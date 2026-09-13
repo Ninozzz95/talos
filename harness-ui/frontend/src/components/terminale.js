@@ -43,7 +43,7 @@ export const TESTI = Object.freeze({
 
 /*
  * ⛔ 07/9, visto in una foto del Terminale: nel piede il percorso della cartella era tagliato in
- *   CODA — «C:\Users\Antonino\AppData\Local\Temp\claude\C--Users-An…» — cioè spariva proprio la
+ *   CODA — «C:\Users\<utente>\AppData\Local\Temp\claude\C--Users-<u…» — cioè spariva proprio la
  *   parte che serve, il nome della cartella dove i comandi girano davvero. E accanto restava una
  *   frase generica («Ogni scheda dichiara chi l'ha aperta e dove») che si legge una volta e poi
  *   occupa spazio per sempre, proprio mentre il dato utile non ci stava.

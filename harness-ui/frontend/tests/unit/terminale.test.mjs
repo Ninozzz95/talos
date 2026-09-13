@@ -45,7 +45,7 @@ test('TERMINALE-NOME-VALIDO e tetto: vuoto no, 41 caratteri no; il tetto è quel
 test('IL PERCORSO SI TAGLIA NEL MEZZO: restano la radice e la cartella vera', () => {
   // ⛔ i separatori si scrivono con `String.raw`: scritti a mano, un `\U` o un `\a` diventa un
   //    escape JS e la fixture arriva alla funzione SENZA separatori — la prova misurerebbe altro.
-  const lungo = String.raw`C:\Users\Antonino\AppData\Local\Temp\claude\C--Users-Antonino-Desktop\af5c3844\scratchpad\progetto-5`;
+  const lungo = String.raw`C:\Users\esempio\AppData\Local\Temp\claude\C--Users-esempio-Desktop\af5c3844\scratchpad\progetto-5`;
   const corto = accorciaPercorso(lungo);
   assert.ok(corto.length <= 46, `troppo lungo: ${corto.length}`);
   // ⛔ niente String.raw che finisce con un separatore: un backslash prima del backtick sfugge il

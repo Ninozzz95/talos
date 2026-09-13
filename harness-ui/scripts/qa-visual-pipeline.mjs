@@ -72,11 +72,14 @@ export function viewportRichiesta(urlBase) {
 
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { BUDGET_RAF_P95_MS, percentili, riassuntoGpu, verdettoSonda } from './lib/statistiche-raf.mjs';
+
+/** R-05b: i progetti di prova stanno sotto la cartella dei progetti della persona che lancia la pipeline, non su un disco fisso; `TALOS_QA_RADICE_PROGETTI` la sposta. */
+const RADICE_PROGETTI = (process.env.TALOS_QA_RADICE_PROGETTI ?? join(homedir(), 'Desktop', 'projects')).replace(/\\/g, '/');
 
 const QUI = dirname(fileURLToPath(import.meta.url));
 const RADICE_HARNESS_UI = dirname(QUI);
@@ -2387,7 +2390,7 @@ const SCENARI = {
    */
   async 'qa-delegation-artifact-integrity'(p) {
     const sessionId = '82c71bd0-74d6-423f-b600-1dbe3bc5fdf7';
-    const fileTarget = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/serpente-2d/test/gioco.test.mjs';
+    const fileTarget = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/serpente-2d/test/gioco.test.mjs';
     const prima = existsSync(fileTarget) ? readFileSync(fileTarget, 'utf8') : null;
     const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
@@ -2560,7 +2563,7 @@ const SCENARI = {
     await p.attendi(1200);
     await p.screenshot('stato-iniziale', { nota: 'app appena caricata, nessuna sessione' });
 
-    const cartellaFiglio = 'C:/Users/Antonino/Desktop/projects/talos-prova-harness-figlio';
+    const cartellaFiglio = RADICE_PROGETTI + '/talos-prova-harness-figlio';
     const nomeFile = `fase-c-figlio-${Date.now()}.txt`;
     const testoFile = 'delegato con successo';
     // ⭐ 28/8, owner: "i messaggi devono partire in linguaggio naturale esattamente come farebbero gli utenti umani, senza termini tecnici" — descrive il desiderio (un sotto-agente separato, isolato), mai il nome dell'attrezzo (vedi memoria i-messaggi-di-prova-in-linguaggio-naturale.md).
@@ -2593,7 +2596,7 @@ const SCENARI = {
      * che deve girare DENTRO la pagina.
      */
     const percorsoFiglio = `${cartellaFiglio}/${nomeFile}`;
-    const percorsoNelPadre = `C:/Users/Antonino/Desktop/projects/talos-prova-harness/${nomeFile}`;
+    const percorsoNelPadre = `${RADICE_PROGETTI}/talos-prova-harness/${nomeFile}`;
     if (!existsSync(percorsoFiglio)) {
       p.difetto(`il file NON esiste nella cartella della figlia: ${percorsoFiglio} — la delega non ha scritto per davvero, o ha scritto altrove`, { severita: 'blocco' });
     } else {
@@ -2839,7 +2842,7 @@ const SCENARI = {
     }
 
     // --- La prova che conta di più: il FILE sul disco riflette ENTRAMBI i turni, non solo il testo mostrato in chat ---
-    const percorsoFile = `C:/Users/Antonino/Desktop/projects/talos-prova-harness/${nomeFile}`;
+    const percorsoFile = `${RADICE_PROGETTI}/talos-prova-harness/${nomeFile}`;
     if (!existsSync(percorsoFile)) {
       p.difetto(`il file NON esiste sul disco: ${percorsoFile} — il primo turno non ha scritto per davvero`, { severita: 'blocco' });
     } else {
@@ -2962,7 +2965,7 @@ const SCENARI = {
    * diff, titolo auto-rinominato.
    */
   async 'qa-task-1-py-sconto'(p) {
-    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py';
+    const CARTELLA = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/magazzino_py';
     const MODELLO_RICERCA = 'gemini-3.7-flash';
 
     await p.attendi(1200);
@@ -3099,7 +3102,7 @@ const SCENARI = {
    * ridigita `npm test` di suo pugno, fuori dal turno dell'agente.
    */
   async 'qa-task-2-html-conta'(p) {
-    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/preventivo-html';
+    const CARTELLA = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/preventivo-html';
     await p.attendi(1200);
     await p.click('[data-open-sheet="permissions"]');
     await p.attendi(300);
@@ -3249,7 +3252,7 @@ const SCENARI = {
    * NUOVA, terminale aperto per la prima volta, UN comando semplice.
    */
   async 'qa-diagnostica-terminale-fresco'(p) {
-    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/preventivo-html';
+    const CARTELLA = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/preventivo-html';
     await p.attendi(1200);
     await p.click('[data-open-sheet="permissions"]');
     await p.attendi(300);
@@ -3314,7 +3317,7 @@ const SCENARI = {
    * non si sta guardando il terminale di quella sessione.
    */
   async 'qa-diagnostica-terminale-sessione-vera'(p) {
-    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/preventivo-html';
+    const CARTELLA = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/preventivo-html';
     await p.attendi(1200);
     await p.click('[data-open-sheet="permissions"]');
     await p.attendi(300);
@@ -3422,7 +3425,7 @@ const SCENARI = {
    * sull'albero file, Doctor.
    */
   async 'qa-task-3-game-wraparound'(p) {
-    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/serpente-2d';
+    const CARTELLA = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/serpente-2d';
     await p.attendi(1200);
     await p.click('[data-open-sheet="permissions"]');
     await p.attendi(300);
@@ -3560,7 +3563,7 @@ const SCENARI = {
    * bottone Compatta, F5 reale + bottone Resume, export MD/JSON.
    */
   async 'qa-task-5-api-validazione'(p) {
-    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/api-contatti';
+    const CARTELLA = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/api-contatti';
     await p.attendi(1200);
     await p.click('[data-open-sheet="permissions"]');
     await p.attendi(300);
@@ -3685,7 +3688,7 @@ const SCENARI = {
    * "Nuovo file"/"Nuova cartella" owner-facing dal menu albero.
    */
   async 'qa-task-5-1-create-da-zero'(p) {
-    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/sito-nuovo-da-zero';
+    const CARTELLA = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/sito-nuovo-da-zero';
     await p.attendi(1200);
     await p.click('[data-open-sheet="permissions"]');
     await p.attendi(300);
@@ -3746,7 +3749,7 @@ const SCENARI = {
    * quella owner-facing (tasto destro → Elimina, scheda di conferma).
    */
   async 'qa-task-5-2-delete-ridondanti'(p) {
-    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py';
+    const CARTELLA = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/magazzino_py';
     await p.attendi(1200);
     await p.click('[data-open-sheet="permissions"]');
     await p.attendi(300);
@@ -4060,7 +4063,7 @@ const SCENARI = {
    * `#tasksListMount` nel Capability hub.
    */
   async 'qa-task-7-html-filtro'(p) {
-    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/preventivo-html';
+    const CARTELLA = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/preventivo-html';
     await p.attendi(1200);
     await p.click('[data-open-sheet="permissions"]');
     await p.attendi(300);
@@ -4652,7 +4655,7 @@ const SCENARI = {
    * delega_sottotask (riga "Delega: ..." attesa in conversazione).
    */
   async 'qa-task-12-planner-delega'(p) {
-    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py';
+    const CARTELLA = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/magazzino_py';
     await p.attendi(1200);
     await p.click('[data-open-sheet="permissions"]');
     await p.attendi(300);
@@ -4784,7 +4787,7 @@ const SCENARI = {
     await p.attendi(300);
     await p.click('#newSessionBtn');
     await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
-    await p.scegliCartellaNuovaSessione('C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py');
+    await p.scegliCartellaNuovaSessione(RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/magazzino_py');
     await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[0]?.click()");
     await p.attendiCondizione("!document.querySelectorAll('.model-picker-list')[0]?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo principale caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
@@ -5018,7 +5021,7 @@ const SCENARI = {
    * arriva SUBITO dopo "Crea", senza attendiCondizione sul backdrop.
    */
   async 'qa-batchfix-f-backdrop'(p) {
-    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py';
+    const CARTELLA = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/magazzino_py';
     await p.attendi(1200);
     await p.click('[data-open-sheet="permissions"]');
     await p.attendi(300);
@@ -5179,7 +5182,7 @@ const SCENARI = {
    * esce dal file per costruzione, l'avviso deve accorgersene.
    */
   async 'qa-batchfix-b-avviso-simboli'(p) {
-    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py';
+    const CARTELLA = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/magazzino_py';
     await p.attendi(1200);
     await p.click('[data-open-sheet="permissions"]');
     await p.attendi(300);
@@ -5234,7 +5237,7 @@ const SCENARI = {
    * dovrebbe produrre UN batch collassato con diff totale.
    */
   async 'qa-raggruppamento-tool-call'(p) {
-    const CARTELLA = 'C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/magazzino_py';
+    const CARTELLA = RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/magazzino_py';
     await p.attendi(1200);
     await p.click('[data-open-sheet="permissions"]');
     await p.attendi(300);
@@ -5309,7 +5312,7 @@ const SCENARI = {
     await p.attendi(300);
     await p.click('#newSessionBtn');
     await p.attendiCondizione("!!document.querySelector('#workspaceChooserPath')", { descrizione: 'workbench Nuova sessione' });
-    await p.scegliCartellaNuovaSessione('C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/serpente-2d');
+    await p.scegliCartellaNuovaSessione(RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/serpente-2d');
     await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[0]?.click()");
     await p.attendiCondizione("!document.querySelectorAll('.model-picker-list')[0]?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo principale caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
@@ -5532,7 +5535,7 @@ const SCENARI = {
     const scorciatoieInvalide = !Array.isArray(scorciatoie) || scorciatoie.length === 0 || scorciatoie.some((s) => !s.titolo || !/^[A-Za-z]:[\\/]/.test(s.titolo));
     if (scorciatoieInvalide) p.difetto('il workbench mostra una scorciatoia senza un percorso Windows reale', { severita: 'blocco' });
 
-    await p.scegliCartellaNuovaSessione('C:/Users/Antonino/Desktop/projects/qa-visiva-harness-2026-08-30/crm-contatti');
+    await p.scegliCartellaNuovaSessione(RADICE_PROGETTI + '/qa-visiva-harness-2026-08-30/crm-contatti');
     await p.cdp.evaluate("document.querySelectorAll('.model-picker-trigger')[0]?.click()");
     await p.attendiCondizione("!document.querySelectorAll('.model-picker-list')[0]?.textContent?.includes('Carico il catalogo')", { descrizione: 'catalogo caricato' });
     await p.digita('.model-picker-search input', 'gemini-3.7-flash');
