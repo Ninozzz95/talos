@@ -1,0 +1,8 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {tipoVoceLibreria,origineVoceLibreria,testiVoceLibreria,filtraLibreria} from '../../src/components/libreria.js';
+test('LIBRERIA-TIPO: il tipo non riconosciuto non diventa documento',()=>{assert.equal(tipoVoceLibreria('image').testo,'Immagine');assert.equal(tipoVoceLibreria('document').testo,'Documento');assert.equal(tipoVoceLibreria('__proto__').testo,'Tipo non registrato');});
+test('LIBRERIA-ORIGINE-IGNOTA: non inventare un caricamento',()=>{assert.equal(origineVoceLibreria('uploaded'),'Caricato');assert.equal(origineVoceLibreria('generated'),'Generato');assert.equal(origineVoceLibreria(undefined),'Origine non registrata');});
+test('LIBRERIA-METADATI: nome intero, date invalide e nessuna stima inventata',()=>{const nome='A'.repeat(300)+'<script>';const v=testiVoceLibreria({nome,aggiornatoIl:'non una data'});assert.equal(v.nome,nome);assert.equal(v.aggiornata,null);assert.equal(v.dataBreve,'Data non registrata');assert.equal(testiVoceLibreria({}).nome,'File senza nome');});
+test('LIBRERIA-FILTRO: nome, tipo e provenienza, intersezione, ordine stabile',()=>{const a=[{nome:'Foto casa.png',fileType:'image',origine:'uploaded'},{nome:'Contratto.md',fileType:'document',origine:'generated'}];assert.deepEqual(filtraLibreria(a,{query:' IMMAGINE '}),[a[0]]);assert.deepEqual(filtraLibreria(a,{query:'contratto',origine:'uploaded'}),[]);assert.deepEqual(filtraLibreria(a,{query:'generato'}),[a[1]]);assert.deepEqual(filtraLibreria(a),a);});
+test('LIBRERIA-ICONA-IMMAGINE: un’immagine non ha il simbolo della cartella',()=>{assert.equal(tipoVoceLibreria('image').icona,'image');});

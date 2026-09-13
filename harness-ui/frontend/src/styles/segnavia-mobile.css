@@ -1,0 +1,75 @@
+/*
+ * ⭐⭐⭐ IL SEGNAVIA A TRE NODI — QUELLO DEL MOBILE, COPIATO.
+ *
+ * Owner 10/09: «ok rimetti il segnavia ma fallo più piccolo e mi raccomando identico a quello che
+ * c'è già nel mobile, e piccolo».
+ *
+ * ⛔ «Identico» vuol dire identico: queste regole sono quelle di `mobile/src/style.css`
+ *   (`.talos-line-loader*`, `@keyframes talosLineSweep`, `@keyframes talosLineNodeFill`), lette
+ *   oggi e riportate senza reinterpretarle. Il mobile lo rende a 96×16, qui a 36×6.
+ *
+ * ⛔ Perché adesso può funzionare, e prima no: il segnavia non era rotto. Erano due regole
+ *   universali con `!important` — `body.reduce-motion *` e `@media (prefers-reduced-motion){ * }` —
+ *   a spegnere ogni animazione dell'app. Eliminate quelle, l'animazione CSS del mobile si muove, ed
+ *   è esattamente ciò che l'owner voleva vedere. Sei tentativi di cura su un componente sano.
+ *
+ * ⛔ Niente SMIL, niente motore JS di riserva, niente `data-motore`: erano cure a un problema che
+ *   non esisteva. Meno codice, e il disegno di un componente già provato su un altro prodotto.
+ */
+.talos-line-loader{ display: block; width: 36px; height: 6px; overflow: visible; flex: none; }
+.talos-line-loader-track{
+  stroke: var(--talos-accent);
+  stroke-opacity: .18;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.talos-line-loader-sweep{
+  stroke: var(--talos-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 88;
+  stroke-dashoffset: 88;
+  animation: talosLineSweep 1.6s ease-in-out infinite;
+}
+.talos-line-loader-node{
+  fill: transparent;
+  stroke: var(--talos-accent);
+  stroke-width: 2;
+  animation: talosLineNodeFill 1.6s ease-in-out infinite;
+}
+/*
+ * I ritardi del mobile, e il selettore GIUSTO: `nth-of-type` conta per TIPO, e i `<circle>` sono 1,
+ * 2 e 3 — non 3, 4 e 5. Il nostro vecchio foglio usava `(3)` e `(4)`, quindi il primo e il secondo
+ * nodo pulsavano IN SINCRONO e il terzo ritardo non esisteva. Il mobile non ha mai avuto il difetto.
+ * I tempi corrispondono all'istante in cui la linea raggiunge x=16, 48 e 80 sui suoi 88 px.
+ */
+.talos-line-loader-node:nth-of-type(1){ animation-delay: 0s; }
+.talos-line-loader-node:nth-of-type(2){ animation-delay: .36s; }
+.talos-line-loader-node:nth-of-type(3){ animation-delay: .73s; }
+@keyframes talosLineSweep{
+  0%        { stroke-dashoffset: 88; }
+  70%, 100% { stroke-dashoffset: 0; }
+}
+@keyframes talosLineNodeFill{
+  0%, 12%   { fill: transparent; }
+  22%, 82%  { fill: var(--talos-accent); }
+  100%      { fill: transparent; }
+}
+
+/*
+ * ⭐ 12/09, owner: «il mobile ha introdotto un nuovo logo animato di caricamento… mettilo al posto del
+ *   segnavia». È l'ORB dei messaggi Calm del mobile: regole copiate da
+ *   `mobile/src/components/chat/talosCalmMessages.css` (`.talos-orb`, `.talos-orb.working::after`,
+ *   `@keyframes talos-orb-spin`) e `mobile/src/style.css` (`.talos-short-logo`, `.talos-short-logo-mark`),
+ *   lette il 12/09 (commit 4ccbed1f, ramo `lane/voce-personale`). Il marchio corto è lo stesso file
+ *   (`/talos/brand/logo-short.svg`, già servito da `static-files.mjs`). 1,5 s è il numero del mobile
+ *   (`TALOS_CALM_SPECS.orb`); con «riduci le animazioni» l'anello sta fermo, come là.
+ */
+.talos-orb{ position: relative; width: 2.25rem; height: 2.25rem; flex: none; border: 1px solid var(--talos-accent-soft, color-mix(in srgb, var(--talos-accent) 35%, transparent)); border-radius: 50%; display: grid; place-items: center; color: var(--talos-accent); }
+.talos-orb .talos-short-logo{ width: 1.2rem; height: 1.2rem; }
+.talos-orb.working::after{ content: ''; position: absolute; inset: -3px; border: 1px solid transparent; border-top-color: var(--talos-accent); border-radius: 50%; animation: talos-orb-spin 1500ms linear infinite; }
+.talos-short-logo{ display: inline-flex; width: 3rem; height: 3rem; flex: 0 0 auto; align-items: center; justify-content: center; color: var(--talos-accent); overflow: hidden; }
+.talos-short-logo-mark{ display: block; width: 92%; height: 92%; background: currentColor; mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; }
+@keyframes talos-orb-spin{ to { transform: rotate(360deg); } }
+body.reduce-motion .talos-orb.working::after{ animation: none; }
+@media (prefers-reduced-motion: reduce){ .talos-orb.working::after{ animation: none; } }
