@@ -6,10 +6,25 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
-## desktop-v0.1.3 — 2026-09-13
+## desktop-v0.1.4 — 2026-09-13
 
-Carries everything below. The three tags before it published nothing: their release jobs stopped at
-the gates, and a published tag is never rewritten, so each attempt gets a new number.
+Carries everything below. The four tags before it published nothing: their release jobs stopped at
+the gates, and a published tag is never rewritten, so each attempt gets a new number. Not once was
+the product at fault: every time it was a test describing something other than the software.
+
+### Fixed
+- Two browser tests that had been failing for days. The first refused an image the app serves at
+  runtime, because the test's bundler read the address as a path on disk; addresses are now left to
+  the network, exactly as fonts already were. The second waited for a message the product no longer
+  writes: the component's wording changed twice after the test was written, so the test hung for
+  thirty seconds and reported only a timeout. It now expects what the product actually says, still
+  as an exact match, so it fails again if that path stops working.
+- Both of those gates now name what they refuse and what they saw instead of failing silently.
+  The silent version cost two release attempts before the cause was visible.
+
+## desktop-v0.1.3 — 2026-09-13 (tag only, no release published)
+
+Carried everything below it at the time:
 
 ### Fixed
 - Test teardown on Windows. A test deleted its temporary folder and the deletion failed with
