@@ -67,7 +67,8 @@ import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nom
 import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina (il montaggio è in sezioni-adattatori.js)
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
-import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, tonoDelTick, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
+import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, tonoDelTick, vestizioneErrore } from '../components/errori.js';
+import { ETICHETTA_INTERRUTTORE_RAGIONAMENTO, etichettaRagionamento } from '../components/ragionamento.js'; // 13/09 sera: il ragionamento si comprime invece di sparire // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
 // 06/9 C24: la pagina delle Note — la monta `sezioni-adattatori.js`, che riusa `note.js`
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
@@ -4078,7 +4079,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       ['Animazione risposta', etichetta('streamingAnimation', a.streamingAnimation)],
       ['Forma del composer', etichetta('composerShape', a.composerShape)],
       ['Chat a tutta larghezza', a.chatFullWidth ? 'Sì' : 'No'],
-      ['Ragionamento mostrato', state.showReasoning ? 'Sì' : 'No'],
+      ['Ragionamento aperto mentre scrive', state.showReasoning ? 'Sì' : 'No'],
     ]);
     const regole = Object.keys(state.permessiPerAttrezzo || impostazioni.chat.permessiPerAttrezzo || {}).length;
     riempiFatti('settingsToolsFacts', [
@@ -6362,7 +6363,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     /*
      * ⛔⛔ 06/9, owner: «quando clicco lo slider ragionamento il selettore modello sparisce». Riprodotto:
      * nel foglio «Modello» il picker è montato con `apriSubito` (il trigger è nascosto, il pannello È il
-     * foglio) e sotto di lui vivono il cursore del ragionamento e l'interruttore «Mostra ragionamento»:
+     * foglio) e sotto di lui vivono il cursore del ragionamento e l'interruttore del ragionamento (allora
+     * «Mostra ragionamento», dal 13/09 «Apri il ragionamento mentre scrive»):
      * cliccarli è un clic FUORI da `wrap`, quindi il pannello si chiudeva e restava un foglio vuoto,
      * senza modo di riaprirlo. Il «clic fuori chiude» ha senso solo quando il picker è una tendina fra
      * altri campi («Nuova sessione»): con `apriSubito` non si registra proprio.
@@ -7633,14 +7635,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const reasoningRow = document.createElement('label');
         reasoningRow.className = 'sheet-toggle-row';
         const reasoningLabel = document.createElement('span');
-        reasoningLabel.textContent = 'Mostra ragionamento';
+        reasoningLabel.textContent = ETICHETTA_INTERRUTTORE_RAGIONAMENTO;
         const reasoningToggle = document.createElement('input');
         reasoningToggle.type = 'checkbox';
         reasoningToggle.className = 'talos-switch';
         reasoningToggle.setAttribute('role', 'switch');
         reasoningToggle.id = 'showReasoningToggle';
         reasoningToggle.checked = state.showReasoning;
-        reasoningToggle.setAttribute('aria-label', 'Mostra ragionamento');
+        reasoningToggle.setAttribute('aria-label', ETICHETTA_INTERRUTTORE_RAGIONAMENTO);
         reasoningToggle.addEventListener('change', () => {
           state.showReasoning = reasoningToggle.checked;
           salvaPreferenzeChatDesktop();
@@ -8581,14 +8583,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     riga.className = 'talos-setting';
     const etichetta = document.createElement('span');
     etichetta.className = 'talos-setting__label';
-    etichetta.textContent = 'Mostra ragionamento';
+    etichetta.textContent = ETICHETTA_INTERRUTTORE_RAGIONAMENTO;
     const interruttore = document.createElement('input');
     interruttore.type = 'checkbox';
     interruttore.className = 'talos-switch';
     interruttore.setAttribute('role', 'switch');
     interruttore.id = 'showReasoningToggle';
     interruttore.checked = state.showReasoning;
-    interruttore.setAttribute('aria-label', 'Mostra ragionamento');
+    interruttore.setAttribute('aria-label', ETICHETTA_INTERRUTTORE_RAGIONAMENTO);
     interruttore.addEventListener('change', () => {
       state.showReasoning = interruttore.checked;
       salvaPreferenzeChatDesktop();
@@ -10409,13 +10411,75 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return { article, summaryText, detail, dettaglio: riga.dettaglio }; // 05/9 Fase 2: anche il dettaglio mono della riga
   }
 
+  /*
+   * ⛔⛔ 13/09 sera — IL RAGIONAMENTO SI COMPRIME (decisione owner, fonti in `components/ragionamento.js`).
+   *   L'interruttore non nasconde più niente: dice se una scheda di ragionamento IN CORSO si apre da sola
+   *   mentre il modello scrive. Di serie è spento, cioè sempre compresso. Le schede già finite, e quelle
+   *   aperte o chiuse a mano dalla persona, non si toccano.
+   */
   function aggiornaVisibilitaRagionamento() {
-    $$('.real-reasoning-note').forEach((article) => {
-      article.hidden = !state.showReasoning;
-      article.setAttribute('aria-hidden', String(!state.showReasoning));
-    });
+    for (const voce of state.realSession.ragionamentoBubble.values()) {
+      if (voce.article.hidden || voce.inizio === null) continue;
+      if (voce.article.querySelector(':scope > .talos-activity__head')?.dataset.toccatoDaUtente === 'si') continue;
+      impostaAperturaRagionamento(voce.article, state.showReasoning);
+      voce.apertaDaSola = state.showReasoning;
+    }
     const toggle = $('#showReasoningToggle');
     if (toggle) toggle.checked = state.showReasoning;
+  }
+
+  function adessoRagionamentoMs() {
+    return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+  }
+
+  /** Apre o chiude la scheda come fa la regia del mockup: `aria-expanded` sulla testa, `hidden` sul corpo. */
+  function impostaAperturaRagionamento(card, aperto) {
+    const testa = card?.querySelector(':scope > .talos-activity__head');
+    const corpo = card?.querySelector(':scope > .talos-activity__body');
+    if (!testa || !corpo) return;
+    testa.setAttribute('aria-expanded', String(aperto));
+    corpo.hidden = !aperto;
+  }
+
+  function ragionamentoAperto(card) {
+    return card?.querySelector(':scope > .talos-activity__head')?.getAttribute('aria-expanded') === 'true';
+  }
+
+  function etichettaSchedaRagionamento(card, testo) {
+    const etichetta = card?.querySelector(':scope > .talos-activity__head .tool-note-summary-text');
+    if (etichetta?.textContent === testo) return; // ⛔ riscrivere lo stesso testo è una modifica del DOM in più, e nella rigiocata la fine ripete l'etichetta già messa al primo testo
+    if (etichetta) etichetta.textContent = testo;
+  }
+
+  /** Il primo testo: la riga compare, e il gruppo dei comandi che le sta sopra si chiude. */
+  function mostraRagionamento(voce) {
+    chiudiBatchTool();
+    voce.article.hidden = false;
+    // ⛔ niente `aria-hidden` da togliere: la riga non l'ha mai avuto (vedi ReasoningMessageStart), `hidden` basta.
+    const inCorso = voce.inizio !== null;
+    etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso }));
+    if (inCorso && state.showReasoning) {
+      impostaAperturaRagionamento(voce.article, true);
+      voce.apertaDaSola = true;
+    }
+  }
+
+  /** La fine: l'etichetta dice quanto è durato, e una scheda aperta da sola (non a mano) si richiude. */
+  function chiudiRagionamento(voce) {
+    const secondi = voce.inizio === null ? null : (adessoRagionamentoMs() - voce.inizio) / 1000;
+    etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso: false, secondi }));
+    const toccata = voce.article.querySelector(':scope > .talos-activity__head')?.dataset.toccatoDaUtente === 'si';
+    if (voce.apertaDaSola && !toccata) impostaAperturaRagionamento(voce.article, false);
+    voce.apertaDaSola = false;
+  }
+
+  /**
+   * ⛔ Un giro che finisce o si ferma a metà ragionamento non manda la fine del ragionamento: senza
+   *   questa chiusura l'etichetta resterebbe «Sta ragionando…» per sempre su un lavoro finito.
+   */
+  function chiudiRagionamentiInCorso() {
+    for (const voce of state.realSession.ragionamentoBubble.values()) chiudiRagionamento(voce);
+    state.realSession.ragionamentoBubble.clear();
   }
 
   /*
@@ -14638,23 +14702,40 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       case 'ReasoningMessageStart': {
         if (!state.realSession.chiusaDalServer) mostraAttesaRisposta('reasoning');
-        // Un evento che l'utente ha scelto di nascondere non è un confine
-        // visibile: il batch resta unico. Quando il ragionamento è mostrato,
-        // invece, conserva la cronologia reale e chiude il gruppo precedente.
-        if (state.showReasoning) chiudiBatchTool();
-        const bubble = appendToolNote('Ragionamento', { classeExtra: 'real-reasoning-note', glifo: '💭' });
-        bubble.article.hidden = !state.showReasoning;
-        bubble.article.setAttribute('aria-hidden', String(!state.showReasoning));
-        state.realSession.ragionamentoBubble.set(evento.messageId, { ...bubble, grezzo: '', renderStato: { prefisso: null, nodiCoda: [] } });
+        /*
+         * ⛔⛔ 13/09 sera — IL RAGIONAMENTO NON SI NASCONDE PIÙ: SI COMPRIME. Decisione dell'owner dopo la
+         *   ricerca (Hermes desktop, assistant-ui, AI SDK Elements, NN/g: fonti in `components/ragionamento.js`).
+         *   Prima «Mostra ragionamento» spento voleva dire `hidden`: invisibile e irraggiungibile, e un turno
+         *   il cui unico contenuto era un ragionamento restava con la sola intestazione.
+         * ⇒ La scheda nasce nascosta e compare al PRIMO TESTO: un ragionamento senza testo non ha riga, come in
+         *   Hermes. Per la stessa ragione il gruppo dei comandi si chiude al primo testo e non qui: un
+         *   ragionamento vuoto non è un confine visibile e non spezza il gruppo (TOOL-BATCH-HIDDEN-REASONING-01).
+         * ⛔ La riga interna nasce APERTA: la scheda è l'unico livello da aprire, non due clic per leggere.
+         * ⛔ Gli eventi non portano un orario: la durata si misura solo dal vivo. In una rigiocata `inizio` è
+         *   `null`, e l'etichetta dice «Ha ragionato» invece di una durata falsa di pochi millisecondi.
+         */
+        const bubble = appendToolNote('Ragionamento', { classeExtra: 'real-reasoning-note', glifo: '💭', aperto: true });
+        bubble.article.hidden = true;
+        // ⛔ Solo `hidden`, non anche `aria-hidden`: toglie già la riga dall'albero dell'accessibilità, e ogni attributo in più è una modifica del DOM che LAG-REPLAY-REASONING-36 conta — misurato 22 contro un tetto di 20, mentre il pacchetto di prima passava.
+        const testaRagionamento = bubble.article.querySelector(':scope > .talos-activity__head');
+        testaRagionamento?.addEventListener('click', () => { testaRagionamento.dataset.toccatoDaUtente = 'si'; });
+        state.realSession.ragionamentoBubble.set(evento.messageId, {
+          ...bubble,
+          grezzo: '',
+          renderStato: { prefisso: null, nodiCoda: [] },
+          inizio: state.realSession.deferHistoricalRendering ? null : adessoRagionamentoMs(),
+          apertaDaSola: false,
+        });
         break;
       }
       case 'ReasoningMessageContent': {
         const voce = state.realSession.ragionamentoBubble.get(evento.messageId);
         if (!voce) break; // difensivo: un Content senza il suo Start non deve far crashare la sessione
         voce.grezzo += evento.delta;
+        if (voce.article.hidden && voce.grezzo.trim() !== '') mostraRagionamento(voce);
         if (!state.realSession.deferHistoricalRendering) {
           renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
-          if (state.showReasoning) scrollStreamingOutput(voce.article);
+          if (ragionamentoAperto(voce.article)) scrollStreamingOutput(voce.article);
         }
         break;
       }
@@ -14663,6 +14744,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (voce && state.realSession.deferHistoricalRendering) {
           renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
         }
+        if (voce) chiudiRagionamento(voce);
         state.realSession.ragionamentoBubble.delete(evento.messageId); // la bolla resta a schermo, solo non si aggiorna più
         if (!state.realSession.chiusaDalServer) mostraAttesaRisposta('preparing');
         break;
@@ -15112,6 +15194,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         chiudiBatchTool(); // 30/8 — fine turno: un batch di tool-call aperto non resta orfano fino al prossimo giro
         aggiornaTickGiro({ tono: null }); // 05/9 Fase 2: il giro non e' piu' current
         spegniGiriInCorso($('#conversation')); // ⛔ BC-41: e nemmeno gli altri — nel replay l'ultimo turno non e' quello che ha appena finito
+        chiudiRagionamentiInCorso(); // 13/09 sera: un ragionamento senza la sua fine non resta «Sta ragionando…»
         state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
         syncRunComposerState();
         mostraSuggerimentoComposer(suggerimentoDaUltimoAttrezzo()); // ⭐ 3/9 — item 10: dopo syncRunComposerState, cosi' se c'e' un redirect pendente runRealeAttivo() lo vede ancora attivo e non propone niente
@@ -15222,6 +15305,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (guida) spiegazione.rimedi = [guida.replace(/^\s*—\s*/, ''), ...spiegazione.rimedi];
         appendStatusNote('', true, { spiegazione });
         spegniGiriInCorso($('#conversation')); // ⛔ BC-41: anche un giro FALLITO e' un giro finito — `appendStatusNote` segna `danger` solo sull'ultimo turno
+        chiudiRagionamentiInCorso(); // 13/09 sera: un ragionamento senza la sua fine non resta «Sta ragionando…»
         state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
         syncRunComposerState();
         break;
@@ -17027,7 +17111,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     reasoningSection.append(effortPicker.elemento);
     const reasoningToggle = document.createElement('label');
     reasoningToggle.className = 'workspace-chooser-inline-toggle';
-    reasoningToggle.innerHTML = '<span><strong>Mostra ragionamento</strong><small>Visualizza il processo solo quando ti serve.</small></span>';
+    reasoningToggle.innerHTML = `<span><strong>${ETICHETTA_INTERRUTTORE_RAGIONAMENTO}</strong><small>Spento, resta una riga chiusa che apri quando ti serve.</small></span>`;
     const reasoningInput = document.createElement('input');
     reasoningInput.type = 'checkbox';
     // ⛔ 07/9, owner: «tutti i component devono essere stilizzati custom». Nudo, questo lo
@@ -17035,7 +17119,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     reasoningInput.className = 'talos-switch';
     reasoningInput.setAttribute('role', 'switch');
     reasoningInput.checked = local.showReasoning;
-    reasoningInput.setAttribute('aria-label', 'Mostra ragionamento');
+    reasoningInput.setAttribute('aria-label', ETICHETTA_INTERRUTTORE_RAGIONAMENTO);
     reasoningInput.addEventListener('change', () => { local.showReasoning = reasoningInput.checked; });
     reasoningToggle.appendChild(reasoningInput);
     reasoningSection.appendChild(reasoningToggle);
