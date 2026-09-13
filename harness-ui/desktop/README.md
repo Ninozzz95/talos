@@ -69,8 +69,8 @@ registered; a file whose bytes or checksum differ from the manifest is rejected.
 ## Data and uninstall
 
 Window geometry, the shell log and the service data (sessions, downloaded models, notes, tasks,
-memory, automations, provider settings) live in `%APPDATA%\talos-desktop` (Electron's
-`userData`). The menu can open the log. For isolated tests set `TALOS_DESKTOP_DATA_DIR` to an
+memory, automations, provider settings) live in `%APPDATA%\TALOS` (Electron's
+`userData`, which Electron names after the product, not the package). The menu can open the log. For isolated tests set `TALOS_DESKTOP_DATA_DIR` to an
 absolute path.
 
 To uninstall: close TALOS (also from the tray), open **Settings → Apps → Installed apps → TALOS →
