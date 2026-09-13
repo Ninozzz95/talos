@@ -1968,7 +1968,13 @@ function datiRuntimeModello(r = {}) {
   const errore = r.modelsError || r.failureReason || "";
   const locale = r.runtimeId === "llama.cpp", fasi = { unavailable: "Non avviato", stopped: "Non avviato", loading: "Caricamento in corso", stopping: "Arresto in corso", failed: "Avvio non riuscito" };
   const stato = raggiunto ? locale ? r.runtimeState === "ready" ? "Raggiunto" : fasi[r.runtimeState] || "Stato non rilevato" : "Raggiunto" : "Non raggiunto";
-  return { nome: nomi[r.runtimeId] || r.runtimeId || "Motore sconosciuto", stato, tono: stato === "Raggiunto" && !errore ? "success" : "warning", modelli: !raggiunto ? "Disponibilità non verificata" : r.modelsError ? "Lettura dei modelli non riuscita" : models.length ? models.length + (models.length === 1 ? " modello disponibile" : " modelli disponibili") : "Nessun modello disponibile", nomi: raggiunto && !r.modelsError ? models.map((m) => m.name || m.id).filter(Boolean) : [], caricamento: raggiunto && r.runtimeId === "llama.cpp" ? r.runtimeState === "ready" ? "Modello caricato da TALOS" : ["stopped", "unavailable"].includes(r.runtimeState) ? "Nessun modello caricato da TALOS" : "Non rilevato" : "Non rilevato", indirizzo: r.baseUrl || "Non esposto dal server", data: typeof r.observedAt === "string" && !Number.isNaN(Date.parse(r.observedAt)) ? new Date(r.observedAt).toLocaleString("it-IT", { timeZone: "Europe/Rome" }) : "Non rilevata", errore };
+  const m = locale && r.motore && typeof r.motore === "object" ? r.motore : null;
+  const dispositivi = Array.isArray(m?.dispositivi) ? m.dispositivi.filter(Boolean) : [];
+  const motore = !m ? "" : m.variante === "vulkan" ? "Motore locale: scheda grafica (Vulkan)" + (dispositivi.length ? " · " + dispositivi.join(", ") : "") : m.variante === "cpu" ? "Motore locale: processore" : "Motore locale: percorso scelto a mano";
+  const pronto = r.runtimeState === "ready";
+  const avvisoMotore = !m ? "" : m.ripiego && pronto ? "La scheda grafica non è disponibile: il modello gira sul processore" : m.ripiego && r.runtimeState === "failed" ? "La scheda grafica non è disponibile e il caricamento sul processore non è riuscito" : m.proposta?.a === "cpu" ? "La memoria della scheda grafica non basta per questo modello. Nel menu «Motore locale» puoi scegliere «Processore»: più lento, ma il modello gira." : "";
+  const riprovaGrafica = Boolean(m?.ripiego && pronto);
+  return { nome: nomi[r.runtimeId] || r.runtimeId || "Motore sconosciuto", stato, tono: stato === "Raggiunto" && !errore ? "success" : "warning", motore, avvisoMotore, riprovaGrafica, modelli: !raggiunto ? "Disponibilità non verificata" : r.modelsError ? "Lettura dei modelli non riuscita" : models.length ? models.length + (models.length === 1 ? " modello disponibile" : " modelli disponibili") : "Nessun modello disponibile", nomi: raggiunto && !r.modelsError ? models.map((m2) => m2.name || m2.id).filter(Boolean) : [], caricamento: raggiunto && r.runtimeId === "llama.cpp" ? r.runtimeState === "ready" ? "Modello caricato da TALOS" : ["stopped", "unavailable"].includes(r.runtimeState) ? "Nessun modello caricato da TALOS" : "Non rilevato" : "Non rilevato", indirizzo: r.baseUrl || "Non esposto dal server", data: typeof r.observedAt === "string" && !Number.isNaN(Date.parse(r.observedAt)) ? new Date(r.observedAt).toLocaleString("it-IT", { timeZone: "Europe/Rome" }) : "Non rilevata", errore };
 }
 function el5(tag2, cls, txt) {
   const n = document.createElement(tag2);
@@ -2000,6 +2006,29 @@ function creaRuntimeModello(runtime) {
     v.dataset.runtimeValue = key;
     row.append(el5("span", "talos-kv__k", label), v);
     card.append(row);
+  }
+  if (d.motore) {
+    const row = el5("div", "talos-kv"), v = el5("span", "talos-kv__v", d.motore.replace(/^Motore locale: /, ""));
+    v.dataset.runtimeValue = "engine";
+    row.append(el5("span", "talos-kv__k", "Motore locale"), v);
+    card.append(row);
+  }
+  if (d.avvisoMotore) {
+    const avviso = el5("p", "talos-muted talos-runtime-card__avviso", d.avvisoMotore);
+    avviso.setAttribute("role", "status");
+    avviso.dataset.runtimeEngineNotice = "";
+    card.append(avviso);
+  }
+  if (d.riprovaGrafica) {
+    const riprova = el5("button", "talos-button talos-button--secondary talos-button--sm", "Riprova sulla scheda grafica");
+    riprova.type = "button";
+    riprova.dataset.c = "Button";
+    riprova.dataset.runtimeRetryGpu = "";
+    riprova.addEventListener("click", () => {
+      riprova.disabled = true;
+      card.dispatchEvent(new CustomEvent("talos:riprova-motore", { bubbles: true, detail: { runtimeId: runtime.runtimeId, modelId: runtime.modelId || null } }));
+    });
+    card.append(riprova);
   }
   if (d.errore) {
     const error = el5("p", "talos-muted talos-runtime-card__error", "Dettaglio: " + d.errore);
@@ -21105,6 +21134,19 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const refresh = $2("#modelLabRuntimeRefresh");
         if (refresh) refresh.disabled = loading;
         aggiornaElencoRuntime(list, state.modelLab.runtimes, { caricamento: loading, errore: state.modelLab.runtimeError });
+        if (!list.dataset.riprovaMotore) {
+          list.dataset.riprovaMotore = "1";
+          list.addEventListener("talos:riprova-motore", async (evento) => {
+            const modelId = evento.detail?.modelId;
+            try {
+              await apiPost("/api/v1/runtime/unload", { runtimeId: "llama.cpp" });
+              if (modelId) await apiPost("/api/v1/runtime/load", { runtimeId: "llama.cpp", modelId });
+            } catch (error) {
+              state.modelLab.runtimeError = error;
+            }
+            await caricaRuntimeModelLab();
+          });
+        }
         if (loading || state.modelLab.runtimeError) {
           status.textContent = loading ? "Verifica in corso…" : "Verifica non riuscita";
           runtimeSelect.replaceChildren(new Option(loading ? "Verifica in corso…" : "Nessun runtime osservato", ""));
