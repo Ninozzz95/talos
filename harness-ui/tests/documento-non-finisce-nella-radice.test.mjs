@@ -35,7 +35,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { parse as parsePath } from 'node:path';
+import { join, parse as parsePath } from 'node:path';
 import test from 'node:test';
 
 import { avviaSessione } from '../src/agent-service.mjs';
