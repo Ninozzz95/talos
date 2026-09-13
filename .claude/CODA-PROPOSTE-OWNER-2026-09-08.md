@@ -1,5 +1,18 @@
 # Coda delle proposte dell'owner — 08/09/2026
 
+> ## ⛔ AGGIORNATA IL 13/09/2026 — l'intestazione qui sotto e' di due giorni fa
+>
+> Il blocco che segue dichiara «lo stato vero, 11/09/2026». **Quello stato non e' piu' vero**: fra il
+> 12 e il 13 sono state chiuse altre righe, e tre proposte nuove dell'owner sono entrate come PO-17,
+> PO-18, PO-19, PO-20, PO-21 dopo una collisione di numeri sanata il 13.
+>
+> ⇒ **Lo stato aggiornato sta in `TABELLA-FASI-COMPLETA-2026-09-13.md`**, sezione «Registro degli
+> obsoleti». Questa coda resta la descrizione distesa di ogni proposta; per sapere **se una riga e'
+> aperta**, si guarda la tabella, non questa intestazione.
+>
+> ⛔ E vale comunque la regola che e' costata crediti veri oggi: **prima di aprire una riga, lo stato
+> si riaccerta NEL CODICE**. Due righe erano marcate «in lavorazione» ed erano chiuse da un commit.
+
 > ⛔⛔⛔ **RISCRITTA L'11/09/2026, dopo che l'owner ha detto: «non voglio assolutamente vedere fasi già
 > fatte in documenti di debiti/implementazioni in corso».**
 > Questo documento diceva «IN CODA» per **sette proposte su dodici che erano già state fatte**, e
@@ -687,3 +700,463 @@ che ha già voce e TTS locali (Pocket TTS, 0.1.19) e con Hermes/Codex se hanno q
 (3) misurare il costo reale su una sessione vera, perché $3/ora più il backend cambia la classe
 di spesa rispetto a tutto il resto. ⛔ Fuori dal principio local-first del mobile: qui è desktop e
 va bene come OPZIONE a chiave, mai come unica via per la voce.
+
+## PO-17 — Installer con una vera interfaccia e il passo del consenso (owner 13/09/2026, dopo la 0.1.1)
+
+Owner, parole sue: «dopo la release dobbiamo fare un installe migliore a livello ui con step user
+agreeement ui a livello di installer talos». Cioe': l'installazione oggi e' muta e va bene per un
+rilascio tecnico, non per una persona che installa TALOS per la prima volta.
+
+**Cosa c'e' oggi.** NSIS `oneClick: true`, `perMachine: false`, `allowElevation: false`,
+`allowToChangeInstallationDirectory: false`: un solo colpo, nessuna pagina, nessun consenso
+mostrato, `runAfterFinish: true`. Le icone dell'installer e del disinstallatore ci sono gia'
+(`installerIcon`, `uninstallerIcon`, `installerHeaderIcon`), e `assets/installer.nsh` personalizza
+testi e colori del controllo nativo.
+
+**Il vincolo gia' misurato**, da `LEDGER-R02.md`: un `oneClick` NSIS **non ospita pagine**. Un passo
+di consenso vuole l'installer assistito (`oneClick: false`) con la sua pagina di licenza, oppure
+pagine NSIS scritte a mano nell'include. ⛔ E il ledger avverte anche di non promettere un wizard
+in HTML: NSIS disegna col controllo nativo di Windows, non col nostro tema Calm.
+
+**Prima di scrivere una riga.** (1) Ricerca fresca su electron-builder: `oneClick: false`,
+`license`, `installerSidebar`, `uninstallerSidebar`, e cosa cambia per un'installazione per utente
+senza amministratore; (2) cosa fanno gli installer che l'owner cita come metro (Hermes, VS Code,
+Codex): quante pagine, dove sta il consenso, se ricordano le scelte; (3) decidere QUALE licenza si
+accetta: il prodotto e' AGPL-3.0-only, e un consenso alla AGPL non e' un EULA proprietario —
+va scritto cosa si sta accettando, senza inventare clausole.
+
+⛔ Non si tocca finche' la 0.1.1 non e' pubblicata e provata: cambiare la forma dell'installer
+cambia anche lo smoke test del rilascio (installazione silenziosa, avvio, health, disinstallazione).
+
+**Stato:** APERTA, decisa dall'owner, da fare DOPO la release.
+
+## PO-18 — La finestra dell'app desktop, come interfaccia (owner 13/09/2026, dopo la 0.1.1)
+
+Owner: «e finestra app desktop migliore come ui». La finestra oggi e' un guscio Electron che
+mostra la stessa pagina del browser: nessuna barra del titolo propria, nessun cromo che dica «sono
+una applicazione», niente che distingua la finestra installata dalla scheda del browser.
+
+**Da guardare prima di disegnare** (regola: si inventaria cio' che c'e' gia'): la barra del titolo
+del sistema contro una `titleBarStyle` personalizzata, dove finiscono i comandi della finestra sul
+tema chiaro e su quello scuro, il menu «Motore locale» e le altre voci gia' presenti, e il
+comportamento all'avvio (il velo, il primo disegno col tema salvato). Metro di paragone: Hermes,
+VS Code e Codex, guardati davvero, non a memoria.
+
+⛔ Vale la regola di sempre: si rispetta il sistema di design Calm gia' in casa, e nessuna funzione
+che oggi esiste puo' sparire nella forma nuova.
+
+**Stato:** APERTA, decisa dall'owner, da fare DOPO la release.
+
+### RIFERIMENTO VISIVO per PO-17 e PO-18 | tre schermate di Hermes, mandate dall'owner il 13/09/2026
+
+Owner: «ti mando degli screen per ricerca finestra e installer piu' belli stile hermes». Non sono
+immagini custodite su disco (sono arrivate in chat), quindi qui resta la descrizione, che e' la
+cosa che serve quando si disegnera'.
+
+**L'installer di Hermes, prima schermata.** Una finestra piccola, propria, non il wizard nativo di
+Windows: fondo blu notte pieno, il nome del prodotto scritto grandissimo con una grazia in stile
+inciso, e SOTTO una sola riga di promessa («The agent that grows with you. We'll set things up in
+the background — takes a few minutes.»). Una sola azione, scritta fra parentesi quadre:
+[ INSTALL ]. Nessun percorso da scegliere, nessuna casella, nessun pulsante Avanti.
+
+**L'installer, seconda schermata (durante).** Cambia intestazione: «Setting up Hermes Agent», e
+spiega perche' l'attesa esiste — «This is a one-time setup… Subsequent launches will skip this
+step.» Sotto, una barra di avanzamento con la percentuale a destra, e un ELENCO DEI PASSI VERI, in
+chiaro, uno per riga: gestore di pacchetti, Git, rilevamento di Node, ripgrep e ffmpeg, clone del
+repository, verifica di Python, ambiente virtuale, dipendenze Python, dipendenze Node, build della
+app, aggiunta al PATH, scrittura dei file di configurazione. In fondo un «Show details» che si apre
+e un «Cancel» sempre disponibile.
+
+⇒ Cosa prendere per PO-17, in ordine di valore: (1) l'attesa si SPIEGA invece di essere subita, e
+si dichiara che accade una volta sola; (2) i passi si mostrano per nome, quindi chi guarda sa
+sempre a che punto e' e cosa sta scaricando; (3) una sola azione per schermata; (4) «Cancel»
+esiste sempre. ⛔ Il loro installer fa molto lavoro perche' costruisce la app sulla macchina: il
+nostro pacchetto e' gia' costruito, quindi da noi quell'elenco sarebbe corto e onesto (verifica
+delle firme, scrittura dei file, collegamenti), e non va gonfiato per sembrare impegnativo.
+
+**La finestra della app, per PO-18.** Barra laterale scura con quattro voci sole in alto (New
+session, Capabilities, Messaging, Artifacts) e la scorciatoia accanto alla prima; poi PINNED con un
+suggerimento in grigio su come si appunta una chat; poi SESSIONS, con le sessioni raggruppate per
+mese e i titoli tagliati a una riga. A destra un pannello con l'elenco dei file. In basso una barra
+sottile col modello scelto, il microfono e l'invio. Titolo della finestra e comandi di sistema
+normali, con l'icona del prodotto a sinistra.
+
+⇒ Cosa confrontare col nostro: noi abbiamo gia' piu' roba nella barra (Note, Attivita', Libreria,
+Memoria, Ricerca, Progetti, Board, Strumenti). Il punto non e' copiare la loro sobrieta' togliendo
+funzioni — vale la regola che una UI nuova non nasconde cio' che esiste — ma guardare COME
+raggruppano e quanto lasciano respirare, e il raggruppamento delle sessioni per periodo.
+
+## PO-19 | TALOS come CENTRO ASSISTENZA DI SE STESSO (owner 13/09/2026, «importantissima», dopo il rilascio)
+
+Owner, parole sue: «bisogna usare talos come un vero e proprio centro assistenza di talos stesso, se
+io ho qualche curiosita su come funziona talos, su una qualsiasi sua funzione tipo cosa fa "full
+access?" talos deve chiamare un tool o qualcosa… deve dire anche cosa e' talos ovviamente, i dati
+al suo riguardo tipo la repo github etc».
+
+**Il caso d'uso, nelle sue parole:** la persona chiede «cosa fa Full access?» dentro la chat, e
+TALOS risponde con la documentazione VERA di TALOS, non con quello che il modello si ricorda.
+
+**Cosa esiste gia' (verificato il 13/09, prima di scrivere questa riga):**
+- `docs/` alla radice del repo, con documentazione vera: architecture, alignment, agent-bus,
+  PUBLISHING.md, README.md. E' materiale nostro, gia' scritto, oggi invisibile dal prodotto.
+- I README di `harness-ui/` e `harness-ui/desktop/` (quest'ultimo in inglese) e i due CHANGELOG.
+- Una superficie **Doctor** (`frontend/src/components/doctor.js`): diagnostica, non assistenza.
+- Un attrezzo di **ricerca web** gia' nel kernel (chiave dedicata) e la sezione «Ricerca
+  approfondita».
+- I meccanismi che iniettano documenti di progetto nel contesto (istruzioni di progetto, contesto
+  del progetto): la strada per far leggere documenti al modello esiste gia', non va inventata.
+⇒ Il pezzo mancante non e' la capacita' di leggere o cercare: e' che TALOS **non sa niente di se
+stesso** e non ha una fonte dichiarata su cui rispondere.
+
+**Le tre fonti, in ordine di fiducia** (da decidere con l'owner):
+1. **La documentazione nel repo** — sta gia' sul disco di chi usa la app, quindi risponde anche
+   senza rete. E' la fonte primaria e va tenuta aggiornata come codice.
+2. **I fatti su se stesso** — che cos'e' TALOS, la repo GitHub `Ninozzz95/talos`, la licenza
+   AGPL-3.0-only, la versione installata, cosa fa e cosa NON fa ancora. ⛔ Devono venire dal
+   REPOSITORY e dal pacchetto, mai dalla memoria del modello: un dato scritto a mano invecchia e
+   diventa una bugia al primo rilascio.
+3. **Il sito ufficiale di TALOS** — ⛔ **oggi non esiste**. L'owner lo nomina come fonte futura.
+   Quindi l'attrezzo deve degradare in modo onesto quando non c'e', e il sito e' una decisione
+   separata da prendere, non un presupposto di questa riga.
+
+**Prima di scrivere una riga** (ricerca obbligatoria, e l'owner la chiede esplicitamente): come lo
+fanno i concorrenti. Hermes ha un sito con DOCS e un PORTAL; Claude Code ha `/help` e una
+documentazione interrogabile; Cursor e Codex hanno le loro. Interessa COME ancorano la risposta:
+citano il file o la pagina? Dicono «non lo so» quando la documentazione tace? Funzionano offline?
+
+**Vincoli che questa casa ha gia' pagato e che valgono qui:**
+- ⛔⛔ **Una risposta sbagliata SICURA e' peggio del silenzio.** Misurato qui: un modello ha negato
+  l'esistenza di una cartella che conteneva 104 file, con una motivazione costruita, e il banco l'ha
+  registrata come successo. Un centro assistenza che inventa il comportamento di «Full access» e'
+  peggio di nessun centro assistenza. ⇒ Ogni risposta cita la FONTE (file e sezione, o pagina), e
+  quando la documentazione non copre la domanda lo dice.
+- ⛔ Niente nomi tecnici a schermo: la persona chiede «Full access», non `cartellaEffettivaPerPermessi`.
+- ⛔ La documentazione che l'attrezzo legge diventa di fatto pubblica: va trattata come il README,
+  quindi niente percorsi personali, niente chiavi, niente roba interna.
+- Local-first dove si puo': la fonte 1 non ha bisogno di rete.
+
+**Un corollario che vale da subito:** se TALOS deve spiegare le sue funzioni, quelle funzioni devono
+essere SCRITTE da qualche parte. Oggi «Full access» e' spiegato solo dal codice e da un commento.
+Questa riga quindi non e' solo un attrezzo: e' anche la decisione di scrivere e mantenere una
+documentazione d'uso, funzione per funzione.
+
+**Stato:** APERTA, dichiarata «importantissima» dall'owner, da fare DOPO il rilascio.
+
+> ⛔ **13/09/2026 — RINUMERATE.** Queste tre righe erano nate come PO-14, PO-15 e PO-16, ma quei tre
+> numeri erano gia' stati usati il **12/09** nella coda dei debiti per tre cose diverse (i fornitori
+> P-D…P-L, la delega a un agente esterno da CLI, la connessione a GitHub). Chi e' arrivato prima
+> tiene il numero: le mie di oggi diventano **PO-17, PO-18, PO-19**. ⛔ La causa e' che i numeri PO
+> si assegnano in DUE documenti diversi senza un registro unico: finche' resta cosi', succedera'
+> ancora.
+
+## PO-20 | Selezione MASSIVA nelle sezioni: Libreria, Note, Ricerca e le altre (owner 13/09/2026, post rilascio)
+
+Owner, parole sue: «pulsante per selezionare massivamente i dati nelle sezioni libreria note ricerca
+etc». Nasce guardando TALOS cancellare 214 file della Libreria uno per uno, per nove lotti, in 314
+secondi: **la persona non ha alcun modo di farlo da se'**, e nemmeno il modello ce l'ha.
+
+**Cosa manca, oggi.** Le sezioni con elenchi — Libreria (216 voci nello scatto), Note, Attivita',
+Memoria, Ricerca approfondita, Progetti, Board — hanno azioni **per riga**. Nessuna selezione
+multipla, nessun «seleziona tutto», nessuna azione su piu' voci insieme. Per togliere 214 file di
+scarto l'unica via era chiederlo all'agente, che ha dovuto fare 214 chiamate.
+
+**Cosa serve, come minimo:** caselle di selezione per riga; «seleziona tutto» che dichiari se
+significa *tutto* o *tutto cio' che il filtro mostra* (sono due cose diverse e vanno distinte a
+parole, non con un'icona); un contatore sempre visibile di quante voci sono scelte; e una barra di
+azioni che compare solo quando c'e' una selezione.
+
+⛔ **Vincoli che questa casa ha gia' pagato:**
+- **La conferma di un'azione distruttiva su N voci deve dire quante e quali**, non ripetere N volte
+  la domanda che oggi si fa per una. Un «Elimina 214 file?» senza l'elenco di cosa sta per sparire
+  non e' una conferma, e' una trappola.
+- ⛔ Deve esistere un modo di **tornare indietro**, o almeno di sapere cosa e' stato tolto. Oggi la
+  cancellazione e' definitiva e silenziosa.
+- **Piu' di due azioni su un oggetto vogliono un menu**, non cinque pulsanti affiancati: e' una
+  regola esplicita dell'owner del 10/09, nata proprio da una riga della Libreria.
+- Si rispetta il sistema di disegno Calm gia' in casa, e **nessuna funzione che oggi esiste sulla
+  riga singola puo' sparire** nella forma nuova.
+
+⭐ **Fondamenta in comune con BC-10.** Una selezione massiva senza un'operazione massiva sotto
+produrrebbe esattamente il difetto di oggi, solo avviato da un pulsante invece che dall'agente. Le
+rotte e gli attrezzi che accettano una lista di id servono a tutte e due le righe, e vanno disegnati
+una volta sola. ⇒ Ordine consigliato: prima la meta' server/attrezzi di BC-10, poi questa.
+
+**Prima di disegnare** (regola dell'owner): guardare come lo fanno i concorrenti che lui usa come
+metro, e che cosa TALOS ha gia' nelle sue liste, invece di inventare da zero.
+
+**Stato:** APERTA, decisa dall'owner, da fare DOPO il rilascio.
+
+### PO-20, estensione | tutte le sezioni con un elenco, non solo la Libreria
+
+Owner, 13/09: «fai in modo che si estenda a tutti i tool che ne hanno bisogno». Vale anche qui: la
+selezione massiva non e' una funzione della Libreria, e' una funzione delle LISTE.
+
+Le sezioni con un elenco e con azioni per riga, oggi: **Libreria**, **Note**, **Attivita'**,
+**Memoria**, **Ricerca approfondita**, **Progetti**, **Board**, e le liste del contesto (lavori e
+fatti). Ognuna ha sotto una rotta che opera su una voce per volta, censite in BC-10.
+
+⇒ La selezione va disegnata **una volta sola come comportamento condiviso delle liste**, non
+copiata sette volte. Cambiano solo quali azioni compaiono nella barra quando c'e' una selezione:
+eliminare vale ovunque, completare solo per le Attivita', mettere in pausa o annullare solo per le
+Ricerche.
+
+⛔ Due avvertenze, dalla stessa giornata: una selezione massiva senza l'operazione massiva sotto
+(BC-10) rifarebbe il ciclo di oggi con un pulsante al posto dell'agente; e l'esito va mostrato
+**per voce**, perche' un «fatto» complessivo su 214 file nasconde quello che non e' andato.
+
+**Stato:** APERTA, decisa dall'owner, da fare DOPO il rilascio, insieme a BC-10.
+
+## PO-21 | Freccia su per la cronologia dei MESSAGGI, non solo dei comandi (owner 13/09/2026, post rilascio)
+
+Owner: «tasto freccia su per accedere alla cronologia».
+
+⛔ **Cosa esiste gia'** (verificato nel codice il 13/09, non ricordato): la cronologia c'e' gia', ma
+registra **solo i comandi della shell**. I fatti:
+- il legame ↑/↓ e' gia' nel gestore di tasti del composer (`legacy/app.js`, dentro il `keydown` di
+  `composerInput`), introdotto con PO-06 il 10/09;
+- chi la riempie e' `ricordaComandoDiretto`, e ha **un solo chiamante**: sta dentro
+  `if (value.startsWith('!'))`, e salva il comando DOPO aver tolto il prefisso. Un messaggio
+  normale al modello non entra mai nella lista;
+- lo store e' `localStorage`, chiave `talos.harness.desktop.comandi.v1`, tetto **50**, **globale**
+  (non per sessione), letto una volta e tenuto in memoria.
+
+⇒ Il lavoro non e' costruire la funzione: e' **estenderla ai messaggi**. Il che e' piu' piccolo di
+quanto sembri, e piu' delicato di quanto sembri.
+
+⭐ **Una cosa da NON rompere.** La guardia esistente prende ↑ solo a campo vuoto, o se si sta gia'
+scorrendo: in una textarea le frecce muovono il cursore fra le righe, ed e' quello che si aspetta
+chi scrive un messaggio lungo. E' una decisione giusta e motivata nel codice. Chi tocchera' questa
+riga la conservi: rubare sempre ↑ romperebbe la scrittura normale.
+
+**Tre domande da decidere con l'owner, non da risolvere in silenzio:**
+1. **Una lista o due?** Comandi e messaggi nello stesso storico significa che ↑ restituisce a volte
+   un comando e a volte un messaggio; separarli significa due gesti diversi per la stessa idea.
+2. **Globale o per sessione?** Oggi e' globale, e per i comandi ha senso. Per i messaggi meno: un
+   messaggio richiamato dentro un altro progetto e' un errore facile da fare e difficile da notare.
+3. **Il tetto di 50** e' tarato sui comandi. Con ogni messaggio dentro si riempie molto piu' in
+   fretta, e va deciso se 50 resta la cosa giusta.
+
+**Stato:** APERTA, decisa dall'owner, da fare DOPO il rilascio.
+
+## PO-22 | Togliere i temi Paper, Claudius e Basicus (owner 13/09/2026)
+
+**Richiesta, testuale:** «rimuovere temi basicus claudius e paper definitivamente dalla app,
+motivo: non mi piacciono». Nessuna discussione da fare: e' una scelta di gusto dell'owner sul
+proprio prodotto, ed e' la ragione sufficiente.
+
+**Misurato il 13/09, non ricordato.** Oggi i temi sono **quattordici**, e il loro elenco e'
+dichiarato in **DUE posti che devono restare allineati**: `frontend/src/avvio.js:56` e
+`frontend/src/legacy/app.js:12665` (`TALOS_THEME_IDS`). Tutti e tre i nomi chiesti dall'owner sono
+temi veri di quell'elenco, non parole che capitano.
+
+**Dove vive un tema, per ognuno dei tre** — **otto** posti (li avevo contati sette: la descrizione e le traduzioni sono due file, non uno), e chi ne dimentica uno lascia un tema a
+meta':
+
+⛔ **L’elenco delle scene e’ PARALLELO PER POSIZIONE, ed e’ la trappola vera.** Verificato il 13/09 leggendo i tre elenchi: **quattordici** temi in `avvio.js`, **quattordici** in `legacy/app.js`, identici e nello **stesso ordine**; **quattordici** scene congelate, e l’ordine delle scene combacia con quello dei temi, posizione per posizione. ⇒ Togliere un tema dagli elenchi senza togliere **la sua scena, alla stessa posizione**, sposta tutti i temi successivi sulla scena sbagliata, e lo fa **in silenzio**: non c’e’ nessun errore, cambia solo il disegno dietro.
+
+| dove | cosa c'e' |
+|---|---|
+| `frontend/src/avvio.js:56` | il nome nell'elenco dei quattordici |
+| `frontend/src/legacy/app.js:12665` | lo **stesso** elenco, duplicato |
+| `frontend/src/styles/temi.css` | il blocco dei semi di colore (accento, fondo, linea, raggi) |
+| `frontend/src/styles/desktop-final.css` | regole in piu' per alcuni temi |
+| `frontend/src/components/workspace-footer.js:45` | l'etichetta umana mostrata a schermo |
+| `frontend/src/motion/desktop-scenes.js:122` | una scena animata a testa, dentro un elenco congelato di quattordici |
+| `frontend/src/components/theme-studio.js` | la descrizione lunga mostrata nello studio dei temi |
+| `frontend/src/i18n/en.js` | le voci tradotte |
+
+## ⛔ Le due cose che l'owner deve sapere PRIMA, perche' sono conseguenze misurate
+
+1. ✅ **CORRETTO IL 13/09 DALL’OWNER, e la misura gli da’ ragione.** Avevo scritto qui che i temi chiari erano quattro e che dopo la rimozione ne sarebbe restato **uno solo**. ⛔ **E’ FALSO, ed era mio.** L’owner: «ogni tema scuro ha una sua controparte chiara».
+   Verificato in `frontend/src/styles/temi.css`, righe 115 e 123: il fondo chiaro e quello scuro leggono il seme del tema **con un ripiego** — se un tema non dichiara il proprio fondo, se lo **deriva dall’accento**. ⇒ **Tutti e quattordici i temi hanno entrambe le forme**; i quattro che dichiarano i semi per esteso stanno solo scavalcando il valore derivato.
+   ⇒ **Togliere i tre non riduce le forme chiare disponibili.** La conseguenza che avevo scritto non esiste, e questa riga resta come promemoria: la mia fonte era un commento in `legacy/app.js:12774` che parla dell’impostazione del **mobile**, non dei temi del desktop. Un commento non e’ una misura.
+2. **Chi ha gia' scelto uno dei tre** se lo ritrova salvato nelle proprie preferenze. Se si toglie
+   il tema senza una migrazione, quella persona resta con un tema **che non esiste piu'**: e' la
+   stessa famiglia del «default che nessun percorso produce» gia' in memoria. ⇒ Serve una riga che
+   porti chi aveva paper/claudius/basicus su un tema vivo, e la scelta di quale la fa l'owner.
+
+## Come si verifica che sia finita davvero
+
+- I tre nomi non compaiono piu' in **nessuno** dei sette posti: una ricerca sul nome, non sul file.
+- L'elenco congelato delle scene passa da quattordici a **undici**, e la app non lancia errori
+  all'avvio (quell'elenco e' parallelo per posizione: toglierne uno a meta' sposta tutte le altre).
+- Provato **anche al contrario**: si carica un profilo che ha uno dei tre salvato, e si verifica che
+  venga portato su un tema vivo invece di restare senza.
+- Foto nei due temi, chiaro e scuro, e con il tema chiaro superstite.
+
+⛔ Tocca `frontend/src/legacy/app.js`, quindi in una fase e' una corsia con il lucchetto: un solo
+agente per volta su quel file.
+
+## PO-23 | L'icona del desktop su un fondo pieno, presa da quella del mobile (owner 13/09/2026)
+
+**Richiesta, testuale, con foto del collegamento sul Desktop:** «mettere icona dietro un bg, direi
+di prendere tale e quale icona della app mobile».
+
+## ⛔ La causa vera di cio' che si vede nella foto, misurata
+
+Nella foto l'icona e' un contorno sottile che si perde sullo sfondo rosso. Non e' solo questione di
+gusto: **il file dell'icona contiene due sole misure**, 256 e 32 pixel. Windows per il collegamento
+sul Desktop ne usa una da **48**, che li' dentro **non c'e'** ⇒ se la fabbrica da sola rimpicciolendo
+quella da 256. Un disegno a filo sottile, ridotto cosi', si sfarina e sparisce.
+
+⇒ Il lavoro ha **due meta'**, e farne una sola non basta:
+1. **il fondo pieno**, che e' quello che l'owner ha chiesto;
+2. **le misure mancanti**, senza cui anche un'icona col fondo resterebbe sgranata a 48 pixel.
+
+## La proposta dell'owner regge, con una precisazione — verificato nel codice del mobile
+
+L'icona del mobile e' **adattiva a due strati**, dichiarati separatamente: un **fondo pieno**
+(`#1e1f22` per il tema calm) e un disegno di primo piano. Cioe' ha gia' esattamente la cosa che manca
+al desktop. E il primo piano e' **vettoriale** (600x600 di area di disegno), quindi si ridisegna
+pulito a qualunque misura, senza sgranare.
+
+⛔ **Ma non si copia il file.** L'icona di Android e' fatta per essere **ritagliata dal telefono**
+dentro un cerchio o un quadrato stondato: ha margini di sicurezza attorno al disegno. Portata su
+Windows tale e quale darebbe un'icona con i bordi sbagliati, o troppo piccola dentro il suo quadrato.
+⇒ Si prendono i **due strati** e si ridisegna per Windows, alle misure che Windows chiede.
+
+⭐ **E c'e' gia' un generatore che lo fa**: `mobile/tools/android-assets/gen_theme_icons.py` produce
+oggi **quindici** icone, una per tema. Estenderlo per emettere anche il formato di Windows e' molto
+meno lavoro che ridisegnare a mano.
+
+## ⛔ Due cose da decidere, e le decide l'owner
+
+1. ✅ **DECISO: UNA SOLA** (owner 13/09). Il mobile ne ha quindici, una per tema. Sul desktop l'icona sta
+   nel collegamento e nella barra: cambiarla quando la persona cambia tema e' possibile ma non
+   gratuito, e su Windows un collegamento gia' creato non si aggiorna da solo. La via semplice e'
+   **una sola**, quella del tema predefinito.
+2. **Quale fondo.** Il mobile usa un fondo scuro. Sul Desktop di Windows, che puo' avere qualunque
+   sfondo, un fondo scuro pieno funziona quasi sempre — ma va guardato su sfondo chiaro **e** scuro
+   prima di dire che va bene.
+
+⛔ **Incrocio con PO-22:** fra le quindici icone del mobile ci sono anche quelle di **basicus** e
+**claudius**, due dei tre temi che l'owner ha chiesto di togliere. Se i temi spariscono, spariscono
+anche le loro icone: le due righe vanno fatte nello stesso giro o si contraddicono.
+
+## Come si verifica che sia finita davvero
+
+- Il file dell'icona contiene **tutte** le misure che Windows usa, non due: si conta aprendo il file,
+  non fidandosi del programma che l'ha scritto.
+- Foto del collegamento **sul Desktop vero**, su sfondo chiaro e su sfondo scuro, e nella barra delle
+  applicazioni: e' li' che il difetto si vede, non in un'anteprima.
+- ⛔ Provato anche al contrario: si guarda l'icona a **16 pixel** (barra del titolo), la misura in cui
+  un disegno complesso diventa una macchia.
+
+## PO-24 | Rifare la modale del primo avvio (owner 13/09/2026)
+
+**Richiesta, testuale:** «rifare la modale del primo avvio, sinceramente ora come ora fa cagare al
+cazzo scusa la sincerita', deve seguire le linee guida delle modali intro moderne 2026, ui super
+smooth e setup veloce e rapido».
+
+⛔ E' la **prima cosa** che vede chiunque apra TALOS per la prima volta, e adesso l'installatore e'
+pubblicato: da oggi quella schermata la incontrano persone che non siamo noi.
+
+## Cosa c'e' oggi, misurato e non ricordato
+
+`frontend/src/components/intro.js`, **296 righe**, **quattro passi**: cartella, modello, permessi,
+pronto. Non e' uno scheletro: legge le cartelle vere del computer con un albero navigabile da
+tastiera, i fornitori dal portachiavi, i modelli dal catalogo, e se un elenco non arriva **lo dice**
+invece di mostrare valori finti.
+
+⭐ **E dentro c'e' gia' una ricerca**, del 06/09, che va usata e non rifatta da zero: l'onboarding
+deve portare **al primo valore nel minor numero di passi** e deve permettere di **saltare**; l'albero
+delle cartelle segue le regole di accessibilita' per gli alberi (frecce, inizio e fine, ricerca per
+lettera). ⇒ Chi rifa' la modale parte da qui.
+
+## ⛔ Due cose morte attaccate a questa superficie, misurate oggi
+
+1. `apriIntroPrimoAvvio` in `legacy/app.js`, **176 righe**, e il suo nome compare **una volta sola**
+   in tutto il codice: la propria definizione. **Nessuno la chiama.** E' la vecchia modale, rimasta.
+2. Un commento a `legacy/app.js:445` rimanda a `costruisciIntroPrimoAvvio` «per i dettagli». Quella
+   funzione **non esiste** in nessun file. ⇒ Un commento che manda a leggere il nulla e' peggio di
+   nessun commento: fa perdere tempo a chi si fida.
+
+⇒ Vanno tolte nello stesso giro, altrimenti chi rifa' la modale trova due versioni e non sa quale sia
+viva. Si incrocia con la corsia del codice morto gia' in tabella.
+
+## ⛔ Cosa serve PRIMA di disegnare, e oggi non si puo' fare
+
+L'owner chiede «le linee guida delle modali intro moderne 2026». Quella e' **una ricerca**, ed e'
+obbligatoria prima di scrivere codice — regola di casa, violata due volte in un giorno solo a
+settembre e mai piu'. ⛔ **Il budget di ricerca web di questa sessione e' esaurito** (200 su 200),
+quindi la ricerca **non e' stata fatta** e non va spacciata per fatta. Chi apre questa riga la fa
+come primo passo, e cita fonte e data.
+
+Cosa cercare, concretamente: quanti passi tollera una persona prima di abbandonare; se conviene
+chiedere le cose **dopo** il primo valore invece che prima; come si fa a far saltare tutto senza che
+la app resti inutilizzabile; e che cosa vuol dire «smooth» in numeri — durate delle transizioni,
+rispetto della preferenza di chi ha chiesto meno animazioni.
+
+## Come si verifica che sia finita davvero
+
+- ⛔ **Provata da profilo vergine**, non dalle preferenze salvate dell'owner: e' gia' successo che una
+  foto sembrasse giusta solo perche' il profilo aveva gia' tutto dentro.
+- Contato **quanti passi** e **quanti secondi** servono a una persona nuova per arrivare al primo
+  messaggio utile. Sono i due numeri che dicono se «veloce e rapido» e' vero.
+- Provata anche nel verso in cui si **salta tutto**: la app deve restare usabile, non rotta.
+- Foto nei due temi, chiaro e scuro, e alle larghezze da portatile e da schermo grande.
+- Le due funzioni morte non esistono piu', e nessun commento rimanda a funzioni inesistenti.
+
+## PO-25 | Il pulsante «+» come pannello delle azioni, e le PROCEDURE GUIDATE (owner 13/09/2026)
+
+**Richiesta, con quattro schermate del mobile:** riprodurre sul desktop il pannello che si apre col
+«+», **e espanderlo**. «Soprattutto nella sezione Crea e Agente ci siano delle funzionalita'
+estremamente studiate, come quelle che abbiamo studiato per il workflow con Paperclip, per rendere
+quel tasto estremamente versatile». L'owner la chiama **«piu' un end game che altro»**.
+
+## Cosa mostrano le schermate del mobile, letto dalle foto
+
+Un foglio che sale dal basso, titolo **«Cosa vuoi fare?»**, una **casella di ricerca** delle azioni, e
+**quattro categorie** in griglia due per due — Allega, Crea, Strumenti, Agente — dove la categoria
+scelta si accende e sotto compare il suo elenco:
+
+| categoria | sottotitolo | voci viste nelle foto |
+|---|---|---|
+| **Allega** | File, immagini, libreria | Allega un file · Scegli un'immagine · Scatta una foto · Dalla Libreria |
+| **Crea** | Documenti e contenuti | Migliora il messaggio · Crea presentazione · Crea documento · Analizza un file |
+| **Strumenti** | Note, memoria, telefono | Nuova nota · Nuova memoria · Controllo del telefono · Tool Forge · Modelli |
+| **Agente** | Piani, ricerche, strumenti | Strumenti del modello (interruttore) · Pianifica un'attivita' · Ricerca approfondita · Lavora con Codice |
+
+## ⛔ Il difetto e' scritto nelle schermate stesse
+
+Tre voci della sezione **Crea** portano come sottotitolo, testualmente, **«Precompila il messaggio»**.
+⇒ Oggi quel pulsante **scrive testo nel composer** e si ferma li'. E' un acceleratore di battitura,
+non un modo di far partire un lavoro. L'owner lo dice con l'esempio: «Crea una presentazione non e'
+che ti riempi il composer con il testo».
+
+## Che cosa deve diventare, e con quale macchina
+
+**Una procedura guidata**: la voce fa partire **un piano a passi** che il modello propone e la
+persona approva, come la modalita' piano. Esempi dell'owner: una **presentazione**; e **un sito web**
+con una procedura che chiede linguaggio, framework, obiettivo, stack.
+
+⭐ **La macchina c'e' gia' nel piano**, ed e' quella della **modalita' workflow** (Fase 3-bis): il
+modello propone un piano, la persona lo approva prima che parta, le lavorazioni dichiarano i file che
+toccano, e l'esecuzione riprende dopo una chiusura. ⇒ Una procedura guidata **e' un piano di lavoro
+con un modulo davanti**: non serve un secondo motore, serve un modo di **partire da un modello di
+piano** invece che dal foglio bianco.
+
+⛔ **Dipendenza vera, non formale:** questa riga **non si apre prima** della modalita' workflow. Senza
+quella, «procedura guidata» diventerebbe una finestrella che alla fine incolla un testo nel composer,
+cioe' esattamente il difetto di oggi con piu' passaggi.
+
+## ⛔ Cosa NON so ancora, e va accertato prima di scrivere una riga di codice
+
+Non ho misurato **cosa esiste oggi sul desktop** dietro al «+»: se ci sia un pannello, quali voci
+abbia, e quali di esse precompilino soltanto. ⛔ Va accertato **nel codice**, non dedotto dalle foto
+del mobile: oggi stesso ho aperto due lavorazioni su premesse che non avevo misurato, e una era un
+difetto che non esisteva.
+
+E va deciso: quali procedure guidate esistono al primo colpo (presentazione, documento, sito web,
+altro), e se la casella di ricerca cerchi solo fra le azioni o anche dentro il prodotto.
+
+## Come si verifica che sia finita davvero
+
+- Una voce di **Crea** fa partire una procedura a passi che si puo' **approvare o annullare**, e alla
+  fine produce **un artefatto vero**, non un messaggio precompilato.
+- La procedura del **sito web** chiede linguaggio, framework, obiettivo e stack, e ogni risposta
+  cambia davvero il piano — provato cambiando una risposta e verificando che il piano cambi.
+- Provato **anche al contrario**: si annulla a meta' e non resta niente di sporco, ne' una sessione
+  aperta ne' file a meta'.
+- Il pannello si apre da tastiera e ci si muove da tastiera, e la ricerca filtra davvero.
+- Foto nei due temi e alle due larghezze.

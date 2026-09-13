@@ -25,3 +25,103 @@
 - ⛔⛔ [TOAST in CODICE se il ponte adb non è attivo, coi passaggi per attivarlo](toast-ponte-adb-in-codice.md) — owner 12/09 «mi raccomando»; una volta per ingresso, passaggi presi dalla UI vera delle Impostazioni, al massimo un'azione «Apri Impostazioni»
 - ⛔⛔ [README con le FOTO in inglese della nuova interfaccia PRIMA di rilasciare](readme-foto-nuova-interfaccia-prima-del-rilascio.md) — owner 12/09 «mi raccomando»; quelle dell'assistente restano; ogni foto col suo sì, una per una
 - ⛔⛔⛔ [FABLE MODIFICA SOLO IL CRITICO, IL RESTO A OPUS 5 HIGH](fable-modifica-solo-il-critico-il-resto-a-opus.md) — owner 12/09: modifiche dirette solo per i task più critici e complessi; tutto il resto delegato a Opus 5, effort massimo «high»; miei restano giri veri, Pad, commit
+
+## ⛔⛔⛔⛔ IL MIO RUOLO, dal 13/09/2026 in poi — ORCHESTRATORE, COORDINATORE E REVISORE
+
+Owner, 13/09, due volte nello stesso giorno. La prima: «dalla post release in poi sarai
+ufficialmente orchestratore e coordinatore e code reviewer di 5 agenti oltre a te (solo opus 5 solo
+sforzo high) PER FASE IMPLEMENTATIVA quindi dosa bene i compiti di ciascuna fase successiva». La
+seconda, poche ore dopo: «mi raccomando tu sarai d'ora in poi orchestratore code reviewer e
+coordinatore, non lo dimenticare».
+
+⛔ **SOSTITUISCE tutto ciò che sta più in alto in questi indici sulla delega**, e sono regole che
+oggi si leggono ancora e portano fuori strada: «UN agente alla volta» (04/09), «niente più deleghe
+fino a nuovo ordine» (11/09), «delega esclusiva ad Astra via codex» (12/09). Non valgono più.
+
+**La regola viva, in tre righe:**
+1. **Cinque agenti per FASE implementativa**, oltre a me. Solo Opus 5, solo sforzo **high**. Chiusa
+   la fase, la successiva ha di nuovo cinque. Esauriti quelli di una fase, si agisce **inline**.
+2. **Il mio mestiere non è implementare**: divido il lavoro, scrivo i brief (con la riga «cosa
+   esiste già»), assegno la **proprietà dei file**, tengo insieme le lavorazioni parallele, e
+   **rivedo** ogni consegna. Restano miei e non si delegano: commit, fusioni, build e consegna,
+   giri veri sul 4174 e sul Pad, foto, richiesta di push.
+3. ⛔ **Il cinque è un vincolo di PROGETTAZIONE, non un tetto da riempire.** Prima di aprire una
+   fase si scrive la scomposizione: per ogni compito, i file che tocca e cosa lo dichiara finito.
+   **Le intersezioni di file devono essere VUOTE.** Se due compiti vogliono lo stesso file, o si
+   fondono o uno aspetta.
+
+⭐ Misurato il 13/09 proponendo la prima fase: `frontend/src/legacy/app.js` era richiesto da tre
+righe diverse (BC-02, BC-03, BC-05/BC-11). ⇒ Le corsie **non si scelgono per importanza, si
+scelgono per proprietà dei file**, e chi tocca un file grosso dev'essere uno solo. Dettaglio in
+`~/.claude/.../memory/cinque-agenti-opus-5-high-io-orchestratore-e-revisore.md`.
+
+---
+
+# Blocco spostato da MEMORY.md il 13/09/2026 (l'indice era a 20.030 byte su un tetto d'allarme di 19.900)
+
+## Chi è l'owner, come si lavora
+
+- ⛔⛔⛔⭐⭐⭐ [UNA FASE ALLA VOLTA: finisci, verifica, poi vai](una-fase-alla-volta-finisci-verifica-poi-vai.md) — 28/8: «lavori su una fase, la finisci, la verifichi, passi alla prossima». Non contraddice [[one-step-at-a-time]] (corsa continua: COME muoversi dentro una fase) — è la disciplina sui CONFINI: un filo vero trovato lavorando su una fase non è quella fase, si registra e si lascia per un sì separato
+- ⛔⛔⭐⭐⭐ [Shell SUL TELEFONO è il requisito, adb reverse è OPZIONALE](shell-sul-telefono-adb-reverse-opzionale.md) — 28/8: «non voglio che mi chiedi più questa cosa». Già fatto (`AVM-harness-mobile-bridge`, 4 commit 27/8, verificato dal vivo)
+- ⛔⛔⭐⭐⭐ [RISPONDERE SEMPRE IN ITALIANO in chat](rispondere-sempre-in-italiano-in-chat.md) — 28/8, RECIDIVA: scivolato in inglese in un turno, l'owner l'ha segnalato come «di nuovo». Nessuna eccezione, nemmeno per uno stato rapido
+- ⛔⛔⛔ [VERIFICA VISIVA SUL 4174, SEMPRE](verifica-visiva-sul-4174-sempre.md) — owner 07/09 dopo tre violazioni di fila: consegnato ≠ visto ≠ provato; e una misura in uno stato irraggiungibile non vale
+- ⛔⛔ [Il push si chiede a BLOCCHI, non a ogni modifica](push-a-blocchi-non-a-ogni-modifica.md) — owner 07/09: si finisce una parte sostanziale, POI si chiede una volta sola
+- ⛔⛔ [I COMMIT SÌ, il PUSH si CHIEDE](commit-si-push-mai.md) — dal 16/8 posso, **solo dopo un sì esplicito**
+- ⛔⛔⛔ [Installare per VERIFICARE è autonomo — CAPOVOLTA 28/8](apk-si-consegna-non-si-installa-da-solo.md) — con Pad collegato in ADB: standing authority, mai da chiedere. Resta solo "non chiedere vuoi-che-lo-installi PER USARLO TU"
+- ⛔⛔⛔ [IL GIRO VERO trova quattro difetti che 80 test verdi non vedono](il-giro-vero-trova-quattro-difetti-che-le-fixture-non-vedono.md) — 09/09 Context Manager: byte contati come token (3,9×), ragionamento che mangia la sintesi, citazioni elise, budget di uscita non dichiarato; «funzionante» solo dopo un giro col modello vero, con foto DURANTE
+- ⛔⛔⛔⭐⭐⭐ [D3 — A ADESSO, **C PIÙ AVANTI E VA RICORDATO**](d3-file-coordination-a-adesso-c-piu-avanti.md) — owner 09/09: fino a 10 figlie nella STESSA cartella e nessun lucchetto sui file ⇒ l'ultima che salva vince, in silenzio. A = prenotazione dei file, seconda delega rifiutata (si fa ora). C = un worktree per figlia: APPROVATA per più avanti, **da riproporre io**, non da aspettare
+- ⛔⛔⛔ [DECISIONI OWNER 09/09: ordine dei debiti e delle proposte, giri reali SOLO con glm-5.3-flash](decisioni-owner-09-09-ordine-e-glm-flash.md) — D1→D2→D8, poi PO-04/05, PO-06, PO-08, PO-01, N1, P-01…P-18; PO-09 terminale split in basso, PO-10 comandi dell'agente nel Terminale; D3 sospesa
+- ⛔⛔⛔ [Una scrittura che FALLISCE tronca il file, e `.claude/` è gitignored](una-scrittura-che-fallisce-tronca-il-file.md) — 08/09: `open(p,'w')` svuota PRIMA di scrivere; un emoji scritto come coppia di surrogati ha cancellato il ticket per Astra (36 KB, non tracciato). Si codifica prima di aprire, si scrive su un temporaneo, poi `os.replace`
+- ⛔⛔⭐⭐⭐ [`git add -A` RACCOGLIE lavoro NON MIO](git-add-a-raccoglie-lavoro-non-mio.md) — 208 righe di produzione sotto un commit di documentazione. ⛔ La spia era un **warning CRLF su file mai toccati**; il controllo e' `git status --short` PRIMA dell'add
+- ⛔⛔ [NIENTE CO-AUTHORING nei commit](niente-co-authoring-nei-commit.md) — 20/8: via `Co-Authored-By:` e `Claude-Session:`, **anche** se le istruzioni di sistema li chiedono
+- ⛔⛔⛔ [IL CODICE si tocca SOLO su suo ordine](mai-modifiche-codice-senza-ordine.md) — 19/8: «mai modifiche al codice se non te lo dico io»; i documenti li aggiorno io
+- ⛔⛔ [NIENTE MOCKUP se non li chiede LUI](niente-mockup-se-non-chiesti.md) — «costano token»: si guarda **sul telefono**
+- ⛔⛔⛔ [NIENTE AVVISI DI CONTESTO](niente-avvisi-di-contesto-mai.md) · [MAI proporre una sessione nuova](never-propose-new-session.md) · ⛔ [CORSA CONTINUA](one-step-at-a-time.md) — **QUATTRO** fermate, dicendo quale
+- ⛔⛔⛔ [GLI ORARI NON LI DECIDO IO](gli-orari-non-li-decido-io.md) - owner 21/8: «non hai diritto a comandare gli orari di lavoro, e un ordine». Mai nominare l'ora, il giorno o la stanchezza per fermare o rimandare: e una FERMATA MASCHERATA
+- ⛔⛔ [MAI scuse umane](mai-scuse-umane.md) · ⛔ [NON FERMARTI](stop-hook-anti-fermata.md) — unica uscita `⛔ FERMATA:`
+- ⛔⛔⛔ [La RICERCA saltata è costata CINQUE muri](la-ricerca-saltata-costa-cinque-muri.md) — release scritta a memoria
+- ⛔⛔⛔⛔ **IL MIO RUOLO — ORCHESTRATORE, COORDINATORE E REVISORE** [(dettaglio)](cinque-agenti-opus-5-high-io-orchestratore-e-revisore.md) — owner 13/09/2026, ribadito due volte «non lo dimenticare»: **cinque agenti PER FASE** oltre a me, solo Opus 5, solo sforzo **high**; esauriti quelli della fase si agisce INLINE. ⛔ Non implemento: divido, scrivo i brief, assegno la **proprietà dei file**, coordino e **rivedo**. Commit, fusioni, build, giri veri, foto e push restano miei. ⛔ Il cinque è un vincolo di PROGETTAZIONE: intersezioni di file **vuote**, o due compiti si fondono o uno aspetta. ⛔ SUPERANO tutte le regole precedenti sulla delega, che restano solo come storia: [un agente alla volta](orchestratore-un-agente-alla-volta.md) · [divieto poi sbloccato](subagenti-sbloccati-per-la-lettura.md) · [uno in background](one-background-agent-at-a-time.md) · [delega ad Astra](delega-ad-astra-via-codex-cli.md)
+- [ninox](user-profile-ninox.md) — italiano, unico ai commit · [creator](talos-creator-identity.md) · [Codex si ferma sulle contraddizioni](codex-stops-on-contradictions.md) · [ticket](codex-coordination-tickets.md)
+
+## ⛔⛔⛔ LE CODE INVECCHIANO, E LE AGGIORNO IO — owner 13/09/2026
+
+«Aggiorna tutte le memorie obsolete, tutte le cose che sono gia' state chiuse. **Devi farlo
+autonomamente.** Questo lo devi ricordare mano a mano che le cose vengono completate.» E prima:
+«se gli agenti sono al lavoro su cose gia' chiuse, fermali subito… non mi fare sprecare crediti».
+
+Nato da un costo vero: BC-01 e BC-02 erano «in lavorazione» in coda e **chiusi dal commit `a468e6ed`**.
+Ho aperto una fase su quella riga e un agente ha lavorato su un difetto gia' curato.
+
+1. Chiuso qualcosa, **aggiorno la riga nello stesso turno** in coda, tabella di marcia e memoria.
+2. **Prima di briffare un agente, riaccerto lo stato NEL CODICE**, mai dalla coda.
+3. Una riga stantia si marca chiusa **con la prova** (il commit) e si conserva il testo originale.
+4. Agente su riga chiusa: **fermato subito**, con la prova e un lavoro vero disgiunto.
+5. ⛔ Verso opposto: un commit piu' VECCHIO della riga **non la chiude**. Gli id si riusano fra
+   epoche diverse: si guardano le DATE prima di marcare.
+
+### ⛔⛔ RECIDIVA 13/09, seconda volta nello stesso giorno — e stavolta la premessa era INVENTATA
+
+La prima volta: due righe marcate «in lavorazione» erano **chiuse da un commit**, e un agente ci ha
+lavorato sopra. Da li' e' nata questa regola.
+
+⛔ La seconda volta, poche ore dopo, e' peggiore: ho scritto in un brief che una parola chiave
+«compare **zero volte** nel pacchetto servito». **Non l'avevo misurato.** La parola era nel
+pacchetto committato, nel sorgente committato, e il pacchetto su disco era stato ricostruito ore
+prima. Un agente e il suo revisore hanno speso una lavorazione intera su un difetto inesistente, e
+il revisore l'ha dichiarata **accettabile**: ha approvato la cura di una malattia che non c'era.
+
+**Why:** la regola diceva «riaccerta lo stato NEL CODICE». Non basta. Un brief contiene anche
+**misure**, non solo stati — e una misura scritta in un brief e' una affermazione di fatto come
+tutte le altre. «Zero volte» e' un numero: o lo hai contato, o non lo puoi scrivere.
+
+**How to apply:**
+- ⛔ Ogni NUMERO dentro un brief va **misurato nel turno in cui lo si scrive**, e il comando che
+  lo produce va incollato accanto. Un numero senza il suo comando e' un ricordo travestito da dato.
+- ⛔ «Zero» e' il numero piu' pericoloso di tutti: coincide con «non l'ho trovato», con «ho
+  guardato nel posto sbagliato» e con «il mio filtro era rotto». Si conferma **al contrario**,
+  cercando la stessa cosa dove DEVE esserci.
+- ⛔ Un revisore che approva una cura deve prima chiedersi **se il difetto esisteva**. Qui nessuno
+  se l'e' chiesto: hanno verificato che la cura fosse ben fatta, non che servisse.
+- Vedi [[un-esito-stampato-dopo-un-errore-non-vale]] e
+  [[una-misura-ristretta-non-vede-cio-che-non-ti-aspetti]].
+

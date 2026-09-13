@@ -1,5 +1,17 @@
 # LO STATO VERO DELLE RIGHE — 11/09/2026
 
+> ## ⛔ LETTO IL 13/09/2026 — quali verdetti reggono ancora e quali no
+>
+> Questo documento e' ancora la **fonte piu' autorevole** sulle righe che ha provato, perche' ogni
+> verdetto qui dentro viene da una prova eseguita e non dalla presenza del codice. Due avvertenze:
+>
+> 1. I verdetti si riferiscono a `HEAD = 128b44e0` dell'11/09. Il ramo e' andato avanti: fra il 12 e
+>    il 13 altre righe si sono chiuse, e due che qui risultano aperte sono state chiuse dal commit
+>    `a468e6ed`. La tabella aggiornata e' `TABELLA-FASI-COMPLETA-2026-09-13.md`.
+> 2. ⛔ Le righe che questo documento **dichiara aperte senza averle riprovate** (quelle raccolte come
+>    «gruppo B» nella tabella) non sono una misura: sono una dichiarazione di due giorni fa. Vanno
+>    riaccertate nel codice **prima** di aprirci una fase sopra.
+
 > Owner, oggi: «**non voglio assolutamente vedere fasi già fatte in documenti di debiti/implementazioni
 > in corso**».
 >
