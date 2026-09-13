@@ -1,13 +1,31 @@
 # Changelog di TALOS Desktop
 
+Forma: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) (letto il 13/09/2026); versioni
+[SemVer](https://semver.org/): in 0.y.z tutto può ancora cambiare. La versione vive in
+`package.json` e nel tag `desktop-vX.Y.Z`.
+
+## Unreleased
+
 ## desktop-v0.1.0 — non rilasciata
 
+**Cosa NON fa ancora:** non è firmata (Windows mostra SmartScreen), non si aggiorna da sola, non
+include modelli GGUF (si scaricano dall'app), non è stata provata su Windows 10 1809 né su una
+macchina senza driver Vulkan.
+
+### Added
 - Guscio **Electron 44.3.0** della stessa interfaccia TALOS, con Node incluso, backend locale, kernel e motore di contesto (R-01).
 - Installer **NSIS per utente**, senza privilegi amministrativi e **non firmato**, più archivio ZIP completo; i dati utente sono conservati dopo la disinstallazione (R-02).
 - Motore **llama.cpp b10517**, CPU e Vulkan, incluso e verificato tramite SHA-256; i modelli GGUF non sono inclusi (R-02).
-- Workflow Windows per i tag `desktop-vX.Y.Z`, controlli di regressione, prova di installazione/avvio/reload/disinstallazione, SHA-256 e attestazioni degli artefatti. Implementato e provato localmente; l'esecuzione su GitHub resta da verificare (R-04).
-- Nessun aggiornamento automatico. Telemetria: nessuna. I provider remoti e i download dei modelli richiedono rete quando usati.
-- Licenza del progetto: **AGPL-3.0-only**; le terze parti conservano le proprie licenze (R-05A).
+- Il motore locale si sceglie dalla macchina: Vulkan solo se elenca una scheda; se la scheda manca o si perde durante il caricamento il modello riparte una volta sul processore; menu «Motore locale» (Automatico · Scheda grafica · Processore); stato del motore nel Laboratorio modelli (R-03).
+- Workflow Windows per i tag `desktop-vX.Y.Z`: controlli di regressione, costruzione, prova di installazione/avvio/ricarica/disinstallazione, SHA-256 e attestazioni di provenienza degli artefatti (R-04).
+
+### Changed
+- Licenza del progetto: **AGPL-3.0-only** su tutto il monorepo; le terze parti conservano le proprie licenze (R-05a).
+- Il repository pubblico è un monorepo: la app mobile in `mobile/`, il desktop in `harness-ui/` e `context-engine/` (R-05b).
+
+### Security
+- Nessuna telemetria. I provider remoti e i download dei modelli usano la rete solo per quell'azione.
+- Renderer senza Node né preload, isolamento del contesto e sandbox attivi, navigazione e nuove finestre fuori dall'origine locale bloccate (checklist ufficiale di Electron, letta il 13/09/2026).
 
 ### Misure registrate in R-06
 
