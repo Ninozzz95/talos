@@ -374,7 +374,13 @@
     border: 0;
     outline: none;
     background: transparent;
-    padding: var(--talos-space-inline) var(--talos-space-inline) var(--talos-space-page);
+    /* ⛔ 2026-09-13, misurato sulla foto del Pad e confermato nel CSS: il campo
+       aggiungeva 0,5rem di padding SOPRA che si sommavano a 1rem della scheda,
+       mentre sotto la riga strumenti restava solo 1rem della scheda. Sopra il
+       doppio dello spazio che c'era sotto, e si vedeva. Il padding verticale
+       del campo se ne va dall'alto; in basso resta mezzo passo, che con il
+       margine della riga strumenti fa un passo intero come sopra. */
+    padding: 0 var(--talos-space-inline) var(--talos-space-inline);
     font-family: var(--talos-font-ui);
     font-size: var(--text-base);
     line-height: 1.6;
@@ -382,13 +388,30 @@
 }
 
 .talos-calm-prompt::placeholder { color: var(--talos-muted); opacity: 1; }
+
+/* Owner 2026-09-13: il comando sta ACCANTO al campo, non nella riga sotto. */
+.talos-composer-field-row {
+    display: flex;
+    align-items: flex-end;
+    gap: calc(var(--talos-space-inline) / 2);
+    padding-inline-end: var(--talos-space-inline);
+}
+.talos-composer-field-row .talos-calm-prompt { flex: 1 1 auto; min-width: 0; }
+.talos-composer-field-row .talos-send-btn { margin-bottom: var(--talos-space-inline); }
+.talos-composer-field-row button:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
 .talos-docked-composer .talos-calm-prompt { min-height: 3.5rem; }
 
+/* ⛔ Owner 2026-09-13, dal Pad: «sono troppo attaccati i due container».
+   La riga del campo (o, mentre si detta, la barra di registrazione) e la riga
+   degli strumenti sotto si toccavano: due contenitori con un bordo proprio,
+   incollati, si leggono come un blocco solo e storto. Lo stacco e' quello di
+   sistema, cosi' resta uguale ovunque cambi la spaziatura. */
 .talos-composer-tools {
     display: flex;
     align-items: center;
     gap: calc(var(--talos-space-inline) / 2);
     flex-wrap: wrap;
+    margin-top: var(--talos-space-inline);
 }
 
 .talos-composer-tools .talos-mode-chip,
@@ -407,6 +430,13 @@
 .talos-model-chip { flex-wrap: wrap; overflow-wrap: anywhere; text-align: left; }
 .talos-model-chip > span:first-of-type { color: var(--talos-text); font-weight: 500; }
 .talos-mode-chip:disabled { opacity: .5; }
+.talos-composer-tools .talos-icon-chip {
+    width: var(--talos-touch-target);
+    padding: 0;
+    justify-content: center;
+    background: var(--talos-secondary, var(--talos-panel));
+    border-radius: 50%;
+}
 .talos-composer-tools .talos-mode-chip.active {
     background: var(--talos-active);
     color: var(--talos-text);
@@ -414,8 +444,7 @@
 }
 .talos-composer-tools button:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
 .talos-composer-tools .talos-plus-btn { border-radius: 50%; background: var(--talos-secondary, var(--talos-panel)); }
-.talos-composer-send-controls { display: flex; align-items: center; gap: calc(var(--talos-space-inline) / 2); margin-left: auto; }
-.talos-composer-tools .talos-send-btn {
+.talos-calm-composer .talos-send-btn {
     width: var(--talos-touch-target);
     height: var(--talos-touch-target);
     flex: none;
@@ -423,8 +452,8 @@
     background: var(--talos-accent);
     color: var(--talos-accent-text);
 }
-.talos-composer-tools .talos-send-btn:hover:not(:disabled) { background: var(--talos-accent-hover); }
-.talos-composer-tools .talos-send-btn:disabled { background: var(--talos-secondary, var(--talos-panel)); color: var(--talos-muted); opacity: .65; }
+.talos-calm-composer .talos-send-btn:hover:not(:disabled) { background: var(--talos-accent-hover); }
+.talos-calm-composer .talos-send-btn:disabled { background: var(--talos-secondary, var(--talos-panel)); color: var(--talos-muted); opacity: .65; }
 
 @media (max-width: 860px) {
     .talos-docked-composer { padding: var(--talos-space-inline) var(--talos-space-inline) max(var(--talos-space-card), env(safe-area-inset-bottom)); }

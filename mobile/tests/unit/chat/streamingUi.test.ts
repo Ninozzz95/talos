@@ -198,7 +198,8 @@ describe('TalosMobileStreamingReply (F2-T4 / R1-5)', () => {
             expect(utility, `waiting state must stay bare: ${utility}`)
                 .not.toMatch(/^(rounded|border|bg-|shadow|ring|backdrop)/)
         }
-        expect(waiting.find('svg').exists()).toBe(true)
+        // Owner 2026-09-13: il segno dell'attesa e' l'orb con l'anello che gira.
+        expect(waiting.find('[data-testid="talos-assistant-orb"]').exists()).toBe(true)
     })
 
     it('renders nothing at all when idle', () => {
@@ -228,8 +229,15 @@ describe('TalosMobileComposer stop control (F2-T4)', () => {
         expect(wrapper.find('button[aria-label="Send message"]').exists()).toBe(false)
     })
 
-    it('shows the Send button when idle', () => {
+    /**
+     * Owner 2026-09-13: a riposo il comando dipende dal testo — microfono
+     * finche' il campo e' vuoto, invio appena c'e' qualcosa da mandare.
+     */
+    it('a riposo mostra il microfono a campo vuoto, e l invio appena c e del testo', async () => {
         const wrapper = mountComposer(false)
+        expect(wrapper.find('button[aria-label="Dictate"]').exists()).toBe(true)
+        expect(wrapper.find('button[aria-label="Send message"]').exists()).toBe(false)
+        await wrapper.setProps({ prompt: 'una domanda' })
         expect(wrapper.find('button[aria-label="Send message"]').exists()).toBe(true)
         expect(wrapper.find('button[aria-label="Stop response"]').exists()).toBe(false)
     })

@@ -3,7 +3,6 @@ import { computed, defineAsyncComponent, defineComponent, h, nextTick, onBeforeU
 import { useTalosI18n } from '@/i18n'
 import TalosMobileAssistantHeader from './TalosMobileAssistantHeader.vue'
 import './talosCalmMessages.css'
-import TalosLineLoader from '@/components/brand/TalosLineLoader.vue'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
 import TalosMobileRunningToolRow from '@/components/chat/TalosMobileRunningToolRow.vue'
 import {
@@ -524,10 +523,11 @@ onBeforeUnmount(() => {
         role="status"
         aria-live="polite"
     >
-        <!-- F4-#24 (owner): boot-logo styled loader — a line crossing 3
-             empty nodes; each node fills as the line passes through it. -->
+        <!-- Owner 2026-09-13, dal Pad: «rimuovere il segnavia con i tre pallini
+             animato e lasciare solo orb con ring a scorrimento». Il segno
+             dell'attesa e' UNO — l'orb del marchio con l'anello che gira
+             (.talos-orb.working::after) — e sparisce alla prima lettera. -->
         <TalosMobileAssistantHeader working />
-        <TalosLineLoader :width="44" />
         <span class="sr-only">{{ $t('chat.processing') }}</span>
         <!--
             ⛔ Compare SOLO quando il motore sta davvero caricando: fuori da

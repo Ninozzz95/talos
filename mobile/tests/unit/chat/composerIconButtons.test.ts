@@ -41,15 +41,19 @@ describe('composer icon buttons', () => {
         }
     })
 
-    it('the microphone is bare, and send KEEPS its container', async () => {
+    /**
+     * ⛔ Aggiornato il 2026-09-13: l'owner ha chiesto un comando solo, accanto
+     * al campo — microfono a vuoto, invio col testo. Il contenitore pieno resta
+     * suo in ogni stato, perche' e' il pulsante che si cerca di fretta.
+     */
+    it('owner 2026-09-13: un comando solo, e TIENE il suo contenitore', async () => {
         const source = await composerSource()
-        const mic = buttonsLabelled(source, 'microphoneLabel')[0]
-        expect(mic).toContain('variant="ghost"')
-        expect(mic).not.toContain('talos-send-btn')
+        expect(buttonsLabelled(source, 'microphoneLabel')).toHaveLength(0)
+        expect(source).not.toContain('talos-composer-append-mic')
         const send = buttonsLabelled(source, 'rightActionLabel')[0]
         expect(send).toContain('talos-send-btn')
         const css = readFileSync('src/style.css', 'utf8')
-        expect(css).toMatch(/\.talos-composer-tools \.talos-send-btn\s*\{[^}]*border-radius: 50%;[^}]*background: var\(--talos-accent\)/s)
+        expect(css).toMatch(/\.talos-calm-composer \.talos-send-btn\s*\{[^}]*border-radius: 50%;[^}]*background: var\(--talos-accent\)/s)
     })
 
     it('keeps the 44px touch target on both controls', async () => {

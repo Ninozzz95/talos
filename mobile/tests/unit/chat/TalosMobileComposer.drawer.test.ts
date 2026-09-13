@@ -202,9 +202,14 @@ describe('composer drawer mode (F3-T4bis)', () => {
          * the visual breakpoint and the app's own definition of a tablet cannot
          * drift apart.
          */
+        /**
+         * ⛔ Aggiornato il 2026-09-13: l'owner ha chiesto la pillola del
+         * contesto SOLO ICONA, accanto a quella del modello, a ogni larghezza.
+         * Le parole non spariscono: restano in sr-only e nel nome accessibile,
+         * quindi chi ascolta lo schermo sente ancora modo e numero di fonti.
+         */
         const chipLabel = wrapper.get('[data-testid="talos-composer-library-chip-label"]')
-        expect(chipLabel.classes()).not.toContain('hidden')
-        expect(chipLabel.isVisible()).toBe(true)
+        expect(chipLabel.classes()).toContain('sr-only')
         // The icon is never hidden: on a phone it is all that remains.
         expect(chip.find('svg').exists()).toBe(true)
         // And the accessible name still carries the whole meaning.
@@ -387,10 +392,35 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
          * il solo che esiste e' quello della barra (provato in
          * `barraDettatura.test.ts`).
          */
+        /*
+         * ⛔⛔ 2026-09-13 — QUESTA GUARDIA ERA STATA SVUOTATA, E IL DIFETTO E'
+         * ARRIVATO SULLO SCHERMO DELL'OWNER.
+         *
+         * Il commento qui sopra diceva gia' la cosa giusta — «il compositore
+         * non disegna NESSUN comando di dettatura» — ma l'asserzione sotto
+         * pretendeva l'opposto, cioe' che `talos-composer-action` esistesse e
+         * si chiamasse «Stop dictation». Qualcuno l'aveva adattata alla forma
+         * del compositore Calm senza toccare l'INTENTO, e da quel momento il
+         * caso non difendeva piu' niente: passava sia con un comando che con
+         * due.
+         *
+         * Il 13/09, spostando il comando accanto al campo, i due stop sono
+         * tornati davvero: quello della barra e il tondo accento del
+         * compositore, quest'ultimo da solo su una riga vuota. Questo test era
+         * verde.
+         *
+         * ⇒ Ora asserisce cio' che il suo nome promette: mentre si detta, nel
+         * compositore non c'e' NESSUN comando di dettatura ne' il campo. Il
+         * solo stop che esiste e' quello della barra, provato in
+         * `barraDettatura.test.ts`.
+         */
         const wrapper = mountComposer({ drawerMode: true, dictationSupported: true, dictationListening: true })
         await flushPromises()
-        expect(wrapper.get('[data-testid="talos-composer-action"]').attributes('aria-label')).toBe('Stop dictation')
+        expect(wrapper.findAll('[data-testid="talos-composer-action"]')).toHaveLength(0)
+        expect(wrapper.findAll('[aria-label="Stop dictation"]')).toHaveLength(0)
+        expect(wrapper.findAll('[aria-label="Dictate"]')).toHaveLength(0)
         expect(wrapper.findAll('textarea')).toHaveLength(0)
+        expect(wrapper.findAll('.talos-composer-field-row')).toHaveLength(0)
     })
 
     // Owner device 2026-07-25: the mic was "extremely hard" to start. Root cause:
