@@ -408,6 +408,26 @@ senza reindirizzamento lascia la sua nota.
     la cura**; 21 su 22 sulla corsa a schermo; suite unitaria completa del frontend: 1039 prove, 1039 passate, 0 fallite.
   - 🔜 **Domanda per l'owner**: mentre ragiona compaiono insieme la riga «Sta ragionando…» e l'attesa
     «Ragionamento in corso…» — due segnali uguali. Hermes fa lo stesso.
+  ⭐ **FARE MEGLIO DI HERMES SUL SEGNALE DEL RAGIONAMENTO** — owner 13/09 sera: «Dobbiamo fare meglio di Hermes, cosa consigli?».
+  Letto nei cloni su disco (ricerca web esaurita) e misurato sullo store, in sola lettura.
+  - **Hermes desktop ha il nostro stesso doppio segnale**: la riga «Thinking…» col timer E una riga di stato
+    in fondo (`thread/status.tsx`, che parla del suo timer «thinking»). **E perde la durata alla ricarica**, lo
+    dichiara in `components/chat/activity-timer.ts`: «the persisted turn records the text the model thought, never
+    how long it spent thinking it» — una conversazione riaperta dice solo «Thought».
+  - **Codex ha un segnale solo, e dice SU COSA ragiona**: `tui/src/chatwidget/streaming.rs` estrae il primo
+    titolo in grassetto del ragionamento (`extract_first_bold`) e lo mette nella riga di stato al posto di
+    «Working»; si azzera a ogni nuova sezione del ragionamento.
+  - ⛔ **Il trucco di Codex da noi funziona il 5% delle volte**: 31 ragionamenti su 595 nello store hanno un
+    titolo in grassetto. I nostri modelli (qwen3.8-flash 436, glm-5.3-flash 129) scrivono prosa, spesso in
+    inglese. Il ripiego (l'ultima frase completa) sarebbe la regola, non l'eccezione.
+  - **Il server sa gia' abbastanza per battere Hermes sulla durata**: gli istanti di ogni evento stanno in
+    memoria (`voce.istantiEvento`) e a fine giro si salva gia' un record `tempi-giro`; la durata di ogni
+    ragionamento ci entra senza mettere un orario su ogni evento (scelta del registro: «una seconda fonte
+    di verita'»).
+  - **Raccomandazione in tre pezzi, decide l'owner**: (1) un solo indicatore vivo mentre ragiona — la riga
+    compressa diventa l'indicatore, l'attesa sotto sparisce e torna solo quando non c'e' altro che si muove;
+    (2) dire su cosa sta ragionando — titolo in grassetto se c'e', altrimenti l'ultima frase completa, su una
+    riga; (3) la durata che sopravvive alla ricarica, salvata nel record `tempi-giro`.
 - 🔜 **DUBBIO REGISTRATO, non difetto dichiarato**: 26 file di prova scattano foto e nessuno aspetta
   il velo esplicitamente. Molti aspettano elementi per piu' di 4 s, quindi le loro foto possono essere
   buone: va verificato guardandone una per suite, non dedotto dal conteggio.
