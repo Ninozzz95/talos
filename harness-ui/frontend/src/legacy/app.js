@@ -3345,6 +3345,25 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const refresh = $('#modelLabRuntimeRefresh');
     if (refresh) refresh.disabled = loading;
     aggiornaElencoRuntime(list, state.modelLab.runtimes, {caricamento: loading, errore: state.modelLab.runtimeError});
+    /*
+     * R-03 (13/09): «Riprova sulla scheda grafica» dopo un ripiego sul processore. La scheda
+     * del motore (runtime-modelli.js) alza un evento; qui si scarica e si ricarica lo STESSO
+     * modello con le rotte che esistono già, poi si rilegge lo stato. Il ripiego vale per un
+     * caricamento solo, quindi il nuovo caricamento riparte dalla scheda grafica.
+     */
+    if (!list.dataset.riprovaMotore) {
+      list.dataset.riprovaMotore = '1';
+      list.addEventListener('talos:riprova-motore', async (evento) => {
+        const modelId = evento.detail?.modelId;
+        try {
+          await apiPost('/api/v1/runtime/unload', { runtimeId: 'llama.cpp' });
+          if (modelId) await apiPost('/api/v1/runtime/load', { runtimeId: 'llama.cpp', modelId });
+        } catch (error) {
+          state.modelLab.runtimeError = error;
+        }
+        await caricaRuntimeModelLab();
+      });
+    }
     if (loading || state.modelLab.runtimeError) {
       status.textContent = loading ? 'Verifica in corso…' : 'Verifica non riuscita';
       runtimeSelect.replaceChildren(new Option(loading ? 'Verifica in corso…' : 'Nessun runtime osservato', ''));

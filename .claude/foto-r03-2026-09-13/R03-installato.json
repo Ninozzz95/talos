@@ -1,0 +1,132 @@
+[
+  {
+    "etichetta": "auto",
+    "preferenza": "auto",
+    "prima": {
+      "runtimeId": "llama.cpp",
+      "state": "observed",
+      "runtimeState": "unavailable",
+      "modelId": null,
+      "motore": {
+        "variante": "vulkan",
+        "dispositivi": [
+          "AMD Radeon RX 9070 XT"
+        ],
+        "ripiego": null,
+        "proposta": null
+      },
+      "observedAt": "2026-09-13T02:25:57.040Z",
+      "models": [
+        {
+          "id": "qwen3-0.6b-q2-k-16d75108d73a",
+          "name": "Qwen/Qwen3-0.6B-GGUF",
+          "source": "llama.cpp",
+          "context": {
+            "state": "unknown"
+          }
+        }
+      ]
+    },
+    "modelli": [
+      "qwen3-0.6b-q2-k-16d75108d73a"
+    ],
+    "load": {
+      "status": 200,
+      "ms": 1761,
+      "corpo": "{\"state\":\"ready\",\"runtimeId\":\"llama.cpp\",\"motore\":{\"variante\":\"vulkan\",\"dispositivi\":[\"AMD Radeon RX 9070 XT\"],\"ripiego\":null,\"proposta\":null},\"port\":50705,\"baseUrl\":\"http://127.0.0.1:50705\",\"modelId\":\"qwen3-0.6b-q2-k-16d75108d73a\",\"observedAt\":\"2026-09-13T02:25:58.810Z\"}"
+    },
+    "dopo": {
+      "runtimeId": "llama.cpp",
+      "state": "observed",
+      "runtimeState": "ready",
+      "modelId": "qwen3-0.6b-q2-k-16d75108d73a",
+      "motore": {
+        "variante": "vulkan",
+        "dispositivi": [
+          "AMD Radeon RX 9070 XT"
+        ],
+        "ripiego": null,
+        "proposta": null
+      },
+      "observedAt": "2026-09-13T02:25:58.820Z",
+      "models": [
+        {
+          "id": "qwen3-0.6b-q2-k-16d75108d73a",
+          "name": "Qwen/Qwen3-0.6B-GGUF",
+          "source": "llama.cpp",
+          "context": {
+            "state": "unknown"
+          }
+        }
+      ]
+    },
+    "testo_chiaro": "llama.cpp Raggiunto 1 modello disponibile Qwen/Qwen3-0.6B-GGUF Caricamento Modello caricato da TALOS Indirizzo Non esposto dal server Verifica 13/09/2026, 04:25:59 Motore locale scheda grafica (Vulkan) · AMD Radeon RX 9070 XT",
+    "pulsanti_chiaro": [],
+    "testo_scuro": "llama.cpp Raggiunto 1 modello disponibile Qwen/Qwen3-0.6B-GGUF Caricamento Modello caricato da TALOS Indirizzo Non esposto dal server Verifica 13/09/2026, 04:26:02 Motore locale scheda grafica (Vulkan) · AMD Radeon RX 9070 XT",
+    "pulsanti_scuro": [],
+    "unload": 200
+  },
+  {
+    "etichetta": "cpu",
+    "preferenza": "cpu",
+    "prima": {
+      "runtimeId": "llama.cpp",
+      "state": "observed",
+      "runtimeState": "unavailable",
+      "modelId": null,
+      "motore": {
+        "variante": "cpu",
+        "dispositivi": [],
+        "ripiego": null,
+        "proposta": null
+      },
+      "observedAt": "2026-09-13T02:26:09.240Z",
+      "models": [
+        {
+          "id": "qwen3-0.6b-q2-k-16d75108d73a",
+          "name": "Qwen/Qwen3-0.6B-GGUF",
+          "source": "llama.cpp",
+          "context": {
+            "state": "unknown"
+          }
+        }
+      ]
+    },
+    "modelli": [
+      "qwen3-0.6b-q2-k-16d75108d73a"
+    ],
+    "load": {
+      "status": 200,
+      "ms": 1764,
+      "corpo": "{\"state\":\"ready\",\"runtimeId\":\"llama.cpp\",\"motore\":{\"variante\":\"cpu\",\"dispositivi\":[],\"ripiego\":null,\"proposta\":null},\"port\":55254,\"baseUrl\":\"http://127.0.0.1:55254\",\"modelId\":\"qwen3-0.6b-q2-k-16d75108d73a\",\"observedAt\":\"2026-09-13T02:26:11.006Z\"}"
+    },
+    "dopo": {
+      "runtimeId": "llama.cpp",
+      "state": "observed",
+      "runtimeState": "ready",
+      "modelId": "qwen3-0.6b-q2-k-16d75108d73a",
+      "motore": {
+        "variante": "cpu",
+        "dispositivi": [],
+        "ripiego": null,
+        "proposta": null
+      },
+      "observedAt": "2026-09-13T02:26:11.014Z",
+      "models": [
+        {
+          "id": "qwen3-0.6b-q2-k-16d75108d73a",
+          "name": "Qwen/Qwen3-0.6B-GGUF",
+          "source": "llama.cpp",
+          "context": {
+            "state": "unknown"
+          }
+        }
+      ]
+    },
+    "testo_chiaro": "llama.cpp Raggiunto 1 modello disponibile Qwen/Qwen3-0.6B-GGUF Caricamento Modello caricato da TALOS Indirizzo Non esposto dal server Verifica 13/09/2026, 04:26:11 Motore locale processore",
+    "pulsanti_chiaro": [],
+    "testo_scuro": "llama.cpp Raggiunto 1 modello disponibile Qwen/Qwen3-0.6B-GGUF Caricamento Modello caricato da TALOS Indirizzo Non esposto dal server Verifica 13/09/2026, 04:26:14 Motore locale processore",
+    "pulsanti_scuro": [],
+    "unload": 200
+  }
+]

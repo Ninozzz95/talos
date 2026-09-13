@@ -17,6 +17,11 @@ import {
   trovaPortaLibera,
 } from '../src/config.mjs';
 import { generateHarnessReceiptKeypair } from '../src/harness-receipt-keypair.mjs';
+test('R03-CONFIG — fallback esplicito normalizzato, assente resta assente', () => {
+  const config = loadConfig({ TALOS_LLAMA_SERVER_PATH: 'gpu.exe', TALOS_LLAMA_SERVER_FALLBACK_PATH: 'cpu.exe' }, import.meta.url);
+  assert.equal(config.llamaServerFallbackPath, resolve('cpu.exe'));
+  assert.equal(loadConfig({ TALOS_LLAMA_SERVER_PATH: 'gpu.exe' }, import.meta.url).llamaServerFallbackPath, undefined);
+});
 
 /*
  * ⛔⛔⛔ 30/8 — `TALOS_BANCO_DIR`/`TALOS_HARNESS_UI_CAMPAIGNS` rimosse da

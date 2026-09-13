@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-export const STATO_FINESTRA_DEFAULT = Object.freeze({ width: 1440, height: 900, x: undefined, y: undefined, massimizzata: false, restaNelVassoio: false });
+export const STATO_FINESTRA_DEFAULT = Object.freeze({ width: 1440, height: 900, x: undefined, y: undefined, massimizzata: false, restaNelVassoio: false, motoreLocale: 'auto' });
 const MIN_W = 900;
 const MIN_H = 600;
 
@@ -25,12 +25,12 @@ export function leggiStatoFinestra(file, schermi = []) {
     const bounds = { x: salvato.x, y: salvato.y, width, height };
     if (schermi.length === 0 || schermi.some((s) => interseca(bounds, s))) { x = salvato.x; y = salvato.y; }
   }
-  return { width, height, x, y, massimizzata, restaNelVassoio: salvato.restaNelVassoio === true };
+  return { width, height, x, y, massimizzata, restaNelVassoio: salvato.restaNelVassoio === true, motoreLocale: ['auto', 'vulkan', 'cpu'].includes(salvato.motoreLocale) ? salvato.motoreLocale : 'auto' };
 }
 
-export function salvaStatoFinestra(file, { x, y, width, height, massimizzata = false, restaNelVassoio = false } = {}) {
+export function salvaStatoFinestra(file, { x, y, width, height, massimizzata = false, restaNelVassoio = false, motoreLocale = 'auto' } = {}) {
   if (!file) return;
-  const dati = { x, y, width, height, massimizzata: massimizzata === true, restaNelVassoio: restaNelVassoio === true, salvatoIl: new Date().toISOString() };
+  const dati = { x, y, width, height, massimizzata: massimizzata === true, restaNelVassoio: restaNelVassoio === true, motoreLocale: ['auto', 'vulkan', 'cpu'].includes(motoreLocale) ? motoreLocale : 'auto', salvatoIl: new Date().toISOString() };
   mkdirSync(dirname(file), { recursive: true });
   const tmp = `${file}.tmp-${process.pid}`;
   writeFileSync(tmp, `${JSON.stringify(dati, null, 2)}\n`);

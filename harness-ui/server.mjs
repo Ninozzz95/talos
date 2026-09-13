@@ -144,16 +144,18 @@ async function startServer() {
    * dichiara nessun dispositivo — una build CPU accetterebbe `-ngl` e lo
    * ignorerebbe, e resteremmo convinti di usare una scheda che non tocchiamo.
    */
-  async function rilevaLivelliGpu(percorsoBinario) {
+  async function rilevaMotore(percorsoBinario) {
+    // R-03: oltre a «c'è una GPU?» si tengono i NOMI dei dispositivi, per dirli alla persona.
     try {
       const { execFile } = await import('node:child_process');
       const { promisify } = await import('node:util');
       const { stdout } = await promisify(execFile)(percorsoBinario, ['--list-devices'], { timeout: 20_000, windowsHide: true });
-      const haDispositivo = /^\s{2,}\S+\d*:\s/mu.test(stdout) && !/\(none\)/u.test(stdout);
+      const dispositivi = [...stdout.matchAll(/^\s{2,}(\S+\d*):\s*(.+?)\s*$/gmu)].map((m) => m[2].replace(/\s+\(\d+ MiB,.*\)$/u, ''));
+      const haDispositivo = dispositivi.length > 0 && !/\(none\)/u.test(stdout);
       if (haDispositivo) console.log('[runtime] backend GPU rilevato dal binario llama-server:', stdout.trim().split(/\r?\n/u).slice(1).join(' | '));
-      return haDispositivo ? 99 : 0;
+      return { gpuLayers: haDispositivo ? 99 : 0, dispositivi: haDispositivo ? dispositivi : [] };
     } catch {
-      return 0; // ⛔ se non si riesce a chiedere, non si dà per scontato
+      return { gpuLayers: 0, dispositivi: [] }; // ⛔ se non si riesce a chiedere, non si dà per scontato
     }
   }
 
@@ -274,8 +276,20 @@ async function startServer() {
      * quello che Windows racconta sulla VRAM (tronca a 32 bit: riportava 4 GB
      * per una scheda da 16).
      */
-    const gpuLayers = await rilevaLivelliGpu(config.llamaServerPath);
-    const supervisor = createLlamaServerSupervisor({ binaryPath: config.llamaServerPath, modelStore: localModelStore, gpuLayers });
+    const { gpuLayers, dispositivi } = await rilevaMotore(config.llamaServerPath);
+    /*
+     * R-03, 13/09 — la riserva CPU (`TALOS_LLAMA_SERVER_FALLBACK_PATH`, messa dal guscio
+     * quando sceglie Vulkan) e la descrizione del motore entrano nel supervisore: se la
+     * scheda manca o si perde durante il caricamento, il modello riparte sul processore
+     * una volta sola e lo stato lo dichiara (`motore.ripiego`).
+     */
+    const supervisor = createLlamaServerSupervisor({
+      binaryPath: config.llamaServerPath,
+      fallbackBinaryPath: config.llamaServerFallbackPath && config.llamaServerFallbackPath !== config.llamaServerPath ? config.llamaServerFallbackPath : null,
+      motore: { variante: gpuLayers > 0 ? 'vulkan' : 'cpu', dispositivi },
+      modelStore: localModelStore,
+      gpuLayers,
+    });
     // ⛔ Registrato SUBITO dopo la creazione: è l'unico punto in cui il
     // legame tardivo di sopra si chiude davvero. Senza questa riga i modelli
     // locali resterebbero irraggiungibili con un messaggio che dice
@@ -283,7 +297,10 @@ async function startServer() {
     supervisoreLocale = supervisor;
     const llama = createLlamaServerRuntime({ supervisor });
     localRuntimes['llama.cpp'] = {
-      detect: async () => ({ state: 'observed', runtimeId: 'llama.cpp', runtimeState: supervisor.status().state, observedAt: supervisor.status().observedAt }),
+      detect: async () => {
+        const s = supervisor.status();
+        return { state: 'observed', runtimeId: 'llama.cpp', runtimeState: s.state, modelId: s.modelId ?? null, motore: s.motore, observedAt: s.observedAt };
+      },
       listModels: async () => (await localModelStore.list()).filter((model) => model.state === 'ready').map((model) => ({ id: model.id, name: model.repo, source: 'llama.cpp', context: { state: 'unknown' } })),
       inspect: (modelId) => localModelStore.inspect(modelId),
       /*
