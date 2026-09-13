@@ -375,6 +375,26 @@ senza reindirizzamento lascia la sua nota.
   unico contenuto e' un ragionamento che l'utente ha scelto di nascondere (`showReasoning` spento), e
   una domanda accodata arriva prima di qualunque testo. Prima lo copriva l'attesa messa nel posto
   sbagliato. Si puo' mostrare una riga discreta o comprimere il turno: non lo decido io.
+  ⭐ **RICERCA SUL RAGIONAMENTO NASCOSTO — 13/09 sera, chiesta dall'owner** (ricerca web esaurita a
+  200/200: pagine lette per indirizzo diretto, Hermes letto nel clone su disco).
+  - **Hermes desktop** (`apps/desktop/src/components/assistant-ui/thread/message-parts.tsx`): il
+    ragionamento **non si nasconde mai, si comprime**. Una riga apribile che dice «Thinking…» mentre
+    scrive e poi «Thought for 12s» / «Thought briefly» / «Thought» — «a turn that ended must not go on
+    saying Thinking». Preferenza **«Collapse thinking by default»**, spenta di serie: «Keep streamed
+    reasoning available without expanding it until you open it.» Un ragionamento **senza testo** non
+    ha riga: «an empty header is never wanted».
+  - **Hermes CLI**: `display.show_reasoning` acceso di serie; spento, in terminale non stampa niente.
+  - **assistant-ui** (su cui Hermes desktop e' costruito): «a plain collapsed row once the model moves
+    on», etichetta «Reasoning (12s)». **AI SDK Elements**: si apre mentre scrive, si chiude a fine.
+  - **NN/g, Nielsen, «Progressive Disclosure» (3/12/2006)**: il secondario si rimanda, ma «it must be
+    obvious how users progress» — deve restare trovabile.
+  - ⛔ **TALOS oggi fa il contrario dei tre**: «Mostra ragionamento» e' spento di serie e spento vuol
+    dire `hidden`, cioe' **invisibile e irraggiungibile**. Il turno vuoto e' il sintomo; la causa e' che
+    nascondere non e' comprimere.
+  - **Raccomandazione**: il ragionamento si comprime invece di sparire (la riga chiusa esiste gia':
+    e' la card attivita' della nota), con la durata nell'etichetta; un ragionamento senza testo non ha
+    riga; l'interruttore cambia significato da «mostra/nascondi» a «aperto mentre scrive / sempre
+    compresso». 🔜 Decide l'owner, e decide anche il valore di serie.
 - 🔜 **DUBBIO REGISTRATO, non difetto dichiarato**: 26 file di prova scattano foto e nessuno aspetta
   il velo esplicitamente. Molti aspettano elementi per piu' di 4 s, quindi le loro foto possono essere
   buone: va verificato guardandone una per suite, non dedotto dal conteggio.
