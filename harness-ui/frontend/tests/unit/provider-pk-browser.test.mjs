@@ -29,8 +29,14 @@ test('PK-UI-02/03 — campi cloud reali, salvataggio HTTP, ricarica, errore e di
   const sorgenti = { name: 'sorgenti-pk', setup(b) {
     b.onResolve({ filter: /.*/ }, args => {
       if (/\.(woff2?|ttf)$/u.test(args.path)) return { path: args.path, external: true };
+      // 13/09: un riferimento che comincia con «/» e' un INDIRIZZO servito dall'app a runtime
+      // (qui «/talos/brand/logo-short.svg», che static-files.mjs serve davvero), non un file da
+      // impacchettare. Senza questa riga esbuild lo legge come percorso su disco, arriva a
+      // C:/talos/... e il cancello lo respinge: il test cadeva su una risorsa che nel browser
+      // funziona benissimo. Stessa idea dei font qui sopra: cio' che serve la rete resta fuori.
+      if (args.path.startsWith('/')) return { path: args.path, external: true };
       const path = resolve(args.resolveDir || frontend, args.path);
-      if (relative(frontend, path).startsWith('..')) throw Error('Sorgente fuori dal frontend');
+      if (relative(frontend, path).startsWith('..')) throw Error('Sorgente fuori dal frontend: ' + path + '  (chiesto da ' + (args.importer || 'ingresso') + ' come ' + args.path + ')');
       return { path, namespace: 'pk' };
     });
     b.onLoad({ filter: /.*/, namespace: 'pk' }, async args => ({ contents: await readFile(args.path, 'utf8'), resolveDir: dirname(args.path), loader: extname(args.path) === '.css' ? 'css' : 'js' }));
@@ -67,12 +73,25 @@ test('PK-UI-02/03 — campi cloud reali, salvataggio HTTP, ricarica, errore e di
     await vertex.getByLabel('Regione', { exact: true }).fill('europe-west1');
     assert.equal(await vertex.getByLabel('Indirizzo del servizio').inputValue(), 'https://europe-west1-aiplatform.googleapis.com/v1/projects/progetto-pk/locations/europe-west1/endpoints/openapi');
     await salva();
-    await page.waitForFunction(() => document.querySelector('[data-provider-id=vertex] [data-provider-feedback]').textContent === 'Collegamento salvato.');
+    try {
+      await page.waitForFunction(() => document.querySelector('[data-provider-id=vertex] [data-provider-feedback]').textContent === 'Collegamento salvato.');
+    } catch (errore) {
+      // 13/09: un'attesa che scade non dice NIENTE di utile, e questo test ha bruciato 30 secondi
+      // per dire solo «Timeout». Qui si legge cosa c'e' DAVVERO nel riscontro e quali errori ha
+      // raccolto la pagina, e si rilancia coi due fatti dentro il messaggio.
+      const visto = await page.evaluate(() => { const e = document.querySelector('[data-provider-id=vertex] [data-provider-feedback]'); return e ? { testo: e.textContent, nascosto: e.hidden } : 'elemento assente'; });
+      throw new Error('riscontro atteso «Collegamento salvato.», visto ' + JSON.stringify(visto) + ' · errori di pagina: ' + JSON.stringify(errors) + ' · causa: ' + errore.message);
+    }
     await carica();
     assert.equal(await vertex.getByLabel('Progetto', { exact: true }).inputValue(), 'progetto-pk');
     await vertex.getByLabel('Regione', { exact: true }).fill('regione/non-valida');
     await salva();
-    await page.waitForFunction(() => document.querySelector('[data-provider-id=vertex] [data-provider-feedback]').textContent === 'Controlla il collegamento.');
+    // 13/09: il test aspettava «Controlla il collegamento.», una frase che nel prodotto NON
+    // esiste piu' da nessuna parte: il componente e' cambiato due volte dopo che questo test e'
+    // nato, e il ramo di errore scrive la frase qui sotto. Il test restava appeso 30 secondi e
+    // diceva solo «Timeout». ⛔ Si allinea al prodotto MANTENENDO il confronto esatto: se il ramo
+    // di errore smettesse di scattare, questa attesa deve tornare a cadere.
+    await page.waitForFunction(() => document.querySelector('[data-provider-id=vertex] [data-provider-feedback]').textContent === 'Collegamento non salvato. Controlla i campi e il server locale, poi riprova.');
     await page.evaluate(() => carica()); // il renderer mantiene la bozza, non la sostituisce col salvato
     assert.equal(await vertex.getByLabel('Regione', { exact: true }).inputValue(), 'regione/non-valida');
     await vertex.getByLabel('Regione', { exact: true }).fill('europe-west1');

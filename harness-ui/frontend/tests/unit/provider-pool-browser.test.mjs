@@ -18,8 +18,14 @@ test('PH-UI-BROWSER componenti reali: menu, azioni, tastiera, desktop, mobile e 
   const sorgenti={name:'sorgenti-ph',setup(b){
     b.onResolve({filter:/.*/},args=>{
       if(/\.(woff2?|ttf)$/u.test(args.path))return {path:args.path,external:true};
+      // 13/09: un riferimento che comincia con «/» e' un INDIRIZZO servito dall'app a runtime
+      // (qui «/talos/brand/logo-short.svg», che static-files.mjs serve davvero), non un file da
+      // impacchettare. Senza questa riga esbuild lo legge come percorso su disco, arriva a
+      // C:/talos/... e il cancello lo respinge: il test cadeva su una risorsa che nel browser
+      // funziona benissimo. Stessa idea dei font qui sopra: cio' che serve la rete resta fuori.
+      if(args.path.startsWith('/'))return {path:args.path,external:true};
       const path=resolve(args.resolveDir||frontend,args.path);
-      if(relative(frontend,path).startsWith('..'))throw new Error('Sorgente fuori dal frontend');
+      if(relative(frontend,path).startsWith('..'))throw new Error('Sorgente fuori dal frontend: ' + path + '  (chiesto da ' + (args.importer || 'ingresso') + ' come ' + args.path + ')');
       return {path,namespace:'ph'};
     });
     b.onLoad({filter:/.*/,namespace:'ph'},async args=>({contents:await readFile(args.path,'utf8'),resolveDir:dirname(args.path),loader:extname(args.path)==='.css'?'css':'js'}));
