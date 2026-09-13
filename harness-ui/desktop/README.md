@@ -261,6 +261,19 @@ Registro con oscuramento delle credenziali e limite di dimensione.
 Renderer senza Node o preload, con isolamento e sandbox attivi; nuove finestre
 e navigazioni fuori dall'origine locale bloccate. `ignore-gpu-blocklist` conservato.
 
+**Motore locale (R-03).** All'avvio il guscio chiede alla build Vulkan inclusa
+`--list-devices`: sceglie la scheda grafica solo se ne elenca almeno una, altrimenti
+il processore (`--version` esce 0 anche senza GPU, quindi non basta). Al servizio
+passa il binario scelto e, con Vulkan, la riserva CPU. Se durante un caricamento la
+scheda manca o si perde (driver assente, dispositivo perso), il modello riparte una
+volta sola sul processore e la scheda del motore nel Laboratorio modelli lo dice
+(«La scheda grafica non è disponibile: il modello gira sul processore», con
+«Riprova sulla scheda grafica»). Con la memoria della scheda esaurita non si ripiega
+da soli: viene proposta la scelta «Processore» nel menu «Motore locale» (Automatico,
+Scheda grafica, Processore), che riavvia il servizio e vale finché la persona non la
+cambia. I modelli GGUF si scaricano dall'app con impronta verificata; un file con
+byte o impronta diversi da quelli dichiarati viene rifiutato.
+
 L'ingresso browser riusa il redirect `/?token=` esistente e il cookie HttpOnly,
 SameSite=Strict. Il token non compare negli argomenti del figlio né nel registro.
 L'URL passato all'associazione browser di Windows contiene la credenziale: la

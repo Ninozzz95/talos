@@ -33,6 +33,8 @@ function avviaGuscio() {
   let staUscendo = false; let uscitaPronta = false; let dialogoAperto = false;
   let generazione = 0; let generazioneMostrata = 0;
   let restaNelVassoio = leggiStatoFinestra(fileStato).restaNelVassoio;
+  let motoreLocalePreferito = leggiStatoFinestra(fileStato).motoreLocale;
+  let cambioMotoreInCorso = false;
   const attendi = ms => new Promise(r => setTimeout(r, ms));
 
   function salva() {
@@ -40,7 +42,7 @@ function avviaGuscio() {
       const stato = finestra && !finestra.isDestroyed()
         ? { ...finestra.getNormalBounds(), massimizzata: finestra.isMaximized() }
         : leggiStatoFinestra(fileStato);
-      salvaStatoFinestra(fileStato, { ...stato, restaNelVassoio });
+      salvaStatoFinestra(fileStato, { ...stato, restaNelVassoio, motoreLocale: motoreLocalePreferito });
     } catch { registro.scrivi('Impossibile salvare la posizione della finestra.'); }
   }
 
@@ -104,13 +106,13 @@ function avviaGuscio() {
       await Promise.all([...figli].filter(h => h.chiusura).map(h => h.chiusura));
       if (staUscendo) throw new Error('Chiusura in corso.');
       const percorsi = risolviPercorsi({ appPath: app.getAppPath(), isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, harnessDir: process.env.TALOS_DESKTOP_HARNESS_DIR });
-      const motoreLocale = scegliMotoreLocale({ percorsi });
-      if (motoreLocale) process.env.TALOS_LLAMA_SERVER_PATH = motoreLocale;
+      const motoreLocale = scegliMotoreLocale({ percorsi, preferenza: motoreLocalePreferito });
+      if (motoreLocale) registro.scrivi('Motore locale: ' + JSON.stringify(motoreLocale));
       if (!existsSync(percorsi.server)) throw new Error('Il servizio locale manca dal pacchetto.');
       const port = await scegliPortaEffimera();
       if (staUscendo) throw new Error('Chiusura in corso.');
       const reportFile = join(cartellaHandshake, 'figlio-' + (++generazione) + '.json');
-      const avvio = creaAvvioFiglio({ execPath: process.execPath, percorsi, port, token, reportFile, dataDir });
+      const avvio = creaAvvioFiglio({ execPath: process.execPath, percorsi, port, token, reportFile, dataDir, motoreLocale });
       const proc = spawn(avvio.command, avvio.args, avvio.options);
       const handle = { proc, port, reportFile, generazione, terminato: false, get exitCode() { return proc.exitCode; } };
       figli.add(handle);
@@ -130,6 +132,7 @@ function avviaGuscio() {
     uccidiFiglio: fermaFiglio, attendiSalute: salute,
     onStato: (stato, dettaglio) => {
       registro.scrivi('Stato: ' + stato + ' ' + (dettaglio ? JSON.stringify(dettaglio) : ''));
+      if (vassoio) creaMenu();
       if (stato === 'pronto') void mostraOAggiorna().catch(() => { registro.scrivi('Impossibile aprire la finestra.'); app.quit(); });
       if (stato === 'arreso') void mostraErrore();
     },
@@ -151,17 +154,32 @@ function avviaGuscio() {
     finestra.show(); finestra.focus();
   }
 
+  async function cambiaMotoreLocale(preferenza) {
+    if (cambioMotoreInCorso || staUscendo || preferenza === motoreLocalePreferito) return;
+    cambioMotoreInCorso = true;
+    motoreLocalePreferito = preferenza; salva(); creaMenu();
+    registro.scrivi('Preferenza manuale del motore locale: ' + preferenza + '. Riavvio del servizio; ricaricare il modello scelto.');
+    try { await ciclo.riavvia(); }
+    catch (errore) { registro.scrivi('Cambio motore non riuscito: ' + errore.message); }
+    finally { cambioMotoreInCorso = false; if (!staUscendo) creaMenu(); }
+  }
+
   function creaMenu() {
+    const motore = () => ({ label: 'Motore locale', submenu: [
+      ['auto', 'Automatico'], ['vulkan', 'Scheda grafica (Vulkan)'], ['cpu', 'Processore'],
+    ].map(([valore, label]) => ({ id: 'motore-' + valore, label, type: 'radio', checked: motoreLocalePreferito === valore,
+      enabled: !cambioMotoreInCorso && !['avvio', 'in-chiusura'].includes(ciclo.stato()), click: () => { void cambiaMotoreLocale(valore); } })) });
     const azioni = () => [
       { id: 'apri-talos', label: 'Apri TALOS', click: portaDavanti },
       { id: 'apri-browser', label: 'Apri nel browser', click: apriBrowser },
+      motore(),
       { type: 'separator' },
       { id: 'esci', label: 'Esci', click: () => app.quit() },
     ];
     vassoio.setContextMenu(Menu.buildFromTemplate(azioni()));
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       { label: 'TALOS', submenu: [
-        ...azioni().slice(0, 2), { type: 'separator' },
+        ...azioni().slice(0, 3), { type: 'separator' },
         { id: 'resta-vassoio', label: 'Resta nel vassoio alla chiusura', type: 'checkbox', checked: restaNelVassoio,
           click: voce => { restaNelVassoio = voce.checked; salva(); } },
         { label: 'Apri il registro', click: apriRegistro }, { type: 'separator' }, azioni().at(-1),
