@@ -5,7 +5,7 @@ diff, automations, hooks, MCP, skills and plugins, driven by any model over
 OpenRouter. Every session is a replayable event log; every operation with
 side effects leaves a signed receipt. The server binds to `127.0.0.1` only.
 
-<img src="../mobile/docs/immagini/tablet-9-coding-agent.png" alt="Harness Desktop mid-session: chat on the left, live tool feed and context rail on the right">
+<img src="docs/immagini/harness-desktop.png" alt="Harness Desktop after a run: the agent read the files, added a boundary test and ran the suite; the tool strip and the diff sit in the conversation, the touched files and the folder tree on the right">
 
 ## Quick start
 
