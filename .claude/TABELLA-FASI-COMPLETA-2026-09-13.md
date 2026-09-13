@@ -270,6 +270,53 @@ invisibili.
 millisecondi fra il clic e il segno a schermo. Qualunque numero sulla «fluidita'» sarebbe
 inventato finche' non lo misuriamo noi.
 
+#### ⭐ TRE PISTE IN PIU', VERIFICATE APRENDO LE PAGINE (13/09, sera)
+
+⛔ **Provenienza, dichiarata perche' cambia quanto ci si puo' fidare.** Le piste vengono
+dall'altra sessione, che ha ancora il motore di ricerca. Loro hanno dichiarato di **non aver
+aperto le pagine**: erano titoli, indirizzi ed estratti. Le ho aperte io una per una. ⇒ Due
+reggono alla lettera, **una va corretta** — ed e' la correzione a valere di piu'.
+
+**① ✅ Il concorrente piu' vicino, quando reindirizza, BUTTA IL LAVORO FATTO.** Verificato:
+una richiesta del 26/04/2026, chiusa, dice testualmente che quella modalita' *«immediately aborts
+the run, losing partial progress»*, e che i messaggi in coda **non si possono ne' modificare ne'
+annullare**.
+
+⇒ **Questo cambia il nostro vantaggio, e in meglio.** Non e' «noi reindirizziamo»: e' **«noi
+reindirizziamo senza buttare il giro, e lo diciamo»**. ⭐ E cambia anche la forma della tabella:
+la colonna da confrontare non e' «accoda contro reindirizza», e' **«che cosa perdi quando parli
+mentre lavora»**.
+
+**② ✅ Chiedono di poter SCEGLIERE, e i modi sono tre, non due.** Una richiesta ancora aperta
+del 13/06/2026 chiede accoda, reindirizza **e interrompi** come scelta configurabile. ⛔ E porta
+un argomento che ci riguarda in pieno, perche' **noi compattiamo**: se la compattazione tratta un
+testo di correzione come **un turno a se'**, il riassunto perde il legame fra la correzione e cio'
+che correggeva. ⇒ Un testo inserito a giro vivo non e' un turno nuovo: appartiene al compito in
+corso, e la compattazione deve saperlo.
+
+**③ ⛔ LA CORREZIONE: il precedente sulla ricevuta di lettura NON viene da un agente.** La pista
+lo dava come «riguarda proprio un agente». La pagina dice un'altra cosa: e' la correzione di un
+**canale di messaggistica** dentro quel prodotto. Le spunte di lettura partivano **solo a giro
+completo** — modello piu' attrezzi piu' risposta — e sono state spostate al momento in cui il
+messaggio viene **ricevuto**.
+
+⇒ Si usa come **precedente per analogia, dichiarato come tale**, non come prova che un agente di
+codice lo faccia: «preso in carico» e «usato» sono due istanti diversi, e chi li fonde mente a chi
+scrive per tutta la durata del giro. ⭐ E porta il criterio di accettazione che ci mancava: la
+ricevuta deve arrivare **nello stesso tempo che impiegherebbe un lettore umano**, indipendentemente
+da quanto ci mette l'agente.
+
+⭐ Un dettaglio che l'estratto non dava e che ho visto solo aprendo: quella modifica risulta
+**chiusa perche' l'autore aveva raggiunto il tetto di richieste aperte, non perche' sia stata
+respinta**. Citarla come idea bocciata sarebbe stato falso.
+
+**④ Sulla latenza, la formulazione giusta e' «NON PUBBLICATA», non «non trovata»:** sono due cose
+diverse e la seconda sembra pigrizia. ⭐ E la cosa piu' utile e' che il vocabolario per misurare
+un'interruzione **esiste gia', ma e' nato nel mondo della voce**, dove il trattamento
+dell'interruzione e' una metrica **separata** dal primo suono e dall'attesa degli attrezzi.
+Nessuno l'ha portato negli agenti di codice: e' una lacuna del campo, e un argomento a nostro
+favore.
+
 ### Corsia 2 · Reindirizzare produce una carta rossa che da' la colpa a te
 **Oggi:** reindirizzi e ricevi «si e' interrotto per un errore… apri Doctor». Non e' successo niente
 di male: hai solo cambiato direzione.
