@@ -333,6 +333,25 @@ selettore e' **costruito per interpolazione** — nel pacchetto c'e' `SCELTA_PRE
 scontato: **uno zero e' una risposta plausibile, ed e' per questo che nessuno lo guarda.** Commit
 `231ab6bd`.
 
+✅ **IL PACCHETTO CONSEGNATO NON LANCIA A RUNTIME** — misurato, e con la copertura dichiarata.
+Il cancello `RUNTIME-01` apre la app, cambia sessione, scrive nel campo e apre il velo dei
+permessi, e pretende **zero** errori JavaScript. ⛔ Fa **sei azioni che toccano la app**, quindi
+sul 4174 non si punta: e' girato contro un **banco sulla 4196** con una **copia** dello store.
+
+- **Primo giro, store vuoto:** 1 passed in 7,3 s — ma con **zero** sessioni il gesto «cambia
+  sessione» non parte (la prova clicca solo se ne trova piu' di una). Verde vero, copertura
+  parziale: non l'ho contato come prova piena.
+- **Secondo giro, 38 sessioni copiate:** il banco ne espone **38** (`data.items`), quindi il click
+  sulla seconda sessione e' avvenuto. **1 passed in 9,7 s**, esito di Playwright 0 catturato
+  senza pipe.
+- ⛔ **Lo store dell'owner non e' stato toccato:** ultima modifica **12/09 20:34:45** prima e dopo,
+  38 file. Le copie nel banco sono state rimosse, il banco spento, il 4174 vivo.
+- ⛔ **Due inciampi del mio strumento, dichiarati:** al primo avvio `-WorkingDirectory` e i redirect
+  sono caduti (i backtick di continuazione mangiati da bash) e il server e' partito lo stesso —
+  il testimone che le variabili fossero passate e' stata la data invariata dello store; al secondo
+  lo script e' rimasto **fermo** dopo l'avvio, e il cancello l'ho lanciato a mano invece di
+  aspettarlo.
+
 ⛔ **Resta NON VERIFICATO, e lo dichiaro invece di chiuderlo:** la prova **dal vivo** del
 reindirizzamento — far partire un giro, premere «Reindirizza» e guardare con gli occhi che la carta
 rossa non esca, nei **due temi**. Il codice ora e' servito e la sua catena e' provata in ogni anello,
