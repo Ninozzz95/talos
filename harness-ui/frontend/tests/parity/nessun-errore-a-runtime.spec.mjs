@@ -158,3 +158,38 @@ test('STREAMING-LIVE-SMOOTH-02 — 240 delta regolari raggiungono il DOM entro d
   expect(risultato.t4).not.toBeNull();
   expect(risultato.frameDopoUltimoDelta, `T3→T4 = ${risultato.lagFinaleMs} ms; ultimo render: ${JSON.stringify(risultato.ultimoRender)}`).toBeLessThanOrEqual(2);
 });
+
+/*
+ * Lo stesso bundle può essere ospitato da un host embedded. La hotfix Desktop non deve cambiare
+ * preferenze o comportamento di quella superficie: il fix live-smooth vale solo per il Desktop
+ * standalone. Questo test resta nella suite Desktop e simula soltanto il contratto dell'host.
+ */
+test('STREAMING-LIVE-SMOOTH-02 scope — un host embedded conserva la propria animazione streaming', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, '__talosHarnessHost', {
+      configurable: true,
+      get() {
+        const host = document.documentElement;
+        if (!host) return null;
+        host.classList.add('talos-embedded');
+        if (!host.dataset.talosStreamingAnimation) host.dataset.talosStreamingAnimation = 'fade';
+        return host;
+      },
+    });
+    try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* niente storage */ }
+  });
+
+  await page.goto(process.env.TALOS_URL_CANCELLO || 'http://127.0.0.1:4174/');
+  await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
+
+  const stato = await page.evaluate(() => {
+    const host = window.__talosHarnessHost || document.documentElement;
+    return {
+      embedded: host.classList.contains('talos-embedded'),
+      streamingAnimation: host.dataset.talosStreamingAnimation,
+    };
+  });
+
+  expect(stato.embedded).toBe(true);
+  expect(stato.streamingAnimation).toBe('fade');
+});
