@@ -23,8 +23,9 @@ jobs:
           cache: npm
           cache-dependency-path: harness-ui/package-lock.json
 
+      # Il banco avvia server.mjs davvero: node-pty deve quindi avere il suo modulo nativo.
       - name: dipendenze server
-        run: npm ci --ignore-scripts
+        run: npm ci
         working-directory: harness-ui
 
       - name: dipendenze frontend
