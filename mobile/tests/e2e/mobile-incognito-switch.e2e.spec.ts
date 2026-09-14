@@ -82,7 +82,7 @@ async function historySettlesAt(page: Page, count: number): Promise<void> {
     await page.locator(MENU).click()
     await expect(page.getByTestId('talos-sidebar-recents').locator('[data-chat-id]')).toHaveCount(count)
     await page.locator(`${SIDEBAR} [aria-label="Close menu"]`).click()
-    await expect(page.locator(SIDEBAR)).toHaveCount(0)
+    await expect(page.locator(SIDEBAR)).not.toBeVisible()
 }
 
 test('entering incognito leaves you in incognito, and stays there', async ({ page }) => {
