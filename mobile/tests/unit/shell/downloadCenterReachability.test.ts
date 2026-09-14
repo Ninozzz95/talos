@@ -7,11 +7,11 @@ const surfaces = [
     'TalosMobileImmersiveChrome.vue',
     'TalosMobileSidebar.vue',
     'TalosTabletSidebar.vue',
-    'TalosMobileToolSheet.vue',
+    // ⛔ NON il foglio delle stazioni: owner 2026-09-14, campanella e download «solo dalla chat».
 ] as const
 
 describe('Download Center reachability', () => {
-    it('C45-RED-03 mounts the same lazy trigger in all five mobile chrome surfaces', () => {
+    it('C45-RED-03 mounts the same lazy trigger in the four chrome surfaces that keep it', () => {
         for (const file of surfaces) {
             const source = readFileSync(resolve(process.cwd(), 'src/components/shell', file), 'utf8')
             expect(source, file).toContain(

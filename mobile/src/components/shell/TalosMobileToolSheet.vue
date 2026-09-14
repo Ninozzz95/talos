@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, provide, ref, type Component } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, ref, type Component } from 'vue'
+import { TALOS_SHEET_TITLE_KEY, type TalosSheetTitleRegistry } from '@/lib/sheetTitle'
 import { ArrowLeft, Menu, X } from '@lucide/vue'
 import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosI18n } from '@/i18n'
 
-const TalosMobileNotificationBell = defineAsyncComponent(
-    () => import('@/components/shell/TalosMobileNotificationBell.vue'),
-)
-const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
-    () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
-)
+/*
+ * ⛔ Campanella e centro download NON stanno piu' nel foglio: owner 2026-09-14, «solo dalla
+ * chat». E' una scelta esplicita, non una funzione nascosta per svista — la chat e la
+ * sidebar le hanno (vedi downloadCenterReachability.test.ts).
+ */
 
 // Station sheet presented over the persistent chat base — mirror of the desktop
 // TalosMobileToolSheet (window/TalosMobileToolSheet.vue): Back-to-chat header,
@@ -176,6 +176,85 @@ onMounted(() => {
 // F3-T3 chrome dedup: the sheet titles the surface — screens inside drop
 // their own duplicate header via this context.
 provide(TALOS_SHEET_CONTEXT_KEY, true)
+
+/*
+ * La barra che si ripiega — owner 2026-09-13/14: a riposo nessuna barra, il titolo grande sta
+ * nella pagina; scorrendo, il titolo si rimpicciolisce e sfuma mentre compare una barra col
+ * fondo pieno e un filo sotto (Material 3, «Top app bar»: la Large si ripiega e il
+ * contenitore si riempie). Il movimento SEGUE IL DITO: `animation-timeline` legato allo
+ * scorrimento del corpo (Chrome 115+, `timeline-scope` 116+; WebView del Pad 154 —
+ * developer.chrome.com/docs/css-ui/scroll-driven-animations, letto il 2026-09-14). Dove non
+ * c'e', un ripiego in JS la fa comparire oltre 48 px.
+ */
+const pageTitles = ref<Array<{ id: symbol, title: string }>>([])
+const titleRegistry: TalosSheetTitleRegistry = {
+    set(id, title) {
+        const index = pageTitles.value.findIndex((entry) => entry.id === id)
+        if (index >= 0) pageTitles.value.splice(index, 1, { id, title })
+        else pageTitles.value.push({ id, title })
+    },
+    clear(id) {
+        pageTitles.value = pageTitles.value.filter((entry) => entry.id !== id)
+    },
+}
+provide(TALOS_SHEET_TITLE_KEY, titleRegistry)
+/** Il titolo della pagina aperta (sottopagina compresa), poi la sottovista, poi la stazione. */
+const barTitle = computed(() => pageTitles.value.at(-1)?.title ?? (subView.value ? subView.value.title : props.title))
+/** C'e' almeno un tondo in alto? Solo allora il contenuto scende sotto la loro riga. */
+const hasControls = computed(() => Boolean(subView.value || props.parentBack || props.rootBack) || !props.hideMenu || props.presentation === 'drawer')
+const scrollLinked = typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('animation-timeline: scroll()')
+const scrolled = ref(false)
+/*
+ * ⛔ CHI SCORRE DAVVERO — misurato sul Pad il 14/09. Nella Libreria il corpo del foglio non
+ * si muove: scorre `mobile-screen-body` di TalosMobileScreen, un livello piu' dentro (13.754 px
+ * di contenuto su 1.276). In una nota invece scorre il corpo del foglio. Legare la linea di
+ * scorrimento al corpo lasciava la barra ferma per sempre.
+ *
+ * ⇒ Lo scorrimento non risale, ma si CATTURA sul foglio: il primo elemento che scorre in
+ * verticale diventa lo scorritore (`data-talos-sheet-scroller`) e la linea del CSS si lega a
+ * lui. Prima di ogni scorrimento nessuno e' marcato, la linea e' inattiva e la pagina resta nel
+ * suo stato di riposo — che e' esattamente quello giusto (barra nascosta, titolo pieno). Le
+ * righe orizzontali (le schede) non contano: non hanno contenuto piu' alto del riquadro.
+ */
+let scroller: HTMLElement | null = null
+/*
+ * ⛔ QUANDO NON SI SCORRE PIÙ — misurato sul Pad il 14/09 (fase 4B). Nella Libreria, entrando
+ * in selezione, la griglia passa da 80 schede a 1: lo scorritore scende a `scrollMax 0` e
+ * `scrollTop 0`, eppure la barra restava piena e il titolo grande invisibile. La specifica dice
+ * che senza overflow la linea diventa inattiva e l'animazione non ha effetto
+ * (https://www.w3.org/TR/scroll-animations-1/, letto il 2026-09-14); la WebView del Pad invece
+ * la teneva `running` col tempo VECCHIO. Non si scommette sul motore: quando lo scorritore non
+ * ha più niente da scorrere, le animazioni si spengono qui (`data-scroll-rest`) e tornano gli
+ * stili di riposo. Il contenuto che si accorcia non lancia `scroll`, quindi lo si OSSERVA.
+ */
+const scrollAtRest = ref(false)
+let osservatore: ResizeObserver | null = null
+function verificaOverflow(): void {
+    if (!scroller) return
+    const fermo = scroller.scrollHeight <= scroller.clientHeight + 1
+    scrollAtRest.value = fermo
+    if (fermo) scrolled.value = false
+}
+function osservaScorritore(el: HTMLElement): void {
+    osservatore?.disconnect()
+    if (typeof ResizeObserver === 'undefined') return
+    osservatore = new ResizeObserver(verificaOverflow)
+    osservatore.observe(el)
+    for (const figlio of Array.from(el.children)) osservatore.observe(figlio)
+}
+onBeforeUnmount(() => { osservatore?.disconnect(); osservatore = null })
+function onSheetScroll(event: Event): void {
+    const target = event.target
+    if (!(target instanceof HTMLElement) || target.scrollHeight <= target.clientHeight + 1) return
+    if (target !== scroller) {
+        scroller?.removeAttribute('data-talos-sheet-scroller')
+        target.setAttribute('data-talos-sheet-scroller', '')
+        scroller = target
+        osservaScorritore(target)
+    }
+    scrollAtRest.value = false
+    if (!scrollLinked) scrolled.value = target.scrollTop > 48
+}
 </script>
 
 <template>
@@ -201,8 +280,11 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
             data-testid="talos-mobile-tool-sheet"
             :data-presentation="presentation"
             :data-scene-background="String(sceneBackground === true || hideChrome === true)"
+            :data-scrolled="String(scrolled)"
+            :data-scroll-rest="String(scrollAtRest)"
             class="talos-mobile-tool-sheet-surface relative z-10 flex flex-col overflow-clip border-[var(--talos-border)] text-[var(--talos-text)] outline-none"
             @keydown.escape="emit('close')"
+            @scroll.capture.passive="onSheetScroll"
             :class="[
                 presentation === 'fullscreen'
                     ? 'h-[100dvh] max-h-none rounded-none border-0'
@@ -211,75 +293,55 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
             ]"
             :style="{ transform: sheetTransform }"
         >
-            <!-- Owner 2026-07-24: ONE contextual back. When a station pushes a
-                 sub-view, the header shows the subsection title and Back returns
-                 to the station (not a second in-body arrow). -->
-            <!-- U-7: la barra del mockup — `.topbar`: min 4rem, fondo `--talos-header`,
-                 bordo sotto; `.top-title`: icona + titolo, non un titolo centrato. -->
-            <header v-if="!hideChrome" class="talos-mobile-tool-sheet-header flex min-h-16 shrink-0 items-center gap-1 border-b border-[var(--talos-border)] bg-[var(--talos-header)] px-2 py-1 pt-[max(0.25rem,env(safe-area-inset-top))]">
-                <!--
-                    Owner 2026-08-04, provato sul telefono: «il pulsante
-                    indietro in alto a sinistra fa chiudere tutto».
-
-                    Aveva ragione. Questo bottone conosceva i `subView` — il
-                    vecchio meccanismo dei fogli — ma NON le pagine-figlie di
-                    rotta, che sono quelle nate con la navigazione lineare.
-                    Aperta una nota, `subView` era nullo e il ramo `else`
-                    chiudeva la stazione intera. La gesture di sistema
-                    funzionava perche' passa da `stationParent`, che questo
-                    bottone non consultava: due comandi per lo stesso gesto,
-                    con due destinazioni diverse.
-
-                    Tre casi, tre destinazioni, e ognuno DICE la sua: un
-                    pulsante che si chiama «Back to chat» e va da un'altra
-                    parte e' peggio di uno che non c'e'.
-                -->
-                <button
-                    v-if="subView || parentBack || rootBack"
-                    type="button"
-                    data-testid="talos-sheet-back"
-                    :data-back-target="subView ? 'subview' : (parentBack ? 'parent' : 'chat')"
-                    :aria-label="backLabel"
-                    class="talos-pressable inline-flex min-h-touch min-w-touch items-center justify-center rounded-full text-[var(--talos-muted)]"
-                    @click="goBack"
-                >
-                    <ArrowLeft class="h-4 w-4" aria-hidden="true" />
-                </button>
-                <!-- U-7: sulla radice della stazione, il ☰ del mockup (solo telefono). -->
-                <button
-                    v-else-if="!hideMenu"
-                    type="button"
-                    data-testid="talos-sheet-menu"
-                    :aria-label="t('navigation.openMenu')"
-                    class="talos-pressable inline-flex min-h-touch min-w-touch items-center justify-center rounded-full text-[var(--talos-text)]"
-                    @click="emit('openMenu')"
-                >
-                    <Menu class="size-5" aria-hidden="true" />
-                </button>
-                <div class="flex min-w-0 flex-1 items-center gap-2 px-1">
-                    <component :is="icon" v-if="icon && !subView" class="size-5 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
-                    <div class="min-w-0">
-                        <p class="talos-title truncate text-sm font-medium text-[var(--talos-text)]">{{ subView ? subView.title : title }}</p>
-                        <p v-if="!subView && description" class="truncate text-2xs text-[var(--talos-muted)]">{{ description }}</p>
+            <!--
+                Owner 2026-09-13/14: la barra fissa se ne va. Restano i comandi tondi (indietro o menu
+                a sinistra, chiudi in finestra a destra) e una barra che compare scorrendo col titolo
+                della pagina. Un solo indietro contestuale, come prima (owner 2026-07-24).
+            -->
+            <div v-if="!hideChrome" data-testid="talos-sheet-chrome" class="talos-sheet-chrome pointer-events-none absolute inset-x-0 top-0 z-20">
+                <div data-testid="talos-sheet-bar" aria-hidden="true" class="talos-sheet-bar pointer-events-auto absolute inset-0 border-b border-[var(--talos-border)] bg-[var(--talos-background)]">
+                    <div class="flex h-full items-center justify-center px-16 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+                        <p class="talos-title truncate text-sm font-medium text-[var(--talos-text)]">{{ barTitle }}</p>
                     </div>
                 </div>
-                <template v-if="!hideAppActions">
-                    <TalosMobileNotificationBell />
-                    <TalosMobileDownloadCenterTrigger />
-                </template>
-                <button
-                    v-if="presentation === 'drawer'"
-                    type="button"
-                    :aria-label="`Close ${title}`"
-                    class="talos-pressable inline-flex min-h-touch min-w-touch items-center justify-center rounded-md text-[var(--talos-muted)]"
-                    @click="emit('close')"
-                >
-                    <X class="h-4 w-4" aria-hidden="true" />
-                </button>
-            </header>
+                <div class="relative flex min-h-16 items-center justify-between gap-2 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+                    <button
+                        v-if="subView || parentBack || rootBack"
+                        type="button"
+                        data-testid="talos-sheet-back"
+                        :data-back-target="subView ? 'subview' : (parentBack ? 'parent' : 'chat')"
+                        :aria-label="backLabel"
+                        class="talos-pressable pointer-events-auto inline-flex min-h-touch min-w-touch items-center justify-center rounded-full border border-[var(--talos-border)]/60 bg-[var(--talos-card)]/85 text-[var(--talos-text)] backdrop-blur"
+                        @click="goBack"
+                    >
+                        <ArrowLeft class="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                        v-else-if="!hideMenu"
+                        type="button"
+                        data-testid="talos-sheet-menu"
+                        :aria-label="t('navigation.openMenu')"
+                        class="talos-pressable pointer-events-auto inline-flex min-h-touch min-w-touch items-center justify-center rounded-full border border-[var(--talos-border)]/60 bg-[var(--talos-card)]/85 text-[var(--talos-text)] backdrop-blur"
+                        @click="emit('openMenu')"
+                    >
+                        <Menu class="size-5" aria-hidden="true" />
+                    </button>
+                    <span v-else aria-hidden="true" />
+                    <button
+                        v-if="presentation === 'drawer'"
+                        type="button"
+                        :aria-label="`Close ${title}`"
+                        class="talos-pressable pointer-events-auto inline-flex min-h-touch min-w-touch items-center justify-center rounded-full border border-[var(--talos-border)]/60 bg-[var(--talos-card)]/85 text-[var(--talos-text)] backdrop-blur"
+                        @click="emit('close')"
+                    >
+                        <X class="h-4 w-4" aria-hidden="true" />
+                    </button>
+                </div>
+            </div>
             <div
                 data-testid="talos-mobile-sheet-body"
-                class="min-h-0 flex-1"
+                class="talos-sheet-body min-h-0 flex-1"
+                :data-under-controls="String(!hideChrome && hasControls)"
                 :class="[
                     lockBodyScroll
                         ? 'overflow-hidden'
@@ -386,16 +448,69 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
    this header alone consumes. Harness already exposes its own focused composer;
    temporarily yield the sheet chrome, then restore it on keyboardWillHide. */
 @media (max-height: 500px) and (orientation: landscape) {
-    body.keyboard-open .talos-mobile-tool-sheet-header {
+    body.keyboard-open .talos-sheet-chrome {
         display: none;
     }
 
-    body.keyboard-open .talos-mobile-tool-sheet-header + [data-testid="talos-mobile-sheet-body"] {
+    body.keyboard-open .talos-sheet-body[data-under-controls="true"] {
         padding-top: env(safe-area-inset-top);
     }
 
     body.keyboard-open .talos-mobile-tool-sheet-body-chromeless {
         padding-top: env(safe-area-inset-top);
     }
+}
+/* ─── La barra che si ripiega (owner 2026-09-13/14) ─────────────────────────── */
+.talos-mobile-tool-sheet-surface { timeline-scope: --talos-sheet-scroll; }
+/* La linea sta sullo scorritore VERO, marcato al primo scorrimento (vedi onSheetScroll). */
+.talos-mobile-tool-sheet-surface [data-talos-sheet-scroller] { scroll-timeline: --talos-sheet-scroll block; }
+/*
+ * ⛔ Foto del Pad, 14/09: senza tondi alla radice (tablet) il titolo «Libreria» e «Aggiungi file»
+ * finivano SOTTO la barra di stato, con Wi-Fi e batteria disegnati sopra il pulsante: la barra fissa
+ * garantiva quello spazio, e togliendola l'avevo tolto. Ora c'e' sempre (tranne Codice, che ha la
+ * sua barra). E sotto i tondi 3,25rem, non 4: il margine della pagina si somma (vuoto di ~90 px).
+ */
+.talos-sheet-body[data-under-controls="false"]:not(.talos-mobile-tool-sheet-body-chromeless) { padding-top: env(safe-area-inset-top); }
+.talos-sheet-body[data-under-controls="true"] { padding-top: calc(3.25rem + env(safe-area-inset-top)); }
+/* Nascosta non ruba i tocchi: `visibility` passa a visible solo quando la barra c'e'. */
+.talos-sheet-bar { opacity: 0; visibility: hidden; }
+.talos-mobile-tool-sheet-surface[data-scrolled="true"] .talos-sheet-bar { opacity: 1; visibility: visible; }
+@supports (animation-timeline: scroll()) {
+    /*
+     * ⛔ Foto a 48 px, 14/09: una barra semitrasparente lasciava vedere il campo di ricerca e ci
+     * scriveva sopra «Libreria» — sembrava rotta. Il FONDO diventa pieno nei primi 16 px (il
+     * contenuto passa sotto un fondo, non attraverso un velo); il TITOLO piccolo sfuma dentro fra
+     * 32 e 72 px, mentre quello grande se ne va. E' questa la «fusione».
+     */
+    .talos-sheet-bar {
+        animation: talos-sheet-bar-in linear both;
+        animation-timeline: --talos-sheet-scroll;
+        animation-range: 0px 16px;
+    }
+    .talos-sheet-bar .talos-title {
+        animation: talos-sheet-bar-title-in linear both;
+        animation-timeline: --talos-sheet-scroll;
+        animation-range: 32px 72px;
+    }
+    .talos-sheet-body [data-talos-sheet-title] {
+        transform-origin: 0 100%;
+        animation: talos-sheet-title-out linear both;
+        animation-timeline: --talos-sheet-scroll;
+        animation-range: 0px 72px;
+    }
+    /* Niente da scorrere: niente ripiegamento (vedi `verificaOverflow`). */
+    .talos-mobile-tool-sheet-surface[data-scroll-rest="true"] .talos-sheet-bar,
+    .talos-mobile-tool-sheet-surface[data-scroll-rest="true"] .talos-sheet-bar .talos-title,
+    .talos-mobile-tool-sheet-surface[data-scroll-rest="true"] .talos-sheet-body [data-talos-sheet-title] {
+        animation: none;
+    }
+}
+@keyframes talos-sheet-bar-in { from { opacity: 0; visibility: hidden; } to { opacity: 1; visibility: visible; } }
+@keyframes talos-sheet-title-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-0.5rem) scale(0.92); } }
+@keyframes talos-sheet-title-fade { from { opacity: 1; } to { opacity: 0; } }
+@keyframes talos-sheet-bar-title-in { from { opacity: 0; } to { opacity: 1; } }
+/* Con la riduzione del movimento il titolo SFUMA soltanto: niente spostamento ne' scala. */
+@media (prefers-reduced-motion: reduce) {
+    .talos-sheet-body [data-talos-sheet-title] { animation-name: talos-sheet-title-fade; }
 }
 </style>

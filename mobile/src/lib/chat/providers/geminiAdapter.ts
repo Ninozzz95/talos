@@ -1,3 +1,4 @@
+import { talosFlatUsage } from '@/lib/chat/providers/usage'
 import { z } from 'zod'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
 import { createGeminiToolCallAccumulator } from '@/lib/tools/wire'
@@ -206,6 +207,8 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
     async streamComplete(input, credential, handlers) {
         const apiKey = requireProviderApiKey('gemini', 'complete', credential)
         const toolCalls = createGeminiToolCallAccumulator()
+        let usage: Record<string, number> | null = null
+        let callId: string | null = null
         const stream = await talosStreamText({
             url: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model.id)}:streamGenerateContent?alt=sse`,
             headers: { 'x-goog-api-key': apiKey, 'content-type': 'application/json' },
@@ -215,8 +218,13 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
             extract: (payload) => {
                 const event = JSON.parse(payload) as {
                     candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>
+                    usageMetadata?: Record<string, unknown>
+                    responseId?: unknown
                 }
                 toolCalls.push(event)
+                // I conteggi sono cumulativi: vale l'ULTIMO (ai.google.dev/gemini-api/docs/generate-content/tokens, 2026-09-13).
+                if (event.usageMetadata) usage = talosFlatUsage(event.usageMetadata) ?? usage
+                if (callId === null && typeof event.responseId === 'string' && event.responseId) callId = event.responseId
                 return geminiAnswerText(event.candidates?.[0]?.content?.parts ?? [])
             },
             // Defect #5: Gemini marks thinking parts with `thought: true` in the
@@ -236,6 +244,8 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
         return {
             text: stream.text,
             model: input.model.id,
+            usage,
+            callId,
             reasoning: stream.reasoning || undefined,
             ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : {}),
         }

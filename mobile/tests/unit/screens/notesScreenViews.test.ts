@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import NotesScreen from '@/screens/NotesScreen.vue'
 import TalosMobileNoteRow from '@/components/talos/notes/TalosMobileNoteRow.vue'
 import type { TalosLocalNote } from '@/repositories/chatRepository'
@@ -57,6 +57,15 @@ vi.mock('@/i18n', () => ({
 }))
 
 vi.mock('@/stores/notificationCentre', () => ({ talosNotify: vi.fn() }))
+
+/** Fase 6 (owner 14/09/2026): l'ordine si sceglie nel foglio «Opzioni», non in un `<select>` nativo. */
+async function ordina(wrapper: VueWrapper, valore: string): Promise<void> {
+    await wrapper.get('[data-testid="talos-notes-options"]').trigger('click')
+    await flushPromises()
+    // L'ultimo: il foglio si teletrasporta nel body, e un test precedente può averne lasciato uno.
+    ;([...document.body.querySelectorAll(`[data-testid="talos-notes-sort-${valore}"]`)].at(-1) as HTMLElement).click()
+    await flushPromises()
+}
 
 async function screen() {
     const wrapper = mount(NotesScreen)
@@ -265,7 +274,7 @@ describe('the checklist filter and the sort', () => {
         ]
         const wrapper = await screen()
 
-        await wrapper.get('[data-testid="talos-notes-sort"]').setValue('title')
+        await ordina(wrapper, 'title')
 
         const titles = wrapper.findAll('[data-testid="talos-note-row"]').map((row) => row.text())
         // Il pin è una decisione, e un ordinamento non revoca una decisione.

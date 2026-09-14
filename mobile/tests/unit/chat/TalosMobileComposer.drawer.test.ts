@@ -625,4 +625,15 @@ describe('foglio «+» sul mockup (categorie, ricerca, voci)', () => {
         await con.get('[data-testid="talos-drawer-tab-agent"]').trigger('click')
         expect(con.find('[data-testid="talos-drawer-harness"]').exists()).toBe(true)
     })
+
+    /** Fase 7 (owner 13/09): icone nude ambra e una sola verticale sinistra nel foglio «+». */
+    it("le voci hanno l'icona nuda come le schede, senza piastrella", async () => {
+        const con = await apri({})
+        const righe = con.findAll('[data-testid="talos-drawer-options"] > button')
+        expect(righe.length).toBeGreaterThan(0)
+        for (const riga of righe) {
+            expect(riga.find('.talos-action-row-icon').exists()).toBe(false)
+            expect(riga.get('svg').classes()).toContain('talos-drawer-row-icon')
+        }
+    })
 })

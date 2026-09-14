@@ -59,4 +59,19 @@ describe('TalosMobileSavedLinkRow', () => {
         await wrapper.get('[data-testid="browser"]').trigger('click')
         expect(wrapper.emitted('openBrowser')).toEqual([[]])
     })
+
+    it('LINK-MENU-01 with actions, the browser lives in the ⋯ menu and has no button of its own', () => {
+        const wrapper = mount(TalosMobileSavedLinkRow, {
+            props: {
+                row,
+                browserTestId: 'browser',
+                actions: [{ id: 'open-browser', label: 'Open in browser' }],
+                actionsLabel: 'Actions for Primary research',
+            },
+        })
+        expect(wrapper.find('[data-testid="browser"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-library-link-actions-source-1"]').exists()).toBe(true)
+        // No date is passed, so none is shown.
+        expect(wrapper.text()).not.toContain('today')
+    })
 })

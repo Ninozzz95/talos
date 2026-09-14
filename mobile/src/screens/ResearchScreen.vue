@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useTalosSheetTitle } from '@/lib/sheetTitle'
 /**
  * La stazione della Ricerca: che cosa hai chiesto, e quanto hanno tenuto le risposte.
  *
@@ -45,6 +46,7 @@ import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialo
 import TalosResearchDossierCard from '@/components/talos/research/TalosResearchDossierCard.vue'
 import TalosResearchDossierRow from '@/components/talos/research/TalosResearchDossierRow.vue'
 import { Button } from '@/components/ui/button'
+import TalosMobileStationOptionsSheet from '@/components/talos/ui/TalosMobileStationOptionsSheet.vue'
 import { talosLightImpact } from '@/services/haptics'
 import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
 import { useTalosDeferredBusy } from '@/composables/useTalosDeferredBusy'
@@ -77,14 +79,26 @@ import { TALOS_DANGER_ACTION_CLASS } from '@/lib/dangerAction'
 const controller = useChatController()
 const settings = useSettingsStore()
 const router = useRouter()
-const { t } = useTalosI18n()
+const { t, locale } = useTalosI18n()
 const { isTablet } = useTalosTabletLayout()
 
 const runs = ref<readonly TalosResearchRun[]>([])
 const caricato = ref(false)
 const error = ref<string | null>(null)
 const query = ref('')
-const bucket = ref<TalosResearchBucket | 'all'>('all')
+/**
+ * Fase 6 — owner 14/09/2026: le schede di Ricerca erano DIECI, e sul tablet l'ultima visibile
+ * era tagliata al bordo. Ora quattro: Tutte · In corso · Concluse · Da riprendere (in pausa,
+ * interrotte, bloccate da un permesso, senza conclusione). Senza rapporto, annullate e fallite si
+ * scelgono dal foglio «Opzioni», e mentre una è scelta compare come quinta scheda: una scelta che
+ * non si vede è una scelta che si dimentica di aver fatto. «Senza rapporto» nel foglio è una mia
+ * interpretazione, annotata nel ledger: la domanda all'owner non lo nominava.
+ * Material 3, Chips (https://m3.material.io/components/chips/guidelines, letto il 2026-09-14).
+ */
+const RIPRENDERE: readonly TalosResearchBucket[] = ['paused', 'unfinished', 'bloccata-dal-permesso', 'giri-esauriti']
+const SECONDARI: readonly TalosResearchBucket[] = ['senza-rapporto', 'cancelled', 'failed']
+type TalosResearchTab = TalosResearchBucket | 'all' | 'riprendere'
+const bucket = ref<TalosResearchTab>('all')
 const sort = ref<'recent' | 'title'>('recent')
 
 /** Riempiti dietro la prima pittura — vedi la nota in testa. */
@@ -139,33 +153,36 @@ const cards = computed(() => runs.value.map((run) => {
 }))
 
 const shown = computed(() => {
-    const filtrate = [...talosResearchFilterCards(cards.value, bucket.value, query.value)]
+    const filtrate = bucket.value === 'riprendere'
+        ? talosResearchFilterCards(cards.value, 'all', query.value).filter((card) => RIPRENDERE.includes(card.bucket))
+        : [...talosResearchFilterCards(cards.value, bucket.value, query.value)]
     if (sort.value === 'title') {
         return filtrate.sort((a, b) => a.question.localeCompare(b.question))
     }
     return filtrate.sort((a, b) => b.startedAt.localeCompare(a.startedAt))
 })
 
-const BUCKETS: ReadonlyArray<TalosResearchBucket | 'all'> = [
-    'all', 'running', 'paused', 'unfinished', 'done',
-    // ⛔ MB-1: i tre nuovi stanno dopo «Concluse» e prima degli esiti veri e
-    // propri, perche' e' li' che vanno cercati — chi ha chiesto «le concluse» e
-    // non le trova guarda subito a destra.
-    'senza-rapporto', 'bloccata-dal-permesso', 'giri-esauriti',
-    'cancelled', 'failed',
-]
+function conta(id: TalosResearchTab): number {
+    if (id === 'all') return cards.value.length
+    if (id === 'riprendere') return cards.value.filter((card) => RIPRENDERE.includes(card.bucket)).length
+    return cards.value.filter((card) => card.bucket === id).length
+}
 
 /**
- * I filtri col LORO CONTEGGIO, come nel mockup.
- *
- * Il numero non e' decorazione: e' quello che fa decidere se cambiare filtro
- * prima di averlo provato. Un secchio vuoto resta comunque visibile — sparire
- * e ricomparire farebbe ballare la striscia sotto il dito.
+ * I filtri col LORO CONTEGGIO (owner 14/09: i contatori restano). Un secchio vuoto resta
+ * visibile — sparire e ricomparire farebbe ballare la striscia sotto il dito.
  */
-const filters = computed(() => BUCKETS.map((id) => ({
-    id,
+const filters = computed(() => {
+    const ids: TalosResearchTab[] = ['all', 'running', 'done', 'riprendere']
+    if ((SECONDARI as readonly string[]).includes(bucket.value)) ids.push(bucket.value)
+    return ids.map((id) => ({ id, label: t(`research.buckets.${id}`), count: conta(id) }))
+})
+
+/** Nel foglio «Opzioni», sotto «Mostra». */
+const secondaryOptions = computed(() => SECONDARI.map((id) => ({
+    value: id,
     label: t(`research.buckets.${id}`),
-    count: id === 'all' ? cards.value.length : cards.value.filter((card) => card.bucket === id).length,
+    count: conta(id),
 })))
 
 const filtering = computed(() => bucket.value !== 'all' || query.value.trim().length > 0)
@@ -563,7 +580,16 @@ function startNew(): void {
 function when(iso: string): string {
     // Solo la data: una ricerca e' una cosa che hai fatto in un giorno, e il
     // minuto in cui e' partita e' rumore in un elenco che si scorre.
-    return new Date(iso).toLocaleDateString()
+    // Fase 6 (14/09/2026): nella forma breve di Note e Memoria («12 set»), non «12/09/2026»;
+    // l'anno solo quando non e' quello in corso.
+    const data = new Date(iso)
+    if (Number.isNaN(data.getTime())) return ''
+    const stessoAnno = data.getFullYear() === new Date().getFullYear()
+    return new Intl.DateTimeFormat(locale.value, {
+        day: 'numeric',
+        month: 'short',
+        ...(stessoAnno ? {} : { year: 'numeric' as const }),
+    }).format(data)
 }
 
 /* ═══ U-14 — il movimento del mockup, in questa stazione ═══════════════════
@@ -594,6 +620,18 @@ function entrata(indice: number): Record<string, unknown> {
     if (!stile) return {}
     return { 'data-talos-motion-intent': 'message-insert', style: stile }
 }
+// Owner 2026-09-14: scorrendo, il titolo si ripiega nella barra del foglio.
+/**
+ * Fase 6 (owner 14/09/2026): l'ordinamento in un foglio dal basso
+ * (`TalosMobileStationOptionsSheet`), come nella Libreria. Il `<select>` nativo
+ * lo disegnava Android, fuori dalla palette.
+ */
+const optionsOpen = ref(false)
+const sortOptions = computed<Array<{ value: 'recent' | 'title'; label: string }>>(() => [
+    { value: 'recent', label: t('research.sortRecent') },
+    { value: 'title', label: t('research.sortTitle') },
+])
+useTalosSheetTitle(() => t('stations.deepResearchTitle'))
 </script>
 
 <template>
@@ -607,44 +645,28 @@ function entrata(indice: number): Record<string, unknown> {
              che galleggia sopra l'ultima scheda. -->
         <header class="flex items-start justify-between gap-[var(--talos-space-section)]">
             <div class="min-w-0">
-                <h1 class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">
+                <h1 data-talos-sheet-title class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">
                     {{ t('stations.deepResearchTitle') }}
                 </h1>
                 <p class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
                     {{ t('research.subtitle') }}
                 </p>
             </div>
-            <!-- Sul tablet il pulsante dice cosa fa; sul telefono, dove la riga
-                 del titolo e' tutta la larghezza che c'e', resta il quadrato in
-                 accento col nome accessibile intatto. -->
-            <Button
-                type="button"
-                data-testid="talos-research-new"
-                :aria-label="t('research.newTitle')"
-                :class="[
-                    'talos-pressable shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)]',
-                    isTablet ? 'min-h-touch gap-2 px-5 text-sm font-medium' : 'size-14 p-0',
-                ]"
-                @click="startNew"
-            >
-                <Plus :class="isTablet ? 'size-4' : 'size-6'" aria-hidden="true" />
-                <span v-if="isTablet">{{ t('research.newTitle') }}</span>
-            </Button>
         </header>
 
         <!-- Ricerca e presentazione, sulla stessa riga: sono le due cose che si
              fanno prima di guardare. Il campo sta FUORI da ogni catena `v-if` —
              deve restare visibile anche con la lista vuota, perche' e' con la
              lista vuota che si cancella il filtro. -->
-        <div class="mt-[var(--talos-space-section)] flex items-stretch gap-[var(--talos-space-card)]">
-            <label class="relative min-w-0 flex-1">
+        <div class="mt-[var(--talos-space-section)] flex flex-wrap items-stretch gap-[var(--talos-space-inline)]">
+            <label class="relative min-w-[8rem] flex-1">
                 <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
                 <input
                     v-model="query"
                     type="search"
                     inputmode="search"
                     data-testid="talos-research-search"
-                    :placeholder="t('research.searchPlaceholder')"
+                    :placeholder="t('common.search')"
                     :aria-label="t('research.searchPlaceholder')"
                     class="min-h-touch w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
                 >
@@ -669,7 +691,7 @@ function entrata(indice: number): Record<string, unknown> {
                     :data-testid="`talos-research-view-${mode[0]}`"
                     :class="[
                         'talos-pressable talos-wave-host relative flex min-h-touch min-w-touch items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-xs',
-                        layout === mode[0] ? 'bg-[var(--talos-secondary)] text-[var(--talos-text)]' : 'text-[var(--talos-muted)]',
+                        layout === mode[0] ? 'text-[var(--talos-text)]' : 'text-[var(--talos-muted)]',
                     ]"
                     @click="chooseLayout(mode[0])"
                     @pointerdown="onda.onPointerDown"
@@ -684,6 +706,39 @@ function entrata(indice: number): Record<string, unknown> {
                     />
                 </button>
             </div>
+
+            <!-- Fase 6 (owner 14/09/2026): l'ordine sta in un foglio dal basso, come
+                 nella Libreria — niente più `<select>` nativo sotto le schede. -->
+            <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                data-testid="talos-research-options"
+                :aria-label="t('research.options')"
+                aria-haspopup="dialog"
+                :aria-expanded="optionsOpen"
+                class="min-h-touch min-w-touch shrink-0 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)]"
+                @click="optionsOpen = true"
+            >
+                <SlidersHorizontal class="size-5" aria-hidden="true" />
+            </Button>
+
+            <!-- L'azione principale nella riga degli strumenti (owner 13/09): con
+                 l'etichetta sul tablet, solo icona sul telefono. -->
+            <Button
+                type="button"
+                data-testid="talos-research-new"
+                :aria-label="t('research.newTitle')"
+                :class="[
+                    'talos-pressable talos-wave-host shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)]',
+                    isTablet ? 'min-h-touch gap-2 px-5 text-sm font-medium' : 'size-12 p-0',
+                ]"
+                @click="startNew"
+                @pointerdown="onda.onPointerDown"
+            >
+                <Plus class="size-5" aria-hidden="true" />
+                <span v-if="isTablet">{{ t('research.newTitle') }}</span>
+            </Button>
         </div>
 
         <!-- Cosa sto guardando, col conto di quante ce ne sono in ciascun
@@ -724,23 +779,6 @@ function entrata(indice: number): Record<string, unknown> {
         <div class="flex min-h-touch items-center justify-between gap-[var(--talos-space-inline)] text-xs text-[var(--talos-muted)]">
             <span role="status" aria-live="polite" data-testid="talos-research-count">{{ caricato ? countLabel : '' }}</span>
             <div class="flex shrink-0 items-center gap-1">
-                <label class="flex items-center gap-1">
-                    <SlidersHorizontal class="size-4" aria-hidden="true" />
-                    <span class="sr-only">{{ t('research.sortLabel') }}</span>
-                    <!-- Un `select` nativo: sul telefono apre la ruota di
-                         Android, che e' il controllo che la persona conosce
-                         gia', e non ha bisogno di un pannello nostro per due
-                         voci. -->
-                    <select
-                        v-model="sort"
-                        data-testid="talos-research-sort"
-                        :aria-label="t('research.sortLabel')"
-                        class="min-h-touch max-w-36 cursor-pointer border-0 bg-transparent px-1 text-xs text-[var(--talos-muted)] outline-none"
-                    >
-                        <option value="recent">{{ t('research.sortRecent') }}</option>
-                        <option value="title">{{ t('research.sortTitle') }}</option>
-                    </select>
-                </label>
                 <!-- Owner sulle Chat, chiesto due volte: se nella selezione si
                      entra solo tenendo premuto, non la trova nessuno. Sparisce
                      mentre il modo e' acceso perche' la barra sotto possiede
@@ -757,6 +795,21 @@ function entrata(indice: number): Record<string, unknown> {
                 </button>
             </div>
         </div>
+
+        <TalosMobileStationOptionsSheet
+            v-if="optionsOpen"
+            :title="t('research.options')"
+            test-id-prefix="talos-research"
+            :sort-label="t('research.sortLabel')"
+            :sort-options="sortOptions"
+            :sort="sort"
+            :show-label="t('research.showLabel')"
+            :show-options="secondaryOptions"
+            :show="bucket"
+            @update:show="(value: string) => bucket = value as TalosResearchTab"
+            @update:sort="(value: string) => sort = value as 'recent' | 'title'"
+            @close="optionsOpen = false"
+        />
 
         <!-- La barra della selezione: mentre il modo e' acceso la schermata ha
              UN significato solo. -->

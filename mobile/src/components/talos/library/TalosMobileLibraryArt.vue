@@ -55,7 +55,7 @@
 import { computed } from 'vue'
 import { Globe } from '@lucide/vue'
 import TalosMobileLibraryFileGlyph from '@/components/talos/library/TalosMobileLibraryFileGlyph.vue'
-import { talosThumbnailKind, talosTypographicPreview } from '@/lib/library/libraryThumbnails'
+import { talosThumbnailKind, talosTitoloAnteprima, talosTypographicPreview } from '@/lib/library/libraryThumbnails'
 import type { TalosThumbnailState } from '@/composables/useTalosLibraryThumbnails'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 
@@ -103,6 +103,10 @@ const genere = computed(() => (props.file ? talosThumbnailKind(props.file) : 'no
 const tipografica = computed(() => (
     genere.value === 'typographic' ? talosTypographicPreview(props.previewText) : null
 ))
+
+/** I titoli dentro il documentino: righe intere, mai una tagliata a metà (owner 14/09). */
+const titoloLink = computed(() => (props.linkTitle ? talosTitoloAnteprima(props.linkTitle) : ''))
+const titoloTipografico = computed(() => (tipografica.value ? talosTitoloAnteprima(tipografica.value.title) : ''))
 
 /**
  * Cosa si disegna, in una parola sola.
@@ -160,8 +164,8 @@ const cosa = computed<'image' | 'loading' | 'link' | 'typographic' | 'glyph'>(()
                 class="mb-[var(--talos-space-inline)] size-5 rounded-[3px] object-contain"
             >
             <Globe v-else class="mb-[var(--talos-space-inline)] size-5 text-[var(--talos-accent)]" />
-            <b class="line-clamp-4 text-3xs font-semibold leading-[1.35] text-[var(--talos-text)]">
-                {{ linkTitle }}
+            <b class="line-clamp-3 text-3xs font-semibold leading-[1.35] text-[var(--talos-text)]">
+                {{ titoloLink }}
             </b>
         </div>
 
@@ -178,7 +182,7 @@ const cosa = computed<'image' | 'loading' | 'link' | 'typographic' | 'glyph'>(()
         >
             <span class="mb-[var(--talos-space-inline)] block h-[3px] w-7 shrink-0 bg-[var(--talos-accent)]" />
             <b class="line-clamp-3 text-3xs font-semibold leading-[1.35] text-[var(--talos-text)]">
-                {{ tipografica!.title }}
+                {{ titoloTipografico }}
             </b>
             <span
                 v-for="(quota, indice) in tipografica!.lines"

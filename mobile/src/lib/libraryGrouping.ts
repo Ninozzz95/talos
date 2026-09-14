@@ -30,7 +30,23 @@ export interface TalosLibraryGroupingOptions<T> {
     /** Omit and sections carry no date and keep arrival order, as before. */
     timeOf?: (item: T) => string | null
     sort?: TalosLibrarySort
+    /**
+     * The item's own name. Owner 14/09/2026: the choice reads «Nome (A–Z)», and
+     * with grouping off there is ONE section — ordering only the headings would
+     * make that choice do nothing at all. Given, `name` orders the items too.
+     */
+    nameOf?: (item: T) => string
 }
+
+/**
+ * One collator for every comparison: `numeric` so «file 2» comes before «file
+ * 10», `base` so accents and case land where a reader expects instead of where
+ * their code points fall. MDN recommends a Collator over repeated
+ * `localeCompare` when sorting many strings —
+ * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Collator
+ * (read 2026-09-14).
+ */
+const PER_NOME = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true })
 
 /** Null for anything unparseable, so a bad string can never date a section. */
 function instant(value: string | null | undefined): number | null {
@@ -67,7 +83,7 @@ export function groupTalosLibraryByChat<T>(
         else buckets.set(title, [item])
     }
 
-    const { timeOf, sort } = options
+    const { timeOf, sort, nameOf } = options
     const sections = [...buckets.entries()].map(([title, grouped]) => {
         let newest: number | null = null
         let latestAt: string | null = null
@@ -98,15 +114,16 @@ export function groupTalosLibraryByChat<T>(
     }
 
     if (sort === 'name') {
-        // Sorting by name orders the HEADINGS; inside one, newest still comes
-        // first — whoever picked A-Z was organising the chats, not asking for
-        // their oldest file to be the first thing they see.
-        // `localeCompare` rather than `<`, so accents and case land where a
-        // reader expects instead of where their code points fall.
-        sections.sort((a, b) => a.title.localeCompare(b.title, undefined, {
-            sensitivity: 'base',
-            numeric: true,
-        }))
+        // The headings go A–Z. Inside one, the ITEMS go A–Z when the caller says
+        // what an item is called; without `nameOf`, newest still comes first —
+        // the order the time sort above left them in. `sort` is stable, so equal
+        // names keep that order too.
+        if (nameOf) {
+            for (const section of sections) {
+                section.items = [...section.items].sort((a, b) => PER_NOME.compare(nameOf(a), nameOf(b)))
+            }
+        }
+        sections.sort((a, b) => PER_NOME.compare(a.title, b.title))
     } else {
         sections.sort((a, b) => byInstant(instant(a.latestAt), instant(b.latestAt), direction))
     }

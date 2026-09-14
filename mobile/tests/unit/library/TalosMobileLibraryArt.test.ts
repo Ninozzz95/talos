@@ -148,4 +148,13 @@ describe('TalosMobileLibraryArt', () => {
         expect(wrapper.find('svg').exists()).toBe(true)
         expect(wrapper.text()).toContain('Una pagina')
     })
+
+    /** Owner 14/09/2026: dentro il riquadro le righe sono intere, mai tagliate a metà. */
+    it('un titolo lungo entra intero: al massimo 35 caratteri, tagliato a parola', () => {
+        const wrapper = mount(TalosMobileLibraryArt, {
+            props: { linkTitle: 'Il prezzo del gas sale ancora a settembre, dice il ministero', faviconUrl: null },
+            ...i18n,
+        })
+        expect(wrapper.get('b').text()).toBe('Il prezzo del gas sale ancora a…')
+    })
 })

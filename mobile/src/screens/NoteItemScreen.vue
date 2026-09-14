@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useTalosSheetTitle } from '@/lib/sheetTitle'
 /**
  * Una nota, per intero, con il suo indirizzo — nella forma del mockup
  * «Talos Calm Finale».
@@ -170,6 +171,8 @@ async function exportText(): Promise<void> {
  * questo giro di lavoro non poteva toccare. Debito scritto nell'inventario.
  */
 const onda = useTalosTouchWave()
+// Owner 2026-09-14: scorrendo, il titolo si ripiega nella barra del foglio.
+useTalosSheetTitle(() => note.value?.title)
 </script>
 
 <template>
@@ -223,7 +226,7 @@ const onda = useTalosTouchWave()
                         <span class="mb-[var(--talos-space-card)] block text-xs text-[var(--talos-muted)]">
                             {{ checklist.length > 0 ? t('notes.kindChecklist') : t('notes.kicker') }}
                         </span>
-                        <h1 class="text-2xl font-semibold leading-[1.35] tracking-[-0.025em] text-[var(--talos-text)] [overflow-wrap:anywhere]">
+                        <h1 data-talos-sheet-title class="text-2xl font-semibold leading-[1.35] tracking-[-0.025em] text-[var(--talos-text)] [overflow-wrap:anywhere]">
                             {{ note.title }}
                         </h1>
                     </div>

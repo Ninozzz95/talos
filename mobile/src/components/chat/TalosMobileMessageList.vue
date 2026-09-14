@@ -116,6 +116,9 @@ const emit = defineEmits<{
     resend: [messageId: string]
     retry: [messageId: string]
     saveToLibrary: [messageId: string]
+    share: [messageId: string]
+    details: [messageId: string]
+    delete: [messageId: string]
     /** La riga dell'attesa e' essa stessa il modo di rispondere. */
     reviewAuthorization: []
 }>()
@@ -764,6 +767,9 @@ function messageStateLabel(state: string): string {
                     @resend="emit('resend', $event.id)"
                     @retry="emit('retry', $event.id)"
                     @save-to-library="emit('saveToLibrary', $event.id)"
+                    @share="emit('share', $event.id)"
+                    @details="emit('details', $event.id)"
+                    @delete="emit('delete', $event.id)"
                 />
                 <!--
                     ⛔ SOTTO le azioni, come nello screenshot di PocketPal che

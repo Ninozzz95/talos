@@ -9,7 +9,7 @@
  * filtro che non toglie mai niente supera un test che guarda solo chi resta.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import MemoryScreen from '@/screens/MemoryScreen.vue'
 import TalosMobileMemoryRow from '@/components/talos/memory/TalosMobileMemoryRow.vue'
 import type { TalosLocalMemory } from '@/repositories/chatRepository'
@@ -79,6 +79,15 @@ beforeEach(() => {
         memoria({ id: 'm5', title: 'Proposta del modello', kind: 'rejected' as never }),
     ]
 })
+
+/** Fase 6 (owner 14/09/2026): l'ordine si sceglie nel foglio «Opzioni», non in un `<select>` nativo. */
+async function ordina(wrapper: VueWrapper, valore: string): Promise<void> {
+    await wrapper.get('[data-testid="talos-memory-options"]').trigger('click')
+    await flushPromises()
+    // L'ultimo: il foglio si teletrasporta nel body, e un test precedente può averne lasciato uno.
+    ;([...document.body.querySelectorAll(`[data-testid="talos-memory-sort-${valore}"]`)].at(-1) as HTMLElement).click()
+    await flushPromises()
+}
 
 async function screen() {
     const wrapper = mount(MemoryScreen)
@@ -232,17 +241,17 @@ describe('ordinamento e densità', () => {
 
         expect(righe(wrapper)).toEqual(['m1', 'm2', 'm3', 'm4', 'm5'])
 
-        await wrapper.get('[data-testid="talos-memory-sort"]').setValue('title')
+        await ordina(wrapper, 'title')
         expect(righe(wrapper)).toEqual(['m4', 'm3', 'm5', 'm1', 'm2'])
 
-        await wrapper.get('[data-testid="talos-memory-sort"]').setValue('recent')
+        await ordina(wrapper, 'recent')
         expect(righe(wrapper)).toEqual(['m1', 'm2', 'm3', 'm4', 'm5'])
     })
 
     it('per tipo raggruppa, e dentro il gruppo decide il titolo', async () => {
         const wrapper = await screen()
 
-        await wrapper.get('[data-testid="talos-memory-sort"]').setValue('kind')
+        await ordina(wrapper, 'kind')
 
         // policy_note non c'è; l'ordine alfabetico dei tipi è
         // preference > procedure > project_fact > rejected.

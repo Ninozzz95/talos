@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { useTalosSheetTitle } from '@/lib/sheetTitle'
 import type { Component, ComponentPublicInstance } from 'vue'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
+import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import { useTalosI18n } from '@/i18n'
 import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
 import { useTalosLibraryThumbnails } from '@/composables/useTalosLibraryThumbnails'
@@ -10,10 +11,9 @@ import { useTalosSlidingIndicator } from '@/composables/useTalosSlidingIndicator
 import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import {
-    AlertTriangle, CheckCircle2, Database, FileText, FolderPlus,
-    ArrowDownUp, Download, ExternalLink, LayoutGrid, List, LoaderCircle, Paperclip, Plus, RefreshCw, Search, SlidersHorizontal, Trash2, Upload, X,
+    AlertTriangle, Database, FileText,
+    Download, ExternalLink, LayoutGrid, List, LoaderCircle, Paperclip, Plus, RefreshCw, Search, SlidersHorizontal, Trash2, X,
     Check,
-    CheckSquare,
     Eye,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,9 @@ import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLibraryFileRow.vue'
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
 import TalosMobileLibraryFileTile from '@/components/talos/library/TalosMobileLibraryFileTile.vue'
-import TalosMobileLibrarySectionHeading from '@/components/talos/library/TalosMobileLibrarySectionHeading.vue'
+import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
+import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
+import { talosLibraryFilePresentation } from '@/lib/libraryFilePresentation'
 import TalosMobileImageViewer from '@/components/talos/library/TalosMobileImageViewer.vue'
 import TalosMobileFileOriginCard from '@/components/talos/library/TalosMobileFileOriginCard.vue'
 import { useTalosFileOrigin } from '@/composables/useTalosFileOrigin'
@@ -39,7 +41,6 @@ import {
     filterTalosSavedLinkRows,
     type TalosSavedLinkRow,
     filterLibraryFiles,
-    isTalosLibraryFileShared,
     matchesTalosLibrarySurfaceTab,
     parseVaultOrigin,
     parseVaultSourceUrl,
@@ -49,11 +50,10 @@ import {
 } from '@/lib/vaultLibrary'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
-import type { TalosLibraryContextMode } from '@/lib/chat/libraryPolicy'
 
 const controller = useChatController()
 const router = useRouter()
-const { t, locale } = useTalosI18n()
+const { t } = useTalosI18n()
 const settings = useSettingsStore()
 /** Sul tablet il pulsante primario dice cosa fa; sul telefono è un quadrato. */
 const { isTablet } = useTalosTabletLayout()
@@ -67,20 +67,6 @@ const deleteTarget = ref<TalosLocalVaultFile | null>(null)
 const contextPolicySavingFileId = ref<string | null>(null)
 
 const globalLibraryPolicy = computed(() => settings.state.shell.library_context_policy)
-const globalLibraryEnabled = computed(
-    () => globalLibraryPolicy.value?.enabled ?? settings.state.shell.library_context_enabled,
-)
-const globalLibraryMode = computed<TalosLibraryContextMode>(
-    () => globalLibraryPolicy.value?.mode ?? 'broad_compat_v1',
-)
-const globalLibraryModeLabel = computed(() => {
-    if (!globalLibraryEnabled.value) return t('library.contextModeOff')
-    if (globalLibraryMode.value === 'smart_relevant_v1') return t('aiDefaults.libraryModes.smart')
-    if (globalLibraryMode.value === 'ask_before_use_v1') return t('aiDefaults.libraryModes.ask')
-    if (globalLibraryMode.value === 'agentic_on_demand_v1') return t('aiDefaults.libraryModes.onDemand')
-    return t('aiDefaults.libraryModes.broad')
-})
-
 // Google/OPPO-Files-style Library: grid (default) / list, type chips, a bottom
 // search, per-file thumbnails, tap-to-open, and an overflow menu.
 // Remembered across visits (persisted in shell prefs).
@@ -108,7 +94,6 @@ const sortOptions = computed<Array<{ value: TalosLibrarySort; label: string }>>(
     { value: 'name', label: t('library.sortName') },
 ])
 const query = ref('')
-const menuOpen = ref(false)
 const typeFilterOptions = computed(() => typeTabs.value.map((tab) => ({
     value: tab.value,
     label: tab.label,
@@ -141,9 +126,10 @@ function chooseTypeFilter(value: string): void {
 }
 
 const typeTabs = computed<Array<{ value: typeof typeFilter.value; label: string }>>(() => [
-    { value: 'all', label: t('library.all') },
-    { value: 'images', label: t('library.images') },
+    // Owner 14/09/2026: Tutto · File · Immagini · Link, in quest'ordine.
+    { value: 'all', label: t('library.tabAll') },
     { value: 'files', label: t('library.files') },
+    { value: 'images', label: t('library.images') },
     // Owner 2026-07-27: the pages a search read are kept as markdown, which is
     // right for an answer that must still be auditable in six months — but it
     // meant the ADDRESS was prose. Here they are links again.
@@ -388,11 +374,10 @@ async function renderArtifactFile(file: TalosLocalVaultFile): Promise<void> {
 // fall through to the station-top action — it left the station entirely instead
 // of closing the preview.
 useTalosOverlayBack(() => {
-    if (menuOpen.value) { menuOpen.value = false; return }
     if (pdfView.value) { pdfView.value = null; return }
     if (docView.value) { docView.value = null; return }
     if (lightboxUrl.value) closeLightbox()
-}, () => menuOpen.value || lightboxUrl.value !== null || docView.value !== null
+}, () => lightboxUrl.value !== null || docView.value !== null
     || pdfView.value !== null)
 
 function closeLightbox(): void {
@@ -421,19 +406,8 @@ function deleteFromDoc(): void {
     if (file) requestDelete(file)
 }
 
-function formatModified(iso: string): string {
-    const date = new Date(iso)
-    const now = new Date()
-    const day = 86_400_000
-    const diff = Math.floor((now.setHours(0, 0, 0, 0) - new Date(iso).setHours(0, 0, 0, 0)) / day)
-    if (diff <= 0) return t('library.today')
-    if (diff === 1) return t('library.yesterday')
-    return date.toLocaleDateString(locale.value === 'it' ? 'it-IT' : 'en-US', { month: 'long', day: 'numeric' })
-}
-
 async function addFiles(): Promise<void> {
     if (actionBusy.value) return
-    menuOpen.value = false
     feedback.value = ''
     actionBusy.value = true
     // ⛔ `library`, not the default: adding a file here files it in the Vault and
@@ -492,21 +466,6 @@ function globalFileContextOverride(fileId: string): GlobalFileContextOverride {
     if (globalLibraryPolicy.value?.excluded_file_ids.includes(fileId)) return 'excluded'
     if (globalLibraryPolicy.value?.included_file_ids.includes(fileId)) return 'included'
     return 'automatic'
-}
-
-function globalFileContextLabel(file: TalosLocalVaultFile): string {
-    if (parseVaultOrigin(file.metadata) !== 'uploaded') {
-        return t('library.contextExplicitToolsOnly')
-    }
-    const override = globalFileContextOverride(file.id)
-    const label = override === 'included'
-        ? t('library.contextIncluded')
-        : override === 'excluded'
-            ? t('library.contextExcluded')
-            : t('library.contextAutomatic')
-    return isTalosLibraryFileShared(file.metadata)
-        ? label
-        : t('library.contextPrivateWithOverride', { state: label })
 }
 
 async function setGlobalFileContext(
@@ -616,6 +575,88 @@ function fileActions(file: TalosLocalVaultFile): GlobalLibraryAction[] {
     return actions
 }
 
+/**
+ * Owner 14/09/2026: sulla scheda lo stato del contesto si dice SOLO quando è
+ * un'eccezione. «Contesto: automatico» su ogni file era una riga ripetuta che
+ * nessuno leggeva più; «Escluso dal contesto» invece cambia le risposte.
+ */
+function fileExcludedLabel(file: TalosLocalVaultFile): string | null {
+    return parseVaultOrigin(file.metadata) === 'uploaded' && globalFileContextOverride(file.id) === 'excluded'
+        ? t('library.excludedFromContextShort')
+        : null
+}
+
+interface TalosLibraryCaptionPiece { text: string; accent: boolean; testId?: string }
+
+/**
+ * La riga sotto il nome in ELENCO, con le stesse parole della scheda in griglia
+ * (`TalosMobileLibraryFileTile`): «Generato» in ambra, l'estensione, la chat solo
+ * col raggruppamento acceso, «Escluso dal contesto» solo se escluso. Niente data.
+ */
+function fileCaption(file: TalosLocalVaultFile): TalosLibraryCaptionPiece[] {
+    const pieces: TalosLibraryCaptionPiece[] = []
+    if (parseVaultOrigin(file.metadata) === 'generated') pieces.push({ text: t('library.generated'), accent: true })
+    pieces.push({ text: talosLibraryFilePresentation(file.display_name, file.media_type).extension, accent: false })
+    const chat = groupByChat.value ? originChat(file) : null
+    if (chat) pieces.push({ text: chat, accent: false })
+    const excluded = fileExcludedLabel(file)
+    if (excluded) pieces.push({ text: excluded, accent: false, testId: `talos-library-context-state-${file.id}` })
+    return pieces
+}
+
+/**
+ * Owner 14/09/2026: un link ha lo stesso ⋯ di un file. Allega, salva ed elimina
+ * agiscono sulla COPIA conservata (il file che la riga rappresenta); «Apri nel
+ * browser» va alla pagina vera, ed era il bottone nell'angolo che se ne va.
+ */
+function linkActions(row: TalosSavedLinkRow): TalosRowAction[] {
+    const file = attachments.vaultFiles.find((entry) => entry.id === row.fileId) ?? null
+    const available = file?.status === 'available'
+    return [
+        {
+            id: 'open-browser',
+            label: t('library.openInBrowser'),
+            ariaLabel: t('library.openHostInBrowser', { host: row.host }),
+            icon: ExternalLink,
+            testId: `talos-library-link-action-open-browser-${row.fileId}`,
+        },
+        {
+            id: 'attach',
+            label: t('library.attachToMessage'),
+            ariaLabel: t('library.attachNamedToMessage', { name: row.title }),
+            icon: Paperclip,
+            disabled: !available || actionBusy.value || isSelected(row.fileId),
+            testId: `talos-library-link-action-attach-${row.fileId}`,
+        },
+        {
+            id: 'save',
+            label: t('library.saveToPhone'),
+            ariaLabel: t('library.saveNamedToDevice', { name: row.title }),
+            icon: Download,
+            disabled: !available || actionBusy.value || savingFileId.value !== null,
+            testId: `talos-library-link-action-save-${row.fileId}`,
+        },
+        {
+            id: 'delete',
+            label: t('common.delete'),
+            ariaLabel: t('library.deleteNamed', { name: row.title }),
+            icon: Trash2,
+            disabled: !file || actionBusy.value,
+            danger: true,
+            testId: `talos-library-link-action-delete-${row.fileId}`,
+        },
+    ]
+}
+
+function onLinkAction(row: TalosSavedLinkRow, action: string): void {
+    if (action === 'open-browser') {
+        void openLink(row.url)
+        return
+    }
+    const file = attachments.vaultFiles.find((entry) => entry.id === row.fileId)
+    if (file) onFileAction(file, action)
+}
+
 function onFileAction(file: TalosLocalVaultFile, action: string, checked?: boolean): void {
     if (action === 'attach') {
         void attachFile(file)
@@ -708,20 +749,16 @@ const groupedEntries = computed(() => groupTalosLibraryByChat(
     // section with an empty heading is the honest shape of "ungrouped".
     groupByChat.value ? entryChat : () => '',
     t('library.notFromChat'),
-    { timeOf: (entry) => entry.at, sort: sortOrder.value },
+    { timeOf: (entry) => entry.at, sort: sortOrder.value, nameOf: (entry) => (entry.kind === 'file' ? entry.file.display_name : entry.row.title) },
 ))
 
 const groupedLinkRows = computed(() => groupTalosLibraryByChat(
     renderedLinkRows.value,
     groupByChat.value ? linkOriginChat : () => '',
     t('library.notFromChat'),
-    { timeOf: (row) => row.savedAt ?? null, sort: sortOrder.value },
+    { timeOf: (row) => row.savedAt ?? null, sort: sortOrder.value, nameOf: (row) => row.title },
 ))
 
-/** A section heading shows the chat and when it was last touched (D-17). */
-function sectionDateLabel(latestAt: string | null): string | null {
-    return latestAt ? formatModified(latestAt) : null
-}
 const hasVisibleLibraryItems = computed(() => (
     (typeFilter.value !== 'links' && filteredFiles.value.length > 0)
     || renderedLinkRows.value.length > 0
@@ -853,7 +890,75 @@ function entrata(indice: number): Record<string, unknown> {
     return { 'data-talos-motion-intent': 'message-insert', style: stile }
 }
 
+/**
+ * ⛔ ENTRARE NELLA SELEZIONE — owner 14/09/2026: «Seleziona» non sta più in un
+ * menu della pagina. Ci si entra con la PRESSIONE LUNGA su un file, o col TASTO
+ * DESTRO del mouse; poi ogni tocco sceglie. È il gesto di Material 3 — «long
+ * press the item to enter selection mode» —
+ * https://m3.material.io/foundations/interaction/selection (letto il 2026-09-14).
+ *
+ * ⛔ Chrome su Android, alla pressione lunga, lancia ANCHE `contextmenu`; se lo
+ * si blocca il click che segue viene soppresso, altrimenti arriva al rilascio
+ * (https://bugzilla.mozilla.org/show_bug.cgi?id=1481923, letto il 2026-09-14).
+ * Quindi il click dopo una pressione scattata si ignora per una finestra BREVE
+ * dal rilascio, in entrambi i casi — e mai oltre: altrimenti il tocco dopo, quello
+ * vero, andrebbe perso. Un dito che si sposta sta scorrendo, non premendo.
+ *
+ * Il ⋯ della scheda resta suo: una pressione che parte da un menu non seleziona.
+ */
+const PRESSIONE_LUNGA_MS = 500
+const PRESSIONE_MOVIMENTO_PX = 10
+const PRESSIONE_CLICK_IGNORATO_MS = 400
+let pressione: { timer: number; x: number; y: number; scattata: boolean } | null = null
+let ignoraTapFinoA = 0
+
+function partitaDaUnMenu(event: Event): boolean {
+    return Boolean((event.target as Element | null)?.closest?.('[aria-haspopup]'))
+}
+function selezionaDaGesto(fileId: string): void {
+    if (!bulk.active.value) bulk.enter(fileId)
+    else if (!bulk.isSelected(fileId)) bulk.toggle(fileId)
+}
+function annullaPressione(): void {
+    if (pressione && pressione.timer !== 0) window.clearTimeout(pressione.timer)
+    pressione = null
+}
+function iniziaPressione(file: TalosLocalVaultFile, event: PointerEvent): void {
+    if (event.pointerType === 'mouse' || partitaDaUnMenu(event)) return
+    annullaPressione()
+    const corrente = { timer: 0, x: event.clientX, y: event.clientY, scattata: false }
+    corrente.timer = window.setTimeout(() => {
+        corrente.timer = 0
+        corrente.scattata = true
+        selezionaDaGesto(file.id)
+    }, PRESSIONE_LUNGA_MS)
+    pressione = corrente
+}
+function muoviPressione(event: PointerEvent): void {
+    if (!pressione || pressione.timer === 0) return
+    if (Math.hypot(event.clientX - pressione.x, event.clientY - pressione.y) > PRESSIONE_MOVIMENTO_PX) annullaPressione()
+}
+function finePressione(): void {
+    if (pressione?.scattata) ignoraTapFinoA = Date.now() + PRESSIONE_CLICK_IGNORATO_MS
+    annullaPressione()
+}
+function menuContestuale(file: TalosLocalVaultFile, event: Event): void {
+    if (partitaDaUnMenu(event)) return
+    event.preventDefault()
+    if (pressione) {
+        if (pressione.timer !== 0) window.clearTimeout(pressione.timer)
+        pressione.timer = 0
+        pressione.scattata = true
+    }
+    selezionaDaGesto(file.id)
+}
+
 function tapFile(file: TalosLocalVaultFile): void {
+    // Il click che segue una pressione lunga appena scattata non è un tocco.
+    if (Date.now() < ignoraTapFinoA) {
+        ignoraTapFinoA = 0
+        return
+    }
     // In selection mode a tap PICKS. Opening a file from here would be a
     // different action wearing the same gesture.
     if (bulk.active.value) bulk.toggle(file.id)
@@ -917,6 +1022,51 @@ onMounted(async () => {
     await controller.init()
     await attachments.refreshVault()
 })
+/** Il foglio «Opzioni Libreria»: ordine e raggruppamento (owner 14/09/2026). */
+const optionsOpen = ref(false)
+const sortFilterOptions = computed(() => sortOptions.value.map((option) => ({
+    ...option,
+    testId: `talos-library-sort-${option.value}`,
+})))
+/** La stessa voce a riquadro del foglio del contesto in chat: un sistema solo. */
+function sortOptionClass(selected: boolean): string {
+    const base = 'talos-pressable flex min-h-12 w-full items-center gap-3 rounded-xl border px-3 text-left text-sm'
+    return selected
+        ? `${base} border-[var(--talos-accent)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]`
+        : `${base} border-[var(--talos-border)] text-[var(--talos-muted)]`
+}
+function chooseSort(value: string): void {
+    const found = sortOptions.value.find((option) => option.value === value)
+    if (found) sortOrder.value = found.value
+}
+
+/**
+ * ⛔ Owner 14/09/2026: un `.md` aperto dalla Libreria si legge FORMATTATO, col
+ * renderer delle risposte in chat — non un secondo renderer Markdown, che prima o
+ * poi disegnerebbe una tabella in un altro modo. «Testo» resta a un tocco: chi ha
+ * scritto il file può voler vedere i segni. Pigro, come il visore dei PDF: chi non
+ * apre mai un Markdown non ne paga un byte all'avvio.
+ */
+const ContenutoMarkdown = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileMessageContent.vue'),
+)
+const docMarkdown = computed(() => {
+    const file = docView.value
+    if (!file) return false
+    return file.media_type === 'text/markdown' || /\.(md|markdown)$/i.test(file.display_name)
+})
+const docReading = ref<'formatted' | 'text'>('formatted')
+watch(() => docView.value?.id, () => { docReading.value = 'formatted' })
+const docReadingOptions = computed(() => [
+    { value: 'formatted', label: t('library.docFormatted'), testId: 'talos-library-doc-formatted' },
+    { value: 'text', label: t('library.docText'), testId: 'talos-library-doc-text' },
+])
+function chooseDocReading(value: string): void {
+    if (value === 'formatted' || value === 'text') docReading.value = value
+}
+
+// Owner 2026-09-14: scorrendo, il titolo si ripiega nella barra del foglio.
+useTalosSheetTitle(() => t('library.title'))
 </script>
 
 <template>
@@ -931,58 +1081,36 @@ onMounted(async () => {
             <Database class="h-4 w-4 text-[var(--talos-accent)]" aria-hidden="true" />
         </template>
 
-        <!-- ⛔ CHE POSTO È QUESTO — la testata del mockup «Talos Calm Finale».
-             Il titolo e una riga che dice cosa ci si mette. Serve perché una
-             stazione aperta dal menu deve dire da sola dove si è finiti, e
-             perché prende il posto dell'intro lunga che stava dentro la pagina
-             (owner U-20: «l'intro lunga sparisce dalla pagina»). -->
-        <header class="flex items-start justify-between gap-[var(--talos-space-section)]">
-            <div class="min-w-0">
-                <h1 class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">
-                    {{ t('library.title') }}
-                </h1>
-                <p class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
-                    {{ t('library.subtitle') }}
-                </p>
-            </div>
-            <!-- Sul tablet il pulsante dice cosa fa; sul telefono, dove la riga
-                 del titolo è tutta la larghezza che c'è, resta il quadrato in
-                 accento col nome accessibile intatto. Stesso mockup, due
-                 larghezze. -->
-            <Button
-                type="button"
-                data-testid="talos-library-add"
-                :aria-label="t('library.addFile')"
-                :disabled="actionBusy"
-                :class="[
-                    'talos-pressable talos-wave-host shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)] disabled:opacity-60',
-                    isTablet ? 'min-h-touch gap-2 px-5 text-sm font-medium' : 'size-14 p-0',
-                ]"
-                @click="addFiles"
-                @pointerdown="onda.onPointerDown"
-            >
-                <Plus :class="isTablet ? 'size-4' : 'size-6'" aria-hidden="true" />
-                <span v-if="isTablet">{{ t('library.addFile') }}</span>
-            </Button>
+        <!-- ⛔ CHE POSTO È QUESTO — il titolo e una riga che dice cosa ci si mette.
+             Owner 14/09/2026: titolo e sottotitolo restano; «Aggiungi file» non
+             sta più accanto al titolo ma nella riga degli strumenti, con le
+             altre cose che si fanno a questa pagina. -->
+        <header class="min-w-0">
+            <h1 data-talos-sheet-title class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">
+                {{ t('library.title') }}
+            </h1>
+            <p class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
+                {{ t('library.subtitle') }}
+            </p>
         </header>
 
-        <!-- ⛔ COME LO RESTRINGO — ricerca, densità e opzioni sulla stessa riga.
-             Il campo sta FUORI da ogni catena `v-if` che dipende dai risultati:
-             dev'essere visibile anche quando la lista è vuota, perché è con la
-             lista vuota che si cancella la ricerca. -->
-        <!-- ⛔ `flex-wrap` più una larghezza minima al campo: sotto i ~360 px i
-             tre controlli non entrano su una riga, e senza il ritorno a capo la
-             ricerca si schiaccerebbe a due centimetri. Va a capo, come nel
-             mockup sul telefono — dove i due bottoni stanno sulla riga sotto. -->
-        <div v-if="!bulk.active.value" class="mt-[var(--talos-space-section)] flex flex-wrap items-stretch gap-[var(--talos-space-card)]">
-            <label class="relative min-w-[11rem] flex-1">
+        <!-- ⛔ LA RIGA DEGLI STRUMENTI — owner 14/09/2026: ricerca · vista ·
+             opzioni · «Aggiungi file», su UNA riga. Il campo sta FUORI da ogni
+             catena `v-if` che dipende dai risultati: dev'essere visibile anche
+             quando la lista è vuota, perché è con la lista vuota che si cancella
+             la ricerca.
+             ⛔ `min-w-[8rem]`: sul telefono i quattro controlli stanno su una
+             riga solo se il campo cede per primo; `flex-wrap` resta come rete
+             per gli schermi più stretti. -->
+        <div v-if="!bulk.active.value" class="mt-[var(--talos-space-section)] flex flex-wrap items-stretch gap-[var(--talos-space-inline)]">
+            <label class="relative min-w-[8rem] flex-1">
                 <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
                 <input
                     v-model="query"
                     type="search"
                     inputmode="search"
                     data-testid="talos-library-search"
-                    :placeholder="t('library.searchLibrary')"
+                    :placeholder="isTablet ? t('library.searchLibrary') : t('common.search')"
                     :aria-label="t('library.searchLibrary')"
                     class="min-h-12 w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
                 >
@@ -990,15 +1118,14 @@ onMounted(async () => {
 
             <!-- ⛔ Un radiogroup e non due bottoni indipendenti: griglia ed
                  elenco sono ALTERNATIVE, e dirlo è ciò che le rende
-                 comprensibili a chi naviga con lo screen reader. Nel mockup è
-                 un bottone solo che si alterna; qui sono due, perché un
-                 interruttore che cambia icona non dice mai in quale dei due
-                 stati si trova — lo si scopre premendolo. -->
+                 comprensibili a chi naviga con lo screen reader.
+                 Owner 14/09/2026: la voce scelta si riconosce SOLO dal filo
+                 ambra che scivola — niente fondo chiaro sotto l'icona. -->
             <div
                 ref="gruppoVista"
                 role="radiogroup"
                 :aria-label="t('library.viewLabel')"
-                class="flex shrink-0 items-center gap-[2px] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[3px]"
+                class="flex shrink-0 items-center rounded-[var(--talos-radius-control)] border border-[var(--talos-border)]"
             >
                 <button
                     v-for="mode in ([['grid', t('library.grid'), LayoutGrid], ['list', t('library.list'), List]] as const)"
@@ -1010,9 +1137,7 @@ onMounted(async () => {
                     :data-testid="`talos-library-view-${mode[0]}`"
                     :class="[
                         'talos-pressable talos-wave-host relative flex min-h-12 min-w-12 items-center justify-center rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-xs',
-                        viewMode === mode[0]
-                            ? 'bg-[var(--talos-secondary)] text-[var(--talos-text)]'
-                            : 'text-[var(--talos-muted)]',
+                        viewMode === mode[0] ? 'text-[var(--talos-text)]' : 'text-[var(--talos-muted)]',
                     ]"
                     @click="viewMode = mode[0]"
                     @pointerdown="onda.onPointerDown"
@@ -1030,57 +1155,39 @@ onMounted(async () => {
                 </button>
             </div>
 
-            <div class="relative shrink-0">
-                <Button type="button" size="icon" variant="ghost" :aria-label="t('library.options')" aria-haspopup="menu" :aria-expanded="menuOpen" class="min-h-12 min-w-12 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)]" @click="menuOpen = !menuOpen">
-                    <SlidersHorizontal class="size-5" aria-hidden="true" />
-                </Button>
-                <div v-if="menuOpen" class="fixed inset-0 z-[59]" aria-hidden="true" @click="menuOpen = false" />
-                <!-- Same motion as the chat 3-dot menu (owner 2026-07-25). -->
-                <Transition
-                    enter-active-class="transition duration-150 ease-out"
-                    enter-from-class="opacity-0 scale-95"
-                    enter-to-class="opacity-100 scale-100"
-                    leave-active-class="transition duration-100 ease-in"
-                    leave-from-class="opacity-100 scale-100"
-                    leave-to-class="opacity-0 scale-95"
-                >
-                <div v-if="menuOpen" role="menu" data-testid="talos-library-menu" class="absolute right-0 top-full z-[60] mt-1 min-w-52 origin-top-right overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl">
-                    <button type="button" role="menuitem" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="addFiles"><Upload class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.addFile') }}</button>
-                    <button type="button" role="menuitem" data-testid="talos-library-select" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="menuOpen = false; bulk.enter()"><CheckSquare class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('common.select') }}</button>
-                    <button type="button" role="menuitem" disabled class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-muted)] opacity-50"><FolderPlus class="size-4" aria-hidden="true" /> {{ t('library.newFolder') }}</button>
-                    <!-- ⛔ Griglia ed elenco NON sono più qui: stanno nella
-                         barra qui sopra, dove il mockup li mette e dove si
-                         vede in quale dei due si è senza aprire niente. Un
-                         controllo in due posti è un controllo che prima o poi
-                         dice due cose diverse. -->
-                    <div class="my-1 border-t border-[var(--talos-border)]" />
-                    <button type="button" role="menuitemcheckbox" :aria-checked="groupByChat" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="groupByChat = !groupByChat; menuOpen = false"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.groupByChat') }} <CheckCircle2 v-if="groupByChat" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
-                    <!--
-                        Owner 2026-07-30 asked for the date beside the chat name
-                        and, in the same breath, for a way to sort by it. Both
-                        answer to the same field, which is why the heading shows
-                        the section's most recent item rather than its creation
-                        date. Three entries: sorting by type would duplicate the
-                        chips that are already on screen.
-                    -->
-                    <div role="separator" class="my-1 h-px bg-[var(--talos-border)]" />
-                    <button
-                        v-for="option in sortOptions"
-                        :key="option.value"
-                        type="button"
-                        role="menuitemradio"
-                        :aria-checked="sortOrder === option.value"
-                        :data-testid="`talos-library-sort-${option.value}`"
-                        class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm"
-                        @click="sortOrder = option.value; menuOpen = false"
-                    >
-                        <ArrowDownUp class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                        {{ option.label }}
-                        <CheckCircle2 v-if="sortOrder === option.value" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                    </button>
-                </div>
-                </Transition>
-            </div>
+            <!-- Ordine e raggruppamento: un foglio dal basso (owner 14/09/2026),
+                 al posto del menu della pagina e del `<select>` nativo. -->
+            <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                data-testid="talos-library-options"
+                :aria-label="t('library.options')"
+                aria-haspopup="dialog"
+                :aria-expanded="optionsOpen"
+                class="min-h-12 min-w-12 shrink-0 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)]"
+                @click="optionsOpen = true"
+            >
+                <SlidersHorizontal class="size-5" aria-hidden="true" />
+            </Button>
+
+            <!-- Sul tablet il pulsante dice cosa fa; sul telefono resta il
+                 quadrato in accento, col nome accessibile intatto. -->
+            <Button
+                type="button"
+                data-testid="talos-library-add"
+                :aria-label="t('library.addFile')"
+                :disabled="actionBusy"
+                :class="[
+                    'talos-pressable talos-wave-host shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)] disabled:opacity-60',
+                    isTablet ? 'min-h-12 gap-2 px-5 text-sm font-medium' : 'size-12 p-0',
+                ]"
+                @click="addFiles"
+                @pointerdown="onda.onPointerDown"
+            >
+                <Plus class="size-5" aria-hidden="true" />
+                <span v-if="isTablet">{{ t('library.addFile') }}</span>
+            </Button>
         </div>
 
         <!-- Selection bar: replaces the search row while the mode is on, so the
@@ -1091,7 +1198,7 @@ onMounted(async () => {
             class="mt-[var(--talos-space-section)] flex items-center gap-1 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
         >
             <Button type="button" size="icon" variant="ghost" class="min-h-12 min-w-12 rounded-full" :aria-label="t('library.cancelSelection')" @click="bulk.exit()"><X class="size-4" aria-hidden="true" /></Button>
-            <span class="text-sm font-medium">{{ t('library.selected', { count: bulk.count.value }) }}</span>
+            <span class="text-sm font-medium">{{ t(bulk.count.value === 1 ? 'library.selectedOne' : 'library.selected', { count: bulk.count.value }) }}</span>
             <Button type="button" variant="ghost" size="sm" class="ml-auto min-h-12" @click="bulk.selectAll(visibleIds)">
                 {{ bulk.allSelected(visibleIds) ? t('common.none') : t('library.all') }}
             </Button>
@@ -1151,48 +1258,17 @@ onMounted(async () => {
             </TalosThemedFilter>
         </div>
 
-        <!--
-            ⛔ QUANTI SONO, IN CHE ORDINE, E SE ENTRANO NELLE RISPOSTE.
-
-            Le tre cose stanno su una riga sola perché si leggono insieme prima
-            di guardare la griglia. Lo stato del contesto globale era una scheda
-            di due righe in cima alla pagina: diceva la stessa cosa e occupava il
-            posto della prima fila di schede. Qui è una frase, con i suoi
-            attributi intatti — `data-mode` e `data-enabled` sono ciò che i test
-            interrogano, e sono anche ciò che un domani dirà perché una risposta
-            non ha usato un file.
-        -->
-        <div class="flex min-h-12 flex-wrap items-center justify-between gap-[var(--talos-space-inline)] text-xs text-[var(--talos-muted)]">
-            <span class="flex min-w-0 items-center gap-[var(--talos-space-inline)]">
-                <span role="status" aria-live="polite" data-testid="talos-library-count">
-                    {{ t('library.acrossEveryChat', { count: logicalLibraryItemCount }) }}
-                </span>
-                <span
-                    data-testid="talos-library-global-policy"
-                    :data-mode="globalLibraryMode"
-                    :data-enabled="globalLibraryEnabled"
-                    class="truncate border-l border-[var(--talos-border)] pl-[var(--talos-space-inline)]"
-                >{{ t('library.globalContextMode') }}: {{ globalLibraryModeLabel }}</span>
-            </span>
-            <label class="flex shrink-0 items-center gap-1">
-                <ArrowDownUp class="size-4" aria-hidden="true" />
-                <span class="sr-only">{{ t('library.sortLabel') }}</span>
-                <!-- Un `select` nativo: sul telefono apre la ruota di Android,
-                     che è il controllo che la persona conosce già. Le stesse
-                     tre voci restano anche nel menu, perché è lì che i test e
-                     l'abitudine le cercano. -->
-                <select
-                    v-model="sortOrder"
-                    data-testid="talos-library-sort"
-                    :aria-label="t('library.sortLabel')"
-                    class="min-h-12 max-w-40 cursor-pointer border-0 bg-transparent px-1 text-xs text-[var(--talos-muted)] outline-none"
-                >
-                    <option v-for="option in sortOptions" :key="option.value" :value="option.value">
-                        {{ option.label }}
-                    </option>
-                </select>
-            </label>
-        </div>
+        <!-- ⛔ QUANTI SONO. Owner 14/09/2026: il conteggio resta; la riga
+             «Contesto Libreria globale: …» e l'ordinamento nativo se ne vanno —
+             l'ordine sta nel foglio delle opzioni. -->
+        <p
+            role="status"
+            aria-live="polite"
+            data-testid="talos-library-count"
+            class="flex min-h-12 items-center text-xs text-[var(--talos-muted)]"
+        >
+            {{ t('library.acrossEveryChat', { count: logicalLibraryItemCount }) }}
+        </p>
 
         <div v-if="attachments.vaultError.value" role="alert" class="mb-3 flex items-center gap-2 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
             <AlertTriangle class="size-4 shrink-0" aria-hidden="true" />
@@ -1280,12 +1356,6 @@ onMounted(async () => {
         -->
         <div v-else-if="typeFilter === 'links'" data-testid="talos-library-links" :aria-label="t('library.savedLinks')">
             <template v-for="section in groupedLinkRows" :key="section.title || 'all'">
-                <TalosMobileLibrarySectionHeading
-                    v-if="groupByChat"
-                    :title="section.title"
-                    :date-label="sectionDateLabel(section.latestAt)"
-                />
-
                 <TransitionGroup
                     v-if="viewMode === 'grid'"
                     tag="div"
@@ -1300,10 +1370,12 @@ onMounted(async () => {
                         :key="row.url"
                         v-bind="entrata(indice)"
                         :row="row"
-                        :saved-at-label="formatModified(row.savedAt)"
                         :favicon-url="sourceIcons[row.url] ?? null"
+                        :origin-label="groupByChat ? linkOriginChat(row) : null"
+                        :actions="linkActions(row)"
+                        :actions-label="t('library.linkActionsFor', { title: row.title })"
                         @open-copy="openSavedCopy(row.fileId)"
-                        @open-browser="openLink(row.url)"
+                        @action="(action: string) => onLinkAction(row, action)"
                     />
                 </TransitionGroup>
 
@@ -1321,11 +1393,12 @@ onMounted(async () => {
                         :key="row.url"
                         v-bind="entrata(indice)"
                         :row="row"
-                        :saved-at-label="formatModified(row.savedAt)"
                         :favicon-url="sourceIcons[row.url] ?? null"
-                        browser-test-id="talos-library-link-open"
+                        :origin-label="groupByChat ? linkOriginChat(row) : null"
+                        :actions="linkActions(row)"
+                        :actions-label="t('library.linkActionsFor', { title: row.title })"
                         @open-copy="openSavedCopy(row.fileId)"
-                        @open-browser="openLink(row.url)"
+                        @action="(action: string) => onLinkAction(row, action)"
                     />
                 </TransitionGroup>
             </template>
@@ -1342,12 +1415,6 @@ onMounted(async () => {
             other forgotten.
         -->
         <template v-else v-for="section in groupedEntries" :key="section.title || 'all'">
-            <TalosMobileLibrarySectionHeading
-                v-if="groupByChat"
-                :title="section.title"
-                :date-label="sectionDateLabel(section.latestAt)"
-            />
-
             <!-- GRID: the tile opens; the same explicit More contract as list
                  carries attach/save/delete without hover-only behavior.
 
@@ -1378,8 +1445,15 @@ onMounted(async () => {
                         :selected="bulk.isSelected(entry.file.id)"
                         :generated="parseVaultOrigin(entry.file.metadata) === 'generated'"
                         :generated-label="t('library.generated')"
-                        :origin-label="groupByChat ? null : originChat(entry.file)"
-                        :context-label="globalFileContextLabel(entry.file)"
+                        :origin-label="groupByChat ? originChat(entry.file) : null"
+                        :excluded-label="fileExcludedLabel(entry.file)"
+                        class="select-none [-webkit-touch-callout:none]"
+                        @pointerdown="(event: PointerEvent) => iniziaPressione(entry.file, event)"
+                        @pointermove="muoviPressione"
+                        @pointerup="finePressione"
+                        @pointercancel="finePressione"
+                        @pointerleave="finePressione"
+                        @contextmenu="(event: Event) => menuContestuale(entry.file, event)"
                         :actions-label="t('library.fileActionsFor', { name: entry.file.display_name })"
                         :actions="fileActions(entry.file)"
                         :tap-label="t(bulk.active.value ? 'library.selectNamed' : 'library.openNamed', { name: entry.file.display_name })"
@@ -1390,10 +1464,12 @@ onMounted(async () => {
                         v-else
                         v-bind="entrata(indice)"
                         :row="entry.row"
-                        :saved-at-label="formatModified(entry.row.savedAt)"
                         :favicon-url="sourceIcons[entry.row.url] ?? null"
+                        :origin-label="groupByChat ? linkOriginChat(entry.row) : null"
+                        :actions="linkActions(entry.row)"
+                        :actions-label="t('library.linkActionsFor', { title: entry.row.title })"
                         @open-copy="openSavedCopy(entry.row.fileId)"
-                        @open-browser="openLink(entry.row.url)"
+                        @action="(action: string) => onLinkAction(entry.row, action)"
                     />
                 </template>
             </TransitionGroup>
@@ -1416,11 +1492,12 @@ onMounted(async () => {
                         v-if="entry.kind === 'link'"
                         v-bind="entrata(indice)"
                         :row="entry.row"
-                        :saved-at-label="formatModified(entry.row.savedAt)"
                         :favicon-url="sourceIcons[entry.row.url] ?? null"
-                        browser-test-id="talos-library-link-open"
+                        :origin-label="groupByChat ? linkOriginChat(entry.row) : null"
+                        :actions="linkActions(entry.row)"
+                        :actions-label="t('library.linkActionsFor', { title: entry.row.title })"
                         @open-copy="openSavedCopy(entry.row.fileId)"
-                        @open-browser="openLink(entry.row.url)"
+                        @action="(action: string) => onLinkAction(entry.row, action)"
                     />
                     <TalosMobileLibraryFileRow
                         v-else
@@ -1432,18 +1509,22 @@ onMounted(async () => {
                         :selected="bulk.isSelected(entry.file.id)"
                         :open-label="t(bulk.active.value ? 'library.selectNamed' : 'library.openNamed', { name: entry.file.display_name })"
                         @open="tapFile(entry.file)"
+                        class="select-none [-webkit-touch-callout:none]"
+                        @pointerdown="(event: PointerEvent) => iniziaPressione(entry.file, event)"
+                        @pointermove="muoviPressione"
+                        @pointerup="finePressione"
+                        @pointercancel="finePressione"
+                        @pointerleave="finePressione"
+                        @contextmenu="(event: Event) => menuContestuale(entry.file, event)"
                 >
                     <template #meta>
-                            <span v-if="parseVaultOrigin(entry.file.metadata) === 'generated'" class="text-[var(--talos-accent)]">{{ t('library.generated') }}</span>
-                            <span v-else>{{ t('library.modified', { date: formatModified(entry.file.updated_at) }) }}</span>
-                            <span v-if="!groupByChat && originChat(entry.file)" class="truncate">· {{ originChat(entry.file) }}</span>
-                    </template>
-                    <template #details>
-                        <span
-                            :data-testid="`talos-library-context-state-${entry.file.id}`"
-                            class="mt-0.5 block text-2xs leading-4 text-[var(--talos-muted)]"
-                        >
-                            {{ t('library.contextState', { state: globalFileContextLabel(entry.file) }) }}
+                        <span class="min-w-0 truncate">
+                            <template v-for="(pezzo, posto) in fileCaption(entry.file)" :key="pezzo.text">
+                                <span v-if="posto > 0" aria-hidden="true"> · </span><span
+                                    :data-testid="pezzo.testId"
+                                    :class="pezzo.accent ? 'text-[var(--talos-accent)]' : ''"
+                                >{{ pezzo.text }}</span>
+                            </template>
                         </span>
                     </template>
                     <template #actions>
@@ -1540,11 +1621,71 @@ onMounted(async () => {
                     class="mb-3"
                     @open-chat="openOriginChat"
                 />
-                <pre v-if="docText" class="whitespace-pre-wrap break-words font-sans text-sm leading-6">{{ docText }}</pre>
+                <div v-if="docText && docMarkdown" class="mb-3">
+                    <TalosThemedFilter
+                        group-class="inline-flex min-h-12 items-center gap-[var(--talos-space-inline)] border-b border-[var(--talos-border)]"
+                        :model-value="docReading"
+                        :options="docReadingOptions"
+                        :group-label="t('library.docReadingMode')"
+                        :option-class="typeFilterOptionClass"
+                        @update:model-value="chooseDocReading"
+                    >
+                        <template #option="{ option, selected }">
+                            <span>{{ option.label }}</span>
+                            <span
+                                v-if="selected"
+                                aria-hidden="true"
+                                class="absolute bottom-0 left-[var(--talos-space-control)] right-[var(--talos-space-control)] h-[2px] rounded-full bg-[var(--talos-accent)]"
+                            />
+                        </template>
+                    </TalosThemedFilter>
+                </div>
+                <ContenutoMarkdown v-if="docText && docMarkdown && docReading === 'formatted'" :content="docText" />
+                <pre v-else-if="docText" class="whitespace-pre-wrap break-words font-sans text-sm leading-6">{{ docText }}</pre>
                 <p v-else class="text-sm text-[var(--talos-muted)]">{{ t('library.noPreviewText') }}</p>
             </div>
         </div>
     </Teleport>
+
+    <!--
+        OPZIONI LIBRERIA — owner 14/09/2026: ordine e raggruppamento restano, in un
+        foglio dal basso fatto coi pezzi dell'app (`TalosMobileComposerSheet`,
+        `TalosThemedFilter`, `TalosThemedSwitch`) — mai più un `<select>` nativo col
+        radio turchese di Android. Il foglio resta aperto dopo una scelta: le due
+        cose si regolano insieme.
+    -->
+    <TalosMobileComposerSheet
+        v-if="optionsOpen"
+        :title="t('library.options')"
+        testid="talos-library-options-sheet"
+        @close="optionsOpen = false"
+    >
+        <section>
+            <h3 class="text-sm font-medium text-[var(--talos-text)]">{{ t('library.sortLabel') }}</h3>
+            <TalosThemedFilter
+                group-class="mt-2 grid gap-2"
+                :model-value="sortOrder"
+                :options="sortFilterOptions"
+                :group-label="t('library.sortLabel')"
+                :option-class="sortOptionClass"
+                @update:model-value="chooseSort"
+            >
+                <template #option="{ option, selected }">
+                    <span class="min-w-0 flex-1">{{ option.label }}</span>
+                    <Check v-if="selected" class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                </template>
+            </TalosThemedFilter>
+        </section>
+        <div class="flex min-h-12 items-center justify-between gap-3 border-t border-[var(--talos-border)] pb-2 pt-3 text-sm text-[var(--talos-text)]">
+            <span>{{ t('library.groupByChat') }}</span>
+            <TalosThemedSwitch
+                :model-value="groupByChat"
+                :aria-label="t('library.groupByChat')"
+                test-id="talos-library-group-by-chat"
+                @update:model-value="groupByChat = $event"
+            />
+        </div>
+    </TalosMobileComposerSheet>
 
     <TalosMobileConfirmDialog
         v-if="deleteOpen"

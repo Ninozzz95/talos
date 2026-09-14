@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useTalosSheetTitle } from '@/lib/sheetTitle'
 /**
  * Le Attività, nella forma del mockup «Talos Calm Finale» (owner 12/09/2026).
  *
@@ -47,6 +48,7 @@ import { useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import { LayoutGrid, List, Plus, Search, SlidersHorizontal, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
+import TalosMobileStationOptionsSheet from '@/components/talos/ui/TalosMobileStationOptionsSheet.vue'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileTaskCard from '@/components/talos/tasks/TalosMobileTaskCard.vue'
 import TalosMobileTaskRow from '@/components/talos/tasks/TalosMobileTaskRow.vue'
@@ -453,6 +455,19 @@ function entrata(indice: number): Record<string, unknown> {
     if (!stile) return {}
     return { 'data-talos-motion-intent': 'message-insert', style: stile }
 }
+// Owner 2026-09-14: scorrendo, il titolo si ripiega nella barra del foglio.
+/**
+ * Fase 6 (owner 14/09/2026): l'ordinamento in un foglio dal basso
+ * (`TalosMobileStationOptionsSheet`), come nella Libreria. Il `<select>` nativo
+ * lo disegnava Android, fuori dalla palette.
+ */
+const optionsOpen = ref(false)
+const sortOptions = computed<Array<{ value: TalosTaskSort; label: string }>>(() => [
+    { value: 'priority', label: t('tasks.sortPriority') },
+    { value: 'recent', label: t('tasks.sortRecent') },
+    { value: 'title', label: t('tasks.sortTitle') },
+])
+useTalosSheetTitle(() => t('navigation.tasks'))
 </script>
 
 <template>
@@ -466,42 +481,28 @@ function entrata(indice: number): Record<string, unknown> {
              una stazione aperta dal menu deve dire da sola dove si è finiti. -->
         <header class="flex items-start justify-between gap-[var(--talos-space-section)]">
             <div class="min-w-0">
-                <h1 class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">
+                <h1 data-talos-sheet-title class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">
                     {{ t('navigation.tasks') }}
                 </h1>
                 <p class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
                     {{ t('tasks.subtitle') }}
                 </p>
             </div>
-            <Button
-                type="button"
-                data-testid="talos-tasks-new"
-                :aria-label="t('tasks.add')"
-                :class="[
-                    'talos-pressable talos-wave-host shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)]',
-                    isTablet ? 'min-h-touch gap-2 px-5 text-sm font-medium' : 'size-14 p-0',
-                ]"
-                @click="nuova"
-                @pointerdown="onda.onPointerDown"
-            >
-                <Plus :class="isTablet ? 'size-4' : 'size-6'" aria-hidden="true" />
-                <span v-if="isTablet">{{ t('tasks.add') }}</span>
-            </Button>
         </header>
 
         <!-- Ricerca e densità sulla stessa riga: sono le due cose che si fanno
              prima di guardare. Il campo sta FUORI da ogni catena `v-if` — deve
              restare visibile anche quando la lista è vuota, perché è con la
              lista vuota che si cancella il filtro. -->
-        <div class="mt-[var(--talos-space-section)] flex items-stretch gap-[var(--talos-space-card)]">
-            <label class="relative min-w-0 flex-1">
+        <div class="mt-[var(--talos-space-section)] flex flex-wrap items-stretch gap-[var(--talos-space-inline)]">
+            <label class="relative min-w-[8rem] flex-1">
                 <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
                 <input
                     v-model="query"
                     type="search"
                     inputmode="search"
                     data-testid="talos-tasks-search"
-                    :placeholder="t('tasks.searchPlaceholder')"
+                    :placeholder="t('common.search')"
                     :aria-label="t('tasks.searchPlaceholder')"
                     class="min-h-touch w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
                 >
@@ -527,7 +528,7 @@ function entrata(indice: number): Record<string, unknown> {
                     :class="[
                         'talos-pressable talos-wave-host relative flex min-h-touch min-w-touch items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-xs',
                         vista === modo[0]
-                            ? 'bg-[var(--talos-secondary)] text-[var(--talos-text)]'
+                            ? 'text-[var(--talos-text)]'
                             : 'text-[var(--talos-muted)]',
                     ]"
                     @click="vista = modo[0]"
@@ -543,6 +544,39 @@ function entrata(indice: number): Record<string, unknown> {
                     />
                 </button>
             </div>
+
+            <!-- Fase 6 (owner 14/09/2026): l'ordine sta in un foglio dal basso, come
+                 nella Libreria — niente più `<select>` nativo sotto le schede. -->
+            <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                data-testid="talos-tasks-options"
+                :aria-label="t('tasks.options')"
+                aria-haspopup="dialog"
+                :aria-expanded="optionsOpen"
+                class="min-h-touch min-w-touch shrink-0 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)]"
+                @click="optionsOpen = true"
+            >
+                <SlidersHorizontal class="size-5" aria-hidden="true" />
+            </Button>
+
+            <!-- L'azione principale nella riga degli strumenti (owner 13/09): con
+                 l'etichetta sul tablet, solo icona sul telefono. -->
+            <Button
+                type="button"
+                data-testid="talos-tasks-new"
+                :aria-label="t('tasks.add')"
+                :class="[
+                    'talos-pressable talos-wave-host shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)]',
+                    isTablet ? 'min-h-touch gap-2 px-5 text-sm font-medium' : 'size-12 p-0',
+                ]"
+                @click="nuova"
+                @pointerdown="onda.onPointerDown"
+            >
+                <Plus class="size-5" aria-hidden="true" />
+                <span v-if="isTablet">{{ t('tasks.add') }}</span>
+            </Button>
         </div>
 
         <!-- Cosa sto guardando, col conto di quante ce ne sono in ciascun
@@ -617,24 +651,18 @@ function entrata(indice: number): Record<string, unknown> {
             <span role="status" aria-live="polite" data-testid="talos-tasks-count">
                 {{ caricato ? t('tasks.count', { count: shown.length }) : '' }}
             </span>
-            <label class="flex shrink-0 items-center gap-1">
-                <SlidersHorizontal class="size-4" aria-hidden="true" />
-                <span class="sr-only">{{ t('tasks.sortLabel') }}</span>
-                <!-- Un `select` nativo: sul telefono apre la ruota di Android,
-                     che è il controllo che la persona conosce già, e non ha
-                     bisogno di un pannello nostro per tre voci. -->
-                <select
-                    v-model="ordine"
-                    data-testid="talos-tasks-sort"
-                    :aria-label="t('tasks.sortLabel')"
-                    class="min-h-touch max-w-36 cursor-pointer border-0 bg-transparent px-1 text-xs text-[var(--talos-muted)] outline-none"
-                >
-                    <option value="priority">{{ t('tasks.sortPriority') }}</option>
-                    <option value="recent">{{ t('tasks.sortRecent') }}</option>
-                    <option value="title">{{ t('tasks.sortTitle') }}</option>
-                </select>
-            </label>
         </div>
+
+        <TalosMobileStationOptionsSheet
+            v-if="optionsOpen"
+            :title="t('tasks.options')"
+            test-id-prefix="talos-tasks"
+            :sort-label="t('tasks.sortLabel')"
+            :sort-options="sortOptions"
+            :sort="ordine"
+            @update:sort="(value: string) => ordine = value as TalosTaskSort"
+            @close="optionsOpen = false"
+        />
 
         <p v-if="error" role="alert" data-testid="talos-tasks-error" class="py-[var(--talos-space-inline)] text-xs text-[var(--talos-danger)]">
             {{ error }}

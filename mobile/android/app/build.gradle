@@ -534,6 +534,30 @@ android {
                 applicationIdSuffix '.dev'
                 versionNameSuffix '-dev'
             }
+            /*
+             * ⛔⛔ Owner 2026-09-14: «il motore llm fa cagare» — misurato sull'APK di PROVA, che
+             * era SOLO PROCESSORE: OpenCL si accendeva soltanto in `release`, e il laboratorio
+             * diceva il vero («GPU assente»). Una prova che misura un motore diverso da quello
+             * spedito non dice niente del motore spedito. ⇒ Stessi argomenti della release,
+             * stesso caricatore ICD compilato dai submodule, stesso cancello
+             * (`verify-local-backend-artifact.mjs cpu,opencl`). Con `-PtalosResearchBackend` resta
+             * la corsia di ricerca, identica a prima.
+             */
+            if (!project.hasProperty('talosResearchBackend')) {
+                def headerOpenclProva = file('../../third_party/opencl-headers')
+                def libreriaOpenclProva = file("${buildDir}/opencl-icd-loader/libOpenCL.so")
+                externalNativeBuild {
+                    cmake {
+                        arguments '-DGGML_OPENCL=ON',
+                                '-DGGML_VULKAN=OFF',
+                                '-DGGML_OPENCL_EMBED_KERNELS=ON',
+                                '-DGGML_OPENCL_USE_ADRENO_KERNELS=ON',
+                                '-DGGML_OPENCL_TARGET_VERSION=300',
+                                "-DOpenCL_INCLUDE_DIR=${headerOpenclProva.path}",
+                                "-DOpenCL_LIBRARY=${libreriaOpenclProva.path}"
+                    }
+                }
+            }
         }
         release {
             /*
@@ -929,7 +953,8 @@ tasks.register('costruisciOpenclIcdLoader') {
 
 // Deve finire PRIMA che CMake configuri la release: gli argomenti qui sotto
 // le puntano dritto all'artefatto di questo task.
-tasks.matching { it.name.startsWith('configureCMakeRelease') }.configureEach {
+// Anche la PROVA (14/09): senza, l'APK di debug misurava un motore solo processore.
+tasks.matching { it.name.startsWith('configureCMakeRelease') || it.name.startsWith('configureCMakeDebug') }.configureEach {
     dependsOn 'costruisciOpenclIcdLoader'
 }
 

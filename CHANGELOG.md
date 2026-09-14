@@ -6,6 +6,60 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.34
+
+Every station now has one toolbar, one options sheet and a menu on each item; each chat keeps its own
+draft; and "Run details" shows what a reply cost and how long it took.
+
+### Messages
+
+- Long-press a message, or tap its ⋯, for one "Message actions" sheet. A reply offers Share, Run
+  details and Delete; your own message offers sending it again, Reuse prompt and Delete. Delete takes
+  the question and its answer together, with Undo for five seconds, and files the reply created stay
+  in the Library.
+- "Run details" lists the tools a reply used, what each one looked for and how it ended, the input and
+  output tokens, the time to the first word and in total, and the cost: the figure OpenRouter reports,
+  a marked estimate from its public price list when a provider reports none, and "Free, on this phone"
+  for a model running on the device.
+
+### Drafts
+
+- Every chat keeps its own draft, attachments included. A new chat no longer inherits the text of the
+  previous one, and a chat you started typing in stays in the history marked "Draft".
+- The composer keeps its space in an empty chat too, so the last line no longer slides under it.
+
+### Stations
+
+- Library, Memory, Notes, Research and Tasks lose the fixed bar at the top. The large title starts the
+  page and, as you scroll, folds into a slim bar that follows your finger; on a phone only the round menu
+  button stays.
+- One toolbar row everywhere: search, list or grid, options, and the main action ("Add file", "New
+  note", "New memory", "New task"), an icon only on a phone.
+- Sorting moved into an options sheet drawn by the app, instead of Android's own picker. In the Library
+  it also holds "Group by chat", and "Name (A–Z)" now sorts the files themselves, not only the groups.
+- Library: tabs All · Files · Images · Links. A card says the extension, or the site, and the chat only
+  when grouping is on — no dates, no group headings, and "Excluded from context" only on a file that is.
+  Every card has a ⋯ menu, links included: Open in browser, Attach, Save to phone, Delete. Long-press or
+  right-click a file to start selecting. A Markdown file opens formatted, with Text one tap away. Preview
+  titles stop at 35 characters and are cut at a word, so no line shows half its letters.
+- Research: four tabs — All, Running, Finished and To resume, which gathers the paused, the
+  interrupted, the ones blocked by a permission and the ones that never concluded. No readable report,
+  Cancelled and Failed are picked from the options sheet and show up as a fifth tab while chosen. Dates
+  read "12 Sep".
+- Tasks: a card's ⋯ sits bottom right, as in the other stations.
+
+### The "+" sheet
+
+- Every entry has a bare amber icon on the same vertical line as the four categories above it: 28–29 px
+  and 58 px from the sheet edge on tablet, phone and landscape. The entries used to sit 10 px and 23 px
+  further in, inside a tinted tile.
+
+### Fixed
+
+- A page that stopped scrolling — the Library after starting a selection — kept the folded bar on and
+  the large title hidden at the top.
+- "1 selected" in the Library read as a plural.
+
 ## v0.1.33
 
 The composer no longer keeps an empty line under what you type.

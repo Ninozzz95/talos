@@ -262,6 +262,31 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
     await repository.saveComposerDraft(alpha.id, '')
     expect(await repository.loadComposerDraft(alpha.id)).toBe('')
 
+    /*
+     * Owner 2026-09-13: una chat senza messaggi con una bozza resta in cronologia.
+     * `has_draft` lo riporta; beta ha ancora la sua bozza, alpha l'ha svuotata.
+     */
+    const drafted = new Map((await repository.listSessions()).map((session) => [session.id, session.has_draft]))
+    expect(drafted.get('session-beta')).toBe(true)
+    expect(drafted.get('session-alpha')).toBe(false)
+
+    // Gli allegati in attesa seguono la chat: andata e ritorno, e contano come bozza.
+    const pending = [{
+        id: 'draft-att-1', source: 'picker' as const, displayName: 'nota.txt', mediaType: 'text/plain', sizeBytes: 12,
+        vaultFileId: 'vault-x', grantId: 'grant-x', bindingId: 'binding-x', permissions: ['read'],
+    }]
+    expect(await repository.loadComposerAttachments(alpha.id)).toEqual([])
+    await repository.saveComposerAttachments(alpha.id, pending)
+    expect(await repository.loadComposerAttachments(alpha.id)).toEqual(pending)
+    expect(await repository.loadComposerAttachments(beta.id)).toEqual([])
+    expect((await repository.listSessions()).find((session) => session.id === 'session-alpha')?.has_draft).toBe(true)
+    await repository.saveComposerAttachments(alpha.id, [])
+    expect(await repository.loadComposerAttachments(alpha.id)).toEqual([])
+    expect((await repository.listSessions()).find((session) => session.id === 'session-alpha')?.has_draft).toBe(false)
+    // ⛔ Il verso contrario: una voce malformata e' rifiutata, non salvata a meta'.
+    await expect(repository.saveComposerAttachments(alpha.id, [{ ...pending[0], grantId: '' }])).rejects.toThrow('TALOS_COMPOSER_ATTACHMENTS_INVALID')
+    expect(await repository.loadComposerAttachments(alpha.id)).toEqual([])
+
     await repository.selectSession(alpha.id)
     expect(await repository.getActiveSessionId()).toBe(alpha.id)
     expect((await repository.listMessages(alpha.id)).map((message) => message.content)).toEqual([

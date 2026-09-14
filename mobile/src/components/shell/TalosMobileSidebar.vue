@@ -18,6 +18,7 @@ import { useTalosAccountStore } from '@/stores/account'
 import { useSettingsStore } from '@/stores/settings'
 import { TALOS_MOTION_V6_DEFAULTS } from '@/motion-v6/defaults'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
+import { talosDaIntitolare } from '@/stores/chat'
 import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
 import { talosLightImpact } from '@/services/haptics'
@@ -499,8 +500,15 @@ function vaiA(route: TalosMobileRouteName): void {
     suppressSidebarFocusRestore()
     emit('navigate', route)
 }
+/**
+ * ⛔ Foto del Pad, 13/09: una chat nuova con una bozza entrava in cronologia come
+ * «New chat» — il gettone inglese salvato nel database, mostrato com'era. Le altre
+ * superfici (ChatsScreen, «Riprendi da qui», ricerca) passano gia' da
+ * `talosDaIntitolare`: la sidebar no, e finche' le chat vuote non comparivano
+ * nessuno l'aveva visto.
+ */
 function sessionTitle(session: TalosLocalChatSession): string {
-    return session.title || t('chat.untitledChat')
+    return talosDaIntitolare(session.title) ? t('chat.newChat') : session.title
 }
 
 const renameTarget = ref<TalosLocalChatSession | null>(null)
@@ -675,6 +683,7 @@ const onda = useTalosTouchWave()
                                 >
                                     <MessageSquareText class="icon" aria-hidden="true" />
                                     <span class="recent-title">{{ sessionTitle(session) }}</span>
+                                    <span v-if="session.has_draft && session.has_messages === false" class="recent-draft" data-testid="talos-chat-draft-marker">{{ $t('chat.draftMarker') }}</span>
                                 </button>
                                 <div class="recent-menu">
                                     <TalosRowActions
@@ -906,6 +915,8 @@ const onda = useTalosTouchWave()
 .recent-row .icon { color: var(--talos-muted); }
 .recent-row[aria-current="page"] { background: var(--talos-active); box-shadow: inset 0 0 0 1px var(--talos-accent-soft); }
 .recent-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* La pastiglia di stato del mockup (.status-chip): bordo, testo tenue, niente colore d'allarme. */
+.recent-draft { flex: none; display: inline-flex; align-items: center; min-height: 1.25rem; padding-inline: 0.375rem; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); color: var(--talos-muted); font-size: var(--text-3xs); line-height: 1; }
 .nav-fixed { margin-top: var(--talos-space-inline); border-top: 1px solid var(--talos-border); padding-top: var(--talos-space-inline); }
 .sidebar-foot {
     display: flex;

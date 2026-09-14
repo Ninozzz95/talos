@@ -27,6 +27,7 @@ import {
     talosThumbnailKind,
     talosThumbnailPath,
     talosThumbnailWidthPx,
+    talosTitoloAnteprima,
     talosTypographicPreview,
 } from '@/lib/library/libraryThumbnails'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
@@ -197,5 +198,22 @@ describe('talosTypographicPreview — il titolo vero, e la forma del testo', () 
         expect(talosTypographicPreview('')).toBeNull()
         expect(talosTypographicPreview('   \n\n \n')).toBeNull()
         expect(talosTypographicPreview('###\n---\n')).toBeNull()
+    })
+})
+
+describe('talosTitoloAnteprima — righe intere nel documentino', () => {
+    it('lascia com\'è un titolo che ci sta', () => {
+        expect(talosTitoloAnteprima('Prospetto dei costi')).toBe('Prospetto dei costi')
+    })
+
+    it('taglia a parola entro 35 caratteri e chiude coi puntini', () => {
+        const titolo = talosTitoloAnteprima('Il prezzo del gas sale ancora a settembre, dice il ministero')
+        expect(titolo).toBe('Il prezzo del gas sale ancora a…')
+        expect(titolo.length).toBeLessThanOrEqual(35)
+    })
+
+    /** Il verso contrario: una parola sola lunghissima non resta intera. */
+    it('taglia comunque una parola sola più lunga del tetto', () => {
+        expect(talosTitoloAnteprima('x'.repeat(80))).toBe(`${'x'.repeat(34)}…`)
     })
 })

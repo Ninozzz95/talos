@@ -7,6 +7,7 @@ import {
     normalizeChatSurface,
     normalizeComposerDraft,
     normalizeComposerDraftScope,
+    normalizeComposerAttachments,
     normalizeFileAuthorityPermissions,
     normalizeRepositoryId,
     normalizeStationTitle,
@@ -16,6 +17,7 @@ import {
     normalizeVaultSha256,
     normalizeVaultSize,
     type AppendChatMessageInput,
+    type TalosComposerAttachmentDraft,
     type ChatRepositoryOptions,
     type CreateChatSessionInput,
     type CreateFileAuthorityGrantInput,
@@ -90,6 +92,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
     const sessions = new Map<string, TalosLocalChatSession>()
     const messages = new Map<string, TalosLocalChatMessage[]>()
     const composerDrafts = new Map<string, string>()
+    const composerAttachments = new Map<string, TalosComposerAttachmentDraft[]>()
     const vaultFiles = new Map<string, TalosLocalVaultFile>()
     const grants = new Map<string, TalosLocalFileAuthorityGrant>()
     const attachmentBindings = new Map<string, TalosChatAttachmentBinding[]>()
@@ -146,6 +149,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             return [...sessions.values()].sort(byMostRecent).map((session) => ({
                 ...copySession(session),
                 has_messages: (messages.get(session.id) ?? []).length > 0,
+                has_draft: composerDrafts.has(session.id) || composerAttachments.has(session.id),
             }))
         },
         async getActiveSessionId() {
@@ -204,6 +208,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 if (activity.session_id === sessionId) toolActivities.delete(activityId)
             }
             composerDrafts.delete(sessionId)
+            composerAttachments.delete(sessionId)
             if (activeSessionId === sessionId) {
                 activeSessionId = [...sessions.values()].sort(byMostRecent)[0]?.id ?? null
             }
@@ -256,6 +261,24 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             }
             session.updated_at = now()
             return text
+        },
+        async deleteMessageTurn(sessionId: string, messageId: string) {
+            const session = requireSession(sessionId)
+            const rows = messages.get(sessionId) ?? []
+            const index = rows.findIndex(row => row.id === messageId)
+            if (index < 0) throw new Error('TALOS_CHAT_MESSAGE_NOT_FOUND')
+            let start = index
+            for (let i = index; i >= 0; i--) if (rows[i]!.role === 'user') { start = i; break }
+            let end = rows.length
+            for (let i = start + 1; i < rows.length; i++) if (rows[i]!.role === 'user') { end = i; break }
+            const removed = new Set(rows.slice(start, end).map(row => row.id))
+            messages.set(sessionId, [...rows.slice(0, start), ...rows.slice(end)])
+            for (const id of removed) attachmentBindings.delete(id)
+            for (const [id, activity] of toolActivities) {
+                if (activity.message_id && removed.has(activity.message_id)) toolActivities.delete(id)
+            }
+            session.updated_at = now()
+            return [...removed]
         },
         async appendMessage(input: AppendChatMessageInput) {
             const session = requireSession(input.session_id)
@@ -476,6 +499,15 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             const value = normalizeComposerDraft(draft)
             if (value === '') composerDrafts.delete(scope)
             else composerDrafts.set(scope, value)
+        },
+        async loadComposerAttachments(scopeId: string) {
+            return (composerAttachments.get(normalizeComposerDraftScope(scopeId)) ?? []).map((item) => ({ ...item, permissions: [...item.permissions] }))
+        },
+        async saveComposerAttachments(scopeId: string, attachments: readonly TalosComposerAttachmentDraft[]) {
+            const scope = normalizeComposerDraftScope(scopeId)
+            const value = normalizeComposerAttachments(attachments)
+            if (value.length === 0) composerAttachments.delete(scope)
+            else composerAttachments.set(scope, value)
         },
         async updateSessionMetadata(sessionId: string, metadata: Record<string, unknown>) {
             const session = sessions.get(sessionId)

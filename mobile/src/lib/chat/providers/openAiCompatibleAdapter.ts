@@ -49,7 +49,7 @@ import {
     requireProviderApiKey,
     sendWithProviderRetry,
 } from '@/lib/chat/providerErrors'
-import { talosNumericUsage } from '@/lib/chat/providers/usage'
+import { talosFlatUsage, talosNumericUsage } from '@/lib/chat/providers/usage'
 
 const modelSchema = z.object({
     id: z.string().min(1),
@@ -668,6 +668,15 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                     return await giro(tetto)
                 }
             }
+            /*
+             * ⛔ Owner 2026-09-13: in chat i token di OpenRouter e dei compatibili non erano
+             * MAI arrivati — questo lettore prendeva solo il testo. OpenRouter manda l'uso,
+             * costo compreso, sempre e nell'ultimo messaggio SSE, e `stream_options` non
+             * serve piu' (openrouter.ai/docs/use-cases/usage-accounting, letto il 2026-09-13).
+             * Stessa perdita trovata in Hermes Agent (NousResearch/hermes-agent#105215).
+             */
+            let usage: Record<string, number> | null = null
+            let callId: string | null = null
             const stream = await conRipiegoSulCredito(async (tetto) => await talosStreamText({
                 url: `${baseUrl}/chat/completions`,
                 headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
@@ -675,8 +684,14 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 signal: handlers.signal,
                 accumulator: createTalosSseAccumulator(),
                 extract: (payload) => {
-                    const event = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string | null } }> }
+                    const event = JSON.parse(payload) as {
+                        id?: unknown
+                        choices?: Array<{ delta?: { content?: string | null } }>
+                        usage?: Record<string, unknown> | null
+                    }
                     toolCalls.push(event)
+                    if (callId === null && typeof event.id === 'string' && event.id) callId = event.id
+                    if (event.usage) usage = talosFlatUsage(event.usage) ?? usage
                     return event.choices?.[0]?.delta?.content ?? ''
                 },
                 // Defect #5: DeepSeek streams `reasoning_content`, OpenRouter
@@ -702,6 +717,8 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
             return {
                 text: testoPulito,
                 model: input.model.id,
+                usage,
+                callId,
                 reasoning: stream.reasoning || undefined,
                 ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : {}),
             }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useTalosSheetTitle } from '@/lib/sheetTitle'
 /**
  * One research, at its own address.
  *
@@ -782,6 +783,8 @@ function openClaim(index: number): void {
 function openSource(index: number): void {
     void router.push({ name: 'research-source', params: { id: runId.value, index: String(index) } })
 }
+// Owner 2026-09-14: scorrendo, il titolo si ripiega nella barra del foglio.
+useTalosSheetTitle(() => heading.value)
 </script>
 
 <template>
@@ -807,7 +810,7 @@ function openSource(index: number): void {
                     this document's title and belongs where a title goes.
                 -->
                 <header data-testid="talos-research-hero" class="pt-4">
-                    <h1 class="talos-title text-xl font-semibold leading-7 text-[var(--talos-text)]">{{ heading }}</h1>
+                    <h1 data-talos-sheet-title class="talos-title text-xl font-semibold leading-7 text-[var(--talos-text)]">{{ heading }}</h1>
                     <p v-if="renamed" data-testid="talos-research-asked-question" class="mt-1 text-2xs leading-5 text-[var(--talos-muted)]">
                         {{ t('research.askedQuestion', { question: current?.question ?? '' }) }}
                     </p>

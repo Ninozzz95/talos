@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { config, flushPromises, mount } from '@vue/test-utils'
 import { Capacitor } from '@capacitor/core'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import TalosMobileSidebar from '@/components/shell/TalosMobileSidebar.vue'
+import { TALOS_IT_MESSAGES } from '@/i18n/locales/it'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 // Il ventaglio in fondo alla sidebar naviga, quindi la sidebar ora vive dentro
@@ -505,5 +506,38 @@ describe('TalosMobileSidebar — Harness UI debug-only entry (24/8)', () => {
         row.click()
         await flushPromises()
         expect(wrapper.emitted('navigate')).toEqual([['harness']])
+    })
+})
+
+/**
+ * Owner 2026-09-13, foto del Pad: una chat nuova con una bozza entrava in cronologia
+ * come «New chat» — il gettone inglese salvato nel database — dentro un'interfaccia
+ * italiana. In INGLESE il test non morderebbe (la traduzione e il gettone coincidono):
+ * per questo si prova in italiano.
+ */
+describe('TalosMobileSidebar — chat con bozza in cronologia', () => {
+    const i18n = config.global.plugins[0] as unknown as {
+        global: { locale: { value: string }, setLocaleMessage(locale: string, messages: typeof TALOS_IT_MESSAGES): void }
+    }
+    afterEach(() => { i18n.global.locale.value = 'en' })
+
+    it('il titolo segnaposto si legge «Nuova chat» e porta la pastiglia «Bozza»; un titolo vero resta com\'e\'', async () => {
+        i18n.global.setLocaleMessage('it', TALOS_IT_MESSAGES)
+        i18n.global.locale.value = 'it'
+        const base = sessions[0]!
+        const wrapper = mountSidebar({
+            sessions: [
+                { ...base, id: 'bozza', title: 'New chat', has_messages: false, has_draft: true, updated_at: '2026-09-13T21:00:00.000Z' },
+                { ...base, id: 'vera', title: 'Release review', has_messages: true, has_draft: false },
+            ],
+        })
+        await flushPromises()
+        const riga = (id: string) => document.body.querySelector<HTMLElement>('[data-chat-id="' + id + '"]')!
+        expect(riga('bozza').querySelector('.recent-title')?.textContent).toBe('Nuova chat')
+        expect(riga('bozza').querySelector('[data-testid="talos-chat-draft-marker"]')?.textContent).toBe('Bozza')
+        // ⛔ Il verso contrario: una chat con messaggi non porta la pastiglia, e il suo titolo non si tocca.
+        expect(riga('vera').querySelector('.recent-title')?.textContent).toBe('Release review')
+        expect(riga('vera').querySelector('[data-testid="talos-chat-draft-marker"]')).toBeNull()
+        wrapper.unmount()
     })
 })

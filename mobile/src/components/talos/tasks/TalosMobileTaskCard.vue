@@ -128,14 +128,6 @@ function press(event: PointerEvent): void {
 
             <TalosMobileTaskState :state="stato" :label="props.stateLabel" />
 
-            <TalosRowActions
-                v-if="!props.selecting"
-                class="ml-auto"
-                :items="props.actions"
-                :label="props.actionsLabel"
-                test-id="talos-tasks-row-actions"
-                @select="(id) => emit('action', id)"
-            />
         </div>
 
         <button
@@ -189,16 +181,28 @@ function press(event: PointerEvent): void {
 
         <!-- Il piede colloca l'attività: quando riparte, e quanto conta. Sopra
              un filo, perché è di un altro genere rispetto al testo. -->
-        <div class="mt-auto flex min-h-14 flex-wrap items-center justify-between gap-[var(--talos-space-inline)] border-t border-[var(--talos-border)] px-[calc(var(--talos-space-card)*1.5)] py-[var(--talos-space-inline)] text-2xs text-[var(--talos-muted)]">
-            <span data-testid="talos-task-schedule" class="inline-flex items-center gap-[var(--talos-space-inline)]">
+        <div class="mt-auto flex min-h-14 flex-nowrap items-center justify-between gap-1 border-t border-[var(--talos-border)] py-[var(--talos-space-inline)] pl-[var(--talos-space-card)] pr-0 text-2xs text-[var(--talos-muted)]">
+            <span data-testid="talos-task-schedule" class="inline-flex min-w-0 items-center gap-[var(--talos-space-inline)]">
                 <component :is="pianificata ? Clock : CalendarClock" class="size-3 shrink-0" aria-hidden="true" />
-                <span>{{ props.scheduleLabel }}</span>
+                <span class="truncate">{{ props.scheduleLabel }}</span>
             </span>
-            <span
-                v-if="props.task.priority === 'high'"
-                data-testid="talos-task-priority"
-                class="whitespace-nowrap rounded-[var(--talos-radius-control)] bg-[var(--talos-warning-soft,var(--talos-active))] px-[6px] py-[3px] text-3xs text-[var(--talos-warning,var(--talos-text))]"
-            >{{ props.priorityLabel }}</span>
+            <span class="ml-auto flex shrink-0 items-center gap-[var(--talos-space-inline)]">
+                <span
+                    v-if="props.task.priority === 'high'"
+                    data-testid="talos-task-priority"
+                    class="whitespace-nowrap rounded-[var(--talos-radius-control)] bg-[var(--talos-warning-soft,var(--talos-active))] px-[6px] py-[3px] text-3xs text-[var(--talos-warning,var(--talos-text))]"
+                >{{ props.priorityLabel }}</span>
+                <!-- Owner 14/09/2026: il ⋯ in basso a destra, come Libreria, Note e Memoria —
+                     dove sta il pollice, e dove non copre il titolo. -->
+                <TalosRowActions
+                    v-if="!props.selecting"
+                    class="-mr-1"
+                    :items="props.actions"
+                    :label="props.actionsLabel"
+                    test-id="talos-tasks-row-actions"
+                    @select="(id) => emit('action', id)"
+                />
+            </span>
         </div>
     </article>
 </template>

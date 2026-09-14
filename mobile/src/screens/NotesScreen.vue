@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useTalosSheetTitle } from '@/lib/sheetTitle'
 /**
  * Le Note, nella forma del mockup «Talos Calm Finale» (owner 11/09/2026).
  *
@@ -45,6 +46,7 @@ import TalosMobileNoteTile from '@/components/talos/notes/TalosMobileNoteTile.vu
 import TalosMobileNoteRow from '@/components/talos/notes/TalosMobileNoteRow.vue'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import { Button } from '@/components/ui/button'
+import TalosMobileStationOptionsSheet from '@/components/talos/ui/TalosMobileStationOptionsSheet.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useChatController } from '@/stores/chatController'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
@@ -353,6 +355,18 @@ function entrata(indice: number): Record<string, unknown> {
     if (!stile) return {}
     return { 'data-talos-motion-intent': 'message-insert', style: stile }
 }
+// Owner 2026-09-14: scorrendo, il titolo si ripiega nella barra del foglio.
+/**
+ * Fase 6 (owner 14/09/2026): l'ordinamento in un foglio dal basso
+ * (`TalosMobileStationOptionsSheet`), come nella Libreria. Il `<select>` nativo
+ * lo disegnava Android, fuori dalla palette.
+ */
+const optionsOpen = ref(false)
+const sortOptions = computed<Array<{ value: TalosNotesSort; label: string }>>(() => [
+    { value: 'recent', label: t('notes.sortRecent') },
+    { value: 'title', label: t('notes.sortTitle') },
+])
+useTalosSheetTitle(() => t('navigation.notes'))
 </script>
 
 <template>
@@ -365,45 +379,28 @@ function entrata(indice: number): Record<string, unknown> {
              aperta dal menu deve dire da sola dove si è finiti. -->
         <header class="flex items-start justify-between gap-[var(--talos-space-section)]">
             <div class="min-w-0">
-                <h1 class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">
+                <h1 data-talos-sheet-title class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">
                     {{ t('navigation.notes') }}
                 </h1>
                 <p class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
                     {{ t('notes.subtitle') }}
                 </p>
             </div>
-            <!-- Sul tablet il pulsante dice cosa fa; sul telefono, dove la riga
-                 del titolo è tutta la larghezza che c'è, resta il quadrato in
-                 accento col nome accessibile intatto. Stesso mockup, due
-                 larghezze. -->
-            <Button
-                type="button"
-                data-testid="talos-notes-new"
-                :aria-label="t('notes.add')"
-                :class="[
-                    'talos-pressable shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)]',
-                    isTablet ? 'min-h-touch gap-2 px-5 text-sm font-medium' : 'size-14 p-0',
-                ]"
-                @click="startNew"
-            >
-                <Plus :class="isTablet ? 'size-4' : 'size-6'" aria-hidden="true" />
-                <span v-if="isTablet">{{ t('notes.add') }}</span>
-            </Button>
         </header>
 
         <!-- Ricerca e densità, sulla stessa riga: sono le due cose che si fanno
              prima di guardare. Il campo sta FUORI da ogni catena `v-if` — deve
              restare visibile anche quando la lista è vuota, perché è con la
              lista vuota che si cancella il filtro. -->
-        <div class="mt-[var(--talos-space-section)] flex items-stretch gap-[var(--talos-space-card)]">
-            <label class="relative min-w-0 flex-1">
+        <div class="mt-[var(--talos-space-section)] flex flex-wrap items-stretch gap-[var(--talos-space-inline)]">
+            <label class="relative min-w-[8rem] flex-1">
                 <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
                 <input
                     v-model="query"
                     type="search"
                     inputmode="search"
                     data-testid="talos-notes-search"
-                    :placeholder="t('notes.searchPlaceholder')"
+                    :placeholder="t('common.search')"
                     :aria-label="t('notes.searchPlaceholder')"
                     class="min-h-touch w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
                 >
@@ -429,7 +426,7 @@ function entrata(indice: number): Record<string, unknown> {
                     :class="[
                         'talos-pressable talos-wave-host relative flex min-h-touch min-w-touch items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-xs',
                         viewMode === mode[0]
-                            ? 'bg-[var(--talos-secondary)] text-[var(--talos-text)]'
+                            ? 'text-[var(--talos-text)]'
                             : 'text-[var(--talos-muted)]',
                     ]"
                     @click="viewMode = mode[0]"
@@ -451,6 +448,39 @@ function entrata(indice: number): Record<string, unknown> {
                     />
                 </button>
             </div>
+
+            <!-- Fase 6 (owner 14/09/2026): l'ordine sta in un foglio dal basso, come
+                 nella Libreria — niente più `<select>` nativo sotto le schede. -->
+            <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                data-testid="talos-notes-options"
+                :aria-label="t('notes.options')"
+                aria-haspopup="dialog"
+                :aria-expanded="optionsOpen"
+                class="min-h-touch min-w-touch shrink-0 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)]"
+                @click="optionsOpen = true"
+            >
+                <SlidersHorizontal class="size-5" aria-hidden="true" />
+            </Button>
+
+            <!-- L'azione principale nella riga degli strumenti (owner 13/09): con
+                 l'etichetta sul tablet, solo icona sul telefono. -->
+            <Button
+                type="button"
+                data-testid="talos-notes-new"
+                :aria-label="t('notes.add')"
+                :class="[
+                    'talos-pressable talos-wave-host shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)]',
+                    isTablet ? 'min-h-touch gap-2 px-5 text-sm font-medium' : 'size-12 p-0',
+                ]"
+                @click="startNew"
+                @pointerdown="onda.onPointerDown"
+            >
+                <Plus class="size-5" aria-hidden="true" />
+                <span v-if="isTablet">{{ t('notes.add') }}</span>
+            </Button>
         </div>
 
         <!-- Cosa sto guardando, col conto di quante ce ne sono in ciascun
@@ -490,23 +520,18 @@ function entrata(indice: number): Record<string, unknown> {
 
         <div class="flex min-h-touch items-center justify-between gap-[var(--talos-space-inline)] text-xs text-[var(--talos-muted)]">
             <span role="status" aria-live="polite" data-testid="talos-notes-count">{{ caricato ? countLabel : '' }}</span>
-            <label class="flex shrink-0 items-center gap-1">
-                <SlidersHorizontal class="size-4" aria-hidden="true" />
-                <span class="sr-only">{{ t('notes.sortLabel') }}</span>
-                <!-- Un `select` nativo: sul telefono apre la ruota di Android,
-                     che è il controllo che la persona conosce già, e non ha
-                     bisogno di un pannello nostro per due voci. -->
-                <select
-                    v-model="sort"
-                    data-testid="talos-notes-sort"
-                    :aria-label="t('notes.sortLabel')"
-                    class="min-h-touch max-w-36 cursor-pointer border-0 bg-transparent px-1 text-xs text-[var(--talos-muted)] outline-none"
-                >
-                    <option value="recent">{{ t('notes.sortRecent') }}</option>
-                    <option value="title">{{ t('notes.sortTitle') }}</option>
-                </select>
-            </label>
         </div>
+
+        <TalosMobileStationOptionsSheet
+            v-if="optionsOpen"
+            :title="t('notes.options')"
+            test-id-prefix="talos-notes"
+            :sort-label="t('notes.sortLabel')"
+            :sort-options="sortOptions"
+            :sort="sort"
+            @update:sort="(value: string) => sort = value as TalosNotesSort"
+            @close="optionsOpen = false"
+        />
 
         <p v-if="error" role="alert" data-testid="talos-notes-error" class="py-[var(--talos-space-inline)] text-xs text-[var(--talos-danger)]">
             {{ error }}

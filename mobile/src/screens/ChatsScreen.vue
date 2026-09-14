@@ -645,7 +645,10 @@ function act(
                             <Check v-if="bulk.isSelected(session.id)" class="size-3.5" />
                         </span>
                         <span class="flex min-w-0 flex-1 flex-col items-start">
-                        <span class="w-full truncate text-sm text-[var(--talos-text)]">{{ sessionTitle(session) }}</span>
+                        <span class="flex w-full min-w-0 items-center gap-2">
+                            <span class="min-w-0 truncate text-sm text-[var(--talos-text)]">{{ sessionTitle(session) }}</span>
+                            <span v-if="session.has_draft && session.has_messages === false" class="inline-flex min-h-5 shrink-0 items-center rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-1.5 text-2xs leading-none text-[var(--talos-muted)]" data-testid="talos-chat-draft-marker">{{ t('chat.draftMarker') }}</span>
+                        </span>
                         <!--
                             ⛔ L'ORA, non «8 h fa»: la fascia dice già il giorno, e
                             due righe «8 h fa» in due fasce diverse si leggono

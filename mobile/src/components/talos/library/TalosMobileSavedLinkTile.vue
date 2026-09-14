@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ExternalLink } from '@lucide/vue'
 import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
 import TalosMobileLibraryArt from '@/components/talos/library/TalosMobileLibraryArt.vue'
+import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import type { TalosSavedLinkRow } from '@/lib/vaultLibrary'
 
 /**
@@ -12,13 +12,11 @@ import type { TalosSavedLinkRow } from '@/lib/vaultLibrary'
  * griglia/elenco — che sta nel ramo dei file — non li raggiungeva, e scegliere
  * «griglia» guardando i link non faceva assolutamente niente.
  *
- * Resta un componente **diverso** dalla scheda di un file, e per la stessa
- * ragione di sempre: una scheda di file porta la selezione multipla, il menu
- * delle azioni e lo stato del contesto, e un indirizzo non ha significato per
- * nessuna delle tre. Un template solo per entrambi sarebbe fatto di `v-if` e
- * si leggerebbe peggio di due. Quello che condividono davvero — il
- * raggruppamento per chat e ora il **riquadro d'anteprima** — è condiviso
- * (`libraryGrouping.ts`, `TalosMobileLibraryArt.vue`).
+ * Resta un componente **diverso** dalla scheda di un file: una scheda di file
+ * porta la selezione multipla e l'anello di selezione, che per un indirizzo non
+ * hanno significato. Quello che condividono davvero — il raggruppamento per chat,
+ * il **riquadro d'anteprima** e ora il **menu ⋯** — è condiviso
+ * (`libraryGrouping.ts`, `TalosMobileLibraryArt.vue`, `TalosRowActions.vue`).
  *
  * ## ⛔ L'anteprima di un indirizzo sono la favicon e il titolo
  *
@@ -27,24 +25,31 @@ import type { TalosSavedLinkRow } from '@/lib/vaultLibrary'
  * legge dal disco, quindi mostrarla non costa una richiesta — e quando manca il
  * mappamondo non è un fallimento, è un sito che non ne ha una.
  *
- * ## ⛔ Due azioni, e sono le due giuste
+ * ## ⛔ Owner 14/09/2026: «apri fuori» entra nel menu ⋯
  *
- * La scheda apre **la copia che TALOS ha conservato** — la metà che l'owner ha
- * già, leggibile anche senza rete. Il bottone separato apre **la pagina vera**
- * nel browser della persona, coi suoi cookie. Sono due destinazioni diverse, non
- * due modi di fare la stessa cosa, e per questo sono due bersagli: nasconderne
- * una in un menu vorrebbe dire scegliere al posto suo quale delle due conta.
+ * La scheda apre **la copia che TALOS ha conservato** — leggibile anche senza
+ * rete. La pagina vera nel browser della persona era un secondo bottone
+ * nell'angolo, l'unica scheda della Libreria con un'azione fuori dal menu. Ora
+ * il link ha lo stesso ⋯ di un file — Apri nel browser, Allega al messaggio,
+ * Salva sul telefono, Elimina — e un'azione sta in un posto solo: riga e menu
+ * non si ripetono.
+ *
+ * La riga di dettaglio dice il **dominio**, e la chat solo quando la Libreria è
+ * raggruppata per chat (owner): niente data.
  */
 withDefaults(defineProps<{
     row: TalosSavedLinkRow
-    savedAtLabel: string
     /** Captured at save time; absent means the Globe, which is not a failure. */
     faviconUrl?: string | null
-}>(), { faviconUrl: null })
+    /** La chat di provenienza, solo col raggruppamento per chat acceso. */
+    originLabel?: string | null
+    actions: readonly TalosRowAction[]
+    actionsLabel: string
+}>(), { faviconUrl: null, originLabel: null })
 
 const emit = defineEmits<{
     openCopy: []
-    openBrowser: []
+    action: [action: string]
 }>()
 
 /** L'onda al tocco: `talos-wave-host` dà il posto, questo dà il punto. */
@@ -69,30 +74,24 @@ const onda = useTalosTouchWave()
                 :link-title="row.title"
                 :favicon-url="faviconUrl"
             />
-            <!-- `pr-12`: il bottone del browser sta sopra questo angolo. -->
+            <!-- `pr-12`: i tre puntini stanno sopra questo angolo. -->
             <span class="flex min-w-0 flex-col p-[var(--talos-space-card)] pr-12 md:p-[var(--talos-space-page)] md:pr-12">
                 <strong class="line-clamp-2 text-sm font-medium leading-[1.6] text-[var(--talos-text)]">
                     {{ row.title }}
                 </strong>
                 <small class="mt-[var(--talos-space-inline)] truncate text-xs text-[var(--talos-muted)]">
-                    {{ row.host }} · {{ savedAtLabel }}
+                    {{ row.host }}<template v-if="originLabel"> · {{ originLabel }}</template>
                 </small>
             </span>
         </button>
-        <!--
-            La favicon della scheda è dentro `TalosMobileLibraryArt`; questo
-            `data-testid` resta qui, sul bottone, perché è quello che i test
-            interrogano per sapere se la scheda offre la pagina vera.
-        -->
-        <button
-            type="button"
-            data-testid="talos-library-link-open"
-            class="talos-pressable talos-wave-host absolute bottom-1 right-1 flex min-h-touch min-w-touch items-center justify-center rounded-full text-[var(--talos-muted)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-            :aria-label="$t('library.openHostInBrowser', { host: row.host })"
-            @click="emit('openBrowser')"
-            @pointerdown="onda.onPointerDown"
-        >
-            <ExternalLink class="size-4" aria-hidden="true" />
-        </button>
+
+        <div class="absolute bottom-1 right-1 z-[2]">
+            <TalosRowActions
+                :label="actionsLabel"
+                :test-id="`talos-library-link-actions-${row.fileId}`"
+                :items="actions"
+                @select="(action) => emit('action', action)"
+            />
+        </div>
     </div>
 </template>
