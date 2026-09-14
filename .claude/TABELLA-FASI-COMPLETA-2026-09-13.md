@@ -707,10 +707,16 @@ col codice di oggi (dettaglio in TACCUINO, 14/09).
 - **Review ingegneristica** (`TALOS_1aa816de`, 53 test, 8 patch + 1 file nuovo): **VALE.** Parte da `1aa816de` (35 commit
   dietro) ma i suoi 8 file toccati sono byte-identici a oggi. Sul nostro codice: 12/53 verdi → i 41 rossi sono i difetti che cura.
   - ✅ **F01 (path traversal negli id di Note/Attività/Memoria) — CONFERMATO DAL VIVO e CHIUSO**, commit `7879d81d`. Vedi TACCUINO.
-  - 🔜 **Restano F02–F07** (classificazione trust `.mcp-trust`/`.plugin-trust`; byte non-UTF8 export Libreria; backlog PTY a chunk
-    unico; PTY osservata marcata orfana; tick automazioni sovrapposti; discovery MCP seriale opt-in). Tutti riprodotti dalle loro
-    prove rosse sul nostro codice, patch piccole. ⛔ Da riscrivere con le NOSTRE prove, non col loro `apply.mjs`. Decisione owner:
-    tutti insieme come lavoro a sé, o come corsie dentro una fase.
+  - ✅ **F02–F07 CHIUSI il 14/09** (owner: «gli altri difetti falli tu adesso, prima della fase 3»), riscritti con le NOSTRE prove
+    e non col loro `apply.mjs`: **F02** `.mcp-trust`/`.plugin-trust` nei file di controllo (senza, un attrezzo del modello poteva
+    auto-concedersi la fiducia); **F03** `library_export` dalla porta BINARIA (prima un .docx/.pdf arrivava corrotto con
+    «Exported» dichiarato), anteprima decisa dal media type e rifiuto detto a parole; **F04** tetto del backlog PTY rispettato
+    anche con UN solo pezzo, taglio UTF-8-safe; **F05** una PTY osservata da un'altra finestra non è più orfana (due condizioni,
+    in `segnaDisconnesso` e in `reap`); **F06** un giro alla volta nello scheduler (due tick sovrapposti facevano partire due
+    sessioni VERE); **F07** avvio MCP a concorrenza **opt-in** (`TALOS_MCP_STARTUP_CONCURRENCY`, 1..8, spenta di serie), con
+    l'ordine dei tool preso dalla DICHIARAZIONE e non dall'arrivo. Suite backend **3003/3007, 0 rosse** (4 skip noti);
+    **14 rotture al contrario**, tutte hanno morso, ripristino sha256 identico ogni volta, più una rottura **inerte** di
+    controllo rimasta verde. Commit: vedi TACCUINO 14/09.
 - **Overlay** (`talos-desktop-overlay.zip`, 5 moduli nuovi): **gap veri, non plug-and-play.** Verificato: il nostro SSE *live*
   dopo `fineReplay` non coalescente (solo il replay lo è); `terminal-ws.mjs` senza contropressione. I moduli sono standalone con
   test ma NON cablati: vanno agganciati a mano e provati con un giro vero. Candidato per una fase «prestazioni» dopo la Fase 3.

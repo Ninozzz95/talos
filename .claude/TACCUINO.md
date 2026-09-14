@@ -405,3 +405,36 @@
   (NON un throw come la patch della review, che romperebbe l'idempotenza). Prova nuova al contrario (rossa con la grammatica
   aperta, ripristino identico); le 24 prove di traversal della review passano da sole (12→36 su 53); dal vivo sul banco GET/DELETE
   ora 404 e sentinella intatta su tutti e tre gli store; suite backend 2987/2991 (0 rosse). Restano F02–F07 (decisione owner).
+
+## 2026-09-14 — F02…F07: i sei difetti restanti della review, chiusi con le nostre prove
+
+- ✅ **F02** — `.mcp-trust` e `.plugin-trust` mancavano da `FILE_DI_CONTROLLO.cartelleOvunque` mentre `.hooks-trust` c'era:
+  sono i registri dei consensi a server MCP e plugin, e senza classificazione un attrezzo di scrittura del modello poteva
+  **auto-concedersi la fiducia**. Prova che li nomina alla lettera + alias/junction. **3 rotture** (senza l'uno, senza
+  l'altro, senza entrambe = lo stato di ieri): tutte rosse, ripristino sha256 identico.
+- ✅ **F03** — `library_export` leggeva con `leggiVoce` (porta utf8 del MODELLO): un `.docx`/`.pdf` arrivava nel workspace
+  **corrotto in modo irreversibile** con «Exported» dichiarato e byte falsi. Ora `leggiBytesVoce` (porta binaria, la stessa
+  dello scarico UI), anteprima decisa dal **media type** e rifiuto detto con `ok:false` invece di esplodere. **4 rotture**:
+  3 rosse + 1 **inerte di controllo rimasta verde** (il banco non è rosso a prescindere).
+- ✅ **F04** — il backlog PTY prometteva 200.000 byte per scheda e non li rispettava con **un solo pezzo** (il ciclo si
+  fermava a `backlog.length > 1`). `limitaBacklog` taglia tenendo la **coda**, sui byte UTF-8 (scavalca i byte di
+  continuazione: una sequenza spezzata arriverebbe a xterm come `U+FFFD`, cioè output mai scritto dalla shell). Chi guarda
+  dal vivo riceve comunque tutto.
+- ✅ **F05** — `segnaDisconnesso` timbrava sempre e `reap()` guardava solo il timbro ⇒ una PTY **osservata da un'altra
+  finestra** veniva uccisa dopo 10 minuti. Due condizioni in entrambi i punti (`ascoltatori.size === 0`). Col lavoro a due
+  finestre di oggi non era teorico.
+- ✅ **F06** — `unTick` senza single-flight: due giri sovrapposti facevano partire **due sessioni vere** (che costano),
+  perché il secondo leggeva il contatore prima che `registraEsecuzione` del primo avesse scritto. Guardia locale dichiarata
+  per quello che è: non un «esattamente una volta» fra processi né a prova di crash.
+- ✅ **F07** — scoperta MCP seriale ⇒ N server = **somma** degli avvii, e un avvio è **attesa**, non calcolo (misura della
+  review: 121 ms → 46 ms su quattro server d'eco). Pool **opt-in**, `TALOS_MCP_STARTUP_CONCURRENCY` 1..8, **spento di serie**
+  (byte per byte il comportamento di prima), valore storto → 1 mai un errore, documentato nel README. ⛔ L'**ordine** dei
+  tool è quello di **dichiarazione**, non di arrivo: gli esiti si depositano nella casella del loro server. La prova non
+  misura il tempo ma la **sovrapposizione** (quanti avvii aperti insieme), con arrivi rovesciati e **nessun timer vero**.
+- **Numeri**: suite backend **3003/3007, 0 rosse** (4 skip noti; erano 2987/2991 prima di queste prove nuove).
+  `path-policy` 22/22 · `agent-service` 194/194 · `pty-terminal`+`automation-scheduler` 42/42 · `mcp-session` 15/15.
+  **14 rotture al contrario** in totale, tutte hanno morso, **ripristino sha256 identico** ogni volta.
+  Script conservati: `scratchpad/rompi-f02.py`, `rompi-f03.py`, `rompi-f04-f05-f06.py`.
+- ⛔ **Lezione di strada**: uno script Python che stampa i nomi delle prove **muore sulla console cp1252** di Windows, non
+  sul codice (`UnicodeEncodeError` a metà del primo giro, con l'esito già valido ma il resto mai eseguito). Prima riga
+  obbligatoria: `sys.stdout.reconfigure(encoding='utf-8')`.
