@@ -1,4 +1,54 @@
 import { expect, test } from '@playwright/test';
+import { createServer } from 'node:http';
+import { createHttpApp } from '../../../src/http-app.mjs';
+
+test('RELEASE-018-PROMPT-ENHANCE: composer through real route and session provider', async ({ page }) => {
+  const improved = 'Scrivi un resoconto chiaro con obiettivo, vincoli e risultato atteso.';
+  let providerRequest;
+  const server = createServer(createHttpApp({
+    staticHandler: async () => null,
+    sessionRegistry: { leggiSessioneContesto: () => ({ sessionId: 'release-018', modello: 'deepseek:deepseek-chat', provider: 'cloud' }) },
+    providerStore: {
+      getKey: p => p === 'deepseek' ? 'test-only' : null,
+      getRuntime: p => ({ endpoint: `https://${p}.example`, endpointConfigured: true }),
+    },
+    fetchMiglioraPromptFn: async (url, options) => {
+      providerRequest = { url, body: JSON.parse(options.body) };
+      return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ enhanced_prompt: improved, summary: 'Obiettivo chiarito.', applied_principles: ['chiarezza'] }) } }] }) };
+    },
+  }));
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    await page.addInitScript(() => localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })));
+    let requestBody;
+    await page.route('**/api/v1/sessions/release-018/migliora-prompt', async route => {
+      requestBody = route.request().postDataJSON();
+      const response = await fetch(`http://127.0.0.1:${server.address().port}/api/v1/sessions/release-018/migliora-prompt`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody),
+      });
+      await route.fulfill({ status: response.status, contentType: 'application/json', body: await response.text() });
+    });
+    await page.goto(process.env.TALOS_URL_CANCELLO);
+    await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
+    await page.evaluate(() => { window.__talosHarnessUiRuntime.realSessionState.id = 'release-018'; });
+    const composer = page.locator('#composerInput');
+    await composer.fill('aiutami a scrivere un resoconto');
+    await page.locator('#miglioraPromptBtn').click();
+    const panel = page.locator('#miglioraPromptPannello');
+    await expect(panel).toBeVisible();
+    await panel.getByRole('button', { name: 'Migliora', exact: true }).click();
+    await expect(panel.getByText(improved, { exact: true })).toBeVisible();
+    expect(requestBody).toEqual({ prompt: 'aiutami a scrivere un resoconto', profondita: 'equilibrata' });
+    expect(providerRequest.url).toBe('https://deepseek.example/chat/completions');
+    expect(providerRequest.body.model).toBe('deepseek-chat');
+    await expect(composer).toHaveValue('aiutami a scrivere un resoconto');
+    await panel.getByRole('button', { name: 'Sostituisci', exact: true }).click();
+    await expect(composer).toHaveValue(improved);
+  } finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
 
 /*
  * ⛔⛔⛔ 11/09 — IL CANCELLO CHE MANCAVA, e che è costato il blocco del 4174 dell'owner.

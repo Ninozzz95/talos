@@ -6,6 +6,16 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.8 — 2026-09-14
+
+### Fixed
+- Desktop response streaming now renders received text without the artificial fade/typewriter backlog. Embedded hosts retain their own animation preference.
+- Prompt Enhance now uses the provider and model selected by the current session. Direct-provider sessions no longer require an unrelated OpenRouter credential.
+
+### Verification
+- Browser coverage checks streaming order and completeness, a final drain within two frames, embedded isolation, and the Prompt Enhance flow through the real HTTP route to explicit replacement in the composer.
+- Provider responses in the browser integration test are deterministic fixtures; no live-provider quality benchmark is claimed.
+
 ## desktop-v0.1.7 — 2026-09-14
 
 Same product as `desktop-v0.1.6`, which never published: its release job died at the gates. For the
