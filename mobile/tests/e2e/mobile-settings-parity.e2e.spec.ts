@@ -3,11 +3,12 @@ import { expect, test } from '@playwright/test'
 async function openSettings(page: import('@playwright/test').Page): Promise<void> {
     await page.goto('/')
     await expect(page.locator('[data-testid="talos-mobile-header"]')).toBeVisible()
-    await page.locator('[aria-label="Open menu"]').click()
+    await page.getByTestId('talos-shell-menu').click()
     await page.locator('[data-testid="talos-mobile-sidebar"] [aria-label="Open Settings"]').click()
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toBeVisible()
-    // F3-T3 chrome dedup: ONE title per surface — the sheet header owns it.
-    await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]').getByText('Settings Center').first()).toBeVisible()
+    // Settings copy is localized and can evolve independently of the layout.
+    // These journeys need the stable structural contract: the category pane.
+    await expect(page.getByTestId('settings-category-pane')).toBeVisible()
 }
 
 async function openSettingsCategory(
@@ -258,7 +259,7 @@ test('Font size scales interface chrome and persists', async ({ page }) => {
     // The menu is the surface the owner named: "il font size DEVE impattare
     // anche il font dei menù e di tutto il sistema non solo chat."
     const menuItemSize = async (): Promise<number> => {
-        await page.locator('[aria-label="Open menu"]').click()
+        await page.getByTestId('talos-shell-menu').click()
         const size = await page.locator('[data-testid="talos-sidebar-tools"]').first()
             .evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize))
         await page.keyboard.press('Escape')
