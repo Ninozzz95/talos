@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { CARTELLA_LIBRERIA } from '../src/library-store.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import {
   LibraryPolicyConflictError,
   LibraryPolicyError,
@@ -27,7 +28,7 @@ test('⭐⭐⭐ leggiPolitica: nessun policy.json — il default onesto (abilita
     const politica = await leggiPolitica({ cartella });
     assert.deepEqual(politica, { revision: 0, enabled: true, mode: 'agentic_on_demand_v1', includedFileIds: [], excludedFileIds: [] });
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -41,7 +42,7 @@ test('⭐⭐⭐ scriviPolitica + leggiPolitica: la revisione avanza, il contenut
     assert.equal(riletta.revision, 1);
     assert.equal(riletta.enabled, false);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -61,7 +62,7 @@ test('⛔⛔⛔ AL CONTRARIO — scriviPolitica: una revisioneAttesa sbagliata l
     const rimasta = await leggiPolitica({ cartella });
     assert.equal(rimasta.enabled, false, 'la scrittura respinta non deve aver toccato il disco');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -71,7 +72,7 @@ test('⭐⭐ scriviPolitica: include/exclude file ids sono normalizzati (dedupli
     const scritta = await scriviPolitica({ cartella, valore: { includedFileIds: ['lib-1', 'lib-1', ' lib-2 '] }, revisioneAttesa: 0 });
     assert.deepEqual(scritta.includedFileIds, ['lib-1', 'lib-2']);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -86,7 +87,7 @@ test('⛔⛔ AL CONTRARIO — leggiPolitica: un policy.json malformato (JSON rot
       return true;
     });
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -98,7 +99,7 @@ test('⛔ AL CONTRARIO — leggiPolitica: un "mode" sconosciuto (mai scritto da 
     const politica = await leggiPolitica({ cartella });
     assert.equal(politica.mode, 'agentic_on_demand_v1');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 

@@ -4,10 +4,11 @@ import { EventEmitter } from 'node:events';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import test from 'node:test';
 
 import { createHfModelTransfer } from '../src/hf-model-transfer.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const revision = 'a'.repeat(40);
 const bytes = Buffer.from('GGUF-test-model');
@@ -50,7 +51,7 @@ function memoryStore() {
 
 async function withTransfer(t, options = {}) {
   const rootDir = await mkdtemp(join(tmpdir(), 'talos-hf-transfer-'));
-  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(rootDir));
   const children = [];
   const calls = [];
   const spawnImpl = options.spawnImpl ?? ((command, args, spawnOptions) => {

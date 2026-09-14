@@ -19,12 +19,13 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { CARATTERI_MINIMI_PER_CACHE, conMarcatoreDiCache, talosLavora } from '../src/kernel/talosHarness.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /*
  * ⛔ Un preambolo FINTO ma di taglia VERA. Sotto il minimo dichiarato dai fornitori il
@@ -50,7 +51,7 @@ function fornitoreCheRegistra() {
 
 test('⭐⭐⭐ la richiesta porta il marcatore SUL BLOCCO di sistema, col TTL di un\'ora', async (t) => {
   const cartella = mkdtempSync(join(tmpdir(), 'talos-cache-'));
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const fornitore = fornitoreCheRegistra();
 
   await talosLavora({

@@ -34,6 +34,7 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import { join } from 'node:path';
+import { idArchivioValido } from './id-archivio.mjs';
 
 const TITOLO_MASSIMO = 120;
 const CONTENUTO_MASSIMO = 8_000;
@@ -50,7 +51,9 @@ export class NoteStoreError extends Error {
 }
 
 function percorsoDi(cartella, id) {
-  // ⛔ id è sempre un randomUUID() generato da questo stesso modulo (mai testo esterno) — nessuna sanificazione di percorso richiesta, a differenza di un nome scelto dal modello (vedi library-store.mjs#sanificaNomeLibreria).
+  // ⛔ 14/09: l'id arriva da fuori (indirizzo HTTP, attrezzo del modello), non solo da un randomUUID nostro — un id fuori
+  //   grammatica non nomina nessun file e torna `null`, mai un `join` che con `..` uscirebbe dalla cartella. Vedi id-archivio.mjs.
+  if (!idArchivioValido(id)) return null;
   return join(cartella, `${id}.json`);
 }
 
@@ -173,8 +176,10 @@ export async function elencaNote({ cartella }, deps = {}) {
 /** Un id assente torna `null`, mai un'eccezione — stesso principio di `library-store.mjs#leggiVoce`. */
 export async function leggiNota({ cartella, id }, deps = {}) {
   const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const percorso = percorsoDi(cartella, id);
+  if (!percorso) return null; // ⛔ 14/09: id fuori grammatica = «non c'è», mai una lettura fuori dalla cartella
   try {
-    return JSON.parse(await readFileFn(percorsoDi(cartella, id), 'utf8'));
+    return JSON.parse(await readFileFn(percorso, 'utf8'));
   } catch {
     return null;
   }
@@ -239,5 +244,7 @@ export async function aggiornaNota({ cartella, id, title, content, formato }, de
 /** Idempotente — un id già assente non è un errore, è l'esito voluto ottenuto da qualcun altro (stesso principio del tool mobile: "It may already be gone"). */
 export async function eliminaNota({ cartella, id }, deps = {}) {
   const rmFn = deps.rmFn ?? fsp.rm;
-  await rmFn(percorsoDi(cartella, id), { force: true });
+  const percorso = percorsoDi(cartella, id);
+  if (!percorso) return; // ⛔ 14/09: un id che non può nominare un file è già «assente» — no-op idempotente, mai un rm fuori dalla cartella
+  await rmFn(percorso, { force: true });
 }

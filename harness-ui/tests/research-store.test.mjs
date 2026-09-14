@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { CARTELLA_RICERCA, ResearchStoreError, aggiornaRicerca, creaRicerca, elencaRicerche, eliminaRicerca, leggiRicerca } from '../src/research-store.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 function cartellaVera() {
   return mkdtempSync(join(tmpdir(), 'talos-research-store-'));
@@ -24,7 +25,7 @@ test('⭐⭐⭐ creaRicerca + leggiRicerca: forma completa, terminata/reportLibr
     const riletta = await leggiRicerca({ cartella, id: 'sess-abc' });
     assert.deepEqual(riletta, voce);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -34,7 +35,7 @@ test('⭐⭐ creaRicerca: profondita default "deep" se assente', async () => {
     const voce = await creaRicerca({ cartella, id: 'sess-x', domanda: 'y' });
     assert.equal(voce.profondita, 'deep');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -44,7 +45,7 @@ test('⛔ creaRicerca: rifiuta senza id o senza domanda (mai una scrittura a met
     await assert.rejects(() => creaRicerca({ cartella, id: '', domanda: 'x' }), ResearchStoreError);
     await assert.rejects(() => creaRicerca({ cartella, id: 'sess-y', domanda: '   ' }), ResearchStoreError);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -53,7 +54,7 @@ test('⛔ leggiRicerca: un id inesistente torna null, mai un\'eccezione', async 
   try {
     assert.equal(await leggiRicerca({ cartella, id: 'mai-esistita' }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -69,7 +70,7 @@ test('⭐⭐⭐ elencaRicerche: cartella assente torna [] (mai un errore), più 
     assert.equal(elenco[0].id, 'sess-2', 'la più recente è prima');
     assert.equal(elenco[1].id, 'sess-1');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -83,7 +84,7 @@ test('⛔ elencaRicerche AL CONTRARIO: una voce corrotta è saltata, le altre re
     assert.equal(elenco.length, 1);
     assert.equal(elenco[0].id, 'sess-buona');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -99,7 +100,7 @@ test('⭐⭐⭐ aggiornaRicerca: titolo/terminata/reportLibraryId aggiornabili s
     assert.equal(conclusa.terminata, 'done');
     assert.equal(conclusa.reportLibraryId, 'lib-xyz');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -111,7 +112,7 @@ test('⛔⛔ aggiornaRicerca AL CONTRARIO: titolo:null è un valore ESPLICITO (r
     const resettata = await aggiornaRicerca({ cartella, id: 'sess-b', titolo: null });
     assert.equal(resettata.titolo, null, 'titolo:null azzera davvero, non viene scambiato per "non passato"');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -120,7 +121,7 @@ test('⛔ aggiornaRicerca: un id inesistente torna null, mai un\'eccezione', asy
   try {
     assert.equal(await aggiornaRicerca({ cartella, id: 'mai-esistita', titolo: 'x' }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -133,7 +134,7 @@ test('⭐⭐⭐ eliminaRicerca: cancella davvero (elencaRicerche non la vede pi�
     assert.equal(await leggiRicerca({ cartella, id: 'sess-c' }), null);
     assert.deepEqual(await elencaRicerche({ cartella }), []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -145,6 +146,6 @@ test('⛔⛔ eliminaRicerca AL CONTRARIO: idempotente — un id già assente tor
     await eliminaRicerca({ cartella, id: 'sess-d' });
     assert.equal(await eliminaRicerca({ cartella, id: 'sess-d' }), null, 'una seconda eliminazione sullo stesso id non lancia');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });

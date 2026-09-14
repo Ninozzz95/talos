@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { cartelleConsigliate, cartelleFrequenti } from '../src/frequent-dirs.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 function homeFinta(t, { conDesktop = true, conDownloads = true, conDocuments = true } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'talos-home-finta-'));
-  t.after(() => rmSync(home, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(home));
   if (conDesktop) mkdirSync(join(home, 'Desktop'));
   if (conDownloads) mkdirSync(join(home, 'Downloads'));
   if (conDocuments) mkdirSync(join(home, 'Documents'));
@@ -45,7 +46,7 @@ test('⛔ AL CONTRARIO — se homedir() torna un percorso che non esiste per nie
 
 test('⛔⛔⛔ AL CONTRARIO — un FILE chiamato "Desktop" (non una cartella) non viene proposto come scorciatoia', (t) => {
   const home = mkdtempSync(join(tmpdir(), 'talos-home-file-'));
-  t.after(() => rmSync(home, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(home));
   writeFileSync(join(home, 'Desktop'), 'non è una cartella');
   const trovate = cartelleFrequenti({ homedirFn: () => home });
   assert.equal(trovate.some((c) => c.etichetta === 'Desktop'), false);
@@ -61,7 +62,7 @@ test('⛔⛔⛔ AL CONTRARIO — un FILE chiamato "Desktop" (non una cartella) n
 test('⭐⭐⭐ con cronologia reale disponibile, quella vince — Desktop/Download/Documenti NON compaiono insieme', (t) => {
   const home = homeFinta(t); // le tre standard esistono DAVVERO, ma non devono comparire
   const progetto = mkdtempSync(join(tmpdir(), 'talos-progetto-usato-'));
-  t.after(() => rmSync(progetto, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(progetto));
   const registry = { cartellePiuUsate: () => [{ percorso: progetto, conteggio: 4, ultimaVolta: '2026-08-30T10:00:00.000Z' }] };
   const trovate = cartelleFrequenti({ homedirFn: () => home, sessionRegistry: registry });
   assert.deepEqual(trovate, [{ etichetta: progetto.split(/[/\\]/).pop(), percorso: progetto }]);
@@ -94,7 +95,7 @@ test('⛔ AL CONTRARIO — cartellePiuUsate() rispetta il tetto massimoRisultati
   const cartelle = [];
   for (let i = 0; i < 10; i += 1) {
     const c = mkdtempSync(join(tmpdir(), `talos-molte-cartelle-${i}-`));
-    t.after(() => rmSync(c, { recursive: true, force: true }));
+    t.after(() => rimuoviCartellaDiProva(c));
     cartelle.push({ percorso: c, conteggio: 10 - i, ultimaVolta: '2026-08-30T00:00:00.000Z' });
   }
   const registry = { cartellePiuUsate: () => cartelle };
@@ -106,7 +107,7 @@ test('⛔ AL CONTRARIO — cartellePiuUsate() rispetta il tetto massimoRisultati
 test('WORKSPACE-CHOOSER-RECOMMENDED-06 — cartelleConsigliate unisce cronologia e cartelle standard reali senza duplicati', (t) => {
   const home = homeFinta(t);
   const progetto = mkdtempSync(join(tmpdir(), 'talos-progetto-consigliato-'));
-  t.after(() => rmSync(progetto, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(progetto));
   const registry = { cartellePiuUsate: () => [
     { percorso: progetto, conteggio: 4, ultimaVolta: '2026-09-01T10:00:00.000Z' },
     { percorso: join(home, 'Desktop'), conteggio: 2, ultimaVolta: '2026-09-01T09:00:00.000Z' },

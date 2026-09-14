@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, open, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, open, readFile, realpath, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 
 import { ePercorsoDiControllo, FILE_DI_CONTROLLO, PathPolicyError, isPathInside, openContainedFile, resolveContainedRealPath } from '../src/path-policy.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /*
  * ⛔⛔⛔ 30/8 — questo file testava `createPathPolicy()` (5 test, tutti su
@@ -57,7 +58,7 @@ test('resolveContainedRealPath: risolve un file reale dentro la radice e rifiuta
   // 13/09: sui runner GitHub `tmpdir()` è nella forma corta 8.3 (`C:\Users\RUNNER~1\…`) e la
   // funzione risponde col percorso vero (`runneradmin`): la radice si confronta già risolta.
   const root = await realpath(await mkdtemp(join(tmpdir(), 'talos-path-policy-')));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
   await writeFile(join(root, 'ok.txt'), 'ok');
   assert.equal(await resolveContainedRealPath(root, 'ok.txt'), resolve(root, 'ok.txt'));
   await assert.rejects(() => resolveContainedRealPath(root, '../fuori.txt'), { code: 'PATH_NOT_ALLOWED' });
@@ -67,7 +68,7 @@ test('resolveContainedRealPath: risolve un file reale dentro la radice e rifiuta
 test('resolveContainedRealPath: un link simbolico che esce dalla radice viene rifiutato', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'talos-path-policy-'));
   const outside = await mkdtemp(join(tmpdir(), 'talos-path-policy-outside-'));
-  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(outside, { recursive: true, force: true }); });
+  t.after(async () => { await rimuoviCartellaDiProvaAttesa(root); await rimuoviCartellaDiProvaAttesa(outside); });
   await writeFile(join(outside, 'segreto.txt'), 'segreto');
   try {
     await symlink(outside, join(root, 'link'), 'junction');
@@ -80,7 +81,7 @@ test('resolveContainedRealPath: un link simbolico che esce dalla radice viene ri
 
 test('openContainedFile: apre il file dentro la radice e non lascia handle su errore', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'talos-path-policy-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
   await writeFile(join(root, 'ok.txt'), 'contenuto');
   const handle = await openContainedFile(root, 'ok.txt', 'r');
   assert.equal(await handle.readFile({ encoding: 'utf8' }), 'contenuto');
@@ -97,7 +98,7 @@ test('openContainedFile: apre il file dentro la radice e non lascia handle su er
 
 test('ePercorsoDiControllo: veri per NOME, a qualunque profondità — anche un file che non esiste ancora', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'talos-controllo-nome-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
   for (const nome of FILE_DI_CONTROLLO.file) {
     assert.equal(ePercorsoDiControllo(root, nome), true, `${nome} alla radice`);
     assert.equal(ePercorsoDiControllo(root, `sotto/annidato/${nome}`), true, `${nome} annidato`);
@@ -106,23 +107,41 @@ test('ePercorsoDiControllo: veri per NOME, a qualunque profondità — anche un 
 
 test('ePercorsoDiControllo AL CONTRARIO: un file del progetto normale (src/a.js) è falso', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'talos-controllo-nome-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
   assert.equal(ePercorsoDiControllo(root, 'src/a.js'), false);
   assert.equal(ePercorsoDiControllo(root, 'a.js'), false);
 });
 
 test('ePercorsoDiControllo: vero per le CARTELLE OVUNQUE (.harness-ui-plugins, .hooks-trust, .claude, .memory-store), a qualunque profondità', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'talos-controllo-cartella-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
   for (const cartella of FILE_DI_CONTROLLO.cartelleOvunque) {
     assert.equal(ePercorsoDiControllo(root, `${cartella}/qualsiasi`), true, `${cartella}/qualsiasi alla radice`);
     assert.equal(ePercorsoDiControllo(root, `molto/annidato/${cartella}/x`), true, `${cartella}/x annidato`);
   }
 });
 
+test('ePercorsoDiControllo (F02, 14/09): i registri di fiducia .mcp-trust e .plugin-trust sono protetti, per nome e via alias', async (t) => {
+  /*
+   * ⛔ Nominati a mano, non presi da `FILE_DI_CONTROLLO.cartelleOvunque`: se un giorno qualcuno li togliesse dall'elenco
+   *   (come erano assenti fino al 14/09), un test che itera l'elenco resterebbe verde. Questo diventa rosso.
+   * Sono i registri dei consensi a MCP e ai plugin: se il modello potesse scriverci dentro, si auto-concederebbe la fiducia.
+   */
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'talos-trust-')));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
+  for (const cartella of ['.mcp-trust', '.plugin-trust']) {
+    assert.equal(ePercorsoDiControllo(root, `${cartella}/grant.json`), true, `${cartella} diretta`);
+    assert.equal(ePercorsoDiControllo(root, `progetto/${cartella}/grant.json`), true, `${cartella} annidata`);
+  }
+  // via alias/symlink: ePercorsoDiControllo risolve il realpath, quindi il consenso resta protetto anche dietro un link.
+  await mkdir(join(root, '.mcp-trust'), { recursive: true });
+  await symlink(join(root, '.mcp-trust'), join(root, 'alias-trust'), 'junction');
+  assert.equal(ePercorsoDiControllo(root, 'alias-trust/grant.json'), true, 'un alias verso .mcp-trust resta protetto');
+});
+
 test('ePercorsoDiControllo AL CONTRARIO: un nome di cartella SIMILE ma diverso non è protetto — match esatto sul segmento, non un prefisso', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'talos-controllo-cartella-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
   // ⛔ il bug classico "STRINGERE la guardia": un confronto per prefisso
   // farebbe passare ".claude-backup"/".hooks-trust-vecchio" come protetti.
   assert.equal(ePercorsoDiControllo(root, '.claude-backup/x'), false);
@@ -132,20 +151,20 @@ test('ePercorsoDiControllo AL CONTRARIO: un nome di cartella SIMILE ma diverso n
 
 test('ePercorsoDiControllo: vero per skills/** SOLO alla radice del workspace', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'talos-controllo-skills-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
   assert.equal(ePercorsoDiControllo(root, 'skills/x.md'), true);
   assert.equal(ePercorsoDiControllo(root, 'skills/sotto/y.md'), true);
 });
 
 test('ePercorsoDiControllo AL CONTRARIO: skills annidata sotto un\'altra cartella NON è protetta — un progetto che si chiama così non diventa tutto intoccabile', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'talos-controllo-skills-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
   assert.equal(ePercorsoDiControllo(root, 'progetto/skills/x.md'), false);
 });
 
 test('ePercorsoDiControllo: vero anche passando da "../" — un file di controllo del genitore non si aggira uscendo dalla radice', async (t) => {
   const genitore = await mkdtemp(join(tmpdir(), 'talos-controllo-dotdot-'));
-  t.after(() => rm(genitore, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(genitore));
   const workspace = join(genitore, 'workspace');
   await mkdir(workspace);
   await writeFile(join(genitore, 'CLAUDE.md'), '# regole vere');
@@ -154,7 +173,7 @@ test('ePercorsoDiControllo: vero anche passando da "../" — un file di controll
 
 test('ePercorsoDiControllo AL CONTRARIO: "../" da sola, verso un file NORMALE del genitore, resta falso', async (t) => {
   const genitore = await mkdtemp(join(tmpdir(), 'talos-controllo-dotdot-'));
-  t.after(() => rm(genitore, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(genitore));
   const workspace = join(genitore, 'workspace');
   await mkdir(workspace);
   await writeFile(join(genitore, 'altro.txt'), 'niente di speciale');
@@ -163,7 +182,7 @@ test('ePercorsoDiControllo AL CONTRARIO: "../" da sola, verso un file NORMALE de
 
 test('ePercorsoDiControllo: vero anche attraverso un link/junction che punta a un file di controllo VERO, pure con un nome di link innocuo', async (t) => {
   const radice = await mkdtemp(join(tmpdir(), 'talos-controllo-link-'));
-  t.after(() => rm(radice, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(radice));
   const workspace = join(radice, 'workspace');
   const vero = join(radice, 'vero');
   await mkdir(workspace);
@@ -183,7 +202,7 @@ test('ePercorsoDiControllo: vero anche attraverso un link/junction che punta a u
 
 test('ePercorsoDiControllo: vero attraverso un link/junction che punta DENTRO una cartella OVUNQUE reale (fuori dal workspace)', async (t) => {
   const radice = await mkdtemp(join(tmpdir(), 'talos-controllo-link-cartella-'));
-  t.after(() => rm(radice, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(radice));
   const workspace = join(radice, 'workspace');
   const claudeVera = join(radice, '.claude');
   await mkdir(workspace);
@@ -200,7 +219,7 @@ test('ePercorsoDiControllo: vero attraverso un link/junction che punta DENTRO un
 
 test('ePercorsoDiControllo: fallisce CHIUSO — un realpathFn che lancia torna sempre true, mai un\'eccezione propagata', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'talos-controllo-fallisce-chiuso-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
   const realpathCheGetta = () => { throw new Error('disco non leggibile'); };
   // AL CONTRARIO del test "src/a.js è falso" sopra: stesso percorso, stesso file, MA il canale di risoluzione è rotto — qui deve tornare true, non false.
   assert.equal(ePercorsoDiControllo(root, 'src/a.js', { realpathFn: realpathCheGetta }), true);

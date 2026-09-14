@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, parse as parsePath } from 'node:path';
 import test from 'node:test';
 
 import { createSessionRegistry } from '../src/session-registry.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /*
  * ⛔⛔⛔ LE TRE PROVE CHIESTE DALL'OWNER (08/09/2026), verbatim:
@@ -145,7 +146,7 @@ test('TRE PROVE — 1/3 · DUE DELEGHE IN PARALLELO: partono entrambe, e nella c
     assert.equal((await primaFinita).esito, 'concluso');
     assert.equal((await secondaFinita).esito, 'concluso');
   } finally {
-    rmSync(cartellaMadre, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaMadre);
   }
 });
 
@@ -173,7 +174,7 @@ test('TRE PROVE — 2/3 · DUE DELEGHE UNA DOPO L\'ALTRA: la seconda parte a pri
     assert.deepEqual(figli.map((f) => f.task), ['scrivi la PARTE 1', 'scrivi la PARTE 2'],
       'i due compiti si sono confusi fra loro');
   } finally {
-    rmSync(cartellaMadre, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaMadre);
   }
 });
 
@@ -198,7 +199,7 @@ test('TRE PROVE — 3/3 · STESSO WORKSPACE: la cartella arriva alla figlia inta
     assert.equal(registro.elencaFigli(madreId).figli.length, 1,
       'la figlia deve comparire nell\'albero della madre, o la scheda «Agenti» resta vuota');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -259,7 +260,7 @@ test('⛔ FORK: il fork di una sessione con cartella scelta a mano NON finisce n
     assert.equal(voceFork.cartella, cartellaMadre,
       'il fork lavora nella radice del disco invece che nella cartella scelta: stesso difetto della delega');
   } finally {
-    rmSync(cartellaMadre, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaMadre);
   }
 });
 
@@ -299,7 +300,7 @@ test('⛔ FORK, AL CONTRARIO: l\'allargamento LEGITTIMO dell\'allowlist sopravvi
     assert.equal(finto.avvii[1].cartella, radice,
       'il fork di una sessione allargata deve restare allargato: la cura non deve stringerlo');
   } finally {
-    rmSync(progetto, { recursive: true, force: true });
+    rimuoviCartellaDiProva(progetto);
   }
 });
 
@@ -352,7 +353,7 @@ test('⛔ BARRA: l\'elenco delle sessioni dice CHI è figlia di chi, o l\'albero
     assert.equal(figlia.profonditaDelega, 1,
       'la profondità serve a indentare: senza, l\'albero è piatto anche avendo i legami');
   } finally {
-    rmSync(cartellaMadre, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaMadre);
   }
 });
 
@@ -378,7 +379,7 @@ test('⛔ BARRA: il nome di una figlia è CORTO alla fonte — la prima riga, 80
     assert.equal(registro.elenca().find((s) => s.sessionId === madreId).taskDelega, null,
       'una sessione avviata da una persona non ha un «compito delegato»: mai un nome inventato');
   } finally {
-    rmSync(cartellaMadre, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaMadre);
   }
 });
 
@@ -423,7 +424,7 @@ test('⛔ NOME DELLA FIGLIA: il compito, non il preambolo di sistema del kernel'
     const madre2 = registroConMadre(cartellaMadre, modelloFinto());
     void madre2;
   } finally {
-    rmSync(cartellaMadre, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaMadre);
   }
 });
 
@@ -444,7 +445,7 @@ test('⛔ NOME, AL CONTRARIO: una figlia RIPRISTINATA dal disco (senza consegnaC
     const figlia = registro.elenca().find((s) => s.padreId);
     assert.ok(figlia.taskDelega.startsWith('scrivi il file storico.md'), `invece: «${figlia.taskDelega}»`);
   } finally {
-    rmSync(cartellaMadre, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaMadre);
   }
 });
 
@@ -500,6 +501,6 @@ test('D3 sul registro VERO — due figlie sullo stesso file: la collisione arriv
 
     f1.concludi(); f2.concludi(); await uno; await due;
   } finally {
-    rmSync(cartellaMadre, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaMadre);
   }
 });

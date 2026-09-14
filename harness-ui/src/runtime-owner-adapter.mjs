@@ -748,7 +748,21 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
             ...(opzioni.onDelta ? { onDelta: (...args) => { rispostaInterrotta = true; return opzioni.onDelta(...args); } } : {}),
           });
         } catch (error) {
-          if (opzioni.segnaleStop?.aborted || error?.fermatoSuRichiesta || error?.name === 'AbortError') throw error;
+          if (opzioni.segnaleStop?.aborted || error?.fermatoSuRichiesta || error?.name === 'AbortError') {
+            /*
+             * ⛔ 14/09, giro vero della coda (banco 5475): 7 invii, 6 fermati, e la sessione diceva «1 giro». Una chiamata già
+             *   PARTITA verso il fornitore e poi fermata non lasciava nessuna traccia, perché qui si rilanciava prima del deposito:
+             *   i token di uno stream interrotto non arrivano (li porta l'ultimo pezzo), ma la chiamata c'è stata. Si deposita con
+             *   `usage: null` e `esito: 'fermato'` — nessun numero inventato. Stessa forma di Codex, dove `TurnAbortedEvent` porta
+             *   motivo e orari e i token restano `Option` (codex-rs/protocol/src/protocol.rs:4154 e :2318, clone 728cb12).
+             * ⛔ Solo se la richiesta è partita (`contesto.scelta`): uno stop prima della rete non è un giro. E un deposito che
+             *   fallisce non deve coprire lo stop.
+             */
+            if (contesto.scelta && typeof onConsumoFornitore === 'function') {
+              try { await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage: null, costoDichiarato: null, esito: 'fermato' }); } catch { /* lo stop resta lo stop */ }
+            }
+            throw error;
+          }
           const classificazione = contesto.errore ?? classificaGuasto(error, error?.stato ?? error?.statusCode);
           const pulito = erroreFornitorePubblico(classificazione, error?.stato ?? contesto.errore?.stato);
           if (!contesto.errore && contesto.scelta) providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, { classe: classificazione.classe });

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { TaskCatalogError, listaTaskDisponibili, preparaEsecuzione } from '../src/task-catalog.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const TASK = Object.freeze({
   id: 'sconto-a-scaglioni', progetto: 'listino', difficolta: 1,
@@ -17,7 +18,7 @@ const provider = Object.freeze({
     if (taskId !== TASK.id) throw new TaskCatalogError(`Task non ammesso: ${taskId}`);
     const cartella = mkdtempSync(join(tmpdir(), 'talos-task-provider-'));
     writeFileSync(join(cartella, 'README.md'), 'fixture posseduta dal provider di test');
-    return { cartella, comandoProva: TASK.comando, task: TASK, pulisci: () => rmSync(cartella, { recursive: true, force: true }) };
+    return { cartella, comandoProva: TASK.comando, task: TASK, pulisci: () => rimuoviCartellaDiProva(cartella) };
   },
 });
 

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { TaskStoreError, aggiornaAttivita, completaAttivita, creaAttivita, elencaAttivita, eliminaAttivita, leggiAttivita } from '../src/tasks-store.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 function cartellaVera() {
   return mkdtempSync(join(tmpdir(), 'talos-tasks-store-'));
@@ -22,7 +23,7 @@ test('⭐⭐⭐ creaAttivita + leggiAttivita: nasce "todo", priorità default "n
     const riletta = await leggiAttivita({ cartella, id: creata.id });
     assert.deepEqual(riletta, creata);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -35,7 +36,7 @@ test('⭐⭐ creaAttivita: title + description + priority espliciti, e una descr
     const soloSpazi = await creaAttivita({ cartella, title: 'y', description: '   ' });
     assert.equal(soloSpazi.descrizione, null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -44,7 +45,7 @@ test('⛔ leggiAttivita: un id inesistente torna null, mai un\'eccezione', async
   try {
     assert.equal(await leggiAttivita({ cartella, id: 'mai-esistita' }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -53,7 +54,7 @@ test('⛔ elencaAttivita: cartella assente (primo avvio) torna [], mai un errore
   try {
     assert.deepEqual(await elencaAttivita({ cartella: join(radice, 'non-esiste') }), []);
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -70,7 +71,7 @@ test('⭐⭐⭐ elencaAttivita: più recentemente aggiornate per prime', async (
     const elenco = await elencaAttivita({ cartella });
     assert.deepEqual(elenco.map((a) => a.id), [prima.id, seconda.id]);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -84,7 +85,7 @@ test('⛔⛔ AL CONTRARIO — elencaAttivita: un file .json corrotto non nascond
     assert.equal(elenco.length, 1);
     assert.equal(elenco[0].titolo, 'Buona');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -102,7 +103,7 @@ test('⛔⛔ AL CONTRARIO — creaAttivita: title vuoto o oltre 200 caratteri è
     });
     assert.deepEqual(await elencaAttivita({ cartella }), []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -114,7 +115,7 @@ test('⛔⛔ AL CONTRARIO — creaAttivita: priority fuori dal vocabolario è TA
       return true;
     });
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -128,7 +129,7 @@ test('⭐⭐⭐ aggiornaAttivita: solo i campi mandati cambiano, MAI lo stato (q
     assert.equal(aggiornata.priorita, 'low', 'priority non mandata: resta quella di prima');
     assert.equal(aggiornata.stato, 'todo', 'lo stato non lo tocca mai aggiornaAttivita');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -141,7 +142,7 @@ test('⛔⛔ AL CONTRARIO — aggiornaAttivita: un id inesistente è TASK_NOT_FO
       return true;
     });
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -155,7 +156,7 @@ test('⭐⭐⭐ completaAttivita: cambia lo stato e SOLO lo stato', async () => 
     assert.equal(completata.descrizione, 'y');
     assert.equal(completata.priorita, 'high');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -166,7 +167,7 @@ test('⭐⭐ completaAttivita: default "done" se status non passato', async () =
     const completata = await completaAttivita({ cartella, id: creata.id });
     assert.equal(completata.stato, 'done');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -178,7 +179,7 @@ test('⛔⛔ AL CONTRARIO — completaAttivita: un id inesistente è TASK_NOT_FO
       return true;
     });
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -191,7 +192,7 @@ test('⛔⛔ AL CONTRARIO — completaAttivita: uno status fuori dal vocabolario
       return true;
     });
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -203,7 +204,7 @@ test('⭐⭐ eliminaAttivita: l\'attività sparisce davvero dal disco', async ()
     assert.equal(await leggiAttivita({ cartella, id: creata.id }), null);
     assert.deepEqual(await elencaAttivita({ cartella }), []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -213,6 +214,6 @@ test('⛔ AL CONTRARIO — eliminaAttivita: un id già assente non lancia, è id
     await eliminaAttivita({ cartella, id: 'mai-esistita' }); // non deve lanciare
     assert.deepEqual(await elencaAttivita({ cartella }), []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });

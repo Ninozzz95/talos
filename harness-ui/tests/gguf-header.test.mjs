@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { GgufHeaderError, readGgufHeader } from '../src/gguf-header.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const VALUE_TYPE = { UINT8: 0, UINT32: 4, FLOAT32: 6, STRING: 8, ARRAY: 9, UINT64: 10 };
 
@@ -33,7 +34,7 @@ async function withFixture(buffer, run) {
   const dir = await mkdtemp(join(tmpdir(), 'gguf-header-test-'));
   const path = join(dir, 'model.gguf');
   await writeFile(path, buffer);
-  try { return await run(path); } finally { await rm(dir, { recursive: true, force: true }); }
+  try { return await run(path); } finally { await rimuoviCartellaDiProvaAttesa(dir); }
 }
 
 const VALID_ENTRIES = [

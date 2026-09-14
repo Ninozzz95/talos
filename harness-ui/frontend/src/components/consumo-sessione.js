@@ -73,6 +73,26 @@ export function usageDellaSessione(sessione) {
   return sessione.usage && typeof sessione.usage === 'object' ? sessione.usage : null;
 }
 
+/**
+ * ⛔ 14/09, giro vero della coda — i giri della SESSIONE: quelli col consumo misurato (`usageSessione.giri`) più le chiamate
+ * partite e poi fermate (`giriFermati`, dal server), che sono giri veri senza consumo dichiarato. Misurato sul registro del
+ * banco: 7 invii, 6 fermati, e la barra diceva «1 giro». Un posto solo, perché barra, Board e Costi dicano lo stesso numero.
+ * @returns {{giri:number|null, fermati:number}} `giri` è `null` quando non c'è né una misura né un giro fermato
+ */
+export function giriDellaSessione(sessione) {
+  const misurati = usageDellaSessione(sessione)?.giri;
+  const conMisura = Number.isFinite(misurati) ? misurati : null;
+  const fermati = Number.isSafeInteger(sessione?.giriFermati) && sessione.giriFermati > 0 ? sessione.giriFermati : 0;
+  if (conMisura === null && fermati === 0) return { giri: null, fermati: 0 };
+  return { giri: (conMisura ?? 0) + fermati, fermati };
+}
+
+/** Il titolo che spiega perché i token non contano i giri fermati — le stesse parole ovunque compaia il numero. */
+export function spiegaGiriFermati(fermati) {
+  if (!Number.isSafeInteger(fermati) || fermati <= 0) return '';
+  return `${fermati === 1 ? '1 giro fermato' : `${fermati} giri fermati`} prima che il fornitore dichiarasse il consumo: nei token non ci sono.`;
+}
+
 /** Quanti INVII ci sono dietro un totale di sessione (`null` quando non è dichiarato). */
 export function esecuzioniDellaSessione(sessione) {
   const u = sessione?.usageSessione;

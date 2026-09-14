@@ -6,7 +6,76 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
-## desktop-v0.1.5 — 2026-09-13
+## desktop-v0.1.7 — 2026-09-14
+
+Same product as `desktop-v0.1.6`, which never published: its release job died at the gates. For the
+seventh time in a row, not one of the failures was the product — all three were tests describing the
+machine they were written on.
+
+### Fixed
+- A test handed a session the **system temp folder** as its workspace, and the registry puts a real
+  watcher on a session's workspace. On a GitHub runner that folder has a short 8.3 name, libuv then
+  fails an internal assertion and **aborts the process**, taking the whole file down with it — while
+  the same file ran green locally. The fixture now lives inside the repository, under a folder git
+  already ignores, which always has a long name. It is the same cure the watcher's own tests took on
+  13/09; it had simply never been applied here.
+- Two guard tests asserted as a hard premise that `/Users` and `src` answer yes to the disk. That is
+  true on the machine where they were written and false on a runner working from `D:`. The premise is
+  now declared, and the case is skipped with its reason when it does not hold. What those tests
+  actually watch — a malformed folder is refused and no child process starts — is unchanged.
+- One cache test relied on a new file moving the containing folder's mtime. It does on this machine's
+  NTFS; it did not on the runner. The test now moves the mtime itself, so it measures the cache
+  rather than the timestamp resolution of whatever disk it runs on.
+
+## desktop-v0.1.6 — 2026-09-14 (tag only, no release published)
+
+Everything below it was prepared and never reached anyone: `desktop-v0.1.5` was written but never
+tagged, and the five tags before it stopped at the gates. This one carries all of that work plus
+what the product gained since.
+
+### Added
+- **A message queue that belongs to the session, not to the window.** Type while a run is going and
+  the message waits its turn; open the same session in another window, or reload, and the queue is
+  still there with its position. After you stop a run the queue says it is paused instead of
+  promising to send at the end of a turn that is no longer running.
+- **The model can edit a file** instead of rewriting it whole, and that edit asks for its own
+  permission.
+- While the model is thinking you now see **one** indicator, and it says what the model is thinking
+  about. That reasoning is **compressed rather than hidden**, and it survives a reload — reopening a
+  session no longer loses how much the model reasoned.
+- `TALOS_MCP_STARTUP_CONCURRENCY` (1..8, default `1`): how many trusted MCP servers start at once
+  when a session begins. Starting a server is waiting, not computing, so raising it shortens
+  startup when you trust several servers. Off by default, and any malformed value falls back to `1`
+  rather than refusing to start.
+
+### Fixed
+- Changing your mind mid-run is no longer treated as a failure: no red card, no error wording, and
+  pressing Enter twice does not redirect the run any more.
+- A session that is still alive reopens as alive, phantom turns no longer appear in the list, and a
+  stopped run does not colour its tick red.
+- The terminal kept its whole output in memory when a single burst was larger than the declared
+  200,000-byte cap — a `cat` of a big file, for instance. The cap now holds in that case too, and
+  the trim never splits a UTF-8 character, so nothing the shell never wrote can appear on screen.
+- A terminal watched from a second window was treated as abandoned and killed ten minutes later.
+  "Orphaned" now means nobody is watching it.
+- Two overlapping scheduler ticks could start the same automation twice — two real, paid sessions.
+  One turn at a time now.
+
+### Security
+- File names coming from the model can no longer step outside the Notes, Tasks and Memory folders.
+  Confirmed live before it was fixed: a delete removed a file outside the store.
+- `.mcp-trust` and `.plugin-trust` are control files, like `.hooks-trust` already was. Without that,
+  a write tool could grant itself trust for MCP servers and plugins with no approval.
+- Exporting a Library file into the workspace now reads bytes as bytes. A `.docx`, a `.pdf` or any
+  other binary used to arrive irreversibly corrupted while the tool reported success with a byte
+  count that was not the file's.
+
+### Changed
+- Release notes are now written in English, like everything else that gets published, and they
+  carry this changelog section. A tag whose version has no section in this file is refused before
+  the build starts.
+
+## desktop-v0.1.5 — 2026-09-13 (never tagged, no release published)
 
 Carries everything below. The five tags before it published nothing, and not once was the product
 at fault: every time a test or a build script described the developer's machine instead of the

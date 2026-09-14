@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import test from 'node:test';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 import {
   apriInEsploraFile,
@@ -39,7 +40,7 @@ test('⭐ leggiContenutoFile: il contenuto VERO di un file reale', async () => {
     assert.equal(contenuto, 'contenuto di a');
     assert.equal(dimensione, 'contenuto di a'.length);
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -49,7 +50,7 @@ test('⭐⭐ leggiContenutoFile: un file dentro una sottocartella', async () => 
     const { contenuto } = await leggiContenutoFile({ cartella: radice, percorso: 'sub/b.txt' });
     assert.equal(contenuto, 'contenuto di b');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -61,7 +62,7 @@ test('⛔⛔ leggiContenutoFile: ".." che risale fuori dalla radice, mai il cont
       (e) => { assert.ok(e instanceof WorkspaceFileError); return true; },
     );
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -70,7 +71,7 @@ test('⛔ leggiContenutoFile: una CARTELLA non è un file — errore dichiarato,
   try {
     await assert.rejects(leggiContenutoFile({ cartella: radice, percorso: 'sub' }), /Non è un file/);
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -83,7 +84,7 @@ test('⛔ leggiContenutoFile: file oltre il tetto — FILE_TOO_LARGE dichiarato,
       (e) => { assert.equal(e.code, 'FILE_TOO_LARGE'); return true; },
     );
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -95,7 +96,7 @@ test('⭐⭐⭐ rinominaFile: sposta DAVVERO il file sul disco, nella STESSA car
     assert.equal(existsSync(join(radice, 'a.txt')), false, 'il vecchio nome non esiste più');
     assert.equal(existsSync(join(radice, 'rinominato.txt')), true, 'il nuovo nome esiste davvero sul disco');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -108,7 +109,7 @@ test('⛔ rinominaFile: un nuovoNome con "/" è un percorso travestito — respi
     );
     assert.equal(existsSync(join(radice, 'a.txt')), true, 'il file originale non si è mosso');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -122,7 +123,7 @@ test('⛔⛔ rinominaFile: AL CONTRARIO, non sovrascrive MAI un file già esiste
     );
     assert.equal(readFileSync(join(radice, 'gia-qui.txt'), 'utf8'), 'non toccarmi');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -132,7 +133,7 @@ test('⭐⭐⭐ eliminaFile: cancella DAVVERO un file dal disco', async () => {
     await eliminaFile({ cartella: radice, percorso: 'a.txt' });
     assert.equal(existsSync(join(radice, 'a.txt')), false);
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -142,7 +143,7 @@ test('⭐⭐ eliminaFile: cancella una CARTELLA intera, ricorsivamente', async (
     await eliminaFile({ cartella: radice, percorso: 'sub' });
     assert.equal(existsSync(join(radice, 'sub')), false);
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -155,7 +156,7 @@ test('⛔⛔⛔ eliminaFile: la RADICE della sessione stessa non si può elimina
     );
     assert.equal(existsSync(radice), true, 'la cartella della sessione esiste ancora');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -167,7 +168,7 @@ test('⛔ eliminaFile: un percorso che non esiste è FILE_NOT_FOUND, non un succ
       (e) => { assert.equal(e.code, 'FILE_NOT_FOUND'); return true; },
     );
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -184,7 +185,7 @@ test('⭐⭐⭐ rivelaInEsploraFile: UN solo argomento argv "/select,<percorso>"
     assert.match(visto.argomenti[0], /^\/select,/);
     assert.ok(visto.argomenti[0].endsWith('a.txt'));
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -197,7 +198,7 @@ test('⛔ rivelaInEsploraFile: un codice di uscita diverso da zero NON è un fal
     });
     assert.deepEqual(risultato, { rivelato: true });
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -211,7 +212,7 @@ test('⛔⛔ rivelaInEsploraFile: ENOENT (explorer.exe non trovato) è un fallim
       }),
     );
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -223,7 +224,7 @@ test('⛔ rivelaInEsploraFile: AL CONTRARIO, fuori da Windows è dichiarato PLAT
       (e) => { assert.equal(e.code, 'PLATFORM_UNSUPPORTED'); return true; },
     );
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -235,7 +236,7 @@ test('⭐⭐⭐ creaFileWorkspace: byte VERI, rileggibili dal disco, alla radice
     assert.equal(percorso, 'nuovo.txt');
     assert.equal(readFileSync(join(radice, 'nuovo.txt'), 'utf8'), 'contenuto binario di prova');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -249,7 +250,7 @@ test('⛔⛔ creaFileWorkspace: un nome che esiste già viene RIFIUTATO, mai sov
     // ⭐ AL CONTRARIO: il file originale non è stato toccato dal tentativo.
     assert.equal(readFileSync(join(radice, 'a.txt'), 'utf8'), 'contenuto di a');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -266,7 +267,7 @@ test('⛔⛔⛔ creaFileWorkspace: un nome con traversal (".." o "/") viene RIFI
     );
     assert.ok(!existsSync(join(radice, '..', 'fuori.txt')));
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -284,7 +285,7 @@ test('⭐⭐⭐ spostaFile: sposta DAVVERO un file dentro una sottocartella', as
     assert.equal(existsSync(join(radice, 'a.txt')), false, 'non è più alla radice');
     assert.equal(existsSync(join(radice, 'sub', 'a.txt')), true, 'è davvero dentro sub');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -295,7 +296,7 @@ test('⭐⭐ spostaFile: cartellaDestinazione vuota sposta ALLA RADICE', async (
     assert.equal(nuovoPercorso, 'b.txt');
     assert.equal(existsSync(join(radice, 'b.txt')), true);
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -308,7 +309,7 @@ test('⛔⛔⛔ spostaFile: AL CONTRARIO, una cartella non può essere spostata 
     );
     assert.equal(existsSync(join(radice, 'sub', 'b.txt')), true, 'sub non si è mosso');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -322,7 +323,7 @@ test('⛔⛔⛔ spostaFile: AL CONTRARIO, una cartella non può essere spostata 
     );
     assert.equal(existsSync(join(radice, 'sub', 'nipote')), true, 'nipote esiste ancora al suo posto, sub non si è mosso dentro se stessa');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -337,7 +338,7 @@ test('⛔⛔ spostaFile: AL CONTRARIO, non sovrascrive MAI un nome già occupato
     assert.equal(readFileSync(join(radice, 'sub', 'a.txt'), 'utf8'), 'già qui in sub, non toccarmi');
     assert.equal(existsSync(join(radice, 'a.txt')), true, 'il file originale non si è mosso');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -349,7 +350,7 @@ test('⛔ spostaFile: una destinazione che non esiste è FILE_NOT_FOUND', async 
       (e) => { assert.equal(e.code, 'FILE_NOT_FOUND'); return true; },
     );
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -361,7 +362,7 @@ test('⛔⛔ spostaFile: AL CONTRARIO, la destinazione dev\'essere una cartella,
       (e) => { assert.ok(e instanceof WorkspaceFileError); return true; },
     );
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -373,7 +374,7 @@ test('⭐⭐⭐ copiaFile: duplica DAVVERO un file, "nome (copia).ext"', async (
     assert.equal(readFileSync(join(radice, 'a (copia).txt'), 'utf8'), 'contenuto di a');
     assert.equal(existsSync(join(radice, 'a.txt')), true, 'l\'originale resta al suo posto');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -384,7 +385,7 @@ test('⭐⭐⭐ copiaFile: una CARTELLA si copia ricorsivamente, col suo contenu
     assert.equal(nuovoPercorso, 'sub (copia)');
     assert.equal(readFileSync(join(radice, 'sub (copia)', 'b.txt'), 'utf8'), 'contenuto di b');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -396,7 +397,7 @@ test('⭐⭐ copiaFile: una seconda copia diventa "(copia 2)", non sovrascrive l
     assert.equal(nuovoPercorso, 'a (copia 2).txt');
     assert.equal(existsSync(join(radice, 'a (copia).txt')), true, 'la prima copia esiste ancora');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -407,7 +408,7 @@ test('⛔⛔ copiaFile: AL CONTRARIO, un file che INIZIA con un punto non perde 
     const { nuovoPercorso } = await copiaFile({ cartella: radice, percorso: '.gitignore' });
     assert.equal(nuovoPercorso, '.gitignore (copia)');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -419,7 +420,7 @@ test('⛔ copiaFile: un percorso che non esiste è FILE_NOT_FOUND', async () => 
       (e) => { assert.equal(e.code, 'FILE_NOT_FOUND'); return true; },
     );
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -430,7 +431,7 @@ test('⭐⭐⭐ creaVoceWorkspace: un file nuovo, vuoto, VERO sul disco, in una 
     assert.equal(percorso, 'sub/nuovo.txt');
     assert.equal(readFileSync(join(radice, 'sub', 'nuovo.txt'), 'utf8'), '');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -442,7 +443,7 @@ test('⭐⭐⭐ creaVoceWorkspace: una cartella nuova, VERA sul disco, alla radi
     const { statSync } = await import('node:fs');
     assert.ok(statSync(join(radice, 'nuova-cartella')).isDirectory());
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -455,7 +456,7 @@ test('⛔⛔ creaVoceWorkspace: AL CONTRARIO, non sovrascrive MAI un nome già o
     );
     assert.equal(readFileSync(join(radice, 'a.txt'), 'utf8'), 'contenuto di a', 'il file originale non è stato toccato');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -468,7 +469,7 @@ test('⛔⛔⛔ creaVoceWorkspace: AL CONTRARIO, un nome con traversal viene RIF
     );
     assert.ok(!existsSync(join(radice, '..', 'fuori.txt')));
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -480,7 +481,7 @@ test('⛔ creaVoceWorkspace: un percorsoBase che non esiste è FILE_NOT_FOUND', 
       (e) => { assert.equal(e.code, 'FILE_NOT_FOUND'); return true; },
     );
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -492,7 +493,7 @@ test('⛔⛔ creaVoceWorkspace: AL CONTRARIO, un percorsoBase che è un FILE (no
       (e) => e instanceof WorkspaceFileError,
     );
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -504,7 +505,7 @@ test('⛔ creaVoceWorkspace: un tipo diverso da "file"/"cartella" è rifiutato',
       (e) => e instanceof WorkspaceFileError,
     );
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -533,7 +534,7 @@ test('PO-05: i byte di un binario arrivano IDENTICI, e utf8 li avrebbe distrutti
     assert.notDeepEqual([...riconvertito], [...originale],
       'se questa passasse, `leggiFilePerScarico` non servirebbe: \u00e8 la prova che il difetto era reale');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -553,8 +554,8 @@ test('PO-05: un file fuori dalla cartella della sessione non si scarica', async 
     mkdirSync(join(cartella, 'sottocartella'));
     await assert.rejects(() => leggiFilePerScarico({ cartella, percorso: 'sottocartella' }), (e) => e instanceof WorkspaceFileError);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
-    rmSync(fuori, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
+    rimuoviCartellaDiProva(fuori);
   }
 });
 
@@ -611,7 +612,7 @@ test('⛔ AZIONI WINDOWS: il richiamo arriva anche quando il finto ha la firma V
       assert.equal(typeof visto.opzioni, 'object', '⛔ se qui arriva una FUNZIONE, il richiamo è finito nel posto sbagliato');
     }
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -628,7 +629,7 @@ test('⛔ AZIONI WINDOWS: chi inietta un finto a TRE argomenti continua a funzio
     ]);
     assert.deepEqual(esito, { rivelato: true }, 'la forma vecchia resta valida: le prove già scritte non diventano rosse');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -648,7 +649,7 @@ test('⛔ APRI, AL CONTRARIO: una cartella non si apre col programma, e fuori da
       'fuori da Windows non finge: lo dichiara',
     );
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -680,7 +681,7 @@ test('⛔⛔⛔ BC-11 creaFileWorkspace: contenuto MANCANTE → messaggio a paro
     );
     assert.ok(!existsSync(join(radice, 'senza-corpo.txt')), 'nessun file a metà');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -702,7 +703,7 @@ test('⛔⛔ BC-11 creaFileWorkspace: oltre il tetto → il tetto è DICHIARATO 
     const { percorso } = await creaFileWorkspace({ cartella: radice, nome: 'giusto.txt', bytes: Buffer.alloc(1024) });
     assert.equal(percorso, 'giusto.txt');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -718,7 +719,7 @@ test('⭐⭐⭐ BC-11 creaFileWorkspace modalita "accoda": il secondo pezzo va i
     // ⛔ e NIENTE `lungo_p2.md`: è esattamente il file inventato che BC-11 è venuto a togliere di mezzo
     assert.ok(!existsSync(join(radice, 'lungo_p2.md')));
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -731,7 +732,7 @@ test('⛔⛔⛔ BC-11 AL CONTRARIO — senza modalita "accoda" un nome già pres
     );
     assert.equal(readFileSync(join(radice, 'a.txt'), 'utf8'), 'contenuto di a', 'il file di prima è intatto');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -749,7 +750,7 @@ test('⛔⛔⛔ BC-11 accodare a una CARTELLA: risposta a parole, mai EISDIR del
     );
     assert.ok(existsSync(join(radice, 'sub', 'b.txt')), 'la cartella e il suo contenuto sono intatti');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -764,7 +765,7 @@ test('⛔⛔ BC-11 accodando si guarda il TOTALE contro il tetto, non solo il pe
     // ⭐ AL CONTRARIO: il file non è cresciuto di un byte
     assert.equal(readFileSync(join(radice, 'grosso.txt')).length, DIMENSIONE_MASSIMA_CREAZIONE - 10);
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -777,7 +778,7 @@ test('⛔⛔ BC-11 una modalita scritta male viene DETTA, non indovinata', async
     );
     assert.ok(!existsSync(join(radice, 'x.txt')));
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -811,7 +812,7 @@ test('apriInEsploraFile: la RADICE (percorso vuoto) si apre - UN argomento argv,
     assert.equal(visto.argomenti[0].includes('/select'), false, 'apri NON e rivela: /select aprirebbe il GENITORE del workspace');
     assert.equal(typeof visto.opzioni, 'object', 'se qui arriva una FUNZIONE, il richiamo e finito nel posto sbagliato (difetto 10/09)');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -829,7 +830,7 @@ test('apriInEsploraFile: una CARTELLA dentro il workspace si apre, e anche un fi
       assert.equal(realpathSync(visto[0]), realpathSync(join(radice, percorso)));
     }
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -859,8 +860,8 @@ test('apriInEsploraFile AL CONTRARIO: fuori dal workspace non si apre NIENTE, e 
     }
     assert.equal(chiamate, 0, 'nessun caso respinto deve essere arrivato a explorer.exe');
   } finally {
-    rmSync(radice, { recursive: true, force: true });
-    rmSync(fuori, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
+    rimuoviCartellaDiProva(fuori);
   }
 });
 
@@ -883,8 +884,8 @@ test('apriInEsploraFile AL CONTRARIO: un COLLEGAMENTO che punta fuori viene cano
     );
     assert.equal(chiamate, 0);
   } finally {
-    rmSync(radice, { recursive: true, force: true });
-    rmSync(fuori, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
+    rimuoviCartellaDiProva(fuori);
   }
 });
 
@@ -896,7 +897,7 @@ test('apriInEsploraFile AL CONTRARIO: fuori da Windows si DICHIARA, non finge', 
       (e) => e.code === 'PLATFORM_UNSUPPORTED',
     );
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -915,6 +916,6 @@ test('LA DEROGA NON SI E ALLARGATA: rinomina, elimina, copia e le altre dicono a
       await assert.rejects(chiama, (e) => e instanceof WorkspaceFileError, nome + ': la radice NON e un bersaglio valido per questa azione');
     }
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });

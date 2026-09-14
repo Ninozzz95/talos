@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -11,6 +11,7 @@ import { createLocalModelStore } from '../src/local-model-store.mjs';
 import { createLocalRuntimeProbe } from '../src/local-runtime-probe.mjs';
 import { createOpenAiCompatibleRuntime } from '../src/openai-compatible-runtime.mjs';
 import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const OBSERVED_AT = '2026-08-31T15:00:00.000Z';
 
@@ -163,7 +164,7 @@ test('SECURITY-PATH-01 manifest con traversal è rifiutato dal catalogo locale',
     };
     return assert.rejects(store.register(manifest), { code: 'MODEL_INVALID' });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    rimuoviCartellaDiProva(root);
   }
 });
 

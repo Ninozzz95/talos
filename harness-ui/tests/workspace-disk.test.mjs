@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { createWorkspaceDisk, WorkspaceDiskError } from '../src/workspace-disk.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 test('workspace disk lists one directory level with stable folder-first order', async () => {
   const root = await mkdtemp(join(tmpdir(), 'talos-disk-'));
@@ -19,7 +20,7 @@ test('workspace disk lists one directory level with stable folder-first order', 
       { nome: 'b.txt', cartella: false },
     ]);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rimuoviCartellaDiProvaAttesa(root);
   }
 });
 
@@ -30,7 +31,7 @@ test('workspace disk rejects traversal and absolute paths before reading', async
     await assert.rejects(() => disk.elenca('../'), (error) => error instanceof WorkspaceDiskError && error.code === 'QUERY_INVALID');
     await assert.rejects(() => disk.elenca(root), (error) => error instanceof WorkspaceDiskError && error.code === 'QUERY_INVALID');
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rimuoviCartellaDiProvaAttesa(root);
   }
 });
 

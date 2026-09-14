@@ -39,7 +39,7 @@
  *   contano le chiamate. Il giro vero lo lancia l'owner.
  */
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -51,12 +51,13 @@ import {
   leggiIndiceFonti, leggiPiano, leggiRicerca, percorsoPiano, percorsoRapporto, scriviRapporto,
 } from '../src/research-store.mjs';
 import { talosResearchParseReport } from '../src/research/report.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /* ─────────────────────────── impalcatura ─────────────────────────── */
 
 function cartellaVera(t) {
   const dir = mkdtempSync(join(tmpdir(), 'talos-l9-'));
-  t.after(() => { try { rmSync(dir, { recursive: true, force: true }); } catch { /* già sparita */ } });
+  t.after(() => { try { rimuoviCartellaDiProva(dir); } catch { /* già sparita */ } });
   return dir;
 }
 
