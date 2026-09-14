@@ -40,6 +40,15 @@ setup('a provider on the classic shell', async ({ page }) => {
     // covering the composer — so the sheet is checked gone as well.
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toHaveCount(0)
     await expect(page.getByLabel('Message TALOS')).toBeEnabled()
+
+    // Regression 2026-09-14: closing the provider setup must persist Chat as the
+    // last route. A helper that merely changes browser history can make this
+    // page look closed while leaving Settings persisted; every spec inheriting
+    // this storageState then cold-starts under the Settings backdrop.
+    await page.reload()
+    await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toHaveCount(0)
+    await expect(page.getByLabel('Message TALOS')).toBeEnabled()
+
     await page.context().storageState({ path: TALOS_PROVIDER_STATE })
 })
 
