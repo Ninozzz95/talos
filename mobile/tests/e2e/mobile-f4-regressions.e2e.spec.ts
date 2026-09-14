@@ -21,7 +21,7 @@ const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
 function geminiResponse(text: string) {
     return {
         modelVersion: 'gemini-live',
-        candidates: [{ finishReason: 'STOP', content: { parts: [{ text }] }],
+        candidates: [{ finishReason: 'STOP', content: { parts: [{ text }] } }],
     }
 }
 
