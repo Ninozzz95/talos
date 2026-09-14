@@ -6,11 +6,32 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
-## desktop-v0.1.6 — 2026-09-14
+## desktop-v0.1.7 — 2026-09-14
 
-The first release that actually publishes. Everything below it was prepared and never reached
-anyone: `desktop-v0.1.5` was written but never tagged, and the five tags before it stopped at the
-gates. This one carries all of that work plus what the product gained since.
+Same product as `desktop-v0.1.6`, which never published: its release job died at the gates. For the
+seventh time in a row, not one of the failures was the product — all three were tests describing the
+machine they were written on.
+
+### Fixed
+- A test handed a session the **system temp folder** as its workspace, and the registry puts a real
+  watcher on a session's workspace. On a GitHub runner that folder has a short 8.3 name, libuv then
+  fails an internal assertion and **aborts the process**, taking the whole file down with it — while
+  the same file ran green locally. The fixture now lives inside the repository, under a folder git
+  already ignores, which always has a long name. It is the same cure the watcher's own tests took on
+  13/09; it had simply never been applied here.
+- Two guard tests asserted as a hard premise that `/Users` and `src` answer yes to the disk. That is
+  true on the machine where they were written and false on a runner working from `D:`. The premise is
+  now declared, and the case is skipped with its reason when it does not hold. What those tests
+  actually watch — a malformed folder is refused and no child process starts — is unchanged.
+- One cache test relied on a new file moving the containing folder's mtime. It does on this machine's
+  NTFS; it did not on the runner. The test now moves the mtime itself, so it measures the cache
+  rather than the timestamp resolution of whatever disk it runs on.
+
+## desktop-v0.1.6 — 2026-09-14 (tag only, no release published)
+
+Everything below it was prepared and never reached anyone: `desktop-v0.1.5` was written but never
+tagged, and the five tags before it stopped at the gates. This one carries all of that work plus
+what the product gained since.
 
 ### Added
 - **A message queue that belongs to the session, not to the window.** Type while a run is going and
