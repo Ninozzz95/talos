@@ -183,13 +183,10 @@ test('operates slash commands at 360px without overflow, and every row runs', as
     await composer.press('Enter')
     await expect(composer).toHaveValue('')
     await page.locator(MENU).click()
-    // F3-T3 (owner #12): phones surface the count on the Chats entry; the
-    // session list lives in the dedicated Chats page.
-    //
-    // Zero, and that is the point: `/new` opened a chat and nothing has been
-    // written in it, so there is nothing in the history yet (owner 2026-07-31,
-    // «una chat entra nella cronologia solo quando ha dentro qualcosa»).
-    await expect(page.locator('[data-testid="talos-sidebar-chats-entry"]')).toContainText('0')
+    // `/new` opened a blank chat. Blank chats do not enter history, so the
+    // sidebar's real recent-session rows stay empty. The Chats navigation row
+    // intentionally carries no numeric badge in the current shell.
+    await expect(page.getByTestId('talos-sidebar-recents').locator('[data-chat-id]')).toHaveCount(0)
 
     const horizontalOverflow = await page.evaluate(() => (
         document.documentElement.scrollWidth - document.documentElement.clientWidth
