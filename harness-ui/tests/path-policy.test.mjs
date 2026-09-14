@@ -121,6 +121,24 @@ test('ePercorsoDiControllo: vero per le CARTELLE OVUNQUE (.harness-ui-plugins, .
   }
 });
 
+test('ePercorsoDiControllo (F02, 14/09): i registri di fiducia .mcp-trust e .plugin-trust sono protetti, per nome e via alias', async (t) => {
+  /*
+   * ⛔ Nominati a mano, non presi da `FILE_DI_CONTROLLO.cartelleOvunque`: se un giorno qualcuno li togliesse dall'elenco
+   *   (come erano assenti fino al 14/09), un test che itera l'elenco resterebbe verde. Questo diventa rosso.
+   * Sono i registri dei consensi a MCP e ai plugin: se il modello potesse scriverci dentro, si auto-concederebbe la fiducia.
+   */
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'talos-trust-')));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
+  for (const cartella of ['.mcp-trust', '.plugin-trust']) {
+    assert.equal(ePercorsoDiControllo(root, `${cartella}/grant.json`), true, `${cartella} diretta`);
+    assert.equal(ePercorsoDiControllo(root, `progetto/${cartella}/grant.json`), true, `${cartella} annidata`);
+  }
+  // via alias/symlink: ePercorsoDiControllo risolve il realpath, quindi il consenso resta protetto anche dietro un link.
+  await mkdir(join(root, '.mcp-trust'), { recursive: true });
+  await symlink(join(root, '.mcp-trust'), join(root, 'alias-trust'), 'junction');
+  assert.equal(ePercorsoDiControllo(root, 'alias-trust/grant.json'), true, 'un alias verso .mcp-trust resta protetto');
+});
+
 test('ePercorsoDiControllo AL CONTRARIO: un nome di cartella SIMILE ma diverso non è protetto — match esatto sul segmento, non un prefisso', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'talos-controllo-cartella-'));
   t.after(() => rimuoviCartellaDiProvaAttesa(root));
