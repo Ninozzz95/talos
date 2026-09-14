@@ -89,6 +89,9 @@ test('RUNTIME-01: aprire la app non produce nessun errore JavaScript', async ({ 
  * l'ultimo T3 tutto il testo è già nel frontend: nessuna animazione può trattenerlo per centinaia
  * di millisecondi. Il commit visibile deve raggiungerlo entro uno o due frame. L'ordine è provato
  * confrontando il testo completo, carattere per carattere.
+ *
+ * La prova vive nel browser vero e non usa clock assoluti per decidere verde/rosso: il contratto
+ * è espresso in frame, così una macchina CI lenta non trasforma un backlog intenzionale in rumore.
  */
 test('STREAMING-LIVE-SMOOTH-02 — 240 delta regolari raggiungono il DOM entro due frame senza backlog artificiale', async ({ page }) => {
   await page.addInitScript(() => {
