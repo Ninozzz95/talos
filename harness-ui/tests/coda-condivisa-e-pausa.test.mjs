@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { createSessionRegistry } from '../src/session-registry.mjs';
@@ -22,7 +22,31 @@ import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const CONSEGNA_INTERROTTA = '⛔ interrotto su richiesta: mentre il modello stava rispondendo, al giro 1.';
 
-function banco({ cartellaStore = mkdtempSync(join(tmpdir(), 'talos-coda-')) } = {}) {
+/*
+ * ⛔⛔⛔ 14/09 — LA RADICE DI PROVA NON NASCE NELLA CARTELLA TEMPORANEA DI SISTEMA, e non è un dettaglio di stile.
+ *
+ * Il registro installa un watcher VERO sul workspace della sessione (`session-registry.mjs`, riga 1864): questo banco
+ * dava come workspace `tmpdir()` NUDO, cioè metteva un watcher sull'intera cartella temporanea del sistema.
+ * Sui runner GitHub quella cartella ha un nome CORTO 8.3 (`RUNNER~1`): libuv riceve da ReadDirectoryChangesW il nome
+ * LUNGO, in `uv__relative_path` (src/win/fs-event.c, riga 72) non riconosce più il prefisso della cartella osservata e
+ * **ABORTISCE il processo**. Non un test rosso: un processo morto, che porta giù il file intero.
+ *
+ * ⛔ È successo davvero, e non in teoria: il job del tag `desktop-v0.1.6` (14/09) è morto così, con
+ *   `Assertion failed: !_wcsnicmp(filename, dir, dirlen)` e questo file segnato rosso senza un solo test nominato —
+ *   mentre in locale era 9/9 verde.
+ *
+ * ⇒ Stessa cura già adottata da `workspace-watcher.test.mjs` il 13/09: si nasce sotto `.talos/` (ignorata da git a
+ *   ogni profondità), che ha sempre un nome lungo, ancorata al FILE e non alla cwd — la suite gira sia da `harness-ui`
+ *   sia dalla radice del repo. ⛔ `realpathSync` NON serve: su Windows non espande le forme 8.3 (misurato il 13/09).
+ */
+function cartellaDiProva(prefisso) {
+  const casa = fileURLToPath(new URL('../.talos/', import.meta.url));
+  mkdirSync(casa, { recursive: true });
+  return mkdtempSync(join(casa, prefisso));
+}
+
+function banco({ cartellaStore = cartellaDiProva('coda-store-') } = {}) {
+  const cartellaProgetto = cartellaDiProva('coda-progetto-');
   const giri = [];
   const registro = createSessionRegistry({
     cartellaStore,
@@ -38,7 +62,21 @@ function banco({ cartellaStore = mkdtempSync(join(tmpdir(), 'talos-coda-')) } = 
       const voce = cartelleProgetto.find((c) => c.id === cartellaId);
       return { cartella: voce.percorso, comandoProva: 'npm test', task: { consegna, consegnaCorta: consegna } };
     },
-    cartelleProgetto: [{ id: '0', percorso: tmpdir(), nome: 'progetto' }],
+    cartelleProgetto: [{ id: '0', percorso: cartellaProgetto, nome: 'progetto' }],
+    /*
+     * ⛔⛔ IL WATCHER DEL WORKSPACE QUI È FINTO, e questa riga vale più della cartella qui sopra.
+     *
+     * Il registro ne installa uno VERO sul workspace della sessione: con la temp di sistema come workspace, su un
+     * runner GitHub (nome corto 8.3) libuv **abortiva il processo** — è così che è morto il job del tag
+     * `desktop-v0.1.6`. Spostare la radice sotto `.talos/` toglieva QUELLA forma del guasto, ma ne lasciava un'altra,
+     * misurata subito dopo: con una cartella vera il watcher parte davvero, tiene aperto il loop di node e **il file
+     * non termina più** — 9 prove verdi e il file rosso a 119.935 ms per timeout.
+     *
+     * ⇒ Questo banco prova LA CODA, non il watcher (che ha la sua suite, `workspace-watcher.test.mjs`, col disco
+     *   vero). Una dipendenza che non è oggetto della prova si inietta: niente handle aperti, niente nomi di cartella
+     *   da sperare, e la prova misura ciò che dice di misurare su qualunque macchina.
+     */
+    guardaWorkspaceFn: () => () => {},
     modello: 'z-ai/glm-5.3-flash', chiave: 'k',
   });
   return {
@@ -56,7 +94,7 @@ function banco({ cartellaStore = mkdtempSync(join(tmpdir(), 'talos-coda-')) } = 
       return readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').split('\n').filter(Boolean).map((r) => JSON.parse(r));
     },
     /* Classe A di BC-09: il registro scrive e chiude il registro dentro la chiamata, nessun server o watcher resta vivo. */
-    pulisci() { rimuoviCartellaDiProva(cartellaStore); },
+    pulisci() { rimuoviCartellaDiProva(cartellaStore); rimuoviCartellaDiProva(cartellaProgetto); },
   };
 }
 
