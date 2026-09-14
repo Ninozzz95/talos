@@ -74,13 +74,13 @@ async function chooseFromChatMenu(page: Page, item: string): Promise<void> {
  *
  * The defect arrived after the visible part: creating the incognito chat is the
  * first half, disposing of the chat it replaced is the second, and it was the
- * second that moved the screen. The history count only reaches its final value
- * once that has landed, so it is the honest settle point — and it is also what
- * the owner checks by hand ("apri la lista chat: deve essercene una sola").
+ * second that moved the screen. The history only reaches its final shape once
+ * that has landed, so the real persisted recent rows are the honest settle
+ * point. The Chats navigation row intentionally carries no numeric badge now.
  */
 async function historySettlesAt(page: Page, count: number): Promise<void> {
     await page.locator(MENU).click()
-    await expect(page.getByTestId('talos-sidebar-chats-entry')).toContainText(String(count))
+    await expect(page.getByTestId('talos-sidebar-recents').locator('[data-chat-id]')).toHaveCount(count)
     await page.locator(`${SIDEBAR} [aria-label="Close menu"]`).click()
     await expect(page.locator(SIDEBAR)).toHaveCount(0)
 }
