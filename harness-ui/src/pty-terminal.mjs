@@ -50,6 +50,28 @@ const PERCORSI_GIT_BASH_WINDOWS = [
  */
 export const BACKLOG_MASSIMO_BYTE = 200_000;
 
+/*
+ * ⛔ 14/09 (F04 della review, riprodotto): il tetto NON si rispettava con un solo pezzo — il vecchio ciclo si fermava a
+ *   `backlog.length > 1`, quindi un `cat` di un file grosso lasciava in memoria un elemento da megabyte PER SCHEDA, e
+ *   il numero dichiarato qui sopra («200.000 byte per scheda, dichiarato, non infinito») era falso proprio nel caso che
+ *   conta. Adesso l'ultimo pezzo si TAGLIA, e si tiene la CODA: è quella che la scheda deve rivedere al rientro.
+ * ⛔ Il taglio è sui byte UTF-8, mai sui caratteri: si entra da destra e si scavalcano i byte di continuazione
+ *   (`10xxxxxx`), perché una sequenza multi-byte spezzata arriverebbe a xterm come `�` — cioè il backlog
+ *   consegnerebbe caratteri che la shell non ha mai scritto.
+ */
+function limitaBacklog(voce) {
+  while (voce.byteBacklog > BACKLOG_MASSIMO_BYTE && voce.backlog.length > 1) {
+    voce.byteBacklog -= Buffer.byteLength(voce.backlog.shift(), 'utf8');
+  }
+  if (voce.byteBacklog <= BACKLOG_MASSIMO_BYTE || voce.backlog.length === 0) return;
+  const ultimo = Buffer.from(voce.backlog[0], 'utf8');
+  let taglio = ultimo.length - BACKLOG_MASSIMO_BYTE;
+  while (taglio < ultimo.length && (ultimo[taglio] & 0xc0) === 0x80) taglio += 1;
+  const coda = ultimo.subarray(taglio).toString('utf8');
+  voce.backlog[0] = coda;
+  voce.byteBacklog = Buffer.byteLength(coda, 'utf8');
+}
+
 /** Una PTY disconnessa da più di così viene chiusa dal reaper — pulizia di schede mai più tornate, non un limite sulla shell viva. */
 export const MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA = 10;
 
@@ -148,9 +170,7 @@ export function creaRegistroTerminali(deps = {}) {
     handle.onData((dati) => {
       voce.backlog.push(dati);
       voce.byteBacklog += Buffer.byteLength(dati, 'utf8');
-      while (voce.byteBacklog > BACKLOG_MASSIMO_BYTE && voce.backlog.length > 1) {
-        voce.byteBacklog -= Buffer.byteLength(voce.backlog.shift(), 'utf8');
-      }
+      limitaBacklog(voce);
       for (const ascolta of voce.ascoltatori) ascolta({ tipo: 'dati', dati });
     });
     handle.onExit(({ exitCode, signal }) => {
@@ -170,9 +190,15 @@ export function creaRegistroTerminali(deps = {}) {
     if (voce && !voce.chiusa && cols > 0 && rows > 0) voce.handle.resize(cols, rows);
   }
 
+  /*
+   * ⛔ 14/09 (F05 della review, riprodotto): una scheda che si stacca NON rende orfana una PTY che un'ALTRA finestra sta
+   *   ancora guardando. Prima il timbro si metteva comunque, e dieci minuti dopo il reaper uccideva un terminale vivo
+   *   sotto gli occhi di chi lo stava usando — difetto che il lavoro a due finestre di oggi rende tutt'altro che teorico.
+   *   Il timbro lo mette solo l'ULTIMO che se ne va; se resta qualcuno, si azzera.
+   */
   function segnaDisconnesso(id) {
     const voce = terminali.get(id);
-    if (voce) voce.ultimaDisconnessioneMs = clock();
+    if (voce) voce.ultimaDisconnessioneMs = voce.ascoltatori.size === 0 ? clock() : null;
   }
 
   /** Chiusura esplicita (mai implicita): l'owner chiude la scheda del terminale dalla UI. */
@@ -192,7 +218,10 @@ export function creaRegistroTerminali(deps = {}) {
   function reap() {
     const ora = clock();
     for (const [id, voce] of terminali) {
-      const orfanaScaduta = voce.ultimaDisconnessioneMs !== null
+      // ⛔ 14/09 (F05): «orfana» vuol dire che NESSUNO la guarda — il timbro da solo non basta, perché un'altra finestra
+      //   può essersi riagganciata nel frattempo. Due condizioni, non una.
+      const orfanaScaduta = voce.ascoltatori.size === 0
+        && voce.ultimaDisconnessioneMs !== null
         && ora - voce.ultimaDisconnessioneMs > MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA * 60_000;
       if (voce.chiusa || orfanaScaduta) {
         try { voce.handle.kill(); } catch { /* già morta */ }

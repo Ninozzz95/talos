@@ -1,7 +1,8 @@
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { contestoDelProgetto, segnalaFileCambiati } from '../../src/contesto-del-progetto.mjs';
+import { rimuoviCartellaDiProvaAttesa } from '../aiuto/rimuovi-cartella-di-prova.mjs';
 
 /** Progetto isolato: nessun comando git, nessuna rete, due stati con gli stessi file. */
 export async function progettoBC48() {
@@ -37,7 +38,7 @@ export async function progettoBC48() {
       segnalaFileCambiati(cartella);
       const destinazione = resolve(temporanea);
       if (!destinazione.startsWith(resolve(tmpdir()) + sep) || !destinazione.split(sep).at(-1).startsWith('talos-bc48-')) throw new Error('Cartella temporanea fuori dal perimetro della prova');
-      await rm(destinazione, { recursive: true, force: true });
+      await rimuoviCartellaDiProvaAttesa(destinazione);
     },
   };
 }

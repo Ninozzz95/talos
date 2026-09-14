@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, createHash } from 'node:crypto';
 import { createSqliteContextStore } from '../../../../context-engine/src/node/sqlite-store.mjs';
+import { rimuoviCartellaDiProvaAttesa } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 
 const harness = fileURLToPath(new URL('../../../', import.meta.url));
 const sessionId = 'context-desktop-proof';
@@ -40,7 +41,7 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => {
   if (child && child.exitCode === null && child.signalCode === null) { const ended = new Promise(done => child.once('exit', done)); child.kill(); await ended; }
-  if (directory && resolve(directory).startsWith(resolve(tmpdir()) + '\\') && directory.includes('tcec-ui-')) await rm(directory, { recursive: true, force: true });
+  if (directory && resolve(directory).startsWith(resolve(tmpdir()) + '\\') && directory.includes('tcec-ui-')) await rimuoviCartellaDiProvaAttesa(directory);
 });
 
 test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async ({ page, context }) => {

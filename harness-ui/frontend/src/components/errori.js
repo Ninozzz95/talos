@@ -87,6 +87,106 @@ const rimediContesto = (proprio) => [APRI_CONTEXT_MANAGER, ...(proprio ? [propri
 const CODICE_CONTESTO = /\bCTX_[A-Z0-9_]+/;
 
 /**
+ * ⛔⛔⛔ 13/09 — LA PROVENIENZA DI UN EVENTO: QUALE COMANDO L'HA GENERATO.
+ *
+ * Un evento che dice «il giro si è chiuso» senza dire CHI gliel'ha chiesto costringe chi legge a
+ * indovinarlo dalle parole — e le parole dei due comandi sono IDENTICHE (vedi la regola
+ * 'reindirizzato'). Queste sono le parole con cui la provenienza si dichiara: chi costruisce
+ * l'evento e chi lo legge devono usare le stesse, quindi vivono qui, esportate, e non scritte a
+ * mano in due posti diversi.
+ *
+ * ⛔ 13/09, sera — LA DIPENDENZA E' CHIUSA: `legacy/app.js` le passa, sul `RunError` del giro
+ * vecchio, ricavandole da `provenienzaDelGiroFinito` qui sotto. Finche' non lo faceva, la famiglia
+ * `reindirizzato` era IRRAGGIUNGIBILE per costruzione — la sua regola pretende l'origine (r. 332) —
+ * e la prova verde su questo modulo non poteva accorgersene: misurava la funzione, non la catena.
+ */
+export const ORIGINI = Object.freeze({
+  /** «Ferma» — la persona ha chiesto di fermare il giro, e basta. */
+  STOP: 'stop',
+  /** «Reindirizza» — la persona ha cambiato direzione: il giro vecchio si chiude per lasciare il posto al nuovo. */
+  REINDIRIZZAMENTO: 'reindirizzamento',
+});
+
+/**
+ * La provenienza di un giro che si e' appena chiuso, per chi tiene lo stato della sessione.
+ *
+ * ⛔ TORNA `null` QUANDO NON SA, e non e' una pigrizia: e' il contratto. Cercate sette forme di
+ *   uno stop esplicito nel monolite (`stopRequest`, `stopPending`, `richiestaStop`, `RunStopped`…)
+ *   il 13/09: nessuna esiste. Quindi «non c'e' un reindirizzamento in volo» NON significa «la
+ *   persona ha premuto Ferma» — puo' benissimo essere un guasto vero che nessuno ha chiesto.
+ *   Restituire `ORIGINI.STOP` qui sarebbe stato INVENTARE una provenienza, ed e' esattamente cio'
+ *   che `spiegaErrore` vieta: «assente = provenienza ignota, e si dice cosi' invece di indovinarla».
+ *
+ * ⛔ E la provenienza da sola non basta a dichiarare un cambio di direzione: la regola pretende
+ *   ANCHE che l'esito sia davvero un fermo su richiesta. Un guasto vero capitato mentre un
+ *   reindirizzamento e' in volo resta rosso — c'e' una prova apposta, al contrario.
+ *
+ * @param {{reindirizzamentoInVolo?:boolean}} stato
+ * @returns {{origine:string}|{}} il contesto da passare a `spiegaErrore`, vuoto se non si sa
+ */
+export function provenienzaDelGiroFinito({ reindirizzamentoInVolo = false } = {}) {
+  return reindirizzamentoInVolo ? { origine: ORIGINI.REINDIRIZZAMENTO } : {};
+}
+
+/**
+ * Le parole con cui un fermo su richiesta arriva DAVVERO qui: l'italiano del motore
+ * (`talosHarness.mjs`, «⛔ interrotto su richiesta: …») e l'inglese del browser
+ * (`AbortController`, «This operation was aborted»). ⛔ Fin qui c'era solo la seconda metà.
+ */
+const FERMO_SU_RICHIESTA = /interrotto su richiesta|operation was aborted|AbortError|aborted by user|fermato dall'utente/i;
+
+/**
+ * ⛔⛔⛔ 13/09, IN REVISIONE — `comeFinita: 'fermato'` NON vuol dire «l'ha chiesto la persona».
+ *
+ * La prima stesura di questa cura si fidava del solo codice (`codice === 'fermato'` ⇒ fermo). Ma
+ * il kernel produce quel codice in DUE punti, e solo uno è un fermo su richiesta:
+ *   · `talosHarness.mjs` ≈9334 — `⛔ interrotto su richiesta[: <punto>].`, e quello sì;
+ *   · `talosHarness.mjs` ≈1443 (`comeSonoFinitiIGiri`, ramo `haRisposto === false`) — «⛔ la
+ *     generazione si e fermata senza risposta e senza esaurire i giri.», che NESSUNO ha chiesto:
+ *     è il modello che ha chiuso il turno muto.
+ * ⇒ MISURATO sul file curato, prima di stringere: quel guasto usciva come «Hai fermato il giro.»,
+ *   e con un reindirizzamento in attesa come «Hai cambiato direzione.». È lo stesso difetto della
+ *   carta rossa, solo capovolto: la colpa spostata su chi legge, invece che addosso a lui.
+ */
+/**
+ * Vero quando il giro si è chiuso perché QUALCUNO l'ha chiesto: lo dicono le PAROLE del motore
+ * (l'italiano di `talosHarness.mjs`, l'inglese dell'`AbortController`) — mai il codice da solo.
+ *
+ * ⛔ Il codice da solo basta in UN caso e uno solo: quando non ci sono parole affatto. È il fermo
+ * del runtime locale — `session-registry.mjs` ≈2312/2322 chiude con `comeFinita: 'fermato'` e
+ * NESSUN `detto`, perché il controller è stato annullato. Tenerlo è ciò che impedisce a questa
+ * stretta di creare il falso negativo speculare (un fermo vero letto come guasto): togliere quel
+ * pezzo fa diventare ROSSA la prova FERMATO-SENZA-PAROLE, provato.
+ *
+ * ⛔⛔ E l'esclusione del guasto di `comeSonoFinitiIGiri` è STRUTTURALE, non una lista nera: quel
+ * testo semplicemente non dice le parole di un fermo, e le parole sono l'unica cosa di cui ci si
+ * fida. Una prima stesura di questa revisione ci aveva messo davanti anche un rifiuto esplicito
+ * (`if (/la generazione si e fermata.../) return false`): toltolo, NON cadeva nessuna prova — era
+ * codice inerte con un commento che prometteva una guardia. Via, e la conoscenza resta qui scritta.
+ *
+ * ⛔ `testo` arriva come `${codice} ${messaggio}` (vedi `spiegaErrore`): il codice si toglie prima
+ * di guardare le parole, altrimenti «non ci sono parole» non è mai vero.
+ */
+function eFermoSuRichiesta(testo, codice) {
+  const intero = String(testo ?? '').trim();
+  const cod = String(codice ?? '');
+  const parole = cod && intero.startsWith(cod) ? intero.slice(cod.length).trim() : intero;
+  return FERMO_SU_RICHIESTA.test(parole) || (codice === 'fermato' && parole === '');
+}
+
+/**
+ * DOVE si è fermato, quando il motore lo dice — «mentre aspettavo la tua approvazione per "scrivi"».
+ * ⛔ Solo la PRIMA riga: `esito.detto` porta la frase del fermo e SOTTO l'ultimo testo del modello
+ * (il kernel le unisce con un a capo), e il punto fermo di quella coda non è il punto di fermata.
+ * Null quando il motore non l'ha detto: mai una parentesi vuota a schermo.
+ */
+function puntoDiFermata(testo) {
+  const primaRiga = String(testo ?? '').split('\n')[0];
+  const punto = /interrotto su richiesta:\s*(.+?)\s*\.?\s*$/.exec(primaRiga)?.[1]?.trim();
+  return punto || null;
+}
+
+/**
  * Il grezzo della famiglia contesto: il codice tecnico NON si mostra a schermo (regola: niente nomi
  * tecnici nella UI) ma è quello che si incolla in una segnalazione, quindi entra nel dettaglio
  * richiuso — e non si duplica se il server l'aveva già scritto dentro il messaggio.
@@ -219,6 +319,53 @@ const REGOLE = [
   },
   {
     /*
+     * ⛔⛔⛔ 13/09, con la sessione dell'owner in mano: REINDIRIZZARE produceva una carta ROSSA —
+     * «Il giro si è interrotto per un errore… apri Doctor». Non era successo niente di male: aveva
+     * solo cambiato direzione. Sotto ci sono DUE difetti distinti, non uno.
+     *
+     *  1. Il riconoscitore cercava SOLO parole INGLESI («operation was aborted»), mentre il motore
+     *     scrive in ITALIANO: `talosHarness.mjs` (≈8986) chiude con `⛔ interrotto su richiesta:
+     *     <punto>.` e `agent-service.mjs` (≈169) lo manda come `RunError` con `code: 'fermato'`.
+     *     Le due stringhe non si incontravano ⇒ MISURATO prima di curare, sulle tre frasi vere del
+     *     kernel: `id: 'sconosciuto'`, tono `danger`, rimedio «apri Doctor». La colpa a chi legge.
+     *
+     *  2. Un reindirizzamento non è NEMMENO un fermo. Ma il kernel produce la stessa identica frase
+     *     nei due casi, perché `session-registry.mjs` chiama `voce.controller.abort()` SENZA
+     *     argomenti sia in `ferma()` (≈5188) sia in `reindirizza()` (≈4952): dal messaggio i due
+     *     comandi non si distinguono, e nessuno sforzo su questo file può inventare la differenza.
+     *     ⇒ Serve la PROVENIENZA, e la porta chi il comando lo conosce (vedi `spiegaErrore`).
+     *
+     * ⛔ Questa regola chiede DUE cose INSIEME — provenienza «reindirizzamento» E un esito che sia
+     * davvero un fermo su richiesta. Un `fetch failed` capitato mentre un reindirizzamento era in
+     * attesa resta un errore di rete, rosso: un guasto vero non si traveste da cambio di direzione.
+     *
+     * Ricerca 13/09/2026, prima di scrivere:
+     * - MDN, «AbortSignal: reason property» (letto 13/09/2026): il motivo dell'annullamento è un
+     *   valore qualunque che si passa ad `abort()`, e «if not explicitly set in those methods, it
+     *   defaults to "AbortError" DOMException» ⇒ la provenienza ESISTE alla sorgente ed è gratis;
+     *   oggi viene buttata, e i due comandi arrivano qui indistinguibili.
+     * - AG-UI, «Events» (docs.ag-ui.com/concepts/events, letto 13/09/2026): `RunError` «signals
+     *   failure during execution» e porta SOLO `message` e `code` — mentre un giro interrotto ha
+     *   il suo posto in `RunFinished` con `outcome: { type: "interrupt" }`. Far uscire un cambio
+     *   di direzione come `RunError` è fuori contratto, non solo brutto da vedere. ⛔ Quella cura
+     *   sta nel kernel e nel registro: non è questo file, ed è dichiarata come dipendenza.
+     */
+    id: 'reindirizzato',
+    famiglia: 'reindirizzato',
+    riconosce: (t, codice, origine) => origine === ORIGINI.REINDIRIZZAMENTO && eFermoSuRichiesta(t, codice),
+    spiega: (t) => {
+      const punto = puntoDiFermata(t);
+      return {
+        cosa: 'Hai cambiato direzione.',
+        perche: `Non è andato storto niente: la tua nuova richiesta ha la precedenza, e il giro di prima si è chiuso al primo punto sicuro${punto ? ` (${punto})` : ''} per lasciarle il posto. Quello che era già fatto resta: i file scritti restano scritti.`,
+        /* ⛔ Nessun rimedio, perché non c'è niente da rimediare: il lavoro riparte da solo sulla nuova direzione. Suggerire qualcosa qui direbbe che è andata storta. */
+        rimedi: [],
+        tecnico: t,
+      };
+    },
+  },
+  {
+    /*
      * ⛔⛔ 06/9, prova T05-D2: premi «Ferma», ed esce una carta ROSSA con «[internal-error] This
      * operation was aborted». Fermare un giro non è un guasto: è una cosa che hai chiesto tu, e
      * l'unica notizia è che è successa. La carta resta (serve a dire che il giro è finito lì), ma
@@ -226,16 +373,28 @@ const REGOLE = [
      */
     id: 'fermato-da-te',
     famiglia: 'fermato',
-    riconosce: (t) => /operation was aborted|AbortError|aborted by user|fermato dall'utente/i.test(t),
-    spiega: () => ({
-      cosa: 'Hai fermato il giro.',
-      perche: 'Il lavoro si è chiuso al primo punto sicuro, come chiesto. Quello che era già fatto resta: i file scritti restano scritti.',
-      rimedi: ['Scrivi un altro messaggio per continuare da qui, nella stessa sessione.'],
-    }),
+    /* ⛔ 13/09: qui c'erano SOLO le parole inglesi — vedi la regola sopra. Il codice `fermato` e l'italiano del motore valgono quanto l'`AbortError` del browser. */
+    riconosce: (t, codice) => eFermoSuRichiesta(t, codice),
+    spiega: (t) => {
+      /* Il motore dice DOVE si è fermato: si usa, non si butta — è la differenza fra «fermato» e «fermato mentre aspettavo la tua approvazione per "scrivi"». */
+      const punto = puntoDiFermata(t);
+      return {
+        cosa: 'Hai fermato il giro.',
+        perche: `Il lavoro si è chiuso al primo punto sicuro${punto ? ` (${punto})` : ''}, come chiesto. Quello che era già fatto resta: i file scritti restano scritti.`,
+        rimedi: ['Scrivi un altro messaggio per continuare da qui, nella stessa sessione.'],
+      };
+    },
   },
   {
     id: 'risposta-vuota',
-    riconosce: (t) => /flusso SSE senza contenuto|senza contenuto ne tool_calls|empty (?:response|stream)/i.test(t),
+    /*
+     * ⛔ 13/09, in revisione: qui finisce ANCHE «⛔ la generazione si e fermata senza risposta e
+     *   senza esaurire i giri.» (`comeSonoFinitiIGiri`), che viaggia con `code: 'fermato'` e che
+     *   la stretta qui sopra ha tolto dalla famiglia dei fermi. È esattamente questo caso — il
+     *   turno chiuso senza una parola — quindi ha già la sua carta, con la sua diagnosi: senza
+     *   questa riga sarebbe caduto nel sacco generico, col rimedio «apri Doctor».
+     */
+    riconosce: (t) => /flusso SSE senza contenuto|senza contenuto ne tool_calls|empty (?:response|stream)|la generazione si (?:e|è) fermata senza risposta/i.test(t),
     spiega: () => ({
       cosa: 'Il modello ha chiuso il turno senza dire niente e senza chiamare nessun attrezzo.',
       perche: 'Capita soprattutto con i modelli locali: la generazione finisce subito, per un modello di chat servito senza il suo formato di conversazione, per una finestra già piena, o per un campionamento che tronca al primo token.',
@@ -327,24 +486,34 @@ export function spiegaRifiutoAttrezzo(esito) {
  * invece di inventare una causa.
  * @param {string} messaggio il testo del server
  * @param {string} [codice] il codice del server (`internal-error`, `giri-esauriti`, …)
- * @returns {{id:string, cosa:string, perche:string, rimedi:string[], tecnico:string, riconosciuto:boolean}}
+ * @param {{origine?:string}} [contesto] da dove viene l'evento: `ORIGINI.STOP`, `ORIGINI.REINDIRIZZAMENTO`.
+ *   ⛔ È l'unico modo di distinguere «ho fermato» da «ho cambiato direzione»: il messaggio del motore
+ *   è lo stesso nei due casi. Assente = provenienza ignota, e si dice così invece di indovinarla.
+ * @returns {{id:string, cosa:string, perche:string, rimedi:string[], tecnico:string, riconosciuto:boolean, origine:string|null}}
  */
-export function spiegaErrore(messaggio, codice = '') {
+export function spiegaErrore(messaggio, codice = '', contesto = {}) {
   const tecnico = String(messaggio ?? '').trim();
   const testo = `${codice} ${tecnico}`;
+  /*
+   * ⛔ 13/09 — la PROVENIENZA, quando chi chiama la conosce: `ORIGINI.STOP`, `ORIGINI.REINDIRIZZAMENTO`.
+   * Non si deduce dal messaggio (i due comandi ne producono uno solo, identico), e una provenienza
+   * sconosciuta resta `null`: non si indovina.
+   */
+  const origine = typeof contesto?.origine === 'string' && contesto.origine ? contesto.origine : null;
   for (const regola of REGOLE) {
-    if (!regola.riconosce(testo, codice)) continue;
+    if (!regola.riconosce(testo, codice, origine)) continue;
     /*
      * ⛔ 09/9: il codice arriva anche a `spiega`. Serve alla famiglia contesto, che deve poterlo
      * mettere nel GREZZO (dove va) senza mostrarlo a schermo — e per questo una regola può dettare
      * il proprio `tecnico` invece di ereditare il messaggio nudo.
      */
     const s = regola.spiega(tecnico, codice);
-    return { id: regola.id, famiglia: regola.famiglia ?? null, ...s, tecnico: s.tecnico ?? tecnico, riconosciuto: true };
+    return { id: regola.id, famiglia: regola.famiglia ?? null, origine, ...s, tecnico: s.tecnico ?? tecnico, riconosciuto: true };
   }
   return {
     id: 'sconosciuto',
     famiglia: null,
+    origine,
     cosa: 'Il giro si è interrotto per un errore.',
     perche: 'Questa forma di errore non è ancora tradotta: qui sotto c’è il testo che ha mandato il server, così com’è.',
     rimedi: ['Riprova il giro.', 'Se si ripete, apri Doctor e allega il testo qui sotto.'],
@@ -365,6 +534,17 @@ export function spiegaErrore(messaggio, codice = '') {
  */
 const VESTIZIONI = {
   fermato: { badge: 'Fermato', titolo: 'TALOS · fermato', tono: 'accent' },
+  /*
+   * ⛔ 13/09 — un cambio di direzione non è un guasto E non è nemmeno una notizia: il giro riparte
+   * da solo, e la persona lo vede ripartire. `silenziosa` dice a chi disegna che questa nota non
+   * va mostrata affatto — la famiglia decide anche QUESTO, accanto alle frasi, invece di lasciare
+   * un ramo `if` nel disegnatore (è così che «fermato-da-te» era rimasto l'unica eccezione).
+   * ⛔ 13/09, sera — CHI DISEGNA HA IMPARATO A LEGGERLO: `appendStatusNote` esce prima di creare
+   * la nota, e non colora il tick. Serviva anche quello: con `isError` il disegnatore chiamava
+   * `aggiornaTickGiro({tono:'danger'})`, quindi il rosso aveva DUE manifestazioni e zittirne una
+   * sola avrebbe lasciato l'altra — la stessa meta'-cura che questa famiglia esiste per evitare.
+   */
+  reindirizzato: { badge: 'Reindirizzato', titolo: 'TALOS · nuova direzione', tono: 'accent', silenziosa: true },
   contesto: { badge: 'Contesto', titolo: 'TALOS · contesto non compattato', tono: 'warning' },
 };
 const VESTIZIONE_ERRORE = { badge: 'Errore', titolo: 'TALOS · errore', tono: 'danger' };
@@ -376,6 +556,28 @@ const VESTIZIONE_ERRORE = { badge: 'Errore', titolo: 'TALOS · errore', tono: 'd
  */
 export function vestizioneErrore(spiegazione) {
   return { ...(VESTIZIONI[spiegazione?.famiglia] ?? VESTIZIONE_ERRORE) };
+}
+
+/**
+ * Il tono del tick del giro, preso dalla STESSA vestizione della carta.
+ *
+ * ⛔⛔ 13/09 sera — misurato dal DOM sul pacchetto servito: dopo uno stop chiesto dalla persona la
+ *   carta diceva «Fermato» col tono d'accento, e il tick del giro era `--danger`. Il disegnatore
+ *   colorava di rosso OGNI nota con `isError`, qualunque cosa dicesse la carta: la stessa bugia
+ *   doppia curata la sera stessa per il reindirizzamento, rimasta sulla famiglia «fermato».
+ * ⇒ Il tick segue la carta. Conosce quattro toni (`current`, `info`, `warning`, `danger`); l'accento
+ *   non c'e' perche' un tick SENZA tono e' gia' l'accento (`--visibile` usa `--talos-accent`), cioe'
+ *   lo stesso colore del badge «Fermato».
+ * ⛔ Chi non riconosce la vestizione torna ROSSO, non muto: un guasto non si zittisce perche' manca
+ *   un oggetto. Una guardia che non sa valutare deve negare, non tacere.
+ * @param {{tono?:string}|null|undefined} vestizione l'esito di `vestizioneErrore`
+ * @returns {'danger'|'warning'|'info'|null}
+ */
+export function tonoDelTick(vestizione) {
+  const tono = vestizione?.tono;
+  if (tono === 'accent') return null;
+  if (tono === 'danger' || tono === 'warning' || tono === 'info') return tono;
+  return 'danger';
 }
 
 /** La stessa spiegazione in una riga sola, per i posti stretti (elenco sessioni, riepiloghi). */

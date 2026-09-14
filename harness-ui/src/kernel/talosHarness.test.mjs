@@ -113,6 +113,9 @@ import {
     richiestaRicerca, analizzaRisultatiRicerca, formattaRisultatiRicerca, eseguiRicercaWeb,
     formattaOraCorrente, formattaEsitoMcp,
     formattaListaLibreria, formattaRicercaLibreria, formattaLetturaLibreria, formattaOrigineLibreria,
+    firmaDiSfogliamento, decisioneDiSfogliamento, sfogliaTuttoRichiesto, limitaRipetizioniIdentiche,
+    CAMPI_DI_PAGINAZIONE, CAMPO_SFOGLIA_TUTTO, PAGINE_SENZA_RICHIESTA, PAGINE_MASSIME_PER_ELENCO,
+    CAMPI_CHE_IDENTIFICANO_LA_DOMANDA, registraEsitoDiSfogliamento, VOCI_PER_PAGINA_MASSIME, VOCI_DELL_INCIDENTE,
     formattaListaNote, formattaListaAttivita, formattaRicercaMemoria,
     formattaListaRicerche, formattaLetturaRicerca,
     forgePercorsoViolazione, forgeLeggiPercorso, forgeScriviPercorso, forgeRaccogliRiferimenti,
@@ -6536,5 +6539,881 @@ describe('⛔⛔⛔ lo STOP e immediato — 08/09/2026, owner: «si ferma all is
         assert.match(risposteAttrezzo[1].content, /non e stato eseguito/)
         assert.match(risposteAttrezzo[2].content, /non e stato eseguito/)
         assert.equal(risposteAttrezzo[0].content.includes('non e stato eseguito'), false, 'la prima era gia partita: il suo esito e quello vero')
+    })
+})
+
+/*
+ * ⛔⛔⛔ BC-10 (13/09/2026) — «ciao», e sfogliava UNDICI pagine di Libreria.
+ *
+ * Ogni prova qui dentro è scritta anche NEL VERSO CHE DEVE FALLIRE, perché oggi nove guardie di
+ * questo progetto hanno stampato una risposta plausibile dopo aver fallito. Una prova che passa
+ * sia col difetto sia senza non è una prova ⇒ accanto a ogni «adesso si ferma» c'è la riga che
+ * rimette il difetto (tetto infinito, flag spento, attrezzo senza tetto) e verifica che la misura
+ * se ne accorga davvero.
+ */
+describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto sulle pagine', () => {
+    function cartellaVuota(t) {
+        const radice = mkdtempSync(join(tmpdir(), 'talos-harness-sfogliamento-'))
+        t.after(() => rmSync(radice, { recursive: true, force: true }))
+        return radice
+    }
+
+    function reteDiRisposte(...risposte) {
+        const chiamate = []
+        return {
+            chiamate,
+            fetch: async (url, opzioni) => {
+                const indice = chiamate.length
+                chiamate.push({ url, opzioni, corpo: JSON.parse(opzioni.body) })
+                const scelta = risposte[Math.min(indice, risposte.length - 1)]
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({ choices: [{ message: scelta }], usage: { prompt_tokens: 10, completion_tokens: 5 } }),
+                    text: async () => '',
+                }
+            },
+        }
+    }
+
+    function chiamataTool(nome, argomenti) {
+        return { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: nome, arguments: JSON.stringify(argomenti) } }] }
+    }
+
+    const TASK_SALUTO = { consegna: 'ciao' }
+    const CONCLUSO = { role: 'assistant', content: 'ciao a te', tool_calls: [] }
+    /* Una pagina come quella vera dell'owner: 216 file in Libreria, e un token che invita alla prossima. */
+    const paginaLibreria = (n) => ({
+        pagina: [{ id: `lib-${n}`, nome: `file-${n}.md`, fileType: 'document', origine: 'uploaded', aggiornatoIl: '2026-09-13T10:00:00.000Z' }],
+        totale: 216,
+        vistiPrima: n - 1,
+        vistiDopo: n,
+        nextPageToken: `p${n + 1}`,
+    })
+    const LETTURA_OK = { nome: 'a.md', mediaType: 'text/markdown', origine: 'uploaded', testo: 'contenuto vero' }
+    /* Gli argomenti fabbricati apposta: undici chiamate in cui CAMBIA SOLO il cursore. */
+    const UNDICI_PAGINE = Array.from({ length: 11 }, (_, i) => ({ origin: 'all', file_type: 'all', page_token: `p${i + 1}` }))
+
+    it('⛔ la guardia della valanga è CIECA su una paginazione, per costruzione — misurato su 11 chiamate fabbricate', () => {
+        /* La firma della valanga è «nome + argomenti grezzi»: undici cursori diversi = undici firme diverse. */
+        const firmeValanga = new Set(UNDICI_PAGINE.map((a) => `library_list ${JSON.stringify(a)}`))
+        assert.equal(firmeValanga.size, 11, 'per la guardia della valanga sono undici richieste distinte')
+        /* La firma dello sfogliamento toglie il cursore: una sola domanda, ripetuta undici volte. */
+        const firmeSfogliamento = new Set(UNDICI_PAGINE.map((a) => firmaDiSfogliamento('library_list', a)))
+        assert.equal(firmeSfogliamento.size, 1, 'undici pagine dello stesso elenco sono UNA firma sola')
+
+        /* ⛔ VERSO CHE DEVE FALLIRE (1): la guardia VERA della valanga, messa davanti a queste undici, non ferma niente. */
+        const fabbricate = UNDICI_PAGINE.map((a, i) => ({ id: `c${i}`, function: { name: 'library_list', arguments: JSON.stringify(a) } }))
+        const controValanga = limitaRipetizioniIdentiche(fabbricate, 3)
+        assert.equal(controValanga.ripetizione, null, 'nessuna ripetizione vista: è il buco che BC-10 chiude')
+        assert.equal(controValanga.toolCalls.length, 11, 'le passa tutte e undici')
+
+        /* ⛔ VERSO CHE DEVE FALLIRE (2): e quel `null` non è perché la funzione è inerte — con gli argomenti IDENTICI morde al terzo colpo. */
+        const identiche = Array.from({ length: 11 }, (_, i) => ({ id: `c${i}`, function: { name: 'library_list', arguments: '{"origin":"all"}' } }))
+        const controIdentiche = limitaRipetizioniIdentiche(identiche, 3)
+        assert.equal(controIdentiche.toolCalls.length, 2, 'la guardia della valanga funziona: taglia alla terza copia identica')
+        assert.ok(controIdentiche.ripetizione, 'e lo dichiara')
+    })
+
+    it('⛔⛔ decisioneDiSfogliamento: due pagine, poi RIFIUTO — e la pagina rifiutata non consuma il tetto', () => {
+        const registro = new Map()
+        const decide = (token, extra = {}) => decisioneDiSfogliamento({
+            nome: 'library_list', argomenti: { origin: 'all', page_token: token, ...extra }, registro,
+        })
+
+        const prima = decide('p1')
+        assert.equal(prima.permesso, true)
+        assert.equal(prima.pagina, 1)
+        assert.equal(prima.coda, '', 'la prima pagina esce identica, byte per byte: nessuna coda')
+
+        const seconda = decide('p2')
+        assert.equal(seconda.permesso, true)
+        assert.match(seconda.coda, /page 2 of 2/, 'sull ultima pagina gratis il modello viene avvisato PRIMA di sbatterci')
+
+        const terza = decide('p3')
+        assert.equal(terza.permesso, false, 'la terza pagina si FERMA: è questo che un avviso non faceva')
+        assert.match(terza.messaggio, /^REFUSED/)
+        assert.match(terza.messaggio, /browse_every_page/, 'e dice come chiedere davvero le altre pagine')
+        assert.match(terza.messaggio, /library_search/, 'e la via più economica per trovare UN file')
+
+        /* Rifiutata due volte di fila resta ferma al conto di prima: i rifiuti non si accumulano contro chi poi chiede bene. */
+        assert.equal(decide('p4').permesso, false)
+        assert.equal(registro.get(firmaDiSfogliamento('library_list', { origin: 'all' })).pagine, 2, 'contate solo le pagine SERVITE')
+
+        /* ⛔ VERSO CHE DEVE FALLIRE (1): com era stamattina — contare e basta. Con il tetto tolto, le undici passano TUTTE. */
+        const senzaTetto = new Map()
+        const permesse = UNDICI_PAGINE.filter((argomenti) => decisioneDiSfogliamento({
+            nome: 'library_list', argomenti, registro: senzaTetto, tetto: Infinity, tettoAssoluto: Infinity,
+        }).permesso).length
+        assert.equal(permesse, 11, 'senza tetto la valanga dell owner si ripete identica: la prova sopra misura il TETTO, non una frase')
+
+        /* ⛔ VERSO CHE DEVE FALLIRE (2): un aggancio sbagliato LANCIA, non ricade in silenzio su «permesso». */
+        assert.throws(() => decisioneDiSfogliamento({ nome: 'library_list', argomenti: { origin: 'all' } }), TypeError)
+        assert.throws(() => decisioneDiSfogliamento({ nome: 'library_list', argomenti: {}, registro: {} }), TypeError)
+
+        /* Un filtro diverso è un ALTRA domanda e riparte da capo: il tetto non deve punire chi cambia ricerca. */
+        const altroFiltro = decisioneDiSfogliamento({ nome: 'library_list', argomenti: { origin: 'generated' }, registro })
+        assert.equal(altroFiltro.permesso, true)
+        assert.equal(altroFiltro.pagina, 1)
+    })
+
+    it('⛔⛔⛔ IL GIRO VERO: «ciao» e otto tentativi di pagina — lo store ne vede DUE, le altre sei tornano REFUSED', async () => {
+        const cartella = cartellaVuota(it)
+        const tentativi = Array.from({ length: 8 }, (_, i) => chiamataTool('library_list', { origin: 'all', file_type: 'all', page_token: `p${i + 1}` }))
+        const rete = reteDiRisposte(...tentativi, CONCLUSO)
+        const viste = []
+        const esito = await talosLavora({
+            cartella, task: TASK_SALUTO, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
+            strumentiEstesi: ['library_list'],
+            onLibreriaLista: async (a) => { viste.push(a); return paginaLibreria(viste.length) },
+        })
+
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.equal(viste.length, PAGINE_SENZA_RICHIESTA, `la Libreria è stata sfogliata ${PAGINE_SENZA_RICHIESTA} volte, non otto`)
+        const messaggiTool = esito.messaggiFinali.filter((m) => m.role === 'tool')
+        assert.equal(messaggiTool.length, 8, 'ogni chiamata annunciata ha comunque il suo esito: nessun tool_use orfano')
+        assert.match(messaggiTool[0].content, /Library list: showing 1-1 of 216/)
+        assert.equal(messaggiTool[0].content.includes('REFUSED'), false, 'la prima pagina si serve sempre')
+        assert.match(messaggiTool[1].content, /page 2 of 2/)
+        for (let i = 2; i < 8; i += 1) {
+            assert.match(messaggiTool[i].content, /^REFUSED/, `il tentativo ${i + 1} deve essere rifiutato`)
+            assert.match(messaggiTool[i].content, /browse_every_page/)
+        }
+
+        /* ⛔ VERSO CHE DEVE FALLIRE: lo stesso identico scenario su un attrezzo SENZA tetto arriva a otto.
+           Senza questo controllo, «viste.length === 2» potrebbe voler dire soltanto che il giro si era fermato prima. */
+        const cartellaControllo = cartellaVuota(it)
+        const senzaTetto = Array.from({ length: 8 }, (_, i) => chiamataTool('library_read', { id: `lib-${i + 1}` }))
+        const reteControllo = reteDiRisposte(...senzaTetto, CONCLUSO)
+        const letture = []
+        const esitoControllo = await talosLavora({
+            cartella: cartellaControllo, task: TASK_SALUTO, modello: 'x', chiave: 'y', fetchDiRete: reteControllo.fetch,
+            strumentiEstesi: ['library_read'],
+            onLibreriaLeggi: async (a) => { letture.push(a); return LETTURA_OK },
+        })
+        assert.equal(esitoControllo.comeFinita, 'concluso')
+        assert.equal(letture.length, 8, 'senza tetto il modello arriva in fondo: lo scenario sa contare fino a otto')
+    })
+
+    it('⭐ IL GIRO VERO: chi CHIEDE davvero tutte le pagine le ottiene — ma solo con il flag a true', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(
+            chiamataTool('library_list', { origin: 'all', page_token: 'p1' }),
+            chiamataTool('library_list', { origin: 'all', page_token: 'p2' }),
+            chiamataTool('library_list', { origin: 'all', page_token: 'p3' }),
+            chiamataTool('library_list', { origin: 'all', page_token: 'p3', browse_every_page: true }),
+            CONCLUSO,
+        )
+        const viste = []
+        const esito = await talosLavora({
+            cartella, task: { consegna: 'elencami TUTTI i file della libreria, uno per uno' }, modello: 'x', chiave: 'y',
+            fetchDiRete: rete.fetch, strumentiEstesi: ['library_list'],
+            onLibreriaLista: async (a) => { viste.push(a); return paginaLibreria(viste.length) },
+        })
+
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.equal(viste.length, 3, 'la terza pagina, CHIESTA esplicitamente, viene servita')
+        assert.equal(viste[2][CAMPO_SFOGLIA_TUTTO], true, 'il flag arriva allo store verbatim: non lo tocchiamo')
+        const messaggiTool = esito.messaggiFinali.filter((m) => m.role === 'tool')
+        assert.match(messaggiTool[2].content, /^REFUSED/, 'il tentativo senza flag resta rifiutato')
+        assert.match(messaggiTool[3].content, new RegExp(`Page 3 of at most ${PAGINE_MASSIME_PER_ELENCO}`), 'e quella col flag dice a che punto è del fondo')
+
+        /* ⛔ VERSO CHE DEVE FALLIRE: il flag si controlla per VERITÀ, non per presenza — «false» e «no» non aprono niente. */
+        const cartellaFinta = cartellaVuota(it)
+        const reteFinta = reteDiRisposte(
+            chiamataTool('library_list', { origin: 'all', page_token: 'p1' }),
+            chiamataTool('library_list', { origin: 'all', page_token: 'p2' }),
+            chiamataTool('library_list', { origin: 'all', page_token: 'p3', browse_every_page: false }),
+            chiamataTool('library_list', { origin: 'all', page_token: 'p4', browse_every_page: 'no' }),
+            CONCLUSO,
+        )
+        const visteFinte = []
+        await talosLavora({
+            cartella: cartellaFinta, task: TASK_SALUTO, modello: 'x', chiave: 'y',
+            fetchDiRete: reteFinta.fetch, strumentiEstesi: ['library_list'],
+            onLibreriaLista: async (a) => { visteFinte.push(a); return paginaLibreria(visteFinte.length) },
+        })
+        assert.equal(visteFinte.length, 2, 'un flag spento o storto non sblocca niente')
+        assert.equal(sfogliaTuttoRichiesto({ browse_every_page: 'true' }), true, 'la stringa "true" di un modello che manda JSON storto vale')
+        assert.equal(sfogliaTuttoRichiesto({ browse_every_page: 1 }), false)
+        assert.equal(sfogliaTuttoRichiesto({}), false)
+        assert.equal(sfogliaTuttoRichiesto(null), false)
+    })
+
+    it('⛔⛔ IL GIRO VERO, library_search: stesso tetto del fratello — e una QUERY diversa riparte da pagina 1', async () => {
+        /*
+         * ⛔ Questa prova esiste perché il punto di chiamata di `library_search` è stato cambiato
+         * come quello di `library_list`, e senza una prova sua sarebbe potuto restare rotto senza
+         * che niente diventasse rosso: la guardia che tutti credono ci sia.
+         */
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(
+            chiamataTool('library_search', { query: 'fatture', offset: 0 }),
+            chiamataTool('library_search', { query: 'fatture', offset: 5 }),
+            chiamataTool('library_search', { query: 'fatture', offset: 10 }),
+            chiamataTool('library_search', { query: 'contratti', offset: 0 }),
+            CONCLUSO,
+        )
+        const cercate = []
+        const esito = await talosLavora({
+            cartella, task: TASK_SALUTO, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
+            strumentiEstesi: ['library_search'],
+            onLibreriaCerca: async (a) => {
+                cercate.push(a)
+                return { pagina: [{ id: 'lib-1', nome: 'a.md', origine: 'uploaded', testoEstratto: 'trovato' }], totale: 216, nextOffset: 5 }
+            },
+        })
+
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.deepEqual(cercate.map((a) => a.query), ['fatture', 'fatture', 'contratti'], 'due pagine di "fatture", poi la terza è rifiutata; "contratti" è un altra domanda e riparte')
+        const messaggiTool = esito.messaggiFinali.filter((m) => m.role === 'tool')
+        assert.match(messaggiTool[2].content, /^REFUSED/)
+        assert.equal(messaggiTool[3].content.includes('REFUSED'), false, 'cambiare ricerca non deve essere punito dal tetto della precedente')
+    })
+
+    it('⛔ il fondo assoluto regge ANCHE col flag acceso: esaurite le pagine del conto, basta', () => {
+        const registro = new Map()
+        const conFlag = (n) => decisioneDiSfogliamento({
+            nome: 'library_list', argomenti: { origin: 'all', page_token: `p${n}`, [CAMPO_SFOGLIA_TUTTO]: true }, registro,
+        })
+        for (let n = 1; n <= PAGINE_MASSIME_PER_ELENCO; n += 1) {
+            assert.equal(conFlag(n).permesso, true, `la pagina ${n} è dentro il fondo`)
+        }
+        const oltre = conFlag(PAGINE_MASSIME_PER_ELENCO + 1)
+        assert.equal(oltre.permesso, false, 'il flag sposta il tetto, non lo toglie')
+        assert.match(oltre.messaggio, /hard ceiling/)
+        assert.match(oltre.messaggio, /does not raise it/)
+
+        /* ⛔ VERSO CHE DEVE FALLIRE: alzando il fondo, la stessa pagina passa ⇒ la prova misura il NUMERO, non una frase che c è sempre. */
+        const registroLargo = new Map()
+        for (let n = 1; n <= PAGINE_MASSIME_PER_ELENCO; n += 1) {
+            decisioneDiSfogliamento({ nome: 'library_list', argomenti: { origin: 'all', page_token: `p${n}`, [CAMPO_SFOGLIA_TUTTO]: true }, registro: registroLargo, tettoAssoluto: PAGINE_MASSIME_PER_ELENCO + 1 })
+        }
+        const conFondoPiuAlto = decisioneDiSfogliamento({
+            nome: 'library_list', argomenti: { origin: 'all', page_token: 'p13', [CAMPO_SFOGLIA_TUTTO]: true },
+            registro: registroLargo, tettoAssoluto: PAGINE_MASSIME_PER_ELENCO + 1,
+        })
+        assert.equal(conFondoPiuAlto.permesso, true)
+    })
+
+    it('⛔⛔ la DESCRIZIONE non ordina più di seguire il segnalibro fino in fondo, e il nome del flag combacia con la costante', () => {
+        const perNome = (nome) => ATTREZZI_ESTESI_OPENAI.find((a) => a.function.name === nome).function
+        const lista = perNome('library_list')
+        const ricerca = perNome('library_search')
+
+        const ORDINE_VECCHIO = /Follow next_page_token until it is null/i
+        assert.equal(ORDINE_VECCHIO.test(lista.description), false, 'era questa frase a far nascere il comportamento')
+        assert.match(lista.description, /REFUSED/, 'la descrizione dice che il tetto esiste')
+        assert.match(lista.description, /browse_every_page/)
+        assert.match(ricerca.description, /browse_every_page/, 'anche la ricerca pagina, e ha lo stesso tetto')
+
+        /* ⛔ VERSO CHE DEVE FALLIRE: la stessa regex sulla descrizione VECCHIA la trova ⇒ il controllo qui sopra morde davvero. */
+        const DESCRIZIONE_VECCHIA = 'List, browse, count or filter every file in this project\'s Library. '
+            + 'Follow next_page_token until it is null when asked for all files, repeating the same origin and file_type filters.'
+        assert.equal(ORDINE_VECCHIO.test(DESCRIZIONE_VECCHIA), true, 'se questa fosse falsa, il controllo sopra non guarderebbe niente')
+
+        /* Il nome del campo è scritto a mano nello schema (i tetti sono dichiarati più in basso nel file): qui si prova che non è andato alla deriva. */
+        for (const attrezzo of [lista, ricerca]) {
+            assert.ok(
+                Object.prototype.hasOwnProperty.call(attrezzo.parameters.properties, CAMPO_SFOGLIA_TUTTO),
+                `${attrezzo.name}: lo schema deve esporre proprio "${CAMPO_SFOGLIA_TUTTO}", altrimenti il modello non ha nessun modo di chiedere le altre pagine`,
+            )
+            assert.equal(attrezzo.parameters.properties[CAMPO_SFOGLIA_TUTTO].type, 'boolean')
+        }
+        assert.equal(CAMPI_DI_PAGINAZIONE.includes(CAMPO_SFOGLIA_TUTTO), false, 'il flag NON è un campo di paginazione')
+    })
+
+    /*
+     * ⛔⛔⛔ RIFACIMENTO 13/09/2026 — le prove che chiudono i quattro difetti trovati dal revisore.
+     * Ognuna porta il suo VERSO CHE DEVE FALLIRE, e dichiara su quante cose ha guardato.
+     */
+
+    it('⛔⛔⛔ DIFETTO 1: variare page_size (o limit) NON azzera più il conteggio — il varco, misurato e richiuso', () => {
+        /* Le stesse undici pagine dell'incidente, con un `page_size` diverso a ogni colpo: e` il varco che il revisore ha trovato. */
+        const conPageSize = UNDICI_PAGINE.map((a, i) => ({ ...a, page_size: (i % 20) + 1 }))
+        const registro = new Map()
+        const permesse = conPageSize.filter((argomenti) => decisioneDiSfogliamento({ nome: 'library_list', argomenti, registro }).permesso).length
+        assert.equal(permesse, PAGINE_SENZA_RICHIESTA, `undici pagine con page_size sempre diverso: ne passano ${PAGINE_SENZA_RICHIESTA}, non undici`)
+        assert.equal(new Set(conPageSize.map((a) => firmaDiSfogliamento('library_list', a))).size, 1, 'e sono UNA domanda sola')
+
+        /* Il fratello: `limit` su library_search. */
+        const conLimit = Array.from({ length: 11 }, (_, i) => ({ query: 'fatture', offset: i * 5, limit: (i % 20) + 1 }))
+        const registroRicerca = new Map()
+        const cercate = conLimit.filter((argomenti) => decisioneDiSfogliamento({ nome: 'library_search', argomenti, registro: registroRicerca }).permesso).length
+        assert.equal(cercate, PAGINE_SENZA_RICHIESTA, 'undici ricerche con limit sempre diverso: ne passano due')
+
+        /*
+         * ⛔ VERSO CHE DEVE FALLIRE: la firma VECCHIA — quella per ESCLUSIONE — rimessa qui tale e
+         * quale. Se questa riga non fosse rossa col vecchio codice, la prova sopra non misurerebbe
+         * la cura ma solo se stessa.
+         */
+        const CURSORI_DI_ALLORA = ['page_token', 'pageToken', 'cursor', 'offset', 'next_offset', 'nextOffset', 'page']
+        const firmaPerEsclusione = (nome, argomenti) => `${nome}\x00${Object.entries(argomenti)
+            .filter(([campo]) => !CURSORI_DI_ALLORA.includes(campo) && campo !== CAMPO_SFOGLIA_TUTTO)
+            .map(([campo, valore]) => `${campo}=${JSON.stringify(valore)}`).sort().join('\x1f')}`
+        assert.equal(new Set(conPageSize.map((a) => firmaPerEsclusione('library_list', a))).size, 11,
+            'com era stamattina: undici firme distinte, cio\u00e8 nessun tetto')
+    })
+
+    it('⛔⛔ DIFETTO 1, il varco che nessuno aveva nominato: un filtro ASSENTE e il suo DEFAULT sono la stessa domanda', () => {
+        assert.equal(
+            firmaDiSfogliamento('library_list', {}),
+            firmaDiSfogliamento('library_list', { origin: 'all', file_type: 'all' }),
+            'lo schema dichiara "all" come default: ometterlo non è un altra domanda',
+        )
+        /* Prima della cura questo alternarsi RADDOPPIAVA il conto: due firme, due pagine ciascuna. */
+        const alternate = Array.from({ length: 11 }, (_, i) => (i % 2 ? { page_token: `p${i}` } : { origin: 'all', page_token: `p${i}` }))
+        const registro = new Map()
+        const permesse = alternate.filter((argomenti) => decisioneDiSfogliamento({ nome: 'library_list', argomenti, registro }).permesso).length
+        assert.equal(permesse, PAGINE_SENZA_RICHIESTA, 'alternare assente e default non raddoppia più il conto')
+
+        /* Spazi e maiuscole: la stessa ricerca scritta in due modi resta una ricerca. */
+        assert.equal(firmaDiSfogliamento('library_search', { query: ' Fatture ' }), firmaDiSfogliamento('library_search', { query: 'fatture' }))
+
+        /* ⛔ VERSO CHE DEVE FALLIRE: una domanda DAVVERO diversa deve restare diversa, o il tetto punirebbe chi cambia ricerca. */
+        assert.notEqual(firmaDiSfogliamento('library_list', { origin: 'generated' }), firmaDiSfogliamento('library_list', {}))
+        assert.notEqual(firmaDiSfogliamento('library_search', { query: 'contratti' }), firmaDiSfogliamento('library_search', { query: 'fatture' }))
+    })
+
+    it('⛔⛔ il cancello anti-deriva: nessun campo degli schemi VERI resta fuori dalla classificazione', () => {
+        const cursori = new Set(CAMPI_DI_PAGINAZIONE)
+        const nonClassificati = (nome, campi) => campi.filter((campo) => (
+            !Object.prototype.hasOwnProperty.call(CAMPI_CHE_IDENTIFICANO_LA_DOMANDA[nome], campo)
+            && !cursori.has(campo)
+            && campo !== CAMPO_SFOGLIA_TUTTO
+        ))
+        let guardati = 0
+        for (const nome of ['library_list', 'library_search']) {
+            const campi = Object.keys(ATTREZZI_ESTESI_OPENAI.find((a) => a.function.name === nome).function.parameters.properties)
+            guardati += campi.length
+            assert.deepEqual(nonClassificati(nome, campi), [],
+                `${nome}: un campo dello schema non classificato finirebbe fuori dalla firma, ed è esattamente come page_size aggirava il tetto`)
+        }
+        assert.equal(guardati, 9, 'la misura ha guardato NOVE campi: 5 di library_list + 4 di library_search')
+
+        /* ⛔ VERSO CHE DEVE FALLIRE: un filtro nuovo non dichiarato viene visto da questo cancello. */
+        assert.deepEqual(nonClassificati('library_list', ['origin', 'page_size', CAMPO_SFOGLIA_TUTTO, 'tag']), ['tag'])
+        /* E il flag non è un filtro: se lo fosse, accenderlo cambierebbe la firma e azzererebbe il conto. */
+        assert.equal(Object.prototype.hasOwnProperty.call(CAMPI_CHE_IDENTIFICANO_LA_DOMANDA.library_list, CAMPO_SFOGLIA_TUTTO), false)
+        /* Un attrezzo che non dichiara i suoi campi LANCIA, invece di firmare al buio. */
+        assert.throws(() => firmaDiSfogliamento('research_list', { status: 'all' }), TypeError)
+        assert.throws(() => decisioneDiSfogliamento({ nome: 'research_list', argomenti: {}, registro: new Map() }), TypeError)
+    })
+
+    it('⛔⛔ DIFETTO 3: il fondo assoluto non supera più l incidente, ed è un CONTO, non un numero scelto', () => {
+        assert.equal(PAGINE_MASSIME_PER_ELENCO, Math.ceil(VOCI_DELL_INCIDENTE / VOCI_PER_PAGINA_MASSIME), 'il fondo è l aritmetica, non una preferenza')
+        assert.equal(PAGINE_MASSIME_PER_ELENCO, 11)
+        assert.ok(PAGINE_MASSIME_PER_ELENCO <= 11, 'undici pagine ERANO l incidente: il fondo non ci passa sopra (era 12)')
+        assert.ok(PAGINE_MASSIME_PER_ELENCO * VOCI_PER_PAGINA_MASSIME >= VOCI_DELL_INCIDENTE,
+            'e la seconda metà di BC-10 — contare 216 file per cancellarne 214 — deve poter ancora finire')
+        /* ⛔ VERSO CHE DEVE FALLIRE: il fondo a 10 che il revisore chiedeva NON basterebbe al caso legittimo. È la ragione, misurata, per cui non si scende. */
+        assert.ok(10 * VOCI_PER_PAGINA_MASSIME < VOCI_DELL_INCIDENTE, '10 pagine da 20 sono 200 voci: i 216 file non ci stanno')
+        /* E su propria iniziativa restano DUE, che è la cosa che l incidente misurava davvero. */
+        assert.equal(PAGINE_SENZA_RICHIESTA, 2)
+    })
+
+    it('⛔⛔⛔ DIFETTO 3, il fondo VERO: servite tutte le voci che l elenco DICHIARA, la pagina dopo è rifiutata', () => {
+        const argomenti = (n) => ({ origin: 'all', page_token: `p${n}`, [CAMPO_SFOGLIA_TUTTO]: true })
+        const servi = (registro, n, risultato) => {
+            const decisione = decisioneDiSfogliamento({ nome: 'library_list', argomenti: argomenti(n), registro })
+            if (decisione.permesso) registraEsitoDiSfogliamento({ registro, nome: 'library_list', argomenti: argomenti(n), risultato })
+            return decisione
+        }
+        const registro = new Map()
+        assert.equal(servi(registro, 1, { pagina: [{ id: 'a' }, { id: 'b' }], totale: 3 }).permesso, true)
+        assert.equal(servi(registro, 2, { pagina: [{ id: 'c' }], totale: 3 }).permesso, true, 'ne mancava una: la pagina 2 si serve')
+        const terza = servi(registro, 3, { pagina: [], totale: 3 })
+        assert.equal(terza.permesso, false, 'le tre voci che esistono sono già state servite: dopo l ultima non c è niente')
+        assert.match(terza.messaggio, /^REFUSED/)
+        assert.match(terza.messaggio, /all 3 entries/, 'e dice il numero che ha misurato, non una frase generica')
+
+        /* ⛔ VERSO CHE DEVE FALLIRE (1): con un totale PIÙ GRANDE la stessa terza pagina passa ⇒ la prova misura il TOTALE, non il testo. */
+        const registroPieno = new Map()
+        servi(registroPieno, 1, { pagina: [{ id: 'a' }, { id: 'b' }], totale: 30 })
+        servi(registroPieno, 2, { pagina: [{ id: 'c' }], totale: 30 })
+        assert.equal(servi(registroPieno, 3, { pagina: [{ id: 'd' }], totale: 30 }).permesso, true, 'ne restano 27: si sfoglia')
+
+        /* ⛔ VERSO CHE DEVE FALLIRE (2): un risultato SENZA totale (cursore scaduto) non fa inventare un fondo. */
+        const registroCieco = new Map()
+        servi(registroCieco, 1, { errore: 'CURSOR_INVALID' })
+        assert.equal(servi(registroCieco, 2, { errore: 'CURSOR_INVALID' }).permesso, true, 'niente totale, niente fondo dedotto: decide il conto in pagine')
+
+        /* Una firma mai permessa non si annota dal nulla. */
+        const registroVuoto = new Map()
+        registraEsitoDiSfogliamento({ registro: registroVuoto, nome: 'library_list', argomenti: argomenti(1), risultato: { pagina: [{ id: 'a' }], totale: 1 } })
+        assert.equal(registroVuoto.size, 0)
+        assert.throws(() => registraEsitoDiSfogliamento({ registro: {}, nome: 'library_list', argomenti: {}, risultato: {} }), TypeError)
+    })
+
+    it('⛔⛔ DIFETTO 2: il messaggio dice l ambito che MISURA — il registro muore col giro, e il giro dopo riparte da zero', async () => {
+        /* Il testo non promette più una sessione intera. */
+        const registro = new Map()
+        const conFlag = (n) => decisioneDiSfogliamento({
+            nome: 'library_list', argomenti: { origin: 'all', page_token: `p${n}`, [CAMPO_SFOGLIA_TUTTO]: true }, registro, tettoAssoluto: 1,
+        })
+        conFlag(1)
+        const oltre = conFlag(2)
+        assert.equal(oltre.permesso, false)
+        assert.equal(/session/i.test(oltre.messaggio), false, 'il registro non vive quanto una sessione: il messaggio non lo dica')
+        assert.match(oltre.messaggio, /in this run/)
+
+        /*
+         * ⛔ E questa è l ANCORA VERA: non una parola nel testo, ma l ambito misurato dal vivo.
+         * Due giri di fila, e il secondo riparte da capo ⇒ «run» è la parola giusta e «session» era
+         * una promessa più larga della cosa.
+         */
+        const viste = []
+        const unGiro = async () => {
+            const rete = reteDiRisposte(
+                chiamataTool('library_list', { origin: 'all', page_token: 'p1' }),
+                chiamataTool('library_list', { origin: 'all', page_token: 'p2' }),
+                chiamataTool('library_list', { origin: 'all', page_token: 'p3' }),
+                CONCLUSO,
+            )
+            return talosLavora({
+                cartella: cartellaVuota(it), task: TASK_SALUTO, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
+                strumentiEstesi: ['library_list'],
+                onLibreriaLista: async (a) => { viste.push(a); return paginaLibreria(viste.length) },
+            })
+        }
+        await unGiro()
+        assert.equal(viste.length, PAGINE_SENZA_RICHIESTA, 'primo giro: due pagine')
+        await unGiro()
+        assert.equal(viste.length, PAGINE_SENZA_RICHIESTA * 2, 'secondo giro: altre due — il registro NON attraversa i giri, ed è il rischio residuo dichiarato')
+    })
+
+    it('⛔⛔⛔ IL GIRO VERO: il TOTALE dichiarato dallo store arriva davvero al tetto — sui DUE punti di chiamata', async () => {
+        /*
+         * ⛔ Questa prova esiste perché senza di lei mancava proprio la guardia che tutti avrebbero
+         * creduto ci fosse: le prove del fondo-vero chiamavano `registraEsitoDiSfogliamento` a mano,
+         * quindi togliere l'aggancio dai punti di chiamata di `talosLavora` sarebbe rimasto VERDE.
+         * Qui il totale deve attraversare il kernel per conto suo.
+         */
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(
+            chiamataTool('library_list', { origin: 'all', page_token: 'p1' }),
+            chiamataTool('library_list', { origin: 'all', page_token: 'p2' }),
+            chiamataTool('library_list', { origin: 'all', page_token: 'p3' }),
+            CONCLUSO,
+        )
+        const viste = []
+        const esito = await talosLavora({
+            cartella, task: TASK_SALUTO, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
+            strumentiEstesi: ['library_list'],
+            /* Una Libreria di DUE voci: alla seconda pagina l'elenco è finito per il DATO, non per il nostro tetto. */
+            onLibreriaLista: async (a) => {
+                viste.push(a)
+                return { pagina: [{ id: `lib-${viste.length}`, nome: 'a.md', fileType: 'document', origine: 'uploaded', aggiornatoIl: '2026-09-13T10:00:00.000Z' }], totale: 2, vistiPrima: viste.length - 1, vistiDopo: viste.length, nextPageToken: 'p9' }
+            },
+        })
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.equal(viste.length, 2, 'servite le due voci che esistono')
+        const messaggiTool = esito.messaggiFinali.filter((m) => m.role === 'tool')
+        assert.match(messaggiTool[2].content, /^REFUSED/)
+        assert.match(messaggiTool[2].content, /all 2 entries/,
+            'il rifiuto cita il TOTALE arrivato dallo store: se l aggancio non ci fosse, qui si leggerebbe il tetto generico')
+
+        /* Il fratello `library_search`, stesso aggancio, stesso verso. */
+        const cartellaRicerca = cartellaVuota(it)
+        const reteRicerca = reteDiRisposte(
+            chiamataTool('library_search', { query: 'fatture', offset: 0 }),
+            chiamataTool('library_search', { query: 'fatture', offset: 5 }),
+            CONCLUSO,
+        )
+        const cercate = []
+        const esitoRicerca = await talosLavora({
+            cartella: cartellaRicerca, task: TASK_SALUTO, modello: 'x', chiave: 'y', fetchDiRete: reteRicerca.fetch,
+            strumentiEstesi: ['library_search'],
+            onLibreriaCerca: async (a) => {
+                cercate.push(a)
+                return { pagina: [{ id: 'lib-1', nome: 'a.md', origine: 'uploaded', testoEstratto: 'trovato' }], totale: 1, nextOffset: 5 }
+            },
+        })
+        assert.equal(esitoRicerca.comeFinita, 'concluso')
+        assert.equal(cercate.length, 1, 'un solo risultato esiste: la seconda pagina non si chiede allo store')
+        const messaggiRicerca = esitoRicerca.messaggiFinali.filter((m) => m.role === 'tool')
+        assert.match(messaggiRicerca[1].content, /all 1 entry\b/, 'una voce sola si dice al singolare: è testo che legge il modello')
+    })
+})
+
+/* ═════════════════ PO-12 (13/09/2026) — L'ATTREZZO DI MODIFICA, `file_edit` ═════════════════
+ *
+ * ⛔ La premessa, riaccertata nel codice prima di curare: nessun `name:` del kernel conteneva
+ *   modifica/patch/replace/edit, e il commento di `scrivi` (BC-11) lo diceva per iscritto —
+ *   «TALOS un attrezzo di modifica non ce l'ha». Per cambiare una riga il modello rimandava il
+ *   file INTERO.
+ *
+ * ⛔ Ogni prova qui sotto esiste in DUE VERSI: che la cura morda, e che il verso contrario
+ *   (nessuna corrispondenza, corrispondenza ambigua, permesso negato, cancello semantico) NON
+ *   scriva niente sul disco. Una sostituzione che non combacia deve fallire a voce alta: e' la
+ *   differenza fra una cura e una bugia.
+ */
+import {
+    applicaSostituzione, messaggioSostituzioneRifiutata, messaggioArgomentiAssenti,
+    testoDaSostituire, testoSostitutivo, sostituzioneSuTutteRichiesta, attrezziNegatiDalLivello,
+} from './talosHarness.mjs'
+
+describe('PO-12 — il modello puo\' MODIFICARE un file invece di riscriverlo', () => {
+    const cartellaDiProva = () => {
+        const cartella = mkdtempSync(join(tmpdir(), 'po12-'))
+        return cartella
+    }
+    const pulisci = (cartella) => rmSync(cartella, { recursive: true, force: true })
+
+    /** Uno sportello finto: una risposta per chiamata, l'ultima si ripete. */
+    function sportello(...risposte) {
+        let indice = 0
+        return async () => {
+            const scelta = risposte[Math.min(indice, risposte.length - 1)]
+            indice += 1
+            return {
+                ok: true, status: 200,
+                json: async () => ({ choices: [{ message: scelta }], usage: { prompt_tokens: 1, completion_tokens: 1 } }),
+                text: async () => '',
+            }
+        }
+    }
+    const FINE = { role: 'assistant', content: 'fatto', tool_calls: [] }
+    const chiamata = (argomenti, id = 'call_1', nome = 'file_edit') => ({
+        role: 'assistant', content: '',
+        tool_calls: [{ id, function: { name: nome, arguments: typeof argomenti === 'string' ? argomenti : JSON.stringify(argomenti) } }],
+    })
+    const dettoAlModello = (esito) => esito.messaggiFinali.filter((m) => m.role === 'tool').map((m) => m.content)
+    const TASK = { consegna: 'una prova di PO-12' }
+    const giro = (cartella, argomenti, extra = {}) => talosLavora({
+        cartella, task: TASK, modello: 'x', chiave: 'y', strumentiEstesi: ['file_edit'],
+        fetchDiRete: sportello(...(Array.isArray(argomenti) ? argomenti : [chiamata(argomenti)]), FINE),
+        ...extra,
+    })
+
+    /* ─────────────────────────── la sostituzione, pura, nei due versi ─────────────────────── */
+
+    it('⭐⭐⭐ sostituisce SOLO il pezzo indicato: il resto del file resta identico', () => {
+        const prima = 'const a = 1\nconst b = 2\nconst c = 3\n'
+        const esito = applicaSostituzione(prima, 'const b = 2', 'const b = 99')
+        assert.equal(esito.ok, true)
+        assert.equal(esito.testo, 'const a = 1\nconst b = 99\nconst c = 3\n')
+        assert.equal(esito.occorrenze, 1)
+    })
+
+    it('⛔⛔ AL CONTRARIO — un testo che NON c\'e\' non viene avvicinato: rifiuto, e nessun testo nuovo', () => {
+        const esito = applicaSostituzione('const a = 1\n', 'const z = 9', 'const z = 10')
+        assert.equal(esito.ok, false)
+        assert.equal(esito.motivo, 'assente')
+        assert.equal(esito.testo, undefined, '⛔ un rifiuto non produce MAI un contenuto da scrivere')
+    })
+
+    it('⛔⛔⛔ due occorrenze sono un RIFIUTO, non la prima a caso — e dice su quali RIGHE', () => {
+        const prima = 'x = 1\nqualcosa\nx = 1\n'
+        const ambigua = applicaSostituzione(prima, 'x = 1', 'x = 2')
+        assert.equal(ambigua.ok, false)
+        assert.equal(ambigua.motivo, 'ambigua')
+        assert.equal(ambigua.occorrenze, 2)
+        assert.deepEqual(ambigua.righe, [1, 3])
+        // ...e con replace_all diventa legittimo, e le cambia TUTTE
+        const tutte = applicaSostituzione(prima, 'x = 1', 'x = 2', { tutte: true })
+        assert.equal(tutte.ok, true)
+        assert.equal(tutte.testo, 'x = 2\nqualcosa\nx = 2\n')
+        assert.equal(tutte.occorrenze, 2)
+    })
+
+    it('⛔ vecchio vuoto e vecchio === nuovo sono due guasti diversi, e nessuno dei due scrive', () => {
+        assert.equal(applicaSostituzione('a', '', 'b').motivo, 'vuoto')
+        assert.equal(applicaSostituzione('a', 'a', 'a').motivo, 'identici')
+        assert.equal(applicaSostituzione(null, 'a', 'b').motivo, 'illeggibile')
+    })
+
+    it('⭐⭐ i DOLLARI del testo nuovo arrivano interi: `split/join`, mai `String.replace`', () => {
+        // [[string-replace-mangia-i-dollari]] — con `replace` qui `$&` diventerebbe il testo trovato
+        const esito = applicaSostituzione('prezzo = X\n', 'X', 'costo("$&") + "$1" + "$$"')
+        assert.equal(esito.testo, 'prezzo = costo("$&") + "$1" + "$$"\n')
+    })
+
+    it('⭐ cancellare e\' una sostituzione con nuovo vuoto — legittima, come in Hermes', () => {
+        assert.equal(applicaSostituzione('a\nDA TOGLIERE\nb\n', 'DA TOGLIERE\n', '').testo, 'a\nb\n')
+    })
+
+    it('⛔ gli alias inglesi arrivano; e senza nessun nome riconoscibile NON si indovina', () => {
+        for (const nome of ['old_string', 'old_str', 'oldString', 'vecchio']) {
+            assert.equal(testoDaSostituire({ [nome]: 'q' }), 'q', `alias perso: ${nome}`)
+        }
+        for (const nome of ['new_string', 'new_str', 'newString', 'nuovo']) {
+            assert.equal(testoSostitutivo({ [nome]: 'r' }), 'r', `alias perso: ${nome}`)
+        }
+        assert.equal(testoSostitutivo({ new_string: '' }), '', '⛔ cancellare e\' una richiesta, non un\'assenza')
+        assert.equal(testoDaSostituire({}), undefined)
+        assert.equal(testoSostitutivo({}), undefined)
+        assert.equal(sostituzioneSuTutteRichiesta({}), false, '⛔ il default e\' il match UNICO')
+        assert.equal(sostituzioneSuTutteRichiesta({ replace_all: true }), true)
+        assert.equal(sostituzioneSuTutteRichiesta({ replaceAll: 'true' }), true)
+        assert.equal(sostituzioneSuTutteRichiesta({ replace_all: 'forse' }), false, '⛔ un valore che non si capisce non e\' un si\'')
+    })
+
+    it('⛔ ogni rifiuto porta la MOSSA SUCCESSIVA, e i due guasti non si confondono', () => {
+        const assente = messaggioSostituzioneRifiutata('src/a.mjs', applicaSostituzione('a', 'z', 'y'))
+        const ambigua = messaggioSostituzioneRifiutata('src/a.mjs', applicaSostituzione('z\nz', 'z', 'y'))
+        assert.match(assente, /does not appear in src\/a\.mjs/)
+        assert.match(assente, /`leggi`/, 'la mossa successiva e\' rileggere il file, e gliela si dice')
+        assert.doesNotMatch(assente, /ambiguous/, '⛔ dire «ambiguo» a chi non ha trovato niente lo manda a cercare un errore che non ha fatto')
+        assert.match(ambigua, /appears 2 times/)
+        assert.match(ambigua, /lines 1, 2/)
+        assert.match(ambigua, /replace_all:true/)
+        assert.notEqual(assente, ambigua)
+    })
+
+    it('⛔ i tre campi mancanti hanno tre frasi diverse, e nessuna parla di leggere o di accodare', () => {
+        const senzaPercorso = messaggioArgomentiAssenti('file_edit')
+        const senzaVecchio = messaggioArgomentiAssenti('file_edit', { campo: 'old_string' })
+        const senzaNuovo = messaggioArgomentiAssenti('file_edit', { campo: 'new_string' })
+        assert.match(senzaPercorso, /no file path was given/)
+        assert.match(senzaPercorso, /`old_string`/)
+        assert.doesNotMatch(senzaPercorso, /Nothing was read/, '⛔ `file_edit` non legge: cambia')
+        assert.match(senzaVecchio, /no text to replace/)
+        assert.match(senzaNuovo, /no replacement text/)
+        assert.equal(new Set([senzaPercorso, senzaVecchio, senzaNuovo]).size, 3)
+        // ⛔ AL CONTRARIO — i messaggi degli altri due attrezzi non si sono spostati di una virgola
+        assert.match(messaggioArgomentiAssenti('scrivi'), /^Nothing was written: no file path was given\./)
+        assert.match(messaggioArgomentiAssenti('leggi'), /^Nothing was read: no file path was given\./)
+    })
+
+    /* ──────────────────────────── il giro vero, col dispatcher ────────────────────────────── */
+
+    it('⭐⭐⭐ IL GIRO VERO: il modello cambia UNA riga e il file NON viene riscritto', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            const prima = 'riga uno\nriga due\nriga tre\n'
+            writeFileSync(join(cartella, 'f.txt'), prima)
+            const esito = await giro(cartella, { percorso: 'f.txt', old_string: 'riga due', new_string: 'riga DUE cambiata' })
+            assert.equal(readFileSync(join(cartella, 'f.txt'), 'utf8'), 'riga uno\nriga DUE cambiata\nriga tre\n')
+            const [detto] = dettoAlModello(esito)
+            assert.match(detto, /^edited: f\.txt \(1 occurrence replaced/)
+            assert.match(detto, /The rest of the file is untouched\./)
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔⛔⛔ una sostituzione che NON combacia e\' RIFIUTATA con un motivo, e il file resta byte per byte quello di prima', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            const prima = 'lavoro di ore\n'
+            writeFileSync(join(cartella, 'prezioso.txt'), prima)
+            const ricevute = []
+            const esito = await giro(cartella, { percorso: 'prezioso.txt', old_string: 'non c\'e\' mai stato', new_string: 'x' },
+                { onGiro: (e) => { if (e.tipo === 'ricevuta') ricevute.push(e.ricevuta) } })
+            const [detto] = dettoAlModello(esito)
+            assert.match(detto, /^REFUSED\. Nothing was changed/)
+            assert.match(detto, /not even once/)
+            assert.equal(readFileSync(join(cartella, 'prezioso.txt'), 'utf8'), prima)
+            assert.equal(ricevute.length, 0, '⛔ nessun permesso chiesto, niente tentato: una ricevuta sarebbe il record di un\'operazione mai avvenuta')
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔⛔ ambiguo: RIFIUTATO con le righe; poi con replace_all lo stesso file cambia in tutte e due i punti', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, 'due.txt'), 'val = 1\nmezzo\nval = 1\n')
+            const esito = await giro(cartella, [
+                chiamata({ percorso: 'due.txt', old_string: 'val = 1', new_string: 'val = 2' }),
+                chiamata({ percorso: 'due.txt', old_string: 'val = 1', new_string: 'val = 2', replace_all: true }, 'call_2'),
+            ])
+            const detti = dettoAlModello(esito)
+            assert.match(detti[0], /appears 2 times in due\.txt \(lines 1, 3\)/)
+            assert.match(detti[1], /^edited: due\.txt \(2 occurrences replaced/)
+            assert.equal(readFileSync(join(cartella, 'due.txt'), 'utf8'), 'val = 2\nmezzo\nval = 2\n')
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔ un file che non esiste lo dice, e non ne crea uno nuovo di nascosto', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            const esito = await giro(cartella, { percorso: 'mai-visto.txt', old_string: 'a', new_string: 'b' })
+            assert.match(dettoAlModello(esito)[0], /does not exist/)
+            assert.equal(existsSync(join(cartella, 'mai-visto.txt')), false, '⛔ una modifica non e\' una creazione')
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔ i tre campi mancanti non toccano il disco, nemmeno per leggerlo', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, 'f.txt'), 'intatto\n')
+            const esito = await giro(cartella, [
+                chiamata({ old_string: 'a', new_string: 'b' }),
+                chiamata({ percorso: 'f.txt', new_string: 'b' }, 'call_2'),
+                chiamata({ percorso: 'f.txt', old_string: 'intatto' }, 'call_3'),
+            ])
+            const detti = dettoAlModello(esito)
+            assert.match(detti[0], /no file path was given/)
+            assert.match(detti[1], /no text to replace/)
+            assert.match(detti[2], /no replacement text/)
+            assert.equal(readFileSync(join(cartella, 'f.txt'), 'utf8'), 'intatto\n')
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔⛔⛔ IL PERMESSO: in sola lettura la modifica e\' negata e il file non cambia', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, 'f.txt'), 'originale\n')
+            const esito = await giro(cartella, { percorso: 'f.txt', old_string: 'originale', new_string: 'manomesso' },
+                { livelloAccesso: 'lettura' })
+            assert.match(dettoAlModello(esito)[0], /^REFUSED\./)
+            assert.match(dettoAlModello(esito)[0], /sola lettura/)
+            assert.equal(readFileSync(join(cartella, 'f.txt'), 'utf8'), 'originale\n')
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⭐⭐⭐ «scrittura nel workspace» AMMETTE la modifica — e RIFIUTA un percorso che esce dal workspace', async () => {
+        /*
+         * ⛔ La trappola trovata leggendo il cancello: `livello scrittura-area` elencava UN SOLO
+         *   attrezzo (`scrivi`). Senza questa riga il livello piu' usato dall'owner avrebbe avuto
+         *   un attrezzo di modifica offerto e sempre negato — peggio del non averlo.
+         */
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, 'f.txt'), 'dentro\n')
+            const dentro = await giro(cartella, { percorso: 'f.txt', old_string: 'dentro', new_string: 'cambiato' },
+                { livelloAccesso: 'scrittura-area' })
+            assert.match(dettoAlModello(dentro)[0], /^edited: f\.txt/)
+            assert.equal(readFileSync(join(cartella, 'f.txt'), 'utf8'), 'cambiato\n')
+
+            const fuori = join(cartella, '..', `po12-fuori-${Date.now()}.txt`)
+            writeFileSync(fuori, 'roba di fuori\n')
+            try {
+                const negato = await giro(cartella, { percorso: `../${fuori.split(/[\\/]/).pop()}`, old_string: 'roba', new_string: 'manomessa' },
+                    { livelloAccesso: 'scrittura-area' })
+                assert.match(dettoAlModello(negato)[0], /^REFUSED\./)
+                assert.equal(readFileSync(fuori, 'utf8'), 'roba di fuori\n', '⛔ il cancello del percorso vale anche per la modifica')
+            }
+            finally { rmSync(fuori, { force: true }) }
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔⛔ IL CANCELLO SEMANTICO morde anche qui: una funzione inventata non entra nel file', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            const prima = 'export const uno = 1\nexport const due = 2\n'
+            writeFileSync(join(cartella, 'uso.ts'), prima)
+            const esito = await giro(cartella, { percorso: 'uso.ts', old_string: 'export const due = 2', new_string: 'export const due = funzioneCheNonEsisteDavvero(2)' })
+            assert.equal(esito.premesseNegate, 1)
+            assert.equal(readFileSync(join(cartella, 'uso.ts'), 'utf8'), prima, '⛔ un rifiuto non lascia mezza modifica sul disco')
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⭐⭐ una modifica LEGITTIMA che usa un simbolo gia\' nel file passa il cancello semantico', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, 'ok.ts'), 'export const raddoppia = (n: number) => n * 2\nexport const x = 1\n')
+            const esito = await giro(cartella, { percorso: 'ok.ts', old_string: 'export const x = 1', new_string: 'export const x = raddoppia(2)' })
+            assert.equal(esito.premesseNegate, 0, '⛔ il cancello giudica il file INTERO, non il pezzo')
+            assert.match(readFileSync(join(cartella, 'ok.ts'), 'utf8'), /x = raddoppia\(2\)/)
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⭐⭐ la RICEVUTA c\'e\', dice `file_edit`, e il pannello Review riceve il file intero', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, 'r.md'), 'prima\nseconda\n')
+            const ricevute = []
+            const scritture = []
+            await giro(cartella, { percorso: 'r.md', old_string: 'seconda', new_string: 'SECONDA' }, {
+                onGiro: (e) => { if (e.tipo === 'ricevuta') ricevute.push(e.ricevuta) },
+                onScrittura: (percorso, contenuto, esisteva, contenutoPrima) => scritture.push({ percorso, contenuto, esisteva, contenutoPrima }),
+            })
+            assert.equal(ricevute.length, 1)
+            assert.equal(ricevute[0].action, 'write')
+            assert.equal(ricevute[0].status, 'succeeded')
+            assert.equal(ricevute[0].risk, 'R1', 'stessa portata di `scrivi`: un file del workspace')
+            assert.equal(ricevute[0].postcondizione, 'retta', '⛔ la rilettura dal disco e\' un CANCELLO, non un\'eco')
+            assert.equal(ricevute[0].verified, true, '⛔ «verificato» dev\'essere un fatto controllato, non l\'eco di `disco.scrivi`')
+            assert.deepEqual(scritture, [{ percorso: 'r.md', contenuto: 'prima\nSECONDA\n', esisteva: true, contenutoPrima: 'prima\nseconda\n' }])
+        }
+        finally { pulisci(cartella) }
+    })
+
+    /* ────────────────────── l'inventario: il metro del banco non si muove ─────────────────── */
+
+    it('⛔⛔⛔ LA REGRESSIONE CHE TEMO — la lista BASE resta i sette nomi di sempre, e senza `strumentiEstesi` il modello non vede `file_edit`', async () => {
+        assert.deepEqual(
+            ATTREZZI_OPENAI.map((a) => a.function.name),
+            ['elenca', 'cerca', 'leggi', 'scrivi', 'prova', 'shell', 'naviga'],
+            '⛔ la lista base e\' il METRO del banco: un attrezzo nuovo non la allunga',
+        )
+        const cartella = cartellaDiProva()
+        try {
+            let corpo = null
+            await talosLavora({
+                cartella, task: TASK, modello: 'x', chiave: 'y',
+                fetchDiRete: async (_url, opzioni) => {
+                    corpo ??= JSON.parse(opzioni.body)
+                    return { ok: true, status: 200, json: async () => ({ choices: [{ message: FINE }] }), text: async () => '' }
+                },
+            })
+            assert.deepEqual(corpo.tools.map((t) => t.function.name), ['elenca', 'cerca', 'leggi', 'scrivi', 'prova', 'shell', 'naviga'])
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔ `file_edit` e\' una scrittura: il filtro del livello lo toglie dalla lista in lettura e in ricerca', () => {
+        assert.equal(attrezziNegatiDalLivello({ livelloAccesso: 'lettura' }).has('file_edit'), true)
+        assert.equal(attrezziNegatiDalLivello({ livelloAccesso: 'ricerca' }).has('file_edit'), true)
+        assert.equal(attrezziNegatiDalLivello({}).size, 0, '⛔ TALOS-BANCO non passa il livello: per lui non cambia niente')
+    })
+
+    it('⭐ lo SCHEMA nomina i quattro campi: «uno strumento che non nomina un campo, per il modello, non ce l\'ha»', () => {
+        const attrezzo = ATTREZZI_ESTESI_OPENAI.find((a) => a.function.name === 'file_edit')
+        assert.ok(attrezzo)
+        assert.deepEqual(Object.keys(attrezzo.function.parameters.properties).sort(), ['new_string', 'old_string', 'percorso', 'replace_all'])
+        assert.match(attrezzo.function.description, /must appear ONCE/)
+        assert.match(attrezzo.function.description, /instead of rewriting a whole file/)
+    })
+
+    /*
+     * ⛔⛔⛔ REVIEW PO-12 (13/09/2026) — LA GUARDIA CHE NON MORDEVA.
+     * `file_edit` era stato messo in `AZIONI_MUTANTI_PER_HOOK`, ma NESSUNA prova lo
+     * chiedeva: tolto di li', la suite restava interamente verde (misurato). Una riga che
+     * nessuna prova difende non e' una guardia, e' una buona intenzione — ed e' la riga da
+     * cui dipende il cancello dei FILE DI CONTROLLO del desktop (`session-registry.mjs`),
+     * che vive su `pre_tool_call`.
+     * ⇒ Qui si prova che un rifiuto sul `pre_tool_call` di una modifica la FERMA e che il
+     *   file resta quello di prima; e nel verso contrario, che senza quel rifiuto la
+     *   stessa identica chiamata il file lo cambia davvero.
+     */
+    it("⛔⛔⛔ un pre_tool_call che rifiuta `file_edit` la FERMA, e il file resta byte per byte quello di prima", async () => {
+        const cartella = cartellaDiProva()
+        try {
+            const prima = "REGOLA ORIGINALE\n"
+            writeFileSync(join(cartella, "CLAUDE.md"), prima)
+            const visti = []
+            const esito = await giro(cartella, { percorso: "CLAUDE.md", old_string: "ORIGINALE", new_string: "MANOMESSA" }, {
+                hookFn: async (evento) => {
+                    if (evento.tipo === "pre_tool_call") visti.push(evento.azione)
+                    return evento.tipo === "pre_tool_call" && evento.azione === "file_edit"
+                        ? { consentito: false, motivo: "bloccato da un hook di prova." }
+                        : undefined
+                },
+            })
+            assert.ok(visti.includes("file_edit"), "⛔ il pre_tool_call deve VEDERE file_edit: se non lo vede, nessun cancello del desktop puo' fermarlo")
+            assert.match(dettoAlModello(esito)[0], /REFUSED/)
+            assert.equal(readFileSync(join(cartella, "CLAUDE.md"), "utf8"), prima, "⛔ un rifiuto dell'hook non lascia mezza modifica sul disco")
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it("⭐⭐ AL CONTRARIO — senza quel rifiuto la stessa chiamata cambia il file: la prova sopra misura l'hook, non un guasto qualunque", async () => {
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, "CLAUDE.md"), "REGOLA ORIGINALE\n")
+            await giro(cartella, { percorso: "CLAUDE.md", old_string: "ORIGINALE", new_string: "MANOMESSA" },
+                { hookFn: async () => ({ consentito: true }) })
+            assert.equal(readFileSync(join(cartella, "CLAUDE.md"), "utf8"), "REGOLA MANOMESSA\n")
+        }
+        finally { pulisci(cartella) }
     })
 })

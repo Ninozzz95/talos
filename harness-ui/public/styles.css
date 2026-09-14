@@ -10763,7 +10763,8 @@ dialog.command-dialog .tool-chips .status-chip,
 }
 
 /* src/styles/attesa-shimmer.css */
-.talos-waiting__label {
+.talos-waiting__label,
+.real-reasoning-note[data-ragionamento=vivo] > .talos-activity__head > .tool-note-summary-text {
   background-image:
     linear-gradient(
       100deg,
@@ -10779,6 +10780,18 @@ dialog.command-dialog .tool-chips .status-chip,
   color: transparent;
   animation: talosAttesaShimmer 1.9s linear infinite;
 }
+.real-reasoning-note[data-ragionamento=vivo] > .talos-activity__head > .tool-note-summary-text {
+  flex: none;
+}
+.talos-ragionamento__argomento {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 400;
+}
+.real-reasoning-note[data-ragionamento=vivo] > .talos-activity__head > .talos-measure {
+  flex: none;
+  white-space: nowrap;
+}
 @keyframes talosAttesaShimmer {
   from {
     background-position: 120% 0;
@@ -10787,12 +10800,14 @@ dialog.command-dialog .tool-chips .status-chip,
     background-position: -60% 0;
   }
 }
-body.reduce-motion .talos-waiting__label {
+body.reduce-motion .talos-waiting__label,
+body.reduce-motion .real-reasoning-note[data-ragionamento=vivo] > .talos-activity__head > .tool-note-summary-text {
   background-image: none;
   color: var(--talos-muted);
   animation: none !important;
 }
-body.reduce-motion .talos-waiting__label {
+body.reduce-motion .talos-waiting__label,
+body.reduce-motion .real-reasoning-note[data-ragionamento=vivo] > .talos-activity__head > .tool-note-summary-text {
   background-image:
     linear-gradient(
       100deg,

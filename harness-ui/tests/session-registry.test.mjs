@@ -15,6 +15,8 @@ import {
   SOGLIE_STALLO_PREDEFINITE,
 } from '../src/session-registry.mjs';
 import { CustomTaskError } from '../src/custom-task.mjs';
+// BC-09 (13/09/2026): la copia locale dei ritentativi e diventata l'aiuto condiviso, uno solo per tutta la suite.
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { imageMessageContent } from '../src/chat-image-attachments.mjs';
 // ⭐ L4 (11/09) — lo scrittore VERO del record recintato, per le fixture di ricerca.
@@ -1541,6 +1543,57 @@ test('⭐⭐ ...e un DINIEGO torna {consentito:false} con un motivo che nomina i
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
+/*
+ * ⛔⛔⛔ REVIEW PO-12 (13/09/2026) — LA PORTA DI SERVIZIO.
+ *
+ * Le due prove qui sopra provavano il cancello dei file di controllo con UN nome scritto a
+ * mano: `azione: 'scrivi'`. Sono rimaste verdi il giorno in cui e' nato un SECONDO attrezzo
+ * capace di riscrivere un file per percorso — e infatti erano verdi mentre `file_edit`
+ * riscriveva `CLAUDE.md` senza card, in Full access (misurato con una sonda sul kernel vero:
+ * `scrivi` REFUSED e file intatto, `file_edit` "edited:" e file riscritto).
+ * ⇒ Una prova che nomina UN attrezzo misura UN attrezzo. Queste due lo chiedono all'INSIEME,
+ *   cosi' il prossimo attrezzo che scrive per percorso non puo' nascere gia' esente.
+ */
+test("⛔⛔⛔ PO-12 — file_edit NON e' una porta di servizio: anche una MODIFICA di un file di controllo chiede approvazione", async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+
+  const esitoPromessa = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'file_edit', argomenti: { percorso: 'CLAUDE.md' }, giro: 0 });
+  await Promise.resolve();
+
+  const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+  assert.ok(richiesta, "⛔ una MODIFICA di CLAUDE.md deve chiedere quanto una riscrittura: mezza regola riscritta e' una regola riscritta");
+  // ⛔ la card nomina l'attrezzo VERO: chiedere «scrivi» per una modifica e' chiedere il consenso per un'altra cosa
+  assert.deepEqual(richiesta.azione, { tipo: 'file_edit', percorso: 'CLAUDE.md', fileDiControllo: true });
+
+  registro.rispondiApprovazione(sessionId, richiesta.requestId, false);
+  const esito = await esitoPromessa;
+  assert.equal(esito.consentito, false, '⛔ negata, la modifica non passa: mai un bypass silenzioso');
+  assert.match(esito.motivo, /file di controllo/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test("⭐⭐ AL CONTRARIO — chi NON scrive per percorso resta fuori dal cancello, e un file normale passa", async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  registro.avvia('task-vero', { permessiScelto: 'Full access' });
+
+  // una LETTURA di CLAUDE.md non e' una scrittura: il cancello non deve inventarsi una card
+  assert.deepEqual(await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'leggi', argomenti: { percorso: 'CLAUDE.md' }, giro: 0 }), { consentito: true });
+  // ...e una MODIFICA di un file qualunque del progetto non chiede niente
+  assert.deepEqual(await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'file_edit', argomenti: { percorso: 'src/prezzo.mjs' }, giro: 0 }), { consentito: true });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
 test('⭐⭐⭐ W1-13 — il cancello chiede ANCHE con permessiPerAttrezzo:{scrivi:\'sempre\'}: l\'override per-attrezzo non lo scavalca', async () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({
@@ -2883,8 +2936,13 @@ test('⭐⭐⭐⭐ FILO INTERO: accodaMessaggio() popola voce.codaMessaggi, e la
   const ricevuti = [];
   registro.iscriviti(sessionId, (e) => ricevuti.push(e));
 
+  /* ⭐ 14/09 — la risposta porta anche `coda` (la coda è della sessione e si annuncia a ogni finestra): l'intento di
+     questa prova non cambia, cambia solo la forma esatta della risposta. */
   const esito = registro.accodaMessaggio(sessionId, 'e adesso aggiungi anche i test');
-  assert.deepEqual(esito, { ok: true, posizione: 1 });
+  assert.equal(esito.ok, true);
+  assert.equal(esito.posizione, 1);
+  assert.deepEqual(esito.coda.voci.map((v) => v.testo), ['e adesso aggiungi anche i test']);
+  assert.equal(esito.coda.inPausa, false);
 
   assert.equal(codaMessaggiFn(), 'e adesso aggiungi anche i test', 'la STESSA funzione passata al kernel legge il messaggio vero appena accodato');
   const evento = ricevuti.find((e) => e.type === 'QueuedMessageDelivered');
@@ -2929,8 +2987,12 @@ test('⭐⭐⭐ AL CONTRARIO — due accodaMessaggio in sequenza mantengono l\'O
   const { sessionId } = registro.avvia('task-vero');
   const codaMessaggiFn = finta.ultimoInput.codaMessaggiFn;
 
-  assert.deepEqual(registro.accodaMessaggio(sessionId, 'primo'), { ok: true, posizione: 1 });
-  assert.deepEqual(registro.accodaMessaggio(sessionId, 'secondo'), { ok: true, posizione: 2 });
+  /* ⭐ 14/09 — la risposta porta anche `coda` (la coda è della sessione e si annuncia a ogni finestra): l'intento di
+     questa prova non cambia, cambia solo la forma esatta della risposta. */
+  assert.equal(registro.accodaMessaggio(sessionId, 'primo').posizione, 1);
+  const secondo = registro.accodaMessaggio(sessionId, 'secondo');
+  assert.equal(secondo.posizione, 2);
+  assert.deepEqual(secondo.coda.voci.map((v) => v.testo), ['primo', 'secondo'], 'la coda annunciata ha lo stesso ordine della consegna');
 
   assert.equal(codaMessaggiFn(), 'primo', 'il PRIMO accodato è il PRIMO consegnato — FIFO');
   assert.equal(codaMessaggiFn(), 'secondo');
@@ -2947,7 +3009,11 @@ test('⭐⭐ svuotaCoda: rimuove l\'ULTIMO messaggio accodato, mai il primo — 
   registro.accodaMessaggio(sessionId, 'primo');
   registro.accodaMessaggio(sessionId, 'secondo');
 
-  assert.deepEqual(registro.svuotaCoda(sessionId), { ok: true, rimosso: true });
+  /* ⭐ 14/09 — la risposta porta anche `coda` (la coda è della sessione e si annuncia a ogni finestra): l'intento di
+     questa prova non cambia, cambia solo la forma esatta della risposta. */
+  const tolto = registro.svuotaCoda(sessionId);
+  assert.equal(tolto.rimosso, true);
+  assert.deepEqual(tolto.coda.voci.map((v) => v.testo), ['primo'], 'senza id si toglie l\'ULTIMO, come prima');
   assert.equal(codaMessaggiFn(), 'primo', 'il "secondo" è stato tolto dall\'Annulla — resta solo il primo, ancora in ordine');
   assert.equal(codaMessaggiFn(), null);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
@@ -2958,7 +3024,9 @@ test('⛔ svuotaCoda: rimosso:false su una coda già vuota, mai un errore — e 
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
-  assert.deepEqual(registro.svuotaCoda(sessionId), { ok: true, rimosso: false });
+  /* ⭐ 14/09 — la risposta porta anche `coda` (la coda è della sessione e si annuncia a ogni finestra): l'intento di
+     questa prova non cambia, cambia solo la forma esatta della risposta. */
+  assert.deepEqual(registro.svuotaCoda(sessionId), { ok: true, rimosso: false, coda: { voci: [], inPausa: false } });
   assert.deepEqual(registro.svuotaCoda('fantasma'), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
@@ -3563,18 +3631,6 @@ function cartellaStoreVera() {
   return mkdtempSync(join(tmpdir(), 'talos-session-store-registry-'));
 }
 
-/*
- * 13/09: su Windows una rimozione ricorsiva puo' uscire con ENOTEMPTY anche a test finito, perche'
- * un handle sul JSONL si chiude qualche millisecondo dopo e la cartella risulta ancora non vuota.
- * Misurato sul runner del tag desktop-v0.1.2, morto esattamente qui, in LOCAL-RESUME-JSON-02: il
- * test passava in locale e al giro prima, quindi e' una CORSA nel teardown, non un difetto del
- * prodotto. `maxRetries` e `retryDelay` sono le opzioni ufficiali di rm/rmSync per questo caso
- * (documentazione Node, modulo fs, letta il 13/09/2026: `maxRetries` vale 0 di serie).
- * ⛔ Non nasconde niente: se dopo i ritentativi la cartella resta piena, lancia ancora.
- */
-function rimuoviCartellaDiProva(cartella) {
-  rmSync(cartella, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-}
 
 test('SESSION-SETTINGS-DURABILITY-01 — impostazioni aggiornate guidano elenco, resume e ripristino JSONL', async () => {
   const cartellaStore = cartellaStoreVera();

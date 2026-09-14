@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 import {
   CARTELLA_LIBRERIA,
@@ -44,7 +45,7 @@ test('⭐⭐⭐ elencaVoci: nessuna cartella .harness-ui-library — [], mai un 
   try {
     assert.deepEqual(await elencaVoci({ cartella }), []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -60,7 +61,7 @@ test('⭐⭐⭐ salvaVoce + elencaVoci: una voce vera, campi corretti, deriva fi
     assert.equal(voci[0].origine, 'uploaded');
     assert.equal(voci[0].modello, null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -76,7 +77,7 @@ test('⭐⭐⭐ salvaVoce: origine "generated" porta modello/provider, "uploaded
     assert.equal(gen.provider, 'openrouter');
     assert.equal(up.modello, null); // ⛔ AL CONTRARIO — un modello passato su una voce "uploaded" non deve mai comparire: la provenienza dichiara solo ciò che è vero
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -88,7 +89,7 @@ test('⛔ AL CONTRARIO — una sottocartella SENZA meta.json non è una voce, no
     const voci = await elencaVoci({ cartella });
     assert.deepEqual(voci.map((v) => v.id), [id]);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -103,7 +104,7 @@ test('⛔⛔ AL CONTRARIO — un meta.json malformato FERMA il caricamento con u
       return true;
     });
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -113,7 +114,7 @@ test('⛔ salvaVoce: AL CONTRARIO, senza nome o senza contenuto viene rifiutato'
     await assert.rejects(() => salvaVoce({ cartella, nome: '', mediaType: 'text/plain', testo: 'x' }), LibraryStoreError);
     await assert.rejects(() => salvaVoce({ cartella, nome: 'a.txt', mediaType: 'text/plain' }), LibraryStoreError);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -126,7 +127,7 @@ test('⭐⭐⭐ leggiVoce: un documento torna il testo vero, byte per byte', asy
     assert.equal(letta.testo, 'riga uno\nriga due');
     assert.equal(letta.immagineBase64, undefined);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -139,7 +140,7 @@ test('⭐⭐⭐ leggiVoce: un\'immagine torna base64, non testo', async () => {
     assert.equal(letta.testo, undefined);
     assert.equal(Buffer.from(letta.immagineBase64, 'base64').equals(bytes), true);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -148,7 +149,7 @@ test('⛔ leggiVoce: AL CONTRARIO, un id che non esiste torna null, mai un\'ecce
   try {
     assert.equal(await leggiVoce({ cartella, id: 'lib-non-esiste' }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -162,7 +163,7 @@ test('⭐⭐⭐ origineVoce: la seconda porta — mai il contenuto, solo la prov
     assert.equal(origine.provider, 'openrouter');
     assert.equal('testo' in origine, false); // ⛔ AL CONTRARIO — nessun campo testo/contenuto in questa risposta
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -171,7 +172,7 @@ test('⛔ origineVoce: AL CONTRARIO, un id che non esiste torna null', async () 
   try {
     assert.equal(await origineVoce({ cartella, id: 'lib-fantasma' }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -186,7 +187,7 @@ test('⭐⭐⭐ elencaVociConTesto: legge il testo per i documenti, lo salta per
     assert.equal(doc.testoEstratto, 'parola cercabile');
     assert.equal(img.testoEstratto, '');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -363,7 +364,7 @@ test('⭐⭐⭐ rinominaVoce: cambia SOLO il nome, il contenuto resta byte per b
     const letta = await leggiVoce({ cartella, id });
     assert.equal(letta.testo, 'contenuto invariato');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -376,7 +377,7 @@ test('⭐⭐ rinominaVoce: il nome viene sanificato, mai un separatore di percor
     assert.equal(esito.nomeDopo, 'evil.md');
     assert.ok(!esito.nomeDopo.includes('/') && !esito.nomeDopo.includes('..'));
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -392,7 +393,7 @@ test('⛔⛔ AL CONTRARIO — rinominaVoce: un nome vuoto dopo la sanificazione 
     const voci = await elencaVoci({ cartella });
     assert.equal(voci[0].nome, 'a.md', 'il nome originale non deve essere toccato dal tentativo rifiutato');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -401,7 +402,7 @@ test('⛔ AL CONTRARIO — rinominaVoce: un id che non esiste torna null, mai un
   try {
     assert.equal(await rinominaVoce({ cartella, id: 'lib-fantasma', nome: 'x.md' }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -414,7 +415,7 @@ test('⭐⭐⭐ eliminaVoce: la cartella della voce sparisce DAVVERO dal disco',
     assert.deepEqual(await elencaVoci({ cartella }), []);
     assert.equal(await leggiVoce({ cartella, id }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -427,7 +428,7 @@ test('⭐⭐ eliminaVoce: cancellarne una NON tocca le altre voci', async () => 
     const voci = await elencaVoci({ cartella });
     assert.deepEqual(voci.map((v) => v.id), [idResta]);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -436,7 +437,7 @@ test('⛔ AL CONTRARIO — eliminaVoce: un id già sparito torna null, MAI un\'e
   try {
     assert.equal(await eliminaVoce({ cartella, id: 'lib-mai-esistito' }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 /*
@@ -471,7 +472,7 @@ test('⭐⭐⭐ leggiBytesVoce: i byte di un binario arrivano IDENTICI — e utf
     const perLaStradaSbagliata = Buffer.from(BINARIO_CATTIVO.toString('utf8'), 'utf8');
     assert.notEqual(Buffer.compare(perLaStradaSbagliata, BINARIO_CATTIVO), 0, 'se questo non fallisse, il test non starebbe misurando niente');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -480,7 +481,7 @@ test('⛔ AL CONTRARIO — leggiBytesVoce: un id che non esiste torna null, mai 
   try {
     assert.equal(await leggiBytesVoce({ cartella, id: 'lib-mai-esistito' }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -495,7 +496,7 @@ test('⛔⛔ leggiBytesVoce: la scheda c\'è e il file no — è uno stato ROTTO
       return true;
     });
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -513,7 +514,7 @@ test('⛔⛔ leggiBytesVoce: oltre il tetto dello scarico si DICHIARA, mai si tr
       },
     );
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -524,7 +525,7 @@ test('⭐⭐ idVoceLibreriaValido: passa ciò che salvaVoce genera davvero, resp
     assert.equal(idVoceLibreriaValido(id), true, 'un id vero, generato da salvaVoce, deve passare');
     assert.match(id, /^lib-/);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
   for (const cattivo of ['..', '.', '../..', 'lib/../..', 'lib\\..', '.nascosto', '', ' ', 'a/b', 'a'.repeat(129), null, undefined, 42]) {
     assert.equal(idVoceLibreriaValido(cattivo), false, `doveva rifiutare ${JSON.stringify(cattivo)}`);
@@ -561,7 +562,7 @@ test('⛔⛔⛔ AL CONTRARIO — un id con "../" non legge, non rinomina e non c
     assert.deepEqual((await elencaVoci({ cartella })).map((v) => v.id), [idVero]);
     assert.equal((await leggiVoce({ cartella, id: idVero })).testo, 'contenuto vero');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -608,7 +609,7 @@ test('⭐⭐⭐ BC-38 salvaVoce + elencaVoci({conProvenienza}): percorso, cartel
     assert.equal(voce.fileType, 'document');
     assert.equal(voce.origine, 'generated');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -632,7 +633,7 @@ test('⛔⛔ BC-38 AL CONTRARIO — una voce VECCHIA (nessun sessionId nel meta)
     assert.deepEqual(voce.creatoDa, { tipo: 'modello', modello: null, provider: null });
     assert.equal(voce.percorso, join(cartella, CARTELLA_LIBRERIA, 'lib-vecchia', 'contenuto'));
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -648,7 +649,7 @@ test('⭐⭐ BC-38: un file CARICATO è creato da una persona, e un sessionId vu
     assert.equal('sessionId' in meta, false);
     assert.equal('sessionNome' in meta, false);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -662,7 +663,7 @@ test('⛔⛔⛔ BC-38: SENZA conProvenienza l’elenco del MODELLO è identico a
     const [voce] = await elencaVoci({ cartella });
     assert.deepEqual(Object.keys(voce).sort(), ['aggiornatoIl', 'creatoIl', 'fileType', 'id', 'mediaType', 'modello', 'nome', 'origine', 'provider']);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -675,6 +676,6 @@ test('⛔⛔ BC-38 AL CONTRARIO — un meta.json malformato ferma l’elenco all
     await assert.rejects(() => elencaVoci({ cartella }), LibraryStoreError);
     await assert.rejects(() => elencaVoci({ cartella, conProvenienza: true }), LibraryStoreError);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });

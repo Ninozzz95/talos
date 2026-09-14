@@ -19,12 +19,13 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { cercaNelProgetto } from '../src/kernel/talosHarness.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /**
  * Un `disco` finto con la stessa forma di `discoNode`: `elenca(cartella)` torna
@@ -171,9 +172,9 @@ test('AL CONTRARIO — CERCA-05: il `.gitignore` VERO decide, e si prova in ENTR
       const senzaRegola = await cercaNelProgetto(discoVero(radice2), { testo: 'riga-cercata' }, { radice: radice2 });
       assert.match(senzaRegola, /costruito\/bundle\.js/);
     }
-    finally { await rm(radice2, { recursive: true, force: true }); }
+    finally { await rimuoviCartellaDiProvaAttesa(radice2); }
   }
-  finally { await rm(radice, { recursive: true, force: true }); }
+  finally { await rimuoviCartellaDiProvaAttesa(radice); }
 });
 
 test('AL CONTRARIO — CERCA-06: senza `radice` il ripiego pota `dist`, ma NON `android`, `ios`, `vendor`', async () => {

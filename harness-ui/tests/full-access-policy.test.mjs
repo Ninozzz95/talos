@@ -1,14 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { talosLavora, discoNode } from '../src/kernel/talosHarness.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'talos-full-access-'));
   const workspace = join(root, 'project'); mkdirSync(workspace);
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(root));
   return { root, workspace };
 }
 function call(id, name, args) { return { id, type: 'function', function: { name, arguments: JSON.stringify(args) } }; }

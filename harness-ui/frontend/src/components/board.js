@@ -4,7 +4,7 @@
 import { statoSessione, nomeModello } from './session-item.js';
 import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
 // ⛔ 06/9, CB-04: le colonne Giri/Token/Cache promettono la SESSIONE, non l'ultimo invio.
-import { usageDellaSessione, esecuzioniDellaSessione } from './consumo-sessione.js';
+import { usageDellaSessione, esecuzioniDellaSessione, giriDellaSessione, spiegaGiriFermati } from './consumo-sessione.js';
 const NUMERO = new Intl.NumberFormat('it-IT', {maximumFractionDigits:1});
 const valido = n => typeof n === 'number' && Number.isFinite(n) && n >= 0;
 const totale = s => { const u = usageDellaSessione(s); return valido(u?.prompt_tokens) && valido(u?.completion_tokens) ? u.prompt_tokens + u.completion_tokens : null; };
@@ -42,7 +42,8 @@ export function tempoBoard(iso, adesso = new Date()) {
 export function testiBoard(sessione, metriche = {}, adesso = new Date()) {
   return {
     titolo:sessione.nome || sessione.taskId || 'Sessione', modello:nomeModello(sessione.modello) || '—',
-    giri:valido(usageDellaSessione(sessione)?.giri) ? String(usageDellaSessione(sessione).giri) : '—', token:compatto(totale(sessione)),
+    // ⛔ 14/09: i giri fermati contano come nella barra — un conto solo, `giriDellaSessione`
+    giri:valido(giriDellaSessione(sessione).giri) ? String(giriDellaSessione(sessione).giri) : '—', token:compatto(totale(sessione)),
     cache:(valido(metriche?.cache?.percentuale) ? NUMERO.format(metriche.cache.percentuale) + '%' : '—') + (valido(usageDellaSessione(sessione)?.cached_tokens) ? ' · ' + compatto(usageDellaSessione(sessione).cached_tokens) : ''),
     primo:valido(metriche?.primoToken?.ms) ? (metriche.primoToken.ms / 1000).toFixed(1).replace('.',',') + ' s' : '—',
     chiusura:MOTIVI[metriche?.chiusura?.motivo] || (metriche?.chiusura?.motivo ? 'altro motivo' : '—'),
@@ -84,7 +85,7 @@ export function creaRigaBoard(sessione, {document:doc=globalThis.document,metric
     const invii=esecuzioniDellaSessione(sessione);
     const daInvii=valido(invii) ? ' · '+invii+' invi'+(invii===1?'o':'i') : '';
     if (campo==='token' && valido(totale(sessione))) cella.title=totale(sessione).toLocaleString('it-IT')+' token · ingresso + uscita · tutta la sessione'+daInvii;
-    if (campo==='giri' && t.giri!=='—') cella.title='Giri del modello in tutta la sessione'+daInvii;
+    if (campo==='giri' && t.giri!=='—') cella.title='Giri del modello in tutta la sessione'+daInvii+(giriDellaSessione(sessione).fermati ? ' · '+spiegaGiriFermati(giriDellaSessione(sessione).fermati) : '');
     if (campo==='primo' && t.primo==='—') cella.title=metriche?.primoToken?.motivoAssente || 'Tempo non registrato';
     if (campo==='cache') {
       const cached=usageDellaSessione(sessione)?.cached_tokens;

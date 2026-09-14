@@ -1,5 +1,5 @@
 import { validaFallbackProviders } from './model-destination.mjs';
-import { cacheSessioneDaEventi } from './usage-cache.mjs';
+import { cacheSessioneDaEventi, giriFermatiDaEventi } from './usage-cache.mjs';
 import { contextUsageFromEvents } from '../../context-engine/src/usage.mjs';
 
 /**
@@ -1126,6 +1126,115 @@ function cacheDaEventi(ordinati) {
 }
 
 /**
+ * ⭐⭐ 13/09 sera — QUANTO HA RAGIONATO IL MODELLO, per ogni ragionamento. «Fare meglio di Hermes».
+ *
+ * Hermes desktop perde la durata a ogni ricarica, e lo dichiara nel suo codice
+ * (`apps/desktop/src/components/chat/activity-timer.ts`: «the persisted turn records the text the model
+ * thought, never how long it spent thinking it»): una conversazione riaperta dice solo «Thought».
+ * Qui gli istanti di ogni evento stanno già in memoria mentre il giro passa (`voce.istantiEvento`): la
+ * durata si calcola da lì e finisce nel record `tempi-giro` — una riga per giro, nessun campo sugli
+ * eventi, la stessa regola di BC-07 (vedi `persistiTempiDelGiro`).
+ *
+ * ⛔ Solo coppie inizio/fine con ENTRAMBI gli istanti: un ragionamento fermato a metà non ha una durata,
+ *   e una sessione ripresa da disco non ha istanti. «Non misurato» non diventa mai uno zero.
+ * ⛔ `soloUltimoGiro`: il record è per giro, e riscriverci le durate di tutta la sessione a ogni giro le
+ *   duplicherebbe.
+ * @returns {Record<string, number>} messageId → millisecondi
+ */
+export function durateRagionamentoDaEventi(eventi, { istanti = null, soloUltimoGiro = false } = {}) {
+  const ordinati = eventiInOrdine(eventi);
+  const leggiIstante = creaLettoreIstanti(istanti);
+  let da = 0;
+  if (soloUltimoGiro) {
+    for (let i = ordinati.length - 1; i >= 0; i -= 1) if (ordinati[i]?.type === 'RunStarted') { da = i; break; }
+  }
+  const inizi = new Map();
+  const durate = {};
+  for (const evento of ordinati.slice(da)) {
+    /*
+     * ⛔⛔ 13/09 notte, GIRO VERO (glm-5.3-flash, banco 5471): un reindirizzamento chiude il giro mentre il
+     *   modello RAGIONA, e `ReasoningMessageEnd` non arriva mai — nello store: Start, 688 pezzi, poi
+     *   `RunError fermato`. Dal vivo la riga diceva «Ha ragionato per 8 s» (il browser chiude i ragionamenti
+     *   aperti alla fine del giro); riaperta, diceva solo «Ha ragionato». Due racconti dello stesso fatto.
+     * ⇒ La fine del GIRO chiude i ragionamenti rimasti aperti, come fa lo schermo. Senza un evento di fine
+     *   giro (giro ancora vivo) resta vero quello di prima: nessuna durata.
+     */
+    /*
+     * ⛔⛔ 13/09 notte, stesso GIRO VERO, letto nello store: `ReasoningMessageEnd` arriva DOPO `TextMessageEnd`
+     *   (Start, 41.426 pezzi di ragionamento, TextMessageStart, 2.204 pezzi di risposta, TextMessageEnd, e solo lì
+     *   ReasoningMessageEnd). Dopo il primo testo non arriva più un solo pezzo di ragionamento: il modello ha smesso
+     *   di ragionare lì, e la fine viene solo annunciata tardi. Contata fino all'End, la durata comprendeva la
+     *   risposta intera. ⇒ Il ragionamento finisce quando il modello PASSA OLTRE — primo testo o primo attrezzo —
+     *   «a plain collapsed row once the model moves on» (assistant-ui, Reasoning).
+     */
+    if ((evento?.type === 'TextMessageStart' || evento?.type === 'ToolCallStart' || evento?.type === 'RunFinished' || evento?.type === 'RunError') && Number.isSafeInteger(evento._sequenza) && inizi.size) {
+      const fine = leggiIstante(evento._sequenza);
+      for (const [messageId, inizio] of inizi) {
+        const ms = fine === null ? null : fine - inizio;
+        if (Number.isFinite(ms) && ms >= 0) durate[messageId] = ms;
+      }
+      inizi.clear();
+      continue;
+    }
+    if (typeof evento?.messageId !== 'string' || !Number.isSafeInteger(evento._sequenza)) continue;
+    if (evento.type === 'ReasoningMessageStart') {
+      const istante = leggiIstante(evento._sequenza);
+      if (istante !== null) inizi.set(evento.messageId, istante);
+    } else if (evento.type === 'ReasoningMessageEnd' && inizi.has(evento.messageId)) {
+      const fine = leggiIstante(evento._sequenza);
+      const ms = fine === null ? null : fine - inizi.get(evento.messageId);
+      if (Number.isFinite(ms) && ms >= 0) durate[evento.messageId] = ms;
+      inizi.delete(evento.messageId); // ⛔ chiuso dalla sua fine: la fine del giro non lo deve richiudere più tardi
+    }
+  }
+  return durate;
+}
+
+/**
+ * ⭐⭐ 13/09 notte — I RAGIONAMENTI ANCORA APERTI, e da quanto. Trovato col GIRO VERO (glm-5.3-flash, banco
+ * 5471): riaperta a metà giro, la riga diceva «Sta ragionando… 35 s» su un ragionamento partito TREDICI minuti
+ * prima (852.858 ms, poi scritti nel record). Il browser non ha l'istante d'inizio: gli eventi non portano un
+ * orario. Il registro sì, in memoria.
+ * ⛔ Un giro finito chiude tutto ciò che era aperto (stessa regola di `durateRagionamentoDaEventi`); senza
+ *   istanti — una sessione ripresa da disco — non si dice niente, mai uno zero.
+ * @returns {Record<string, number>} messageId → millisecondi trascorsi dall'inizio
+ */
+export function ragionamentiInCorsoDaEventi(eventi, { istanti = null, adesso = null } = {}) {
+  if (!Number.isFinite(adesso)) return {};
+  const leggiIstante = creaLettoreIstanti(istanti);
+  const aperti = new Map();
+  for (const evento of eventiInOrdine(eventi)) {
+    /* ⛔ Stessa regola delle durate: primo testo o primo attrezzo, e il ragionamento non è più «in corso». */
+    if (['TextMessageStart', 'ToolCallStart', 'RunFinished', 'RunError'].includes(evento?.type)) { aperti.clear(); continue; }
+    if (typeof evento?.messageId !== 'string' || !Number.isSafeInteger(evento._sequenza)) continue;
+    if (evento.type === 'ReasoningMessageStart') {
+      const inizio = leggiIstante(evento._sequenza);
+      if (inizio !== null) aperti.set(evento.messageId, inizio);
+    } else if (evento.type === 'ReasoningMessageEnd') {
+      aperti.delete(evento.messageId);
+    }
+  }
+  const trascorsi = {};
+  for (const [messageId, inizio] of aperti) {
+    const ms = adesso - inizio;
+    if (Number.isFinite(ms) && ms >= 0) trascorsi[messageId] = ms;
+  }
+  return trascorsi;
+}
+
+/** Le durate già scritte nei record `tempi-giro` di una sessione: servono a una sessione ripresa da disco. */
+export function durateRagionamentoDaRecord(record) {
+  const durate = {};
+  for (const riga of Array.isArray(record) ? record : []) {
+    if (riga?.tipo !== 'tempi-giro' || !riga.ragionamentiMs || typeof riga.ragionamentiMs !== 'object') continue;
+    for (const [messageId, ms] of Object.entries(riga.ragionamentiMs)) {
+      if (Number.isFinite(ms) && ms >= 0) durate[messageId] = ms;
+    }
+  }
+  return durate;
+}
+
+/**
  * ⭐⭐⭐ LE METRICHE DI UNA SESSIONE, derivate dai SOLI eventi persistiti.
  *
  * Stessa firma e stesso contratto di `processiDaEventi` qui sopra:
@@ -1530,6 +1639,13 @@ export function createSessionRegistry({
      */
     'research_deposit',
     'tool_create',
+    /*
+     * ⭐⭐⭐ PO-12 (13/09/2026) — `file_edit`. Senza questo nome l'attrezzo
+     * esiste nel kernel, e' provato, ed e' invisibile: `ATTREZZI_ESTESI`
+     * dichiara, questa lista ACCENDE. La corsia PO-12 non e' consegnata
+     * finche' non e' qui.
+     */
+    'file_edit',
   ],
   ricercaWeb,
   // ⭐ 04/9, R-03 — se presente vince su `ricercaWeb`: letta a OGNI giro (come `chiaveFn`), così una fonte cambiata dalle Impostazioni vale dal giro successivo senza riavvio. Restituisce { ricercaWeb, richiediRicercaFn }.
@@ -1859,6 +1975,47 @@ export function createSessionRegistry({
    * ⛔ Non lancia mai e non blocca niente: un giro non si rompe perché una misura non si è scritta.
    *   Stessa disciplina della copia in Libreria e di `persistiMessaggiFinali` qui sopra.
    */
+  /*
+   * ⭐⭐ 14/09/2026 — LA CODA È DELLA SESSIONE, NON DELLA FINESTRA CHE L'HA SCRITTA. Owner: «i competitor lo fanno, lo
+   *   facciamo anche noi». Trovato col giro vero del 13/09: un messaggio accodato non si vedeva in un'altra finestra né dopo
+   *   una ricarica, e dopo uno stop il banner prometteva «parte alla fine di questo giro» su un giro già fermo.
+   * Letto nei cloni il 14/09/2026:
+   *   · Codex tiene la coda sul server, nel `ThreadStore`, con elenco, aggiunta, modifica, cancellazione e avvio
+   *     (`app-server-protocol/src/protocol/common.rs:596-627`, `thread/queue/*`; `thread_queue_processor.rs`): ogni
+   *     client la vede, e sopravvive a un riavvio.
+   *   · Hermes desktop mette la coda IN PAUSA allo Stop (`app/chat/composer/index.tsx`, `haltRun`): «an explicit halt must
+   *     not roll straight into the next queued prompt (that read as Stop not working; the queued text also seemed to
+   *     vanish)»; a schermo «N Queued — paused», «Paused by Stop — resume sending the queued turns» (`i18n/en.ts`).
+   *   · Da noi il kernel consegna un messaggio in coda SOLO quando il modello si ferma da solo (`talosHarness.mjs`, zero
+   *     chiamate): dopo uno stop la coda restava viva e partiva in silenzio alla fine della risposta SUCCESSIVA.
+   * ⇒ Ogni voce ha un id; lo stop mette in pausa; ogni cambio si annuncia a chi guarda con un `CUSTOM talos.coda` di
+   *   SOLO TRASPORTO (effimero come WorkspaceChanged: niente `_sequenza`, mai in `voce.eventi`, BC-07) e si scrive in un
+   *   record `coda` — l'ultimo vince al ripristino, come `impostazioni-sessione`.
+   */
+  function voceDiCoda(item) {
+    if (typeof item === 'string') return { id: null, testo: item, immagini: [] };
+    return { id: typeof item?.id === 'string' ? item.id : null, testo: String(item?.testo ?? ''), immagini: Array.isArray(item?.immagini) ? item.immagini : [] };
+  }
+
+  /** Quello che si mostra: niente riferimenti alle immagini, solo quante sono. */
+  function statoCodaDi(voce) {
+    const voci = (voce?.codaMessaggi ?? []).map(voceDiCoda).map(({ id, testo, immagini }) => ({ id, testo, immagini: immagini.length }));
+    return { voci, inPausa: Boolean(voce?.codaInPausa) && voci.length > 0 };
+  }
+
+  function annunciaCoda(voce) {
+    const value = statoCodaDi(voce);
+    broadcast(voce, { type: 'CUSTOM', name: 'talos.coda', value });
+    if (!cartellaStore || !voce?.sessionId) return;
+    try {
+      const voci = voce.codaMessaggi.map(voceDiCoda).map(({ id, testo, immagini }) => ({ id: id ?? randomUUID(), testo, ...(immagini.length ? { immagini } : {}) }));
+      registraRigaSyncFn({ cartellaStore, sessionId: voce.sessionId, record: { tipo: 'coda', voci, inPausa: value.inPausa } });
+    } catch (errore) {
+      // ⛔ Stessa disciplina di `persistiTempiDelGiro`: una coda non scritta non rompe il giro, ma si DICE.
+      console.error(`[session-store] coda non salvata per ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore);
+    }
+  }
+
   function persistiTempiDelGiro(voce, versioneGiro) {
     if (!cartellaStore || !voce?.sessionId) return;
     try {
@@ -1875,6 +2032,7 @@ export function createSessionRegistry({
        *   vale zero» sono fatti diversi, ed è la stessa disciplina di `usage` e del ledger.
        */
       if (!metriche?.registrato || metriche.primoToken?.ms === null) return;
+      const durateRagionamento = durateRagionamentoDaEventi(voce.eventi, { istanti: voce.istantiEvento ?? null, soloUltimoGiro: true });
       registraRigaSyncFn({
         cartellaStore,
         sessionId: voce.sessionId,
@@ -1889,6 +2047,8 @@ export function createSessionRegistry({
           tokenDentro: usage?.prompt_tokens ?? null,
           tokenFuori: usage?.completion_tokens ?? null,
           tokenDaCache: usage?.cached_tokens ?? null,
+          // ⭐ 13/09 sera: quanto ha ragionato, per ragionamento — la durata che Hermes perde alla ricarica. Assente = nessuno misurato, mai un oggetto di zeri.
+          ...(Object.keys(durateRagionamento).length ? { ragionamentiMs: durateRagionamento } : {}),
         },
       });
     } catch (errore) {
@@ -2026,7 +2186,8 @@ export function createSessionRegistry({
      *   pezzi vorrebbe dire scrivere due volte la stessa cosa, la seconda senza tetto, e
      *   rigiocarla a ogni riapertura della sessione.
      */
-    const effimero = workspaceCambiato || evento.type === 'ToolCallOutput';
+    /* ⭐ 14/09 — e così l'annuncio della coda: è STATO, non storia. Chi si collega dopo lo riceve dalla rotta degli eventi. */
+    const effimero = workspaceCambiato || evento.type === 'ToolCallOutput' || (evento.type === 'CUSTOM' && evento.name === 'talos.coda');
     /* ⛔ P-13 — i file sono cambiati davvero: il prossimo giro ricostruirà l'elenco. Si chiama
        SOLO da qui, cioè quando il disco cambia: farlo a ogni evento annullerebbe la cache e con
        essa tutto il vantaggio, riportando l'elenco a costare pieno ogni volta. */
@@ -2203,10 +2364,23 @@ export function createSessionRegistry({
    * attrezzo, indipendentemente da `livelloAccesso`/`permessiPerAttrezzo`
    * (vedi la doc di `AZIONI_MUTANTI_PER_HOOK` nel kernel) — un `pre_tool_call`
    * è l'UNICO punto che il desktop controlla per intero, prima che
-   * `verificaPermessoScrittura` veda la chiamata. Un rifiuto qui blocca
-   * SOLO 'scrivi' (l'unico attrezzo mutante con un `argomenti.percorso`
-   * verificabile — `shell`/`document_create` non lo hanno, vedi il
-   * resoconto W1-13: restano un buco dichiarato, non silenzioso).
+   * `verificaPermessoScrittura` veda la chiamata.
+   *
+   * ⛔⛔⛔ REVIEW PO-12, 13/09/2026 — QUESTA RIGA ERA UNA PORTA DI SERVIZIO.
+   * Fino a oggi diceva «blocca SOLO 'scrivi' (l'unico attrezzo mutante con
+   * un `argomenti.percorso` verificabile)»: era vero quando fu scritta, ed
+   * è diventato FALSO nel momento in cui `file_edit` è nato con lo stesso
+   * campo `percorso` e lo stesso potere di riscrivere un file. Misurato,
+   * non dedotto: `scrivi` su `CLAUDE.md` tornava REFUSED col file intatto,
+   * `file_edit` sullo stesso file rispondeva «edited:» e lo riscriveva —
+   * nessuna card di approvazione, in Full access.
+   * ⇒ Il cancello non si tiene per NOME di un attrezzo, ma per l'insieme
+   *   degli attrezzi mutanti che portano un `percorso` verificabile: chi
+   *   aggiunge il prossimo lo aggiunge QUI, e la prova qui sotto
+   *   («ogni attrezzo che scrive per percorso passa da questo cancello»)
+   *   diventa rossa se se ne dimentica.
+   * ⛔ Restano fuori `shell`/`document_create`, che un percorso non lo
+   *   hanno: buco dichiarato, non silenzioso (resoconto W1-13).
    *
    * ⛔ Fallisce chiuso, mai un bypass silenzioso: un percorso che
    * `ePercorsoDiControllo` non riesce a risolvere torna già `true` (sua
@@ -2222,9 +2396,18 @@ export function createSessionRegistry({
    * indipendente dalla policy scelta per il resto della sessione, non un
    * uso più aggressivo dello stesso.
    */
+  /**
+   * ⛔ Gli attrezzi che MUTANO un file indicandolo per percorso. `scrivi`
+   * riscrive tutto, `file_edit` (PO-12, 13/09) ne cambia un pezzo: per un
+   * file di controllo la differenza non esiste — una regola riscritta a
+   * meta' e' riscritta. Chi aggiunge un attrezzo con un `percorso` che
+   * muta lo aggiunge qui.
+   */
+  const ATTREZZI_CHE_SCRIVONO_PER_PERCORSO = Object.freeze(['scrivi', 'file_edit']);
+
   function costruisciCancelloFileDiControllo(voce) {
     return async (evento) => {
-      if (evento?.tipo !== 'pre_tool_call' || evento.azione !== 'scrivi') return { consentito: true };
+      if (evento?.tipo !== 'pre_tool_call' || !ATTREZZI_CHE_SCRIVONO_PER_PERCORSO.includes(evento.azione)) return { consentito: true };
       const percorso = evento.argomenti?.percorso;
       if (typeof percorso !== 'string' || percorso.length === 0) return { consentito: true };
       let controllo;
@@ -2253,7 +2436,8 @@ export function createSessionRegistry({
       }
       let approvato = false;
       try {
-        approvato = await richiediApprovazione(voce, { tipo: 'scrivi', percorso, fileDiControllo: true });
+        // ⛔ `evento.azione`, non 'scrivi' scritto a mano: una card che nomina l'attrezzo sbagliato chiede il consenso per un'altra cosa.
+        approvato = await richiediApprovazione(voce, { tipo: evento.azione, percorso, fileDiControllo: true });
       } catch {
         approvato = false; // un cancello che lancia non autorizza in silenzio — stessa disciplina di chiediApprovazioneFn/hookFn
       }
@@ -2544,6 +2728,7 @@ export function createSessionRegistry({
       padreId, profonditaDelega, esitoDelega: null, evidenzaDelega: null,
       // ⭐⭐⭐ FASE D (28/8) — coda messaggi: FIFO vera, vuota per ogni sessione. Sopravvive a un resume (STESSA voce): un messaggio accodato mentre la sessione era "in corso" resta in coda anche se il turno finisce e ne parte un altro tramite resume().
       codaMessaggi: [],
+      codaInPausa: false, // ⭐ 14/09 — vero dopo uno stop con messaggi in coda: vedi `annunciaCoda`
     };
     /*
      * Il punto sicuro può arrivare anche dopo un timeout/abort avvenuto prima
@@ -2805,11 +2990,14 @@ export function createSessionRegistry({
       // Un input prioritario è già stato accettato: la FIFO resta intatta
       // per il giro successivo, mai consumata dal giro che stiamo fermando.
       if (voce.reindirizzamentoPendente) return null;
+      // ⭐ 14/09 — una coda in pausa (stop) aspetta la persona: non scivola nel giro dopo. Vedi `annunciaCoda`.
+      if (voce.codaInPausa) return null;
       const item = voce.codaMessaggi.shift();
       if (item == null) return null;
       const testo = typeof item === 'string' ? item : item.testo;
       const immagini = typeof item === 'string' ? [] : item.immagini;
       broadcast(voce, { ...queuedMessageDelivered({ testo }), ...(immagini?.length ? { immagini } : {}) });
+      annunciaCoda(voce); // ⭐ 14/09: chi guarda da un'altra finestra vede la coda accorciarsi
       return imageMessageContent(testo, immagini);
     };
 
@@ -3305,6 +3493,12 @@ export function createSessionRegistry({
         const impostazioniRecord = record.filter((r) => r.tipo === 'impostazioni-sessione').at(-1) ?? null;
         // ⭐ 02/09 — il nome scelto (o dato dal primo messaggio) sopravvive al riavvio: l'ULTIMA riga nome-sessione vince, come per le impostazioni.
         const nomeRecord = record.filter((r) => r.tipo === 'nome-sessione' && typeof r.nome === 'string' && r.nome.trim().length > 0).at(-1) ?? null;
+        /* ⭐ 14/09 — la coda sopravvive al riavvio, come in Codex (ThreadStore). Il processo che l'avrebbe consegnata non c'è
+           più: torna IN PAUSA, e parte solo quando la persona la invia. L'ultimo record vince. */
+        const codaRecord = record.filter((r) => r.tipo === 'coda' && Array.isArray(r.voci)).at(-1) ?? null;
+        const codaRipristinata = (codaRecord?.voci ?? [])
+          .filter((v) => v && typeof v.id === 'string' && typeof v.testo === 'string' && v.testo.trim() !== '')
+          .map((v) => ({ id: v.id, testo: v.testo, ...(Array.isArray(v.immagini) && v.immagini.length ? { immagini: v.immagini } : {}) }));
         const impostazioni = impostazioniRecord ? { ...intestazione, ...impostazioniRecord } : intestazione;
         const ultimoEventoEsecuzione = [...eventi].reverse().find((evento) => (
           evento?.type === 'RunStarted' || evento?.type === 'RunFinished' || evento?.type === 'RunError'
@@ -3372,9 +3566,10 @@ export function createSessionRegistry({
           approvazionePendente: null, reindirizzamentoPendente: null, redirectAnnullati: new Set(), padreId: intestazione.padreId, profonditaDelega: intestazione.profonditaDelega,
           esitoDelega: intestazione.padreId ? esitoDelegaDaEventi(eventi, { task: intestazione.task }) : null,
           evidenzaDelega: intestazione.padreId ? analizzaEvidenzaDelega(eventi) : null,
-          codaMessaggi: [], sessionId, controller: new AbortController(),
+          codaMessaggi: codaRipristinata, codaInPausa: codaRipristinata.length > 0, sessionId, controller: new AbortController(),
           conclusa, ripristinata: true, interrotta: !conclusa,
           prossimaSequenza: ultimaSequenza, versioneGiro,
+          durateRagionamentoSalvate: durateRagionamentoDaRecord(record), // ⭐ 13/09 sera: la durata del ragionamento sopravvive al riavvio
         };
         // SESSION-RESTORE-LAZY-WATCHER-24 — nessun watcher durante il boot:
         // la cronologia resta leggibile e il primo vero resume lo attiverà.
@@ -3443,21 +3638,72 @@ export function createSessionRegistry({
         return { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un messaggio in coda qui non verrebbe mai consegnato. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' };
       }
       if (typeof testo !== 'string' || testo.trim() === '') return { erroreAvvio: 'Il messaggio in coda non può essere vuoto', code: 'QUERY_INVALID' };
-      voce.codaMessaggi.push(immagini.length ? { testo, immagini } : testo);
-      return { ok: true, posizione: voce.codaMessaggi.length };
+      voce.codaMessaggi.push({ id: randomUUID(), testo, ...(immagini.length ? { immagini } : {}) });
+      // ⭐ 14/09 — accodare di nuovo scioglie una pausa di prima, come in Hermes (`store/composer-queue.ts`): la persona ha ripreso a parlare.
+      voce.codaInPausa = false;
+      annunciaCoda(voce);
+      return { ok: true, posizione: voce.codaMessaggi.length, coda: statoCodaDi(voce) };
     },
     /**
-     * Toglie l'ULTIMO messaggio accodato (non tutta la coda: coerente con
-     * un "Annulla" accanto al messaggio appena scritto, mai un
-     * azzeramento che cancellerebbe messaggi più vecchi già in attesa).
-     * @returns {{ok:true, rimosso:boolean}|{erroreAvvio:string, code:string}}
+     * Toglie UN messaggio dalla coda. ⭐ 14/09: con `id` quello che la persona vede nel banner; senza, l'ULTIMO accodato
+     * (il comportamento di prima, per chi non manda l'id). Mai un azzeramento di messaggi più vecchi già in attesa.
+     * @returns {{ok:true, rimosso:boolean, coda:object}|{erroreAvvio:string, code:string}}
      */
-    svuotaCoda(sessionId) {
+    svuotaCoda(sessionId, { id = null } = {}) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
-      const rimosso = voce.codaMessaggi.length > 0;
-      if (rimosso) voce.codaMessaggi.pop();
-      return { ok: true, rimosso };
+      let rimosso = false;
+      if (id === null) {
+        rimosso = voce.codaMessaggi.length > 0;
+        if (rimosso) voce.codaMessaggi.pop();
+      } else {
+        const indice = voce.codaMessaggi.findIndex((item) => voceDiCoda(item).id === id);
+        rimosso = indice >= 0;
+        if (rimosso) voce.codaMessaggi.splice(indice, 1);
+      }
+      if (voce.codaMessaggi.length === 0) voce.codaInPausa = false;
+      if (rimosso) annunciaCoda(voce);
+      return { ok: true, rimosso, coda: statoCodaDi(voce) };
+    },
+
+    /** ⭐ 14/09 — la coda com'è adesso, per chi apre la sessione dopo (Codex: `thread/queue/list`). */
+    statoCoda(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      return { ok: true, ...statoCodaDi(voce) };
+    },
+
+    /**
+     * ⭐ 14/09 — «Invia ora» un messaggio in coda. A giro VIVO entra come correzione (`reindirizza`, lo stesso gesto di
+     * «Indirizza ora»); a giro FERMO riprende la sessione con quel messaggio (`resume`). Codex ha la stessa porta,
+     * `thread/queue/start` («resume the thread before starting a queued message»); Hermes l'invio dalla riga del pannello.
+     * ⛔ Se la porta rifiuta, il messaggio torna al suo posto: una parola della persona non si perde per un errore.
+     * @returns {Promise<{ok:true, modo:'reindirizzato'|'ripreso', coda:object, redirectId?:string}|{erroreAvvio:string, code:string}>}
+     */
+    async inviaDallaCoda(sessionId, id) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const indice = voce.codaMessaggi.findIndex((item) => voceDiCoda(item).id === id);
+      if (indice < 0) return { erroreAvvio: 'Questo messaggio non è più in coda', code: 'NOT_FOUND' };
+      const [item] = voce.codaMessaggi.splice(indice, 1);
+      const { testo, immagini } = voceDiCoda(item);
+      const inCorso = !voce.conclusa && !voce.interrotta;
+      let esito;
+      try {
+        esito = inCorso
+          ? this.reindirizza(sessionId, testo, immagini.length ? { immagini } : {})
+          : await this.resume(sessionId, testo, immagini);
+      } catch (errore) {
+        voce.codaMessaggi.splice(indice, 0, item);
+        throw errore;
+      }
+      if (esito && typeof esito === 'object' && 'erroreAvvio' in esito) {
+        voce.codaMessaggi.splice(indice, 0, item);
+        return esito;
+      }
+      if (voce.codaMessaggi.length === 0) voce.codaInPausa = false;
+      annunciaCoda(voce);
+      return { ok: true, modo: inCorso ? 'reindirizzato' : 'ripreso', coda: statoCodaDi(voce), ...(esito?.redirectId ? { redirectId: esito.redirectId } : {}) };
     },
     /**
      * @returns {{sessionId:string}|{erroreAvvio:string, code:string}} — mai
@@ -4186,7 +4432,11 @@ export function createSessionRegistry({
       const chiusura = interrotta && metriche.chiusura && metriche.chiusura.motivo === null
         ? { ...metriche.chiusura, motivoAssente: MOTIVO_CHIUSURA_INTERROTTA }
         : metriche.chiusura;
-      return { ok: true, ...metriche, chiusura, interrotta, cacheSessione: cacheSessioneDaEventi(voce.eventi) };
+      /* ⭐ 13/09 sera: le durate salvate (sessione ripresa) si completano con quelle vive di questo processo. */
+      const ragionamentiMs = { ...(voce.durateRagionamentoSalvate ?? {}), ...durateRagionamentoDaEventi(voce.eventi, { istanti: voce.istantiEvento ?? null }) };
+      /* ⭐ 13/09 notte: e quelli ancora aperti, da quanto — per chi riapre la chat a metà ragionamento. */
+      const ragionamentiInCorsoDaMs = interrotta ? {} : ragionamentiInCorsoDaEventi(voce.eventi, { istanti: voce.istantiEvento ?? null, adesso: clock().getTime() });
+      return { ok: true, ...metriche, chiusura, interrotta, cacheSessione: cacheSessioneDaEventi(voce.eventi), ragionamentiMs, ragionamentiInCorsoDaMs };
     },
 
     async elencaServerMcp(sessionId) {
@@ -5186,6 +5436,12 @@ export function createSessionRegistry({
       }
       negaApprovazionePendente(voce);
       voce.controller.abort();
+      /* ⭐ 14/09 — Hermes, `haltRun`: uno stop esplicito non deve scivolare nel prossimo messaggio in coda. La coda resta a
+         vista, IN PAUSA, finché la persona non la invia, la toglie o accoda altro. */
+      if (voce.codaMessaggi.length > 0 && !voce.codaInPausa) {
+        voce.codaInPausa = true;
+        annunciaCoda(voce);
+      }
       return true;
     },
 
@@ -5347,6 +5603,7 @@ export function createSessionRegistry({
            */
           usageSessione: usageSessioneDaEventi(voce.eventi),
           cacheSessione: cacheSessioneDaEventi(voce.eventi),
+          giriFermati: giriFermatiDaEventi(voce.eventi), // ⛔ 14/09: chiamate partite e fermate — giri senza consumo dichiarato
         }))
         .sort((a, b) => b.avviataAlle.localeCompare(a.avviataAlle));
     },

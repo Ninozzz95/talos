@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,7 @@ import { createSessionRegistry } from '../../../src/session-registry.mjs';
 import { cartellaDellaRicerca, scriviRapporto } from '../../../src/research-store.mjs';
 import { talosResearchReportDocument } from '../../../src/research/report.mjs';
 import { servizioRicerche } from '../../src/components/sezioni-adattatori.js';
+import { rimuoviCartellaDiProva } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 import {
   vociMenuRicerca, paroleErroreRicerca, ricercheInCorso,
   esportazioniRicerca, indirizzoEsportazione, FORMATI_ESPORTAZIONE,
@@ -69,8 +70,8 @@ async function banco(t, { leggiPaginaFn = async () => ({ url: '', stato: 200, co
   const radice = mkdtempSync(join(tmpdir(), 'talos-ric-fe-'));
   const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-ric-fe-store-'));
   t.after(() => {
-    rmSync(radice, { recursive: true, force: true });
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
+    rimuoviCartellaDiProva(cartellaStore);
   });
   const avvii = [];
   const chiusure = new Map();

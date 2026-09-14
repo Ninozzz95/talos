@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createChatImageStore, imageMessageContent } from '../src/chat-image-attachments.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
 const input = { nome: 'controllo.png', dataUrl: `data:image/png;base64,${png}`, larghezza: 1, altezza: 1 };
-async function isolated(fn) { const rootDir = await mkdtemp(join(tmpdir(), 'talos-chat-images-')); try { await fn(createChatImageStore({ rootDir }), rootDir); } finally { await rm(rootDir, { recursive: true, force: true }); } }
+async function isolated(fn) { const rootDir = await mkdtemp(join(tmpdir(), 'talos-chat-images-')); try { await fn(createChatImageStore({ rootDir }), rootDir); } finally { await rimuoviCartellaDiProvaAttesa(rootDir); } }
 
 test('IMAGE-01 — upload conserva i pixel dopo riavvio senza esporre percorsi', () => isolated(async (store, rootDir) => {
   const image = await store.upload(input);

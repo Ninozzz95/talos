@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 import {
   costruisciElencoProfondo,
@@ -372,6 +373,6 @@ test('ELENCO-DISCO-VERO-10: col filesystem di serie funziona, e i separatori son
     const ancora = await costruisciElencoProfondo({ radice: base });
     assert.equal(testoElenco(esito.percorsi, { ...esito, radice: base }), testoElenco(ancora.percorsi, { ...ancora, radice: base }));
   } finally {
-    await rm(base, { recursive: true, force: true });
+    await rimuoviCartellaDiProvaAttesa(base);
   }
 });

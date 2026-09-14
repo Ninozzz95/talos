@@ -26,12 +26,13 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { comeSonoFinitiIGiri, talosLavora } from '../src/kernel/talosHarness.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /* Più dei 24 di prima, e abbastanza da attraversare due compattazioni (ogni 8 giri). */
 const GIRI_DA_FARE = 30;
@@ -76,7 +77,7 @@ function fornitoreCheLavoraALungo(giriDiAttrezzo) {
 
 test('⭐⭐⭐ un task che vuole 30 giri arriva in fondo: nessun tetto lo taglia più a 24', async (t) => {
   const cartella = mkdtempSync(join(tmpdir(), 'talos-giri-'));
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const fornitore = fornitoreCheLavoraALungo(GIRI_DA_FARE);
 
   const esito = await talosLavora({
@@ -106,7 +107,7 @@ test('⭐⭐⭐ un task che vuole 30 giri arriva in fondo: nessun tetto lo tagli
 
 test('⛔⛔ e la sua diagnosi non compare più nel testo consegnato: era la frase che l’owner leggeva a schermo', async (t) => {
   const cartella = mkdtempSync(join(tmpdir(), 'talos-giri-'));
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const fornitore = fornitoreCheLavoraALungo(GIRI_DA_FARE);
 
   const esito = await talosLavora({

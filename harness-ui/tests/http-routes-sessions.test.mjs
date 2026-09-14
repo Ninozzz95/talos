@@ -1422,7 +1422,7 @@ test('⭐⭐ GET /api/v1/sessions/{id}/events replica la storia in frame SSE, e 
     if (done) throw new Error('lo stream si è chiuso da solo prima dei tre eventi attesi — regressione');
     accumulato += decoder.decode(value, { stream: true });
     const frame = accumulato.split('\n\n').map((f) => f.trim()).filter(Boolean).filter((f) => !f.startsWith(':'));
-    eventi = frame.map((f) => JSON.parse(f.replace(/^data: /, '')));
+    eventi = frame.map((f) => JSON.parse(f.replace(/^data: /, ''))).filter(nonEConfineDiTrasporto);
   }
   assert.deepEqual(eventi.map((e) => e.type), ['RunStarted', 'TextMessageContent', 'RunFinished']);
   await reader.cancel(); // il test chiude, non lo stream da solo — coerente con la cura
@@ -1446,7 +1446,7 @@ test('⛔ AL CONTRARIO — GET /api/v1/sessions/{id}/events resta aperto dopo Ru
     if (done) throw new Error('lo stream si è chiuso prima del replay atteso');
     accumulato += decoder.decode(value, { stream: true });
     eventi = accumulato.split('\n\n').map((f) => f.trim()).filter(Boolean).filter((f) => !f.startsWith(':'))
-      .map((f) => JSON.parse(f.replace(/^data: /, '')));
+      .map((f) => JSON.parse(f.replace(/^data: /, ''))).filter(nonEConfineDiTrasporto);
   }
 
   sessionRegistry._emetti(sessionId, { type: 'WorkspaceChanged', percorsi: ['esterno.txt'] });
@@ -1455,7 +1455,7 @@ test('⛔ AL CONTRARIO — GET /api/v1/sessions/{id}/events resta aperto dopo Ru
     if (done) throw new Error('lo stream si è chiuso invece di consegnare il terzo evento — la regressione che questo test previene');
     accumulato += decoder.decode(value, { stream: true });
     eventi = accumulato.split('\n\n').map((f) => f.trim()).filter(Boolean).filter((f) => !f.startsWith(':'))
-      .map((f) => JSON.parse(f.replace(/^data: /, '')));
+      .map((f) => JSON.parse(f.replace(/^data: /, ''))).filter(nonEConfineDiTrasporto);
   }
   assert.equal(eventi[2].type, 'WorkspaceChanged');
   assert.deepEqual(eventi[2].percorsi, ['esterno.txt']);
@@ -2286,6 +2286,36 @@ test('⭐⭐⭐ W1-03 — GET /api/v1/sessions/:id/metrics torna cache, tempo al
 
   assert.equal(corpo.data.chiusura.motivo, null, 'il giro è ancora aperto: nessun motivo di chiusura inventato');
   assert.ok(corpo.data.chiusura.motivoAssente.includes('ancora in corso'));
+  /*
+   * ⛔⛔ 13/09 notte — CAMBIATA DOPO IL GIRO VERO. Qui c'era «`g1` è partito ma non è finito: nessuna durata». Ma a 6.000
+   *   parte il testo, e nello store vero dopo il primo testo non arriva più un solo pezzo di ragionamento: la sua fine
+   *   il kernel la annuncia a risposta scritta. Il ragionamento è finito quando il modello è passato oltre: 1.450 → 6.000.
+   *   Il caso «aperto davvero» (nessun testo, nessun attrezzo) sta nella prova dei ragionamenti in corso, più sotto.
+   */
+  assert.deepEqual(corpo.data.ragionamentiMs, { g1: 4_550 }, 'il ragionamento finisce al primo testo, non quando la sua fine viene annunciata');
+  assert.deepEqual(corpo.data.ragionamentiInCorsoDaMs, {}, '⛔ AL CONTRARIO: mentre scrive la risposta non sta più ragionando');
+});
+
+test('⭐⭐ 13/09 sera — GET .../metrics dice quanto ha ragionato il modello, per ragionamento (registro VERO)', async (t) => {
+  let ora = 1_000;
+  const registro = registroVeroConEventi(t, {
+    clock: () => new Date(ora),
+    emetti: (onEvento) => {
+      onEvento({ type: 'RunStarted', threadId: 't', runId: 'r1', input: { consegna: 'c' } });
+      ora = 1_450;
+      onEvento({ type: 'ReasoningMessageStart', messageId: 'g1', role: 'reasoning' });
+      ora = 4_450;
+      onEvento({ type: 'ReasoningMessageEnd', messageId: 'g1' });
+      ora = 4_500;
+      onEvento({ type: 'TextMessageStart', messageId: 'm1', role: 'assistant' });
+    },
+  });
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  const corpo = await (await fetch(`${base}/api/v1/sessions/${sessionId}/metrics`)).json();
+  assert.equal(corpo.ok, true);
+  assert.deepEqual(corpo.data.ragionamentiMs, { g1: 3_000 }, 'la durata vera arriva fino all’HTTP: è quella che la riga «Ha ragionato per…» mostra');
 });
 
 test('⛔⛔ AL CONTRARIO — GET .../metrics su una sessione VIVA ma senza un solo evento dice «non registrato», mai uno 0% di cache', async (t) => {
@@ -2381,4 +2411,160 @@ test('⛔⛔ GET .../processes e .../metrics DICHIARANO interrotta, invece di la
   } finally {
     rmSync(cartellaStore, { recursive: true, force: true });
   }
+});
+
+/* ───────────── ⭐⭐ 13/09 notte — il confine fra storia e diretta, e i ragionamenti ancora aperti ─────────────
+ * Trovati col GIRO VERO (glm-5.3-flash, banco 5471): riaperta una sessione viva, la chat trattava la storia come
+ * diretta — «Ha ragionato poco» su 8 s veri, e «35 s» su tredici minuti. */
+
+/** Il confine è di SOLO TRASPORTO: chi conta gli eventi della sessione non lo deve contare. */
+function nonEConfineDiTrasporto(evento) {
+  return !(evento?.type === 'CUSTOM' && evento?.name === 'talos.fine-rigiocata');
+}
+
+async function leggiFrameFinche(reader, stato, basta) {
+  const decoder = new TextDecoder();
+  while (!basta(stato.frame)) {
+    const { value, done } = await reader.read();
+    if (done) throw new Error('lo stream si è chiuso prima del previsto');
+    stato.grezzo += decoder.decode(value, { stream: true });
+    stato.frame = stato.grezzo.split('\n\n').map((f) => f.trim()).filter(Boolean).filter((f) => !f.startsWith(':'));
+  }
+}
+const datiDelFrame = (frame) => JSON.parse(frame.split('\n').find((riga) => riga.startsWith('data: ')).slice('data: '.length));
+const haId = (frame) => frame.split('\n').some((riga) => riga.startsWith('id: '));
+
+test('⭐⭐ GET .../events — dopo la storia rigiocata arriva UNA volta il confine, SENZA id, e la diretta viene dopo', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  sessionRegistry._emetti(sessionId, { type: 'RunStarted', threadId: 't1', runId: 'r1', _sequenza: 1 });
+  sessionRegistry._emetti(sessionId, { type: 'ReasoningMessageStart', messageId: 'g1', role: 'reasoning', _sequenza: 2 });
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/events`);
+  const reader = risposta.body.getReader();
+  t.after(() => reader.cancel().catch(() => {}));
+  const stato = { grezzo: '', frame: [] };
+  await leggiFrameFinche(reader, stato, (frame) => frame.length >= 3);
+  assert.deepEqual(stato.frame.slice(0, 3).map((f) => datiDelFrame(f).type), ['RunStarted', 'ReasoningMessageStart', 'CUSTOM'], 'la storia prima, il confine subito dopo');
+  assert.equal(datiDelFrame(stato.frame[2]).name, 'talos.fine-rigiocata');
+  assert.equal(haId(stato.frame[1]), true, 'premessa: un evento della sessione porta il suo id');
+  assert.equal(haId(stato.frame[2]), false, '⛔ il confine non ha id: una riconnessione non deve ripartire da lì');
+
+  sessionRegistry._emetti(sessionId, { type: 'ReasoningMessageContent', messageId: 'g1', delta: 'ciao', _sequenza: 3 });
+  await leggiFrameFinche(reader, stato, (frame) => frame.length >= 4);
+  assert.equal(datiDelFrame(stato.frame[3]).type, 'ReasoningMessageContent', 'la diretta arriva DOPO il confine');
+  assert.equal(stato.frame.filter((f) => !nonEConfineDiTrasporto(datiDelFrame(f))).length, 1, 'un confine solo per connessione');
+
+  const nelRegistro = [];
+  sessionRegistry.iscriviti(sessionId, (evento) => nelRegistro.push(evento))();
+  assert.equal(nelRegistro.some((e) => !nonEConfineDiTrasporto(e)), false, '⛔ AL CONTRARIO: il confine non entra negli eventi della sessione (BC-07)');
+  await reader.cancel(); // ⛔ nel corpo, come le prove sopra: dal `t.after` il server di prova aspettava questa connessione per sempre
+});
+
+test('⛔⛔ AL CONTRARIO — GET .../events su una sessione senza storia: il confine arriva lo stesso, per primo', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/events`);
+  const reader = risposta.body.getReader();
+  t.after(() => reader.cancel().catch(() => {}));
+  const stato = { grezzo: '', frame: [] };
+  await leggiFrameFinche(reader, stato, (frame) => frame.length >= 1);
+  assert.equal(datiDelFrame(stato.frame[0]).name, 'talos.fine-rigiocata', 'senza il confine un browser resterebbe per sempre «nella storia», e non cronometrerebbe più niente');
+  await reader.cancel();
+});
+
+test('⭐⭐ GET .../metrics dice da quanto ragiona il modello, per il ragionamento ANCORA APERTO (registro VERO)', async (t) => {
+  let ora = 1_000;
+  const registro = registroVeroConEventi(t, {
+    clock: () => new Date(ora),
+    emetti: (onEvento) => {
+      onEvento({ type: 'RunStarted', threadId: 't', runId: 'r1', input: { consegna: 'c' } });
+      ora = 1_450;
+      onEvento({ type: 'ReasoningMessageStart', messageId: 'chiuso', role: 'reasoning' });
+      ora = 2_450;
+      onEvento({ type: 'ReasoningMessageEnd', messageId: 'chiuso' });
+      ora = 3_000;
+      onEvento({ type: 'ReasoningMessageStart', messageId: 'aperto', role: 'reasoning' });
+    },
+  });
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  ora = 855_858;
+  const corpo = await (await fetch(`${base}/api/v1/sessions/${sessionId}/metrics`)).json();
+  assert.equal(corpo.ok, true);
+  assert.deepEqual(corpo.data.ragionamentiInCorsoDaMs, { aperto: 852_858 }, 'da quanto ragiona, fino all’HTTP: la misura del giro vero');
+  assert.deepEqual(corpo.data.ragionamentiMs, { chiuso: 1_000 }, '⛔ AL CONTRARIO: quello finito sta fra le durate, non fra gli aperti');
+});
+
+/* ───────────── ⭐⭐ 14/09 — la coda è della sessione: si legge, si toglie per id, si invia, e arriva a chi apre dopo ─────────────
+ * Codex espone `thread/queue/list|delete|start` (app-server-protocol, common.rs:596-627); Hermes mette la coda in pausa allo Stop. */
+
+const postJson = (url, corpo) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+
+test('⭐⭐ GET .../queue dice la coda VERA della sessione; ⛔ al contrario una sessione che non c’è è 404', async (t) => {
+  const registro = registroVeroConEventi(t);
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  registro.accodaMessaggio(sessionId, 'poi aggiorna il README');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/queue`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.deepEqual(corpo.data.voci.map((v) => v.testo), ['poi aggiorna il README']);
+  assert.equal(corpo.data.inPausa, false);
+  assert.equal(typeof corpo.data.voci[0].id, 'string');
+  assert.equal((await fetch(`${base}/api/v1/sessions/non-esiste/queue`)).status, 404);
+});
+
+test('⭐⭐ POST .../queue/annulla con {id} toglie QUEL messaggio; ⛔ un id che non è una stringa è rifiutato', async (t) => {
+  const registro = registroVeroConEventi(t);
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  const primo = registro.accodaMessaggio(sessionId, 'primo').coda.voci[0];
+  registro.accodaMessaggio(sessionId, 'secondo');
+  const risposta = await postJson(`${base}/api/v1/sessions/${sessionId}/queue/annulla`, { id: primo.id });
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.equal(corpo.data.rimosso, true);
+  assert.deepEqual(corpo.data.coda.voci.map((v) => v.testo), ['secondo'], 'tolto il primo, non l’ultimo');
+  assert.equal((await postJson(`${base}/api/v1/sessions/${sessionId}/queue/annulla`, { id: 5 })).status, 400);
+});
+
+test('⭐⭐ POST .../queue/invia a giro vivo reindirizza col messaggio; ⛔ un corpo che non è esattamente {id} è rifiutato', async (t) => {
+  const registro = registroVeroConEventi(t);
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  const voce = registro.accodaMessaggio(sessionId, 'cambia strada').coda.voci[0];
+  const indirizzo = `${base}/api/v1/sessions/${sessionId}/queue/invia`;
+  assert.equal((await postJson(indirizzo, {})).status, 400, 'senza id');
+  assert.equal((await postJson(indirizzo, { id: voce.id, testo: 'altro' })).status, 400, 'il testo sta sul server: un corpo che lo ripete potrebbe contraddirlo');
+  const risposta = await postJson(indirizzo, { id: voce.id });
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.equal(corpo.data.modo, 'reindirizzato');
+  assert.deepEqual(corpo.data.coda.voci, []);
+  assert.equal((await postJson(indirizzo, { id: voce.id })).status, 404, 'lo stesso messaggio non si invia due volte');
+});
+
+test('⭐⭐ GET .../events: chi apre la sessione DOPO riceve la coda subito dopo la storia — anche da un’altra finestra', async (t) => {
+  const registro = registroVeroConEventi(t);
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  registro.accodaMessaggio(sessionId, 'visibile ovunque');
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/events`);
+  const reader = risposta.body.getReader();
+  t.after(() => reader.cancel().catch(() => {}));
+  const stato = { grezzo: '', frame: [] };
+  await leggiFrameFinche(reader, stato, (frame) => frame.some((f) => datiDelFrame(f).name === 'talos.coda'));
+  const nomi = stato.frame.map((f) => datiDelFrame(f)).filter((e) => e.type === 'CUSTOM').map((e) => e.name);
+  assert.ok(nomi.indexOf('talos.coda') > nomi.indexOf('talos.fine-rigiocata'), 'la coda arriva DOPO il confine della storia');
+  const coda = stato.frame.map((f) => datiDelFrame(f)).find((e) => e.name === 'talos.coda');
+  assert.deepEqual(coda.value.voci.map((v) => v.testo), ['visibile ovunque']);
+  assert.equal(haId(stato.frame.find((f) => datiDelFrame(f).name === 'talos.coda')), false, '⛔ stato, non storia: niente id SSE');
+  await reader.cancel();
 });

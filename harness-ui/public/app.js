@@ -381,6 +381,91 @@ var init_fonti_modelli = __esm({
   }
 });
 
+// src/legacy/invio-durante-il-giro.js
+function decidiInvio({ testo: testo3 = "", giroAttivo = false, conCtrl = false } = {}) {
+  const pulito = String(testo3 ?? "");
+  if (pulito.startsWith("!")) return AZIONE_COMANDO;
+  const durante = Boolean(pulito) && Boolean(giroAttivo);
+  if (conCtrl) return durante ? AZIONE_ACCODA : AZIONE_INVIA;
+  if (durante) return AZIONE_BIVIO;
+  return AZIONE_INVIA;
+}
+function reindirizzoConsentito(origine) {
+  return origine === ORIGINE_SCELTA_ESPLICITA;
+}
+function mostraPulsanteReindirizzo({
+  giroAttivo = false,
+  haTesto = false,
+  scorciatoiaAbilitata = SCORCIATOIA_REINDIRIZZO_ABILITATA
+} = {}) {
+  if (!scorciatoiaAbilitata) return false;
+  return Boolean(giroAttivo && haTesto);
+}
+function creaCronologiaComposer({ leggi, scrivi: scrivi2, tetto = TETTO_CRONOLOGIA } = {}) {
+  let voci = null;
+  let indice2 = -1;
+  function carica() {
+    if (voci) return voci;
+    voci = [];
+    try {
+      const v2 = JSON.parse(leggi(CHIAVE_CRONOLOGIA_V2) || "[]");
+      if (Array.isArray(v2) && v2.length) voci = v2.filter(usabile);
+      else {
+        const v1 = JSON.parse(leggi(CHIAVE_CRONOLOGIA_V1) || "[]");
+        if (Array.isArray(v1)) voci = v1.filter(usabile).map((c) => `!${c}`);
+      }
+    } catch {
+      voci = [];
+    }
+    return voci;
+  }
+  function ricorda(testo3) {
+    const pulito = String(testo3 ?? "").trim();
+    if (!pulito) return;
+    const lista = carica();
+    if (lista[0] !== pulito) lista.unshift(pulito);
+    voci = lista.slice(0, tetto);
+    indice2 = -1;
+    try {
+      scrivi2(CHIAVE_CRONOLOGIA_V2, JSON.stringify(voci));
+    } catch {
+    }
+  }
+  function scorri(direzione, { campoVuoto = false } = {}) {
+    const inScorrimento = indice2 >= 0;
+    if (!campoVuoto && !inScorrimento) return null;
+    const lista = carica();
+    if (!lista.length) return null;
+    const prossimo = indice2 + (direzione < 0 ? 1 : -1);
+    if (prossimo < -1 || prossimo >= lista.length) return null;
+    indice2 = prossimo;
+    return prossimo === -1 ? "" : lista[prossimo];
+  }
+  return {
+    ricorda,
+    scorri,
+    voci: () => [...carica()]
+  };
+}
+var AZIONE_COMANDO, AZIONE_ACCODA, AZIONE_BIVIO, AZIONE_INVIA, SCELTE_BIVIO, SCELTA_PREDEFINITA_BIVIO, SELETTORE_SCELTA_PREDEFINITA, ORIGINE_SCELTA_ESPLICITA, SCORCIATOIA_REINDIRIZZO_ABILITATA, CHIAVE_CRONOLOGIA_V1, CHIAVE_CRONOLOGIA_V2, TETTO_CRONOLOGIA, usabile;
+var init_invio_durante_il_giro = __esm({
+  "src/legacy/invio-durante-il-giro.js"() {
+    AZIONE_COMANDO = "comando";
+    AZIONE_ACCODA = "accoda";
+    AZIONE_BIVIO = "bivio";
+    AZIONE_INVIA = "invia";
+    SCELTE_BIVIO = Object.freeze(["indirizza", "accoda", "annulla"]);
+    SCELTA_PREDEFINITA_BIVIO = "accoda";
+    SELETTORE_SCELTA_PREDEFINITA = `[data-bivio="${SCELTA_PREDEFINITA_BIVIO}"]`;
+    ORIGINE_SCELTA_ESPLICITA = "scelta-esplicita";
+    SCORCIATOIA_REINDIRIZZO_ABILITATA = true;
+    CHIAVE_CRONOLOGIA_V1 = "talos.harness.desktop.comandi.v1";
+    CHIAVE_CRONOLOGIA_V2 = "talos.harness.desktop.composer.v2";
+    TETTO_CRONOLOGIA = 50;
+    usabile = (v) => typeof v === "string" && v.trim().length > 0;
+  }
+});
+
 // src/components/consumo-sessione.js
 function sommaUsage(a, b) {
   if (!a || typeof a !== "object") return b && typeof b === "object" ? { ...b } : null;
@@ -404,6 +489,17 @@ function usageDellaSessione(sessione) {
   if (!sessione || typeof sessione !== "object") return null;
   if (sessione.usageSessione && typeof sessione.usageSessione === "object") return sessione.usageSessione;
   return sessione.usage && typeof sessione.usage === "object" ? sessione.usage : null;
+}
+function giriDellaSessione(sessione) {
+  const misurati = usageDellaSessione(sessione)?.giri;
+  const conMisura = Number.isFinite(misurati) ? misurati : null;
+  const fermati = Number.isSafeInteger(sessione?.giriFermati) && sessione.giriFermati > 0 ? sessione.giriFermati : 0;
+  if (conMisura === null && fermati === 0) return { giri: null, fermati: 0 };
+  return { giri: (conMisura ?? 0) + fermati, fermati };
+}
+function spiegaGiriFermati(fermati) {
+  if (!Number.isSafeInteger(fermati) || fermati <= 0) return "";
+  return `${fermati === 1 ? "1 giro fermato" : `${fermati} giri fermati`} prima che il fornitore dichiarasse il consumo: nei token non ci sono.`;
 }
 function esecuzioniDellaSessione(sessione) {
   const u = sessione?.usageSessione;
@@ -2054,8 +2150,12 @@ function creaSessionItem(sessione, opzioni = {}) {
   const aside = el4(documentObj, "span", "talos-session-item__aside");
   if (!opzioni.pendente) {
     aside.append(el4(documentObj, "span", null, oraCompatta(sessione.avviataAlle, opzioni.adesso)));
-    const giri = usageDellaSessione(sessione)?.giri;
-    if (Number.isFinite(giri) && giri > 0) aside.append(el4(documentObj, "span", null, `${giri} gir${giri === 1 ? "o" : "i"}`));
+    const { giri, fermati } = giriDellaSessione(sessione);
+    if (giri !== null && giri > 0) {
+      const conto = el4(documentObj, "span", null, `${giri} gir${giri === 1 ? "o" : "i"}`);
+      if (fermati > 0) conto.title = spiegaGiriFermati(fermati);
+      aside.append(conto);
+    }
   }
   if (opzioni.selezione?.attiva) {
     const casella = el4(documentObj, "input", "talos-checkbox");
@@ -11475,7 +11575,8 @@ function testiBoard(sessione, metriche = {}, adesso = /* @__PURE__ */ new Date()
   return {
     titolo: sessione.nome || sessione.taskId || "Sessione",
     modello: nomeModello(sessione.modello) || "—",
-    giri: valido(usageDellaSessione(sessione)?.giri) ? String(usageDellaSessione(sessione).giri) : "—",
+    // ⛔ 14/09: i giri fermati contano come nella barra — un conto solo, `giriDellaSessione`
+    giri: valido(giriDellaSessione(sessione).giri) ? String(giriDellaSessione(sessione).giri) : "—",
     token: compatto(totale(sessione)),
     cache: (valido(metriche?.cache?.percentuale) ? NUMERO2.format(metriche.cache.percentuale) + "%" : "—") + (valido(usageDellaSessione(sessione)?.cached_tokens) ? " · " + compatto(usageDellaSessione(sessione).cached_tokens) : ""),
     primo: valido(metriche?.primoToken?.ms) ? (metriche.primoToken.ms / 1e3).toFixed(1).replace(".", ",") + " s" : "—",
@@ -11524,7 +11625,7 @@ function creaRigaBoard(sessione, { document: doc = globalThis.document, metriche
     const invii = esecuzioniDellaSessione(sessione);
     const daInvii = valido(invii) ? " · " + invii + " invi" + (invii === 1 ? "o" : "i") : "";
     if (campo2 === "token" && valido(totale(sessione))) cella.title = totale(sessione).toLocaleString("it-IT") + " token · ingresso + uscita · tutta la sessione" + daInvii;
-    if (campo2 === "giri" && t2.giri !== "—") cella.title = "Giri del modello in tutta la sessione" + daInvii;
+    if (campo2 === "giri" && t2.giri !== "—") cella.title = "Giri del modello in tutta la sessione" + daInvii + (giriDellaSessione(sessione).fermati ? " · " + spiegaGiriFermati(giriDellaSessione(sessione).fermati) : "");
     if (campo2 === "primo" && t2.primo === "—") cella.title = metriche?.primoToken?.motivoAssente || "Tempo non registrato";
     if (campo2 === "cache") {
       const cached = usageDellaSessione(sessione)?.cached_tokens;
@@ -12662,7 +12763,7 @@ function raggruppa(sessioni, chiaveDi) {
     if (k == null) continue;
     const v = per.get(k) || { chiave: k, sessioni: 0, giri: 0, token: 0, cache: 0, tokenNoti: 0 };
     v.sessioni += 1;
-    if (numeroValido(usageDellaSessione(s)?.giri)) v.giri += Number(usageDellaSessione(s).giri);
+    if (numeroValido(giriDellaSessione(s).giri)) v.giri += giriDellaSessione(s).giri;
     const t2 = tokenDi(s);
     if (t2 != null) {
       v.token += t2;
@@ -12680,9 +12781,11 @@ function consumoPerModello(sessioni = []) {
   return raggruppa(sessioni, (s) => typeof s?.modello === "string" && s.modello.trim() !== "" ? s.modello : null).sort((a, b) => b.token - a.token || b.sessioni - a.sessioni);
 }
 function riepilogoConsumo(sessioni = []) {
-  const totali = { sessioni: sessioni.length, giri: 0, token: 0, cache: 0, senzaToken: 0, senzaData: 0, senzaModello: 0 };
+  const totali = { sessioni: sessioni.length, giri: 0, token: 0, cache: 0, senzaToken: 0, senzaData: 0, senzaModello: 0, giriFermati: 0 };
   for (const s of sessioni) {
-    if (numeroValido(usageDellaSessione(s)?.giri)) totali.giri += Number(usageDellaSessione(s).giri);
+    const { giri, fermati } = giriDellaSessione(s);
+    if (numeroValido(giri)) totali.giri += giri;
+    totali.giriFermati += fermati;
     const t2 = tokenDi(s);
     if (t2 == null) totali.senzaToken += 1;
     else totali.token += t2;
@@ -12747,6 +12850,7 @@ function aggiornaCosti(pannello, sessioni = [], { document: d = globalThis.docum
       badge3(d, `${compatto2(tot.cache)} in cache`)
     ];
     if (tot.senzaToken) voci.push(badge3(d, `${NUM.format(tot.senzaToken)} senza token registrati`, "warning"));
+    if (tot.giriFermati) voci.push(badge3(d, `${NUM.format(tot.giriFermati)} ${tot.giriFermati === 1 ? "giro fermato" : "giri fermati"} senza token`, "warning"));
     if (tot.senzaModello) voci.push(badge3(d, `${NUM.format(tot.senzaModello)} senza modello`, "warning"));
     if (tot.senzaData) voci.push(badge3(d, `${NUM.format(tot.senzaData)} senza data`, "warning"));
     const aperta2 = sessioneId ? sessioni.find((s) => s.sessionId === sessioneId) : null;
@@ -17915,6 +18019,20 @@ var init_permessi = __esm({
 });
 
 // src/components/errori.js
+function provenienzaDelGiroFinito({ reindirizzamentoInVolo = false } = {}) {
+  return reindirizzamentoInVolo ? { origine: ORIGINI3.REINDIRIZZAMENTO } : {};
+}
+function eFermoSuRichiesta(testo3, codice) {
+  const intero2 = String(testo3 ?? "").trim();
+  const cod = String(codice ?? "");
+  const parole = cod && intero2.startsWith(cod) ? intero2.slice(cod.length).trim() : intero2;
+  return FERMO_SU_RICHIESTA.test(parole) || codice === "fermato" && parole === "";
+}
+function puntoDiFermata(testo3) {
+  const primaRiga = String(testo3 ?? "").split("\n")[0];
+  const punto = /interrotto su richiesta:\s*(.+?)\s*\.?\s*$/.exec(primaRiga)?.[1]?.trim();
+  return punto || null;
+}
 function grezzoContesto(tecnico, codice) {
   const trovato = CODICE_CONTESTO.exec(String(codice ?? ""))?.[0];
   if (!trovato || tecnico.includes(trovato)) return tecnico;
@@ -17931,17 +18049,19 @@ function spiegaRifiutoAttrezzo(esito) {
     tecnico: testo3
   };
 }
-function spiegaErrore(messaggio, codice = "") {
+function spiegaErrore(messaggio, codice = "", contesto2 = {}) {
   const tecnico = String(messaggio ?? "").trim();
   const testo3 = `${codice} ${tecnico}`;
+  const origine = typeof contesto2?.origine === "string" && contesto2.origine ? contesto2.origine : null;
   for (const regola of REGOLE) {
-    if (!regola.riconosce(testo3, codice)) continue;
+    if (!regola.riconosce(testo3, codice, origine)) continue;
     const s = regola.spiega(tecnico, codice);
-    return { id: regola.id, famiglia: regola.famiglia ?? null, ...s, tecnico: s.tecnico ?? tecnico, riconosciuto: true };
+    return { id: regola.id, famiglia: regola.famiglia ?? null, origine, ...s, tecnico: s.tecnico ?? tecnico, riconosciuto: true };
   }
   return {
     id: "sconosciuto",
     famiglia: null,
+    origine,
     cosa: "Il giro si è interrotto per un errore.",
     perche: "Questa forma di errore non è ancora tradotta: qui sotto c’è il testo che ha mandato il server, così com’è.",
     rimedi: ["Riprova il giro.", "Se si ripete, apri Doctor e allega il testo qui sotto."],
@@ -17952,7 +18072,13 @@ function spiegaErrore(messaggio, codice = "") {
 function vestizioneErrore(spiegazione) {
   return { ...VESTIZIONI[spiegazione?.famiglia] ?? VESTIZIONE_ERRORE };
 }
-var COSA_CONTESTO, ORIGINALI_INTATTI, APRI_CONTEXT_MANAGER, COMPATTA_A_MANO, rimediContesto, CODICE_CONTESTO, REGOLE, RIFIUTI, VESTIZIONI, VESTIZIONE_ERRORE;
+function tonoDelTick(vestizione) {
+  const tono = vestizione?.tono;
+  if (tono === "accent") return null;
+  if (tono === "danger" || tono === "warning" || tono === "info") return tono;
+  return "danger";
+}
+var COSA_CONTESTO, ORIGINALI_INTATTI, APRI_CONTEXT_MANAGER, COMPATTA_A_MANO, rimediContesto, CODICE_CONTESTO, ORIGINI3, FERMO_SU_RICHIESTA, REGOLE, RIFIUTI, VESTIZIONI, VESTIZIONE_ERRORE;
 var init_errori = __esm({
   "src/components/errori.js"() {
     COSA_CONTESTO = "La compattazione del contesto non è riuscita, e il giro si è fermato lì.";
@@ -17961,6 +18087,13 @@ var init_errori = __esm({
     COMPATTA_A_MANO = "Da lì «Compatta ora» rifà il tentativo da capo, sugli stessi messaggi.";
     rimediContesto = (proprio) => [APRI_CONTEXT_MANAGER, ...proprio ? [proprio] : [], COMPATTA_A_MANO];
     CODICE_CONTESTO = /\bCTX_[A-Z0-9_]+/;
+    ORIGINI3 = Object.freeze({
+      /** «Ferma» — la persona ha chiesto di fermare il giro, e basta. */
+      STOP: "stop",
+      /** «Reindirizza» — la persona ha cambiato direzione: il giro vecchio si chiude per lasciare il posto al nuovo. */
+      REINDIRIZZAMENTO: "reindirizzamento"
+    });
+    FERMO_SU_RICHIESTA = /interrotto su richiesta|operation was aborted|AbortError|aborted by user|fermato dall'utente/i;
     REGOLE = [
       {
         /*
@@ -18081,6 +18214,53 @@ var init_errori = __esm({
       },
       {
         /*
+         * ⛔⛔⛔ 13/09, con la sessione dell'owner in mano: REINDIRIZZARE produceva una carta ROSSA —
+         * «Il giro si è interrotto per un errore… apri Doctor». Non era successo niente di male: aveva
+         * solo cambiato direzione. Sotto ci sono DUE difetti distinti, non uno.
+         *
+         *  1. Il riconoscitore cercava SOLO parole INGLESI («operation was aborted»), mentre il motore
+         *     scrive in ITALIANO: `talosHarness.mjs` (≈8986) chiude con `⛔ interrotto su richiesta:
+         *     <punto>.` e `agent-service.mjs` (≈169) lo manda come `RunError` con `code: 'fermato'`.
+         *     Le due stringhe non si incontravano ⇒ MISURATO prima di curare, sulle tre frasi vere del
+         *     kernel: `id: 'sconosciuto'`, tono `danger`, rimedio «apri Doctor». La colpa a chi legge.
+         *
+         *  2. Un reindirizzamento non è NEMMENO un fermo. Ma il kernel produce la stessa identica frase
+         *     nei due casi, perché `session-registry.mjs` chiama `voce.controller.abort()` SENZA
+         *     argomenti sia in `ferma()` (≈5188) sia in `reindirizza()` (≈4952): dal messaggio i due
+         *     comandi non si distinguono, e nessuno sforzo su questo file può inventare la differenza.
+         *     ⇒ Serve la PROVENIENZA, e la porta chi il comando lo conosce (vedi `spiegaErrore`).
+         *
+         * ⛔ Questa regola chiede DUE cose INSIEME — provenienza «reindirizzamento» E un esito che sia
+         * davvero un fermo su richiesta. Un `fetch failed` capitato mentre un reindirizzamento era in
+         * attesa resta un errore di rete, rosso: un guasto vero non si traveste da cambio di direzione.
+         *
+         * Ricerca 13/09/2026, prima di scrivere:
+         * - MDN, «AbortSignal: reason property» (letto 13/09/2026): il motivo dell'annullamento è un
+         *   valore qualunque che si passa ad `abort()`, e «if not explicitly set in those methods, it
+         *   defaults to "AbortError" DOMException» ⇒ la provenienza ESISTE alla sorgente ed è gratis;
+         *   oggi viene buttata, e i due comandi arrivano qui indistinguibili.
+         * - AG-UI, «Events» (docs.ag-ui.com/concepts/events, letto 13/09/2026): `RunError` «signals
+         *   failure during execution» e porta SOLO `message` e `code` — mentre un giro interrotto ha
+         *   il suo posto in `RunFinished` con `outcome: { type: "interrupt" }`. Far uscire un cambio
+         *   di direzione come `RunError` è fuori contratto, non solo brutto da vedere. ⛔ Quella cura
+         *   sta nel kernel e nel registro: non è questo file, ed è dichiarata come dipendenza.
+         */
+        id: "reindirizzato",
+        famiglia: "reindirizzato",
+        riconosce: (t2, codice, origine) => origine === ORIGINI3.REINDIRIZZAMENTO && eFermoSuRichiesta(t2, codice),
+        spiega: (t2) => {
+          const punto = puntoDiFermata(t2);
+          return {
+            cosa: "Hai cambiato direzione.",
+            perche: `Non è andato storto niente: la tua nuova richiesta ha la precedenza, e il giro di prima si è chiuso al primo punto sicuro${punto ? ` (${punto})` : ""} per lasciarle il posto. Quello che era già fatto resta: i file scritti restano scritti.`,
+            /* ⛔ Nessun rimedio, perché non c'è niente da rimediare: il lavoro riparte da solo sulla nuova direzione. Suggerire qualcosa qui direbbe che è andata storta. */
+            rimedi: [],
+            tecnico: t2
+          };
+        }
+      },
+      {
+        /*
          * ⛔⛔ 06/9, prova T05-D2: premi «Ferma», ed esce una carta ROSSA con «[internal-error] This
          * operation was aborted». Fermare un giro non è un guasto: è una cosa che hai chiesto tu, e
          * l'unica notizia è che è successa. La carta resta (serve a dire che il giro è finito lì), ma
@@ -18088,16 +18268,27 @@ var init_errori = __esm({
          */
         id: "fermato-da-te",
         famiglia: "fermato",
-        riconosce: (t2) => /operation was aborted|AbortError|aborted by user|fermato dall'utente/i.test(t2),
-        spiega: () => ({
-          cosa: "Hai fermato il giro.",
-          perche: "Il lavoro si è chiuso al primo punto sicuro, come chiesto. Quello che era già fatto resta: i file scritti restano scritti.",
-          rimedi: ["Scrivi un altro messaggio per continuare da qui, nella stessa sessione."]
-        })
+        /* ⛔ 13/09: qui c'erano SOLO le parole inglesi — vedi la regola sopra. Il codice `fermato` e l'italiano del motore valgono quanto l'`AbortError` del browser. */
+        riconosce: (t2, codice) => eFermoSuRichiesta(t2, codice),
+        spiega: (t2) => {
+          const punto = puntoDiFermata(t2);
+          return {
+            cosa: "Hai fermato il giro.",
+            perche: `Il lavoro si è chiuso al primo punto sicuro${punto ? ` (${punto})` : ""}, come chiesto. Quello che era già fatto resta: i file scritti restano scritti.`,
+            rimedi: ["Scrivi un altro messaggio per continuare da qui, nella stessa sessione."]
+          };
+        }
       },
       {
         id: "risposta-vuota",
-        riconosce: (t2) => /flusso SSE senza contenuto|senza contenuto ne tool_calls|empty (?:response|stream)/i.test(t2),
+        /*
+         * ⛔ 13/09, in revisione: qui finisce ANCHE «⛔ la generazione si e fermata senza risposta e
+         *   senza esaurire i giri.» (`comeSonoFinitiIGiri`), che viaggia con `code: 'fermato'` e che
+         *   la stretta qui sopra ha tolto dalla famiglia dei fermi. È esattamente questo caso — il
+         *   turno chiuso senza una parola — quindi ha già la sua carta, con la sua diagnosi: senza
+         *   questa riga sarebbe caduto nel sacco generico, col rimedio «apri Doctor».
+         */
+        riconosce: (t2) => /flusso SSE senza contenuto|senza contenuto ne tool_calls|empty (?:response|stream)|la generazione si (?:e|è) fermata senza risposta/i.test(t2),
         spiega: () => ({
           cosa: "Il modello ha chiuso il turno senza dire niente e senza chiamare nessun attrezzo.",
           perche: "Capita soprattutto con i modelli locali: la generazione finisce subito, per un modello di chat servito senza il suo formato di conversazione, per una finestra già piena, o per un campionamento che tronca al primo token.",
@@ -18160,9 +18351,109 @@ var init_errori = __esm({
     ];
     VESTIZIONI = {
       fermato: { badge: "Fermato", titolo: "TALOS · fermato", tono: "accent" },
+      /*
+       * ⛔ 13/09 — un cambio di direzione non è un guasto E non è nemmeno una notizia: il giro riparte
+       * da solo, e la persona lo vede ripartire. `silenziosa` dice a chi disegna che questa nota non
+       * va mostrata affatto — la famiglia decide anche QUESTO, accanto alle frasi, invece di lasciare
+       * un ramo `if` nel disegnatore (è così che «fermato-da-te» era rimasto l'unica eccezione).
+       * ⛔ 13/09, sera — CHI DISEGNA HA IMPARATO A LEGGERLO: `appendStatusNote` esce prima di creare
+       * la nota, e non colora il tick. Serviva anche quello: con `isError` il disegnatore chiamava
+       * `aggiornaTickGiro({tono:'danger'})`, quindi il rosso aveva DUE manifestazioni e zittirne una
+       * sola avrebbe lasciato l'altra — la stessa meta'-cura che questa famiglia esiste per evitare.
+       */
+      reindirizzato: { badge: "Reindirizzato", titolo: "TALOS · nuova direzione", tono: "accent", silenziosa: true },
       contesto: { badge: "Contesto", titolo: "TALOS · contesto non compattato", tono: "warning" }
     };
     VESTIZIONE_ERRORE = { badge: "Errore", titolo: "TALOS · errore", tono: "danger" };
+  }
+});
+
+// src/components/ragionamento.js
+function formattaDurataRagionamento(secondi) {
+  const totale2 = Math.max(0, Math.round(Number(secondi) || 0));
+  if (totale2 < 60) return `${totale2} s`;
+  const minuti = Math.floor(totale2 / 60);
+  const resto = totale2 % 60;
+  return resto ? `${minuti} min ${resto} s` : `${minuti} min`;
+}
+function etichettaRagionamento({ inCorso = false, secondi = null } = {}) {
+  if (inCorso) return "Sta ragionando…";
+  if (secondi === null || secondi === void 0 || !Number.isFinite(Number(secondi))) return "Ha ragionato";
+  if (Number(secondi) < 1) return "Ha ragionato poco";
+  return `Ha ragionato per ${formattaDurataRagionamento(secondi)}`;
+}
+function pulisciArgomento(testo3) {
+  return String(testo3).replace(/\*\*|__|`/g, "").replace(/^\s*(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+)/, "").replace(/\s+/g, " ").trim();
+}
+function accorciaArgomento(testo3, massimo) {
+  if (testo3.length <= massimo) return testo3;
+  return `${testo3.slice(0, massimo - 1).trimEnd()}…`;
+}
+function argomentoDelRagionamento(testo3, { massimo = 90 } = {}) {
+  const grezzo = String(testo3 ?? "");
+  if (!grezzo.trim()) return null;
+  const titoli = [...grezzo.matchAll(/^[ \t]*\*\*([^*\n]{3,80})\*\*[ \t]*$/gm)];
+  if (titoli.length) {
+    const titolo2 = pulisciArgomento(titoli[titoli.length - 1][1]);
+    if (titolo2) return accorciaArgomento(titolo2, massimo);
+  }
+  let fine = -1;
+  for (const m of grezzo.matchAll(/[.!?](?=\s)|\n/g)) fine = m.index + 1;
+  if (fine <= 0) return null;
+  const frasi = grezzo.slice(0, fine).split(/(?<=[.!?])\s+|\n+/).map(pulisciArgomento).filter((frase) => frase.split(" ").filter(Boolean).length >= MINIMO_PAROLE_ARGOMENTO);
+  return frasi.length ? accorciaArgomento(frasi[frasi.length - 1], massimo) : null;
+}
+function permanenzaArgomentoMs(testo3) {
+  const parole = String(testo3 ?? "").split(/\s+/).filter(Boolean).length;
+  const lettura = parole / PAROLE_AL_SECONDO_LETTORE_VELOCE * 1e3;
+  return Math.min(PERMANENZA_MASSIMA_ARGOMENTO_MS, Math.round(PERMANENZA_MINIMA_ARGOMENTO_MS + lettura));
+}
+function argomentoPuoCambiare({ attuale = "", mostratoAlle = 0, adesso = 0 } = {}) {
+  if (!String(attuale ?? "").trim()) return true;
+  return adesso - mostratoAlle >= permanenzaArgomentoMs(attuale);
+}
+var ETICHETTA_INTERRUTTORE_RAGIONAMENTO, MINIMO_PAROLE_ARGOMENTO, PERMANENZA_MINIMA_ARGOMENTO_MS, PERMANENZA_MASSIMA_ARGOMENTO_MS, PAROLE_AL_SECONDO_LETTORE_VELOCE;
+var init_ragionamento = __esm({
+  "src/components/ragionamento.js"() {
+    ETICHETTA_INTERRUTTORE_RAGIONAMENTO = "Apri il ragionamento mentre scrive";
+    MINIMO_PAROLE_ARGOMENTO = 3;
+    PERMANENZA_MINIMA_ARGOMENTO_MS = 2e3;
+    PERMANENZA_MASSIMA_ARGOMENTO_MS = 4e3;
+    PAROLE_AL_SECONDO_LETTORE_VELOCE = 5.91;
+  }
+});
+
+// src/components/coda-messaggi.js
+function accorcia(testo3, massimo) {
+  const pulito = String(testo3 ?? "").replace(/\s+/g, " ").trim();
+  return pulito.length > massimo ? `${pulito.slice(0, massimo - 1).trimEnd()}…` : pulito;
+}
+function normalizzaStatoCoda(valore) {
+  const voci = (Array.isArray(valore?.voci) ? valore.voci : []).map((v) => typeof v === "string" ? { id: null, testo: v, immagini: 0 } : {
+    id: typeof v?.id === "string" ? v.id : null,
+    testo: typeof v?.testo === "string" ? v.testo : "",
+    immagini: Number.isFinite(v?.immagini) ? v.immagini : 0
+  }).filter((v) => v.testo.trim() !== "");
+  return { voci, inPausa: Boolean(valore?.inPausa) && voci.length > 0 };
+}
+function descriviCoda(stato, { giroVivo = false } = {}) {
+  const { voci, inPausa } = normalizzaStatoCoda(stato);
+  if (voci.length === 0) return null;
+  const anteprima3 = `«${accorcia(voci[0].testo, LUNGHEZZA_ANTEPRIMA)}»`;
+  const intero2 = `«${accorcia(voci[0].testo, LUNGHEZZA_TITOLO)}»`;
+  const azione = giroVivo ? { azione: "Indirizza ora", titoloAzione: "Lo porta dentro il giro in corso, come correzione" } : { azione: "Invia ora", titoloAzione: "Riprende la conversazione con questo messaggio" };
+  if (inPausa) {
+    const spiegazione2 = "In pausa dallo stop: parte solo se lo invii tu";
+    return { conteggio: `${voci.length} in pausa`, tono: "attenzione", testo: anteprima3, spiegazione: spiegazione2, titoloTesto: `${intero2} — ${spiegazione2}`, ...azione };
+  }
+  const spiegazione = "Parte quando TALOS finisce di rispondere";
+  return { conteggio: `${voci.length} in coda`, tono: "neutro", testo: anteprima3, spiegazione, titoloTesto: `${intero2} — ${spiegazione}`, ...azione };
+}
+var LUNGHEZZA_ANTEPRIMA, LUNGHEZZA_TITOLO;
+var init_coda_messaggi = __esm({
+  "src/components/coda-messaggi.js"() {
+    LUNGHEZZA_ANTEPRIMA = 200;
+    LUNGHEZZA_TITOLO = 1e3;
   }
 });
 
@@ -18891,6 +19182,7 @@ var app_exports = {};
 var init_app = __esm({
   "src/legacy/app.js"() {
     init_fonti_modelli();
+    init_invio_durante_il_giro();
     init_conversazione_dom();
     init_provider_card();
     init_politiche();
@@ -18954,6 +19246,8 @@ var init_app = __esm({
     init_tooltip();
     init_permessi();
     init_errori();
+    init_ragionamento();
+    init_coda_messaggi();
     init_testo_pagina();
     init_cartella_ritratto();
     init_consumo_sessione();
@@ -19208,6 +19502,10 @@ var init_app = __esm({
           browserErroriPagina: {},
           /** ⭐⭐⭐ 27/8, R1 — messageId(ragionamento) -> {summaryText, detail, grezzo}, la bolla collassabile che ospita il ragionamento in streaming (riusa la stessa forma di appendToolNote, non un componente nuovo). Il testo grezzo si accumula qui per lo stesso motivo di testoGrezzoMessaggi: renderizzaMarkdownSemplice lavora sul totale, non sul delta. */
           ragionamentoBubble: /* @__PURE__ */ new Map(),
+          inRigiocata: false,
+          // ⭐ 13/09 notte: vero fra l'apertura del flusso e `talos.fine-rigiocata`
+          ragionamentiInCorso: null,
+          // ⭐ 13/09 notte: { sessionId, inizi } — l'inizio vero dei ragionamenti aperti, dal registro
           /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
           sequenzeViste: /* @__PURE__ */ new Set(),
           /** ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il refresh" — vero SOLO fra l'appendUserFollowUp ottimista di resumeSession() e il RunStarted (seguito:true) che arriva davvero: consumato una volta, evita che handleRealEvent mostri lo stesso follow-up due volte dal vivo. Vedi il case RunStarted per il perché non è sempre così. */
@@ -19275,7 +19573,7 @@ var init_app = __esm({
           cartellaAssoluta: null,
           /**
            * ⭐⭐⭐ FASE D (28/8) — coda messaggi: i testi CONFERMATI dal server
-           * (risposta della POST .../queue), FIFO, in attesa di essere
+           * (dal 14/09 l'annuncio `talos.coda`, o la risposta di una rotta della coda), FIFO, in attesa di essere
            * consegnati. Un bubble in chat compare SOLO quando arriva DAVVERO
            * l'evento QueuedMessageDelivered (mai ottimisticamente al POST: un
            * messaggio può restare in coda per giri interi mentre il modello
@@ -19283,7 +19581,9 @@ var init_app = __esm({
            * cosa il modello ha già "visto") — vedi renderizzaBannerCoda() e
            * il case QueuedMessageDelivered.
            */
-          codaMessaggi: []
+          codaMessaggi: [],
+          codaInPausa: false
+          // ⭐ 14/09: la dice il server (`talos.coda`), mai questa finestra da sola
         }
       };
       const QA_VIEWPORTS = Object.freeze({
@@ -21911,7 +22211,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           ["Animazione risposta", etichetta2("streamingAnimation", a.streamingAnimation)],
           ["Forma del composer", etichetta2("composerShape", a.composerShape)],
           ["Chat a tutta larghezza", a.chatFullWidth ? "Sì" : "No"],
-          ["Ragionamento mostrato", state.showReasoning ? "Sì" : "No"]
+          ["Ragionamento aperto mentre scrive", state.showReasoning ? "Sì" : "No"]
         ]);
         const regole = Object.keys(state.permessiPerAttrezzo || impostazioni.chat.permessiPerAttrezzo || {}).length;
         riempiFatti("settingsToolsFacts", [
@@ -24797,14 +25097,14 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             const reasoningRow = document.createElement("label");
             reasoningRow.className = "sheet-toggle-row";
             const reasoningLabel = document.createElement("span");
-            reasoningLabel.textContent = "Mostra ragionamento";
+            reasoningLabel.textContent = ETICHETTA_INTERRUTTORE_RAGIONAMENTO;
             const reasoningToggle = document.createElement("input");
             reasoningToggle.type = "checkbox";
             reasoningToggle.className = "talos-switch";
             reasoningToggle.setAttribute("role", "switch");
             reasoningToggle.id = "showReasoningToggle";
             reasoningToggle.checked = state.showReasoning;
-            reasoningToggle.setAttribute("aria-label", "Mostra ragionamento");
+            reasoningToggle.setAttribute("aria-label", ETICHETTA_INTERRUTTORE_RAGIONAMENTO);
             reasoningToggle.addEventListener("change", () => {
               state.showReasoning = reasoningToggle.checked;
               salvaPreferenzeChatDesktop();
@@ -25586,14 +25886,14 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         riga.className = "talos-setting";
         const etichetta2 = document.createElement("span");
         etichetta2.className = "talos-setting__label";
-        etichetta2.textContent = "Mostra ragionamento";
+        etichetta2.textContent = ETICHETTA_INTERRUTTORE_RAGIONAMENTO;
         const interruttore = document.createElement("input");
         interruttore.type = "checkbox";
         interruttore.className = "talos-switch";
         interruttore.setAttribute("role", "switch");
         interruttore.id = "showReasoningToggle";
         interruttore.checked = state.showReasoning;
-        interruttore.setAttribute("aria-label", "Mostra ragionamento");
+        interruttore.setAttribute("aria-label", ETICHETTA_INTERRUTTORE_RAGIONAMENTO);
         interruttore.addEventListener("change", () => {
           state.showReasoning = interruttore.checked;
           salvaPreferenzeChatDesktop();
@@ -26051,13 +26351,22 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           do {
             richiesta.ancora = false;
             let misura = null;
+            let durate = null;
+            let inCorso = null;
+            let giroInCorsoDaMs = null;
             try {
               const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/metrics`);
               misura = dati?.cacheSessione ?? null;
+              durate = dati?.ragionamentiMs ?? null;
+              inCorso = dati?.ragionamentiInCorsoDaMs ?? null;
+              giroInCorsoDaMs = Number.isFinite(dati?.primoToken?.inCorsoDaMs) ? dati.primoToken.inCorsoDaMs : null;
             } catch {
             }
             if (richiestaCacheSessione !== richiesta || state.realSession.id !== sessionId || state.realSession.generation !== generation) return;
             state.realSession.cacheSessione = misura;
+            if (durate) applicaDurateRagionamento(sessionId, durate);
+            if (inCorso) applicaRagionamentiInCorso(sessionId, inCorso);
+            if (giroInCorsoDaMs !== null && runRealeAttivo()) giroAvviatoA = performance.now() - giroInCorsoDaMs;
             aggiornaInspectorDaStato();
           } while (richiesta.ancora);
         })().finally(() => {
@@ -26129,11 +26438,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         sendButton.setAttribute("aria-label", senzaContatto ? "Il server non risponde" : attivo ? "Interrompi risposta" : "Invia");
         sendButton.title = senzaContatto ? "Il server non risponde: la richiesta di fermare non arriverebbe." : attivo ? "Interrompi adesso" : "Invia";
         if (use) use.setAttribute("href", attivo ? "#i-stop" : "#i-send");
-        redirectRunButton.hidden = !(attivo && haTesto);
+        redirectRunButton.hidden = !mostraPulsanteReindirizzo({ giroAttivo: attivo, haTesto });
         redirectRunButton.disabled = redirectOccupato || uploadImmaginiInCorso();
         redirectRunButton.setAttribute("aria-label", "Reindirizza con il testo scritto");
+        aggiornaParoleCodaAVista();
         if (suggerimentoComposerAttivo && (attivo || haTesto)) svuotaSuggerimentoComposer();
-        composerInput.placeholder = attivo ? "Scrivi un follow-up… Invio per scegliere, Ctrl+Invio accoda" : suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? "Scrivi il primo messaggio…" : "Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda");
+        composerInput.placeholder = attivo ? "Scrivi un follow-up… Invio per scegliere, Ctrl+Invio accoda" : suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? "Scrivi il primo messaggio…" : "Scrivi… Invio manda, Maiusc+Invio va a capo");
       }
       function mostraSuggerimentoComposer(testo3) {
         if (!testo3 || runRealeAttivo() || composerInput.value.trim() !== "") return;
@@ -26312,6 +26622,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const conversation = $2("#conversation");
         const ultimo = conversation?.lastElementChild;
         if (!ultimo?.classList.contains("talos-turn") || ultimo.dataset.turno !== "talos") return;
+        const messaggio = ultimo.querySelector(":scope > .talos-message");
+        const haGiaUnGiro = [...messaggio?.children || []].some((figlio) => !figlio.hidden && !figlio.matches(".talos-message__head, .talos-waiting"));
+        if (!haGiaUnGiro) return;
         const spine = ultimo.querySelector(".talos-turn-spine");
         impostaTonoUltimoTick(spine, null);
         const n = spine.querySelectorAll(".talos-turn-spine__n").length + Number(ultimo.dataset.spineBase || 1);
@@ -26386,7 +26699,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const daMostrare = state.realSession.bollaDaMostrare;
         state.realSession.bollaDaMostrare = null;
         const testoBolla = daMostrare && typeof daMostrare.testo === "string" ? daMostrare.testo : text;
-        const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? "" : oraMessaggio(), meta: `Follow-up${etichettaPermessiGiro(contesto2)}` }), "utente");
+        const ora = state.realSession.deferHistoricalRendering ? "" : oraMessaggio();
+        const messaggioUtente = creaMessaggioUtente({ testo: testoBolla, ora, meta: `Follow-up${etichettaPermessiGiro(contesto2)}` });
+        messaggioUtente.dataset.oraMessaggio = ora;
+        const article = nellaChat(messaggioUtente, "utente");
         const allegatiVisibili = daMostrare?.allegati?.length ? daMostrare.allegati : immagini;
         if (allegatiVisibili.length) disegnaChipAllegati(article, allegatiVisibili);
         markMotionEnter(article);
@@ -26415,49 +26731,57 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         scorriAllaBollaAppesa(article);
         return article;
       }
-      const CHIAVE_CRONOLOGIA_COMANDI = "talos.harness.desktop.comandi.v1";
-      const TETTO_CRONOLOGIA_COMANDI = 50;
-      let cronologiaComandi = null;
-      let indiceCronologiaComandi = -1;
-      function leggiCronologiaComandi() {
-        if (cronologiaComandi) return cronologiaComandi;
-        try {
-          const grezzo = JSON.parse(localStorage.getItem(CHIAVE_CRONOLOGIA_COMANDI) || "[]");
-          cronologiaComandi = Array.isArray(grezzo) ? grezzo.filter((v) => typeof v === "string" && v.trim()) : [];
-        } catch {
-          cronologiaComandi = [];
-        }
-        return cronologiaComandi;
+      const cronologiaComposer = creaCronologiaComposer({
+        leggi: (chiave) => localStorage.getItem(chiave),
+        scrivi: (chiave, valore) => localStorage.setItem(chiave, valore)
+      });
+      function ricordaTestoInviato(testo3) {
+        cronologiaComposer.ricorda(testo3);
       }
-      function ricordaComandoDiretto(comando) {
-        const testo3 = String(comando || "").trim();
-        if (!testo3) return;
-        const lista = leggiCronologiaComandi();
-        if (lista[0] !== testo3) lista.unshift(testo3);
-        cronologiaComandi = lista.slice(0, TETTO_CRONOLOGIA_COMANDI);
-        indiceCronologiaComandi = -1;
-        try {
-          localStorage.setItem(CHIAVE_CRONOLOGIA_COMANDI, JSON.stringify(cronologiaComandi));
-        } catch {
-        }
-      }
-      function scorriCronologiaComandi(direzione) {
-        const lista = leggiCronologiaComandi();
-        if (!lista.length) return false;
-        const prossimo = indiceCronologiaComandi + (direzione < 0 ? 1 : -1);
-        if (prossimo < -1 || prossimo >= lista.length) return false;
-        indiceCronologiaComandi = prossimo;
-        composerInput.value = prossimo === -1 ? "" : `!${lista[prossimo]}`;
+      function scorriCronologiaComposer(direzione) {
+        const valore = cronologiaComposer.scorri(direzione, { campoVuoto: composerInput.value === "" });
+        if (valore === null) return false;
+        composerInput.value = valore;
         autoGrowTextarea();
         syncRunComposerState();
         composerInput.setSelectionRange(composerInput.value.length, composerInput.value.length);
         return true;
       }
-      function renderizzaBannerCoda() {
-        const coda = state.realSession.codaMessaggi;
+      function applicaStatoCoda(valore) {
+        const { voci, inPausa } = normalizzaStatoCoda(valore);
+        state.realSession.codaMessaggi = voci;
+        state.realSession.codaInPausa = inPausa;
+        renderizzaBannerCoda();
+      }
+      function descrizioneCoda() {
+        return descriviCoda({ voci: state.realSession.codaMessaggi, inPausa: state.realSession.codaInPausa }, { giroVivo: runRealeAttivo() });
+      }
+      function scriviParoleCoda(descrizione) {
         const testoEl = $2("#queuedMessageText", queuedMessage) || $2("[data-coda-testo]", queuedMessage);
         const conteggioEl = $2("[data-coda-conteggio]", queuedMessage);
-        if (coda.length === 0) {
+        const inviaEl = $2("[data-coda-invia]", queuedMessage);
+        if (conteggioEl) {
+          conteggioEl.textContent = descrizione.conteggio;
+          conteggioEl.classList.toggle("talos-badge--warning", descrizione.tono === "attenzione");
+          conteggioEl.title = descrizione.spiegazione;
+        }
+        if (testoEl) {
+          testoEl.textContent = descrizione.testo;
+          testoEl.title = descrizione.titoloTesto;
+        }
+        if (inviaEl) {
+          inviaEl.textContent = descrizione.azione;
+          inviaEl.title = descrizione.titoloAzione;
+        }
+      }
+      function aggiornaParoleCodaAVista() {
+        if (!queuedMessage || queuedMessage.hidden) return;
+        const descrizione = descrizioneCoda();
+        if (descrizione) scriviParoleCoda(descrizione);
+      }
+      function renderizzaBannerCoda() {
+        const descrizione = descrizioneCoda();
+        if (!descrizione) {
           if (!queuedMessage.hidden) {
             animateExit(queuedMessage, { durationToken: "--talos-motion-duration-composer-collapse" }, () => {
               queuedMessage.classList.remove("show");
@@ -26466,11 +26790,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           }
           return;
         }
-        if (conteggioEl) conteggioEl.textContent = `${coda.length} in coda`;
-        if (testoEl) {
-          const extra = coda.length > 1 ? ` (+${coda.length - 1} altr${coda.length - 1 === 1 ? "o" : "i"})` : "";
-          testoEl.textContent = `«${tronca2(coda[0], 60)}»${extra} — parte alla fine di questo giro`;
-        }
+        scriviParoleCoda(descrizione);
         const demoBadge = $2(".demo-surface-badge", queuedMessage);
         if (demoBadge) demoBadge.hidden = true;
         if (queuedMessage.hidden) {
@@ -26491,7 +26811,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           bivioInvio.hidden = false;
           markMotionEnter(bivioInvio);
         }
-        $2('[data-bivio="indirizza"]', bivioInvio)?.focus();
+        $2(SELETTORE_SCELTA_PREDEFINITA, bivioInvio)?.focus();
       }
       function chiudiBivioInvio({ tornaAlComposer = false } = {}) {
         if (!bivioInvio || bivioInvio.hidden) return;
@@ -26507,6 +26827,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       }
       function accodaDalComposer(testo3) {
         if (attendiUploadImmagini()) return;
+        ricordaTestoInviato(testo3);
         const immagini = allegatiComposer.filter((a) => a.tipo === "immagine");
         const completo = testoConAllegati(testo3);
         svuotaComposerDopoScelta();
@@ -26752,12 +27073,152 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         return { article, summaryText, detail, dettaglio: riga.dettaglio };
       }
       function aggiornaVisibilitaRagionamento() {
-        $$(".real-reasoning-note").forEach((article) => {
-          article.hidden = !state.showReasoning;
-          article.setAttribute("aria-hidden", String(!state.showReasoning));
-        });
+        for (const voce of state.realSession.ragionamentoBubble.values()) {
+          if (voce.article.hidden || voce.inizio === null) continue;
+          if (voce.article.querySelector(":scope > .talos-activity__head")?.dataset.toccatoDaUtente === "si") continue;
+          impostaAperturaRagionamento(voce.article, state.showReasoning);
+          voce.apertaDaSola = state.showReasoning;
+        }
         const toggle = $2("#showReasoningToggle");
         if (toggle) toggle.checked = state.showReasoning;
+      }
+      function adessoRagionamentoMs() {
+        return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+      }
+      function impostaAperturaRagionamento(card, aperto) {
+        const testa = card?.querySelector(":scope > .talos-activity__head");
+        const corpo = card?.querySelector(":scope > .talos-activity__body");
+        if (!testa || !corpo) return;
+        testa.setAttribute("aria-expanded", String(aperto));
+        corpo.hidden = !aperto;
+      }
+      function ragionamentoAperto(card) {
+        return card?.querySelector(":scope > .talos-activity__head")?.getAttribute("aria-expanded") === "true";
+      }
+      function etichettaSchedaRagionamento(card, testo3) {
+        const etichetta2 = card?.querySelector(":scope > .talos-activity__head .tool-note-summary-text");
+        if (etichetta2?.textContent === testo3) return;
+        if (etichetta2) etichetta2.textContent = testo3;
+      }
+      function mostraRagionamento(voce) {
+        chiudiBatchTool();
+        voce.article.hidden = false;
+        const inCorso = !voce.chiuso && (voce.inizio !== null || !state.realSession.deferHistoricalRendering && !state.realSession.inRigiocata);
+        etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso }));
+        if (inCorso) accendiRagionamentoVivo(voce);
+        if (inCorso && state.showReasoning) {
+          impostaAperturaRagionamento(voce.article, true);
+          voce.apertaDaSola = true;
+        }
+      }
+      function accendiRagionamentiApertiDopoLaStoria() {
+        if (state.realSession.deferHistoricalRendering || state.realSession.chiusaDalServer) return;
+        for (const voce of state.realSession.ragionamentoBubble.values()) {
+          if (voce.vivo || voce.chiuso || voce.article.hidden) continue;
+          etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso: true }));
+          accendiRagionamentoVivo(voce);
+        }
+      }
+      const INTERVALLO_ARGOMENTO_RAGIONAMENTO_MS = 300;
+      function accendiRagionamentoVivo(voce) {
+        const testa = voce.article.querySelector(":scope > .talos-activity__head");
+        if (!testa || voce.vivo) return;
+        if (!state.realSession.redirectPendingId) nascondiAttesaRisposta();
+        const argomento = document.createElement("span");
+        argomento.className = "talos-muted talos-truncate talos-ragionamento__argomento";
+        const secondi = document.createElement("span");
+        secondi.className = "talos-mono talos-measure";
+        secondi.setAttribute("aria-hidden", "true");
+        secondi.textContent = voce.inizio === null ? "" : formattaDurataRagionamento((adessoRagionamentoMs() - voce.inizio) / 1e3);
+        const pallino = document.createElement("span");
+        pallino.className = "talos-dot talos-dot--live";
+        pallino.setAttribute("aria-hidden", "true");
+        testa.append(argomento, secondi, pallino);
+        voce.article.dataset.ragionamento = "vivo";
+        voce.vivo = { argomento, secondi, pallino, ultimoArgomentoAlle: 0, argomentoMostratoAlle: 0, timer: null };
+        voce.vivo.timer = window.setInterval(() => {
+          if (!voce.vivo || !voce.article.isConnected) {
+            spegniRagionamentoVivo(voce);
+            return;
+          }
+          const testo3 = voce.inizio === null ? "" : formattaDurataRagionamento((adessoRagionamentoMs() - voce.inizio) / 1e3);
+          if (secondi.textContent !== testo3) secondi.textContent = testo3;
+          aggiornaArgomentoRagionamento(voce);
+        }, 1e3);
+        aggiornaArgomentoRagionamento(voce, { subito: true });
+      }
+      function aggiornaArgomentoRagionamento(voce, { subito = false } = {}) {
+        const vivo = voce.vivo;
+        if (!vivo) return;
+        const adesso = adessoRagionamentoMs();
+        if (!subito && adesso - vivo.ultimoArgomentoAlle < INTERVALLO_ARGOMENTO_RAGIONAMENTO_MS) return;
+        if (!argomentoPuoCambiare({ attuale: vivo.argomento.textContent, mostratoAlle: vivo.argomentoMostratoAlle, adesso })) return;
+        vivo.ultimoArgomentoAlle = adesso;
+        const testo3 = argomentoDelRagionamento(voce.grezzo);
+        if (testo3 && vivo.argomento.textContent !== testo3) {
+          vivo.argomento.textContent = testo3;
+          vivo.argomentoMostratoAlle = adesso;
+        }
+      }
+      function spegniRagionamentoVivo(voce) {
+        const vivo = voce.vivo;
+        if (!vivo) return;
+        window.clearInterval(vivo.timer);
+        vivo.argomento.remove();
+        vivo.secondi.remove();
+        vivo.pallino.remove();
+        delete voce.article.dataset.ragionamento;
+        voce.vivo = null;
+      }
+      function chiudiRagionamento(voce) {
+        if (voce.chiuso) return;
+        voce.chiuso = true;
+        spegniRagionamentoVivo(voce);
+        const salvata = state.realSession.durateRagionamento?.sessionId === state.realSession.id ? state.realSession.durateRagionamento.durate?.[voce.article.dataset.ragionamentoId] : void 0;
+        const secondi = voce.inizio !== null ? (adessoRagionamentoMs() - voce.inizio) / 1e3 : Number.isFinite(salvata) ? salvata / 1e3 : null;
+        etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso: false, secondi }));
+        const toccata = voce.article.querySelector(":scope > .talos-activity__head")?.dataset.toccatoDaUtente === "si";
+        if (voce.apertaDaSola && !toccata) impostaAperturaRagionamento(voce.article, false);
+        voce.apertaDaSola = false;
+      }
+      function applicaDurateRagionamento(sessionId, durate) {
+        if (!durate || typeof durate !== "object") return;
+        state.realSession.durateRagionamento = { sessionId, durate };
+        const senzaDurata = etichettaRagionamento({ inCorso: false });
+        for (const card of $$("#conversation .real-reasoning-note[data-ragionamento-id]")) {
+          const ms = durate[card.dataset.ragionamentoId];
+          if (!Number.isFinite(ms) || card.dataset.ragionamento === "vivo") continue;
+          const etichetta2 = card.querySelector(":scope > .talos-activity__head .tool-note-summary-text")?.textContent;
+          if (etichetta2 !== senzaDurata) continue;
+          etichettaSchedaRagionamento(card, etichettaRagionamento({ inCorso: false, secondi: ms / 1e3 }));
+        }
+      }
+      function inizioRagionamentoDaRegistrare(messageId) {
+        if (state.realSession.deferHistoricalRendering) return null;
+        if (!state.realSession.inRigiocata) return adessoRagionamentoMs();
+        const noti = state.realSession.ragionamentiInCorso;
+        const inizio = noti?.sessionId === state.realSession.id ? noti.inizi.get(messageId) : void 0;
+        return Number.isFinite(inizio) ? inizio : null;
+      }
+      function applicaRagionamentiInCorso(sessionId, trascorsi) {
+        if (!trascorsi || typeof trascorsi !== "object") return;
+        const adesso = adessoRagionamentoMs();
+        const inizi = /* @__PURE__ */ new Map();
+        for (const [messageId, ms] of Object.entries(trascorsi)) if (Number.isFinite(ms) && ms >= 0) inizi.set(messageId, adesso - ms);
+        state.realSession.ragionamentiInCorso = { sessionId, inizi };
+        if (state.realSession.id !== sessionId) return;
+        for (const [messageId, voce] of state.realSession.ragionamentoBubble) {
+          if (voce.inizio !== null || !inizi.has(messageId)) continue;
+          voce.inizio = inizi.get(messageId);
+          if (voce.vivo) voce.vivo.secondi.textContent = formattaDurataRagionamento((adesso - voce.inizio) / 1e3);
+        }
+      }
+      function concludiRagionamentiPassatiOltre() {
+        for (const voce of state.realSession.ragionamentoBubble.values()) if (!voce.chiuso) chiudiRagionamento(voce);
+      }
+      function chiudiRagionamentiInCorso() {
+        for (const voce of state.realSession.ragionamentoBubble.values()) chiudiRagionamento(voce);
+        state.realSession.ragionamentoBubble.clear();
       }
       function appendArtifactCard(titolo2, id) {
         const src = API(`/api/v1/artifacts/${encodeURIComponent(id)}`);
@@ -27000,6 +27461,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       }
       function appendStatusNote(text, isError = false, { meta: etichettaMeta = null, spiegazione = null } = {}) {
         const vestizione = vestizioneErrore(spiegazione);
+        if (vestizione.silenziosa) return;
         const article = spiegazione ? creaNotaErrore({
           titolo: etichettaMeta || vestizione.titolo,
           badge: vestizione.badge,
@@ -27007,9 +27469,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           spiegazione
         }) : creaNotaSistema({ tipo: isError ? "danger" : "info", badge: isError ? "Errore" : "Nota", titolo: etichettaMeta || (isError ? "TALOS · errore" : "TALOS · concluso"), testo: text });
         article.classList.add("real-session-status");
-        if (isError) article.classList.add("real-session-error");
+        if (isError && vestizione.tono === "danger") article.classList.add("real-session-error");
         nellaChat(article);
-        if (isError) aggiornaTickGiro({ tono: "danger" });
+        if (isError) aggiornaTickGiro({ tono: tonoDelTick(vestizione) });
         markMotionEnter(article);
         scorriAllaBollaAppesa(article);
       }
@@ -29856,6 +30318,16 @@ ${testo3}` : testo3;
       }
       function handleRealEvent(evento, generation) {
         if (generation !== state.realSession.generation) return;
+        if (evento.type === "CUSTOM" && evento.name === "talos.fine-rigiocata") {
+          state.realSession.inRigiocata = false;
+          accendiRagionamentiApertiDopoLaStoria();
+          state.realSession.deferHistoricalRendering = false;
+          return;
+        }
+        if (evento.type === "CUSTOM" && evento.name === "talos.coda") {
+          applicaStatoCoda(evento.value);
+          return;
+        }
         if (evento.type === "CUSTOM" && evento.name === "talos.context") {
           const value = evento.value;
           if (value?.schema !== "talos.context.event.v1" || value.sessionId !== state.realSession.id) return;
@@ -29934,12 +30406,15 @@ ${testo3}` : testo3;
               aggiornaUsageSessione();
             }
             state.realSession.currentRunModel = typeof evento.contesto?.modello === "string" && evento.contesto.modello.trim() ? evento.contesto.modello.trim() : state.model || null;
+            if (!state.realSession.inRigiocata) {
+              state.realSession.chiusaDalServer = false;
+              programmaAggiornamentoElencoSessioniReali();
+            }
             state.realSession.redirectPendingId = null;
             state.realSession.eventoTerminaleVisto = false;
             svuotaSuggerimentoComposer();
             syncRunComposerState();
             state.realSession.runCount = (state.realSession.runCount || 0) + 1;
-            segnaGiroNellaSpine();
             segnaTappaLatenza("runStarted");
             if (!state.realSession.taskBubbleMostrata && evento.input) {
               appendRealTaskStart(evento.input, evento.contesto);
@@ -29948,12 +30423,16 @@ ${testo3}` : testo3;
                 const turnoInAttesa = state.realSession.attesaBubble?.closest('[data-turno="talos"]');
                 const metaInAttesa = turnoInAttesa?.querySelector(":scope > .talos-message > .talos-message__head > .talos-message__meta");
                 if (metaInAttesa) metaInAttesa.textContent = [nomeModelloBreve(state.realSession.currentRunModel), turnoInAttesa.dataset.oraMessaggio].filter(Boolean).join(" · ");
+                const domandaInAttesa = [...$2("#conversation")?.querySelectorAll(".talos-message--user") || []].at(-1);
+                const metaDomanda = domandaInAttesa?.querySelector(".talos-message__meta");
+                if (metaDomanda && evento.contesto) metaDomanda.textContent = [domandaInAttesa.dataset.oraMessaggio, `Follow-up${etichettaPermessiGiro(evento.contesto)}`].filter(Boolean).join(" · ");
                 state.realSession.followUpBubbleInAttesa = false;
                 allineaPilloleAlGiroVivo(evento.contesto);
               } else {
                 appendUserFollowUp(evento.input.consegna, evento.contesto, evento.input.immagini);
               }
             }
+            segnaGiroNellaSpine();
             if (!state.realSession.chiusaDalServer) mostraAttesaRisposta();
             if (evento.contesto) {
               aggiornaPannelloAmbiente(evento.contesto);
@@ -29963,6 +30442,7 @@ ${testo3}` : testo3;
             break;
           }
           case "TextMessageContent": {
+            concludiRagionamentiPassatiOltre();
             logStreaming("delta", { messageId: evento.messageId, len: typeof evento.delta === "string" ? evento.delta.length : 0 });
             segnaTappaLatenza("primoDelta");
             chiudiBatchTool();
@@ -30006,20 +30486,31 @@ ${testo3}` : testo3;
            */
           case "ReasoningMessageStart": {
             if (!state.realSession.chiusaDalServer) mostraAttesaRisposta("reasoning");
-            if (state.showReasoning) chiudiBatchTool();
-            const bubble = appendToolNote("Ragionamento", { classeExtra: "real-reasoning-note", glifo: "💭" });
-            bubble.article.hidden = !state.showReasoning;
-            bubble.article.setAttribute("aria-hidden", String(!state.showReasoning));
-            state.realSession.ragionamentoBubble.set(evento.messageId, { ...bubble, grezzo: "", renderStato: { prefisso: null, nodiCoda: [] } });
+            const bubble = appendToolNote("Ragionamento", { classeExtra: "real-reasoning-note", glifo: "💭", aperto: true });
+            bubble.article.hidden = true;
+            bubble.article.dataset.ragionamentoId = evento.messageId;
+            const testaRagionamento = bubble.article.querySelector(":scope > .talos-activity__head");
+            testaRagionamento?.addEventListener("click", () => {
+              testaRagionamento.dataset.toccatoDaUtente = "si";
+            });
+            state.realSession.ragionamentoBubble.set(evento.messageId, {
+              ...bubble,
+              grezzo: "",
+              renderStato: { prefisso: null, nodiCoda: [] },
+              inizio: inizioRagionamentoDaRegistrare(evento.messageId),
+              apertaDaSola: false
+            });
             break;
           }
           case "ReasoningMessageContent": {
             const voce = state.realSession.ragionamentoBubble.get(evento.messageId);
             if (!voce) break;
             voce.grezzo += evento.delta;
+            if (voce.article.hidden && voce.grezzo.trim() !== "") mostraRagionamento(voce);
+            else if (voce.vivo) aggiornaArgomentoRagionamento(voce);
             if (!state.realSession.deferHistoricalRendering) {
               renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
-              if (state.showReasoning) scrollStreamingOutput(voce.article);
+              if (ragionamentoAperto(voce.article)) scrollStreamingOutput(voce.article);
             }
             break;
           }
@@ -30028,11 +30519,14 @@ ${testo3}` : testo3;
             if (voce && state.realSession.deferHistoricalRendering) {
               renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
             }
+            const eraAperto = Boolean(voce && !voce.chiuso);
+            if (voce) chiudiRagionamento(voce);
             state.realSession.ragionamentoBubble.delete(evento.messageId);
-            if (!state.realSession.chiusaDalServer) mostraAttesaRisposta("preparing");
+            if (eraAperto && !state.realSession.chiusaDalServer) mostraAttesaRisposta("preparing");
             break;
           }
           case "ToolCallStart": {
+            concludiRagionamentiPassatiOltre();
             nascondiAttesaRisposta();
             if (evento.toolCallName === "delega_sottotask") void caricaFigliSessione();
             const batch = apriBatchSeServe();
@@ -30241,9 +30735,8 @@ ${testo3}` : testo3;
             break;
           }
           case "QueuedMessageDelivered": {
+            nascondiAttesaRisposta();
             appendUserFollowUp(evento.testo, null, evento.immagini);
-            state.realSession.codaMessaggi.shift();
-            renderizzaBannerCoda();
             mostraAttesaRisposta();
             break;
           }
@@ -30259,6 +30752,7 @@ ${testo3}` : testo3;
             state.realSession.redirectInvalidatedIds.delete(evento.redirectId);
             state.realSession.redirectPendingId = null;
             state.realSession.eventoTerminaleVisto = false;
+            nascondiAttesaRisposta();
             appendUserFollowUp(evento.testo, null, evento.immagini);
             state.realSession.followUpBubbleInAttesa = true;
             mostraAttesaRisposta();
@@ -30292,6 +30786,7 @@ ${testo3}` : testo3;
             chiudiBatchTool();
             aggiornaTickGiro({ tono: null });
             spegniGiriInCorso($2("#conversation"));
+            chiudiRagionamentiInCorso();
             state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
             syncRunComposerState();
             mostraSuggerimentoComposer(suggerimentoDaUltimoAttrezzo());
@@ -30327,12 +30822,16 @@ ${testo3}` : testo3;
               const riassunto = riassuntoAttrezziDaEventi(state.realSession.eventiAttrezzi);
               guida = ` — ${testoDiagnosiGiri(riassunto)}. ${consiglioDaRiassunto(riassunto)} Il prossimo messaggio continuerà questo task nella stessa sessione. Premi «Nuova» per iniziare un task separato.`;
             }
-            const spiegazione = spiegaErrore(evento.message, evento.code);
+            const spiegazione = spiegaErrore(evento.message, evento.code, provenienzaDelGiroFinito({
+              reindirizzamentoInVolo: Boolean(state.realSession.redirectPendingId)
+            }));
             if (guida) spiegazione.rimedi = [guida.replace(/^\s*—\s*/, ""), ...spiegazione.rimedi];
             appendStatusNote("", true, { spiegazione });
             spegniGiriInCorso($2("#conversation"));
+            chiudiRagionamentiInCorso();
             state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
             syncRunComposerState();
+            programmaAggiornamentoElencoSessioniReali();
             break;
           }
           /*
@@ -30360,8 +30859,12 @@ ${testo3}` : testo3;
         syncRunComposerState();
         const demoBadgeChat = $$(".demo-surface-badge", $2(".chat-view")).find((badge5) => badge5.closest("[data-demo-surface]")?.dataset.demoSurface === "chat");
         if (demoBadgeChat) demoBadgeChat.hidden = true;
+        state.realSession.inRigiocata = true;
         const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
         segnaTappaLatenza("sseCollegato");
+        source.onopen = () => {
+          if (generation === state.realSession.generation) state.realSession.inRigiocata = true;
+        };
         state.realSession.eventSource = source;
         source.onmessage = (message) => {
           sorveglianza?.segnalaEventoVivo();
@@ -30425,6 +30928,7 @@ ${testo3}` : testo3;
           state.realSession.browserPagine = [];
           state.realSession.browserIndice = -1;
           state.realSession.ragionamentoBubble = /* @__PURE__ */ new Map();
+          state.realSession.durateRagionamento = null;
           state.realSession.followUpBubbleInAttesa = false;
           state.realSession.redirectPendingId = null;
           state.realSession.redirectInvalidatedIds = /* @__PURE__ */ new Set();
@@ -30443,6 +30947,7 @@ ${testo3}` : testo3;
           state.realSession.approvazioniPendenti = /* @__PURE__ */ new Map();
           state.realSession.cartellaAssoluta = null;
           state.realSession.codaMessaggi = [];
+          state.realSession.codaInPausa = false;
           state.realSession.batchAttivo = null;
           state.realSession.ultimoBatchChiuso = null;
           renderizzaBannerCoda();
@@ -30507,6 +31012,11 @@ ${testo3}` : testo3;
           sendButton.removeAttribute("aria-busy");
           syncRunComposerState();
         }
+      }
+      function chiediReindirizzamento(testo3, origine) {
+        if (!reindirizzoConsentito(origine)) return false;
+        ricordaTestoInviato(testo3);
+        return reindirizzaSessioneReale(testo3);
       }
       async function reindirizzaSessioneReale(testo3) {
         if (attendiUploadImmagini()) return false;
@@ -30581,7 +31091,7 @@ ${testo3}` : testo3;
           toast("Fork non riuscito", error.message);
         }
       }
-      async function resumeSession(messaggioFollowUp, immagini = []) {
+      async function resumeSession(messaggioFollowUp, immagini = [], { viaCodaId = null } = {}) {
         if (!state.realSession.id) {
           toast("Nessuna sessione reale da riprendere");
           return;
@@ -30589,6 +31099,7 @@ ${testo3}` : testo3;
         const sessionId = state.realSession.id;
         const taskId = state.realSession.taskId;
         const generationAtSend = state.realSession.generation;
+        state.realSession.deferHistoricalRendering = false;
         const voceElenco = state.sessionSelection.available.get(sessionId);
         if (voceElenco?.conclusa) {
           const eta = formattaEta(voceElenco.avviataAlle);
@@ -30602,7 +31113,11 @@ ${testo3}` : testo3;
         mostraAttesaRisposta();
         try {
           segnaTappaLatenza("postInviata");
-          await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp, ...immagini.length ? { immagini: payloadImmagini(immagini) } : {} } : {});
+          if (viaCodaId) {
+            await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue/invia`, { id: viaCodaId });
+          } else {
+            await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp, ...immagini.length ? { immagini: payloadImmagini(immagini) } : {} } : {});
+          }
           if (sessionId !== state.realSession.id || generationAtSend !== state.realSession.generation) return;
           segnaTappaLatenza("postRisposta");
           const generation = nuovaGenerazioneSessione({ continua: true });
@@ -30616,7 +31131,7 @@ ${testo3}` : testo3;
           nascondiAttesaRisposta();
           if (messaggioFollowUp) appendStatusNote(`Invio non riuscito: ${error.message}`, true);
           toast(messaggioFollowUp ? "Invio non riuscito" : "Resume non riuscito", error.message);
-          if (sessionId === state.realSession.id) ripristinaImmagini(immagini, messaggioFollowUp);
+          if (sessionId === state.realSession.id && !viaCodaId) ripristinaImmagini(immagini, messaggioFollowUp);
         }
       }
       async function accodaMessaggioReale(testo3, immagini = []) {
@@ -30624,9 +31139,12 @@ ${testo3}` : testo3;
         try {
           const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue`, { messaggio: testo3, ...immagini.length ? { immagini: payloadImmagini(immagini) } : {} });
           if (sessionId !== state.realSession.id) return;
-          state.realSession.codaMessaggi.push(testo3);
-          renderizzaBannerCoda();
-          toast("Messaggio in coda", `Arriverà quando l'agente conclude il turno corrente (posizione ${dati.posizione}).`);
+          if (dati?.coda) applicaStatoCoda(dati.coda);
+          else {
+            state.realSession.codaMessaggi = [...state.realSession.codaMessaggi, { id: null, testo: testo3, immagini: 0 }];
+            renderizzaBannerCoda();
+          }
+          toast("Messaggio in coda", `Posizione ${dati.posizione} nella coda di questa sessione.`);
         } catch (error) {
           const nonInCorso = /non è in corso|non pronta|SESSION_NOT_READY|interrott/i.test(String(error?.message || "")) || error?.code === "SESSION_NOT_READY";
           if (nonInCorso && sessionId === state.realSession.id) {
@@ -31527,13 +32045,13 @@ ${testo3}` : testo3;
         reasoningSection.append(effortPicker.elemento);
         const reasoningToggle = document.createElement("label");
         reasoningToggle.className = "workspace-chooser-inline-toggle";
-        reasoningToggle.innerHTML = "<span><strong>Mostra ragionamento</strong><small>Visualizza il processo solo quando ti serve.</small></span>";
+        reasoningToggle.innerHTML = `<span><strong>${ETICHETTA_INTERRUTTORE_RAGIONAMENTO}</strong><small>Spento, resta una riga chiusa che apri quando ti serve.</small></span>`;
         const reasoningInput = document.createElement("input");
         reasoningInput.type = "checkbox";
         reasoningInput.className = "talos-switch";
         reasoningInput.setAttribute("role", "switch");
         reasoningInput.checked = local.showReasoning;
-        reasoningInput.setAttribute("aria-label", "Mostra ragionamento");
+        reasoningInput.setAttribute("aria-label", ETICHETTA_INTERRUTTORE_RAGIONAMENTO);
         reasoningInput.addEventListener("change", () => {
           local.showReasoning = reasoningInput.checked;
         });
@@ -32802,6 +33320,7 @@ ${blocchi.join("\n\n")}` : testa;
         const immagini = allegati.filter((a) => a.tipo === "immagine");
         const value = String(text || "").trim();
         if (!value) return false;
+        ricordaTestoInviato(mostra ?? value);
         state.realSession.chiusaDalServer = false;
         if (mostra !== null && mostra !== value) {
           state.realSession.bollaDaMostrare = { testo: mostra, allegati: Array.isArray(allegati) ? allegati : [] };
@@ -32818,7 +33337,6 @@ ${blocchi.join("\n\n")}` : testa;
             toast("Comando vuoto", 'Scrivi qualcosa dopo "!".');
             return true;
           }
-          ricordaComandoDiretto(comando);
           runDirectShell(comando, hidden);
           return true;
         }
@@ -33713,30 +34231,25 @@ ${testo3}`;
           event.preventDefault();
           if (attendiUploadImmagini()) return;
           const testo3 = composerInput.value.trim() || (allegatiComposer.some((a) => a.tipo === "immagine") ? "Descrivi l’immagine allegata." : "");
-          const durante = Boolean(testo3) && runRealeAttivo();
-          if (testo3.startsWith("!")) {
+          const azione = decidiInvio({ testo: testo3, giroAttivo: runRealeAttivo(), conCtrl: event.ctrlKey || event.metaKey });
+          if (azione === AZIONE_COMANDO) {
             chiudiBivioInvio();
             composerForm.requestSubmit();
             return;
           }
-          if (event.ctrlKey || event.metaKey) {
-            if (durante) {
-              chiudiBivioInvio();
-              accodaDalComposer(testo3);
-              return;
-            }
-            composerForm.requestSubmit();
+          if (azione === AZIONE_ACCODA) {
+            chiudiBivioInvio();
+            accodaDalComposer(testo3);
             return;
           }
-          if (durante) {
+          if (azione === AZIONE_BIVIO) {
             apriBivioInvio(testo3);
             return;
           }
           composerForm.requestSubmit();
         }
         if ((event.key === "ArrowUp" || event.key === "ArrowDown") && !event.ctrlKey && !event.metaKey && !event.altKey) {
-          const inScorrimento = indiceCronologiaComandi >= 0;
-          if ((composerInput.value === "" || inScorrimento) && scorriCronologiaComandi(event.key === "ArrowUp" ? -1 : 1)) {
+          if (scorriCronologiaComposer(event.key === "ArrowUp" ? -1 : 1)) {
             event.preventDefault();
             return;
           }
@@ -33759,7 +34272,7 @@ ${testo3}`;
         composerForm.requestSubmit();
       });
       redirectRunButton.addEventListener("click", () => {
-        reindirizzaSessioneReale(composerInput.value);
+        chiediReindirizzamento(composerInput.value, ORIGINE_SCELTA_ESPLICITA);
       });
       if (composerMic) {
         if (riconoscimentoVocale) {
@@ -33803,7 +34316,7 @@ ${testo3}`;
         }
         chiudiBivioInvio();
         if (scelta === "indirizza") {
-          reindirizzaSessioneReale(testo3);
+          chiediReindirizzamento(testo3, ORIGINE_SCELTA_ESPLICITA);
           return;
         }
         accodaDalComposer(testo3);
@@ -33813,16 +34326,34 @@ ${testo3}`;
         await stopRealSession();
       });
       $2("#cancelQueued").addEventListener("click", async () => {
-        if (!state.realSession.id || state.realSession.codaMessaggi.length === 0) return;
+        const sessionId = state.realSession.id;
+        const primo = state.realSession.codaMessaggi[0];
+        if (!sessionId || !primo) return;
         try {
-          const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/queue/annulla`, {});
-          if (dati.rimosso) {
-            state.realSession.codaMessaggi.pop();
-            renderizzaBannerCoda();
-            toast("Follow-up annullato");
-          }
+          const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue/annulla`, primo.id ? { id: primo.id } : {});
+          if (sessionId !== state.realSession.id) return;
+          if (dati?.coda) applicaStatoCoda(dati.coda);
+          if (dati?.rimosso) toast("Tolto dalla coda", `«${tronca2(primo.testo, 60)}» non verrà inviato.`);
         } catch (error) {
-          toast("Annullamento non riuscito", error.message);
+          toast("Non tolto dalla coda", error.message);
+        }
+      });
+      $2("#inviaQueued")?.addEventListener("click", async () => {
+        const sessionId = state.realSession.id;
+        const primo = state.realSession.codaMessaggi[0];
+        if (!sessionId || !primo?.id) return;
+        if (!runRealeAttivo()) {
+          state.realSession.chiusaDalServer = false;
+          resumeSession(primo.testo, [], { viaCodaId: primo.id });
+          return;
+        }
+        try {
+          const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue/invia`, { id: primo.id });
+          if (sessionId !== state.realSession.id) return;
+          if (dati?.coda) applicaStatoCoda(dati.coda);
+          toast("Reindirizzamento richiesto", "La correzione verrà applicata al prossimo punto sicuro.");
+        } catch (error) {
+          toast("Reindirizzamento non riuscito", error.message);
         }
       });
       $$("[data-approve], [data-allow-session], [data-deny]").forEach((button2) => {
@@ -35283,7 +35814,8 @@ function montaPonteLegacy(documentObj = document) {
   const coda = uno(piede, ".talos-queue");
   battezza(coda, { id: "queuedMessage", classi: ["queued-message"] });
   battezza(uno(coda, ".talos-queue__text"), { id: "queuedMessageText" });
-  battezza(uno(coda, ".talos-button"), { id: "cancelQueued" });
+  battezza(uno(coda, "[data-coda-togli]"), { id: "cancelQueued" });
+  battezza(uno(coda, "[data-coda-invia]"), { id: "inviaQueued" });
   coda.hidden = true;
   const compositore = uno(piede, "#composerForm");
   battezza(uno(compositore, ".talos-send"), { classi: ["send-btn"] });

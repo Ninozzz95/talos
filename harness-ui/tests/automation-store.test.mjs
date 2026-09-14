@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 import {
   AutomationStoreError, INTERVALLO_MINIMO_MINUTI, LIMITE_MASSIMO_AL_GIORNO, createAutomationStore,
@@ -10,7 +11,7 @@ import {
 
 function storeFinto(t, orologio = () => new Date('2026-08-27T10:00:00.000Z')) {
   const cartella = mkdtempSync(join(tmpdir(), 'talos-automations-'));
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   return createAutomationStore({ cartella, clock: orologio });
 }
 
@@ -25,7 +26,7 @@ test('⭐ crea() nasce SEMPRE attiva:false — mai una spesa autonoma di sorpres
 
 test('⭐⭐ crea() persiste DAVVERO: un secondo store sulla stessa cartella la rilegge', async (t) => {
   const cartella = mkdtempSync(join(tmpdir(), 'talos-automations-'));
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const uno = createAutomationStore({ cartella });
   const due = createAutomationStore({ cartella });
 
@@ -112,7 +113,7 @@ test('⭐ elimina() rimuove davvero — elenca() non la ritrova più', async (t)
 
 test('elenca() su una cartella che non esiste ancora torna vuoto, non un errore', async (t) => {
   const cartella = join(mkdtempSync(join(tmpdir(), 'talos-automations-')), 'mai-creata');
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const store = createAutomationStore({ cartella });
 
   assert.deepEqual(await store.elenca(), []);

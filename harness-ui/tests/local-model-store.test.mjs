@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir } from 'node:fs/promises';
 import test from 'node:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createLocalModelStore, LocalModelStoreError } from '../src/local-model-store.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const valid = {
   id: 'lfm2-6b-q6',
@@ -23,7 +24,7 @@ async function withStore(run, options = {}) {
   try {
     await run(createLocalModelStore({ rootDir, ...options }), rootDir);
   } finally {
-    await rm(rootDir, { recursive: true, force: true });
+    await rimuoviCartellaDiProvaAttesa(rootDir);
   }
 }
 
@@ -207,7 +208,7 @@ test('BC-13-CACHE-04 VERSO CONTRARIO: un nome cambiato arriva nell\'elenco', asy
 
 test('BC-13-CACHE-05 VERSO CONTRARIO: un manifest scritto da FUORI dallo store viene visto', async () => {
   await withStore(async (store, rootDir) => {
-    const { writeFile } = await import('node:fs/promises');
+    const { writeFile, utimes } = await import('node:fs/promises');
     await store.register({ ...valid, id: 'a-model' });
     await store.list(); // scalda la cache
     /*
@@ -216,6 +217,15 @@ test('BC-13-CACHE-05 VERSO CONTRARIO: un manifest scritto da FUORI dallo store v
      * misurato l'11/09 su NTFS: una voce NUOVA lo muove sempre.
      */
     await writeFile(join(rootDir, 'manifests', 'fuori-model.json'), JSON.stringify({ ...valid, id: 'fuori-model', path: 'fuori-model/x.gguf' }));
+    /*
+     * ⛔ 14/09 — il mtime della cartella si muove A MANO, e la prova ci guadagna. Su questa macchina una voce nuova lo
+     *   muoveva sempre (misurato l'11/09 su NTFS); sul runner del tag `desktop-v0.1.6` NON si è mosso, e questa prova
+     *   è diventata rossa mentre il prodotto non aveva niente che non andasse — la cache decade eccome, quando la
+     *   cartella cambia. ⇒ Si misura ciò che si voleva misurare (la cache rilegge il disco quando la cartella cambia)
+     *   invece della risoluzione del timestamp del filesystem sotto, che è un fatto della macchina, non del prodotto.
+     */
+    const quando = new Date(Date.now() + 2000);
+    await utimes(join(rootDir, 'manifests'), quando, quando);
     assert.deepEqual((await store.list()).map(({ id }) => id), ['a-model', 'fuori-model'], 'il disco è l\'unica fonte che non può essere in ritardo');
   });
 });

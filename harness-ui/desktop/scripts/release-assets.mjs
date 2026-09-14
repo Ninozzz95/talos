@@ -9,11 +9,43 @@ export function nomiArtefatti(versione) {
   return { exe: `TALOS-Setup-${versione}.exe`, zip: `TALOS-${versione}-win.zip`, sha: 'SHA256SUMS.txt', note: 'NOTE-RELEASE.md' };
 }
 
-export async function preparaRelease({ versione, tag, repository, distDir, smoke }) {
+/*
+ * ⛔⛔ 14/09 — LE NOTE DEVONO DIRE COSA È CAMBIATO, e queste non lo dicevano.
+ *
+ * Regola permanente dell'owner (16/08): «ad ogni release non creare del testo statico, o meglio
+ * assieme al testo statico metti anche il changelog breve delle fix e delle implementazioni nuove».
+ * Il mobile ha un cancello che lo impone dal 16/08; il desktop no, e le sue note erano un testo
+ * IDENTICO a ogni versione: installazione, SmartScreen, SHA256. Tutto vero, e muto su cosa fosse
+ * cambiato.
+ *
+ * ⛔ E non lo risolve `--generate-notes` di GitHub: quelle note elencano le pull request, cioè il
+ * MATERIALE da cui si scrive un changelog, non un changelog (GitHub, «Automatically generated
+ * release notes», letto il 14/09/2026). La fonte autorevole resta il file: Keep a Changelog 1.1.0
+ * dice che una release su una piattaforma «crea un changelog non portabile, mostrabile solo dentro
+ * quella piattaforma», e che a ogni versione corrisponde una sezione (letto il 14/09/2026).
+ *
+ * ⇒ Le note si COMPONGONO: la sezione del CHANGELOG per QUESTO tag, più il testo stabile che
+ *   riguarda l'installazione. Se la sezione manca, non si pubblica — un cancello da 2 secondi
+ *   prima della build, non una scoperta dopo quaranta minuti.
+ */
+export function sezioneDelChangelog(testo, tag) {
+  const righe = String(testo).split(/\r?\n/);
+  const intestazione = `## ${tag}`;
+  const inizio = righe.findIndex((r) => r.trimEnd() === intestazione || r.startsWith(`${intestazione} `));
+  if (inizio < 0) return '';
+  const resto = righe.slice(inizio + 1);
+  const fine = resto.findIndex((r) => r.startsWith('## '));
+  return (fine < 0 ? resto : resto.slice(0, fine)).join('\n').trim();
+}
+
+export async function preparaRelease({ versione, tag, repository, distDir, smoke, changelogPath }) {
   const nomi = nomiArtefatti(versione);
   if (tag !== `desktop-v${versione}`) throw Error('Il tag deve corrispondere alla versione del package desktop.');
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw Error('Repository GitHub non valido.');
   if (smoke?.completato !== true) throw Error('Smoke installato non riuscito: pubblicazione vietata.');
+  if (!changelogPath) throw Error('Serve il percorso del CHANGELOG: una release che non dice cosa è cambiato non si pubblica.');
+  const cambiamenti = sezioneDelChangelog(await readFile(changelogPath, 'utf8'), tag);
+  if (!cambiamenti) throw Error(`Il CHANGELOG non ha una sezione "## ${tag}": scrivila prima di taggare — cosa è nuovo, cosa è stato corretto.`);
   const artefatti = [];
   for (const nome of [nomi.exe, nomi.zip]) {
     const path = resolve(distDir, nome);
@@ -25,31 +57,42 @@ export async function preparaRelease({ versione, tag, repository, distDir, smoke
   }
   if (artefatti[0].sha256 !== smoke.installerSha256) throw Error('Lo SHA256 dell’installer differisce da quello provato nello smoke.');
   const somme = artefatti.map(a => `${a.sha256}  ${a.nome}\n`).join('');
+  /*
+   * ⛔ IN INGLESE, e non è una preferenza: è la stessa trappola che il mobile ha già pagato. La sua
+   * v0.1.0 uscì in italiano, fu corretta A MANO, e la SORGENTE rimase italiana — quindi la release
+   * dopo sarebbe tornata italiana da sola (vedi il commento in `.github/workflows/release.yml`).
+   * Correggere il sintomo e lasciare la causa è come non aver corretto niente. Qui la sorgente è
+   * inglese: tutto ciò che si pubblica lo è.
+   */
   const note = `# TALOS Desktop ${versione}
 
-Windows 10 1809 o successivo, x64, oppure Windows 11 x64. Non occorre installare Node.
-Il runner Windows Server 2025 verifica build e smoke; la compatibilità minima con Windows 10 richiede anche la prova su quel sistema.
+Windows 10 1809 or later, x64, or Windows 11 x64. Node does not need to be installed.
+Build and smoke test run on a Windows Server 2025 runner; the minimum Windows 10 compatibility still needs a test on that system.
 
-## Installazione
+## What changed
 
-Aprire ${nomi.exe}: installazione NSIS per l'utente corrente, senza richiesta di amministratore.
-In alternativa estrarre interamente ${nomi.zip} e aprire TALOS.exe mantenendo resources e DLL accanto all'eseguibile.
+${cambiamenti}
 
-La v0.1 è **non firmata**: SmartScreen può mostrare «PC protetto da Windows» e autore sconosciuto.
-Dopo aver verificato SHA256 e provenienza, scegliere «Ulteriori informazioni», controllare il nome ${nomi.exe}, quindi «Esegui comunque» se si intende procedere.
-Se l'opzione è bloccata dalla gestione del dispositivo, rivolgersi all'amministratore. Non disattivare SmartScreen o Defender.
-L'attestazione GitHub certifica la provenienza della build; non è una firma Authenticode e non elimina l'avviso SmartScreen.
+## Install
 
-## Contenuto
+Open ${nomi.exe}: NSIS installer for the current user, no administrator prompt.
+Alternatively extract ${nomi.zip} in full and open TALOS.exe, keeping resources and the DLLs next to the executable.
 
-Guscio Electron 44.3.0 con runtime Node incluso, backend TALOS, frontend costruito, kernel, context-engine, addon nativi e llama.cpp b10517 CPU/Vulkan con licenze.
-Per Vulkan serve un driver compatibile; il motore CPU è incluso come alternativa.
-Nessun modello GGUF o credenziale incluso. Il guscio non aggiunge aggiornamenti automatici o telemetria.
-Provider remoti e download di modelli richiedono rete e la relativa configurazione; questo installer non ne certifica il funzionamento.
+The v0.1 is **not code-signed**: SmartScreen may show "Windows protected your PC" and an unknown publisher.
+After checking the SHA256 and the provenance, choose "More info", check the name ${nomi.exe}, then "Run anyway" if you intend to proceed.
+If your device management blocks that option, ask your administrator. Do not turn SmartScreen or Defender off.
+The GitHub attestation certifies where the build came from; it is not an Authenticode signature and does not remove the SmartScreen warning.
 
-## Verifica SHA256
+## What is inside
 
-Confrontare entrambi i valori con SHA256SUMS.txt e con quelli pubblicati qui:
+An Electron 44.3.0 shell with the Node runtime included, the TALOS backend, the built frontend, the kernel, the context engine, native addons, and llama.cpp b10517 CPU/Vulkan builds with their licences.
+Vulkan needs a compatible driver; the CPU engine is included as the alternative.
+No GGUF model and no credential is bundled. The shell adds no automatic updates and no telemetry.
+Remote providers and model downloads need the network and their own configuration; this installer does not certify that they work.
+
+## Check the SHA256
+
+Compare both values with SHA256SUMS.txt and with the ones published here:
 
 \`\`\`text
 ${somme.trimEnd()}
@@ -61,17 +104,17 @@ Get-FileHash -Algorithm SHA256 .\\${nomi.zip}
 Get-Content .\\SHA256SUMS.txt
 \`\`\`
 
-## Verifica provenienza GitHub
+## Check the GitHub provenance
 
-Con GitHub CLI installata, verificare ogni file scaricato contro il repository che ha prodotto questa release:
+With the GitHub CLI installed, verify every file you downloaded against the repository that produced this release:
 
 \`\`\`powershell
 gh attestation verify .\\${nomi.exe} --repo ${repository}
 gh attestation verify .\\${nomi.zip} --repo ${repository}
 \`\`\`
 
-La provenienza lega gli artefatti al workflow e al commit del tag ${tag}.
-Il job desktop esegue i cancelli prima del pacchetto e verifica installazione silenziosa, avvio dell'EXE installato, health con cookie, ricarica, chiusura e disinstallazione senza processi residui.
+The provenance ties the artifacts to the workflow and to the commit of tag ${tag}.
+The desktop job runs the gates before packaging, then verifies silent install, start of the installed EXE, health with cookie, reload, close and uninstall with no processes left behind.
 `;
   await writeFile(join(distDir, nomi.sha), somme, 'utf8');
   await writeFile(join(distDir, nomi.note), note, 'utf8');
@@ -86,7 +129,10 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     if (pkg.version !== lock.version || pkg.version !== lock.packages[''].version) throw Error('Versione package/lock non allineata.');
     const distDir = join(root, 'dist');
     const smoke = JSON.parse(await readFile(join(root, '.prove/R04-ci-smoke.json'), 'utf8'));
-    const risultato = await preparaRelease({ versione: pkg.version, tag: process.env.GITHUB_REF_NAME, repository: process.env.GITHUB_REPOSITORY, distDir, smoke });
+    const risultato = await preparaRelease({
+      versione: pkg.version, tag: process.env.GITHUB_REF_NAME, repository: process.env.GITHUB_REPOSITORY, distDir, smoke,
+      changelogPath: join(root, 'CHANGELOG.md'),
+    });
     if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, Object.entries(risultato.nomi).map(([k, nome]) => `${k}=${join(distDir, nome).replaceAll('\\', '/')}\n`).join(''));
     const righe = risultato.artefatti.map(a => `| ${a.nome} | ${a.bytes} | ${(a.bytes / 1048576).toFixed(2)} | ${a.sha256} |`).join('\n');
     if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, `\n### Artefatti desktop\n\n| File | Byte | MiB | SHA256 |\n|---|---:|---:|---|\n${righe}\n`);

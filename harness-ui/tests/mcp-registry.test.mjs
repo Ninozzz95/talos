@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 import {
   caricaServerMcp,
@@ -24,7 +25,7 @@ test('⭐⭐⭐ caricaServerMcp: nessun file .harness-ui-mcp.json — {server:[]
     const { server } = await caricaServerMcp({ cartella });
     assert.deepEqual(server, []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -43,7 +44,7 @@ test('⭐⭐⭐ caricaServerMcp: un server valido, hash calcolato dalla dichiara
     assert.equal(typeof server[0].hash, 'string');
     assert.equal(server[0].hash.length, 64, 'sha256 esadecimale');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -56,7 +57,7 @@ test('⭐⭐ caricaServerMcp: "argomenti" assente diventa un array vuoto, mai un
     const { server } = await caricaServerMcp({ cartella });
     assert.deepEqual(server[0].argomenti, []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -74,7 +75,7 @@ test('⭐⭐ caricaServerMcp: due server con allowlist DIVERSA hanno hash DIVERS
     assert.notEqual(server[0].hash, server[1].hash);
     assert.equal(server[0].hash, server[2].hash, 'stessa dichiarazione ⇒ stesso hash, indipendentemente dall\'id');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -87,7 +88,7 @@ test('⛔⛔⛔ AL CONTRARIO — caricaServerMcp: un JSON malformato è un McpRe
       (e) => { assert.ok(e instanceof McpRegistryError); assert.equal(e.code, 'MCP_CONFIG_MALFORMED'); return true; },
     );
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -100,7 +101,7 @@ test('⛔⛔ AL CONTRARIO — caricaServerMcp: "server" mancante o non-array è 
       (e) => { assert.equal(e.code, 'MCP_CONFIG_MALFORMED'); return true; },
     );
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -112,7 +113,7 @@ test('⛔ AL CONTRARIO — caricaServerMcp: un server senza "comando" è rifiuta
     }));
     await assert.rejects(caricaServerMcp({ cartella }), (e) => e.code === 'MCP_CONFIG_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -127,7 +128,7 @@ test('⛔⛔⛔ AL CONTRARIO — caricaServerMcp: un server SENZA allowlist è r
       (e) => { assert.equal(e.code, 'MCP_CONFIG_MALFORMED'); assert.match(e.message, /allowlist/); return true; },
     );
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -139,7 +140,7 @@ test('⛔⛔ AL CONTRARIO — caricaServerMcp: allowlist VUOTA è rifiutata quan
     }));
     await assert.rejects(caricaServerMcp({ cartella }), (e) => e.code === 'MCP_CONFIG_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -151,7 +152,7 @@ test('⛔ AL CONTRARIO — caricaServerMcp: "argomenti" non-array è rifiutato',
     }));
     await assert.rejects(caricaServerMcp({ cartella }), (e) => e.code === 'MCP_CONFIG_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -161,7 +162,7 @@ test('⭐⭐⭐ verificaTrustMcp: nessun trust registrato — false, mai fidato 
     const fidato = await verificaTrustMcp({ cartellaTrust, serverId: 'filesystem', hash: 'abc123' });
     assert.equal(fidato, false);
   } finally {
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 
@@ -173,7 +174,7 @@ test('⭐⭐⭐ fidaServerMcp poi verificaTrustMcp: lo stesso hash torna VERAMEN
     const fidato = await verificaTrustMcp({ cartellaTrust, serverId: 'filesystem', hash: 'abc123' });
     assert.equal(fidato, true);
   } finally {
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 
@@ -184,7 +185,7 @@ test('⛔⛔⛔ AL CONTRARIO — un server fidato il cui CONTENUTO cambia (allow
     const fidatoConHashNuovo = await verificaTrustMcp({ cartellaTrust, serverId: 'filesystem', hash: 'hash-con-anche-write_file' });
     assert.equal(fidatoConHashNuovo, false, 'il trust è legato al CONTENUTO — allargare l\'allowlist deve chiedere una nuova fiducia esplicita');
   } finally {
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 
@@ -196,7 +197,7 @@ test('⛔⛔ AL CONTRARIO — un serverId con traversal ("..") è rifiutato, mai
       (e) => { assert.ok(e instanceof McpRegistryError); return true; },
     );
   } finally {
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 
@@ -217,8 +218,8 @@ test('⭐⭐⭐ serverMcpFidati: un server fidato finisce in "fidati", uno non f
     assert.deepEqual(fidati.map((s) => s.id), ['fidato']);
     assert.deepEqual(nonFidati.map((s) => s.id), ['non-fidato']);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 
@@ -230,8 +231,8 @@ test('⛔⭐⭐ AL CONTRARIO — serverMcpFidati: zero server dichiarati — ent
     assert.deepEqual(fidati, []);
     assert.deepEqual(nonFidati, []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 
@@ -246,7 +247,7 @@ test('⛔⛔ AL CONTRARIO — serverMcpFidati: un server dichiarato ma MAI fidat
     assert.deepEqual(fidati, []);
     assert.equal(nonFidati.length, 1);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });

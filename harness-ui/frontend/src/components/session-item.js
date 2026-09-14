@@ -23,7 +23,7 @@
  * restano globali per il monolite (blog.master.dev/light-dom-only, letto il
  * 05/09/2026). Nessuno shadow DOM.
  */
-import { usageDellaSessione } from './consumo-sessione.js'; // 06/9 CB-04: i giri della sessione, non dell'ultimo invio
+import { giriDellaSessione, spiegaGiriFermati } from './consumo-sessione.js'; // 06/9 CB-04: i giri della sessione, non dell'ultimo invio
 import { nomeModelloUmano } from './chat-foot.js'; // 13/09 R-08: la targa di un GGUF locale diventa un nome
 
 /**
@@ -517,8 +517,16 @@ export function creaSessionItem(sessione, opzioni = {}) {
     aside.append(el(documentObj, 'span', null, oraCompatta(sessione.avviataAlle, opzioni.adesso)));
     // ⛔ 06/9, CB-04: la riga dell'elenco parla della SESSIONE, quindi i giri sono quelli di
     //    tutta la conversazione: `usage` è il solo ultimo invio, e diceva «1 giro» su tre.
-    const giri = usageDellaSessione(sessione)?.giri;
-    if (Number.isFinite(giri) && giri > 0) aside.append(el(documentObj, 'span', null, `${giri} gir${giri === 1 ? 'o' : 'i'}`));
+    /*
+     * ⛔ 14/09, giro vero della coda: 7 invii, 6 fermati, e questa riga diceva «1 giro». Una chiamata partita e fermata è un
+     *   giro vero senza consumo dichiarato (`giriFermati`, dal server): entra nel conto, e il titolo dice perché i token no.
+     */
+    const { giri, fermati } = giriDellaSessione(sessione);
+    if (giri !== null && giri > 0) {
+      const conto = el(documentObj, 'span', null, `${giri} gir${giri === 1 ? 'o' : 'i'}`);
+      if (fermati > 0) conto.title = spiegaGiriFermati(fermati);
+      aside.append(conto);
+    }
   }
 
   if (opzioni.selezione?.attiva) {
