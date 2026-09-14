@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, inject, onMounted, onUnmounted, ref, type Component } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, type Component } from 'vue'
 import { Boxes, ChevronRight, Cpu, KeyRound } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
-import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
+import { useTalosSheetTitle } from '@/lib/sheetTitle'
 import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
 import { useChatController } from '@/stores/chatController'
 import { talosLocalInstalledModels } from '@/services/localEngine'
@@ -127,8 +127,9 @@ async function leggiIDispositivi(): Promise<void> {
 }
 
 const { t } = useTalosI18n()
+// Fase 4A: il titolo grande sta nella pagina e si ripiega nella barra scorrendo.
+useTalosSheetTitle(() => t('models.labTitle'))
 const controller = useChatController()
-const insideSheet = inject(TALOS_SHEET_CONTEXT_KEY, false)
 const installedCount = ref<number | null>(null)
 
 const configuredProviders = computed(() => (
@@ -148,7 +149,9 @@ const destinations = computed<Array<{
         icon: KeyRound,
         label: t('models.providerAccessTitle'),
         description: t('models.providerAccessDescription'),
-        status: t('models.providerAccessStatus', { configured: configuredProviders.value }),
+        status: configuredProviders.value === 1
+            ? t('models.providerAccessStatusOne')
+            : t('models.providerAccessStatus', { configured: configuredProviders.value }),
     },
     {
         route: 'settings-models-catalog',
@@ -164,7 +167,9 @@ const destinations = computed<Array<{
         description: t('models.localDescription'),
         status: installedCount.value === null
             ? t('models.measurePending')
-            : t('models.localStatus', { count: installedCount.value }),
+            : installedCount.value === 1
+                ? t('models.localStatusOne')
+                : t('models.localStatus', { count: installedCount.value }),
     },
 ])
 
@@ -201,7 +206,7 @@ onMounted(async () => {
 <template>
     <div data-testid="talos-model-lab-hub" class="flex min-w-0 flex-col gap-[var(--talos-space-section)]">
         <header class="flex flex-col gap-[var(--talos-space-inline)]">
-            <h1 :class="insideSheet ? 'sr-only' : 'talos-title text-lg font-semibold text-[var(--talos-text)]'">{{ t('models.labTitle') }}</h1>
+            <h1 data-talos-sheet-title class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">{{ t('models.labTitle') }}</h1>
             <p class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('models.labDescription') }}</p>
         </header>
 

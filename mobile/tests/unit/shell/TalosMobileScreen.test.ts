@@ -3,8 +3,30 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
+import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
 
 describe('TalosMobileScreen', () => {
+    it('LIB-SURFACE-01 allows Library to use its enclosing sheet background', () => {
+        const wrapper = mount(TalosMobileScreen, {
+            props: { title: 'Library', sheetBackground: true },
+            global: { provide: { [TALOS_SHEET_CONTEXT_KEY as symbol]: true } },
+        })
+        expect(wrapper.get('[data-testid="mobile-screen"]').classes()).not.toContain('bg-[var(--talos-background)]')
+    })
+
+    it('LIB-SURFACE-02 keeps the standalone background without an enclosing sheet', () => {
+        const wrapper = mount(TalosMobileScreen, { props: { title: 'Library', sheetBackground: true } })
+        expect(wrapper.get('[data-testid="mobile-screen"]').classes()).toContain('bg-[var(--talos-background)]')
+    })
+
+    it('CODE-SURFACE-01 preserves the default background inside a sheet', () => {
+        const wrapper = mount(TalosMobileScreen, {
+            props: { title: 'Code' },
+            global: { provide: { [TALOS_SHEET_CONTEXT_KEY as symbol]: true } },
+        })
+        expect(wrapper.get('[data-testid="mobile-screen"]').classes()).toContain('bg-[var(--talos-background)]')
+    })
+
     it('renders the screen title as the single h1', () => {
         const wrapper = mount(TalosMobileScreen, { props: { title: 'Runtime cockpit' } })
         const h1 = wrapper.findAll('h1')

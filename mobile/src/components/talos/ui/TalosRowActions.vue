@@ -133,7 +133,34 @@ async function show(index = 0): Promise<void> {
     // behind an open panel is how a screen reader user ends up driving a menu
     // they were never told had opened.
     await nextTick()
+    tieniDentroLoSchermo()
     focusActive()
+}
+
+/**
+ * ⛔ Il pannello non esce dallo schermo a sinistra.
+ *
+ * Misurato sul Pad il 14/09 a 360 px (owner, dalla foto del telefono): il ⋯ della scheda di SINISTRA ha il
+ * bordo destro a 167, il pannello largo 176 si ancorava a destra e finiva col bordo sinistro a −9 — «Allega al
+ * messaggio», «Elimina file» tagliati. `place()` conosce solo il pulsante; la larghezza vera del pannello si
+ * sa dopo che è comparso. Come lo «shift» di Floating UI (https://floating-ui.com/docs/shift, letto il
+ * 2026-09-14): si misura, e si scorre lungo lo stesso asse fino a lasciare `GAP` dal bordo.
+ */
+function tieniDentroLoSchermo(): void {
+    // The entrance scales the painted bounds; position using the final layout width.
+    // MDN: CSSOM / Determining the dimensions of elements (2026-09-14).
+    const larghezza = panel.value?.offsetWidth ?? 0
+    if (larghezza <= 0) return
+    const box = trigger.value?.getBoundingClientRect()
+    const altezza = panel.value?.offsetHeight ?? 0
+    const below = box ? window.innerHeight - box.bottom - GAP : 0
+    const flipped = box ? below < altezza && box.top > below : at.value.flipped
+    const top = box ? (flipped ? box.top - altezza - GAP : box.bottom + GAP) : at.value.top
+    at.value = {
+        top: Math.max(GAP, Math.min(top, window.innerHeight - altezza - GAP)),
+        right: Math.max(GAP, Math.min(at.value.right, window.innerWidth - GAP - larghezza)),
+        flipped,
+    }
 }
 
 function focusActive(): void {
@@ -284,7 +311,7 @@ defineExpose({ close, show })
                 role="menu"
                 :aria-label="props.label"
                 data-testid="talos-row-actions-menu"
-                class="talos-holdable absolute min-w-44 max-w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.28)]"
+                class="talos-holdable absolute w-max min-w-44 max-w-[min(20rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-12px)] overflow-y-auto rounded-xl border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.28)]"
                 data-talos-motion-intent="menu-open"
                 data-talos-calm-menu
                 :style="{ top: `${at.top}px`, right: `${at.right}px`, '--talos-motion-surface-rise': at.flipped ? '-8px' : '8px' }"

@@ -1,5 +1,6 @@
 import type { TalosModelFit, TalosModelBand, TalosModelFitReason } from '@/lib/models/fit'
 import type { TalosTransferItem } from '@/services/modelTransfer'
+import { talosCurrentLocale } from '@/i18n'
 
 /**
  * What the download centre says, decided apart from how it looks.
@@ -92,7 +93,7 @@ export function talosFitVerdict(fit: TalosModelFit, askedContext: number): Talos
  * "2.7 GB" file that Android calls 2.5 GB makes the app look wrong about the
  * one number the user can check.
  */
-export function talosFormatBytes(bytes: number): string {
+export function talosFormatBytes(bytes: number, locale: string = talosCurrentLocale()): string {
     if (bytes < 1024) return `${Math.max(0, Math.round(bytes))} B`
     const units = ['KB', 'MB', 'GB', 'TB']
     let value = bytes / 1024
@@ -103,7 +104,12 @@ export function talosFormatBytes(bytes: number): string {
     }
     // One decimal below ten, none above: "9.4 GB" is informative, "947.3 MB" is
     // three digits of noise.
-    return `${value < 10 ? Math.round(value * 10) / 10 : Math.round(value)} ${units[unit]}`
+    // ⛔ Il separatore dei decimali e' della LINGUA: «4.2 GB» in un'interfaccia italiana e' un errore
+    // (Pad, 14/09). Intl.NumberFormat lo sceglie per locale —
+    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/NumberFormat (letto il 2026-09-14).
+    const arrotondato = value < 10 ? Math.round(value * 10) / 10 : Math.round(value)
+    const numero = new Intl.NumberFormat(locale, { maximumFractionDigits: 1, useGrouping: false }).format(arrotondato)
+    return `${numero} ${units[unit]}`
 }
 
 /**

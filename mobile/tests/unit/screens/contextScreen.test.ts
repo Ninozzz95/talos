@@ -29,8 +29,10 @@ const artifactBridge = vi.hoisted(() => ({
 vi.mock('@/lib/device/artifactPlugin', () => ({ TalosArtifactBridge: artifactBridge }))
 
 import ContextScreen from '@/screens/ContextScreen.vue'
+import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
 import { __resetToastsForTests, useTalosMobileToasts } from '@/stores/toasts'
 import { __resetSettingsStoreForTests, useSettingsStore } from '@/stores/settings'
+import { __resetTalosTabletLayoutForTests } from '@/composables/useTalosTabletLayout'
 
 function file(id: string, status: 'available' | 'failed' = 'available') {
     const isImage = id === 'vault-image'
@@ -94,6 +96,125 @@ beforeEach(() => {
 afterEach(() => { document.body.innerHTML = '' })
 
 describe('ContextScreen Library gallery', () => {
+    function manyFiles(total = 80) {
+        const controller = makeController()
+        controller.attachments.vaultFiles.splice(0, 2, ...Array.from({ length: total }, (_, index) => ({
+            ...file(`file-${index}`),
+            display_name: index === 0 ? 'Zirconium manuscript.txt' : `Document ${String(index).padStart(3, '0')}.txt`,
+            media_type: 'text/plain',
+            updated_at: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(),
+        })))
+        mockState.controller = controller
+        return controller
+    }
+
+    it('LIB-INFINITE-01 renders 24 then 48/72/80 files with the full collection count', async () => {
+        manyFiles()
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(24)
+        expect(wrapper.get('[data-testid="talos-library-count"]').text()).toContain('80')
+        for (const count of [48, 72, 80]) {
+            await wrapper.get('[data-testid="talos-library-load-more"]').trigger('click')
+            await flushPromises()
+            const ids = wrapper.findAll('[data-vault-file-id]').map(w => w.attributes('data-vault-file-id'))
+            expect(ids).toHaveLength(count)
+            expect(new Set(ids).size).toBe(count)
+        }
+        expect(wrapper.find('[data-testid="talos-library-load-more"]').exists()).toBe(false)
+    })
+
+    it('LIB-INFINITE-02 searches an item beyond the initially rendered page', async () => {
+        manyFiles()
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        expect(wrapper.find('[data-vault-file-id="file-0"]').exists()).toBe(false)
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('Zirconium')
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(1)
+        expect(wrapper.find('[data-vault-file-id="file-0"]').exists()).toBe(true)
+    })
+
+    it('LIB-INFINITE-03 sorts before paging and resets the page after search changes', async () => {
+        manyFiles()
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')[0]!.attributes('data-vault-file-id')).toBe('file-79')
+        await wrapper.get('[data-testid="talos-library-load-more"]').trigger('click')
+        await wrapper.get('[data-testid="talos-library-view-list"]').trigger('click')
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(48)
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('Zirconium')
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('')
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(24)
+    })
+
+    it('LIB-INFINITE-05 shares the rendering budget between links and files', async () => {
+        const controller = manyFiles()
+        controller.attachments.vaultFiles.forEach((entry, index) => {
+            if (index % 2 === 0) Object.assign(entry, {
+                media_type: 'text/markdown',
+                created_at: entry.updated_at,
+                metadata: { origin: 'generated', kind: 'web_source', source_url: `https://example.com/page-${index}` },
+            })
+        })
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-library-view-grid"]').trigger('click')
+        const files = () => wrapper.findAll('[data-vault-file-id]')
+        const links = () => wrapper.findAll('[data-talos-saved-link-tile]')
+        expect(files()).toHaveLength(12)
+        expect(links()).toHaveLength(12)
+        await wrapper.get('[data-testid="talos-library-load-more"]').trigger('click')
+        expect(files()).toHaveLength(24)
+        expect(links()).toHaveLength(24)
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        expect(files()).toHaveLength(0)
+        expect(links()).toHaveLength(24)
+    })
+
+    it('LIB-INFINITE-06 keeps a thousand files searchable without mounting them all', async () => {
+        manyFiles(1000)
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(24)
+        expect(wrapper.get('[data-testid="talos-library-count"]').text()).toContain('1000')
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('Zirconium')
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(1)
+        expect(wrapper.find('[data-vault-file-id="file-0"]').exists()).toBe(true)
+    })
+
+    it('LIB-INFINITE-07 resets the scroller after the final page has removed the load button', async () => {
+        manyFiles()
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        for (let page = 0; page < 3; page++) {
+            await wrapper.get('[data-testid="talos-library-load-more"]').trigger('click')
+        }
+        const scroller = wrapper.get('[data-testid="mobile-screen-body"]').element
+        scroller.scrollTop = 1800
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('Zirconium')
+        expect(scroller.scrollTop).toBe(0)
+    })
+
+    it('LIB-SURFACE-03 lets the real Library inherit the enclosing sheet surface', async () => {
+        const wrapper = mount(ContextScreen, { global: { provide: { [TALOS_SHEET_CONTEXT_KEY as symbol]: true } } })
+        await flushPromises()
+        expect(wrapper.get('[data-testid="mobile-screen"]').classes()).not.toContain('bg-[var(--talos-background)]')
+    })
+
+    it('LIB-HEADER-03 gives the subtitle a full row below the title and primary action', async () => {
+        __resetTalosTabletLayoutForTests()
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        const title = wrapper.get('[data-talos-sheet-title]').element
+        const header = title.closest('header')!
+        expect(title.parentElement!.querySelector('[data-testid="talos-library-add"]')).not.toBeNull()
+        expect(header.querySelector('p')!.parentElement).toBe(header)
+    })
+
     it('renders the vault and hydrates it locally', async () => {
         const wrapper = mount(ContextScreen)
         await flushPromises()
@@ -334,18 +455,42 @@ describe('ContextScreen Library gallery', () => {
     })
 
     /**
-     * Owner 14/09/2026: «Aggiungi file» sits in the toolbar row with search, view
-     * and options — no longer beside the title.
+     * Owner 14/09/2026: on the TABLET «Aggiungi file» sits in the toolbar row with search, view
+     * and options. On the PHONE it sits beside the title, icon only: on the owner's phone the
+     * toolbar wrapped and left the «+» alone on a second line.
      */
-    it('LIB-TOOLBAR-01 puts search, view, options and Add file on one toolbar row', async () => {
+    it('LIB-TOOLBAR-01 tablet: search, view, options and Add file on one toolbar row', async () => {
+        const originale = window.matchMedia
+        window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
+        __resetTalosTabletLayoutForTests()
+        try {
+            const wrapper = mount(ContextScreen)
+            await flushPromises()
+            const row = wrapper.get('[data-testid="talos-library-search"]').element.closest('label')!.parentElement!
+            for (const id of ['talos-library-view-grid', 'talos-library-options', 'talos-library-add']) {
+                expect(row.querySelector(`[data-testid="${id}"]`)).not.toBeNull()
+            }
+            const heading = wrapper.get('[data-talos-sheet-title]').element.closest('header')!
+            expect(heading.querySelector('[data-testid="talos-library-add"]')).toBeNull()
+            expect(wrapper.get('[data-testid="talos-library-add"]').text().trim()).not.toBe('')
+        } finally {
+            window.matchMedia = originale
+            __resetTalosTabletLayoutForTests()
+        }
+    })
+
+    it('LIB-TOOLBAR-02 phone: Add file beside the title, icon only, and only once', async () => {
+        __resetTalosTabletLayoutForTests()
         const wrapper = mount(ContextScreen)
         await flushPromises()
-        const row = wrapper.get('[data-testid="talos-library-search"]').element.closest('label')!.parentElement!
-        for (const id of ['talos-library-view-grid', 'talos-library-options', 'talos-library-add']) {
-            expect(row.querySelector(`[data-testid="${id}"]`)).not.toBeNull()
-        }
         const heading = wrapper.get('[data-talos-sheet-title]').element.closest('header')!
-        expect(heading.querySelector('[data-testid="talos-library-add"]')).toBeNull()
+        const add = heading.querySelector('[data-testid="talos-library-add"]')
+        expect(add).not.toBeNull()
+        expect(add!.textContent!.trim()).toBe('')
+        expect(add!.getAttribute('aria-label')).toBeTruthy()
+        expect(wrapper.findAll('[data-testid="talos-library-add"]')).toHaveLength(1)
+        const row = wrapper.get('[data-testid="talos-library-search"]').element.closest('label')!.parentElement!
+        expect(row.querySelector('[data-testid="talos-library-add"]')).toBeNull()
     })
 
     it('LIB-MENU-07 still requires explicit confirmation after selecting Delete from More', async () => {
