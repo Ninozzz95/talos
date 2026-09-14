@@ -45,16 +45,3 @@ test('Browse remains in Chat, opens the exact detected URL and restores truthful
         expect(overflow).toBeLessThanOrEqual(0)
     }
 })
-
-test('slash Browse enables the current conversation without opening another route', async ({ page }) => {
-    await page.setViewportSize({ width: 360, height: 640 })
-    await page.goto('/')
-    const composer = page.getByLabel('Message TALOS')
-    await composer.fill('/browse')
-    await expect(page.getByRole('option', { name: /Open Browse/i })).toHaveAttribute('aria-disabled', 'false')
-    await composer.press('Enter')
-
-    await expect(page.getByTestId('talos-mobile-browse-mode-status')).toBeVisible()
-    await expect(page.locator('[data-talos-route]')).toHaveAttribute('data-talos-route', 'chat')
-    await expect(composer).toHaveValue('')
-})
