@@ -97,9 +97,11 @@ test('R1: Memory station delete confirm renders and works on the shipped default
     const row = page.locator('[data-testid="talos-memory-row"]')
     await expect(row).toHaveCount(1)
 
-    // Delete it — the R1 device-proven confirm dialog MUST render (reka Dialog
-    // never appeared on the owner's WebView; this was device-bite debt #1).
-    await page.getByLabel('Delete memory Ricorda questo').click()
+    // Delete it through the current row overflow menu — the R1 device-proven
+    // confirm dialog MUST render (reka Dialog never appeared on the owner's
+    // WebView; this was device-bite debt #1).
+    await page.getByLabel('Actions for Ricorda questo').click()
+    await page.getByTestId('talos-memory-action-delete').click()
     const dialog = page.locator('[data-testid="talos-confirm-dialog"]')
     await expect(dialog).toBeVisible()
     await expect(dialog.getByText('Delete memory?', { exact: true })).toBeVisible()
