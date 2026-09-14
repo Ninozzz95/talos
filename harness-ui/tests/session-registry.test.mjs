@@ -2936,8 +2936,13 @@ test('⭐⭐⭐⭐ FILO INTERO: accodaMessaggio() popola voce.codaMessaggi, e la
   const ricevuti = [];
   registro.iscriviti(sessionId, (e) => ricevuti.push(e));
 
+  /* ⭐ 14/09 — la risposta porta anche `coda` (la coda è della sessione e si annuncia a ogni finestra): l'intento di
+     questa prova non cambia, cambia solo la forma esatta della risposta. */
   const esito = registro.accodaMessaggio(sessionId, 'e adesso aggiungi anche i test');
-  assert.deepEqual(esito, { ok: true, posizione: 1 });
+  assert.equal(esito.ok, true);
+  assert.equal(esito.posizione, 1);
+  assert.deepEqual(esito.coda.voci.map((v) => v.testo), ['e adesso aggiungi anche i test']);
+  assert.equal(esito.coda.inPausa, false);
 
   assert.equal(codaMessaggiFn(), 'e adesso aggiungi anche i test', 'la STESSA funzione passata al kernel legge il messaggio vero appena accodato');
   const evento = ricevuti.find((e) => e.type === 'QueuedMessageDelivered');
@@ -2982,8 +2987,12 @@ test('⭐⭐⭐ AL CONTRARIO — due accodaMessaggio in sequenza mantengono l\'O
   const { sessionId } = registro.avvia('task-vero');
   const codaMessaggiFn = finta.ultimoInput.codaMessaggiFn;
 
-  assert.deepEqual(registro.accodaMessaggio(sessionId, 'primo'), { ok: true, posizione: 1 });
-  assert.deepEqual(registro.accodaMessaggio(sessionId, 'secondo'), { ok: true, posizione: 2 });
+  /* ⭐ 14/09 — la risposta porta anche `coda` (la coda è della sessione e si annuncia a ogni finestra): l'intento di
+     questa prova non cambia, cambia solo la forma esatta della risposta. */
+  assert.equal(registro.accodaMessaggio(sessionId, 'primo').posizione, 1);
+  const secondo = registro.accodaMessaggio(sessionId, 'secondo');
+  assert.equal(secondo.posizione, 2);
+  assert.deepEqual(secondo.coda.voci.map((v) => v.testo), ['primo', 'secondo'], 'la coda annunciata ha lo stesso ordine della consegna');
 
   assert.equal(codaMessaggiFn(), 'primo', 'il PRIMO accodato è il PRIMO consegnato — FIFO');
   assert.equal(codaMessaggiFn(), 'secondo');
@@ -3000,7 +3009,11 @@ test('⭐⭐ svuotaCoda: rimuove l\'ULTIMO messaggio accodato, mai il primo — 
   registro.accodaMessaggio(sessionId, 'primo');
   registro.accodaMessaggio(sessionId, 'secondo');
 
-  assert.deepEqual(registro.svuotaCoda(sessionId), { ok: true, rimosso: true });
+  /* ⭐ 14/09 — la risposta porta anche `coda` (la coda è della sessione e si annuncia a ogni finestra): l'intento di
+     questa prova non cambia, cambia solo la forma esatta della risposta. */
+  const tolto = registro.svuotaCoda(sessionId);
+  assert.equal(tolto.rimosso, true);
+  assert.deepEqual(tolto.coda.voci.map((v) => v.testo), ['primo'], 'senza id si toglie l\'ULTIMO, come prima');
   assert.equal(codaMessaggiFn(), 'primo', 'il "secondo" è stato tolto dall\'Annulla — resta solo il primo, ancora in ordine');
   assert.equal(codaMessaggiFn(), null);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
@@ -3011,7 +3024,9 @@ test('⛔ svuotaCoda: rimosso:false su una coda già vuota, mai un errore — e 
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
-  assert.deepEqual(registro.svuotaCoda(sessionId), { ok: true, rimosso: false });
+  /* ⭐ 14/09 — la risposta porta anche `coda` (la coda è della sessione e si annuncia a ogni finestra): l'intento di
+     questa prova non cambia, cambia solo la forma esatta della risposta. */
+  assert.deepEqual(registro.svuotaCoda(sessionId), { ok: true, rimosso: false, coda: { voci: [], inPausa: false } });
   assert.deepEqual(registro.svuotaCoda('fantasma'), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });

@@ -217,12 +217,18 @@ test('CORSIA2-TICK-CABLAGGIO — il disegnatore usa il tono della carta e marca 
  */
 
 test('CORSIA2-ATTESA-CABLAGGIO — coda consegnata e reindirizzamento applicato tolgono l’attesa vecchia PRIMA della bolla nuova', () => {
-  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  for (const [nome, riga] of [
-    ['coda consegnata', 'state.realSession.codaMessaggi.shift();'],
-    ['reindirizzamento applicato', 'state.realSession.followUpBubbleInAttesa = true;'],
+  /*
+   * ⛔ 14/09 — l'ancora della coda era `codaMessaggi.shift()`, che non esiste più: la coda a schermo la accorcia l'annuncio
+   *   del server (`talos.coda`). La forma si cerca allora DENTRO il suo `case`, senza uscirne: senza quel confine la stessa
+   *   coppia di righe del reindirizzamento farebbe passare la prova anche con la coda rotta.
+   */
+  const dentroIlCase = (evento, dopo) => new RegExp(
+    `case '${evento}': \\{(?:(?!case ')[\\s\\S])*?nascondiAttesaRisposta\\(\\);\\s*appendUserFollowUp\\(evento\\.testo, null, evento\\.immagini\\);${dopo}`,
+  );
+  for (const [nome, forma] of [
+    ['coda consegnata', dentroIlCase('QueuedMessageDelivered', '')],
+    ['reindirizzamento applicato', dentroIlCase('RunRedirectApplied', '\\s*state\\.realSession\\.followUpBubbleInAttesa = true;')],
   ]) {
-    const forma = new RegExp(`nascondiAttesaRisposta\\(\\);\\s*appendUserFollowUp\\(evento\\.testo, null, evento\\.immagini\\);\\s*${escape(riga)}`);
     assert.ok(forma.test(MONOLITE), `${nome}: l’attesa vecchia non viene tolta prima della bolla nuova, e resta sopra la domanda`);
   }
 });

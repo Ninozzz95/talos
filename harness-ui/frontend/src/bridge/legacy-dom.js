@@ -163,7 +163,9 @@ export function montaPonteLegacy(documentObj = document) {
   const coda = uno(piede, '.talos-queue');
   battezza(coda, { id: 'queuedMessage', classi: ['queued-message'] });
   battezza(uno(coda, '.talos-queue__text'), { id: 'queuedMessageText' });
-  battezza(uno(coda, '.talos-button'), { id: 'cancelQueued' });
+  // ⛔ 14/09: per ATTRIBUTO, non «il primo pulsante» — «Indirizza ora» sta prima di «Togli» e se lo sarebbe preso.
+  battezza(uno(coda, '[data-coda-togli]'), { id: 'cancelQueued' });
+  battezza(uno(coda, '[data-coda-invia]'), { id: 'inviaQueued' });
   coda.hidden = true;
   const compositore = uno(piede, '#composerForm');
   battezza(uno(compositore, '.talos-send'), { classi: ['send-btn'] });
