@@ -36,3 +36,63 @@
 - ⛔⛔⛔⭐⭐⭐ [TEMA CHIARO E SCURO, SEMPRE TUTTI E DUE](tema-chiaro-e-scuro-sempre-tutti-e-due.md) — owner 11/09: «GUARDA SEMPRE LA APP CON TEMA CHIARO E SCURO SEMPRE». Nata da un velo d'avvio che usciva CHIARO su una app SCURA: un lampo bianco, cioè peggio del difetto che copriva. ⛔ Una superficie che nasce PRIMA che la app applichi il tema non lo eredita: va letto dalla preferenza salvata e stampato sulla radice prima del primo disegno. La prova vale solo con **entrambe** le foto
 - ⛔⛔⛔⭐⭐⭐ [NON CONSEGNARE AL 4174 IL LAVORO A META' DI UN ALTRO](non-consegnare-il-lavoro-a-meta-di-un-altro.md) — 11/09: avevo PREVISTO io il rischio del verde e ho consegnato lo stesso; l'owner si e' ritrovato la chat verde. Una consegna porta TUTTO l'albero. ⛔ E una foto di un profilo VERGINE non e' una verifica: il verde veniva dalle preferenze SALVATE dell'owner, che Playwright non ha — si riproduce lo stato con `addInitScript`, o si dichiara non verificato. ⛔ Spegnere un default non basta quando la scelta e' timbrata: si smette di DISEGNARE
 - ⛔⛔⛔⭐⭐⭐ [IL WORKSPACE PIU LARGO NON E UN POSTO DOVE SCRIVERE](il-workspace-largo-non-e-un-posto-dove-scrivere.md) — 11/09: `document_create` dava EPERM in `C:\` e sembrava una risoluzione fallita che ricade sulla radice. Era il contrario: `cartellaEffettivaPerPermessi` ritorna `parse(base).root` **apposta** per «Full access», e la radice di sistema su Windows accetta cartelle ma non file (ACL del gruppo Users) ⇒ nessun nome diverso poteva riuscire, e il consiglio «prova un altro titolo» era falso. ⭐ Erano due domande in una variabile sola: **da dove si legge** e **dove si deposita un file generato** (`cartellaCreazioni` → `cartellaBase`). ⛔ Corollario: quando un permesso allarga un ambito, chiedersi se allarga anche le SCRITTURE e se il posto più largo sia scrivibile. ⛔ Aperto, trovato per strada: un cambio di permesso a sessione viva **non raggiunge la conversazione** — il modello si è creduto in sola lettura per sei giri
+
+
+## Le regole di VERIFICA — spostate qui da `MEMORY.md` il 14/09/2026
+
+> ⛔ **Non sono state buttate: sono state spostate.** `MEMORY.md` era a **180 righe**
+> contro il tetto di lettura di **200** (e l'allarme del sistema scatta a 140): oltre quel punto il
+> contenuto si perde **in silenzio**, come già succede ai 25 KB. Questo era il blocco più coeso —
+> tutte regole su COME si verifica e quando una cosa si può dire provata.
+>
+> ⛔ E la destinazione è stata misurata come l'origine, prima di spostare: questo file aveva
+> **6819 byte** e **6352 byte** ci stavano senza avvicinarsi al tetto. Nessuna
+> riga accorciata, nessuna riga persa.
+
+> ⛔⛔⛔ **SE NON VERIFICHI ESATTAMENTE COME CHIESTO, FERMATI E DILLO** —
+> owner 2/9: una verifica APPROSSIMATA (surrogato automatico al posto
+> del tocco reale richiesto, scenario "simile" invece di quello
+> preciso) non chiude una fase — la falsa chiusura costa più di una
+> fermata onesta. Dettagli in [[se-non-verifichi-esatto-fermati-e-dillo]].
+
+> ⛔⛔ **UNA RICERCA WEB A OGNI SINGOLO DUBBIO** — [[ricerca-web-a-ogni-dubbio]], obbligo owner 20/8. Non solo prima di implementare: **ogni volta** che una domanda resta aperta, anche a meta' indagine. Il segnale e' la parola «probabilmente».
+
+> ⛔ **REGOLA ZERO — NON NEGOZIABILE.** A **OGNI** fix, da solo:
+> **(1)** ricerca web PRIMA — [[web-research-before-implementation]], budget finito → brief — [[web-research-handoff-when-out-of-budget]]; **(2)** skill ufficiali — [[use-official-skills-always]];
+> **(3)** vincoli TALOS: ricerca + one-up + parity + **AMBITION** — [[vincoli-ingegneristici-talos]]; **(4)** review SF avversariale, poi i gate — [[sf-review-and-vincoli-norm]];
+> **(5)** ⛔⛔ **SI STRUMENTA SEMPRE, MAI IPOTESI** — [[si-strumenta-sempre-mai-ipotesi]] · [[far-dire-alla-macchina-perche]]; riprodurre prima di «risolto» — [[reproduce-before-claiming-fix]]; lavoro coeso — [[no-fragmented-work-debt]];
+> **(5-bis)** ⛔ ogni funzione si prova **ANCHE AL CONTRARIO** — [[provare-sempre-anche-il-verso-contrario]];
+> **(6)** ⛔ niente è chiuso senza **DISPOSITIVO REALE** — [[device-verified-or-not-done]] — in **QUATTRO combinazioni** — [[quattro-combinazioni-su-dispositivo]] — con **tocchi adb** — [[tocchi-reali-adb-obbligatori]]. Una grep non è una prova — [[phase-closed-only-on-device]];
+> ⛔⛔ [LO SCREENSHOT VA SCATTATO **DURANTE**](lo-screenshot-va-scattato-DURANTE.md) - owner 21/8: il JSON grezzo si vedeva **mentre elabora** e spariva nella risposta finale. Avevo dichiarato curato guardando solo la fine. ⛔ Per cio che SCORRE si fotografa a intervalli durante l'attesa, non una volta sola alla fine.
+> **(6-bis)** ⛔ ogni funzione **SCREENSHOTTATA**, e ogni screenshot **ISPEZIONATO** — [[screenshot-obbligatorio-e-fonte-di-anomalie]].
+> **(6-ter)** ⛔⛔⛔ regola BLOCCANTE owner 27/8: in una pipeline QA visiva, ogni screenshot annota nel **taccuino** TUTTI i difetti (automatici e trovati guardando l'immagine), si corregge **in BATCH**, e si riverifica visivamente **solo una volta, alla fine** — [[pipeline-qa-batch-non-uno-alla-volta]].
+> Se stai per implementare senza 1-3: **FERMATI**.
+
+> ⛔⛔⛔ **LOCAL-FIRST È LA PREMESSA DI TUTTA LA APP** — [[mobile-app-local-first-requirement]], DIMENTICATA 3 VOLTE. Il mobile gira standalone, senza PC/server/tunnel, di default e SEMPRE. Un ponte verso un backend desktop è opzionale e futuro — mai proposto come alternativa alla pari per far funzionare qualcosa oggi.
+
+> ⛔⛔⛔ **HARNESS-UI MOBILE: SI ALLINEA SEMPRE AL DESKTOP** — [[mobile-harness-ui-si-allinea-sempre-al-desktop]], owner 29/8, persistente, mai da dimenticare: il desktop ha GIÀ RISOLTO su questo sottosistema — si consulta COME FA IL DESKTOP prima di decidere un comportamento, mai a tavolino. Due bug trovati dal vivo che l'hanno fatto nascere, in coda: la nota "File scritto" senza senso dopo ogni scrittura, e il resume che mostra Files/Review coi dati MOCK invece di uno stato vuoto onesto o la radice vera.
+
+> ⛔⛔ [LE REGOLE D'ORO SI ESEGUONO, non si rileggono](le-regole-doro-la-lista-che-si-esegue.md) — 19/8: tre mancate in un turno solo. **Prima** del codice i punti 1-5, **prima** di dire «fatto» i punti 6-10.
+
+> ⛔⛔⛔ [PRIMA DI UCCIDERE UN PROCESSO, RISALI LA CATENA](il-guardiano-accusava-la-sessione-dellowner.md) — 23/8: la sorveglianza gridava «3 ORFANI» e uno era la **sessione Codex dell'owner, viva**; un'altra volta erano un albero **vivo della campagna** su un task pagato. ⛔ Un allarme che dice QUANTI e non CHI non è azionabile. Si risale ai genitori e si guarda dove finisce, **sempre**, prima di `taskkill`.
+> ⛔⛔ [TACCUINO ISPETTORE SEMPRE ACCESO](taccuino-ispettore-sempre-acceso.md) — ogni screenshot si guarda **tutto**, cercando difetti **fuori** da ciò che sto facendo. Tre difetti in una foto che avevo dichiarato buona. Il 20/8 ha trovato **otto** difetti in un turno, tre miei.
+
+> ⛔⛔ [QUATTRO VIEWPORT, non quattro tocchi](quattro-viewport-non-quattro-tocchi.md) — owner 20/8: tablet in **entrambi** gli orientamenti E risoluzione telefono in entrambi. ⛔⛔ owner 30/8: **tablet PORTRAIT è il principale, sempre il primo**; gli altri tre sono un passaggio ulteriore; si ripristina **sempre** a tablet portrait alla fine — `wm size reset` da solo non basta, serve anche `user_rotation 0`.
+
+> ⛔⛔ [SE LA TOCCHI, LA PROVI TUTTA](se-la-tocchi-la-provi-tutta.md) — chi tocca una superficie la **guarda tutta**, la confronta con la sorella, prova **ogni** voce fino all'esito vero e rileva gli errori di **stile**. Da solo. Se l'owner deve dire «prova tutto», il turno prima era incompleto.
+
+> ⛔⛔ [OGNI SCREENSHOT LO APPROVA LUI](ogni-screenshot-va-approvato.md) — nessuna vista entra nel README senza il sì **esplicito**, una per una. Tre volte ho detto «eccellente» e lui l'ha bocciata a colpo d'occhio: viewport sbagliata, chat in italiano. ⛔ Il cancello è nello script di pubblicazione, non nella mia memoria.
+
+> ⛔⛔⛔⛔ **OGNI FOTO SI ISPEZIONA TUTTA, CERCANDO TUTTI I DIFETTI** — owner 13/09/2026,
+> dopo che un difetto mai guardato è arrivato sul suo schermo: «devi sempre ispezionare la foto
+> per TUTTI I DIFETTI DEVI ESSERE ESIGENTE CRITICO E CAPARBIO, NON DARE PER SCONTATO DI AVER
+> SISTEMATO TUTTI I DIFETTI» ([[ispeziona-la-foto-per-tutti-i-difetti]]).
+> ⛔ Il caso: avevo provato il compositore a campo vuoto, pieno e in risposta, **mai con la
+> dettatura accesa** — e lì restavano DUE comandi di stop. E la guardia che doveva impedirlo era
+> **capovolta**: nome e commento promettevano «uno solo», l'asserzione pretendeva che ne
+> esistesse uno. Era verde mentre il doppione andava a schermo.
+> ⇒ Si enumerano gli **stati** prima di dire «provata»; si guarda la foto **fuori** da ciò che si
+> sta correggendo; e quando un test viene adattato a una UI nuova si rilegge il suo commento e si
+> controlla che l'asserzione dica ancora la stessa cosa.
+
+> ⛔⛔ **PRIMA DI OGNI BRIEF, VERIFICA COSA ESISTE GIÀ** — owner 12/09: «stai attento a dare i prompt su cose che potremmo avere già fatto» ([[prima-del-brief-verifica-cosa-esiste-gia]]): grep nel codice e nella coda, riga «cosa esiste già» in testa al brief, una domanda all'owner se la voce è ambigua fra due sottosistemi. ⛔ Spostata qui il 14/09/2026 insieme al blocco delle regole di verifica: è la stessa disciplina, applicata a un brief invece che a una foto.
