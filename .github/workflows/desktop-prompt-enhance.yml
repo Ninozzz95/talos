@@ -6,11 +6,13 @@ on:
       - fix/desktop-prompt-enhance
     paths:
       - 'harness-ui/**'
+      - 'context-engine/**'
       - '.github/workflows/desktop-prompt-enhance.yml'
   pull_request:
     branches: [main]
     paths:
       - 'harness-ui/**'
+      - 'context-engine/**'
       - '.github/workflows/desktop-prompt-enhance.yml'
 
 permissions:
@@ -26,11 +28,17 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: harness-ui/package-lock.json
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            context-engine/package-lock.json
 
       - name: dipendenze server
         run: npm ci
         working-directory: harness-ui
+
+      - name: dipendenze context engine
+        run: npm ci
+        working-directory: context-engine
 
       - name: regressione Prompt Enhance Desktop
         run: node --test tests/http-routes-migliora-prompt-provider.test.mjs tests/http-routes-migliora-prompt.test.mjs
