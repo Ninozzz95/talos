@@ -14,7 +14,7 @@ import { configureChatProvider } from './chatFixtures'
 // core flows on the REAL shipped default — including the R1 device-proven
 // confirm dialog on the Memory station, the #1 device-bite debt. File-local
 // storageState, no shared state (playwright best practice).
-const MENU = '[aria-label="Open menu"]'
+const MENU = '[data-testid="talos-shell-menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
 
