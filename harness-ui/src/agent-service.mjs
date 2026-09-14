@@ -47,6 +47,7 @@ import {
   elencaVociConTesto as elencaVociConTestoReale,
   eliminaVoce as eliminaVoceReale,
   impaginaVoci as impaginaVociLibreria,
+  leggiBytesVoce as leggiBytesVoceReale,
   leggiVoce as leggiVoceReale,
   origineVoce as origineVoceReale,
   rinominaVoce as rinominaVoceReale,
@@ -450,13 +451,19 @@ export async function avviaSessione({
   elencaVociFn = elencaVociReale,
   elencaVociConTestoFn = elencaVociConTestoReale,
   leggiVoceFn = leggiVoceReale,
+  /*
+   * ⛔ 14/09 (F03 della review) — la porta BINARIA della Libreria, sorella di `leggiVoceFn`. Non è un doppione:
+   * `leggiVoce` legge in utf8 tutto ciò che non è un'immagine ed è giusta così (serve al MODELLO, che vuole testo),
+   * mentre qui i byte devono restare byte. Vedi la doc di `leggiBytesVoce` in `library-store.mjs`.
+   */
+  leggiBytesVoceFn = leggiBytesVoceReale,
   origineVoceFn = origineVoceReale,
   /*
    * ⭐⭐⭐ 29/8 — FASE N, seconda fetta (mutazioni). Stesso principio
    * appena sopra: solo i punti di contatto I/O sono iniettabili
    * (`rinominaVoceFn`/`eliminaVoceFn`); `trovaVoceLibreria` è PURA,
-   * usata direttamente. `library_export` non ha un suo I/O dedicato —
-   * compone `leggiVoceFn` (già iniettabile sopra) con
+   * usata direttamente. `library_export` non ha un I/O tutto suo —
+   * compone `leggiBytesVoceFn` (già iniettabile sopra) con
    * `creaFileWorkspaceFn` (già iniettabile per onDocumento/onImmagine,
    * riuso diretto, nessuna funzione nuova per "scrivi un file nel
    * workspace").
@@ -1457,6 +1464,20 @@ export async function avviaSessione({
    * rifiuta onestamente (`creaFileWorkspaceFn` lancia `FILE_EXISTS`),
    * mai una sovrascrittura silenziosa.
    */
+  /**
+   * L'anteprima che finisce nell'evento a schermo, decisa dal MEDIA TYPE e non dal caso: il testo si legge, il
+   * binario si DICHIARA. ⛔ Mai un `toString('utf8')` alla cieca sui byte di uno zip o di un PDF — a schermo
+   * arriverebbero righe di caratteri sostituti, cioè un contenuto che il file non ha. Il confine testo/binario è
+   * quello già in uso in `context-asset-adapter.mjs` (`text/*` più `application/json`), esteso ai suffissi
+   * `+json`/`+xml` che l'ecosistema usa per i formati derivati: non un criterio nuovo inventato qui.
+   */
+  function anteprimaDiUnFileEsportato({ mediaType, bytes }) {
+    const tipo = String(mediaType || 'application/octet-stream');
+    const testuale = tipo.startsWith('text/') || tipo === 'application/json' || tipo === 'application/xml'
+      || tipo.endsWith('+json') || tipo.endsWith('+xml');
+    return testuale ? bytes.toString('utf8') : `[${tipo}, ${bytes.byteLength} bytes]`;
+  }
+
   const onLibreriaEsporta = async (argomenti) => {
     const voci = await elencaVociFn({ cartella });
     const trovata = trovaVoceLibreria(voci, argomenti?.reference ?? '');
@@ -1466,11 +1487,26 @@ export async function avviaSessione({
     if (trovata.ambiguo) {
       return { ok: false, esito: `More than one Library file is named "${argomenti?.reference}". Ask the user which one; do not choose for them.` };
     }
-    const letta = await leggiVoceFn({ cartella, id: trovata.id });
+    /*
+     * ⛔⛔⛔ 14/09 (F03 della review, riprodotto): qui si leggeva con `leggiVoceFn`, cioè la porta del MODELLO, che
+     *   decodifica in utf8 tutto ciò che non è un'immagine. Un `.docx` (che è uno zip), un `.pdf`, un `.xlsx`
+     *   passavano da lì e ogni byte non valido diventava U+FFFD, IRREVERSIBILMENTE: l'esportazione consegnava un
+     *   file rotto dichiarando «Exported», con un conteggio di byte che non era nemmeno quello del file vero.
+     *   La porta giusta esiste da sempre ed è la stessa dello scarico dalla UI — `leggiBytesVoce`.
+     * ⛔ E il suo rifiuto si dice: il tetto dei 64 MB e la scheda-senza-file LANCIANO. Un attrezzo del modello non
+     *   deve esplodere per questo, ma nemmeno tacere: torna `ok:false` col motivo, e nessun file scritto.
+     */
+    let letta;
+    try {
+      letta = await leggiBytesVoceFn({ cartella, id: trovata.id });
+    } catch (errore) {
+      const dettaglio = errore instanceof Error ? errore.message : String(errore);
+      return { ok: false, esito: `"${trovata.nome}" could not be read from the Library: ${dettaglio}. No copy was saved.` };
+    }
     if (!letta) {
       return { ok: false, esito: `"${trovata.nome}" is no longer available. No copy was saved.` };
     }
-    const bytes = letta.immagineBase64 ? Buffer.from(letta.immagineBase64, 'base64') : Buffer.from(letta.testo ?? '', 'utf8');
+    const { bytes } = letta;
     let salvato;
     try {
       salvato = await creaFileWorkspaceFn({ cartella: cartellaPerCreare, nome: letta.nome, bytes });
@@ -1479,7 +1515,7 @@ export async function avviaSessione({
       return { ok: false, esito: `"${letta.nome}" could not be saved into the workspace: ${dettaglio}. Do not silently retry with the same name — offer a different name, or ask.` };
     }
     // ⛔ mai i byte grezzi dentro un evento SSE/JSON — stessa disciplina già in uso per un documento/immagine binari in onDocumento/onImmagine.
-    onEvento(eventoPerScrittura({ percorso: percorsoNellAlbero(salvato.percorso), contenuto: letta.immagineBase64 ? `[image, ${bytes.byteLength} bytes]` : (letta.testo ?? ''), esisteva: false }));
+    onEvento(eventoPerScrittura({ percorso: percorsoNellAlbero(salvato.percorso), contenuto: anteprimaDiUnFileEsportato(letta), esisteva: false }));
     return { ok: true, esito: `Exported "${letta.nome}" into the workspace (${bytes.byteLength} bytes).` };
   };
 

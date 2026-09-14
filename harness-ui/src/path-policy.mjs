@@ -33,7 +33,11 @@ import { basename as nomeBase, dirname as cartellaDi, relative as relativoA, res
  */
 export const FILE_DI_CONTROLLO = Object.freeze({
   file: Object.freeze(['.harness-ui-hooks.json', '.harness-ui-mcp.json', '.provider-runtime.json', 'CLAUDE.md', 'AGENTS.md']),
-  cartelleOvunque: Object.freeze(['.harness-ui-plugins', '.hooks-trust', '.claude', '.memory-store']),
+  // ⛔ 14/09 (F01/F02 della review, verificato): `.mcp-trust` e `.plugin-trust` sono i registri dove vivono i consensi ai
+  //   server MCP e ai plugin (session-registry.mjs), esattamente come `.hooks-trust`. Mancavano da questo elenco: senza,
+  //   un attrezzo di scrittura del modello poteva scriverci dentro e AUTO-CONCEDERSI la fiducia. `ePercorsoDiControllo`
+  //   risolve già il realpath, quindi la classificazione vale anche per un alias/symlink verso queste cartelle.
+  cartelleOvunque: Object.freeze(['.harness-ui-plugins', '.hooks-trust', '.mcp-trust', '.plugin-trust', '.claude', '.memory-store']),
   cartelleAllaRadice: Object.freeze(['skills']),
 });
 

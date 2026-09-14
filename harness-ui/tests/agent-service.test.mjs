@@ -2257,14 +2257,17 @@ test('⭐⭐⭐ onLibreriaEsporta: risolve il riferimento, legge la voce, la scr
   let catturato;
   const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
   const elencaVociFn = async () => [{ id: 'lib-1', nome: 'report.md', fileType: 'document', origine: 'uploaded' }];
-  const leggiVoceFn = async ({ id }) => (id === 'lib-1' ? { nome: 'report.md', mediaType: 'text/markdown', origine: 'uploaded', testo: 'contenuto vero' } : null);
+  // 14/09 (F03): l'esportazione legge dalla porta BINARIA della Libreria, non da quella del modello — vedi i due test qui sotto.
+  const leggiBytesVoceFn = async ({ id }) => (id === 'lib-1'
+    ? { bytes: Buffer.from('contenuto vero', 'utf8'), dimensione: 14, nome: 'report.md', mediaType: 'text/markdown' }
+    : null);
   let scritturaRicevuta;
   const creaFileWorkspaceFn = async (spec) => { scritturaRicevuta = spec; return { percorso: spec.nome }; };
   const eventi = [];
 
   await avviaSessione({
     cartella: '/tmp/progetto-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
-    elencaVociFn, leggiVoceFn, creaFileWorkspaceFn,
+    elencaVociFn, leggiBytesVoceFn, creaFileWorkspaceFn,
   });
 
   const risultato = await catturato.onLibreriaEsporta({ reference: 'lib-1' });
@@ -2273,6 +2276,7 @@ test('⭐⭐⭐ onLibreriaEsporta: risolve il riferimento, legge la voce, la scr
   assert.match(risultato.esito, /Exported "report\.md" into the workspace \(14 bytes\)/);
   const eventoScrittura = eventi.find((e) => e.type === 'StateDelta');
   assert.ok(eventoScrittura, 'una scrittura reale nel workspace deve emettere StateDelta, come document_create/generate_image');
+  assert.ok(JSON.stringify(eventoScrittura).includes('contenuto vero'), 'un file di TESTO resta leggibile nell\'anteprima a schermo');
 });
 
 test('⛔⛔ AL CONTRARIO — onLibreriaEsporta: due voci con lo stesso nome sono ambigue, creaFileWorkspaceFn MAI chiamata', async () => {
@@ -2297,14 +2301,67 @@ test('⛔ AL CONTRARIO — onLibreriaEsporta: un nome già occupato nel workspac
   let catturato;
   const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
   const elencaVociFn = async () => [{ id: 'lib-1', nome: 'esiste-gia.md', fileType: 'document', origine: 'uploaded' }];
-  const leggiVoceFn = async () => ({ nome: 'esiste-gia.md', mediaType: 'text/markdown', origine: 'uploaded', testo: 'x' });
+  const leggiBytesVoceFn = async () => ({ bytes: Buffer.from('x', 'utf8'), dimensione: 1, nome: 'esiste-gia.md', mediaType: 'text/markdown' });
   const creaFileWorkspaceFn = async () => { throw new WorkspaceFileError('Esiste già un file con questo nome', 'FILE_EXISTS'); };
 
-  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaVociFn, leggiVoceFn, creaFileWorkspaceFn });
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaVociFn, leggiBytesVoceFn, creaFileWorkspaceFn });
 
   const risultato = await catturato.onLibreriaEsporta({ reference: 'lib-1' });
   assert.equal(risultato.ok, false);
   assert.match(risultato.esito, /could not be saved into the workspace: Esiste già un file con questo nome/);
+});
+
+/*
+ * ⛔⛔⛔ 14/09 — F03 della review, riprodotto prima di curarlo: `library_export` leggeva dalla porta del MODELLO
+ *   (`leggiVoce`, che decodifica in utf8 tutto ciò che non è un'immagine) e depositava nel workspace un file
+ *   BINARIO corrotto — ogni byte non valido diventato U+FFFD — dichiarando «Exported» con un conteggio di byte
+ *   che non era quello del file vero. Il criterio della riga è byte per byte, non «sembra uguale».
+ */
+test('⛔⛔⛔ F03 — onLibreriaEsporta: un file BINARIO arriva nel workspace IDENTICO, senza passare da utf8', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  // L'intestazione di uno zip (cioè di un .docx) più byte non validi in utf8: esattamente ciò che la vecchia strada distruggeva.
+  const veri = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe, 0x00, 0x01, 0x80, 0x9f]);
+  assert.notDeepEqual(Buffer.from(veri.toString('utf8'), 'utf8'), veri, 'premessa della prova: passare da utf8 DISTRUGGE questi byte');
+
+  const mediaType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  const elencaVociFn = async () => [{ id: 'lib-1', nome: 'contratto.docx', fileType: 'document', origine: 'uploaded' }];
+  const leggiBytesVoceFn = async ({ id }) => (id === 'lib-1' ? { bytes: veri, dimensione: veri.byteLength, nome: 'contratto.docx', mediaType } : null);
+  let scritturaRicevuta;
+  const creaFileWorkspaceFn = async (spec) => { scritturaRicevuta = spec; return { percorso: spec.nome }; };
+  const eventi = [];
+
+  await avviaSessione({
+    cartella: '/tmp/progetto-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
+    elencaVociFn, leggiBytesVoceFn, creaFileWorkspaceFn,
+  });
+
+  const risultato = await catturato.onLibreriaEsporta({ reference: 'contratto.docx' });
+  assert.equal(risultato.ok, true);
+  assert.deepEqual(scritturaRicevuta.bytes, veri, 'i byte scritti sono quelli della Libreria, non la loro ombra utf8');
+  assert.match(risultato.esito, /Exported "contratto\.docx" into the workspace \(10 bytes\)/);
+
+  const eventoScrittura = eventi.find((e) => e.type === 'StateDelta' && JSON.stringify(e).includes('contratto.docx'));
+  assert.ok(eventoScrittura, 'una scrittura reale nel workspace deve emettere StateDelta');
+  const detto = JSON.stringify(eventoScrittura);
+  assert.ok(detto.includes(`[${mediaType}, 10 bytes]`), 'l\'anteprima DICHIARA il binario invece di fingerlo testo');
+  assert.ok(!detto.includes('�'), 'mai caratteri sostituti a schermo per un file che non ne ha');
+});
+
+test('⛔ AL CONTRARIO — F03: se la Libreria RIFIUTA di dare i byte (tetto dello scarico), si dice il motivo e non si scrive niente', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const elencaVociFn = async () => [{ id: 'lib-1', nome: 'enorme.bin', fileType: 'document', origine: 'uploaded' }];
+  const leggiBytesVoceFn = async () => { throw new Error('File troppo grande da scaricare (70 MB, tetto 64 MB)'); };
+  let chiamataScrittura = false;
+  const creaFileWorkspaceFn = async () => { chiamataScrittura = true; return { percorso: 'x' }; };
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaVociFn, leggiBytesVoceFn, creaFileWorkspaceFn });
+
+  const risultato = await catturato.onLibreriaEsporta({ reference: 'lib-1' });
+  assert.equal(risultato.ok, false);
+  assert.match(risultato.esito, /could not be read from the Library: File troppo grande da scaricare \(70 MB, tetto 64 MB\)/);
+  assert.equal(chiamataScrittura, false, 'un rifiuto in lettura non deve MAI arrivare a scrivere qualcosa');
 });
 
 /*
