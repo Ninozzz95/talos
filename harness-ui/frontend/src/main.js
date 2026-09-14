@@ -22,6 +22,17 @@ import { montaPonteLegacy } from './bridge/legacy-dom.js';
 montaPonteLegacy(document);
 await import('./legacy/app.js');
 
+/*
+ * 14/09/2026 — Desktop 0.1.7: il trasporto consegna i delta in tempo reale, ma le modalita
+ * `fade`/`typewriter` del monolite trattengono volontariamente testo gia ricevuto fino a
+ * 300–350 ms. Il renderer incrementale e il suo requestAnimationFrame sono gia il punto giusto
+ * per coalescere SOLO il lavoro di paint: qui rendiamo quindi il live stream "none", cioe ogni
+ * frame vede tutto cio che T3 ha gia ricevuto. Nessun timer, nessun typing artificiale, nessun
+ * chunk sintetico; ordine e contenuto dei delta restano quelli originali.
+ */
+const streamingHost = window.__talosHarnessHost || document.documentElement;
+streamingHost.dataset.talosStreamingAnimation = 'none';
+
 /* TALOS-DESKTOP-FINAL-UI */
 const { initTalosDesktopBackground } = await import('./motion/desktop-background.js');
 initTalosDesktopBackground();
