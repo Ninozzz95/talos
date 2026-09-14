@@ -14,14 +14,14 @@ test.use({ storageState: TALOS_PROVIDER_STATE })
 
 // F4 owner regressions: #19 pasted links must survive into the visible
 // message; #20 the prompt enhancer must be actionable with a prompt present.
-const MENU = '[aria-label="Open menu"]'
+const MENU = '[data-testid="talos-shell-menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
 
 function geminiResponse(text: string) {
     return {
         modelVersion: 'gemini-live',
-        candidates: [{ finishReason: 'STOP', content: { parts: [{ text }] } }],
+        candidates: [{ finishReason: 'STOP', content: { parts: [{ text }] }],
     }
 }
 
@@ -564,7 +564,7 @@ test('#20 the enhancer control is actionable once a prompt exists', async ({ pag
 
     const composer = page.getByLabel('Message TALOS')
     await composer.fill('Migliora questo prompt per favore')
-    // Classic bar (seeded classic shell): the wand must be enabled with text.
-    const wand = page.getByLabel('Improve prompt')
-    await expect(wand).toBeEnabled({ timeout: 15_000 })
+    await page.getByLabel('Add to chat').click()
+    await page.getByTestId('talos-drawer-tab-create').click()
+    await expect(page.getByTestId('talos-drawer-enhance')).toBeEnabled({ timeout: 15_000 })
 })
