@@ -374,3 +374,34 @@
   generazione nuova: in una finestra che guarda, ciò che arriva dopo `talos.fine-rigiocata` veniva disegnato come storia.
 - **glm-5.3-flash e «senza spiegazioni»**: alla richiesta «scrivi soltanto il più piccolo di quei numeri, senza spiegazioni» ha
   scritto la verifica intera e poi «153» (parte 5, due volte su due).
+
+## 2026-09-14 — le tre zip (audit/review/overlay): cosa valgono, misurato
+
+- **Tre zip distinte, non una**: `TALOS_desktop_audit_e_kit.zip` (13/09 14:44, kit di osservabilità + confronto documentale),
+  `TALOS_1aa816de_review_ingegneristica_e_patch.zip` (16:16, review + 8 patch + 1 file nuovo + 53 test) e
+  `talos-desktop-overlay.zip` (16:16, 5 moduli nuovi non cablati). Estratte in `scratchpad/zip-audit/`.
+- **La review parte da `1aa816de`, 35 commit dietro HEAD, ma i suoi 8 file toccati sono BYTE-IDENTICI a oggi** (`git hash-object`
+  == `beforeGitSha1` per tutti e 8; 0 commit li hanno cambiati dal 13/09). `store-entry-id.mjs` è nuovo, non esiste da noi.
+  ⇒ le patch si applicano pulite sul codice di oggi.
+- ⛔⛔⛔ **F01 È REALE, CONFERMATO DAL VIVO sul banco 5475.** `DELETE /api/v1/sessions/<id>/notes/..%5Czz-sentinella-traversal`
+  ha risposto 200 e **cancellato `harness-ui/zz-sentinella-traversal.json`, un file FUORI da `.notes-store/`**. GET dello stesso
+  id → 200. `nomiDellaRichiesta` fa `decodeURIComponent` e passa l'id dritto a `percorsoDi(cartella,id)=join(cartella,id+'.json')`,
+  senza nessun controllo. Vale per notes/tasks/memory, e l'id arriva ANCHE dagli attrezzi del modello (`argomenti?.id` →
+  `eliminaNotaFn`), quindi è raggiungibile per prompt-injection, non solo via HTTP loopback.
+- **Le 53 prove della review sul NOSTRO codice: 12 verdi / 41 rosse** (rilanciate con il suo `pty-loader` e `TALOS_TEST_ROOT` su
+  `harness-ui`). Le 41 rosse SONO i difetti che la patch cura: traversal (F01), classificazione `.mcp-trust`/`.plugin-trust`
+  (F02), byte non-UTF8 dell'export Libreria (F03), backlog PTY a chunk unico (F04), PTY osservata marcata orfana (F05),
+  tick automazioni sovrapposti (F06). Ogni patch è piccola (`all.patch` +87 -33).
+- **L'overlay tocca gap VERI ma non è cablato**: il nostro SSE *live* dopo `fineReplay` NON coalescente (solo il replay lo è);
+  `terminal-ws.mjs` NON ha contropressione (nessun `bufferedAmount`/`pause`/`resume`/`drain`). I 5 moduli sono standalone con
+  test, ma vanno agganciati a mano e provati con un giro vero — non plug-and-play.
+- **L'audit kit lo dichiara da sé**: «Audit parziale. Nessun benchmark di prodotto, nessuna patch di ottimizzazione
+  certificata.» 0 esecuzioni TALOS, 0 concorrenti eseguiti, 11 clonazioni fallite per DNS. Valore d'implementazione basso: è
+  un kit di sonde + un confronto documentale con 10 concorrenti, utile come riferimento, non come codice da mettere dentro.
+- ⛔ La review stessa dice di NON fare merge cieco col suo `apply.mjs` («se un hash non coincide, l'applicazione si ferma: non
+  fare un merge cieco»): si trattano come un bug-report verificato e si riscrivono le cure con le NOSTRE prove e il contrario.
+- ✅ **F01 CHIUSO il 14/09**, commit `7879d81d`. `src/id-archivio.mjs` (grammatica della Libreria), guardia in `percorsoDi` di
+  notes/tasks/memory che torna `null` per un id fuori grammatica; `leggi`→null, `elimina`→no-op idempotente, `aggiorna`→NOT_FOUND
+  (NON un throw come la patch della review, che romperebbe l'idempotenza). Prova nuova al contrario (rossa con la grammatica
+  aperta, ripristino identico); le 24 prove di traversal della review passano da sole (12→36 su 53); dal vivo sul banco GET/DELETE
+  ora 404 e sentinella intatta su tutti e tre gli store; suite backend 2987/2991 (0 rosse). Restano F02–F07 (decisione owner).

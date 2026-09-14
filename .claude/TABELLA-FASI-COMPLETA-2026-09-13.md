@@ -699,6 +699,25 @@ Quindi puo' creare e leggere, non correggere. Per cambiare una riga deve riscriv
 
 ---
 
+# LE TRE ZIP DELL'AUDIT (13/09) — verdetto misurato il 14/09
+
+Owner 14/09: «facciamo prima lo zip … se vale la pena implementare o se è una ricerca che ha poco valore». Aperte e confrontate
+col codice di oggi (dettaglio in TACCUINO, 14/09).
+
+- **Review ingegneristica** (`TALOS_1aa816de`, 53 test, 8 patch + 1 file nuovo): **VALE.** Parte da `1aa816de` (35 commit
+  dietro) ma i suoi 8 file toccati sono byte-identici a oggi. Sul nostro codice: 12/53 verdi → i 41 rossi sono i difetti che cura.
+  - ✅ **F01 (path traversal negli id di Note/Attività/Memoria) — CONFERMATO DAL VIVO e CHIUSO**, commit `7879d81d`. Vedi TACCUINO.
+  - 🔜 **Restano F02–F07** (classificazione trust `.mcp-trust`/`.plugin-trust`; byte non-UTF8 export Libreria; backlog PTY a chunk
+    unico; PTY osservata marcata orfana; tick automazioni sovrapposti; discovery MCP seriale opt-in). Tutti riprodotti dalle loro
+    prove rosse sul nostro codice, patch piccole. ⛔ Da riscrivere con le NOSTRE prove, non col loro `apply.mjs`. Decisione owner:
+    tutti insieme come lavoro a sé, o come corsie dentro una fase.
+- **Overlay** (`talos-desktop-overlay.zip`, 5 moduli nuovi): **gap veri, non plug-and-play.** Verificato: il nostro SSE *live*
+  dopo `fineReplay` non coalescente (solo il replay lo è); `terminal-ws.mjs` senza contropressione. I moduli sono standalone con
+  test ma NON cablati: vanno agganciati a mano e provati con un giro vero. Candidato per una fase «prestazioni» dopo la Fase 3.
+- **Audit kit** (`TALOS_desktop_audit_e_kit.zip`): **valore d'implementazione basso.** Lo dichiara da sé: nessun benchmark di
+  prodotto, nessuna patch. 0 esecuzioni TALOS, 11 clonazioni fallite per DNS. Kit di sonde + confronto documentale con 10
+  concorrenti: si archivia come riferimento, non si implementa.
+
 # FASE 3 · Fare le cose in blocco, dal server fino al pulsante
 
 **A cosa serve:** oggi per cancellare 214 file servono **214 richieste**, una per file. L'hai visto
