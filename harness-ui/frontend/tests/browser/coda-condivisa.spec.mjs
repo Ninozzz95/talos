@@ -138,6 +138,8 @@ for (const modo of ['dark', 'light']) {
       expect(invii[0]).toEqual({ id: 'q-1' });
       expect(riprese, '⛔ il testo sta sul server: nessuna ripresa col testo copiato dalla finestra').toEqual([]);
       await expect(page.locator('#conversation')).toContainText('poi aggiorna il README coi numeri veri');
+      /* ⛔ 14/09, foto 12: su una sessione aperta CONCLUSA la domanda mandata da qui usciva senza ora — un invio è diretta. */
+      await expect(page.locator('#conversation .talos-message--user').last().locator('.talos-message__meta')).toHaveText(/^\d{2}:\d{2} · Follow-up/);
     });
 
     test(`CODA-SCHERMO-06 — il giro ripreso da «Invia ora» si può INTERROMPERE (${modo})`, async ({ page }, testInfo) => {
@@ -157,8 +159,10 @@ for (const modo of ['dark', 'light']) {
       const generazione = await page.evaluate(() => window.__talosHarnessUiRuntime.realSessionState.generation);
       await banner(page).locator('[data-coda-invia]').click();
       await page.waitForFunction((g) => window.__talosHarnessUiRuntime.realSessionState.generation !== g, generazione);
-      await eventi(page, [{ type: 'RunStarted', input: { consegna: VOCE.testo, seguito: true }, _sequenza: 3 }]);
+      await eventi(page, [{ type: 'RunStarted', input: { consegna: VOCE.testo, seguito: true }, contesto: { permessi: 'Full access', modello: 'z-ai/glm-5.3-flash' }, _sequenza: 3 }]);
       await expect(page.locator('.send-btn.is-stop'), 'il giro ripreso ha il suo «Interrompi»').toHaveCount(1);
+      /* ⛔ 14/09, giro vero (parte 5): la domanda mandata da qui prende il permesso che il server dichiara, come nelle altre finestre. */
+      await expect(page.locator('#conversation .talos-message--user').last().locator('.talos-message__meta')).toHaveText(/^\d{2}:\d{2} · Follow-up · \S/);
       await page.screenshot({ path: testInfo.outputPath(`6-ripreso-interrompibile-${modo}.png`) });
     });
 

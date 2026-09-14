@@ -1,5 +1,5 @@
 import { validaFallbackProviders } from './model-destination.mjs';
-import { cacheSessioneDaEventi } from './usage-cache.mjs';
+import { cacheSessioneDaEventi, giriFermatiDaEventi } from './usage-cache.mjs';
 import { contextUsageFromEvents } from '../../context-engine/src/usage.mjs';
 
 /**
@@ -5603,6 +5603,7 @@ export function createSessionRegistry({
            */
           usageSessione: usageSessioneDaEventi(voce.eventi),
           cacheSessione: cacheSessioneDaEventi(voce.eventi),
+          giriFermati: giriFermatiDaEventi(voce.eventi), // ⛔ 14/09: chiamate partite e fermate — giri senza consumo dichiarato
         }))
         .sort((a, b) => b.avviataAlle.localeCompare(a.avviataAlle));
     },

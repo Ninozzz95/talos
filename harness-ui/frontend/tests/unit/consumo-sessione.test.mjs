@@ -1,7 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sommaUsage, usageDellaSessione, esecuzioniDellaSessione } from '../../src/components/consumo-sessione.js';
+import { sommaUsage, usageDellaSessione, esecuzioniDellaSessione, giriDellaSessione, spiegaGiriFermati } from '../../src/components/consumo-sessione.js';
 import { testiUsage } from '../../src/components/chat-foot.js';
+import { testiBoard } from '../../src/components/board.js';
+import { riepilogoConsumo } from '../../src/components/costi-consumo.js';
+
+test('GIRI-FERMATI (14/09, giro vero: 7 invii, 6 fermati, «1 giro») — un conto solo per barra, Board e Costi', () => {
+  const sessione = { sessionId: 's', nome: 'x', usageSessione: { prompt_tokens: 9488, completion_tokens: 8008, giri: 1, esecuzioni: 1 }, giriFermati: 6 };
+  assert.deepEqual(giriDellaSessione(sessione), { giri: 7, fermati: 6 });
+  assert.equal(testiBoard(sessione).giri, '7', 'la Board dice lo stesso numero della barra');
+  const tot = riepilogoConsumo([sessione]);
+  assert.equal(tot.giri, 7);
+  assert.equal(tot.giriFermati, 6, 'e i Costi dichiarano quanti giri i token non contano');
+  assert.match(spiegaGiriFermati(6), /^6 giri fermati prima che il fornitore dichiarasse il consumo/);
+  assert.equal(spiegaGiriFermati(1).startsWith('1 giro fermato'), true);
+  assert.deepEqual(giriDellaSessione({ ...sessione, giriFermati: 0 }), { giri: 1, fermati: 0 }, 'AL CONTRARIO: senza fermati è il conto di prima');
+  assert.deepEqual(giriDellaSessione({ giriFermati: 2 }), { giri: 2, fermati: 2 }, 'tutti fermati: i giri ci sono anche senza nessuna misura');
+  assert.deepEqual(giriDellaSessione({}), { giri: null, fermati: 0 }, 'niente misura e niente fermati: nessun numero inventato');
+  assert.equal(spiegaGiriFermati(0), '');
+});
 
 /*
  * ⛔⛔⛔ 06/9 — CB-04: «il consumo mostrato è quello dell'ULTIMO INVIO, non della

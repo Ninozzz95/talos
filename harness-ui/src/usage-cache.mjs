@@ -293,3 +293,23 @@ export function cacheSessioneDaEventi(eventi) {
     giriMisurati, giriNonMisurati, fonte: 'consumo-fornitore',
   };
 }
+
+/**
+ * ⛔ 14/09 — quante chiamate al fornitore sono PARTITE e poi state fermate (`esito: 'fermato'`, runtime-owner-adapter).
+ * Sono giri veri senza consumo dichiarato: il conto dei giri li include, quello dei token no, e chi mostra i token lo dice.
+ * Solo gli stop: un guasto (`interrotto`, `traffico`) ha già la sua strada. `_sequenza` evita il doppio a un replay.
+ * @returns {number} mai `null`: nei registri di prima del 14/09 non c'è niente da contare, e zero è la verità di quel log.
+ */
+export function giriFermatiDaEventi(eventi) {
+  let fermati = 0;
+  const viste = new Set();
+  for (const evento of Array.isArray(eventi) ? eventi : []) {
+    if (evento?.type !== 'CUSTOM' || evento.name !== 'consumo-fornitore' || evento.value?.esito !== 'fermato') continue;
+    if (Number.isSafeInteger(evento._sequenza)) {
+      if (viste.has(evento._sequenza)) continue;
+      viste.add(evento._sequenza);
+    }
+    fermati += 1;
+  }
+  return fermati;
+}

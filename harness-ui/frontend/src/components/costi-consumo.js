@@ -39,7 +39,7 @@ import { nomeModello } from './session-item.js';
  * avuto — quindi «0 giri» su ogni riga. Il totale di sessione ora ha un nome
  * suo, `usageSessione`, e un posto solo che lo sa leggere.
  */
-import { usageDellaSessione, testoRiusoCache } from './consumo-sessione.js';
+import { usageDellaSessione, testoRiusoCache, giriDellaSessione } from './consumo-sessione.js';
 
 const NUM = new Intl.NumberFormat('it-IT');
 
@@ -88,7 +88,7 @@ function raggruppa(sessioni, chiaveDi) {
     if (k == null) continue;
     const v = per.get(k) || { chiave: k, sessioni: 0, giri: 0, token: 0, cache: 0, tokenNoti: 0 };
     v.sessioni += 1;
-    if (numeroValido(usageDellaSessione(s)?.giri)) v.giri += Number(usageDellaSessione(s).giri);
+    if (numeroValido(giriDellaSessione(s).giri)) v.giri += giriDellaSessione(s).giri; // ⛔ 14/09: coi giri fermati, come barra e Board
     const t = tokenDi(s);
     if (t != null) { v.token += t; v.tokenNoti += 1; }
     if (numeroValido(usageDellaSessione(s)?.cached_tokens)) v.cache += Number(usageDellaSessione(s).cached_tokens);
@@ -119,9 +119,11 @@ export function consumoPerModello(sessioni = []) {
  * settanta non hanno i token registrati, la somma è di sessanta e va detto.
  */
 export function riepilogoConsumo(sessioni = []) {
-  const totali = { sessioni: sessioni.length, giri: 0, token: 0, cache: 0, senzaToken: 0, senzaData: 0, senzaModello: 0 };
+  const totali = { sessioni: sessioni.length, giri: 0, token: 0, cache: 0, senzaToken: 0, senzaData: 0, senzaModello: 0, giriFermati: 0 };
   for (const s of sessioni) {
-    if (numeroValido(usageDellaSessione(s)?.giri)) totali.giri += Number(usageDellaSessione(s).giri);
+    const { giri, fermati } = giriDellaSessione(s);
+    if (numeroValido(giri)) totali.giri += giri;
+    totali.giriFermati += fermati; // ⛔ 14/09: giri veri che i token non contano — la riga di CHI MANCA li dichiara
     const t = tokenDi(s);
     if (t == null) totali.senzaToken += 1; else totali.token += t;
     if (numeroValido(usageDellaSessione(s)?.cached_tokens)) totali.cache += Number(usageDellaSessione(s).cached_tokens);
@@ -182,6 +184,7 @@ export function aggiornaCosti(pannello, sessioni = [], { document: d = globalThi
      * mute si legge come il totale di tutte.
      */
     if (tot.senzaToken) voci.push(badge(d, `${NUM.format(tot.senzaToken)} senza token registrati`, 'warning'));
+    if (tot.giriFermati) voci.push(badge(d, `${NUM.format(tot.giriFermati)} ${tot.giriFermati === 1 ? 'giro fermato' : 'giri fermati'} senza token`, 'warning'));
     if (tot.senzaModello) voci.push(badge(d, `${NUM.format(tot.senzaModello)} senza modello`, 'warning'));
     if (tot.senzaData) voci.push(badge(d, `${NUM.format(tot.senzaData)} senza data`, 'warning'));
     // La sessione è scelta dalla chat, mai indovinata dalla data o dall'ordine dell'elenco.
