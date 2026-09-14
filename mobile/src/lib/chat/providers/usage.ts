@@ -17,6 +17,24 @@
  * it: chat streams and builds its own usage, and only the non-streaming path
  * parses the provider's.
  */
+/**
+ * Come `talosNumericUsage`, ma i conteggi ANNIDATI non si perdono: OpenRouter mette i token
+ * letti dalla cache in `prompt_tokens_details.cached_tokens` e quelli di ragionamento in
+ * `completion_tokens_details.reasoning_tokens`; il filtro piatto li buttava. Si tengono col
+ * nome della foglia (`cached_tokens`, `reasoning_tokens`), senza sovrascrivere un campo di
+ * primo livello con lo stesso nome.
+ */
+export function talosFlatUsage(usage: Record<string, unknown> | undefined | null): Record<string, number> | null {
+    const flat = { ...(talosNumericUsage(usage) ?? {}) }
+    for (const value of Object.values(usage ?? {})) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+        for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+            if (typeof inner === 'number' && Number.isFinite(inner) && !(key in flat)) flat[key] = inner
+        }
+    }
+    return Object.keys(flat).length ? flat : null
+}
+
 export function talosNumericUsage(usage: Record<string, unknown> | undefined | null): Record<string, number> | null {
     if (!usage) return null
     const entries = Object.entries(usage).filter(

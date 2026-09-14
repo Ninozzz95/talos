@@ -81,6 +81,7 @@ let sessionCounter = 0
 function makeController(messages: FakeMessage[] = []) {
     const sessions = reactive<Array<{ id: string; title: string; metadata?: Record<string, unknown> }>>([])
     const drafts = new Map<string, string>()
+    const savedAttachments = new Map<string, unknown[]>()
     const chat = {
         messages: reactive(messages.map((message) => ({
             ...message,
@@ -101,6 +102,8 @@ function makeController(messages: FakeMessage[] = []) {
         retryPersistence: vi.fn().mockResolvedValue(undefined),
         recordBrowserActivity: vi.fn().mockResolvedValue(undefined),
         loadComposerDraft: vi.fn(async (scope?: string | null) => drafts.get(scope ?? 'new') ?? ''),
+        loadComposerAttachments: vi.fn(async (scope: string) => savedAttachments.get(scope) ?? []),
+        saveComposerAttachments: vi.fn(async (scope: string, list: readonly unknown[]) => { if (list.length) savedAttachments.set(scope, [...list]); else savedAttachments.delete(scope) }),
         saveComposerDraft: vi.fn(async (value: string, scope?: string | null) => {
             const key = scope ?? 'new'
             if (value) drafts.set(key, value)
@@ -131,6 +134,10 @@ function makeController(messages: FakeMessage[] = []) {
         }),
         deleteVaultFile: vi.fn().mockResolvedValue(undefined),
         discardAll: vi.fn().mockResolvedValue(undefined),
+        snapshot: vi.fn(() => attachmentItems.filter((item) => item.status === 'authorized').map((item) => ({ ...item }))),
+        setAside: vi.fn(() => attachmentItems.splice(0, attachmentItems.length)),
+        restore: vi.fn((list: Array<Record<string, unknown>>) => attachmentItems.splice(0, attachmentItems.length, ...list.map((item) => ({ ...item, status: 'authorized' })))),
+        revokeSaved: vi.fn().mockResolvedValue(undefined),
         clearSent: vi.fn(() => attachmentItems.splice(0, attachmentItems.length)),
         clearError: vi.fn(() => { attachmentError.value = null }),
     }
@@ -630,7 +637,9 @@ describe('ChatScreen (functional, local-first)', () => {
         const exposed = wrapper.vm as unknown as { selectSession: (id: string) => void }
         exposed.selectSession('chat-1')
         await vi.waitFor(() => expect(controller.selectSession).toHaveBeenCalledWith('chat-1'))
-        expect(controller.attachments.discardAll).toHaveBeenCalledTimes(1)
+        // Owner 2026-09-13: gli allegati seguono la loro chat — si mettono da parte, non si revocano.
+        expect(controller.attachments.setAside).toHaveBeenCalledTimes(1)
+        expect(controller.attachments.discardAll).not.toHaveBeenCalled()
     })
 
     /**
@@ -814,7 +823,8 @@ describe('ChatScreen (functional, local-first)', () => {
         }
         exposed.newSession()
         await vi.waitFor(() => expect(controller.newSession).toHaveBeenCalledTimes(1))
-        expect(controller.attachments.discardAll).toHaveBeenCalledTimes(1)
+        await vi.waitFor(() => expect(controller.attachments.setAside).toHaveBeenCalledTimes(1))
+        expect(controller.attachments.discardAll).not.toHaveBeenCalled()
         await flushPromises() // R2-7: release the runner busy-guard fully
 
         exposed.renameSession('chat-1', 'Renamed notes')
@@ -1154,19 +1164,21 @@ describe('immersive chrome clearance (F2 capture fix)', () => {
     })
 })
 
-// D-F2-1 (12/09, Pad): la bozza scritta in una chat appena creata si perdeva
-// uscendo prima di inviare — la sessione vuota sparisce dalla cronologia e la
-// bozza legata al suo id con lei. Finché non ci sono messaggi, l'ambito è «new».
-describe('D-F2-1 — l’ambito della bozza segue i messaggi, non l’id', () => {
-    it('chat senza messaggi → bozza in «new»; chat con messaggi → bozza sotto il suo id', async () => {
+// Owner 2026-09-13 — «una bozza per ogni chat». Prima (D-F2-1) una chat senza messaggi
+// usava l'ambito condiviso «new», e ogni chat nuova ereditava la bozza della precedente
+// (visto sul Pad: «Buon» in una chat appena aperta). Ora l'ambito e' l'id della chat, e
+// «new» resta solo dove una chat non esiste ancora.
+describe('Bozza per chat — l’ambito è la chat, anche senza messaggi', () => {
+    it('chat senza messaggi → bozza sotto il SUO id; chat con messaggi → idem; niente in «new»', async () => {
         const controller = makeController()
         mockState.controller = controller
         controller.chat.activeSession.value = { id: 's-vuota', title: 'New chat', surface: 'chat', has_messages: false }
         const wrapper = mount(ChatScreen, { global: { stubs: { teleport: true } } })
         await flushPromises()
         await wrapper.get('textarea').setValue('bozza in attesa')
-        await vi.waitFor(() => expect(controller.__drafts.get('new')).toBe('bozza in attesa'), { timeout: 4000 })
-        expect(controller.__drafts.has('s-vuota')).toBe(false)
+        await vi.waitFor(() => expect(controller.__drafts.get('s-vuota')).toBe('bozza in attesa'), { timeout: 4000 })
+        // ⛔ Il verso contrario: l'ambito condiviso resta vuoto, quindi la prossima chat nuova non eredita niente.
+        expect(controller.__drafts.has('new')).toBe(false)
         wrapper.unmount()
 
         const piena = makeController()

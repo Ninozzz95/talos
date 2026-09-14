@@ -199,4 +199,24 @@ describe('ordering the sections', () => {
         expect(grouped.map((s) => s.title)).toEqual(['Ricerche', 'Fatture'])
         expect(grouped[0]?.items.map((i) => i.id)).toEqual(['a', 'c'])
     })
+
+    it('sorts the items themselves by name when told what an item is called', () => {
+        const items = [
+            { id: 'b', name: 'file 10.md', at: '2026-09-02T00:00:00Z' },
+            { id: 'a', name: 'File 2.md', at: '2026-09-01T00:00:00Z' },
+            { id: 'c', name: 'àbaco.md', at: '2026-09-03T00:00:00Z' },
+        ]
+        // Owner 14/09/2026: with grouping off there is one section, and «Name (A–Z)»
+        // must still order something — accents and case by base letter, 2 before 10.
+        const [section] = groupTalosLibraryByChat(items, () => '', 'Not from a chat', {
+            timeOf: (item) => item.at,
+            sort: 'name',
+            nameOf: (item) => item.name,
+        })
+        expect(section!.items.map((item) => item.id)).toEqual(['c', 'a', 'b'])
+
+        // Without `nameOf`, name still orders only the headings: newest first inside.
+        const [unnamed] = groupTalosLibraryByChat(items, () => '', 'Not from a chat', { timeOf: (item) => item.at, sort: 'name' })
+        expect(unnamed!.items.map((item) => item.id)).toEqual(['c', 'b', 'a'])
+    })
 })

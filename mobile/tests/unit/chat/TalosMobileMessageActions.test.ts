@@ -16,49 +16,73 @@ function message(role: 'user' | 'assistant'): TalosMobileMessageView {
 afterEach(() => { document.body.innerHTML = '' })
 
 describe('TalosMobileMessageActions', () => {
-    it('mostra copia/modifica e conserva Reinvia/Riutilizza nel menu', async () => {
+    /**
+     * ⛔ Owner 2026-09-13: il menu «⋯» e' un FOGLIO «Azioni messaggio», e riga e
+     * foglio hanno INTERSEZIONE VUOTA. Prima il menu della risposta ripeteva
+     * copia, riprova e libreria gia' presenti in riga, e non aveva Elimina.
+     */
+    it('persona: in riga copia e modifica; nel foglio Invia di nuovo, Riutilizza, Elimina', async () => {
         const wrapper = mount(TalosMobileMessageActions, {
             attachTo: document.body,
             props: { message: message('user'), busy: false, canRetry: false },
         })
-
         expect(wrapper.find('[aria-label="Copy message"]').exists()).toBe(true)
         expect(wrapper.find('[aria-label="Edit message"]').exists()).toBe(true)
-        expect(wrapper.find('[aria-label="Retry assistant response"]').exists()).toBe(false)
-        await wrapper.get('[aria-label="Copy message"]').trigger('click')
-        await wrapper.get('[aria-label="Edit message"]').trigger('click')
-        expect(wrapper.emitted('copy')).toEqual([[expect.objectContaining({ id: 'user-1' })]])
-        expect(wrapper.emitted('edit')).toEqual([[expect.objectContaining({ id: 'user-1' })]])
-
-        await vi.waitFor(() => {
-            expect(wrapper.find('[aria-label="More message actions"]').exists()).toBe(true)
-        })
+        await vi.waitFor(() => { expect(wrapper.find('[aria-label="More message actions"]').exists()).toBe(true) })
         await wrapper.get('[aria-label="More message actions"]').trigger('click')
         await flushPromises()
-        const resend = document.body.querySelector<HTMLElement>('[data-testid="talos-message-resend"]')
-        expect(resend).not.toBeNull()
-        resend!.click()
+        const foglio = document.body.querySelector<HTMLElement>('[data-testid="talos-message-actions-sheet"]')
+        expect(foglio, 'il foglio non si e aperto').not.toBeNull()
+        for (const voce of ['talos-message-resend', 'talos-message-reuse', 'talos-message-delete'])
+            expect(foglio!.querySelector('[data-testid=' + JSON.stringify(voce) + ']'), voce).not.toBeNull()
+        // ⛔ Il verso contrario: nel foglio NON ricompare niente di cio' che sta in riga,
+        //    e niente delle voci della risposta.
+        for (const voce of ['talos-message-copy', 'talos-message-edit', 'talos-message-share', 'talos-message-details'])
+            expect(foglio!.querySelector('[data-testid=' + JSON.stringify(voce) + ']'), voce).toBeNull()
+        foglio!.querySelector<HTMLElement>('[data-testid="talos-message-resend"]')!.click()
         await flushPromises()
         expect(wrapper.emitted('resend')).toEqual([[expect.objectContaining({ id: 'user-1' })]])
         await wrapper.get('[aria-label="More message actions"]').trigger('click')
         await flushPromises()
-        const reuse = document.body.querySelector<HTMLElement>('[role="menuitem"][aria-label="Reuse prompt"]')
-        expect(reuse).not.toBeNull()
-        reuse!.click()
+        document.body.querySelector<HTMLElement>('[data-testid="talos-message-delete"]')!.click()
         await flushPromises()
-        expect(wrapper.emitted('reuse')).toEqual([[expect.objectContaining({ id: 'user-1' })]])
+        expect(wrapper.emitted('delete')).toEqual([[expect.objectContaining({ id: 'user-1' })]])
+        wrapper.unmount()
     })
 
-    it('conserva azioni e menu assistente e rispetta lo stato occupato', async () => {
+    it('risposta: nel foglio Condividi, Dettagli esecuzione, Elimina — e nessuna azione della riga', async () => {
         const wrapper = mount(TalosMobileMessageActions, {
-            props: { message: message('assistant'), busy: true, canRetry: true },
+            attachTo: document.body,
+            props: { message: message('assistant'), busy: false, canRetry: true },
         })
-        expect(wrapper.find('[aria-label="Copy message"]').exists()).toBe(true)
-        expect(wrapper.get('[aria-label="Retry assistant response"]').attributes('disabled')).toBeDefined()
-        expect(wrapper.find('[aria-label="Resend message"]').exists()).toBe(false)
         await vi.dynamicImportSettled()
         await flushPromises()
-        expect(wrapper.find('[aria-label="More message actions"]').exists()).toBe(true)
+        await wrapper.get('[aria-label="More message actions"]').trigger('click')
+        await flushPromises()
+        const foglio = document.body.querySelector<HTMLElement>('[data-testid="talos-message-actions-sheet"]')
+        expect(foglio).not.toBeNull()
+        for (const voce of ['talos-message-share', 'talos-message-details', 'talos-message-delete'])
+            expect(foglio!.querySelector('[data-testid=' + JSON.stringify(voce) + ']'), voce).not.toBeNull()
+        for (const voce of ['talos-message-copy', 'talos-message-speak', 'talos-message-retry', 'talos-message-save', 'talos-message-resend', 'talos-message-reuse'])
+            expect(foglio!.querySelector('[data-testid=' + JSON.stringify(voce) + ']'), voce).toBeNull()
+        foglio!.querySelector<HTMLElement>('[data-testid="talos-message-share"]')!.click()
+        await flushPromises()
+        expect(wrapper.emitted('share')).toEqual([[expect.objectContaining({ id: 'assistant-1' })]])
+        wrapper.unmount()
+    })
+
+    it('mentre risponde, Elimina e Invia di nuovo sono spenti', async () => {
+        const wrapper = mount(TalosMobileMessageActions, {
+            attachTo: document.body,
+            props: { message: message('user'), busy: true, canRetry: false },
+        })
+        await vi.dynamicImportSettled()
+        await flushPromises()
+        await wrapper.get('[aria-label="More message actions"]').trigger('click')
+        await flushPromises()
+        expect(document.body.querySelector('[data-testid="talos-message-delete"]')!.hasAttribute('disabled')).toBe(true)
+        expect(document.body.querySelector('[data-testid="talos-message-resend"]')!.hasAttribute('disabled')).toBe(true)
+        wrapper.unmount()
     })
 })
 

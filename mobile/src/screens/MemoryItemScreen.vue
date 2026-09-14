@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useTalosSheetTitle } from '@/lib/sheetTitle'
 /**
  * Una memoria, per intero, nella forma del mockup «Talos Calm Finale».
  *
@@ -191,6 +192,8 @@ async function remove(): Promise<void> {
 
 /** U-14 — l'onda che parte dal dito, sulle azioni di questa pagina. */
 const onda = useTalosTouchWave()
+// Owner 2026-09-14: scorrendo, il titolo si ripiega nella barra del foglio.
+useTalosSheetTitle(() => item.value?.title)
 </script>
 
 <template>
@@ -253,7 +256,7 @@ const onda = useTalosTouchWave()
                         <span class="mb-[var(--talos-space-card)] block text-xs text-[var(--talos-muted)]">
                             {{ kindLabel }}
                         </span>
-                        <h1 class="text-2xl font-semibold leading-[1.35] tracking-[-0.025em] text-[var(--talos-text)] [overflow-wrap:anywhere]">
+                        <h1 data-talos-sheet-title class="text-2xl font-semibold leading-[1.35] tracking-[-0.025em] text-[var(--talos-text)] [overflow-wrap:anywhere]">
                             {{ item.title }}
                         </h1>
                     </div>

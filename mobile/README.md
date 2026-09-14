@@ -393,7 +393,7 @@ A future optional backend/sync architecture is intended as **replication and exe
 </tr>
 </table>
 
-<img src="docs/immagini/tablet-15-library.png" alt="The Library on a tablet: pages saved from a chat, with real previews, grouped by the chat that produced them">
+<img src="docs/immagini/tablet-15-library.png" alt="The Library on a tablet: pages saved from chats as cards with real previews and their site, one toolbar row, and a menu on every card">
 
 Everything the agent reads or saves lands in the Library with a real preview, grouped by the conversation that produced it. On a phone the same stations keep their shape:
 

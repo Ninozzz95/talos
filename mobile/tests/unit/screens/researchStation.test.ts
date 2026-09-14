@@ -401,12 +401,13 @@ describe('renaming a research', () => {
 })
 
 describe('a paused research in the list', () => {
-    it('has a drawer of its own, apart from the ones the phone killed', async () => {
-        // Filing a deliberate stop with the accidents would tell the person
-        // their decision was an accident.
+    it('keeps its own pill, and sits in «Da riprendere» (owner 14/09/2026)', async () => {
+        // Fase 6: the ten drawers became four, and a paused research waits with the other
+        // ones to pick up again. Its pill still says «In pausa» — the decision stays visible.
         const wrapper = await station([run({ status: 'paused' })])
         expect(wrapper.get('[data-testid="talos-research-card"]').attributes('data-bucket')).toBe('paused')
-        expect(wrapper.find('[data-testid="talos-research-filter-paused"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-research-filter-paused"]').exists()).toBe(false)
+        expect(wrapper.get('[data-testid="talos-research-filter-riprendere"] small').text()).toBe('1')
     })
 
     it('offers Resume, and resuming starts watching it again', async () => {
@@ -646,5 +647,27 @@ describe('una ricerca che finisce mentre la stazione è aperta', () => {
 
         expect(wrapper.get('[data-testid="talos-research-card-status-run-1"]').attributes('data-bucket')).toBe('done')
         wrapper.unmount()
+    })
+})
+
+describe('fase 6 — le schede di Ricerca (owner 14/09/2026)', () => {
+    it('quattro schede; annullate, fallite e senza rapporto si scelgono dal foglio e compaiono come quinta', async () => {
+        const wrapper = await station([run({ status: 'paused' }), run({ id: 'run-2', status: 'cancelled' })])
+        const schede = () => wrapper.findAll('[data-testid^="talos-research-filter-"]').map((el) => el.attributes('data-testid'))
+        expect(schede()).toEqual(['talos-research-filter-all', 'talos-research-filter-running', 'talos-research-filter-done', 'talos-research-filter-riprendere'])
+        expect(wrapper.find('select').exists()).toBe(false)
+
+        await wrapper.get('[data-testid="talos-research-options"]').trigger('click')
+        await flushPromises()
+        ;([...document.body.querySelectorAll('[data-testid="talos-research-show-cancelled"]')].at(-1) as HTMLElement).click()
+        await flushPromises()
+        expect(schede().at(-1)).toBe('talos-research-filter-cancelled')
+        expect(wrapper.findAll('[data-research-id]').map((el) => el.attributes('data-research-id'))).toEqual(['run-2'])
+
+        // ⛔ Il verso contrario: tornando a una scheda fissa la quinta se ne va.
+        await wrapper.get('[data-testid="talos-research-filter-riprendere"]').trigger('click')
+        await flushPromises()
+        expect(schede()).toHaveLength(4)
+        expect(wrapper.findAll('[data-research-id]').map((el) => el.attributes('data-research-id'))).toEqual(['run-1'])
     })
 })

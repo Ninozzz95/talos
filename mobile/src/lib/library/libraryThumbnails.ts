@@ -242,3 +242,30 @@ export function talosTypographicPreview(
     }
     return { title, lines }
 }
+
+/** Owner 14/09/2026: il titolo dentro l'anteprima non supera 35 caratteri. */
+export const TALOS_TITOLO_ANTEPRIMA_MAX = 35
+
+/**
+ * Il titolo che entra nel documentino dell'anteprima, accorciato A PAROLA.
+ *
+ * ⛔ Foto del Pad, 14/09: dentro un riquadro alto quanto la scheda il
+ * `line-clamp` lasciava a vista una riga tagliata a metà altezza — sopra le
+ * lettere intere, sotto solo le teste. È un limite noto del clamp in un
+ * contenitore ad altezza fissa: «the cut-off text will still be visible»
+ * (https://css-tricks.com/line-clampin/, letto il 2026-09-14). La cura non è
+ * un'altezza calcolata al pixel ma un testo che ci sta: al massimo 35 caratteri,
+ * tagliati sull'ultimo spazio utile e chiusi da «…», così le righe sono sempre
+ * intere.
+ */
+export function talosTitoloAnteprima(titolo: string, massimo = TALOS_TITOLO_ANTEPRIMA_MAX): string {
+    const pulito = titolo.replace(/\s+/g, ' ').trim()
+    if (pulito.length <= massimo) return pulito
+    const spazio = massimo - 1
+    const taglio = pulito.slice(0, spazio)
+    const ultimoSpazio = taglio.lastIndexOf(' ')
+    // Sotto metà lunghezza la parola è una sola e lunghissima: meglio tagliarla
+    // che lasciare un titolo di due lettere.
+    const base = ultimoSpazio >= Math.floor(spazio / 2) ? taglio.slice(0, ultimoSpazio) : taglio
+    return `${base.replace(/[\s.,;:!?\-–—]+$/u, '')}…`
+}

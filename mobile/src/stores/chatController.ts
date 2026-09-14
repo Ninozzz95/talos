@@ -2546,6 +2546,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // exactly as `begin` pushed it — "ok, 0ms" for a send the user watched
         // fail, and one more on the recorded count.
         let trace: TalosSendTraceHandle | null = null
+        /*
+         * «Dettagli esecuzione» — owner 2026-09-13: token, costo e tempi del giro, sommati su
+         * tutti i passaggi. La traccia qui sopra esiste solo se la diagnostica la apre;
+         * questo cronometro c'e' sempre, e finisce nei metadati del messaggio.
+         */
+        const { createTalosRunMeter } = await import('@/lib/chat/runDetails')
+        const runMeter = createTalosRunMeter()
         /**
          * A "round" is the model call AND the tools it then asks for.
          *
@@ -4229,6 +4236,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     ...handlers,
                     onChunk: (text: string) => {
                         round.open?.firstChunk()
+                        runMeter.firstChunk()
                         grezzo += text
                         const visibile = talosSenzaEnvelopeToolResult(
                             talosVisibleWhileStreaming(grezzo),
@@ -4244,11 +4252,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     },
                     onReasoning: (text: string) => {
                         round.open?.firstChunk()
+                        runMeter.firstChunk()
                         handlers.onReasoning?.(text)
                     },
                 }
                 const result = await completeOnce(roundTurns, timed ?? handlers, toolsDisabledByPerson ? [] : tools)
                 round.open?.cache?.(result.usage)
+                runMeter.add(result.usage, result.callId)
                 // Anche una chiamata inattesa dal provider non arriva a preflight/consenso.
                 return toolsDisabledByPerson
                     ? { ...result, toolCalls: undefined, finishReason: result.toolCalls?.length ? 'stop' : result.finishReason }
@@ -5015,6 +5025,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             : {}),
                         tool_authorization_pending_checkpoint_id: markerCheckpoint.id,
                         tool_authorization_pending_count: markerCheckpoint.requests.length,
+                        run: runMeter.finish({ provider: profile?.provider ?? 'unknown', model: providerModel?.id ?? 'unknown' }),
                     },
                     finishReason: 'tool_authorization',
                     reasoning: completion.reasoning,
@@ -5139,6 +5150,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     return [s.tipo + (s.tool ?? s.capacita ?? s.quando ?? ''), r.scheda] as const
                 })).values()]
             const answerMetadata = {
+                // «Dettagli esecuzione»: cio' che il giro e' costato e quanto e' durato.
+                run: runMeter.finish({ provider: profile?.provider ?? 'unknown', model: providerModel?.id ?? 'unknown' }),
                 ...(liveLibrary.receipt
                     ? { library_context_receipt: liveLibrary.receipt }
                     : {}),

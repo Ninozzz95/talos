@@ -438,10 +438,10 @@ const vociVisibili = computed(() => {
                 :aria-checked="v.checked === undefined ? undefined : v.checked"
                 :disabled="v.disabled === true"
                 :title="v.disabled && v.reason ? v.reason : undefined"
-                class="talos-pressable talos-action-row min-h-13 w-full"
+                class="talos-pressable talos-action-row talos-drawer-row min-h-13 w-full"
                 @click="v.run()"
             >
-                <span class="talos-action-row-icon" aria-hidden="true"><component :is="v.icon" class="size-5" /></span>
+                <component :is="v.icon" class="talos-drawer-row-icon size-5 shrink-0" aria-hidden="true" />
                 <span class="min-w-0 flex-1">
                     <strong>{{ v.title }}</strong>
                     <small>{{ v.disabled && v.reason ? v.reason : v.subtitle }}</small>
@@ -452,3 +452,18 @@ const vociVisibili = computed(() => {
         </div>
     </TalosMobileComposerSheet>
 </template>
+
+<style scoped>
+/*
+ * Fase 7 — owner 13/09: nel foglio «+» icone NUDE in ambra e UNA sola verticale sinistra.
+ * Misurato sul Pad il 14/09 (px dal bordo del foglio): schede con icona a 29 e testo a 58; righe
+ * con icona a 39 e testo a 81, per la piastrella da 2,5rem e lo spazio 0,875rem. Le righe prendono
+ * le misure delle schede: icona nuda, rientro 0,7rem, spazio 0,6rem.
+ * Voci sulla stessa verticale, dal centro delle icone al bordo del testo: Material Lists
+ * (https://m3.material.io/components/lists/guidelines) e keyline alignment
+ * (https://uxcel.com/lessons/lists-best-practices-814), letti il 2026-09-14.
+ * ⛔ `talos-action-row-icon` resta com'è in style.css: la usa ancora la ricerca globale.
+ */
+.talos-drawer-row { gap: 0.6rem; padding-left: 0.7rem; }
+.talos-drawer-row-icon { color: var(--talos-accent); }
+</style>

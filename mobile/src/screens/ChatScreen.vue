@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { TalosRunCost } from '@/lib/chat/runCost'
+import type { TalosRunRecord } from '@/lib/chat/runDetails'
 import { ChevronRight, Eye, EyeOff, FileText, FlaskConical, MessageSquareText, MoreHorizontal, Presentation } from '@lucide/vue'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import { talosDaIntitolare } from '@/stores/chat'
@@ -40,6 +42,10 @@ import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import { talosComposerFlags } from '@/lib/composerStyle'
 import { useTalosMobileToasts } from '@/stores/toasts'
+import { defineAsyncComponent as talosAsyncSheet } from 'vue'
+import { shareTalosMessageMarkdown } from '@/lib/chat/messageShare'
+import { TALOS_TURN_UNDO_MS } from '@/stores/chat'
+const TalosMobileRunDetailsSheet = talosAsyncSheet(() => import('@/components/chat/TalosMobileRunDetailsSheet.vue'))
 import {
     parseTalosSessionLibraryContextPolicy,
     resolveTalosLibraryContextPolicy,
@@ -294,16 +300,65 @@ const browserError = ref<string | null>(null)
 const browserStatus = ref('')
 const activeSessionId = computed(() => chat.activeSession.value?.id ?? null)
 /**
- * D-F2-1 (12/09, visto sul Pad): l'AMBITO della bozza. Una chat senza messaggi —
- * appena creata dalla speed dial — usa «new»: se la si lascia prima di inviare,
- * la sessione vuota sparisce dalla cronologia e una bozza legata al suo id
- * sparirebbe con lei. Al primo invio la sessione ha messaggi e l'ambito diventa
- * il suo id (la bozza «new» e' gia' stata svuotata dall'invio).
+ * L'AMBITO della bozza: la sua chat, sempre — owner 2026-09-13, «una bozza per ogni
+ * chat». «new» resta solo dove una chat non esiste ancora (la home, prima del primo
+ * invio).
+ *
+ * ⛔ Prima (D-F2-1, 12/09) una chat senza messaggi usava «new», perche' la cronologia
+ * la nascondeva e la bozza sarebbe sparita con lei. Il prezzo era peggio del difetto:
+ * OGNI chat nuova ereditava la stessa bozza — visto sul Pad il 13/09, «Buon» in una
+ * chat appena aperta. Ora la chat con una bozza resta in cronologia, marcata
+ * (`has_draft`), quindi l'id non si perde e non serve piu' un ambito condiviso.
  */
 function ambitoBozza(): string {
-    const sessione = chat.activeSession.value
-    return !sessione || sessione.has_messages === false ? 'new' : sessione.id
+    return chat.activeSession.value?.id ?? 'new'
 }
+
+/**
+ * Owner 2026-09-13: «gli allegati in attesa seguono la loro chat come il testo».
+ * Lasciando una chat si mettono da parte (salvati, grant attivo); entrando si
+ * rimettono quelli della chat in cui si entra. Durante il cambio il salvataggio
+ * automatico tace: svuotare il vassoio non deve cancellare cio' che si e' appena
+ * salvato.
+ */
+let allegatiInCambio = false
+/**
+ * `sostituisci` solo cambiando chat. Al montaggio e dopo un invio si rimettono i
+ * salvati SOLO se il vassoio e' vuoto: il controller degli allegati vive piu' a lungo
+ * di questa schermata, e tornando in chat da un'altra stazione il vassoio e' ancora
+ * pieno — e anche un file che si sta copiando adesso (non ancora salvato) non si butta.
+ */
+async function entraNellAmbito(sostituisci = false): Promise<void> {
+    await draft.activateScope(ambitoBozza())
+    const ambito = draft.scope.value
+    try {
+        const salvati = await chat.loadComposerAttachments(ambito)
+        if (draft.scope.value === ambito && (sostituisci || attachments.items.length === 0)) attachments.restore(salvati)
+    } catch {
+        // Un elenco illeggibile non blocca la chat: il testo della bozza c'e' comunque.
+    }
+}
+async function lasciaLAmbito(): Promise<void> {
+    await chat.saveComposerAttachments(draft.scope.value, attachments.snapshot())
+    attachments.setAside()
+}
+async function cambiaAmbito(cambio: () => Promise<void>): Promise<void> {
+    allegatiInCambio = true
+    try {
+        await lasciaLAmbito()
+        try {
+            await cambio()
+        } finally {
+            await entraNellAmbito(true)
+        }
+    } finally {
+        allegatiInCambio = false
+    }
+}
+watch(() => attachments.snapshot().map((item) => item.bindingId).join('|'), () => {
+    if (allegatiInCambio) return
+    void chat.saveComposerAttachments(draft.scope.value, attachments.snapshot()).catch(() => undefined)
+})
 
 /**
  * Dichiara QUALE conversazione si sta guardando, e la ritira uscendo.
@@ -756,10 +811,18 @@ watch(() => ambitoBozza(), async () => {
     scrollChatToBottom('auto')
 })
 
+/**
+ * ⛔ Owner 2026-09-13 (foto del Pad): «Riprendi da qui» tagliata a meta' dal
+ * compositore, e l'avviso «Domanda e risposta eliminate» sopra il campo. La causa
+ * era una: a chat VUOTA questa misura valeva 0. Veniva da aee2f5ba (12/09), quando
+ * il compositore stava DENTRO la home; l'owner l'ha poi voluto sempre agganciato in
+ * basso, anche a chat vuota, e lo 0 e' rimasto. Chi lo legge: il fondo dello
+ * scorrimento e la regione degli avvisi.
+ */
 function publishComposerHeight(): void {
     const el = composerWrap.value
     if (!el) return
-    const height = chat.messages.length ? Math.ceil(el.getBoundingClientRect().height) || 180 : 0
+    const height = Math.ceil(el.getBoundingClientRect().height) || 180
     document.documentElement.style.setProperty('--talos-composer-height', `${height}px`)
 }
 
@@ -797,7 +860,7 @@ async function onSend(): Promise<void> {
     if (libraryTurnOverride.value === turnPolicy) {
         libraryTurnOverride.value = null
     }
-    await draft.activateScope(ambitoBozza())
+    await entraNellAmbito()
 }
 
 // Exposed to the app shell: the header/sidebar (F1-T3) drive these orchestrated
@@ -823,16 +886,16 @@ const orchestrator = {
     async newSession(options?: { ephemeral?: boolean }): Promise<void> {
         controller.clearPromptEnhancement()
         await draft.flush()
-        await attachments.discardAll()
-        await controller.newSession(options)
-        await draft.activateScope(ambitoBozza())
+        await cambiaAmbito(() => controller.newSession(options))
     },
     async selectSession(sessionId: string): Promise<void> {
         controller.clearPromptEnhancement()
         await draft.flush()
-        if (sessionId !== activeSessionId.value) await attachments.discardAll()
-        await controller.selectSession(sessionId)
-        await draft.activateScope(ambitoBozza())
+        if (sessionId === activeSessionId.value) {
+            await controller.selectSession(sessionId)
+            return
+        }
+        await cambiaAmbito(() => controller.selectSession(sessionId))
     },
     async renameSession(sessionId: string, title: string): Promise<void> {
         await controller.renameSession(sessionId, title)
@@ -840,9 +903,21 @@ const orchestrator = {
     async deleteSession(sessionId: string): Promise<void> {
         controller.clearPromptEnhancement()
         await draft.flush()
-        if (sessionId === activeSessionId.value) await attachments.discardAll()
+        // Gli allegati della chat eliminata non torneranno: i loro grant si revocano.
+        if (sessionId === activeSessionId.value) {
+            allegatiInCambio = true
+            try {
+                await attachments.discardAll()
+                await controller.deleteSession(sessionId)
+                await entraNellAmbito()
+            } finally {
+                allegatiInCambio = false
+            }
+            return
+        }
+        const salvati = await chat.loadComposerAttachments(sessionId).catch(() => [])
         await controller.deleteSession(sessionId)
-        await draft.activateScope(ambitoBozza())
+        await attachments.revokeSaved(salvati)
     },
 }
 controller.sessionLifecycle.register(orchestrator)
@@ -950,6 +1025,68 @@ function retryAssistantMessage(messageId: string): void {
     void runMessageAction(() => controller.retryAssistantMessage(messageId))
 }
 
+/**
+ * Owner 2026-09-13 — «Condividi»: la risposta in Markdown al foglio di Android.
+ * Se il foglio non c'e', il testo va negli appunti e lo si dice.
+ */
+function shareMessage(messageId: string): void {
+    const message = messageById(messageId)
+    if (!message || message.content.trim() === '') return
+    void runMessageAction(async () => {
+        const outcome = await shareTalosMessageMarkdown(message.content, t('chat.shareMessageTitle'))
+        if (outcome === 'copied') toasts.push({ message: t('chat.shareCopied'), durationMs: 4000 })
+    })
+}
+
+/** «Dettagli esecuzione»: il foglio si apre subito e si riempie quando le righe arrivano. */
+interface RunDetailsState {
+    messageId: string
+    activities: NonNullable<Awaited<ReturnType<typeof chat.listTurnToolActivities>>> | 'unavailable' | undefined
+    run: TalosRunRecord | null
+    cost: TalosRunCost | undefined
+}
+const runDetails = ref<RunDetailsState | null>(null)
+/** Aggiorna il foglio SOLO se e' ancora quello dello stesso messaggio: una lettura lenta non scrive su un altro. */
+function aggiornaDettagli(messageId: string, patch: Partial<RunDetailsState>): void {
+    if (runDetails.value?.messageId === messageId) runDetails.value = { ...runDetails.value, ...patch }
+}
+function showRunDetails(messageId: string): void {
+    const metadata = chat.messages.find((message) => message.id === messageId)?.metadata
+    runDetails.value = { messageId, activities: undefined, run: null, cost: undefined }
+    void chat.listTurnToolActivities(messageId)
+        .then((activities) => aggiornaDettagli(messageId, { activities: activities ?? 'unavailable' }))
+        .catch(() => aggiornaDettagli(messageId, { activities: 'unavailable' }))
+    void (async () => {
+        const [{ talosReadRunRecord }, { talosResolveRunCost }] = await Promise.all([
+            import('@/lib/chat/runDetails'),
+            import('@/lib/chat/runCost'),
+        ])
+        const run = talosReadRunRecord(metadata)
+        if (!run) return aggiornaDettagli(messageId, { run: null, cost: { kind: 'unknown' } })
+        aggiornaDettagli(messageId, { run })
+        // Costo vero (OpenRouter) o gratis (locale): il listino non serve, e non si scarica.
+        const subito = talosResolveRunCost(run, null)
+        if (subito.kind === 'real' || subito.kind === 'free') return aggiornaDettagli(messageId, { cost: subito })
+        const { talosDefaultPriceListPorts, talosLoadOpenRouterPriceList } = await import('@/services/openRouterPriceList')
+        const listino = await talosLoadOpenRouterPriceList(await talosDefaultPriceListPorts()).catch(() => null)
+        aggiornaDettagli(messageId, { cost: talosResolveRunCost(run, listino) })
+    })().catch(() => aggiornaDettagli(messageId, { cost: { kind: 'unknown' } }))
+}
+
+/**
+ * Owner 2026-09-13 — «Elimina» toglie la coppia domanda-risposta SUBITO, con
+ * «Annulla» per 5 secondi. La stessa costante regge l'avviso e la cancellazione.
+ */
+function deleteMessageTurn(messageId: string): void {
+    const token = chat.hideMessageTurn(messageId)
+    if (!token) return
+    toasts.push({
+        message: t('chat.turnDeleted'),
+        durationMs: TALOS_TURN_UNDO_MS,
+        action: { label: t('common.undo'), run: () => { chat.undoMessageTurn(token) } },
+    })
+}
+
 function focusComposer(): void {
     void nextTick(() => composer.value?.focusPrompt())
 }
@@ -1005,9 +1142,7 @@ function selectSlashCommand(commandId: TalosMobileCommandId): void {
         controller.clearPromptEnhancement()
 
         if (commandId === 'new_session') {
-            await attachments.discardAll()
-            await controller.newSession()
-                await draft.activateScope(ambitoBozza())
+            await cambiaAmbito(() => controller.newSession())
             return
         }
         if (commandId === 'open_browse') {
@@ -1049,7 +1184,7 @@ function selectSlashCommand(commandId: TalosMobileCommandId): void {
 
 onMounted(async () => {
     await init()
-    await draft.activateScope(ambitoBozza())
+    await entraNellAmbito()
     publishComposerHeight()
     if (typeof ResizeObserver !== 'undefined' && composerWrap.value) {
         /*
@@ -1468,7 +1603,8 @@ onBeforeUnmount(() => {
                                 <span class="talos-resume-icon" aria-hidden="true"><MessageSquareText class="size-5" /></span>
                                 <span class="min-w-0">
                                     <strong>{{ titoloRipresa(session) }}</strong>
-                                    <small>{{ quandoRipresa(session) || t('chat.resumeConversation') }}</small>
+                                    <small v-if="session.has_draft && session.has_messages === false" class="talos-draft-chip" data-testid="talos-chat-draft-marker">{{ t('chat.draftMarker') }}</small>
+                                    <small v-else>{{ quandoRipresa(session) || t('chat.resumeConversation') }}</small>
                                 </span>
                             </button>
                         </div>
@@ -1512,7 +1648,17 @@ onBeforeUnmount(() => {
                     @resend="resendMessage"
                     @retry="retryAssistantMessage"
                     @save-to-library="saveMessageToLibrary"
+                    @share="shareMessage"
+                    @details="showRunDetails"
+                    @delete="deleteMessageTurn"
                     @review-authorization="controller.showToolAuthorization()"
+                />
+                <TalosMobileRunDetailsSheet
+                    v-if="runDetails"
+                    :activities="runDetails.activities"
+                    :run="runDetails.run"
+                    :cost="runDetails.cost"
+                    @close="runDetails = null"
                 />
                 </template>
             </div>

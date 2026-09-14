@@ -24,6 +24,15 @@ import {
     talosEffectiveToolPermissions,
 } from '@/lib/tools/permissionTypes'
 import { __resetToastsForTests, useTalosMobileToasts } from '@/stores/toasts'
+/*
+ * ⛔ Precaricato apposta (14/09/2026). `send()` fa `await import('@/lib/chat/runDetails')` prima
+ * di chiamare il modello: nel prodotto e' un frammento pigro, qui la PRIMA importazione aspetta che
+ * Vite risolva e trasformi il modulo (https://vitest.dev/guide/improving-performance, letto il
+ * 2026-09-14). Nella suite intera del rilascio v0.1.34 — import a 169 s — quella attesa ha mangiato
+ * i 10 s di `vi.waitFor` in TOOL-AUTH-02, verde 3 su 3 da solo. Caricarlo qui toglie dal test il
+ * tempo di trasformazione, non un comportamento dell'app.
+ */
+import '@/lib/chat/runDetails'
 
 const webSearchRuntime = vi.hoisted(() => ({
     runTalosSearch: vi.fn(),

@@ -33,6 +33,29 @@ export interface TalosLocalChatSession {
      * `renameSession` makes no claim either way.
      */
     has_messages?: boolean
+    /**
+     * Owner 2026-09-13: una chat nuova con una bozza mai inviata RESTA in cronologia,
+     * marcata come bozza, finche' non la invii o la svuoti. Stessa regola di
+     * `has_messages`: riportato da `listSessions`, undefined = non chiesto.
+     */
+    has_draft?: boolean
+}
+
+/**
+ * Un allegato in attesa nel compositore, salvato con la sua chat — owner 2026-09-13:
+ * «gli allegati in attesa seguono la loro chat come il testo della bozza». Solo quelli
+ * gia' autorizzati: il grant resta attivo finche' la bozza vive, e l'invio lo verifica.
+ */
+export interface TalosComposerAttachmentDraft {
+    id: string
+    source: 'picker' | 'vault'
+    displayName: string
+    mediaType: string
+    sizeBytes: number
+    vaultFileId: string
+    grantId: string
+    bindingId: string
+    permissions: string[]
 }
 
 export interface TalosLocalChatMessage {
@@ -526,6 +549,15 @@ export interface TalosChatRepository {
     appendMessage(input: AppendChatMessageInput): Promise<TalosLocalChatMessage>
     /** Fase 4: salva la bozza e ritaglia da un messaggio utente, nella stessa transazione. */
     rewindUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string): Promise<string>
+    /**
+     * Owner 2026-09-13: «Elimina» su un messaggio toglie la COPPIA domanda-risposta.
+     * La coppia e' il messaggio della persona piu' tutto cio' che lo segue fino al
+     * messaggio successivo della persona. Chiamata su una risposta, risale alla
+     * domanda che la precede. Le FK portano via legami e attivita' dei messaggi,
+     * mai i file della Libreria (vault_file_id ON DELETE RESTRICT). Restituisce gli
+     * id rimossi.
+     */
+    deleteMessageTurn(sessionId: string, messageId: string): Promise<string[]>
     appendToolActivity(input: CreateToolActivityInput): Promise<TalosLocalToolActivity>
     updateToolActivity(activityId: string, input: UpdateToolActivityInput): Promise<void>
     listMessageToolActivities(messageId: string): Promise<TalosLocalToolActivity[]>
@@ -579,6 +611,8 @@ export interface TalosChatRepository {
     listSessionAttachmentFileIds(sessionId: string): Promise<string[]>
     loadComposerDraft(scopeId: string): Promise<string>
     saveComposerDraft(scopeId: string, draft: string): Promise<void>
+    loadComposerAttachments(scopeId: string): Promise<TalosComposerAttachmentDraft[]>
+    saveComposerAttachments(scopeId: string, attachments: readonly TalosComposerAttachmentDraft[]): Promise<void>
     createTask(input: CreateTaskInput): Promise<TalosLocalTask>
     listTasks(): Promise<TalosLocalTask[]>
     setTaskStatus(taskId: string, status: TalosTaskStatus): Promise<TalosLocalTask>
@@ -734,6 +768,29 @@ export function normalizeComposerDraft(value: string): string {
         throw new Error('TALOS_COMPOSER_DRAFT_TOO_LARGE')
     }
     return value
+}
+
+export function normalizeComposerAttachments(value: unknown): TalosComposerAttachmentDraft[] {
+    if (!Array.isArray(value)) throw new Error('TALOS_COMPOSER_ATTACHMENTS_INVALID')
+    return value.map((raw) => {
+        const item = raw as Record<string, unknown> | null
+        const text = (key: string) => {
+            const field = item?.[key]
+            if (typeof field !== 'string' || field === '') throw new Error('TALOS_COMPOSER_ATTACHMENTS_INVALID')
+            return field
+        }
+        const source = text('source')
+        if (source !== 'picker' && source !== 'vault') throw new Error('TALOS_COMPOSER_ATTACHMENTS_INVALID')
+        const sizeBytes = item?.sizeBytes
+        if (typeof sizeBytes !== 'number' || !Number.isFinite(sizeBytes) || sizeBytes < 0) throw new Error('TALOS_COMPOSER_ATTACHMENTS_INVALID')
+        const permissions = item?.permissions
+        if (!Array.isArray(permissions) || permissions.some((p) => typeof p !== 'string')) throw new Error('TALOS_COMPOSER_ATTACHMENTS_INVALID')
+        return {
+            id: text('id'), source, displayName: text('displayName'), mediaType: text('mediaType'), sizeBytes,
+            vaultFileId: text('vaultFileId'), grantId: text('grantId'), bindingId: text('bindingId'),
+            permissions: [...permissions] as string[],
+        }
+    })
 }
 
 export function normalizeChatTitle(value: string): string {

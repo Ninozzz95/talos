@@ -20,6 +20,9 @@ const emit = defineEmits<{
     resend: [message: TalosMobileMessageView]
     retry: [message: TalosMobileMessageView]
     saveToLibrary: [message: TalosMobileMessageView]
+    share: [message: TalosMobileMessageView]
+    details: [message: TalosMobileMessageView]
+    delete: [message: TalosMobileMessageView]
 }>()
 
 const speech = useTalosSpeech()
@@ -97,6 +100,6 @@ function toggleSpeak(): void {
         </Button>
         <TalosMobileMessageOverflowMenu :message="message" :busy="busy" :can-retry="canRetry"
             @reuse="emit('reuse', $event)" @resend="emit('resend', $event)"
-            @copy="emit('copy', $event)" @retry="emit('retry', $event)" @save-to-library="emit('saveToLibrary', $event)" />
+            @share="emit('share', $event)" @details="emit('details', $event)" @delete="emit('delete', $event)" />
     </div>
 </template>

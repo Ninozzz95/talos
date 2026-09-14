@@ -1,3 +1,4 @@
+import type { TalosComposerAttachmentDraft } from '@/repositories/chatRepository'
 import { computed, reactive, readonly, ref, type ComputedRef, type Ref } from 'vue'
 import type { TalosPickedFile } from '@/services/nativeFilePicker'
 import type { TalosTranslate } from '@/i18n/contracts'
@@ -132,6 +133,14 @@ export interface TalosMobileAttachmentsController {
     /** Debt S7: withdraw a document from model context, or put it back. */
     setVaultFileShared(fileId: string, shared: boolean): Promise<void>
     discardAll(): Promise<void>
+    /** Gli allegati autorizzati, nella forma in cui si salvano con la loro chat. */
+    snapshot(): TalosComposerAttachmentDraft[]
+    /** Toglie dal compositore SENZA revocare: restano salvati con la chat che si lascia. */
+    setAside(): void
+    /** Rimette gli allegati salvati di una chat al posto di quelli in vista. */
+    restore(saved: readonly TalosComposerAttachmentDraft[]): void
+    /** Revoca i grant di allegati salvati che non torneranno piu' (chat eliminata). */
+    revokeSaved(saved: readonly TalosComposerAttachmentDraft[]): Promise<void>
     clearSent(): void
     clearError(): void
 }
@@ -610,6 +619,34 @@ export function useTalosMobileAttachments(
         error.value = null
     }
 
+    function snapshot(): TalosComposerAttachmentDraft[] {
+        return items
+            .filter((item): item is TalosMobileAttachmentDraft & { vaultFileId: string, grantId: string, bindingId: string } =>
+                item.status === 'authorized' && item.vaultFileId !== null && item.grantId !== null && item.bindingId !== null)
+            .map((item) => ({
+                id: item.id, source: item.source, displayName: item.displayName, mediaType: item.mediaType,
+                sizeBytes: item.sizeBytes, vaultFileId: item.vaultFileId, grantId: item.grantId, bindingId: item.bindingId,
+                permissions: [...item.permissions],
+            }))
+    }
+
+    function setAside(): void {
+        items.splice(0, items.length)
+        error.value = null
+    }
+
+    function restore(saved: readonly TalosComposerAttachmentDraft[]): void {
+        items.splice(0, items.length, ...saved.map((item): TalosMobileAttachmentDraft => ({
+            ...item, status: 'authorized', error: null,
+            permissions: [...item.permissions] as TalosFileAuthorityPermission[],
+        })))
+        error.value = null
+    }
+
+    async function revokeSaved(saved: readonly TalosComposerAttachmentDraft[]): Promise<void> {
+        for (const item of saved) await options.vault.revokeGrant(item.grantId).catch(() => undefined)
+    }
+
     function clearSent(): void {
         items.splice(0, items.length)
         error.value = null
@@ -646,6 +683,10 @@ export function useTalosMobileAttachments(
         takeDeleteFailure,
         setVaultFileShared,
         discardAll,
+        snapshot,
+        setAside,
+        restore,
+        revokeSaved,
         clearSent,
         clearError,
     }

@@ -18,9 +18,10 @@
  * - **Un menu ⋯ e basta**, fuori dal bottone che apre — un bottone dentro un
  *   bottone non è HTML valido e, su Android, è un bersaglio che a volte prende
  *   l'azione sbagliata.
- * - **Lo stato del contesto resta scritto**, con il suo `data-testid`: è
- *   l'unica cosa che dice se questo file entra nelle risposte, e toglierla per
- *   fare ordine sarebbe togliere l'informazione più importante della pagina.
+ * - **Lo stato del contesto si scrive quando è un'eccezione** (owner 14/09/2026):
+ *   «Escluso dal contesto» in coda alla riga di dettaglio, col suo `data-testid`;
+ *   un file che entra nelle risposte come tutti gli altri non ha niente da dire,
+ *   e una riga «Contesto: automatico» su ogni scheda era rumore ripetuto.
  * - **La selezione multipla** e l'anello di selezione restano dov'erano: sopra
  *   l'anteprima, perché è lì che il dito guarda quando sta scegliendo.
  *
@@ -52,7 +53,8 @@ const props = withDefaults(defineProps<{
     generated: boolean
     /** «Generato», già tradotto: il componente non conosce la lingua. */
     generatedLabel: string
-    contextLabel: string
+    /** «Escluso dal contesto», solo per un file escluso; altrimenti niente. */
+    excludedLabel?: string | null
     /** La chat da cui il file proviene, quando c'è e non è già un'intestazione. */
     originLabel?: string | null
     actionsLabel: string
@@ -62,6 +64,7 @@ const props = withDefaults(defineProps<{
 }>(), {
     thumbnailState: 'none',
     originLabel: null,
+    excludedLabel: null,
 })
 
 const emit = defineEmits<{
@@ -94,7 +97,7 @@ const presentation = computed(() => talosLibraryFilePresentation(
  * comincia o finisce con un punto separatore — il difetto che si vede solo
  * quando manca il pezzo di mezzo, cioè quasi mai in prova.
  */
-interface PezzoDiDettaglio { text: string; accent: boolean }
+interface PezzoDiDettaglio { text: string; accent: boolean; testId?: string }
 
 const dettaglio = computed<PezzoDiDettaglio[]>(() => {
     const pezzi: PezzoDiDettaglio[] = []
@@ -108,6 +111,13 @@ const dettaglio = computed<PezzoDiDettaglio[]>(() => {
     if (props.generated) pezzi.push({ text: props.generatedLabel, accent: true })
     pezzi.push({ text: presentation.value.extension, accent: false })
     if (props.originLabel) pezzi.push({ text: props.originLabel, accent: false })
+    if (props.excludedLabel) {
+        pezzi.push({
+            text: props.excludedLabel,
+            accent: false,
+            testId: `talos-library-context-state-${props.file.id}`,
+        })
+    }
     return pezzi
 })
 </script>
@@ -147,19 +157,11 @@ const dettaglio = computed<PezzoDiDettaglio[]>(() => {
                 </strong>
                 <small class="mt-[var(--talos-space-inline)] truncate text-xs text-[var(--talos-muted)]">
                     <template v-for="(pezzo, indice) in dettaglio" :key="pezzo.text">
-                        <span v-if="indice > 0"> · </span><span
+                        <span v-if="indice > 0" aria-hidden="true"> · </span><span
+                            :data-testid="pezzo.testId"
                             :class="pezzo.accent ? 'text-[var(--talos-accent)]' : ''"
                         >{{ pezzo.text }}</span>
                     </template>
-                </small>
-                <!-- ⛔ Lo stato del contesto NON è un dettaglio: dice se questo
-                     file può entrare in una risposta. Resta scritto, e resta
-                     con il nome che i test interrogano. -->
-                <small
-                    :data-testid="`talos-library-context-state-${file.id}`"
-                    class="mt-[var(--talos-space-inline)] truncate text-2xs leading-4 text-[var(--talos-muted)]"
-                >
-                    {{ $t('library.contextState', { state: contextLabel }) }}
                 </small>
             </span>
         </button>

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import TasksScreen from '@/screens/TasksScreen.vue'
 import TalosMobileTaskCard from '@/components/talos/tasks/TalosMobileTaskCard.vue'
 import TalosMobileTaskRow from '@/components/talos/tasks/TalosMobileTaskRow.vue'
@@ -76,6 +76,15 @@ const esporta = vi.fn(async () => 'shared' as const)
 vi.mock('@/components/talos/tasks/taskExport', () => ({
     exportTalosTaskText: (...args: unknown[]) => esporta(...(args as [])),
 }))
+
+/** Fase 6 (owner 14/09/2026): l'ordine si sceglie nel foglio «Opzioni», non in un `<select>` nativo. */
+async function ordina(wrapper: VueWrapper, valore: string): Promise<void> {
+    await wrapper.get('[data-testid="talos-tasks-options"]').trigger('click')
+    await flushPromises()
+    // L'ultimo: il foglio si teletrasporta nel body, e un test precedente può averne lasciato uno.
+    ;([...document.body.querySelectorAll(`[data-testid="talos-tasks-sort-${valore}"]`)].at(-1) as HTMLElement).click()
+    await flushPromises()
+}
 
 async function schermata() {
     const wrapper = mount(TasksScreen)
@@ -190,8 +199,10 @@ describe('i cinque filtri, coi loro numeri', () => {
 describe('l\'ordine e la densità', () => {
     it('parte da PRIORITÀ, e le completate vanno in fondo', async () => {
         const wrapper = await schermata()
-        expect((wrapper.get('[data-testid="talos-tasks-sort"]').element as HTMLSelectElement).value)
-            .toBe('priority')
+        await wrapper.get('[data-testid="talos-tasks-options"]').trigger('click')
+        await flushPromises()
+        expect([...document.body.querySelectorAll('[data-testid="talos-tasks-sort-priority"]')].at(-1)!.getAttribute('aria-checked'))
+            .toBe('true')
         const titoli = wrapper.findAllComponents(TalosMobileTaskCard).map((c) => c.props('task').id)
         expect(titoli[0]).toBe('t1')
         expect(titoli.at(-1)).toBe('t5')
@@ -199,7 +210,7 @@ describe('l\'ordine e la densità', () => {
 
     it('per titolo riordina davvero', async () => {
         const wrapper = await schermata()
-        await wrapper.get('[data-testid="talos-tasks-sort"]').setValue('title')
+        await ordina(wrapper, 'title')
         await flushPromises()
         const titoli = wrapper.findAllComponents(TalosMobileTaskCard).map((c) => c.props('task').title)
         expect(titoli).toEqual([...titoli].sort((a, b) => a.localeCompare(b, 'it')))

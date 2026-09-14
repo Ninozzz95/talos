@@ -1,3 +1,5 @@
+import type { TalosComposerAttachmentDraft } from '@/repositories/chatRepository'
+import { talosTurnToolActivities } from '@/lib/chat/turnActivities'
 import { computed, reactive, readonly, ref, type Ref } from 'vue'
 import { talosEphemeralSessionId, talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import type { TalosTranslate } from '@/i18n/contracts'
@@ -211,6 +213,8 @@ export interface ChatCompletionResult {
      * Optional and untouched by anything that ignores it.
      */
     usage?: Record<string, number> | null
+    /** L'id della chiamata al fornitore, quando lo manda. */
+    callId?: string | null
     toolCalls?: TalosToolCall[]
     /**
      * ⭐⭐ Blocchi che il fornitore pretende indietro immutati — il QUINTO ponte.
@@ -349,6 +353,13 @@ export interface ChatStore<Runtime = undefined> {
     renameSession(sessionId: string, title: string): Promise<TalosLocalChatSession>
     deleteSession(sessionId: string): Promise<void>
     editUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string): Promise<void>
+    /** Owner 2026-09-13: la coppia sparisce subito; «Annulla» per TALOS_TURN_UNDO_MS. */
+    hideMessageTurn(messageId: string): string | null
+    undoMessageTurn(token: string): boolean
+    /** Chiamata da ogni strada che legge o riscrive la storia: una coppia nascosta non va al modello. */
+    flushMessageTurnDeletions(): Promise<void>
+    /** Le attivita' della coppia domanda-risposta di un messaggio in vista; null se il messaggio non c'e'. */
+    listTurnToolActivities(messageId: string): Promise<TalosLocalToolActivity[] | null>
     setSessionArchived(sessionId: string, archived: boolean): Promise<void>
     setSessionLibraryContextPolicy(
         sessionId: string,
@@ -364,6 +375,8 @@ export interface ChatStore<Runtime = undefined> {
     }>
     loadComposerDraft(scopeId?: string | null): Promise<string>
     saveComposerDraft(draft: string, scopeId?: string | null): Promise<void>
+    loadComposerAttachments(scopeId: string): Promise<TalosComposerAttachmentDraft[]>
+    saveComposerAttachments(scopeId: string, attachments: readonly TalosComposerAttachmentDraft[]): Promise<void>
     setActiveModelProfile(modelProfileId: string | null): Promise<void>
     setSurface(surface: TalosLocalChatSurface): Promise<void>
     recordBrowserActivity(
@@ -579,6 +592,14 @@ function providerFault(
         model: identity.model,
     }
 }
+
+/**
+ * Owner 2026-09-13: dopo «Elimina», «Annulla» resta disponibile 5 secondi. La
+ * stessa costante governa l'avviso e il momento in cui la coppia si cancella
+ * davvero: due numeri diversi farebbero sparire il pulsante prima (o dopo) che
+ * l'annullamento smetta di funzionare.
+ */
+export const TALOS_TURN_UNDO_MS = 5_000
 
 export function createChatStore<Runtime = undefined>(
     complete: ChatCompletion<Runtime>,
@@ -805,7 +826,7 @@ export function createChatStore<Runtime = undefined>(
      * not used were sitting in his list.
      */
     const history = computed(
-        () => sessions.filter((session) => session.has_messages !== false),
+        () => sessions.filter((session) => session.has_messages !== false || session.has_draft === true),
     )
 
     /**
@@ -869,6 +890,7 @@ export function createChatStore<Runtime = undefined>(
         modelProfileId: string | null = null,
         options: { ephemeral?: boolean } = {},
     ): Promise<TalosLocalChatSession> {
+        await flushMessageTurnDeletions()
         const revision = ++navigationRevision
         resetPaging()
         requirePersistence()
@@ -930,6 +952,7 @@ export function createChatStore<Runtime = undefined>(
     }
 
     async function selectSession(sessionId: string): Promise<void> {
+        await flushMessageTurnDeletions()
         const revision = ++navigationRevision
         requirePersistence()
         try {
@@ -971,6 +994,7 @@ export function createChatStore<Runtime = undefined>(
     }
 
     async function deleteSession(sessionId: string): Promise<void> {
+        await flushMessageTurnDeletions()
         const revision = ++navigationRevision
         requirePersistence()
         /**
@@ -1053,7 +1077,118 @@ export function createChatStore<Runtime = undefined>(
         }
     }
 
+    /**
+     * Owner 2026-09-13 — «Elimina» toglie la coppia domanda-risposta SUBITO, con
+     * «Annulla» per 5 secondi, e tutto cio' che quel giro ha creato resta.
+     *
+     * Il messaggio sparisce dalla vista al tocco, ma il database si tocca solo
+     * allo scadere: annullare non deve ricostruire niente, basta rimettere le
+     * righe dov'erano.
+     *
+     * ⛔ La trappola che questo ordine apre: durante i 5 secondi la coppia e'
+     * NASCOSTA, non cancellata, e l'invio ricostruisce il contesto dalla storia
+     * INTERA del database. Un invio in quella finestra rimanderebbe al modello
+     * la coppia appena tolta. ⇒ Ogni strada che legge o riscrive la storia —
+     * invio, continuazione, cambio o creazione di chat, modifica, eliminazione
+     * della chat — chiama prima flushMessageTurnDeletions(). E lo fa anche
+     * l'app che va in sottofondo, perche' un'app chiusa nei 5 secondi non deve
+     * far ricomparire il messaggio al riavvio.
+     */
+    const pendingTurnDeletions = new Map<string, {
+        sessionId: string
+        messageId: string
+        views: Array<(typeof messages)[number]>
+        timer: ReturnType<typeof setTimeout>
+    }>()
+    let turnDeletionListener = false
+
+    function turnRangeInViews(messageId: string): { start: number, end: number } | null {
+        const index = messages.findIndex(message => message.id === messageId)
+        if (index < 0) return null
+        let start = index
+        for (let i = index; i >= 0; i--) if (messages[i]!.role === 'user') { start = i; break }
+        let end = messages.length
+        for (let i = start + 1; i < messages.length; i++) if (messages[i]!.role === 'user') { end = i; break }
+        return { start, end }
+    }
+
+    function hideMessageTurn(messageId: string): string | null {
+        const session = activeSession.value
+        // Mentre una risposta si sta scrivendo, togliere la sua coppia romperebbe il giro.
+        if (!session || state.sending || state.editingMessage) return null
+        const range = turnRangeInViews(messageId)
+        if (!range) return null
+        const views = messages.splice(range.start, range.end - range.start)
+        const token = makeId()
+        const timer = setTimeout(() => { void commitMessageTurn(token) }, TALOS_TURN_UNDO_MS)
+        pendingTurnDeletions.set(token, { sessionId: session.id, messageId, views, timer })
+        if (!turnDeletionListener && typeof document !== 'undefined') {
+            turnDeletionListener = true
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') void flushMessageTurnDeletions()
+            })
+        }
+        return token
+    }
+
+    function restoreTurnViews(sessionId: string, views: Array<(typeof messages)[number]>): void {
+        if (activeSession.value?.id !== sessionId || views.length === 0) return
+        const first = views[0]!
+        let at = messages.length
+        // Per ordinale, non per indice: in 5 secondi puo' essersi caricata una pagina piu' vecchia.
+        if (typeof first.ordinal === 'number') {
+            const after = messages.findIndex(message => typeof message.ordinal === 'number' && message.ordinal > first.ordinal!)
+            if (after >= 0) at = after
+        }
+        messages.splice(at, 0, ...views)
+    }
+
+    function undoMessageTurn(token: string): boolean {
+        const pending = pendingTurnDeletions.get(token)
+        if (!pending) return false
+        clearTimeout(pending.timer)
+        pendingTurnDeletions.delete(token)
+        restoreTurnViews(pending.sessionId, pending.views)
+        return true
+    }
+
+    async function commitMessageTurn(token: string): Promise<void> {
+        const pending = pendingTurnDeletions.get(token)
+        if (!pending) return
+        clearTimeout(pending.timer)
+        pendingTurnDeletions.delete(token)
+        try {
+            await repository.deleteMessageTurn(pending.sessionId, pending.messageId)
+            if (activeSession.value?.id === pending.sessionId) {
+                const activities = await repository.listSessionToolActivities(pending.sessionId)
+                if (activeSession.value?.id === pending.sessionId) {
+                    sessionBrowserActivities.splice(0, sessionBrowserActivities.length,
+                        ...activities.map(toBrowserActivityView).filter((entry): entry is TalosMobileBrowserActivityView => entry !== null))
+                }
+            }
+            await refreshSessionList()
+        } catch {
+            // Una cancellazione non riuscita non deve lasciare a schermo una conversazione
+            // diversa da quella salvata: le righe tornano, e l'errore si dice.
+            restoreTurnViews(pending.sessionId, pending.views)
+            state.lastError = translate('chat.turnDeleteFailed')
+        }
+    }
+
+    async function flushMessageTurnDeletions(): Promise<void> {
+        if (pendingTurnDeletions.size === 0) return
+        for (const token of [...pendingTurnDeletions.keys()]) await commitMessageTurn(token)
+    }
+
+    async function listTurnToolActivities(messageId: string): Promise<TalosLocalToolActivity[] | null> {
+        const session = activeSession.value
+        if (!session || !messages.some((message) => message.id === messageId)) return null
+        const activities = await repository.listSessionToolActivities(session.id)
+        return talosTurnToolActivities(messages, activities, messageId)
+    }
+
     async function editUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string): Promise<void> {
+        await flushMessageTurnDeletions()
         requirePersistence()
         if (state.sending || state.editingMessage || continuationQueue.length || activeSession.value?.id !== sessionId) throw new Error(translate('chat.editMessageUnavailable'))
         state.editingMessage = true
@@ -1091,7 +1226,32 @@ export function createChatStore<Runtime = undefined>(
 
     async function saveComposerDraft(draft: string, scopeId?: string | null): Promise<void> {
         requirePersistence()
-        await repository.saveComposerDraft(composerDraftScope(scopeId), draft)
+        const scope = composerDraftScope(scopeId)
+        await repository.saveComposerDraft(scope, draft)
+        await noteDraftPresence(scope, draft !== '')
+    }
+
+    async function loadComposerAttachments(scopeId: string): Promise<TalosComposerAttachmentDraft[]> {
+        requirePersistence()
+        return repository.loadComposerAttachments(scopeId)
+    }
+
+    async function saveComposerAttachments(scopeId: string, attachments: readonly TalosComposerAttachmentDraft[]): Promise<void> {
+        requirePersistence()
+        await repository.saveComposerAttachments(scopeId, attachments)
+        await noteDraftPresence(scopeId, attachments.length > 0)
+    }
+
+    /**
+     * La cronologia segue la bozza (owner 2026-09-13): una chat senza messaggi appare
+     * quando la bozza nasce e sparisce quando si svuota. Si rilegge l'elenco SOLO se il
+     * segno puo' cambiare; testo vuoto con allegati ancora dentro lo rilegge, e
+     * l'elenco — che conta testo E allegati — resta la verita'.
+     */
+    async function noteDraftPresence(scopeId: string, present: boolean): Promise<void> {
+        const listed = sessions.find((session) => session.id === scopeId)
+        if (!listed || (listed.has_draft === true) === present) return
+        await refreshSessionList()
     }
 
     async function setActiveModelProfile(modelProfileId: string | null): Promise<void> {
@@ -1312,6 +1472,7 @@ export function createChatStore<Runtime = undefined>(
     async function runContinuation(
         input: TalosChatContinuationInput<Runtime>,
     ): Promise<boolean> {
+        await flushMessageTurnDeletions()
         state.sending = true
         // The chat you are on owns it until the journal says otherwise.
         state.sendingSessionId = activeSession.value?.id ?? null
@@ -1512,6 +1673,7 @@ export function createChatStore<Runtime = undefined>(
         onPersisted?: () => void,
         turnPolicy: TalosLibraryTurnOverride | null = null,
     ): Promise<boolean> {
+        await flushMessageTurnDeletions()
         const trimmed = text.trim()
         if ((!trimmed && attachments.length === 0) || state.sending || state.editingMessage) return false
         if (state.persistenceStatus !== 'ready') {
@@ -1800,12 +1962,18 @@ export function createChatStore<Runtime = undefined>(
         renameSession,
         deleteSession,
         editUserMessage,
+        hideMessageTurn,
+        undoMessageTurn,
+        flushMessageTurnDeletions,
+        listTurnToolActivities,
         setSessionArchived,
         setSessionLibraryContextPolicy,
         setSessionOrder,
         exportSnapshot,
         loadComposerDraft,
         saveComposerDraft,
+        loadComposerAttachments,
+        saveComposerAttachments,
         setActiveModelProfile,
         setSurface,
         recordBrowserActivity,

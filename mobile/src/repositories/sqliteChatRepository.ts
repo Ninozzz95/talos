@@ -1,7 +1,7 @@
 import { TALOS_CONTENT_ORIGIN_FALLBACK, talosContentOrigin } from '@/lib/tools/security'
 import { normalizeTalosLibrarySearchText } from '@/lib/librarySearchText'
 import { talosMessageSearchExcerpt, talosMessageSearchLimit } from '@/lib/chat/messageSearch'
-import type { TalosMessageSearchHit } from '@/repositories/chatRepository'
+import type { TalosComposerAttachmentDraft, TalosMessageSearchHit } from '@/repositories/chatRepository'
 import type {
     TalosSqlConnection,
     TalosSqlRow,
@@ -14,6 +14,7 @@ import {
     normalizeFileAuthorityPermissions,
     normalizeComposerDraft,
     normalizeComposerDraftScope,
+    normalizeComposerAttachments,
     normalizeChatTitle,
     normalizeChatSurface,
     normalizeRepositoryId,
@@ -57,6 +58,7 @@ import {
 
 const ACTIVE_SESSION_KEY = 'active_session_id'
 const COMPOSER_DRAFT_KEY_PREFIX = 'composer_draft:'
+const COMPOSER_ATTACHMENTS_KEY_PREFIX = 'composer_attachments:'
 
 function invalidRow(): never {
     throw new Error('TALOS_CHAT_ROW_INVALID')
@@ -278,6 +280,10 @@ function encodeObject(value: Record<string, unknown> | undefined): string {
     return JSON.stringify(cloneJsonObject(value))
 }
 
+function composerAttachmentsKey(scopeId: string): string {
+    return `${COMPOSER_ATTACHMENTS_KEY_PREFIX}${normalizeComposerDraftScope(scopeId)}`
+}
+
 function composerDraftKey(scopeId: string): string {
     return `${COMPOSER_DRAFT_KEY_PREFIX}${normalizeComposerDraftScope(scopeId)}`
 }
@@ -402,13 +408,17 @@ export function createSqliteChatRepository(
                 `SELECT s.id, s.title, s.surface, s.mode, s.persistence_mode,
                         s.active_model_profile_id, s.metadata_json, s.created_at, s.updated_at,
                         EXISTS (SELECT 1 FROM talos_chat_messages m WHERE m.session_id = s.id)
-                            AS has_messages
+                            AS has_messages,
+                        EXISTS (SELECT 1 FROM talos_chat_state d
+                                WHERE d.key IN ('composer_draft:' || s.id, 'composer_attachments:' || s.id))
+                            AS has_draft
                  FROM talos_chat_sessions s
                  ORDER BY s.updated_at DESC, s.created_at DESC, s.id DESC`,
             )
             return rows.map((row) => ({
                 ...parseSession(row),
                 has_messages: reportedTrue(row.has_messages),
+                has_draft: reportedTrue(row.has_draft),
             }))
         },
         getActiveSessionId: () => activeSessionId(),
@@ -520,6 +530,7 @@ export function createSqliteChatRepository(
                 )
                 if (remaining.length !== 0) throw new Error('TALOS_CHAT_DELETE_UNVERIFIED')
                 await database.run('DELETE FROM talos_chat_state WHERE key = ?', [composerDraftKey(sessionId)])
+                await database.run('DELETE FROM talos_chat_state WHERE key = ?', [composerAttachmentsKey(sessionId)])
                 // SF-10: session-scoped memories die with their session.
                 await database.run(
                     "DELETE FROM talos_memories WHERE scope_type = 'session' AND scope_id = ?",
@@ -623,6 +634,37 @@ export function createSqliteChatRepository(
                 if (remaining.length) throw new Error('TALOS_CHAT_DELETE_UNVERIFIED')
                 await database.run('UPDATE talos_chat_sessions SET updated_at = ? WHERE id = ?', [now(), sessionId])
                 return text
+            })
+        },
+        async deleteMessageTurn(sessionId: string, messageId: string) {
+            return transaction(async (database) => {
+                await findSession(sessionId, database)
+                const rows = await database.query(
+                    'SELECT id, role, ordinal FROM talos_chat_messages WHERE session_id = ? ORDER BY ordinal ASC, id ASC',
+                    [sessionId],
+                )
+                const index = rows.findIndex(row => row.id === messageId)
+                if (index < 0) throw new Error('TALOS_CHAT_MESSAGE_NOT_FOUND')
+                // La coppia comincia dal messaggio della persona che la apre, anche se si
+                // e' premuto Elimina sulla risposta; finisce prima della domanda seguente.
+                let start = index
+                for (let i = index; i >= 0; i--) if (rows[i]!.role === 'user') { start = i; break }
+                let end = rows.length
+                for (let i = start + 1; i < rows.length; i++) if (rows[i]!.role === 'user') { end = i; break }
+                const ids = rows.slice(start, end).map(row => requiredString(row, 'id'))
+                const from = boundedInteger(rows[start]!, 'ordinal')
+                if (end < rows.length) {
+                    await database.run('DELETE FROM talos_chat_messages WHERE session_id = ? AND ordinal >= ? AND ordinal < ?',
+                        [sessionId, from, boundedInteger(rows[end]!, 'ordinal')])
+                } else {
+                    await database.run('DELETE FROM talos_chat_messages WHERE session_id = ? AND ordinal >= ?', [sessionId, from])
+                }
+                // Si verifica sulle righe, non sul fatto che la DELETE non abbia lanciato.
+                const placeholders = ids.map(() => '?').join(', ')
+                const remaining = await database.query('SELECT id FROM talos_chat_messages WHERE id IN (' + placeholders + ')', ids)
+                if (remaining.length) throw new Error('TALOS_CHAT_DELETE_UNVERIFIED')
+                await database.run('UPDATE talos_chat_sessions SET updated_at = ? WHERE id = ?', [now(), sessionId])
+                return ids
             })
         },
         async appendMessage(input: AppendChatMessageInput) {
@@ -1621,6 +1663,35 @@ export function createSqliteChatRepository(
             const value = normalizeComposerDraft(draft)
             await transaction(async (database) => {
                 if (value === '') {
+                    await database.run('DELETE FROM talos_chat_state WHERE key = ?', [key])
+                    return
+                }
+                await database.run(
+                    `INSERT INTO talos_chat_state (key, value_json, updated_at)
+                     VALUES (?, ?, ?)
+                     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`,
+                    [key, JSON.stringify(value), now()],
+                )
+            })
+        },
+        async loadComposerAttachments(scopeId: string) {
+            const rows = await (await db()).query(
+                'SELECT value_json FROM talos_chat_state WHERE key = ? LIMIT 1',
+                [composerAttachmentsKey(scopeId)],
+            )
+            if (rows.length === 0) return []
+            const raw = requiredString(rows[0] as TalosSqlRow, 'value_json')
+            try {
+                return normalizeComposerAttachments(JSON.parse(raw))
+            } catch {
+                return invalidRow()
+            }
+        },
+        async saveComposerAttachments(scopeId: string, attachments: readonly TalosComposerAttachmentDraft[]) {
+            const key = composerAttachmentsKey(scopeId)
+            const value = normalizeComposerAttachments(attachments)
+            await transaction(async (database) => {
+                if (value.length === 0) {
                     await database.run('DELETE FROM talos_chat_state WHERE key = ?', [key])
                     return
                 }
