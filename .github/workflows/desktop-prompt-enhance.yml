@@ -16,7 +16,7 @@ on:
       - '.github/workflows/desktop-prompt-enhance.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   prompt-enhance-regression:
@@ -40,24 +40,6 @@ jobs:
         run: npm ci
         working-directory: context-engine
 
-      - name: applica patch Prompt Enhance verificata
-        if: github.event_name == 'push'
-        run: node scripts/apply-prompt-enhance-provider-fix.mjs
-        working-directory: harness-ui
-
       - name: regressione Prompt Enhance Desktop
         run: node --test tests/http-routes-migliora-prompt-provider.test.mjs tests/http-routes-migliora-prompt.test.mjs
         working-directory: harness-ui
-
-      - name: committa patch solo dopo GREEN
-        if: github.event_name == 'push' && success()
-        shell: bash
-        run: |
-          if git diff --quiet -- harness-ui/src/http-app.mjs; then
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add harness-ui/src/http-app.mjs
-          git commit -m 'fix(desktop): use session provider for prompt enhancer'
-          git push origin HEAD:fix/desktop-prompt-enhance
