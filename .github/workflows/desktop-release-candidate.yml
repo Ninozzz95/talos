@@ -1,0 +1,88 @@
+name: desktop-release-candidate
+
+on:
+  push:
+    branches:
+      - verify/desktop-v0.1.8
+
+permissions:
+  contents: read
+
+env:
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+  TALOS_R02_BUILDER_NETWORK: '1'
+
+jobs:
+  desktop-candidate:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            harness-ui/frontend/package-lock.json
+            harness-ui/desktop/package-lock.json
+            context-engine/package-lock.json
+
+      - name: dipendenze dai lock con addon nativi
+        timeout-minutes: 10
+        run: |
+          npm ci --prefix harness-ui --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci backend fallito.' }
+          npm ci --prefix harness-ui/frontend --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci frontend fallito.' }
+          npm ci --prefix harness-ui/desktop --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci desktop fallito.' }
+          npm ci --prefix context-engine --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci context-engine fallito.' }
+          node harness-ui/frontend/node_modules/playwright/cli.js install chromium
+          if ($LASTEXITCODE -ne 0) { throw 'Installazione Chromium per i test frontend fallita.' }
+
+      - name: costruisci il frontend e consegnalo
+        run: |
+          npm --prefix harness-ui/frontend run build
+          if ($LASTEXITCODE -ne 0) { throw 'Build frontend fallita.' }
+          Copy-Item -Path harness-ui/frontend/dist/* -Destination harness-ui/public/ -Recurse -Force
+
+      - name: cancelli release Desktop
+        timeout-minutes: 15
+        run: |
+          node --test harness-ui/tests/*.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Test server falliti.' }
+          npm --prefix harness-ui run test:kernel
+          if ($LASTEXITCODE -ne 0) { throw 'Test kernel falliti.' }
+          npm --prefix harness-ui run kernel:controlla
+          if ($LASTEXITCODE -ne 0) { throw 'Controllo kernel fallito.' }
+          npm --prefix harness-ui/frontend run test:unit
+          if ($LASTEXITCODE -ne 0) { throw 'Test frontend falliti.' }
+          npm --prefix harness-ui/desktop run test:puri
+          if ($LASTEXITCODE -ne 0) { throw 'Test puri desktop falliti.' }
+          npm --prefix harness-ui/desktop run test:guscio
+          if ($LASTEXITCODE -ne 0) { throw 'Test Electron reali falliti.' }
+
+      - name: regressione streaming Desktop integrata
+        timeout-minutes: 8
+        run: |
+          npx --prefix harness-ui/frontend playwright test -c playwright.componenti.config.mjs nessun-errore-a-runtime.spec.mjs --grep 'STREAMING-LIVE-SMOOTH-02' --project desktop-1280x800 --reporter=line
+          if ($LASTEXITCODE -ne 0) { throw 'Regressione streaming Desktop fallita.' }
+
+      - name: installer e ZIP candidati
+        timeout-minutes: 15
+        run: |
+          npm --prefix harness-ui/desktop run dist
+          if ($LASTEXITCODE -ne 0) { throw 'Build installer/ZIP fallita.' }
+
+      - name: smoke installato candidato
+        timeout-minutes: 8
+        run: |
+          $pkg = Get-Content harness-ui/desktop/package.json -Raw | ConvertFrom-Json
+          $installer = "harness-ui/desktop/dist/TALOS-Setup-$($pkg.version).exe"
+          ./harness-ui/desktop/scripts/ci-smoke.ps1 -Installer $installer
