@@ -12,7 +12,7 @@ import { closeToolSheet } from './toolSheet'
 test.use({ storageState: TALOS_PROVIDER_STATE })
 
 
-const MENU = '[aria-label="Open menu"]'
+const MENU = '[data-testid="talos-shell-menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
 
@@ -33,7 +33,9 @@ function firstUserText(body: GeminiRequestBody): string {
 }
 
 async function requestPromptEnhancement(page: Page): Promise<void> {
-    await page.getByLabel('Improve prompt').click()
+    await page.getByLabel('Add to chat').click()
+    await page.getByTestId('talos-drawer-tab-create').click()
+    await page.getByTestId('talos-drawer-enhance').click()
     const setup = page.getByRole('dialog', { name: 'Prompt enhancement', exact: true })
     await expect(setup).toBeVisible()
     await setup.getByRole('button', { name: 'Improve the prompt', exact: true }).click()
@@ -150,10 +152,10 @@ test('operates slash commands at 360px without overflow, and every row runs', as
     await composer.fill('/')
     const menu = page.getByRole('listbox', { name: 'Composer slash commands' })
     await expect(menu).toBeVisible()
-    // Owner 2026-07-25 (defect #6): the menu offered 21 commands, 17 greyed
-    // out and four of those lying about features that shipped. What is left is
-    // exactly what runs.
-    await expect(menu.getByRole('option')).toHaveCount(9)
+    // Browse is intentionally no longer a slash command. The menu contains
+    // only commands that execute directly from the composer.
+    await expect(menu.getByRole('option')).toHaveCount(8)
+    await expect(menu.getByRole('option', { name: /Browse/i })).toHaveCount(0)
     await expect(menu.locator('[aria-disabled="true"]')).toHaveCount(0)
 
     await composer.fill('/file')
@@ -180,7 +182,7 @@ test('operates slash commands at 360px without overflow, and every row runs', as
     await composer.fill('/new')
     await composer.press('Enter')
     await expect(composer).toHaveValue('')
-    await page.getByLabel('Open menu').click()
+    await page.locator(MENU).click()
     // F3-T3 (owner #12): phones surface the count on the Chats entry; the
     // session list lives in the dedicated Chats page.
     //
