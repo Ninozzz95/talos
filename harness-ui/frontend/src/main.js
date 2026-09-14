@@ -29,9 +29,14 @@ await import('./legacy/app.js');
  * per coalescere SOLO il lavoro di paint: qui rendiamo quindi il live stream "none", cioe ogni
  * frame vede tutto cio che T3 ha gia ricevuto. Nessun timer, nessun typing artificiale, nessun
  * chunk sintetico; ordine e contenuto dei delta restano quelli originali.
+ *
+ * Il bundle puo essere ospitato anche da una superficie embedded, riconoscibile dal contratto
+ * `window.__talosHarnessHost`: in quel caso la preferenza appartiene all'host e non va sovrascritta
+ * da questa hotfix Desktop standalone.
  */
-const streamingHost = window.__talosHarnessHost || document.documentElement;
-streamingHost.dataset.talosStreamingAnimation = 'none';
+if (!window.__talosHarnessHost) {
+  document.documentElement.dataset.talosStreamingAnimation = 'none';
+}
 
 /* TALOS-DESKTOP-FINAL-UI */
 const { initTalosDesktopBackground } = await import('./motion/desktop-background.js');
