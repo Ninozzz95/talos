@@ -79,3 +79,117 @@ test('RUNTIME-01: aprire la app non produce nessun errore JavaScript', async ({ 
 
   expect(errori, `⛔ la pagina ha lanciato ${errori.length} errori:\n  ${errori.slice(0, 6).join('\n  ')}`).toEqual([]);
 });
+
+/*
+ * ⛔⛔⛔ 14/09/2026 — REGRESSIONE DESKTOP 0.1.7: i delta arrivano regolari ma il testo visibile
+ * resta indietro e recupera a blocchi. Questa prova NON misura quanti millisecondi impiega una
+ * macchina CI: misura quanti FOTOGRAMMI servono a T4 per raggiungere T3 dopo l'ultimo delta.
+ *
+ * 240 delta a ~12 ms esercitano il caso reale (provider più veloce del ritmo artificiale). Dopo
+ * l'ultimo T3 tutto il testo è già nel frontend: nessuna animazione può trattenerlo per centinaia
+ * di millisecondi. Il commit visibile deve raggiungerlo entro uno o due frame. L'ordine è provato
+ * confrontando il testo completo, carattere per carattere.
+ *
+ * La prova vive nel browser vero e non usa clock assoluti per decidere verde/rosso: il contratto
+ * è espresso in frame, così una macchina CI lenta non trasforma un backlog intenzionale in rumore.
+ */
+test('STREAMING-LIVE-SMOOTH-02 — 240 delta regolari raggiungono il DOM entro due frame senza backlog artificiale', async ({ page }) => {
+  await page.addInitScript(() => {
+    try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* niente storage */ }
+  });
+  await page.goto(process.env.TALOS_URL_CANCELLO || 'http://127.0.0.1:4174/');
+  await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
+
+  const risultato = await page.evaluate(async () => {
+    const runtime = window.__talosHarnessUiRuntime;
+    const sessione = runtime.realSessionState;
+    const conversazione = document.querySelector('#conversation');
+    conversazione.replaceChildren();
+    sessione.messageElements.clear();
+    sessione.testoGrezzoMessaggi.clear();
+    sessione.renderIncrementale?.clear?.();
+    sessione.sequenzeViste.clear();
+    sessione.deferHistoricalRendering = false;
+
+    const pezzi = Array.from({ length: 240 }, (_, indice) => `d${String(indice).padStart(3, '0')}:abcdef `);
+    const atteso = pezzi.join('');
+    const messageId = 'streaming-smooth-regression';
+    let ultimoT3 = null;
+
+    for (let indice = 0; indice < pezzi.length; indice += 1) {
+      ultimoT3 = performance.now();
+      runtime.handleRealEvent({
+        type: 'TextMessageContent', messageId, delta: pezzi[indice], _sequenza: 70000 + indice,
+      }, sessione.generation);
+      if (indice + 1 < pezzi.length) await new Promise((resolve) => setTimeout(resolve, 12));
+    }
+
+    let frameDopoUltimoDelta = 0;
+    let t4 = null;
+    const testoVisibile = () => conversazione.querySelector('.assistant-copy')?.textContent || '';
+    if (testoVisibile() === atteso) t4 = performance.now();
+
+    while (t4 === null && frameDopoUltimoDelta < 40) {
+      await new Promise((resolve) => requestAnimationFrame(() => {
+        frameDopoUltimoDelta += 1;
+        resolve();
+      }));
+      if (testoVisibile() === atteso) t4 = performance.now();
+    }
+
+    const log = typeof window.talosStreamingLog === 'function' ? window.talosStreamingLog() : [];
+    const delta = log.filter((riga) => riga.evento === 'delta' && riga.messageId === messageId);
+    const render = log.filter((riga) => riga.evento === 'render' && riga.messageId === messageId);
+    return {
+      atteso,
+      visibile: testoVisibile(),
+      frameDopoUltimoDelta,
+      ultimoT3,
+      t4,
+      lagFinaleMs: t4 === null || ultimoT3 === null ? null : t4 - ultimoT3,
+      deltaRicevuti: delta.length,
+      renderEseguiti: render.length,
+      ultimoRender: render.at(-1) ?? null,
+    };
+  });
+
+  expect(risultato.deltaRicevuti).toBe(240);
+  expect(risultato.visibile).toBe(risultato.atteso);
+  expect(risultato.t4).not.toBeNull();
+  expect(risultato.frameDopoUltimoDelta, `T3→T4 = ${risultato.lagFinaleMs} ms; ultimo render: ${JSON.stringify(risultato.ultimoRender)}`).toBeLessThanOrEqual(2);
+});
+
+/*
+ * Lo stesso bundle può essere ospitato da un host embedded. La hotfix Desktop non deve cambiare
+ * preferenze o comportamento di quella superficie: il fix live-smooth vale solo per il Desktop
+ * standalone. Questo test resta nella suite Desktop e simula soltanto il contratto dell'host.
+ */
+test('STREAMING-LIVE-SMOOTH-02 scope — un host embedded conserva la propria animazione streaming', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, '__talosHarnessHost', {
+      configurable: true,
+      get() {
+        const host = document.documentElement;
+        if (!host) return null;
+        host.classList.add('talos-embedded');
+        if (!host.dataset.talosStreamingAnimation) host.dataset.talosStreamingAnimation = 'fade';
+        return host;
+      },
+    });
+    try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* niente storage */ }
+  });
+
+  await page.goto(process.env.TALOS_URL_CANCELLO || 'http://127.0.0.1:4174/');
+  await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
+
+  const stato = await page.evaluate(() => {
+    const host = window.__talosHarnessHost || document.documentElement;
+    return {
+      embedded: host.classList.contains('talos-embedded'),
+      streamingAnimation: host.dataset.talosStreamingAnimation,
+    };
+  });
+
+  expect(stato.embedded).toBe(true);
+  expect(stato.streamingAnimation).toBe('fade');
+});
