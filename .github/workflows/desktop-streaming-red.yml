@@ -45,7 +45,7 @@ jobs:
           npx playwright test
           -c playwright.componenti.config.mjs
           nessun-errore-a-runtime.spec.mjs
-          --grep 'STREAMING-LIVE-SMOOTH-02'
+          --grep 'STREAMING-LIVE-SMOOTH-02|RELEASE-018-PROMPT-ENHANCE'
           --project desktop-1280x800
           --reporter=line
         working-directory: harness-ui/frontend
