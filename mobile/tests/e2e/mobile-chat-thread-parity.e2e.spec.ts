@@ -140,7 +140,8 @@ test('renders and operates a durable safe thread through the final mobile UI', a
 
     const firstUser = page.locator('article[data-message-kind="user"]').first()
     await firstUser.getByLabel('More message actions').click()
-    await page.getByRole('menuitem', { name: 'Reuse prompt' }).click()
+    await expect(page.getByTestId('talos-message-actions-sheet')).toBeVisible()
+    await page.getByTestId('talos-message-reuse').click()
     await expect(page.getByLabel('Message TALOS')).toHaveValue(initialPrompt)
     await expect(page.getByLabel('Message TALOS')).toBeFocused()
 
