@@ -32,12 +32,16 @@ export async function closeToolSheet(page: Page): Promise<void> {
         // A refusal here is the race itself, and the wait below is what
         // establishes the outcome either way.
         // U-7 (2026-09-11): a station ROOT has no back arrow any more — the
-        // mockup gives it the phone menu button instead, and the way back to
-        // the chat is the system Back. Inside a station the arrow is still there.
+        // mockup gives it the phone menu button instead. Do NOT use
+        // `page.goBack()` here: that changes browser history behind the app's
+        // back contract and can leave `last_route` persisted on the station.
+        // Escape is a real TalosMobileToolSheet dismissal; the component emits
+        // `close`, App handles it through navigate('chat'), and persistence stays
+        // consistent with what the person sees.
         if (await page.locator(BACK).count() > 0) {
             await page.locator(BACK).first().click({ timeout: 5_000 }).catch(() => {})
         } else {
-            await page.goBack().catch(() => {})
+            await sheet.first().press('Escape', { timeout: 5_000 }).catch(() => {})
         }
         await page.waitForFunction(
             ([selector, before]) => document.querySelectorAll(selector as string).length < (before as number),
