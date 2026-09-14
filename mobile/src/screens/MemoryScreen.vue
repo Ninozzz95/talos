@@ -390,15 +390,27 @@ useTalosSheetTitle(() => t('navigation.memory'))
         <!-- Che posto è questo. Il titolo e una riga sola che dice cosa ci si
              mette: è il primo pezzo del mockup, e serve perché una stazione
              aperta dal menu deve dire da sola dove si è finiti. -->
-        <header class="flex items-start justify-between gap-[var(--talos-space-section)]">
-            <div class="min-w-0">
-                <h1 data-talos-sheet-title class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">
+        <header>
+            <!-- Keep the subtitle full width; only the title shares the primary action row. -->
+            <div class="flex items-center justify-between gap-[var(--talos-space-section)]">
+                <h1 data-talos-sheet-title :class="['font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]', isTablet ? 'text-3xl' : 'text-2xl']">
                     {{ t('navigation.memory') }}
                 </h1>
-                <p class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
-                    {{ t('memory.subtitle') }}
-                </p>
+                <Button
+                    v-if="!isTablet"
+                    type="button"
+                    data-testid="talos-memory-new"
+                    :aria-label="t('memory.newMemory')"
+                    class="talos-pressable talos-wave-host shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)] size-12 p-0"
+                    @click="startNew"
+                    @pointerdown="onda.onPointerDown"
+                >
+                    <Plus class="size-5" aria-hidden="true" />
+                </Button>
             </div>
+            <p class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
+                {{ t('memory.subtitle') }}
+            </p>
         </header>
 
         <!-- Ricerca e densità, sulla stessa riga: sono le due cose che si fanno
@@ -475,21 +487,22 @@ useTalosSheetTitle(() => t('navigation.memory'))
                 <SlidersHorizontal class="size-5" aria-hidden="true" />
             </Button>
 
-            <!-- L'azione principale nella riga degli strumenti (owner 13/09): con
-                 l'etichetta sul tablet, solo icona sul telefono. -->
+            <!-- L'azione principale nella riga degli strumenti, sul TABLET (owner 13/09),
+                 con l'etichetta. Sul telefono sta accanto al titolo (owner 14/09). -->
             <Button
+                v-if="isTablet"
                 type="button"
                 data-testid="talos-memory-new"
                 :aria-label="t('memory.newMemory')"
                 :class="[
                     'talos-pressable talos-wave-host shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)]',
-                    isTablet ? 'min-h-touch gap-2 px-5 text-sm font-medium' : 'size-12 p-0',
+                    'min-h-touch gap-2 px-5 text-sm font-medium',
                 ]"
                 @click="startNew"
                 @pointerdown="onda.onPointerDown"
             >
                 <Plus class="size-5" aria-hidden="true" />
-                <span v-if="isTablet">{{ t('memory.newMemory') }}</span>
+                <span>{{ t('memory.newMemory') }}</span>
             </Button>
         </div>
 

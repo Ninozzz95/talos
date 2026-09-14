@@ -2,6 +2,8 @@
 import { useTalosSheetTitle } from '@/lib/sheetTitle'
 import type { Component, ComponentPublicInstance } from 'vue'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useInfiniteScroll } from '@vueuse/core'
+import { pageTalosLibrarySections, TALOS_LIBRARY_PAGE_SIZE } from '@/lib/libraryPagination'
 import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import { useTalosI18n } from '@/i18n'
 import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
@@ -250,9 +252,7 @@ const docSourceUrl = computed(() => (docView.value ? parseVaultSourceUrl(docView
  * l'unica funzione che sa dove i file vivono davvero, e duplicarla qui avrebbe
  * significato due idee di «dov'è il file» che prima o poi divergono.
  */
-const thumbnails = useTalosLibraryThumbnails(filteredFiles, {
-    readBytes: (fileId) => attachments.previewBytes(fileId),
-})
+// Thumbnail work is bound to the rendered page below, after global grouping.
 onBeforeUnmount(closeLightbox)
 
 // Open: images in a lightbox, documents in a text viewer (both in-app).
@@ -704,10 +704,7 @@ function linkOriginChat(row: TalosSavedLinkRow): string | null {
 // here, for the links saved before capture existed. This is the screen that
 // backfills them: it is about the links themselves, it is opened deliberately,
 // and leaving it abandons the pass.
-const { icons: sourceIcons } = useTalosSourceCardIcons(
-    computed(() => renderedLinkRows.value.map((row) => row.url)),
-    { backfill: true },
-)
+// Icon reads/backfill are bound to the rendered page below as well.
 
 /**
  * Owner 2026-07-30: in `All`, files and links belong to the SAME section — «tutto
@@ -758,6 +755,48 @@ const groupedLinkRows = computed(() => groupTalosLibraryByChat(
     t('library.notFromChat'),
     { timeOf: (row) => row.savedAt ?? null, sort: sortOrder.value, nameOf: (row) => row.title },
 ))
+
+const pageLimit = ref(TALOS_LIBRARY_PAGE_SIZE)
+const libraryScroller = ref<HTMLElement | null>(null)
+const pagedEntries = computed(() => pageTalosLibrarySections(groupedEntries.value, pageLimit.value))
+const pagedLinkRows = computed(() => pageTalosLibrarySections(groupedLinkRows.value, pageLimit.value))
+const pagedFiles = computed(() => typeFilter.value === 'links' ? [] : pagedEntries.value.flatMap(
+    section => section.items.flatMap(entry => entry.kind === 'file' ? [entry.file] : []),
+))
+const pagedLinks = computed(() => typeFilter.value === 'links'
+    ? pagedLinkRows.value.flatMap(section => section.items)
+    : pagedEntries.value.flatMap(section => section.items.flatMap(entry => entry.kind === 'link' ? [entry.row] : [])),
+)
+const hasMoreLibraryItems = computed(() => pageLimit.value < (
+    typeFilter.value === 'links' ? renderedLinkRows.value.length : libraryEntries.value.length
+))
+
+function loadMoreLibraryItems(): void {
+    if (hasMoreLibraryItems.value) pageLimit.value += TALOS_LIBRARY_PAGE_SIZE
+}
+
+/** The pagination footer is a direct child of the actual, bounded screen scroller. */
+function bindLibraryPagination(node: Element | ComponentPublicInstance | null): void {
+    libraryScroller.value = node instanceof HTMLElement ? node.parentElement : null
+}
+
+const { reset: resetInfiniteScroll } = useInfiniteScroll(libraryScroller, loadMoreLibraryItems, {
+    distance: 400,
+    canLoadMore: () => hasMoreLibraryItems.value,
+})
+watch([query, typeFilter, sortOrder, groupByChat], () => {
+    pageLimit.value = TALOS_LIBRARY_PAGE_SIZE
+    if (libraryScroller.value) libraryScroller.value.scrollTop = 0
+    resetInfiniteScroll()
+})
+
+const thumbnails = useTalosLibraryThumbnails(pagedFiles, {
+    readBytes: (fileId) => attachments.previewBytes(fileId),
+})
+const { icons: sourceIcons } = useTalosSourceCardIcons(
+    computed(() => pagedLinks.value.map(row => row.url)),
+    { backfill: true },
+)
 
 const hasVisibleLibraryItems = computed(() => (
     (typeFilter.value !== 'links' && filteredFiles.value.length > 0)
@@ -1070,7 +1109,7 @@ useTalosSheetTitle(() => t('library.title'))
 </script>
 
 <template>
-    <TalosMobileScreen :title="t('library.title')" :eyebrow="t('library.contextVault')">
+    <TalosMobileScreen :title="t('library.title')" :eyebrow="t('library.contextVault')" sheet-background>
         <p
             v-if="openError"
             role="alert"
@@ -1085,10 +1124,28 @@ useTalosSheetTitle(() => t('library.title'))
              Owner 14/09/2026: titolo e sottotitolo restano; «Aggiungi file» non
              sta più accanto al titolo ma nella riga degli strumenti, con le
              altre cose che si fanno a questa pagina. -->
-        <header class="min-w-0">
-            <h1 data-talos-sheet-title class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">
-                {{ t('library.title') }}
-            </h1>
+        <!-- ⛔ Owner 14/09: «il titolo è troppo attaccato» alla barra. Pad a 360 px: il titolo della
+             Libreria partiva a 86 px, sotto il bordo della barra (91), quello di Note a 103 — le altre
+             stazioni hanno `pt-[var(--talos-space-section)]` sul loro contenitore, questa no. -->
+        <header class="pt-[var(--talos-space-section)]">
+            <!-- Keep the subtitle full width; only the title shares the primary action row. -->
+            <div class="flex items-center justify-between gap-[var(--talos-space-section)]">
+                <h1 data-talos-sheet-title :class="['font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]', isTablet ? 'text-3xl' : 'text-2xl']">
+                    {{ t('library.title') }}
+                </h1>
+                <Button
+                    v-if="!isTablet"
+                    type="button"
+                    data-testid="talos-library-add"
+                    :aria-label="t('library.addFile')"
+                    :disabled="actionBusy"
+                    class="talos-pressable talos-wave-host shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)] size-12 p-0 disabled:opacity-60"
+                    @click="addFiles"
+                    @pointerdown="onda.onPointerDown"
+                >
+                    <Plus class="size-5" aria-hidden="true" />
+                </Button>
+            </div>
             <p class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
                 {{ t('library.subtitle') }}
             </p>
@@ -1171,22 +1228,23 @@ useTalosSheetTitle(() => t('library.title'))
                 <SlidersHorizontal class="size-5" aria-hidden="true" />
             </Button>
 
-            <!-- Sul tablet il pulsante dice cosa fa; sul telefono resta il
-                 quadrato in accento, col nome accessibile intatto. -->
+            <!-- Sul tablet il pulsante dice cosa fa, nella riga strumenti. Sul telefono
+                 sta accanto al titolo (owner 14/09). -->
             <Button
+                v-if="isTablet"
                 type="button"
                 data-testid="talos-library-add"
                 :aria-label="t('library.addFile')"
                 :disabled="actionBusy"
                 :class="[
                     'talos-pressable talos-wave-host shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)] disabled:opacity-60',
-                    isTablet ? 'min-h-12 gap-2 px-5 text-sm font-medium' : 'size-12 p-0',
+                    'min-h-12 gap-2 px-5 text-sm font-medium',
                 ]"
                 @click="addFiles"
                 @pointerdown="onda.onPointerDown"
             >
                 <Plus class="size-5" aria-hidden="true" />
-                <span v-if="isTablet">{{ t('library.addFile') }}</span>
+                <span>{{ t('library.addFile') }}</span>
             </Button>
         </div>
 
@@ -1355,7 +1413,7 @@ useTalosSheetTitle(() => t('library.title'))
             has no meaning for.
         -->
         <div v-else-if="typeFilter === 'links'" data-testid="talos-library-links" :aria-label="t('library.savedLinks')">
-            <template v-for="section in groupedLinkRows" :key="section.title || 'all'">
+            <template v-for="section in pagedLinkRows" :key="section.title || 'all'">
                 <TransitionGroup
                     v-if="viewMode === 'grid'"
                     tag="div"
@@ -1414,7 +1472,7 @@ useTalosSheetTitle(() => t('library.title'))
             them are shared, which is what stops one branch being fixed and the
             other forgotten.
         -->
-        <template v-else v-for="section in groupedEntries" :key="section.title || 'all'">
+        <template v-else v-for="section in pagedEntries" :key="section.title || 'all'">
             <!-- GRID: the tile opens; the same explicit More contract as list
                  carries attach/save/delete without hover-only behavior.
 
@@ -1541,6 +1599,16 @@ useTalosSheetTitle(() => t('library.title'))
             </TransitionGroup>
         </template>
 
+        <div v-show="hasMoreLibraryItems" :ref="bindLibraryPagination" class="flex justify-center py-4">
+            <Button
+                v-if="hasMoreLibraryItems"
+                type="button"
+                variant="outline"
+                data-testid="talos-library-load-more"
+                class="min-h-12"
+                @click="loadMoreLibraryItems"
+            >{{ t('library.loadMore') }}</Button>
+        </div>
         <p class="sr-only" role="status" aria-live="polite">{{ feedback }}</p>
     </TalosMobileScreen>
 

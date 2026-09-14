@@ -112,7 +112,9 @@ function motivoDi(kind: TalosLocalBackendKind): string | null {
         const nome = props.devices.find(
             (device) => opzione.registries.includes(device.registry),
         )?.name
-        return nome ?? null
+        // ⛔ «CPU … CPU» (Pad, 14/09): il nome del dispositivo si tace quando ripete quello della riga.
+        if (!nome || nome.trim().toLowerCase() === t(`localModels.backendName.${kind}`).trim().toLowerCase()) return null
+        return nome
     }
     /*
      * ⛔⛔ DUE «NON DISPONIBILE» DIVERSI, e dirli uguali sarebbe una bugia.

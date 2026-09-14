@@ -186,7 +186,10 @@ onBeforeUnmount(() => { molla?.cancel(); molla = null })
                 <span class="min-w-touch" aria-hidden="true" />
             </header>
 
-            <div data-talos-sheet-body class="min-h-0 flex-1 touch-pan-y space-y-3 overflow-y-auto px-4 pt-1">
+            <!-- ⛔ `pb-3`: il mockup «Talos Calm Finale» dà il respiro DENTRO la parte che scorre
+                 (`.sheet-body{overflow:auto;padding:12px}`). Senza, misurato sul Pad il 14/09, l'ultima
+                 voce finiva a filo dell'area della barra dei gesti (16 px) senza un pixel di aria. -->
+            <div data-talos-sheet-body class="min-h-0 flex-1 touch-pan-y space-y-3 overflow-y-auto px-4 pb-3 pt-1">
                 <slot />
             </div>
         </section>

@@ -121,7 +121,7 @@ describe('standard tab screens (verbatim desktop parity, step-1 empty states)', 
         // Il titolo della pagina, quello del mockup: dentro il foglio della
         // stazione e' l'unico visibile, perche' li' l'intestazione di
         // `TalosMobileScreen` si nasconde da sola.
-        expect(w.get('h1.text-3xl').text()).toBe('Library')
+        expect(w.get('h1[data-talos-sheet-title]').text()).toBe('Library')
         expect(w.text()).toContain('Documents, images and saved pages.')
         expect(w.get('[data-testid="talos-library-empty"]').text()).toContain('Nothing here yet')
         expect(w.text()).not.toContain('/api/talos/context-sets')

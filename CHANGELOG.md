@@ -6,6 +6,17 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.35
+
+- The Library loads more items as you scroll, starting with 24. Search, filters and the total count
+  still cover the whole collection; thumbnails and saved-link icons follow the displayed pages.
+- Item menus keep their full width inside the screen and open above their button when the actual
+  menu height does not fit below it. Long menus can scroll.
+- Phone station headers put the title and add button on one row, with the subtitle underneath.
+  The Library uses the same background as its enclosing sheet.
+- The last item in a station stays clear of the bottom edge. Model Lab categories and navigation
+  labels follow the selected language.
+
 ## v0.1.34
 
 Every station now has one toolbar, one options sheet and a menu on each item; each chat keeps its own

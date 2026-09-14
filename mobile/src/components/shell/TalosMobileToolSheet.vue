@@ -299,7 +299,7 @@ function onSheetScroll(event: Event): void {
                 della pagina. Un solo indietro contestuale, come prima (owner 2026-07-24).
             -->
             <div v-if="!hideChrome" data-testid="talos-sheet-chrome" class="talos-sheet-chrome pointer-events-none absolute inset-x-0 top-0 z-20">
-                <div data-testid="talos-sheet-bar" aria-hidden="true" class="talos-sheet-bar pointer-events-auto absolute inset-0 border-b border-[var(--talos-border)] bg-[var(--talos-background)]">
+                <div data-testid="talos-sheet-bar" aria-hidden="true" class="talos-sheet-bar pointer-events-auto absolute inset-0 border-b border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-background))]">
                     <div class="flex h-full items-center justify-center px-16 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
                         <p class="talos-title truncate text-sm font-medium text-[var(--talos-text)]">{{ barTitle }}</p>
                     </div>

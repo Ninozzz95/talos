@@ -11,7 +11,7 @@ vi.mock('@/stores/localModels', () => ({
     talosRefreshDeviceCapacity: refresh,
 }))
 vi.mock('@/services/localEngine', () => ({
-    talosLocalEngineStatus: vi.fn().mockResolvedValue({ available: true, backends: ['cpu'] }),
+    talosLocalEngineStatus: vi.fn().mockResolvedValue({ available: true, backends: 'OpenCL,CPU' }),
 }))
 
 import TalosMobileDeviceCapacityCard from '@/components/talos/models/TalosMobileDeviceCapacityCard.vue'
@@ -48,5 +48,12 @@ describe('TalosMobileDeviceCapacityCard', () => {
         expect(wrapper.text()).toContain('4 GB')
         expect(wrapper.text()).toContain('32 GB')
         expect(wrapper.text()).toContain('1 GB')
+    })
+
+    it("writes the backends with a space and the eyebrow in its own case (Pad, 14/09)", async () => {
+        const wrapper = mount(TalosMobileDeviceCapacityCard)
+        await flushPromises()
+        expect(wrapper.text()).toContain('OpenCL, CPU')
+        expect(wrapper.get('[data-testid="talos-device-capacity-eyebrow"]').classes()).not.toContain('uppercase')
     })
 })

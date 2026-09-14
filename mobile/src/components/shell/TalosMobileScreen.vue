@@ -33,10 +33,13 @@ withDefaults(defineProps<{
      * variant, never had this problem because it never used this shell at all.
      */
     embedded?: boolean
+    /** Opt into the enclosing sheet surface without changing other stations. */
+    sheetBackground?: boolean
 }>(), {
     tabletEdgeToEdge: false,
     edgeToEdge: false,
     embedded: false,
+    sheetBackground: false,
 })
 const insideSheet = inject(TALOS_SHEET_CONTEXT_KEY, false)
 </script>
@@ -50,7 +53,7 @@ const insideSheet = inject(TALOS_SHEET_CONTEXT_KEY, false)
         data-testid="mobile-screen"
         :aria-label="title"
         class="flex h-full flex-col text-[var(--talos-text)]"
-        :class="embedded ? '' : 'bg-[var(--talos-background)]'"
+        :class="embedded || (sheetBackground && insideSheet) ? '' : 'bg-[var(--talos-background)]'"
     >
         <header v-if="!insideSheet && !embedded" class="border-b border-[var(--talos-border)] p-4">
             <p
