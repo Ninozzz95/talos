@@ -363,3 +363,14 @@
   e Chromium ha scritto «VirtualAlloc failed». Nello stesso giro la principale ha perso `OPEN-WITH-TALOS-WINDOWS-01`
   (5,4 s), verde nei due giri precedenti. Rilanciate senza carichi accanto, sullo stesso codice: unità **1054/1054**,
   principale **2981/2985** (0 rosse, 4 saltate) e `OPEN-WITH-TALOS-WINDOWS-01` verde in 1,9 s.
+- **Una chiamata al fornitore fermata non lasciava traccia**: sul registro della sessione del giro (7 invii, 6 fermati) solo
+  l'invio finito porta `StateDelta /usage` (giri: 1) e un `consumo-fornitore`; i 6 fermati hanno solo `ReasoningMessageStart`
+  e `RunError`. Causa letta: `runtime-owner-adapter.mjs` rilanciava lo stop prima del deposito, mentre per un guasto
+  deposita già un consumo con `usage: null`. Dopo la cura, parte 5: uno stop a ragionamento iniziato → `giriFermati: 1`,
+  `usageSessione: null`.
+- ⛔ **`[data-runtime-usage]` non esiste nella pagina** — né nel template né nel mockup: il testo «token · giri» che
+  `chat-foot.js` scrive con `querySelector` non si disegna da nessuna parte. Scoperto da una prova che non trovava l'elemento.
+- **`deferHistoricalRendering`** si accende in `passaASessione` per una sessione conclusa e si spegneva solo con una
+  generazione nuova: in una finestra che guarda, ciò che arriva dopo `talos.fine-rigiocata` veniva disegnato come storia.
+- **glm-5.3-flash e «senza spiegazioni»**: alla richiesta «scrivi soltanto il più piccolo di quei numeri, senza spiegazioni» ha
+  scritto la verifica intera e poi «153» (parte 5, due volte su due).

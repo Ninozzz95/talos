@@ -497,6 +497,24 @@ senza reindirizzamento lascia la sua nota.
   - 🔜 Visti nelle foto, NON curati: «1 giro» nella barra con dieci righe nell’Indice; la finestra che invia non scrive ora e
     permesso sopra il proprio seguito; il titolo della riga di sessione resta aperto dopo il clic; i toast «Messaggio in coda —
     Parte quando TALOS finisce di rispondere» restano (e si impilano sopra l’Indice) anche dopo uno stop.
+    ✅ 14/09, stesso giorno — tutti e quattro misurati e chiusi nel blocco qui sotto (tre curati, uno non era un difetto).
+  ⛔⛔ **I DIFETTI VISTI NELLE FOTO DELLA CODA (14/09)** — commit `40602263`. 4174 aggiornato (nessun giro vivo prima) e
+    guardato in sola lettura nei due temi: 0 richieste non GET, 0 errori, 0 carte rosse, Indice senza fantasmi.
+  - «1 giro» con dieci righe: sul registro del banco 7 invii, 6 fermati, e i fermati non lasciavano NESSUNA traccia della
+    chiamata (l’adattatore dei fornitori rilanciava lo stop prima del deposito). Ora una chiamata partita e fermata deposita
+    un consumo `fermato` senza numeri; il server espone `giriFermati`; barra, Board e Costi usano un conto solo
+    (`giriDellaSessione`) e dicono che i token non li contano. Fonte: Codex `TurnAbortedEvent`, token `Option`.
+  - Ora e permesso: una finestra che apre una sessione CONCLUSA disegnava come storia tutto ciò che arrivava dopo (il
+    differimento non si spegneva); e la finestra che invia non completava il permesso della propria domanda. Curati tutti e due.
+  - Toast della coda: dice solo la posizione (resta perché è l’annuncio per i lettori di schermo); il quando lo dice il banner.
+  - Non un difetto: il titolo della riga aperto dopo il clic è il `title` nativo col puntatore sopra.
+  - Prove al contrario: lotto 6/6 e permesso 1/1, ogni ripristino identico, `dist` identica. Schermo 28/28 nei due temi;
+    unità 1055/1055; principale 2983/2987 (0 rosse); parità 135/147, gli stessi 12 rossi di HEAD `a46f6c83`.
+  - Giro vero parte 5 (sessione nuova, A invia, B apre conclusa): 9/10 al primo passaggio (il rosso era il permesso nella
+    finestra che invia), 10/10 dopo la cura su un’altra sessione nuova.
+  - 🔜 Deciso di NON fare ora: completare il dizionario inglese (`lingua.js` segue il browser e lascia l’italiano dove manca la
+    frase) — lavoro da pre-rilascio. 🔜 `[data-runtime-usage]` (token · giri nel piede) non esiste nella pagina: il testo che
+    `chat-foot.js` scrive non è disegnato da nessuna parte.
 - 🔜 **DUBBIO REGISTRATO, non difetto dichiarato**: 26 file di prova scattano foto e nessuno aspetta
   il velo esplicitamente. Molti aspettano elementi per piu' di 4 s, quindi le loro foto possono essere
   buone: va verificato guardandone una per suite, non dedotto dal conteggio.
