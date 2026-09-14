@@ -128,3 +128,74 @@ test('⭐ onEsecuzione() è chiamata con automazione ed esito, per ogni avvio re
   assert.equal(catturati[0].automazione.id, 'a1');
   assert.equal(catturati[0].esito.sessionId, 's-1');
 });
+
+/*
+ * ⛔⛔ 14/09 — F06 della review, riprodotto prima di curarlo: due giri SOVRAPPOSTI (il timer ne apre uno mentre il
+ *   precedente sta ancora leggendo l'elenco) facevano partire DUE VOLTE la stessa automazione, perché il secondo
+ *   giro vedeva `eseguiteOggi` prima che `registraEsecuzione` del primo avesse scritto. Una sessione vera COSTA:
+ *   qui la prova conta gli avvii, non le intenzioni.
+ */
+function storeFintoLento(voci) {
+  const base = storeFinto(voci);
+  let sblocca;
+  const cancello = new Promise((risolvi) => { sblocca = risolvi; });
+  const elencaBase = base.elenca.bind(base);
+  let elencaChiamate = 0;
+  base.elenca = async () => { elencaChiamate += 1; await cancello; return elencaBase(); };
+  return { store: base, apriIlCancello: () => sblocca(), elencaChiamate: () => elencaChiamate };
+}
+
+test('⛔⛔⛔ F06 — due giri sovrapposti fanno partire l\'automazione UNA volta sola (un giro alla volta)', async () => {
+  const voce = {
+    id: 'a1', taskId: 'costosa', attiva: true,
+    prossimaEsecuzione: '2026-08-27T09:59:00.000Z', limiteAlGiorno: 3, eseguiteOggi: 0, giornoContatore: null,
+  };
+  const { store, apriIlCancello, elencaChiamate } = storeFintoLento([voce]);
+  const registry = sessionRegistryFinto();
+  const scheduler = createAutomationScheduler({ store, sessionRegistry: registry, clock: () => new Date('2026-08-27T10:00:00.000Z') });
+
+  const primo = scheduler.unTick();
+  const secondo = scheduler.unTick(); // arriva mentre il primo è fermo sull'elenco
+  apriIlCancello();
+  await Promise.all([primo, secondo]);
+
+  assert.deepEqual(registry.avviate, ['costosa'], 'una sessione vera sola, non due');
+  assert.deepEqual(store.chiamate.registraEsecuzione, ['a1']);
+  assert.equal(elencaChiamate(), 1, 'il secondo giro ha ricevuto lo STESSO giro, non ne ha aperto un altro');
+});
+
+test('⛔ AL CONTRARIO: la guardia non incastra lo scheduler — il giro DOPO quello finito riparte normalmente', async () => {
+  const voce = {
+    id: 'a1', taskId: 'x', attiva: true,
+    prossimaEsecuzione: '2026-08-27T09:59:00.000Z', limiteAlGiorno: 9, eseguiteOggi: 0, giornoContatore: null,
+  };
+  const store = storeFinto([voce]);
+  const registry = sessionRegistryFinto();
+  const scheduler = createAutomationScheduler({ store, sessionRegistry: registry, clock: () => new Date('2026-08-27T10:00:00.000Z') });
+
+  await scheduler.unTick();
+  await scheduler.unTick();
+
+  assert.deepEqual(registry.avviate, ['x', 'x'], 'due giri SEQUENZIALI restano due giri');
+});
+
+test('⛔ AL CONTRARIO: un giro che FALLISCE non blocca per sempre i successivi', async () => {
+  const voce = {
+    id: 'a1', taskId: 'x', attiva: true,
+    prossimaEsecuzione: '2026-08-27T09:59:00.000Z', limiteAlGiorno: 9, eseguiteOggi: 0, giornoContatore: null,
+  };
+  const store = storeFinto([voce]);
+  const registry = sessionRegistryFinto();
+  let primaVolta = true;
+  const elencaBase = store.elenca.bind(store);
+  store.elenca = async () => {
+    if (primaVolta) { primaVolta = false; throw new Error('elenco illeggibile'); }
+    return elencaBase();
+  };
+  const scheduler = createAutomationScheduler({ store, sessionRegistry: registry, clock: () => new Date('2026-08-27T10:00:00.000Z') });
+
+  await assert.rejects(() => scheduler.unTick(), /elenco illeggibile/);
+  await scheduler.unTick();
+
+  assert.deepEqual(registry.avviate, ['x'], 'il giro dopo il fallimento gira davvero');
+});

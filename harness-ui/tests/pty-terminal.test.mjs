@@ -325,3 +325,107 @@ test('⭐⭐ apriDichiarando dà la STESSA voce di apri: una sola verità, non d
   const voce = registro.apri({ id: 'a', cartella: 'C:/progetto' });
   assert.equal(registro.apriDichiarando({ id: 'a', cartella: 'C:/progetto' }).voce, voce);
 });
+
+/*
+ * ⛔⛔⛔ 14/09 — F04 e F05 della review, riprodotti PRIMA di curarli. Sono due promesse che questo file scrive nella
+ *   propria documentazione e che il codice non manteneva:
+ *   F04 «200.000 byte per scheda, dichiarato, non infinito» — il vecchio ciclo si fermava a `backlog.length > 1`,
+ *       quindi UN solo `cat` di un file grosso restava in memoria intero.
+ *   F05 «mai quelle ancora attaccate a un client» — il timbro si metteva a ogni scheda che si staccava, anche con
+ *       un'altra finestra ancora agganciata, e dieci minuti dopo il reaper uccideva una shell viva.
+ */
+
+test('⛔⛔⛔ F04 — un SOLO pezzo più grande del tetto viene TAGLIATO, e si tiene la CODA', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  const voce = registro.apri({ id: 't1', cartella: '/tmp' });
+  const visti = [];
+  voce.ascoltatori.add((evento) => visti.push(evento));
+
+  const enorme = 'a'.repeat(BACKLOG_MASSIMO_BYTE * 3);
+  ptyCreate[0].p._emettiDati(enorme);
+
+  const tenuto = voce.backlog.join('');
+  assert.ok(voce.byteBacklog <= BACKLOG_MASSIMO_BYTE, `tenuti ${voce.byteBacklog} byte contro un tetto di ${BACKLOG_MASSIMO_BYTE}`);
+  assert.equal(voce.byteBacklog, Buffer.byteLength(tenuto, 'utf8'), 'il contatore dice la verità su ciò che è rimasto in memoria');
+  assert.ok(enorme.endsWith(tenuto), 'si tiene la CODA: è quella che la scheda deve rivedere al rientro');
+  assert.equal(visti.length, 1);
+  assert.equal(visti[0].dati, enorme, 'chi guarda DAL VIVO riceve tutto: il taglio riguarda solo la memoria');
+});
+
+test('⛔⛔ F04 — il taglio non spezza mai un carattere UTF-8 a metà (niente � nel backlog)', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  const voce = registro.apri({ id: 't1', cartella: '/tmp' });
+
+  // ⛔ 3 byte per carattere e 200.000 NON è multiplo di 3: il taglio cade DENTRO una sequenza, che è il caso da provare.
+  const enorme = '∑'.repeat(100_000);
+  assert.equal(Buffer.byteLength(enorme, 'utf8'), 300_000);
+  ptyCreate[0].p._emettiDati(enorme);
+
+  const tenuto = voce.backlog.join('');
+  assert.ok(voce.byteBacklog <= BACKLOG_MASSIMO_BYTE);
+  assert.ok(!tenuto.includes('�'), 'un carattere spezzato arriverebbe a xterm come sostituto: sarebbe output mai scritto dalla shell');
+  assert.equal(tenuto.replaceAll('∑', ''), '', 'tutto ciò che resta sono caratteri interi');
+  assert.ok(enorme.endsWith(tenuto));
+});
+
+test('⛔ F04 — sotto il tetto non si taglia NIENTE (il verso in cui la cura non deve mordere)', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  const voce = registro.apri({ id: 't1', cartella: '/tmp' });
+
+  ptyCreate[0].p._emettiDati('prima riga\r\n');
+  ptyCreate[0].p._emettiDati('seconda riga\r\n');
+
+  assert.deepEqual(voce.backlog, ['prima riga\r\n', 'seconda riga\r\n']);
+  assert.equal(voce.byteBacklog, Buffer.byteLength('prima riga\r\nseconda riga\r\n', 'utf8'));
+});
+
+test('⛔⛔⛔ F05 — una finestra che si stacca NON rende orfana la PTY che un\'ALTRA sta ancora guardando', () => {
+  const { registro, ptyCreate, avanza } = registroPerTest();
+  const voce = registro.apri({ id: 't1', cartella: '/tmp' });
+  const finestraA = () => {};
+  const finestraB = () => {};
+  voce.ascoltatori.add(finestraA);
+  voce.ascoltatori.add(finestraB);
+
+  voce.ascoltatori.delete(finestraA); // A chiude la scheda
+  registro.segnaDisconnesso('t1');
+  assert.equal(voce.ultimaDisconnessioneMs, null, 'resta B a guardare: nessun timbro di orfana');
+
+  avanza((MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA + 5) * 60_000);
+  registro.reap();
+
+  assert.equal(registro.stato('t1')?.viva, true, 'la shell che B sta usando è ancora viva');
+  assert.equal(ptyCreate[0].p.uccisa, false);
+});
+
+test('⛔⛔ F05 — il reaper guarda CHI c\'è adesso, non solo il timbro: una scheda riagganciata non viene chiusa', () => {
+  const { registro, ptyCreate, avanza } = registroPerTest();
+  const voce = registro.apri({ id: 't1', cartella: '/tmp' });
+
+  registro.segnaDisconnesso('t1'); // nessuno guardava: il timbro si mette davvero
+  assert.notEqual(voce.ultimaDisconnessioneMs, null);
+  voce.ascoltatori.add(() => {}); // una finestra si riaggancia mentre il timbro è ancora lì
+
+  avanza((MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA + 5) * 60_000);
+  registro.reap();
+
+  assert.equal(registro.stato('t1')?.viva, true);
+  assert.equal(ptyCreate[0].p.uccisa, false);
+});
+
+test('⛔ AL CONTRARIO — F05: la scheda DAVVERO abbandonata viene chiusa dal reaper come prima', () => {
+  const { registro, ptyCreate, avanza } = registroPerTest();
+  const voce = registro.apri({ id: 't1', cartella: '/tmp' });
+  const unica = () => {};
+  voce.ascoltatori.add(unica);
+
+  voce.ascoltatori.delete(unica);
+  registro.segnaDisconnesso('t1');
+  assert.notEqual(voce.ultimaDisconnessioneMs, null, 'l\'ULTIMO che se ne va mette il timbro');
+
+  avanza((MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA + 1) * 60_000);
+  registro.reap();
+
+  assert.equal(registro.stato('t1'), null, 'la pulizia delle schede mai più tornate continua a funzionare');
+  assert.equal(ptyCreate[0].p.uccisa, true);
+});

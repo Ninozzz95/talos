@@ -48,6 +48,27 @@ export function nomeEspostoMcp(serverId, nomeTool) {
   return `${PREFISSO}${serverId}${SEPARATORE}${nomeTool}`;
 }
 
+/** Tetto della partenza in parallelo: oltre, si aprirebbero troppi processi figli in un colpo all'avvio di una sessione. */
+export const CONCORRENZA_AVVIO_MCP_MASSIMA = 8;
+
+/*
+ * ⭐ 14/09 (F07 della review) — la scoperta dei tool era SERIALE: N server fidati costavano la SOMMA dei loro avvii,
+ *   e ogni avvio è un processo figlio che fa handshake, cioè attesa, non calcolo. Misurato su quattro server d'eco:
+ *   mediana **121 ms** in fila contro **46 ms** a quattro per volta.
+ * ⛔ Resta SPENTA di serie (`1` = il comportamento di prima, byte per byte): un server MCP di terzi può avere un
+ *   avvio pesante, e far partire più processi insieme sulla macchina di qualcun altro non è una scelta che prendo io.
+ *   Chi la vuole la accende con `TALOS_MCP_STARTUP_CONCURRENCY`.
+ * ⛔ Qualunque valore storto — vuoto, «due», 0, -3, 2.5 — torna **1**, mai un errore: una variabile d'ambiente scritta
+ *   male non deve impedire a una sessione di partire.
+ */
+export function concorrenzaAvvioMcp(env = process.env) {
+  const grezzo = env?.TALOS_MCP_STARTUP_CONCURRENCY;
+  if (typeof grezzo !== 'string' && typeof grezzo !== 'number') return 1;
+  const numero = Number(String(grezzo).trim());
+  if (!Number.isInteger(numero) || numero < 1) return 1;
+  return Math.min(numero, CONCORRENZA_AVVIO_MCP_MASSIMA);
+}
+
 /**
  * Connette OGNI server fidato del workspace, scopre e filtra i suoi
  * tool con la sua allowlist (mai "tutto ciò che offre" — la stessa
@@ -81,26 +102,52 @@ export async function preparaToolMcpPerSessione({ cartella, cartellaTrust }, dep
   const connessioni = []; // { client, chiudi } — per chiudiTutti
   const falliti = [];
 
-  for (const server of fidati) {
+  /** L'avvio di UN server: non lancia mai — un fallimento è un esito come un altro, da comporre in ordine più sotto. */
+  async function avviaUnServer(server) {
     let client;
     let chiudi;
     try {
       ({ client, chiudi } = await connettiServerMcpFn({ comando: server.comando, argomenti: server.argomenti, nome: `talos-harness-${server.id}` }));
     } catch (errore) {
-      falliti.push({ serverId: server.id, errore: errore instanceof Error ? errore.message : String(errore) });
-      continue; // un server che non parte non ferma gli altri, ne' la sessione
+      // un server che non parte non ferma gli altri, ne' la sessione
+      return { server, errore: errore instanceof Error ? errore.message : String(errore) };
     }
-    connessioni.push({ client, chiudi });
     let tuttiITool;
     try {
       tuttiITool = await elencaToolMcpFn({ client });
     } catch (errore) {
-      falliti.push({ serverId: server.id, errore: `elenco tool fallito: ${errore instanceof Error ? errore.message : String(errore)}` });
-      continue; // la connessione resta aperta (chiusa comunque da chiudiTutti), ma zero tool da questo server
+      // la connessione resta aperta (chiusa comunque da chiudiTutti), ma zero tool da questo server
+      return { server, client, chiudi, errore: `elenco tool fallito: ${errore instanceof Error ? errore.message : String(errore)}` };
     }
-    const filtrati = filtraToolMcpFn(tuttiITool, server.allowlist);
-    for (const t of filtrati) {
-      const nomeEsposto = nomeEspostoMcp(server.id, t.name);
+    return { server, client, chiudi, tool: filtraToolMcpFn(tuttiITool, server.allowlist) };
+  }
+
+  /*
+   * ⛔ L'ORDINE del risultato non dipende da chi finisce prima: gli esiti si depositano nella casella del loro server e
+   *   si compongono dopo, in fila. Senza, `toolMcp` cambierebbe ordine a ogni avvio a seconda di quale processo figlio
+   *   è stato più svelto — e con due server che espongono lo stesso attrezzo cambierebbe anche quale vince a schermo.
+   */
+  const concorrenza = Math.max(1, Math.min(deps.concorrenza ?? concorrenzaAvvioMcp(deps.env), CONCORRENZA_AVVIO_MCP_MASSIMA));
+  const esiti = new Array(fidati.length).fill(null);
+  let prossimo = 0;
+  async function unLavoratore() {
+    while (prossimo < fidati.length) {
+      const indice = prossimo;
+      prossimo += 1;
+      esiti[indice] = await avviaUnServer(fidati[indice]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concorrenza, fidati.length) }, () => unLavoratore()));
+
+  for (const esito of esiti) {
+    if (!esito) continue;
+    if (esito.chiudi) connessioni.push({ client: esito.client, chiudi: esito.chiudi });
+    if (esito.errore) {
+      falliti.push({ serverId: esito.server.id, errore: esito.errore });
+      continue;
+    }
+    for (const t of esito.tool) {
+      const nomeEsposto = nomeEspostoMcp(esito.server.id, t.name);
       /*
        * ⛔ Stessa cura degli attrezzi Forge, e qui serve ancora di più: questo
        * schema arriva da un server MCP di TERZI, che non abbiamo scritto noi e
@@ -108,7 +155,7 @@ export async function preparaToolMcpPerSessione({ cartella, cartellaTrust }, dep
        * una grammatica fa fallire l'intera richiesta — non solo quell'attrezzo.
        */
       toolMcp.push({ name: nomeEsposto, description: t.description, inputSchema: schemaIngressoAttrezzo(t.inputSchema) });
-      instradamento.set(nomeEsposto, { client, nomeOriginale: t.name });
+      instradamento.set(nomeEsposto, { client: esito.client, nomeOriginale: t.name });
     }
   }
 
