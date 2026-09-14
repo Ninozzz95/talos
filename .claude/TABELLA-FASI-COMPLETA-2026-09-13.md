@@ -1352,3 +1352,28 @@ Hai chiesto la marcatura; poi mi hai detto di fermarmi alla tabella. Ecco cosa v
 | Un processo da **1.979 MB**, vivo dal 10 settembre | e' il singolo processo piu' grosso della macchina. Ho risalito la catena come da regola: **non e' orfano**, e' appeso a un albero vivo. Non lo uccido: decidi tu |
 | La pulizia di fine lavoro | due cartelle sul Desktop, una cartella di appunti, worktree vecchi, le cartelle di costruzione. Solo al tuo si', misurando prima |
 | Un rapporto di prova vecchio sul disco di sviluppo | dichiara «completato» per una versione precedente. Sul server di costruzione viene riscritto a ogni corsa, e la guardia sull'impronta lo **respinge** (provato nel verso che deve fallire). Resta da decidere se il rapporto debba portare anche versione e tag, cosi' che il rifiuto spieghi **quale** costruzione stava dichiarando |
+
+---
+
+# LA PRIMA RELEASE DESKTOP (14/09/2026) — owner: «pubblica e nuova release prima della fase 3»
+
+**Stato: in corso.** Nessuna release desktop era mai uscita: zero tag `desktop-*`, e il changelog
+dichiarava una `0.1.5` scritta e mai taggata.
+
+- ✅ **Pubblicati** i tre commit di F02–F07 (`f19edd6a`, `850bf0ec`, `f3b67d39`) e la preparazione
+  della release (`f287f68f`).
+- ✅ **Le note di rilascio dicono cosa è cambiato**: `release-assets.mjs` compone la sezione
+  `## <tag>` del CHANGELOG desktop col testo stabile sull'installazione, e **rifiuta prima della
+  build** se quella sezione manca — lo stesso cancello che il mobile ha dal 16/08 per ordine
+  dell'owner. E sono **in inglese**: la sorgente italiana era la trappola che il mobile ha già
+  pagato una volta. 4 rotture al contrario, tutte hanno morso.
+- ⛔ **`desktop-v0.1.6` taggata e MORTA ai cancelli** (run 34831547172, 4m42s). Tre prove rosse,
+  **tutte ambientali**: il `fs.watch` su una temp con nome 8.3 che fa **abortire il processo** da
+  libuv; due premesse (`/Users`, `src`) vere solo sul disco dell'owner; un mtime di cartella che sul
+  runner non si muove. Dettaglio e cure nel TACCUINO, 14/09.
+- 🔜 **`desktop-v0.1.7`**: cure scritte, versione e lock allineati, sezione di changelog scritta,
+  controllo pre-tag ✓. Restano: suite intera verde → commit (**in inglese**, regola owner 14/09) →
+  tag → push → esito del job.
+- ⛔ **Regola che questa riga lascia al progetto**: un tag pubblicato non si riscrive. Ogni
+  tentativo fallito brucia un numero di versione e si riparte dal successivo, dichiarando nel
+  changelog che quel tag non ha pubblicato niente.

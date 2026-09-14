@@ -438,3 +438,30 @@
 - ⛔ **Lezione di strada**: uno script Python che stampa i nomi delle prove **muore sulla console cp1252** di Windows, non
   sul codice (`UnicodeEncodeError` a metà del primo giro, con l'esito già valido ma il resto mai eseguito). Prima riga
   obbligatoria: `sys.stdout.reconfigure(encoding='utf-8')`.
+
+## 2026-09-14 — la release desktop: `desktop-v0.1.6` taggata e MORTA ai cancelli, e le tre cause
+
+- ⛔ **Nessuna release desktop era mai uscita**: zero tag `desktop-*` in locale e sul remoto, mentre il changelog
+  dichiarava `desktop-v0.1.5` del 13/09 — scritta e **mai taggata**, e i cinque tag prima di lei fermi ai cancelli.
+- ✅ Preparata e taggata la **0.1.6** (`f287f68f`): note di rilascio che **portano il changelog** e sono **in inglese**
+  (`release-assets.mjs` compone la sezione del tag col testo stabile e **rifiuta** se manca — lo stesso cancello che il
+  mobile ha dal 16/08). 4 rotture al contrario, tutte hanno morso, ripristino sha256 identico.
+- ⛔ **Job `release`/`desktop` run 34831547172: FALLITO dopo 4m42s** al passo dei cancelli. **Settima volta di fila** che
+  un tag desktop muore per la stessa famiglia: **un test che descrive la macchina su cui è stato scritto**. Suite locale
+  **verde 3003/3007**, suite del runner **rossa**: è quella differenza il segnale, non il conteggio.
+  1. `coda-condivisa-e-pausa.test.mjs` rosso come **FILE INTERO, senza un test nominato**:
+     `Assertion failed: !_wcsnicmp(filename, dir, dirlen), src\win\fs-event.c:72` — **libuv ABORTISCE il processo**. Il
+     banco dava alla sessione la **temp di sistema come workspace** e il registro ci installa un watcher vero
+     (`session-registry.mjs:1864`); sui runner quella cartella ha nome corto **8.3** (`RUNNER~1`). ⇒ Curato con la
+     strada già presa il 13/09 da `workspace-watcher.test.mjs` e **mai applicata qui**: radice sotto `.talos/`
+     (ignorata a ogni profondità, provato con `git check-ignore`), ancorata al FILE e non alla cwd. ⛔ `realpathSync`
+     non espande le 8.3 su Windows.
+  2. Due prove «FORMA» di `delega-percorso-e-scheda-agenti.test.mjs`: asserivano come **premessa dura** che `/Users` e
+     `src` rispondano sì al disco — vero su `C:`, falso su un runner che lavora da `D:`. ⇒ La premessa si **dichiara**
+     con `t.skip(motivo)`; il cuore della prova resta intatto.
+  3. `BC-13-CACHE-05`: si fidava che scrivere un file muovesse il **mtime della cartella** (misurato l'11/09 su NTFS).
+     Sul runner non si è mosso. ⇒ Il test muove il mtime da sé con `utimes`: misura la cache, non il filesystem.
+- ⭐ **La lezione, che vale più delle tre cure**: una suite verde in locale non dice niente su un'altra macchina quando
+  i test **toccano il disco vero**. Le tre cause sono tutte «il test descrive l'ambiente»: nome corto 8.3, esistenza di
+  una cartella di sistema, risoluzione di un timestamp. Un tag pubblicato **non si riscrive**: 0.1.6 resta bruciata e
+  marcata «tag only, no release published», e si riparte da **0.1.7**.
