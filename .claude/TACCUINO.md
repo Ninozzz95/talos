@@ -332,3 +332,34 @@
   script. Non è la pagina: si avvolge in try/catch, come fa già `nessun-errore-a-runtime.spec.mjs`.
 - **`baseline-shell.spec.mjs` sul pacchetto di HEAD: 49 rossi su 65**, e sul pacchetto nuovo gli stessi 49
   (insiemi identici, A/B nello stesso momento su 4186/4187). Debito vecchio, non di stasera.
+
+## 2026-09-14 — la coda della sessione, giro vero su banco 5475 (glm-5.3-flash, due finestre, un riavvio)
+
+- **Stop ⇒ pausa, misurato dal server**: 6 s dopo lo stop nessuna consegna, e `GET …/queue` = 2 voci, `inPausa:true`.
+  Dopo il riavvio del processo del banco il registro rimette le stesse 2 voci in pausa (vale l'ULTIMO record `coda`).
+- **`avviaESegui` mette `voce.conclusa = false` PRIMA che il kernel emetta `RunStarted`** (session-registry.mjs r. 2805):
+  un elenco riletto su un `RunStarted` in diretta vede già la sessione aperta.
+- **Tempi dal vivo, due finestre**: barra «fermata» dopo lo stop 130 e 131 ms (rinvio di 60 ms + GET); «Interrompi»
+  nell'altra finestra dopo «Invia ora» 259 e 261 ms; barra «in corso» 424 ms; parola della coda da «Invia ora» a
+  «Indirizza ora» 87 ms, e ritorno dopo lo stop 140 ms.
+- **glm-5.3-flash ripreso con la voce della coda** ha ragionato 2 min 18 s e ha obbedito: «Numeri trovati: 4 — 153, 370,
+  371, 407.» Il costo di una ripresa dalla coda è quello di un giro intero.
+- ⛔ **17 controlli su 17 e un giro che non si poteva fermare**: lo script della parte 2 guardava le parole della coda, e
+  le foto 06-07 mostravano il pulsante fermo su «Invia» per tutto il giro ripreso. Un controllo verde misura solo ciò che
+  chiede.
+- ⛔ **La suite di parità dei componenti usa DUE porte e ricostruisce `dist`**: il banco «aspetto» parte su
+  `TALOS_ASPETTO_PORT` (predefinita **4177**, vietata e occupata: la suite esce 1 prima di cominciare) con
+  `node scripts/build.mjs && node ../server.mjs`. ⇒ Porta a mano (5477), e mai mentre un banco serve `dist` o uno script di
+  rotture la ricostruisce.
+- **Parità dei componenti: 12 rossi su 147 sull'albero di lavoro e gli stessi 12 su un worktree di HEAD `a46f6c83`**
+  (insiemi identici, lanciati uno dopo l'altro): ProviderCard «Sostituisci la prima chiave» contro «la chiave» del mockup
+  (`bdaac011`, 12/09); attesa col cerchio contro la linea del mockup (`6d27602d`, 12/09); una riga `talos-kv` in più
+  nell'Inspector. Debito vecchio.
+- ⛔ **`git worktree add` dentro lo scratchpad della sessione fallisce sui percorsi lunghi** (`.claude/refactor-ui-owner-…`)
+  e git lo annulla da solo; sotto `Temp/claude/wt-…` riesce. I collegamenti a `node_modules` si staccano con `rmdir` prima di
+  `git worktree remove --force`: dopo, i `node_modules` veri avevano ancora 74 e 10 voci.
+- ⛔ **Una suite sotto pressione di memoria non dà un conteggio**: con parità su HEAD, due Chrome del giro vero e la suite
+  principale insieme, le unità del frontend hanno dato 1017/1023 — sei FILE rossi, 30 prove sparite (erano 1053) —
+  e Chromium ha scritto «VirtualAlloc failed». Nello stesso giro la principale ha perso `OPEN-WITH-TALOS-WINDOWS-01`
+  (5,4 s), verde nei due giri precedenti. Rilanciate senza carichi accanto, sullo stesso codice: unità **1054/1054**,
+  principale **2981/2985** (0 rosse, 4 saltate) e `OPEN-WITH-TALOS-WINDOWS-01` verde in 1,9 s.

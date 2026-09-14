@@ -464,14 +464,39 @@ senza reindirizzamento lascia la sua nota.
     vero apposta per questa cura.
   - Riaperta a giro finito sullo stesso server e poi DOPO UN RIAVVIO (durate solo dal disco): spine senza fantasmi, «per 8 s» e
     «per 6 min 47 s» nei due temi (record: 7642, 406634 ms).
+  - ✅ **Deciso e fatto il 14/09** (owner: «i competitor lo fanno, lo facciamo anche noi») — vedi il blocco «LA CODA DELLA
+    SESSIONE» qui sotto. Testo originale della riga, conservato:
   - ⛔ **Da decidere (owner)**: un messaggio accodato non si vede in un’altra finestra né dopo una ricarica (il server non lo espone);
     e fermato il giro, nella finestra che l’ha accodato il banner dice ancora «parte alla fine di questo giro» (foto 05-fine-A).
     Il messaggio NON si perde: `codaMessaggi` sopravvive alla fine del giro e parte col prossimo (session-registry, FASE D);
     si perde solo a un riavvio del server, debito già dichiarato lì. Sbagliate le parole, non il dato.
   - 🔜 Da verificare, non dichiarato: la finestra aperta a metà mostrava ancora «in corso» nella barra, pochi secondi dopo lo stop;
     e sul 4174 il chip del composer dice «Giri 1» mentre la barra dice «2 giri» (due significati della stessa parola?).
+    ✅ 14/09 la prima metà è VERIFICATA ed era un difetto vero in ogni finestra (curata nel blocco qui sotto); la seconda resta
+    aperta — dal vivo la barra ha detto «1 giro» con dieci righe nell’Indice.
   - 4174 aggiornato e guardato in sola lettura (ogni richiesta non GET bloccata: zero): una sessione vera con un seguito
     rigiocata ha l’indice 1 · 2 · 3 · 4 senza il «3 · Risposta» fantasma, nei due temi.
+  ⛔⛔ **LA CODA DELLA SESSIONE (14/09)** — owner: «i competitor lo fanno, lo facciamo anche noi». Commit `4d3208a5`.
+  - Fatto: la coda la tiene il server (id per voce, record `coda` nel registro, annuncio `talos.coda` di solo trasporto);
+    stop ⇒ **in pausa**, riavvio ⇒ torna in pausa; `GET …/queue`, `POST …/queue/invia {id}` (indirizza a giro vivo, riprende a
+    giro fermo), `annulla {id}`. A schermo: «N in coda» / «N in pausa», messaggio intero nel titolo, «Indirizza ora» a giro
+    vivo e «Invia ora» a giro fermo, «Togli». Fonti: Codex `thread/queue/*` e `thread_status.rs:147-160`; Hermes
+    `composer-queue.ts` e `queue-panel.tsx:79` (letti nei cloni il 13-14/09).
+  - Trovati dal giro vero e curati nello stesso lavoro: barra «in corso» 15 s dopo ogni stop; «Invia ora» senza «Interrompi»
+    per 2 min 18 s; le altre finestre vedevano FINITO il giro ripreso; «Invia ora»/«Il giro è fermo» su un giro vivo; titolo
+    col testo già tagliato e «(+1 alt…» nei puntini.
+  - Prove al contrario (ripristini identici, `dist` identica): server 7/7, guardie adattate 3/3, schermo coda 4/4, barra 2/2,
+    ripresa 3/3 con O-48, parole 2/2. Schermo 22/22 nei due temi; unità frontend 1054/1054; principale 2981/2985 (0 rosse).
+  - Giro vero (glm-5.3-flash, banco 5475, due finestre, un riavvio): **11/11, 17/17, 10/10, 7/7**. «Interrompi» nell’altra
+    finestra 259-261 ms, barra «fermata» 130-140 ms, parola della coda 87/140 ms.
+  - Parità dei componenti: 12 rossi, gli stessi 12 su un worktree di HEAD `a46f6c83` — debito vecchio (ProviderCard, attesa,
+    Inspector).
+  - 4174 aggiornato (nessun giro vivo prima del riavvio) e guardato in sola lettura nei due temi: 0 richieste non GET tentate,
+    0 errori a runtime, 0 carte rosse, Indice 1 · 2 · 3 · 4 senza fantasmi. ⛔ Sul 4174 non c'è una coda da guardare: la coda
+    dal vivo è provata solo sul banco 5475.
+  - 🔜 Visti nelle foto, NON curati: «1 giro» nella barra con dieci righe nell’Indice; la finestra che invia non scrive ora e
+    permesso sopra il proprio seguito; il titolo della riga di sessione resta aperto dopo il clic; i toast «Messaggio in coda —
+    Parte quando TALOS finisce di rispondere» restano (e si impilano sopra l’Indice) anche dopo uno stop.
 - 🔜 **DUBBIO REGISTRATO, non difetto dichiarato**: 26 file di prova scattano foto e nessuno aspetta
   il velo esplicitamente. Molti aspettano elementi per piu' di 4 s, quindi le loro foto possono essere
   buone: va verificato guardandone una per suite, non dedotto dal conteggio.
