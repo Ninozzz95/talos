@@ -22,7 +22,7 @@ test.use({ storageState: TALOS_PROVIDER_STATE })
  * test that stopped at "incognito appeared" would have passed — it did appear.
  * The assertion has to survive what happens next.
  */
-const MENU = '[aria-label="Open menu"]'
+const MENU = '[data-testid="talos-shell-menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
 
