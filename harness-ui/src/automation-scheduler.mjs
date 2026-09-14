@@ -22,7 +22,7 @@ export function createAutomationScheduler({
    * l'automazione resta ferma fino a domani, quando `registraEsecuzione`
    * (chiamata dal PROSSIMO avvio riuscito) azzera il contatore da sola.
    */
-  async function unTick() {
+  async function eseguiTick() {
     const automazioni = await store.elenca();
     const ora = clock();
     const oggi = ora.toISOString().slice(0, 10);
@@ -37,6 +37,20 @@ export function createAutomationScheduler({
       await store.registraEsecuzione(voce.id);
       onEsecuzione({ automazione: voce, esito });
     }
+  }
+
+  /*
+   * ⛔ 14/09 (F06 della review, riprodotto): due giri sovrapposti facevano partire DUE VOLTE la stessa automazione — il
+   *   secondo giro leggeva l'elenco prima che il primo avesse scritto `registraEsecuzione`, e una sessione vera costa.
+   *   Un giro alla volta per questo scheduler: chi arriva mentre uno è in corso riceve lo STESSO giro, non ne apre un altro.
+   * ⛔ Non è un «esattamente una volta» fra processi diversi né a prova di crash: è la guardia locale di questa istanza,
+   *   e non pretende di essere altro.
+   */
+  let tickInCorso = null;
+  async function unTick() {
+    if (tickInCorso) return tickInCorso;
+    tickInCorso = eseguiTick().finally(() => { tickInCorso = null; });
+    return tickInCorso;
   }
 
   let timer = null;
