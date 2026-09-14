@@ -490,6 +490,17 @@ function usageDellaSessione(sessione) {
   if (sessione.usageSessione && typeof sessione.usageSessione === "object") return sessione.usageSessione;
   return sessione.usage && typeof sessione.usage === "object" ? sessione.usage : null;
 }
+function giriDellaSessione(sessione) {
+  const misurati = usageDellaSessione(sessione)?.giri;
+  const conMisura = Number.isFinite(misurati) ? misurati : null;
+  const fermati = Number.isSafeInteger(sessione?.giriFermati) && sessione.giriFermati > 0 ? sessione.giriFermati : 0;
+  if (conMisura === null && fermati === 0) return { giri: null, fermati: 0 };
+  return { giri: (conMisura ?? 0) + fermati, fermati };
+}
+function spiegaGiriFermati(fermati) {
+  if (!Number.isSafeInteger(fermati) || fermati <= 0) return "";
+  return `${fermati === 1 ? "1 giro fermato" : `${fermati} giri fermati`} prima che il fornitore dichiarasse il consumo: nei token non ci sono.`;
+}
 function esecuzioniDellaSessione(sessione) {
   const u = sessione?.usageSessione;
   return u && Number.isFinite(Number(u.esecuzioni)) ? Number(u.esecuzioni) : null;
@@ -2139,8 +2150,12 @@ function creaSessionItem(sessione, opzioni = {}) {
   const aside = el4(documentObj, "span", "talos-session-item__aside");
   if (!opzioni.pendente) {
     aside.append(el4(documentObj, "span", null, oraCompatta(sessione.avviataAlle, opzioni.adesso)));
-    const giri = usageDellaSessione(sessione)?.giri;
-    if (Number.isFinite(giri) && giri > 0) aside.append(el4(documentObj, "span", null, `${giri} gir${giri === 1 ? "o" : "i"}`));
+    const { giri, fermati } = giriDellaSessione(sessione);
+    if (giri !== null && giri > 0) {
+      const conto = el4(documentObj, "span", null, `${giri} gir${giri === 1 ? "o" : "i"}`);
+      if (fermati > 0) conto.title = spiegaGiriFermati(fermati);
+      aside.append(conto);
+    }
   }
   if (opzioni.selezione?.attiva) {
     const casella = el4(documentObj, "input", "talos-checkbox");
@@ -11560,7 +11575,8 @@ function testiBoard(sessione, metriche = {}, adesso = /* @__PURE__ */ new Date()
   return {
     titolo: sessione.nome || sessione.taskId || "Sessione",
     modello: nomeModello(sessione.modello) || "—",
-    giri: valido(usageDellaSessione(sessione)?.giri) ? String(usageDellaSessione(sessione).giri) : "—",
+    // ⛔ 14/09: i giri fermati contano come nella barra — un conto solo, `giriDellaSessione`
+    giri: valido(giriDellaSessione(sessione).giri) ? String(giriDellaSessione(sessione).giri) : "—",
     token: compatto(totale(sessione)),
     cache: (valido(metriche?.cache?.percentuale) ? NUMERO2.format(metriche.cache.percentuale) + "%" : "—") + (valido(usageDellaSessione(sessione)?.cached_tokens) ? " · " + compatto(usageDellaSessione(sessione).cached_tokens) : ""),
     primo: valido(metriche?.primoToken?.ms) ? (metriche.primoToken.ms / 1e3).toFixed(1).replace(".", ",") + " s" : "—",
@@ -11609,7 +11625,7 @@ function creaRigaBoard(sessione, { document: doc = globalThis.document, metriche
     const invii = esecuzioniDellaSessione(sessione);
     const daInvii = valido(invii) ? " · " + invii + " invi" + (invii === 1 ? "o" : "i") : "";
     if (campo2 === "token" && valido(totale(sessione))) cella.title = totale(sessione).toLocaleString("it-IT") + " token · ingresso + uscita · tutta la sessione" + daInvii;
-    if (campo2 === "giri" && t2.giri !== "—") cella.title = "Giri del modello in tutta la sessione" + daInvii;
+    if (campo2 === "giri" && t2.giri !== "—") cella.title = "Giri del modello in tutta la sessione" + daInvii + (giriDellaSessione(sessione).fermati ? " · " + spiegaGiriFermati(giriDellaSessione(sessione).fermati) : "");
     if (campo2 === "primo" && t2.primo === "—") cella.title = metriche?.primoToken?.motivoAssente || "Tempo non registrato";
     if (campo2 === "cache") {
       const cached = usageDellaSessione(sessione)?.cached_tokens;
@@ -12747,7 +12763,7 @@ function raggruppa(sessioni, chiaveDi) {
     if (k == null) continue;
     const v = per.get(k) || { chiave: k, sessioni: 0, giri: 0, token: 0, cache: 0, tokenNoti: 0 };
     v.sessioni += 1;
-    if (numeroValido(usageDellaSessione(s)?.giri)) v.giri += Number(usageDellaSessione(s).giri);
+    if (numeroValido(giriDellaSessione(s).giri)) v.giri += giriDellaSessione(s).giri;
     const t2 = tokenDi(s);
     if (t2 != null) {
       v.token += t2;
@@ -12765,9 +12781,11 @@ function consumoPerModello(sessioni = []) {
   return raggruppa(sessioni, (s) => typeof s?.modello === "string" && s.modello.trim() !== "" ? s.modello : null).sort((a, b) => b.token - a.token || b.sessioni - a.sessioni);
 }
 function riepilogoConsumo(sessioni = []) {
-  const totali = { sessioni: sessioni.length, giri: 0, token: 0, cache: 0, senzaToken: 0, senzaData: 0, senzaModello: 0 };
+  const totali = { sessioni: sessioni.length, giri: 0, token: 0, cache: 0, senzaToken: 0, senzaData: 0, senzaModello: 0, giriFermati: 0 };
   for (const s of sessioni) {
-    if (numeroValido(usageDellaSessione(s)?.giri)) totali.giri += Number(usageDellaSessione(s).giri);
+    const { giri, fermati } = giriDellaSessione(s);
+    if (numeroValido(giri)) totali.giri += giri;
+    totali.giriFermati += fermati;
     const t2 = tokenDi(s);
     if (t2 == null) totali.senzaToken += 1;
     else totali.token += t2;
@@ -12832,6 +12850,7 @@ function aggiornaCosti(pannello, sessioni = [], { document: d = globalThis.docum
       badge3(d, `${compatto2(tot.cache)} in cache`)
     ];
     if (tot.senzaToken) voci.push(badge3(d, `${NUM.format(tot.senzaToken)} senza token registrati`, "warning"));
+    if (tot.giriFermati) voci.push(badge3(d, `${NUM.format(tot.giriFermati)} ${tot.giriFermati === 1 ? "giro fermato" : "giri fermati"} senza token`, "warning"));
     if (tot.senzaModello) voci.push(badge3(d, `${NUM.format(tot.senzaModello)} senza modello`, "warning"));
     if (tot.senzaData) voci.push(badge3(d, `${NUM.format(tot.senzaData)} senza data`, "warning"));
     const aperta2 = sessioneId ? sessioni.find((s) => s.sessionId === sessioneId) : null;
@@ -26680,7 +26699,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const daMostrare = state.realSession.bollaDaMostrare;
         state.realSession.bollaDaMostrare = null;
         const testoBolla = daMostrare && typeof daMostrare.testo === "string" ? daMostrare.testo : text;
-        const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? "" : oraMessaggio(), meta: `Follow-up${etichettaPermessiGiro(contesto2)}` }), "utente");
+        const ora = state.realSession.deferHistoricalRendering ? "" : oraMessaggio();
+        const messaggioUtente = creaMessaggioUtente({ testo: testoBolla, ora, meta: `Follow-up${etichettaPermessiGiro(contesto2)}` });
+        messaggioUtente.dataset.oraMessaggio = ora;
+        const article = nellaChat(messaggioUtente, "utente");
         const allegatiVisibili = daMostrare?.allegati?.length ? daMostrare.allegati : immagini;
         if (allegatiVisibili.length) disegnaChipAllegati(article, allegatiVisibili);
         markMotionEnter(article);
@@ -30299,6 +30321,7 @@ ${testo3}` : testo3;
         if (evento.type === "CUSTOM" && evento.name === "talos.fine-rigiocata") {
           state.realSession.inRigiocata = false;
           accendiRagionamentiApertiDopoLaStoria();
+          state.realSession.deferHistoricalRendering = false;
           return;
         }
         if (evento.type === "CUSTOM" && evento.name === "talos.coda") {
@@ -30400,6 +30423,9 @@ ${testo3}` : testo3;
                 const turnoInAttesa = state.realSession.attesaBubble?.closest('[data-turno="talos"]');
                 const metaInAttesa = turnoInAttesa?.querySelector(":scope > .talos-message > .talos-message__head > .talos-message__meta");
                 if (metaInAttesa) metaInAttesa.textContent = [nomeModelloBreve(state.realSession.currentRunModel), turnoInAttesa.dataset.oraMessaggio].filter(Boolean).join(" · ");
+                const domandaInAttesa = [...$2("#conversation")?.querySelectorAll(".talos-message--user") || []].at(-1);
+                const metaDomanda = domandaInAttesa?.querySelector(".talos-message__meta");
+                if (metaDomanda && evento.contesto) metaDomanda.textContent = [domandaInAttesa.dataset.oraMessaggio, `Follow-up${etichettaPermessiGiro(evento.contesto)}`].filter(Boolean).join(" · ");
                 state.realSession.followUpBubbleInAttesa = false;
                 allineaPilloleAlGiroVivo(evento.contesto);
               } else {
@@ -31073,6 +31099,7 @@ ${testo3}` : testo3;
         const sessionId = state.realSession.id;
         const taskId = state.realSession.taskId;
         const generationAtSend = state.realSession.generation;
+        state.realSession.deferHistoricalRendering = false;
         const voceElenco = state.sessionSelection.available.get(sessionId);
         if (voceElenco?.conclusa) {
           const eta = formattaEta(voceElenco.avviataAlle);
@@ -31117,7 +31144,7 @@ ${testo3}` : testo3;
             state.realSession.codaMessaggi = [...state.realSession.codaMessaggi, { id: null, testo: testo3, immagini: 0 }];
             renderizzaBannerCoda();
           }
-          toast("Messaggio in coda", `Parte quando TALOS finisce di rispondere (posizione ${dati.posizione}).`);
+          toast("Messaggio in coda", `Posizione ${dati.posizione} nella coda di questa sessione.`);
         } catch (error) {
           const nonInCorso = /non è in corso|non pronta|SESSION_NOT_READY|interrott/i.test(String(error?.message || "")) || error?.code === "SESSION_NOT_READY";
           if (nonInCorso && sessionId === state.realSession.id) {

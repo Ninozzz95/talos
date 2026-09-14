@@ -108,5 +108,41 @@ for (const modo of ['dark', 'light']) {
       await expect(stop(page), 'O-48: il pulsante non torna su «Interrompi» per un giro finito da un pezzo').toHaveCount(0);
       expect(letture.length, 'la storia non fa rileggere l’elenco a ogni giro rigiocato').toBe(prima);
     });
+
+    test(`ELENCO-STOP-05 — i giri fermati entrano nel conto della riga, e il titolo dice perché i token non ci sono (${modo})`, async ({ page }) => {
+      /* ⛔ 14/09, giro vero della coda: 7 invii, 6 fermati, e la riga diceva «1 giro» (registro del banco 5475, contato a mano). */
+      const { riga, voce } = await prepara(page, `lista-giri-${modo}`, { fermata: true });
+      Object.assign(riga, { usageSessione: { prompt_tokens: 9488, completion_tokens: 8008, cached_tokens: 0, giri: 1, esecuzioni: 1 }, giriFermati: 6 });
+      await page.evaluate(() => window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali());
+      const conto = voce.locator('.talos-session-item__aside span', { hasText: /\bgir[oi]$/ });
+      await expect(conto).toHaveText('7 giri');
+      await expect(conto).toHaveAttribute('title', /6 giri fermati prima che il fornitore dichiarasse il consumo/);
+      Object.assign(riga, { giriFermati: 0 });
+      await page.evaluate(() => window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali());
+      await expect(conto, 'AL CONTRARIO: senza fermati la riga è quella di prima').toHaveText('1 giro');
+      await expect(conto).not.toHaveAttribute('title', /.+/);
+    });
+
+    test(`ELENCO-STOP-06 — un seguito mandato da UN’ALTRA finestra porta ora e permesso anche qui (${modo})`, async ({ page }) => {
+      /*
+       * ⛔ 14/09, giro vero (foto 12): la finestra che guardava una sessione aperta CONCLUSA disegnava il giro ripreso come storia
+       *   — domanda senza ora né permesso, testata di TALOS senza ora — perché il differimento della storia non si spegneva mai.
+       */
+      await prepara(page, `lista-ora-${modo}`, { fermata: true });
+      await eventi(page, [{ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: {} }]);
+      await eventi(page, [{ type: 'RunStarted', input: { consegna: 'Alla fine scrivi soltanto quanti sono.', seguito: true }, contesto: { permessi: 'Full access', modello: MODELLO }, _sequenza: 3 }]);
+      const domanda = page.locator('#conversation .talos-message--user').last();
+      await expect(domanda).toContainText('Alla fine scrivi soltanto quanti sono.');
+      await expect(domanda.locator('.talos-message__meta')).toHaveText(/^\d{2}:\d{2} · Follow-up · \S/);
+      await expect(page.locator('#conversation .talos-turn[data-turno="talos"]').last().locator('.talos-message__meta').first()).toHaveText(/ · \d{2}:\d{2}$/);
+    });
+
+    test(`ELENCO-STOP-07 AL CONTRARIO — lo stesso seguito dentro la STORIA resta senza ora: l’orario di ieri non si inventa (${modo})`, async ({ page }) => {
+      await prepara(page, `lista-ora-storia-${modo}`, { fermata: true });
+      await eventi(page, [{ type: 'RunStarted', input: { consegna: 'Un seguito della storia.', seguito: true }, contesto: { permessi: 'Full access', modello: MODELLO }, _sequenza: 3 }]);
+      const domanda = page.locator('#conversation .talos-message--user').last();
+      await expect(domanda).toContainText('Un seguito della storia.');
+      await expect(domanda.locator('.talos-message__meta')).toHaveText(/^Follow-up/);
+    });
   });
 }

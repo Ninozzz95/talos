@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cacheSessioneDaEventi, tokenIngressoDaUsage } from '../src/usage-cache.mjs';
+import { cacheSessioneDaEventi, giriFermatiDaEventi, tokenIngressoDaUsage } from '../src/usage-cache.mjs';
+
+test('GIRI-FERMATI (14/09, giro vero: 7 invii, 6 fermati, «1 giro») — si contano solo gli stop, una volta per sequenza', () => {
+  const con = (esito, _sequenza) => ({ type: 'CUSTOM', name: 'consumo-fornitore', value: { tipo: 'consumo-fornitore', provider: 'openrouter', model: 'prova', usage: null, esito }, ...(_sequenza === undefined ? {} : { _sequenza }) });
+  assert.equal(giriFermatiDaEventi([con('fermato', 4), con('fermato', 9), con('completato', 12)]), 2);
+  assert.equal(giriFermatiDaEventi([con('fermato', 4), con('fermato', 4)]), 1, 'la stessa sequenza rigiocata non raddoppia');
+  assert.equal(giriFermatiDaEventi([con('interrotto', 1), con('traffico', 2)]), 0, 'AL CONTRARIO: un guasto non è uno stop');
+  assert.equal(giriFermatiDaEventi([{ type: 'RunError', code: 'fermato', _sequenza: 3 }]), 0, 'AL CONTRARIO: lo stop del GIRO senza una chiamata partita non è un giro');
+  assert.equal(giriFermatiDaEventi(null), 0, 'un registro vecchio non ha niente da contare: zero, non un errore');
+});
 
 const evento = (usage, provider = 'openrouter', _sequenza) => ({ type: 'CUSTOM', name: 'consumo-fornitore', value: { tipo: 'consumo-fornitore', provider, model: 'prova', usage, esito: 'completato' }, ...(_sequenza === undefined ? {} : { _sequenza }) });
 const uso = (prompt_tokens, cached_tokens) => ({ prompt_tokens, prompt_tokens_details: { cached_tokens } });

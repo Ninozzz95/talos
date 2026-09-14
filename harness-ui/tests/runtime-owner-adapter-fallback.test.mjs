@@ -76,6 +76,24 @@ test('PH-FALLBACK-05 stop esplicito: nessuna richiesta o cambio',async t=>{
   const b=await banco(t,(_req,res)=>rispondiBene(res));const stop=new AbortController();stop.abort();
   await assert.rejects(esegui(creaFetchMultiProvider(fetch,b.opzioni),{segnaleStop:stop.signal}));
   assert.equal(b.richieste.length,0);assert.equal(b.eventi.length,0);
+  assert.equal(b.consumi.length,0,'⛔ 14/09 AL CONTRARIO: uno stop prima della rete non è un giro, e non lascia un consumo');
+});
+test('PH-FALLBACK-20 stop DOPO che la richiesta è partita: un consumo «fermato» senza numeri, e lo stop resta uno stop',async t=>{
+  /* ⛔ 14/09, giro vero della coda: 7 invii, 6 fermati, «1 giro». La chiamata partita e fermata non lasciava traccia. */
+  const b=await banco(t,(_req,res)=>{
+    res.writeHead(200,{'Content-Type':'text/event-stream'});
+    res.write('data: '+JSON.stringify({choices:[{delta:{content:'Sto ragionando'}}]})+'\n\n');
+    setTimeout(()=>{try{res.end();}catch{}},3000);
+  });
+  const stop=new AbortController();
+  await assert.rejects(esegui(creaFetchMultiProvider(fetch,b.opzioni),{segnaleStop:stop.signal,onDelta:()=>stop.abort()}));
+  assert.equal(b.richieste.length,1,'la richiesta è partita una volta sola, e nessun cambio di fornitore dopo lo stop');
+  assert.equal(b.eventi.filter(e=>e.tipo==='cambio-fornitore').length,0);
+  const fermati=b.consumi.filter(c=>c.esito==='fermato');
+  assert.equal(fermati.length,1,`consumi visti: ${JSON.stringify(b.consumi)}`);
+  assert.equal(fermati[0].usage,null,'nessun numero inventato: i token di uno stream interrotto non arrivano');
+  assert.equal(fermati[0].costoDichiarato,null);
+  assert.equal(fermati[0].provider,'deepseek');
 });
 test('PH-FALLBACK-06 errore di rete: il kernel esaurisce i tentativi prima del cambio',async t=>{
   const b=await banco(t,(_req,res)=>rispondiBene(res));let chiamateKernel=0;

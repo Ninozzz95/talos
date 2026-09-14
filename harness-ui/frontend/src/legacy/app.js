@@ -9811,7 +9811,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.realSession.bollaDaMostrare = null;
     const testoBolla = daMostrare && typeof daMostrare.testo === 'string' ? daMostrare.testo : text;
     // 05/9 Fase 2: Conversazione — il follow-up e' un messaggio della persona nel blocco del mockup
-    const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(), meta: `Follow-up${etichettaPermessiGiro(contesto)}` }), 'utente');
+    const ora = state.realSession.deferHistoricalRendering ? '' : oraMessaggio();
+    const messaggioUtente = creaMessaggioUtente({ testo: testoBolla, ora, meta: `Follow-up${etichettaPermessiGiro(contesto)}` });
+    messaggioUtente.dataset.oraMessaggio = ora; // ⛔ 14/09: il RunStarted completa la testata col permesso, e deve ritrovare l'ora
+    const article = nellaChat(messaggioUtente, 'utente');
     const allegatiVisibili = daMostrare?.allegati?.length ? daMostrare.allegati : immagini;
     if (allegatiVisibili.length) disegnaChipAllegati(article, allegatiVisibili);
     markMotionEnter(article);
@@ -14662,6 +14665,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (evento.type === 'CUSTOM' && evento.name === 'talos.fine-rigiocata') {
       state.realSession.inRigiocata = false;
       accendiRagionamentiApertiDopoLaStoria();
+      /*
+       * ⛔ 14/09, giro vero della coda (due finestre): aperta una sessione CONCLUSA, `deferHistoricalRendering` restava vero per
+       *   sempre (lo spegne solo una generazione nuova), e tutto ciò che arrivava DOPO la storia — un giro ripreso da un'altra
+       *   finestra — si disegnava come storia: la domanda senza ora né permesso, la testata di TALOS senza ora. Il confine dice
+       *   che la storia è finita: da qui niente è più differito. Dopo `accendiRagionamentiApertiDopoLaStoria`, che resta com'era.
+       */
+      state.realSession.deferHistoricalRendering = false;
       return;
     }
     /* ⭐⭐ 14/09 — lo stato della coda, di solo trasporto: arriva a ogni finestra quando cambia, e a chi apre dopo la storia. */
@@ -14895,6 +14905,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             const turnoInAttesa = state.realSession.attesaBubble?.closest('[data-turno="talos"]');
             const metaInAttesa = turnoInAttesa?.querySelector(':scope > .talos-message > .talos-message__head > .talos-message__meta');
             if (metaInAttesa) metaInAttesa.textContent = [nomeModelloBreve(state.realSession.currentRunModel), turnoInAttesa.dataset.oraMessaggio].filter(Boolean).join(' · ');
+            /*
+             * ⛔ 14/09, giro vero (parte 5): la domanda mandata da QUESTA finestra nasce senza permesso — il client non sa ancora
+             *   quale userà il server — e restava «10:22 · Follow-up», mentre l'altra finestra, che la legge da qui, diceva
+             *   «10:22 · Follow-up · Accesso pieno». Si completa dalla stessa fonte, come la testata di TALOS due righe sopra.
+             */
+            const domandaInAttesa = [...($('#conversation')?.querySelectorAll('.talos-message--user') || [])].at(-1);
+            const metaDomanda = domandaInAttesa?.querySelector('.talos-message__meta');
+            if (metaDomanda && evento.contesto) metaDomanda.textContent = [domandaInAttesa.dataset.oraMessaggio, `Follow-up${etichettaPermessiGiro(evento.contesto)}`].filter(Boolean).join(' · ');
             state.realSession.followUpBubbleInAttesa = false; // già mostrato dal vivo, non duplicare
             allineaPilloleAlGiroVivo(evento.contesto);
           } else {
@@ -15971,6 +15989,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const sessionId = state.realSession.id;
     const taskId = state.realSession.taskId;
     const generationAtSend = state.realSession.generation;
+    /* ⛔ 14/09 — un invio è diretta per definizione: la domanda e la testata di TALOS che nascono QUI portano la loro ora anche su una sessione aperta conclusa. */
+    state.realSession.deferHistoricalRendering = false;
     /*
      * ⭐ 04/9, W1-12 (ricerca) — PRIMA di chiamare la rotta si
      * dice cosa si sta riprendendo: quanto è vecchia la sessione e quanto
@@ -16079,7 +16099,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       /* ⭐ 14/09 — la coda la dice il server; un server vecchio senza `coda` nella risposta resta servito come prima. */
       if (dati?.coda) applicaStatoCoda(dati.coda);
       else { state.realSession.codaMessaggi = [...state.realSession.codaMessaggi, { id: null, testo, immagini: 0 }]; renderizzaBannerCoda(); }
-      toast('Messaggio in coda', `Parte quando TALOS finisce di rispondere (posizione ${dati.posizione}).`);
+      /*
+       * ⛔ 14/09, giro vero (foto 11 e 14): questo toast diceva «Parte quando TALOS finisce di rispondere» e restava a schermo
+       *   dopo uno stop, cioè prometteva una partenza che non sarebbe avvenuta. Il QUANDO lo dice il banner, che segue la pausa
+       *   in ogni finestra. Il toast resta perché è `role="status"` (toast.js): è così che un lettore di schermo sa dell'accodamento.
+       */
+      toast('Messaggio in coda', `Posizione ${dati.posizione} nella coda di questa sessione.`);
     } catch (error) {
       /*
        * ⛔⛔⛔ 07/9 — LA RETE DI SICUREZZA. Il server rifiuta la coda quando la sessione non e
