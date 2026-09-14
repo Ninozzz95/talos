@@ -102,8 +102,23 @@ const CHIUSURA_SOGLIA_PX = 96
 const trascinamento = ref(0)
 let presa: { y: number; id: number } | null = null
 
+/**
+ * I controlli interattivi devono possedere il proprio click. Catturare il
+ * puntatore sulla section durante un pointerdown nato su un bottone ritargetta
+ * il pointerup/click alla section in browser reali: il controllo prende il
+ * focus ma non riceve l'attivazione. Il gesto verticale del foglio resta
+ * disponibile sulle aree non interattive, mentre i gesture handler specifici
+ * dei controlli (per esempio lo swipe orizzontale del drawer +) continuano a
+ * ricevere la sequenza completa.
+ */
+function bersaglioInterattivo(target: EventTarget | null): boolean {
+    return target instanceof Element && Boolean(target.closest(
+        'button, a, input, textarea, select, [role="button"], [role="tab"], [role="switch"], [contenteditable="true"]',
+    ))
+}
+
 function iniziaTrascinamento(e: PointerEvent): void {
-    if (closing.value || e.button !== 0) return
+    if (closing.value || e.button !== 0 || bersaglioInterattivo(e.target)) return
     const corpo = (e.target as HTMLElement | null)?.closest?.('[data-talos-sheet-body]') as HTMLElement | null
     if (corpo && corpo.scrollTop > 0) return
     molla?.cancel()
