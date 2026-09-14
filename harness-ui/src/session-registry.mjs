@@ -1975,6 +1975,47 @@ export function createSessionRegistry({
    * ⛔ Non lancia mai e non blocca niente: un giro non si rompe perché una misura non si è scritta.
    *   Stessa disciplina della copia in Libreria e di `persistiMessaggiFinali` qui sopra.
    */
+  /*
+   * ⭐⭐ 14/09/2026 — LA CODA È DELLA SESSIONE, NON DELLA FINESTRA CHE L'HA SCRITTA. Owner: «i competitor lo fanno, lo
+   *   facciamo anche noi». Trovato col giro vero del 13/09: un messaggio accodato non si vedeva in un'altra finestra né dopo
+   *   una ricarica, e dopo uno stop il banner prometteva «parte alla fine di questo giro» su un giro già fermo.
+   * Letto nei cloni il 14/09/2026:
+   *   · Codex tiene la coda sul server, nel `ThreadStore`, con elenco, aggiunta, modifica, cancellazione e avvio
+   *     (`app-server-protocol/src/protocol/common.rs:596-627`, `thread/queue/*`; `thread_queue_processor.rs`): ogni
+   *     client la vede, e sopravvive a un riavvio.
+   *   · Hermes desktop mette la coda IN PAUSA allo Stop (`app/chat/composer/index.tsx`, `haltRun`): «an explicit halt must
+   *     not roll straight into the next queued prompt (that read as Stop not working; the queued text also seemed to
+   *     vanish)»; a schermo «N Queued — paused», «Paused by Stop — resume sending the queued turns» (`i18n/en.ts`).
+   *   · Da noi il kernel consegna un messaggio in coda SOLO quando il modello si ferma da solo (`talosHarness.mjs`, zero
+   *     chiamate): dopo uno stop la coda restava viva e partiva in silenzio alla fine della risposta SUCCESSIVA.
+   * ⇒ Ogni voce ha un id; lo stop mette in pausa; ogni cambio si annuncia a chi guarda con un `CUSTOM talos.coda` di
+   *   SOLO TRASPORTO (effimero come WorkspaceChanged: niente `_sequenza`, mai in `voce.eventi`, BC-07) e si scrive in un
+   *   record `coda` — l'ultimo vince al ripristino, come `impostazioni-sessione`.
+   */
+  function voceDiCoda(item) {
+    if (typeof item === 'string') return { id: null, testo: item, immagini: [] };
+    return { id: typeof item?.id === 'string' ? item.id : null, testo: String(item?.testo ?? ''), immagini: Array.isArray(item?.immagini) ? item.immagini : [] };
+  }
+
+  /** Quello che si mostra: niente riferimenti alle immagini, solo quante sono. */
+  function statoCodaDi(voce) {
+    const voci = (voce?.codaMessaggi ?? []).map(voceDiCoda).map(({ id, testo, immagini }) => ({ id, testo, immagini: immagini.length }));
+    return { voci, inPausa: Boolean(voce?.codaInPausa) && voci.length > 0 };
+  }
+
+  function annunciaCoda(voce) {
+    const value = statoCodaDi(voce);
+    broadcast(voce, { type: 'CUSTOM', name: 'talos.coda', value });
+    if (!cartellaStore || !voce?.sessionId) return;
+    try {
+      const voci = voce.codaMessaggi.map(voceDiCoda).map(({ id, testo, immagini }) => ({ id: id ?? randomUUID(), testo, ...(immagini.length ? { immagini } : {}) }));
+      registraRigaSyncFn({ cartellaStore, sessionId: voce.sessionId, record: { tipo: 'coda', voci, inPausa: value.inPausa } });
+    } catch (errore) {
+      // ⛔ Stessa disciplina di `persistiTempiDelGiro`: una coda non scritta non rompe il giro, ma si DICE.
+      console.error(`[session-store] coda non salvata per ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore);
+    }
+  }
+
   function persistiTempiDelGiro(voce, versioneGiro) {
     if (!cartellaStore || !voce?.sessionId) return;
     try {
@@ -2145,7 +2186,8 @@ export function createSessionRegistry({
      *   pezzi vorrebbe dire scrivere due volte la stessa cosa, la seconda senza tetto, e
      *   rigiocarla a ogni riapertura della sessione.
      */
-    const effimero = workspaceCambiato || evento.type === 'ToolCallOutput';
+    /* ⭐ 14/09 — e così l'annuncio della coda: è STATO, non storia. Chi si collega dopo lo riceve dalla rotta degli eventi. */
+    const effimero = workspaceCambiato || evento.type === 'ToolCallOutput' || (evento.type === 'CUSTOM' && evento.name === 'talos.coda');
     /* ⛔ P-13 — i file sono cambiati davvero: il prossimo giro ricostruirà l'elenco. Si chiama
        SOLO da qui, cioè quando il disco cambia: farlo a ogni evento annullerebbe la cache e con
        essa tutto il vantaggio, riportando l'elenco a costare pieno ogni volta. */
@@ -2686,6 +2728,7 @@ export function createSessionRegistry({
       padreId, profonditaDelega, esitoDelega: null, evidenzaDelega: null,
       // ⭐⭐⭐ FASE D (28/8) — coda messaggi: FIFO vera, vuota per ogni sessione. Sopravvive a un resume (STESSA voce): un messaggio accodato mentre la sessione era "in corso" resta in coda anche se il turno finisce e ne parte un altro tramite resume().
       codaMessaggi: [],
+      codaInPausa: false, // ⭐ 14/09 — vero dopo uno stop con messaggi in coda: vedi `annunciaCoda`
     };
     /*
      * Il punto sicuro può arrivare anche dopo un timeout/abort avvenuto prima
@@ -2947,11 +2990,14 @@ export function createSessionRegistry({
       // Un input prioritario è già stato accettato: la FIFO resta intatta
       // per il giro successivo, mai consumata dal giro che stiamo fermando.
       if (voce.reindirizzamentoPendente) return null;
+      // ⭐ 14/09 — una coda in pausa (stop) aspetta la persona: non scivola nel giro dopo. Vedi `annunciaCoda`.
+      if (voce.codaInPausa) return null;
       const item = voce.codaMessaggi.shift();
       if (item == null) return null;
       const testo = typeof item === 'string' ? item : item.testo;
       const immagini = typeof item === 'string' ? [] : item.immagini;
       broadcast(voce, { ...queuedMessageDelivered({ testo }), ...(immagini?.length ? { immagini } : {}) });
+      annunciaCoda(voce); // ⭐ 14/09: chi guarda da un'altra finestra vede la coda accorciarsi
       return imageMessageContent(testo, immagini);
     };
 
@@ -3447,6 +3493,12 @@ export function createSessionRegistry({
         const impostazioniRecord = record.filter((r) => r.tipo === 'impostazioni-sessione').at(-1) ?? null;
         // ⭐ 02/09 — il nome scelto (o dato dal primo messaggio) sopravvive al riavvio: l'ULTIMA riga nome-sessione vince, come per le impostazioni.
         const nomeRecord = record.filter((r) => r.tipo === 'nome-sessione' && typeof r.nome === 'string' && r.nome.trim().length > 0).at(-1) ?? null;
+        /* ⭐ 14/09 — la coda sopravvive al riavvio, come in Codex (ThreadStore). Il processo che l'avrebbe consegnata non c'è
+           più: torna IN PAUSA, e parte solo quando la persona la invia. L'ultimo record vince. */
+        const codaRecord = record.filter((r) => r.tipo === 'coda' && Array.isArray(r.voci)).at(-1) ?? null;
+        const codaRipristinata = (codaRecord?.voci ?? [])
+          .filter((v) => v && typeof v.id === 'string' && typeof v.testo === 'string' && v.testo.trim() !== '')
+          .map((v) => ({ id: v.id, testo: v.testo, ...(Array.isArray(v.immagini) && v.immagini.length ? { immagini: v.immagini } : {}) }));
         const impostazioni = impostazioniRecord ? { ...intestazione, ...impostazioniRecord } : intestazione;
         const ultimoEventoEsecuzione = [...eventi].reverse().find((evento) => (
           evento?.type === 'RunStarted' || evento?.type === 'RunFinished' || evento?.type === 'RunError'
@@ -3514,7 +3566,7 @@ export function createSessionRegistry({
           approvazionePendente: null, reindirizzamentoPendente: null, redirectAnnullati: new Set(), padreId: intestazione.padreId, profonditaDelega: intestazione.profonditaDelega,
           esitoDelega: intestazione.padreId ? esitoDelegaDaEventi(eventi, { task: intestazione.task }) : null,
           evidenzaDelega: intestazione.padreId ? analizzaEvidenzaDelega(eventi) : null,
-          codaMessaggi: [], sessionId, controller: new AbortController(),
+          codaMessaggi: codaRipristinata, codaInPausa: codaRipristinata.length > 0, sessionId, controller: new AbortController(),
           conclusa, ripristinata: true, interrotta: !conclusa,
           prossimaSequenza: ultimaSequenza, versioneGiro,
           durateRagionamentoSalvate: durateRagionamentoDaRecord(record), // ⭐ 13/09 sera: la durata del ragionamento sopravvive al riavvio
@@ -3586,21 +3638,72 @@ export function createSessionRegistry({
         return { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un messaggio in coda qui non verrebbe mai consegnato. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' };
       }
       if (typeof testo !== 'string' || testo.trim() === '') return { erroreAvvio: 'Il messaggio in coda non può essere vuoto', code: 'QUERY_INVALID' };
-      voce.codaMessaggi.push(immagini.length ? { testo, immagini } : testo);
-      return { ok: true, posizione: voce.codaMessaggi.length };
+      voce.codaMessaggi.push({ id: randomUUID(), testo, ...(immagini.length ? { immagini } : {}) });
+      // ⭐ 14/09 — accodare di nuovo scioglie una pausa di prima, come in Hermes (`store/composer-queue.ts`): la persona ha ripreso a parlare.
+      voce.codaInPausa = false;
+      annunciaCoda(voce);
+      return { ok: true, posizione: voce.codaMessaggi.length, coda: statoCodaDi(voce) };
     },
     /**
-     * Toglie l'ULTIMO messaggio accodato (non tutta la coda: coerente con
-     * un "Annulla" accanto al messaggio appena scritto, mai un
-     * azzeramento che cancellerebbe messaggi più vecchi già in attesa).
-     * @returns {{ok:true, rimosso:boolean}|{erroreAvvio:string, code:string}}
+     * Toglie UN messaggio dalla coda. ⭐ 14/09: con `id` quello che la persona vede nel banner; senza, l'ULTIMO accodato
+     * (il comportamento di prima, per chi non manda l'id). Mai un azzeramento di messaggi più vecchi già in attesa.
+     * @returns {{ok:true, rimosso:boolean, coda:object}|{erroreAvvio:string, code:string}}
      */
-    svuotaCoda(sessionId) {
+    svuotaCoda(sessionId, { id = null } = {}) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
-      const rimosso = voce.codaMessaggi.length > 0;
-      if (rimosso) voce.codaMessaggi.pop();
-      return { ok: true, rimosso };
+      let rimosso = false;
+      if (id === null) {
+        rimosso = voce.codaMessaggi.length > 0;
+        if (rimosso) voce.codaMessaggi.pop();
+      } else {
+        const indice = voce.codaMessaggi.findIndex((item) => voceDiCoda(item).id === id);
+        rimosso = indice >= 0;
+        if (rimosso) voce.codaMessaggi.splice(indice, 1);
+      }
+      if (voce.codaMessaggi.length === 0) voce.codaInPausa = false;
+      if (rimosso) annunciaCoda(voce);
+      return { ok: true, rimosso, coda: statoCodaDi(voce) };
+    },
+
+    /** ⭐ 14/09 — la coda com'è adesso, per chi apre la sessione dopo (Codex: `thread/queue/list`). */
+    statoCoda(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      return { ok: true, ...statoCodaDi(voce) };
+    },
+
+    /**
+     * ⭐ 14/09 — «Invia ora» un messaggio in coda. A giro VIVO entra come correzione (`reindirizza`, lo stesso gesto di
+     * «Indirizza ora»); a giro FERMO riprende la sessione con quel messaggio (`resume`). Codex ha la stessa porta,
+     * `thread/queue/start` («resume the thread before starting a queued message»); Hermes l'invio dalla riga del pannello.
+     * ⛔ Se la porta rifiuta, il messaggio torna al suo posto: una parola della persona non si perde per un errore.
+     * @returns {Promise<{ok:true, modo:'reindirizzato'|'ripreso', coda:object, redirectId?:string}|{erroreAvvio:string, code:string}>}
+     */
+    async inviaDallaCoda(sessionId, id) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const indice = voce.codaMessaggi.findIndex((item) => voceDiCoda(item).id === id);
+      if (indice < 0) return { erroreAvvio: 'Questo messaggio non è più in coda', code: 'NOT_FOUND' };
+      const [item] = voce.codaMessaggi.splice(indice, 1);
+      const { testo, immagini } = voceDiCoda(item);
+      const inCorso = !voce.conclusa && !voce.interrotta;
+      let esito;
+      try {
+        esito = inCorso
+          ? this.reindirizza(sessionId, testo, immagini.length ? { immagini } : {})
+          : await this.resume(sessionId, testo, immagini);
+      } catch (errore) {
+        voce.codaMessaggi.splice(indice, 0, item);
+        throw errore;
+      }
+      if (esito && typeof esito === 'object' && 'erroreAvvio' in esito) {
+        voce.codaMessaggi.splice(indice, 0, item);
+        return esito;
+      }
+      if (voce.codaMessaggi.length === 0) voce.codaInPausa = false;
+      annunciaCoda(voce);
+      return { ok: true, modo: inCorso ? 'reindirizzato' : 'ripreso', coda: statoCodaDi(voce), ...(esito?.redirectId ? { redirectId: esito.redirectId } : {}) };
     },
     /**
      * @returns {{sessionId:string}|{erroreAvvio:string, code:string}} — mai
@@ -5333,6 +5436,12 @@ export function createSessionRegistry({
       }
       negaApprovazionePendente(voce);
       voce.controller.abort();
+      /* ⭐ 14/09 — Hermes, `haltRun`: uno stop esplicito non deve scivolare nel prossimo messaggio in coda. La coda resta a
+         vista, IN PAUSA, finché la persona non la invia, la toglie o accoda altro. */
+      if (voce.codaMessaggi.length > 0 && !voce.codaInPausa) {
+        voce.codaInPausa = true;
+        annunciaCoda(voce);
+      }
       return true;
     },
 

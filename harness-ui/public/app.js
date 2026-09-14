@@ -18404,6 +18404,40 @@ var init_ragionamento = __esm({
   }
 });
 
+// src/components/coda-messaggi.js
+function accorcia(testo3, massimo) {
+  const pulito = String(testo3 ?? "").replace(/\s+/g, " ").trim();
+  return pulito.length > massimo ? `${pulito.slice(0, massimo - 1).trimEnd()}…` : pulito;
+}
+function normalizzaStatoCoda(valore) {
+  const voci = (Array.isArray(valore?.voci) ? valore.voci : []).map((v) => typeof v === "string" ? { id: null, testo: v, immagini: 0 } : {
+    id: typeof v?.id === "string" ? v.id : null,
+    testo: typeof v?.testo === "string" ? v.testo : "",
+    immagini: Number.isFinite(v?.immagini) ? v.immagini : 0
+  }).filter((v) => v.testo.trim() !== "");
+  return { voci, inPausa: Boolean(valore?.inPausa) && voci.length > 0 };
+}
+function descriviCoda(stato, { giroVivo = false } = {}) {
+  const { voci, inPausa } = normalizzaStatoCoda(stato);
+  if (voci.length === 0) return null;
+  const anteprima3 = `«${accorcia(voci[0].testo, LUNGHEZZA_ANTEPRIMA)}»`;
+  const intero2 = `«${accorcia(voci[0].testo, LUNGHEZZA_TITOLO)}»`;
+  const azione = giroVivo ? { azione: "Indirizza ora", titoloAzione: "Lo porta dentro il giro in corso, come correzione" } : { azione: "Invia ora", titoloAzione: "Riprende la conversazione con questo messaggio" };
+  if (inPausa) {
+    const spiegazione2 = "In pausa dallo stop: parte solo se lo invii tu";
+    return { conteggio: `${voci.length} in pausa`, tono: "attenzione", testo: anteprima3, spiegazione: spiegazione2, titoloTesto: `${intero2} — ${spiegazione2}`, ...azione };
+  }
+  const spiegazione = "Parte quando TALOS finisce di rispondere";
+  return { conteggio: `${voci.length} in coda`, tono: "neutro", testo: anteprima3, spiegazione, titoloTesto: `${intero2} — ${spiegazione}`, ...azione };
+}
+var LUNGHEZZA_ANTEPRIMA, LUNGHEZZA_TITOLO;
+var init_coda_messaggi = __esm({
+  "src/components/coda-messaggi.js"() {
+    LUNGHEZZA_ANTEPRIMA = 200;
+    LUNGHEZZA_TITOLO = 1e3;
+  }
+});
+
 // src/components/cartella-ritratto.js
 function numeroItaliano(n) {
   const v = Number(n);
@@ -19194,6 +19228,7 @@ var init_app = __esm({
     init_permessi();
     init_errori();
     init_ragionamento();
+    init_coda_messaggi();
     init_testo_pagina();
     init_cartella_ritratto();
     init_consumo_sessione();
@@ -19519,7 +19554,7 @@ var init_app = __esm({
           cartellaAssoluta: null,
           /**
            * ⭐⭐⭐ FASE D (28/8) — coda messaggi: i testi CONFERMATI dal server
-           * (risposta della POST .../queue), FIFO, in attesa di essere
+           * (dal 14/09 l'annuncio `talos.coda`, o la risposta di una rotta della coda), FIFO, in attesa di essere
            * consegnati. Un bubble in chat compare SOLO quando arriva DAVVERO
            * l'evento QueuedMessageDelivered (mai ottimisticamente al POST: un
            * messaggio può restare in coda per giri interi mentre il modello
@@ -19527,7 +19562,9 @@ var init_app = __esm({
            * cosa il modello ha già "visto") — vedi renderizzaBannerCoda() e
            * il case QueuedMessageDelivered.
            */
-          codaMessaggi: []
+          codaMessaggi: [],
+          codaInPausa: false
+          // ⭐ 14/09: la dice il server (`talos.coda`), mai questa finestra da sola
         }
       };
       const QA_VIEWPORTS = Object.freeze({
@@ -26385,6 +26422,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         redirectRunButton.hidden = !mostraPulsanteReindirizzo({ giroAttivo: attivo, haTesto });
         redirectRunButton.disabled = redirectOccupato || uploadImmaginiInCorso();
         redirectRunButton.setAttribute("aria-label", "Reindirizza con il testo scritto");
+        aggiornaParoleCodaAVista();
         if (suggerimentoComposerAttivo && (attivo || haTesto)) svuotaSuggerimentoComposer();
         composerInput.placeholder = attivo ? "Scrivi un follow-up… Invio per scegliere, Ctrl+Invio accoda" : suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? "Scrivi il primo messaggio…" : "Scrivi… Invio manda, Maiusc+Invio va a capo");
       }
@@ -26687,11 +26725,41 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         composerInput.setSelectionRange(composerInput.value.length, composerInput.value.length);
         return true;
       }
-      function renderizzaBannerCoda() {
-        const coda = state.realSession.codaMessaggi;
+      function applicaStatoCoda(valore) {
+        const { voci, inPausa } = normalizzaStatoCoda(valore);
+        state.realSession.codaMessaggi = voci;
+        state.realSession.codaInPausa = inPausa;
+        renderizzaBannerCoda();
+      }
+      function descrizioneCoda() {
+        return descriviCoda({ voci: state.realSession.codaMessaggi, inPausa: state.realSession.codaInPausa }, { giroVivo: runRealeAttivo() });
+      }
+      function scriviParoleCoda(descrizione) {
         const testoEl = $2("#queuedMessageText", queuedMessage) || $2("[data-coda-testo]", queuedMessage);
         const conteggioEl = $2("[data-coda-conteggio]", queuedMessage);
-        if (coda.length === 0) {
+        const inviaEl = $2("[data-coda-invia]", queuedMessage);
+        if (conteggioEl) {
+          conteggioEl.textContent = descrizione.conteggio;
+          conteggioEl.classList.toggle("talos-badge--warning", descrizione.tono === "attenzione");
+          conteggioEl.title = descrizione.spiegazione;
+        }
+        if (testoEl) {
+          testoEl.textContent = descrizione.testo;
+          testoEl.title = descrizione.titoloTesto;
+        }
+        if (inviaEl) {
+          inviaEl.textContent = descrizione.azione;
+          inviaEl.title = descrizione.titoloAzione;
+        }
+      }
+      function aggiornaParoleCodaAVista() {
+        if (!queuedMessage || queuedMessage.hidden) return;
+        const descrizione = descrizioneCoda();
+        if (descrizione) scriviParoleCoda(descrizione);
+      }
+      function renderizzaBannerCoda() {
+        const descrizione = descrizioneCoda();
+        if (!descrizione) {
           if (!queuedMessage.hidden) {
             animateExit(queuedMessage, { durationToken: "--talos-motion-duration-composer-collapse" }, () => {
               queuedMessage.classList.remove("show");
@@ -26700,11 +26768,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           }
           return;
         }
-        if (conteggioEl) conteggioEl.textContent = `${coda.length} in coda`;
-        if (testoEl) {
-          const extra = coda.length > 1 ? ` (+${coda.length - 1} altr${coda.length - 1 === 1 ? "o" : "i"})` : "";
-          testoEl.textContent = `«${tronca2(coda[0], 60)}»${extra} — parte alla fine di questo giro`;
-        }
+        scriviParoleCoda(descrizione);
         const demoBadge = $2(".demo-surface-badge", queuedMessage);
         if (demoBadge) demoBadge.hidden = true;
         if (queuedMessage.hidden) {
@@ -30237,6 +30301,10 @@ ${testo3}` : testo3;
           accendiRagionamentiApertiDopoLaStoria();
           return;
         }
+        if (evento.type === "CUSTOM" && evento.name === "talos.coda") {
+          applicaStatoCoda(evento.value);
+          return;
+        }
         if (evento.type === "CUSTOM" && evento.name === "talos.context") {
           const value = evento.value;
           if (value?.schema !== "talos.context.event.v1" || value.sessionId !== state.realSession.id) return;
@@ -30315,6 +30383,10 @@ ${testo3}` : testo3;
               aggiornaUsageSessione();
             }
             state.realSession.currentRunModel = typeof evento.contesto?.modello === "string" && evento.contesto.modello.trim() ? evento.contesto.modello.trim() : state.model || null;
+            if (!state.realSession.inRigiocata) {
+              state.realSession.chiusaDalServer = false;
+              programmaAggiornamentoElencoSessioniReali();
+            }
             state.realSession.redirectPendingId = null;
             state.realSession.eventoTerminaleVisto = false;
             svuotaSuggerimentoComposer();
@@ -30639,8 +30711,6 @@ ${testo3}` : testo3;
           case "QueuedMessageDelivered": {
             nascondiAttesaRisposta();
             appendUserFollowUp(evento.testo, null, evento.immagini);
-            state.realSession.codaMessaggi.shift();
-            renderizzaBannerCoda();
             mostraAttesaRisposta();
             break;
           }
@@ -30735,6 +30805,7 @@ ${testo3}` : testo3;
             chiudiRagionamentiInCorso();
             state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
             syncRunComposerState();
+            programmaAggiornamentoElencoSessioniReali();
             break;
           }
           /*
@@ -30850,6 +30921,7 @@ ${testo3}` : testo3;
           state.realSession.approvazioniPendenti = /* @__PURE__ */ new Map();
           state.realSession.cartellaAssoluta = null;
           state.realSession.codaMessaggi = [];
+          state.realSession.codaInPausa = false;
           state.realSession.batchAttivo = null;
           state.realSession.ultimoBatchChiuso = null;
           renderizzaBannerCoda();
@@ -30993,7 +31065,7 @@ ${testo3}` : testo3;
           toast("Fork non riuscito", error.message);
         }
       }
-      async function resumeSession(messaggioFollowUp, immagini = []) {
+      async function resumeSession(messaggioFollowUp, immagini = [], { viaCodaId = null } = {}) {
         if (!state.realSession.id) {
           toast("Nessuna sessione reale da riprendere");
           return;
@@ -31014,7 +31086,11 @@ ${testo3}` : testo3;
         mostraAttesaRisposta();
         try {
           segnaTappaLatenza("postInviata");
-          await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp, ...immagini.length ? { immagini: payloadImmagini(immagini) } : {} } : {});
+          if (viaCodaId) {
+            await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue/invia`, { id: viaCodaId });
+          } else {
+            await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp, ...immagini.length ? { immagini: payloadImmagini(immagini) } : {} } : {});
+          }
           if (sessionId !== state.realSession.id || generationAtSend !== state.realSession.generation) return;
           segnaTappaLatenza("postRisposta");
           const generation = nuovaGenerazioneSessione({ continua: true });
@@ -31028,7 +31104,7 @@ ${testo3}` : testo3;
           nascondiAttesaRisposta();
           if (messaggioFollowUp) appendStatusNote(`Invio non riuscito: ${error.message}`, true);
           toast(messaggioFollowUp ? "Invio non riuscito" : "Resume non riuscito", error.message);
-          if (sessionId === state.realSession.id) ripristinaImmagini(immagini, messaggioFollowUp);
+          if (sessionId === state.realSession.id && !viaCodaId) ripristinaImmagini(immagini, messaggioFollowUp);
         }
       }
       async function accodaMessaggioReale(testo3, immagini = []) {
@@ -31036,9 +31112,12 @@ ${testo3}` : testo3;
         try {
           const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue`, { messaggio: testo3, ...immagini.length ? { immagini: payloadImmagini(immagini) } : {} });
           if (sessionId !== state.realSession.id) return;
-          state.realSession.codaMessaggi.push(testo3);
-          renderizzaBannerCoda();
-          toast("Messaggio in coda", `Arriverà quando l'agente conclude il turno corrente (posizione ${dati.posizione}).`);
+          if (dati?.coda) applicaStatoCoda(dati.coda);
+          else {
+            state.realSession.codaMessaggi = [...state.realSession.codaMessaggi, { id: null, testo: testo3, immagini: 0 }];
+            renderizzaBannerCoda();
+          }
+          toast("Messaggio in coda", `Parte quando TALOS finisce di rispondere (posizione ${dati.posizione}).`);
         } catch (error) {
           const nonInCorso = /non è in corso|non pronta|SESSION_NOT_READY|interrott/i.test(String(error?.message || "")) || error?.code === "SESSION_NOT_READY";
           if (nonInCorso && sessionId === state.realSession.id) {
@@ -34220,16 +34299,34 @@ ${testo3}`;
         await stopRealSession();
       });
       $2("#cancelQueued").addEventListener("click", async () => {
-        if (!state.realSession.id || state.realSession.codaMessaggi.length === 0) return;
+        const sessionId = state.realSession.id;
+        const primo = state.realSession.codaMessaggi[0];
+        if (!sessionId || !primo) return;
         try {
-          const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/queue/annulla`, {});
-          if (dati.rimosso) {
-            state.realSession.codaMessaggi.pop();
-            renderizzaBannerCoda();
-            toast("Follow-up annullato");
-          }
+          const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue/annulla`, primo.id ? { id: primo.id } : {});
+          if (sessionId !== state.realSession.id) return;
+          if (dati?.coda) applicaStatoCoda(dati.coda);
+          if (dati?.rimosso) toast("Tolto dalla coda", `«${tronca2(primo.testo, 60)}» non verrà inviato.`);
         } catch (error) {
-          toast("Annullamento non riuscito", error.message);
+          toast("Non tolto dalla coda", error.message);
+        }
+      });
+      $2("#inviaQueued")?.addEventListener("click", async () => {
+        const sessionId = state.realSession.id;
+        const primo = state.realSession.codaMessaggi[0];
+        if (!sessionId || !primo?.id) return;
+        if (!runRealeAttivo()) {
+          state.realSession.chiusaDalServer = false;
+          resumeSession(primo.testo, [], { viaCodaId: primo.id });
+          return;
+        }
+        try {
+          const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue/invia`, { id: primo.id });
+          if (sessionId !== state.realSession.id) return;
+          if (dati?.coda) applicaStatoCoda(dati.coda);
+          toast("Reindirizzamento richiesto", "La correzione verrà applicata al prossimo punto sicuro.");
+        } catch (error) {
+          toast("Reindirizzamento non riuscito", error.message);
         }
       });
       $$("[data-approve], [data-allow-session], [data-deny]").forEach((button2) => {
@@ -35690,7 +35787,8 @@ function montaPonteLegacy(documentObj = document) {
   const coda = uno(piede, ".talos-queue");
   battezza(coda, { id: "queuedMessage", classi: ["queued-message"] });
   battezza(uno(coda, ".talos-queue__text"), { id: "queuedMessageText" });
-  battezza(uno(coda, ".talos-button"), { id: "cancelQueued" });
+  battezza(uno(coda, "[data-coda-togli]"), { id: "cancelQueued" });
+  battezza(uno(coda, "[data-coda-invia]"), { id: "inviaQueued" });
   coda.hidden = true;
   const compositore = uno(piede, "#composerForm");
   battezza(uno(compositore, ".talos-send"), { classi: ["send-btn"] });

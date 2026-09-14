@@ -1250,8 +1250,9 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/comandi-nella-conversazione$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/impostazioni-comandi$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/approve$/, metodi: ['POST'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue$/, metodi: ['GET', 'POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue\/annulla$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue\/invia$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/hooks\/([^/]+)\/trust$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tool-forge\/([^/]+)\/enable$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/mcp\/([^/]+)\/trust$/, metodi: ['POST'] },
@@ -4904,6 +4905,36 @@ export function createHttpApp({
      * dichiara solo 'GET, HEAD, POST' più sotto. Stesso schema POST +
      * verbo-nel-path di trustMatch/approveMatch appena sopra.
      */
+    /*
+     * ⭐⭐ 14/09 — la coda si LEGGE: è della sessione, non della finestra che l'ha scritta. Codex espone lo stesso elenco
+     *   come `thread/queue/list` (app-server-protocol/src/protocol/common.rs:602, letto nel clone il 14/09/2026).
+     */
+    const queueGetMatch = method === 'GET' && sessionRegistry && typeof sessionRegistry.statoCoda === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/queue$/.exec(url.pathname);
+    if (queueGetMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(queueGetMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const esito = sessionRegistry.statoCoda(sessionId);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        sendJson(res, 200, successEnvelope({ voci: esito.voci, inPausa: esito.inPausa }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const queueMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/queue$/.exec(url.pathname);
     if (queueMatch) {
@@ -4926,7 +4957,45 @@ export function createHttpApp({
           throw errore;
         }
         if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope({ ok: true, posizione: esito.posizione }, clock), method);
+        sendJson(res, 200, successEnvelope({ ok: true, posizione: esito.posizione, ...(esito.coda ? { coda: esito.coda } : {}) }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐ 14/09 — «Invia ora» un messaggio in coda: a giro vivo entra come correzione, a giro fermo riprende la sessione.
+     *   Codex ha la stessa porta, `thread/queue/start` (thread_queue_processor.rs). ⛔ Solo `{id}`: il testo sta già sul
+     *   server, e un corpo che lo ripetesse potrebbe contraddirlo.
+     */
+    const queueInviaMatch = method === 'POST' && sessionRegistry && typeof sessionRegistry.inviaDallaCoda === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/queue\/invia$/.exec(url.pathname);
+    if (queueInviaMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(queueInviaMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        if (!corpo || typeof corpo.id !== 'string' || corpo.id.length === 0 || Object.keys(corpo).some((chiave) => chiave !== 'id')) {
+          const errore = new Error('Corpo non valido: atteso {id}');
+          errore.code = 'QUERY_INVALID';
+          throw errore;
+        }
+        const esito = await sessionRegistry.inviaDallaCoda(sessionId, corpo.id);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true, modo: esito.modo, coda: esito.coda, ...(esito.redirectId ? { redirectId: esito.redirectId } : {}) }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -4946,14 +5015,21 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
-        const esito = sessionRegistry.svuotaCoda(sessionId);
+        /* ⭐ 14/09 — «Togli» toglie il messaggio che la persona VEDE (`id`); senza corpo resta il comportamento di prima. */
+        const corpoAnnulla = await leggiCorpoJson(req);
+        if (corpoAnnulla && Object.hasOwn(corpoAnnulla, 'id') && (typeof corpoAnnulla.id !== 'string' || corpoAnnulla.id.length === 0)) {
+          const errore = new Error('Corpo non valido: atteso {id?}');
+          errore.code = 'QUERY_INVALID';
+          throw errore;
+        }
+        const esito = sessionRegistry.svuotaCoda(sessionId, typeof corpoAnnulla?.id === 'string' ? { id: corpoAnnulla.id } : {});
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
           throw errore;
         }
         if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope({ ok: true, rimosso: esito.rimosso }, clock), method);
+        sendJson(res, 200, successEnvelope({ ok: true, rimosso: esito.rimosso, ...(esito.coda ? { coda: esito.coda } : {}) }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -5917,6 +5993,12 @@ export function createHttpApp({
              *   conosce lo ignora.
              */
             sseSession.send({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null });
+            /* ⭐ 14/09 — e com'è la coda ADESSO: l'annuncio `talos.coda` è effimero, quindi chi apre la sessione dopo (un'altra
+               finestra, una ricarica) lo riceve qui, subito dopo la storia. Anche vuota: dice «nessuna coda» a chi ne ricordava una. */
+            if (typeof sessionRegistry.statoCoda === 'function') {
+              const coda = sessionRegistry.statoCoda(sessionId);
+              if (coda && !('erroreAvvio' in coda)) sseSession.send({ type: 'CUSTOM', name: 'talos.coda', value: { voci: coda.voci, inPausa: coda.inPausa } });
+            }
             /*
              * ⛔⛔⛔ 28/8 — SECONDA metà della stessa cura (setNoDelay sopra
              * è la prima): senza scritture nuove, una connessione può

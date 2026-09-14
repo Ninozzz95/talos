@@ -2496,3 +2496,75 @@ test('⭐⭐ GET .../metrics dice da quanto ragiona il modello, per il ragioname
   assert.deepEqual(corpo.data.ragionamentiInCorsoDaMs, { aperto: 852_858 }, 'da quanto ragiona, fino all’HTTP: la misura del giro vero');
   assert.deepEqual(corpo.data.ragionamentiMs, { chiuso: 1_000 }, '⛔ AL CONTRARIO: quello finito sta fra le durate, non fra gli aperti');
 });
+
+/* ───────────── ⭐⭐ 14/09 — la coda è della sessione: si legge, si toglie per id, si invia, e arriva a chi apre dopo ─────────────
+ * Codex espone `thread/queue/list|delete|start` (app-server-protocol, common.rs:596-627); Hermes mette la coda in pausa allo Stop. */
+
+const postJson = (url, corpo) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+
+test('⭐⭐ GET .../queue dice la coda VERA della sessione; ⛔ al contrario una sessione che non c’è è 404', async (t) => {
+  const registro = registroVeroConEventi(t);
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  registro.accodaMessaggio(sessionId, 'poi aggiorna il README');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/queue`);
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.deepEqual(corpo.data.voci.map((v) => v.testo), ['poi aggiorna il README']);
+  assert.equal(corpo.data.inPausa, false);
+  assert.equal(typeof corpo.data.voci[0].id, 'string');
+  assert.equal((await fetch(`${base}/api/v1/sessions/non-esiste/queue`)).status, 404);
+});
+
+test('⭐⭐ POST .../queue/annulla con {id} toglie QUEL messaggio; ⛔ un id che non è una stringa è rifiutato', async (t) => {
+  const registro = registroVeroConEventi(t);
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  const primo = registro.accodaMessaggio(sessionId, 'primo').coda.voci[0];
+  registro.accodaMessaggio(sessionId, 'secondo');
+  const risposta = await postJson(`${base}/api/v1/sessions/${sessionId}/queue/annulla`, { id: primo.id });
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.equal(corpo.data.rimosso, true);
+  assert.deepEqual(corpo.data.coda.voci.map((v) => v.testo), ['secondo'], 'tolto il primo, non l’ultimo');
+  assert.equal((await postJson(`${base}/api/v1/sessions/${sessionId}/queue/annulla`, { id: 5 })).status, 400);
+});
+
+test('⭐⭐ POST .../queue/invia a giro vivo reindirizza col messaggio; ⛔ un corpo che non è esattamente {id} è rifiutato', async (t) => {
+  const registro = registroVeroConEventi(t);
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  const voce = registro.accodaMessaggio(sessionId, 'cambia strada').coda.voci[0];
+  const indirizzo = `${base}/api/v1/sessions/${sessionId}/queue/invia`;
+  assert.equal((await postJson(indirizzo, {})).status, 400, 'senza id');
+  assert.equal((await postJson(indirizzo, { id: voce.id, testo: 'altro' })).status, 400, 'il testo sta sul server: un corpo che lo ripete potrebbe contraddirlo');
+  const risposta = await postJson(indirizzo, { id: voce.id });
+  assert.equal(risposta.status, 200);
+  const corpo = await risposta.json();
+  assert.equal(corpo.data.modo, 'reindirizzato');
+  assert.deepEqual(corpo.data.coda.voci, []);
+  assert.equal((await postJson(indirizzo, { id: voce.id })).status, 404, 'lo stesso messaggio non si invia due volte');
+});
+
+test('⭐⭐ GET .../events: chi apre la sessione DOPO riceve la coda subito dopo la storia — anche da un’altra finestra', async (t) => {
+  const registro = registroVeroConEventi(t);
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  registro.accodaMessaggio(sessionId, 'visibile ovunque');
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/events`);
+  const reader = risposta.body.getReader();
+  t.after(() => reader.cancel().catch(() => {}));
+  const stato = { grezzo: '', frame: [] };
+  await leggiFrameFinche(reader, stato, (frame) => frame.some((f) => datiDelFrame(f).name === 'talos.coda'));
+  const nomi = stato.frame.map((f) => datiDelFrame(f)).filter((e) => e.type === 'CUSTOM').map((e) => e.name);
+  assert.ok(nomi.indexOf('talos.coda') > nomi.indexOf('talos.fine-rigiocata'), 'la coda arriva DOPO il confine della storia');
+  const coda = stato.frame.map((f) => datiDelFrame(f)).find((e) => e.name === 'talos.coda');
+  assert.deepEqual(coda.value.voci.map((v) => v.testo), ['visibile ovunque']);
+  assert.equal(haId(stato.frame.find((f) => datiDelFrame(f).name === 'talos.coda')), false, '⛔ stato, non storia: niente id SSE');
+  await reader.cancel();
+});

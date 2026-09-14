@@ -69,6 +69,7 @@ import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i sugge
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
 import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, tonoDelTick, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
 import { ETICHETTA_INTERRUTTORE_RAGIONAMENTO, argomentoDelRagionamento, etichettaRagionamento, formattaDurataRagionamento, argomentoPuoCambiare } from '../components/ragionamento.js'; // 13/09 sera: il ragionamento si comprime invece di sparire, e mentre ragiona dice su cosa
+import { descriviCoda, normalizzaStatoCoda } from '../components/coda-messaggi.js'; // 14/09: la coda è della sessione — le sue parole in un posto solo
 // 06/9 C24: la pagina delle Note — la monta `sezioni-adattatori.js`, che riusa `note.js`
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
@@ -406,7 +407,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       cartellaAssoluta: null,
       /**
        * ⭐⭐⭐ FASE D (28/8) — coda messaggi: i testi CONFERMATI dal server
-       * (risposta della POST .../queue), FIFO, in attesa di essere
+       * (dal 14/09 l'annuncio `talos.coda`, o la risposta di una rotta della coda), FIFO, in attesa di essere
        * consegnati. Un bubble in chat compare SOLO quando arriva DAVVERO
        * l'evento QueuedMessageDelivered (mai ottimisticamente al POST: un
        * messaggio può restare in coda per giri interi mentre il modello
@@ -415,6 +416,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
        * il case QueuedMessageDelivered.
        */
       codaMessaggi: [],
+      codaInPausa: false, // ⭐ 14/09: la dice il server (`talos.coda`), mai questa finestra da sola
     },
   };
 
@@ -9327,6 +9329,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     redirectRunButton.hidden = !mostraPulsanteReindirizzo({ giroAttivo: attivo, haTesto });
     redirectRunButton.disabled = redirectOccupato || uploadImmaginiInCorso();
     redirectRunButton.setAttribute('aria-label', 'Reindirizza con il testo scritto');
+    aggiornaParoleCodaAVista(); // ⭐ 14/09: l'azione sulla coda segue il giro — «Indirizza ora» vivo, «Invia ora» fermo
     // ⭐ 3/9 — item 10: un suggerimento vale solo a riposo, campo vuoto, niente in coda.
     if (suggerimentoComposerAttivo && (attivo || haTesto)) svuotaSuggerimentoComposer();
     composerInput.placeholder = attivo ? 'Scrivi un follow-up… Invio per scegliere, Ctrl+Invio accoda' : (suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? 'Scrivi il primo messaggio…' : 'Scrivi… Invio manda, Maiusc+Invio va a capo')); // 05/9 Fase 2: le parole del mockup
@@ -9910,16 +9913,61 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return true;
   }
 
+  /*
+   * ⭐⭐ 14/09 — LA CODA LA TIENE IL SERVER. Owner: «i competitor lo fanno, lo facciamo anche noi». Trovato col giro vero del
+   *   13/09: la coda la conosceva solo la finestra che l'aveva scritta (una `push` dopo la POST), quindi non si vedeva in
+   *   un'altra finestra né dopo una ricarica. Codex la espone a ogni client (`thread/queue/list`), Hermes la tiene fuori
+   *   dalla memoria della pagina. ⇒ Ogni finestra mostra quello che dice `talos.coda` o la risposta di una rotta della
+   *   coda, e basta: nessuna copia propria da tenere allineata.
+   */
+  function applicaStatoCoda(valore) {
+    const { voci, inPausa } = normalizzaStatoCoda(valore);
+    state.realSession.codaMessaggi = voci;
+    state.realSession.codaInPausa = inPausa;
+    renderizzaBannerCoda();
+  }
+
+  /*
+   * ⭐ 14/09 — la PAUSA la dice il server, l'AZIONE la dice il giro: «Indirizza ora» a giro vivo, «Invia ora» a giro fermo (vedi
+   *   `descriviCoda`). Il giro cambia senza che la coda cambi, quindi le parole si riscrivono anche da `syncRunComposerState`.
+   */
+  function descrizioneCoda() {
+    return descriviCoda({ voci: state.realSession.codaMessaggi, inPausa: state.realSession.codaInPausa }, { giroVivo: runRealeAttivo() });
+  }
+  function scriviParoleCoda(descrizione) {
+    const testoEl = $('#queuedMessageText', queuedMessage) || $('[data-coda-testo]', queuedMessage);
+    const conteggioEl = $('[data-coda-conteggio]', queuedMessage);
+    const inviaEl = $('[data-coda-invia]', queuedMessage);
+    if (conteggioEl) {
+      conteggioEl.textContent = descrizione.conteggio;
+      conteggioEl.classList.toggle('talos-badge--warning', descrizione.tono === 'attenzione');
+      conteggioEl.title = descrizione.spiegazione;
+    }
+    if (testoEl) {
+      testoEl.textContent = descrizione.testo;
+      testoEl.title = descrizione.titoloTesto; // ⛔ 14/09: il messaggio INTERO e quando parte — la riga li taglia
+    }
+    if (inviaEl) {
+      inviaEl.textContent = descrizione.azione;
+      inviaEl.title = descrizione.titoloAzione;
+    }
+  }
+  /** Solo le parole di un banner GIÀ a vista: non lo mostra e non lo nasconde, così non tocca le sue animazioni. */
+  function aggiornaParoleCodaAVista() {
+    if (!queuedMessage || queuedMessage.hidden) return;
+    const descrizione = descrizioneCoda();
+    if (descrizione) scriviParoleCoda(descrizione);
+  }
+
   /**
    * ⭐⭐⭐ FASE D (28/8) — il banner "Follow-up in coda" mostra la coda
-   * VERA (state.realSession.codaMessaggi, popolata SOLO da una POST
-   * .../queue riuscita) invece del testo statico del mockup. Il primo
-   * elemento è quello che il kernel consegnerà per PRIMO (FIFO) — un
-   * secondo elemento in attesa si vede come "+N altri", mai perso
-   * silenziosamente. Chiamata sia quando la coda cresce (submitPrompt)
-   * sia quando si svuota (QueuedMessageDelivered, #cancelQueued,
-   * nuovaGenerazioneSessione) — un solo punto che decide se il banner è
-   * visibile, mai due stati da tenere sincronizzati a mano.
+   * VERA (state.realSession.codaMessaggi) invece del testo statico del
+   * mockup. ⭐ 14/09: la lista la scrive solo `applicaStatoCoda`, cioè
+   * l'annuncio `talos.coda` del server o la risposta di una rotta della
+   * coda. Il primo elemento è quello che il kernel consegnerà per PRIMO
+   * (FIFO); quanti ne aspettano sta nel badge, mai perso silenziosamente.
+   * Un solo punto che decide se il banner è visibile, mai due stati da
+   * tenere sincronizzati a mano.
    */
   function renderizzaBannerCoda() {
     /*
@@ -9932,10 +9980,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * messaggio — quindi `hidden` è l'unico interruttore, e lo tiene questa
      * funzione sola (nessuno stato doppio da sincronizzare a mano).
      */
-    const coda = state.realSession.codaMessaggi;
-    const testoEl = $('#queuedMessageText', queuedMessage) || $('[data-coda-testo]', queuedMessage);
-    const conteggioEl = $('[data-coda-conteggio]', queuedMessage);
-    if (coda.length === 0) {
+    /* ⭐ 14/09 — le parole le decide `descriviCoda`: «N in pausa» dopo uno stop, e mai più «parte alla fine di questo giro» su un giro fermo. */
+    const descrizione = descrizioneCoda();
+    if (!descrizione) {
       if (!queuedMessage.hidden) {
         animateExit(queuedMessage, { durationToken: '--talos-motion-duration-composer-collapse' }, () => {
           queuedMessage.classList.remove('show');
@@ -9944,11 +9991,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
       return;
     }
-    if (conteggioEl) conteggioEl.textContent = `${coda.length} in coda`;
-    if (testoEl) {
-      const extra = coda.length > 1 ? ` (+${coda.length - 1} altr${coda.length - 1 === 1 ? 'o' : 'i'})` : '';
-      testoEl.textContent = `«${tronca(coda[0], 60)}»${extra} — parte alla fine di questo giro`;
-    }
+    scriviParoleCoda(descrizione);
     const demoBadge = $('.demo-surface-badge', queuedMessage);
     if (demoBadge) demoBadge.hidden = true;
     if (queuedMessage.hidden) {
@@ -14621,6 +14664,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       accendiRagionamentiApertiDopoLaStoria();
       return;
     }
+    /* ⭐⭐ 14/09 — lo stato della coda, di solo trasporto: arriva a ogni finestra quando cambia, e a chi apre dopo la storia. */
+    if (evento.type === 'CUSTOM' && evento.name === 'talos.coda') {
+      applicaStatoCoda(evento.value);
+      return;
+    }
     if (evento.type === 'CUSTOM' && evento.name === 'talos.context') {
       const value = evento.value;
       if (value?.schema !== 'talos.context.event.v1' || value.sessionId !== state.realSession.id) return;
@@ -14763,6 +14811,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         state.realSession.currentRunModel = typeof evento.contesto?.modello === 'string' && evento.contesto.modello.trim()
           ? evento.contesto.modello.trim()
           : (state.model || null);
+        /*
+         * ⛔ 14/09, giro vero della coda (due finestre): ripreso il giro dalla finestra A, la B lo mostrava FINITO — «Ha
+         *   ragionato», barra «fermata», nessun «Interrompi» — per tutto il ragionamento. O-48 azzera `chiusaDalServer` solo
+         *   dove parte un invio, per non riaccendere un `RunStarted` della STORIA; ma dopo `talos.fine-rigiocata` un
+         *   `RunStarted` è per forza in diretta, anche quando l'invio l'ha fatto un'altra finestra. Codex avvisa ogni client
+         *   all'inizio del turno (`note_turn_started`, codex-rs/app-server/src/thread_status.rs:147, clone 728cb12 del 03/09/2026).
+         */
+        if (!state.realSession.inRigiocata) {
+          state.realSession.chiusaDalServer = false;
+          programmaAggiornamentoElencoSessioniReali();
+        }
         state.realSession.redirectPendingId = null;
         state.realSession.eventoTerminaleVisto = false;
         svuotaSuggerimentoComposer(); // ⭐ 3/9 — item 10: un suggerimento del giro FINITO non ha senso su uno appena iniziato
@@ -15318,11 +15377,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * ⭐⭐⭐ FASE D (28/8) — il kernel ha DAVVERO consumato un messaggio
          * dalla coda (session-registry.mjs, codaMessaggiFn) — il SOLO
          * momento onesto per mostrarlo come un turno utente vero (mai
-         * ottimisticamente al POST, vedi accodaMessaggioReale). shift(),
-         * non filter: FIFO, lo stesso ordine con cui il server li ha
-         * accodati — un evento fuori ordine (mai dovrebbe capitare, ma
-         * niente si assume) lascerebbe comunque la lista locale corretta
-         * alla lunghezza, solo con l'etichetta sbagliata nel banner.
+         * ottimisticamente al POST, vedi accodaMessaggioReale).
          */
         /*
          * ⛔⛔ 13/09 sera — stessa cura del reindirizzamento applicato, e qui pesa di piu': accodare
@@ -15333,8 +15388,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          */
         nascondiAttesaRisposta();
         appendUserFollowUp(evento.testo, null, evento.immagini);
-        state.realSession.codaMessaggi.shift();
-        renderizzaBannerCoda();
+        /* ⭐ 14/09 — niente `shift()` locale: subito dopo questa consegna il server annuncia la coda accorciata (`talos.coda`). */
         mostraAttesaRisposta();
         break;
       }
@@ -15534,6 +15588,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         chiudiRagionamentiInCorso(); // 13/09 sera: un ragionamento senza la sua fine non resta «Sta ragionando…»
         state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
         syncRunComposerState();
+        /*
+         * ⛔ 14/09, giro vero della coda (banco 5475, due finestre): dopo lo stop la barra laterale diceva ancora «in corso»
+         *   in TUTTE e due, e «fermata» solo dopo una ricarica. `RunFinished` rilegge l'elenco, questo ramo no: restava il
+         *   giro dei 15 s. Codex avvisa i client sia a turno completato sia a turno interrotto (`note_turn_completed` e
+         *   `note_turn_interrupted`, codex-rs/app-server/src/thread_status.rs:156-160, clone 728cb12 del 03/09/2026).
+         */
+        programmaAggiornamentoElencoSessioniReali();
         break;
       }
       /*
@@ -15692,6 +15753,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.realSession.approvazioniPendenti = new Map(); // le card sono già sparite con replaceChildren() qui sopra, la mappa le segue
       state.realSession.cartellaAssoluta = null; // Fase 3 — una sessione nuova non conosce ancora la propria radice finché RunStarted non arriva
       state.realSession.codaMessaggi = []; // FASE D — una sessione nuova non eredita la coda di quella precedente
+      state.realSession.codaInPausa = false; // ⭐ 14/09 — né la sua pausa: la vera arriva col flusso degli eventi
       state.realSession.batchAttivo = null; // 30/8 — una sessione nuova non eredita un batch di tool-call della precedente
       state.realSession.ultimoBatchChiuso = null;
       renderizzaBannerCoda();
@@ -15904,7 +15966,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * turno di chat reale — vedi submitPrompt(), unico chiamante di questo
    * secondo caso. Stesso endpoint, stessa funzione: nessuna duplicazione.
    */
-  async function resumeSession(messaggioFollowUp, immagini = []) {
+  async function resumeSession(messaggioFollowUp, immagini = [], { viaCodaId = null } = {}) {
     if (!state.realSession.id) { toast('Nessuna sessione reale da riprendere'); return; }
     const sessionId = state.realSession.id;
     const taskId = state.realSession.taskId;
@@ -15926,7 +15988,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     mostraAttesaRisposta(); // sia il follow-up sia un resume senza messaggio riavviano un giro vero
     try {
       segnaTappaLatenza('postInviata');
-      await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp, ...(immagini.length ? { immagini: payloadImmagini(immagini) } : {}) } : {});
+      if (viaCodaId) {
+        /* ⭐ 14/09 — «Invia ora» dalla coda: il testo e le immagini li ha già il server, che toglie il messaggio e riprende. */
+        await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue/invia`, { id: viaCodaId });
+      } else {
+        await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp, ...(immagini.length ? { immagini: payloadImmagini(immagini) } : {}) } : {});
+      }
       if (sessionId !== state.realSession.id || generationAtSend !== state.realSession.generation) return;
       segnaTappaLatenza('postRisposta');
       // continua:true — STESSA vista: la conversazione resta a schermo, il
@@ -15992,7 +16059,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       nascondiAttesaRisposta();
       if (messaggioFollowUp) appendStatusNote(`Invio non riuscito: ${error.message}`, true); // il bubble utente resta — l'ha scritto davvero, solo non e' arrivato
       toast(messaggioFollowUp ? 'Invio non riuscito' : 'Resume non riuscito', error.message);
-      if (sessionId === state.realSession.id) ripristinaImmagini(immagini, messaggioFollowUp);
+      if (sessionId === state.realSession.id && !viaCodaId) ripristinaImmagini(immagini, messaggioFollowUp); // ⭐ 14/09: un messaggio della coda resta in coda sul server, non torna nel composer
     }
   }
 
@@ -16009,9 +16076,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     try {
       const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue`, { messaggio: testo, ...(immagini.length ? { immagini: payloadImmagini(immagini) } : {}) });
       if (sessionId !== state.realSession.id) return; // la sessione a schermo è già un'altra, questo accodamento non la riguarda più
-      state.realSession.codaMessaggi.push(testo);
-      renderizzaBannerCoda();
-      toast('Messaggio in coda', `Arriverà quando l'agente conclude il turno corrente (posizione ${dati.posizione}).`);
+      /* ⭐ 14/09 — la coda la dice il server; un server vecchio senza `coda` nella risposta resta servito come prima. */
+      if (dati?.coda) applicaStatoCoda(dati.coda);
+      else { state.realSession.codaMessaggi = [...state.realSession.codaMessaggi, { id: null, testo, immagini: 0 }]; renderizzaBannerCoda(); }
+      toast('Messaggio in coda', `Parte quando TALOS finisce di rispondere (posizione ${dati.posizione}).`);
     } catch (error) {
       /*
        * ⛔⛔⛔ 07/9 — LA RETE DI SICUREZZA. Il server rifiuta la coda quando la sessione non e
@@ -20315,17 +20383,45 @@ ${testo}`;
     await stopRealSession();
   });
 
+  /* ⭐⭐ 14/09 — «Togli» toglie il messaggio che la persona VEDE (il primo), per id: prima toglieva l'ultimo accodato, che
+     poteva non essere quello scritto nel banner. La coda che resta la dice il server. */
   $('#cancelQueued').addEventListener('click', async () => {
-    if (!state.realSession.id || state.realSession.codaMessaggi.length === 0) return;
+    const sessionId = state.realSession.id;
+    const primo = state.realSession.codaMessaggi[0];
+    if (!sessionId || !primo) return;
     try {
-      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/queue/annulla`, {});
-      if (dati.rimosso) {
-        state.realSession.codaMessaggi.pop();
-        renderizzaBannerCoda();
-        toast('Follow-up annullato');
-      }
+      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue/annulla`, primo.id ? { id: primo.id } : {});
+      if (sessionId !== state.realSession.id) return;
+      if (dati?.coda) applicaStatoCoda(dati.coda);
+      if (dati?.rimosso) toast('Tolto dalla coda', `«${tronca(primo.testo, 60)}» non verrà inviato.`);
     } catch (error) {
-      toast('Annullamento non riuscito', error.message);
+      toast('Non tolto dalla coda', error.message);
+    }
+  });
+  /* ⭐⭐ 14/09 — la seconda azione della coda. A giro vivo «Indirizza ora»: il messaggio entra come correzione, lo stesso gesto
+     del bivio. A giro fermo «Invia ora»: la conversazione riparte da quel messaggio. Codex: `thread/queue/start`; Hermes:
+     Steer e Send dal pannello della coda. */
+  $('#inviaQueued')?.addEventListener('click', async () => {
+    const sessionId = state.realSession.id;
+    const primo = state.realSession.codaMessaggi[0];
+    if (!sessionId || !primo?.id) return;
+    if (!runRealeAttivo()) {
+      /*
+       * ⛔ 14/09, giro vero (banco 5475): «Invia ora» è un invio vero come quello del compositore, e azzera `chiusaDalServer`
+       *   come fa `submitPrompt` (O-48). Senza, il giro ripreso ha ragionato 2 min 18 s col pulsante fermo su «Invia»:
+       *   nessun modo di interromperlo.
+       */
+      state.realSession.chiusaDalServer = false;
+      resumeSession(primo.testo, [], { viaCodaId: primo.id });
+      return;
+    }
+    try {
+      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue/invia`, { id: primo.id });
+      if (sessionId !== state.realSession.id) return;
+      if (dati?.coda) applicaStatoCoda(dati.coda);
+      toast('Reindirizzamento richiesto', 'La correzione verrà applicata al prossimo punto sicuro.');
+    } catch (error) {
+      toast('Reindirizzamento non riuscito', error.message);
     }
   });
 
