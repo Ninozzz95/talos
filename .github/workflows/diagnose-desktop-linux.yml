@@ -25,5 +25,16 @@ jobs:
         working-directory: context-engine
 
       - name: server
-        run: node --test tests/*.test.mjs
+        run: |
+          set -o pipefail
+          node --test tests/*.test.mjs 2>&1 | tee ../desktop-server-linux.log
         working-directory: harness-ui
+
+      - name: conserva il log del server
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-server-linux-log
+          path: desktop-server-linux.log
+          if-no-files-found: error
+          retention-days: 7
