@@ -247,12 +247,15 @@ test('SV-INDIRIZZI: le cinque porte sono quelle del contratto, e nessun adattato
   await s.leggi('n1');
   await s.modifica('n1', { titolo: 'U' });
   await s.elimina('n1');
+  await s.eliminaInBlocco(['n1', 'n2']);
   assert.deepEqual(chiamate.map((c) => `${c[0]} ${c[1]}`), [
     'POST /api/v1/sessions/sess%201/notes',
     'GET /api/v1/sessions/sess%201/notes/n1',
     'PATCH /api/v1/sessions/sess%201/notes/n1',
     'DELETE /api/v1/sessions/sess%201/notes/n1',
+    'POST /api/v1/sessions/sess%201/notes/batch',
   ]);
+  assert.deepEqual(chiamate.at(-1)[2], { azione: 'elimina', ids: ['n1', 'n2'] });
 
   const t = servizioVoci({ schema: SCHEMI.tasks, sessionId: 's', rete });
   await t.cambiaStato('t1', 'done');

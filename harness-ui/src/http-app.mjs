@@ -1,5 +1,6 @@
 import { validaFallbackProviders } from './model-destination.mjs';
 import { chiediMiglioramentoAlProvider } from './prompt-enhancer-provider.mjs';
+import { CARTELLA_ASSISTENZA_PREDEFINITA, MAX_DOMANDA_ASSISTENZA, cercaAssistenza } from './assistenza.mjs';
 import { randomBytes, randomUUID } from 'node:crypto'; // 08/9, BH-06: il nonce CSP del documento, nuovo a ogni risposta
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { nomiPerContentDisposition } from './workspace-files.mjs'; // PO-05: le due forme del nome per Content-Disposition (RFC 6266)
@@ -1110,6 +1111,7 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/browser/vivo/stato', metodi: ['GET'] },
   { schema: '/api/v1/search-source', metodi: ['GET'] },
   { schema: '/api/v1/sessions', metodi: ['GET', 'POST'] },
+  { schema: '/api/v1/assistenza', metodi: ['POST'] },
   { schema: '/api/v1/automations', metodi: ['GET', 'POST'] },
   { schema: '/api/v1/workspace-launches', metodi: ['POST'] },
   { schema: '/api/v1/workspace-browser/folders', metodi: ['POST'] },
@@ -2148,6 +2150,7 @@ export function createHttpApp({
   setupStatoFn = null,
   // ⭐ 04/9, R-03 — fonte della ricerca web scelta dalle Impostazioni (parità mobile) + prova reale.
   searchSourceStore = null, provaRicercaWebFn = null,
+  cartellaAssistenza = CARTELLA_ASSISTENZA_PREDEFINITA, cercaAssistenzaFn = cercaAssistenza,
   // ⭐ 04/9, W1-10 — token di loopback (config.token): quando c'è, /api/* vuole il cookie talos_token; `GET /?token=<t>` lo imposta e rimanda a `/`.
   token = null,
   workspaceLaunchStore = null,
@@ -4533,6 +4536,29 @@ export function createHttpApp({
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    const assistenzaMatch = method === 'POST' && url.pathname === '/api/v1/assistenza';
+    if (assistenzaMatch) {
+      try {
+        requireNoQuery(url);
+        const corpo = await leggiCorpoJson(req, MAX_REQUEST_BODY_BYTES);
+        if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)
+          || Object.keys(corpo).some((chiave) => chiave !== 'domanda')) {
+          throw Object.assign(new Error('Il corpo accetta soltanto la domanda.'), { code: 'QUERY_INVALID' });
+        }
+        const domanda = typeof corpo.domanda === 'string' ? corpo.domanda.trim() : '';
+        if (!domanda || Array.from(domanda).length > MAX_DOMANDA_ASSISTENZA) {
+          throw Object.assign(new Error(`La domanda deve contenere da 1 a ${MAX_DOMANDA_ASSISTENZA} caratteri.`), { code: 'QUERY_INVALID' });
+        }
+        const risposta = await cercaAssistenzaFn({ domanda, cartella: cartellaAssistenza });
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope(risposta, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
