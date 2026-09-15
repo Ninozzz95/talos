@@ -3964,3 +3964,67 @@ describe('Harness UI — passaASessione() non si arrende più su un id già corr
         expect(FakeEventSource.instances).toHaveLength(1) // nessuna seconda connessione: il contenuto c'era già
     })
 })
+
+/*
+ * ⛔⛔⛔ 15/09/2026 — run CI del job `mobile`, due rossi "solo sotto carico" con la STESSA radice:
+ * una catena di caricaCronologiaSessione sospesa sul backoff (1s/2s/3s, app.js) sopravviveva allo
+ * smontaggio del runtime (window.__talosHarnessDestroy, onBeforeUnmount di HarnessSessionScreen.vue)
+ * e si risvegliava DENTRO il test successivo: retry fantasma di GET /api/v1/sessions (AUTOMATIONS-09,
+ * «zero fetch» al tocco embedded) e, se la regola di mock c'era, perfino una EventSource fantasma sul
+ * mount nuovo (de-dup, «toHaveLength(1)» riceveva 2). Il trigger reale DENTRO questo file era HOOKS-05:
+ * selectSession SENZA la regola GET /api/v1/sessions, test finito prima del risveglio del backoff.
+ * La cura sta in app.js (flag runtimeDistrutto alzato dal distruttore, controllato a ogni risveglio —
+ * stessa classe del difetto del timer di boot corretto il 12/09); questa prova lo chiude dall'altra
+ * parte, col rimontaggio vero.
+ */
+describe('Harness UI — le catene di retry di caricaCronologiaSessione muoiono col runtime smontato (CI 15/9/2026)', () => {
+    beforeEach(() => {
+        // ⛔ Stesso motivo del describe "riprendiSessioneDalHost" qui sopra: il boot ha un
+        // window.setTimeout(...,0) che chiama aggiornaElencoSessioniReali()/renderAutomationsReali()
+        // se HOST() NON porta `talos-embedded` — fetch che qui scombussolerebbe i conteggi del test.
+        document.documentElement.classList.add('talos-embedded')
+    })
+
+    afterEach(() => {
+        document.documentElement.classList.remove('talos-embedded')
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
+        document.documentElement.removeAttribute('data-harness-session-id')
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+
+    it('⛔ AL CONTRARIO — una catena in backoff di un runtime DISTRUTTO non rilancia la fetch né apre una EventSource nel mount dopo', async () => {
+        document.documentElement.removeAttribute('data-harness-session-id') // isolamento: nessun test precedente lascia il suo id al boot di QUESTO mount
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        const fetchMock = mockFetch([{ metodo: 'GET', percorso: '/api/v1/doctor', corpo: {} }]) // NIENTE regola per GET /api/v1/sessions, come HOOKS-05: la catena entra in backoff
+        mountStaticRuntime()
+        runtime().selectSession({ id: '4d1136ce-e514-4e6e-944d-bd083bce224b', title: 'Sessione reale' })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(fetchMock).toHaveBeenCalledTimes(1) // il primo tentativo è già fallito: la catena dorme sul backoff di 1s
+
+        // Smontaggio e rimontaggio — ciò che HarnessSessionScreen.vue fa in onBeforeUnmount + remount.
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        mountStaticRuntime()
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: '4d1136ce-e514-4e6e-944d-bd083bce224b', taskId: 'elenca-file', nome: 'Elenca i file del workspace', forkDa: null, conclusa: false, avviataAlle: '2026-09-02T00:00:00.000Z' }] } },
+            { metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [] } },
+        ])
+        await new Promise((resolve) => setTimeout(resolve, 0)) // il boot del mount NUOVO (timer 0ms, già tacitato da talos-embedded) viene assorbito
+
+        const chiamateDopoIlBoot = fetchMock.mock.calls.length
+        // Il risveglio del backoff (1s dal primo tentativo) cade DENTRO questa attesa: senza la cura,
+        // la catena del runtime VECCHIO rilanciava apiGet QUI (fetch fantasma) e, trovando la sessione
+        // nell'elenco, passava da passaASessione: scriveva nel DOM del mount NUOVO e apriva la SUA
+        // EventSource — esattamente la firma dei due rossi di CI.
+        await new Promise((resolve) => setTimeout(resolve, 1100)) // 1s di backoff + margine
+
+        expect(fetchMock.mock.calls.length).toBe(chiamateDopoIlBoot) // ZERO fetch nuove al risveglio
+        expect(FakeEventSource.instances).toHaveLength(0) // e nessuna EventSource fantasma sul mount nuovo
+    })
+})

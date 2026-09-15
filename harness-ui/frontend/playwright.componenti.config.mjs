@@ -62,7 +62,9 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   reporter: [['list'], ['json', { outputFile: 'artifacts/parita-componenti.json' }]],
-  use: { channel: 'chrome', headless: true, trace: 'retain-on-failure' },
+  // Le fixture temporali sono istanti UTC; il mockup documenta il formato locale italiano.
+  // Fissare la zona rende la parita identica su workstation Windows e runner Linux.
+  use: { channel: 'chrome', headless: true, trace: 'retain-on-failure', timezoneId: 'Europe/Rome' },
   projects: viewports.map(([name, viewport]) => ({ name, use: { viewport } })),
   webServer: [
     {

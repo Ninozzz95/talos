@@ -146,7 +146,7 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ steps.dove.outputs.dir }}/package-lock.json
 
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: temurin
           java-version: '21'
@@ -350,7 +350,7 @@ jobs:
         with:
           subject-path: ${{ steps.apk.outputs.nome }}
 
-      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: ${{ steps.apk.outputs.nome }}
           generate_release_notes: true
@@ -539,7 +539,7 @@ jobs:
 
       - id: upload
         name: conserva gli artefatti della release
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: talos-desktop-${{ github.ref_name }}-windows-x64
           path: |
@@ -565,7 +565,7 @@ jobs:
 
       - name: conserva la prova dello smoke anche in caso di errore
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: talos-desktop-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: harness-ui/desktop/.prove/R04-ci-smoke.json
