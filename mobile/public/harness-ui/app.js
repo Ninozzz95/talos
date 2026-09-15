@@ -5907,7 +5907,9 @@
       let elenco;
       let ultimoErrore;
       for (let tentativo = 1; tentativo <= 3; tentativo += 1) {
-        if (state.realSession.caricamentoInCorsoPer !== sessionId) return; // superato nel frattempo, non vale nemmeno il prossimo tentativo
+        // ⛔ 15/09/2026 — runtimeDistrutto PRIMA di rilanciare la fetch: il risveglio dal backoff di un
+        // runtime già smontato non deve toccare la rete né il DOM (vedi la dichiarazione del flag).
+        if (runtimeDistrutto || state.realSession.caricamentoInCorsoPer !== sessionId) return; // superato nel frattempo, non vale nemmeno il prossimo tentativo
         try {
           elenco = (await apiGet('/api/v1/sessions')).items;
           ultimoErrore = null;
@@ -5934,7 +5936,9 @@
        * richiesta più recente?" — se un'altra è partita nel frattempo,
        * mi fermo senza toccare niente: ci pensa lei.
        */
-      if (state.realSession.caricamentoInCorsoPer !== sessionId) return;
+      // ⛔ 15/09/2026 — stessa guardia del loop: una catena smontata mentre l'ULTIMA fetch era in volo
+      // non deve né scrivere il DOM né aprire l'EventSource di passaASessione sotto.
+      if (runtimeDistrutto || state.realSession.caricamentoInCorsoPer !== sessionId) return;
       const sessione = elenco.find((candidata) => candidata.sessionId === sessionId);
       /*
        * ⭐⭐⭐ 2/9 — prima: "non fare niente", lasciando l'hero di
@@ -7280,6 +7284,14 @@
    */
   let hostResizeObserver = null;
   let bootTimerId = null; // il setTimeout(0) del boot, cancellato dal distruttore (12/09/2026)
+  // ⛔ 15/09/2026 — il backoff dei retry di caricaCronologiaSessione (1s/2s/3s sotto) è un timer che
+  // SOPRAVVIVE allo smontaggio: una catena sospesa sul suo setTimeout si risveglia DOPO
+  // __talosHarnessDestroy() (onBeforeUnmount di HarnessSessionScreen.vue) e rilancerebbe apiGet —
+  // fetch fantasma ed EventSource fantasma nel mondo della pagina NUOVA. Stessa classe del difetto
+  // del timer di boot corretto qui sopra il 12/09 ("rosso solo sotto carico"). Il distruttore alza
+  // questo flag; il loop lo controlla a ogni risveglio (pattern "ignore flag" del cleanup, react.dev,
+  // letto 15/09/2026).
+  let runtimeDistrutto = false;
 
   function syncHostLayout() {
     const host = HOST();
@@ -7363,6 +7375,9 @@
   };
   window.__talosHarnessDestroy = () => {
     if (bootTimerId !== null) { window.clearTimeout(bootTimerId); bootTimerId = null; }
+    // ⛔ 15/09/2026 — spegne anche le catene di caricaCronologiaSessione sospese sul backoff (1s/2s/3s):
+    // al prossimo risveglio vedono il flag e escono SENZA rilanciare apiGet (vedi la dichiarazione del flag).
+    runtimeDistrutto = true;
     cancelMotionAnimations();
     setEmbeddedTopbarHidden(false);
     embeddedHeaderScrollers.forEach((scroller) => {
