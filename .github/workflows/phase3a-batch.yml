@@ -27,3 +27,11 @@ jobs:
         run: npm ci --prefix context-engine --no-audit --no-fund
       - name: contratto batch Fase 3A
         run: node --test harness-ui/tests/http-routes-batch-phase3.test.mjs
+      - name: regressioni HTTP adiacenti
+        run: >-
+          node --test
+          harness-ui/tests/http-inventario-rotte.test.mjs
+          harness-ui/tests/http-routes-note-attivita-memoria.test.mjs
+          harness-ui/tests/http-routes-sessions.test.mjs
+          harness-ui/tests/http-routes-research.test.mjs
+          harness-ui/tests/http-routes-research-esportazioni.test.mjs
