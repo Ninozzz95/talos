@@ -5,7 +5,7 @@ on:
     branches: [fix/ci-linux-desktop-node-pty]
 
 jobs:
-  desktop:
+  desktop-core:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -20,17 +20,9 @@ jobs:
         run: npm ci --no-audit --no-fund
         working-directory: harness-ui
 
-      - name: dipendenze del frontend
-        run: npm ci --no-audit --no-fund
-        working-directory: harness-ui/frontend
-
       - name: dipendenze del motore di contesto
         run: npm ci --no-audit --no-fund
         working-directory: context-engine
-
-      - name: Chromium per i test frontend
-        run: node node_modules/playwright/cli.js install chromium
-        working-directory: harness-ui/frontend
 
       - name: server
         run: node --test tests/*.test.mjs
@@ -43,6 +35,33 @@ jobs:
       - name: il kernel del repo e quello della fonte
         run: npm run kernel:controlla
         working-directory: harness-ui
+
+  desktop-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: harness-ui/frontend/package-lock.json
+
+      - name: dipendenze del server per il banco browser
+        run: npm ci --ignore-scripts
+        working-directory: harness-ui
+
+      - name: dipendenze del frontend
+        run: npm ci
+        working-directory: harness-ui/frontend
+
+      - name: dipendenze del motore di contesto
+        run: npm ci
+        working-directory: context-engine
+
+      - name: Chromium e dipendenze di sistema
+        run: npx playwright install --with-deps chromium
+        working-directory: harness-ui/frontend
 
       - name: unit del frontend
         run: npm run test:unit
