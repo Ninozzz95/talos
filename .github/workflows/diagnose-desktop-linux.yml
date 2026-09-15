@@ -28,6 +28,10 @@ jobs:
         run: npm ci --no-audit --no-fund
         working-directory: context-engine
 
+      - name: Chromium per i test frontend
+        run: node node_modules/playwright/cli.js install chromium
+        working-directory: harness-ui/frontend
+
       - name: server
         run: node --test tests/*.test.mjs
         working-directory: harness-ui
@@ -42,10 +46,6 @@ jobs:
 
       - name: unit del frontend
         run: npm run test:unit
-        working-directory: harness-ui/frontend
-
-      - name: il browser
-        run: npx playwright install --with-deps chromium
         working-directory: harness-ui/frontend
 
       - name: build del frontend
