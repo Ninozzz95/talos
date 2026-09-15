@@ -24,7 +24,9 @@ test('PH-UI-BROWSER componenti reali: menu, azioni, tastiera, desktop, mobile e 
       // impacchettare. Senza questa riga esbuild lo legge come percorso su disco, arriva a
       // C:/talos/... e il cancello lo respinge: il test cadeva su una risorsa che nel browser
       // funziona benissimo. Stessa idea dei font qui sopra: cio' che serve la rete resta fuori.
-      if(args.path.startsWith('/'))return {path:args.path,external:true};
+      // Su POSIX anche l'entry point assoluto del CSS comincia con «/»: quello e' un FILE e deve
+      // restare interno al bundle. `kind` distingue i due casi senza dipendere dalla piattaforma.
+      if(args.kind!=='entry-point'&&args.path.startsWith('/'))return {path:args.path,external:true};
       const path=resolve(args.resolveDir||frontend,args.path);
       if(relative(frontend,path).startsWith('..'))throw new Error('Sorgente fuori dal frontend: ' + path + '  (chiesto da ' + (args.importer || 'ingresso') + ' come ' + args.path + ')');
       return {path,namespace:'ph'};
