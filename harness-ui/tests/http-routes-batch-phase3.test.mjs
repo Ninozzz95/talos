@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,12 +7,13 @@ import test from 'node:test';
 
 import { createHttpApp } from '../src/http-app.mjs';
 import { creaNota, elencaNote } from '../src/notes-store.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const SESSIONE = 'sess-phase3a';
 
 async function listen(t, { sessioni = [SESSIONE] } = {}) {
   const radice = mkdtempSync(join(tmpdir(), 'talos-phase3a-'));
-  t.after(() => rmSync(radice, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(radice));
   const cartelle = {
     cartellaNote: join(radice, 'note'),
     cartellaAttivita: join(radice, 'attivita'),
