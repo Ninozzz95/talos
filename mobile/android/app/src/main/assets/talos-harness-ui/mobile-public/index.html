@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#1e1f22" />
+  <title>TALOS Code</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M12 15h5"/></symbol>
+    <symbol id="i-files" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+    <symbol id="i-git" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="8" cy="19" r="2"/><path d="M6 7v4a4 4 0 0 0 4 4h2a6 6 0 0 0 6-6V8M8 17v-6"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M8 17c5 0 8-2 8-9"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m9 6 9 6-9 6V6Z"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="m4 4 17 8-17 8 3-8-3-8Z"/><path d="M7 12h14"/></symbol>
+<symbol id="i-chevron" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></symbol>
+<symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5L9.2 6a7 7 0 0 0-1.7 1l-2.4-1-2 3.4L5.1 11a7 7 0 0 0 0 2L3 14.5l2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 3.1h5l.4-3.1a7 7 0 0 0 1.7-1l2.4 1 2-3.4L18.9 13a7 7 0 0 0 .1-1Z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 7 3 7 3 8H3c0-1 3-1 3-8ZM10 21h4"/></symbol>
+    <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 6V5a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v14a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6Z"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.6 3 7.8 7.5 9.5 4.5-1.7 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-5"/></symbol>
+    <symbol id="i-brain" viewBox="0 0 24 24"><path d="M9 4a4 4 0 0 0-4 4v1a4 4 0 0 0 1 7.9V18a3 3 0 0 0 5 2.2V4.8A3 3 0 0 0 9 4ZM15 4a4 4 0 0 1 4 4v1a4 4 0 0 1-1 7.9V18a3 3 0 0 1-5 2.2V4.8A3 3 0 0 1 15 4Z"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+    <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M9 10h12"/></symbol>
+    <symbol id="i-robot" viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="12" rx="3"/><path d="M12 3v4M9 12h.01M15 12h.01M8 16h8"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1M14 10a5 5 0 0 1 0 7l-1 1a5 5 0 0 1-7-7l1-1"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m5 18 5-5 3 3 2-2 4 4"/></symbol>
+    <symbol id="i-web" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></symbol>
+    <symbol id="i-diff" viewBox="0 0 24 24"><path d="M6 3v12M6 7h6a4 4 0 0 1 4 4v2M4 18h4M16 17v4M14 19h4"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+    <symbol id="i-folder-open" viewBox="0 0 24 24"><path d="M3 8a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2l-1.5 7a2 2 0 0 1-2 1.6H6.5a2 2 0 0 1-2-1.6L3 8Z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v4h4"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  </svg>
+
+  <div id="app" class="app-shell">
+    <button class="overlay-backdrop" id="overlayBackdrop" aria-label="Close panels"></button>
+
+    <aside class="sessions-panel" id="sessionsPanel" aria-label="TALOS sessions" data-demo-surface="sessions">
+      <div class="brand-row">
+        <button class="icon-btn nav-close" data-close-panel="sessions" aria-label="Close sessions"><svg><use href="#i-x"/></svg></button>
+        <div class="brand-mark" aria-hidden="true"><span class="brand-glyph-mark"></span></div>
+        <div class="brand-copy"><strong>TALOS</strong><span>Code</span></div>
+        <button class="icon-btn" data-demo-action="notifications" aria-label="Demo notifications"><svg><use href="#i-bell"/></svg><span class="badge-dot">2</span></button>
+      </div>
+
+      <div class="session-actions">
+        <label class="search-field"><svg><use href="#i-search"/></svg><input id="sessionSearch" type="search" placeholder="Search chats..." aria-label="Search chats"/><kbd>⌘K</kbd></label>
+        <button class="primary-btn" id="newSessionBtn"><svg><use href="#i-plus"/></svg><span>New</span></button>
+      </div>
+
+      <div class="sidebar-caption">Press and hold a chat for actions.</div>
+      <nav class="session-list" id="sessionList">
+        <p class="board-empty" id="noSessionsPlaceholder">No sessions yet — press “New” to start.</p>
+      </nav>
+
+      <div class="attention-card">
+        <div><svg><use href="#i-clock"/></svg></div>
+        <div><strong>2 automazioni</strong><span>Next run 10:00</span></div>
+        <button class="text-btn" data-open-view="automations">Open</button>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="avatar"><span class="brand-glyph-mark"></span></div>
+        <div><strong>Local workspace</strong><small>Tema TALOS · locale</small></div>
+        <button class="icon-btn" data-open-view="settings" aria-label="Settings"><svg><use href="#i-settings"/></svg></button>
+      </div>
+      <div class="panel-resize-handle" id="sessionsResizeHandle" data-resize="sessions" role="separator" aria-orientation="vertical" aria-label="Resize the session panel" tabindex="0"></div>
+    </aside>
+
+    <main class="workspace-shell">
+      <header class="topbar">
+        <div class="topbar-left">
+<button class="icon-btn mobile-only" data-open-panel="sessions" aria-label="Open sessions"><svg class="sessions-menu-icon"><use href="#i-menu"/></svg><svg class="embedded-session-back-icon"><use href="#i-arrow-left"/></svg></button>
+          <button class="icon-btn desktop-only" id="sessionsCollapseBtn" aria-label="Collapse or expand the session list" aria-expanded="true"><svg><use href="#i-menu"/></svg></button>
+          <button class="title-button" id="sessionTitleButton" data-open-sheet="sessionTree" aria-haspopup="dialog" aria-label="Open session details and tree">
+            <span><strong id="sessionTitle" data-current-session-title>No sessions</strong><small id="sessionSubtitle">press “New” to start</small></span>
+            <svg><use href="#i-chevron"/></svg>
+          </button>
+        </div>
+        <div class="topbar-center">
+          <button class="mode-tab active" data-mode="chat" aria-pressed="true">Chat</button>
+          <button class="mode-tab" data-mode="terminal" aria-pressed="false">Terminal</button>
+          <button class="mode-tab" data-mode="dashboard" aria-pressed="false">Board</button>
+        </div>
+        <div class="topbar-right">
+          <button class="context-chip environment-chip" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span>wt/auth · feat/mobile</span></button>
+          <!-- ⭐ 29/8 — ledger §13: l'UNICO trigger di questo sheet viveva dentro .mission-card, il mockup che §9 sostituisce con l'hero per ogni sessione reale — irraggiungibile da quel momento in poi. Qui, in testata, resta sempre presente. -->
+          <button class="icon-btn" data-open-sheet="control" aria-label="Doctor and project hooks"><svg><use href="#i-more"/></svg></button>
+          <!--
+            ⭐ FASE M (29/8) — resumeSession()/compactSession() esistevano
+            già, testate, ma raggiungibili solo scrivendo un messaggio
+            (resume) o mai da un umano (compact, solo via ⌘K). Due
+            bottoni reali, stesse funzioni, nessuna duplicazione — vedi
+            app.js.
+          -->
+          <button class="icon-btn" id="resumeSessionBtn" aria-label="Resume this session"><svg><use href="#i-play"/></svg></button>
+          <button class="icon-btn" id="compactSessionBtn" aria-label="Compact the context"><svg><use href="#i-grid"/></svg></button>
+          <button class="icon-btn" id="commandPaletteBtn" aria-label="Commands"><svg><use href="#i-command"/></svg></button>
+          <button class="icon-btn desktop-context-toggle" data-open-panel="inspector" aria-label="Show or hide the inspector" aria-expanded="true"><svg><use href="#i-layout"/></svg></button>
+        </div>
+      </header>
+
+      <section class="run-strip" aria-label="Run state" hidden>
+        <button class="run-state" id="runStateToggle" type="button" aria-pressed="false" aria-label="Turn the follow-up queue on or off"><span class="status-pulse"></span><strong>Running</strong><span>—</span></button>
+        <div class="run-progress" role="progressbar" aria-label="Run progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="run-progress-value-0"></span></div>
+        <!-- ⛔⛔⛔ 3/9 — verificato dal vivo: aggiornaRunKpis() (app.js) cercava questi tre valori con $('[data-run-kpi="…"] b'), ma il markup non aveva MAI portato quell'attributo — sempre null, sempre "—" a schermo nonostante state.realSession.usage/erroriStrumento fossero corretti (giri:4, erroriStrumento:1, verificato via CDP sullo stato interno). Trovato SOLO dal dispositivo, non dai test (jsdom non distingue "selettore che non trova mai" da "selettore mai eseguito" se il test non controlla anche lo stato interno). -->
+        <div class="run-kpis">
+          <span data-run-kpi="step"><b>—</b> step</span>
+          <span data-run-kpi="ctx"><b>—</b> ctx</span>
+          <span data-run-kpi="errors"><b>—</b> errors</span>
+        </div>
+        <button class="icon-btn stop-run" aria-label="Stop the run"><svg><use href="#i-stop"/></svg></button>
+      </section>
+
+      <div class="content-stage" id="contentStage">
+        <section class="chat-view view-pane active" data-view="chat" data-demo-surface="chat">
+          <div class="conversation" id="conversation">
+            <div class="conversation-hero" id="conversationEmptyState">
+              <span class="hero-logo" aria-hidden="true"><span class="hero-logo-mark"></span></span>
+              <span class="hero-wordmark">TALOS</span>
+              <p class="hero-welcome-title">No active session.</p>
+              <p class="hero-subtitle">Premi «Nuova» in alto, scegli una cartella e scrivi cosa deve fare TALOS — oppure scrivi qui sotto per iniziare subito.</p>
+            </div>
+          </div>
+
+          <div class="composer-wrap">
+            <div class="queued-message" id="queuedMessage" data-demo-surface="queue"><span><b>Follow-up queued</b> · <span id="queuedMessageText">after the current run</span></span><button class="text-btn" id="cancelQueued">Cancel</button></div>
+            <form class="composer" id="composerForm">
+              <textarea id="composerInput" rows="1" placeholder="Message TALOS..." aria-label="Message"></textarea>
+              <button class="icon-btn composer-mic" type="button" aria-label="Voice"><svg><use href="#i-mic"/></svg></button>
+              <div class="composer-toolbar">
+                <button class="round-btn" type="button" id="capabilityBtn" aria-label="Add context"><svg><use href="#i-plus"/></svg></button>
+                <button class="selector-pill" type="button" data-open-sheet="model"><svg><use href="#i-brain"/></svg><span>gpt-5.6-sol · high</span><svg><use href="#i-chevron"/></svg></button>
+                <button class="selector-pill hide-on-narrow" type="button" data-open-sheet="permissions"><svg><use href="#i-shield"/></svg><span>Workspace write</span><svg><use href="#i-chevron"/></svg></button>
+                <button class="selector-pill hide-on-mid" type="button" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span>feat/mobile-code</span></button>
+                <div class="composer-spacer"></div>
+                <button class="queue-toggle" type="button" id="queueToggle" title="Send as a follow-up" aria-pressed="false">Follow-up</button>
+                <button class="send-btn" type="submit" aria-label="Send"><svg><use href="#i-send"/></svg></button>
+              </div>
+            </form>
+            <div class="composer-status">
+              <span>Tema TALOS · locale</span><span>18.7k / 128k</span><span class="desktop-only">↑ 142 tok/s</span><span class="desktop-only">cache 78%</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="view-pane" data-view="diff" data-demo-surface="diff">
+          <div class="review-shell">
+            <div class="view-heading"><div><span class="eyebrow">Review center</span><h2>3 file modificati</h2><p>A gate before you finish: diff, tests and risk.</p></div><button class="primary-btn compact" id="approveAllDiffs">Approve all</button></div>
+            <div class="review-summary">
+              <div><span id="reviewSummaryNuovi">+68</span><small>new</small></div><div><span id="reviewSummaryModificati">−31</span><small>changed</small></div><div data-review-stat="test"><span>6/6</span><small>test</small></div><div data-review-stat="risk"><span>Low</span><small>risk</small></div>
+            </div>
+            <div class="file-review-list">
+              <button class="file-review active" data-review-file="composer" aria-pressed="true"><span><svg><use href="#i-diff"/></svg><strong>TalosComposer.vue</strong></span><span class="diff-stats">+28 −19</span></button>
+              <button class="file-review" data-review-file="layout" aria-pressed="false"><span><svg><use href="#i-diff"/></svg><strong>chat-layout.css</strong></span><span class="diff-stats">+32 −8</span></button>
+              <button class="file-review" data-review-file="tests" aria-pressed="false"><span><svg><use href="#i-diff"/></svg><strong>composer.spec.ts</strong></span><span class="diff-stats">+8 −4</span></button>
+            </div>
+            <div class="diff-panel">
+              <div class="diff-toolbar"><span id="diffPath">src/components/chat/TalosComposer.vue</span><div><button class="secondary-btn compact" data-review-action="comment">Comment</button><button class="secondary-btn compact" data-review-action="open">Open file</button></div></div>
+              <pre><code id="diffCode"><span class="ctx">@@ composer layout @@</span>
+<span class="del">- .composer { grid-template-columns: 48px 1fr auto auto; }</span>
+<span class="add">+ .composer { container-type: inline-size; }</span>
+<span class="add">+ .composer-toolbar { grid-template-columns: 48px minmax(0, 1fr) 48px; }</span>
+<span class="add">+ @container (max-width: 560px) {</span>
+<span class="add">+   .secondary-context { display: none; }</span>
+<span class="add">+ }</span>
+<span class="ctx"> </span>
+<span class="ctx">@@ safe area @@</span>
+<span class="add">+ padding-bottom: max(12px, env(safe-area-inset-bottom));</span></code></pre>
+            </div>
+          </div>
+        </section>
+
+        <section class="view-pane" data-view="terminal" data-demo-surface="terminal">
+          <div class="terminal-shell">
+            <div class="view-heading"><div><span class="eyebrow">Built-in terminal</span><h2>talos · feat/mobile-code</h2></div><span class="status-chip">pty demo</span></div>
+            <pre class="terminal-window"><code><span class="prompt">antonino@talos</span> <span class="path">~/dev/talos</span> <span class="branch">feat/mobile-code</span>
+$ npm run test:unit -- composer
+
+ PASS  tests/unit/chat/composer.spec.ts
+  ✓ keeps 48px touch targets at 360px
+  ✓ respects safe-area inset
+  ✓ hides secondary pills under 560px
+  ✓ command palette remains keyboard reachable
+
+ Test Files  1 passed (1)
+ Tests       6 passed (6)
+ Duration    8.42s
+
+<span class="prompt">antonino@talos</span> <span class="path">~/dev/talos</span> <span class="branch">feat/mobile-code</span>
+$ <span class="cursor"> </span></code></pre>
+            <!--
+              ⭐ 4/9, owner (LEDGER §76.2): "nel terminale puoi vedere i
+              comandi ma non scrivere comandi tu stesso, errore critico
+              io devo poter scrivere". La capacità di eseguire un
+              comando scelto dalla persona esisteva già lato server
+              (session-registry.mjs `shell()`, raggiunta oggi solo da
+              "!comando" nel composer della chat) — qui la stessa
+              chiamata (runDirectShell) diventa raggiungibile da QUESTA
+              vista, dove "Terminal" la fa davvero aspettare.
+            -->
+            <form class="terminal-composer" data-terminal-composer>
+              <span class="terminal-composer-prompt" aria-hidden="true">$</span>
+              <input type="text" class="terminal-composer-input" data-terminal-input
+                placeholder="Type a command…" autocomplete="off" autocorrect="off"
+                autocapitalize="off" spellcheck="false" inputmode="text"
+                aria-label="Command to run on the device">
+              <button type="submit" class="terminal-composer-send" aria-label="Run command"><svg aria-hidden="true"><use href="#i-send"/></svg></button>
+            </form>
+            <p class="terminal-composer-hint" data-terminal-hint hidden></p>
+          </div>
+        </section>
+
+        <section class="view-pane" data-view="browser" data-demo-surface="browser">
+          <div class="browser-shell">
+            <div class="browser-bar"><div class="browser-nav"><button data-browser-action="back" aria-label="Back">‹</button><button data-browser-action="forward" aria-label="Forward">›</button><button data-browser-action="reload" aria-label="Reload">↻</button></div><div class="browser-url"><span class="status-pulse"></span>127.0.0.1:4173/chat</div><div class="browser-tools"><button class="secondary-btn compact" data-browser-action="annotate">Annotate</button><button class="secondary-btn compact" data-browser-action="inspect">Inspect</button></div></div>
+            <div class="device-preview">
+              <div class="phone-frame">
+                <div class="phone-status"><span>09:41</span><span>5G · 87%</span></div>
+                <div class="phone-header"><span class="mini-brand"><span class="brand-glyph-mark"></span></span><strong>TALOS</strong><span>•••</span></div>
+                <div class="phone-chat">
+                  <div class="phone-user">Fix the composer without losing context.</div>
+                  <div class="phone-agent"><span class="mini-brand"><span class="brand-glyph-mark"></span></span><p>Ho preservato modello, permessi e branch in un'area compatta e sempre accessibile.</p></div>
+                  <div class="phone-tool"><span>✓ Edit</span><strong>TalosComposer.vue</strong><small>+28 −19</small></div>
+                </div>
+                <div class="phone-composer"><span>Message TALOS...</span><span class="phone-send-preview" aria-hidden="true">↑</span><div class="phone-composer-meta"><span>+ </span><span>gpt-5.6-sol</span><span>workspace</span></div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view-pane" data-view="dashboard" data-demo-surface="board">
+          <div class="dashboard-shell">
+            <div class="view-heading board-heading">
+              <div><span class="eyebrow" id="boardEyebrow">Code board</span><h2 id="boardTitle">Local benchmark runs</h2><p id="boardDescription">Local reads, a fixed allowlist, and nothing executed here.</p></div>
+              <div class="board-heading-actions"><button class="secondary-btn compact" type="button" data-action="clear-evidence">Clear evidence</button><button class="primary-btn compact" type="button" data-action="refresh-campaign"><svg><use href="#i-history"/></svg>Refresh</button></div>
+            </div>
+
+            <section class="campaign-controls" data-real-surface="campaigns" aria-label="Pick a run">
+              <label><span>Run</span><select id="campaignSelect"><option>Loading…</option></select></label>
+              <label><span>Code</span><select id="harnessFilter"><option value="">All</option></select></label>
+              <label><span>Outcome</span><select id="outcomeFilter"><option value="">All</option></select></label>
+              <div class="campaign-connection"><span class="connection-dot"></span><strong data-connection-state="idle">Not connected</strong><small id="campaignReadMeta">Open the Board with the local server running.</small></div>
+            </section>
+
+            <section class="campaign-summary" data-real-surface="summary" aria-label="Run summary" aria-live="polite">
+              <article><span>Rows</span><strong id="summaryTotal">—</strong><small>observed</small></article>
+              <article><span>Measured</span><strong id="summaryMeasured">—</strong><small>binary outcomes</small></article>
+              <article><span>Pass rate</span><strong id="summaryPassRate">—</strong><small>majority of turns</small></article>
+              <article><span>Canonical cost</span><strong id="summaryCost">—</strong><small id="summaryCostSource">run file</small></article>
+              <article><span>Diagnostics</span><strong id="summaryDiagnostics">—</strong><small>flagged rows</small></article>
+            </section>
+
+            <div class="campaign-data-grid">
+              <section class="campaign-runs" data-real-surface="runs" aria-label="Run rows">
+                <div class="campaign-section-head"><div><span class="eyebrow">Observed runs</span><h3>JSONL results</h3></div><span id="campaignRunCount">0 righe</span></div>
+                <div class="campaign-run-list" id="campaignRunList"><p class="board-empty">Pick a run to read its results.</p></div>
+                <button class="secondary-btn full" type="button" data-action="load-more-runs" hidden>Load more</button>
+              </section>
+
+              <section class="campaign-report" data-real-surface="report" aria-label="Run report">
+                <div class="campaign-section-head"><div><span class="eyebrow">Existing contract</span><h3>rapporto.txt</h3></div><span id="campaignReportState" class="status-chip">Waiting</span></div>
+                <pre id="campaignReportText">No report produced yet</pre>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="view-pane" data-view="automations" data-demo-surface="automations">
+          <div class="generic-shell">
+            <div class="view-heading"><div><span class="eyebrow">Automations</span><h2>Scheduled runs</h2><p>Isolated tasks, each with its own state, history and model.</p></div><button class="primary-btn compact" data-automation-action="new">New automation</button></div>
+            <div class="automation-list">
+              <article class="automation-row"><div class="automation-icon"><svg><use href="#i-clock"/></svg></div><div><strong>Tiered discount</strong><small>Task reale del corpus · avvio manuale, non ancora su una schedulazione vera</small></div><span class="status-chip">Real task</span><button class="secondary-btn compact" data-automation-action="run" data-task-id="sconto-a-scaglioni">Run now</button></article>
+            </div>
+            <div class="automation-list" id="automationListReal"></div>
+          </div>
+        </section>
+
+        <section class="view-pane" data-view="settings">
+          <div class="generic-shell">
+            <div class="view-heading"><div><span class="eyebrow">TALOS</span><h2>Code settings</h2><p>The surface follows the active TALOS theme tokens.</p></div></div>
+            <div class="settings-grid">
+              <article class="settings-card"><h3>Appearance</h3><div class="setting-line"><span>Preset</span><strong>Tema TALOS</strong></div><div class="theme-swatch"><span></span><span></span><span></span><span></span></div><small>Colour, type, radius and density tokens, inherited</small></article>
+              <article class="settings-card"><h3>Interaction</h3><label><span>Reduce motion</span><input type="checkbox" id="reducedMotionToggle"/></label><p class="muted-copy">Diffs expanded by default and compact tool activity: not implemented yet.</p></article>
+              <article class="settings-card"><h3>Agentic</h3><p class="muted-copy">La verifica prima di "fatto" (il cancello semantico) è sempre attiva — non è un'opzione da spegnere. Sotto-agenti e steering queue: non ancora implementati.</p></article>
+              <article class="settings-card control-plane-card"><h3>Control plane</h3><p class="muted-copy">Everything the CLI does, without forcing you into a terminal.</p><div class="control-grid"><button data-open-sheet="control">Agents</button><button data-open-sheet="control">Hooks</button><button data-open-sheet="capabilities">Skills</button><button data-open-sheet="capabilities">Plugins</button><button data-open-sheet="capabilities">MCP</button><button data-control-action="doctor">Doctor</button></div></article>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <aside class="inspector-panel" id="inspectorPanel" aria-label="Inspector">
+      <div class="panel-resize-handle" id="inspectorResizeHandle" data-resize="inspector" role="separator" aria-orientation="vertical" aria-label="Resize the inspector" tabindex="0"></div>
+      <div class="inspector-head">
+        <div><span class="eyebrow">Context rail</span><strong>Session</strong></div>
+        <button class="icon-btn nav-close" data-close-panel="inspector" aria-label="Close inspector"><svg><use href="#i-x"/></svg></button>
+      </div>
+      <div class="inspector-tabs" role="tablist" aria-label="Session inspector">
+        <button class="active" id="inspector-tab-context" role="tab" aria-selected="true" aria-controls="inspector-context" data-inspector-tab="context">Context</button>
+        <button id="inspector-tab-files" role="tab" aria-selected="false" aria-controls="inspector-files" data-inspector-tab="files">Files</button>
+        <button id="inspector-tab-agents" role="tab" aria-selected="false" aria-controls="inspector-agents" data-inspector-tab="agents">Agents</button>
+      </div>
+      <div class="inspector-body">
+        <section class="inspector-section active" id="inspector-context" role="tabpanel" aria-labelledby="inspector-tab-context" data-inspector-section="context" data-demo-surface="inspector-context">
+          <div class="inspector-card">
+            <div class="card-title"><span>Environment</span><svg><use href="#i-branch"/></svg></div>
+            <!-- ⭐⭐⭐ 3/9 — avm-03, dal vivo: al resume con server non ancora pronto questi quattro valori mostravano dati d'esempio (talos/feat/mobile-code/wt/auth-61c/~/dev/talos) accanto a un badge onesto "Demo UI · not connected" — sembravano veri, non lo erano. aggiornaPannelloAmbiente() (app.js) li sostituisce SOLO quando arriva un RunStarted vero; prima di allora (boot, o un resume ancora in attesa del server) questi default devono essere onesti quanto il badge, non un esempio verosimile. '—' è la stessa convenzione già usata da quella funzione per "worktree" (mai un repository git in questo corpus). -->
+            <dl><div><dt>Workspace</dt><dd id="envWorkspace">—</dd></div><div><dt>Branch</dt><dd id="envBranch">—</dd></div><div><dt>Worktree</dt><dd id="envWorktree">—</dd></div><div><dt>Root</dt><dd id="envRoot">—</dd></div></dl>
+          </div>
+          <div class="inspector-card">
+            <div class="card-title"><span>Capability</span><svg><use href="#i-link"/></svg></div>
+            <div class="capability-row"><span>Tools</span><b>7</b></div><div class="capability-row"><span>MCP</span><b>0</b></div><div class="capability-row"><span>Web search</span><b>—</b></div><div class="capability-row"><span>Browser</span><b>Scoped</b></div>
+            <button class="secondary-btn full" id="manageCapabilitiesBtn">Manage capabilities</button>
+          </div>
+          <div class="inspector-card">
+            <div class="card-title"><span>Memory</span><svg><use href="#i-brain"/></svg></div>
+            <p class="muted-copy">Not implemented yet — this agent has no project memory system today.</p>
+          </div>
+          <div class="inspector-card session-topology">
+            <div class="card-title"><span>Session topology</span><svg><use href="#i-branch"/></svg></div>
+            <div class="topology-row root"><span class="topology-node"></span><div><strong data-current-session-title>No sessions</strong><small>current session</small></div></div>
+            <p class="muted-copy">Delegations to isolated sub-agents (the delega_sottotask tool) appear in the "Session tree" sheet — open the session title above.</p>
+            <div class="topology-actions"><button class="secondary-btn compact" data-action="fork-session">Fork this session</button></div>
+          </div>
+        </section>
+        <section class="inspector-section" id="inspector-files" role="tabpanel" aria-labelledby="inspector-tab-files" data-inspector-section="files" data-demo-surface="inspector-files">
+          <div class="ft-search-row">
+            <svg class="ft-search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+            <input type="text" id="fileTreeFilter" class="ft-search-input" placeholder="Filter loaded files…" aria-label="Filter files by name" autocomplete="off" spellcheck="false">
+          </div>
+          <p class="ft-search-hint" id="fileTreeFilterHint" aria-live="polite"></p>
+          <div class="ft-legend">
+            <span class="ft-legend-new"><i></i>new</span>
+            <span class="ft-legend-modified"><i></i>changed</span>
+          </div>
+          <div class="file-tree">
+            <div class="tree-root"><svg><use href="#i-files"/></svg><strong>talos</strong></div>
+            <button data-file-entry="src">src/</button><button class="nested" data-file-entry="components">components/</button><button class="nested deep active" data-file-entry="composer">TalosComposer.vue <span>+28 −19</span></button><button class="nested deep" data-file-entry="chat-shell">ChatShell.vue</button><button data-file-entry="tests">tests/</button><button class="nested" data-file-entry="composer-tests">composer.spec.ts <span>+8 −4</span></button>
+          </div>
+        </section>
+        <section class="inspector-section" id="inspector-agents" role="tabpanel" aria-labelledby="inspector-tab-agents" data-inspector-section="agents" data-demo-surface="inspector-agents">
+          <p class="board-empty">Non ancora implementato — TALOS non delega a sotto-agenti oggi, un solo modello guida l'intero task.</p>
+        </section>
+      </div>
+    </aside>
+
+    <nav class="mobile-nav" aria-label="Mobile navigation">
+      <button class="active" data-mobile-view="chat" aria-current="page"><svg><use href="#i-list"/></svg><span>Chat</span></button>
+      <button data-mobile-view="diff"><svg><use href="#i-diff"/></svg><span>Review</span></button>
+      <button data-mobile-view="terminal"><svg><use href="#i-terminal"/></svg><span>Terminal</span></button>
+      <button data-mobile-view="browser"><svg><use href="#i-web"/></svg><span>Browser</span></button>
+      <button data-open-panel="inspector"><svg><use href="#i-grid"/></svg><span>More</span></button>
+    </nav>
+  </div>
+
+  <button class="harness-dialog-backdrop" id="harnessDialogBackdrop" type="button" aria-label="Close the Code window" hidden></button>
+
+  <dialog class="command-dialog" id="commandDialog" aria-labelledby="commandDialogTitle">
+    <h2 class="sr-only" id="commandDialogTitle">TALOS commands</h2>
+    <div class="command-search"><svg><use href="#i-search"/></svg><input id="commandSearch" aria-label="Search a command or action" placeholder="Search a command or action..." autocomplete="off"/><button class="command-close" id="closeCommand" type="button" aria-label="Close commands"><svg><use href="#i-x"/></svg></button></div>
+    <div class="command-results" id="commandResults">
+      <button data-command="new"><span><svg><use href="#i-plus"/></svg>New session</span><kbd>⌘N</kbd></button>
+      <button data-command="review"><span><svg><use href="#i-diff"/></svg>Open review</span><kbd>⌘R</kbd></button>
+      <button data-command="terminal"><span><svg><use href="#i-terminal"/></svg>Open terminal</span><kbd>⌘T</kbd></button>
+      <button data-command="browser"><span><svg><use href="#i-web"/></svg>Open browser</span><kbd>⌘B</kbd></button>
+      <!-- ⛔ 28/8, ledger Fase 1/resume-compact §3.B: 'resume' non era nemmeno un comando riconosciuto. Icona i-play: stessa del bottone topbar #resumeSessionBtn (FASE M, 29/8). -->
+      <button data-command="resume"><span><svg><use href="#i-play"/></svg>Resume session</span><kbd>R</kbd></button>
+      <button data-command="fork"><span><svg><use href="#i-branch"/></svg>Fork session</span><kbd>F</kbd></button>
+      <button data-command="compact"><span><svg><use href="#i-brain"/></svg>Compact context</span><kbd>C</kbd></button>
+      <button data-command="permissions"><span><svg><use href="#i-shield"/></svg>Permissions</span><kbd>P</kbd></button>
+      <button data-command="dashboard"><span><svg><use href="#i-grid"/></svg>Session board</span><kbd>D</kbd></button>
+      <button data-command="tree"><span><svg><use href="#i-branch"/></svg>Session tree and side threads</span><kbd>Y</kbd></button>
+      <button data-command="skills"><span><svg><use href="#i-bolt"/></svg>Skills, MCP, plugins and gateways</span><kbd>S</kbd></button>
+      <button data-command="control"><span><svg><use href="#i-settings"/></svg>Agents, hooks and doctor</span><kbd>G</kbd></button>
+      <button data-command="rename"><span><svg><use href="#i-list"/></svg>Rename session</span><kbd>N</kbd></button>
+      <button data-command="export"><span><svg><use href="#i-copy"/></svg>Export session</span><kbd>E</kbd></button>
+      <button data-command="share"><span><svg><use href="#i-link"/></svg>Share snapshot</span><kbd>H</kbd></button>
+      <div class="command-empty" id="commandEmpty" hidden>No command matches your search.</div>
+    </div>
+  </dialog>
+
+  <dialog class="sheet-dialog" id="sheetDialog" aria-labelledby="sheetTitle" data-demo-surface="dynamic-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head"><div><span class="eyebrow" id="sheetEyebrow">Context</span><h2 id="sheetTitle">Capability</h2></div><button class="icon-btn" id="closeSheet" aria-label="Close panel"><svg><use href="#i-x"/></svg></button></div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </dialog>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>

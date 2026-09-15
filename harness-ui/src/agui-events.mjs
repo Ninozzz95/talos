@@ -1,0 +1,406 @@
+/**
+ * agui-events.mjs — traduttori PURI da forme interne di talosHarness.mjs
+ * allo schema pubblico AG-UI (Agent User Interaction Protocol).
+ *
+ * ⛔ Zero dipendenze da talosLavora: ogni funzione qui prende dati già
+ * pronti (la risposta OpenAI-shaped, un id, un esito) e restituisce
+ * SOLO oggetti piatti — nessuna chiamata di rete, nessun I/O, nessuno
+ * stato. Per questo si prova con un evento finto per riga, senza mai
+ * far girare un vero talosLavora (vedi il piano, §1.6, punto 1).
+ *
+ * Schema verificato il 24/8 su docs.ag-ui.com/concepts/events — nomi di
+ * campo esatti, non inventati. Vedi il piano (elegant-spinning-dongarra.md),
+ * §1.2, per la tabella completa evento-per-evento con la fonte, e §0.1
+ * per il perché SSE (non WebSocket) è il trasporto scelto: la ricerca
+ * del 24/8 conferma che la maggioranza delle implementazioni AG-UI usa
+ * SSE per il canale server→client, e l'unico segnale client→server che
+ * questa fase richiede ("stop") è raro e non a bassa latenza, quindi
+ * viaggia come POST separato invece di aprire un canale bidirezionale.
+ */
+
+import { ContextEventV1 } from '../../context-engine/src/contracts.mjs';
+
+/** AG-UI CUSTOM ufficiale; l'identita persistita resta nel payload TALOS v1. */
+export function contextEngineEvent(input) {
+    const value = ContextEventV1.parse(structuredClone(input));
+    return { type: 'CUSTOM', name: 'talos.context', timestamp: Date.parse(value.createdAt), value };
+}
+
+export function runStarted({ threadId, runId, input, contesto }) {
+    const evento = { type: 'RunStarted', threadId, runId }
+    if (input !== undefined) evento.input = input
+    /*
+     * ⭐ `contesto` — {progetto, cartella, branch} da workspace-context.mjs —
+     * non fa parte dello schema pubblico AG-UI (che non prevede un campo per
+     * "dove sta girando", solo "cosa sta facendo"): è un'estensione
+     * dichiarata, nello spirito di "loose event format matching" che AG-UI
+     * stesso permette (ricerca del piano, §0.1). Solo se presente: il primo
+     * chiamante di questa funzione (i test) non deve saperne niente.
+     */
+    if (contesto !== undefined) evento.contesto = contesto
+    return evento
+}
+
+export function runFinished({ threadId, runId, outcome, result }) {
+    const evento = { type: 'RunFinished', threadId, runId }
+    if (outcome !== undefined) evento.outcome = outcome
+    if (result !== undefined) evento.result = result
+    return evento
+}
+
+export function runError({ message, code }) {
+    const evento = { type: 'RunError', message }
+    if (code !== undefined) evento.code = code
+    return evento
+}
+
+/**
+ * Lifecycle AVM-owned del reindirizzamento di un giro attivo. AG-UI non
+ * definisce ancora un contratto equivalente per il reindirizzamento di
+ * un turno attivo: questi eventi restano quindi estensioni dichiarate, come ApprovalRequested e
+ * QueuedMessageDelivered. `redirectId` correla richiesta ed esito senza
+ * affidarsi alla posizione nel buffer; `testo` compare solo negli eventi
+ * che rappresentano un input utente effettivo.
+ */
+export function runRedirectRequested({ redirectId, testo }) {
+    return { type: 'RunRedirectRequested', redirectId, testo }
+}
+
+export function runRedirectApplied({ redirectId, testo, immagini = [] }) {
+    return { type: 'RunRedirectApplied', redirectId, testo, ...(immagini.length ? { immagini } : {}) }
+}
+
+export function runRedirectCancelled({ redirectId }) {
+    return { type: 'RunRedirectCancelled', redirectId }
+}
+
+export function runRedirectFailed({ redirectId, message, code }) {
+    const evento = { type: 'RunRedirectFailed', redirectId, message }
+    if (code !== undefined) evento.code = code
+    return evento
+}
+
+export function textMessageStart({ messageId, role = 'assistant' }) {
+    return { type: 'TextMessageStart', messageId, role }
+}
+
+export function textMessageContent({ messageId, delta }) {
+    return { type: 'TextMessageContent', messageId, delta }
+}
+
+export function textMessageEnd({ messageId }) {
+    return { type: 'TextMessageEnd', messageId }
+}
+
+/**
+ * ⭐⭐⭐ 27/8, piano sezione "RICOGNIZIONE COMPETITIVA" (R1) — verificato
+ * su docs.ag-ui.com/concepts/events (WebFetch, non assunto): questi TRE
+ * eventi esistono davvero nello schema pubblico, stesso schema
+ * Start/Content/End di TextMessage*, `role:'reasoning'` fisso. La doc
+ * segnala che i vecchi eventi `THINKING_*` sono deprecati a favore di
+ * questi — REASONING_* è la forma corrente.
+ */
+export function reasoningMessageStart({ messageId }) {
+    return { type: 'ReasoningMessageStart', messageId, role: 'reasoning' }
+}
+
+export function reasoningMessageContent({ messageId, delta }) {
+    return { type: 'ReasoningMessageContent', messageId, delta }
+}
+
+export function reasoningMessageEnd({ messageId }) {
+    return { type: 'ReasoningMessageEnd', messageId }
+}
+
+export function toolCallStart({ toolCallId, toolCallName, parentMessageId }) {
+    const evento = { type: 'ToolCallStart', toolCallId, toolCallName }
+    if (parentMessageId !== undefined) evento.parentMessageId = parentMessageId
+    return evento
+}
+
+export function toolCallArgs({ toolCallId, delta }) {
+    return { type: 'ToolCallArgs', toolCallId, delta }
+}
+
+/**
+ * ⭐⭐⭐ D-10B — l'uscita di un comando MENTRE esce.
+ *
+ * ⛔ Non e' un `ToolCallResult` parziale: quello e' l'esito, arriva una volta sola e ha un
+ *   `messageId` perche' entra nella conversazione come messaggio di ruolo `tool`. Questo invece e'
+ *   avanzamento — si mostra e si dimentica, e il testo definitivo resta quello del risultato.
+ *   Tenerli distinti e' la ragione per cui un consumer vecchio, che non conosce questo tipo, lo
+ *   ignora e continua a vedere esattamente cio' che vedeva prima.
+ * Ricerca 10/09/2026: AG-UI definisce «a vocabulary of typed events that agents emit to frontends»
+ * e tiene separati i chunk di avanzamento dai messaggi finali; Vercel Academy, «Streaming and Tool
+ * Rendering», per la stessa distinzione lato resa.
+ */
+/**
+ * ⭐⭐⭐ D-10D — UN COMANDO SCRITTO DALLA PERSONA NON È UN GIRO DEL MODELLO.
+ *
+ * ⛔ Prima si travestiva da giro: `eseguiComandoDiretto` emetteva `RunStarted`/`RunFinished`, e
+ *   `shell()` metteva `voce.conclusa = false` per la sua durata. Da lì **sette lettori del registro
+ *   credevano a una bugia** — il watcher del workspace si spegneva a metà scrittura,
+ *   `resume`/`fork`/`compatta` diventavano leciti su una sessione viva, `reindirizza` rifiutava, la
+ *   barra dava la sessione per finita. E il prezzo più alto lo pagava chi scrive: col modello al
+ *   lavoro il `!` veniva respinto («la sessione è ancora in corso»), perché due giri insieme non si
+ *   possono raccontare con un vocabolario che ne conosce uno solo.
+ *
+ * ⇒ Due operazioni distinte sulla stessa sessione, ognuna col suo vocabolario. È la forma che usa
+ *   AWS Bedrock AgentCore (docs.aws.amazon.com, «Execute shell commands in AgentCore Runtime
+ *   sessions», letto il 10/09/2026): `InvokeAgentRuntime` per il ragionamento e
+ *   `InvokeAgentRuntimeCommand` per la shell deterministica, con la garanzia dichiarata che
+ *   «command execution doesn't block agent invocations, and you can invoke the agent and run
+ *   commands concurrently on the same session».
+ *
+ * ⛔ `comandoId` e non `runId`: sono due spazi di nomi diversi, e confonderli riporterebbe il
+ *   difetto da un'altra porta.
+ */
+export function comandoUtenteIniziato({ comandoId, comando }) {
+    return { type: 'ComandoUtenteIniziato', comandoId, comando: String(comando ?? '') }
+}
+
+export function comandoUtenteFinito({ comandoId, codice, enforcement, errore }) {
+    const evento = { type: 'ComandoUtenteFinito', comandoId }
+    if (codice !== undefined) evento.codice = codice
+    if (enforcement !== undefined) evento.enforcement = enforcement
+    /* ⛔ Un comando che non è nemmeno partito lo DICE qui: senza, resterebbe indistinguibile da uno
+       finito bene e muto — la stessa confusione che `codice: null` faceva in D-10G. */
+    if (errore !== undefined) evento.errore = String(errore)
+    return evento
+}
+
+export function toolCallOutput({ toolCallId, delta }) {
+    return { type: 'ToolCallOutput', toolCallId, delta: String(delta ?? '') }
+}
+
+export function toolCallResult({ messageId, toolCallId, content, role = 'tool' }) {
+    return { type: 'ToolCallResult', messageId, toolCallId, content, role }
+}
+
+export function stateDelta({ delta }) {
+    return { type: 'StateDelta', delta }
+}
+
+/**
+ * ⭐⭐⭐ 28/8 — `ArtifactCreated`. ⛔ NON è nello schema pubblico AG-UI
+ * (verificato il 24/8 su docs.ag-ui.com/concepts/events per gli eventi
+ * sopra: non esiste un evento per "un documento HTML autosufficiente da
+ * mostrare"): stessa estensione dichiarata di `contesto` su RunStarted,
+ * stesso spirito "loose event format matching".
+ *
+ * ⛔⛔ NIENTE `html` qui dentro — cambiato dopo la prima versione,
+ * misurato dal vivo: `html` viaggiava nell'evento SSE e il frontend lo
+ * passava a `iframe.srcdoc`, ma un `srcdoc` eredita la CSP della pagina
+ * (vedi artifact-store.mjs) — lo script del modello non partiva mai.
+ * La cura è servire l'HTML da una rotta HTTP vera
+ * (`GET /api/v1/artifacts/:id`, la sua CSP dedicata), quindi qui basta
+ * l'`id`: il frontend punta `iframe.src` lì, il browser fa il resto.
+ */
+export function artifactCreated({ messageId, id, titolo }) {
+    return { type: 'ArtifactCreated', messageId, id, titolo }
+}
+
+/**
+ * ⭐⭐⭐ 28/8 — workspace-watcher.mjs: i file sono cambiati FUORI
+ * dall'app (Explorer, un editor, git...), owner 27/8: "se muovo i
+ * file il work tree non si aggiorna automaticamente". Fuori dallo
+ * schema pubblico AG-UI (stessa estensione già dichiarata per
+ * `ArtifactCreated`) — `percorsi` sono i percorsi RELATIVI coinvolti,
+ * già debounced/deduplicati dal watcher; il frontend oggi li usa solo
+ * per decidere SE invalidare (mai un diff fine, vedi app.js), ma sono
+ * inoltrati comunque: costano poco e un consumo più preciso è lavoro
+ * futuro, non una riscrittura del contratto.
+ */
+export function workspaceChanged({ percorsi }) {
+    return { type: 'WorkspaceChanged', percorsi }
+}
+
+/**
+ * ⭐⭐⭐ 28/8 — la pillola permessi, livello "On request": il kernel chiama
+ * `chiediApprovazioneFn(azione)` PRIMA di scrivi/shell/document_create
+ * (talosHarness.mjs, `verificaPermessoScrittura`) e resta in attesa —
+ * questo evento è come quell'attesa diventa visibile a chi guarda la
+ * sessione dal vivo. Fuori dallo schema pubblico AG-UI (stessa estensione
+ * già dichiarata per ArtifactCreated/WorkspaceChanged): non esiste un
+ * evento AG-UI per "il run è in pausa in attesa di un umano".
+ *
+ * `requestId` è come il frontend risponde (`POST .../approve`, vedi
+ * http-app.mjs) — necessario perché una risposta in ritardo/duplicata non
+ * deve mai risolvere la richiesta SUCCESSIVA per errore (session-registry.mjs
+ * verifica che l'id combaci prima di risolvere la Promise in attesa).
+ * `azione` è esattamente ciò che talosHarness.mjs passa al callback:
+ * `{tipo, percorso?, comando?, formato?}` — abbastanza per mostrare
+ * all'owner COSA sta per succedere prima che lui decida.
+ */
+export function approvalRequested({ requestId, azione }) {
+    return { type: 'ApprovalRequested', requestId, azione }
+}
+
+/**
+ * ⭐⭐⭐ FASE D (28/8) — coda messaggi, piano elegant-spinning-dongarra.md,
+ * LEDGER-FASE-D-CODA.md. Il kernel chiama `codaMessaggiFn()` SOLO nel
+ * punto in cui avrebbe altrimenti concluso il run (zero tool-call
+ * nell'ultima risposta) — se torna un testo, quel testo diventa un
+ * nuovo turno utente e il ciclo continua. Questo evento è il SOLO modo
+ * onesto per il frontend di sapere ESATTAMENTE quando questo è successo:
+ * un'euristica lato client (es. "un nuovo ToolCallStart dopo una
+ * risposta di solo testo") è ambigua — la stessa sequenza succede anche
+ * quando il modello risponde con testo+tool_calls nello stesso giro,
+ * senza che la coda c'entri nulla. Fuori dallo schema pubblico AG-UI
+ * (stessa estensione già dichiarata per ArtifactCreated/WorkspaceChanged/
+ * ApprovalRequested).
+ */
+export function queuedMessageDelivered({ testo }) {
+    return { type: 'QueuedMessageDelivered', testo }
+}
+
+/**
+ * ⭐⭐⭐ 28/8 — chiude la richiesta sopra: emesso SUBITO dopo che l'owner ha
+ * risposto, così un secondo tab/client con la stessa sessione aperta
+ * smette di mostrare il prompt invece di restare bloccato per sempre.
+ */
+export function approvalResolved({ requestId, approvato }) {
+    return { type: 'ApprovalResolved', requestId, approvato }
+}
+
+/**
+ * ⭐⭐⭐ 28/8 — FASE A (hook), piano `elegant-spinning-dongarra.md`. Emesso
+ * da `costruisciHookFn` (session-registry.mjs) DOPO ogni esecuzione VERA
+ * di un hook fidato — mai per un hook non fidato (quello non gira
+ * affatto, non c'è niente da mostrare) né per una sessione senza hook
+ * (il ramo veloce `hooksCache.length === 0` non chiama mai questo).
+ * `tipo`/`azione` sono l'evento passato all'hook (pre_tool_call/
+ * post_tool_call/session_start/session_end, più l'azione se presente);
+ * `esito` è ESATTAMENTE ciò che l'hook ha risposto (o il rifiuto
+ * sintetico se l'hook è fallito nell'esecuzione) — il pannello
+ * Control-plane mostra questo, non una sua interpretazione.
+ */
+export function hookInvoked({ hookId, tipo, azione, esito }) {
+    return { type: 'HookInvoked', hookId, tipo, azione: azione ?? null, esito }
+}
+
+/**
+ * ⭐ Da una risposta grezza del modello (la stessa forma OpenAI che
+ * talosLavora già costruisce — {role, content, tool_calls}, vedi
+ * talosHarness.mjs riga ~761) all'elenco ORDINATO di eventi AG-UI per
+ * quel giro.
+ *
+ * ⛔ Zero eventi di streaming a chunk QUI: questa funzione traduce la
+ * risposta GIÀ COMPLETA che `onGiro` riceve a fine giro (talosHarness.mjs),
+ * quindi ogni messaggio di testo resta uno Start+Content+End con UN SOLO
+ * delta. ⭐ 27/8 — lo streaming vero (testo E ragionamento, a pezzi,
+ * PRIMA che il giro finisca) esiste ora come canale SEPARATO: vedi
+ * `reasoningMessageStart/Content/End` sopra e `onDelta` in
+ * agent-service.mjs — non sostituisce questa funzione, la precede nel
+ * tempo (i delta arrivano durante il giro, questa traduce cosa resta a
+ * fine giro).
+ *
+ * `messageId` è responsabilità del CHIAMANTE (chi ha lo stato per
+ * generarne uno univoco, es. agent-service.mjs con crypto.randomUUID) —
+ * questa funzione resta pura e deterministica per essere provata senza
+ * mock di generatori casuali.
+ *
+ * ⛔ `testoGiaStreamato` — ⭐ 27/8, R1: quando `onDelta` ha già mandato il
+ * testo di QUESTO giro a pezzi (Start, N Content, End — dal vivo, prima
+ * ancora che il giro finisse — vedi agent-service.mjs), rimandarlo qui INTERO
+ * duplicherebbe il messaggio in chat — stessa famiglia di difetto già
+ * trovata e chiusa stanotte per RunFinished.
+ *
+ * ⛔ `toolCallsGiaStreamate` — Piano procedi-col-generare-un-snoopy-neumann.md,
+ * Fase 4: STESSA famiglia di difetto, applicata alle tool-call. Prima
+ * di questa fase erano dichiarate "non ancora streamate" (vedi il
+ * commento che questa riga sostituisce) — ora che `onDelta` le manda a
+ * pezzi (agent-service.mjs), rimandarle qui INTERE le duplicherebbe. Un
+ * `Set`/array di `toolCallId` (non un booleano unico: un giro può avere
+ * PIÙ tool-call, a differenza del testo/ragionamento che ne hanno al
+ * più uno) — ogni tool-call il cui id è dentro viene saltata qui,
+ * l'altre (fornitori/percorsi che non passano da `onDelta`, es. la
+ * risposta non-streaming) restano emesse come sempre.
+ */
+export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoGiaStreamato = false, toolCallsGiaStreamate } = {}) {
+    const eventi = []
+    if (risposta?.content && !testoGiaStreamato) {
+        eventi.push(textMessageStart({ messageId, role: risposta.role ?? 'assistant' }))
+        eventi.push(textMessageContent({ messageId, delta: String(risposta.content) }))
+        eventi.push(textMessageEnd({ messageId }))
+    }
+    const streamate = toolCallsGiaStreamate ?? new Set()
+    for (const chiamata of risposta?.tool_calls ?? []) {
+        if (streamate.has(chiamata.id)) continue
+        eventi.push(toolCallStart({
+            toolCallId: chiamata.id,
+            toolCallName: chiamata.function?.name,
+            parentMessageId,
+        }))
+        eventi.push(toolCallArgs({
+            toolCallId: chiamata.id,
+            delta: chiamata.function?.arguments ?? '',
+        }))
+    }
+    return eventi
+}
+
+/**
+ * ⭐ Dall'esito già calcolato di un attrezzo (la stessa stringa che
+ * talosLavora mette in `messaggi.push({role:'tool', tool_call_id,
+ * content})`, talosHarness.mjs riga ~836) a ToolCallResult.
+ */
+export function eventoPerEsitoTool({ messageId, toolCallId, content }) {
+    return toolCallResult({ messageId, toolCallId, content: String(content) })
+}
+
+/**
+ * ⭐ Dal prima/dopo che `scrivi` già costruisce internamente (vedi
+ * `premessaDellaScrittura` in talosHarness.mjs — `prima` e `dopo` sono
+ * già array di {percorso, testo}) a UNA operazione JSON Patch RFC 6902:
+ * `replace` se il file esisteva già in `prima`, `add` se è nuovo.
+ * Formato scelto dalla ricerca del piano §0.1 (`StateDelta` — RFC 6902
+ * JSON Patch), non inventato qui.
+ *
+ * ⭐⭐⭐ 27/8, owner: "un vero formattatore diff, importantissimo".
+ * `contenutoPrima` — quinto campo, NON standard RFC 6902 (la spec non lo
+ * vieta: un consumer che non lo conosce lo ignora) — è il testo del file
+ * un istante prima di questa scrittura, ora tornato da
+ * `premessaDellaScrittura` (vedi AVM-harness). ⛔ Aggiunto SOLO quando
+ * presente (`contenutoPrima !== undefined`): un chiamante vecchio che non
+ * lo passa produce l'identico oggetto di prima, byte per byte — nessuna
+ * chiave fantasma `prima: undefined` che romperebbe un
+ * `assert.deepStrictEqual` già scritto altrove.
+ */
+/*
+ * ⛔⛔ PO-05, owner: «ogni file generato deve avere un collegamento diretto per scaricarlo con un
+ * clic; nome, formato, dimensione e disponibilità REALI». `allegato` — sesto campo, come `prima`
+ * fuori dalla RFC 6902 e come `prima` innocuo per chi non lo conosce — porta ciò che serve a
+ * costruire quel collegamento e a scrivere l'etichetta: nome, formato e byte.
+ * ⛔ NON porta i byte: quelli si prendono dalla rotta, uno per uno, quando la persona clicca. Un
+ *   `.docx` dentro un evento SSE andrebbe ricodificato, cioè spedito due volte e corrotto una.
+ * ⛔ E si aggiunge SOLO quando c'è (`allegato !== undefined`): un chiamante che non lo passa produce
+ *   l'oggetto identico di prima, byte per byte — stessa disciplina di `prima`, e per lo stesso
+ *   motivo (un `assert.deepStrictEqual` già scritto altrove non deve diventare rosso da solo).
+ */
+export function eventoPerScrittura({ percorso, contenuto, esisteva, contenutoPrima, allegato }) {
+    return stateDelta({
+        delta: [{
+            op: esisteva ? 'replace' : 'add',
+            path: `/file/${percorso}`,
+            value: contenuto,
+            ...(contenutoPrima !== undefined ? { prima: contenutoPrima } : {}),
+            ...(allegato !== undefined ? { allegato } : {}),
+        }],
+    })
+}
+
+/**
+ * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — il
+ * contatore costo/token per una sessione VIVA (oggi esiste solo per le
+ * righe storiche della Board campagne). Stesso formato StateDelta di
+ * `eventoPerScrittura` sopra, stesso path-prefix `/usage` (mai
+ * `/file/*`): `replace` sempre, perché `totali` da `talosHarness.mjs`
+ * è già una SOMMA cumulativa a ogni giro, non un delta da sommare qui —
+ * un secondo consumer che sommasse di nuovo raddoppierebbe il conto.
+ */
+export function eventoPerUsage(totali) {
+    return stateDelta({
+        delta: [{ op: 'replace', path: '/usage', value: totali }],
+    })
+}

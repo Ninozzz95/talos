@@ -1,0 +1,104 @@
+/*
+ * ⭐⭐⭐ PO-09 — IL TERMINALE IN SPLIT ORIZZONTALE IN BASSO.
+ *
+ * Owner, 09/09: «un pulsantino per far aprire il terminale splittato in orizzontale in basso, come
+ * fa Hermes, Codex e tanti altri tipo VS Code: resizable, intuitivo». 11/09: il pulsante è una pill
+ * nel composer, accanto a «Giri».
+ *
+ * Ricerca 11/09/2026 — techinterview «Build a Resizable Panels Layout: VS Code and Linear Style»,
+ * documentazione VS Code «Terminal Basics», e le due issue di riferimento (microsoft/vscode #160501
+ * e #142840 sullo split orizzontale):
+ *  · la maniglia è un `separator` ARIA, **focusabile e operabile da tastiera** — non solo trascinabile;
+ *  · l'altezza si salva a fine trascinamento e si ripristina all'apertura;
+ *  · si muove una **variabile CSS**, non `style.height` a ogni movimento, per non rifare il layout
+ *    sessanta volte al secondo.
+ *
+ * ⛔ Nessun colore nuovo: tutto dai token del sistema. Questo pannello non deve somigliare a una
+ *   finestra ospite dentro TALOS — deve sembrare il fondo della stessa stanza.
+ */
+
+.talos-terminale-basso {
+  /* L'altezza vive in una variabile: la maniglia muove QUELLA, e il layout si assesta una volta sola. */
+  --talos-terminale-h: 320px;
+  display: flex;
+  flex-direction: column;
+  height: var(--talos-terminale-h);
+  min-height: 120px;
+  border-top: 1px solid var(--talos-border);
+  background: var(--talos-panel, var(--talos-background));
+  overflow: hidden;
+}
+
+/*
+ * ⛔ La maniglia è alta 5 px ma l'area di presa è 11: chi trascina mira alla riga, non ai pixel.
+ *   È la differenza fra «resizable» e «resizable senza bestemmiare», ed è la ragione per cui il
+ *   riquadro visibile sta in un `::after` invece che nel bordo dell'elemento.
+ */
+.talos-terminale-basso__maniglia {
+  position: relative;
+  flex: 0 0 auto;
+  height: 11px;
+  margin-top: -6px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.talos-terminale-basso__maniglia::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--talos-border-strong, var(--talos-border));
+  transform: translate(-50%, -50%);
+  transition: background-color .15s ease;
+}
+
+.talos-terminale-basso__maniglia:hover::after,
+.talos-terminale-basso__maniglia[data-trascino="si"]::after {
+  background: var(--talos-accent);
+}
+
+/* ⛔ Il fuoco da tastiera si VEDE: la maniglia si può spostare con le frecce, e chi naviga così
+   deve sapere dov'è. Senza questo, `tabindex` su un div è una trappola. */
+.talos-terminale-basso__maniglia:focus-visible {
+  outline: 2px solid var(--talos-accent);
+  outline-offset: -2px;
+  border-radius: 999px;
+}
+
+.talos-terminale-basso__ospite {
+  flex: 1 1 auto;
+  min-height: 0; /* senza questo un figlio che cresce sfonda il pannello invece di scorrere */
+  display: flex;
+}
+
+/* Il pannello ospita `.talos-terminal` così com'è: qui gli si dice solo di riempire lo spazio. */
+.talos-terminale-basso__ospite > .talos-terminal {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+/* La pill accesa dice che il pannello è aperto — lo stesso segnale delle altre scelte del composer. */
+#pillTerminale[aria-expanded='true'] {
+  border-color: var(--talos-accent-strong, var(--talos-accent));
+  background: var(--talos-accent-soft, transparent);
+  color: var(--talos-text);
+}
+
+/*
+ * ⛔ Sotto i 1024 px di larghezza il pannello parte più basso: a laptop la conversazione è già
+ *   stretta, e un terminale da 320 px le lascerebbe quattro righe. Non è una media: è il caso in
+ *   cui la funzione smette di essere utile.
+ */
+@media (max-width: 1024px) {
+  .talos-terminale-basso { --talos-terminale-h: 220px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .talos-terminale-basso__maniglia::after { transition: none; }
+}

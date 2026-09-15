@@ -1,0 +1,187 @@
+/*
+ * ⭐⭐⭐ LA BARRA DEL MOCKUP — i due gruppi, il cassetto sotto gli 860 px, il menu della riga.
+ *
+ * Porting dei lotti A e D del mockup interattivo dell'owner
+ * (`.claude/refactor-ui-owner-2026-09-11/Talos_Desktop_Final_Mockup_Interattivo.html`:
+ * `initSidebar` riga 6098, `openDrawer`/`closeDrawer` righe 6114-6115, `renderSessions` riga 6103;
+ * il suo CSS sta alle righe 4106-4119 e 4141-4178).
+ *
+ * ⛔ Questo foglio AGGIUNGE, non riscrive: `.talos-sidebar`, `.talos-nav-item`, `.talos-session-item`
+ *   e i loro stati restano quelli di `index.css`. Qui vive solo ciò che prima non esisteva —
+ *   le testate di gruppo, il cassetto, il bottone della riga — e sta in coda a `main.css` perché
+ *   con esbuild un `@import` relativo viene incollato sul posto e l'ordine di valutazione è quello
+ *   che decide chi vince (stessa ragione per cui `temi.css` e `aspetto.css` stanno in fondo).
+ *
+ * ⛔ Nessun colore scritto a mano: solo token. Le due foto (chiaro e scuro) sono la prova, non una
+ *   promessa — TALOS ha già pagato un velo d'avvio bianco su una app scura per aver guardato un
+ *   tema solo.
+ */
+
+/* ───────────────────────── A. I DUE GRUPPI ─────────────────────────
+ * La testata è un `button` con `aria-expanded` + `aria-controls` (pattern «disclosure», ricerca
+ * 11/09/2026 — 216digital «Accessible Navigation Design Patterns: 2026 Best Practices for WCAG
+ * Conformance», The A11Y Collective «Practical Guide on Implementing aria-expanded», Intelligence
+ * Community Design System «Side navigation»). Il chevron RUOTA invece di cambiare glifo: un solo
+ * nodo, nessun salto di layout, e la rotazione dice da sola in che verso si apre.
+ */
+/* ⛔ `max-height:50%` + scorrimento proprio è la regola del mockup (riga 4109), e serve: la barra
+   ha UN solo spazio verticale e le sessioni non devono sparire perché i luoghi sono tanti. Con
+   «Strumenti» chiuso — il default — il tetto non viene nemmeno toccato.
+   ⛔ Le voci qui sono più basse che altrove (36 px invece di `--talos-row`, 44): è l'altezza del
+   mockup per questa colonna (riga 4110), e su 13 voci sono 104 px restituiti alle sessioni. */
+/* ⛔ `flex: 0 0 auto` e NON `0 1 auto`: misurato sul banco a 1440×900 con la prima foto — col
+   restringimento attivo il blocco stava in 310 px contro i 365 che gli servivano, e i 55 px tagliati
+   erano ESATTAMENTE la testata «Strumenti», cioè la porta di cinque luoghi, sparita senza che nulla
+   lo dicesse. Il tetto del 50% resta ed è la vera guardia contro una barra che si mangia le sessioni. */
+.td-sidebar-nav { flex: 0 0 auto; min-height: 0; max-height: 50%; overflow-y: auto; padding: 0 10px 8px; }
+.td-sidebar-nav .talos-nav-item { height: auto; min-height: 36px; font-size: 13px; }
+.td-sidebar-nav .talos-nav-item .i { width: 16px; height: 16px; }
+
+.td-nav-head {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 8px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--talos-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+}
+/* La stessa risposta al passaggio del mouse che hanno le voci sotto: la testata è premibile, e
+   deve dirlo prima che qualcuno ci provi. */
+.td-nav-head:hover { background: var(--talos-card-hover); color: var(--talos-text); }
+.td-nav-head .talos-eyebrow { pointer-events: none; }
+.td-nav-head .i {
+  margin-left: auto;
+  width: 12px;
+  height: 12px;
+  transition: rotate var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+.td-nav-head[aria-expanded="true"] .i { rotate: 90deg; }
+/* ⛔ Chi ha chiesto meno movimento non vede ruotare niente: la freccia arriva già girata.
+   `prefers-reduced-motion` è un contratto, non una rifinitura (ricerca 11/09/2026). */
+@media (prefers-reduced-motion: reduce) { .td-nav-head .i { transition: none; } }
+:root.reduce-motion .td-nav-head .i,
+:root.interface-motion-off .td-nav-head .i { transition: none; }
+
+.td-nav-group { display: block; }
+
+/* Barra compressa a icone: le testate di gruppo spariscono (nessuna etichetta da leggere), le
+   voci restano centrate come tutte le altre — la regola delle voci è già in `index.css`. */
+:root[data-sidebar="icone"] .td-nav-head { display: none; }
+:root[data-sidebar="icone"] .td-sidebar-nav { padding: 0 8px; overflow: visible; }
+
+/* ───────────────────────── A-bis. IL CASSETTO SOTTO GLI 860 px ─────────────────────────
+ * Fino all'11/09 `@media (max-width:860px)` faceva `display:none` sulla barra e basta: sessioni,
+ * luoghi, ricerca e «Nuova» sparivano e non c'era NESSUN modo di riaprirli. Il bottone tondo è
+ * l'unica porta, quindi non è decorazione: è la navigazione.
+ */
+.td-floating-menu { display: none; }
+.td-scrim { display: none; }
+
+@media (max-width: 860px) {
+  .td-floating-menu {
+    display: grid;
+    place-items: center;
+    position: fixed;
+    left: 12px;
+    bottom: 12px;
+    width: 48px;   /* il bersaglio tattile del tema (--talos-touch-target), non un numero nuovo */
+    height: 48px;
+    z-index: var(--talos-z-tooltip); /* sopra la app, sotto il cassetto e il suo velo */
+    border: 1px solid var(--talos-border-strong);
+    border-radius: var(--talos-radius-pill); /* tondo: owner, «un bottone tondo in basso» */
+    background: var(--talos-panel);
+    color: var(--talos-text);
+    box-shadow: var(--talos-shadow-card);
+  }
+  .td-floating-menu:hover { background: var(--talos-card-hover); }
+  .td-floating-menu .i { width: 20px; height: 20px; }
+  /* ⛔ Visto nella FOTO a 800×900: il bottone galleggiava sull'angolo del composer. Un bottone che
+     sta SOPRA un campo di testo è un bersaglio che si preme per sbaglio mentre si scrive. Il piede
+     della chat gli lascia il suo posto — 60 px, cioè il bottone (48) più il suo margine. */
+  .talos-chat-foot { padding-left: calc(var(--talos-chat-gutter) + 60px); }
+
+  /* Il velo: chiude toccando fuori, ed è un `button` perché chiudere è un'azione, non uno sfondo. */
+  .td-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    background: var(--talos-overlay);
+    z-index: calc(var(--talos-z-tooltip) + 1);
+  }
+
+  /* ⛔ `display:flex` batte il `display:none` della media query di `index.css` solo perché questo
+     foglio viene DOPO nell'ordine di valutazione: stessa specificità, vince l'ultimo. Niente
+     `!important` — l'ordine è già la risposta. */
+  :root.td-drawer-open .talos-sidebar {
+    display: flex;
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(320px, 88vw);
+    z-index: calc(var(--talos-z-tooltip) + 2);
+    box-shadow: var(--talos-shadow-floating);
+  }
+  /* Dentro il cassetto la barra è INTERA: le sessioni sono la ragione per cui la si apre. */
+  :root.td-drawer-open .talos-sidebar .talos-sidebar__sessions { display: block; }
+  /* La maniglia di ridimensionamento non ha senso su un cassetto che è già largo quanto decide lui. */
+  :root.td-drawer-open .talos-resizer--sidebar { display: none; }
+  /* Col cassetto aperto il bottone che lo apre sparisce: la sua funzione ora ce l'ha il velo. */
+  :root.td-drawer-open .td-floating-menu { display: none; }
+}
+
+/* ───────────────────────── D. LA RIGA DI SESSIONE E IL SUO MENU ─────────────────────────
+ * ⛔ La riga È un `<button>`: un secondo pulsante non può starci DENTRO (nidificare un controllo
+ *   dentro un controllo non è HTML valido e rompe la navigazione da tastiera). Da qui l'involucro
+ *   `.td-session-row`, che è la stessa forma del mockup (riga 6103): la riga e i tre puntini sono
+ *   due controlli FRATELLI, non uno annidato nell'altro.
+ * ⛔ I tre puntini NON compaiono solo al passaggio del mouse: chi naviga da tastiera e chi usa un
+ *   touchscreen non hanno un «hover», e un'azione che esiste solo per il mouse non esiste.
+ *   Restano tenui (`--talos-muted`) e diventano pieni quando li tocchi o li raggiungi con Tab.
+ */
+.td-session-row { position: relative; }
+/* Lo spazio per il bottone si toglie al testo, non alla riga: senza, il titolo ci finisce sotto. */
+.td-session-row > .talos-session-item { padding-right: 38px; }
+
+.td-session-menu {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--talos-muted);
+  cursor: pointer;
+  transition: background-color var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+.td-session-menu .i { width: 15px; height: 15px; }
+.td-session-menu:hover,
+.td-session-menu[aria-expanded="true"] { background: var(--talos-card-hover); color: var(--talos-text); }
+.td-session-menu:focus-visible {
+  outline: var(--talos-focus-width) solid var(--talos-ring);
+  outline-offset: var(--talos-focus-offset);
+}
+/* ⛔ Una figlia di delega è alta `--talos-row` (44px) invece di `--talos-row-session` (66px): il
+   bottone centrato su metà altezza va bene per entrambe proprio perché è centrato — è la ragione
+   per cui qui non c'è il `top:17px` scritto a mano del mockup. */
+
+/* Con la selezione multipla accesa la casella prende il posto dei tre puntini: due comandi sulla
+   stessa riga, nello stesso punto, sarebbero un bersaglio ambiguo. */
+.td-session-row.td-session-selection > .td-session-menu { display: none; }
+.td-session-row.td-session-selection > .talos-session-item { padding-right: 10px; }
+
+/* ⛔ La griglia della barra di selezione (`1fr auto`, cornice d'accento) resta quella approvata in
+   `index.css`: qui si aggiunge SOLO il posto dei tre puntini, che prendono la colonna di destra
+   dove prima stava «Elimina». Il bottone è quadrato e non si stira come gli altri della barra. */
+.talos-sidebar__selezione #sessionSelectionMore { justify-self: end; width: 28px; min-width: 0; padding: 0; }

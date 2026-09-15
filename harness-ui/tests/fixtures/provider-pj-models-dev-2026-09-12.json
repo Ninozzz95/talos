@@ -1,0 +1,31 @@
+{
+  "fonte": "https://models.dev/api.json",
+  "data": "2026-09-12",
+  "sha256": "741add06396feae1e65041984505273e9192fc095b6ac13df5c3471d9ff2ffc9",
+  "fornitori": {
+    "minimax-anthropic": {
+      "models": {
+        "MiniMax-M2.5": {
+          "id": "MiniMax-M2.5",
+          "tool_call": true
+        },
+        "MiniMax-M3": {
+          "id": "MiniMax-M3",
+          "tool_call": true
+        }
+      }
+    },
+    "zai-coding-plan": {
+      "models": {
+        "glm-5.3-flash": {
+          "id": "glm-5.3-flash",
+          "tool_call": true
+        },
+        "glm-5.3": {
+          "id": "glm-5.3",
+          "tool_call": true
+        }
+      }
+    }
+  }
+}

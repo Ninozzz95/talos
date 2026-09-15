@@ -26,7 +26,10 @@ name: release
 
 on:
   push:
-    tags: ['v*']
+    # ⛔⛔ 07/9 — DUE PRODOTTI, DUE PREFISSI. Prima c'era solo `v*`, che è il tag del MOBILE: un tag
+    # per il desktop avrebbe svegliato il job dell'APK, che avrebbe provato a firmare un artefatto
+    # che quel tag non descrive. I due prefissi si dichiarano qui e ogni job guarda il proprio.
+    tags: ['v*', 'desktop-v*']
 
 # ⛔ `attestations: write` è ciò che permette la firma di provenienza; `contents:
 # write` serve a creare la release. Nient'altro: un token che può più di quanto
@@ -44,6 +47,8 @@ permissions:
 
 jobs:
   apk:
+    # ⛔ solo i tag del mobile: `desktop-v0.1.0` non è una release Android.
+    if: startsWith(github.ref_name, 'v')
     runs-on: ubuntu-latest
     steps:
       # ⛔ `submodules: recursive` — senza, `third_party/llama.cpp` arriva come
@@ -306,6 +311,24 @@ jobs:
             "$GITHUB_WORKSPACE/${{ steps.apk.outputs.nome }}" \
             cpu,opencl
 
+      # ⛔⛔⛔ CODICE (harness UI + terminale) NON SPARISCE DI NUOVO — 3/9,
+      # dopo la v0.1.24: quelle due classi vivono in `main/` da oggi, ma
+      # sono cercate via Class.forName (stringa, non X.class) — R8 può
+      # rinominarle a runtime senza fallire in compilazione se la regola
+      # -keep in proguard-rules.pro si rompe. `npm run build` (sopra)
+      # verifica solo che i FILE vivano nel posto giusto, prima che Gradle
+      # e R8 tocchino niente — questo verifica l'APK VERO, firmato, dopo
+      # che R8 ha già fatto il suo lavoro: la metà che nessun checkout
+      # web può provare da solo. Vedi il commento di classe di
+      # TalosHarnessUiPlugin.kt per la storia intera.
+      # (13/09, R-05b: passo ripreso dal release.yml della lane mobile, che il
+      # ramo desktop aveva perso; vale anche con la mobile in `mobile/`.)
+      - name: ⛔ Codice non e' sparito di nuovo dalla release
+        working-directory: ${{ steps.dove.outputs.dir }}
+        run: |
+          node scripts/verify-release-plugin-classes.mjs \
+            "$GITHUB_WORKSPACE/${{ steps.apk.outputs.nome }}"
+
       # La provenienza SLSA: lega l'artefatto al workflow, al commit e al
       # repository, con un certificato effimero su un registro di trasparenza.
       # La provenienza SLSA: lega l'artefatto al workflow, al commit e al
@@ -370,3 +393,192 @@ jobs:
             Two devices: a OnePlus 13 and a OnePlus Pad 3. Two devices are a
             small sample, and Android ROMs diverge a good deal on
             accessibility, background execution and lock screen behaviour.
+
+  # R-04: installer Windows completo. Lo staging R-02 usa una lista di inclusioni;
+  # cancelli e prova dell'installato precedono attestazione e pubblicazione.
+  desktop:
+    if: startsWith(github.ref_name, 'desktop-v')
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      TALOS_R02_BUILDER_NETWORK: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - id: commit_tag
+        name: stesso commit del tag, ramo locale per i cancelli esistenti
+        run: |
+          $prima = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'HEAD non leggibile.' }
+          $tag = git rev-parse "$env:GITHUB_REF_NAME^{commit}"
+          if ($LASTEXITCODE -ne 0 -or $prima -cne $tag) { throw 'La checkout non corrisponde al commit del tag.' }
+          # Alcuni test server richiedono un ramo reale; nessun nuovo commit.
+          git switch --create ci-desktop-release HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Creazione del ramo locale CI fallita.' }
+          $dopo = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $dopo -cne $prima) { throw 'Il commit da rilasciare è cambiato.' }
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            harness-ui/frontend/package-lock.json
+            harness-ui/desktop/package-lock.json
+            context-engine/package-lock.json
+
+      - id: ambiente
+        name: versione, immagine e percorsi delle cache
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pkg = Get-Content harness-ui/desktop/package.json -Raw | ConvertFrom-Json
+          $lock = Get-Content harness-ui/desktop/package-lock.json -Raw | ConvertFrom-Json -AsHashtable
+          if ($env:GITHUB_REF_NAME -cne "desktop-v$($pkg.version)" -or $lock.version -cne $pkg.version -or $lock.packages[''].version -cne $pkg.version) {
+            throw 'Tag e versioni package/lock desktop devono coincidere.'
+          }
+          "exe=harness-ui/desktop/dist/TALOS-Setup-$($pkg.version).exe" >> $env:GITHUB_OUTPUT
+          "electron_config_cache=$env:LOCALAPPDATA/electron/Cache" >> $env:GITHUB_ENV
+          "ELECTRON_BUILDER_CACHE=$env:LOCALAPPDATA/electron-builder/Cache" >> $env:GITHUB_ENV
+          "inizio=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" >> $env:GITHUB_OUTPUT
+          $node = node --version
+          $npm = npm --version
+          "### Ambiente desktop" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          "Windows: $([Environment]::OSVersion.VersionString); immagine: $env:ImageOS / $env:ImageVersion; PowerShell: $($PSVersionTable.PSVersion); Node: $node; npm: $npm." >> $env:GITHUB_STEP_SUMMARY
+
+      - name: cache Electron, builder e staging
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: |
+            ${{ env.electron_config_cache }}
+            ${{ env.ELECTRON_BUILDER_CACHE }}
+            harness-ui/desktop/.cache-r02/npm
+            harness-ui/desktop/.cache-r02/llama-b10517-bin-win-cpu-x64.zip
+            harness-ui/desktop/.cache-r02/llama-b10517-bin-win-vulkan-x64.zip
+          key: desktop-r04-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('harness-ui/package-lock.json', 'harness-ui/desktop/package-lock.json', 'context-engine/package-lock.json', 'harness-ui/desktop/scripts/prepara-pacchetto.mjs') }}
+
+      - name: dipendenze dai lock con addon nativi
+        timeout-minutes: 10
+        run: |
+          npm ci --prefix harness-ui --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci backend fallito.' }
+          npm ci --prefix harness-ui/frontend --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci frontend fallito.' }
+          npm ci --prefix harness-ui/desktop --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci desktop fallito.' }
+          npm ci --prefix context-engine --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci context-engine fallito.' }
+          # test:unit include anche un test DOM che richiede Chromium Playwright.
+          node harness-ui/frontend/node_modules/playwright/cli.js install chromium
+          if ($LASTEXITCODE -ne 0) { throw 'Installazione Chromium per i test frontend fallita.' }
+          # node-pty 1.1.0 include win32-x64; npm conserva il fallback node-gyp.
+          # Server 2025 offre Python, Visual Studio C++, SDK e librerie Spectre.
+          # Il cancello test:guscio prova anche la PTY reale dentro Electron.
+
+      - name: costruisci il frontend e consegnalo
+        run: |
+          npm --prefix harness-ui/frontend run build
+          if ($LASTEXITCODE -ne 0) { throw 'Build frontend fallita.' }
+          Copy-Item -Path harness-ui/frontend/dist/* -Destination harness-ui/public/ -Recurse -Force
+
+      - id: cancelli
+        name: server, kernel, frontend e guscio Electron reale
+        timeout-minutes: 15
+        run: |
+          node --test harness-ui/tests/*.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Test server falliti.' }
+          npm --prefix harness-ui run test:kernel
+          if ($LASTEXITCODE -ne 0) { throw 'Test kernel falliti.' }
+          npm --prefix harness-ui run kernel:controlla
+          if ($LASTEXITCODE -ne 0) { throw 'Controllo kernel fallito.' }
+          npm --prefix harness-ui/frontend run test:unit
+          if ($LASTEXITCODE -ne 0) { throw 'Test frontend falliti.' }
+          npm --prefix harness-ui/desktop run test:puri
+          if ($LASTEXITCODE -ne 0) { throw 'Test puri desktop falliti.' }
+          # _electron usa Electron incluso; nessun browser Playwright da scaricare.
+          npm --prefix harness-ui/desktop run test:guscio
+          if ($LASTEXITCODE -ne 0) { throw 'Test Electron reali falliti.' }
+
+      - id: dist
+        name: installer NSIS e ZIP completo R-02
+        timeout-minutes: 15
+        run: |
+          $tempo = [Diagnostics.Stopwatch]::StartNew()
+          npm --prefix harness-ui/desktop run dist
+          if ($LASTEXITCODE -ne 0) { throw 'Build installer/ZIP fallita.' }
+          "Build installer e ZIP: $($tempo.ElapsedMilliseconds) ms." >> $env:GITHUB_STEP_SUMMARY
+
+      - id: smoke
+        name: installa, avvia, health con cookie, chiudi e disinstalla
+        timeout-minutes: 8
+        env:
+          INSTALLER: ${{ steps.ambiente.outputs.exe }}
+        run: ./harness-ui/desktop/scripts/ci-smoke.ps1 -Installer $env:INSTALLER
+
+      - id: asset
+        name: SHA256, note di release e pesi
+        run: |
+          node harness-ui/desktop/scripts/release-assets.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Preparazione note e SHA256 fallita.' }
+
+      # Come apk: actions/attest v4, non il wrapper attest-build-provenance.
+      # I tre permessi OIDC/attestazioni/metadati sono quelli globali già presenti.
+      - name: provenienza GitHub di EXE e ZIP
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: |
+            ${{ steps.asset.outputs.exe }}
+            ${{ steps.asset.outputs.zip }}
+
+      - id: upload
+        name: conserva gli artefatti della release
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: talos-desktop-${{ github.ref_name }}-windows-x64
+          path: |
+            ${{ steps.asset.outputs.exe }}
+            ${{ steps.asset.outputs.zip }}
+            ${{ steps.asset.outputs.sha }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - id: release
+        name: pubblica la release con tre asset e note scritte
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EXE: ${{ steps.asset.outputs.exe }}
+          ZIP: ${{ steps.asset.outputs.zip }}
+          SHA: ${{ steps.asset.outputs.sha }}
+          NOTE: ${{ steps.asset.outputs.note }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME $env:EXE $env:ZIP $env:SHA --verify-tag --repo $env:GH_REPO --title "TALOS Desktop $env:GITHUB_REF_NAME" --notes-file $env:NOTE
+          if ($LASTEXITCODE -ne 0) { throw 'Creazione release fallita; verificare se il tag ha già una release.' }
+
+      - name: conserva la prova dello smoke anche in caso di errore
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: talos-desktop-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: harness-ui/desktop/.prove/R04-ci-smoke.json
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 14
+
+      - name: tempo totale osservato
+        if: always()
+        env:
+          INIZIO: ${{ steps.ambiente.outputs.inizio }}
+        run: |
+          if ($env:INIZIO) {
+            $secondi = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - [long]$env:INIZIO
+            "Tempo fino al riepilogo (esclusi checkout/setup-node e post action): $secondi s. Limite job: 45 minuti." >> $env:GITHUB_STEP_SUMMARY
+          }

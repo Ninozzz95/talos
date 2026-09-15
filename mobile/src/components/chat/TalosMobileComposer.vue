@@ -1,0 +1,1020 @@
+<script setup lang="ts">
+import { computed, defineAsyncComponent, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
+import { useTalosI18n } from '@/i18n'
+import { createTalosSendGate } from '@/lib/chat/sendGate'
+import { ArrowUp,
+    Database,
+    Maximize2,
+    Mic,
+    Plus,
+    Square, } from '@lucide/vue'
+import TalosMobileAttachmentTray from '@/components/chat/TalosMobileAttachmentTray.vue'
+/**
+ * Il cassetto del modello e dello sforzo si apre a richiesta, quindi si carica
+ * a richiesta.
+ *
+ * Misurato il 2026-08-06 sulla sourcemap: il selettore che porta dentro pesava
+ * **7,9 KB** nel pacchetto d'avvio, per una superficie che compare solo quando
+ * qualcuno tocca il chip del modello. Chi apre l'app e scrive un messaggio non
+ * la vede mai.
+ */
+const TalosMobileModelEffortDrawer = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileModelEffortDrawer.vue'),
+)
+import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
+import { Button } from '@/components/ui/button'
+import type {
+    TalosMobileModelProfileView,
+    TalosMobileRoutingProfileView,
+} from '@/components/chat/mobileChatTypes'
+import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
+import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
+import type { TalosMobilePromptEnhancementResult } from '@/lib/chat/promptEnhancement'
+import {
+    TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH,
+    type TalosPromptEnhancerDepth,
+} from '@/lib/chat/promptEnhancerDepth'
+import { TALOS_MOBILE_COMMANDS, type TalosMobileCommandId } from '@/lib/mobileCommandRegistry'
+
+/** Owner 12/09 20:10: niente «ricerca web» nella chat — `/browse` non sta nel menu slash. Codice (U-4) resta com'e'. */
+const comandiSlashDellaChat = TALOS_MOBILE_COMMANDS.filter(c => c.id !== 'open_browse')
+import type { TalosMobileAttachmentDraft } from '@/composables/useTalosMobileAttachments'
+import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
+import type {
+    TalosLibraryContextMode,
+    TalosLibraryTurnOverride,
+} from '@/lib/chat/libraryPolicy'
+
+
+const TalosMobileSlashCommandMenu = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileSlashCommandMenu.vue'),
+)
+// Il foglio «+» resta caricato a richiesta nella forma unica Calm.
+const TalosMobileComposerDrawer = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileComposerDrawer.vue'),
+)
+const TalosMobileLibraryContextSheet = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileLibraryContextSheet.vue'),
+)
+/*
+ * Il pannello che si vede prima di riscrivere: pigro, come il popover accanto.
+ *
+ * MISURATO 2026-08-04, e non era un dettaglio: importato staticamente si porta
+ * dietro il selettore di reka-ui, e con lui **80.223 byte** nel grafo d'avvio —
+ * il budget e' passato da 594 KB a 674 KB, cioe' oltre il tetto. Il costo non
+ * era del pannello: era del Select, che l'avvio non usa e che quel pannello e'
+ * il solo, fra i suoi vicini, a tirare dentro.
+ *
+ * Il cancello del bundle lo pretende: c'e' una riga in
+ * `verify-initial-chunk.mjs` che fallisce se questo confine sparisce, come per
+ * il popover. Un import che torna statico non deve poter passare in silenzio
+ * una seconda volta.
+ */
+const TalosMobileEnhancerDrawer = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileEnhancerDrawer.vue'),
+)
+/**
+ * Owner 2026-08-27 — l'espansione a tutto schermo si vede solo quando serve
+ * ("per i testi più grandi"): pesa zero al grafo d'avvio finché nessuno
+ * scrive un messaggio lungo, stesso schema pigro degli altri cassetti sopra.
+ */
+const TalosMobileComposerExpanded = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileComposerExpanded.vue'),
+)
+
+const props = withDefaults(defineProps<{
+    prompt: string
+    modelProfiles: TalosMobileModelProfileView[]
+    routingProfiles?: TalosMobileRoutingProfileView[]
+    selectedModelProfileId?: string | null
+    selectedRoutingProfileId?: string | null
+    selectedEffort: string
+    thinking: boolean
+    agentToolsEnabled?: boolean
+    docked?: boolean
+    canSend: boolean
+    sending: boolean
+    sendDisabledReason?: string
+    loadingModels?: boolean
+    loadingRoutes?: boolean
+    refreshingModels?: boolean
+    discoveryProblems?: ReadonlyArray<{ message: string, detail?: string | null }>
+    /**
+     * ⭐⭐⭐ 2/9 — picker Planner (FASE K): additivi, mai passati da
+     * ChatScreen.vue oggi — `showExecutorModel` resta falso di default,
+     * zero cambio per la chat regolare.
+     */
+    showExecutorModel?: boolean
+    executorModelProfiles?: TalosMobileModelProfileView[]
+    selectedExecutorModelProfileId?: string | null
+    attachments?: readonly TalosMobileAttachmentDraft[]
+    attachmentBusy?: boolean
+    attachmentError?: string | null
+    attachmentsAvailable?: boolean
+    attachmentDisabledReason?: string
+    contextAvailable?: boolean
+    contextDisabledReason?: string
+    enhancingPrompt?: boolean
+    promptEnhancement?: TalosMobilePromptEnhancementResult | null
+    enhancerDepth?: TalosPromptEnhancerDepth
+    enhancerModel?: string | null
+    enhancerEffort?: string
+    enhancerModels?: readonly { id: string, label: string, provider: string, efforts: readonly string[] }[]
+    promptEnhancementError?: string
+    /** Codice nel foglio «+» solo dove il ponte nativo esiste (build di sviluppo). */
+    harnessAvailable?: boolean
+    // Calm: il microfono è sempre visibile; se non disponibile spiega perché.
+    dictationSupported?: boolean
+    dictationListening?: boolean
+    dictationStarting?: boolean
+    dictationLevel?: number
+    /** ⭐ Le parole mentre le dici: la trascrizione viva, non la bozza. */
+    dictationTranscript?: string
+    // Preferenze legacy accettate ma senza effetto sulla forma Calm.
+    drawerMode?: boolean
+    immersiveComposer?: boolean
+    plusDropdown?: boolean
+    libraryContextEnabled?: boolean
+    libraryContextMode?: TalosLibraryContextMode
+    librarySourceCount?: number
+    libraryTurnOverride?: TalosLibraryTurnOverride | null
+    libraryFiles?: readonly TalosLocalVaultFile[]
+}>(), {
+    agentToolsEnabled: true,
+    docked: false,
+    routingProfiles: () => [],
+    selectedModelProfileId: null,
+    selectedRoutingProfileId: null,
+    loadingModels: false,
+    refreshingModels: false,
+    showExecutorModel: false,
+    executorModelProfiles: () => [],
+    selectedExecutorModelProfileId: null,
+    attachments: () => [],
+    attachmentBusy: false,
+    attachmentError: null,
+    attachmentsAvailable: true,
+    attachmentDisabledReason: '',
+    contextAvailable: false,
+    contextDisabledReason: '',
+    enhancingPrompt: false,
+    promptEnhancement: null,
+    enhancerDepth: TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH,
+    enhancerModel: null,
+    enhancerEffort: 'low',
+    enhancerModels: () => [],
+    promptEnhancementError: '',
+    dictationSupported: false,
+    dictationListening: false,
+    dictationStarting: false,
+    dictationLevel: 0,
+    dictationTranscript: '',
+    drawerMode: false,
+    immersiveComposer: false,
+    plusDropdown: false,
+    libraryContextEnabled: false,
+    libraryContextMode: 'broad_compat_v1',
+    librarySourceCount: 0,
+    libraryTurnOverride: null,
+    libraryFiles: () => [],
+})
+
+const TalosMobileDictationBar = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileDictationBar.vue'),
+)
+
+const emit = defineEmits<{
+    'update:prompt': [prompt: string]
+    send: []
+    stop: []
+    toggleDictation: []
+    discardDictation: []
+    /** ⭐ Chiude la dettatura E manda: il gesto di chi ha le mani occupate. */
+    sendDictation: []
+    selectModelProfile: [profileId: string]
+    selectModelRoutingProfile: [profileId: string]
+    selectEffort: [level: TalosMobileEffortLevel]
+    selectThinking: [enabled: boolean]
+    /** Foglio «+» (12/09): le voci «Crea …» precompilano; le stazioni si aprono dalla schermata. */
+    preset: [id: 'slides' | 'document' | 'analyze']
+    navigate: [route: TalosMobileRouteName]
+    setAgentToolsEnabled: [enabled: boolean]
+    attach: []
+    takePhoto: []
+    pickPhotos: []
+    removeAttachment: [itemId: string]
+    dismissAttachmentError: []
+    openContext: []
+    openModelLab: []
+    refreshModels: []
+    selectExecutorModelProfile: [profileId: string | null]
+    enhancePrompt: []
+    updateEnhancerDepth: [value: TalosPromptEnhancerDepth]
+    updateEnhancerModel: [value: string | null]
+    updateEnhancerEffort: [value: string]
+    enhanceBlocked: [reason: string]
+    cancelPromptEnhancement: []
+    insertPromptEnhancement: []
+    replacePromptEnhancement: []
+    selectSlashCommand: [commandId: TalosMobileCommandId]
+    updateLibraryTurnOverride: [override: TalosLibraryTurnOverride | null]
+}>()
+
+const { t } = useTalosI18n()
+const promptField = ref<HTMLTextAreaElement | null>(null)
+const modelTrigger = ref<ComponentPublicInstance | HTMLElement | null>(null)
+// F4-#26: model+effort and the enhancer live in dedicated bottom drawers —
+// the same organized-sheet pattern as the "+" Add-to-chat drawer.
+const modelPickerOpen = ref(false)
+const enhancerDrawerOpen = ref(false)
+const slashActiveIndex = ref(0)
+const slashCommandCount = ref(0)
+const slashMenu = ref<{ activateSelected(): void } | null>(null)
+const toolDrawerOpen = ref(false)
+const plusTrigger = ref<ComponentPublicInstance | HTMLElement | null>(null)
+/**
+ * ⛔⛔ REGRESSIONE RIPARATA il 2026-09-13. Owner, dal Pad, guardando la foto:
+ * «ECCO COSA MANCA LA MODALITA COMPATTA — REGRESSIONE».
+ *
+ * La forma compatta esisteva ed era il PREDEFINITO (`TALOS_DEFAULT_COMPOSER_SHAPE`,
+ * scelto dall'owner il 2026-08-17). Il compositore Calm del 12/09 ha smesso di
+ * guardare i tre flag di forma — lo dichiarava lui stesso in testa a
+ * composerStyle.ts: «la forma Calm ignora i tre flag restituiti qui» — quindi
+ * «Forma della barra di scrittura» in Impostazioni era diventato un controllo
+ * con tre voci e nessun effetto.
+ *
+ * Ripreso dal compositore precedente, non reinventato: compatto = immersivo E
+ * campo non a fuoco E testo vuoto E nessun allegato. In quello stato la riga
+ * degli strumenti non si disegna: una riga a riposo, si espande quando scrivi —
+ * che e' parola per parola cio' che l'impostazione promette.
+ */
+const composerFocused = ref(false)
+const composerCompact = computed(() => (
+    props.immersiveComposer
+    && !composerFocused.value
+    && !props.prompt.trim()
+    && (props.attachments?.length ?? 0) === 0
+))
+const libraryChip = ref<HTMLElement | null>(null)
+const librarySheetOpen = ref(false)
+const showLibraryChip = computed(() => (
+    props.libraryContextEnabled
+    || props.libraryTurnOverride !== null
+    || props.libraryFiles.length > 0
+))
+const libraryModeLabel = computed(() => {
+    if (!props.libraryContextEnabled && props.libraryTurnOverride?.enabled !== true) {
+        return t('library.contextModeOff')
+    }
+    if (props.libraryContextMode === 'smart_relevant_v1') return t('aiDefaults.libraryModes.smart')
+    if (props.libraryContextMode === 'ask_before_use_v1') return t('aiDefaults.libraryModes.ask')
+    if (props.libraryContextMode === 'agentic_on_demand_v1') return t('aiDefaults.libraryModes.onDemand')
+    return t('aiDefaults.libraryModes.broad')
+})
+const librarySourceCountLabel = computed(() => t(
+    props.librarySourceCount === 1 ? 'library.sourceCountOne' : 'library.sourceCountMany',
+    { count: props.librarySourceCount },
+))
+/** Sola icona a schermo: modo e numero di fonti vivono nel nome accessibile. */
+const libraryChipLabel = computed(() => (
+    `${t('library.contextForNextMessage')}: ${libraryModeLabel.value} · ${librarySourceCountLabel.value}`
+))
+
+async function closeLibrarySheet(): Promise<void> {
+    librarySheetOpen.value = false
+    await nextTick()
+    libraryChip.value?.focus()
+}
+
+async function openPlus(): Promise<void> {
+    toolDrawerOpen.value = true
+}
+async function closeToolDrawer(): Promise<void> {
+    toolDrawerOpen.value = false
+    await nextTick()
+    focusTrigger(plusTrigger.value)
+}
+
+const selectedProfile = computed(() => (
+    props.modelProfiles.find((profile) => profile.id === props.selectedModelProfileId) ?? null
+))
+const selectedRoute = computed(() => (
+    props.routingProfiles.find((profile) => profile.id === props.selectedRoutingProfileId) ?? null
+))
+const modelTitle = computed(() => {
+    if (selectedRoute.value) return selectedRoute.value.name
+    if (selectedProfile.value) return selectedProfile.value.display_name
+    return t('chat.noModelSelected')
+})
+const hasAuthorizedAttachment = computed(() =>
+    props.attachments.some((attachment) => attachment.status === 'authorized'),
+)
+const attachmentBlocked = computed(() =>
+    props.attachmentBusy || props.attachments.some((attachment) => attachment.status !== 'authorized'),
+)
+const canSubmit = computed(() => (
+    props.canSend
+    && !props.sending
+    && !attachmentBlocked.value
+    && (props.prompt.trim().length > 0 || hasAuthorizedAttachment.value)
+))
+const canRequestEnhancement = computed(() => (
+    selectedProfile.value !== null
+    && !props.enhancingPrompt
+    && !props.sending
+    && props.prompt.trim().length > 0
+))
+// F4-#20: a mute disabled control explains nothing on touch — when the
+// enhancer cannot run, the tap surfaces WHY instead of dying silently.
+const enhanceUnavailableReason = computed<string | null>(() => {
+    if (selectedProfile.value === null) return t('chat.selectCallableModel')
+    if (props.prompt.trim().length === 0) return t('chat.writePromptFirst')
+    return null
+})
+const slashMenuOpen = computed(() => /^\/[^\s\n]*$/.test(props.prompt))
+const statusText = computed(() => {
+    if (props.sending) return t('chat.processing')
+    if (props.attachmentBusy) return t('chat.addingFiles')
+    if (attachmentBlocked.value) return t('chat.removeFailedFiles')
+    if (props.enhancingPrompt) return t('chat.improvingPrompt')
+    if (props.promptEnhancementError) return props.promptEnhancementError
+    return props.sendDisabledReason
+})
+
+// Calm: microfono separato, invio vuoto disabilitato, stop sempre raggiungibile.
+const composerHasContent = computed(() => (
+    props.prompt.trim().length > 0 || props.attachments.length > 0
+))
+const dictating = computed(() => props.dictationListening || props.dictationStarting)
+/**
+ * Owner 2026-09-13: microfono a campo vuoto, invio col testo, stop mentre
+ * risponde o mentre si detta.
+ *
+ * Dove la dettatura non c'e' il microfono resta al suo posto, spento, con la
+ * riga che dice perche' (talos-composer-mic-reason): un comando che sparisce
+ * non spiega niente, uno spento con la sua ragione si'.
+ */
+const rightAction = computed<'stop' | 'dictating' | 'mic' | 'send'>(() => {
+    if (props.sending) return 'stop'
+    if (dictating.value) return 'dictating'
+    return composerHasContent.value ? 'send' : 'mic'
+})
+const microphoneReason = computed(() => !props.dictationSupported ? t('chat.dictationUnavailable') : '')
+function onMicrophone(): void {
+    if (!props.dictationSupported || dictating.value) return
+    promptField.value?.blur()
+    emit('toggleDictation')
+}
+/** Stable accessible name; the reason travels in the title. */
+const rightActionLabel = computed(() => {
+    switch (rightAction.value) {
+        case 'stop': return t('chat.stopResponse')
+        case 'dictating': return t('chat.stopDictation')
+        case 'send': return t('chat.sendMessage')
+        default: return t('chat.dictate')
+    }
+})
+const rightActionTitle = computed(() => {
+    if (rightAction.value === 'dictating' && props.dictationStarting) return t('chat.startingDictation')
+    if (rightAction.value === 'send') return statusText.value || t('chat.sendMessage')
+    if (rightAction.value === 'mic') return microphoneReason.value || rightActionLabel.value
+    return rightActionLabel.value
+})
+const attachmentReason = computed(() => props.attachmentDisabledReason || t('chat.attachmentUnavailable'))
+const contextReason = computed(() => props.contextDisabledReason || t('chat.contextUnavailable'))
+function effortLabel(level: string): string {
+    const key = `chat.effort${level.charAt(0).toUpperCase()}${level.slice(1)}`
+    return t(key)
+}
+
+/**
+ * Owner 2026-07-26: on a phone the model pill shows a themed brain instead of
+ * the word "reasoning"; from a tablet up it can show the words too.
+ *
+ * The same shape the Library chip beside it already uses — icon always, words
+ * from `md:` (768px, exactly TALOS_TABLET_WIDTH_MEDIA_QUERY, so the breakpoint
+ * cannot drift from the app's own idea of a tablet).
+ *
+ * The accessible name is the part that was already wrong. An `aria-label`
+ * REPLACES an element's text, so the reasoning state was never announced even
+ * while it was visible; hiding it from the eye as well would make it invisible
+ * twice. It goes into the name now, and the name still leads with the model,
+ * because the model is what the button is for.
+ */
+/**
+ * Owner 2026-07-30: the brain would not go out when extended thinking was
+ * switched off.
+ *
+ * The cause was inherited, not introduced: `effort` defaults to 'high' and is
+ * rarely set back to 'off', so a condition of "thinking OR effort is on" was
+ * true almost always. The old text version hid it — it simply swapped the word
+ * "Ragionamento" for "Alto" and looked busy either way.
+ *
+ * So the ICON means the switch the user flips, and nothing else. The words
+ * still report the effort, because that dial is real too — but a light that
+ * never goes out is not an indicator, it is decoration.
+ */
+const reasoningWordsActive = computed(() => Boolean(
+    selectedProfile.value && (props.thinking || props.selectedEffort !== 'off'),
+))
+const reasoningLabel = computed(() => (
+    props.thinking ? t('chat.thinking') : effortLabel(props.selectedEffort)
+))
+const modelChipLabel = computed(() => {
+    const name = selectedProfile.value?.display_name ?? t('chat.chooseModel')
+    const base = `${t('chat.chooseModelProfile')}: ${name}`
+    return reasoningWordsActive.value ? `${base} · ${reasoningLabel.value}` : base
+})
+const rightActionDisabled = computed(() => {
+    if (rightAction.value === 'send') return !canSubmit.value
+    if (rightAction.value === 'mic') return !props.dictationSupported
+    return false
+})
+function onRightAction(): void {
+    if (rightAction.value === 'stop') { emit('stop'); return }
+    if (rightAction.value === 'dictating') { emit('toggleDictation'); return }
+    if (rightAction.value === 'mic') { onMicrophone(); return }
+    requestSend()
+}
+
+watch(composerCompact, () => { void nextTick().then(resizePrompt) })
+
+function resizePrompt(): void {
+    const field = promptField.value
+    if (!field) return
+    field.style.height = 'auto'
+    /*
+     * ⛔ Anche il pavimento CSS va tolto PRIMA di misurare: `scrollHeight` lo
+     *    include, quindi un campo vuoto riportava 56 px di contenuto che non
+     *    esiste — e arrotondati in su diventavano 76,8, cioe' TRE righe per un
+     *    campo in cui non c'e' scritto niente. Misurato sul Pad il 13/09, ed e'
+     *    l'altezza che l'owner ha visto come «troppo alto».
+     */
+    const minimoScritto = field.style.minHeight
+    field.style.minHeight = '0px'
+    const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+    /*
+     * ⛔ Owner 2026-09-13: «i pulsanti e il testo non sono centrati bene nel
+     *    container composer». MISURATO col Pad in verticale (CDP): contenitore
+     *    alto 73,5 px per un campo di 56, con dentro UNA riga da 28 — e i
+     *    comandi 16,8 px sopra il centro, 4 px fuori dal riquadro in cima.
+     *
+     * Il pavimento di 3,5rem serve al campo che CRESCE, per non farlo sobbalzare
+     * mentre si scrive. A riposo — campo vuoto, nessun fuoco, nessun allegato —
+     * non c'e' niente da stabilizzare: quel pavimento aggiunge solo aria sotto
+     * il testo, e la riga dei comandi galleggia in alto dentro di essa.
+     * ⇒ A riposo la scatola vale UNA RIGA, e il CSS (.is-compact) la centra.
+     */
+    const stile = getComputedStyle(field)
+    const riga = Number.parseFloat(stile.lineHeight) || rem * 1.75
+    /*
+     * Owner 13/09: «il composer espanso e' troppo alto». Il pavimento e' UNA
+     * RIGA anche a fuoco, nella barra agganciata.
+     *
+     * Il pavimento di due righe l'avevo messo per «dare peso» alla scatola, e
+     * misurandolo si e' visto che non paga: a campo vuoto il placeholder sta
+     * sulla prima riga e sotto resta una riga vuota, cioe' il testo finisce
+     * 12,8 px sopra i comandi — che sono centrati, come l'owner ha chiesto.
+     * Una riga e' insieme piu' bassa e allineata, e il campo cresce da solo
+     * appena si scrive: e' cio' che fa un campo che cresce.
+     *
+     * La home resta piu' generosa: li' il compositore e' l'elemento principale
+     * della pagina vuota, non una barra in fondo.
+     */
+    const floor = props.docked ? riga : 3 * riga
+    /*
+     * ⛔ Owner 2026-09-13, terzo difetto della stessa superficie: l'ultima riga
+     *    si vedeva TAGLIATA A META'. Misurato sul Pad: campo 192 px, riga 25,6
+     *    → 7,5 righe, resto 12,8 px. Il tetto di 12rem non e' un multiplo della
+     *    riga, e mezza riga di testo resta appesa sotto il bordo.
+     *
+     * ⇒ La scatola vale sempre un numero INTERO di righe: il tetto si arrotonda
+     *   in GIU' (una riga mozzata non si mostra), il contenuto in SU (se no
+     *   taglierebbe proprio la riga che si sta scrivendo).
+     *
+     * ⛔ scrollHeight include il padding verticale: si sottrae prima di contare
+     *   le righe e si riaggiunge dopo. Oggi vale 0, ma la cura non deve
+     *   dipendere da un valore che qualcuno potrebbe cambiare domani.
+     */
+    const passo = (Number.parseFloat(stile.paddingTop) || 0) + (Number.parseFloat(stile.paddingBottom) || 0)
+    /*
+     * ⛔ La tolleranza non e' una comodita': e' l'errore di misura del browser.
+     *    `scrollHeight` e' un INTERO, quindi una riga da 25,6 px viene
+     *    dichiarata 26 — e 26/25,6 = 1,0156, che arrotondato in su fa DUE righe.
+     *    Misurato sul Pad: un campo vuoto risultava alto 51,2 px per mezzo pixel
+     *    di arrotondamento altrui. Si concede il 5% di una riga (1,28 px), che
+     *    copre l'intero senza mai nascondere del testo vero.
+     * ⛔ E vale SOLO quando si sale: applicata al tetto lo abbasserebbe di una
+     *    riga proprio quando il tetto e' un multiplo esatto.
+     */
+    const TOLLERANZA_RIGA = 0.05
+    const aRighe = (px: number, verso: (n: number) => number, tolleranza = 0): number =>
+        Math.max(riga, verso((px - passo) / riga - tolleranza) * riga) + passo
+    const tetto = aRighe(12 * rem, Math.floor)
+    const contenuto = aRighe(field.scrollHeight, Math.ceil, TOLLERANZA_RIGA)
+    field.style.height = Math.max(floor, Math.min(contenuto, tetto)) + 'px'
+    field.style.minHeight = minimoScritto
+    measurePromptTall(field)
+}
+
+/**
+ * Owner 2026-08-27 — il pulsante "espandi a tutto schermo" compare solo
+ * oltre 2-3 righe, per non affollare la barra su un messaggio corto.
+ * MISURATO, non contato a caratteri: stesso principio già usato altrove nel
+ * repo per la stessa identica domanda ("questo campo è alto più di una
+ * riga?") — vedi `TalosBarraRoot.vue::misuraIlCampo`. `scrollHeight` include
+ * il padding verticale, quindi va sottratto prima di confrontarlo con
+ * `lineHeight`; la soglia sale a 2.5 righe (contro l'1.5 della barra)
+ * perché qui l'intento è "testo grande", non "più di una riga sola".
+ */
+const promptTall = ref(false)
+function measurePromptTall(field: HTMLTextAreaElement): void {
+    const style = getComputedStyle(field)
+    const lineHeight = Number.parseFloat(style.lineHeight) || 24
+    const padding = (Number.parseFloat(style.paddingTop) || 0)
+        + (Number.parseFloat(style.paddingBottom) || 0)
+    promptTall.value = (field.scrollHeight - padding) > lineHeight * 2.5
+}
+
+const composerExpanded = ref(false)
+function openComposerExpanded(): void {
+    composerExpanded.value = true
+}
+function closeComposerExpanded(): void {
+    composerExpanded.value = false
+    // Owner 2026-08-27: chi collassa vuole continuare a scrivere lì dove
+    // era rimasto — il ripristino del focus di `useTalosModalSurface` da
+    // solo tornerebbe sul bottone che ha aperto l'overlay, non sul campo.
+    void nextTick(() => promptField.value?.focus())
+}
+function updatePrompt(event: Event): void {
+    const field = event.currentTarget as HTMLTextAreaElement
+    emit('update:prompt', field.value)
+    resizePrompt()
+}
+
+/**
+ * One tap, one message.
+ *
+ * Owner 2026-07-27 caught the same prompt sent twice. `props.sending` was the
+ * only guard, and the parent raises it AFTER the emit — so between the two
+ * there is a window where a second event (a blur that produces an extra click,
+ * a fast double tap) passes untouched. The gate closes on this very tick and
+ * reopens when the answer ends, or after a grace period if the send never
+ * started at all.
+ */
+const sendGate = createTalosSendGate()
+watch(() => props.sending, (sending) => sendGate.observeSending(sending))
+
+function requestSend(value = promptField.value?.value ?? props.prompt): void {
+    if (!props.canSend || props.sending || attachmentBlocked.value
+        || (!value.trim() && !hasAuthorizedAttachment.value)) return
+    if (!sendGate.claim(performance.now())) return
+    emit('send')
+}
+
+function onPromptKeydown(event: KeyboardEvent): void {
+    if (slashMenuOpen.value && !event.isComposing) {
+        const count = slashCommandCount.value
+        if (event.key === 'Escape') {
+            event.preventDefault()
+            emit('update:prompt', '')
+            return
+        }
+        if (count > 0 && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+            event.preventDefault()
+            if (event.key === 'Home') slashActiveIndex.value = 0
+            else if (event.key === 'End') slashActiveIndex.value = count - 1
+            else if (event.key === 'ArrowDown') slashActiveIndex.value = (slashActiveIndex.value + 1) % count
+            else slashActiveIndex.value = (slashActiveIndex.value - 1 + count) % count
+            return
+        }
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault()
+            slashMenu.value?.activateSelected()
+            return
+        }
+    }
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
+    event.preventDefault()
+    requestSend((event.currentTarget as HTMLTextAreaElement).value)
+}
+
+function requestPromptEnhancement(): void {
+    if (props.enhancingPrompt || props.sending) return
+    const reason = enhanceUnavailableReason.value
+    if (reason) {
+        emit('enhanceBlocked', reason)
+        return
+    }
+    modelPickerOpen.value = false
+    /*
+     * Aprire NON fa piu' partire.
+     *
+     * Owner 2026-08-04: «prima che parta l'enhancing bisogna selezionare
+     * modello e ragionamento ove previsto, e il tono». Prima il drawer si
+     * apriva e la spesa era gia' partita: chi voleva un modello diverso
+     * scopriva di non poterlo scegliere mentre il conto correva.
+     */
+    enhancerDrawerOpen.value = true
+}
+
+// Manual dismissal of the enhancer drawer abandons the enhancement; the
+// parent clears its state, which is also what closes the drawer after a
+// decision (insert/replace/cancel) — popover-parity semantics.
+function dismissEnhancerDrawer(): void {
+    enhancerDrawerOpen.value = false
+    if (props.enhancingPrompt || props.promptEnhancementError || props.promptEnhancement) {
+        emit('cancelPromptEnhancement')
+    }
+}
+
+function selectSlashCommand(commandId: TalosMobileCommandId): void {
+    emit('selectSlashCommand', commandId)
+}
+
+function updateSlashCommandCount(count: number): void {
+    slashCommandCount.value = count
+    if (count === 0) slashActiveIndex.value = 0
+    else slashActiveIndex.value = Math.min(slashActiveIndex.value, count - 1)
+}
+
+async function toggleModelPicker(): Promise<void> {
+    modelPickerOpen.value = !modelPickerOpen.value
+}
+
+function focusTrigger(trigger: ComponentPublicInstance | HTMLElement | null): void {
+    const element = trigger instanceof HTMLElement ? trigger : (trigger?.$el as HTMLElement | undefined)
+    element?.focus()
+}
+
+async function closeModelPicker(): Promise<void> {
+    modelPickerOpen.value = false
+    await nextTick()
+    focusTrigger(modelTrigger.value)
+}
+
+/**
+ * Choosing something inside the drawer does NOT dismiss it.
+ *
+ * Owner 2026-07-27: "fai in modo che il drawer modello non si chiuda ogni volta
+ * che clicco su una cosa dentro". Every selection used to close it — model,
+ * routing profile AND effort — which makes a sheet titled "Model & reasoning"
+ * unusable: it is a configuration surface, not a menu, and picking a model then
+ * wanting a different effort meant opening it twice. The sheet already has a
+ * close affordance; leaving is the user's decision, not a side effect of
+ * adjusting something.
+ */
+function selectModelProfile(profileId: string): void {
+    emit('selectModelProfile', profileId)
+}
+
+function selectRoutingProfile(profileId: string): void {
+    emit('selectModelRoutingProfile', profileId)
+}
+
+function selectEffort(level: TalosMobileEffortLevel): void {
+    emit('selectEffort', level)
+}
+
+watch(
+    () => Boolean(props.enhancingPrompt || props.promptEnhancementError || props.promptEnhancement),
+    (active) => { if (!active) enhancerDrawerOpen.value = false },
+)
+
+function focusPrompt(atEnd = false): boolean {
+    const field = promptField.value
+    if (!field || field.disabled) return false
+    field.focus()
+    if (atEnd) field.setSelectionRange(field.value.length, field.value.length)
+    return document.activeElement === field
+}
+
+// `openPlus` esce per le chip di prompt della home (Fase 2 Calm, 12/09):
+// «Analizza un file» e «Altro» aprono il foglio «Aggiungi alla chat» — lo
+// stesso del «+», non un secondo.
+defineExpose({ focusPrompt, openPlus })
+
+watch(() => [props.prompt, props.docked, dictating.value], () => {
+    slashActiveIndex.value = 0
+    if (slashMenuOpen.value) modelPickerOpen.value = false
+    nextTick(resizePrompt)
+}, { immediate: true })
+</script>
+
+<template>
+    <section
+        data-testid="talos-mobile-composer"
+        class="talos-calm-composer"
+        :class="{ 'is-compact': composerCompact }"
+        :data-talos-composer-compact="composerCompact ? 'true' : 'false'"
+        :aria-label="$t('chat.composer')"
+    >
+        <div
+            v-if="slashMenuOpen"
+            id="talos-mobile-slash-command-popover"
+            class="absolute bottom-full left-0 right-0 z-50 mb-2"
+        >
+            <TalosMobileSlashCommandMenu
+                ref="slashMenu"
+                :commands="comandiSlashDellaChat"
+                :query="prompt"
+                :active-index="slashActiveIndex"
+                @selected="selectSlashCommand"
+                @filtered-count="updateSlashCommandCount"
+            />
+        </div>
+
+        <TalosMobileAttachmentTray
+            :items="attachments"
+            :busy="attachmentBusy"
+            :error="attachmentError"
+            @remove="emit('removeAttachment', $event)"
+            @dismiss-error="emit('dismissAttachmentError')"
+        />
+
+        <!-- Owner 12/09 20:10: «levi ricerca web dal drawer e dalla chat in generale» —
+             la pillola del link rilevato (mondo + apri) non c'e' piu'. -->
+
+        <!--
+            Mentre si detta il compositore ha UNA cosa da mostrare.
+            Owner 2026-08-04: «vorrei che il campo testo venisse nascosto mentre
+            registri, in modo che si veda solo la barra di registrazione. Al
+            momento si vedono entrambi e risulta ripetitivo.» Aveva ragione: nel
+            campo non si scrive mentre si parla, quindi occupava spazio per non
+            offrire niente.
+
+            La forma viene dal riferimento che ha passato (Claude mobile): due
+            comandi soli, opposti, agli estremi — uno butta, uno tiene — e in
+            mezzo l'onda che reagisce alla voce, che e' l'unica cosa che dice
+            «ti sto sentendo».
+        -->
+        <TalosMobileDictationBar
+            v-if="dictationListening || dictationStarting"
+            :avvio="dictationStarting"
+            :livello="dictationLevel"
+            :trascrizione="dictationTranscript"
+            :bozza="props.prompt"
+            @annulla="emit('discardDictation')"
+            @ferma="emit('toggleDictation')"
+            @invia="emit('sendDictation')"
+        />
+
+        <!--
+            Owner 2026-09-13, dal Pad: invio dinamico, solo microfono o invio a
+            seconda del testo immesso, come il vecchio compositore, e accanto al
+            campo.
+
+            UN solo comando, alla destra del campo: microfono finche' il campo
+            e' vuoto, invio appena c'e' del testo, stop mentre TALOS risponde o
+            mentre si detta. Il secondo microfono che accodava (2026-08-27) non
+            c'e' piu': con del testo scritto il comando e' Invia, come nel
+            vecchio compositore che l'owner ha chiesto di riavere.
+        -->
+        <!--
+            ⛔⛔ 2026-09-13, owner dal Pad con foto: MENTRE SI DETTA IL COMANDO
+            NON C'E'. La barra di registrazione ha gia' i suoi tre comandi
+            (annulla, ferma, invia); lasciare qui il tondo accento significava
+            DUE pulsanti di stop uno sotto l'altro, il secondo da solo su una
+            riga vuota perche' il campo sparisce.
+
+            E' la stessa regola dell'owner del 2026-08-04 sul campo di testo:
+            mentre si registra il compositore ha UNA cosa da mostrare. Il campo
+            spariva gia'; il comando no, e l'ho visto solo quando me l'ha
+            mostrato lui.
+        -->
+        <div v-if="!dictating" class="talos-composer-field-row">
+            <!-- Owner 2026-09-13, dal Pad: «il tasto piu' senza bordo rotondo lo devi
+                 mettere alla sinistra del campo di input», come il vecchio compositore.
+                 Sta nella riga del campo, non piu' in quella degli strumenti. -->
+            <Button
+                ref="plusTrigger" type="button" size="icon" variant="ghost"
+                data-testid="talos-composer-plus" data-mobile-icon-only="true"
+                :aria-label="$t('chat.addToChat')" aria-haspopup="dialog"
+                :aria-expanded="toolDrawerOpen"
+                class="talos-pressable talos-plus-btn min-h-touch min-w-touch"
+                @pointerdown.prevent @click="openPlus"
+            ><Plus class="size-5" aria-hidden="true" /></Button>
+            <textarea
+                v-if="!dictating"
+                ref="promptField"
+                :value="prompt"
+                rows="1"
+                data-testid="talos-composer-prompt"
+                :aria-label="$t('chat.messagePlaceholder')"
+                :placeholder="$t('chat.messagePlaceholderEllipsis')"
+                class="talos-calm-prompt"
+                @input="updatePrompt"
+                @keydown="onPromptKeydown"
+                @focus="composerFocused = true"
+                @blur="composerFocused = false"
+            />
+            <!-- ⛔⛔ 2026-09-13, misurato sul Pad con uiautomator: con
+                 `aria-pressed` questo pulsante arrivava nell'albero di
+                 accessibilita' come ToggleButton SENZA NOME — desc vuota,
+                 testo vuoto — perche' dentro ha solo un'icona. Chi usa il
+                 lettore di schermo sentiva «pulsante di attivazione» e
+                 nient'altro. Il «+» accanto, che non ha aria-pressed, il
+                 nome ce l'ha; «Ragiona», che e' un toggle vero, si salva
+                 perche' ha del testo visibile.
+                 ⇒ E l'attributo era comunque MORTO: lo stato 'dictating' in
+                 questa riga non si disegna piu' (la riga sparisce mentre si
+                 detta), quindi non c'era piu' niente da «premere». -->
+            <Button
+                data-testid="talos-composer-action" type="button" size="icon" variant="ghost" data-mobile-icon-only="true"
+                :aria-label="rightActionLabel" :title="rightActionTitle"
+                :data-talos-action="rightAction"
+                :disabled="rightActionDisabled" class="talos-pressable talos-send-btn min-h-touch min-w-touch"
+                @pointerdown.prevent @click="onRightAction"
+            >
+                <Square v-if="rightAction === 'stop' || rightAction === 'dictating'" class="size-4" fill="currentColor" aria-hidden="true" />
+                <Mic v-else-if="rightAction === 'mic'" class="size-5" aria-hidden="true" />
+                <ArrowUp v-else class="size-5" aria-hidden="true" />
+            </Button>
+        </div>
+
+        <div v-if="!composerCompact" class="talos-composer-tools" data-testid="talos-composer-tools">
+            <button
+                ref="modelTrigger" type="button" data-testid="talos-composer-model-chip"
+                :aria-label="modelChipLabel" :title="modelTitle"
+                aria-haspopup="dialog" :aria-expanded="modelPickerOpen"
+                class="talos-pressable talos-model-chip min-h-touch"
+                @pointerdown.prevent @click="toggleModelPicker"
+            >
+                <TalosMobileProviderIcon v-if="selectedProfile" :provider="selectedProfile.provider" class="size-5 shrink-0 border-0 bg-transparent" />
+                <span>{{ selectedRoute?.name ?? selectedProfile?.display_name ?? $t('chat.chooseModel') }}</span>
+                <!-- Owner 12/09 19:25: la parola del ragionamento accanto al modello
+                     doppiava la chip «Ragiona» accesa. Resta per chi ascolta lo schermo. -->
+                <span v-if="reasoningWordsActive" data-testid="talos-composer-reasoning-label" class="sr-only">{{ reasoningLabel }}</span>
+            </button>
+            <!-- Owner 2026-09-13, dal Pad: la pillola del contesto e' sola
+                 icona, accanto a quella del modello. Le parole restano nel nome
+                 accessibile e in sr-only: chi ascolta lo schermo sente modo e
+                 numero di fonti, l'occhio vede un'icona e il nome del modello
+                 ha di nuovo spazio per respirare. -->
+            <button
+                v-if="showLibraryChip" ref="libraryChip" type="button" data-testid="talos-composer-library-chip"
+                :aria-label="libraryChipLabel" aria-haspopup="dialog" :aria-expanded="librarySheetOpen"
+                class="talos-pressable talos-mode-chip talos-icon-chip min-h-touch min-w-touch"
+                @pointerdown.prevent @click="librarySheetOpen = true"
+            >
+                <Database class="size-4 shrink-0" aria-hidden="true" />
+                <span data-testid="talos-composer-library-chip-label" class="sr-only">{{ libraryModeLabel }} · {{ librarySourceCountLabel }}</span>
+            </button>
+            <!-- Owner 2026-09-13, dal Pad: «devi eliminare il pulsante ragiona
+                 completamente, tanto ce l'abbiamo nel drawer del modello». La
+                 SCELTA del ragionamento non sparisce: vive nel foglio del modello
+                 (profilo + sforzo). Qui spariva solo il doppione. -->
+            <!-- Owner 12/09 19:30, dal Pad: «Leva il pulsante agente subito» e «il
+                 pulsante naviga sul web si deve levare completamente». Lo stato
+                 degli attrezzi (agentToolsEnabled) resta nel controller, acceso;
+                 il suggerimento dell'URL rilevato resta sopra il campo. -->
+            <slot />
+            <Button
+                v-if="promptTall" type="button" size="icon" variant="ghost"
+                data-testid="talos-composer-expand" data-mobile-icon-only="true"
+                :aria-label="$t('chat.expandComposer')" :title="$t('chat.expandComposer')"
+                class="talos-pressable min-h-touch min-w-touch"
+                @pointerdown.prevent @click="openComposerExpanded"
+            ><Maximize2 class="size-4" aria-hidden="true" /></Button>
+        </div>
+        <p v-if="microphoneReason" data-testid="talos-composer-mic-reason" class="text-xs text-[var(--talos-muted)]">{{ microphoneReason }}</p>
+
+        <!--
+            The reason the composer will not send, where eyes can find it.
+
+            It was announced to screen readers and hung on the Send button's
+            `title` — which on a phone nobody can hover, and which is not there
+            at all while the composer is empty and the right button is the Mic.
+            So a person met a composer that silently refused and said nothing.
+
+            Owner 2026-08-03 hit the same shape twice in one day: the dead
+            «Avvia» in the research setup, and a new chat that would not send
+            because another one was still answering. Both were controls that
+            declined without explaining.
+
+            Only when it is genuinely blocked: `sending` has its own visible
+            state (the Stop button), and repeating "processing" under it would
+            be noise.
+        -->
+        <p
+            v-if="!sending && sendDisabledReason"
+            data-testid="talos-composer-blocked-reason"
+            class="px-1 pt-1 text-2xs leading-5 text-[var(--talos-muted)]"
+        >{{ sendDisabledReason }}</p>
+
+        <span class="sr-only" role="status" aria-live="polite">{{ statusText }}</span>
+
+        <!-- Lo stesso foglio «Aggiungi alla chat» per tutte le preferenze legacy. -->
+        <TalosMobileComposerDrawer
+            v-if="toolDrawerOpen"
+            :can-enhance="canRequestEnhancement"
+            :enhance-reason="enhanceUnavailableReason"
+            :thinking="thinking"
+            :supports-thinking="selectedProfile?.supports_thinking ?? false"
+            :effort-levels="selectedProfile?.effort_levels ?? []"
+            :selected-effort="selectedEffort"
+            :attachment-disabled-reason="attachmentReason"
+            :context-disabled-reason="contextReason"
+            :enhancing="enhancingPrompt || sending"
+            :attachments-available="attachmentsAvailable"
+            :context-available="contextAvailable"
+            :agent-tools-enabled="agentToolsEnabled"
+            :harness-available="harnessAvailable"
+            @close="closeToolDrawer"
+            @preset="emit('preset', $event)"
+            @navigate="emit('navigate', $event)"
+            @set-agent-tools-enabled="emit('setAgentToolsEnabled', $event)"
+            @attach="emit('attach')"
+            @take-photo="emit('takePhoto')"
+            @pick-photos="emit('pickPhotos')"
+            @open-context="emit('openContext')"
+            @open-model-lab="emit('openModelLab')"
+            @select-thinking="emit('selectThinking', $event)"
+            @select-effort="emit('selectEffort', $event)"
+            @enhance-prompt="requestPromptEnhancement"
+        />
+
+        <TalosMobileModelEffortDrawer
+            v-if="modelPickerOpen"
+            :model-profiles="modelProfiles"
+            :routing-profiles="routingProfiles"
+            :selected-model-profile-id="selectedModelProfileId"
+            :selected-routing-profile-id="selectedRoutingProfileId"
+            :selected-effort="selectedEffort"
+            :thinking="thinking"
+            :supports-thinking="selectedProfile?.supports_thinking ?? false"
+            :effort-levels="selectedProfile?.effort_levels ?? []"
+            :loading-models="loadingModels"
+            :loading-routes="loadingRoutes"
+            :refreshing-models="refreshingModels"
+            :discovery-problems="discoveryProblems"
+            :show-executor-model="showExecutorModel"
+            :executor-model-profiles="executorModelProfiles"
+            :selected-executor-model-profile-id="selectedExecutorModelProfileId"
+            @close="closeModelPicker"
+            @select-model-profile="selectModelProfile"
+            @select-model-routing-profile="selectRoutingProfile"
+            @select-effort="selectEffort"
+            @select-thinking="emit('selectThinking', $event)"
+            @refresh-models="emit('refreshModels')"
+            @select-executor-model-profile="emit('selectExecutorModelProfile', $event)"
+            @open-model-lab="modelPickerOpen = false; emit('openModelLab')"
+        />
+
+        <TalosMobileEnhancerDrawer
+            v-if="enhancerDrawerOpen"
+            :enhancing="enhancingPrompt ?? false"
+            :error="promptEnhancementError ?? ''"
+            :result="promptEnhancement ?? null"
+            :model-title="modelTitle"
+            :depth="enhancerDepth"
+            :model="enhancerModel"
+            :effort="enhancerEffort"
+            :models="enhancerModels"
+            @start="emit('enhancePrompt')"
+            @update:depth="(value) => emit('updateEnhancerDepth', value)"
+            @update:model="(value) => emit('updateEnhancerModel', value)"
+            @update:effort="(value) => emit('updateEnhancerEffort', value)"
+            @close="dismissEnhancerDrawer"
+            @cancel="emit('cancelPromptEnhancement')"
+            @insert="emit('insertPromptEnhancement')"
+            @replace="emit('replacePromptEnhancement')"
+        />
+
+        <TalosMobileLibraryContextSheet
+            v-if="librarySheetOpen"
+            :effective-enabled="libraryContextEnabled"
+            :effective-mode="libraryContextMode"
+            :override="libraryTurnOverride"
+            :files="libraryFiles"
+            @close="closeLibrarySheet"
+            @update:override="emit('updateLibraryTurnOverride', $event)"
+        />
+
+        <TalosMobileComposerExpanded
+            v-if="composerExpanded"
+            :prompt="prompt"
+            :sending="sending"
+            :can-submit="canSubmit"
+            @update:prompt="emit('update:prompt', $event)"
+            @send="requestSend(prompt); closeComposerExpanded()"
+            @stop="emit('stop')"
+            @close="closeComposerExpanded"
+        />
+    </section>
+</template>
+
+<style>
+/* Il compositore resta scorrevole anche quando la tastiera lascia solo 180 px. */
+@media (orientation: landscape) and (max-height: 180px) {
+    [data-testid="talos-mobile-composer"] {
+        max-height: calc(100dvh - env(safe-area-inset-top));
+        overflow-y: auto;
+    }
+    [data-testid="talos-mobile-composer"] textarea {
+        height: 48px !important;
+        min-height: 48px !important;
+    }
+}
+</style>
