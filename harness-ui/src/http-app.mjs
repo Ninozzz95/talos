@@ -1,4 +1,6 @@
 import { validaFallbackProviders } from './model-destination.mjs';
+import { chiediMiglioramentoAlProvider } from './prompt-enhancer-provider.mjs';
+import { CARTELLA_ASSISTENZA_PREDEFINITA, MAX_DOMANDA_ASSISTENZA, cercaAssistenza } from './assistenza.mjs';
 import { randomBytes, randomUUID } from 'node:crypto'; // 08/9, BH-06: il nonce CSP del documento, nuovo a ogni risposta
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { nomiPerContentDisposition } from './workspace-files.mjs'; // PO-05: le due forme del nome per Content-Disposition (RFC 6266)
@@ -42,6 +44,8 @@ export const API_SCHEMA = 'talos.harness-ui.api.v1';
 const MAX_REQUEST_TARGET_BYTES = 4096;
 /** ⛔ Un corpo POST qui è solo `{taskId}` — poche decine di byte. 4096 è già generoso, stesso ordine di grandezza di MAX_REQUEST_TARGET_BYTES. */
 const MAX_REQUEST_BODY_BYTES = 4096;
+const MAX_BATCH_BODY_BYTES = 64 * 1024;
+export const MAX_BATCH_ITEMS = 250;
 /** ⭐ 28/8 — vedi la doc sopra `res.on('close', ...)` nella rotta /events: abbastanza frequente da tenere il canale vivo, abbastanza raro da non essere rumore nei log/nel traffico. */
 const INTERVALLO_BATTITO_SSE_MS = 15_000;
 const QA_STATES = new Set([
@@ -1108,6 +1112,7 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/browser/vivo/schermo', metodi: ['GET'] },
   { schema: '/api/v1/browser/vivo/stato', metodi: ['GET'] },
   { schema: '/api/v1/search-source', metodi: ['GET'] },
+  { schema: '/api/v1/assistenza', metodi: ['POST'] },
   { schema: '/api/v1/sessions', metodi: ['GET', 'POST'] },
   { schema: '/api/v1/automations', metodi: ['GET', 'POST'] },
   { schema: '/api/v1/workspace-launches', metodi: ['POST'] },
@@ -1137,6 +1142,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/branch$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/skills$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/(library|notes|tasks|memory|research)\/batch$/, metodi: ['POST'] },
   /*
    * ⭐⭐⭐⭐ 10/9 — il CRUD di UNA voce di Libreria, per la PERSONA. Fino a ieri qui c'era la sola
    * riga sopra, l'elenco: il modello aveva sei attrezzi sulla Libreria e chi guarda lo schermo
@@ -1156,7 +1162,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/anteprima$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/rivela$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/apri$/, metodi: ['POST'] }, // 10/09: l'azione Windows «Apri», gemella di «rivela»
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/, metodi: ['PATCH', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/(?!batch$)([^/]+)$/, metodi: ['PATCH', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/plugins$/, metodi: ['GET'] },
   /*
    * ⭐⭐⭐⭐ 11/9, owner («non negotiable»): «tutte le Note, Attività, Memoria, Libreria devono
@@ -1170,12 +1176,12 @@ const ROTTE_API = Object.freeze([
    *   di dichiarare su tutte l'unione dei metodi di tutte.
    */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/notes$/, metodi: ['GET', 'POST'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/notes\/([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/notes\/(?!batch$)([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks$/, metodi: ['GET', 'POST'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks\/(?!batch$)([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)\/stato$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory$/, metodi: ['GET', 'POST'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory\/([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory\/(?!batch$)([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/research$/, metodi: ['GET'] },
   /*
    * ⭐⭐⭐⭐ 12/9, L5 — la Ricerca approfondita smette di essere di sola lettura. Fino a ieri qui
@@ -1200,7 +1206,7 @@ const ROTTE_API = Object.freeze([
    * ACCETTA una query (`?formato=…&tono=…`): tutte le altre passano da `requireNoQuery`.
    */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)\/esporta$/, metodi: ['GET'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)$/, metodi: ['GET', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/research\/(?!batch$)([^/]+)$/, metodi: ['GET', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tool-forge$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/children$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/terminals$/, metodi: ['GET', 'POST'] },
@@ -1373,6 +1379,20 @@ function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES) {
       reject(errore);
     });
   });
+}
+
+export function requireBatchDeleteBody(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || Object.keys(value).some((chiave) => !['azione', 'ids'].includes(chiave))
+    || value.azione !== 'elimina' || !Array.isArray(value.ids)
+    || value.ids.length === 0 || value.ids.length > MAX_BATCH_ITEMS) {
+    throw Object.assign(new Error(`Il batch richiede azione elimina e da 1 a ${MAX_BATCH_ITEMS} id.`), { code: 'QUERY_INVALID' });
+  }
+  const ids = value.ids.map((id) => (typeof id === 'string' ? id.trim() : ''));
+  if (ids.some((id) => id === '') || new Set(ids).size !== ids.length) {
+    throw Object.assign(new Error('Gli id del batch devono essere stringhe uniche e non vuote.'), { code: 'QUERY_INVALID' });
+  }
+  return ids;
 }
 
 /**
@@ -2102,6 +2122,7 @@ export function createHttpApp({
   setupStatoFn = null,
   // ⭐ 04/9, R-03 — fonte della ricerca web scelta dalle Impostazioni (parità mobile) + prova reale.
   searchSourceStore = null, provaRicercaWebFn = null,
+  cartellaAssistenza = CARTELLA_ASSISTENZA_PREDEFINITA, cercaAssistenzaFn = cercaAssistenza,
   // ⭐ 04/9, W1-10 — token di loopback (config.token): quando c'è, /api/* vuole il cookie talos_token; `GET /?token=<t>` lo imposta e rimanda a `/`.
   token = null,
   workspaceLaunchStore = null,
@@ -2287,6 +2308,26 @@ export function createHttpApp({
       sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
       return null;
     }
+  }
+
+  async function eliminaUnaInBlocco(sessionId, risorsa, id) {
+    if (risorsa === 'library') {
+      const esito = await sessionRegistry.eliminaVoceLibreria(sessionId, id);
+      if (esito && 'erroreAvvio' in esito) throw Object.assign(new Error(esito.erroreAvvio), { code: esito.code });
+      return;
+    }
+    if (risorsa === 'research') {
+      if (!idRicercaValido(id)) throw Object.assign(new Error('id di ricerca non valido'), { code: 'RESEARCH_INVALID' });
+      const esito = await sessionRegistry.eliminaRicerca(sessionId, id);
+      if (esito && 'erroreAvvio' in esito) throw Object.assign(new Error(esito.erroreAvvio), { code: esito.code });
+      if (!esito?.ok) throw Object.assign(new Error(esito?.motivo ?? 'ricerca non eliminabile'), { code: 'RESEARCH_CONFLICT' });
+      if (!esito.eliminata) throw Object.assign(new Error('ricerca assente'), { code: 'RESEARCH_NOT_FOUND' });
+      return;
+    }
+    const magazzino = magazziniDellaPersona[risorsa];
+    const voce = await magazzino.leggi(id);
+    if (!voce) throw Object.assign(new Error('voce assente'), { code: magazzino.codiceAssente });
+    await magazzino.elimina(id);
   }
 
   async function handle(req, res) {
@@ -2797,8 +2838,45 @@ export function createHttpApp({
       return;
     }
 
+    const batchEliminaMatch = method === 'POST' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/(library|notes|tasks|memory|research)\/batch$/.exec(url.pathname)
+      : null;
+    if (batchEliminaMatch) {
+      const nomi = nomiDellaRichiesta(res, method, clock, batchEliminaMatch[1]);
+      if (!nomi) return;
+      const [sessionId] = nomi;
+      const risorsa = batchEliminaMatch[2];
+      try {
+        requireNoQuery(url);
+        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const ids = requireBatchDeleteBody(await leggiCorpoJson(req, MAX_BATCH_BODY_BYTES));
+        const esiti = [];
+        for (const id of ids) {
+          try {
+            await eliminaUnaInBlocco(sessionId, risorsa, id);
+            esiti.push({ id, ok: true });
+          } catch (error) {
+            esiti.push({ id, ok: false, code: normalizeError(error).code });
+          }
+        }
+        if (req.aborted || res.destroyed) return;
+        const riusciti = esiti.filter((esito) => esito.ok).length;
+        sendJson(res, 200, successEnvelope({
+          azione: 'elimina', risorsa, richiesti: esiti.length, riusciti,
+          falliti: esiti.length - riusciti, esiti,
+        }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const libreriaRinominaMatch = method === 'PATCH' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/.exec(url.pathname)
+      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/(?!batch$)([^/]+)$/.exec(url.pathname)
       : null;
     if (libreriaRinominaMatch) {
       let sessionId;
@@ -2828,7 +2906,7 @@ export function createHttpApp({
     }
 
     const libreriaEliminaMatch = method === 'DELETE' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/.exec(url.pathname)
+      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/(?!batch$)([^/]+)$/.exec(url.pathname)
       : null;
     if (libreriaEliminaMatch) {
       let sessionId;
@@ -2988,7 +3066,7 @@ export function createHttpApp({
     }
 
     const voceLeggiMatch = method === 'GET' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname)
+      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/(?!batch$)([^/]+)$/.exec(url.pathname)
       : null;
     if (voceLeggiMatch) {
       const nomi = nomiDellaRichiesta(res, method, clock, voceLeggiMatch[1], voceLeggiMatch[3]);
@@ -3018,7 +3096,7 @@ export function createHttpApp({
     }
 
     const voceModificaMatch = method === 'PATCH' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname)
+      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/(?!batch$)([^/]+)$/.exec(url.pathname)
       : null;
     if (voceModificaMatch) {
       const nomi = nomiDellaRichiesta(res, method, clock, voceModificaMatch[1], voceModificaMatch[3]);
@@ -3046,7 +3124,7 @@ export function createHttpApp({
     }
 
     const voceEliminaMatch = method === 'DELETE' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname)
+      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/(?!batch$)([^/]+)$/.exec(url.pathname)
       : null;
     if (voceEliminaMatch) {
       const nomi = nomiDellaRichiesta(res, method, clock, voceEliminaMatch[1], voceEliminaMatch[3]);
@@ -3136,7 +3214,7 @@ export function createHttpApp({
      *   qui sarebbe una seconda difesa che diverge dalla prima proprio sul confine che conta.
      */
     const ricercaVoceMatch = sessionRegistry && (method === 'GET' || method === 'DELETE')
-      ? /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)$/.exec(url.pathname)
+      ? /^\/api\/v1\/sessions\/([^/]+)\/research\/(?!batch$)([^/]+)$/.exec(url.pathname)
       : null;
     const ricercaAzioneMatch = sessionRegistry && method === 'POST'
       ? /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)\/(pausa|ripresa|riverifica)$/.exec(url.pathname)
@@ -4401,6 +4479,29 @@ export function createHttpApp({
       return;
     }
 
+    const assistenzaMatch = method === 'POST' && url.pathname === '/api/v1/assistenza';
+    if (assistenzaMatch) {
+      try {
+        requireNoQuery(url);
+        const corpo = await leggiCorpoJson(req, MAX_REQUEST_BODY_BYTES);
+        if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)
+          || Object.keys(corpo).some((chiave) => chiave !== 'domanda')) {
+          throw Object.assign(new Error('Il corpo accetta soltanto la domanda.'), { code: 'QUERY_INVALID' });
+        }
+        const domanda = typeof corpo.domanda === 'string' ? corpo.domanda.trim() : '';
+        if (!domanda || Array.from(domanda).length > MAX_DOMANDA_ASSISTENZA) {
+          throw Object.assign(new Error(`La domanda deve contenere da 1 a ${MAX_DOMANDA_ASSISTENZA} caratteri.`), { code: 'QUERY_INVALID' });
+        }
+        const risposta = await cercaAssistenzaFn({ domanda, cartella: cartellaAssistenza });
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope(risposta, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const settingsMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/settings$/.exec(url.pathname);
     if (settingsMatch) {
@@ -4548,37 +4649,15 @@ export function createHttpApp({
             }
           }
         } else {
-          if (!providerStore || typeof providerStore.getKey !== 'function') {
-            const e = new Error('Il portachiavi dei provider non è configurato.'); e.code = 'PROVIDER_STORE_UNAVAILABLE'; throw e;
-          }
-          const chiave = providerStore.getKey('openrouter');
-          if (!chiave) { const e = new Error('Collega OpenRouter prima di far migliorare un prompt.'); e.code = 'PROVIDER_KEY_REQUIRED'; throw e; }
-          modelloUsato = contesto.modello;
-          fornitoreUsato = 'openrouter';
-          if (typeof modelloUsato !== 'string' || modelloUsato.trim() === '') {
-            const e = new Error('Questa sessione non dichiara un modello.'); e.code = 'SESSION_NOT_READY'; throw e;
-          }
-          const runtimeProvider = typeof providerStore.getRuntime === 'function' ? providerStore.getRuntime('openrouter') : null;
-          const base = (runtimeProvider?.endpoint || 'https://openrouter.ai/api/v1').replace(/\/+$/u, '');
-          let risposta;
-          try {
-            risposta = await fetchMiglioraPromptFn(`${base}/chat/completions`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${chiave}` },
-              body: JSON.stringify({ model: modelloUsato, messages: messaggi, stream: false, max_tokens: 2048 }),
-            });
-          } catch (errore) {
-            const e = new Error(messaggioSenzaChiave(`Il fornitore non ha risposto: ${errore?.message || 'motivo ignoto'}`, chiave));
-            e.code = 'PROVIDER_RUNTIME_UNAVAILABLE'; throw e;
-          }
-          if (!risposta?.ok) {
-            const e = new Error(messaggioSenzaChiave(`Il fornitore ha risposto ${risposta?.status ?? '?'}.`, chiave));
-            e.code = 'PROVIDER_RUNTIME_UNAVAILABLE'; throw e;
-          }
-          let letto;
-          try { letto = await risposta.json(); } catch { letto = null; }
-          contenuto = letto?.choices?.[0]?.message?.content;
-          if (typeof contenuto !== 'string') contenuto = '';
+          const risultato = await chiediMiglioramentoAlProvider({
+            modello: contesto.modello,
+            messaggi,
+            providerStore,
+            fetchFn: fetchMiglioraPromptFn,
+          });
+          contenuto = risultato.contenuto;
+          modelloUsato = risultato.modelloUsato;
+          fornitoreUsato = risultato.fornitoreUsato;
         }
 
         const esito = leggiRispostaMiglioramento(contenuto);

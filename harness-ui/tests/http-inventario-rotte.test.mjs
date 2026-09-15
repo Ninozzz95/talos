@@ -221,6 +221,10 @@ test('⭐⭐⭐ le rotte nuove di Note/Attività/Memoria dichiarano i metodi VER
   assert.deepEqual(metodiAmmessiPerRotta('/api/v1/sessions/x/tasks/t1/stato'), ['POST']);
   assert.equal(metodiAmmessiPerRotta('/api/v1/sessions/x/notes/n1/stato'), null, 'una nota non ha uno stato: quell’indirizzo non esiste');
   assert.equal(metodiAmmessiPerRotta('/api/v1/sessions/x/memory/m1/stato'), null);
+  for (const risorsa of ['library', 'notes', 'tasks', 'memory', 'research']) {
+    assert.deepEqual(metodiAmmessiPerRotta(`/api/v1/sessions/x/${risorsa}/batch`), ['POST'], `batch ${risorsa}`);
+  }
+  assert.equal(metodiAmmessiPerRotta('/api/v1/sessions/x/projects/batch'), null, 'Progetti resta privo di cancellazione');
 });
 
 /*

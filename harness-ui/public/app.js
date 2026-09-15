@@ -35898,6 +35898,9 @@ function montaPonteLegacy(documentObj = document) {
 // src/main.js
 montaPonteLegacy(document);
 await Promise.resolve().then(() => (init_app(), app_exports));
+if (!window.__talosHarnessHost) {
+  document.documentElement.dataset.talosStreamingAnimation = "none";
+}
 var { initTalosDesktopBackground: initTalosDesktopBackground2 } = await Promise.resolve().then(() => (init_desktop_background(), desktop_background_exports));
 initTalosDesktopBackground2();
 var { montaAnimazioniMockup: montaAnimazioniMockup2 } = await Promise.resolve().then(() => (init_animazioni_mockup(), animazioni_mockup_exports));

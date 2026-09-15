@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +34,22 @@ function esegui(sorgente, copia, ...args) {
 }
 function salva(dir, message) { git(dir, 'add', '-A'); git(dir, 'commit', '-m', message); }
 function stato(dir) { return [git(dir, 'rev-parse', 'HEAD'), git(dir, 'status', '--porcelain=v1', '--untracked-files=all')]; }
+const RADICI_PRESERVATE = new Set(['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', '.gitattributes', '.github', '.gitmodules', 'CHANGELOG.md', 'CODE_OF_CONDUCT.md']);
+function preparaMobileAllaRadice(dir) {
+  const radice = git(dir, 'ls-tree', '--name-only', 'HEAD').split('\n').filter(Boolean);
+  const mobile = git(dir, 'ls-tree', '--name-only', 'HEAD:mobile').split('\n').filter(Boolean);
+  assert.ok(mobile.includes('package.json'), 'la fixture pubblica non contiene la app mobile da riportare alla radice');
+  for (const voce of radice) {
+    if (voce === 'mobile' || RADICI_PRESERVATE.has(voce)) continue;
+    git(dir, 'rm', '-r', '-f', '--', voce);
+  }
+  for (const voce of mobile) git(dir, 'mv', '--', `mobile/${voce}`, voce);
+  rmdirSync(join(dir, 'mobile'));
+  const moduli = join(dir, '.gitmodules');
+  writeFileSync(moduli, readFileSync(moduli, 'utf8').replaceAll('path = mobile/third_party/', 'path = third_party/'));
+  salva(dir, 'test: ricostruisci la disposizione mobile precedente al monorepo');
+  git(dir, 'update-ref', 'refs/remotes/origin/main', git(dir, 'rev-parse', 'HEAD'));
+}
 
 test('R05B-CLI: il comando esiste', () => assert.ok(existsSync(script), 'manca prepara-monorepo-pubblico.ps1'));
 
@@ -59,6 +75,7 @@ test('R05B: contratto completo sul clone locale pubblico', { skip: !existsSync(s
   scrivi(sorgente, 'harness-ui/docs/immagini/harness-desktop.png', 'PNG di prova R05b');
   salva(sorgente, 'test: sorgente minima R05b, non prodotto');
   clone(copia);
+  preparaMobileAllaRadice(copia);
   const iniziale = stato(copia);
   const originaleReadme = git(copia, 'rev-parse', 'HEAD:README.md');
   await t.test('R05B-ANTEPRIMA: disposizione radice e nessuna mutazione', () => {

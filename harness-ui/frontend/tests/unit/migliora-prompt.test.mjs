@@ -67,18 +67,20 @@ const documentoFinto = () => ({ createElement: (tag) => nodoFinto(tag) });
 function monta(opzioni = {}) {
   const chiamate = [];
   const applicati = [];
+  const copiati = [];
   const pannello = montaMiglioraPrompt({
     document: documentoFinto(),
     modello: 'z-ai/glm-5.3-flash',
     leggiPrompt: () => 'scrivi il test',
     applica: (scelta) => applicati.push(scelta),
+    copiaTesto: async (testo) => { copiati.push(testo); },
     chiedi: async (richiesta) => {
       chiamate.push(richiesta);
       return { promptMigliorato: 'Obiettivo: scrivere il test.', sintesi: 'Obiettivo esplicito.', principi: ['obiettivo esplicito'], modello: 'z-ai/glm-5.3-flash', profondita: richiesta.profondita, promptOriginale: richiesta.prompt };
     },
     ...opzioni,
   });
-  return { pannello, chiamate, applicati };
+  return { pannello, chiamate, applicati, copiati };
 }
 
 /* ------------------------------------------------------------------ parti pure */
@@ -189,6 +191,21 @@ test('MIGLIORA-DECISIONE: «Sostituisci» e «Aggiungi sotto» consegnano il tes
     assert.deepEqual(applicati, [{ modo, testo: 'Obiettivo: scrivere il test.' }]);
     assert.equal(pannello.elemento.hidden, true, 'deciso vuol dire chiuso: il pannello non resta lì a invitare a rifarlo');
   }
+});
+
+test('MIGLIORA-COPIA: copia il prompt migliorato esatto, lascia aperto il pannello e lo annuncia', async () => {
+  const { pannello, applicati, copiati } = monta();
+  pannello.apri();
+  pannello.elemento.perDato('miglioraAvvia').lancia('click');
+  await new Promise((r) => setTimeout(r, 0));
+
+  pannello.elemento.perDato('miglioraCopia').lancia('click');
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.deepEqual(copiati, ['Obiettivo: scrivere il test.']);
+  assert.deepEqual(applicati, [], 'copiare non modifica il composer');
+  assert.equal(pannello.elemento.hidden, false, 'il risultato resta disponibile dopo la copia');
+  assert.equal(pannello.elemento.perDato('miglioraCopiaStato').textContent, 'Copiato');
 });
 
 test('MIGLIORA-ANNULLA: chiude senza consegnare niente, e riaprendo si riparte dalla domanda', async () => {
