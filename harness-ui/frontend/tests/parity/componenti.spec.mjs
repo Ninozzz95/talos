@@ -193,8 +193,8 @@ test.describe('parità dei componenti ↔ mockup', () => {
       if (comp.nome === 'Inspector') {
         expect(await a.pagina.evaluate(() => {
           const riga = [...document.querySelectorAll('#railContesto .talos-kv')].find(n => n.querySelector('.talos-kv__k')?.textContent === 'Riusato dalla cache');
-          return riga?.textContent?.replace(/\s+/gu, ' ').trim() ?? null;
-        }), 'BC48-CACHE-NON-MISURATA').toBe('Riusato dalla cache non misurato');
+          return riga ? { chiave: riga.querySelector('.talos-kv__k')?.textContent, valore: riga.querySelector('.talos-kv__v')?.textContent } : null;
+        }), 'BC48-CACHE-NON-MISURATA').toEqual({ chiave: 'Riusato dalla cache', valore: 'non misurato' });
         await a.pagina.evaluate(() => {
           const riga = [...document.querySelectorAll('#railContesto .talos-kv')].find(n => n.querySelector('.talos-kv__k')?.textContent === 'Riusato dalla cache');
           riga?.remove();
