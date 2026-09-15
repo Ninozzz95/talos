@@ -1,0 +1,58 @@
+name: desktop-prompt-enhance
+
+on:
+  push:
+    branches:
+      - fix/desktop-prompt-enhance
+    paths:
+      - 'harness-ui/**'
+      - 'context-engine/**'
+      - '.github/workflows/desktop-prompt-enhance.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'harness-ui/**'
+      - 'context-engine/**'
+      - '.github/workflows/desktop-prompt-enhance.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  prompt-enhance-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            harness-ui/frontend/package-lock.json
+            context-engine/package-lock.json
+
+      - name: dipendenze server
+        run: npm ci
+        working-directory: harness-ui
+
+      - name: dipendenze frontend
+        run: npm ci
+        working-directory: harness-ui/frontend
+
+      - name: dipendenze context engine
+        run: npm ci
+        working-directory: context-engine
+
+      - name: regressione Prompt Enhance server
+        run: node --test tests/http-routes-migliora-prompt-provider.test.mjs tests/http-routes-migliora-prompt.test.mjs
+        working-directory: harness-ui
+
+      - name: regressione Prompt Enhance UI
+        run: node --test tests/unit/migliora-prompt.test.mjs tests/unit/bc15-aggancio-enhancer.test.mjs
+        working-directory: harness-ui/frontend
+
+      - name: build frontend Desktop
+        run: npm run build
+        working-directory: harness-ui/frontend

@@ -1,4 +1,5 @@
 import { validaFallbackProviders } from './model-destination.mjs';
+import { chiediMiglioramentoAlProvider } from './prompt-enhancer-provider.mjs';
 import { randomBytes, randomUUID } from 'node:crypto'; // 08/9, BH-06: il nonce CSP del documento, nuovo a ogni risposta
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { nomiPerContentDisposition } from './workspace-files.mjs'; // PO-05: le due forme del nome per Content-Disposition (RFC 6266)
@@ -4548,37 +4549,15 @@ export function createHttpApp({
             }
           }
         } else {
-          if (!providerStore || typeof providerStore.getKey !== 'function') {
-            const e = new Error('Il portachiavi dei provider non è configurato.'); e.code = 'PROVIDER_STORE_UNAVAILABLE'; throw e;
-          }
-          const chiave = providerStore.getKey('openrouter');
-          if (!chiave) { const e = new Error('Collega OpenRouter prima di far migliorare un prompt.'); e.code = 'PROVIDER_KEY_REQUIRED'; throw e; }
-          modelloUsato = contesto.modello;
-          fornitoreUsato = 'openrouter';
-          if (typeof modelloUsato !== 'string' || modelloUsato.trim() === '') {
-            const e = new Error('Questa sessione non dichiara un modello.'); e.code = 'SESSION_NOT_READY'; throw e;
-          }
-          const runtimeProvider = typeof providerStore.getRuntime === 'function' ? providerStore.getRuntime('openrouter') : null;
-          const base = (runtimeProvider?.endpoint || 'https://openrouter.ai/api/v1').replace(/\/+$/u, '');
-          let risposta;
-          try {
-            risposta = await fetchMiglioraPromptFn(`${base}/chat/completions`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${chiave}` },
-              body: JSON.stringify({ model: modelloUsato, messages: messaggi, stream: false, max_tokens: 2048 }),
-            });
-          } catch (errore) {
-            const e = new Error(messaggioSenzaChiave(`Il fornitore non ha risposto: ${errore?.message || 'motivo ignoto'}`, chiave));
-            e.code = 'PROVIDER_RUNTIME_UNAVAILABLE'; throw e;
-          }
-          if (!risposta?.ok) {
-            const e = new Error(messaggioSenzaChiave(`Il fornitore ha risposto ${risposta?.status ?? '?'}.`, chiave));
-            e.code = 'PROVIDER_RUNTIME_UNAVAILABLE'; throw e;
-          }
-          let letto;
-          try { letto = await risposta.json(); } catch { letto = null; }
-          contenuto = letto?.choices?.[0]?.message?.content;
-          if (typeof contenuto !== 'string') contenuto = '';
+          const risultato = await chiediMiglioramentoAlProvider({
+            modello: contesto.modello,
+            messaggi,
+            providerStore,
+            fetchFn: fetchMiglioraPromptFn,
+          });
+          contenuto = risultato.contenuto;
+          modelloUsato = risultato.modelloUsato;
+          fornitoreUsato = risultato.fornitoreUsato;
         }
 
         const esito = leggiRispostaMiglioramento(contenuto);
