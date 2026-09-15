@@ -1,0 +1,570 @@
+/*
+ * ⭐⭐⭐ LO SFONDO ANIMATO, E OGNI ALTRO COMANDO DI ASPETTO CHE NON FACEVA NIENTE
+ *   Owner 10/09/2026: «e anche i BG animati, fai in modo che qualunque impostazione di aspetto sia
+ *   funzionante al 100 percento».
+ *
+ * ⛔ MISURATO PRIMA DI SCRIVERE (banco su una copia costruita, porta 5210 — mai il 4174). Ogni
+ *   comando della schermata Impostazioni cambiato davvero dalla UI, e fotografato lo schermo intero
+ *   (1440×900 = 1.296.000 pixel) prima e dopo:
+ *     · `colorMode` ......... 1.276.583 pixel cambiati — funzionava;
+ *     · `uiFontScale` ....... 52.445;  `composerShape` 6.107;  `uiDensity` 2.048;  `immersiveHeader` 824;
+ *     · `themePreset` ....... 134 (solo il testo del `<select>`);
+ *     · **ventisei comandi su trentanove: ZERO pixel.**
+ *   E alla fonte: nel foglio costruito (240 KB) `--talos-motion-intensity`, `--talos-motion-glow`,
+ *   `--talos-motion-density`, `--talos-motion-depth`, `--talos-motion-trails`,
+ *   `--talos-motion-contrast`, `--talos-motion-parallax`, `--talos-motion-speed`,
+ *   `--talos-background-cycle`, `--talos-motion-stagger`, `--talos-motion-ui-intensity` comparivano
+ *   **0 volte ciascuna**, e così `background-motion-active`, `background-motion-paused`,
+ *   `background-motion-off`, `interface-motion-off`, `data-talos-motion-quality`,
+ *   `data-talos-streaming-animation`, `data-talos-window-presentation`. Il JavaScript le calcolava
+ *   tutte, a ogni cambio, da mesi: **non esisteva nessuno sfondo su cui cadessero.**
+ *
+ * ⇒ Qui nasce la scena, e ogni cursore di quel pannello ne governa una proprietà misurabile. Nessun
+ *   colore nuovo: la scena è fatta con l'accento e il fondo del tema in corso, quindi cambia da sola
+ *   quando cambia il tema. All'intensità di serie (20) è una presenza appena percepibile — è uno
+ *   sfondo, non un effetto.
+ *
+ * Ricerca 10/09/2026, prima di scrivere:
+ *   · tryhoverify.com «I wish I had known this sooner about CSS gradient performance» e
+ *     instantgradient.com «Animated Gradient Backgrounds: When to Use Them»: si animano SOLO
+ *     proprietà da compositor (`transform`, `opacity`), mai `background-color`, `filter`, `width`,
+ *     `top`; durate lunghe (8-20 s) per uno sfondo. Qui i gradienti sono statici e si muove solo un
+ *     `transform` — e il ciclo di serie è 36 s. ⛔ Conta doppio su questo prodotto: il Chrome
+ *     dell'owner ha l'accelerazione hardware DISATTIVATA (misurato il 02/09: 6,1 ms → 109 ms per
+ *     fotogramma), e una scena che ridipinge a ogni frame lì sarebbe insostenibile.
+ *   · «About 5 to 10 percent of users have reduced-motion turned on … showing them a
+ *     constantly-shifting gradient is a real accessibility failure» ⇒ con `prefers-reduced-motion`
+ *     la scena resta, ferma. Non sparisce: sparire cambierebbe la stanza a chi ha chiesto meno moto.
+ */
+
+/* ---------- 0. Il colore della pagina passa a `html` ----------
+   ⛔ Serve perché la scena vive a `z-index:-1`: sopra lo sfondo del CANVAS, sotto tutto il
+   contenuto. Finché il fondo lo dichiarava `body`, quel colore veniva propagato al canvas e la
+   scena ci finiva SOTTO — invisibile. Dandolo a `html`, `body` torna un elemento come gli altri e
+   può farsi trasparente quando la scena è accesa. Nessun pixel cambia quando la scena è spenta. */
+html { background: var(--talos-background); }
+
+/* ---------- 1. LA SCENA — ⭐ 11/09: E' LO SFONDO DELLA CHAT, NON UN VELO SU TUTTA LA PAGINA ----------
+ *
+ * Owner 11/09/2026, guardando la sua conversazione: «correggi subito questa porcata di sfondo
+ * giallognolo nella chat», e poi: «portare lo sfondo animato dentro la CHAT: deve essere lo sfondo
+ * della conversazione». ⭐ «Il mobile è la sorgente di verità: lì funziona tutto alla perfezione.»
+ *
+ * ⛔ COSA C'ERA, MISURATO SUL BANCO (copia costruita su porta 5310 — mai il 4174; confronto pixel a
+ *   pixel scritto a mano, soglia 2/255, perché `pixelmatch@7.2.0` ha già risposto **0** su due
+ *   schermate visibilmente diverse):
+ *     · le due macchie stavano su `body::before/::after`, `position:fixed`, `inset:-18%` ⇒ coprivano
+ *       il VIEWPORT INTERO, e si vedevano su OGNI schermata. Accendere e spegnere lo sfondo cambiava
+ *       **942.179 px (72,70%)** su Impostazioni, **1.025.207 (79,11%)** su Memoria,
+ *       **1.027.807 (79,31%)** su Attività, **983.517 (75,89%)** su Board. Uno sfondo «della chat»
+ *       che dipinge i tre quarti della schermata Impostazioni non è lo sfondo della chat.
+ *     · l'alfa vera dell'accento al centro della macchia era `opacity .22 x mix 80%` = **0,176**.
+ *
+ * ⛔ COME LO FA IL MOBILE (letto nel codice, non dedotto):
+ *     · `mobile/src/App.vue:1157-1163` — lo sfondo è UN canvas a livello di shell, sotto il
+ *       contenuto, mai un secondo strato dentro la chat;
+ *     · `mobile/src/motion-v6/scenes/complex/sceneTools.ts:191-195` — l'alfa di OGNI tratto è
+ *       `base * (0.32 + intensity/100*0.8) * (0.7 + contrast/100*0.46)`; coi default del mobile
+ *       (intensity 20, contrast 80) il fattore vale **0,5126**;
+ *     · `mobile/src/motion-v6/scenes/complex/calm.ts` — il campo che respira è dipinto a
+ *       `alpha(0.018)` = **0,0092**, e i tratti che si VEDONO (orizzonte, filamento) stanno fra
+ *       **0,056 e 0,082**. ⇒ Il registro visibile del mobile è ~8%, non 17,6%.
+ *     · `mobile/src/screens/ChatScreen.vue:1124-1131` — l'unico velo di leggibilità che esiste
+ *       davvero è `radial-gradient(ellipse at center, var(--talos-background) 35%, transparent 78%)`,
+ *       cioè **il fondo del tema usato come velo**, che sfuma ai bordi.
+ *     · Periodo: `breath += dt*0.07` ⇒ ~90 s, `drift += dt*0.025` ⇒ ~251 s. Il desktop girava in 36 s.
+ *
+ * ⇒ QUI: la scena si aggancia a `#schermoChat` — la sezione che contiene topbar, conversazione e
+ *   composer, e che il router mette a `display:none` quando sei su un'altra schermata (verificato
+ *   sulla pagina viva). Barra laterale e ispettore restano fuori per COSTRUZIONE, non perché
+ *   dipingono opaco. E la forza è quella del mobile.
+ *
+ * Ricerca 11/09/2026 prima di scrivere: instantgradient.com «Making Gradient Backgrounds
+ * Accessible» e webability.io «Color Contrast for Accessibility: WCAG Guide (2026)» — su un
+ * gradiente il contrasto CAMBIA lungo la superficie, si campiona a 0%/50%/100%, e la forma
+ * raccomandata è **il gradiente come decorazione con un velo sopra che si prende la leggibilità**,
+ * non il testo appoggiato sullo strato vivo. I numeri stanno nel rapporto.
+ */
+:root { --talos-scena-tinta: var(--talos-scena-accento, var(--talos-accent)); }
+:root[data-theme="light"] { --talos-scena-tinta: color-mix(in srgb, var(--talos-scena-accento, var(--talos-accent)) 58%, #241f19); }
+
+/* La CURVA dell'intensità è quella del mobile (`sceneTools.ts:191-195`), il coefficiente `.21` è
+   tarato perché coi valori di serie (intensità 20, contrasto 80) l'alfa dell'accento al centro
+   della macchia valga **0,081** — cioè esattamente il registro visibile delle scene del mobile
+   (orizzonte 0,082, filamento 0,056) invece dei 0,176 di prima.
+   ⛔ Il contrasto resta nel `color-mix` e NON nella curva: nel mobile a contrasto 0 la scena non
+   sparisce (il fattore si ferma a 0,7), qui sì — ed è una promessa che quel cursore fa già. */
+:root { --talos-scena-alfa: calc((.32 + var(--talos-motion-intensity, .2) * .8) * .21); }
+
+/*
+ * ⛔⛔⛔ LA SCENA NON ESISTE FINCHÉ LA APP NON LA DICHIARA — trovato dal cancello di parità, non da me.
+ *   La prima stesura la mostrava per DIFETTO: bastava una pagina che carica questo foglio senza far
+ *   girare `app.js` (il laboratorio dei componenti, che confronta ogni componente col mockup) e lo
+ *   sfondo compariva lì dentro. Misura del cancello: **82 prove rosse su 144**, con differenze di
+ *   pixel su componenti che non c'entrano niente (`comp-RuntimeCard` 1.486 px, `comp-MemoryMeter`
+ *   3.459, `comp-FonteRicerca` 2.317).
+ * ⇒ Si parte SPENTA e si accende solo su un marcatore che scrive `avviaBackgroundDesktop()`:
+ *   `background-motion-active` (viva) o `background-motion-paused` (presente ma ferma — è lo stato di
+ *   `motionMode: static`, della finestra nascosta e del risparmio dati).
+ */
+#schermoChat::before,
+#schermoChat::after {
+  display: none;
+  content: '';
+  /* ⛔ `absolute`, non `fixed`: il blocco contenitore è `#schermoChat` (`.talos-screen` è già
+     `position:relative`), quindi la scena è larga e alta quanto la chat e NON esiste altrove. */
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  /* `motionDensity` (25…150) decide quanto sono larghe le macchie: più densa, più piccole e più fitte. */
+  background-size: calc(190% / var(--talos-motion-density, 1)) calc(190% / var(--talos-motion-density, 1));
+  will-change: transform;
+}
+
+/* Lo strato di fondo: due macchie d'accento agli angoli opposti.
+   `motionContrast` decide quanto l'accento emerge dal fondo; `motionTrails` quanto sfumano i bordi.
+   ⛔ Si miscela con `transparent` e non col fondo: `motionContrast` è l'alfa vera della macchia, e a
+   0 la scena sparisce davvero — che è ciò che quel cursore promette. */
+#schermoChat::before {
+  background-image:
+    radial-gradient(circle at 22% 28%,
+      color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 100%), transparent) 0%,
+      transparent calc(38% + var(--talos-motion-trails, .5) * 26%)),
+    radial-gradient(circle at 78% 74%,
+      color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 74%), transparent) 0%,
+      transparent calc(34% + var(--talos-motion-trails, .5) * 26%));
+  background-position: 0% 0%, 100% 100%;
+  opacity: var(--talos-scena-alfa);
+  animation: talosScenaDeriva var(--talos-background-cycle, 90000ms) var(--talos-motion-ease, ease-in-out) infinite alternate;
+}
+
+/* Lo strato di luce: `motionGlow` è la sua sola ragione di esistere, e `motionStagger` il ritardo
+   con cui insegue il primo. ⛔ Passa anche dall'alfa della scena, come nel mobile, dove `alpha()`
+   moltiplica OGNI tratto: alzare l'intensità alza tutto insieme, invece di scollarsi. */
+#schermoChat::after {
+  background-image:
+    radial-gradient(ellipse at 55% 12%,
+      color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 100%), transparent) 0%,
+      transparent calc(30% + var(--talos-motion-trails, .5) * 30%));
+  background-position: 50% 0%;
+  opacity: calc(var(--talos-motion-glow, .1) * var(--talos-scena-alfa) * 3);
+  animation: talosScenaLuce var(--talos-background-cycle, 90000ms) var(--talos-motion-ease, ease-in-out) infinite alternate;
+  animation-delay: var(--talos-motion-stagger, 40ms);
+}
+
+/* `motionParallax` è la distanza percorsa (il JS la scrive già in px in `--talos-background-shift-*`),
+   `motionDepth` quanto la scena respira avvicinandosi. Si muove SOLO `transform`. */
+@keyframes talosScenaDeriva {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(var(--talos-background-shift-x, 16px), var(--talos-background-shift-y, 10px), 0)
+                    scale(calc(1 + var(--talos-motion-depth, .92) * .06)); }
+}
+@keyframes talosScenaLuce {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(calc(var(--talos-background-shift-x, 16px) * -1.4), calc(var(--talos-background-shift-y, 10px) * .8), 0)
+                    scale(calc(1 + var(--talos-motion-depth, .92) * .1)); }
+}
+
+/* Perché la scena si veda.
+ *
+ * ⛔⛔⛔ 11/09 — LA VECCHIA FORMA CAMBIAVA L'ANTIALIASING DI TUTTO IL TESTO DELLA APP.
+ *   Per far emergere una scena a `z-index:-1` il foglio rendeva TRASPARENTI `body` e `.talos-shell`.
+ *   Misurato guardando DOVE cambiano i pixel invece di contarli: il delta massimo (133/255) non
+ *   stava nella scena, stava nelle LETTERE —
+ *     spento  [123,31,34] [30,161,201]  canali sbilanciati = antialiasing SUBPIXEL (LCD)
+ *     acceso  [ 89,87,84] [163,160,154] canali quasi uguali = antialiasing GRIGIO
+ *   Chrome non fa subpixel antialiasing sopra una superficie non opaca e ripiega sul grigio: il
+ *   testo cambiava spessore ovunque, barra laterale compresa, per uno sfondo che sta nella chat.
+ *
+ * ⇒ Non si toglie il fondo a nessuno. `#schermoChat` prende `isolation: isolate` — che crea un
+ *   contesto di impilamento e NIENT'ALTRO — e il suo fondo opaco: il `z-index:-1` della scena resta
+ *   dentro quel contesto, e si dipinge sopra quel fondo e sotto il contenuto.
+ * ⛔ Provato prima di scriverlo che dentro `#schermoChat` non ci sia nessun `position:fixed`, nessun
+ *   `position:sticky` e nessun `z-index >= 50` (sonda sulla pagina viva): veli, menu, pannello
+ *   notifiche e toast sono tutti figli di `body`, quindi il contesto nuovo non intrappola niente.
+ * ⛔ Barra laterale e ispettore dipingono il loro fondo (`index.css`) e stanno comunque FUORI da
+ *   `#schermoChat`: la scena non li tocca né prima né dopo — misurato, 0 pixel.
+ */
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat {
+  isolation: isolate;
+  background: var(--talos-background);
+}
+
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::before,
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::after { display: block; }
+
+/*
+ * ⛔⛔ LA TESTATA E IL COMPOSER NON SONO FINESTRE SULLA SCENA.
+ *
+ * Riprodotto lo stato SALVATO dell'owner (scena `terminal`, cursori 100/100/100/150: alfa 0,235
+ * contro lo 0,10 di un profilo vergine — senza `addInitScript` non si vede quasi niente e si crede
+ * che vada bene), la scena traspariva in una fascia sola: quella della topbar, alta 60 px e larga
+ * quanto la finestra. È la «schermata gialla, ora tagliata»: non uno sfondo, una BANDA.
+ * ⛔ Una scena che si vede in una striscia sola non si legge come profondità — si legge come un
+ *   errore di ritaglio. Il mobile non ha questo problema perché lì lo sfondo sta dietro la
+ *   CONVERSAZIONE, non dietro la barra dei comandi.
+ * ⇒ Testata e composer prendono il fondo del tema. La scena resta dove deve stare: dietro il
+ *   testo, e intorno a esso.
+ */
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat > .talos-topbar,
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat > .talos-composer-wrap {
+  background: var(--talos-background);
+}
+
+/* ---------- 1-bis. LA COLONNA DI LETTURA È OPACA — LA SCENA NON LE PASSA SOTTO ----------
+ *
+ * Owner 11/09/2026, la condizione per dichiarare chiusa questa riga: «lo sfondo animato vive DENTRO
+ * la chat come nel mobile, e **non passa mai sotto il testo della conversazione**».
+ *
+ * ⛔ LA VERSIONE DI STAMATTINA VELAVA AL 72%, cioè il 28% della scena arrivava ancora sotto le
+ *   lettere — e sfumava sui bordi laterali della colonna, dove il testo di TALOS **comincia**
+ *   (misurato sulla pagina viva: colonna a x=320 larga 736, e il primo carattere della risposta sta
+ *   esattamente a x=320, cioè dentro la sfumatura). Una percentuale è una taratura: regge finché
+ *   nessuno alza un cursore. Qui la garanzia dev'essere STRUTTURALE, perché il difetto è arrivato
+ *   all'owner **tre volte in un giorno** e la terza si è spento tutto per non rischiare la quarta.
+ *
+ * ⇒ `#conversation` — la colonna di lettura, cioè esattamente la scatola che contiene ogni riga di
+ *   testo della conversazione — prende il **fondo pieno del tema**. Sotto il testo il pixel è
+ *   quello del tema e basta: lo stesso identico che si misura a scena SPENTA, per qualunque scena,
+ *   qualunque tema e qualunque posizione dei cursori. Non c'è una soglia da tarare.
+ * ⛔ E quando la scena è spenta questa regola non esiste (sta dietro lo stesso guardiano delle
+ *   altre): a sfondo spento la colonna resta trasparente com'era, e non cambia un pixel.
+ *
+ * ⭐ Dov'è allora che si VEDE la scena, se la colonna è opaca:
+ *   · nei due margini da 44px di `.talos-conversation` (`index.css:576`) e in tutto lo spazio
+ *     laterale quando l'ispettore è chiuso — lì la chat è larga 1164 e la colonna 736;
+ *   · **sotto l'ultima riga**: la colonna è alta quanto il suo contenuto, non quanto lo schermo;
+ *   · dietro la testata, intorno al composer, e **su tutta la chat vuota** — che è esattamente il
+ *     posto in cui il mobile la mostra con più forza. Lì `chat.messages.length === 0` accende un
+ *     velo radiale dietro il marchio (`mobile/src/screens/ChatScreen.vue:1129`, letto verbatim
+ *     l'11/09) proprio perché non c'è niente da leggere.
+ *
+ * ⛔ E il MOBILE, letto nel codice invece che ricordato, **non** protegge il testo con un velo: le
+ *   sue bolle assistente in stile `sections` (il default) non hanno nessun fondo
+ *   (`mobile/src/components/chat/TalosMobileMessageList.vue:440-452`), e il testo sta direttamente
+ *   sopra la scena. Quello che fa è **fermarla** appena c'è un messaggio
+ *   (`mobile/src/App.vue:1162` — `:paused="activeRoute === 'chat' && chatHasMessages"`) e tenere le
+ *   opacità fra 0,08 e 0,32 (`motion-v6/scenes/simple/_legacyDom/sceneTools.ts:116-118`). È una
+ *   difesa statistica, non una garanzia: qui il desktop va **oltre** la sorgente di verità, perché
+ *   la condizione che l'owner ha scritto è «mai», non «quasi mai».
+ *   ⛔ Registrato e non corretto (altra lane, `mobile/` si legge e non si scrive): i due div
+ *     `.talos-theme-background-glow` e `.talos-theme-background-scrim` di
+ *     `TalosProceduralBackground.vue:146-147` **non hanno nessuna regola CSS** nel repo mobile, e le
+ *     sei variabili che `motion-v6/backgroundPresentation.ts:36-41` calcola per loro non le legge
+ *     nessuno: il velo del mobile è codificato e non applicato.
+ *
+ * Ricerca 11/09/2026 prima di scrivere — webability.io «Color Contrast for Accessibility: WCAG
+ * Guide (2026)» e colorcontrast.org «WCAG Contrast Requirements»: su un gradiente il contrasto
+ * CAMBIA lungo la superficie, e la cura raccomandata è testuale — *«add a semi-transparent overlay
+ * between the image and text, **or use a solid background for the text area**»*. Fra le due si
+ * sceglie la seconda, che è l'unica che non ha un numero da azzeccare.
+ */
+/*
+ * ⛔⛔⛔ 11/09/2026, SERA — LE DUE RIGHE CHE SEGUONO NASCONO DALLA FOTO DELL'OWNER: «lo sfondo
+ *   animato viene o tagliato o parte da molto sotto». Riprodotto sul banco e MISURATO, non dedotto
+ *   (rapporto `.claude/RAPPORTO-SFONDO-TAGLIATO-2026-09-11.md`).
+ *
+ * 1) `background-clip: content-box` — LA CODA DELLA COLONNA NON È TESTO, E NON VA COPERTA.
+ *    `.talos-conversation__column` porta `padding-bottom: var(--stream-follow-space)`
+ *    (`index.css:614`), che `aggiornaSpazioCodaConversazione` mette a **metà dell'altezza
+ *    visibile** appena c'è un messaggio (`legacy/app.js:704-712`). Misurato a 1600×794: colonna
+ *    alta **442 px** di cui **297 di padding vuoto** — cioè metà schermo di fondo OPACO sotto
+ *    l'ultima riga, dove non c'è un solo glifo da proteggere. Il fondo si ferma al contenuto e la
+ *    scena riprende esattamente dove il testo finisce: **43.789 → 131.635 px** di scena visibile
+ *    (×3,0) con due messaggi; su una conversazione che riempie lo schermo non cambia niente
+ *    (14.723 → 14.723), perché lì la coda sta fuori dalla finestra. MDN «background-clip»
+ *    (letto l'11/09/2026): *«content-box — The background is painted within (clipped to) the
+ *    content box»*; ⛔ e il `background` ABBREVIATO lo riazzera a `border-box`, per questo qui è
+ *    la longhand `background-color` e non `background`.
+ *
+ * 2) `box-shadow` — È QUESTO L'UNICO LAVORO CHE FACEVA IL VELO SULLO SCROLLER, ed è locale.
+ *    La colonna opaca, senza sfumatura, si stacca dalla scena come un rettangolo a spigoli vivi
+ *    (visibile nelle foto: i glifi tagliati netti a x=44 e x=780). Un'ombra ESTERNA si disegna
+ *    fuori dal border box — è la «knockout» di CSS Backgrounds 3 §6.1.1, e MDN «box-shadow»
+ *    (letto l'11/09/2026) descrive il blur come *«a color transition the length of the blur
+ *    distance … perpendicular to and centered on the shadow's edge»* — quindi NON può aggiungere
+ *    un pixel sopra il testo: la garanzia «mai sotto il testo» resta strutturale, e l'ho
+ *    riverificata (0 px di scena dentro i rettangoli dei glifi, prima e dopo).
+ *    ⛔ `22px 0` e non `40px 18px`: lo spazio da sfumare è il margine da 44 px della conversazione
+ *    (`index.css:592`), e 40+18 se lo mangia tutto — misurato su una conversazione piena,
+ *    14.723 → **7.667** px di scena (−48%) contro **12.882** (−12,5%) con `22px 0`. Una sfumatura
+ *    che cancella ciò che deve sfumare non è una sfumatura.
+ */
+/*
+ * ⛔ 12/09, 00:0x — OWNER, sulla foto con la scena scoperta: «la sezione della chat deve essere
+ *   TRASPARENTE». Il fondo pieno della colonna (la garanzia «mai sotto il testo» di sopra) è
+ *   ABOLITO per suo ordine: la scena si vede dietro i messaggi, come nel mockup, dove sono le
+ *   bolle a portare il proprio fondo. Resta il velo debole della chat vuota in desktop-final.css.
+ *   La regola resta scritta a `transparent` (e non cancellata) perché chi la cerca la trovi con la
+ *   sua storia; se un giorno il testo non si legge, la cura è sulle BOLLE, non sulla colonna.
+ */
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #conversation {
+  background-color: transparent;
+  background-clip: content-box;
+  box-shadow: none;
+}
+
+/*
+ * ⭐ 11/09, secondo giro — IL BORDO DELLA COLONNA NON DEV'ESSERE UNA RIGA NETTA.
+ *
+ * ⛔ Trovato guardando le foto, non contando i pixel: coi cursori al massimo (scena `terminal`,
+ *   intensità 100, contrasto 100) la colonna opaca si stacca dallo sfondo come un RETTANGOLO a
+ *   spigoli vivi in mezzo al verde — la garanzia regge, il disegno no.
+ *
+ * ⇒ È il pattern dello SCRIM, e ha un nome: uno strato semi-opaco che sfuma ai bordi, «the most
+ *   subtle way of reliably overlaying text on images» (Smashing Magazine, «Designing Accessible
+ *   Text Over Images», e Google Material Design «Scrims» — letti l'11/09/2026). Il mobile fa
+ *   esattamente questo: `mobile/src/screens/ChatScreen.vue:1124-1131` usa
+ *   `radial-gradient(ellipse at center, var(--talos-background) 35%, transparent 78%)`, cioè il
+ *   fondo del tema PIENO al centro e sfumato ai bordi. Lì è un'ellisse perché l'hero è una
+ *   schermata sola; qui la colonna SCORRE, quindi la sfumatura è solo orizzontale.
+ * ⭐ Il concorrente di riferimento non ha questo problema perché non ha la funzione: Hermes Agent
+ *   spedisce otto skin (Official, Classic, Slate, Mono x chiaro/scuro) su una tavolozza
+ *   «black-centric, TUI-first» e NESSUNO sfondo animato dietro la conversazione
+ *   (hermes-agent.nousresearch.com/docs/user-guide/features/skins, letto l'11/09/2026). Il nostro
+ *   +1 misurabile non è «abbiamo lo sfondo»: è che con lo sfondo acceso il fondo sotto il testo
+ *   resta lo STESSO PIXEL di quando è spento.
+ *
+ * ⇒ Lo scroller `.talos-conversation` — largo quanto la chat, contiene la colonna — prende lo
+ *   stesso fondo del tema, PIENO dove si legge e sfumato negli ultimi 40 px a destra e a sinistra,
+ *   dove per costruzione non c'è nessun testo (la colonna vive dentro un padding di 44 px,
+ *   `index.css:576`). Il bordo netto sparisce; la garanzia non si tocca, perché questo strato può
+ *   solo AGGIUNGERE opacità sopra ciò che la colonna già copre.
+ * ⛔ Un gradiente statico, non un `box-shadow` sfocato né un `background-attachment: fixed`: il
+ *   Chrome dell'owner ha l'accelerazione hardware DISATTIVATA (misurato il 02/09: 6,1 ms → 109 ms
+ *   per fotogramma), e la ricerca dell'11/09 (Four Kitchens «Fix scrolling performance with CSS
+ *   will-change»; bugzilla Mozilla 657603 «slow scrolling with CSS gradients») dice che ciò che
+ *   costa è il RIDIPINTO a ogni fotogramma — un fondo fisso o una `background-position` animata.
+ *   Il fondo di un contenitore che scorre è ancorato al suo padding box e NON scorre col
+ *   contenuto: si dipinge una volta sola e lo scorrimento non lo tocca.
+ * ⛔ `:has(#conversation > *)`: a chat VUOTA la scena resta scoperta e intera — è il punto in cui il
+ *   mobile la mostra con più forza, perché non c'è niente da leggere.
+ */
+/*
+/*
+ * ⛔⛔⛔ 11/09/2026 — TERZO GIRO, E IL MOBILE ERA GIÀ LA RISPOSTA. Owner, furioso: «il mobile l'ha
+ *   fatto alla perfezione e tu non ci riesci?». Ha ragione, e le mie due stesure precedenti erano
+ *   sbagliate per lo stesso identico motivo: **un velo RETTANGOLARE**.
+ *
+ * ⛔ Che cosa ho rotto, dichiarato invece che nascosto:
+ *     1ª stesura (velo sullo scroller) — fondo pieno su tutta la chat tranne 40 px per lato: la
+ *        scena sopravviveva solo in due strisce. Owner: «il ritorno della schermata gialla, ora
+ *        tagliata»;
+ *     2ª stesura (velo sui messaggi) — peggio: ogni messaggio diventava un rettangolo opaco dentro
+ *        un'area colorata, con un bordo netto. Una chat che galleggia su una tovaglia.
+ *   In tutt'e due il difetto è lo stesso: un bordo DURO fra ciò che è velato e ciò che non lo è.
+ *
+ * ⭐ IL MOBILE NON HA BORDI, e il suo codice lo dice — `mobile/src/screens/ChatScreen.vue:1124-1131`:
+ *     radial-gradient(ellipse at center, var(--talos-background) 35%, transparent 78%)
+ *   cioè il fondo del tema PIENO al centro, dove si legge, sfumato fino a sparire ai bordi. Non c'è
+ *   nessuna linea perché non c'è nessun confine: il velo è tutt'uno con la stanza.
+ * ⇒ Stessa forma qui, sullo scroller, che è dove vive il testo. La colonna di lettura sta dentro la
+ *   parte piena; la scena riemerge verso i bordi, dove per costruzione non c'è nessun glifo.
+ * ⛔ `at 50% 38%` e non `at center`: la conversazione è più alta che larga e il testo si addensa in
+ *   alto — un'ellisse centrata sul centro geometrico lascerebbe scoperta la prima riga.
+ */
+/*
+ * ⛔⛔⛔⛔ 11/09/2026, SERA — QUESTA REGOLA È STATA TOLTA, ED È LA CAUSA DELLA FOTO DELL'OWNER
+ *   («lo sfondo animato viene o tagliato o parte da molto sotto»). Il testo sopra resta perché
+ *   spiega il PROBLEMA giusto — il bordo netto della colonna — ma la forma era sbagliata, e i
+ *   numeri lo dicono invece di discuterlo.
+ *
+ *     body:is(…) .talos-conversation:has(#conversation > *) {
+ *       background-image: radial-gradient(ellipse 96% 86% at 50% 38%,
+ *         var(--talos-background) 0%, var(--talos-background) 62%, transparent 100%);
+ *     }
+ *
+ * ⛔ In `radial-gradient` le due percentuali dopo `ellipse` sono i RAGGI, non i diametri, e ognuna
+ *   si risolve sulla dimensione corrispondente della scatola — MDN «radial-gradient», letto
+ *   l'11/09/2026: *«The first value represents the horizontal radius and the second is the vertical
+ *   radius. Percentage values are relative to the corresponding dimension of the gradient box.»*
+ *   ⇒ raggio verticale `86%` con lo stop pieno a `62%` = **0,533 × altezza** di parte piena, sopra
+ *   un centro a `38%`: il fondo OPACO arriva al **91,3%** dell'altezza dello scroller, e la
+ *   sfumatura ha solo l'**8,7%** finale per esistere. Non era «pieno al centro e sfumato ai bordi»:
+ *   era un MURO con una finestrella negli angoli in basso. Anche all'estremo sinistro della prima
+ *   riga la copertura calcolata è **83%**.
+ * ⭐ Misurato sul banco (chat con due messaggi, 1600×794, DPR 1,25, scena `terminal`, cursori al
+ *   massimo), confrontando la stessa schermata col bitmap del canvas pieno e svuotato:
+ *     con la regola   → la scena compare dalla riga **646 su 993** (65% dello schermo), 9.814 px;
+ *     senza la regola → dalla riga **75** (subito sotto la testata), 43.789 px.
+ *   È esattamente la frase dell'owner, in numeri.
+ * ⛔ E toglierla non tocca la garanzia «la scena non passa mai sotto il testo»: chi la regge è la
+ *   colonna opaca `#conversation` qui sopra, non questo velo — lo diceva già il commento della
+ *   seconda stesura («questo strato può solo AGGIUNGERE opacità sopra ciò che la colonna già
+ *   copre»). Riverificato a pixel: **0** px di scena dentro i rettangoli dei glifi, prima e dopo.
+ * ⛔ Il lavoro utile che faceva — smussare il bordo della colonna — è ora un `box-shadow` sulla
+ *   colonna stessa: sta attaccato all'oggetto da proteggere invece che alla finestra, quindi
+ *   sfuma 22 px e basta, e sotto l'ultima riga non c'è più niente da sfumare.
+ */
+
+/* Ferma ma presente: è ciò che chiedono `motionMode: static`, «metti in pausa quando la finestra non
+   si vede», «rispetta il risparmio dati» e la pausa mentre si scorre.
+   ⛔ Qui `animation-play-state` e non `animation:none`: sono pause TRANSITORIE, e azzerare
+   l'animazione farebbe SALTARE la scena alla posizione di partenza sotto gli occhi di chi scorre. */
+body.background-motion-paused #schermoChat::before,
+body.background-motion-paused #schermoChat::after { animation-play-state: paused; }
+
+/* ---------- 1-ter. SUL FILO VIVO LA SCENA SI FERMA ----------
+ *
+ * ⭐ La regola viene dal MOBILE, ed è scritta lì per esteso —
+ *   `mobile/src/App.vue:1157-1163`  :paused="activeRoute === 'chat' && chatHasMessages"
+ *   `mobile/src/App.vue:64-67`      «The animated workspace backdrop is useful on the empty hero,
+ *                                    but it is pure competition once a real thread is visible.»
+ *
+ * ⛔ E sul desktop ha una seconda ragione, MISURATA qui e non prevista da nessuno — l'antialiasing.
+ *   Chrome spegne il subpixel antialiasing del testo dentro un gruppo isolato che contiene un
+ *   layer animato. Firma misurata (sbilanciamento medio dei canali sui bordi delle lettere: alto =
+ *   LCD acceso, basso = grigio), zona dei messaggi, 1440x900 scuro:
+ *       sfondo spento .................... 68,7   (LCD)
+ *       sfondo acceso, animazione VIVA .... 7,6   (grigio)
+ *       sfondo acceso, `animation: none` .. 66,8   (LCD)
+ *   Provato uno per uno: NON è `will-change` (7,6 anche con `will-change:auto`), NON è
+ *   `animation-play-state: paused` (7,6 lo stesso, il layer resta promosso): è l'animazione VIVA
+ *   dentro il contesto isolato. E il difetto c'era già prima di questo giro, in un'altra forma:
+ *   col vecchio `body` trasparente la stessa zona misurava **22,4** contro 68,7.
+ *
+ * ⇒ Quando nella conversazione c'è anche un solo messaggio, la scena resta — ferma. Il testo
+ *   riprende il subpixel antialiasing, e non si legge più sopra qualcosa che si muove
+ *   (instantgradient.com, «Making Gradient Backgrounds Accessible»: un'area che cambia tono di
+ *   continuo dietro il testo è un difetto di leggibilità, non un effetto).
+ * ⛔ `:has()` e non una classe scritta dal JS: la condizione è «c'è un messaggio nella colonna», e
+ *   il DOM la sa già. Una classe vorrebbe un chiamante in ogni punto che inserisce un messaggio —
+ *   cioè un'altra `markMotionEnter` che nessuno richiama. Il bersaglio è `#conversation > *`, i
+ *   figli DIRETTI della colonna (i giri), non un discendente qualunque: l'invalidazione resta sul
+ *   primo livello.
+ * ⛔ `animation: none` e non `paused`: solo togliere l'animazione toglie il layer, ed è il layer il
+ *   problema. Il salto alla posizione di partenza vale al massimo `--talos-background-shift-x`
+ *   (16 px di serie) su una macchia sfocata all'8% — misurato sotto la soglia della vista.
+ */
+#schermoChat:has(#conversation > *)::before,
+#schermoChat:has(#conversation > *)::after { animation: none; will-change: auto; }
+
+/* `motionQuality`: quanto costa la scena. Basso = un solo strato e nessuna luce.
+ *
+ * ⛔⛔ 11/09 — QUESTE DUE LEVE NON HANNO MAI TOLTO LO STRATO DI LUCE, e non l'aveva visto nessuno.
+ *   Trovato provandole al VERSO CONTRARIO invece che implementandole: la regola che ACCENDE la
+ *   scena (`body:is(...)...::after { display: block }`) ha specificita' **(0,3,2)**, queste che la
+ *   spengono avevano **(0,2,2)** ⇒ `block` vinceva su `none`, sempre, e `motionQuality: low` e
+ *   `motionMode: simple` cambiavano **zero pixel** sul secondo strato. Vale anche per la forma di
+ *   ieri (`body::after`): il difetto e' vecchio quanto la scena.
+ * ⇒ Portano lo stesso guardiano della regola che accende, cosi' arrivano a **(0,4,2)** e vincono
+ *   per specificita', senza un `!important` (che qui sarebbe la solita regola che non si batte da
+ *   valle). Provato nei due versi: con `low` lo strato sparisce, con `balanced` torna.
+ */
+:root[data-talos-motion-quality="low"] body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::after { display: none; }
+:root[data-talos-motion-quality="low"] #schermoChat::before { background-image: radial-gradient(circle at 30% 32%, color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 100%), transparent) 0%, transparent 52%); }
+:root[data-talos-motion-quality="high"] #schermoChat::before { opacity: calc(var(--talos-scena-alfa) * 1.25); }
+:root[data-talos-motion-quality="high"] #schermoChat::after { opacity: calc(var(--talos-motion-glow, .1) * var(--talos-scena-alfa) * 4.6); }
+
+/* `motionMode: simple` — una scena senza secondo strato, ma ancora viva. Stessa cura, stessa causa. */
+:root[data-talos-motion-mode="simple"] body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::after { display: none; }
+
+/* ⛔ Con «meno movimento» chiesto al SISTEMA la scena non sparisce: si ferma. Toglierla cambierebbe
+   la stanza a chi ha chiesto solo di non vederla muovere (W3C WAI, «prefers-reduced-motion»), ed è
+   anche ciò che fa il mobile — `runtimePolicy.ts:205-217` degrada a `static`, non a `off`. */
+@media (prefers-reduced-motion: reduce) {
+  #schermoChat::before, #schermoChat::after { animation: none; transform: none; }
+}
+
+/* ---------- 2. L'ENTRATA DEI MESSAGGI ----------
+   `markMotionEnter()` mette la classe `.motion-enter` e la toglie su `animationend`. Misurato: in
+   tutto il foglio non esisteva NESSUNA regola per quella classe fuori dal velo dei dialoghi ⇒
+   l'evento non arrivava mai e la classe restava attaccata per sempre a ogni bolla della chat.
+   Qui la classe fa il suo mestiere, e consuma i due token che nessuno leggeva:
+   `--talos-motion-ui-intensity` (quanto viaggia) e `--talos-motion-duration-message-insert` (quanto dura).
+   ⛔ Solo dentro la conversazione: un'entrata su OGNI pannello è il tic delle interfacce generate. */
+@keyframes talosEntrataMessaggio {
+  from { opacity: 0; transform: translateY(calc(var(--talos-motion-ui-intensity, .65) * 12px)); }
+  to   { opacity: 1; transform: none; }
+}
+#conversation .motion-enter {
+  animation: talosEntrataMessaggio var(--talos-motion-duration-message-insert, 180ms) var(--talos-motion-ease, ease-out) both;
+}
+/* «Movimento dei messaggi» spento, o «movimento dell'interfaccia» spento: l'entrata non c'è. */
+:root.motion-messages-off #conversation .motion-enter,
+:root.interface-motion-off #conversation .motion-enter { animation: none; }
+
+/* ---------- 3. LE SEI LEVE «dove» DEL MOVIMENTO ----------
+   Erano sei interruttori con due sole regole dietro (`motion-windows-off`, `motion-messages-off`,
+   in `foglio-monolite.css`). Le altre quattro non toccavano niente. */
+/*
+ * ⛔⛔⛔ 11/09 — QUI C'ERA UNA REGOLA UNIVERSALE CON `!important`, ED E' STATA TOLTA.
+ *   Diceva `:root.interface-motion-off *, *::before, *::after { transition-duration: 0s !important }`.
+ *   E' la stessa FORMA delle due regole cancellate la notte del 10-11/09
+ *   (`body.reduce-motion * { animation:none!important }` e la gemella dentro
+ *   `@media (prefers-reduced-motion)`), che spegnevano OGNI animazione dell'app e sono costate SEI
+ *   cure di fila su un componente sano: una regola universale con `!important` non si batte da
+ *   valle, e chi cerca il colpevole guarda il componente invece dell'ambiente.
+ *   ⛔ Non conta che qui fosse dietro una classe spenta di serie: conta che, il giorno in cui
+ *     qualcuno accende quell'interruttore, il difetto e' di nuovo invisibile e di nuovo globale.
+ * ⇒ «Movimento dell'interfaccia spento» ora si esprime sui TOKEN, non con un martello universale:
+ *   `aggiornaMotionDesktop` scrive `0s` in tutte le `--talos-motion-duration-*`. Chi legge quei
+ *   token si ferma; chi non li legge non viene spento alle spalle; e la cosa si trova con un grep
+ *   sul nome del token invece che con sei tentativi.
+ */
+:root.motion-surfaces-off .talos-card,
+:root.motion-surfaces-off .talos-panel,
+:root.motion-surfaces-off .talos-dialog { transition: none !important; }
+:root.motion-navigation-off .talos-nav-item,
+:root.motion-navigation-off .talos-session-item,
+:root.motion-navigation-off .talos-tab { transition: none !important; }
+/* ⛔ «Movimento del composer» era spento e acceso senza differenza per una ragione precisa, misurata:
+   il composer non aveva **nessuna** transizione da togliere — `transitionDuration` calcolata `0s` in
+   tutti e due gli stati. Il fuoco ci arrivava di scatto. Qui il bordo e l'alone del fuoco prendono la
+   durata che il progetto calcolava già e non usava (`--talos-motion-duration-composer-expand`), e
+   l'interruttore ha finalmente qualcosa da spegnere. */
+.talos-composer {
+  transition:
+    border-color var(--talos-motion-duration-composer-expand, 180ms) var(--talos-motion-ease, ease-out),
+    box-shadow var(--talos-motion-duration-composer-expand, 180ms) var(--talos-motion-ease, ease-out);
+}
+:root.motion-composer-off .talos-composer,
+:root.motion-composer-off .talos-composer__input,
+:root.motion-composer-off .talos-composer__bar * { transition: none !important; }
+:root.motion-feedback-off .talos-toast,
+:root.motion-feedback-off .talos-badge,
+:root.motion-feedback-off .talos-button { transition: none !important; }
+
+/* ---------- 4. «Animazione dello streaming»: typewriter o dissolvenza ----------
+   L'attributo `data-talos-streaming-animation` esisteva sulla radice e non lo leggeva nessuno.
+   `typewriter` = il cursore che lampeggia accanto a ciò che TALOS sta scrivendo; `fade` = niente
+   cursore, il testo arriva e basta. Due stati, tutti e due visibili. */
+@keyframes talosCursoreScrittura { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
+:root[data-talos-streaming-animation="typewriter"] .run-activity-label::after {
+  content: '▌';
+  margin-left: 2px;
+  color: var(--talos-accent);
+  animation: talosCursoreScrittura 1.06s steps(1, end) infinite;
+}
+
+/* ---------- 5. «Presentazione delle finestre»: cassetto o schermo intero ----------
+   Anche questo attributo non aveva una riga dietro: il foglio si apriva uguale in tutti e due i casi. */
+:root[data-talos-window-presentation="fullscreen"] dialog.sheet-dialog,
+:root[data-talos-window-presentation="fullscreen"] dialog.command-dialog {
+  width: 100vw; max-width: none;
+  height: 100vh; max-height: none;
+  border-radius: 0;
+  inset: 0;
+  margin: 0;
+}
+
+/*
+ * ⛔ 11/09/2026, sera — L'ABOLIZIONE È RIENTRATA, e il perché va detto tutto.
+ *
+ * Alle 17 l'owner aveva abolito lo sfondo animato («SPEGNI COMPLETAMENTE») dopo che io avevo
+ * fallito quattro volte a renderlo presentabile — striscia gialla, rettangoli, velo che copriva
+ * la scena. Qui sotto stavano due regole universali con `!important` che spegnevano i due
+ * pseudo-elementi e nascondevano la sezione «Sfondo» delle Impostazioni.
+ *
+ * Alle 19 l'owner ha consegnato il SUO pacchetto (`.claude/refactor-ui-owner-2026-09-11/`): lo
+ * sfondo non è più un `::before` con gradienti, è un renderer Canvas a 14 scene
+ * (`src/motion/desktop-background.js`), con la sezione Impostazioni riaccesa apposta da
+ * `desktop-final.css`. «L'ho abolito perché hai fallito quattro volte: eccezione, lo applichi tu.»
+ * ⇒ Le due regole sono TOLTE, non commentate: con `!important` avrebbero vinto in silenzio sul
+ *   suo CSS, e il cancello `tests/parity/sfondo-animato-abolito.spec.mjs` esce dalla suite con
+ *   la ragione scritta in testa. Il resto di questo foglio — la scena a `::before`, i veli —
+ *   resta inerte finché nessun JS aggiunge `background-motion-*` al body: il renderer nuovo non
+ *   passa da quelle classi.
+ */

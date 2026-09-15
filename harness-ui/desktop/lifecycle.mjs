@@ -1,0 +1,138 @@
+/** R-01 — Ciclo di vita del servizio locale, derivato dal laboratorio W2-13. */
+
+export const STATI = Object.freeze(['fermo', 'avvio', 'pronto', 'in-chiusura', 'chiuso', 'crash', 'sospeso', 'arreso']);
+export const BACKOFF_MS_DEFAULT = Object.freeze([500, 1000, 2000, 4000, 8000]);
+
+export function creaCicloDiVita({
+  avviaFiglio, // () => { pid?, exitCode: null|number } | Promise<...> — deve avviare e restituire un handle
+  uccidiFiglio, // (handle) => void
+  attendiSalute, // (handle) => Promise<boolean> — true quando /api/v1/health risponde
+  onStato = () => {}, // (stato, dettaglio) => void
+  onAvviso = () => {}, // (messaggio) => void
+  pianifica = (fn, ms) => setTimeout(fn, ms), // iniettabile per i test (nessun timer vero)
+  backoffMs = BACKOFF_MS_DEFAULT,
+  tentativiMassimi = backoffMs.length,
+} = {}) {
+  if (typeof avviaFiglio !== 'function' || typeof uccidiFiglio !== 'function' || typeof attendiSalute !== 'function') {
+    throw new Error('creaCicloDiVita richiede avviaFiglio, uccidiFiglio, attendiSalute');
+  }
+  let stato = 'fermo';
+  let handle = null;
+  let riavviiConsecutivi = 0;
+  let generazione = 0; // ogni avvio ne apre una nuova: gli esiti tardivi di un figlio vecchio si ignorano
+  const transizioni = [];
+
+  function vaiA(nuovo, dettaglio = null) {
+    if (!STATI.includes(nuovo)) throw new Error(`stato sconosciuto: ${nuovo}`);
+    stato = nuovo;
+    transizioni.push({ stato: nuovo, dettaglio });
+    onStato(nuovo, dettaglio);
+  }
+
+  async function avvia() {
+    if (stato !== 'fermo' && stato !== 'crash' && stato !== 'chiuso') return stato;
+    generazione += 1;
+    const mia = generazione;
+    vaiA('avvio', { generazione: mia, tentativo: riavviiConsecutivi });
+    try {
+      const avviato = await avviaFiglio();
+      if (mia !== generazione) { if (avviato) await uccidiFiglio(avviato); return stato; }
+      handle = avviato;
+      const sano = await attendiSalute(handle);
+      if (mia !== generazione) return stato; // superato da un altro avvio o da una chiusura
+      if (!sano) { return guasto(handle?.exitCode ?? null, { motivo: 'salute-non-raggiunta' }); }
+      riavviiConsecutivi = 0;
+      vaiA('pronto', { generazione: mia });
+      return stato;
+    } catch (errore) {
+      if (mia !== generazione) return stato;
+      return guasto(null, { motivo: 'avvio-fallito', errore: errore?.message ?? String(errore) });
+    }
+  }
+
+  /** Il figlio è uscito (evento 'exit') o non è mai diventato sano. Decide se è un crash e se riavviare. */
+  function figlioUscito(codice, dettaglio = {}) {
+    if (stato === 'in-chiusura') { vaiA('chiuso', { codice }); handle = null; return stato; }
+    if (stato === 'chiuso' || stato === 'fermo' || stato === 'arreso' || stato === 'crash') return stato;
+    handle = null;
+    generazione += 1; // invalida esiti tardivi del figlio morto
+    vaiA('crash', { codice, ...dettaglio, riavviiConsecutivi });
+    if (riavviiConsecutivi >= tentativiMassimi) {
+      vaiA('arreso', { codice, riavvii: riavviiConsecutivi });
+      onAvviso(`Il server locale è caduto ${riavviiConsecutivi} volte di fila: non lo riavvio più da solo. Chiudi e riapri TALOS, o guarda il Doctor.`);
+      return stato;
+    }
+    const attesa = backoffMs[Math.min(riavviiConsecutivi, backoffMs.length - 1)];
+    riavviiConsecutivi += 1;
+    onAvviso(`Il server locale si è fermato (codice ${codice ?? 'n/d'}): lo riavvio fra ${attesa} ms (tentativo ${riavviiConsecutivi} di ${tentativiMassimi}).`);
+    const prevista = generazione;
+    pianifica(() => { if (stato === 'crash' && generazione === prevista) void avvia(); }, attesa);
+    return stato;
+  }
+
+  async function guasto(codice, dettaglio) {
+    const precedente = handle;
+    // Passa a crash prima di terminare: l'exit della vecchia generazione non
+    // deve pianificare un secondo riavvio. Il main attende tutti i figli in uscita.
+    figlioUscito(codice, dettaglio);
+    if (precedente) await uccidiFiglio(precedente);
+    return stato;
+  }
+
+  async function riprova() {
+    if (stato !== 'arreso') return stato;
+    generazione += 1; riavviiConsecutivi = 0;
+    vaiA('fermo');
+    return avvia();
+  }
+
+  function chiudi() {
+    if (stato === 'in-chiusura') { generazione += 1; return stato; }
+    if (stato === 'chiuso' || stato === 'fermo') return stato;
+    if (stato === 'crash' || stato === 'arreso') { generazione += 1; vaiA('chiuso', { daStato: 'crash' }); return stato; }
+    const daChiudere = handle;
+    vaiA('in-chiusura');
+    generazione += 1; // un avvio in corso non deve più completare
+    if (daChiudere) uccidiFiglio(daChiudere);
+    else vaiA('chiuso', { nessunFiglio: true });
+    return stato;
+  }
+
+  function sospendi() {
+    if (stato !== 'pronto') return stato;
+    vaiA('sospeso');
+    return stato;
+  }
+
+  /** Cambio esplicito del motore dal menu, abilitato a servizio pronto/fermo. */
+  async function riavvia() {
+    if (['avvio', 'in-chiusura'].includes(stato)) return stato;
+    const mia = ++generazione;
+    const precedente = handle;
+    vaiA('in-chiusura', { motivo: 'cambio-motore' });
+    if (precedente) await uccidiFiglio(precedente);
+    if (mia !== generazione) return stato;
+    handle = null; riavviiConsecutivi = 0;
+    vaiA('chiuso');
+    return avvia();
+  }
+
+  async function riprendi() {
+    if (stato !== 'sospeso') return stato;
+    const mia = generazione;
+    let sano = false;
+    try { sano = handle ? await attendiSalute(handle) : false; } catch { /* risveglio fallito */ }
+    if (mia !== generazione || stato !== 'sospeso') return stato;
+    if (sano) { vaiA('pronto', { daSospensione: true }); return stato; }
+    vaiA('pronto', { daSospensione: true, figlioMorto: true }); // torna pronto per far scattare le regole del crash
+    return guasto(handle?.exitCode ?? null, { motivo: 'morto-durante-sospensione' });
+  }
+
+  return Object.freeze({
+    avvia, chiudi, sospendi, riprendi, figlioUscito, riprova, riavvia,
+    stato: () => stato,
+    handle: () => handle,
+    transizioni: () => transizioni.slice(),
+    riavviiConsecutivi: () => riavviiConsecutivi,
+  });
+}

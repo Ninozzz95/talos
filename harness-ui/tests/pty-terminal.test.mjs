@@ -1,0 +1,431 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  BACKLOG_MASSIMO_BYTE,
+  codificaFrame,
+  creaRegistroTerminali,
+  decodificaFrame,
+  MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA,
+  sceltaShell,
+  TIPO_FRAME_CONTROLLO,
+  TIPO_FRAME_DATI,
+} from '../src/pty-terminal.mjs';
+
+/**
+ * ⭐ Stesso principio del resto della suite: mai una PTY VERA nei test
+ * unitari (costerebbe un processo di sistema, non deterministico) — una
+ * finta iniettabile che implementa esattamente la superficie di `IPty`
+ * usata da questo modulo (`onData`/`onExit`/`write`/`resize`/`kill`),
+ * verificata contro `node_modules/node-pty/typings/node-pty.d.ts` prima
+ * di scrivere `pty-terminal.mjs`.
+ */
+function ptyFinta() {
+  const ascoltatoriDati = [];
+  const ascoltatoriUscita = [];
+  const finta = {
+    scritture: [],
+    resizeChiamate: [],
+    uccisa: false,
+    onData(cb) { ascoltatoriDati.push(cb); return { dispose() {} }; },
+    onExit(cb) { ascoltatoriUscita.push(cb); return { dispose() {} }; },
+    write(dati) { finta.scritture.push(dati); },
+    resize(cols, rows) { finta.resizeChiamate.push({ cols, rows }); },
+    kill() { finta.uccisa = true; },
+    _emettiDati(dati) { for (const cb of ascoltatoriDati) cb(dati); },
+    _emettiUscita(exitCode, signal) { for (const cb of ascoltatoriUscita) cb({ exitCode, signal }); },
+  };
+  return finta;
+}
+
+function registroPerTest(overrides = {}) {
+  const ptyCreate = [];
+  const spawnPtyFn = overrides.spawnPtyFn ?? ((comando, argomenti, opzioni) => {
+    const p = ptyFinta();
+    ptyCreate.push({ comando, argomenti, opzioni, p });
+    return p;
+  });
+  let ora = overrides.oraIniziale ?? 0;
+  const clock = overrides.clock ?? (() => ora);
+  const avanza = (ms) => { ora += ms; };
+  const registro = creaRegistroTerminali({
+    spawnPtyFn,
+    sceltaShellFn: overrides.sceltaShellFn ?? (() => ({ comando: 'shell-finta', argomenti: ['-i'], enforcement: 'test' })),
+    clock,
+  });
+  return { registro, ptyCreate, avanza };
+}
+
+test('⭐⭐⭐ apri: spawna con cwd/cols/rows richiesti, usando la shell scelta da sceltaShellFn', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  registro.apri({ id: 'a', cartella: 'C:/progetto', cols: 100, rows: 30 });
+  assert.equal(ptyCreate.length, 1);
+  assert.equal(ptyCreate[0].comando, 'shell-finta');
+  assert.deepEqual(ptyCreate[0].argomenti, ['-i']);
+  assert.equal(ptyCreate[0].opzioni.cwd, 'C:/progetto');
+  assert.equal(ptyCreate[0].opzioni.cols, 100);
+  assert.equal(ptyCreate[0].opzioni.rows, 30);
+});
+
+test('⭐⭐⭐ apri due volte sullo STESSO id vivo: riaggancia, non spawna una seconda PTY', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  const prima = registro.apri({ id: 'a', cartella: 'C:/x' });
+  const seconda = registro.apri({ id: 'a', cartella: 'C:/x' });
+  assert.equal(ptyCreate.length, 1, 'una sola spawn per lo stesso id ancora vivo');
+  assert.equal(prima, seconda);
+});
+
+test('⭐⭐ i dati emessi dalla PTY arrivano a ogni ascoltatore registrato', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  const voce = registro.apri({ id: 'a', cartella: 'C:/x' });
+  const ricevuti = [];
+  voce.ascoltatori.add((evento) => ricevuti.push(evento));
+  ptyCreate[0].p._emettiDati('ciao');
+  assert.deepEqual(ricevuti, [{ tipo: 'dati', dati: 'ciao' }]);
+});
+
+test('⭐⭐ il backlog resta sotto BACKLOG_MASSIMO_BYTE, scartando i pezzi più vecchi', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  const voce = registro.apri({ id: 'a', cartella: 'C:/x' });
+  const pezzo = 'x'.repeat(1000);
+  const numeroPezzi = Math.ceil(BACKLOG_MASSIMO_BYTE / 1000) + 20;
+  for (let i = 0; i < numeroPezzi; i += 1) ptyCreate[0].p._emettiDati(pezzo);
+  assert.ok(voce.byteBacklog <= BACKLOG_MASSIMO_BYTE, `byteBacklog=${voce.byteBacklog} deve restare sotto il tetto`);
+  assert.ok(voce.backlog.length < numeroPezzi, 'i pezzi più vecchi devono essere stati scartati');
+});
+
+test('⭐ scrivi/ridimensiona instradano alla PTY giusta', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  registro.apri({ id: 'a', cartella: 'C:/x' });
+  registro.scrivi('a', 'echo ciao\r');
+  registro.ridimensiona('a', 120, 40);
+  assert.deepEqual(ptyCreate[0].p.scritture, ['echo ciao\r']);
+  assert.deepEqual(ptyCreate[0].p.resizeChiamate, [{ cols: 120, rows: 40 }]);
+});
+
+test('⛔⛔ AL CONTRARIO — ridimensiona con cols/rows non positivi non tocca la PTY', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  registro.apri({ id: 'a', cartella: 'C:/x' });
+  registro.ridimensiona('a', 0, 40);
+  registro.ridimensiona('a', 10, -1);
+  assert.deepEqual(ptyCreate[0].p.resizeChiamate, []);
+});
+
+test('⛔ scrivi/ridimensiona su un id ignoto non lanciano (mai un crash su un client tardivo)', () => {
+  const { registro } = registroPerTest();
+  assert.doesNotThrow(() => { registro.scrivi('fantasma', 'x'); registro.ridimensiona('fantasma', 1, 1); });
+});
+
+test('⭐⭐⭐ reap chiude solo le PTY disconnesse da PIÙ di MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA', () => {
+  const { registro, ptyCreate, avanza } = registroPerTest();
+  registro.apri({ id: 'vecchia', cartella: 'C:/x' });
+  registro.apri({ id: 'recente', cartella: 'C:/x' });
+  registro.segnaDisconnesso('vecchia');
+  avanza((MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA * 60_000) - 1);
+  registro.segnaDisconnesso('recente'); // disconnessa proprio ora, all'ultimo istante disponibile
+  avanza(2); // 'vecchia' ora supera il tetto, 'recente' no
+  registro.reap();
+  assert.equal(ptyCreate[0].p.uccisa, true, 'la PTY vecchia va chiusa');
+  assert.equal(ptyCreate[1].p.uccisa, false, 'la PTY recente resta viva');
+  assert.equal(registro._terminali.has('vecchia'), false);
+  assert.equal(registro._terminali.has('recente'), true);
+});
+
+test('⛔⛔⛔ AL CONTRARIO — reap non chiude MAI una PTY ancora connessa, anche con l\'orologio molto avanti', () => {
+  const { registro, ptyCreate, avanza } = registroPerTest();
+  registro.apri({ id: 'attaccata', cartella: 'C:/x' });
+  avanza(MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA * 60_000 * 100);
+  registro.reap();
+  assert.equal(ptyCreate[0].p.uccisa, false);
+  assert.equal(registro._terminali.has('attaccata'), true);
+});
+
+test('⭐ chiudiForzato uccide e rimuove subito, a prescindere dal tempo', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  registro.apri({ id: 'a', cartella: 'C:/x' });
+  registro.chiudiForzato('a');
+  assert.equal(ptyCreate[0].p.uccisa, true);
+  assert.equal(registro._terminali.has('a'), false);
+});
+
+test('⭐⭐ apri dopo una uscita reale (handle.onExit) NON riaggancia una PTY morta: ne spawna una nuova', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  registro.apri({ id: 'a', cartella: 'C:/x' });
+  ptyCreate[0].p._emettiUscita(0, undefined);
+  registro.apri({ id: 'a', cartella: 'C:/x' });
+  assert.equal(ptyCreate.length, 2, 'una PTY uscita non è viva: una riapertura ne crea una nuova');
+});
+
+test('⭐⭐⭐ sceltaShell — win32 con Git Bash presente: enforcement git-bash, comando esatto', () => {
+  const scelta = sceltaShell({
+    platform: 'win32',
+    existsFn: (percorso) => percorso === 'C:\\Program Files\\Git\\bin\\bash.exe',
+    percorsiGitBash: ['C:\\Program Files\\Git\\bin\\bash.exe', 'C:\\Program Files (x86)\\Git\\bin\\bash.exe'],
+  });
+  assert.deepEqual(scelta, { comando: 'C:\\Program Files\\Git\\bin\\bash.exe', argomenti: ['--login', '-i'], enforcement: 'git-bash' });
+});
+
+test('⛔⛔ AL CONTRARIO — sceltaShell su win32 senza Git Bash: fallback DICHIARATO, mai spacciato per bash', () => {
+  const scelta = sceltaShell({ platform: 'win32', existsFn: () => false, percorsiGitBash: ['C:\\nope\\bash.exe'] });
+  assert.equal(scelta.enforcement, 'cmd-fallback');
+  assert.equal(scelta.comando, 'cmd.exe');
+});
+
+test('⭐ sceltaShell — POSIX usa $SHELL quando presente, altrimenti /bin/bash', () => {
+  assert.equal(sceltaShell({ platform: 'linux', env: { SHELL: '/usr/bin/zsh' } }).comando, '/usr/bin/zsh');
+  assert.equal(sceltaShell({ platform: 'linux', env: {} }).comando, '/bin/bash');
+});
+
+test('⭐⭐⭐ codificaFrame/decodificaFrame: round-trip per entrambi i tipi', () => {
+  const frameDati = codificaFrame(TIPO_FRAME_DATI, 'echo ciao\r');
+  const decDati = decodificaFrame(frameDati);
+  assert.equal(decDati.tipo, TIPO_FRAME_DATI);
+  assert.equal(decDati.payload.toString('utf8'), 'echo ciao\r');
+
+  const frameCtrl = codificaFrame(TIPO_FRAME_CONTROLLO, JSON.stringify({ tipo: 'resize', cols: 80, rows: 24 }));
+  const decCtrl = decodificaFrame(frameCtrl);
+  assert.equal(decCtrl.tipo, TIPO_FRAME_CONTROLLO);
+  assert.deepEqual(JSON.parse(decCtrl.payload.toString('utf8')), { tipo: 'resize', cols: 80, rows: 24 });
+});
+
+test('⛔⛔⛔ AL CONTRARIO — decodificaFrame su input vuoto o tipo ignoto torna null, mai un crash', () => {
+  assert.equal(decodificaFrame(Buffer.alloc(0)), null);
+  assert.equal(decodificaFrame(Buffer.from([99, 1, 2, 3])), null);
+});
+
+/*
+ * ⭐⭐⭐ W1-01 (05/9) — IL CRITERIO DELLA RIGA. Fino al 04/9 l'id della PTY *era*
+ * il sessionId, quindi «due schede nella stessa sessione» non era nemmeno
+ * esprimibile. Questi test provano la cosa che la riga chiede: due schede della
+ * STESSA sessione sono due PTY separate, con I/O e backlog separati.
+ */
+
+test('⭐⭐⭐ DUE SCHEDE della stessa sessione NON condividono I/O: scrivo in una, l\'altra non vede niente', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  const a = registro.apri({ id: 'sess-1', cartella: 'C:/lavoro' });        // prima scheda (id === sessionId)
+  const b = registro.apri({ id: 'term-2', cartella: 'C:/lavoro' });        // seconda scheda della stessa sessione
+  assert.equal(ptyCreate.length, 2, 'due schede = due PTY vere, mai una condivisa');
+
+  const vistiDaA = [];
+  const vistiDaB = [];
+  a.ascoltatori.add((evento) => vistiDaA.push(evento));
+  b.ascoltatori.add((evento) => vistiDaB.push(evento));
+
+  registro.scrivi('term-2', 'echo solo-per-b\r');
+  assert.deepEqual(ptyCreate[0].p.scritture, [], 'la tastiera della scheda B non deve MAI finire nella shell della scheda A');
+  assert.deepEqual(ptyCreate[1].p.scritture, ['echo solo-per-b\r']);
+
+  ptyCreate[1].p._emettiDati('output di b');
+  assert.deepEqual(vistiDaA, [], 'l\'output di B non arriva agli ascoltatori di A');
+  assert.deepEqual(vistiDaB, [{ tipo: 'dati', dati: 'output di b' }]);
+  assert.deepEqual(a.backlog, [], 'e nemmeno nel backlog di A: un F5 su A non deve rigiocare l\'output di B');
+  assert.deepEqual(b.backlog, ['output di b']);
+});
+
+test('⭐⭐⭐ il tetto del backlog è PER SCHEDA, non globale: riempire una non svuota l\'altra', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  const a = registro.apri({ id: 'scheda-a', cartella: 'C:/x' });
+  const b = registro.apri({ id: 'scheda-b', cartella: 'C:/x' });
+  b._notaDiProva = true;
+  ptyCreate[1].p._emettiDati('riga preziosa di B');
+
+  const pezzo = 'x'.repeat(1000);
+  for (let i = 0; i < Math.ceil(BACKLOG_MASSIMO_BYTE / 1000) + 20; i += 1) ptyCreate[0].p._emettiDati(pezzo);
+
+  assert.ok(a.byteBacklog <= BACKLOG_MASSIMO_BYTE, `A resta sotto il suo tetto (${a.byteBacklog})`);
+  assert.deepEqual(b.backlog, ['riga preziosa di B'], 'il traffico di A non deve sfrattare il backlog di B — il tetto è di 200.000 byte CIASCUNA');
+  assert.equal(b.byteBacklog, Buffer.byteLength('riga preziosa di B', 'utf8'));
+});
+
+test('⛔⛔⛔ AL CONTRARIO — chiudere UNA scheda non tocca le altre della stessa sessione', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  registro.apri({ id: 'sess-1', cartella: 'C:/x' });
+  registro.apri({ id: 'term-2', cartella: 'C:/x' });
+  registro.chiudiForzato('term-2');
+  assert.equal(ptyCreate[1].p.uccisa, true);
+  assert.equal(ptyCreate[0].p.uccisa, false, 'la scheda che nessuno ha chiuso resta viva');
+  assert.equal(registro._terminali.has('sess-1'), true);
+  assert.equal(registro._terminali.has('term-2'), false);
+});
+
+test('⭐⭐⭐ il reaper delle PTY orfane continua a valere PER OGNI scheda, non solo per la prima', () => {
+  const { registro, ptyCreate, avanza } = registroPerTest();
+  registro.apri({ id: 'sess-1', cartella: 'C:/x' });
+  registro.apri({ id: 'term-2', cartella: 'C:/x' });
+  registro.apri({ id: 'term-3', cartella: 'C:/x' });
+  registro.segnaDisconnesso('term-2');
+  registro.segnaDisconnesso('term-3');
+  avanza(MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA * 60_000 + 1);
+  registro.reap();
+  assert.equal(ptyCreate[0].p.uccisa, false, 'sess-1 è ancora attaccata: non si tocca');
+  assert.equal(ptyCreate[1].p.uccisa, true);
+  assert.equal(ptyCreate[2].p.uccisa, true, 'la terza scheda non deve sfuggire al reaper solo perché è la terza');
+  assert.deepEqual([...registro._terminali.keys()], ['sess-1']);
+});
+
+test('⭐⭐⭐ SHUTDOWN — chiudere tutte le schede fotografando le chiavi (come fa server.mjs) non ne lascia nemmeno una viva', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  for (const id of ['sess-1', 'term-2', 'term-3', 'term-4']) registro.apri({ id, cartella: 'C:/x' });
+  /* ⛔ Esattamente la riga di server.mjs: le chiavi si fotografano PRIMA, perché chiudiForzato cancella dalla stessa Map. */
+  for (const id of [...registro._terminali.keys()]) registro.chiudiForzato(id);
+  assert.equal(registro._terminali.size, 0, 'zero PTY superstiti allo shutdown');
+  assert.deepEqual(ptyCreate.map((c) => c.p.uccisa), [true, true, true, true]);
+});
+
+test('⭐⭐ stato(): tre fatti distinti — viva, uscita, inesistente', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  registro.apri({ id: 'viva', cartella: 'C:/x' });
+  registro.apri({ id: 'morta', cartella: 'C:/x' });
+  ptyCreate[1].p._emettiUscita(0, undefined);
+  assert.equal(registro.stato('viva').viva, true);
+  assert.equal(registro.stato('morta').viva, false);
+  assert.equal(registro.stato('mai-esistita'), null, '⛔ null non è {viva:false}: "non c\'è" e "è uscita" sono due fatti diversi');
+});
+
+/*
+ * ⭐⭐⭐ Il segnale «ripreso» — la misura che l'interfaccia non poteva fare.
+ *
+ * ⛔ Il ponte rigioca il backlog sia quando riaggancia una PTY viva sia quando
+ * il reaper l'ha chiusa e ne nasce una nuova. Una PTY appena creata ha backlog
+ * vuoto, che è anche l'aspetto di una shell viva che non ha ancora stampato
+ * niente: dedurre la ripresa dall'assenza di backlog è un indovinello. Qui la
+ * risposta viene dal registro, che è l'unico che la sa.
+ */
+test('⭐⭐⭐ apriDichiarando: la PRIMA apertura in assoluto NON è una ripresa', () => {
+  const { registro } = registroPerTest();
+  const esito = registro.apriDichiarando({ id: 'a', cartella: 'C:/progetto' });
+  assert.equal(esito.ripresa, false, 'la prima volta la shell è nuova per definizione');
+  assert.equal(esito.voce.id, 'a');
+});
+
+test('⭐⭐⭐ apriDichiarando: riagganciare una PTY VIVA è una ripresa, e non spawna', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  registro.apri({ id: 'a', cartella: 'C:/progetto' });
+  const esito = registro.apriDichiarando({ id: 'a', cartella: 'C:/progetto' });
+  assert.equal(esito.ripresa, true);
+  assert.equal(ptyCreate.length, 1, 'nessuna seconda PTY');
+});
+
+test('⭐⭐⭐ AL CONTRARIO — dopo che il reaper ha chiuso la shell, riaprire NON è una ripresa', () => {
+  const { registro, ptyCreate, avanza } = registroPerTest();
+  registro.apri({ id: 'a', cartella: 'C:/progetto' });
+  registro.segnaDisconnesso('a');
+  // Oltre la finestra di grazia: il reaper chiude la PTY orfana.
+  avanza(1000 * 60 * 60);
+  registro.reap();
+  const esito = registro.apriDichiarando({ id: 'a', cartella: 'C:/progetto' });
+  // ⛔ È il caso che conta: da fuori sembra identico a una riconnessione
+  // riuscita, e invece la shell della persona non c'è più.
+  assert.equal(esito.ripresa, false);
+  assert.equal(ptyCreate.length, 2, 'una PTY NUOVA è nata');
+});
+
+test('⭐⭐ apriDichiarando dà la STESSA voce di apri: una sola verità, non due', () => {
+  const { registro } = registroPerTest();
+  const voce = registro.apri({ id: 'a', cartella: 'C:/progetto' });
+  assert.equal(registro.apriDichiarando({ id: 'a', cartella: 'C:/progetto' }).voce, voce);
+});
+
+/*
+ * ⛔⛔⛔ 14/09 — F04 e F05 della review, riprodotti PRIMA di curarli. Sono due promesse che questo file scrive nella
+ *   propria documentazione e che il codice non manteneva:
+ *   F04 «200.000 byte per scheda, dichiarato, non infinito» — il vecchio ciclo si fermava a `backlog.length > 1`,
+ *       quindi UN solo `cat` di un file grosso restava in memoria intero.
+ *   F05 «mai quelle ancora attaccate a un client» — il timbro si metteva a ogni scheda che si staccava, anche con
+ *       un'altra finestra ancora agganciata, e dieci minuti dopo il reaper uccideva una shell viva.
+ */
+
+test('⛔⛔⛔ F04 — un SOLO pezzo più grande del tetto viene TAGLIATO, e si tiene la CODA', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  const voce = registro.apri({ id: 't1', cartella: '/tmp' });
+  const visti = [];
+  voce.ascoltatori.add((evento) => visti.push(evento));
+
+  const enorme = 'a'.repeat(BACKLOG_MASSIMO_BYTE * 3);
+  ptyCreate[0].p._emettiDati(enorme);
+
+  const tenuto = voce.backlog.join('');
+  assert.ok(voce.byteBacklog <= BACKLOG_MASSIMO_BYTE, `tenuti ${voce.byteBacklog} byte contro un tetto di ${BACKLOG_MASSIMO_BYTE}`);
+  assert.equal(voce.byteBacklog, Buffer.byteLength(tenuto, 'utf8'), 'il contatore dice la verità su ciò che è rimasto in memoria');
+  assert.ok(enorme.endsWith(tenuto), 'si tiene la CODA: è quella che la scheda deve rivedere al rientro');
+  assert.equal(visti.length, 1);
+  assert.equal(visti[0].dati, enorme, 'chi guarda DAL VIVO riceve tutto: il taglio riguarda solo la memoria');
+});
+
+test('⛔⛔ F04 — il taglio non spezza mai un carattere UTF-8 a metà (niente � nel backlog)', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  const voce = registro.apri({ id: 't1', cartella: '/tmp' });
+
+  // ⛔ 3 byte per carattere e 200.000 NON è multiplo di 3: il taglio cade DENTRO una sequenza, che è il caso da provare.
+  const enorme = '∑'.repeat(100_000);
+  assert.equal(Buffer.byteLength(enorme, 'utf8'), 300_000);
+  ptyCreate[0].p._emettiDati(enorme);
+
+  const tenuto = voce.backlog.join('');
+  assert.ok(voce.byteBacklog <= BACKLOG_MASSIMO_BYTE);
+  assert.ok(!tenuto.includes('�'), 'un carattere spezzato arriverebbe a xterm come sostituto: sarebbe output mai scritto dalla shell');
+  assert.equal(tenuto.replaceAll('∑', ''), '', 'tutto ciò che resta sono caratteri interi');
+  assert.ok(enorme.endsWith(tenuto));
+});
+
+test('⛔ F04 — sotto il tetto non si taglia NIENTE (il verso in cui la cura non deve mordere)', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  const voce = registro.apri({ id: 't1', cartella: '/tmp' });
+
+  ptyCreate[0].p._emettiDati('prima riga\r\n');
+  ptyCreate[0].p._emettiDati('seconda riga\r\n');
+
+  assert.deepEqual(voce.backlog, ['prima riga\r\n', 'seconda riga\r\n']);
+  assert.equal(voce.byteBacklog, Buffer.byteLength('prima riga\r\nseconda riga\r\n', 'utf8'));
+});
+
+test('⛔⛔⛔ F05 — una finestra che si stacca NON rende orfana la PTY che un\'ALTRA sta ancora guardando', () => {
+  const { registro, ptyCreate, avanza } = registroPerTest();
+  const voce = registro.apri({ id: 't1', cartella: '/tmp' });
+  const finestraA = () => {};
+  const finestraB = () => {};
+  voce.ascoltatori.add(finestraA);
+  voce.ascoltatori.add(finestraB);
+
+  voce.ascoltatori.delete(finestraA); // A chiude la scheda
+  registro.segnaDisconnesso('t1');
+  assert.equal(voce.ultimaDisconnessioneMs, null, 'resta B a guardare: nessun timbro di orfana');
+
+  avanza((MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA + 5) * 60_000);
+  registro.reap();
+
+  assert.equal(registro.stato('t1')?.viva, true, 'la shell che B sta usando è ancora viva');
+  assert.equal(ptyCreate[0].p.uccisa, false);
+});
+
+test('⛔⛔ F05 — il reaper guarda CHI c\'è adesso, non solo il timbro: una scheda riagganciata non viene chiusa', () => {
+  const { registro, ptyCreate, avanza } = registroPerTest();
+  const voce = registro.apri({ id: 't1', cartella: '/tmp' });
+
+  registro.segnaDisconnesso('t1'); // nessuno guardava: il timbro si mette davvero
+  assert.notEqual(voce.ultimaDisconnessioneMs, null);
+  voce.ascoltatori.add(() => {}); // una finestra si riaggancia mentre il timbro è ancora lì
+
+  avanza((MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA + 5) * 60_000);
+  registro.reap();
+
+  assert.equal(registro.stato('t1')?.viva, true);
+  assert.equal(ptyCreate[0].p.uccisa, false);
+});
+
+test('⛔ AL CONTRARIO — F05: la scheda DAVVERO abbandonata viene chiusa dal reaper come prima', () => {
+  const { registro, ptyCreate, avanza } = registroPerTest();
+  const voce = registro.apri({ id: 't1', cartella: '/tmp' });
+  const unica = () => {};
+  voce.ascoltatori.add(unica);
+
+  voce.ascoltatori.delete(unica);
+  registro.segnaDisconnesso('t1');
+  assert.notEqual(voce.ultimaDisconnessioneMs, null, 'l\'ULTIMO che se ne va mette il timbro');
+
+  avanza((MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA + 1) * 60_000);
+  registro.reap();
+
+  assert.equal(registro.stato('t1'), null, 'la pulizia delle schede mai più tornate continua a funzionare');
+  assert.equal(ptyCreate[0].p.uccisa, true);
+});

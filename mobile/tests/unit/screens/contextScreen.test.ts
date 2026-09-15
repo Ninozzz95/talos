@@ -1,0 +1,1245 @@
+// @vitest-environment jsdom
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick, reactive, ref } from 'vue'
+import { flushPromises, mount } from '@vue/test-utils'
+
+const mockState = vi.hoisted(() => ({ controller: null as unknown }))
+vi.mock('@/stores/chatController', () => ({ useChatController: () => mockState.controller }))
+
+const browserMock = vi.hoisted(() => ({ open: vi.fn().mockResolvedValue(true) }))
+vi.mock('@/services/inAppBrowserService', () => ({ openTalosLinkOnce: browserMock.open }))
+
+const deviceSave = vi.hoisted(() => ({
+    saveTalosVaultFileToDevice: vi.fn(),
+}))
+vi.mock('@/services/saveVaultFileToDevice', () => deviceSave)
+
+/*
+ * ⛔ Owner 2026-08-27 — «renderizzare HTML invece del codice quando ci
+ * clicchi nella Libreria». `renderArtifactFile` importa `TalosArtifactBridge`
+ * dinamicamente (`await import(...)`): un finto controllabile per-test, non
+ * la vera `TalosArtifactPlugin.kt` (quella si prova solo sul Pad).
+ */
+const artifactBridge = vi.hoisted(() => ({
+    create: vi.fn(),
+    open: vi.fn(),
+    read: vi.fn(),
+}))
+vi.mock('@/lib/device/artifactPlugin', () => ({ TalosArtifactBridge: artifactBridge }))
+
+import ContextScreen from '@/screens/ContextScreen.vue'
+import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
+import { __resetToastsForTests, useTalosMobileToasts } from '@/stores/toasts'
+import { __resetSettingsStoreForTests, useSettingsStore } from '@/stores/settings'
+import { __resetTalosTabletLayoutForTests } from '@/composables/useTalosTabletLayout'
+
+function file(id: string, status: 'available' | 'failed' = 'available') {
+    const isImage = id === 'vault-image'
+    return {
+        id,
+        display_name: id === 'vault-ready' ? 'architecture.pdf' : isImage ? 'diagram.png' : 'spoofed.bin',
+        media_type: id === 'vault-ready' ? 'application/pdf' : isImage ? 'image/png' : 'application/octet-stream',
+        size_bytes: 4096,
+        private_uri: 'talos-vault/files/' + id,
+        status,
+        trust: 'untrusted',
+        sha256: status === 'available' ? 'a'.repeat(64) : null,
+        extracted_text: status === 'available' ? 'architecture notes' : null,
+        failure_code: status === 'failed' ? 'TALOS_ATTACHMENT_SIGNATURE_MISMATCH' : null,
+        metadata: id === 'vault-image' ? { origin: 'generated' } : {},
+        created_at: '2026-07-22T10:00:00.000Z',
+        updated_at: '2026-07-22T10:00:00.000Z',
+    }
+}
+
+function makeController() {
+    const vaultFiles = reactive([file('vault-ready'), file('vault-image')])
+    const attachments = {
+        items: reactive<Array<Record<string, unknown>>>([]),
+        vaultFiles,
+        selecting: ref(false),
+        vaultLoading: ref(false),
+        vaultError: ref(null),
+        refreshVault: vi.fn().mockResolvedValue(undefined),
+        selectFiles: vi.fn().mockResolvedValue(undefined),
+        previewUrl: vi.fn().mockResolvedValue(null),
+        previewBytes: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
+        hydrateText: vi.fn().mockResolvedValue('architecture notes'),
+        attachExisting: vi.fn().mockImplementation(async (selected: { id: string }) => {
+            attachments.items.push({ id: 'draft-' + selected.id, vaultFileId: selected.id, status: 'authorized' })
+            return true
+        }),
+        deleteVaultFile: vi.fn().mockImplementation(async (fileId: string) => {
+            const index = vaultFiles.findIndex((candidate) => candidate.id === fileId)
+            if (index >= 0) vaultFiles.splice(index, 1)
+        }),
+    }
+    return { init: vi.fn().mockResolvedValue(undefined), chat: { sessions: reactive([]) }, attachments }
+}
+
+beforeEach(() => {
+    mockState.controller = makeController()
+    deviceSave.saveTalosVaultFileToDevice.mockReset()
+    deviceSave.saveTalosVaultFileToDevice.mockResolvedValue({
+        status: 'saved',
+        delivery: 'android-saf',
+        bytesWritten: 3,
+        displayName: 'architecture.pdf',
+    })
+    artifactBridge.create.mockReset().mockResolvedValue({ id: 'artifact-1' })
+    artifactBridge.open.mockReset().mockResolvedValue({ opened: true })
+    artifactBridge.read.mockReset().mockResolvedValue({ html: '<p>read</p>' })
+    __resetToastsForTests()
+    __resetSettingsStoreForTests()
+})
+afterEach(() => { document.body.innerHTML = '' })
+
+describe('ContextScreen Library gallery', () => {
+    function manyFiles(total = 80) {
+        const controller = makeController()
+        controller.attachments.vaultFiles.splice(0, 2, ...Array.from({ length: total }, (_, index) => ({
+            ...file(`file-${index}`),
+            display_name: index === 0 ? 'Zirconium manuscript.txt' : `Document ${String(index).padStart(3, '0')}.txt`,
+            media_type: 'text/plain',
+            updated_at: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(),
+        })))
+        mockState.controller = controller
+        return controller
+    }
+
+    it('LIB-INFINITE-01 renders 24 then 48/72/80 files with the full collection count', async () => {
+        manyFiles()
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(24)
+        expect(wrapper.get('[data-testid="talos-library-count"]').text()).toContain('80')
+        for (const count of [48, 72, 80]) {
+            await wrapper.get('[data-testid="talos-library-load-more"]').trigger('click')
+            await flushPromises()
+            const ids = wrapper.findAll('[data-vault-file-id]').map(w => w.attributes('data-vault-file-id'))
+            expect(ids).toHaveLength(count)
+            expect(new Set(ids).size).toBe(count)
+        }
+        expect(wrapper.find('[data-testid="talos-library-load-more"]').exists()).toBe(false)
+    })
+
+    it('LIB-INFINITE-02 searches an item beyond the initially rendered page', async () => {
+        manyFiles()
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        expect(wrapper.find('[data-vault-file-id="file-0"]').exists()).toBe(false)
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('Zirconium')
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(1)
+        expect(wrapper.find('[data-vault-file-id="file-0"]').exists()).toBe(true)
+    })
+
+    it('LIB-INFINITE-03 sorts before paging and resets the page after search changes', async () => {
+        manyFiles()
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')[0]!.attributes('data-vault-file-id')).toBe('file-79')
+        await wrapper.get('[data-testid="talos-library-load-more"]').trigger('click')
+        await wrapper.get('[data-testid="talos-library-view-list"]').trigger('click')
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(48)
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('Zirconium')
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('')
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(24)
+    })
+
+    it('LIB-INFINITE-05 shares the rendering budget between links and files', async () => {
+        const controller = manyFiles()
+        controller.attachments.vaultFiles.forEach((entry, index) => {
+            if (index % 2 === 0) Object.assign(entry, {
+                media_type: 'text/markdown',
+                created_at: entry.updated_at,
+                metadata: { origin: 'generated', kind: 'web_source', source_url: `https://example.com/page-${index}` },
+            })
+        })
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-library-view-grid"]').trigger('click')
+        const files = () => wrapper.findAll('[data-vault-file-id]')
+        const links = () => wrapper.findAll('[data-talos-saved-link-tile]')
+        expect(files()).toHaveLength(12)
+        expect(links()).toHaveLength(12)
+        await wrapper.get('[data-testid="talos-library-load-more"]').trigger('click')
+        expect(files()).toHaveLength(24)
+        expect(links()).toHaveLength(24)
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        expect(files()).toHaveLength(0)
+        expect(links()).toHaveLength(24)
+    })
+
+    it('LIB-INFINITE-06 keeps a thousand files searchable without mounting them all', async () => {
+        manyFiles(1000)
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(24)
+        expect(wrapper.get('[data-testid="talos-library-count"]').text()).toContain('1000')
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('Zirconium')
+        await flushPromises()
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(1)
+        expect(wrapper.find('[data-vault-file-id="file-0"]').exists()).toBe(true)
+    })
+
+    it('LIB-INFINITE-07 resets the scroller after the final page has removed the load button', async () => {
+        manyFiles()
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        for (let page = 0; page < 3; page++) {
+            await wrapper.get('[data-testid="talos-library-load-more"]').trigger('click')
+        }
+        const scroller = wrapper.get('[data-testid="mobile-screen-body"]').element
+        scroller.scrollTop = 1800
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('Zirconium')
+        expect(scroller.scrollTop).toBe(0)
+    })
+
+    it('LIB-SURFACE-03 lets the real Library inherit the enclosing sheet surface', async () => {
+        const wrapper = mount(ContextScreen, { global: { provide: { [TALOS_SHEET_CONTEXT_KEY as symbol]: true } } })
+        await flushPromises()
+        expect(wrapper.get('[data-testid="mobile-screen"]').classes()).not.toContain('bg-[var(--talos-background)]')
+    })
+
+    it('LIB-HEADER-03 gives the subtitle a full row below the title and primary action', async () => {
+        __resetTalosTabletLayoutForTests()
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        const title = wrapper.get('[data-talos-sheet-title]').element
+        const header = title.closest('header')!
+        expect(title.parentElement!.querySelector('[data-testid="talos-library-add"]')).not.toBeNull()
+        expect(header.querySelector('p')!.parentElement).toBe(header)
+    })
+
+    it('renders the vault and hydrates it locally', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        expect(mockState.controller.init).toHaveBeenCalledOnce()
+        expect(mockState.controller.attachments.refreshVault).toHaveBeenCalledOnce()
+        expect(wrapper.get('[data-vault-file-id="vault-ready"]').text()).toContain('architecture.pdf')
+        expect(wrapper.find('[data-vault-file-id="vault-image"]').exists()).toBe(true)
+        expect(wrapper.html()).not.toContain('talos-vault/files')
+    })
+
+    it('P1-CTX-UI-03 says «Excluded from context» only on an excluded file, and the menu still sets it', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push(file('vault-other'))
+        mockState.controller = controller
+        const settings = useSettingsStore()
+        await settings.setLibraryContextPolicy({
+            enabled: true,
+            mode: 'smart_relevant_v1',
+            included_file_ids: ['vault-ready'],
+            excluded_file_ids: ['vault-other'],
+        }, 0)
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        // Owner 14/09/2026: the global-context line is gone, and "included" is not
+        // written on a card — only the exception that changes what answers read.
+        expect(wrapper.find('[data-testid="talos-library-global-policy"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-library-context-state-vault-ready"]').exists()).toBe(false)
+        expect(wrapper.get('[data-testid="talos-library-context-state-vault-other"]').text())
+            .toBe('Excluded from context')
+        expect(wrapper.text()).not.toContain('Context:')
+
+        await wrapper.get('[data-testid="talos-library-actions-vault-ready"]').trigger('click')
+        await flushPromises()
+        ;(document.body.querySelector(
+            '[data-testid="talos-library-action-context-exclude-vault-ready"]',
+        ) as HTMLButtonElement).click()
+        await flushPromises()
+
+        expect(settings.state.shell.library_context_policy).toMatchObject({
+            revision: 2,
+            included_file_ids: [],
+            excluded_file_ids: ['vault-other', 'vault-ready'],
+        })
+        expect(wrapper.get('[data-testid="talos-library-context-state-vault-ready"]').text())
+            .toBe('Excluded from context')
+    })
+
+    it('shows the shared file-type glyph in the optional grid view', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-library-view-grid"]').trigger('click')
+        expect(wrapper.get('[data-vault-file-id="vault-ready"] [data-talos-library-extension]').text()).toBe('PDF')
+        expect(wrapper.get('[data-vault-file-id="vault-ready"] [data-talos-library-icon-kind]').attributes('data-talos-library-icon-kind')).toBe('pdf')
+        expect(wrapper.get('[data-vault-file-id="vault-image"] [data-talos-library-extension]').text()).toBe('PNG')
+        expect(wrapper.get('[data-vault-file-id="vault-image"] [data-talos-library-icon-kind]').attributes('data-talos-library-icon-kind')).toBe('image')
+    })
+
+    it('keeps representative global-Library controls on a 48px Android target', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        for (const id of ['talos-library-options', 'talos-library-search', 'talos-library-view-grid']) {
+            expect(wrapper.get(`[data-testid="${id}"]`).classes()).toContain('min-h-12')
+        }
+        expect(wrapper.get('[data-testid="talos-library-options"]').classes()).toContain('min-w-12')
+        expect(wrapper.get('[data-testid="talos-library-type-all"]').classes())
+            .toEqual(expect.arrayContaining(['min-h-12', 'min-w-12']))
+
+        await wrapper.get('[data-testid="talos-library-view-grid"]').trigger('click')
+        expect(wrapper.get('[data-testid="talos-library-actions-vault-ready"]').classes()).toContain('size-12')
+        await wrapper.get('[data-testid="talos-library-actions-vault-ready"]').trigger('click')
+        await flushPromises()
+        for (const item of Array.from(document.body.querySelectorAll('[role^="menuitem"]'))) {
+            expect(item.classList).toContain('min-h-12')
+        }
+
+        await wrapper.get('[data-testid="talos-library-view-list"]').trigger('click')
+        expect(wrapper.get('[data-testid="talos-library-actions-vault-ready"]').classes()).toContain('size-12')
+    })
+
+    it('searches names AND extracted document text, and reports no match', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('architecture')
+        expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(true)
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('nonexistent-term')
+        expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(false)
+        expect(wrapper.text()).toContain('No files match')
+    })
+
+    it('P2-UI-01 uses canonical Unicode and emoji matching in the mounted global Library', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-unicode'),
+            display_name: 'cafe\u0301-☕️.md',
+            media_type: 'text/markdown',
+            extracted_text: 'Budget € for 项目预算',
+        })
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        const search = wrapper.get('[data-testid="talos-library-search"]')
+
+        await search.setValue('CAFÉ')
+        expect(wrapper.find('[data-vault-file-id="vault-unicode"]').exists()).toBe(true)
+        await search.setValue('☕')
+        expect(wrapper.find('[data-vault-file-id="vault-unicode"]').exists()).toBe(true)
+        await search.setValue('预算')
+        expect(wrapper.find('[data-vault-file-id="vault-unicode"]').exists()).toBe(true)
+        await search.setValue('🔒')
+        expect(wrapper.find('[data-vault-file-id="vault-unicode"]').exists()).toBe(false)
+    })
+
+    it('filters by type — Immagini hides non-image files', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-library-type-images"]').trigger('click')
+        expect(wrapper.find('[data-vault-file-id="vault-image"]').exists()).toBe(true)
+        expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(false)
+    })
+
+    it('LIB-MENU-05 groups global list actions under one More trigger and can attach', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-library-view-list"]').trigger('click')
+        expect(wrapper.findAll('[data-talos-library-row]')).toHaveLength(2)
+        expect(wrapper.get('[data-vault-file-id="vault-ready"] [data-talos-library-extension]').text()).toBe('PDF')
+        expect(wrapper.find('[aria-label="Attach architecture.pdf to message"]').exists()).toBe(false)
+
+        await wrapper.get('[data-testid="talos-library-actions-vault-ready"]').trigger('click')
+        await flushPromises()
+        ;(document.body.querySelector('[data-testid="talos-library-action-attach-vault-ready"]') as HTMLButtonElement).click()
+        await flushPromises()
+        expect(mockState.controller.attachments.attachExisting).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'vault-ready' }),
+        )
+    })
+
+    it('passes the exact Vault bytes to device export from the global list', async () => {
+        const controller = makeController()
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-view-list"]').trigger('click')
+        await wrapper.get('[data-testid="talos-library-actions-vault-ready"]').trigger('click')
+        await flushPromises()
+        ;(document.body.querySelector('[data-testid="talos-library-action-save-vault-ready"]') as HTMLButtonElement).click()
+        await flushPromises()
+
+        expect(controller.attachments.previewBytes).toHaveBeenCalledWith('vault-ready')
+        expect(deviceSave.saveTalosVaultFileToDevice).toHaveBeenCalledWith({
+            displayName: 'architecture.pdf',
+            mediaType: 'application/pdf',
+            bytes: new Uint8Array([1, 2, 3]),
+        })
+        expect(useTalosMobileToasts().items.value.at(-1)?.message).toMatch(/saved.+architecture\.pdf/i)
+    })
+
+    it('LIB-MENU-06 offers the same More action contract in global list and grid', async () => {
+        const controller = makeController()
+        controller.attachments.previewUrl.mockResolvedValue('blob:diagram')
+        controller.attachments.vaultFiles.push({
+            ...file('vault-notes'),
+            display_name: 'notes.md',
+            media_type: 'text/markdown',
+        })
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-view-list"]').trigger('click')
+        expect(wrapper.find('[data-testid="talos-library-actions-vault-ready"]').exists()).toBe(true)
+
+        await wrapper.get('[data-testid="talos-library-view-grid"]').trigger('click')
+        expect(wrapper.find('[data-testid="talos-library-actions-vault-ready"]').exists()).toBe(true)
+        await wrapper.get('[data-testid="talos-library-actions-vault-ready"]').trigger('click')
+        await flushPromises()
+        expect(document.body.querySelector('[data-testid="talos-library-action-attach-vault-ready"]')).not.toBeNull()
+        expect(document.body.querySelector('[data-testid="talos-library-action-save-vault-ready"]')).not.toBeNull()
+        expect(document.body.querySelector('[data-testid="talos-library-action-delete-vault-ready"]')).not.toBeNull()
+
+        await wrapper.get('[aria-label="Open diagram.png"]').trigger('click')
+        await flushPromises()
+        expect(document.body.querySelector('[data-testid="talos-library-save-overlay-vault-image"]'))
+            .not.toBeNull()
+        ;(document.body.querySelector('[aria-label="Close preview"]') as HTMLButtonElement).click()
+        await flushPromises()
+
+        await wrapper.get('[aria-label="Open notes.md"]').trigger('click')
+        await flushPromises()
+        expect(document.body.querySelector('[data-testid="talos-library-save-overlay-vault-notes"]'))
+            .not.toBeNull()
+    })
+
+    /**
+     * Owner 14/09/2026: sort and grouping STAY, in a bottom sheet made of the
+     * app's own pieces. The page menu (with «New folder» and «Select») and the
+     * native `<select>` — Android's turquoise radio, outside the palette — go.
+     */
+    it('LIB-OPTIONS-01 keeps sort and grouping in a bottom sheet, with no page menu and no native select', async () => {
+        const settings = useSettingsStore()
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        expect(wrapper.find('[role="menu"]').exists()).toBe(false)
+        expect(wrapper.find('select').exists()).toBe(false)
+        await wrapper.get('[data-testid="talos-library-options"]').trigger('click')
+        await flushPromises()
+        const sheet = document.body.querySelector('[role="dialog"][aria-label="Library options"]')
+        expect(sheet).not.toBeNull()
+        expect(sheet!.textContent).not.toContain('New folder')
+
+        ;(sheet!.querySelector('[data-testid="talos-library-sort-name"]') as HTMLButtonElement).click()
+        await flushPromises()
+        expect(settings.state.shell.library_sort).toBe('name')
+        expect(sheet!.querySelector('[data-testid="talos-library-sort-name"]')!.getAttribute('aria-checked')).toBe('true')
+
+        const before = settings.state.shell.library_group_by_chat
+        ;(sheet!.querySelector('[data-testid="talos-library-group-by-chat"]') as HTMLButtonElement).click()
+        await flushPromises()
+        expect(settings.state.shell.library_group_by_chat).toBe(!before)
+    })
+
+    /**
+     * Owner 12/09/2026: aggiungere un file alla Libreria non manda niente a
+     * nessuno, quindi non deve chiedere «questa immagine esce dal telefono».
+     * La destinazione e’ cio’ che lo decide, e passarla e’ l’unico pezzo che
+     * questa schermata possiede: se sparisce, il cartellino torna.
+     */
+    it('adds to the Library, not to the next message', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-add"]').trigger('click')
+        expect(mockState.controller.attachments.selectFiles).toHaveBeenCalledWith('library')
+    })
+
+    /**
+     * Owner 14/09/2026: on the TABLET «Aggiungi file» sits in the toolbar row with search, view
+     * and options. On the PHONE it sits beside the title, icon only: on the owner's phone the
+     * toolbar wrapped and left the «+» alone on a second line.
+     */
+    it('LIB-TOOLBAR-01 tablet: search, view, options and Add file on one toolbar row', async () => {
+        const originale = window.matchMedia
+        window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia
+        __resetTalosTabletLayoutForTests()
+        try {
+            const wrapper = mount(ContextScreen)
+            await flushPromises()
+            const row = wrapper.get('[data-testid="talos-library-search"]').element.closest('label')!.parentElement!
+            for (const id of ['talos-library-view-grid', 'talos-library-options', 'talos-library-add']) {
+                expect(row.querySelector(`[data-testid="${id}"]`)).not.toBeNull()
+            }
+            const heading = wrapper.get('[data-talos-sheet-title]').element.closest('header')!
+            expect(heading.querySelector('[data-testid="talos-library-add"]')).toBeNull()
+            expect(wrapper.get('[data-testid="talos-library-add"]').text().trim()).not.toBe('')
+        } finally {
+            window.matchMedia = originale
+            __resetTalosTabletLayoutForTests()
+        }
+    })
+
+    it('LIB-TOOLBAR-02 phone: Add file beside the title, icon only, and only once', async () => {
+        __resetTalosTabletLayoutForTests()
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        const heading = wrapper.get('[data-talos-sheet-title]').element.closest('header')!
+        const add = heading.querySelector('[data-testid="talos-library-add"]')
+        expect(add).not.toBeNull()
+        expect(add!.textContent!.trim()).toBe('')
+        expect(add!.getAttribute('aria-label')).toBeTruthy()
+        expect(wrapper.findAll('[data-testid="talos-library-add"]')).toHaveLength(1)
+        const row = wrapper.get('[data-testid="talos-library-search"]').element.closest('label')!.parentElement!
+        expect(row.querySelector('[data-testid="talos-library-add"]')).toBeNull()
+    })
+
+    it('LIB-MENU-07 still requires explicit confirmation after selecting Delete from More', async () => {
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-library-view-list"]').trigger('click')
+        await wrapper.get('[data-testid="talos-library-actions-vault-ready"]').trigger('click')
+        await flushPromises()
+        ;(document.body.querySelector('[data-testid="talos-library-action-delete-vault-ready"]') as HTMLButtonElement).click()
+        await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull())
+        expect(mockState.controller.attachments.deleteVaultFile).not.toHaveBeenCalled()
+        const confirm = Array.from(document.body.querySelectorAll('button'))
+            .find((button) => button.textContent?.trim() === 'Delete file') as HTMLButtonElement
+        confirm.click()
+        await vi.waitFor(() => expect(mockState.controller.attachments.deleteVaultFile).toHaveBeenCalledWith('vault-ready'))
+    })
+
+    /**
+     * Owner 2026-07-27: "nuova sezione link in libreria, tutti i link salvati
+     * nella ricerca devono essere stampati nella libreria sottoforma di link
+     * oltre all'attuale transcript MD … magari nella visualizzazione mettere un
+     * pulsante open in browser".
+     */
+    it('lists a page read while searching as a link whose menu opens it in the browser', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Il prezzo del gas.md',
+            media_type: 'text/markdown',
+            metadata: { origin: 'generated', kind: 'web_source', source_url: 'https://www.corriere.it/gas' },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        await wrapper.get('[data-testid="talos-library-view-list"]').trigger('click')
+        const links = wrapper.get('[data-testid="talos-library-links"]')
+        expect(links.find('[data-talos-saved-link-row]').exists()).toBe(true)
+        expect(links.text()).toContain('Il prezzo del gas')
+        // The host, not the filename it happened to be stored under.
+        expect(links.text()).toContain('corriere.it')
+        // The user's own documents are not addresses and stay out.
+        expect(links.text()).not.toContain('architecture.pdf')
+        // Owner 14/09/2026: «open outside» is no longer a button in the corner.
+        expect(wrapper.find('[data-testid="talos-library-link-open"]').exists()).toBe(false)
+
+        await wrapper.get('[data-testid="talos-library-link-actions-vault-source"]').trigger('click')
+        await flushPromises()
+        for (const action of ['open-browser', 'attach', 'save', 'delete']) {
+            expect(document.body.querySelector(`[data-testid="talos-library-link-action-${action}-vault-source"]`)).not.toBeNull()
+        }
+        ;(document.body.querySelector('[data-testid="talos-library-link-action-open-browser-vault-source"]') as HTMLButtonElement).click()
+        await flushPromises()
+        // The user's OWN browser, with his cookies: this is him going back to a
+        // page, not TALOS reading one on his behalf.
+        expect(browserMock.open).toHaveBeenCalledWith('https://www.corriere.it/gas', 'system_browser')
+    })
+
+    /**
+     * Owner 2026-07-30: "nella libreria c'è ancora il bug che i link non
+     * vengono raggruppati per nome e data chat e non vengono displayati in
+     * layout griglia".
+     *
+     * He was right, and it was never a regression: links render in a branch of
+     * their own, while the grouping and the grid/list switch both live in the
+     * file branch. Choosing "grid" while looking at links did nothing at all,
+     * because the grid code was not even reached.
+     *
+     * The grouping is now shared; the tile is not. A file tile carries
+     * multi-select, an actions menu, a context-state pill and a generated
+     * badge — a link has no meaning for any of them, so one template serving
+     * both would be made of `v-if` and would be worse, not better.
+     */
+    it('LIB-LINK-GRID-01 shows saved links as tiles when the grid view is chosen', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Il prezzo del gas.md',
+            media_type: 'text/markdown',
+            metadata: { origin: 'generated', kind: 'web_source', source_url: 'https://www.corriere.it/gas' },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        await wrapper.get('[data-testid="talos-library-view-grid"]').trigger('click')
+
+        // The tile exists, and carries the page title and its host.
+        const tile = wrapper.get('[data-testid="talos-library-link-tile-vault-source"]')
+        expect(tile.text()).toContain('Il prezzo del gas')
+        expect(tile.text()).toContain('corriere.it')
+        // The view changed, the contract did not: the same ⋯ as the row.
+        await tile.get('[data-testid="talos-library-link-actions-vault-source"]').trigger('click')
+        await flushPromises()
+        ;(document.body.querySelector('[data-testid="talos-library-link-action-open-browser-vault-source"]') as HTMLButtonElement).click()
+        await flushPromises()
+        expect(browserMock.open).toHaveBeenCalledWith('https://www.corriere.it/gas', 'system_browser')
+
+        // Tapping the tile itself opens the copy TALOS kept, never the page.
+        browserMock.open.mockClear()
+        await tile.get('button').trigger('click')
+        await flushPromises()
+        expect(browserMock.open).not.toHaveBeenCalled()
+        expect(document.body.querySelector('[data-testid="talos-library-doc"]')).not.toBeNull()
+    })
+
+    /**
+     * The favicon, captured once when the link was saved and read from disk
+     * here. Showing a real site mark costs no request at display time, which is
+     * the whole reason the sources chip could only use letters before.
+     *
+     * A link whose card was never captured — a save from before this existed,
+     * a dead site, a phone that was offline — keeps the Globe. The mark
+     * degrades; the row never breaks.
+     */
+    it('LIB-LINK-ICON-01 shows the captured favicon, and the Globe when there is none', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Il prezzo del gas.md',
+            media_type: 'text/markdown',
+            metadata: { origin: 'generated', kind: 'web_source', source_url: 'https://www.corriere.it/gas' },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        await flushPromises()
+
+        // No card stored in this harness, so the honest fallback is on screen
+        // and nothing is broken by its absence.
+        const row = wrapper.get('[data-talos-saved-link-row]')
+        expect(row.find('[data-testid="talos-library-link-favicon"]').exists()).toBe(false)
+        expect(row.find('svg').exists()).toBe(true)
+    })
+
+    it('LIB-LINK-GRID-02 groups saved links under the chat they came from', async () => {
+        const controller = makeController()
+        controller.chat.sessions.push({ id: 'session-gas', title: 'Bollette' } as never)
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Il prezzo del gas.md',
+            media_type: 'text/markdown',
+            metadata: {
+                origin: 'generated',
+                kind: 'web_source',
+                source_url: 'https://www.corriere.it/gas',
+                origin_session_id: 'session-gas',
+            },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+
+        // The heading names the chat, the same way the file surface does.
+        expect(wrapper.get('[data-testid="talos-library-links"]').text()).toContain('Bollette')
+    })
+
+    it('LIB-ALL-LINK-01 includes a web source in All as a link, never as a Markdown file', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Il prezzo del gas.md',
+            media_type: 'text/markdown',
+            metadata: {
+                origin: 'generated',
+                kind: 'web_source',
+                source_url: 'https://www.corriere.it/gas',
+            },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        const sourceFileVisible = () => wrapper.find('[data-vault-file-id="vault-source"]').exists()
+        const linkRows = () => wrapper.findAll('[data-talos-saved-link-row]')
+
+        expect(linkRows()).toHaveLength(1)
+        expect(linkRows()[0]!.text()).toContain('corriere.it')
+        expect(sourceFileVisible()).toBe(false)
+
+        await wrapper.get('[data-testid="talos-library-type-images"]').trigger('click')
+        expect(linkRows()).toHaveLength(0)
+        expect(sourceFileVisible()).toBe(false)
+
+        await wrapper.get('[data-testid="talos-library-type-files"]').trigger('click')
+        expect(linkRows()).toHaveLength(0)
+        expect(sourceFileVisible()).toBe(false)
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        expect(wrapper.get('[data-testid="talos-library-links"]').text()).toContain('corriere.it')
+        expect(linkRows()).toHaveLength(1)
+        expect(sourceFileVisible()).toBe(false)
+    })
+
+    it('LIB-ALL-LINK-02/05 keeps exact type projections and counts logical items rather than source rows', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Ricerca energia.md',
+            media_type: 'text/markdown',
+            metadata: {
+                origin: 'generated',
+                kind: 'web_source',
+                source_links: [
+                    { url: 'https://www.reuters.com/energy', title: 'Energy report' },
+                    { url: 'https://example.org/markets', title: 'Markets report' },
+                ],
+            },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        // Two ordinary files plus two logical links. The one backing dossier is
+        // storage, not a fifth user-facing item.
+        expect(wrapper.text()).toContain('4 across every chat')
+        expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(true)
+        expect(wrapper.find('[data-vault-file-id="vault-image"]').exists()).toBe(true)
+        expect(wrapper.find('[data-vault-file-id="vault-source"]').exists()).toBe(false)
+        expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(2)
+
+        await wrapper.get('[data-testid="talos-library-type-images"]').trigger('click')
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(1)
+        expect(wrapper.find('[data-vault-file-id="vault-image"]').exists()).toBe(true)
+        expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(0)
+        expect(wrapper.text()).toContain('4 across every chat')
+
+        await wrapper.get('[data-testid="talos-library-type-files"]').trigger('click')
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(1)
+        expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(true)
+        expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(0)
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(0)
+        expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(2)
+    })
+
+    it('LIB-ALL-LINK-04 composes All and Links with title, host, URL and retained-copy search', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Ricerca mercati globali.md',
+            media_type: 'text/markdown',
+            extracted_text: 'Analisi macroeconomica del budget \u20ac',
+            metadata: {
+                origin: 'generated',
+                kind: 'web_source',
+                source_links: [
+                    { url: 'https://www.reuters.com/world/alpha', title: 'Caf\u00e9 Alpha' },
+                    { url: 'https://example.org/beta-report', title: 'Beta report' },
+                ],
+            },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        const search = wrapper.get('[data-testid="talos-library-search"]')
+
+        await search.setValue('CAFE\u0301')
+        expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(1)
+        expect(wrapper.get('[data-talos-saved-link-row]').text()).toContain('Caf\u00e9 Alpha')
+
+        await search.setValue('example.org')
+        expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(1)
+        expect(wrapper.get('[data-talos-saved-link-row]').text()).toContain('Beta report')
+
+        await search.setValue('beta-report')
+        expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(1)
+
+        await search.setValue('macroeconomica')
+        expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(2)
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(2)
+        await search.setValue('not-present')
+        expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(0)
+        expect(wrapper.text()).toContain('No files match')
+    })
+
+    it('LIB-ALL-LINK-06 hides links only during bulk file selection and restores them unchanged', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Una pagina.md',
+            media_type: 'text/markdown',
+            metadata: {
+                origin: 'generated',
+                kind: 'web_source',
+                source_url: 'https://example.com/page',
+            },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(1)
+        // Owner 14/09/2026: selection starts from a file — here, the right click.
+        await wrapper.get('[data-vault-file-id="vault-ready"]').trigger('contextmenu')
+        expect(wrapper.find('[data-testid="talos-library-selection-bar"]').exists()).toBe(true)
+        expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(0)
+        expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(true)
+
+        await wrapper.get('[aria-label="Cancel selection"]').trigger('click')
+        expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(1)
+        expect(wrapper.get('[data-talos-saved-link-row]').text()).toContain('example.com')
+    })
+
+    it('lists a source saved before the address was kept as a fact', async () => {
+        // Self-review 2026-07-27: the row builder learned to read the `Source:`
+        // header of an older transcript, but the screen filtered those rows out
+        // before it ever ran — the fallback was dead where it mattered, and the
+        // owner's existing Library would have opened empty.
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-legacy'),
+            display_name: 'Il prezzo del gas.md',
+            media_type: 'text/markdown',
+            extracted_text: ['# Il prezzo del gas', '', 'Source: https://www.corriere.it/gas'].join('\n'),
+            metadata: { origin: 'generated', kind: 'web_source' },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        expect(wrapper.get('[data-testid="talos-library-links"]').text()).toContain('corriere.it')
+    })
+
+    it('says the Links section is empty rather than showing an empty list', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-sourceless'),
+            display_name: 'Senza indirizzo.md',
+            media_type: 'text/markdown',
+            extracted_text: 'nessun indirizzo qui',
+            metadata: { origin: 'generated', kind: 'web_source' },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        expect(wrapper.find('[data-testid="talos-library-links"]').exists()).toBe(false)
+        expect(wrapper.text()).toContain('No links yet')
+        expect(wrapper.text()).toMatch(/results TALOS finds|pages it reads/i)
+    })
+
+    it('keeps the saved transcript one tap away from its link', async () => {
+        // The markdown copy is the half that survives the page going away; the
+        // link section adds to it rather than replacing it.
+        const controller = makeController()
+        controller.attachments.hydrateText = vi.fn().mockResolvedValue('# Il prezzo del gas')
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Il prezzo del gas.md',
+            media_type: 'text/markdown',
+            extracted_text: 'il prezzo',
+            metadata: { origin: 'generated', kind: 'web_source', source_url: 'https://example.com/gas' },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        await wrapper.get('[aria-label="Open the saved copy of Il prezzo del gas"]').trigger('click')
+        await flushPromises()
+        const viewer = document.body.querySelector('[data-testid="talos-library-doc"]')
+        expect(viewer).not.toBeNull()
+        expect(viewer!.textContent).toContain('Il prezzo del gas')
+        // And from the transcript, the original page is still reachable.
+        expect(viewer!.querySelector('[data-testid="talos-library-doc-open-source"]')).not.toBeNull()
+    })
+
+    /**
+     * Owner 2026-08-27: "non è possibile renderizzare html quando ci clicchi
+     * nella libreria invece del codice? e con un pulsante 'vedi codice'
+     * switchare alla versione codice?"
+     *
+     * Opening an `.html` Library file renders it as a page by default — the
+     * same isolated `TalosArtifactActivity` the chat `artefatto` card uses,
+     * reused generically. The raw text stays hydrated underneath the whole
+     * time: it is the code view, not a separate mode entered on failure.
+     */
+    it('renders an opened HTML file as a page through the isolated artifact viewer', async () => {
+        const controller = makeController()
+        controller.attachments.hydrateText = vi.fn().mockResolvedValue('<h1>Ciao</h1>')
+        controller.attachments.vaultFiles.push({
+            ...file('vault-page'),
+            display_name: 'Orologio.html',
+            media_type: 'text/html',
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[aria-label="Open Orologio.html"]').trigger('click')
+        await flushPromises()
+
+        expect(artifactBridge.create).toHaveBeenCalledWith({ title: 'Orologio', html: '<h1>Ciao</h1>' })
+        expect(artifactBridge.open).toHaveBeenCalledWith({ id: 'artifact-1' })
+        // The code view is still there underneath, untouched.
+        const viewer = document.body.querySelector('[data-testid="talos-library-doc"]')
+        expect(viewer!.textContent).toContain('Ciao')
+    })
+
+    it('offers a "view as page" button on an HTML file, and none on any other kind', async () => {
+        const controller = makeController()
+        controller.attachments.hydrateText = vi.fn().mockResolvedValue('<h1>Ciao</h1>')
+        controller.attachments.vaultFiles.push({
+            ...file('vault-page'),
+            display_name: 'Orologio.html',
+            media_type: 'text/html',
+        } as ReturnType<typeof file>)
+        controller.attachments.vaultFiles.push({
+            ...file('vault-notes'),
+            display_name: 'notes.md',
+            media_type: 'text/markdown',
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[aria-label="Open Orologio.html"]').trigger('click')
+        await flushPromises()
+        expect(document.body.querySelector('[data-testid="talos-library-doc-view-as-page"]')).not.toBeNull()
+        ;(document.body.querySelector('[data-testid="talos-library-doc"] [aria-label="Close"]') as HTMLButtonElement).click()
+        await flushPromises()
+
+        artifactBridge.create.mockClear()
+        artifactBridge.open.mockClear()
+        // A different text file still opens in the very same code overlay —
+        // it just never gets the button, and the bridge is never touched.
+        await wrapper.get('[aria-label="Open notes.md"]').trigger('click')
+        await flushPromises()
+        expect(document.body.querySelector('[data-testid="talos-library-doc"]')).not.toBeNull()
+        expect(document.body.querySelector('[data-testid="talos-library-doc-view-as-page"]')).toBeNull()
+        expect(artifactBridge.create).not.toHaveBeenCalled()
+    })
+
+    it('the "view as page" button re-renders from the code view on demand', async () => {
+        const controller = makeController()
+        controller.attachments.hydrateText = vi.fn().mockResolvedValue('<h1>Ciao</h1>')
+        controller.attachments.vaultFiles.push({
+            ...file('vault-page'),
+            display_name: 'Orologio.html',
+            media_type: 'text/html',
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[aria-label="Open Orologio.html"]').trigger('click')
+        await flushPromises()
+        artifactBridge.create.mockClear()
+        artifactBridge.open.mockClear()
+
+        ;(document.body.querySelector('[data-testid="talos-library-doc-view-as-page"]') as HTMLButtonElement).click()
+        await flushPromises()
+        expect(artifactBridge.create).toHaveBeenCalledWith({ title: 'Orologio', html: '<h1>Ciao</h1>' })
+        expect(artifactBridge.open).toHaveBeenCalledOnce()
+    })
+
+    it('falls back to the code view already on screen when the page cannot be shown', async () => {
+        const controller = makeController()
+        controller.attachments.hydrateText = vi.fn().mockResolvedValue('<h1>Ciao</h1>')
+        controller.attachments.vaultFiles.push({
+            ...file('vault-page'),
+            display_name: 'Orologio.html',
+            media_type: 'text/html',
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        artifactBridge.open.mockResolvedValue({ opened: false })
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[aria-label="Open Orologio.html"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.text()).toContain('Orologio.html')
+        expect(wrapper.text()).toMatch(/could not be shown as a page/i)
+        // The code stays visible: an honest failure never leaves an empty screen.
+        const viewer = document.body.querySelector('[data-testid="talos-library-doc"]')
+        expect(viewer!.textContent).toContain('Ciao')
+    })
+
+    it('shows the same failure when the native bridge itself throws', async () => {
+        const controller = makeController()
+        controller.attachments.hydrateText = vi.fn().mockResolvedValue('<h1>Ciao</h1>')
+        controller.attachments.vaultFiles.push({
+            ...file('vault-page'),
+            display_name: 'Orologio.html',
+            media_type: 'text/html',
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        artifactBridge.create.mockRejectedValue(new Error('TALOS_ARTIFACT_UNAVAILABLE'))
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[aria-label="Open Orologio.html"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.text()).toMatch(/could not be shown as a page/i)
+        const viewer = document.body.querySelector('[data-testid="talos-library-doc"]')
+        expect(viewer!.textContent).toContain('Ciao')
+    })
+
+    /**
+     * ── U-14 · IL MOVIMENTO C'E' DAVVERO, non e' solo dichiarato ──────────────
+     *
+     * ⛔ Queste quattro prove guardano gli AGGANCI, non le durate: i
+     * millisecondi li decide il motore (`--talos-motion-calm-*`) e provarli qui
+     * vorrebbe dire riscrivere il risolutore dentro un test. Quello che un test
+     * puo' garantire e' che l'aggancio esista — ed e' esattamente cio' che si
+     * perde per primo in un refactor, senza che niente diventi rosso.
+     */
+    it('U-14 wires the FLIP, the staggered entry, the sliding thread and the wave', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-library-view-grid"]').trigger('click')
+        await flushPromises()
+
+        // 1. Le schede si RIORDINANO invece di saltare: e' la classe `move` di
+        //    <TransitionGroup>, che il FLIP lo calcola da sola.
+        const griglia = wrapper.get('[data-testid="talos-library-grid"]')
+        expect(griglia.classes().join(' ')).toContain('grid')
+
+        // 2. Una scheda ENTRA, e le successive con un po' di ritardo.
+        const scheda = wrapper.get('[data-vault-file-id="vault-ready"]')
+        expect(scheda.attributes('data-talos-motion-intent')).toBe('message-insert')
+        // ⛔ Il ritardo e' un calc() sul token del motore, non un numero: a
+        // movimento spento il token va a 0ms e il calc() si annulla da se'.
+        expect(scheda.attributes('style') ?? '').toContain('--talos-motion-stagger')
+
+        // 3. Il filo sotto il filtro attivo, che SCIVOLA da dov'era.
+        expect(wrapper.get('[data-testid="talos-library-type-all"] [data-talos-indicator]').exists())
+            .toBe(true)
+        // ⛔ E sotto il filtro NON attivo non c'e': due fili accesi insieme
+        // vorrebbero dire che il gruppo ha due voci scelte.
+        expect(wrapper.find('[data-testid="talos-library-type-links"] [data-talos-indicator]').exists())
+            .toBe(false)
+
+        // 4. L'onda parte dal dito: la classe da sola non basta, serve il punto.
+        expect(scheda.get('button').classes()).toContain('talos-wave-host')
+    })
+
+    /**
+     * ⛔ GRIGLIA ED ELENCO STANNO NELLA BARRA, non solo dentro un menu.
+     * Un interruttore nascosto in un menu non dice mai in quale dei due stati
+     * ci si trova: lo si scopre premendolo.
+     */
+    it('U-20 puts the view switch in the toolbar, as one radiogroup', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        const griglia = wrapper.get('[data-testid="talos-library-view-grid"]')
+        const elenco = wrapper.get('[data-testid="talos-library-view-list"]')
+        expect(griglia.attributes('role')).toBe('radio')
+        expect(elenco.attributes('role')).toBe('radio')
+        // Esattamente uno dei due e' scelto, sempre.
+        const scelti = [griglia, elenco].filter((b) => b.attributes('aria-checked') === 'true')
+        expect(scelti).toHaveLength(1)
+        // ⛔ E il bersaglio resta quello di Android anche col vestito nuovo.
+        expect(griglia.classes()).toEqual(expect.arrayContaining(['min-h-12', 'min-w-12']))
+    })
+
+    /**
+     * ⛔ TRE STATI, e il terzo e' quello che si dimentica. Su questo banco non
+     * c'e' ne' Capacitor ne' un decoder d'immagini, quindi ogni generazione
+     * fallisce: e' proprio il caso che deve finire su `nessuna` e NON restare
+     * su «in caricamento» — un posto vuoto che gira per sempre e' la bugia
+     * peggiore fra le tre, perche' promette qualcosa che non arrivera'.
+     */
+    it('U-20 settles a thumbnail that cannot be made on "none", never on "loading"', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-library-view-grid"]').trigger('click')
+        await flushPromises()
+
+        const arte = wrapper.get('[data-vault-file-id="vault-ready"] [data-talos-library-art]')
+        expect(arte.attributes('data-talos-art')).toBe('glyph')
+        expect(wrapper.findAll('[data-talos-art="loading"]')).toHaveLength(0)
+    })
+
+    /**
+     * U-20: l'intro lunga e' sparita dalla pagina (owner). Diceva in tre righe
+     * come funziona la Libreria, ogni volta, a chi la Libreria l'aveva gia'
+     * aperta. Al suo posto c'e' lo stato vuoto del mockup: un titolo, una riga,
+     * e il pulsante che RIPARA la situazione in cui si e'.
+     */
+    it('shows the empty state, its way out, and a recoverable load error', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.splice(0, controller.attachments.vaultFiles.length)
+        controller.attachments.vaultError.value = 'Local Vault is unavailable.'
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        expect(wrapper.get('[role="alert"]').text()).toContain('Local Vault is unavailable.')
+        const empty = wrapper.get('[data-testid="talos-library-empty"]')
+        expect(empty.text()).toContain('Nothing here yet')
+        // Uno stato vuoto e' un invito ad agire: il pulsante e' quello che
+        // aggiunge il primo file, non un secondo modo di dire che non ce ne sono.
+        expect(wrapper.find('[data-testid="talos-library-empty-add"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-library-no-matches"]').exists()).toBe(false)
+        await wrapper.get('[aria-label="Retry Library"]').trigger('click')
+        expect(controller.attachments.refreshVault).toHaveBeenCalledTimes(2)
+    })
+
+    /**
+     * ⛔ DUE ASSENZE DIVERSE, DUE FRASI DIVERSE — e solo la seconda si annulla.
+     * Prima erano la stessa schermata: chi cercava una parola sbagliata leggeva
+     * l'introduzione della Libreria vuota, cioe' gli veniva detto che i suoi
+     * file non erano mai esistiti.
+     */
+    it('U-20 tells "nothing here" apart from "the filter hides it", and can undo the second', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('zzzz-no-such-file')
+        await flushPromises()
+        const noMatches = wrapper.get('[data-testid="talos-library-no-matches"]')
+        expect(noMatches.text()).toContain('No results')
+        expect(wrapper.find('[data-testid="talos-library-empty"]').exists()).toBe(false)
+
+        // La via d'uscita RIPARA: toglie la ricerca e il filtro, e i file tornano.
+        await wrapper.get('[data-testid="talos-library-clear-filters"]').trigger('click')
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-library-no-matches"]').exists()).toBe(false)
+        expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(true)
+    })
+
+    /**
+     * Owner 14/09/2026: a long press on a file enters selection with that file
+     * already picked. The click the release brings along must NOT unpick it, and
+     * a finger that moves is scrolling, not pressing. Material 3, Selection —
+     * https://m3.material.io/foundations/interaction/selection (read 2026-09-14).
+     */
+    it('LIB-SELECT-01 enters selection on a long press, keeps the pressed file, and ignores a scrolling finger', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-library-view-list"]').trigger('click')
+        const row = wrapper.get('[data-vault-file-id="vault-ready"]')
+        const name = () => wrapper.get('[data-vault-file-id="vault-ready"] [data-talos-library-name-button]')
+        // jsdom has no PointerEvent and MouseEvent's coordinates are read-only after
+        // construction, so the finger is built by hand: a touch, at a point.
+        const press = async (type: string, x: number, y: number) => {
+            const event = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y })
+            Object.defineProperty(event, 'pointerType', { value: 'touch' })
+            row.element.dispatchEvent(event)
+            await nextTick()
+        }
+
+        vi.useFakeTimers()
+        try {
+            await press('pointerdown', 10, 10)
+            await press('pointermove', 60, 10)
+            vi.advanceTimersByTime(700)
+            await nextTick()
+            expect(wrapper.find('[data-testid="talos-library-selection-bar"]').exists()).toBe(false)
+            await press('pointerup', 10, 10)
+
+            await press('pointerdown', 10, 10)
+            vi.advanceTimersByTime(600)
+            await nextTick()
+            expect(wrapper.find('[data-testid="talos-library-selection-bar"]').exists()).toBe(true)
+            await press('pointerup', 10, 10)
+            await name().trigger('click')
+            await nextTick()
+            expect(name().attributes('aria-pressed')).toBe('true')
+
+            // Past the short window, a tap picks again — here it unpicks.
+            vi.advanceTimersByTime(500)
+            await name().trigger('click')
+            await nextTick()
+            expect(name().attributes('aria-pressed')).toBe('false')
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    /**
+     * Owner 14/09/2026: the caption under a card is the extension (a link: its
+     * domain), the chat only when grouping by chat is on, and no date. The
+     * group headings are gone, so the chat is on the card — once.
+     */
+    it('LIB-CAPTION-01 says the extension, never a date, and the chat only when grouped by chat', async () => {
+        const controller = makeController()
+        controller.chat.sessions.push({ id: 'session-gas', title: 'Bollette' } as never)
+        controller.attachments.vaultFiles[0]!.metadata = { origin_session_id: 'session-gas' } as never
+        mockState.controller = controller
+        const settings = useSettingsStore()
+        await settings.setShell({ library_group_by_chat: false, library_view: 'grid' })
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        const card = () => wrapper.get('[data-vault-file-id="vault-ready"]')
+        expect(card().text()).toContain('PDF')
+        expect(card().text()).not.toContain('Bollette')
+        expect(wrapper.text()).not.toMatch(/Modified|Today|Yesterday/)
+        // «Generated» keeps the accent colour.
+        expect(wrapper.get('[data-vault-file-id="vault-image"]').findAll('span')
+            .some((piece) => piece.text() === 'Generated' && piece.classes().includes('text-[var(--talos-accent)]')))
+            .toBe(true)
+
+        await settings.setShell({ library_group_by_chat: true })
+        await flushPromises()
+        expect(card().text()).toContain('Bollette')
+        expect(wrapper.text().split('Bollette')).toHaveLength(2)
+    })
+
+    /**
+     * Owner 14/09/2026: a `.md` opened from the Library reads FORMATTED, with the
+     * chat's own renderer, and «Text» is one tap away. A plain text file has
+     * nothing to format, so it gets no switch.
+     */
+    it('LIB-MD-01 shows a Markdown file formatted, with Text one tap away, and no switch on plain text', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push(
+            { ...file('vault-md'), display_name: 'piano.md', media_type: 'text/markdown', extracted_text: '# Piano' },
+            { ...file('vault-txt'), display_name: 'note.txt', media_type: 'text/plain', extracted_text: 'solo testo' },
+        )
+        controller.attachments.hydrateText.mockImplementation(
+            async (id: string) => (id === 'vault-md' ? '# Piano\n\n- **uno**' : 'solo testo'),
+        )
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[aria-label="Open piano.md"]').trigger('click')
+        await vi.waitFor(() => expect(document.body.querySelector('[data-testid="talos-library-doc"] strong')).not.toBeNull())
+        const doc = document.body.querySelector('[data-testid="talos-library-doc"]') as HTMLElement
+        expect(doc.querySelector('strong')!.textContent).toBe('uno')
+        expect(doc.querySelector('[data-testid="talos-library-doc-formatted"]')!.getAttribute('aria-checked')).toBe('true')
+
+        ;(doc.querySelector('[data-testid="talos-library-doc-text"]') as HTMLButtonElement).click()
+        await flushPromises()
+        expect(doc.querySelector('strong')).toBeNull()
+        expect(doc.querySelector('pre')!.textContent).toContain('**uno**')
+
+        doc.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        await flushPromises()
+        await wrapper.get('[aria-label="Open note.txt"]').trigger('click')
+        await flushPromises()
+        const plain = document.body.querySelector('[data-testid="talos-library-doc"]') as HTMLElement
+        expect(plain.querySelector('pre')!.textContent).toContain('solo testo')
+        expect(plain.querySelector('[data-testid="talos-library-doc-formatted"]')).toBeNull()
+    })
+})

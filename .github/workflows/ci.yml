@@ -225,6 +225,146 @@ jobs:
   # ⇒ Un test che non gira non è un test: è un file. E il motivo per cui il
   # difetto è potuto restare lì per settimane è ESATTAMENTE l'assenza di questo
   # lavoro.
+  # ⛔⛔⛔ 07/9 — IL DESKTOP NON ESISTEVA PER LA CI. Questo file provava la app mobile e la
+  # compilava per Android; `harness-ui/` — il prodotto desktop, il suo server, il suo frontend e il
+  # kernel — non compariva in nessuna riga (misurato: zero occorrenze di «harness-ui» in ci.yml e
+  # release.yml). Un cancello che non guarda un prodotto non lo protegge: ogni rosso del desktop si
+  # scopriva a mano, sulla macchina di chi lo stava scrivendo.
+  #
+  # 15/09 — il vecchio job Desktop unico girava tutto su Ubuntu. Era una topologia falsa:
+  # la suite server/kernel del prodotto esercita anche semantiche Windows, mentre i cancelli UI
+  # (unit/build/Playwright) sono portabili e conviene tenerli su Linux. Il risultato era un rosso
+  # fisso al passo `server`, prima che UI/parità/lab potessero perfino partire.
+  #
+  # ⇒ Due responsabilità, due runner. `desktop-core` prova il prodotto Windows; `desktop-ui` prova
+  # frontend e browser su Linux. Entrambi saltano pulitamente nel repository mobile pubblicato,
+  # dove `harness-ui/` non esiste.
+  desktop-core:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - id: dove
+        name: c'e il desktop in questo repo?
+        shell: bash
+        run: |
+          if [ -f harness-ui/package.json ]; then
+            echo "ci=si" >> "$GITHUB_OUTPUT"
+            echo "harness-ui c'e: i cancelli core del desktop girano"
+          else
+            echo "ci=no" >> "$GITHUB_OUTPUT"
+            echo "harness-ui non c'e in questo repo (disposizione mobile): niente da provare"
+          fi
+
+      - if: steps.dove.outputs.ci == 'si'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            context-engine/package-lock.json
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: dipendenze del server
+        run: npm ci
+        working-directory: harness-ui
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: dipendenze del motore di contesto
+        run: npm ci
+        working-directory: context-engine
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: server
+        run: node --test tests/*.test.mjs
+        working-directory: harness-ui
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: kernel
+        run: npm run test:kernel
+        working-directory: harness-ui
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: il kernel del repo e quello della fonte
+        run: npm run kernel:controlla
+        working-directory: harness-ui
+
+  desktop-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - id: dove
+        name: c'e il desktop in questo repo?
+        run: |
+          if [ -f harness-ui/package.json ]; then
+            echo "ci=si" >> "$GITHUB_OUTPUT"
+            echo "harness-ui c'e: i cancelli UI del desktop girano"
+          else
+            echo "ci=no" >> "$GITHUB_OUTPUT"
+            echo "harness-ui non c'e in questo repo (disposizione mobile): niente da provare"
+          fi
+
+      - if: steps.dove.outputs.ci == 'si'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            harness-ui/frontend/package-lock.json
+            context-engine/package-lock.json
+
+      # Il banco Playwright avvia il server reale: `--ignore-scripts` lascia `node-pty` senza il
+      # binding nativo e il webServer cade prima di un singolo test. Qui l'installazione è completa.
+      - if: steps.dove.outputs.ci == 'si'
+        name: dipendenze del server per il banco browser
+        run: npm ci
+        working-directory: harness-ui
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: dipendenze del frontend
+        run: npm ci
+        working-directory: harness-ui/frontend
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: dipendenze del motore di contesto
+        run: npm ci
+        working-directory: context-engine
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: il browser
+        run: npx playwright install --with-deps chromium
+        working-directory: harness-ui/frontend
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: unit del frontend
+        run: npm run test:unit
+        working-directory: harness-ui/frontend
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: build del frontend
+        run: npm run build
+        working-directory: harness-ui/frontend
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: parita dei componenti col mockup
+        run: npx playwright test -c playwright.componenti.config.mjs --reporter=line
+        working-directory: harness-ui/frontend
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: lab dei componenti
+        run: npx playwright test -c playwright.lab.config.mjs --reporter=line
+        working-directory: harness-ui/frontend
+
+      - if: failure() && steps.dove.outputs.ci == 'si'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-ui-resti
+          path: harness-ui/frontend/test-results/
+          retention-days: 7
+
   browser:
     runs-on: ubuntu-latest
     steps:

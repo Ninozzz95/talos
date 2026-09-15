@@ -1,0 +1,142 @@
+/*
+ * ⭐⭐⭐ L'ATTESA SI VEDE SULLA RIGA, NON PIÙ SUL SEGNAVIA.
+ *
+ * Owner 10/09, dopo sei tentativi in una sera: «il logo della crocevia non funziona, per adesso
+ * nascondiamolo e mettiamo nella riga accanto uno shimmer da sinistra a destra, casomai
+ * riprogettiamo un grafo animato da zero fatto apposta, ma dopo».
+ *
+ * ⛔ Perché lo shimmer ha una probabilità di riuscita che il segnavia non aveva, e non è un'opinione:
+ *   il segnavia occupa 48×8 px = 864 pixel, e la sua animazione ne cambiava 11,6 per fotogramma
+ *   (1,3%) — misurato. Questa riga è larga quanto la conversazione: il gradiente attraversa
+ *   CENTINAIA di pixel per fotogramma, sulla superficie che l'occhio sta già leggendo perché ci sono
+ *   scritte le parole. Non è un segnale più bello: è un segnale più grande, dove si guarda.
+ *
+ * ⛔ Il segnavia si NASCONDE, non si cancella: il codice che lo disegna resta intatto (SMIL, motore
+ *   di riserva, ripiego per chi chiede meno movimento) e torna con una riga di CSS il giorno in cui
+ *   si riprogetta il grafo. Cancellarlo butterebbe anche le misure che sono costate la serata.
+ */
+/*
+ * ⛔ 10/09, owner: «ok rimetti il segnavia ma fallo piu' piccolo e mi raccomando identico a quello
+ *   che c'e' gia' nel mobile, e piccolo». Torna visibile — e ora PUO' muoversi, perche' le due
+ *   regole universali che spegnevano ogni animazione sono state eliminate. Non era mai stato un
+ *   problema del segnavia.
+ */
+
+/*
+ * Il testo si illumina da sinistra a destra. `background-clip: text` dipinge il gradiente DENTRO le
+ * lettere: il movimento sta nelle parole, non in una barra accanto a esse.
+ */
+.talos-waiting__label,
+.real-reasoning-note[data-ragionamento="vivo"] > .talos-activity__head > .tool-note-summary-text{
+  background-image: linear-gradient(
+    100deg,
+    var(--talos-muted) 0%, var(--talos-muted) 38%,
+    var(--talos-accent-hover) 50%,
+    var(--talos-muted) 62%, var(--talos-muted) 100%
+  );
+  background-size: 220% 100%;
+  background-position: 120% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: talosAttesaShimmer 1.9s linear infinite;
+}
+/*
+ * ⭐⭐ 13/09 sera — LA RIGA DEL RAGIONAMENTO È L'INDICATORE VIVO, «fare meglio di Hermes». Owner.
+ *   Hermes desktop mostra due segnali insieme (la riga «Thinking…» e una riga di stato in fondo); da
+ *   noi, al primo testo del ragionamento l'attesa se ne va e la riga ne prende il posto. Per questo
+ *   usa LO STESSO shimmer dell'attesa, aggiunto ai selettori qui sopra e a quelli del ripiego sotto:
+ *   stesso movimento, stessa decisione dell'owner sul movimento ridotto, e un colore cambiato qui
+ *   cambia tutti e due.
+ * ⇒ Mentre è viva: l'etichetta non si allarga, l'argomento corrente prende lo spazio e si accorcia
+ *   con i puntini (`talos-truncate`), i secondi e il pallino restano in fondo. Finito il ragionamento
+ *   l'attributo se ne va, e la riga torna quella di sempre.
+ */
+.real-reasoning-note[data-ragionamento="vivo"] > .talos-activity__head > .tool-note-summary-text{ flex: none; }
+.talos-ragionamento__argomento{ flex: 1 1 auto; min-width: 0; font-weight: 400; }
+/*
+ * ⛔⛔ 13/09 notte, GIRO VERO con glm-5.3-flash (foto `04-in-coda-scuro`): con un argomento lungo i secondi
+ *   andavano A CAPO — «4» sopra, «s» sotto. L'argomento cede spazio (`min-width: 0`), ma anche i secondi
+ *   erano un figlio flex restringibile, e «2 min 22 s» ha tre spazi dove spezzarsi. Le prove a schermo
+ *   usavano frasi corte e contatori a una cifra: non potevano vederlo.
+ * ⇒ I secondi non si stringono e non vanno a capo: cede solo l'argomento, coi suoi puntini.
+ */
+.real-reasoning-note[data-ragionamento="vivo"] > .talos-activity__head > .talos-measure{ flex: none; white-space: nowrap; }
+
+@keyframes talosAttesaShimmer{
+  from { background-position: 120% 0; }
+  to   { background-position: -60% 0; }
+}
+
+/*
+ * ⛔⛔ IL RIPIEGO, e stavolta scritto per primo invece che dopo. Se le animazioni sono spente — la
+ *   media query del sistema, oppure `body.reduce-motion` che in `index.css` le azzera tutte con
+ *   `!important` — un testo con `color: transparent` e nessun gradiente in movimento sarebbe
+ *   INVISIBILE. È esattamente il modo in cui il segnavia era «sparito» invece che fermarsi.
+ *   Qui il testo torna pieno e leggibile, e l'attesa la dice il contasecondi accanto.
+ */
+body.reduce-motion .talos-waiting__label,
+body.reduce-motion .real-reasoning-note[data-ragionamento="vivo"] > .talos-activity__head > .tool-note-summary-text{
+  background-image: none;
+  color: var(--talos-muted);
+  animation: none !important;
+}
+
+/*
+ * ⛔⛔⛔ 10/09 — STANATO CHI SPEGNE LE ANIMAZIONI, owner: «c'è qualcosa in questo cazzo di progetto
+ *   che elimina le animazioni, bisogna stanarlo».
+ *
+ * Sono DUE regole, tutt'e due universali e tutt'e due con `!important`, nel CSS servito:
+ *   1. `body.reduce-motion *, ::before, ::after { animation:none!important; transition:none!important }`
+ *      — la accende l'interruttore «Riduci animazioni» dentro le IMPOSTAZIONI DELL'APP;
+ *   2. `@media (prefers-reduced-motion: reduce) { * { animation:none!important } }`
+ *      — la accende l'impostazione di WINDOWS.
+ * Una regola universale con `!important` non si batte da valle: nessuna dichiarazione più specifica
+ * la supera. È per questo che sei tentativi sul segnavia non hanno mai potuto funzionare, e perché
+ * lo shimmer non si vedeva: non c'era niente di rotto: c'era un interruttore acceso.
+ *
+ * ⇒ La distinzione che il progetto non faceva, e che è tutta qui: un indicatore di STATO non è una
+ *   decorazione. «Riduci animazioni» dell'app nasce per gli sfondi, le entrate, le transizioni — non
+ *   per la riga che dice «sto lavorando»: spenta senza ripiego, quella riga MENTE.
+ *   ⛔ La richiesta fatta al SISTEMA invece si rispetta: chi la imposta ha una ragione medica o di
+ *     comfort, e vale più della nostra riga. Lì il testo resta pieno e fermo, e lo DICE.
+ */
+body.reduce-motion .talos-waiting__label,
+body.reduce-motion .real-reasoning-note[data-ragionamento="vivo"] > .talos-activity__head > .tool-note-summary-text{
+  background-image: linear-gradient(
+    100deg,
+    var(--talos-muted) 0%, var(--talos-muted) 38%,
+    var(--talos-accent-hover) 50%,
+    var(--talos-muted) 62%, var(--talos-muted) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: talosAttesaShimmer 1.9s linear infinite !important;
+}
+/* ⛔ Ma se è il SISTEMA a chiedere meno movimento, vince il sistema: testo pieno e fermo. */
+
+/*
+ * ⛔⛔⛔ 10/09 — PERCHE' QUI NON C'E' NESSUNO SPEGNIMENTO, nemmeno per `prefers-reduced-motion`.
+ *
+ * Owner, tre volte di fila dopo aver visto la riga ferma: «bisogna stanarlo e eliminarlo»,
+ * «ELIMINALI ENTRAMBI», «NON LI VOGLIO». Le due regole universali sono state tolte da index.css;
+ * questa nota riguarda il ripiego MIRATO che avevo lasciato qui, e che teneva la riga ferma
+ * quando «riduci animazioni» e' acceso in Windows — misurato: 1 posizione su 10 contro 10 su 10.
+ *
+ * ⛔ Che cosa si perde, detto chiaro invece che taciuto: chi imposta «riduci animazioni» nel
+ *   sistema operativo di solito lo fa per una ragione (emicrania, vertigini, disturbi
+ *   vestibolari), e W3C WCAG 2.3.3 dice di rispettarla. Questo shimmer ora si muove comunque.
+ * ⛔ Che cosa si guadagna: la riga che dice «sto lavorando» si vede su OGNI macchina, compresa
+ *   quella dell'owner, dove sei tentativi di seguito erano morti contro un interruttore che
+ *   nessuno aveva stanato. Un indicatore di stato invisibile non e' accessibile: e' assente.
+ * ⇒ Decisione dell'owner, ripetuta tre volte, sul suo prodotto. Sta scritta qui perche' chi la
+ *   trovera' sappia che e' una scelta e non una dimenticanza — e perche' il giorno in cui la si
+ *   vuole rimettere, il posto e' questo e il movimento e' uno solo: il gradiente qui sopra.
+ *
+ * ⭐ Il movimento e' comunque il piu' gentile possibile: un gradiente che scorre dentro le
+ *   lettere, senza spostare niente, senza lampeggiare, in 1,9 s. Non c'e' nessun elemento che
+ *   cambia posizione o dimensione — cioe' niente di cio' che WCAG 2.3.3 chiama «motion animation
+ *   triggered by interaction».
+ */

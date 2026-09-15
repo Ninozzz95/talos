@@ -1,0 +1,167 @@
+:root,
+:root[data-talos-theme='calm'] {
+  color-scheme: dark;
+
+  --talos-background: #1e1f22;
+  --talos-panel: #242529;
+  --talos-panel-soft: #292a2f;
+  --talos-card: #303136;
+  --talos-window-bg: #191a1d;
+  --talos-text: #f3f1ec;
+  --talos-assistant-text: #e6e3dc;
+  --talos-muted: #a9abb2;
+  --talos-border: #3a3b40;
+  --talos-border-strong: #555760;
+  --talos-accent: #c08b3c;
+  --talos-accent-hover: #d09a4a;
+  --talos-accent-soft: #3b3022;
+  --talos-accent-border: #765a31;
+  --talos-accent-text: #f0c783;
+  --talos-secondary: #8e9095;
+  --talos-success: #83c29d;
+  --talos-warning: #d4a558;
+  --talos-danger: #e18383;
+  --talos-info: #87aeda;
+
+  --talos-font-ui: 'Instrument Sans', system-ui, sans-serif;
+  --talos-font-display: 'Instrument Sans', system-ui, sans-serif;
+  --talos-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --talos-font-size-xs: 0.75rem;
+  --talos-font-size-sm: 0.875rem;
+  --talos-font-size-md: 1rem;
+  --talos-font-size-lg: 1.25rem;
+
+  --talos-space-page: clamp(1.5rem, 4vw, 4.5rem);
+  --talos-space-section: clamp(1.5rem, 3vw, 2.5rem);
+  --talos-space-card: 1.25rem;
+  --talos-space-control: 0.75rem;
+  --talos-space-inline: 0.625rem;
+  --talos-space-xs: 0.25rem;
+  --talos-space-sm: 0.5rem;
+  --talos-space-md: 1rem;
+  --talos-space-lg: 1.5rem;
+
+  --talos-radius-card: 1rem;
+  --talos-radius-control: 0.6875rem;
+  --talos-radius-pill: 999px;
+
+  --talos-touch-target: 2.5rem;
+  --talos-control-height: 2.25rem;
+  --talos-primary-height: 2.5rem;
+  --talos-icon-size: 1.125rem;
+
+  --talos-motion-duration-control: 140ms;
+  --talos-motion-duration-surface-enter: 180ms;
+  --talos-motion-duration-surface-exit: 120ms;
+  --talos-motion-duration-tab-change: 160ms;
+  /* Ritmo della pulsazione «sta lavorando»: ambiente, non transizione. */
+  --talos-motion-duration-pulse: 1600ms;
+  --talos-motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --talos-motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  --talos-ring: #efc57e;
+  --talos-ring-soft: #745b37;
+  --talos-focus-width: 2px;
+  --talos-focus-offset: 3px;
+
+  --talos-z-app-overlay: 100;
+  --talos-z-menu: 120;
+  --talos-z-tooltip: 130;
+
+  --talos-text-on-accent: #18191c;
+  --talos-panel-translucent: rgb(36 37 41 / 96%);
+  --talos-card-subtle: rgb(255 255 255 / 2%);
+  --talos-card-hover: rgb(255 255 255 / 5%);
+  --talos-border-subtle: rgb(255 255 255 / 6%);
+  --talos-overlay: rgb(9 10 12 / 72%);
+  --talos-shadow-card: 0 24px 80px rgb(0 0 0 / 24%);
+  --talos-shadow-floating: 0 18px 56px rgb(0 0 0 / 36%);
+  --talos-shadow-sheet: -24px 0 72px rgb(0 0 0 / 34%);
+  --talos-signal: radial-gradient(circle at 70% 20%, color-mix(in srgb, var(--talos-accent) 12%, transparent), transparent 34rem);
+}
+
+:root[data-talos-theme='calm'][data-talos-mode='light'] {
+  color-scheme: light;
+  --talos-background: #ece9e2;
+  --talos-panel: #f7f4ee;
+  --talos-panel-soft: #e8e4db;
+  --talos-card: #ffffff;
+  --talos-window-bg: #ded9cf;
+  --talos-text: #232427;
+  --talos-assistant-text: #303136;
+  --talos-muted: #686a70;
+  --talos-border: #c8c3b9;
+  --talos-border-strong: #949087;
+  --talos-accent: #9b6823;
+  --talos-accent-hover: #82551a;
+  --talos-accent-soft: #eee0c8;
+  --talos-accent-border: #b88a49;
+  --talos-accent-text: #704814;
+  --talos-secondary: #696b70;
+  --talos-success: #31724d;
+  --talos-warning: #8b5c16;
+  --talos-danger: #a03d3d;
+  --talos-info: #376a9e;
+  --talos-ring: #6f4815;
+  --talos-ring-soft: #c5a573;
+  --talos-text-on-accent: #ffffff;
+  --talos-panel-translucent: rgb(247 244 238 / 97%);
+  --talos-card-subtle: rgb(0 0 0 / 2%);
+  --talos-card-hover: rgb(0 0 0 / 5%);
+  --talos-border-subtle: rgb(0 0 0 / 8%);
+  --talos-overlay: rgb(31 29 25 / 48%);
+  --talos-shadow-card: 0 24px 80px rgb(47 42 34 / 14%);
+  --talos-shadow-floating: 0 18px 56px rgb(47 42 34 / 20%);
+  --talos-shadow-sheet: -24px 0 72px rgb(47 42 34 / 20%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  :root[data-talos-theme='calm'],
+  :root[data-talos-theme='calm'][data-talos-mode='light'] {
+    --talos-motion-duration-control: 0s;
+    --talos-motion-duration-surface-enter: 0s;
+    --talos-motion-duration-surface-exit: 0s;
+    --talos-motion-duration-tab-change: 0s;
+    --talos-motion-duration-pulse: 0s;
+  }
+}
+
+@media (forced-colors: active) {
+  :root,
+  :root[data-talos-theme='calm'],
+  :root[data-talos-theme='calm'][data-talos-mode='light'] {
+    --talos-background: Canvas;
+    --talos-panel: Canvas;
+    --talos-panel-soft: Canvas;
+    --talos-card: Canvas;
+    --talos-window-bg: Canvas;
+    --talos-text: CanvasText;
+    --talos-assistant-text: CanvasText;
+    --talos-muted: GrayText;
+    --talos-border: ButtonBorder;
+    --talos-border-strong: CanvasText;
+    --talos-accent: Highlight;
+    --talos-accent-hover: Highlight;
+    --talos-accent-soft: Canvas;
+    --talos-accent-border: Highlight;
+    --talos-accent-text: LinkText;
+    --talos-secondary: CanvasText;
+    --talos-success: CanvasText;
+    --talos-warning: CanvasText;
+    --talos-danger: CanvasText;
+    --talos-info: CanvasText;
+    --talos-ring: Highlight;
+    --talos-ring-soft: Highlight;
+    --talos-text-on-accent: HighlightText;
+    --talos-panel-translucent: Canvas;
+    --talos-card-subtle: Canvas;
+    --talos-card-hover: Canvas;
+    --talos-border-subtle: ButtonBorder;
+    --talos-overlay: Canvas;
+    --talos-shadow-card: none;
+    --talos-shadow-floating: none;
+    --talos-shadow-sheet: none;
+    --talos-signal: none;
+  }
+}
