@@ -5,41 +5,7 @@ on:
     branches: [fix/ci-linux-desktop-node-pty]
 
 jobs:
-  linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: harness-ui/package-lock.json
-
-      - name: dipendenze del server con addon nativi
-        run: npm ci --no-audit --no-fund
-        working-directory: harness-ui
-
-      - name: dipendenze del motore di contesto
-        run: npm ci --no-audit --no-fund
-        working-directory: context-engine
-
-      - name: server
-        run: |
-          set -o pipefail
-          node --test tests/*.test.mjs 2>&1 | tee ../desktop-server-linux.log
-        working-directory: harness-ui
-
-      - name: conserva il log del server
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: desktop-server-linux-log
-          path: desktop-server-linux.log
-          if-no-files-found: error
-          retention-days: 7
-
-  windows:
+  desktop:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -54,6 +20,10 @@ jobs:
         run: npm ci --no-audit --no-fund
         working-directory: harness-ui
 
+      - name: dipendenze del frontend
+        run: npm ci --no-audit --no-fund
+        working-directory: harness-ui/frontend
+
       - name: dipendenze del motore di contesto
         run: npm ci --no-audit --no-fund
         working-directory: context-engine
@@ -61,3 +31,31 @@ jobs:
       - name: server
         run: node --test tests/*.test.mjs
         working-directory: harness-ui
+
+      - name: kernel
+        run: npm run test:kernel
+        working-directory: harness-ui
+
+      - name: il kernel del repo e quello della fonte
+        run: npm run kernel:controlla
+        working-directory: harness-ui
+
+      - name: unit del frontend
+        run: npm run test:unit
+        working-directory: harness-ui/frontend
+
+      - name: il browser
+        run: npx playwright install --with-deps chromium
+        working-directory: harness-ui/frontend
+
+      - name: build del frontend
+        run: npm run build
+        working-directory: harness-ui/frontend
+
+      - name: parita dei componenti col mockup
+        run: npx playwright test -c playwright.componenti.config.mjs --reporter=line
+        working-directory: harness-ui/frontend
+
+      - name: lab dei componenti
+        run: npx playwright test -c playwright.lab.config.mjs --reporter=line
+        working-directory: harness-ui/frontend
