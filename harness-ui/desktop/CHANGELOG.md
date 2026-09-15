@@ -6,6 +6,33 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.9 — 2026-09-15
+
+### Added
+- **Built-in assistance.** A new `/api/v1/assistenza` route answers questions about the product from
+  the `docs/assistenza` corpus shipped with the repository, returning quoted sources for every claim.
+  A question outside the corpus gets an explicit "I don't know" rather than an invented answer.
+  Requests accept a single bounded `domanda` field (1–500 characters), and the route is listed in the
+  HTTP inventory. The corpus carries its own adversarial verification script (`verifica-ancore.mjs`)
+  that checks every quoted anchor against the page it cites.
+- **Multiselect with one batch delete.** Library, notes, tasks, memory and research lists support
+  selecting several entries and deleting them with a single confirmation. Partial outcomes stay
+  visible — which items were deleted, which failed and why — and the failed ones can be retried.
+
+### Changed
+- Streaming renders smoother: the cursor and the fade reach the DOM on the next frame instead of
+  accumulating, and the `desktop-streaming-red` workflow now also runs the STREAMING-LIVE-SMOOTH-03
+  coverage.
+- The improve-prompt panel gained clipboard copy; the voice module and the detail-list section were
+  adjusted for the batch selection flow.
+
+### Verification
+- Full server suite (3028 tests) green on a fresh install; kernel suite 597/597; the fused parity
+  spec runs the phase-3 flows (assistance against the real corpus, batch selection, smooth streaming)
+  6/6 against a fresh build; the lab suite runs 135/135.
+- The batch response keeps the refined #9 shape: counts live in `riepilogo`, per-item outcomes in
+  `esiti[]`; the frontend reads exactly that shape, not the older flat draft.
+
 ## desktop-v0.1.8 — 2026-09-14
 
 ### Fixed
