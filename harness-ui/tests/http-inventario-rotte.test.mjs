@@ -204,6 +204,7 @@ test('⛔⛔ AL CONTRARIO — il guardiano MORDE: ciò che la catena non nomina 
   assert.equal(metodiAmmessiPerRotta('/api/v1/artifacts'), null);          // esiste solo /artifacts/:id
   assert.deepEqual(metodiAmmessiPerRotta('/api/v1/sessions/x/approve'), ['POST']);
   assert.deepEqual(metodiAmmessiPerRotta('/api/v1/artifacts/abc'), ['GET', 'HEAD']);
+  assert.deepEqual(metodiAmmessiPerRotta('/api/v1/assistenza'), ['POST']);
 });
 
 /*

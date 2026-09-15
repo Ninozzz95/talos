@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   larghezzaDettaglio, ordinaVoci, filtraVoci, contaPerFiltro, sommarioSezione,
+  selezioneDopoBatch,
   leggiPreferenze, salvaPreferenze, CHIAVE_PREFERENZE, LARGHEZZA_MINIMA, LARGHEZZA_MASSIMA, LARGHEZZA_NORMALE,
 } from '../../src/components/sezione-elenco-dettaglio.js';
 import { anteprima, conteggioParole, estensioneFile, dataBreve } from '../../src/components/sezioni-adattatori.js';
@@ -79,6 +80,14 @@ test('SED-SOMMARIO: «3 di 12» solo quando qualcosa è nascosto, e lo zero pren
   assert.equal(sommarioSezione(1, 1, 'ricordo'), '1 ricordo');
   assert.equal(sommarioSezione(1, 1, 'progetto', 'progetti'), '1 progetto');
   assert.equal(sommarioSezione(2, 2, 'progetto', 'progetti'), '2 progetti');
+});
+
+test('FASE3-MULTISELECT-PARZIALE: escono solo i successi; falliti e non rendicontati restano selezionati', () => {
+  const dopo = selezioneDopoBatch(new Set(['a', 'b', 'c']), {
+    esiti: [{ id: 'a', ok: true }, { id: 'b', ok: false, code: 'NOTE_NOT_FOUND' }],
+  });
+  assert.deepEqual([...dopo], ['b', 'c']);
+  assert.deepEqual([...selezioneDopoBatch(['a'], null)], ['a'], 'una risposta malformata non finge alcuna cancellazione');
 });
 
 function magazzinoFinto(iniziale = {}) {
