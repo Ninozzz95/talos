@@ -32,6 +32,7 @@
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "test:local-models:device": "node scripts/run-local-model-compatibility.mjs",
+    "test:scroll-fling:device": "node scripts/verify-scroll-fling-device.mjs",
     "verify:android:permission-metadata": "node scripts/verify-release-permission-metadata.mjs",
     "verify:android:backend-artifact": "node scripts/verify-local-backend-artifact.mjs",
     "verify:android:codice-in-release": "node scripts/verify-codice-ships-in-release.mjs",
