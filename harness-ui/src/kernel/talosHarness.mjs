@@ -2475,7 +2475,7 @@ const ATTREZZI_ESTESI = [
      */
     {
         name: 'research_list',
-        description: 'List the deep researches run on this project, with how each one ended and how far it got. Use this whenever the user asks about their researches — what they investigated, which ones are still running, which failed. Do NOT use library_list for that: research reports are saved as Library files, so library_list finds them mixed in with every other document and cannot say whether a research finished, was paused, or failed.',
+        description: 'List the deep researches run on this project, with how each one ended and how far it got. Use this whenever the user asks about their researches — what they investigated, which ones are still running, which failed. The first page reports the total: do not keep advancing the offset unless the user explicitly asked for every entry. Do NOT use library_list for that: research reports are saved as Library files, so library_list finds them mixed in with every other document and cannot say whether a research finished, was paused, or failed.',
         input_schema: {
             type: 'object',
             properties: {
@@ -2486,6 +2486,7 @@ const ATTREZZI_ESTESI = [
                 },
                 page_size: { type: 'number', description: 'Maximum entries in this page (1-20, default 10).' },
                 offset: { type: 'number', description: 'How many to skip, newest first (default 0).' },
+                browse_every_page: { type: 'boolean', description: 'Set true only when the person explicitly asked to see or act on every research entry.' },
             },
             required: [],
         },
@@ -2925,6 +2926,7 @@ export function formattaListaLibreria(risultato) {
 export const CAMPI_CHE_IDENTIFICANO_LA_DOMANDA = Object.freeze({
     library_list: Object.freeze({ origin: 'all', file_type: 'all' }),
     library_search: Object.freeze({ query: '' }),
+    research_list: Object.freeze({ status: 'all' }),
 })
 
 /**
@@ -3035,15 +3037,19 @@ export function decisioneDiSfogliamento({
     const servite = stato.pagine
     const pagina = servite + 1
     const chiesto = sfogliaTuttoRichiesto(argomenti)
+    const ricerca = nome === 'research_list'
+    const nomeElenco = ricerca ? 'Deep Research listing' : 'Library listing'
+    const consiglio = ricerca
+        ? 'Answer with what you already have or narrow the listing with the status filter.'
+        : 'Answer with what you already have, narrow the listing with the origin/file_type filters, or use library_search with a keyword to find one specific file.'
 
     if (pagina > tettoAssoluto) {
         return {
             permesso: false,
             pagina,
-            messaggio: `REFUSED: ${servite} pages of this same Library listing have already been served in this run`
+            messaggio: `REFUSED: ${servite} pages of this same ${nomeElenco} have already been served in this run`
                 + ` (same tool, same filters — only the page cursor changed), and ${tettoAssoluto} is the hard ceiling.`
-                + ` \`${CAMPO_SFOGLIA_TUTTO}\` does not raise it. Answer with what you already have, narrow the listing with`
-                + ' the origin/file_type filters, or use library_search with a keyword to find one specific file.',
+                + ` \`${CAMPO_SFOGLIA_TUTTO}\` does not raise it. ${consiglio}`,
         }
     }
     /*
@@ -3066,10 +3072,9 @@ export function decisioneDiSfogliamento({
         return {
             permesso: false,
             pagina,
-            messaggio: `REFUSED: this would be page ${pagina} of the same Library listing`
+            messaggio: `REFUSED: this would be page ${pagina} of the same ${nomeElenco}`
                 + ` (same tool, same filters — only the page cursor changed), and one listing is served at most ${tetto} pages`
-                + ' on your own initiative. Page 1 already reported the TOTAL, so "how many files" and "what is in the Library"'
-                + ' are answerable without paging at all. To find one specific file, use library_search with a keyword.'
+                + ` on your own initiative. Page 1 already reported the TOTAL. ${consiglio}`
                 + ` If — and only if — the person explicitly asked to see or act on EVERY entry, call ${nome} again with`
                 + ` \`${CAMPO_SFOGLIA_TUTTO}: true\` and the same filters (at most ${tettoAssoluto} pages of one listing).`,
         }
@@ -3115,7 +3120,8 @@ export function registraEsitoDiSfogliamento({ registro, nome, argomenti, risulta
     }
     const stato = registro.get(firmaDiSfogliamento(nome, argomenti))
     if (!stato) return
-    const voci = Array.isArray(risultato && risultato.pagina) ? risultato.pagina.length : 0
+    const pagina = risultato?.pagina ?? risultato?.ricerche
+    const voci = Array.isArray(pagina) ? pagina.length : 0
     const totale = risultato && Number.isFinite(risultato.totale) ? risultato.totale : stato.totale
     registro.set(firmaDiSfogliamento(nome, argomenti), { ...stato, voci: stato.voci + voci, totale })
 }
@@ -9017,11 +9023,18 @@ export async function talosLavora({
                         esito = 'deep research is not configured on this harness: no research channel was set.'
                     }
                     else {
-                        try {
-                            esito = formattaListaRicerche(await onRicercaLista(argomenti))
-                        }
-                        catch (rotto) {
-                            esito = `research_list failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                        const sfoglia = decisioneDiSfogliamento({ nome, argomenti, registro: sfogliamenti })
+                        if (!sfoglia.permesso) esito = sfoglia.messaggio
+                        else {
+                            try {
+                                const grezzo = await onRicercaLista(argomenti)
+                                registraEsitoDiSfogliamento({ registro: sfogliamenti, nome, argomenti, risultato: grezzo })
+                                const testo = formattaListaRicerche(grezzo)
+                                esito = sfoglia.coda ? `${testo}\n\n${sfoglia.coda}` : testo
+                            }
+                            catch (rotto) {
+                                esito = `research_list failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            }
                         }
                     }
                 }

@@ -5533,6 +5533,30 @@ describe('talosLavora - Deep Research (FASE N, ottavo sistema, "fetta onesta")',
         assert.match(messaggioTool.content, /^research_list failed: giornale corrotto$/)
     })
 
+    it('FASE3-RESEARCH-PAGINATION-GUARD — la terza pagina spontanea non raggiunge il canale ricerca', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(
+            chiamataTool('research_list', { status: 'all', offset: 0 }),
+            chiamataTool('research_list', { status: 'all', offset: 10 }),
+            chiamataTool('research_list', { status: 'all', offset: 20 }),
+            CONCLUSO_SUBITO,
+        )
+        const ricevuti = []
+        const esito = await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_list'],
+            onRicercaLista: async (argomenti) => {
+                ricevuti.push(argomenti)
+                return { ricerche: [{ id: `r-${ricevuti.length}`, titolo: 'Ricerca', stato: 'done', avviataAlle: '2026-09-15T00:00:00Z' }], totale: 40 }
+            },
+        })
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.equal(ricevuti.length, 2, 'la terza pagina viene rifiutata prima dello store')
+        const messaggi = esito.messaggiFinali.filter((m) => m.role === 'tool')
+        assert.match(messaggi[1].content, /page 2 of 2/i)
+        assert.match(messaggi[2].content, /^REFUSED/)
+        assert.match(messaggi[2].content, /browse_every_page/)
+    })
+
     it('research_read SENZA onRicercaLeggi: messaggio onesto, mai un tentativo silenzioso', async () => {
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(chiamataTool('research_read', { id: 'sess-1' }), CONCLUSO_SUBITO)
@@ -6883,21 +6907,21 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
             && campo !== CAMPO_SFOGLIA_TUTTO
         ))
         let guardati = 0
-        for (const nome of ['library_list', 'library_search']) {
+        for (const nome of ['library_list', 'library_search', 'research_list']) {
             const campi = Object.keys(ATTREZZI_ESTESI_OPENAI.find((a) => a.function.name === nome).function.parameters.properties)
             guardati += campi.length
             assert.deepEqual(nonClassificati(nome, campi), [],
                 `${nome}: un campo dello schema non classificato finirebbe fuori dalla firma, ed è esattamente come page_size aggirava il tetto`)
         }
-        assert.equal(guardati, 9, 'la misura ha guardato NOVE campi: 5 di library_list + 4 di library_search')
+        assert.equal(guardati, 13, 'la misura guarda 5 campi library_list, 4 library_search e 4 research_list')
 
         /* ⛔ VERSO CHE DEVE FALLIRE: un filtro nuovo non dichiarato viene visto da questo cancello. */
         assert.deepEqual(nonClassificati('library_list', ['origin', 'page_size', CAMPO_SFOGLIA_TUTTO, 'tag']), ['tag'])
         /* E il flag non è un filtro: se lo fosse, accenderlo cambierebbe la firma e azzererebbe il conto. */
         assert.equal(Object.prototype.hasOwnProperty.call(CAMPI_CHE_IDENTIFICANO_LA_DOMANDA.library_list, CAMPO_SFOGLIA_TUTTO), false)
-        /* Un attrezzo che non dichiara i suoi campi LANCIA, invece di firmare al buio. */
-        assert.throws(() => firmaDiSfogliamento('research_list', { status: 'all' }), TypeError)
-        assert.throws(() => decisioneDiSfogliamento({ nome: 'research_list', argomenti: {}, registro: new Map() }), TypeError)
+        assert.equal(firmaDiSfogliamento('research_list', {}), firmaDiSfogliamento('research_list', { status: 'all' }))
+        /* Un attrezzo DAVVERO non dichiarato lancia, invece di firmare al buio. */
+        assert.throws(() => firmaDiSfogliamento('notes_list', {}), TypeError)
     })
 
     it('⛔⛔ DIFETTO 3: il fondo assoluto non supera più l incidente, ed è un CONTO, non un numero scelto', () => {

@@ -171,7 +171,7 @@ test('BC49: deposito unico del banco resta byte per byte, anche senza adattatore
   assert.match(r.risposta, /^deposited:/);
 });
 
-test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni DICHIARATE qui sotto (deposito, i due attrezzi della Libreria e l\'attrezzo di modifica)', () => {
+test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni DICHIARATE qui sotto (deposito, i tre attrezzi paginati e l\'attrezzo di modifica)', () => {
   for (const [attrezzi, impronta] of [[ATTREZZI_OPENAI, '38d65a3f445bf470c5f79ace0b662ae1eaf619b22cbfabbe885676ee5c5bfd4b'], [ATTREZZI_ESTESI_OPENAI, 'eba3456fe9a1bcb97528f6790bf6019cf8a32193d491fac32cd8a431e87e661c']]) {
     /* ⛔ PO-12 (13/09/2026) — TERZA esenzione, e la piu' forte delle tre: l'attrezzo NUOVO
      * (`file_edit`) si toglie INTERO dalla copia prima di misurare. Cosi' le due impronte qui
@@ -221,6 +221,17 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni DICHI
         assert.equal((schema.required ?? []).includes('browse_every_page'), false, `${f.name}: il campo di sblocco NON deve essere obbligatorio`);
         delete schema.properties.browse_every_page;
         delete f.description;
+      }
+      /* FASE 3 (15/09/2026) — research_list e' il terzo attrezzo realmente paginato.
+       * Riceve lo stesso sblocco esplicito dei due attrezzi Libreria; il campo resta
+       * opzionale e viene tolto soltanto dalla copia usata da questo censimento storico. */
+      if (f.name === 'research_list') {
+        const schema = f.parameters ?? f.input_schema;
+        assert.ok(schema.properties.browse_every_page, 'research_list: manca il campo di sblocco');
+        assert.equal((schema.required ?? []).includes('browse_every_page'), false, 'research_list: il campo di sblocco NON deve essere obbligatorio');
+        assert.match(f.description, /first page reports the total/i, 'research_list: la descrizione deve spiegare il tetto al modello');
+        delete schema.properties.browse_every_page;
+        f.description = 'List the deep researches run on this project, with how each one ended and how far it got. Use this whenever the user asks about their researches — what they investigated, which ones are still running, which failed. Do NOT use library_list for that: research reports are saved as Library files, so library_list finds them mixed in with every other document and cannot say whether a research finished, was paused, or failed.';
       }
     }
     assert.equal(createHash('sha256').update(JSON.stringify(copia)).digest('hex'), impronta);

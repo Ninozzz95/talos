@@ -1,5 +1,15 @@
 # Coda delle proposte dell'owner — 08/09/2026
 
+> **RETTIFICA DELLO STATO — 14/09/2026.** I requisiti originali sotto restano validi;
+> lo stato corrente è nella [tabella completa](TABELLA-FASI-COMPLETA-2026-09-13.md).
+> PO-12 è implementata (4e8bfd6d, incluso il permesso file_edit); la diagnosi «zero
+> chiamanti» è storica. Per PO-09 la Fase 1 ha smentito l'assenza del terminale dal
+> pacchetto: resta la verifica completa dell'installato, non una nuova implementazione.
+> D-10C è dichiarato chiuso anche per l'ordine dei flussi nella propria sezione del 10/09;
+> l'apertura rimasta nella roadmap è stata rettificata, senza fingere un nuovo test.
+> Metodo, fonti e limiti della proposta multiagente nel
+> [riallineamento del 14/09](RIALLINEAMENTO-ROADMAP-2026-09-14.md).
+
 > ## ⛔ AGGIORNATA IL 13/09/2026 — l'intestazione qui sotto e' di due giorni fa
 >
 > Il blocco che segue dichiara «lo stato vero, 11/09/2026». **Quello stato non e' piu' vero**: fra il

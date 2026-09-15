@@ -1,5 +1,43 @@
 # TABELLA DELLE FASI, SPIEGATA — tutto il lavoro aperto (13/09/2026)
 
+## Stato corrente riconciliato — 14/09/2026
+
+Questo blocco prevale sulle descrizioni storiche «oggi» e «resta» conservate sotto.
+Dettaglio delle prove e proposta organizzativa nel
+[riallineamento del 14/09](RIALLINEAMENTO-ROADMAP-2026-09-14.md).
+Riconciliazione documentale del 14/09, aggiornata il 15/09 con le prove fresche della Fase 3.
+
+| Fase | Stato utile per ripartire |
+|---|---|
+| 0 | ✅ 0.1.8 pubblicata su Ninozzz95/talos: CI 34901484160 verde, tre asset scaricati e verificati contro SHA256SUMS e attestazioni GitHub; tag sul commit aa517786. |
+| 1 | Chiusura documentata con residui: research_list, taglia pagina duplicata, parti BC-07 e prova dell'assistenza nell'app installata. |
+| 2 | Implementata e provata nei giri del 13–14/09: coda persistente, reindirizzamento, ragionamento e durate. PO-12 implementata (4e8bfd6d), non più «attrezzo assente». Restano i residui di copertura elencati sotto. |
+| Audit F01–F07 | Correzioni committate; non riaprire i difetti senza una nuova riproduzione. |
+| 3 | ✅ Consegnata il 15/09 nel perimetro reale: batch unico sulle cinque collezioni scrivibili, guardia sui tre tool paginati, cancelli exporter riparati e assistenza con fonti/non-lo-so. Prove dettagliate nella sezione della fase. |
+| 3-bis | Già inserita e pianificata: WF-1…WF-7. Implementazione non avviata. PO-25 (procedure guidate dal pulsante +) dipende da questa fase. |
+| 4 | Ottimizzazioni locali parzialmente implementate; misure comparative e difetto del secondo turno ancora da qualificare. |
+| 5 | Traduzione, nomi, numerazioni, temi e foto inglesi; requisiti pre-rilascio non cancellati dal fatto che la 0.1.5 sia uscita. |
+| 6 | Sezioni, azioni sui messaggi, primo avvio e copertura permessi: riaccertare le premesse. Il codice ammette sei override per attrezzo, incluso file_edit. |
+| 7 | Installer assistito, consenso, icona, accessibilità e pulizia. |
+| 8 | Guscio, terminale e processi. D-10C risulta chiuso nella coda; non trattarlo come nuova cura senza riprodurlo. Verifica dei segreti anticipata rispetto all'esecuzione di nuove capacità. |
+| 9 | OAuth e compattazione da qualificare; provider P-D…P-L e P-K-bis/P-L-bis già implementati, con qualifiche reali residue. PO-15 delega esterna e PO-16 GitHub restano distinti. BC-52 ora collocato esplicitamente qui. |
+| 10 | Computer use, comandi dell'agente nel terminale, voce, spazio e intestazioni licenza: conservare le decisioni specifiche prima di aprire. |
+| 11 | Porting desktop → mobile; piano sorgente nel checkout AVM, non qui. Nessuna apertura o modifica mobile in questo aggiornamento. |
+
+Debiti trasversali ancora dichiarati: 12 rossi di parità, 49 di baseline-shell,
+REDUCED-MOTION-02, copertura di prima-del-commit, foto eventualmente coperte dal velo,
+timer e titolo da riqualificare nei percorsi indicati; data-runtime-usage senza elemento UI.
+Questi numeri sono storici, non risultati di test del presente aggiornamento.
+
+**Metodo proposto all'owner:** coordinatore stabile e fino a cinque compiti per fase;
+fasi in sequenza, compiti paralleli solo con file e contratti indipendenti, review e
+verifica integrata prima della fase successiva. Qui sono disponibili al massimo tre
+subagenti simultanei oltre al coordinatore: esecuzione a ondate. L'assegnazione di codice
+ai subagenti va conciliata esplicitamente con AGENTS.md, che oggi la limita. Nessuna
+modifica a tali regole o avvio di agenti è compreso in questo riallineamento.
+
+---
+
 > Owner, 13/09: «espandi la tabella e spiega i singoli punti per fase. Devo sapere cosa fanno le
 > singole fasi. Non posso andare a cercarmi tutto».
 >
@@ -44,6 +82,7 @@ non e' pubblicato, ogni altra fase e' lavoro che nessuno vede.
 **La faccio io, senza agenti.** Commit, build, tag e pubblicazione non si delegano.
 
 ### 0.1 · Il tag `desktop-v0.1.5`
+> Stato storico della preparazione: il tag è poi stato pubblicato sul repository pubblico.
 Tutto e' pronto e provato. I cancelli sono verdi, l'installatore e l'archivio sono costruiti, e il
 prodotto ha superato la prova vera: installato in 81,6 secondi, avviato, chiuso, disinstallato, senza
 lasciare processi, collegamenti o file di troppo, e coi dati dell'utente conservati.
@@ -532,6 +571,10 @@ ma «il codice fa quelle cose» non e' «a schermo si vede cosi'».
 
 # FASE 2 · Scrivere mentre il modello lavora
 
+> Descrizione originaria dei compiti: le implementazioni e prove successive sono registrate
+> nei blocchi precedenti e nello stato corrente in testa. Non usare gli «oggi» qui sotto
+> come diagnosi del codice corrente.
+
 **A cosa serve:** e' il momento in cui la persona e TALOS si parlano sopra. Tu scrivi mentre lui sta
 gia' lavorando, e devi poter scegliere: **accodare** (lo leggera' dopo) o **reindirizzare** (fermalo e
 cambia direzione). Oggi questa scelta funziona male, e tu l'hai segnalata **due volte** — l'11
@@ -733,6 +776,28 @@ fondamenta fino al pulsante.
 ⛔ **L'ordine dentro la fase conta piu' del solito.** Prima la meta' server, poi la selezione che la
 usa. Invertirle produrrebbe un pulsante che fa esattamente cio' che oggi fa l'agente: 214 chiamate,
 solo lanciate da te invece che da lui.
+
+**Esito misurato il 15/09/2026 — Fase 3 consegnata nel perimetro reale del prodotto:**
+
+- ✅ **Corsie 1–2:** le cinque collezioni realmente eliminabili — Libreria, Note, Attivita', Memoria
+  e Ricerca — condividono selezione multipla e una sola `POST .../:resource/batch`. Il server accetta
+  fino a 250 identificativi, conserva l'ordine e restituisce un esito per voce; 214 eliminazioni sono
+  provate con una richiesta. Progetti resta correttamente in sola lettura; Board aveva gia' la
+  selezione delle sessioni e non riceve una seconda implementazione finta.
+- ✅ **Corsia 3, censimento corretto:** nel codice vivo gli attrezzi capaci di avanzare pagina sono
+  tre (`library_list`, `library_search`, `research_list`), non quindici. Tutti e tre consentono al
+  massimo due pagine spontanee, richiedono `browse_every_page:true` per proseguire e mantengono il
+  tetto assoluto.
+- ✅ **Corsia 4:** il banco della preparazione pubblica ricostruisce in una copia temporanea la vera
+  premessa legacy. I 15 scenari sono verdi, comprese anteprima, R100, sottomoduli e snapshot; R100 ha
+  contato 2.224 rinomine. La repository pubblica non viene mutata dal banco.
+- ✅ **Corsia 5:** `POST /api/v1/assistenza` risponde dal corpus tracciato con citazioni reali,
+  conosce identita', repository, licenza e stato della versione di TALOS, e fuori copertura restituisce
+  esattamente `non lo so` con fonti vuote.
+- **Prove fresche:** server 3.012 verdi, 0 rosse e 4 skip; kernel 598/598; frontend unit 54/54;
+  exporter 15/15; documentazione 24 controlli e 218 elementi, 0 rossi. I nuovi percorsi browser sono
+  verdi a tre viewport; la suite parity complessiva conserva 12 debiti visuali gia' censiti
+  (ProviderCard, Conversazione e Inspector), fuori da questa fase.
 
 ### Corsia 1 🔒 · Selezionare tante cose insieme, in tutte le sezioni
 **Oggi:** nelle sezioni con un elenco — Libreria, Note, Attivita', Memoria, Ricerca, Progetti, Board
@@ -1101,14 +1166,20 @@ arrivare al primo messaggio utile; provata anche saltando tutto; foto nei due te
 larghezze; e nessun commento che rimandi a funzioni inesistenti.*
 
 Scheda completa: **PO-24** nella coda delle proposte.
-### Corsia 5 · I permessi mostrano 5 attrezzi su 43
+### Corsia 5 · Copertura dei permessi per attrezzo da riaccertare
+> Rettifica 14/09: config.mjs ammette sei override, compreso file_edit (commit 4e8bfd6d).
+> I numeri 5/43 sotto sono la misura storica; non dimostrano né il catalogo attuale né
+> una vulnerabilità su ogni altro attrezzo. Inventariare le policy applicabili e il loro
+> uso reale prima di stabilire quali override aggiungere; la UI completa non è stata
+> verificata in questa revisione documentale.
+
 **Oggi:** il foglio dei permessi elenca **cinque** attrezzi. Gli attrezzi sono **43**. Cioe' per 38 di
 essi non esiste un permesso per attrezzo: sono governati solo dalle regole generali. Chi guarda quel
 foglio crede di avere il controllo e non ce l'ha.
 
 Nella stessa corsia: il percorso sbagliato che fa fallire le deleghe, se non e' gia' chiuso in Fase 2.
 
-*File: `config.mjs` e la catena di delega · Finita quando: il foglio elenca 43 attrezzi.*
+*File: `config.mjs` e la catena di delega · Finita quando: ogni attrezzo del catalogo corrente dichiara la policy realmente applicata e gli override ammessi sono provati nei due versi; nessun numero storico usato come requisito fisso.*
 
 ---
 
@@ -1207,6 +1278,10 @@ ricevute arriva li' da un file di configurazione, e da li' a ogni processo figli
 *Finita quando: nessun segreto nell'ambiente di un figlio, provato leggendolo davvero.*
 
 ### Corsia 3 · Il terminale
+> Rettifica 14/09: D-10C (ordine stdout/stderr) è dichiarato chiuso con prova reale nella
+> coda proposte, sezione del 10/09. Non è stato rieseguito oggi: riaccertare prima di
+> riaprire. Streaming durante l'esecuzione e comando ! a modello occupato restano voci distinte.
+
 Tre difetti dello stesso pezzo: l'uscita di un comando arriva **tutta insieme alla fine** invece che
 mentre scorre; i due flussi di uscita sono **fusi e riordinati**, quindi l'ordine che leggi non e'
 quello vero; e il comando diretto col punto esclamativo **non funziona mentre il modello lavora**,
@@ -1248,6 +1323,10 @@ riusata (il 40% che gira oggi e' un valore finto messo per la prova), costi prim
 indietro **eseguito** e non solo previsto, e l'annullamento mentre la risposta scorre.
 
 ### Corsia 4 · I fornitori aggiuntivi, l'agente esterno, GitHub
+> Stato 14/09: P-D…P-L e P-K-bis/P-L-bis risultano implementati nei registri del 12/09;
+> restano giri reali dei provider senza credenziali, fallback fra provider e agente ACP reale.
+> PO-15 (delega esterna completa) non è chiuso dal solo provider ACP; PO-16 (GitHub) resta aperto.
+
 Tre righe arrivate il 12 settembre: altri fornitori di modelli, la delega a un agente esterno da riga
 di comando, e il collegamento a GitHub.
 
@@ -1255,6 +1334,15 @@ di comando, e il collegamento a GitHub.
 I numeri delle proposte si assegnano in **due documenti diversi senza un registro unico**. Oggi questo
 ha prodotto una collisione: tre proposte nuove avevano numeri gia' usati, e ho dovuto rinumerarle.
 Finche' resta cosi', succedera' ancora.
+
+### Lavoro successivo della Fase 9 · BC-52 — attrezzi su richiesta
+
+Approvato il 13/09 nella coda unica, mancava dalla tabella. Esporre gli strumenti con
+caricamento degli schemi quando servono; prima occorre qualificare contratto, policy e
+compatibilità dei provider. Dipendenze conservate: dopo release, PO-15, PO-16 e confronto
+A/B del preambolo. Richiede un proprio lotto dopo le cinque corsie, non un sesto agente
+simultaneo. Si chiude con strumenti ancora utilizzabili dal composer, prove di compatibilità
+e confronto misurato; nessuna implementazione o beneficio dichiarato in questo aggiornamento.
 
 ---
 
@@ -1284,6 +1372,10 @@ in un documento dedicato.
 ---
 
 # ⛔ COME SI ESEGUONO — la regola che hai dato il 13 settembre
+
+> Regola storica. La proposta discussa il 14/09 e i limiti effettivi della sessione sono
+> nello stato corrente e in RIALLINEAMENTO-ROADMAP-2026-09-14.md. Cinque compiti non
+> significano cinque processi simultanei disponibili; Opus 5 non è esposto qui.
 
 - **Cinque agenti per FASE**, non per sessione. Solo Opus 5, solo sforzo alto. Chiusa una fase —
   consegne riviste, fuse e provate — la successiva ha di nuovo cinque.
@@ -1317,7 +1409,7 @@ un documento che dichiara aperto un lavoro gia' fatto costa crediti veri. Oggi e
 | Il confronto del file modificato dentro la chat | 10/09 | — |
 | Barra laterale viva | `873b2bba`, 10/09 | — |
 | L'indice dei giri saltava i numeri | 10/09 sera | — |
-| I due flussi di uscita fusi | 10/09 sera | ⛔ **ma** la parte «riordinati» resta aperta, ed e' in Fase 8 |
+| I due flussi di uscita fusi e riordinati | chiusura documentata 10/09 sera | Rettifica 14/09: D-10C nella coda prova anche l'ordine; nuova esecuzione non fatta, riaprire solo con una riproduzione |
 | «Chiudere la scrittura non impediva di scrivere dalla shell» | dal 06/09 | ⛔ il documento **si contraddice da solo**: aperta in una tabella, chiusa nella propria intestazione. Ho letto la voce intera: **e' chiusa** |
 
 ## Chiuso senza difetto — «abbiamo guardato e non c'e'»
@@ -1355,10 +1447,12 @@ Hai chiesto la marcatura; poi mi hai detto di fermarmi alla tabella. Ecco cosa v
 
 ---
 
-# LA PRIMA RELEASE DESKTOP (14/09/2026) — owner: «pubblica e nuova release prima della fase 3»
+# LA NUOVA RELEASE DESKTOP (14/09/2026) — owner: «pubblica e nuova release prima della fase 3»
 
-**Stato: in corso.** Nessuna release desktop era mai uscita: zero tag `desktop-*`, e il changelog
-dichiarava una `0.1.5` scritta e mai taggata.
+**Stato: concluso con la 0.1.8.** La release pubblica su Ninozzz95/talos è uscita dal commit
+`aa517786`: CI 34901484160 verde, EXE e ZIP verificati contro `SHA256SUMS.txt` e attestazioni
+GitHub valide per `refs/tags/desktop-v0.1.8`. L'EXE non ha firma Authenticode: la provenienza
+GitHub verificata e la firma del binario restano due proprietà distinte.
 
 - ✅ **Pubblicati** i tre commit di F02–F07 (`f19edd6a`, `850bf0ec`, `f3b67d39`) e la preparazione
   della release (`f287f68f`).
@@ -1371,9 +1465,9 @@ dichiarava una `0.1.5` scritta e mai taggata.
   **tutte ambientali**: il `fs.watch` su una temp con nome 8.3 che fa **abortire il processo** da
   libuv; due premesse (`/Users`, `src`) vere solo sul disco dell'owner; un mtime di cartella che sul
   runner non si muove. Dettaglio e cure nel TACCUINO, 14/09.
-- 🔜 **`desktop-v0.1.7`**: cure scritte, versione e lock allineati, sezione di changelog scritta,
-  controllo pre-tag ✓. Restano: suite intera verde → commit (**in inglese**, regola owner 14/09) →
-  tag → push → esito del job.
+- ⛔ **`desktop-v0.1.7`**: tentativo intermedio sul repository di sviluppo; non è la release
+  pubblica consegnata.
+- ✅ **`desktop-v0.1.8`**: pubblicata sul repository pubblico e verificata come descritto sopra.
 - ⛔ **Regola che questa riga lascia al progetto**: un tag pubblicato non si riscrive. Ogni
   tentativo fallito brucia un numero di versione e si riparte dal successivo, dichiarando nel
   changelog che quel tag non ha pubblicato niente.

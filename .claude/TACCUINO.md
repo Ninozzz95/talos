@@ -441,6 +441,13 @@
 
 ## 2026-09-14 — la release desktop: `desktop-v0.1.6` taggata e MORTA ai cancelli, e le tre cause
 
+> **Rettifica della ripresa del 14/09:** la premessa «nessuna release desktop era mai
+> uscita» del primo punto sotto è falsa. La 0.1.5 è pubblicata su Ninozzz95/talos dal
+> 13/09, con tre asset. Era stato controllato soltanto il repository di sviluppo.
+> La diagnosi del watcher sotto descrive la prima cura: per la cura completa è stato
+> poi iniettato guardaWorkspaceFn, perché il watcher reale teneva vivo il processo.
+> Il blocco originale resta come cronologia, non come stato corrente.
+
 - ⛔ **Nessuna release desktop era mai uscita**: zero tag `desktop-*` in locale e sul remoto, mentre il changelog
   dichiarava `desktop-v0.1.5` del 13/09 — scritta e **mai taggata**, e i cinque tag prima di lei fermi ai cancelli.
 - ✅ Preparata e taggata la **0.1.6** (`f287f68f`): note di rilascio che **portano il changelog** e sono **in inglese**
@@ -465,3 +472,24 @@
   i test **toccano il disco vero**. Le tre cause sono tutte «il test descrive l'ambiente»: nome corto 8.3, esistenza di
   una cartella di sistema, risoluzione di un timestamp. Un tag pubblicato **non si riscrive**: 0.1.6 resta bruciata e
   marcata «tag only, no release published», e si riparte da **0.1.7**.
+
+## 2026-09-14 — riallineamento autorizzato della roadmap
+
+- gh release view desktop-v0.1.5 --repo Ninozzz95/talos: pubblicazione 13/09 alle
+  12:27:49Z, non draft/prerelease, tre asset: EXE 152.043.007 byte, ZIP 255.850.965,
+  SHA256SUMS 174. La precedente premessa sull'assenza di release è rettificata.
+- git ls-remote origin: ramo lane/harness-desktop e tag desktop-v0.1.7 risolvono ad
+  ad35a646599fdd7e7803442236d9b43e011e280b. Push già avvenuto.
+- gh run view 34834305252 --repo Ninozzz95/agent-virtual-machine, controllo 10:48 UTC:
+  test server/kernel/frontend/Electron success; installer/ZIP in_progress. Non è ancora
+  una prova di release pubblica: verificare repository destinatario e asset finali.
+- Riconciliate 13 fasi (0–11 più 3-bis). WF-1…WF-7 erano già in tabella. BC-52 era
+  solo nella coda: aggiunto alla Fase 9 dopo PO-15/PO-16/A-B, come lotto successivo.
+- config.mjs ammette sei override, non cinque, incluso file_edit; commit 4e8bfd6d
+  presente. D-10C ha una chiusura documentata nella coda, non un nuovo verde oggi.
+- Piano mobile trovato nel checkout AVM, non AVM-harness-desktop. Nessuna modifica mobile.
+- Metodo proposto: coordinatore stabile, fino a cinque compiti per fase, dipendenze e
+  proprietà dei file prima delle partenze. Limite runtime quattro slot totali; delega
+  implementativa ancora da conciliare con AGENTS.md. Nessun agente avviato o commit/push.
+- Registro dei file, fonti primarie e verifica documentale:
+  [RIALLINEAMENTO-ROADMAP-2026-09-14.md](RIALLINEAMENTO-ROADMAP-2026-09-14.md).

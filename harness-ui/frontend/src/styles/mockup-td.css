@@ -68,6 +68,12 @@
 /* Una sezione con un filtro solo (Note, Progetti) non disegna la riga: `hidden` da solo non basta
    contro `display:flex`, e un `[hidden]` universale con `!important` qui non si mette. */
 .td-filters[hidden] { display: none; }
+.td-bulk { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 42px; margin: 0 0 14px; padding: 7px 9px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-card); }
+.td-bulk[hidden] { display: none; }
+.td-bulk-select { display: inline-flex; align-items: center; gap: 8px; color: var(--talos-text); font-size: 12px; cursor: pointer; }
+.td-bulk-select input, .td-card-select { accent-color: var(--talos-accent); }
+.td-bulk-count { color: var(--talos-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.td-bulk-status { flex: 1; min-width: 150px; color: var(--talos-muted); font-size: 11px; text-align: right; }
 
 /* ---------- 3. LE SCHEDE (mockup 4012-4066 + rifiniture 4210-4222) ---------- */
 .td-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; align-items: start; }
@@ -76,6 +82,9 @@
 .td-card { position: relative; min-width: 0; isolation: isolate; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-card); background: var(--talos-panel); transition: border-color var(--talos-motion-duration-control) var(--talos-motion-ease), background-color var(--talos-motion-duration-control) var(--talos-motion-ease); }
 .td-card:hover { border-color: var(--talos-border-strong); }
 .td-card[data-selected="true"] { border-color: var(--talos-accent-border); box-shadow: inset 0 0 0 1px var(--talos-accent-border); }
+.td-card[data-batch-selected="true"] { background: var(--talos-accent-soft); }
+.td-card-select { position: absolute; z-index: 3; top: 15px; right: 48px; width: 17px; height: 17px; margin: 0; cursor: pointer; }
+.td-card[data-batch-capable="true"] .td-card-top { padding-right: 52px; }
 .td-card-open { display: flex; flex-direction: column; align-items: stretch; gap: 14px; min-height: 218px; width: 100%; padding: 20px; background: transparent; color: var(--talos-text); border: 0; border-radius: inherit; text-align: left; font-family: inherit; cursor: pointer; overflow: hidden; }
 .td-card-top { display: flex; align-items: center; gap: 7px; font-size: 11px; line-height: 1.4; font-weight: 500; color: var(--talos-muted); padding-right: 24px; min-height: 21px; }
 .td-card-top svg { width: 15px; height: 15px; }
@@ -128,6 +137,7 @@
    byte), e senza questo la seconda riga della griglia restava vuota spingendo titolo e data ai due
    estremi — visto nella foto. */
 .td-list .td-card-open { min-height: 82px; display: grid; grid-template-columns: 128px minmax(0, 1fr) auto; gap: 5px 16px; padding: 16px 48px 16px 18px; align-content: center; }
+.td-list .td-card[data-batch-capable="true"] .td-card-open { padding-right: 82px; }
 .td-list .td-card-top { grid-column: 1; grid-row: 1 / 3; align-self: center; padding-right: 0; }
 .td-list .td-card h3 { grid-column: 2; grid-row: 1; font-size: 14px; }
 .td-list .td-excerpt { grid-column: 2; grid-row: 2; -webkit-line-clamp: 1; max-height: 22px; font-size: 12px; }
@@ -337,7 +347,7 @@ details.td-theme-note p { margin: 8px 0 0; }
 .td-studio-rimando__elenco { margin-top: 6px !important; font-size: 10px !important; opacity: .8; }
 
 /* ---------- 9. FUOCO, MOVIMENTO, CONTRASTO FORZATO (mockup 4188-4194) ---------- */
-.td-card-open:focus-visible, .td-card-azioni:focus-visible, .td-divider:focus-visible, .td-filter:focus-visible, .td-segment button:focus-visible, .td-theme-choice:focus-visible, .td-studio-button:focus-visible { outline: var(--talos-focus-width, 2px) solid var(--talos-ring); outline-offset: 3px; }
+.td-card-open:focus-visible, .td-card-select:focus-visible, .td-card-azioni:focus-visible, .td-divider:focus-visible, .td-filter:focus-visible, .td-segment button:focus-visible, .td-theme-choice:focus-visible, .td-studio-button:focus-visible { outline: var(--talos-focus-width, 2px) solid var(--talos-ring); outline-offset: 3px; }
 :root.td-dragging *, :root.td-dragging *::before { cursor: col-resize !important; user-select: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .td-scope *, .td-scope *::before, .td-scope *::after, dialog.td-modal * { transition-duration: 0s !important; animation: none !important; scroll-behavior: auto !important; }

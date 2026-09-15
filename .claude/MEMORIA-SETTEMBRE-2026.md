@@ -1,5 +1,15 @@
 # MEMORIA — le regole di settembre 2026 (quarto file dell'indice)
 
+> **14/09 — roadmap riconciliata:** stato corrente in
+> [TABELLA-FASI-COMPLETA-2026-09-13.md](TABELLA-FASI-COMPLETA-2026-09-13.md),
+> prove e proposta organizzativa in [RIALLINEAMENTO-ROADMAP-2026-09-14.md](RIALLINEAMENTO-ROADMAP-2026-09-14.md).
+> Cinque compiti logici per fase, dipendenze rispettate e review integrata; proposta in
+> discussione, non avvio delle fasi. Runtime attuale: principale + massimo tre subagenti
+> simultanei, Opus 5 non esposto. AGENTS.md limita la delega a test semplici e controlli
+> meccanici: non leggere le vecchie istruzioni «cinque implementatori» come autorizzazione
+> automatica in questo runtime. 0.1.5 pubblicata su talos; 0.1.7 osservata in CI su
+> agent-virtual-machine; 3-bis già inserita. Il piano mobile è nel checkout AVM.
+
 > ⛔ **Quarto file dell'indice di memoria**, importato da `CLAUDE.md` come gli
 > altri tre. Nato il **12/09/2026**: `MEMORY.md` era a **20.041 byte**,
 > `MEMORIA-REGOLE.md` a **20.204** e `MEMORIA-LEZIONI.md` a **22.717** — tutti
@@ -124,4 +134,3 @@ tutte le altre. «Zero volte» e' un numero: o lo hai contato, o non lo puoi scr
   se l'e' chiesto: hanno verificato che la cura fosse ben fatta, non che servisse.
 - Vedi [[un-esito-stampato-dopo-un-errore-non-vale]] e
   [[una-misura-ristretta-non-vede-cio-che-non-ti-aspetti]].
-

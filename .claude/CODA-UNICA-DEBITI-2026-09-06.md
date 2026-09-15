@@ -1,5 +1,15 @@
 # CODA UNICA DEI DEBITI — TALOS Harness Desktop
 
+> **STATO CORRENTE — 14/09/2026.** Usare la
+> [tabella completa](TABELLA-FASI-COMPLETA-2026-09-13.md) e il
+> [registro di riallineamento](RIALLINEAMENTO-ROADMAP-2026-09-14.md).
+> Le intestazioni dell'11/12 settembre sotto sono cronologia, non una coda eseguibile.
+> F01–F07 e la coda persistente sono implementati; P-D…P-L e P-K-bis/P-L-bis sono
+> implementati con qualifiche reali residue. PO-15 e PO-16 restano distinti dal provider ACP.
+> BC-52 è ora in Fase 9 dopo PO-15/PO-16/A-B. La 0.1.5 esiste su Ninozzz95/talos;
+> la 0.1.7 è in CI sul repository di sviluppo (osservazione delle 10:48 UTC).
+> Nessuna suite rilanciata per questo aggiornamento; non sommare righe storiche e correnti.
+
 > ⛔⛔⛔ **11/09/2026 — QUESTO DOCUMENTO DICEVA APERTE QUATTORDICI RIGHE GIÀ CHIUSE.**
 > Owner, oggi: «non voglio assolutamente vedere fasi già fatte in documenti di debiti/implementazioni
 > in corso». Le quattordici righe stanno ora nella sezione «✅ CHIUSE» qui sotto, **non più fra gli
