@@ -303,6 +303,7 @@ export function servizioVoci({ schema, sessionId, rete } = {}) {
     leggi: typeof rete.leggi === 'function' ? (id) => rete.leggi(voceUrl(id)) : null,
     modifica: (id, corpo) => rete.patch(voceUrl(id), corpo),
     elimina: (id) => rete.elimina(voceUrl(id)),
+    eliminaInBlocco: (ids) => rete.post(`${base}/batch`, { azione: 'elimina', ids }),
     /* Lo stato ha la SUA porta: `PATCH {stato}` è un 400 apposta, perché marcare fatta non è
        modificare (contratto §3, e lo stesso confine che ha l'attrezzo del modello). */
     cambiaStato: (id, stato) => rete.post(`${voceUrl(id)}/stato`, { stato }),

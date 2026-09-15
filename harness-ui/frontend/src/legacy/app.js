@@ -807,8 +807,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * un prefisso più corto è un input come un altro per lui.
    */
   const RITMO_STREAMING = {
-    typewriter: { caratteriAlSecondo: 160, ritardoMassimoMs: 300, perParola: false },
-    fade: { caratteriAlSecondo: 140, ritardoMassimoMs: 350, perParola: true, dissolvenzaMs: 420 },
+    typewriter: { perParola: false },
+    fade: { perParola: true, dissolvenzaMs: 420 },
   };
 
   function modalitaAnimazioneStreaming() {
@@ -824,31 +824,24 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
 
   /**
-   * Avanza `statoRender.mostrato` verso `testo.length` secondo il ritmo
-   * scelto. Torna il numero di caratteri rivelati in questo frame.
+   * Porta `statoRender.mostrato` a tutto il testo già ricevuto. Il frame resta
+   * la cadenza del paint; la preferenza sceglie l'effetto visivo, mai quanto
+   * tempo trattenere contenuto che il provider ha già consegnato.
    */
   function avanzaRitmoStreaming(statoRender, testo, modalita, ora) {
     const ritmo = RITMO_STREAMING[modalita];
-    const arretrato = testo.length - statoRender.mostrato;
-    if (arretrato <= 0) { statoRender.ultimoTickMs = ora; return 0; }
-    const dtMs = Math.min(100, Math.max(0, ora - (statoRender.ultimoTickMs ?? ora)));
+    const precedente = statoRender.mostrato;
+    const rivelati = testo.length - precedente;
     statoRender.ultimoTickMs = ora;
-    const velocita = Math.max(ritmo.caratteriAlSecondo, arretrato / (ritmo.ritardoMassimoMs / 1000));
-    let passo = Math.min(arretrato, Math.max(1, Math.ceil(velocita * dtMs / 1000)));
-    if (dtMs === 0 && statoRender.ultimoTickMs !== null) passo = Math.min(passo, 1);
-    let prossimo = statoRender.mostrato + passo;
+    if (rivelati <= 0) return 0;
+    statoRender.mostrato = testo.length;
     if (ritmo.perParola) {
-      // parole intere: si estende fino al prossimo spazio (o alla fine), così nessuna parola compare a metà
-      const fineParola = testo.slice(prossimo).search(/\s/);
-      prossimo = fineParola === -1 ? testo.length : prossimo + fineParola;
-      const nuoveParole = contaParole(testo.slice(statoRender.mostrato, prossimo));
+      const nuoveParole = contaParole(testo.slice(precedente));
       for (let k = 0; k < nuoveParole; k += 1) statoRender.paroleRecenti.push(ora);
       const soglia = ora - ritmo.dissolvenzaMs;
       while (statoRender.paroleRecenti.length > 0 && statoRender.paroleRecenti[0] < soglia) statoRender.paroleRecenti.shift();
       if (statoRender.paroleRecenti.length > 400) statoRender.paroleRecenti.splice(0, statoRender.paroleRecenti.length - 400);
     }
-    const rivelati = prossimo - statoRender.mostrato;
-    statoRender.mostrato = prossimo;
     return rivelati;
   }
 
@@ -5129,7 +5122,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          *   resterebbe il nome vecchio, o una voce che sul disco non c'è più.
          */
         aggiornaPaginaLibreria(mount, voci, {
-          errore, caricamento, sessionId,
+          errore, caricamento, sessionId, rete: reteVociDellaPersona(),
           notifica: toast, // 11/09 lotto E: la rinomina riuscita esce con «Annulla», non come nota di stato
           onAggiorna: () => caricaPannelloLibreria({ pagina: true }),
           /*
