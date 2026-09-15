@@ -54,7 +54,7 @@
     "@capacitor/core": "8.4.2",
     "@capacitor/filesystem": "8.1.2",
     "@capacitor/geolocation": "8.2.2",
-    "@capacitor/haptics": "8.0.1",
+    "@capacitor/haptics": "8.0.2",
     "@capacitor/inappbrowser": "4.0.1",
     "@capacitor/keyboard": "8.0.5",
     "@capacitor/preferences": "8.0.1",
