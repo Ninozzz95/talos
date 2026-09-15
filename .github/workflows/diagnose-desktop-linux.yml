@@ -5,6 +5,39 @@ on:
     branches: [fix/ci-linux-desktop-node-pty]
 
 jobs:
+  desktop-core:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            context-engine/package-lock.json
+
+      - name: dipendenze del server
+        run: npm ci
+        working-directory: harness-ui
+
+      - name: dipendenze del motore di contesto
+        run: npm ci
+        working-directory: context-engine
+
+      - name: server
+        run: node --test tests/*.test.mjs
+        working-directory: harness-ui
+
+      - name: kernel
+        run: npm run test:kernel
+        working-directory: harness-ui
+
+      - name: il kernel del repo e quello della fonte
+        run: npm run kernel:controlla
+        working-directory: harness-ui
+
   desktop-ui:
     runs-on: ubuntu-latest
     steps:
@@ -14,10 +47,13 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: harness-ui/frontend/package-lock.json
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            harness-ui/frontend/package-lock.json
+            context-engine/package-lock.json
 
       - name: dipendenze del server per il banco browser
-        run: npm ci --ignore-scripts
+        run: npm ci
         working-directory: harness-ui
 
       - name: dipendenze del frontend
@@ -41,16 +77,16 @@ jobs:
         working-directory: harness-ui/frontend
 
       - name: parita dei componenti col mockup
-        run: |
-          set -o pipefail
-          npx playwright test -c playwright.componenti.config.mjs --reporter=line 2>&1 | tee ../../desktop-parity-linux.log
+        run: npx playwright test -c playwright.componenti.config.mjs --reporter=line
         working-directory: harness-ui/frontend
 
-      - name: conserva il log parita
-        if: always()
+      - name: lab dei componenti
+        run: npx playwright test -c playwright.lab.config.mjs --reporter=line
+        working-directory: harness-ui/frontend
+
+      - if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: desktop-parity-linux-log
-          path: desktop-parity-linux.log
-          if-no-files-found: error
+          name: desktop-ui-resti
+          path: harness-ui/frontend/test-results/
           retention-days: 7
