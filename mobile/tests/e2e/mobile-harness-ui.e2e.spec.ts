@@ -235,7 +235,19 @@ for (const viewport of [
             .querySelector<HTMLElement>('[data-e2e-code-embedded-host]')
             ?.shadowRoot?.querySelector('.topbar')?.classList.contains('is-scroll-hidden')))
             .toBe(true)
-        await page.waitForTimeout(850)
+        // La classe `is-scroll-hidden` scatta in modo sincrono nell'handler
+        // scroll, ma la transizione della topbar (777ms, cubic-bezier(.2,.7,.2,1))
+        // parte solo dal frame in cui il browser committa il nuovo stile e
+        // converge in coda con incrementi di centesimi di pixel: un'attesa
+        // fissa legge quella coda (su CI: "0.0124558px", "0.408802px", "1.36085px").
+        // Si attende quindi il valore TERMINALE reale — a transizione conclusa
+        // la computed value assume esattamente il valore specificato — invece
+        // di stimare a occhio una durata a muro con l'easing.
+        await expect.poll(() => page.evaluate(() => {
+            const root = document.querySelector<HTMLElement>('[data-e2e-code-embedded-host]')?.shadowRoot
+            const topbar = root?.querySelector<HTMLElement>('.topbar')
+            return topbar ? getComputedStyle(topbar).maxHeight : null
+        })).toBe('0px')
         const hidden = await page.evaluate(() => {
             const root = document.querySelector<HTMLElement>('[data-e2e-code-embedded-host]')?.shadowRoot
             const topbar = root?.querySelector<HTMLElement>('.topbar')
