@@ -92,9 +92,18 @@ function apriBrowser(url) {
 async function main() {
   const cartellaHandshake = mkdtempSync(join(tmpdir(), 'talos-avvio-'));
   const fileHandshake = join(cartellaHandshake, 'report.json');
+  const envFiglio = { ...process.env, TALOS_HARNESS_UI_REPORT_FILE: fileHandshake };
+  /*
+   * Black-box hotfix 15/09/2026: double-click desktop launch uses the
+   * desktop adapter by default. An explicitly configured owner runtime is
+   * never overwritten.
+   */
+  if (!envFiglio.TALOS_OWNER_RUNTIME_MODULE?.trim()) {
+    envFiglio.TALOS_OWNER_RUNTIME_MODULE = join(RADICE_HARNESS_UI, 'src', 'kernel', 'talosHarness.desktop-hotfix.mjs');
+  }
   const figlio = spawn(process.execPath, ['server.mjs'], {
     cwd: RADICE_HARNESS_UI,
-    env: { ...process.env, TALOS_HARNESS_UI_REPORT_FILE: fileHandshake },
+    env: envFiglio,
     stdio: ['ignore', 'inherit', 'inherit'],
     windowsHide: true,
   });
