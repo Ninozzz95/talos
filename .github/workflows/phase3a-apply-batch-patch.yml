@@ -33,6 +33,84 @@ jobs:
           path = Path('harness-ui/src/http-app.mjs')
           text = path.read_text(encoding='utf-8')
 
+          old_reader = r'''function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES) {
+            return new Promise((resolve, reject) => {
+              let totale = 0;
+              const pezzi = [];
+              req.on('data', (pezzo) => {
+                totale += pezzo.length;
+                if (totale > limiteByte) {
+                  const errore = new Error('Corpo oltre il limite consentito');
+                  errore.code = 'PAYLOAD_LIMIT';
+                  reject(errore);
+                  req.destroy();
+                  return;
+                }
+                pezzi.push(pezzo);
+              });
+              req.on('end', () => {
+                try {
+                  const testo = Buffer.concat(pezzi).toString('utf8');
+                  resolve(testo.length ? JSON.parse(testo) : {});
+                } catch {
+                  const errore = new Error('Corpo JSON non valido');
+                  errore.code = 'QUERY_INVALID';
+                  reject(errore);
+                }
+              });
+              req.on('error', () => {
+                const errore = new Error('Richiesta interrotta');
+                errore.code = 'QUERY_INVALID';
+                reject(errore);
+              });
+            });
+          }'''
+          new_reader = r'''function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES, { distruggiSuLimite = true } = {}) {
+            return new Promise((resolve, reject) => {
+              let totale = 0;
+              let oltreLimite = false;
+              const pezzi = [];
+              req.on('data', (pezzo) => {
+                if (oltreLimite) return; // con socket vivo si drena il resto senza accumularlo
+                totale += pezzo.length;
+                if (totale > limiteByte) {
+                  oltreLimite = true;
+                  const errore = new Error('Corpo oltre il limite consentito');
+                  errore.code = 'PAYLOAD_LIMIT';
+                  reject(errore);
+                  /*
+                   * Il comportamento storico resta il default per tutte le rotte esistenti.
+                   * FASE 3A opta invece per il drain: così può restituire la propria busta 413
+                   * senza continuare ad accumulare il corpo oltre il limite.
+                   */
+                  if (distruggiSuLimite) req.destroy();
+                  return;
+                }
+                pezzi.push(pezzo);
+              });
+              req.on('end', () => {
+                if (oltreLimite) return;
+                try {
+                  const testo = Buffer.concat(pezzi).toString('utf8');
+                  resolve(testo.length ? JSON.parse(testo) : {});
+                } catch {
+                  const errore = new Error('Corpo JSON non valido');
+                  errore.code = 'QUERY_INVALID';
+                  reject(errore);
+                }
+              });
+              req.on('error', () => {
+                if (oltreLimite) return;
+                const errore = new Error('Richiesta interrotta');
+                errore.code = 'QUERY_INVALID';
+                reject(errore);
+              });
+            });
+          }'''
+          if old_reader not in text:
+            raise SystemExit('reader marker non trovato')
+          text = text.replace(old_reader, new_reader, 1)
+
           marker_validator = "const REDIRECT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;"
           insert_validator = r'''const BATCH_ELIMINA_MAX_IDS = 250;
           const BATCH_ELIMINA_MAX_BODY_BYTES = 64 * 1024;
@@ -69,12 +147,17 @@ jobs:
           }
 
           ''' + marker_validator
-
           if marker_validator not in text:
             raise SystemExit('marker validator non trovato')
           if 'const BATCH_ELIMINA_MAX_IDS = 250;' in text:
             raise SystemExit('patch validator gia presente')
           text = text.replace(marker_validator, insert_validator, 1)
+
+          inventory_marker = "  { schema: /^\\/api\\/v1\\/sessions\\/([^/]+)\\/library$/, metodi: ['GET'] },"
+          inventory_insert = "  { schema: /^\\/api\\/v1\\/sessions\\/([^/]+)\\/([^/]+)\\/batch$/, metodi: ['POST'] }, // FASE 3A: la risorsa viene validata dalla rotta\n" + inventory_marker
+          if inventory_marker not in text:
+            raise SystemExit('inventory marker non trovato')
+          text = text.replace(inventory_marker, inventory_insert, 1)
 
           marker_route = "    const libreriaRinominaMatch = method === 'PATCH' && sessionRegistry\n"
           route = r'''    /*
@@ -100,7 +183,11 @@ jobs:
                   sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
                   return;
                 }
-                const ids = requireBatchEliminaBody(await leggiCorpoJson(req, BATCH_ELIMINA_MAX_BODY_BYTES));
+                const ids = requireBatchEliminaBody(await leggiCorpoJson(
+                  req,
+                  BATCH_ELIMINA_MAX_BODY_BYTES,
+                  { distruggiSuLimite: false },
+                ));
                 const esiti = [];
 
                 for (const id of ids) {
@@ -167,7 +254,6 @@ jobs:
             }
 
           ''' + marker_route
-
           if marker_route not in text:
             raise SystemExit('marker route non trovato')
           if 'const batchEliminaMatch =' in text:
@@ -182,7 +268,7 @@ jobs:
       - name: dipendenze context engine
         run: npm ci --prefix context-engine --no-audit --no-fund
       - name: prova il contratto prima del commit
-        run: node --test harness-ui/tests/http-routes-batch-phase3.test.mjs
+        run: node --test harness-ui/tests/http-routes-batch-phase3.test.mjs harness-ui/tests/http-inventario-rotte.test.mjs
       - name: commit della produzione
         shell: bash
         run: |
