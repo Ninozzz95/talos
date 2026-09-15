@@ -68,6 +68,15 @@ async function mountEmbeddedCodeFixture(page: import('@playwright/test').Page): 
             shadow.appendChild(script)
         })
         await runtimeLoaded
+        // The shipped empty session has no transcript. Supply long fixture
+        // content explicitly to exercise scrolling rather than rely on demo rows.
+        const conversation = shadow.querySelector('.conversation')!
+        for (let i = 0; i < 40; i++) {
+            const row = document.createElement('p')
+            row.textContent = `Geometry fixture transcript row ${i + 1}`
+            row.style.minHeight = '40px'
+            conversation.appendChild(row)
+        }
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
     })
 }
@@ -143,7 +152,8 @@ test('CODE-THEME-INVERSE-STANDALONE-01 preserves the Calm fallback without a TAL
 
 for (const viewport of [
     { name: 'phone portrait', width: 392, height: 872 },
-    { name: 'phone landscape', width: 872, height: 392 },
+    { name: 'tablet portrait', width: 914, height: 1292 },
+    { name: 'tablet landscape', width: 1292, height: 914 },
 ] as const) {
     test(`CODE-EMBEDDED-GEOMETRY-01 ${viewport.name} keeps scroll without scrollbar, one composer and the shared scene`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height })
@@ -154,7 +164,7 @@ for (const viewport of [
             const host = document.querySelector<HTMLElement>('[data-e2e-code-embedded-host]')
             const shell = host?.shadowRoot?.querySelector<HTMLElement>('.app-shell')
             const conversation = host?.shadowRoot?.querySelector<HTMLElement>('.conversation')
-            const mission = host?.shadowRoot?.querySelector<HTMLElement>('.mission-card')
+            const mission = host?.shadowRoot?.querySelector<HTMLElement>('.conversation-hero')
             const staticComposer = host?.shadowRoot?.querySelector<HTMLElement>('.composer-wrap')
             const panel = host?.shadowRoot?.querySelector<HTMLElement>('.sessions-panel')
             if (!host || !shell || !conversation || !mission || !staticComposer || !panel) {
@@ -171,7 +181,9 @@ for (const viewport of [
                 shellBackground: getComputedStyle(shell).backgroundColor,
                 staticComposerDisplay: getComputedStyle(staticComposer).display,
                 conversationRightGap: hostRect.right - conversationRect.right,
-                missionRightGap: hostRect.right - missionRect.right,
+                missionRightGap: conversationRect.right - missionRect.right,
+                missionLeftGap: missionRect.left - conversationRect.left,
+                contentPadding: Number.parseFloat(conversationStyle.paddingRight),
                 scrollbarWidth: conversationStyle.scrollbarWidth,
                 scrollbarGutter: conversationStyle.scrollbarGutter,
                 scrollRange: conversation.scrollHeight - conversation.clientHeight,
@@ -188,10 +200,10 @@ for (const viewport of [
         expect(snapshot.scrollbarGutter).toBe('auto')
         expect(snapshot.scrollRange).toBeGreaterThan(0)
         expect(snapshot.scrollTop).toBeGreaterThan(0)
-        expect(snapshot.conversationRightGap).toBeGreaterThanOrEqual(11)
-        expect(snapshot.conversationRightGap).toBeLessThanOrEqual(13)
-        expect(snapshot.missionRightGap).toBeGreaterThanOrEqual(11)
-        expect(snapshot.missionRightGap).toBeLessThanOrEqual(13)
+        expect(snapshot.conversationRightGap).toBeGreaterThanOrEqual(0)
+        expect(snapshot.contentPadding).toBeGreaterThanOrEqual(12)
+        expect(snapshot.missionRightGap).toBeGreaterThanOrEqual(12)
+        expect(Math.abs(snapshot.missionLeftGap - snapshot.missionRightGap)).toBeLessThanOrEqual(1)
         expect(snapshot.transcriptClearance).toBe('231px')
         expect(snapshot.panelTransition).toContain('0.777s')
     })

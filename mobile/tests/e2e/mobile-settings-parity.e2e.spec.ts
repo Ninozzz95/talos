@@ -3,11 +3,12 @@ import { expect, test } from '@playwright/test'
 async function openSettings(page: import('@playwright/test').Page): Promise<void> {
     await page.goto('/')
     await expect(page.locator('[data-testid="talos-mobile-header"]')).toBeVisible()
-    await page.locator('[aria-label="Open menu"]').click()
+    await page.getByTestId('talos-shell-menu').click()
     await page.locator('[data-testid="talos-mobile-sidebar"] [aria-label="Open Settings"]').click()
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toBeVisible()
-    // F3-T3 chrome dedup: ONE title per surface — the sheet header owns it.
-    await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]').getByText('Settings Center').first()).toBeVisible()
+    // Settings copy is localized and can evolve independently of the layout.
+    // These journeys need the stable structural contract: the category pane.
+    await expect(page.getByTestId('settings-category-pane')).toBeVisible()
 }
 
 async function openSettingsCategory(
@@ -183,8 +184,7 @@ test('Appearance changes theme and Motion V6 preferences without reload and pers
     await openSettings(page)
 
     await openSettingsCategory(page, 'appearance')
-    await page.getByLabel('Theme preset').click()
-    await page.getByRole('option', { name: 'Aurora Research' }).click()
+    await page.getByRole('radio', { name: 'Aurora Research' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme-preset', 'aurora')
 
     await page.getByRole('tab', { name: 'Motion', exact: true }).click()
@@ -258,8 +258,8 @@ test('Font size scales interface chrome and persists', async ({ page }) => {
     // The menu is the surface the owner named: "il font size DEVE impattare
     // anche il font dei menù e di tutto il sistema non solo chat."
     const menuItemSize = async (): Promise<number> => {
-        await page.locator('[aria-label="Open menu"]').click()
-        const size = await page.locator('[data-testid="talos-sidebar-tools"]').first()
+        await page.getByTestId('talos-shell-menu').click()
+        const size = await page.locator('[data-testid="talos-sidebar-chats-entry"] span').last()
             .evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize))
         await page.keyboard.press('Escape')
         return size
@@ -267,7 +267,7 @@ test('Font size scales interface chrome and persists', async ({ page }) => {
     const panelSize = async (): Promise<number> => page.getByText('Chat message size').first()
         .evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize))
     // The label span carries the text utility; the trigger itself is a flex row.
-    const tabSize = async (): Promise<number> => page.locator('[data-settings-tab="appearance"] span.truncate').first()
+    const tabSize = async (): Promise<number> => page.locator('[data-settings-tab="appearance"] strong').first()
         .evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize))
 
     await page.goto('/')

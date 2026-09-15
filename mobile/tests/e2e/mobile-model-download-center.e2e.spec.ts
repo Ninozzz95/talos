@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { closeToolSheet } from './toolSheet'
 
 async function installTransferBridge(page: Page): Promise<void> {
     await page.addInitScript(() => {
@@ -200,7 +201,7 @@ test('C45-RED-08G a durable transfer pauses, survives reload, resumes and cancel
         .toBeLessThanOrEqual(0)
 })
 
-test('the same center is reachable from drawer, Model Lab and the tablet rail without page cards', async ({ page }) => {
+test('Download Center stays in chat navigation and returns after leaving Model Lab', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/')
     await page.getByLabel('Open menu').click()
@@ -214,11 +215,14 @@ test('the same center is reachable from drawer, Model Lab and the tablet rail wi
     await expect(drawerCenter).toHaveCount(0)
     await drawer.getByRole('button', { name: 'Open Settings' }).click()
     const sheet = page.getByTestId('talos-mobile-tool-sheet')
-    await expect(sheet.getByTestId('talos-download-center-trigger')).toBeVisible()
+    await expect(sheet).toBeVisible()
     await page.getByTestId('settings-model-lab-link').click()
     await page.getByTestId('talos-model-lab-destination').filter({ hasText: 'Local models' }).click()
     await expect(page.getByTestId('settings-models-local-screen')).toBeVisible()
     await expect(page.getByTestId('talos-models-transfer')).toHaveCount(0)
+
+    // Owner 2026-09-14: downloads belong in chat/sidebar, not station chrome.
+    await expect(sheet.getByTestId('talos-download-center-trigger')).toHaveCount(0)
 
     await page.setViewportSize({ width: 1024, height: 900 })
     await page.goto('/')
@@ -227,11 +231,14 @@ test('the same center is reachable from drawer, Model Lab and the tablet rail wi
     // chat rail, which Settings deliberately replaces on tablets.
     const restoredSheet = page.getByTestId('talos-mobile-tool-sheet')
     await expect(restoredSheet).toBeVisible()
-    await expect(restoredSheet.getByTestId('talos-download-center-trigger')).toBeVisible()
-    await restoredSheet.getByRole('button', { name: 'Close Settings Center' }).click()
+    await expect(restoredSheet.getByTestId('talos-download-center-trigger')).toHaveCount(0)
+    await closeToolSheet(page)
     await expect(restoredSheet).toHaveCount(0)
-    const tablet = page.getByTestId('talos-tablet-sidebar')
+    const tablet = page.locator('[data-testid="talos-mobile-sidebar"][data-fixed="true"]')
     await expect(tablet).toBeVisible()
     await expect(tablet.getByTestId('talos-download-center-trigger')).toBeVisible()
     await expect(page.getByTestId('talos-download-center-trigger')).toHaveCount(1)
+    await tablet.getByTestId('talos-download-center-trigger').click()
+    await expect(page.getByTestId('talos-download-center-content')).toBeVisible()
+    await page.getByTestId('talos-download-center-content').getByLabel('Close').click()
 })

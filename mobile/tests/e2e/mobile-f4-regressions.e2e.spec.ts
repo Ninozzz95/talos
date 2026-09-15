@@ -14,7 +14,7 @@ test.use({ storageState: TALOS_PROVIDER_STATE })
 
 // F4 owner regressions: #19 pasted links must survive into the visible
 // message; #20 the prompt enhancer must be actionable with a prompt present.
-const MENU = '[aria-label="Open menu"]'
+const MENU = '[data-testid="talos-shell-menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
 
@@ -302,7 +302,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await expect(preview).toContainText('talos_session_benchmark_scenario')
     })
 
-    test('persisted reasoning row opens its drawer, survives reload, and matches the export', async ({ page }) => {
+    test('persisted reasoning expands inline, survives reload, and matches the export', async ({ page }) => {
         await mockProviderWithReasoning(page)
         await page.goto('/')
 
@@ -318,14 +318,14 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await expect(reasoningRow).toContainText('Reasoning')
         await expect(reasoningRow.locator('svg.lucide-brain')).toHaveCount(1)
         await expect(reasoningRow.locator('svg.lucide-sparkles')).toHaveCount(0)
-        await expect(assistant).not.toContainText('I will keep the thought summary')
+        await expect(assistant.getByTestId('talos-reasoning-text')).toBeHidden()
 
         await reasoningRow.click()
-        const drawer = page.getByTestId('talos-reasoning-drawer')
-        await expect(drawer).toBeVisible()
-        await expect(drawer.getByTestId('talos-reasoning-text')).toHaveText(E2E_REASONING)
-        await drawer.getByLabel('Close').click()
-        await expect(drawer).toHaveCount(0)
+        const reasoning = assistant.getByTestId('talos-reasoning-text')
+        await expect(reasoning).toBeVisible()
+        await expect(reasoning).toHaveText(E2E_REASONING)
+        await reasoningRow.click()
+        await expect(reasoning).toBeHidden()
 
         await page.reload()
         await expect(page.getByText(E2E_REASONING_ANSWER, { exact: true })).toBeVisible()
@@ -336,8 +336,9 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await expect(reloadedRow.locator('svg.lucide-sparkles')).toHaveCount(0)
         await reloadedRow.click()
         await expect(page.getByTestId('talos-reasoning-text')).toHaveText(E2E_REASONING)
-        await page.getByTestId('talos-reasoning-drawer').getByLabel('Close').click()
-        await expect(page.getByTestId('talos-reasoning-drawer')).toHaveCount(0)
+        await expect(page.getByTestId('talos-reasoning-text')).toBeVisible()
+        await reloadedRow.click()
+        await expect(page.getByTestId('talos-reasoning-text')).toBeHidden()
 
         await page.getByLabel('Chat options').click()
         await page.getByRole('menuitem', { name: 'Export chat' }).click()
@@ -564,7 +565,7 @@ test('#20 the enhancer control is actionable once a prompt exists', async ({ pag
 
     const composer = page.getByLabel('Message TALOS')
     await composer.fill('Migliora questo prompt per favore')
-    // Classic bar (seeded classic shell): the wand must be enabled with text.
-    const wand = page.getByLabel('Improve prompt')
-    await expect(wand).toBeEnabled({ timeout: 15_000 })
+    await page.getByLabel('Add to chat').click()
+    await page.getByTestId('talos-drawer-tab-create').click()
+    await expect(page.getByTestId('talos-drawer-enhance')).toBeEnabled({ timeout: 15_000 })
 })

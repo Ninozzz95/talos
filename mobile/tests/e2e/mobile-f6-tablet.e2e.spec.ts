@@ -1,18 +1,18 @@
 import { expect, test, type Page } from '@playwright/test'
 import { startChatWithContent } from './chatFixtures'
+import { closeToolSheet } from './toolSheet'
 
 // F6 — tablet split view: persistent left panel + chat content on the right.
 //
-// U-5 (owner, 2026-09-11): on tablets the left panel IS the mockup sidebar
-// («Talos Calm Finale», `aside#sidebar` above 860 px) — fixed at 14.5rem, no
-// divider, no hamburger. The old F6 chat panel with its draggable divider
-// (shell.tablet_sidebar_width, clamped 260–480) survives only for the Codice
-// (harness) rail, which keeps its layout by decision U-4.
+// U-5/U-14 current contract: on tablets the left panel IS the persistent
+// Calm sidebar. Since 2026-09-12 its edge is draggable; the divider is part of
+// the chat rail too, while the hamburger remains phone-only. Settings and other
+// stations open over the content column and leave that global rail available.
 const PANEL = '[data-testid="talos-mobile-sidebar"][data-fixed="true"]'
 const DIVIDER = '[data-testid="talos-tablet-divider"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
-/** `--mockup-sidebar-width: 14.5rem` at the 16px root the e2e browser runs with. */
+/** Default Calm sidebar width: 14.5rem at the 16px root used by the E2E browser. */
 const MOCKUP_SIDEBAR_PX = 232
 
 test.use({ viewport: { width: 1024, height: 768 } })
@@ -22,17 +22,16 @@ async function panelWidth(page: Page): Promise<number> {
 }
 
 
-test('tablet shows the fixed mockup sidebar: search, sections, recents — no divider, no hamburger', async ({ page }) => {
+test('tablet shows the persistent Calm sidebar with its resize divider and no hamburger', async ({ page }) => {
     await page.goto('/')
     await expect(page.locator(PANEL)).toBeVisible()
     await expect(page.locator(`${PANEL} [data-testid="talos-sidebar-chats-entry"]`)).toBeVisible()
     await expect(page.locator(`${PANEL} [data-testid="talos-sidebar-tools"]`)).toBeVisible()
     await expect(page.locator(`${PANEL} [data-testid="talos-sidebar-recents"]`)).toBeVisible()
     await expect(page.locator(`${PANEL} [data-testid="talos-speed-dial-trigger"]`)).toBeVisible()
-    // U-5: the mockup width, and nothing to drag or to open on top of it.
     expect(Math.round(await panelWidth(page))).toBe(MOCKUP_SIDEBAR_PX)
-    await expect(page.locator(DIVIDER)).toHaveCount(0)
-    await expect(page.locator('[aria-label="Open menu"]')).toHaveCount(0)
+    await expect(page.locator(DIVIDER)).toBeVisible()
+    await expect(page.locator('[data-testid="talos-shell-menu"]')).toHaveCount(0)
     await expect(page.locator(`${PANEL} [aria-label="Close menu"]`)).toHaveCount(0)
     // No horizontal overflow with the split engaged.
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
@@ -52,29 +51,32 @@ test('keyboard-height resize keeps the persistent panel mounted', async ({ page 
     await expect(page.getByLabel('Message TALOS')).toBeVisible()
 })
 
-test('tablet Settings replaces the chat rail with categories and restores it on close', async ({ page }) => {
+test('tablet Settings stays beside the persistent chat rail and closes back to chat', async ({ page }) => {
     await page.goto('/')
-    await expect(page.locator(PANEL)).toBeVisible()
+    const panel = page.locator(PANEL)
+    await expect(panel).toBeVisible()
     const originalWidth = Math.round(await panelWidth(page))
-    // U-5: Settings opens from the fixed sidebar itself — there is no ☰.
     await page.locator(`${PANEL} [aria-label="Open Settings"]`).click()
 
     await expect(page.locator(SHEET)).toBeVisible()
-    await expect(page.locator(PANEL)).toHaveCount(0)
-    await expect(page.locator(DIVIDER)).toHaveCount(0)
+    await expect(panel).toBeVisible()
+    await expect(page.locator(DIVIDER)).toBeVisible()
     await expect(page.locator('[data-testid="settings-category-pane"]')).toBeVisible()
+    await page.locator('[data-settings-tab="ai_defaults"]').click()
     await expect(page.locator('[data-testid="settings-detail-pane"]')).toBeVisible()
     await expect(page.locator('[data-settings-panel="ai_defaults"]')).toBeVisible()
 
+    const panelBox = (await panel.boundingBox())!
     const sheetBox = (await page.locator(SHEET).boundingBox())!
     const categoriesBox = (await page.locator('[data-testid="settings-category-pane"]').boundingBox())!
-    expect(Math.round(sheetBox.x)).toBe(0)
-    expect(Math.round(categoriesBox.x)).toBe(0)
-    expect(Math.round(categoriesBox.width)).toBe(originalWidth)
+    // The station owns only the content column; it must not cover the global rail.
+    expect(Math.round(sheetBox.x)).toBe(originalWidth)
+    expect(sheetBox.x).toBeGreaterThanOrEqual(panelBox.x + panelBox.width - 1)
+    expect(categoriesBox.x).toBeGreaterThanOrEqual(sheetBox.x)
 
-    await page.locator('[data-testid="talos-sheet-back"]').click()
+    await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
-    await expect(page.locator(PANEL)).toBeVisible()
+    await expect(panel).toBeVisible()
     await expect(page.locator(DIVIDER)).toBeVisible()
     expect(Math.round(await panelWidth(page))).toBe(originalWidth)
 })
@@ -131,7 +133,7 @@ test('tablet Settings category rail owns a real bounded vertical scrollport', as
 test('U-5: no drawer on tablets; new chat from the fixed sidebar stays in place', async ({ page }) => {
     await page.goto('/')
     // The drawer never mounts on a tablet: nothing opens it and nothing needs to.
-    await expect(page.locator('[aria-label="Open menu"]')).toHaveCount(0)
+    await expect(page.locator('[data-testid="talos-shell-menu"]')).toHaveCount(0)
     await expect(page.locator(`dialog${SIDEBAR}`)).toHaveCount(0)
 
     // New chat from the «+» fan in the brand row: no route change, composer stays live.
@@ -179,16 +181,6 @@ test('selecting a chat in the panel closes an open station sheet', async ({ page
     await expect(page.locator(SHEET)).toHaveCount(0)
     await expect(page.locator('[data-talos-route]')).toHaveAttribute('data-talos-route', 'chat')
 })
-
-/*
- * U-5 (2026-09-11): the two divider tests that lived here — «divider drag
- * resizes the panel and the width survives reload» and «keyboard resize
- * respects the clamp and double-click resets to default» — covered a control
- * that no longer exists on the chat rail: the mockup sidebar is fixed at
- * 14.5rem. The divider and its clamp survive only on the Codice rail, whose
- * layout stays as it was (U-4); its unit tests (`tabletLayout.test.ts`,
- * `TalosTabletSidebar.test.ts`) still cover the mechanics.
- */
 
 // SF6-F15b: the split view must NOT exist on phones — portrait (narrow) or
 // landscape (wide but short, the SF6-F6 guard).
