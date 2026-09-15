@@ -103,6 +103,15 @@ export function sommarioSezione(visibili, totale, sostantivo, pluraleEsplicito) 
   return `${visibili} di ${plurale(totale, sostantivo, pluraleEsplicito)}`;
 }
 
+/** Conserva i fallimenti (e gli id non rendicontati) così la persona può ritentarli. */
+export function selezioneDopoBatch(selezionati, risultato) {
+  const dopo = new Set(Array.from(selezionati || [], (id) => String(id)));
+  for (const esito of Array.isArray(risultato?.esiti) ? risultato.esiti : []) {
+    if (esito?.ok === true) dopo.delete(String(esito.id));
+  }
+  return dopo;
+}
+
 export function leggiPreferenze(chiave, storage = globalThis.localStorage) {
   try {
     const tutte = JSON.parse(storage?.getItem(CHIAVE_PREFERENZE) || '{}');
@@ -201,7 +210,18 @@ export function montaSezione(schermo, config) {
   let stato = STATI.get(schermo);
   if (!stato) {
     const pref = leggiPreferenze(config.chiave);
-    stato = { ...pref, query: String(config.queryIniziale || ''), filtro: config.filtri?.[0]?.id || 'tutte', selezione: null, espanso: false, config, schermo };
+    stato = {
+      ...pref,
+      query: String(config.queryIniziale || ''),
+      filtro: config.filtri?.[0]?.id || 'tutte',
+      selezione: null,
+      selezionateInBlocco: new Set(),
+      batchInCorso: false,
+      batchEsito: '',
+      espanso: false,
+      config,
+      schermo,
+    };
     STATI.set(schermo, stato);
     costruisciScheletro(schermo, doc, stato);
   }
@@ -278,11 +298,26 @@ function costruisciScheletro(schermo, doc, stato) {
   aggiorna.dataset.aggiorna = '';
   barra.append(campo, cresci, ordine, segmento, aggiorna);
 
+  const blocco = nodo(doc, 'div', 'td-bulk');
+  const etichettaTutte = nodo(doc, 'label', 'td-bulk-select');
+  const selezionaTutte = nodo(doc, 'input');
+  selezionaTutte.type = 'checkbox';
+  selezionaTutte.dataset.selezionaVisibili = '';
+  const testoTutte = nodo(doc, 'span', '', 'Seleziona visibili');
+  etichettaTutte.append(selezionaTutte, testoTutte);
+  const conteggioBlocco = nodo(doc, 'span', 'td-bulk-count', '0 selezionati');
+  const eliminaBlocco = nodo(doc, 'button', 'talos-button talos-button--danger talos-button--sm', 'Elimina selezionati');
+  eliminaBlocco.type = 'button';
+  eliminaBlocco.dataset.eliminaSelezionati = '';
+  const esitoBlocco = nodo(doc, 'span', 'td-bulk-status');
+  esitoBlocco.setAttribute('role', 'status');
+  blocco.append(etichettaTutte, conteggioBlocco, eliminaBlocco, esitoBlocco);
+
   const filtri = nodo(doc, 'div', 'td-filters');
   filtri.setAttribute('role', 'group');
   filtri.setAttribute('aria-label', `Filtri ${config.nome}`);
   const risultati = nodo(doc, 'div', 'td-results');
-  master.append(intro, barra, filtri, risultati);
+  master.append(intro, barra, blocco, filtri, risultati);
 
   /* ---- il divisorio ---- */
   const divisorio = nodo(doc, 'button', 'td-divider');
@@ -304,13 +339,17 @@ function costruisciScheletro(schermo, doc, stato) {
   sezione.append(spazio);
   if (pagina) pagina.replaceWith(sezione); else schermo.append(sezione);
 
-  stato.nodi = { sezione, spazio, master, intro, cerca, ordine, segmento, aggiorna, filtri, risultati, divisorio, dettaglio, statoRiga };
+  stato.nodi = {
+    sezione, spazio, master, intro, cerca, ordine, segmento, aggiorna,
+    blocco, selezionaTutte, conteggioBlocco, eliminaBlocco, esitoBlocco,
+    filtri, risultati, divisorio, dettaglio, statoRiga,
+  };
   collegaBarra(schermo, doc, stato);
   collegaDivisorio(doc, stato);
 }
 
 function collegaBarra(schermo, doc, stato) {
-  const { cerca, ordine, segmento, aggiorna } = stato.nodi;
+  const { cerca, ordine, segmento, aggiorna, selezionaTutte, eliminaBlocco } = stato.nodi;
   cerca.addEventListener('input', () => { stato.query = cerca.value; disegna(schermo, doc, stato); });
   ordine.addEventListener('change', () => {
     stato.ordine = ordine.value === 'titolo' ? 'titolo' : 'nuovo';
@@ -325,6 +364,44 @@ function collegaBarra(schermo, doc, stato) {
     disegna(schermo, doc, stato);
   });
   aggiorna.addEventListener('click', () => stato.config.onAggiorna?.());
+  selezionaTutte.addEventListener('change', () => {
+    for (const id of stato.idsVisibili || []) {
+      if (selezionaTutte.checked) stato.selezionateInBlocco.add(id);
+      else stato.selezionateInBlocco.delete(id);
+    }
+    disegna(schermo, doc, stato);
+  });
+  eliminaBlocco.addEventListener('click', async () => {
+    if (stato.batchInCorso || typeof stato.config.eliminaInBlocco !== 'function') return;
+    const ids = [...stato.selezionateInBlocco];
+    if (!ids.length) return;
+    const domanda = `Eliminare ${ids.length} ${ids.length === 1 ? 'voce selezionata' : 'voci selezionate'}?`;
+    const confermata = typeof stato.config.confermaEliminazioneInBlocco === 'function'
+      ? await stato.config.confermaEliminazioneInBlocco(ids)
+      : (doc.defaultView?.confirm?.(domanda) ?? false);
+    if (!confermata) return;
+    stato.batchInCorso = true;
+    stato.batchEsito = 'Eliminazione in corso…';
+    disegna(schermo, doc, stato);
+    try {
+      const risultato = await stato.config.eliminaInBlocco(ids);
+      stato.selezionateInBlocco = selezioneDopoBatch(stato.selezionateInBlocco, risultato);
+      /* ⛔ Adattamento alla busta del server pubblico (#9): i conteggi del batch stanno dentro
+         `riepilogo`, non al livello piatto come nella stesura precedente alla raffinatezza #9.
+         La selezione che resta usa `esiti[].ok`, che le due forme hanno in comune. */
+      const riusciti = Number(risultato?.riepilogo?.riusciti) || 0;
+      const falliti = Number(risultato?.riepilogo?.falliti) || 0;
+      stato.batchEsito = falliti
+        ? `${riusciti} eliminate, ${falliti} non eliminate.`
+        : `${riusciti} ${riusciti === 1 ? 'voce eliminata' : 'voci eliminate'}.`;
+      await stato.config.onBatchCompletato?.(risultato);
+    } catch (errore) {
+      stato.batchEsito = errore?.message || 'Eliminazione non riuscita.';
+    } finally {
+      stato.batchInCorso = false;
+      disegna(schermo, doc, stato);
+    }
+  });
   stato.nodi.filtri.addEventListener('click', (e) => {
     const b = e.target.closest?.('[data-filtro]');
     if (!b) return;
@@ -501,7 +578,10 @@ function disegnaCrudo(schermo, doc, stato) {
   const filtrate = filtraVoci(tutte, { query: stato.query, filtro: stato.filtro, filtri: config.filtri, cercaIn: config.cercaIn });
   const visibili = ordinaVoci(filtrate, stato.ordine, { titoloDi: config.titoloDi, quandoDi: config.quandoDi });
   stato.ultimeVisibili = visibili.length;
-  const { risultati, filtri: barraFiltri, segmento, statoRiga, aggiorna } = stato.nodi;
+  const {
+    risultati, filtri: barraFiltri, segmento, statoRiga, aggiorna,
+    blocco, selezionaTutte, conteggioBlocco, eliminaBlocco, esitoBlocco,
+  } = stato.nodi;
   const errore = config.stato?.errore || null;
   const caricamento = Boolean(config.stato?.caricamento);
 
@@ -511,6 +591,24 @@ function disegnaCrudo(schermo, doc, stato) {
   aggiorna.hidden = typeof config.onAggiorna !== 'function';
   aggiorna.disabled = caricamento;
   for (const b of segmento.querySelectorAll('[data-vista]')) b.setAttribute('aria-pressed', String(b.dataset.vista === stato.vista));
+
+  const batchAttivo = typeof config.eliminaInBlocco === 'function';
+  const idsPresenti = new Set(tutte.filter((voce) => !voce?.__bozza).map((voce) => String(config.idDi(voce) ?? '')).filter(Boolean));
+  /* Un ricarico disegna prima lo stato `caricamento` con lista vuota: potare lì cancellerebbe
+     anche i fallimenti che devono restare selezionati per il ritentativo. Si pota solo quando
+     l'elenco nuovo è una risposta completa e attendibile. */
+  if (!caricamento && !errore) {
+    for (const id of stato.selezionateInBlocco) if (!idsPresenti.has(id)) stato.selezionateInBlocco.delete(id);
+  }
+  stato.idsVisibili = visibili.filter((voce) => !voce?.__bozza).map((voce) => String(config.idDi(voce) ?? '')).filter(Boolean);
+  const visibiliSelezionati = stato.idsVisibili.filter((id) => stato.selezionateInBlocco.has(id)).length;
+  blocco.hidden = !batchAttivo || idsPresenti.size === 0;
+  selezionaTutte.checked = stato.idsVisibili.length > 0 && visibiliSelezionati === stato.idsVisibili.length;
+  selezionaTutte.indeterminate = visibiliSelezionati > 0 && visibiliSelezionati < stato.idsVisibili.length;
+  selezionaTutte.disabled = stato.batchInCorso || stato.idsVisibili.length === 0;
+  conteggioBlocco.textContent = `${stato.selezionateInBlocco.size} selezionat${stato.selezionateInBlocco.size === 1 ? 'a' : 'e'}`;
+  eliminaBlocco.disabled = stato.batchInCorso || stato.selezionateInBlocco.size === 0;
+  esitoBlocco.textContent = stato.batchEsito;
 
   // La riga di stato è quella del prodotto: qui ci passa sopra solo quando non c'è un errore da dire.
   if (statoRiga) {
@@ -543,6 +641,7 @@ function disegnaCrudo(schermo, doc, stato) {
 
   // Le schede. Il fuoco torna sulla scheda che ce l'aveva: senza, ogni tasto premuto lo perde.
   const fuocoVoce = doc.activeElement?.closest?.('.td-card')?.dataset?.item;
+  const fuocoSelezione = Boolean(doc.activeElement?.matches?.('.td-card-select'));
   if (!visibili.length) {
     risultati.replaceChildren(disegnaVuoto(doc, stato, tutte.length));
   } else {
@@ -550,7 +649,10 @@ function disegnaCrudo(schermo, doc, stato) {
     for (const voce of visibili) contenitore.append(disegnaScheda(doc, stato, voce));
     risultati.replaceChildren(contenitore);
   }
-  if (fuocoVoce) perId(risultati, '.td-card', 'item', fuocoVoce)?.querySelector('.td-card-open')?.focus({ preventScroll: true });
+  if (fuocoVoce) {
+    const scheda = perId(risultati, '.td-card', 'item', fuocoVoce);
+    (fuocoSelezione ? scheda?.querySelector('.td-card-select') : scheda?.querySelector('.td-card-open'))?.focus({ preventScroll: true });
+  }
 
   // Il dettaglio: se la voce scelta non c'è più (eliminata, o filtrata via dai dati veri) si chiude.
   const scelta = tutte.find((v) => String(config.idDi(v)) === String(stato.selezione));
@@ -596,6 +698,7 @@ function disegnaScheda(doc, stato, voce) {
   const scheda = nodo(doc, 'article', `td-card ${config.famiglia || ''}`.trim());
   scheda.dataset.item = id;
   scheda.dataset.selected = String(String(stato.selezione) === id);
+  scheda.dataset.batchSelected = String(stato.selezionateInBlocco.has(id));
   const pezzi = config.scheda(voce, { doc, icona: (n, c) => icona(doc, n, c), etichetta: (t, tono) => etichetta(doc, t, tono) }) || {};
   if (pezzi.dati) for (const [k, v] of Object.entries(pezzi.dati)) scheda.dataset[k] = String(v);
 
@@ -620,6 +723,20 @@ function disegnaScheda(doc, stato, voce) {
     stato.selezione = id;
     disegna(stato.schermo, doc, stato);
   });
+  if (typeof config.eliminaInBlocco === 'function' && !voce?.__bozza && id) {
+    scheda.dataset.batchCapable = 'true';
+    const scegli = nodo(doc, 'input', 'td-card-select');
+    scegli.type = 'checkbox';
+    scegli.checked = stato.selezionateInBlocco.has(id);
+    scegli.disabled = stato.batchInCorso;
+    scegli.setAttribute('aria-label', `Seleziona ${titolo}`);
+    scegli.addEventListener('change', () => {
+      if (scegli.checked) stato.selezionateInBlocco.add(id);
+      else stato.selezionateInBlocco.delete(id);
+      disegna(stato.schermo, doc, stato);
+    });
+    scheda.append(scegli);
+  }
   scheda.append(apri);
   if (pezzi.adorno) scheda.append(pezzi.adorno);
   return scheda;

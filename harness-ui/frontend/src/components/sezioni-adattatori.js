@@ -222,7 +222,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
   const m = magazzinoScrittura(schermo);
   const avvisa = notificatore(opzioni);
   const servizio = opzioni.servizio || servizioVoci({ schema, sessionId: opzioni.sessionId, rete: opzioni.rete });
-  const ricarica = () => { (opzioni.onCambiata || opzioni.onAggiorna)?.(); };
+  const ricarica = () => (opzioni.onCambiata || opzioni.onAggiorna)?.();
   const titoloDi = (v) => String(v?.titolo ?? '').trim() || `${schema.sostantivo.charAt(0).toUpperCase()}${schema.sostantivo.slice(1)} senza titolo`;
 
   /* ---- la voce INTERA: l'elenco non porta formato, origine e data di nascita (backend §6) ---- */
@@ -446,6 +446,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
 
   return {
     servizio,
+    ricarica,
     modulo: m.modulo,
     inModulo,
     voceIntera,
@@ -570,6 +571,8 @@ export function montaNote(schermo, note, opzioni = {}) {
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: 'Leggo le note…',
     onAggiorna: opzioni.onAggiorna,
+    eliminaInBlocco: scrivi.servizio?.eliminaInBlocco,
+    onBatchCompletato: scrivi.ricarica,
     // Una sola famiglia di note sul disco: nessun filtro finto per riempire la riga.
     filtri: scrivi.filtriSenzaBozza([{ id: 'tutte', etichetta: 'Tutte' }]),
     queryIniziale: cerca,
@@ -658,6 +661,8 @@ export function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: 'Caricamento ricordi…',
     onAggiorna: opzioni.onAggiorna,
+    eliminaInBlocco: scrivi.servizio?.eliminaInBlocco,
+    onBatchCompletato: scrivi.ricarica,
     filtri: scrivi.filtriSenzaBozza(GENERI_FILTRO.map(([id, etichetta, genere]) => ({ id, etichetta, quando: genere ? (m) => m?.genere === genere : null }))),
     idDi: (m) => m?.id,
     titoloDi: (m) => (m?.__bozza ? 'Nuovo ricordo' : testiMemoria(m).titolo),
@@ -726,6 +731,8 @@ export function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: 'Caricamento attività…',
     onAggiorna: opzioni.onAggiorna,
+    eliminaInBlocco: scrivi.servizio?.eliminaInBlocco,
+    onBatchCompletato: scrivi.ricarica,
     filtri: scrivi.filtriSenzaBozza([
       { id: 'tutte', etichetta: 'Tutte' },
       { id: 'todo', etichetta: 'Da fare', quando: (a) => a?.stato === 'todo' },
@@ -816,6 +823,9 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
   const avvisa = notificatore(opzioni);
   const sessionId = opzioni.sessionId || '';
   const servizioVero = opzioni.azioni || azioniLibreria({ sessionId });
+  const eliminaInBlocco = sessionId && typeof opzioni.rete?.post === 'function'
+    ? (ids) => opzioni.rete.post(`/api/v1/sessions/${encodeURIComponent(sessionId)}/library/batch`, { azione: 'elimina', ids })
+    : null;
   /*
    * ⛔ LOTTO E, l'annullamento del mockup su un'azione VERA.
    *   La rinomina è l'unica scrittura reversibile che il server offre: si rinomina di nuovo col
@@ -878,6 +888,8 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: 'Caricamento Libreria…',
     onAggiorna: opzioni.onAggiorna,
+    eliminaInBlocco,
+    onBatchCompletato: opzioni.onCambiata || opzioni.onAggiorna,
     filtri: [
       { id: 'tutte', etichetta: 'Tutti' },
       { id: 'uploaded', etichetta: 'Caricati', quando: (v) => v?.origine === 'uploaded' },
@@ -1086,6 +1098,7 @@ export function servizioRicerche({ sessionId, rete } = {}) {
     ripresa: (id) => rete.post(`${voceUrl(id)}/ripresa`, {}),
     riverifica: (id) => rete.post(`${voceUrl(id)}/riverifica`, {}),
     elimina: (id) => rete.elimina(voceUrl(id)),
+    eliminaInBlocco: (ids) => rete.post(`${base}/batch`, { azione: 'elimina', ids }),
   };
 }
 
@@ -1138,8 +1151,8 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
    *   è la stessa bugia che questo lotto sta togliendo.
    */
   function ricarica() {
-    if (typeof opzioni.onAggiorna === 'function') opzioni.onAggiorna();
-    else ridisegna();
+    if (typeof opzioni.onAggiorna === 'function') return opzioni.onAggiorna();
+    return ridisegna();
   }
 
   /**
@@ -1394,6 +1407,8 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: 'Caricamento ricerche…',
     onAggiorna: opzioni.onAggiorna,
+    eliminaInBlocco: servizio?.eliminaInBlocco,
+    onBatchCompletato: ricarica,
     /*
      * ⛔ QUATTRO filtri e non otto. Gli stati sono otto, ma un filtro per ognuno darebbe una riga
      *   di bottoni che nessuno legge, e quattro di essi direbbero sempre zero. Le domande che una

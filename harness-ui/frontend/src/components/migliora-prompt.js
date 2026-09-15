@@ -134,15 +134,23 @@ const STATI = Object.freeze(['scelta', 'attesa', 'errore', 'esito']);
  * @param {() => string} opzioni.leggiPrompt Il testo che c'è nel composer ADESSO — si legge
  *        all'avvio della riscrittura, non all'apertura: fra le due cose la persona può scrivere.
  * @param {(scelta: {modo: 'sostituisci'|'aggiungi', testo: string}) => void} opzioni.applica
+ * @param {(testo: string) => Promise<void>} [opzioni.copiaTesto] Scrive negli appunti. Iniettata
+ *        perché permessi e disponibilità appartengono all'host, non al pannello.
  * @param {string} [opzioni.modello] Il modello della sessione, solo da dichiarare.
  * @param {() => void} [opzioni.onChiudi]
  */
 export function montaMiglioraPrompt({
-  chiedi, leggiPrompt, applica, modello = '', onChiudi = () => {},
+  chiedi, leggiPrompt, applica,
+  copiaTesto = async (testo) => {
+    const appunti = globalThis.navigator?.clipboard;
+    if (!appunti || typeof appunti.writeText !== 'function') throw new Error('CLIPBOARD_NOT_AVAILABLE');
+    await appunti.writeText(testo);
+  },
+  modello = '', onChiudi = () => {},
   document: doc = globalThis.document,
 } = {}) {
-  if (typeof chiedi !== 'function' || typeof leggiPrompt !== 'function' || typeof applica !== 'function') {
-    throw new TypeError('MiglioraPrompt richiede chiedi, leggiPrompt e applica.');
+  if (typeof chiedi !== 'function' || typeof leggiPrompt !== 'function' || typeof applica !== 'function' || typeof copiaTesto !== 'function') {
+    throw new TypeError('MiglioraPrompt richiede chiedi, leggiPrompt, applica e copiaTesto.');
   }
 
   let stato = 'scelta';
@@ -309,11 +317,32 @@ export function montaMiglioraPrompt({
   aggiungi.type = 'button';
   aggiungi.dataset.miglioraAggiungi = '';
   aggiungi.addEventListener('click', () => decidi('aggiungi'));
+  const copiaBtn = elemento('button', 'talos-button talos-button--secondary talos-button--sm', 'Copia');
+  copiaBtn.type = 'button';
+  copiaBtn.dataset.miglioraCopia = '';
+  const copiaStato = elemento('span', null, '');
+  copiaStato.dataset.miglioraCopiaStato = '';
+  copiaStato.setAttribute('role', 'status');
+  copiaStato.setAttribute('aria-live', 'polite');
+  copiaStato.style.cssText = 'align-self:center;color:var(--talos-muted);font-size:var(--talos-font-size-xs)';
+  copiaBtn.addEventListener('click', async () => {
+    if (!esito || copiaBtn.disabled) return;
+    copiaBtn.disabled = true;
+    copiaStato.textContent = '';
+    try {
+      await copiaTesto(esito.promptMigliorato);
+      copiaStato.textContent = 'Copiato';
+    } catch {
+      copiaStato.textContent = 'Copia non riuscita';
+    } finally {
+      copiaBtn.disabled = false;
+    }
+  });
   const sostituisci = elemento('button', 'talos-button talos-button--primary talos-button--sm', 'Sostituisci');
   sostituisci.type = 'button';
   sostituisci.dataset.miglioraSostituisci = '';
   sostituisci.addEventListener('click', () => decidi('sostituisci'));
-  azioni.append(annulla, aggiungi, sostituisci);
+  azioni.append(copiaStato, annulla, copiaBtn, aggiungi, sostituisci);
   const corpo = elemento('div');
   corpo.dataset.miglioraCorpo = '';
   // `min-height:0` non e' cosmetica: senza, un figlio flex non si lascia rimpicciolire sotto
@@ -374,6 +403,7 @@ export function montaMiglioraPrompt({
       return;
     }
     const mio = ++giro;
+    copiaStato.textContent = '';
     stato = 'attesa';
     disegna();
     try {
@@ -411,6 +441,7 @@ export function montaMiglioraPrompt({
     stato = 'scelta';
     esito = null;
     errore = '';
+    copiaStato.textContent = '';
     radice.hidden = false;
     disegna();
     const scelto = bottoniProfondita.find((bottone) => bottone.dataset.miglioraProfondita === profondita);
@@ -423,6 +454,7 @@ export function montaMiglioraPrompt({
     stato = 'scelta';
     esito = null;
     errore = '';
+    copiaStato.textContent = '';
     disegna();
     onChiudi();
   }
