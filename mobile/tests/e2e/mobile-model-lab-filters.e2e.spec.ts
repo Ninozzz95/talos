@@ -200,8 +200,13 @@ test('Hugging Face access header keeps readable copy at phone width', async ({ p
     const copy = page.getByTestId('talos-hf-access-copy')
     const status = page.getByTestId('talos-hf-access-status')
 
-    const copyBox = await copy.boundingBox()
-    const statusBox = await status.boundingBox()
+    await expect(copy).toBeVisible()
+    await expect(status).toBeVisible()
+    // Both rectangles must belong to the same animation frame.
+    const { copyBox, statusBox } = await copy.evaluate((node) => ({
+        copyBox: node.getBoundingClientRect().toJSON(),
+        statusBox: node.querySelector('[data-testid="talos-hf-access-status"]')!.getBoundingClientRect().toJSON(),
+    }))
     expect(copyBox).not.toBeNull()
     expect(statusBox).not.toBeNull()
     expect(copyBox!.width).toBeGreaterThanOrEqual(200)

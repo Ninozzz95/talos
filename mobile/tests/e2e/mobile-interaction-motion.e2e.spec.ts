@@ -123,13 +123,11 @@ test('MOTION-E2E-01 phone composer and Settings transitions preserve focus and a
     const composer = page.getByLabel('Message TALOS')
     await clearRecords(page)
     await composer.focus()
-    await expect.poll(async () => relevant(await records(page))
-        .some((record) => record.name === 'talos-composer-layout-expand')).toBe(true)
+    await expect(page.locator(COMPOSER_ROOT)).toHaveAttribute('data-talos-composer-compact', 'false')
     await expect(composer).toBeFocused()
 
     await composer.evaluate((element) => (element as HTMLElement).blur())
-    await expect.poll(async () => relevant(await records(page))
-        .some((record) => record.name === 'talos-composer-layout-collapse')).toBe(true)
+    await expect(page.locator(COMPOSER_ROOT)).toHaveAttribute('data-talos-composer-compact', 'true')
     await expect(composer).not.toBeFocused()
 
     await openSettings(page)

@@ -184,8 +184,7 @@ test('Appearance changes theme and Motion V6 preferences without reload and pers
     await openSettings(page)
 
     await openSettingsCategory(page, 'appearance')
-    await page.getByLabel('Theme preset').click()
-    await page.getByRole('option', { name: 'Aurora Research' }).click()
+    await page.getByRole('radio', { name: 'Aurora Research' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme-preset', 'aurora')
 
     await page.getByRole('tab', { name: 'Motion', exact: true }).click()
@@ -260,7 +259,7 @@ test('Font size scales interface chrome and persists', async ({ page }) => {
     // anche il font dei menù e di tutto il sistema non solo chat."
     const menuItemSize = async (): Promise<number> => {
         await page.getByTestId('talos-shell-menu').click()
-        const size = await page.locator('[data-testid="talos-sidebar-tools"]').first()
+        const size = await page.locator('[data-testid="talos-sidebar-chats-entry"] span').last()
             .evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize))
         await page.keyboard.press('Escape')
         return size
@@ -268,7 +267,7 @@ test('Font size scales interface chrome and persists', async ({ page }) => {
     const panelSize = async (): Promise<number> => page.getByText('Chat message size').first()
         .evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize))
     // The label span carries the text utility; the trigger itself is a flex row.
-    const tabSize = async (): Promise<number> => page.locator('[data-settings-tab="appearance"] span.truncate').first()
+    const tabSize = async (): Promise<number> => page.locator('[data-settings-tab="appearance"] strong').first()
         .evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize))
 
     await page.goto('/')

@@ -20,8 +20,8 @@ const profile: TalosMobileModelProfileView = {
     probe_ok: true,
 }
 
-function pointerdown(x = 100, y = 100): MouseEvent {
-    const event = new MouseEvent('pointerdown', {
+function pointerdown(x = 100, y = 100, type = 'pointerdown'): MouseEvent {
+    const event = new MouseEvent(type, {
         bubbles: true,
         cancelable: true,
         button: 0,
@@ -71,9 +71,11 @@ describe('composer sheet pointer ownership', () => {
         create.element.dispatchEvent(pointerdown())
         expect(capture).not.toHaveBeenCalled()
 
-        create.element.click()
+        create.element.dispatchEvent(pointerdown(100, 100, 'pointerup'))
+        await create.trigger('click')
         await nextTick()
-        expect(create.attributes('aria-selected')).toBe('true')
+        // The sliding indicator can replace the tab node: inspect the live DOM.
+        expect(wrapper.get('[data-testid="talos-drawer-tab-create"]').attributes('aria-selected')).toBe('true')
         expect(wrapper.find('[data-testid="talos-drawer-enhance"]').exists()).toBe(true)
 
         wrapper.unmount()
