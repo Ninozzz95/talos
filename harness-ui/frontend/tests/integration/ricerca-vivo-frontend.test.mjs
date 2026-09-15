@@ -164,7 +164,11 @@ test('BANCO-RICERCA: pausa → ripresa → ri-verifica → elimina, con la porta
   assert.equal(dopoPausa.ricerca.id, ricercaId);
   const ferma = await finoA(async () => {
     const r = (await s.leggi(ricercaId)).ricerca;
-    return r.stato === 'paused' ? r : null;
+    /* ⛔ Il punto sicuro è la riga `run_paused` NEL GIORNALE (L4, orchestratore): il registro
+       vivo può dire «paused» un istante prima che l'append sia su disco — due fonti, due
+       momenti, e una GET fra i due legge stato vivo aggiornato con giornale ancora a
+       «pause_requested». CI ha perso questa corsa il 15/09 sul runner carico. */
+    return r.stato === 'paused' && r.giornale?.stato === 'paused' ? r : null;
   }, 'il punto sicuro della pausa');
   assert.equal(ferma.conclusaAlle, null, 'una pausa non finalizza niente');
   assert.equal(ferma.giornale.stato, 'paused');
