@@ -26,7 +26,10 @@ jobs:
       - name: dipendenze context engine
         run: npm ci --prefix context-engine --no-audit --no-fund
       - name: contratto batch Fase 3A
-        run: node --test harness-ui/tests/http-routes-batch-phase3.test.mjs
+        run: >-
+          node --test
+          harness-ui/tests/http-routes-batch-phase3.test.mjs
+          harness-ui/tests/http-routes-batch-phase3-review.test.mjs
       - name: regressioni HTTP adiacenti
         run: >-
           node --test
