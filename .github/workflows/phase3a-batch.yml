@@ -18,8 +18,12 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: harness-ui/package-lock.json
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            context-engine/package-lock.json
       - name: dipendenze backend
         run: npm ci --prefix harness-ui --no-audit --no-fund
+      - name: dipendenze context engine
+        run: npm ci --prefix context-engine --no-audit --no-fund
       - name: contratto batch Fase 3A
         run: node --test harness-ui/tests/http-routes-batch-phase3.test.mjs
