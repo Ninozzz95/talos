@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Request } from '@playwright/test'
+import { closeToolSheet } from './toolSheet'
 
 // F1-T6 shell journeys — hamburger header + full-width sidebar (D5/D6) replace
 // the retired top icon rail; default theme is now `calm` (D3/D4), with the
@@ -7,7 +8,7 @@ const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost'])
 const HEADER = '[data-testid="talos-mobile-header"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
-const MENU = '[aria-label="Open menu"]'
+const MENU = '[data-testid="talos-shell-menu"]'
 
 function trackExternalRequests(page: Page): string[] {
     const external: string[] = []
@@ -101,7 +102,7 @@ test('a station opens from the sidebar in a tool-sheet over the chat base and re
     // than one title from the localized, time/date-dependent welcome library.
     await expect(page.getByTestId('talos-chat-scroll')).toBeVisible()
 
-    await page.locator('[aria-label="Back to chat"]').click()
+    await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
     await expect(page.locator('div[data-talos-route]')).toHaveAttribute('data-talos-route', 'chat')
 })
@@ -256,16 +257,17 @@ test('settings subsection back returns to the categories list, not straight to c
     const back = page.locator('[data-testid="talos-sheet-back"]')
     await expect(back).toHaveAttribute('aria-label', 'Back')
 
-    // Back returns to the categories list — the sheet stays open.
+    // Back returns to the categories list — the sheet stays open. At the root,
+    // U-7 exposes the station menu instead of a second internal back arrow.
     await back.click()
-    await page.waitForTimeout(320)
     await expect(page.locator(SHEET)).toBeVisible()
     await expect(page.locator('[data-testid="settings-category-pane"]')).toBeVisible()
-    await expect(back).toHaveAttribute('aria-label', 'Back to chat')
+    await expect(back).toHaveCount(0)
+    await expect(page.getByTestId('talos-sheet-menu')).toBeVisible()
 
-    // A second Back closes the sheet, returning to chat.
-    await back.click()
-    await page.waitForTimeout(320)
+    // Closing a root station follows the sheet/app close contract, which also
+    // persists the matching chat route.
+    await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
 })
 

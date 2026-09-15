@@ -5,7 +5,7 @@ const DESTINATION = '[data-testid="talos-model-lab-destination"]'
 
 async function openHub(page: Page): Promise<void> {
     await page.goto('/')
-    await page.getByLabel('Open menu').click()
+    await page.getByTestId('talos-shell-menu').click()
     const sidebar = page.getByTestId('talos-mobile-sidebar')
     await expect(sidebar.getByRole('button', { name: 'Open Model Lab' })).toHaveCount(0)
     await sidebar.getByRole('button', { name: 'Open Settings' }).click()
@@ -87,7 +87,7 @@ test('tablet Settings keeps the same Account-first grouped navigation', async ({
     test.fixme()
     await page.setViewportSize({ width: 1024, height: 900 })
     await page.goto('/')
-    await page.getByLabel('Open menu').click()
+    await page.getByTestId('talos-shell-menu').click()
     await page.locator('[data-testid="talos-mobile-sidebar"] [aria-label="Open Settings"]').click()
 
     const navigation = page.getByRole('navigation', { name: 'TALOS settings categories' })
