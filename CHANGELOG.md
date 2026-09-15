@@ -6,6 +6,16 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.36
+
+- The Library loads more files as you scroll, with search and filters covering the whole collection.
+  Item menus stay within the screen; phone headers and bottom spacing are corrected.
+- Download Center controls remain usable when opened from the navigation drawer.
+- Startup validation works with the existing strict Content Security Policy, without blocked
+  dynamic code compilation.
+- Restored browser regression coverage for attachments, message actions, saved reasoning,
+  chat persistence, appearance settings, and phone/tablet layouts.
+
 ## v0.1.35
 
 - The Library loads more items as you scroll, starting with 24. Search, filters and the total count

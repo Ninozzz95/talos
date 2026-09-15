@@ -145,7 +145,8 @@ test('renders and operates a durable safe thread through the final mobile UI', a
     await expect(page.getByLabel('Message TALOS')).toHaveValue(initialPrompt)
     await expect(page.getByLabel('Message TALOS')).toBeFocused()
 
-    await firstUser.getByLabel('Resend message').click()
+    await firstUser.getByLabel('More message actions').click()
+    await page.getByTestId('talos-message-resend').click()
     await expect(page.getByRole('heading', { name: 'Resent response' })).toBeVisible()
     await firstAssistant.getByLabel('Retry assistant response').click()
     await expect(page.getByRole('heading', { name: 'Retried response' })).toBeVisible()
@@ -170,7 +171,8 @@ test('renders and operates a durable safe thread through the final mobile UI', a
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
     expect(overflow).toBeLessThanOrEqual(0)
     // 3 successful turns (streamed, one POST each) + the failing turn's
-    // stream attempt AND its transparent buffered retry (F2-T4 contract).
-    expect(completions).toHaveLength(5)
+    // stream attempt and four bounded buffered attempts on HTTP 429
+    // (sendWithProviderRetry, DEBT-MOBILE-016).
+    expect(completions).toHaveLength(8)
     expect(pageErrors).toEqual([])
 })

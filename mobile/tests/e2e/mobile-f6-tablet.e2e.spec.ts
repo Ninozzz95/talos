@@ -62,6 +62,7 @@ test('tablet Settings stays beside the persistent chat rail and closes back to c
     await expect(panel).toBeVisible()
     await expect(page.locator(DIVIDER)).toBeVisible()
     await expect(page.locator('[data-testid="settings-category-pane"]')).toBeVisible()
+    await page.locator('[data-settings-tab="ai_defaults"]').click()
     await expect(page.locator('[data-testid="settings-detail-pane"]')).toBeVisible()
     await expect(page.locator('[data-settings-panel="ai_defaults"]')).toBeVisible()
 

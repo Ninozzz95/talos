@@ -302,7 +302,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await expect(preview).toContainText('talos_session_benchmark_scenario')
     })
 
-    test('persisted reasoning row opens its drawer, survives reload, and matches the export', async ({ page }) => {
+    test('persisted reasoning expands inline, survives reload, and matches the export', async ({ page }) => {
         await mockProviderWithReasoning(page)
         await page.goto('/')
 
@@ -318,14 +318,14 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await expect(reasoningRow).toContainText('Reasoning')
         await expect(reasoningRow.locator('svg.lucide-brain')).toHaveCount(1)
         await expect(reasoningRow.locator('svg.lucide-sparkles')).toHaveCount(0)
-        await expect(assistant).not.toContainText('I will keep the thought summary')
+        await expect(assistant.getByTestId('talos-reasoning-text')).toBeHidden()
 
         await reasoningRow.click()
-        const drawer = page.getByTestId('talos-reasoning-drawer')
-        await expect(drawer).toBeVisible()
-        await expect(drawer.getByTestId('talos-reasoning-text')).toHaveText(E2E_REASONING)
-        await drawer.getByLabel('Close').click()
-        await expect(drawer).toHaveCount(0)
+        const reasoning = assistant.getByTestId('talos-reasoning-text')
+        await expect(reasoning).toBeVisible()
+        await expect(reasoning).toHaveText(E2E_REASONING)
+        await reasoningRow.click()
+        await expect(reasoning).toBeHidden()
 
         await page.reload()
         await expect(page.getByText(E2E_REASONING_ANSWER, { exact: true })).toBeVisible()
@@ -336,8 +336,9 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await expect(reloadedRow.locator('svg.lucide-sparkles')).toHaveCount(0)
         await reloadedRow.click()
         await expect(page.getByTestId('talos-reasoning-text')).toHaveText(E2E_REASONING)
-        await page.getByTestId('talos-reasoning-drawer').getByLabel('Close').click()
-        await expect(page.getByTestId('talos-reasoning-drawer')).toHaveCount(0)
+        await expect(page.getByTestId('talos-reasoning-text')).toBeVisible()
+        await reloadedRow.click()
+        await expect(page.getByTestId('talos-reasoning-text')).toBeHidden()
 
         await page.getByLabel('Chat options').click()
         await page.getByRole('menuitem', { name: 'Export chat' }).click()
