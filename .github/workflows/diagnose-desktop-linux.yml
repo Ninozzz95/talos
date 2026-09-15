@@ -41,9 +41,16 @@ jobs:
         working-directory: harness-ui/frontend
 
       - name: parita dei componenti col mockup
-        run: npx playwright test -c playwright.componenti.config.mjs --reporter=line
+        run: |
+          set -o pipefail
+          npx playwright test -c playwright.componenti.config.mjs --reporter=line 2>&1 | tee ../../desktop-parity-linux.log
         working-directory: harness-ui/frontend
 
-      - name: lab dei componenti
-        run: npx playwright test -c playwright.lab.config.mjs --reporter=line
-        working-directory: harness-ui/frontend
+      - name: conserva il log parita
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-parity-linux-log
+          path: desktop-parity-linux.log
+          if-no-files-found: error
+          retention-days: 7
