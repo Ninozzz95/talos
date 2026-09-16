@@ -98,3 +98,38 @@ mod tests {
         assert_eq!(fixture_label(Path::new("scratch")), "S:(ML;OICI;NW;;;LW)");
     }
 }
+
+#[link(name = "advapi32")]
+extern "system" {
+    fn GetSecurityInfo(handle: Handle, kind: i32, information: u32,
+        owner: *mut *mut c_void, group: *mut *mut c_void, dacl: *mut *mut c_void,
+        sacl: *mut *mut c_void, descriptor: *mut *mut c_void) -> u32;
+}
+
+pub(super) fn create_report_pipe(name: &str, owner: &str, package: &str)
+    -> Result<(super::Owned, std::ffi::OsString)> {
+    let access = super::PIPE_CLIENT_ACCESS;
+    let requested = super::descriptor(&format!(
+        "D:P(A;;FA;;;SY)(A;;FA;;;{owner})(A;;0x{access:08x};;;{package})S:(ML;;NW;;;LW)"))?;
+    let attrs = SecurityAttributes { length: std::mem::size_of::<SecurityAttributes>() as u32,
+        descriptor: requested.0, inherit: 0 };
+    // LOCAL was measured separately and resolves to a different package namespace
+    // for this unpackaged broker. Use the original broker name, not a fallback.
+    let name = std::ffi::OsString::from(format!("\\\\.\\pipe\\{name}"));
+    let handle = super::Owned::new(unsafe { CreateNamedPipeW(wide(&name)?.as_ptr(),
+        1 | 0x40000000 | 0x00080000, 8, 1, 4096, 4096, super::DEADLINE_MS, &attrs) }, "CreateNamedPipe")?;
+    let mut raw = null_mut();
+    let error = unsafe { GetSecurityInfo(handle.0, 1, OWNER_DACL_LABEL,
+        null_mut(), null_mut(), null_mut(), null_mut(), &mut raw) };
+    ensure(error == 0, &format!("read actual pipe security: Win32 {error}"))?;
+    let actual = Local(raw);
+    let expected = sddl(requested.0, 4 | 0x10)?.replace(owner, "<OWNER>");
+    let observed = sddl(actual.0, OWNER_DACL_LABEL)?.replace(owner, "<OWNER>");
+    println!("{{\"diagnostic\":\"pipe_security\",\"requested\":{expected:?},\"actual\":{observed:?},\"client_access\":{access}}}");
+    Ok((handle, name))
+}
+
+pub(super) fn open_report_pipe(name: &std::ffi::OsStr) -> std::io::Result<fs::File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    OpenOptions::new().access_mode(super::PIPE_CLIENT_ACCESS).open(name)
+}

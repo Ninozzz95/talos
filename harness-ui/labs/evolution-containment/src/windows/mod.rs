@@ -5,7 +5,7 @@ mod security;
 use ffi::*;
 use crate::protocol::{peer_matches, Report, FRAME_BYTES};
 use std::{ffi::{c_void, OsStr, OsString}, fs::{self, File, OpenOptions}, io::{self, Read, Write},
-    mem::{size_of, zeroed}, net::{SocketAddr, TcpListener, TcpStream}, os::windows::{ffi::OsStrExt, fs::OpenOptionsExt},
+    mem::{size_of, zeroed}, net::{SocketAddr, TcpListener, TcpStream}, os::windows::ffi::OsStrExt,
     path::{Path, PathBuf}, ptr::{null, null_mut}, thread, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
 
 type Result<T> = std::result::Result<T, String>;
@@ -227,19 +227,10 @@ fn launch(exe: &Path, args: &[OsString], temp: &Path, job: &Owned, sid: Option<S
     Ok(child)
 }
 
-fn local_pipe_name(name: &str) -> OsString {
-    OsString::from(format!("\\\\.\\pipe\\LOCAL\\{name}"))
-}
 struct Pipe { handle: Owned, name: OsString }
 impl Pipe {
     fn new(name: &str, owner: &str, package: &str) -> Result<Self> {
-        let sd = descriptor(&format!("D:P(A;;FA;;;SY)(A;;FA;;;{owner})(A;;0x{PIPE_CLIENT_ACCESS:08x};;;{package})S:(ML;;NW;;;LW)"))?;
-        let attrs = SecurityAttributes { length: size_of::<SecurityAttributes>() as u32, descriptor: sd.0, inherit: 0 };
-        // Session-local namespace required by the AppContainer pipe contract.
-        // The package DACL and client rights remain unchanged; no global fallback.
-        let name = local_pipe_name(name);
-        let handle = Owned::new(unsafe { CreateNamedPipeW(wide(&name)?.as_ptr(), 1 | 0x40000000 | 0x00080000,
-            8, 1, 4096, 4096, DEADLINE_MS, &attrs) }, "CreateNamedPipe")?;
+        let (handle, name) = security::create_report_pipe(name, owner, package)?;
         Ok(Self { handle, name })
     }
     fn connect(&self) -> Result<()> {
@@ -352,7 +343,7 @@ fn child_measurements(args: &[OsString]) -> Result<()> {
     }
     let mut frame = report.encode(); if mode == "bad-frame" { frame[3] = b'9'; }
     child_diagnostic(args, "opening report pipe");
-    let mut file = OpenOptions::new().access_mode(PIPE_CLIENT_ACCESS).open(pipe)
+    let mut file = security::open_report_pipe(pipe)
         .map_err(|e| format!("report pipe open: {e}"))?;
     io_result(file.write_all(&(FRAME_BYTES as u32).to_le_bytes()))?;
     io_result(file.write_all(&frame))?;
@@ -511,9 +502,6 @@ pub fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test] fn broker_pipe_uses_session_local_namespace() {
-        assert_eq!(local_pipe_name("synthetic"), OsString::from(r"\\.\pipe\LOCAL\synthetic"));
-    }
     #[test] fn launch_environment_is_explicit_sorted_and_double_terminated() {
         let block = environment(Path::new("C:\\synthetic\\scratch")).unwrap();
         assert!(block.ends_with(&[0, 0]));
