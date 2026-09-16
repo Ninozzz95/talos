@@ -6,6 +6,26 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.12 — 2026-09-16
+
+Same product as `desktop-v0.1.11`, which never published: its release job stopped at the
+version-coherence gate (the package version was bumped without the lockfile), and a published
+tag is never rewritten, so this attempt gets a new number.
+
+Cure of the three findings from the engineering review of the keys work — no new features.
+
+### Fixed
+- With the desktop keyring scope, the installed app no longer falls back to the
+  `OPENROUTER_API_KEY` environment seed: a provider without a key in the app's own keyring
+  stays disconnected. Development from source keeps both paths.
+- Two test files wrote scratch folders to real disk paths through the research orchestrator's
+  disk-write ports; they now inject no-op ports.
+- Coming from 0.1.10 or earlier, the first launch copies (never moves) your provider and
+  search keys from the old keyring services into the app's `-desktop` namespace, pool and
+  priorities included. Keys already in the app — or deleted there — are never touched: the
+  copy happens once per machine (a marker file), providers with any trace in the new
+  namespace are skipped, and a deaf keyring retries next boot instead of burning the marker.
+
 ## desktop-v0.1.10 — 2026-09-16
 
 Same product as `desktop-v0.1.9`, which never published: its release job stopped at the
