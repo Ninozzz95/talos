@@ -62,7 +62,8 @@ import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la 
 import { creaVistaViva } from '../components/browser-vivo.js'; // 07/9: lo schermo del browser pilotato dal server
 import { montaMiglioraPrompt } from '../components/migliora-prompt.js'; // 11/9 BC-15: «Migliora il prompt», il pannello del composer
 import { gestoPerIlServer } from '../components/browser-gesti.js'; // 07/9: la vista e il server parlano due lingue: qui si traducono
-import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
+import { montaScorciatoie, normalizzaTastiScritti, riconosci, suApple } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
+import { TIPO_FRAME_CONTROLLO, TIPO_FRAME_DATI, codificaFrameClient, collegaAppunti, creaTerminaleXterm, decodificaFrameServer } from '../components/terminale-xterm.js'; // P0/A 16/09: il corpo del terminale — xterm, appunti e menu — fuori dal monolite
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina (il montaggio è in sezioni-adattatori.js)
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
@@ -11248,8 +11249,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * il tab Terminale prima ancora di avviare un task dà comunque una
    * shell vera, mai un pannello vuoto in attesa di una sessione.
    */
-  const TIPO_FRAME_DATI_CLIENT = 0;
-  const TIPO_FRAME_CONTROLLO_CLIENT = 1;
+  /* ⛔ 16/09/2026, P0/A punto 3 — i due tipi di frame e il loro codificatore stanno adesso in
+     `components/terminale-xterm.js` insieme al resto del corpo del terminale: erano l'unica parte
+     del ponte scritta due volte (qui e in `src/terminal-ws.mjs`) e sono la prima cosa che serve per
+     provare il ponte senza un browser. Qui restano i nomi con cui il monolite li chiama. */
+  const TIPO_FRAME_DATI_CLIENT = TIPO_FRAME_DATI;
+  const TIPO_FRAME_CONTROLLO_CLIENT = TIPO_FRAME_CONTROLLO;
   const CHIAVE_SCHEDE_TERMINALE = 'talos-harness-terminali-v1';
 
   /*
@@ -11311,13 +11316,6 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     };
   }
 
-  function codificaFrameClient(tipo, testo) {
-    const corpo = new TextEncoder().encode(testo);
-    const frame = new Uint8Array(corpo.length + 1);
-    frame[0] = tipo;
-    frame.set(corpo, 1);
-    return frame;
-  }
 
   /* I nomi scelti dalla persona e la scheda attiva per sessione, nel browser. */
   function memoriaSchedeTerminale() { try { return JSON.parse(localStorage.getItem(CHIAVE_SCHEDE_TERMINALE) || '{}') || {}; } catch { return {}; } }
@@ -11410,7 +11408,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function impostaStatoScheda(record, stato) { record.stato = stato; renderizzaSchedeTerminale(); }
 
-  /** Monta la xterm.js di una scheda dentro il corpo — SOLO quando la scheda è visibile (xterm.js #3029). */
+  /**
+   * Monta la xterm.js di una scheda dentro il corpo — SOLO quando la scheda è visibile (xterm.js #3029).
+   *
+   * ⛔⛔ 16/09/2026, P0/A punto 3 — il cablaggio vero è in `components/terminale-xterm.js`. Qui
+   *   resta solo la CHIAMATA, con quello che il monolite sa e il componente no: dov'è il corpo,
+   *   che tema ha la app in questo momento, dove vanno i dati (la WebSocket della scheda) e come si
+   *   avvisa la persona. Non è un'estrazione per ordine: era l'unico modo di provare la decisione
+   *   sui tasti — «Ctrl+C senza selezione resta della shell» ora è un test, non una speranza.
+   */
   function montaSchedaTerminale(record) {
     if (record.term) return true;
     const corpo = $('#realTerminalMount');
@@ -11418,38 +11424,41 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       statoTerminale().enforcementColore = 'xterm.js non caricato'; // onesto: mai un pannello silenziosamente inerte
       return false;
     }
-    const mount = document.createElement('div');
-    mount.className = 'talos-terminal__mount';
-    mount.dataset.terminaleMount = record.terminalId;
-    corpo.append(mount);
-    record.mount = mount;
-    const term = new window.Terminal({
+    const pezzi = creaTerminaleXterm({
+      documento: document,
+      contenitore: corpo,
+      Terminal: window.Terminal,
+      FitAddon: window.FitAddon,
+      id: record.terminalId,
+      tema: temaTerminaleReale(),
       fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--talos-font-mono').trim() || 'Menlo, Consolas, monospace',
-      fontSize: 13,
-      cursorBlink: true,
-      scrollback: 5000,
-      theme: temaTerminaleReale(),
+      suDati: (dati) => {
+        if (record.ws?.readyState === WebSocket.OPEN) record.ws.send(codificaFrameClient(TIPO_FRAME_DATI_CLIENT, dati));
+      },
+      suMisura: () => inviaResizeTerminale(record),
     });
-    const fit = new window.FitAddon.FitAddon();
-    term.loadAddon(fit);
-    term.open(mount);
-    fit.fit();
-    term.onData((dati) => {
-      if (record.ws?.readyState === WebSocket.OPEN) record.ws.send(codificaFrameClient(TIPO_FRAME_DATI_CLIENT, dati));
-    });
+    if (!pezzi) {
+      statoTerminale().enforcementColore = 'xterm.js non caricato';
+      return false;
+    }
+    Object.assign(record, { term: pezzi.term, fit: pezzi.fit, mount: pezzi.mount, osservatore: pezzi.osservatore });
     /*
-     * ⛔ 28/8: xterm.js ridimensiona SE STESSO dentro l'elemento osservato — il resize alla PTY
-     * parte SOLO se cols/rows sono davvero cambiati (seconda difesa oltre all'altezza fissa in CSS).
+     * ⛔ Gli appunti si collegano QUI e non dentro `creaTerminaleXterm`: il menu contestuale vive
+     *   nella radice della app (la stessa degli altri menu) e l'avviso è il toast del monolite.
+     *   Il componente non deve conoscere né l'una né l'altro.
+     * ⛔ `scollegaAppunti` si tiene sul record ma oggi non lo chiama nessuno, e non è una
+     *   dimenticanza: l'unico ascoltatore che toglie sta sul montaggio, che `smontaSchedaTerminale`
+     *   rimuove dal documento — sparisce con lui. Resta il caso di bordo del menu aperto proprio
+     *   mentre la scheda si chiude; il posto dove chiuderlo è `smontaSchedaTerminale`, che è FUORI
+     *   dai confini di questa lavorazione (P0/A tocca 11415-11535). Dichiarato, non nascosto.
      */
-    const osservatore = new ResizeObserver(() => {
-      if (mount.hidden) return;
-      const primaCols = term.cols;
-      const primaRows = term.rows;
-      fit.fit();
-      if (term.cols !== primaCols || term.rows !== primaRows) inviaResizeTerminale(record);
+    record.scollegaAppunti = collegaAppunti(pezzi.term, {
+      documento: document,
+      ospite: pezzi.mount,
+      radiceMenu: ROOT().body || ROOT(), // la stessa radice del menu delle SCHEDE: un menu solo, una grammatica sola
+      apple: suApple(),
+      avvisa: (titolo, testo) => toast(tr(titolo), tr(testo)),
     });
-    osservatore.observe(mount);
-    Object.assign(record, { term, fit, osservatore });
     return true;
   }
 
@@ -11489,10 +11498,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     record.ws = ws;
     ws.onopen = () => { impostaStatoScheda(record, 'connesso'); inviaResizeTerminale(record); };
     ws.onmessage = (evento) => {
-      const buf = new Uint8Array(evento.data);
-      if (buf.length === 0) return;
-      const tipo = buf[0];
-      const corpo = new TextDecoder().decode(buf.subarray(1));
+      /* ⛔ 16/09: si decodifica con la stessa funzione che codifica (`terminale-xterm.js`), non con
+         una copia scritta qui: erano due letture dello stesso formato in due punti, e il giorno in
+         cui il formato cambia una delle due resta indietro in silenzio. Un frame vuoto torna
+         `null` — «niente», che non è «dati vuoti». */
+      const frame = decodificaFrameServer(new Uint8Array(evento.data));
+      if (!frame) return;
+      const { tipo, corpo } = frame;
       if (tipo === TIPO_FRAME_DATI_CLIENT) { record.term?.write(corpo); return; }
       try {
         const messaggio = JSON.parse(corpo);
