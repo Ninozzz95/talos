@@ -227,14 +227,17 @@ fn launch(exe: &Path, args: &[OsString], temp: &Path, job: &Owned, sid: Option<S
     Ok(child)
 }
 
+fn local_pipe_name(name: &str) -> OsString {
+    OsString::from(format!("\\\\.\\pipe\\LOCAL\\{name}"))
+}
 struct Pipe { handle: Owned, name: OsString }
 impl Pipe {
     fn new(name: &str, owner: &str, package: &str) -> Result<Self> {
         let sd = descriptor(&format!("D:P(A;;FA;;;SY)(A;;FA;;;{owner})(A;;0x{PIPE_CLIENT_ACCESS:08x};;;{package})S:(ML;;NW;;;LW)"))?;
         let attrs = SecurityAttributes { length: size_of::<SecurityAttributes>() as u32, descriptor: sd.0, inherit: 0 };
-        // Broker-created, unpackaged named pipe. Do not broaden ACLs or enable
-        // loopback exemptions to make a failing AppContainer test appear green.
-        let name = OsString::from(format!("\\\\.\\pipe\\{name}"));
+        // Session-local namespace required by the AppContainer pipe contract.
+        // The package DACL and client rights remain unchanged; no global fallback.
+        let name = local_pipe_name(name);
         let handle = Owned::new(unsafe { CreateNamedPipeW(wide(&name)?.as_ptr(), 1 | 0x40000000 | 0x00080000,
             8, 1, 4096, 4096, DEADLINE_MS, &attrs) }, "CreateNamedPipe")?;
         Ok(Self { handle, name })
@@ -508,6 +511,9 @@ pub fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn broker_pipe_uses_session_local_namespace() {
+        assert_eq!(local_pipe_name("synthetic"), OsString::from(r"\\.\pipe\LOCAL\synthetic"));
+    }
     #[test] fn launch_environment_is_explicit_sorted_and_double_terminated() {
         let block = environment(Path::new("C:\\synthetic\\scratch")).unwrap();
         assert!(block.ends_with(&[0, 0]));
