@@ -72,14 +72,21 @@ function scriviFile(percorso, dati) {
  * @param {{get,set,remove}|null} [deps.keyring] stesso contratto del portachiavi provider (server.mjs)
  * @param {string|null} [deps.file] percorso del JSON di scelta (fonte, endpoint)
  */
-export function createSearchSourceStore({ env = process.env, keyring = null, file = null } = {}) {
+export function createSearchSourceStore({ env = process.env, keyring = null, file = null, ignoraSemiAmbiente = false } = {}) {
   const chiavi = new Map();
   let scelta = { source: 'duckduckgo', endpoint: '' };
 
   const salvato = leggiFile(file);
   if (salvato && typeof salvato.source === 'string' && (FONTI[salvato.source] || salvato.source === 'off')) {
     scelta = { source: salvato.source, endpoint: typeof salvato.endpoint === 'string' ? salvato.endpoint : '' };
-  } else {
+  } else if (!ignoraSemiAmbiente) {
+    /*
+     * ⛔ (16/09/2026) — i semi d'ambiente (`TALOS_HARNESS_SEARCH_*`) valgono solo per lo sviluppo:
+     * con lo scope desktop l'app installata salta l'intero ramo (fonte, endpoint e chiave) e la
+     * scelta arriva dalla UI, poi persiste in `.search-source.json`. Stessa scelta del negozio
+     * provider (`ignoraSemiAmbiente`): un semi d'ambiente non deve mai far comparire una fonte
+     * «collegate» nell'app installata.
+     */
     const provider = typeof env.TALOS_HARNESS_SEARCH_PROVIDER === 'string' ? env.TALOS_HARNESS_SEARCH_PROVIDER.trim().toLowerCase() : '';
     const chiaveEnv = typeof env.TALOS_HARNESS_SEARCH_API_KEY === 'string' ? env.TALOS_HARNESS_SEARCH_API_KEY.trim() : '';
     const endpointEnv = typeof env.TALOS_HARNESS_SEARCH_ENDPOINT === 'string' ? env.TALOS_HARNESS_SEARCH_ENDPOINT.trim() : '';
