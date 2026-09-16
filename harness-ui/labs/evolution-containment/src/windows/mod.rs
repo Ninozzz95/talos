@@ -429,7 +429,7 @@ fn experiment() -> Result<()> {
     let mut foreign = Profile::new(&format!("{name}.B"))?;
     let a = sid_string(profile.sid)?; let b = sid_string(foreign.sid)?;
     let fixture = Fixture::new(&name, &owner, &[&a, &b])?;
-    let server = io_result(TcpListener::bind(("127.0.0.1.1", 0)))?;
+    let server = io_result(TcpListener::bind(("127.0.0.1", 0)))?;
     let port = io_result(server.local_addr())?.port();
     let original_env = std::env::var_os(SYNTHETIC);
     std::env::set_var(SYNTHETIC, "synthetic-not-a-real-secret");
