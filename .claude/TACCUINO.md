@@ -522,3 +522,27 @@
 - **«Nessun modello di approvazione» è falso:** `verificaPermessoScrittura` `:7742`, `permessiPerAttrezzo`; la sessione era
   Full access per scelta dell'owner. Il modello ha misurato la sua sessione, non il prodotto.
 - Banco: `scratchpad/audit-banco/{riproduci,wsl-strati,prova-b7,prova-desktop}.mjs`; nessun POST sul 4174, un solo GET.
+
+## 2026-09-17 — la Fase P0 chiusa: cosa è costato, cosa è vero
+
+- Workflow `wf_a38b4449-882`: **18 agenti, 0 errori, 4 h 07 min, 5.198.280 token**. Verdetti: D e E approvate, A/B/C bocciate
+  anche dopo il giro di riparazione — per residui piccoli (A: due numeri; B: etichette + «caratteri»; C: una regressione vera).
+  Secondo giro B: 10 min, 170k token; C: 13 min, 200k token.
+- ⛔ **I cancelli delle corsie non vedono la suite intera.** Sullo stato fuso la backend dava **6 rossi** che nessuna corsia aveva
+  visto: PG-12/CACHE-08 (contratto «stessa Response» contro un guardiano che rimonta per costruzione) e BC48-B ×4 (rossi da
+  `02aff50e`, mio, prima della P0). ⇒ la suite intera si lancia SEMPRE prima di fondere, non dopo.
+- ⛔ **Cinque spec Playwright su un server solo con più worker → 2 timeout d'avvio** (runtime non pronto, pill non trovata); con
+  `--workers=1` 45 verdi + 1 skip. Il cancello P0 va lanciato con un worker o con un server per file.
+- I worktree C e D erano nati da `3415c030`, non da `4c58c961` (il Workflow ha preso l'HEAD di un altro checkout): diff vuoto su
+  `frontend/src|tests`, quindi innocuo — ma va controllato con `merge-base` prima di fondere.
+- Corsia C, misure sulla sessione da 34.026 righe (mediana di 3, DESKTOP-BJ9I7OU): collassato 74→37 ms, per frame 40→1 ms,
+  rapporto 240/480 delta 4,06→1, nodi 25,7k→11,0k; **al contrario** apertura 8→205 ms, replay 374→560 ms, LoAF 254→334.
+- Giro vero `dc42bc6c` sul 4174: `prova` con package.json vero → «exit 0» CON l'uscita della suite (2/2). BC-57 (exit 0 vuoto)
+  resta non riprodotto: lì non c'era package.json.
+- La rotta per una cartella libera è `POST /api/v1/sessions/custom`; la nuda `/api/v1/sessions` vuole `{taskId}` e risponde
+  `QUERY_INVALID` con un messaggio generico («Query non valida») che non dice QUALE campo: un'ora persa a indovinare.
+- ⛔ Un heredoc bash con delimitatore quotato ha comunque perso i `\\` di un JSON e di un `.mjs` (due volte): gli script con
+  escape si scrivono col Write tool, mai in heredoc.
+- ⛔ Ho fermato con `Stop-Process` due processi il cui command line conteneva `giro-vero.mjs`: erano i MIEI wrapper bash del
+  task in background (verificato dalla riga di comando), ma il filtro era per menzione, non per identità — la stessa forma
+  dell'errore del 23/8. Nessun danno; la prossima volta si risale dal PID del node, non dalla stringa.

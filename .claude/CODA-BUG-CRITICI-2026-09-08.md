@@ -661,3 +661,19 @@ suite trovata in <cartella>» e conta come NON provato** per il nudge «scrittur
 allowlist» è falso: `verificaPermessoScrittura` (`:7742`) e `permessiPerAttrezzo` esistono per `shell`, `prova`, `scrivi`,
 `document_create` — la sessione dell'audit era **Full access per scelta dell'owner**, e il modello ha misurato la propria
 sessione, non il prodotto.
+
+## BC-58 | A 1024 la pill «Giri 10» del composer si tronca in «Giri 1…» — un numero tagliato è un numero sbagliato (foto del 17/09, giro vero P0) — APERTO, piccolo
+
+**Visto** in `03-terminale-dal-composer-dark-1024.png` e `05-agenti-figlia-dark-1024.png`: a 1024 px il composer stringe le pill
+(`glm-5.3-fl…`, `Scrive nel prog…`, `Termin…`, tollerabili) e anche **«Giri 10» → «Giri 1…»**: chi legge vede «1». A 1440 è intero.
+**Cura:** il contatore non si tronca mai (la pill dei giri ha priorità sull'ellissi, o l'etichetta «Giri» cede prima del numero);
+prova con un contatore a due cifre a 1024 nei due temi. ⛔ Regola di casa: un numero letto oltre la sua risoluzione, qui oltre il suo
+spazio, è la tredicesima forma del 13/09.
+
+## Osservazioni dal giro vero del 17/09 (non ancora difetti in coda, da decidere)
+
+- **Processi in replay: durata «0 s»** — i tempi dei comandi non sopravvivono al registro (client-side, calcolati dagli eventi che al
+  replay hanno lo stesso istante). Serve `durataMs` nell'evento di fine attrezzo, o la durata sparisce quando non è misurata.
+- **`prova` non è un processo** — la scheda elenca solo `shell`; `npm test` lanciato da `prova` è un comando come gli altri.
+- **Errori JS dentro l'iframe sandbox** («Failed to read localStorage… lacks the allow-same-origin flag»), 2 per apertura del
+  Browser con la pagina IANA: pagine terze con script dentro la cornice `sandbox`; non nostri, ma la console dell'owner li vede.

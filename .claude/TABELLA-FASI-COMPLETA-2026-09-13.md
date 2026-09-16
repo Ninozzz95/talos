@@ -88,6 +88,44 @@ conclusi tornano dalla cache). Base dei worktree: `4c58c961`. Alla consegna: fus
 D, A, B, E, C con messaggi miei in inglese; i worktree delle corsie restano su disco finché non li
 ho fusi.
 
+**⛔ FASE P0 — CHIUSA il 17/09/2026 (notte), consegnata sul 4174 — il rapporto, misurato contro valutato**
+
+Tutte e cinque le corsie sono fuse sul ramo (D `9b611182`, A `7388969d`, E `f4507891`, B `5e667b96`,
+C `26199280`), più la cura dei sei rossi emersi solo sulla suite intera (`d276450d`) e il pacchetto
+consegnato (`99955dbf`). B e C hanno avuto un **secondo** giro di riparazione mirato (un agente Opus 5
+high ciascuno, coi verdetti esatti in mano): B ha reso le etichette del pannello di stato sensibili al
+cambio lingua a caldo e tradotto «N caratteri»; C ha curato la regressione «apri e richiudi il
+ragionamento durante la generazione → resta la prima fetta» (CHAT-LUNGA-P0-07, rosso prima, verde dopo).
+
+| punto | esito | **misurato** | valutato / non verificato |
+|---|---|---|---|
+| 1 terminale a tutta larghezza | ✅ | pannello = area principale a 1024 e 1440 (cancello in pixel; sweep 26 larghezze: 19 esatte, 7 rientrate ≤44 px nella banda 1580→1820); foto nei due temi: il pannello va da bordo a bordo della colonna centrale | — |
+| 2 scheda nuova | ✅ | `Ctrl T/B/R` spariti dalla palette; un toggle per clic anche col cablaggio doppio (unit + browser) | il «clic che apre una scheda» non è mai stato riprodotto: curata la causa plausibile (scorciatoie annunciate e non intercettate) |
+| 3 clipboard | ✅ | copia con selezione (Ctrl+C / Ctrl+Shift+C / Ctrl+Insert), incolla (Ctrl+V / Ctrl+Shift+V / Shift+Insert / menu), `Ctrl+C` senza selezione → `^C` alla shell, su PTY finto coi permessi clipboard | non provato con la clipboard di sistema di Windows dal vivo |
+| 4 browser robusto | ✅ | macchina a stati per scheda, ritentativi con backoff e `AbortController`, iframe nascosto e non ricostruito, una scheda in errore non tocca le altre (browser-p0 13/13; foto: «La pagina vieta ogni cornice (X-Frame-Options: DENY). Qui sotto c'è il testo che ha letto l'agente» sulla pagina IANA) | la vista viva resta una alla volta per scelta dichiarata |
+| 5 Pagina/Testo per scheda | ✅ | stato per id di scheda, A=Pagina B=Testo C=Pagina → A ancora Pagina, e al contrario | — |
+| 6 scroll durante la generazione | ✅ | uno scrittore di scroll, un flag; 240 delta con la persona a metà → `scrollTop` invariato; `RunStarted` non riarma (al base tirava giù di 5.334 px); zero `setTimeout` nuovi, due tolti | — |
+| 7 nessun tetto al ragionamento | ✅ | via i 180 s del kernel e la deadline totale dell'adapter (al base: 4 token su 12 e interrotta a 5,0 s; curato: 12 su 12 a 13,0 s); un solo failsafe di **inattività** 30 min (`TALOS_GENERATION_IDLE_MS`), commenti SSE = vita, Stop <1 s su fornitore muto (P0-D 20/20) | non provato con un modello LOCALE che ragiona >60 s dal vivo |
+| 8 rendering ragionamento / chat lunghe | ✅ con numeri | sessione da 34.026 righe (DESKTOP-BJ9I7OU, mediana di 3): ragionamento vivo collassato **74 → 37 ms**, lavoro per frame **40 → 1 ms**, costo per token piatto (rapporto 240/480 delta **4,06 → 1**), nodi DOM **25.7k → 11.0k**; **al contrario**: aprire una scheda costa **8 → 205 ms** (ora monta a pezzi) e il replay è **374 → 560 ms** con LoAF peggiore 254 → 334 ms | virtualizzazione **non introdotta**, coi numeri scritti; il costo all'apertura e il replay più lento sono il prezzo dichiarato — da guardare in una fase di prestazioni se l'owner lo sente |
+| 9 scheda Processi | ✅ | aggiornamento per riga su un rAF (`replaceChildren` sparito), comando parsato con `shell-quote` vendorizzato, icona per famiglia, stato con icona, cwd, uscita, figlia; 1.000 processi finti misurati; foto: `npm test` / `ls -la` / `node --version` / `git status`, «Riuscito · uscita 0» | ⛔ visto in foto: nel replay la durata è «0 s» (i tempi non sopravvivono al registro) e `prova` non compare fra i processi (è un comando anche lui) |
+| 10 scheda Agenti | ✅ | figlia col renderer Markdown condiviso, riduzione incrementale, scroll conservato, re-render della madre = 0 (colonna-destra-p0); foto: «Ha fatto 1 giro · 5 chiamate», 1 attrezzo, ragionamento ripiegabile, risposta in Markdown | a 1024 la colonna destra è ripiegata: la figlia non è fotografata a quella larghezza |
+
+**Cancelli sullo stato fuso, da soli:** backend **3056 verdi / 0 rossi / 4 skip** (dopo la cura dei sei: PG-12 e CACHE-08 volevano
+«la stessa Response» e il guardiano di D la rimonta per costruzione → guardiano iniettabile, contratti provati separatamente;
+BC48-B ×4 erano rossi da `02aff50e`, cioè da PRIMA della P0); kernel **598 + 1 skip**; unit frontend **1122/1122**; cinque
+cancelli browser P0 **45 verdi + 1 skip con un worker** (con più worker su un server solo: 2 timeout d'avvio — debito del cancello,
+non del prodotto); parità a runtime **15/15** (banco 5477).
+
+**Giro vero sul 4174** (`glm-5.3-flash`, sessione `dc42bc6c`, spazio usa-e-getta nello scratchpad): 14 attrezzi — 4 `shell` in
+WSL2 exit 0, `leggi`, `elenca`, `file_edit` (un rifiuto onesto per `old_string` mancante, poi riuscito), `scrivi`, `prova` con
+la suite vera (2/2), 2 `naviga` HTTP 200, `delega_sottotask` con figlia `07882cc8` che ha scritto `NOTE.md`; 7 blocchi di
+ragionamento (6.505 caratteri), `RunFinished`; 24 foto (2 temi × 2 larghezze × 6 viste) nello scratchpad, 12 ispezionate una per una.
+
+**Trovato guardando le foto, fuori dai dieci punti:** a **1024** la pill del composer tronca «Giri 10» in «Giri 1…» — un numero
+tagliato è un numero sbagliato (→ BC-58); i tooltip restano nelle foto dopo il clic (cosmetico); due errori JS «Failed to read
+localStorage: the document is sandboxed» nascono **dentro l'iframe della cornice** (pagine terze con script; il nostro
+`browser-proxy.mjs:9` dichiara che il proxy dei dev server locali condivide la nostra origine) — attribuiti, non verificati.
+
 **Stato della fusione, 16/09 sera (misurato):** il Workflow è finito — 18 agenti, 0 errori, 4 h 07 min,
 5,2 M token. Verdetti dei controllori avversariali: **D approvata** dopo un giro di riparazione (il
 failsafe era costruito e non agganciato), **E approvata** al primo passaggio, **A/B/C bocciate** anche
