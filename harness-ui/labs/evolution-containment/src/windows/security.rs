@@ -108,7 +108,7 @@ extern "system" {
 
 pub(super) fn create_report_pipe(name: &str, owner: &str, package: &str)
     -> Result<(super::Owned, std::ffi::OsString)> {
-    let access = super::PIPE_CLIENT_ACCESS;
+    let access = PIPE_CLIENT_GRANT;
     let requested = super::descriptor(&format!(
         "D:P(A;;FA;;;SY)(A;;FA;;;{owner})(A;;0x{access:08x};;;{package})S:(ML;;NW;;;LW)"))?;
     let attrs = SecurityAttributes { length: std::mem::size_of::<SecurityAttributes>() as u32,
@@ -129,7 +129,43 @@ pub(super) fn create_report_pipe(name: &str, owner: &str, package: &str)
     Ok((handle, name))
 }
 
+// CreateFile's file-object open may request FILE_READ_ATTRIBUTES in addition
+// to the explicit mask. Grant only that read-only bit to the exact package SID.
+const PIPE_CLIENT_GRANT: u32 = super::PIPE_CLIENT_ACCESS | 0x80;
+
+#[link(name = "ntdll")]
+extern "system" {
+    fn NtQueryObject(handle: Handle, class: i32, information: *mut c_void,
+        length: u32, returned: *mut u32) -> i32;
+}
+
 pub(super) fn open_report_pipe(name: &std::ffi::OsStr) -> std::io::Result<fs::File> {
-    use std::os::windows::fs::OpenOptionsExt;
-    OpenOptions::new().access_mode(super::PIPE_CLIENT_ACCESS).open(name)
+    use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
+    let file = OpenOptions::new().access_mode(super::PIPE_CLIENT_ACCESS).open(name)?;
+    // PUBLIC_OBJECT_BASIC_INFORMATION: Attributes, GrantedAccess, handle/pointer
+    // counts and ten reserved ULONGs. Observation only; not a production ABI.
+    let mut basic = [0u32; 14];
+    let mut returned = 0;
+    let status = unsafe { NtQueryObject(file.as_raw_handle(), 0, basic.as_mut_ptr().cast(),
+        std::mem::size_of_val(&basic) as u32, &mut returned) };
+    if status < 0 || returned as usize > std::mem::size_of_val(&basic) {
+        return Err(std::io::Error::other(format!("pipe access observation failed: NTSTATUS {status:#x}")));
+    }
+    // Prove the implicit bit rather than silently assuming a broader grant is
+    // needed. The caller still requests only WRITE_DATA | SYNCHRONIZE.
+    if basic[1] != PIPE_CLIENT_GRANT {
+        return Err(std::io::Error::other(format!("unexpected granted pipe access: {:#x}", basic[1])));
+    }
+    Ok(file)
+}
+
+#[cfg(test)]
+mod pipe_tests {
+    use super::*;
+    #[test]
+    fn pipe_grant_adds_only_read_attributes_not_server_or_security_rights() {
+        assert_eq!(PIPE_CLIENT_GRANT ^ super::super::PIPE_CLIENT_ACCESS, 0x80);
+        assert_eq!(PIPE_CLIENT_GRANT & (0x4 | 0x10000 | 0x40000 | 0x80000), 0);
+        assert_eq!(PIPE_CLIENT_GRANT, 0x00100082);
+    }
 }
