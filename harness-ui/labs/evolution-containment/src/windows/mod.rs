@@ -4,7 +4,7 @@ mod ffi;
 use ffi::*;
 use crate::protocol::{peer_matches, Report, FRAME_BYTES};
 use std::{ffi::{c_void, OsStr, OsString}, fs::{self, File, OpenOptions}, io::{self, Write},
-    mem::{size_of, zeroed}, net::{SocketAddr, TcpListener, TcpStream}, os::windows::ffi::OsStrExt,
+    mem::{size_of, zeroed}, net::{SocketAddr, TcpListener, TcpStream}, os::windows::{ffi::OsStrExt, fs::OpenOptionsExt},
     path::{Path, PathBuf}, ptr::{null, null_mut}, thread, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
 
 type Result<T> = std::result::Result<T, String>;
@@ -12,7 +12,13 @@ const DEADLINE_MS: u32 = 5000;
 const SYNTHETIC: &str = "TALOS_SPIKE_SYNTHETIC_SECRET";
 const CONTENT: &[u8] = b"synthetic fixture only\n";
 const KILL_ON_CLOSE: u32 = 0x2000;
-const LIMIT_FLAGS: u32 = KILL_ON_CLOSE | 0x100 | 0x200 | 0x400;
+// JOB_OBJECT_LIMIT_ACTIVE_PROCESS is required: setting basic.active alone
+// does not enforce a cap. Keep the SDK flags named and test the actual limit.
+const ACTIVE_PROCESS_LIMIT: u32 = 0x8;
+const LIMIT_FLAGS: u32 = KILL_ON_CLOSE | ACTIVE_PROCESS_LIMIT | 0x100 | 0x200 | 0x400;
+// FILE_WRITE_DATA | SYNCHRONIZE, not GENERIC_WRITE: the latter also grants
+// FILE_CREATE_PIPE_INSTANCE. The client needs to send a frame, not host a pipe.
+const PIPE_CLIENT_ACCESS: u32 = 0x00100002;
 
 fn check(ok: i32, context: &str) -> Result<()> {
     if ok != 0 { Ok(()) } else { Err(format!("{context}: Win32 {}", unsafe { GetLastError() })) }
@@ -127,15 +133,17 @@ impl Fixture {
 }
 impl Drop for Fixture { fn drop(&mut self) { let _ = fs::remove_dir_all(&self.root); } }
 
-fn new_job() -> Result<Owned> {
+fn new_job() -> Result<Owned> { new_job_with_active_limit(4) }
+fn new_job_with_active_limit(active: u32) -> Result<Owned> {
+    ensure((1..=5).contains(&active), "lab process limit must be 1..=5")?;
     let job = Owned::new(unsafe { CreateJobObjectW(null(), null()) }, "CreateJobObject")?;
     let mut limits: ExtendedLimits = unsafe { zeroed() };
-    limits.basic.flags = LIMIT_FLAGS; limits.basic.active = 4;
+    limits.basic.flags = LIMIT_FLAGS; limits.basic.active = active;
     limits.process_memory = 64 * 1024 * 1024; limits.job_memory = 128 * 1024 * 1024;
     unsafe { check(SetInformationJobObject(job.0, 9, (&limits as *const ExtendedLimits).cast(), size_of::<ExtendedLimits>() as u32), "set Job limits")?; }
     let mut actual: ExtendedLimits = unsafe { zeroed() };
     unsafe { check(QueryInformationJobObject(job.0, 9, (&mut actual as *mut ExtendedLimits).cast(), size_of::<ExtendedLimits>() as u32, null_mut()), "read Job limits")?; }
-    ensure(actual.basic.flags == LIMIT_FLAGS && actual.basic.active == 4
+    ensure(actual.basic.flags == LIMIT_FLAGS && actual.basic.active == active
         && actual.process_memory == limits.process_memory && actual.job_memory == limits.job_memory, "Job limits differ from request")?;
     Ok(job)
 }
@@ -215,7 +223,7 @@ fn launch(exe: &Path, args: &[OsString], temp: &Path, job: &Owned, sid: Option<S
 struct Pipe { handle: Owned, name: OsString }
 impl Pipe {
     fn new(name: &str, owner: &str, package: &str) -> Result<Self> {
-        let sd = descriptor(&format!("D:P(A;;FA;;;SY)(A;;FA;;;{owner})(A;;GW;;;{package})S:(ML;;NW;;;LW)"))?;
+        let sd = descriptor(&format!("D:P(A;;FA;;;SY)(A;;FA;;;{owner})(A;;0x{PIPE_CLIENT_ACCESS:08x};;;{package})S:(ML;;NW;;;LW)"))?;
         let attrs = SecurityAttributes { length: size_of::<SecurityAttributes>() as u32, descriptor: sd.0, inherit: 0 };
         // Broker-created, unpackaged named pipe. Do not broaden ACLs or enable
         // loopback exemptions to make a failing AppContainer test appear green.
@@ -318,7 +326,7 @@ fn child(args: &[OsString]) -> Result<()> {
         report.descendant = pi.pid;
     }
     let mut frame = report.encode(); if mode == "bad-frame" { frame[3] = b'9'; }
-    let mut file = io_result(OpenOptions::new().write(true).open(pipe))?;
+    let mut file = io_result(OpenOptions::new().access_mode(PIPE_CLIENT_ACCESS).open(pipe))?;
     io_result(file.write_all(&(FRAME_BYTES as u32).to_le_bytes()))?;
     io_result(file.write_all(&frame))?;
     drop(file); idle()
@@ -370,6 +378,45 @@ fn sandbox_case(name: &str, owner: &str, profile: &Profile, expected_sid: Sid, f
     }
     pass(name); Ok(Some(report))
 }
+/// A read-back of ActiveProcessLimit is not an enforcement test. Prove that
+/// identical fifth launches succeed with a cap of five and are refused with four.
+/// Both controls stay in AppContainer, and at most five tiny idle probes coexist.
+fn process_cap_probe(fixture: &Fixture, profile: &Profile) -> Result<()> {
+    for cap in [5, 4] {
+        let job = new_job_with_active_limit(cap)?;
+        let mut children = Vec::new();
+        for _ in 0..cap {
+            children.push(launch(&fixture.exe, &[OsString::from("--idle")],
+                &fixture.scratch, &job, Some(profile.sid))?);
+        }
+        for child in &children {
+            ensure(unsafe { WaitForSingleObject(child.process.0, 0) } == 258,
+                "process-cap positive control exited before observation")?;
+        }
+        if cap == 4 {
+            match launch(&fixture.exe, &[OsString::from("--idle")],
+                &fixture.scratch, &job, Some(profile.sid)) {
+                Ok(_unexpected_child) => return Err("fifth process escaped active-process cap".into()),
+                // This is the private launch wrapper's exact Win32 error envelope.
+                // A missing file or unrelated setup failure is not a quota denial.
+                Err(error) => ensure(error == "CreateProcess with mandatory job/container: Win32 1816",
+                    &format!("expected ERROR_NOT_ENOUGH_QUOTA (1816), got {error}"))?,
+            }
+        }
+        let mut accounting: Accounting = unsafe { zeroed() };
+        unsafe { check(QueryInformationJobObject(job.0, 1, (&mut accounting as *mut Accounting).cast(),
+            size_of::<Accounting>() as u32, null_mut()), "process-cap accounting")?; }
+        ensure(accounting.active == cap, "process-cap active count changed unexpectedly")?;
+        drop(job);
+        for child in &children {
+            ensure(unsafe { WaitForSingleObject(child.process.0, DEADLINE_MS) } == 0,
+                "process-cap child survived Job close")?;
+        }
+        println!("{{\"check\":\"active_process_cap\",\"limit\":{cap},\"observed_active\":{},\"fifth_launch_denied\":{},\"passed\":true}}",
+            accounting.active, cap == 4);
+    }
+    Ok(())
+}
 fn experiment() -> Result<()> {
     let owner = current_owner()?;
     let token = token(unsafe { GetCurrentProcess() })?;
@@ -382,11 +429,11 @@ fn experiment() -> Result<()> {
     let mut foreign = Profile::new(&format!("{name}.B"))?;
     let a = sid_string(profile.sid)?; let b = sid_string(foreign.sid)?;
     let fixture = Fixture::new(&name, &owner, &[&a, &b])?;
-    let server = io_result(TcpListener::bind(("127.0.0.1", 0)))?;
+    let server = io_result(TcpListener::bind(("127.0.0.1.1", 0)))?;
     let port = io_result(server.local_addr())?.port();
     let original_env = std::env::var_os(SYNTHETIC);
     std::env::set_var(SYNTHETIC, "synthetic-not-a-real-secret");
-    let measured = (|| {
+    let measured: Result<()> = (|| {
         // Same executable and fixtures, no AppContainer. Positive control must
         // actually connect/read/open-for-write, or negative probes prove nothing.
         let control_name = format!("{name}.control");
@@ -407,6 +454,7 @@ fn experiment() -> Result<()> {
         sandbox_case(&format!("{name}.uncontained-peer"), &owner, &profile, profile.sid, &fixture, port, "hello", false, false, false)?;
         sandbox_case(&format!("{name}.foreign-sid"), &owner, &foreign, profile.sid, &fixture, port, "hello", false, true, false)?;
         sandbox_case(&format!("{name}.bad-frame"), &owner, &profile, profile.sid, &fixture, port, "bad-frame", true, true, false)?;
+        process_cap_probe(&fixture, &profile)?;
         Ok(())
     })();
     match original_env { Some(value) => std::env::set_var(SYNTHETIC, value), None => std::env::remove_var(SYNTHETIC) }
@@ -427,6 +475,15 @@ pub fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn active_process_limit_is_enabled() {
+        assert_ne!(LIMIT_FLAGS & ACTIVE_PROCESS_LIMIT, 0);
+        assert_ne!(LIMIT_FLAGS & KILL_ON_CLOSE, 0);
+        assert_eq!(LIMIT_FLAGS & (0x800 | 0x1000), 0, "no breakaway flags");
+    }
+    #[test] fn pipe_client_cannot_request_a_server_instance() {
+        assert_eq!(PIPE_CLIENT_ACCESS & 0x4, 0); // FILE_CREATE_PIPE_INSTANCE
+        assert_eq!(PIPE_CLIENT_ACCESS, 0x00100002);
+    }
     #[test] fn arguments_are_quoted_and_nul_rejected() {
         assert_eq!(String::from_utf16(&quote(OsStr::new("a b")).unwrap()).unwrap(), "\"a b\"");
         assert_eq!(String::from_utf16(&quote(OsStr::new("a\\")).unwrap()).unwrap(), "\"a\\\\\"");
