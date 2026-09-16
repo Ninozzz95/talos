@@ -171,8 +171,8 @@ test('BC49: deposito unico del banco resta byte per byte, anche senza adattatore
   assert.match(r.risposta, /^deposited:/);
 });
 
-test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni DICHIARATE qui sotto (deposito, i tre attrezzi paginati e l\'attrezzo di modifica)', () => {
-  for (const [attrezzi, impronta] of [[ATTREZZI_OPENAI, '38d65a3f445bf470c5f79ace0b662ae1eaf619b22cbfabbe885676ee5c5bfd4b'], [ATTREZZI_ESTESI_OPENAI, 'eba3456fe9a1bcb97528f6790bf6019cf8a32193d491fac32cd8a431e87e661c']]) {
+test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni DICHIARATE qui sotto (deposito, i tre attrezzi paginati, l\'attrezzo di modifica e il lotto di library_delete)', () => {
+  for (const [attrezzi, impronta] of [[ATTREZZI_OPENAI, '38d65a3f445bf470c5f79ace0b662ae1eaf619b22cbfabbe885676ee5c5bfd4b'], [ATTREZZI_ESTESI_OPENAI, '3b1ec130170b4e761cdcc27ced49228ddb6fd8296017ec22a9f4a272152845d4']]) {
     /* ⛔ PO-12 (13/09/2026) — TERZA esenzione, e la piu' forte delle tre: l'attrezzo NUOVO
      * (`file_edit`) si toglie INTERO dalla copia prima di misurare. Cosi' le due impronte qui
      * sopra NON sono state ristampate — sono le stesse identiche di ieri, e il fatto che
@@ -232,6 +232,23 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni DICHI
         assert.match(f.description, /first page reports the total/i, 'research_list: la descrizione deve spiegare il tetto al modello');
         delete schema.properties.browse_every_page;
         f.description = 'List the deep researches run on this project, with how each one ended and how far it got. Use this whenever the user asks about their researches — what they investigated, which ones are still running, which failed. Do NOT use library_list for that: research reports are saved as Library files, so library_list finds them mixed in with every other document and cannot say whether a research finished, was paused, or failed.';
+      }
+      /* ⭐ LOTTI (16/09/2026) — quarta esenzione: `library_delete` guadagna il campo OPZIONALE
+       * `ids` per cancellare piu' file della Libreria in UNA chiamata (tetto 100), e la
+       * description lo spiega al modello. Come per BC-10: si asserisce CHE COSA e' — `ids`
+       * esiste, NON e' obbligatorio e `id` lo resta — poi si toglie dalla copia insieme alla
+       * descrizione, cosi' l'impronta copre tutto il resto dell'inventario e la prosa non parla.
+       * ⇒ Prova misurata: applicando questa STESSA esenzione all'inventario di main (senza
+       *   lotti) l'impronta estesa COINCIDE (3b1ec130… su entrambi) — nient'altro e' cambiato:
+       *   ne' un nome, ne' un campo, ne' un obbligatorio. E la lista base non si tocca:
+       *   `library_delete` non c'e' nella base, e la sua impronta 38d65a3f… resta quella. */
+      if (f.name === 'library_delete') {
+        const schema = f.parameters ?? f.input_schema;
+        assert.ok(schema.properties.ids, 'library_delete: manca il campo `ids` dei lotti');
+        assert.equal((schema.required ?? []).includes('ids'), false, 'library_delete: `ids` NON deve essere obbligatorio');
+        assert.deepEqual([...schema.required].sort(), ['id'], 'library_delete: `id` deve restare l\'unico obbligatorio');
+        delete schema.properties.ids;
+        delete f.description;
       }
     }
     assert.equal(createHash('sha256').update(JSON.stringify(copia)).digest('hex'), impronta);
