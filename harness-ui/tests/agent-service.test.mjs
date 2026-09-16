@@ -68,6 +68,23 @@ function talosLavoraFinto({ script, cattura = () => {} }) {
 
 const TASK = { consegna: 'fai qualcosa' };
 
+/*
+ * ⛔⛔ (16/09/2026) — la Libreria FINTA per i test che oggi la lasciano reale. Misurato: ogni test
+ * con script `documenti:`/`artefatti:`/`immagini:` e `cartella:'/tmp/x'` senza questa iniezione
+ * depositava DAVVERO in `C:\tmp\x\.harness-ui-library` — 2426 voci contate sul disco (Grafico.html,
+ * Prova.md/.docx, «un gatto rosso».png, x.png, Nuovo.md, Lungo.md, R.pdf: un nome per test
+ * colpevole, tutti riconosciuti al contatore). Il deposito in Libreria è un effetto collaterale
+ * mai inteso di questi test: si finge come ogni altra porta di scrittura. (La prassi esisteva già:
+ * i test «l'immagine finisce in LIBRERIA» qui sotto iniettano da sempre.)
+ */
+function libreriaFinta() {
+  const depositi = [];
+  return {
+    depositi,
+    salvaVoceLibreriaFn: async (voce) => { depositi.push(voce); return { id: 'lib-finto' }; },
+  };
+}
+
 test('avviaSessione emette RunStarted per PRIMO, con threadId/runId nuovi e l\'input del task', async () => {
   const eventi = [];
   const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } } });
@@ -814,6 +831,7 @@ test('⭐⭐⭐ un artefatto creato dal kernel viene salvato E diventa un evento
   await avviaSessione({
     cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn,
     salvaArtefattoFn: (id, h) => salvati.push({ id, html: h }),
+    ...libreriaFinta(),
   });
 
   const evento = eventi.find((e) => e.type === 'ArtifactCreated');
@@ -862,6 +880,7 @@ test('⭐⭐⭐ document_create: generate→verify→salva, un evento StateDelta
     generateTalosDocumentFn: async (spec) => ({ format: spec.format, fileName: 'Prova.md', mediaType: 'text/markdown', bytes }),
     verifyTalosDocumentFn: async () => ({ ok: true, detail: '20 caratteri, 2 righe' }),
     creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+    ...libreriaFinta(),
   });
 
   assert.equal(risultato.ok, true);
@@ -884,6 +903,7 @@ test('⭐⭐⭐ document_create: un formato BINARIO non mette mai i byte grezzi 
     generateTalosDocumentFn: async () => ({ format: 'docx', fileName: 'Prova.docx', mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', bytes: bytesFinti }),
     verifyTalosDocumentFn: async () => ({ ok: true, detail: 'reopened: 1 paragraph' }),
     creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+    ...libreriaFinta(),
   });
 
   const evento = eventi.find((e) => e.type === 'StateDelta');
@@ -947,6 +967,7 @@ test('⭐⭐⭐ generate_image: genera→salva, un evento StateDelta con una rig
     immagine: IMMAGINE_CONFIG,
     generaImmagineFn: async () => ({ mediaType: 'image/png', bytes, fileStem: 'un gatto rosso' }),
     creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+    ...libreriaFinta(),
   });
 
   assert.equal(risultato.ok, true);
@@ -1017,6 +1038,7 @@ test('⭐⭐⭐ generate_image: generaImmagineFn riceve prompt/shape VERI del mo
     immagine: { modello: 'google/gemini-3.1-flash-image', nativo: true },
     generaImmagineFn: async (spec) => { catturato = spec; return { mediaType: 'image/png', bytes: new Uint8Array([1]), fileStem: 'x' }; },
     creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+    ...libreriaFinta(),
   });
 
   assert.deepEqual(catturato, {
@@ -1085,6 +1107,7 @@ test('P0.4 generate_image usa il recupero durevole prima della copia nel workspa
     generaImmagineFn: async () => ({ mediaType: 'image/png', bytes, fileStem: 'gatto' }),
     persistGeneratedImageFn: async (spec) => { persistito = spec; return { id: 'recovery-1' }; },
     creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+    ...libreriaFinta(),
   });
   assert.equal(risultato.ok, true);
   assert.equal(persistito.mimeType, 'image/png');
@@ -2999,6 +3022,7 @@ test('⛔⛔⛔ BC-11 AL CONTRARIO — senza `mode` la modalità resta "nuovo": 
     generateTalosDocumentFn: async () => ({ format: 'md', fileName: 'Nuovo.md', mediaType: 'text/markdown', bytes: new TextEncoder().encode('x') }),
     verifyTalosDocumentFn: async () => ({ ok: true, detail: 'ok' }),
     creaFileWorkspaceFn: async (spec) => { specRicevuta = spec; return { percorso: spec.nome }; },
+    ...libreriaFinta(),
   });
 
   assert.equal(specRicevuta.modalita, 'nuovo');
@@ -3100,6 +3124,7 @@ test('⭐⭐ BC-11 l\'esito di una creazione riuscita INSEGNA come allungare il 
     generateTalosDocumentFn: async () => ({ format: 'md', fileName: 'Lungo.md', mediaType: 'text/markdown', bytes: new TextEncoder().encode('x') }),
     verifyTalosDocumentFn: async () => ({ ok: true, detail: 'ok' }),
     creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+    ...libreriaFinta(),
   });
 
   assert.match(esito.esito, /call document_create again with the same title and mode:"append"/);
@@ -3119,6 +3144,7 @@ test('⛔⛔ BC-11 AL CONTRARIO — su un formato NON accodabile l\'esito non su
     generateTalosDocumentFn: async () => ({ format: 'pdf', fileName: 'R.pdf', mediaType: 'application/pdf', bytes: new Uint8Array([1]) }),
     verifyTalosDocumentFn: async () => ({ ok: true, detail: 'ok' }),
     creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+    ...libreriaFinta(),
   });
 
   assert.doesNotMatch(esito.esito, /mode:"append"/);

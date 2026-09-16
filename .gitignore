@@ -22,6 +22,9 @@ harness-ui/.mcp-trust/
 harness-ui/.plugin-trust/
 harness-ui/.sessions-store/
 harness-ui/.sessions-store-scartate-*/
+# Radice di prova dei test che installano watcher veri (tests/coda-condivisa-e-pausa.test.mjs,
+# commento del 14/09: mai sotto tmpdir() nudo — i nomi 8.3 dei runner abbattono libuv).
+harness-ui/.talos/
 harness-ui/.notes-store/
 harness-ui/.tasks-store/
 harness-ui/.memory-store/
