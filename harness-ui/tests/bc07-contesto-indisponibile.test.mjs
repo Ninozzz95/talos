@@ -159,22 +159,20 @@ test('BC-07/2 — due 503 diversi non sono la stessa cosa: «non attivo qui» co
  * Ogni codice con una copia in `COPIA_CONTESTO` deve avere qui una richiesta VERA che lo produce.
  * L'elenco dei casi non è una lista scritta da me: è `Object.keys(COPIA_CONTESTO)`, e il confronto
  * è fra INSIEMI di nomi, non fra numeri — un numero uguale con nomi diversi passerebbe.
- * ⛔ L'unica esclusione è dichiarata e MOTIVATA da una misura, non da comodità: `PAYLOAD_LIMIT`.
- *   `leggiCorpoJson` chiama `req.destroy()` appena il corpo supera i 4096 byte; con un socket
- *   grezzo (corpo da 5.000 byte, `Content-Length` onesto, `Connection: close`) tornano ZERO byte:
- *   la connessione muore prima che una risposta parta. Non si può provare ciò che non risponde, e
- *   fingere di averlo provato sarebbe il difetto che questa riga cura. La sua copia passa comunque
- *   dal divieto, insieme a tutte le altre.
+ * ⛔ Fino al 16/09 c'era UN'esclusione, motivata da una misura: `PAYLOAD_LIMIT` non era raggiungibile
+ *   perché `leggiCorpoJson` faceva `req.destroy()` oltre i 4096 byte e con un socket grezzo tornavano
+ *   ZERO byte. ✅ Dal 16/09 quel ramo risponde (413, drenando) e il tetto è iniettabile
+ *   (`createHttpApp({ limiteCorpoByte })`): la copia si prova con una richiesta VERA come tutte le
+ *   altre, e la mappa delle esclusioni resta vuota — se un giorno torna a riempirsi, deve dire perché.
  */
-const NON_RAGGIUNGIBILI_DALL_ESTERNO = new Map([
-  ['PAYLOAD_LIMIT', 'il corpo oltre 4096 byte fa req.destroy(): misurato con socket grezzo, zero byte di risposta'],
-]);
+const NON_RAGGIUNGIBILI_DALL_ESTERNO = new Map([]);
 
 /** Per ogni codice dichiarato dal prodotto, la richiesta vera che lo fa uscire. */
 async function casiMisurati(t) {
   const sano = await conServer(t, { contextService: servizioSano() });
   const spento = await conServer(t, {});
   const rotto = await conServer(t, { contextService: servizioCheSiRompe() });
+  const stretto = await conServer(t, { contextService: servizioSano(), limiteCorpoByte: 256 });
   const vietato = rottaConMetodoVietato();
 
   const misure = [
@@ -184,6 +182,10 @@ async function casiMisurati(t) {
     /* ⛔ Le due uscite che nascono DENTRO il try, col motore ACCESO: erano la metà scoperta. */
     ['QUERY_INVALID', 400, () => fetch(`${sano}${RADICE}?x=1`)],
     ['INTERNAL_ERROR', 500, () => fetch(`${rotto}${RADICE}`)],
+    /* ⛔ 16/09 — la terza, che prima era «non provabile»: un corpo oltre il tetto (qui iniettato a 256 byte). */
+    ['PAYLOAD_LIMIT', 413, () => fetch(`${stretto}${RADICE}/facts`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo: 'y'.repeat(600) }),
+    })],
   ];
   const daServizio = [
     ['CTX_INVALID_INPUT', 400], ['CTX_STALE_REVISION', 409], ['CTX_SERVICE_CLOSED', 503],
