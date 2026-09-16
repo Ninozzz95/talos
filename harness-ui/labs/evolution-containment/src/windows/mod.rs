@@ -3,7 +3,7 @@
 mod ffi;
 use ffi::*;
 use crate::protocol::{peer_matches, Report, FRAME_BYTES};
-use std::{ffi::{c_void, OsStr, OsString}, fs::{self, File, OpenOptions}, io::{self, Write},
+use std::{ffi::{c_void, OsStr, OsString}, fs::{self, File, OpenOptions}, io::{self, Read, Write},
     mem::{size_of, zeroed}, net::{SocketAddr, TcpListener, TcpStream}, os::windows::{ffi::OsStrExt, fs::OpenOptionsExt},
     path::{Path, PathBuf}, ptr::{null, null_mut}, thread, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
 
@@ -295,7 +295,21 @@ fn raw_error<T>(result: io::Result<T>) -> u32 {
     match result { Ok(_) => 0, Err(error) => error.raw_os_error().map(|n| n as u32).unwrap_or(u32::MAX) }
 }
 fn idle() -> ! { loop { thread::sleep(Duration::from_secs(60)); } }
+// Diagnostic text is untrusted and is only included in a FAIL envelope. It
+// never authorizes a peer or turns an unsuccessful probe into PASS.
+fn child_diagnostic(args: &[OsString], message: &str) {
+    if args.len() != 8 { return; }
+    let path = Path::new(&args[3]).with_extension("diagnostic.txt");
+    let text: String = message.chars().take(1024).collect();
+    let _ = fs::write(path, text);
+}
 fn child(args: &[OsString]) -> Result<()> {
+    child_diagnostic(args, "entered probe");
+    let result = child_measurements(args);
+    if let Err(error) = &result { child_diagnostic(args, error); }
+    result
+}
+fn child_measurements(args: &[OsString]) -> Result<()> {
     ensure(args.len() == 8, "invalid probe arguments")?;
     let pipe = &args[1]; let private = &args[2]; let scratch = &args[3]; let immutable = &args[4];
     let port: u16 = args[5].to_str().ok_or("invalid port")?.parse().map_err(|_| "invalid port")?;
@@ -309,7 +323,8 @@ fn child(args: &[OsString]) -> Result<()> {
         report.immutable_error = raw_error(OpenOptions::new().write(true).open(immutable));
         let address = SocketAddr::from(([127, 0, 0, 1], port));
         report.network_error = raw_error(TcpStream::connect_timeout(&address, Duration::from_millis(1000)));
-        let mut file = io_result(OpenOptions::new().write(true).create_new(true).open(scratch))?;
+        let mut file = OpenOptions::new().write(true).create_new(true).open(scratch)
+            .map_err(|e| format!("scratch open: {e}"))?;
         io_result(file.write_all(CONTENT))?; io_result(file.sync_all())?;
         report.scratch_written = 1;
     }
@@ -326,15 +341,28 @@ fn child(args: &[OsString]) -> Result<()> {
         report.descendant = pi.pid;
     }
     let mut frame = report.encode(); if mode == "bad-frame" { frame[3] = b'9'; }
-    let mut file = io_result(OpenOptions::new().access_mode(PIPE_CLIENT_ACCESS).open(pipe))?;
+    child_diagnostic(args, "opening report pipe");
+    let mut file = OpenOptions::new().access_mode(PIPE_CLIENT_ACCESS).open(pipe)
+        .map_err(|e| format!("report pipe open: {e}"))?;
     io_result(file.write_all(&(FRAME_BYTES as u32).to_le_bytes()))?;
     io_result(file.write_all(&frame))?;
-    drop(file); idle()
+    drop(file); child_diagnostic(args, "report sent; idle"); idle()
 }
 fn probe_args(pipe: &Pipe, fixture: &Fixture, case: &str, port: u16, mode: &str, tree: bool) -> Vec<OsString> {
     vec!["--probe".into(), pipe.name.clone(), fixture.private.as_os_str().into(),
         fixture.scratch.join(format!("{case}.txt")).into_os_string(), fixture.immutable.as_os_str().into(),
         port.to_string().into(), mode.into(), if tree { "tree" } else { "single" }.into()]
+}
+fn connect_probe(pipe: &Pipe, child: &Child, scratch_file: &Path) -> Result<()> {
+    pipe.connect().map_err(|error| {
+        let mut exit = 0;
+        let exit_ok = unsafe { GetExitCodeProcess(child.process.0, &mut exit) } != 0;
+        let mut diagnostic = String::new();
+        if let Ok(file) = File::open(scratch_file.with_extension("diagnostic.txt")) {
+            let _ = file.take(4096).read_to_string(&mut diagnostic);
+        }
+        format!("{error}; child_status_valid={exit_ok}; child exit/status={exit:#x}; diagnostic={diagnostic:?}")
+    })
 }
 fn sandbox_case(name: &str, owner: &str, profile: &Profile, expected_sid: Sid, fixture: &Fixture,
     port: u16, mode: &str, expect_auth: bool, sandboxed: bool, tree: bool) -> Result<Option<Report>> {
@@ -342,10 +370,7 @@ fn sandbox_case(name: &str, owner: &str, profile: &Profile, expected_sid: Sid, f
     let job = new_job()?;
     let child = launch(&fixture.exe, &probe_args(&pipe, fixture, name, port, mode, tree), &fixture.scratch,
         &job, if sandboxed { Some(profile.sid) } else { None })?;
-    pipe.connect().map_err(|error| {
-        let mut exit = 0; unsafe { GetExitCodeProcess(child.process.0, &mut exit); }
-        format!("{error}; child exit/status={exit:#x}")
-    })?;
+    connect_probe(&pipe, &child, &fixture.scratch.join(format!("{name}.txt")))?;
     ensure(pipe.authenticate(&child, &job, expected_sid)? == expect_auth, "peer authority assertion failed")?;
     if !expect_auth { pass(name); return Ok(None); }
     let frame = pipe.read_frame()?;
@@ -441,7 +466,7 @@ fn experiment() -> Result<()> {
             let pipe = Pipe::new(&control_name, &owner, &a)?; let job = new_job()?;
             let child = launch(&fixture.exe, &probe_args(&pipe, &fixture, &control_name, port, "probe", false),
                 &fixture.scratch, &job, None)?;
-            pipe.connect()?;
+            connect_probe(&pipe, &child, &fixture.scratch.join(format!("{control_name}.txt")))?;
             let mut actual = 0;
             unsafe { check(GetNamedPipeClientProcessId(pipe.handle.0, &mut actual), "control peer")?; }
             ensure(actual == child.pid && !is_container(child.process.0)?, "positive control unexpectedly sandboxed")?;
