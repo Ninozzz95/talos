@@ -1,0 +1,36 @@
+name: evolution-containment-spike
+on:
+  pull_request:
+    paths:
+      - 'harness-ui/labs/evolution-containment/**'
+      - '.github/workflows/evolution-containment-spike.yml'
+permissions:
+  contents: read
+jobs:
+  synthetic-windows-probes:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: harness-ui/labs/evolution-containment
+        shell: pwsh
+    env:
+      RUSTFLAGS: '-C target-feature=+crt-static'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # existing repository pin, v7
+        with:
+          persist-credentials: false
+      - name: provision pinned compiler (not part of the offline candidate build)
+        run: |
+          rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Rust toolchain unavailable' }
+      - name: unit tests, frozen build and actual OS probes
+        run: ./run.ps1
+      - name: evidence, including failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # existing repository pin
+        with:
+          name: evolution-containment-spike-${{ github.run_id }}-${{ github.run_attempt }}
+          path: harness-ui/labs/evolution-containment/evidence/
+          if-no-files-found: warn
+          retention-days: 14
