@@ -17,9 +17,38 @@
  *   finestra ospite dentro TALOS — deve sembrare il fondo della stessa stanza.
  */
 
+/*
+ * ⭐⭐⭐ 16/09/2026, P0/A punto 1 — LA LARGHEZZA. Owner: «il terminale che si apre dal composer è
+ * largo quanto il composer».
+ *
+ * Root cause misurata nel foglio, non dedotta: questo pannello è figlio diretto di
+ * `.talos-chat-foot`, e `index.css` dava a OGNI figlio del piede la misura del composer
+ * (`--talos-larghezza-piede`, riga del 07/09 nata per allineare il compositore alla colonna del
+ * testo). Il pannello non dichiarava nessuna larghezza, quindi ereditava quella: 768 px su uno
+ * schermo da 1440, mentre la SUA sezione dedicata (`#schermoTerminale .talos-terminal`, figlia di
+ * `.talos-screen`) prende tutta l'area principale. È lo stesso oggetto, spostato: la larghezza non
+ * può dipendere da dove è agganciato.
+ *
+ * Cura — il pattern documentato per un elemento a piena larghezza dentro un contenitore con respiro
+ * (CSS-Tricks, «Hassle-free Full Bleed with *:not()», riletto il 16/09/2026; VS Code «Terminal
+ * Basics», dove il pannello agganciato in basso occupa tutta la larghezza dell'area di lavoro):
+ *   · `index.css` esclude il pannello dalla regola che impone la misura del composer;
+ *   · qui il pannello annulla il respiro del piede con lo STESSO token che lo definisce
+ *     (`--talos-chat-gutter`), così non c'è nessun numero da tenere aggiornato a mano;
+ *   · e annulla anche i 12 px in fondo, perché un pannello agganciato tocca il bordo: se resta un
+ *     bordo di sfondo sotto, non sembra agganciato — sembra una scheda appoggiata lì.
+ *
+ * ⛔ `margin-inline` NEGATIVO e non `width:100vw`: il guscio ha barra laterale e ispettore, e
+ *   `100vw` è la FINESTRA, non l'area principale. Misurato: a 1440 con le due colonne aperte
+ *   sarebbero ~400 px di troppo, cioè un pannello che esce dallo schermo.
+ */
 .talos-terminale-basso {
   /* L'altezza vive in una variabile: la maniglia muove QUELLA, e il layout si assesta una volta sola. */
   --talos-terminale-h: 320px;
+  width: auto;
+  max-width: none;
+  margin-inline: calc(-1 * var(--talos-chat-gutter));
+  margin-bottom: -12px; /* lo stesso `padding-bottom` che `.talos-chat-foot` dichiara: il pannello tocca il fondo */
   display: flex;
   flex-direction: column;
   height: var(--talos-terminale-h);
@@ -81,6 +110,47 @@
   min-height: 0;
   border: 0;
   border-radius: 0;
+}
+
+/*
+ * ⛔⛔ 16/09, SECONDO GIRO — A «TUTTA LARGHEZZA» IL PANNELLO È L'AREA PRINCIPALE, COME QUI SOPRA.
+ *
+ * ⛔ Qui prima c'era `margin-inline: 0; width: 100%` e, sopra, la frase «il pannello è largo quanto
+ *   il contenuto del piede, quindi è DI FATTO TUTTA L'AREA PRINCIPALE». Era FALSA, e nessuno
+ *   l'aveva misurata. Misura vera (prova P0A-LARGHEZZA-PIENA, porta 4191, mai il 4174):
+ *   a 1440 il pannello era **726 px @x374** contro un'area principale di **824 @x276** — 98 px in
+ *   meno, l'88%; a 1024 era **660 @x343** contro **748 @x276**. ⇒ Una frase di misura scritta senza
+ *   aver misurato è il difetto che questa casa ha già pagato: adesso i numeri ci sono, e li tiene
+ *   fermi un test in pixel.
+ *
+ * La cura è la stessa della modalità normale, detta con i token di QUESTA modalità: si specchia il
+ * padding del piede, che qui vale
+ *   `padding-left : --talos-cronologia-ingombro + --talos-turno-coda + --talos-respiro-pieno`
+ *   `padding-right: --talos-respiro-pieno`                                (index.css, regola del 12/09)
+ * Misurato DOPO: 1440 → **824 @x276**, 1024 → **748 @x276** — cioè esattamente `.talos-screen`, lo
+ * stesso numero che il pannello ha fuori da questa modalità e che ha la sezione dedicata.
+ * Bersaglio dichiarato: VS Code, «Custom Layout» (letto il 16/09/2026), allineamento **Justify** —
+ * «The panel spans the full width of the window»: un pannello agganciato non è largo quanto la
+ * colonna del testo.
+ *
+ * ⛔ IL LIMITE, misurato e non nascosto. `--talos-respiro-pieno` è una PERCENTUALE
+ *   (`clamp(0px, calc((100% - …)/2), 44px)`), e un `100%` non vale lo stesso numero nei due posti:
+ *   nel `padding` del piede si misura sul blocco contenitore del piede, nel `margin` di questo
+ *   pannello sul **content box** del piede, cioè già senza quel padding (MDN «margin» e MDN
+ *   «Containing block», rilette il 16/09/2026). ⇒ Lo specchio è esatto solo dove il `clamp` è
+ *   saturo — e lì lo è quasi sempre. Sweep di 26 larghezze (900→1920 px, passo 40, misurato il
+ *   16/09; ricontato dal controllore, stesso sweep): su 19 il pannello è **esattamente** l'area principale; sulle 7 della banda
+ *   1580→1820 px resta RIENTRATO di 3→44 px per lato (deficit massimo 88 px su 1124).
+ *   ⛔ L'errore ha un VERSO: sempre in dentro, mai in fuori — su 26 larghezze `pannello.x` non è
+ *   mai finito a sinistra di `schermo.x`. Un pannello un po' più stretto si guarda; uno che esce
+ *   dall'area rompe il guscio. Il cancello P0A-LARGHEZZA-PIENA-BANDA tiene ferme tutte e due le
+ *   cose, e non finge che la banda non esista.
+ *
+ * ⛔ `width` resta `auto` (dalla regola qui sopra): con `width: 100%` il margine negativo
+ *   SPOSTEREBBE il pannello a sinistra invece di allargarlo, e uscirebbe dall'area.
+ */
+:root.chat-full-width .talos-terminale-basso {
+  margin-inline: calc(-1 * (var(--talos-cronologia-ingombro) + var(--talos-turno-coda) + var(--talos-respiro-pieno))) calc(-1 * var(--talos-respiro-pieno));
 }
 
 /* La pill accesa dice che il pannello è aperto — lo stesso segnale delle altre scelte del composer. */

@@ -43,7 +43,10 @@ export function etichettaTasto(combo, { apple = suApple() } = {}) {
  */
 export function normalizzaTastiScritti(radice = globalThis.document, { apple = suApple() } = {}) {
   let cambiati = 0;
-  for (const nodo of radice.querySelectorAll('kbd')) {
+  /* ⛔ 16/09: `kbd` NON basta. Le combinazioni del composer sono `<span class="talos-kbd">` (la
+     pill del modello, «Ctrl ⇧ M», e «Ctrl ↵» del bivio): guardando un markup solo, su un Mac
+     restavano scritte col tasto sbagliato. Si legge la CLASSE oltre al tag, come fa il CSS. */
+  for (const nodo of radice.querySelectorAll('kbd, .talos-kbd')) {
     const testo = (nodo.textContent || '').trim();
     if (!/⌘|ctrl|cmd|shift/i.test(testo)) continue;
     const nuovo = etichettaTasto(testo, { apple });
@@ -65,6 +68,84 @@ export const SCORCIATOIE = Object.freeze([
   { id: 'terminale', combo: 'mod `', area: 'Sessione', nome: 'Mostra o nascondi il terminale' },
   { id: 'terminaleNuovo', combo: 'mod ⇧ `', area: 'Sessione', nome: 'Nuova scheda del terminale' },
 ]);
+
+/*
+ * ⭐⭐⭐ 16/09/2026, P0/A punto 2 — «a volte apre una scheda nuova del browser».
+ *
+ * Root cause: la palette dei comandi ANNUNCIAVA «Ctrl T», «Ctrl B» e «Ctrl R» e `riconosci()` non
+ * conosceva nessuna delle tre. Chi legge l'etichetta e preme i tasti li consegna al browser:
+ * scheda nuova, preferiti, ricarica. La guardia che c'era già (`SCORCIATOIE-REGISTRO`, 06/09) non
+ * poteva vederlo: guardava il REGISTRO — le combinazioni che ESISTONO — e mai quelle che
+ * l'interfaccia PROMETTE. La promessa sta nel markup, e nessuno la leggeva.
+ *
+ * Ricerca 16/09/2026, alla fonte: su Windows Chrome NON consegna affatto alla pagina Ctrl+N,
+ * Ctrl+T e Ctrl+W, quindi `preventDefault()` su quelle è inerte per specifica (W3C
+ * public-webapps, discussione UI Events «browsers MAY ignore calls of preventDefault() when key
+ * combinations are important for UI»; Microsoft Learn, «browser default action for Ctrl+P cannot
+ * be prevented»). ⇒ Una combinazione così non si «gestisce meglio»: NON SI ANNUNCIA.
+ */
+
+/**
+ * Le combinazioni che il browser si prende PRIMA della pagina: annunciarle è una promessa che non
+ * può essere mantenuta, nemmeno con `preventDefault()`.
+ * ⛔ `mod N` NON è in questa lista, ed è una scelta dichiarata, non una dimenticanza: sta nel
+ *   registro, è implementata (`createNewSession`) e nel guscio Electron — dove TALOS si consegna —
+ *   arriva davvero alla pagina. In una scheda di Chrome se la prende il browser: è un limite noto,
+ *   e cambiarla è una decisione di prodotto dell'owner, non di questo cancello.
+ */
+export const COMBO_RISERVATE_AL_BROWSER = Object.freeze(['mod T', 'mod W', 'mod ⇧ T', 'mod ⇧ W', 'mod ⇧ N']);
+
+/**
+ * Le combinazioni annunciate che un gestore DIVERSO dal registro globale onora davvero.
+ * Ogni riga porta il suo perché: senza motivo è un'eccezione che nasconde un difetto.
+ */
+export const COMBO_GESTITE_ALTROVE = Object.freeze({
+  'mod ↵': 'il composer, non il registro globale: accoda il messaggio invece di inviarlo (legacy/invio-durante-il-giro.js, decidiInvio)',
+});
+
+/**
+ * La forma canonica di una combinazione: «Ctrl T», «⌘T» e «mod T» diventano tutte `mod T`.
+ * Torna stringa vuota quando non c'è un modificatore — «Esc», «↑ ↓», «D» non sono promesse globali.
+ */
+export function normalizzaCombo(combo) {
+  const parti = String(combo || '')
+    .replace(/⌘/gu, 'mod ')
+    .replace(/\bCtrl\b/giu, 'mod')
+    .replace(/\bCmd\b/giu, 'mod')
+    .replace(/\bShift\b/giu, '⇧')
+    .split(/[+\s]+/u)
+    .filter(Boolean)
+    .map((pezzo) => (pezzo.length === 1 && /[a-z]/u.test(pezzo) ? pezzo.toUpperCase() : pezzo));
+  if (!parti.includes('mod') && !parti.includes('⇧')) return '';
+  return parti.join(' ');
+}
+
+/**
+ * Ogni combinazione ANNUNCIATA dentro una radice, con quante volte compare.
+ * ⛔ Si leggono sia i `<kbd>` sia i `<span class="talos-kbd">`: il progetto usa tutti e due per
+ *   dire la stessa cosa, e guardarne uno solo lascia fuori proprio la pill del modello.
+ * @returns {Map<string, number>} combinazione canonica → quante volte è scritta
+ */
+export function combinazioniAnnunciate(radice = globalThis.document) {
+  const conteggio = new Map();
+  for (const nodo of radice.querySelectorAll('kbd, .talos-kbd')) {
+    const combo = normalizzaCombo((nodo.textContent || '').trim());
+    if (combo) conteggio.set(combo, (conteggio.get(combo) ?? 0) + 1);
+  }
+  return conteggio;
+}
+
+/**
+ * Le combinazioni scritte a schermo che NESSUNO gestisce: né il registro globale né un'esenzione
+ * dichiarata. È la lista che deve restare vuota — ogni riga qui dentro è una promessa rotta.
+ * @returns {string[]} in ordine alfabetico
+ */
+export function scorciatoieSenzaGestore(radice = globalThis.document, { righe = SCORCIATOIE, esenti = COMBO_GESTITE_ALTROVE } = {}) {
+  const gestite = new Set(righe.map((riga) => normalizzaCombo(riga.combo)));
+  return [...combinazioniAnnunciate(radice).keys()]
+    .filter((combo) => !gestite.has(combo) && !Object.hasOwn(esenti, combo))
+    .sort();
+}
 
 /** Riconosce quale scorciatoia è stata premuta. Torna l'id, o null. */
 export function riconosci(evento, { apple = suApple() } = {}) {

@@ -646,7 +646,17 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
    massima, e il contenuto allineato al bordo SINISTRO come il testo, largo quanto il testo — cioè
    la colonna meno la spina. Così i due bordi coincidono a qualunque larghezza, e non c'è un numero
    magico da tenere aggiornato a mano: le misure vengono dalle stesse variabili. */
-.talos-chat-foot > *{--talos-colonna-chat:min(calc(92px + var(--talos-measure-w)), 100%); --talos-testo-chat:min(var(--talos-measure-w), calc(var(--talos-colonna-chat) - var(--talos-turno-coda))); --talos-larghezza-piede:min(var(--composer-max-w, var(--talos-testo-chat)), 100%); width:var(--talos-larghezza-piede); max-width:none; margin-left:max(calc(-1 * var(--talos-chat-gutter)), calc((100% - var(--talos-colonna-chat)) / 2 + (var(--talos-testo-chat) - var(--talos-larghezza-piede)) / 2)); margin-right:auto}
+/* ⛔⛔ 16/09/2026, P0/A punto 1 — `:not(#pannelloTerminale)`. Questa regola dà a OGNI figlio del
+   piede la misura del composer, e il pannello del terminale in basso (PO-09) è un figlio del piede:
+   ereditava 768 px su uno schermo da 1440, mentre la SUA sezione dedicata prende tutta l'area
+   principale. Un pannello agganciato in basso, alla VS Code, non è largo quanto la casella di testo
+   che gli sta sopra — e non è un caso da curare a valle: la larghezza gliela imponeva QUESTA riga.
+   L'esclusione è il pattern documentato per un elemento a piena larghezza dentro un contenitore con
+   respiro (CSS-Tricks, «Hassle-free Full Bleed with *:not()», riletto il 16/09/2026): il padding
+   vale per tutti tranne lui, e lui annulla il respiro con lo stesso token (`terminale-basso.css`).
+   ⛔ L'esclusione riguarda solo LARGHEZZA e MARGINE: le variabili qui sotto restano dichiarate
+   anche per il pannello, perché sono la misura della colonna e non gli fanno nulla. */
+.talos-chat-foot > *:not(#pannelloTerminale){--talos-colonna-chat:min(calc(92px + var(--talos-measure-w)), 100%); --talos-testo-chat:min(var(--talos-measure-w), calc(var(--talos-colonna-chat) - var(--talos-turno-coda))); --talos-larghezza-piede:min(var(--composer-max-w, var(--talos-testo-chat)), 100%); width:var(--talos-larghezza-piede); max-width:none; margin-left:max(calc(-1 * var(--talos-chat-gutter)), calc((100% - var(--talos-colonna-chat)) / 2 + (var(--talos-testo-chat) - var(--talos-larghezza-piede)) / 2)); margin-right:auto}
 /* ⛔ 07/9, owner, precisazione: «il chat composer deve rimanere estensibile oltre la larghezza della
    chat, ma i lati devono essere equidistanti da un bordo rispetto all'altro della chat». Cioè: la
    larghezza resta quella che gli dà il ridimensionamento (`--composer-max-w`), e il CENTRO è quello
@@ -814,7 +824,12 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 :root.chat-full-width{--talos-respiro-pieno:clamp(0px, calc((100% - var(--talos-cronologia-ingombro) - var(--talos-turno-coda) - min(calc(92px + var(--talos-measure-w)), calc(100% - 2 * var(--talos-chat-gutter)))) / 2), var(--talos-chat-gutter))}
 :root.chat-full-width .talos-conversation, :root.chat-full-width .talos-chat-foot{padding-left:calc(var(--talos-cronologia-ingombro) + var(--talos-turno-coda) + var(--talos-respiro-pieno)); padding-right:var(--talos-respiro-pieno)}
 :root.chat-full-width .talos-conversation__column{max-width:none}
-:root.chat-full-width .talos-chat-foot > *{--talos-colonna-chat:100%; width:calc(100% - var(--talos-turno-coda)); max-width:none; margin-left:0}
+/* ⛔ 16/09/2026 — stessa esclusione della riga sorella qui sopra, e per la stessa ragione: anche a
+   «tutta larghezza» il pannello del terminale non è un pezzo del composer. La sua misura in questa
+   modalità la dichiara `terminale-basso.css`, dove si spiega perché LÌ non si specchia il padding
+   (in `chat-full-width` il respiro del piede è una percentuale, e una percentuale in `margin` si
+   misura su una base diversa da quella del `padding` del padre). */
+:root.chat-full-width .talos-chat-foot > *:not(#pannelloTerminale){--talos-colonna-chat:100%; width:calc(100% - var(--talos-turno-coda)); max-width:none; margin-left:0}
 /* ⛔ 07/9, misurato a 1920 px: «a tutta larghezza» allargava la colonna e il composer (1216 e
    1212) ma i MESSAGGI restavano a 768 — il tetto di `.talos-message` non veniva sciolto, e la
    modalita manteneva solo meta della sua promessa. Si vedeva poco finche la misura era `78ch`

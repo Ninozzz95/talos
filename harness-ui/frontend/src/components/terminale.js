@@ -142,16 +142,55 @@ function svgIcona(nome, classi = 'i i--sm') {
   return svg;
 }
 
-function creaMenuContestuale(root) {
-  let menu = root.querySelector('#menuSchedaTerminale');
+/*
+ * ⛔ 16/09/2026 — i due aiuti del menu contestuale sono ESPORTATI, e non è generalizzazione
+ *   preventiva: il corpo del terminale (`terminale-xterm.js`, P0/A punto 3) ha bisogno dello stesso
+ *   menu con altre voci, e la regola di casa dice di guardare cosa il progetto ha già prima di
+ *   disegnare una superficie nuova. Un secondo menu scritto a parte avrebbe avuto un'altra
+ *   grammatica visiva a una settimana di distanza.
+ */
+
+/** Il nodo del menu, creato una volta sola per id. */
+export function creaMenuContestuale(root, { id = 'menuSchedaTerminale', etichetta = 'Azioni sulla scheda' } = {}) {
+  let menu = root.querySelector(`#${id}`);
   if (menu) return menu;
-  menu = document.createElement('div');
-  menu.id = 'menuSchedaTerminale';
+  const documento = root.ownerDocument || globalThis.document;
+  menu = documento.createElement('div');
+  menu.id = id;
   menu.className = 'talos-card talos-context-menu';
   menu.setAttribute('role', 'menu');
-  menu.setAttribute('aria-label', t('Azioni sulla scheda'));
+  menu.setAttribute('aria-label', t(etichetta));
   menu.hidden = true;
   root.append(menu);
+  return menu;
+}
+
+/**
+ * Riempie il menu e lo mette dove sta il puntatore, senza uscire dalla finestra.
+ * @param {HTMLElement} menu il nodo di `creaMenuContestuale`
+ * @param {{titolo?:string, voci:Array<[string, Function, boolean?]>, x:number, y:number, chiudi:Function, finestra?:object}} opzioni
+ */
+export function apriMenuContestuale(menu, { titolo = '', voci = [], x = 0, y = 0, chiudi = () => {}, finestra = globalThis }) {
+  const documento = menu.ownerDocument || globalThis.document;
+  menu.replaceChildren();
+  if (titolo) {
+    const intestazione = documento.createElement('div');
+    intestazione.className = 'talos-context-menu__title';
+    intestazione.textContent = titolo;
+    menu.append(intestazione);
+  }
+  for (const [testo, fai, abilitato = true] of voci) {
+    const b = documento.createElement('button');
+    b.type = 'button'; b.className = 'talos-button talos-button--ghost'; b.setAttribute('role', 'menuitem');
+    b.textContent = testo; b.disabled = !abilitato;
+    b.addEventListener('click', () => { chiudi(); fai(); });
+    menu.append(b);
+  }
+  menu.hidden = false;
+  const larghezza = menu.offsetWidth || 240; const altezza = menu.offsetHeight || 160;
+  menu.style.left = `${Math.max(8, Math.min(x, (finestra.innerWidth ?? 0) - larghezza - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, (finestra.innerHeight ?? 0) - altezza - 8))}px`;
+  menu.querySelector('[role=menuitem]:not([disabled])')?.focus();
   return menu;
 }
 
@@ -172,29 +211,19 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
   root.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) { chiudiMenu(); e.stopPropagation(); } });
 
   function apriMenu(voce, x, y) {
-    menu.replaceChildren();
-    const titolo = document.createElement('div');
-    titolo.className = 'talos-context-menu__title';
-    titolo.textContent = titoloScheda(voce, stato.schede);
-    menu.append(titolo);
-    const voci = [
-      [t(TESTI.rinomina), () => avviaRinomina(voce), true],
-      [t(TESTI.chiudi), () => azioni.chiudi?.(voce.terminalId), true],
-      [t(TESTI.chiudiAltre), () => azioni.chiudiAltre?.(voce.terminalId), stato.schede.length > 1],
-      [t(TESTI.chiudiTutte), () => azioni.chiudiTutte?.(), stato.schede.length > 0],
-    ];
-    for (const [testo, fai, abilitato] of voci) {
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'talos-button talos-button--ghost'; b.setAttribute('role', 'menuitem');
-      b.textContent = testo; b.disabled = !abilitato;
-      b.addEventListener('click', () => { chiudiMenu(); fai(); });
-      menu.append(b);
-    }
-    menu.hidden = false;
-    const larghezza = menu.offsetWidth || 240; const altezza = menu.offsetHeight || 160;
-    menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - larghezza - 8))}px`;
-    menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - altezza - 8))}px`;
-    menu.querySelector('[role=menuitem]:not([disabled])')?.focus();
+    apriMenuContestuale(menu, {
+      titolo: titoloScheda(voce, stato.schede),
+      voci: [
+        [t(TESTI.rinomina), () => avviaRinomina(voce), true],
+        [t(TESTI.chiudi), () => azioni.chiudi?.(voce.terminalId), true],
+        [t(TESTI.chiudiAltre), () => azioni.chiudiAltre?.(voce.terminalId), stato.schede.length > 1],
+        [t(TESTI.chiudiTutte), () => azioni.chiudiTutte?.(), stato.schede.length > 0],
+      ],
+      x,
+      y,
+      chiudi: chiudiMenu,
+      finestra: window,
+    });
   }
 
   function avviaRinomina(voce) {
