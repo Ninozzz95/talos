@@ -35,12 +35,24 @@ fn file_sddl(path: &Path) -> Result<String> {
     sddl(memory.0, OWNER_DACL_LABEL)
 }
 
+fn fixture_label(path: &Path) -> &'static str {
+    if path.extension().is_some_and(|ext| ext == "exe") {
+        "S:(ML;;NW;;;ME)"
+    } else {
+        "S:(ML;OICI;NW;;;LW)"
+    }
+}
+
 pub(super) fn apply(path: &Path, descriptor: &Local) -> Result<()> {
-    // Keep the existing setter unchanged for the diagnostic baseline.
+    // An executable labelled Low silently lowers even the non-AppContainer
+    // control's process token (MIC process-creation rule). Code is immutable
+    // input, not writable scratch: keep it Medium, with exactly the same DACL.
+    let policy = format!("{}{}", sddl(descriptor.0, 4)?, fixture_label(path));
+    let effective = super::descriptor(&policy)?;
     unsafe { check(SetFileSecurityW(wide(path.as_os_str())?.as_ptr(), 4 | 0x10,
-        descriptor.0), "set fixture ACL")?; }
+        effective.0), "set fixture ACL")?; }
     let owner = current_owner()?;
-    let expected = sddl(descriptor.0, 4 | 0x10)?.replace(&owner, "<OWNER>");
+    let expected = sddl(effective.0, 4 | 0x10)?.replace(&owner, "<OWNER>");
     let actual = file_sddl(path)?.replace(&owner, "<OWNER>");
     let name = path.file_name().unwrap_or_default().to_string_lossy();
     println!("{{\"diagnostic\":\"fixture_security\",\"object\":{name:?},\"requested\":{expected:?},\"actual\":{actual:?}}}");
@@ -52,11 +64,14 @@ pub(super) fn describe_process(process: Handle, role: &str) -> Result<()> {
     let user = token_info(token.0, 1)?; // TOKEN_USER
     let integrity = token_info(token.0, 25)?; // TOKEN_MANDATORY_LABEL
     let elevation = token_info(token.0, 20)?;
+    let restricted = token_info(token.0, 11)?; // TOKEN_GROUPS (TokenRestrictedSids)
+    let restricted_count = unsafe { *restricted.as_ptr().cast::<u32>() };
+    let user_attributes = unsafe { *user.as_ptr().cast::<u8>().add(std::mem::size_of::<usize>()).cast::<u32>() };
     let user_matches_owner = sid_string(user[0] as Sid)? == current_owner()?;
     let integrity_sid = sid_string(integrity[0] as Sid)?;
     let elevated = unsafe { *elevation.as_ptr().cast::<u32>() } != 0;
     let container = is_container(process)?;
-    println!("{{\"diagnostic\":\"process_token\",\"role\":{role:?},\"user_matches_owner\":{user_matches_owner},\"integrity_sid\":{integrity_sid:?},\"elevated\":{elevated},\"appcontainer\":{container}}}");
+    println!("{{\"diagnostic\":\"process_token\",\"role\":{role:?},\"user_matches_owner\":{user_matches_owner},\"integrity_sid\":{integrity_sid:?},\"elevated\":{elevated},\"appcontainer\":{container},\"user_attributes\":{user_attributes},\"restricted_sid_count\":{restricted_count}}}");
     Ok(())
 }
 
@@ -72,4 +87,14 @@ pub(super) fn parent_control(fixture: &Fixture) -> Result<()> {
     io_result(fs::remove_file(path))?;
     super::pass("parent_scratch_positive_control");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn executable_and_scratch_have_distinct_integrity_roles() {
+        assert_eq!(fixture_label(Path::new("bin/probe.exe")), "S:(ML;;NW;;;ME)");
+        assert_eq!(fixture_label(Path::new("scratch")), "S:(ML;OICI;NW;;;LW)");
+    }
 }
