@@ -188,8 +188,13 @@ fn command_line(exe: &Path, args: &[OsString]) -> Result<Vec<u16>> {
 }
 fn environment(temp: &Path) -> Result<Vec<u16>> {
     let system_root = std::env::var_os("SystemRoot").ok_or("SystemRoot absent")?;
+    // CreateProcess resolves the AppContainer profile using LOCALAPPDATA even
+    // when an explicit environment block is supplied. Pass this one bootstrap
+    // path, not the full parent environment. Windows redirects it for the child.
+    let local_data = std::env::var_os("LOCALAPPDATA").ok_or("LOCALAPPDATA absent; required for AppContainer launch")?;
+    ensure(!local_data.is_empty(), "LOCALAPPDATA empty")?;
     let mut block = Vec::new();
-    for (key, value) in [("SystemRoot", system_root), ("TEMP", temp.as_os_str().to_owned()), ("TMP", temp.as_os_str().to_owned())] {
+    for (key, value) in [("LOCALAPPDATA", local_data), ("SystemRoot", system_root), ("TEMP", temp.as_os_str().to_owned()), ("TMP", temp.as_os_str().to_owned())] {
         let mut pair = OsString::from(key); pair.push("="); pair.push(value); block.extend(wide(&pair)?);
     }
     block.push(0); Ok(block)
@@ -503,6 +508,19 @@ pub fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn launch_environment_is_explicit_sorted_and_double_terminated() {
+        let block = environment(Path::new("C:\\synthetic\\scratch")).unwrap();
+        assert!(block.ends_with(&[0, 0]));
+        let entries: Vec<String> = block[..block.len() - 1].split(|ch| *ch == 0)
+            .filter(|entry| !entry.is_empty())
+            .map(|entry| String::from_utf16(entry).unwrap()).collect();
+        let keys: Vec<&str> = entries.iter().map(|entry| entry.split_once('=').unwrap().0).collect();
+        assert_eq!(keys, ["LOCALAPPDATA", "SystemRoot", "TEMP", "TMP"]);
+        assert_eq!(entries[2], "TEMP=C:\\synthetic\\scratch");
+        assert_eq!(entries[3], "TMP=C:\\synthetic\\scratch");
+        assert!(!keys.contains(&SYNTHETIC));
+        assert!(!keys.contains(&"PATH"));
+    }
     #[test] fn active_process_limit_is_enabled() {
         assert_ne!(LIMIT_FLAGS & ACTIVE_PROCESS_LIMIT, 0);
         assert_ne!(LIMIT_FLAGS & KILL_ON_CLOSE, 0);
