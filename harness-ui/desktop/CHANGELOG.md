@@ -26,6 +26,13 @@ installer, and a published tag is never rewritten, so this attempt gets a new nu
   `code || 0` when the process ends by draining the event loop — an instrumented run showed the
   code at 1 in `beforeExit` and 0 at process exit. The script now exits non-zero explicitly at
   the moment of the failure.
+- Running all six release gates locally for the first time — a new rule after 0.1.12 — caught one
+  more test describing the machine it was written on: the icon-fallback mutation check matched a
+  regex against the message Node generates for a failed `assert.equal`, and Node's colored diff
+  interleaves the compared characters, so the dead icon name stopped being contiguous and the
+  check failed wherever colors are forced (this machine's shell) while passing on CI. The check
+  now bites on the error's structured `actual` field, which does not depend on how the message is
+  rendered.
 
 ## desktop-v0.1.12 — 2026-09-16
 

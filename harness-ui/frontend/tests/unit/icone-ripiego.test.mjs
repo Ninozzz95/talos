@@ -117,13 +117,21 @@ test('CB-10 AL CONTRARIO — la versione VECCHIA di icon() fallisce questa stess
    * ⛔ Senza questa, la prova sopra potrebbe passare per il motivo sbagliato. Qui c'è `icon()` com'era
    *    prima della cura: se l'asserzione «nessun riferimento morto» non la respingesse, non starebbe
    *    misurando niente.
+   *
+   * ⛔ 16/09/2026 — mordevamo sul RENDERING del messaggio, non sul suo contenuto: la regex sopra
+   *    guardava il testo che Node genera per l'assert fallito, e quel testo cambia coi colori.
+   *    Misurato: con FORCE_COLOR=3 (l'ambiente di questa sessione) Node 24.18.0 interlaccia i
+   *    caratteri dei due valori nel diff colorato, il nome morto non è più contiguo nel messaggio
+   *    e la prova cadeva in locale pur essendo verde in CI (lì niente FORCE_COLOR). Ora il morso è
+   *    sul campo strutturato `actual` dell'AssertionError — il primo argomento di assert.equal,
+   *    documentato e stabile dal v0.1.97 — che non dipende da come il messaggio viene disegnato.
    */
   const iconVecchia = (id) => `<svg aria-hidden="true"><use href="#${id}"/></svg>`;
   const html = iconVecchia('i-questo-non-esiste');
   assert.equal(hrefDi(html), 'i-questo-non-esiste');
   assert.throws(
     () => assert.equal(hrefDi(html), 'i-ignoto'),
-    /i-questo-non-esiste/u,
+    (errore) => errore.actual === 'i-questo-non-esiste',
     'se il codice vecchio passasse, questa suite non morderebbe',
   );
 });
