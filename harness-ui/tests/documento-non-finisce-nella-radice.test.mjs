@@ -67,9 +67,27 @@ const DOCUMENTO_FINTO = {
   verifyTalosDocumentFn: async () => ({ ok: true, detail: '1 pagina' }),
 };
 
+/*
+ * ⛔⛔ (16/09/2026) — la Libreria FINTA, non il default reale. Senza questa iniezione i primi tre
+ * test depositavano DAVVERO in `<cartella>/.harness-ui-library`: due volte in
+ * `C:\.harness-ui-library` (cartella `C:/`) e una in `C:\tmp\progetto` — 142 Relazione.pdf finti
+ * contati sul disco, oltre alle 214 storiche ripulite il 15/09. Il flusso documenti di
+ * `avviaSessione` salva ogni artefatto anche in Libreria: qui si misura il collegamento di
+ * `cartellaCreazioni`, il deposito è un effetto collaterale mai inteso. (Stessa cura della
+ * prassi di `agent-service.test.mjs`, `salvaVoceLibreriaFn: async (voce) => { inLibreria.push(voce); }`.)
+ */
+function libreriaFinta() {
+  const depositi = [];
+  return {
+    depositi,
+    salvaVoceLibreriaFn: async (voce) => { depositi.push(voce); return 'lib-finto'; },
+  };
+}
+
 test('⭐⭐⭐ il documento si deposita in `cartellaCreazioni`, non nella radice a cui «Full access» allarga il workspace', async () => {
   let cartellaRicevuta = null;
   const eventi = [];
+  const libreria = libreriaFinta();
   const risultato = await avviaSessione({
     cartella: 'C:/',
     cartellaCreazioni: 'C:/Users/esempio/Desktop/projects/AVM-harness-desktop',
@@ -77,10 +95,12 @@ test('⭐⭐⭐ il documento si deposita in `cartellaCreazioni`, non nella radic
     onEvento: (e) => eventi.push(e),
     talosLavoraFn: kernelCheChiedeUnDocumento(),
     ...DOCUMENTO_FINTO,
+    salvaVoceLibreriaFn: libreria.salvaVoceLibreriaFn,
     creaFileWorkspaceFn: async ({ cartella, nome }) => { cartellaRicevuta = cartella; return { percorso: nome }; },
   });
 
   assert.equal(risultato.ok, true);
+  assert.equal(libreria.depositi.length, 1, 'il finto deposito in Libreria intercetta l\'unico documento: se cresce, il flusso deposita più di quanto il test misura');
   assert.equal(
     cartellaRicevuta,
     'C:/Users/esempio/Desktop/projects/AVM-harness-desktop',
@@ -90,6 +110,7 @@ test('⭐⭐⭐ il documento si deposita in `cartellaCreazioni`, non nella radic
 
 test('⛔ e il percorso mostrato nell’albero resta relativo al WORKSPACE — altrimenti punterebbe a un file che lì non c’è', async () => {
   const eventi = [];
+  const libreria = libreriaFinta();
   await avviaSessione({
     cartella: 'C:/',
     cartellaCreazioni: 'C:/Users/esempio/Desktop/progetto',
@@ -97,6 +118,7 @@ test('⛔ e il percorso mostrato nell’albero resta relativo al WORKSPACE — a
     onEvento: (e) => eventi.push(e),
     talosLavoraFn: kernelCheChiedeUnDocumento(),
     ...DOCUMENTO_FINTO,
+    salvaVoceLibreriaFn: libreria.salvaVoceLibreriaFn,
     creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
   });
 
@@ -112,12 +134,14 @@ test('⛔ e il percorso mostrato nell’albero resta relativo al WORKSPACE — a
 test('⛔⛔ SENZA il parametro non cambia NIENTE: chi non passa `cartellaCreazioni` scrive dove scriveva prima', async () => {
   let cartellaRicevuta = null;
   const eventi = [];
+  const libreria = libreriaFinta();
   await avviaSessione({
     cartella: '/tmp/progetto',
     task: TASK, modello: 'm', chiave: 'k',
     onEvento: (e) => eventi.push(e),
     talosLavoraFn: kernelCheChiedeUnDocumento(),
     ...DOCUMENTO_FINTO,
+    salvaVoceLibreriaFn: libreria.salvaVoceLibreriaFn,
     creaFileWorkspaceFn: async ({ cartella, nome }) => { cartellaRicevuta = cartella; return { percorso: nome }; },
   });
 
