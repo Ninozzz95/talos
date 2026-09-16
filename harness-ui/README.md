@@ -63,7 +63,47 @@ dependencies, each explained in its header comment.
 | `TALOS_HARNESS_UI_PUBLIC_DIR` | no | Folder served as the UI. Defaults to `public/`, the built app. |
 | `TALOS_MCP_STARTUP_CONCURRENCY` | no | How many trusted MCP servers are started at once when a session begins. Defaults to `1` — serial, the behaviour this server has always had. Values `1..8`; anything else falls back to `1` rather than failing to start. Starting a server is waiting, not computing, so raising this shortens startup when you trust several servers (measured on four echo servers: 121 ms serial, 46 ms at four). |
 | `TALOS_HTTP_BODY_MAX_BYTES` | no | Largest request body the local API accepts, in bytes. Defaults to `10485760` (10 MiB, the same cap Hermes Agent uses on its API server); a body over the limit gets a `413` that says so instead of a dropped connection. Routes with a fixed-shape body (an OAuth code, a batch) keep their own smaller limits. |
+| `TALOS_GENERATION_IDLE_MS` | no | How long the model may stay **completely silent** before the turn is given up. Defaults to `1800000` (30 minutes). This is an *inactivity* limit, not a duration limit: the countdown restarts on every byte the provider sends — SSE keep-alive comments included — so a model that is thinking, streaming, or prefilling a very long prompt is never interrupted, however long it takes. Values below `60000` are raised to 60 s; `0` disables the failsafe entirely (and with it the transport ceilings below); anything unreadable falls back to the default rather than silently switching the guard off. When it fires, the turn fails as *lost connection*, not as a timeout, because at that point the channel is dead rather than slow. |
 | `TALOS_INTRO` | no | `0` skips the first-run introduction. |
+
+### No ceiling on how long the model may think
+
+A turn has no maximum duration. There used to be three, all of them wall-clock
+deadlines that kept counting while the model was answering: 180 s in the kernel,
+the provider's own `timeoutSeconds` (60 s by default), and undici's undeclared
+300 s under `fetch`. Measured on 16/09/2026 with a fake non-OpenRouter provider
+emitting one token every 2 s for 90 s: the answer was **cut at 60.002 ms with the
+last token at 58.023 ms** — a healthy stream, killed two seconds after it last
+spoke, and reported as "the provider exceeded the maximum time".
+
+What replaces them is a single failsafe on **silence** (`TALOS_GENERATION_IDLE_MS`
+above), shared by every provider and by the local engine. Two related settings
+changed meaning rather than disappearing:
+
+- **A provider's *Maximum time* (`timeoutSeconds`, Providers tab)** is now the time
+  allowed for the **first response** — up to the HTTP headers. Once bytes start
+  arriving it no longer applies. Saved values keep working and are not migrated:
+  a `60` written yesterday still means "give up if the provider shows no sign of
+  life within a minute", which is what it was always meant to say.
+- **Transport ceilings.** Provider requests carry their own undici dispatcher whose
+  `headersTimeout` and `bodyTimeout` sit just above the failsafe, so undici's silent
+  300 s default can no longer end a turn before our own, classified error does. The
+  dispatcher is per request, never global: web search, the model hub and MCP keep
+  their short timeouts. On a Node build where it cannot be constructed the request
+  still goes out — with undici's 300 s defaults back in force.
+
+Both layers report the same class of failure and the same sentence in chat, so a
+failed turn also records **which one acted**, as `causaDiTrasporto`:
+`PROVIDER_SILENCE` for the failsafe above, `UND_ERR_BODY_TIMEOUT` for the transport
+net behind it. Without that field a log cannot tell "the guard worked" from "the
+guard was detached and undici caught me" — a distinction this feature got wrong once
+already, and the only thing that makes the two layers observable apart.
+
+The long-running SSE channel that carries a turn to the browser is kept alive by a
+heartbeat every 15 s, and the HTTP server's four timeouts are declared explicitly in
+`src/http-lifecycle.mjs` instead of inherited from whichever Node is installed.
+Measured with a real client on an ephemeral port: the channel survives past 135 s —
+beyond every ceiling listed above.
 
 ### The agent kernel
 

@@ -65,7 +65,17 @@ const MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024;
 const FATTORE_DRENAGGIO_OLTRE_IL_LIMITE = 4;
 const MAX_BATCH_BODY_BYTES = 64 * 1024;
 export const MAX_BATCH_ITEMS = 250;
-/** ⭐ 28/8 — vedi la doc sopra `res.on('close', ...)` nella rotta /events: abbastanza frequente da tenere il canale vivo, abbastanza raro da non essere rumore nei log/nel traffico. */
+/**
+ * ⭐ 28/8 — vedi la doc sopra `res.on('close', ...)` nella rotta /events: abbastanza frequente da
+ * tenere il canale vivo, abbastanza raro da non essere rumore nei log/nel traffico.
+ *
+ * ⛔ P0 · punto 7 (16/09/2026) — questo battito è ciò che rende possibile un ragionamento LUNGO:
+ * finché scrive, il socket ha traffico e nessun guardiano lo considera abbandonato. Misurato con
+ * un client vero su porta effimera (`tests/aiuto/misura-sse-oltre-130s-corsia-d.mjs`): il canale
+ * regge oltre 135 s — cioè oltre i 60 s del fornitore, i 120 s del vecchio `server.timeout` di
+ * Node e i 180 s che il kernel aveva scritti a mano. I tempi del server che glielo permettono sono
+ * dichiarati in `src/http-lifecycle.mjs` (`TEMPI_SERVER_HTTP`), non più lasciati ai default.
+ */
 const INTERVALLO_BATTITO_SSE_MS = 15_000;
 const QA_STATES = new Set([
   'desktop',
@@ -3661,6 +3671,17 @@ export function createHttpApp({
             if (keys.length !== 0) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
             data = providerStore.resetEndpoint(provider);
           } else {
+            /*
+             * ⛔ P0 · punto 7 (16/09/2026) — `timeoutSeconds` arriva ancora da qui, con lo stesso
+             * nome e la stessa scala, ma da oggi significa **tempo massimo alla prima risposta**
+             * (fino alle intestazioni), non più deadline totale sulla chiamata: non può più
+             * tagliare una generazione in corso. Le ragioni e la misura stanno accanto ai limiti
+             * in `src/provider-credential-store.mjs`; la durata del ragionamento è governata dal
+             * solo failsafe di inattività (`TALOS_GENERATION_IDLE_MS`, README «Configuration»).
+             * ⛔ Nessuna migrazione dei valori salvati: un 60 scritto ieri vuole dire oggi la cosa
+             *   che chi l'ha scritto intendeva, e riscriverlo sarebbe cambiare la configurazione
+             *   di qualcuno senza chiederglielo.
+             */
             // P-K-bis: whitelist rigorosa e campi separati per agente e collegamenti cloud.
             const agente = provider === 'esterno';
             const cloud = Boolean(REGISTRO_FORNITORI[provider]?.cloud);
