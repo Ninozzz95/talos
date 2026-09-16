@@ -48,3 +48,24 @@ export function avvolgiAdattatoreKeyring(keyring, scope) {
     remove: (servizio, account) => keyring.remove(conSuffisso(servizio), account),
   };
 }
+
+/**
+ * L'UNICA fabbrica dell'adattatore verso il portachiavi del sistema (`@napi-rs/keyring`): chi
+ * lo usava inline (server.mjs) e chi lo userà dopo (la routine di pulizia alla disinstallazione,
+ * `src/pulizia-dati.mjs`) condividono QUESTA implementazione, non una copia.
+ *
+ * ⛔ Le tre eccezioni qui dentro sono parte del contratto, non pigrizia:
+ *   - `get` fallito → null (una chiave che il portachiavi non dà non esiste);
+ *   - `remove` di una credenziale ASSENTE → successo («assenza già rimossa»: senza questo,
+ *     cancellare una fonte mai configurata — DuckDuckGo, o un provider pulito due volte —
+ *     riporterebbe un errore falso e bloccherebbe una pulizia legittima);
+ *   - solo un `set` fallito propagano: un segreto che NON entra è un guasto vero.
+ */
+export async function creaAdattatorePortachiaviSistema() {
+  const { Entry } = await import('@napi-rs/keyring');
+  return {
+    get: (servizio, account) => { try { return new Entry(servizio, account).getPassword() || null; } catch { return null; } },
+    set: (servizio, account, valore) => new Entry(servizio, account).setPassword(valore),
+    remove: (servizio, account) => { try { new Entry(servizio, account).deletePassword(); } catch { /* assenza già rimossa */ } },
+  };
+}

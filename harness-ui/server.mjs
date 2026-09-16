@@ -31,7 +31,7 @@ import { createLlamaServerSupervisor } from './src/llama-server-supervisor.mjs';
 import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
 import { createProviderProbe } from './src/provider-probe.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
-import { leggiScopePortachiavi, avvolgiAdattatoreKeyring } from './src/adattatore-keyring.mjs';
+import { leggiScopePortachiavi, avvolgiAdattatoreKeyring, creaAdattatorePortachiaviSistema } from './src/adattatore-keyring.mjs';
 import { createGeneratedImageStore } from './src/generated-image-store.mjs';
 import { createOwnerRuntimeAdapter } from './src/runtime-owner-adapter.mjs';
 import { createDesktopContextRuntime, resolveDesktopContextProfile } from './src/context-runtime.mjs';
@@ -72,12 +72,9 @@ async function startServer() {
   const ignoraSemiAmbiente = scopePortachiavi === 'desktop';
   let providerKeyring = null;
   try {
-    const { Entry } = await import('@napi-rs/keyring');
-    providerKeyring = avvolgiAdattatoreKeyring({
-      get: (service, account) => { try { return new Entry(service, account).getPassword() || null; } catch { return null; } },
-      set: (service, account, value) => new Entry(service, account).setPassword(value),
-      remove: (service, account) => { try { new Entry(service, account).deletePassword(); } catch { /* assenza già rimossa */ } },
-    }, scopePortachiavi);
+    /* ⛔ (16/09/2026) — l'adattatore arriva dalla fabbrica unica di `src/adattatore-keyring.mjs`,
+       condivisa con la routine di pulizia alla disinstallazione: un contratto, nessuna copia. */
+    providerKeyring = avvolgiAdattatoreKeyring(await creaAdattatorePortachiaviSistema(), scopePortachiavi);
   } catch {
     console.warn('[provider-store] portachiavi del sistema non disponibile; Doctor segnalerà il limite');
   }
