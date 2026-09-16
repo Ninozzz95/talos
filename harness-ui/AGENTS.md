@@ -23,8 +23,9 @@ by the mobile app: do not change its contracts without a recorded handoff).
 
 ## Verification
 
-- Backend: `node --test tests/*.test.mjs` (kernel: `npm run test:kernel`, three
-  pre-existing failures are known and listed in the ledger).
+- Backend: `node --test tests/*.test.mjs labs/electron-shell/*.test.mjs`, run on
+  its own (a suite under memory pressure does not yield a count); kernel:
+  `npm run test:kernel` (598 green, 1 skip on 16/09/2026 — a red here is new).
 - Frontend: `cd frontend && npm run test:unit`; build with `npm run build` from a
   clean worktree and copy `dist/` into `public/`.
 - Runtime: after a change, the live server on port 4174 is restarted with the

@@ -4800,12 +4800,22 @@ async function premessaDellaScrittura(radice, percorso, contenuto) {
  * domande diverse, e la ricerca (vedi commento su `talosLavora`) sconsiglia
  * di fonderle in un giudizio solo.
  *
- * ⛔ Ricerca (28/8, prima di scrivere): la sicurezza degli harness di coding
- * nel 2026 converge su "le operazioni distruttive sono una CLASSE di
- * permesso a sé, separata dalle letture" (Docker/Developers Digest,
- * `AI Coding Agent Security Models Compared 2026`) — è perché
- * scrivi/shell/document_create sono gated qui, elenca/cerca/leggi/naviga
- * mai (sono letture, per costruzione non hanno bisogno di questo cancello).
+ * ⛔ 16/09 — CITAZIONE CORRETTA (verificata aprendo la fonte, dopo una
+ * segnalazione della lane CLI). Fino a oggi qui si leggeva che «la sicurezza
+ * degli harness converge su: le operazioni distruttive sono una classe di
+ * permesso a sé» attribuito a un inesistente «Docker/Developers Digest».
+ * La fonte vera è UNA: Developers Digest, «AI Coding Agent Security Models
+ * Compared 2026», 28 luglio 2026
+ * (developersdigest.tech/blog/ai-coding-agent-security-models-compared-2026),
+ * e dice una cosa più stretta: Claude Code ha le modalità `default` (chiede
+ * al primo uso), `acceptEdits` (approva da sé le modifiche ai file) e `plan`
+ * (sola lettura). ⇒ Che scrivi/shell/document_create siano gated qui e
+ * elenca/cerca/leggi/naviga no è una SCELTA DI DISEGNO NOSTRA, coerente
+ * con quelle modalità, non una «convergenza del settore». E ha un limite
+ * dichiarato: la stessa fonte raccomanda «deny rules for SSH keys and .env
+ * files», cioè un innesco anche su ciò che LEGGE un segreto — è la fase
+ * P0-bis (owner 16/09): la shell chiede davanti a un percorso segreto anche
+ * quando è su «sempre».
  *
  * `chiediApprovazioneFn` è opzionale: se assente, `livelloAccesso` da solo
  * decide (nega sempre in lettura, consente sempre altrimenti) — stesso
