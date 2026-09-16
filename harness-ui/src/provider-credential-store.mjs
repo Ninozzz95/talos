@@ -324,6 +324,22 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
   }
   function getKey(provider) { return scegliChiave(provider)?.chiave ?? null; }
   function hasKey(provider) { return righe(provider).length > 0; }
+  /*
+   * ⭐ (16/09/2026) — le due porte della MIGRAZIONE (`src/migrazione-chiavi.mjs`, scope desktop):
+   * copiare una chiave dal namespace senza suffisso a quello `-desktop`. I segreti che esportano
+   * restano DENTRO il server: mai in una risposta HTTP, mai in un log — la migrazione li passa
+   * dritti al portachiavi di destinazione, non li registra.
+   */
+  function esportaPool(provider) {
+    return righe(provider).map((v) => ({ chiave: v.chiave, priorita: v.priorita }));
+  }
+  /* Qualunque traccia nel portachiavi — chiave reale o tombstone dell'indice vuoto lasciato da
+     `clearKey` — vieta la copia: senza, una chiave eliminata dall'utente ripartirebbe dal
+     namespace vecchio al prossimo giro di migrazione. */
+  function tracciaInCustodia(provider) {
+    requireProvider(provider);
+    return daPortachiavi.has(provider);
+  }
   function keyringOperation(operation, provider, value, service = KEYRING_SERVICE) {
     if (!keyring || typeof keyring[operation] !== 'function') throw new ProviderCredentialError('PROVIDER_STORE_UNAVAILABLE');
     try { return operation === 'set' ? keyring.set(service, provider, value) : keyring.remove(service, provider); }
@@ -526,5 +542,5 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
   }
 
   return Object.freeze({ getKey, getKeySync: getKey, hasKey, setKey, clearKey, loadFromKeyring, getRuntime, setRuntime, resetEndpoint, listPublic,
-    aggiungiChiave, rimuoviChiave, elencaPool, scegliChiave, mettiInPanchina });
+    aggiungiChiave, rimuoviChiave, elencaPool, scegliChiave, mettiInPanchina, esportaPool, tracciaInCustodia });
 }

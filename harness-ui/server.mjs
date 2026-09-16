@@ -32,6 +32,7 @@ import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
 import { createProviderProbe } from './src/provider-probe.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
 import { leggiScopePortachiavi, avvolgiAdattatoreKeyring, creaAdattatorePortachiaviSistema } from './src/adattatore-keyring.mjs';
+import { migraChiaviLegacySuDesktop } from './src/migrazione-chiavi.mjs';
 import { createGeneratedImageStore } from './src/generated-image-store.mjs';
 import { createOwnerRuntimeAdapter } from './src/runtime-owner-adapter.mjs';
 import { createDesktopContextRuntime, resolveDesktopContextProfile } from './src/context-runtime.mjs';
@@ -77,6 +78,24 @@ async function startServer() {
     providerKeyring = avvolgiAdattatoreKeyring(await creaAdattatorePortachiaviSistema(), scopePortachiavi);
   } catch {
     console.warn('[provider-store] portachiavi del sistema non disponibile; Doctor segnalerà il limite');
+  }
+  /*
+   * ⭐ (16/09/2026, decisione owner) — chi aveva l'app ≤ 0.1.10 non deve reinserire le chiavi:
+   * al primo avvio l'app le COPIA dal namespace vecchio (senza suffisso) al proprio (`-desktop`),
+   * una volta sola (marcatore su disco). I servizi vecchi restano allo sviluppo; vedi
+   * `src/migrazione-chiavi.mjs`.
+   */
+  if (ignoraSemiAmbiente) {
+    try {
+      const migrazione = await migraChiaviLegacySuDesktop({ markerFile: percorsoDatiDesktop('.chiavi-migrate.json') });
+      if (migrazione.migrati.length) {
+        const conteggi = migrazione.migrati.reduce((acc, v) => { acc[v.tipo] = (acc[v.tipo] ?? 0) + v.chiavi; return acc; }, {});
+        console.log(`[chiavi] migrazione namespace vecchio → desktop: ${Object.entries(conteggi).map(([k, n]) => `${n} ${k === 'provider' ? 'chiavi provider' : 'fonti di ricerca'}`).join(', ')}`);
+      }
+      if (migrazione.errori.length) console.warn(`[chiavi] migrazione incompleta: ${migrazione.errori.length} errori — si riprova al prossimo avvio`);
+    } catch (errore) {
+      console.warn(`[chiavi] migrazione non riuscita: ${errore?.message ?? errore}`);
+    }
   }
   const providerStore = createProviderCredentialStore({
     env: process.env,
@@ -421,8 +440,17 @@ async function startServer() {
       talosLavoraFn: (runtimeInput) => ownerRuntime.talosLavora(runtimeInput),
     }),
     modello: config.modello,
-    chiave: config.chiaveApi,
-    chiaveFn: () => providerStore.getKey('openrouter') ?? config.chiaveApi,
+    /*
+     * ⛔ (16/09/2026, review) — la riserva `config.chiaveApi` è la OPENROUTER_API_KEY
+     *   dell'AMBIENTE: nello scope desktop NON deve raggiungere le sessioni nemmeno come
+     *   riserva (2c copre i semi dei NEGOZI, non questa via). Con lo scope desktop la UI dice
+     *   «non collegata» e una chiave che lavora e fattura senza dirlo è peggio di una che manca:
+     *   le sessioni prendono SOLO dal portachiavi dell'app (`-desktop`).
+     */
+    chiave: ignoraSemiAmbiente ? undefined : config.chiaveApi,
+    chiaveFn: ignoraSemiAmbiente
+      ? () => providerStore.getKey('openrouter')
+      : () => providerStore.getKey('openrouter') ?? config.chiaveApi,
     cartelleProgetto: config.cartelleProgetto,
     taskCatalogProvider,
     ricercaWeb: config.ricercaWeb, // seme dell'ambiente: resta per compatibilità, ma è ricercaWebFn a valere a ogni giro
