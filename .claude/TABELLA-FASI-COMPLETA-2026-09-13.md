@@ -66,8 +66,26 @@ aggiornata → analisi del codebase → progettazione → implementazione → ve
 concorrenti** (Codex, Claude Code, Hermes, ChatGPT, IDE AI) dove osservabile, **root cause** prima di
 toccare, **niente `setTimeout` a nascondere una corsa**, **profiling prima e dopo** dove è
 prestazione, e un **report finale** per punto che distingua ciò che è **misurato** da ciò che è
-valutazione. Il piano dettagliato — corsie, file, agenti, cancelli — si scrive in modalità piano e si
-approva prima di aprire la fase.
+valutazione.
+
+**✅ Piano approvato dall'owner il 16/09** (`C:\Users\Antonino\.claude\plans\binary-launching-ullman.md`):
+cinque corsie in un Workflow — **A** terminale (1-3) · **B** browser (4-5) · **C** 🔒 chat: scroll e
+rendering (6, 8, xhigh) · **D** timeout (7, xhigh) · **E** colonna destra: Processi e Agenti (9-10) —
+ognuna in un worktree suo con regioni di `app.js` dichiarate riga per riga, controllore avversariale
+per corsia, fusione mia nell'ordine D, A, B, E, C. **Le root cause sono già misurate nel piano**
+(tre esploratori, file:riga): la larghezza del terminale è `index.css:649`; la scheda nuova è la
+palette che annuncia `Ctrl T/B/R` senza intercettarli; su xterm 6.0 non c'è né handler dei tasti né
+clipboard né menu; il modo Pagina/Testo è globale e riazzerato a ogni cambio scheda (decisione
+dell'11/09 ribaltata dal prompt); lo scroll è scavalcato da `scorriAllaBollaAppesa` (otto chiamanti)
+e da una guardia invertita; i tetti di durata sono 180 s nel kernel e `timeoutSeconds` 60 s totali,
+attivi su locale e non-OpenRouter; il ragionamento chiuso viene parsato a ogni frame; la colonna
+destra si ridisegna intera da 34 punti senza tetto; la figlia è senza Markdown e O(n²). **Stato: in
+esecuzione dal 16/09** — Workflow `wf_a38b4449-882`, script in
+`~/.claude/projects/C--Users-Antonino-Desktop-projects-AVM-harness-desktop/af5c3844-…/workflows/scripts/p0-cinque-corsie-wf_a38b4449-882.js`
+(si riprende con `Workflow({scriptPath, resumeFromRunId: 'wf_a38b4449-882'})`: gli agenti già
+conclusi tornano dalla cache). Base dei worktree: `4c58c961`. Alla consegna: fusione squash nell'ordine
+D, A, B, E, C con messaggi miei in inglese; i worktree delle corsie restano su disco finché non li
+ho fusi.
 
 | # | punto | cosa succede oggi (dall'owner) | finita quando |
 |---|---|---|---|
@@ -202,7 +220,11 @@ da lì**, non da zero.
 un worktree suo basato su `public/main` (0.1.13, `13f65c1`) e mi consegna patch + dossier da
 integrare nella lane privata. Ha già diagnosticato il conflitto NSIS di una pagina welcome con
 `System::Call` (`allowOnlyOneInstallerInstance.nsh` → `getProcessInfo.nsh`) e i warning che con
-`-WX` diventano errori. Io non tocco `harness-ui/desktop/` finché non consegna. **Difetto della
+`-WX` diventano errori. Io non tocco `harness-ui/desktop/` finché non consegna. ⛔ **Bersaglio
+cambiato dall'owner il 16/09** (riportato da quella sessione): non più «assistito + licenza + barra
+laterale» ma **una finestra disegnata da noi con pagine nsDialogs, il più uguale possibile al mockup,
+col tema Calm di TALOS, «come Hermes»** — cioè proprio la strada del conflitto `System::Call`, per
+cui la cura della 0.1.13 (`56b990d`, `!ifndef BUILD_UNINSTALLER` sulla dichiarazione) è la pista. **Difetto della
 mia lane, verificato il 16/09:** `desktop/tests/installer.spec.mjs:39-40` pretende ancora
 `dist/TALOS-Setup-0.1.0.exe`/`TALOS-0.1.0-win.zip` mentre la versione è avanzata — quel cancello
 fallirebbe sulla propria precondizione su un pacchetto fresco: si cura nella stessa consegna.
