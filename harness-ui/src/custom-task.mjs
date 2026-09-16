@@ -15,13 +15,39 @@
  *
  * ⭐⭐⭐ 28/8 — ECCEZIONE dichiarata al paragrafo sopra: col permesso "Full
  * access" (piano elegant-spinning-dongarra.md, owner) un percorso A
- * PIACERE È ammesso — `cartellaLibera` sotto. Ricerca fatta prima di
- * scrivere (REGOLA ZERO): la sicurezza degli harness di coding nel 2026
- * dichiara le DENYLIST di percorsi sensibili (.ssh, credenziali,
- * System32...) una strategia FALLITA — "sandbox escapes documentati
- * proprio nella categoria denylist" (Docker/Developers Digest, agosto
- * 2026) — quindi questo file non ne scrive una. La sicurezza vera sta
- * altrove: (1) il permesso "Full access" è una SCELTA ESPLICITA
+ * PIACERE È ammesso — `cartellaLibera` sotto. Questo file NON scrive una
+ * denylist di percorsi sensibili come CONFINE di sicurezza, e il motivo è
+ * questo, non quello scritto qui fino al 16/09:
+ * ⛔ 16/09 — CITAZIONE CORRETTA. La versione precedente attribuiva a un
+ * inesistente «Docker/Developers Digest, agosto 2026» la tesi che le
+ * denylist fossero «una strategia fallita». Verificato aprendo le fonti
+ * (segnalazione della lane CLI, controllata qui): NON esiste una
+ * pubblicazione congiunta; Developers Digest, «AI Coding Agent Security
+ * Models Compared 2026» (28 LUGLIO 2026,
+ * developersdigest.tech/blog/ai-coding-agent-security-models-compared-2026)
+ * RACCOMANDA «credential masking or deny rules for SSH keys and .env
+ * files»; Docker, «AI Coding Agent Horror Stories» (18 MAGGIO 2026,
+ * docker.com/blog/ai-coding-agent-horror-stories-security-risks) SPEDISCE
+ * una blocklist («~/.aws, ~/.ssh, ~/.docker, ~/.gnupg, ~/.netrc, ~/.npm and
+ * ~/.cargo are all on the blocklist»); la frase sugli escape «nella
+ * categoria denylist» è di un TERZO editore, Pillar Security, «The Week of
+ * Sandbox Escapes» (20 LUGLIO 2026, pillar.security/blog/the-week-of-sandbox-escapes),
+ * e parla di profili di CONFINAMENTO del sistema operativo (Seatbelt su
+ * macOS): «a list of things somebody remembered to block that's always
+ * one entry short». ⇒ La distinzione che conta, e che nessuna fonte fa al
+ * posto nostro: una lista usata come CONFINE («questa lista ferma un
+ * attaccante») è debole perché un percorso si calcola a runtime — su
+ * questo Pillar ha ragione; una lista usata come INNESCO («questa lista
+ * decide quando CHIEDERE») non promette contenimento: se manca un
+ * percorso, il caso peggiore è lo stato di oggi. Il commento vecchio
+ * applicava una critica della prima classe a un meccanismo della
+ * seconda. NVIDIA («Practical Security Guidance for Sandboxing Agentic
+ * Workflows», developer.nvidia.com) raccomanda un piccolo elenco di
+ * percorsi protetti anche a Full access — e copre l'ACCESSO, lettura
+ * compresa, non le sole scritture come riassumeva il dossier del 03/09.
+ * ⇒ Qui resta «nessuna denylist come confine»; l'innesco «la shell chiede
+ * davanti a un percorso segreto» è la fase P0-bis (owner 16/09, «Sì»).
+ * La sicurezza vera sta altrove: (1) il permesso "Full access" è una SCELTA ESPLICITA
  * dell'owner per QUELLA sessione, mai un default; (2) il percorso deve
  * ESISTERE ed essere leggibile/scrivibile DAVVERO (stessa validazione
  * già in uso per l'allowlist fissa, solo a runtime invece che all'avvio

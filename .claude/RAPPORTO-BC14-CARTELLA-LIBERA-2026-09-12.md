@@ -106,7 +106,7 @@ porta — così lo diceva il commento che ho sostituito:
 |---|---|---|
 | il percorso deve essere assoluto, esistere, essere una cartella, leggibile e scrivibile | `custom-task.mjs:64-92` (`validaCartellaLibera`) | `tests/custom-task.test.mjs`, verde oggi |
 | la cartella scelta **non si allarga**, nemmeno con «Accesso pieno» | `session-registry.mjs` `cartellaEffettivaPerPermessi` + `cartellaGiaScelta:true` | `tests/session-registry.test.mjs` «cartellaLibera resta SEMPRE sulla cartella esatta scelta» |
-| mai una denylist di percorsi sensibili (strategia dichiarata fallita, ricerca 28/8) | scelta esplicita, `custom-task.mjs:19-33` | commento + commit `6c37f8d5` |
+| nessuna denylist di percorsi sensibili **come confine** — ⛔ **rettifica 16/09**: la ricerca del 28/8 citata come «strategia dichiarata fallita (Docker/Developers Digest)» era **falsa**: le due fonti (distinte, luglio e maggio 2026) la *raccomandano* e la *spediscono*; la critica è di Pillar Security e riguarda i profili di confinamento OS, non gli inneschi di approvazione. La decisione operativa resta (una lista non è un confine); come **innesco** («chiedi») è la fase P0-bis approvata dall'owner il 16/09 | scelta esplicita, `custom-task.mjs:19-33` (commento corretto il 16/09) | commento + commit `6c37f8d5` |
 | solo quattro nomi di permesso ammessi | `config.mjs` `permessiRichiestaValido` | test nuovo §4.2 |
 
 **E il cancello non restringeva niente.** L'ambito effettivo di una `cartellaLibera` è la cartella

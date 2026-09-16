@@ -21,14 +21,23 @@ This file defines how agentic coding work must be done in this repository. It is
   (TALOS desktop: `harness-ui/`), the mobile lane (`mobile/`, its own owner), and
   the benchmark lane (TALOS-BANCO). A lane never edits another lane's files; a
   cross-lane need is recorded as a file-level handoff first.
-- Delegated batches go to an external agent session (Astra via the Codex CLI)
-  with a written brief that states what already exists, the files it may touch,
-  the forbidden files (diff in the report, never applied), the tests to run and
-  the report path. The orchestrator reviews, tests, commits and verifies on the
-  live server; the delegate never commits, never pushes, never touches port 4174.
-- Concurrent delegates use separate git worktrees; two sessions on the same file
-  are not allowed. Full builds, full suites, dependency installs and shared ports
-  stay single-runner operations.
+- Implementation is delegated (owner's rule of 13/09 and 16/09/2026): the
+  coordinator plans, writes the briefs, assigns file ownership, orchestrates and
+  reviews; up to five Opus 5 agents at high or xhigh effort implement one phase
+  at a time — five lanes of one phase, or one agent per phase — either as
+  separate agents or as a deterministic workflow with an adversarial reviewer
+  per lane. When those agents' limits are spent the coordinator continues
+  inline. Each brief states what already exists (including who is already
+  working on it elsewhere), the files it may touch and the declared regions of
+  shared files, the forbidden files, the tests to run and the report shape.
+  The coordinator alone commits, merges, builds, deploys, runs real turns on the
+  live server and asks for the push; a delegate never pushes and never touches
+  port 4174.
+- Concurrent delegates use separate git worktrees with disjoint file ownership;
+  a shared file is split into declared line regions and merged by the
+  coordinator, so an overlap becomes a merge conflict resolved by hand, never a
+  silent last-save-wins. Full builds, full suites, dependency installs and
+  shared ports stay single-runner operations.
 
 ## Before Coding
 <!-- talos: sempre -->
@@ -54,9 +63,11 @@ This file defines how agentic coding work must be done in this repository. It is
   the reason before editing.
 - Every discovered regression becomes a permanent named ledger scenario and
   automated test.
-- The main agent implements and owns complex architecture/security review.
-  Subagents may run only simple focused tests or mechanical consistency review;
-  they never implement or edit plans.
+- The coordinator owns the ledger, the architecture and security review, and
+  the verification of the integrated state. Implementing agents follow the
+  ledger of their lane (research first, RED test, GREEN, proof in the failing
+  direction, measurements before and after) and report measured facts, never
+  claims; they do not edit the plan.
 
 ## Standards-First Engineering
 
