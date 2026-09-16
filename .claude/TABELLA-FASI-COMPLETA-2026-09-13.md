@@ -21,7 +21,7 @@
 | **Pubblico** `Ninozzz95/talos` | release desktop **0.1.5 · 0.1.7 · 0.1.8 · 0.1.10 · 0.1.13** (0.1.6, 0.1.9, 0.1.11, 0.1.12 bruciate: un tag pubblicato non si riscrive). La **0.1.13** è uscita oggi alle 16:35Z con tre asset. Oggi su `main` sono entrate le PR #18-#22: chiavi con scope desktop (portachiavi separato prod↔dev), disinstallazione con spunta «mantieni/elimina dati e chiavi», batch della Libreria, review chiavi (gate sul seme d'ambiente, migrazione chiavi legacy), le due cure del percorso di release. Le porta avanti **un'altra sessione** («Gate rossi di TALOS»), che ha dichiarato di non chiedermi più review. |
 | **Privato** `lane/harness-desktop` | pubblicato fino a `3415c030` (Fase 3 + streaming). **Tre commit locali non pubblicati di un'altra sessione** (`6d1e078a` batch Libreria, `c36c63ba` generatori di test dal pubblico, `9c9a0fd2` esenzione BC49) e **due test modificati non committati** (porte di scrittura no-op in `research-orchestrator.test.mjs` e `ricerca-deposito-strutturato.test.mjs`): non sono miei, non li tocco, li dichiaro. |
 | ⛔ **Divergenza privato↔pubblico** | il pubblico è **avanti** sul packaging desktop (chiavi, disinstallazione, release-path) e la lane privata ha cose che il pubblico non ha (worktree WIP). Regola già scritta il 14/09 e ancora vera: **non riesportare la lane privata prima di recuperarvi i fix pubblici**; direzione privato→pubblico **a pezzi**, mai copiando `http-app.mjs` intero. È un debito con un nome, non una fase: si chiude dentro la prima fase che tocca quei file. |
-| **Custodito, da valutare INSIEME (owner 16/09)** | **Audit indipendente mobile+desktop sul commit pubblico `13f65c1`**: 10 finding, 33 task, 73 fonti, script di riproduzione; in `TALOS-RICERCHE/2026-09-16-talos-audit-indipendente-mobile-desktop-13f65c1.zip` (+ copia, impronte in `IMPRONTE.txt`). ⛔ Non valutato, niente in coda finché non lo apriamo insieme; ogni finding si riproduce sul banco prima di crederci | — |
+| **Custodito, da valutare INSIEME (owner 16/09)** | **Audit indipendente mobile+desktop sul commit pubblico `13f65c1`**: 10 finding, 33 task, 73 fonti, script di riproduzione; in `TALOS-RICERCHE/2026-09-16-talos-audit-indipendente-mobile-desktop-13f65c1.zip` (+ copia, impronte in `IMPRONTE.txt`). ⛔ Non ancora valutato — ma **TUTTO dentro questa tabella** (owner 16/09: «niente deve rimanere fuori»): i 10 finding e i 33 task stanno in **FASE 12**, uno per uno, con la proprietà; si riproducono sul banco prima di crederci | FASE 12 |
 | **Fuori dal mio scope, altrove** | **La CLI di TALOS** (owner 16/09: «se ne sta occupando un altro agente, è fuori scope»; vive in `AVM-talos-cli-competitive`, con me in contatto diretto se serve). **Il bug dello streaming a blocchi** (il testo si ferma ogni mezzo secondo; owner: «lascia stare, lo faccio risolvere ad altri agenti»). **Il mobile** (sola lettura, lane sua). **La catena di release pubblica** (l'altra sessione). |
 | **Debiti trasversali dichiarati** | 12 rossi di parità componenti (ProviderCard, Conversazione, Inspector — mockup vs app, decisione owner) · 49 rossi `baseline-shell` mai indagati · REDUCED-MOTION-02 · `[data-runtime-usage]` scritto dal codice ma assente dalla pagina · timer della striscia senza prova a schermo · cura del titolo non riverificata con un giro vero · `kernel:controlla` rosso in locale (fonte dell'owner divergente: 9.461 righe contro 6.260) e verde in CI per costruzione · i due store `.harness-ui-research`/`.harness-ui-library` da cancellare dal Desktop a fine lavoro (promemoria owner 11/09). |
 
@@ -124,6 +124,17 @@ difesa lì è D-10E, che pulisce l'ambiente, e il fatto che i segreti di TALOS v
 regione dei permessi (`ATTREZZI_CON_PERMESSO_PER_ATTREZZO`, `config.mjs:307`; l'esecuzione della
 shell in `talosHarness.mjs` ~7831), che nessuna corsia della P0 ha: per questo viene **dopo** la
 fusione, non in parallelo.
+
+---
+
+**Dentro la stessa corsia, dall'audit interno del 16/09 (riprodotti sul banco, schede in `CODA-BUG-CRITICI`):**
+
+| riga | cosa | finita quando |
+|---|---|---|
+| **BC-54** | `wsl.exe --` fa passare la riga da DUE shell: `$HOME`, `$?`, `$X` espansi prima del nostro `bash -lc`, anche negli apici singoli. Cura misurata: `--exec` (`talosHarness.mjs:4268`) | `echo '$HOME'` → `$HOME`, `false; echo $?` → `1`, `X=42 sh -c 'echo $X'` → `42`; test sull'argv + integrazione che gira solo se WSL c'è |
+| **BC-55** | `VAR=…`, `export`, `(cd …` finiscono su cmd.exe `[sandbox: none]` perché `primoProgramma` prende il primo token e WSL «non ce l'ha» | i tre comandi del report girano in WSL con `dove: null` e l'esito dice dove; la scelta della sessione (`doveGiranoIComandi`) esposta nell'interfaccia |
+| **BC-56** | comando vuoto = `TypeError` non catturato sul ramo Windows, `{  ; }` su WSL | esito `-1` con «Il comando è vuoto», nei due rami |
+| **BC-57** | `prova` → `exit 0` senza suite (trascritto `4c3e1649`, app 0.1.13), non riprodotto sul banco | causa trovata con un giro vero su banco; e comunque «nessuna suite trovata in <cartella>» al posto del verde, che conta come NON provato |
 
 ---
 
@@ -399,6 +410,73 @@ piattaforma** che spetta all'owner, non a una corsia.
 | **`cd` su Windows che non persisteva** | `3d292939`, 16/09 — segnalato dalla sessione «talos cli», riprodotto prima di curare: `staccaCartellaFinale` leggeva la prima riga dopo il marcatore, ma la coda Windows (`echo.`) va a capo e la coda POSIX (`printf`) no ⇒ `cartellaFinale: null` con CRLF **e** con un solo LF (non era il `\r`). Cura: prima riga **non vuota**. 5/5 in un file di test proprio, kernel 598/598, rottura al contrario 2 rosse, sha256 identico. ⛔ Da riportare nella copia sorgente del kernel fuori repo | TACCUINO non aggiornato: il commit è la prova |
 | **Le memorie superate** | «un agente alla volta», «niente più deleghe», «delega ad Astra», «stato release a cinque blocchi»: marcate storia negli indici il 13-14/09; la regola viva è quella del 16/09 qui sopra | indici di memoria |
 | **Documenti** | 380 voci spostate in `archivio/2026-09-16/` il 16/09 (prompt e consegne ad Astra, dossier, ledger e rapporti delle righe chiuse, foto 11-13/09, patch mai applicate); restano vivi tabella, taccuino, indici, code, regole e i 23 documenti citati dal codice | `archivio/2026-09-16/INDICE.md` |
+
+# FASE 12 · L'AUDIT INDIPENDENTE sul commit pubblico `13f65c1` — tutti i 10 finding e i 33 task (owner 16/09: «niente deve rimanere fuori»)
+
+Fascicolo custodito in `TALOS-RICERCHE/2026-09-16-talos-audit-indipendente-mobile-desktop-13f65c1.zip` (+ copia,
+impronte OK). **Non ancora valutato**: si apre insieme all'owner. Qui sta l'inventario completo, così nessuna riga vive
+solo nello zip. ⛔ Ogni finding si **riproduce sul banco prima di crederci** (l'audit interno dello stesso giorno aveva
+tre accuse vere su sette, e una «vera» con causa sbagliata). La proprietà è quella delle lane: **desktop = mia**,
+**mobile = lane mobile** (io leggo e segnalo, non scrivo), **condiviso = da decidere con l'owner**.
+
+## I 10 finding
+
+| id | lane | gravità (loro) | cosa dicono | dove tocca la nostra roadmap |
+|---|---|---|---|---|
+| **F01** | desktop | High | la preview locale eredita l'autorità web di TALOS (same-origin) | corsia **B** della P0 (browser: cornice/proxy/vivo) e `http-app.mjs` rotte `/api/v1/browser/*` — si valuta DOPO la fusione P0, sul codice nuovo |
+| **F02** | mobile | High | la policy HTTP locale non è applicata nel percorso provider letto | lane mobile |
+| **F03** | mobile | Medium | il parser SSE non rispetta framing e campi `data:` multipli | lane mobile (il kernel desktop ha il suo parser: da confrontare, non da copiare) |
+| **F04** | desktop | Medium | il tetto del proxy arriva dopo il buffering e misura caratteri, non byte | `browser-proxy.mjs` — parente di BC-53 (tetto in byte, prima del buffer) |
+| **F05** | mobile | Medium | il budget first-byte non include l'attesa degli header | lane mobile — stessa famiglia della corsia **D** della P0 (timeout) |
+| **F06** | mobile | Medium | il retry non ha deadline complessiva né cancellazione dell'attesa | lane mobile — idem |
+| **F07** | desktop | Medium | il proxy verifica i redirect soltanto dopo averli seguiti | `browser-proxy.mjs`/`browser-proxy-universale.mjs` — da confrontare con `naviga` (DNS pinning e camminata sui redirect già portati dal mobile) |
+| **F08** | condiviso | Low | il perimetro delle dichiarazioni di licenza è ambiguo | catena di release (LICENSE, notices) |
+| **F09** | desktop | Medium | il quick start desktop contraddice i manifest presenti | README + CI (T09.1: «il quick start diventa un test») |
+| **F10** | desktop | Improvement | la distribuzione Windows dichiara eseguibili non firmati | catena di release pubblica (firma) — decisione di prodotto dell'owner |
+
+## I 33 task, nelle loro 11 fasi (0–10), con la proprietà
+
+| id | fase | P | sforzo | titolo | finding | lane |
+|---|---|---|---|---|---|---|
+| T00.1 | 0 misurazione e baseline | P1 | M | chiudere l'inventario e fissare la provenienza | — | condiviso |
+| T00.2 | 0 | P1 | M | portare le riproduzioni nel runtime supportato | F02–F06 | mobile + desktop |
+| T00.3 | 0 | P1 | M | strumentare i percorsi critici senza payload sensibili | — | mobile + desktop + context-engine |
+| T01.1 | 1 | **P0** | S | contenere la preview same-origin | F01 | desktop |
+| T01.2 | 1 | P1 | M | applicare la policy provider ai due trasporti | F02 | mobile |
+| T01.3 | 1 | P1 | M | correggere framing SSE e limite byte del proxy | F03, F04 | mobile + desktop |
+| T02.1 | 2 | P1 | L | costruire la preview isolata | F01 | desktop (`main.mjs`, `browser.js`, `browser-proxy.mjs` — è la strada `WebContentsView` che la P0 ha lasciato fuori) |
+| T02.2 | 2 | P1 | M/L | rendere deadline e abort contratti end-to-end | F05, F06 | mobile |
+| T02.3 | 2 | P1 | M | chiudere il confine redirect/DNS per tipo di client | F07 | desktop |
+| T02.4 | 2 | P1 | XL | audit approfondito dei confini privilegiati ancora aperti (terminal-ws, kernel, hook, MCP, plugin, keystore) | — | desktop + mobile |
+| T03.1 | 3 | P2 | M | formalizzare confini e contratti condivisi (ADR) | F01, F02, F05, F06 | condiviso |
+| T03.2 | 3 | P2 | L | estrarre famiglie di rotte da `http-app.mjs` mantenendo il contratto | F01, F07 | desktop |
+| T03.3 | 3 | P2 | M | mappare duplicazioni canoniche e build-time (kernel copiato in `mobile/android/…/assets`) | — | condiviso — è la divergenza «il kernel è uno solo» già nota |
+| T04.1 | 4 | P2 | M | verificare backpressure e shutdown del worker SQLite | — | context-engine |
+| T04.2 | 4 | P1 | L | qualificare migrazioni, recovery e restore | — | context-engine + mobile |
+| T04.3 | 4 | P2 | M/L | qualificare query, export e limiti delle risorse | — | context-engine + desktop |
+| T05.1 | 5 | P2 | L | separare stato di operazione da rendering | F03, F05, F06 | mobile + desktop (`browser.js`: la macchina a stati per scheda della corsia B) |
+| T05.2 | 5 | P2 | L | qualificare invalidazione e concorrenza del client | — | mobile + desktop |
+| T05.3 | 5 | P2 | M | misurare e ridurre il grafo di avvio | — | mobile + desktop |
+| T06.1 | 6 | P2 | M | rendere visibili destinazione, autorizzazione e reversibilità | F01, F02 | mobile + desktop |
+| T06.2 | 6 | P2 | M | ridisegnare attesa, retry e recupero | F03, F05, F06 | mobile + desktop |
+| T06.3 | 6 | P2 | L | qualificare design system e accessibilità | — | mobile + desktop |
+| T06.4 | 6 | P2 | L | completare benchmark Android e ricerca sui journey | — | mobile |
+| T07.1 | 7 | P2 | M | profilare le operazioni peggiori per piattaforma | — | mobile + desktop |
+| T07.2 | 7 | P2 | L | ottimizzare rendering e I/O dove serve | — | mobile + desktop + context-engine |
+| T08.1 | 8 | P1 | L | gate di sicurezza sul confine reale | F01, F02, F04, F07 | mobile + desktop |
+| T08.2 | 8 | P1 | L | conformità, fault injection e contratti API | F03–F06 | mobile + desktop + context-engine |
+| T08.3 | 8 | P1 | L | accettazione del prodotto pacchettizzato | F10 | desktop (release) + mobile (android) |
+| T09.1 | 9 | P2 | S | rendere il quick start un test | F09 | desktop (README, CI) |
+| T09.2 | 9 | P2 | M | chiarire licenze, notices e distinta delle dipendenze | F08, F10 | condiviso |
+| T09.3 | 9 | P2 | L | qualificare dipendenze e provenienza della release | F10 | desktop (release) |
+| T10.1 | 10 | P3 | L/XL | ottimizzazioni avanzate solo dopo baseline stabile | — | tutti |
+| T10.2 | 10 | P1 | XL | chiudere la copertura dell'audit e rivalutare le priorità | — | condiviso |
+
+**Come entra nel lavoro:** alla valutazione insieme, ogni riga riceve uno di tre esiti — **riprodotto → in una fase di
+questa tabella** (con corsia e proprietà dei file, intersezioni vuote), **smentito dal banco → nel registro «chiuso senza
+difetto» con la prova**, **mobile → segnalato alla lane mobile** con file:riga. Nessuna riga può restare «nello zip».
+
+---
 
 ## Chiuso senza difetto — «abbiamo guardato e non c'è»
 
