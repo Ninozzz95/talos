@@ -539,7 +539,19 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
  * solleva l'errore con il motivo vero. Partire e prendersi un 404 farebbe
  * sembrare rotta una credenziale che è buona.
  */
-function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null, instradaOpenRouter = false, inattivitaGenerazioneMs = null } = {}) {
+/*
+ * ⛔ 17/09 — `sorvegliaCorpo` è INIETTABILE, e non per comodità: due contratti veri si contraddicono
+ *   per costruzione. Il guardiano dell'inattività (P0 · punto 7) deve VEDERE i byte che passano, e
+ *   l'unico modo che la piattaforma dà è `body.pipeThrough(...)` dentro una `Response` nuova — il
+ *   corpo è un getter di sola lettura e il piping «locks the stream for the duration of the pipe»
+ *   (MDN, «ReadableStream: pipeThrough() method» e «Using readable streams», lette il 17/09/2026).
+ *   Lo strato della cache (P-B) promette invece che un flusso SSE o un errore escano «LA STESSA
+ *   risposta, non una ricostruita» (PG-12, CACHE-08): quel contratto vale per la CACHE, che non deve
+ *   rimontare un flusso che non ha prodotto — non per il guardiano, che lo attraversa intatto
+ *   (P0-D-20: stessi byte, stesso stato, stessi header). ⇒ Le prove della cache iniettano il
+ *   guardiano identità e misurano il loro contratto; il guardiano vero si prova da solo (P0-D-15/16).
+ */
+function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null, instradaOpenRouter = false, inattivitaGenerazioneMs = null, sorvegliaCorpo = sorvegliaCorpoDiGenerazione } = {}) {
   if (!dipendenze) return fetchDiRete;
   return async function fetchMultiProvider(url, opzioni = {}) {
     let corpo = null;
@@ -606,7 +618,7 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
     const failsafe = Number.isFinite(inattivitaGenerazioneMs) ? inattivitaGenerazioneMs : leggiInattivitaGenerazioneMs();
     const sorveglia = (risposta) => (destinazione.fonte === 'openrouter'
       ? risposta
-      : sorvegliaCorpoDiGenerazione(risposta, { limiteMs: failsafe, userSignal: opzioni.signal ?? null }));
+      : sorvegliaCorpo(risposta, { limiteMs: failsafe, userSignal: opzioni.signal ?? null }));
     const conDispatcher = dispatcherDiRichiesta(failsafe);
 
     // P-L · il corpo del kernel incontra ACP solo qui; stop e chiusura seguono la risposta.
@@ -811,9 +823,11 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
   modelloSessione = null,
   /* P0 · punto 7 (16/09): iniettabile perché una prova non deve aspettare mezz'ora per provarla. */
   inattivitaGenerazioneMs = null,
+  /* 17/09: il guardiano del corpo, iniettabile per le prove dello strato cache (vedi `creaFetchInstradata`). */
+  sorvegliaCorpo = sorvegliaCorpoDiGenerazione,
 } = {}) {
   const catena = validaFallbackProviders(fallbackProviders);
-  if (!providerStore && !catena.length) return creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs });
+  if (!providerStore && !catena.length) return creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo });
   if (!dipendenze || (catena.length && (!providerStore || typeof onCambioFornitore !== 'function' || typeof onConsumoFornitore !== 'function'))) {
     throw new OwnerRuntimeUnavailableError('Per continuare con un altro fornitore occorrono accessi, avvisi in chat e registrazione dei consumi.', 'PROVIDER_FALLBACK_NOT_CONNECTED');
   }
@@ -883,7 +897,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     };
     const instradata = creaFetchInstradata(rete, { risolvi, dipendenze: {
       ...dipendenze, leggiChiave: p => p === fonte && scelta ? scelta.chiave : dipendenze.leggiChiave(p),
-    }, onAvviso, instradaOpenRouter: true, inattivitaGenerazioneMs });
+    }, onAvviso, instradaOpenRouter: true, inattivitaGenerazioneMs, sorvegliaCorpo });
     try { return await instradata(url, opzioni); }
     catch (error) {
       // P-K — token scaduto o involucro malformato: panchina senza partire in rete.
