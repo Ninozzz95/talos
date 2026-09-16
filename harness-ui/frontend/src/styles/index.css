@@ -1113,6 +1113,35 @@ a.talos-button{text-decoration:none}
 .talos-browser__quanto{margin-left:6px; padding:0 5px; border-radius:var(--talos-radius-pill); font-family:var(--talos-font-mono); font-size:10.5px; background:var(--talos-warning-soft); color:var(--talos-warning)}
 .talos-browser__quanto[hidden]{display:none}
 .talos-browser__tools [data-browser-modo][aria-pressed="true"]{border-color:var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-accent-text)}
+/* ⭐ 16/09/2026, P0 corsia B — il pannello dello stato DELLA SCHEDA (apertura, ritentativo, guasto,
+   annullata, a riposo). Vive dentro `#schermoBrowser`, sopra la cornice; è `hidden` quando la
+   scheda sta bene, quindi a regime la schermata è identica al disegno del mockup.
+   ⛔ Il colore lo decide lo STATO, mai il solo colore la sostanza: sotto il titolo c'è sempre la
+   frase (WCAG 1.4.1 «Use of Color», rivisto il 16/09/2026). I token sono quelli del tema, così il
+   pannello è giusto sia in chiaro sia in scuro senza una seconda tavolozza. */
+.talos-browser__stato{border-left:3px solid var(--talos-border)}
+.talos-browser__stato[data-stato="retrying"]{border-left-color:var(--talos-warning)}
+.talos-browser__stato[data-stato="error"],
+.talos-browser__stato[data-stato="unreachable"]{border-left-color:var(--talos-danger)}
+.talos-browser__stato[data-stato="cancelled"],
+.talos-browser__stato[data-stato="riposo"]{border-left-color:var(--talos-muted)}
+.talos-browser__stato [data-stato-titolo]{margin:0}
+.talos-browser__stato [hidden]{display:none}
+/* Lo stato sulla linguetta: solo dentro la striscia del Browser — `.talos-tabstrip` è condivisa col
+   Terminale e non si tocca da qui.
+   ⛔⛔ 16/09, GIRO DI RIPARAZIONE — il commento che stava qui diceva «un puntino, mai il colore da
+   solo: il fumetto porta l'indirizzo», e affermava il falso: il fumetto porta l'INDIRIZZO, non lo
+   stato, e l'icona colorata qui sotto è `aria-hidden`. Cioè lo stato di una scheda non attiva era
+   portato dal SOLO colore — la violazione esatta di WCAG 1.4.1 «Use of Color» (Livello A) che
+   questo blocco citava come sua fonte. Il colore RESTA, ma non è più solo: `components/browser.js`
+   cambia anche la FORMA dell'icona (`ICONA_PER_STATO`) e scrive la parola dello stato in un nodo
+   `.sr-only`, che un lettore di schermo annuncia e una ricerca nella pagina trova. Tre canali, e
+   due prove li tengono fermi (unità + `tests/browser/browser-p0.spec.mjs`). */
+#browserSchede [data-stato-scheda="loading"] .talos-tabstrip__icona,
+#browserSchede [data-stato-scheda="retrying"] .talos-tabstrip__icona{color:var(--talos-warning)}
+#browserSchede [data-stato-scheda="error"] .talos-tabstrip__icona,
+#browserSchede [data-stato-scheda="unreachable"] .talos-tabstrip__icona{color:var(--talos-danger)}
+#browserSchede [data-stato-scheda="cancelled"] .talos-tabstrip__titolo{opacity:.65}
 .talos-browser__testo-pulito{white-space:pre-wrap; overflow-wrap:anywhere}
 .talos-browser__sorgente{margin:12px 0 0}
 .talos-browser__sorgente > summary{cursor:pointer; font-size:12px; color:var(--talos-muted)}
@@ -2033,6 +2062,10 @@ a.talos-button{text-decoration:none}
 /* la lettura testuale scorre dentro di sé invece di spingere fuori la finestra */
 .talos-browser #browserPagina{min-height:0}
 .talos-browser__live iframe{width:100%;height:100%;border:0;border-radius:var(--talos-radius-card);background:#fff}
+/* ⛔ 16/09 — dentro `#browserLive` convivono PIÙ cornici, una per scheda: quella attiva si vede, le
+   altre restano nel documento (nasconderle non le ricarica; spostarle sì — whatwg, thread «keepalive
+   attribute on iframe»). Senza questa riga la regola qui sopra le disegnerebbe tutte una sull'altra. */
+.talos-browser__live iframe[hidden]{display:none}
 /* Browser, 06/09 — i commenti sugli elementi della pagina viva */
 .talos-browser__annotazioni{padding:var(--talos-space-md);border-top:1px solid var(--talos-border-subtle)}
 .talos-browser__annotazioni-testa{gap:var(--talos-space-sm)}
