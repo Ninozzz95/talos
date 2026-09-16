@@ -195,9 +195,9 @@ function creaSceltaFallback({ fornitori = [], valore = [], usaAttrezzi = true, o
   vuota.value = "";
   vuota.textContent = "Nessuno";
   select.append(vuota);
-  for (const [i, o] of scelte.entries()) {
+  for (const [i2, o] of scelte.entries()) {
     const option = document.createElement("option");
-    option.value = String(i);
+    option.value = String(i2);
     option.textContent = o.etichetta;
     select.append(option);
   }
@@ -208,7 +208,7 @@ function creaSceltaFallback({ fornitori = [], valore = [], usaAttrezzi = true, o
   const notifica = () => onChange?.(selezione.map((v) => ({ ...v })));
   function disegna2() {
     lista.hidden = selezione.length === 0;
-    lista.replaceChildren(...selezione.map((v, i) => {
+    lista.replaceChildren(...selezione.map((v, i2) => {
       const li = document.createElement("li");
       li.className = "talos-cluster";
       const label = document.createElement("span");
@@ -220,7 +220,7 @@ function creaSceltaFallback({ fornitori = [], valore = [], usaAttrezzi = true, o
       rimuovi.setAttribute("aria-label", "Rimuovi " + label.textContent);
       rimuovi.disabled = typeof onChange !== "function";
       rimuovi.addEventListener("click", () => {
-        selezione.splice(i, 1);
+        selezione.splice(i2, 1);
         notifica();
         disegna2();
         select.focus();
@@ -228,7 +228,7 @@ function creaSceltaFallback({ fornitori = [], valore = [], usaAttrezzi = true, o
       li.append(label, rimuovi);
       return li;
     }));
-    for (const [i, option] of [...select.options].slice(1).entries()) option.disabled = selezione.some((v) => v.provider === scelte[i].provider && v.model === scelte[i].model);
+    for (const [i2, option] of [...select.options].slice(1).entries()) option.disabled = selezione.some((v) => v.provider === scelte[i2].provider && v.model === scelte[i2].model);
     aggiungi.disabled = typeof onChange !== "function" || !scelte.length || select.value === "" || selezione.length >= 8;
   }
   select.addEventListener("change", disegna2);
@@ -419,7 +419,7 @@ function creaCronologiaComposer({ leggi, scrivi: scrivi2, tetto = TETTO_CRONOLOG
     }
     return voci;
   }
-  function ricorda(testo3) {
+  function ricorda2(testo3) {
     const pulito = String(testo3 ?? "").trim();
     if (!pulito) return;
     const lista = carica();
@@ -442,7 +442,7 @@ function creaCronologiaComposer({ leggi, scrivi: scrivi2, tetto = TETTO_CRONOLOG
     return prossimo === -1 ? "" : lista[prossimo];
   }
   return {
-    ricorda,
+    ricorda: ricorda2,
     scorri,
     voci: () => [...carica()]
   };
@@ -516,6 +516,742 @@ var numero;
 var init_consumo_sessione = __esm({
   "src/components/consumo-sessione.js"() {
     numero = (valore) => Number.isFinite(Number(valore)) ? Number(valore) : null;
+  }
+});
+
+// src/assets/shell-quote/parse.js
+function matchAll(s, r) {
+  var origIndex = r.lastIndex;
+  var matches = [];
+  var matchObj;
+  while (matchObj = r.exec(s)) {
+    matches[matches.length] = matchObj;
+    if (r.lastIndex === matchObj.index) {
+      r.lastIndex += 1;
+    }
+  }
+  r.lastIndex = origIndex;
+  return matches;
+}
+function getVar(env, pre, key) {
+  var r = typeof env === "function" ? env(key) : env[key];
+  if (typeof r === "undefined" && key != "") {
+    r = "";
+  } else if (typeof r === "undefined") {
+    r = "$";
+  }
+  if (typeof r === "object") {
+    return pre + TOKEN + JSON.stringify(r) + TOKEN;
+  }
+  return pre + r;
+}
+function parseInternal(string, env, opts) {
+  if (!opts) {
+    opts = {};
+  }
+  var BS = opts.escape || "\\";
+  var ifs = opts.splitUnquoted === true ? " 	\n" : typeof opts.splitUnquoted === "string" ? opts.splitUnquoted : "";
+  var BAREWORD = "(\\" + BS + `['"` + META + `]|[^\\s'"` + META + "])+";
+  var chunker = new RegExp([
+    "(" + CONTROL + ")",
+    // control chars
+    "(" + BAREWORD + "|" + DOUBLE_QUOTE + "|" + SINGLE_QUOTE + ")+"
+  ].join("|"), "g");
+  var matches = matchAll(string, chunker);
+  if (matches.length === 0) {
+    return [];
+  }
+  if (!env) {
+    env = {};
+  }
+  var commented = false;
+  return matches.map(function(match) {
+    var s = match[0];
+    if (!s || commented) {
+      return void 0;
+    }
+    if (controlRE.test(s)) {
+      return { op: s };
+    }
+    var quote = false;
+    var esc = false;
+    var out = "";
+    var words = [];
+    var sawQuote = false;
+    var pendingNw = null;
+    var isGlob = false;
+    var i2;
+    function parseEnvVar() {
+      i2 += 1;
+      var varend;
+      var varname;
+      var char = s.charAt(i2);
+      if (char === "{") {
+        i2 += 1;
+        if (s.charAt(i2) === "}") {
+          throw new Error("Bad substitution: " + s.slice(i2 - 2, i2 + 1));
+        }
+        var depth = 1;
+        varend = i2;
+        while (depth > 0 && varend < s.length) {
+          if (s.charAt(varend) === "{" && s.charAt(varend - 1) === "$") {
+            depth += 1;
+          } else if (s.charAt(varend) === "}") {
+            depth -= 1;
+          }
+          varend += 1;
+        }
+        if (depth !== 0) {
+          throw new Error("Bad substitution: " + s.slice(i2));
+        }
+        varend -= 1;
+        varname = s.slice(i2, varend);
+        i2 = varend;
+      } else if (/[*@#?$!_-]/.test(char)) {
+        varname = char;
+        i2 += 1;
+      } else {
+        var slicedFromI = s.slice(i2);
+        varend = slicedFromI.match(/[^\w\d_]/);
+        if (!varend) {
+          varname = slicedFromI;
+          i2 = s.length;
+        } else {
+          varname = slicedFromI.slice(0, varend.index);
+          i2 += varend.index - 1;
+        }
+      }
+      return getVar(env, "", varname);
+    }
+    function flushRun() {
+      if (pendingNw === null) {
+        return;
+      }
+      if (pendingNw === 0) {
+        if (out !== "") {
+          words[words.length] = out;
+          out = "";
+        }
+      } else {
+        words[words.length] = out;
+        out = "";
+        for (var fe = 1; fe < pendingNw; fe += 1) {
+          words[words.length] = "";
+        }
+      }
+      pendingNw = null;
+    }
+    for (i2 = 0; i2 < s.length; i2++) {
+      var c = s.charAt(i2);
+      if (ifs && c !== DS) {
+        flushRun();
+      }
+      isGlob = isGlob || !quote && (c === "*" || c === "?");
+      if (esc) {
+        out += c;
+        esc = false;
+      } else if (quote) {
+        if (c === quote) {
+          quote = false;
+        } else if (quote == SQ) {
+          out += c;
+        } else {
+          if (c === BS) {
+            i2 += 1;
+            c = s.charAt(i2);
+            if (c === DQ || c === BS || c === DS) {
+              out += c;
+            } else {
+              out += BS + c;
+            }
+          } else if (c === DS) {
+            out += parseEnvVar();
+          } else {
+            out += c;
+          }
+        }
+      } else if (c === DQ || c === SQ) {
+        quote = c;
+        sawQuote = true;
+      } else if (controlRE.test(c)) {
+        return { op: s };
+      } else if (hash.test(c)) {
+        commented = true;
+        var commentObj = { comment: string.slice(match.index + i2 + 1) };
+        if (out.length) {
+          return [out, commentObj];
+        }
+        return [commentObj];
+      } else if (c === BS) {
+        esc = true;
+      } else if (c === DS) {
+        var value = parseEnvVar();
+        if (!ifs) {
+          out += value;
+        } else {
+          for (var vi = 0; vi < value.length; vi += 1) {
+            var vc = value.charAt(vi);
+            if (ifs.indexOf(vc) < 0) {
+              flushRun();
+              out += vc;
+            } else if (pendingNw === null) {
+              pendingNw = vc === " " || vc === "	" || vc === "\n" ? 0 : 1;
+            } else if (vc !== " " && vc !== "	" && vc !== "\n") {
+              pendingNw += 1;
+            }
+          }
+        }
+      } else {
+        out += c;
+      }
+    }
+    if (isGlob) {
+      return { op: "glob", pattern: out };
+    }
+    if (ifs) {
+      if (pendingNw !== null && pendingNw > 0) {
+        words[words.length] = out;
+        out = "";
+        for (var te = 1; te < pendingNw; te += 1) {
+          words[words.length] = "";
+        }
+      }
+      if (out !== "" || sawQuote && words.length === 0) {
+        words[words.length] = out;
+      }
+      return words;
+    }
+    return out;
+  }).reduce(function(prev, arg) {
+    if (typeof arg === "undefined") {
+      return prev;
+    }
+    [].concat(arg).forEach(function(entry) {
+      prev[prev.length] = entry;
+    });
+    return prev;
+  }, []);
+}
+function parse(s, env, opts) {
+  var mapped = parseInternal(s, env, opts);
+  if (typeof env !== "function") {
+    return mapped;
+  }
+  return mapped.reduce(function(acc, s2) {
+    if (typeof s2 === "object") {
+      acc[acc.length] = s2;
+      return acc;
+    }
+    var xs = s2.split(RegExp("(" + TOKEN + ".*?" + TOKEN + ")", "g"));
+    if (xs.length === 1) {
+      acc[acc.length] = xs[0];
+      return acc;
+    }
+    xs.filter(Boolean).forEach(function(x) {
+      acc[acc.length] = startsWithToken.test(x) ? JSON.parse(x.split(TOKEN)[1]) : x;
+    });
+    return acc;
+  }, []);
+}
+var CONTROL, controlRE, META, SINGLE_QUOTE, DOUBLE_QUOTE, hash, SQ, DQ, DS, TOKEN, mult, i, startsWithToken;
+var init_parse = __esm({
+  "src/assets/shell-quote/parse.js"() {
+    CONTROL = "(?:" + [
+      "\\|\\|",
+      "\\&\\&",
+      ";;",
+      "\\|\\&",
+      "\\<\\(",
+      "\\<\\<\\<",
+      ">>",
+      ">\\&",
+      "<\\&",
+      "[&;()|<>]"
+    ].join("|") + ")";
+    controlRE = new RegExp("^" + CONTROL + "$");
+    META = "|&;()<> \\t";
+    SINGLE_QUOTE = "'([^']*?)'";
+    DOUBLE_QUOTE = '"((\\\\"|[^"])*?)"';
+    hash = /^#$/;
+    SQ = "'";
+    DQ = '"';
+    DS = "$";
+    TOKEN = "";
+    mult = 4294967296;
+    for (i = 0; i < 4; i++) {
+      TOKEN += (mult * Math.random()).toString(16);
+    }
+    startsWithToken = new RegExp("^" + TOKEN);
+  }
+});
+
+// src/components/comando-shell.js
+function nomeEseguibile(token) {
+  const t2 = String(token ?? "").trim();
+  if (!t2) return "";
+  const ultimo = t2.replace(/\\/gu, "/").split("/").filter(Boolean).pop() || "";
+  return ultimo.toLowerCase().replace(/\.(?:exe|cmd|bat|ps1|com)$/u, "");
+}
+function famigliaDaEseguibile(eseguibile) {
+  const nome = nomeEseguibile(eseguibile);
+  if (!nome) return "generico";
+  return FAMIGLIA_PER_ESEGUIBILE.get(nome) || "generico";
+}
+function raffinaFamiglia(eseguibile, parole, flag) {
+  const base = famigliaDaEseguibile(eseguibile);
+  const nome = nomeEseguibile(eseguibile);
+  const p0 = (parole[0] || "").toLowerCase();
+  const p1 = (parole[1] || "").toLowerCase();
+  if (GESTORI_PACCHETTI.has(nome)) {
+    if (nome === "npx") {
+      const dentro = famigliaDaEseguibile(p0);
+      return dentro === "generico" ? "node" : dentro;
+    }
+    if (["install", "i", "ci", "add", "remove", "rm", "uninstall", "update", "upgrade", "link"].includes(p0)) return "install";
+    if (p0 === "test" || p0 === "prova") return "test";
+    if (["start", "dev", "serve", "preview"].includes(p0)) return "server";
+    if (p0 === "build") return "build";
+    if (["run", "run-script", "exec"].includes(p0)) {
+      if (/^(?:test|prova|check|lint|verify)/u.test(p1)) return "test";
+      if (/^(?:build|compila|bundle|dist)/u.test(p1)) return "build";
+      if (/^(?:dev|start|serve|preview|watch)/u.test(p1)) return "server";
+      return "node";
+    }
+    return "node";
+  }
+  if (nome === "node" || nome === "deno" || nome === "nodejs") {
+    if (flag.some((f) => f === "--test" || f.startsWith("--test="))) return "test";
+    return "node";
+  }
+  if (nome === "python" || nome === "python3" || nome === "py") {
+    if (["pytest", "unittest", "nose2"].includes(p0)) return "test";
+    return "python";
+  }
+  if (nome === "pip" || nome === "pip3" || nome === "poetry" || nome === "uv" || nome === "conda") {
+    if (["install", "add", "sync"].includes(p0)) return "install";
+    return "python";
+  }
+  if (nome === "docker" || nome === "podman") {
+    if (p0 === "build" || p0 === "buildx") return "build";
+    return "docker";
+  }
+  if (nome === "cargo") {
+    if (p0 === "test" || p0 === "bench") return "test";
+    if (p0 === "add" || p0 === "install") return "install";
+    return "build";
+  }
+  if (nome === "go") {
+    if (p0 === "test") return "test";
+    if (p0 === "get" || p0 === "install") return "install";
+    return "build";
+  }
+  if (nome === "dotnet") {
+    if (p0 === "test") return "test";
+    if (p0 === "run") return "server";
+    return "build";
+  }
+  if (["apt", "apt-get", "brew", "choco", "winget", "scoop", "yum", "dnf", "pacman", "apk"].includes(nome)) {
+    return "install";
+  }
+  return base;
+}
+function perMostrare(token) {
+  const t2 = String(token ?? "");
+  if (!VUOLE_VIRGOLETTE.test(t2)) return t2;
+  return `"${t2.replace(/"/gu, '\\"')}"`;
+}
+function tipoDelToken(token) {
+  if (token.startsWith("-")) return "flag";
+  if (PARE_URL.test(token)) return "url";
+  if (PARE_PERCORSO.test(token)) return "percorso";
+  return "argomento";
+}
+function analizzaComando(riga) {
+  const grezzo = String(riga ?? "").trim();
+  const vuoto = { ok: false, segmenti: [], eseguibile: null, sottocomando: null, famiglia: "generico", testo: "" };
+  if (!grezzo) return vuoto;
+  let voci;
+  try {
+    voci = parse(grezzo, VARIABILE_A_SE_STESSA, { escape: SENZA_ESCAPE });
+  } catch {
+    return { ok: false, segmenti: [{ tipo: "grezzo", testo: grezzo }], eseguibile: null, sottocomando: null, famiglia: "generico", testo: grezzo };
+  }
+  if (!Array.isArray(voci) || voci.length === 0) return { ...vuoto, segmenti: [{ tipo: "grezzo", testo: grezzo }], testo: grezzo };
+  const segmenti = [];
+  const parole = [];
+  const indiciParole = [];
+  const flag = [];
+  let eseguibile = null;
+  let attesa = "eseguibile";
+  let primoComando = true;
+  for (const voce of voci) {
+    if (voce && typeof voce === "object") {
+      if (typeof voce.comment === "string") {
+        segmenti.push({ tipo: "commento", testo: `#${voce.comment.replace(/\s+$/u, "")}` });
+        continue;
+      }
+      if (voce.op === "glob") {
+        segmenti.push({ tipo: attesa === "eseguibile" ? "eseguibile" : "percorso", testo: String(voce.pattern ?? "") });
+        if (attesa === "eseguibile") attesa = "libera";
+        else if (attesa !== "libera") attesa = "libera";
+        else if (primoComando) {
+          parole.push(String(voce.pattern ?? ""));
+          indiciParole.push(segmenti.length - 1);
+        }
+        continue;
+      }
+      if (typeof voce.op === "string") {
+        segmenti.push({ tipo: "operatore", testo: voce.op });
+        if (OP_NUOVO_COMANDO.has(voce.op)) {
+          attesa = "eseguibile";
+          primoComando = false;
+        } else if (OP_VERSO_FILE.has(voce.op)) attesa = "percorso";
+        else if (OP_VERSO_DESCRITTORE.has(voce.op)) attesa = "descrittore";
+        else attesa = "libera";
+        continue;
+      }
+      continue;
+    }
+    const token = String(voce ?? "");
+    if (!token) continue;
+    if (attesa === "eseguibile") {
+      if (ASSEGNAZIONE.test(token)) {
+        segmenti.push({ tipo: "argomento", testo: perMostrare(token) });
+        continue;
+      }
+      segmenti.push({ tipo: "eseguibile", testo: perMostrare(token) });
+      const nome = nomeEseguibile(token);
+      if (PREFISSI.has(nome)) continue;
+      if (eseguibile === null) eseguibile = token;
+      attesa = "libera";
+      continue;
+    }
+    if (attesa === "percorso") {
+      segmenti.push({ tipo: "percorso", testo: perMostrare(token) });
+      attesa = "libera";
+      continue;
+    }
+    if (attesa === "descrittore") {
+      segmenti.push({ tipo: "argomento", testo: perMostrare(token) });
+      attesa = "libera";
+      continue;
+    }
+    const tipo = tipoDelToken(token);
+    segmenti.push({ tipo, testo: perMostrare(token) });
+    if (primoComando) {
+      if (tipo === "flag") flag.push(token);
+      else {
+        parole.push(token);
+        indiciParole.push(segmenti.length - 1);
+      }
+    }
+  }
+  let sottocomando = null;
+  if (eseguibile && CON_SOTTOCOMANDO.has(nomeEseguibile(eseguibile)) && parole.length) {
+    const candidato = parole[0];
+    if (!PARE_URL.test(candidato) && !PARE_PERCORSO.test(candidato)) {
+      sottocomando = candidato;
+      const dove = indiciParole[0];
+      if (segmenti[dove]) segmenti[dove].tipo = "sottocomando";
+    }
+  }
+  const famiglia = eseguibile ? raffinaFamiglia(eseguibile, parole, flag) : "generico";
+  return {
+    ok: true,
+    segmenti,
+    eseguibile: eseguibile ? nomeEseguibile(eseguibile) : null,
+    sottocomando,
+    famiglia,
+    testo: segmenti.map((s) => s.testo).join(" ")
+  };
+}
+function iconaComando(d, famiglia) {
+  const svg = d.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", "i i--sm talos-cmd__icona");
+  svg.setAttribute("aria-hidden", "true");
+  const use = d.createElementNS(SVG_NS, "use");
+  use.setAttribute("href", `#${ICONA_FAMIGLIA[famiglia] || ICONA_FAMIGLIA.generico}`);
+  svg.append(use);
+  return svg;
+}
+function disegnaComando(d, riga, analisi = null) {
+  const a = analisi || analizzaComando(riga);
+  const frammento = d.createDocumentFragment();
+  if (!a.segmenti.length) {
+    frammento.append(d.createTextNode("—"));
+    return frammento;
+  }
+  a.segmenti.forEach((s, i2) => {
+    if (i2 > 0) frammento.append(d.createTextNode(" "));
+    const span = d.createElement("span");
+    span.className = `talos-cmd__${s.tipo}`;
+    span.textContent = s.testo;
+    frammento.append(span);
+  });
+  return frammento;
+}
+var SENZA_ESCAPE, VARIABILE_A_SE_STESSA, FAMIGLIE, ICONA_FAMIGLIA, NOME_FAMIGLIA, CON_SOTTOCOMANDO, PREFISSI, GESTORI_PACCHETTI, FAMIGLIA_PER_ESEGUIBILE, ASSEGNAZIONE, PARE_URL, PARE_PERCORSO, VUOLE_VIRGOLETTE, OP_NUOVO_COMANDO, OP_VERSO_FILE, OP_VERSO_DESCRITTORE, SVG_NS;
+var init_comando_shell = __esm({
+  "src/components/comando-shell.js"() {
+    init_parse();
+    SENZA_ESCAPE = "\0";
+    VARIABILE_A_SE_STESSA = (nome) => `$${nome}`;
+    FAMIGLIE = Object.freeze([
+      "git",
+      "node",
+      "python",
+      "docker",
+      "test",
+      "build",
+      "server",
+      "rete",
+      "filesystem",
+      "install",
+      "shell",
+      "generico"
+    ]);
+    ICONA_FAMIGLIA = Object.freeze({
+      git: "i-git",
+      node: "i-code",
+      python: "i-brain",
+      docker: "i-grid",
+      test: "i-check-sq",
+      build: "i-layout",
+      server: "i-play",
+      rete: "i-globe",
+      filesystem: "i-folder",
+      install: "i-download",
+      shell: "i-terminal",
+      generico: "i-command"
+    });
+    NOME_FAMIGLIA = Object.freeze({
+      git: "controllo di versione",
+      node: "JavaScript",
+      python: "Python",
+      docker: "contenitori",
+      test: "prove",
+      build: "compilazione",
+      server: "server",
+      rete: "rete",
+      filesystem: "file e cartelle",
+      install: "installazione",
+      shell: "shell",
+      generico: "comando"
+    });
+    CON_SOTTOCOMANDO = /* @__PURE__ */ new Set([
+      "git",
+      "gh",
+      "hub",
+      "jj",
+      "npm",
+      "pnpm",
+      "yarn",
+      "bun",
+      "npx",
+      "deno",
+      "docker",
+      "podman",
+      "kubectl",
+      "helm",
+      "cargo",
+      "go",
+      "rustup",
+      "pip",
+      "pip3",
+      "poetry",
+      "uv",
+      "conda",
+      "dotnet",
+      "apt",
+      "apt-get",
+      "brew",
+      "choco",
+      "winget",
+      "scoop",
+      "systemctl",
+      "adb",
+      "terraform",
+      "aws",
+      "gcloud",
+      "az",
+      "nvm"
+    ]);
+    PREFISSI = /* @__PURE__ */ new Set(["sudo", "doas", "env", "time", "nohup", "command"]);
+    GESTORI_PACCHETTI = /* @__PURE__ */ new Set(["npm", "pnpm", "yarn", "bun", "npx"]);
+    FAMIGLIA_PER_ESEGUIBILE = new Map(Object.entries({
+      git: "git",
+      gh: "git",
+      hub: "git",
+      jj: "git",
+      tig: "git",
+      node: "node",
+      nodejs: "node",
+      deno: "node",
+      tsx: "node",
+      "ts-node": "node",
+      eslint: "node",
+      prettier: "node",
+      biome: "node",
+      python: "python",
+      python3: "python",
+      py: "python",
+      pip: "python",
+      pip3: "python",
+      poetry: "python",
+      uv: "python",
+      conda: "python",
+      ruff: "python",
+      black: "python",
+      mypy: "python",
+      docker: "docker",
+      podman: "docker",
+      "docker-compose": "docker",
+      kubectl: "docker",
+      helm: "docker",
+      minikube: "docker",
+      kind: "docker",
+      pytest: "test",
+      jest: "test",
+      vitest: "test",
+      mocha: "test",
+      ava: "test",
+      tap: "test",
+      playwright: "test",
+      cypress: "test",
+      phpunit: "test",
+      rspec: "test",
+      ctest: "test",
+      gotestsum: "test",
+      make: "build",
+      gmake: "build",
+      cmake: "build",
+      ninja: "build",
+      msbuild: "build",
+      gradle: "build",
+      gradlew: "build",
+      mvn: "build",
+      ant: "build",
+      bazel: "build",
+      cargo: "build",
+      go: "build",
+      dotnet: "build",
+      tsc: "build",
+      swc: "build",
+      webpack: "build",
+      rollup: "build",
+      esbuild: "build",
+      vite: "build",
+      parcel: "build",
+      serve: "server",
+      uvicorn: "server",
+      gunicorn: "server",
+      flask: "server",
+      django: "server",
+      nginx: "server",
+      httpd: "server",
+      caddy: "server",
+      rails: "server",
+      php: "server",
+      curl: "rete",
+      wget: "rete",
+      ssh: "rete",
+      scp: "rete",
+      sftp: "rete",
+      rsync: "rete",
+      ping: "rete",
+      nc: "rete",
+      netcat: "rete",
+      netstat: "rete",
+      dig: "rete",
+      host: "rete",
+      nslookup: "rete",
+      telnet: "rete",
+      traceroute: "rete",
+      ifconfig: "rete",
+      ip: "rete",
+      ls: "filesystem",
+      dir: "filesystem",
+      tree: "filesystem",
+      cat: "filesystem",
+      head: "filesystem",
+      tail: "filesystem",
+      less: "filesystem",
+      more: "filesystem",
+      cp: "filesystem",
+      mv: "filesystem",
+      rm: "filesystem",
+      rmdir: "filesystem",
+      mkdir: "filesystem",
+      touch: "filesystem",
+      ln: "filesystem",
+      find: "filesystem",
+      grep: "filesystem",
+      rg: "filesystem",
+      ripgrep: "filesystem",
+      ag: "filesystem",
+      sed: "filesystem",
+      awk: "filesystem",
+      sort: "filesystem",
+      uniq: "filesystem",
+      wc: "filesystem",
+      diff: "filesystem",
+      cut: "filesystem",
+      tr: "filesystem",
+      tar: "filesystem",
+      zip: "filesystem",
+      unzip: "filesystem",
+      gzip: "filesystem",
+      gunzip: "filesystem",
+      chmod: "filesystem",
+      chown: "filesystem",
+      du: "filesystem",
+      df: "filesystem",
+      stat: "filesystem",
+      realpath: "filesystem",
+      robocopy: "filesystem",
+      xcopy: "filesystem",
+      fd: "filesystem",
+      apt: "install",
+      "apt-get": "install",
+      brew: "install",
+      choco: "install",
+      winget: "install",
+      scoop: "install",
+      yum: "install",
+      dnf: "install",
+      pacman: "install",
+      apk: "install",
+      bash: "shell",
+      sh: "shell",
+      zsh: "shell",
+      fish: "shell",
+      dash: "shell",
+      ksh: "shell",
+      pwsh: "shell",
+      powershell: "shell",
+      cmd: "shell",
+      echo: "shell",
+      printf: "shell",
+      export: "shell",
+      set: "shell",
+      source: "shell",
+      which: "shell",
+      where: "shell",
+      type: "shell",
+      sleep: "shell",
+      exit: "shell",
+      alias: "shell",
+      history: "shell",
+      clear: "shell"
+    }));
+    ASSEGNAZIONE = /^[A-Za-z_][A-Za-z0-9_]*=/u;
+    PARE_URL = /^(?:[a-z][a-z0-9+.-]*:\/\/|www\.)/iu;
+    PARE_PERCORSO = /[/\\]|^\.{1,2}$|^\.[^.]|\.[A-Za-z0-9]{1,8}$/u;
+    VUOLE_VIRGOLETTE = /[\s"'|&;<>()]/u;
+    OP_NUOVO_COMANDO = /* @__PURE__ */ new Set(["|", "||", "&&", ";", ";;", "|&", "&", "(", ")", "<("]);
+    OP_VERSO_FILE = /* @__PURE__ */ new Set([">", ">>", "<", "<<<"]);
+    OP_VERSO_DESCRITTORE = /* @__PURE__ */ new Set([">&", "<&"]);
+    SVG_NS = "http://www.w3.org/2000/svg";
   }
 });
 
@@ -616,12 +1352,280 @@ function righeGiri(giri = []) {
 function righeFile(file = []) {
   return file.map((f) => [f.path, `+${f.aggiunte ?? 0}${f.rimozioni ? ` −${f.rimozioni}` : ""}`]);
 }
+function uscitaDaTestoAttrezzo(testo3) {
+  const t2 = typeof testo3 === "string" ? testo3 : "";
+  const m = /^\s*exit\s+(\d+)\b/u.exec(t2);
+  return m ? Number(m[1]) : null;
+}
+function statoDaUscita(uscita, errore) {
+  if (uscita === 130 || uscita === 143) return "annullato";
+  if (uscita === 124 || uscita === 137) return "ucciso";
+  if (errore === true) return "fallito";
+  if (!Number.isFinite(uscita)) return "fallito";
+  return uscita === 0 ? "riuscito" : "fallito";
+}
+function oraConSecondi(ms) {
+  if (!Number.isFinite(ms)) return "—";
+  const t2 = new Date(ms);
+  return Number.isNaN(t2.getTime()) ? "—" : t2.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
 function datiProcesso(p = {}) {
+  if (p.preparato === true) return p;
+  const stato = STATI_PROCESSO[p.stato] ? p.stato : p.stato === "ok" ? "riuscito" : p.stato === "errore" ? "fallito" : "in-corso";
+  const descrittore = STATI_PROCESSO[stato];
   const durata = Number.isFinite(p.durataMs) ? `${num.format(p.durataMs / 1e3)} s` : null;
-  const misura = [durata, p.stato !== "in-corso" && Number.isFinite(p.uscita) ? `uscita ${p.uscita}` : null].filter(Boolean).join(" · ") || (p.stato === "in-corso" ? "" : "—");
+  const misura = [durata, !descrittore.vivo && Number.isFinite(p.uscita) ? `uscita ${p.uscita}` : null].filter(Boolean).join(" · ") || (descrittore.vivo ? "" : "—");
   const chi = `${p.chi === "tu" ? "tu" : "agente"} · ${p.chi === "tu" ? "terminale" : `giro ${p.giro ?? "—"}`}`;
-  const fermo = Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= 6e4 ? `Nessuna uscita da ${Math.round(p.fermoDaMs / 1e3)} secondi. Il processo è vivo: potrebbe aspettare un input. TALOS non lo ferma da solo.` : null;
-  return { comando: p.comando || "—", stato: p.stato || "ok", chi, misura, fermo };
+  const fermo = Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= SOGLIA_ATTESA_MS ? `Nessuna uscita da ${Math.round(p.fermoDaMs / 1e3)} secondi. Il processo è vivo: potrebbe aspettare un input. TALOS non lo ferma da solo.` : null;
+  const analisi = analizzaComando(p.comando || "");
+  const quando = oraConSecondi(p.avviatoA);
+  const dettaglio = [
+    ["Comando", p.comando || "—"],
+    ["Stato", descrittore.etichetta],
+    ["Avviato", quando],
+    ["Durata", durata || "—"],
+    ["Uscita", Number.isFinite(p.uscita) && !descrittore.vivo ? String(p.uscita) : "—"],
+    ["Cartella", "—"],
+    ["PID", "—"],
+    ["Chi", chi],
+    ["Descrizione", typeof p.descrizione === "string" && p.descrizione.trim() ? p.descrizione.trim() : "—"]
+  ];
+  return {
+    preparato: true,
+    id: p.id ?? null,
+    comando: p.comando || "—",
+    descrizione: typeof p.descrizione === "string" ? p.descrizione.trim() : "",
+    analisi,
+    famiglia: analisi.famiglia,
+    stato,
+    etichetta: descrittore.etichetta,
+    tono: descrittore.tono,
+    icona: descrittore.icona,
+    vivo: descrittore.vivo,
+    chi,
+    misura,
+    fermo,
+    quando,
+    cartella: "—",
+    pid: "—",
+    uscita: Number.isFinite(p.uscita) ? p.uscita : null,
+    dettaglio
+  };
+}
+function schedaDi(contenitore) {
+  if (!contenitore.__processi) {
+    for (const n of [...contenitore.querySelectorAll?.('[data-c="ProcessRow"], [data-c="EmptyState"]') || []]) n.remove?.();
+    contenitore.__processi = { righe: /* @__PURE__ */ new Map(), mostrati: TETTO_PROCESSI, filtro: "", selezionato: null, ultima: [], zona: null, filtroEl: null, campo: null, altri: null, vuoto: null, annuncio: null };
+  }
+  return contenitore.__processi;
+}
+function bottoneApri(d, card, riga, idRiga) {
+  const b = el2(d, "button", "talos-button talos-button--ghost talos-button--sm talos-process__apri");
+  b.type = "button";
+  b.setAttribute("aria-expanded", "false");
+  b.setAttribute("aria-controls", `processo-dettaglio-${idRiga}`);
+  b.setAttribute("aria-label", "Mostra i dettagli di questo comando");
+  const svg = d.createElementNS(SVG_NS_INSPECTOR, "svg");
+  svg.setAttribute("class", "i i--sm");
+  svg.setAttribute("aria-hidden", "true");
+  const use = d.createElementNS(SVG_NS_INSPECTOR, "use");
+  use.setAttribute("href", "#i-chev");
+  svg.append(use);
+  b.append(svg);
+  b.addEventListener("click", (evento) => {
+    evento.preventDefault?.();
+    evento.stopPropagation?.();
+    const aperto = b.getAttribute("aria-expanded") === "true";
+    b.setAttribute("aria-expanded", aperto ? "false" : "true");
+    b.setAttribute("aria-label", aperto ? "Mostra i dettagli di questo comando" : "Nascondi i dettagli di questo comando");
+    riga.aperto = !aperto;
+    if (riga.aperto && riga.dettaglioSporco) {
+      riempiCard(d, riga.dettaglio, riga.righeDettaglio);
+      riga.dettaglioSporco = false;
+    }
+    riga.dettaglio.hidden = aperto;
+    card.dataset.aperto = aperto ? "no" : "si";
+  });
+  return b;
+}
+function creaRiga(d, p, scheda, contenitore) {
+  const card = el2(d, "div", "talos-card talos-process");
+  card.dataset.c = "ProcessRow";
+  card.dataset.processo = String(p.id ?? "");
+  card.tabIndex = 0;
+  card.setAttribute("role", "listitem");
+  const testa = el2(d, "div", "talos-process__testa");
+  const icona10 = iconaComando(d, p.famiglia);
+  const cmd = el2(d, "div", "talos-process__cmd");
+  cmd.setAttribute("role", "text");
+  const dettaglio = el2(d, "div", "talos-process__dettaglio");
+  dettaglio.id = `processo-dettaglio-${String(p.id ?? "")}`;
+  dettaglio.hidden = true;
+  const riga = { card, cmd, statoEl: null, statoTesto: null, statoUse: null, chiEl: null, oraEl: null, misuraEl: null, stallo: null, dettaglio, icona: icona10, mostrato: null, aperto: false, dettaglioSporco: true, righeDettaglio: p.dettaglio };
+  const apri = bottoneApri(d, card, riga, String(p.id ?? ""));
+  testa.append(icona10, cmd, apri);
+  const meta2 = el2(d, "div", "talos-process__meta");
+  const statoEl = el2(d, "span", "talos-badge talos-badge--sm talos-process__stato");
+  const statoIcona = d.createElementNS(SVG_NS_INSPECTOR, "svg");
+  statoIcona.setAttribute("class", "i i--xs");
+  statoIcona.setAttribute("aria-hidden", "true");
+  const statoUse = d.createElementNS(SVG_NS_INSPECTOR, "use");
+  statoIcona.append(statoUse);
+  const statoTesto = el2(d, "span", "talos-process__stato-testo");
+  statoEl.append(statoIcona, statoTesto);
+  const chiEl = el2(d, "span", "talos-process__chi");
+  const oraEl = el2(d, "span", "talos-mono talos-process__ora");
+  const misuraEl = el2(d, "span", "talos-mono talos-measure talos-process__misura");
+  meta2.append(statoEl, chiEl, oraEl, el2(d, "span", "talos-grow"), misuraEl);
+  const stallo = el2(d, "div", "talos-process__stall");
+  stallo.hidden = true;
+  card.append(testa, meta2, stallo, dettaglio);
+  card.addEventListener("click", () => {
+    scheda.selezionato = scheda.selezionato === p.id ? null : p.id;
+    for (const [id, r] of scheda.righe) r.card.dataset.selezionato = scheda.selezionato === id ? "si" : "no";
+  });
+  card.addEventListener("keydown", (evento) => {
+    if (evento.target !== card) return;
+    if (evento.key !== "Enter" && evento.key !== " ") return;
+    evento.preventDefault?.();
+    card.lancia ? card.lancia("click") : card.click?.();
+  });
+  Object.assign(riga, { statoEl, statoTesto, statoUse, chiEl, oraEl, misuraEl, stallo });
+  aggiornaRiga(d, riga, p, scheda);
+  void contenitore;
+  return riga;
+}
+function aggiornaRiga(d, riga, p, scheda) {
+  const m = riga.mostrato;
+  riga.card.dataset.stato = p.stato;
+  riga.card.dataset.famiglia = p.famiglia;
+  riga.card.dataset.selezionato = scheda.selezionato === p.id ? "si" : "no";
+  if (!m || m.comando !== p.comando) {
+    riga.cmd.replaceChildren(disegnaComando(d, p.comando, p.analisi));
+    riga.cmd.setAttribute("aria-label", `Comando ${NOME_FAMIGLIA[p.famiglia] || "generico"}: ${p.comando}`);
+    riga.icona.querySelector?.("use")?.setAttribute?.("href", `#${ICONA_FAMIGLIA[p.famiglia] || ICONA_FAMIGLIA.generico}`);
+  }
+  if (!m || m.stato !== p.stato) {
+    riga.statoEl.className = `talos-badge talos-badge--sm talos-process__stato${p.tono ? ` talos-badge--${p.tono}` : ""}`;
+    riga.statoTesto.textContent = p.etichetta;
+    riga.statoUse.setAttribute("href", `#${p.icona}`);
+  }
+  if (!m || m.chi !== p.chi) riga.chiEl.textContent = p.chi;
+  if (!m || m.quando !== p.quando) riga.oraEl.textContent = p.quando === "—" ? "" : p.quando;
+  if (!m || m.misura !== p.misura) riga.misuraEl.textContent = p.misura;
+  if (!m || m.fermo !== p.fermo) {
+    riga.stallo.textContent = p.fermo || "";
+    riga.stallo.hidden = !p.fermo;
+  }
+  const chiaveDettaglio = p.dettaglio.map((r) => r.join("=")).join("|");
+  if (!m || m.chiaveDettaglio !== chiaveDettaglio) {
+    riga.righeDettaglio = p.dettaglio;
+    if (riga.aperto) {
+      riempiCard(d, riga.dettaglio, p.dettaglio);
+      riga.dettaglioSporco = false;
+    } else riga.dettaglioSporco = true;
+  }
+  riga.mostrato = { comando: p.comando, stato: p.stato, chi: p.chi, quando: p.quando, misura: p.misura, fermo: p.fermo, chiaveDettaglio };
+}
+function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
+  if (!contenitore) return { mostrati: 0, totale: 0 };
+  const scheda = schedaDi(contenitore);
+  const grezzi = (Array.isArray(lista) ? lista : []).filter(Boolean);
+  scheda.ultima = grezzi;
+  if (grezzi.length && !scheda.filtroEl) {
+    const box = el2(d, "div", "talos-field talos-field--sm talos-process-filtro");
+    const campo2 = el2(d, "input", "talos-field__input talos-process-filtro__campo");
+    campo2.type = "search";
+    campo2.setAttribute("aria-label", "Filtra i comandi eseguiti");
+    campo2.setAttribute("placeholder", "Filtra i comandi…");
+    campo2.value = scheda.filtro;
+    campo2.addEventListener("input", () => {
+      scheda.filtro = String(campo2.value || "");
+      disegnaProcessi(d, contenitore, scheda.ultima, { ridisegna: true });
+    });
+    box.append(campo2);
+    scheda.filtroEl = box;
+    scheda.campo = campo2;
+    contenitore.insertBefore(box, contenitore.firstChild || null);
+  } else if (!grezzi.length && scheda.filtroEl) {
+    scheda.filtroEl.remove();
+    scheda.filtroEl = null;
+    scheda.campo = null;
+    scheda.filtro = "";
+  }
+  if (!scheda.zona) {
+    scheda.zona = el2(d, "div", "talos-process-lista");
+    scheda.zona.setAttribute("role", "list");
+    scheda.zona.setAttribute("aria-label", "Comandi eseguiti in questa sessione");
+    contenitore.append(scheda.zona);
+  }
+  const cerca = scheda.filtro.trim().toLowerCase();
+  const filtrati = cerca ? grezzi.filter((p) => testoFiltrabile(p).includes(cerca)) : grezzi;
+  const visibili = filtrati.slice(0, scheda.mostrati).map((p) => datiProcesso(p));
+  const visti = /* @__PURE__ */ new Set();
+  for (let i2 = 0; i2 < visibili.length; i2 += 1) {
+    const p = visibili[i2];
+    visti.add(p.id);
+    let riga = scheda.righe.get(p.id);
+    if (!riga) {
+      riga = creaRiga(d, p, scheda, contenitore);
+      scheda.righe.set(p.id, riga);
+    } else aggiornaRiga(d, riga, p, scheda);
+    const attuale = scheda.zona.children[i2];
+    if (attuale !== riga.card) scheda.zona.insertBefore(riga.card, attuale || null);
+  }
+  for (const [id, riga] of [...scheda.righe]) {
+    if (visti.has(id)) continue;
+    riga.card.remove();
+    scheda.righe.delete(id);
+  }
+  const restano = filtrati.length - visibili.length;
+  if (restano > 0) {
+    if (!scheda.altri) {
+      const b = el2(d, "button", "talos-button talos-button--secondary talos-button--block talos-process-altri");
+      b.type = "button";
+      b.addEventListener("click", () => {
+        scheda.mostrati += TETTO_PROCESSI;
+        disegnaProcessi(d, contenitore, scheda.ultima, { ridisegna: true });
+        if (scheda.annuncio) scheda.annuncio.textContent = `Ora vedi ${Math.min(scheda.mostrati, scheda.ultima.length)} comandi.`;
+      });
+      scheda.altri = b;
+      contenitore.append(b);
+    }
+    scheda.altri.textContent = `Carica altri · ne vedi ${visibili.length} di ${filtrati.length}`;
+  } else if (scheda.altri) {
+    scheda.altri.remove();
+    scheda.altri = null;
+  }
+  if (!scheda.annuncio) {
+    const a = el2(d, "p", "talos-process-annuncio");
+    a.setAttribute("role", "status");
+    scheda.annuncio = a;
+    contenitore.append(a);
+  }
+  const serveVuoto = filtrati.length === 0;
+  const tutti = grezzi;
+  if (serveVuoto && !scheda.vuoto) {
+    const vuoto = el2(d, "div", "talos-card talos-inspector-card");
+    vuoto.dataset.c = "EmptyState";
+    const head = el2(d, "div", "talos-inspector-card__head");
+    head.appendChild(el2(d, "b", "", "Processi"));
+    vuoto.append(head, el2(d, "p", "talos-inspector__hint", tutti.length ? "Nessun comando corrisponde al filtro." : "Nessun comando eseguito in questa sessione. Quando l'agente o tu lanciate un comando, qui compaiono comando, durata e uscita."));
+    scheda.vuoto = vuoto;
+    contenitore.append(vuoto);
+  } else if (serveVuoto && scheda.vuoto) {
+    const frase = scheda.vuoto.querySelector?.(".talos-inspector__hint");
+    if (frase) {
+      frase.textContent = tutti.length ? "Nessun comando corrisponde al filtro." : "Nessun comando eseguito in questa sessione. Quando l'agente o tu lanciate un comando, qui compaiono comando, durata e uscita.";
+    }
+  } else if (!serveVuoto && scheda.vuoto) {
+    scheda.vuoto.remove();
+    scheda.vuoto = null;
+  }
+  return { mostrati: visibili.length, totale: grezzi.length };
+}
+function testoFiltrabile(p) {
+  return `${p.comando || ""} ${p.descrizione || ""} ${p.famiglia || ""}`.toLowerCase();
 }
 function el2(d, tag2, classe, testo3) {
   const n = d.createElement(tag2);
@@ -766,54 +1770,61 @@ function riempiCard(d, card, righe, { classiValore = () => "" } = {}) {
     card.appendChild(kv2(d, r[0], r[1], classiValore(r)));
   }
 }
+function schedaDaSaltare(inspector, rail, chiave) {
+  if (!rail) return false;
+  if (!inspector.__schedeDisegnate) inspector.__schedeDisegnate = /* @__PURE__ */ new Set();
+  if (!inspector.__schedeSporche) inspector.__schedeSporche = /* @__PURE__ */ new Set();
+  if (rail.hidden === true && inspector.__schedeDisegnate.has(chiave)) {
+    inspector.__schedeSporche.add(chiave);
+    return true;
+  }
+  inspector.__schedeDisegnate.add(chiave);
+  inspector.__schedeSporche.delete(chiave);
+  return false;
+}
+function collegaRidisegnoSchede(inspector, d) {
+  if (inspector.__gancioSchede) return;
+  const tabs = inspector.querySelector("#railTabs");
+  if (!tabs || typeof tabs.addEventListener !== "function") return;
+  inspector.__gancioSchede = true;
+  const risveglia = () => {
+    if (!inspector.__schedeSporche?.size) return;
+    const ora = () => aggiornaInspector(inspector, inspector.__ultimiDati || {}, { document: d });
+    if (typeof globalThis.requestAnimationFrame === "function") globalThis.requestAnimationFrame(ora);
+    else ora();
+  };
+  tabs.addEventListener("click", risveglia);
+  tabs.addEventListener("keyup", risveglia);
+}
 function aggiornaInspector(inspector, dati = {}, { document: d = globalThis.document } = {}) {
   if (!inspector) return;
+  inspector.__ultimiDati = dati;
+  collegaRidisegnoSchede(inspector, d);
   const h2 = inspector.querySelector(".talos-inspector__head h2");
   if (h2) h2.textContent = dati.titolo || "Nessuna sessione aperta";
-  const cards = inspector.querySelectorAll('#railContesto [data-c="InspectorCard"], #railContesto [data-c="TurnIndex"]');
-  const [ambiente, finestra, indice2] = cards;
-  riempiCard(d, ambiente, righeAmbiente(dati.contesto));
-  const f = righeFinestra(dati.usage, dati.finestra, dati.ripartizione, dati.cacheSessione);
-  if (finestra) {
-    const testa = finestra.querySelector(".talos-inspector-card__head span");
-    if (testa) testa.textContent = f.titoloDestra;
+  if (!schedaDaSaltare(inspector, inspector.querySelector("#railContesto"), "contesto")) {
+    const cards = inspector.querySelectorAll('#railContesto [data-c="InspectorCard"], #railContesto [data-c="TurnIndex"]');
+    const [ambiente, finestra, indice2] = cards;
+    riempiCard(d, ambiente, righeAmbiente(dati.contesto));
+    const f = righeFinestra(dati.usage, dati.finestra, dati.ripartizione, dati.cacheSessione);
+    if (finestra) {
+      const testa = finestra.querySelector(".talos-inspector-card__head span");
+      if (testa) testa.textContent = f.titoloDestra;
+    }
+    riempiCard(d, finestra, f.righe, { classiValore: (r) => r[2] === "stima" ? "talos-measure--estimate" : "" });
+    const giri = righeGiri(dati.giri);
+    riempiCard(d, indice2, giri.length ? giri : [["Nessun giro ancora", "—"]], { classiValore: (r) => r[2] === "accent" ? "talos-kv__v--accent" : "" });
   }
-  riempiCard(d, finestra, f.righe, { classiValore: (r) => r[2] === "stima" ? "talos-measure--estimate" : "" });
-  const giri = righeGiri(dati.giri);
-  riempiCard(d, indice2, giri.length ? giri : [["Nessun giro ancora", "—"]], { classiValore: (r) => r[2] === "accent" ? "talos-kv__v--accent" : "" });
-  const fileCard = inspector.querySelector('#railFile [data-c="InspectorCard"]');
-  const file = righeFile(dati.file);
-  riempiCard(d, fileCard, file.length ? file : [["Nessun file scritto finora", "—"]], { classiValore: (r) => r[1].startsWith("+") ? "talos-diff-num--plus" : "" });
+  if (!schedaDaSaltare(inspector, inspector.querySelector("#railFile"), "file")) {
+    const fileCard = inspector.querySelector('#railFile [data-c="InspectorCard"]');
+    const file = righeFile(dati.file);
+    riempiCard(d, fileCard, file.length ? file : [["Nessun file scritto finora", "—"]], { classiValore: (r) => r[1].startsWith("+") ? "talos-diff-num--plus" : "" });
+  }
   const agenti = inspector.querySelector("#railAgenti");
-  if (agenti) disegnaAgenti(d, agenti, dati.agenti, dati.azioniAgenti || {});
+  if (agenti && !schedaDaSaltare(inspector, agenti, "agenti")) disegnaAgenti(d, agenti, dati.agenti, dati.azioniAgenti || {});
   const processi = inspector.querySelector("#railProcessi");
-  if (processi) {
-    processi.replaceChildren();
-    const lista = Array.isArray(dati.processi) ? dati.processi : [];
-    if (!lista.length) {
-      const vuoto = el2(d, "div", "talos-card talos-inspector-card");
-      vuoto.dataset.c = "EmptyState";
-      const head = el2(d, "div", "talos-inspector-card__head");
-      head.appendChild(el2(d, "b", "", "Processi"));
-      vuoto.append(head, el2(d, "p", "talos-inspector__hint", "Nessun comando eseguito in questa sessione. Quando l'agente o tu lanciate un comando, qui compaiono comando, durata e uscita."));
-      processi.appendChild(vuoto);
-    }
-    for (const p of lista) {
-      const dp = datiProcesso(p);
-      const card = el2(d, "div", "talos-card talos-process");
-      card.dataset.c = "ProcessRow";
-      card.dataset.stato = dp.stato;
-      card.appendChild(el2(d, "div", "talos-process__cmd", dp.comando));
-      const meta2 = el2(d, "div", "talos-process__meta");
-      if (dp.stato === "in-corso") meta2.appendChild(el2(d, "span", "talos-badge talos-badge--accent talos-badge--sm", "In corso"));
-      else meta2.appendChild(el2(d, "span", `talos-dot talos-dot--${dp.stato === "errore" ? "danger" : "success"}`));
-      meta2.append(el2(d, "span", "", dp.chi), el2(d, "span", "talos-grow"), el2(d, "span", "talos-mono talos-measure", dp.misura));
-      card.appendChild(meta2);
-      if (dp.fermo) card.appendChild(el2(d, "div", "talos-process__stall", dp.fermo));
-      processi.appendChild(d.createTextNode("\n"));
-      processi.appendChild(card);
-    }
-  }
+  if (schedaDaSaltare(inspector, processi, "processi")) return;
+  if (processi) disegnaProcessi(d, processi, Array.isArray(dati.processi) ? dati.processi : []);
 }
 function comandoDagliArgomenti(testo3 = "") {
   try {
@@ -823,38 +1834,66 @@ function comandoDagliArgomenti(testo3 = "") {
     return String(testo3 || "").trim();
   }
 }
+function descrizioneDagliArgomenti(testo3 = "") {
+  try {
+    const a = JSON.parse(testo3);
+    return String(a.descrizione ?? a.description ?? "").trim();
+  } catch {
+    return "";
+  }
+}
 function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = ["shell", "bash", "esegui", "comando", "terminal"] } = {}) {
   const avviati = /* @__PURE__ */ new Map();
   const argomenti = /* @__PURE__ */ new Map();
   const lista = [];
   for (const e of eventi2) {
     if (e.type === "ToolCallStart" && nomiComando.includes(e.toolCallName)) {
-      const p = { id: e.toolCallId, comando: "", stato: "in-corso", chi: "agente", giro: e.giro ?? null, avviatoA: e.ricevutoA ?? null, durataMs: null, uscita: null };
+      const p = { id: e.toolCallId, comando: "", descrizione: "", stato: "in-avvio", chi: "agente", giro: e.giro ?? null, avviatoA: e.ricevutoA ?? null, durataMs: null, uscita: null };
       avviati.set(e.toolCallId, p);
       argomenti.set(e.toolCallId, "");
       lista.push(p);
     } else if (e.type === "ToolCallArgs" && avviati.has(e.toolCallId)) {
       argomenti.set(e.toolCallId, (argomenti.get(e.toolCallId) || "") + String(e.delta ?? ""));
-      avviati.get(e.toolCallId).comando = comandoDagliArgomenti(argomenti.get(e.toolCallId));
+      const p = avviati.get(e.toolCallId);
+      p.comando = comandoDagliArgomenti(argomenti.get(e.toolCallId));
+      p.descrizione = descrizioneDagliArgomenti(argomenti.get(e.toolCallId));
+      if (p.stato === "in-avvio" && p.comando) p.stato = "in-corso";
     } else if (e.type === "ToolCallResult" && avviati.has(e.toolCallId)) {
       const p = avviati.get(e.toolCallId);
-      p.stato = e.errore ? "errore" : "ok";
       p.uscita = Number.isFinite(e.uscita) ? e.uscita : e.errore ? 1 : 0;
+      p.stato = statoDaUscita(p.uscita, Boolean(e.errore));
       if (Number.isFinite(p.avviatoA) && Number.isFinite(e.ricevutoA)) p.durataMs = e.ricevutoA - p.avviatoA;
     }
   }
-  for (const p of lista) if (p.stato === "in-corso" && Number.isFinite(p.avviatoA)) p.fermoDaMs = adesso - p.avviatoA;
+  for (const p of lista) {
+    if (!STATI_PROCESSO[p.stato]?.vivo || !Number.isFinite(p.avviatoA)) continue;
+    p.fermoDaMs = adesso - p.avviatoA;
+    if (p.stato === "in-corso" && p.fermoDaMs >= SOGLIA_ATTESA_MS) p.stato = "in-attesa";
+  }
   return lista.reverse();
 }
-var num, numPercento, SELETTORE_RISPOSTA_TURNO, SELETTORE_TESTO_UTENTE, SVG_NS_INSPECTOR;
+var num, numPercento, SELETTORE_RISPOSTA_TURNO, SELETTORE_TESTO_UTENTE, STATI_PROCESSO, TETTO_PROCESSI, SOGLIA_ATTESA_MS, SVG_NS_INSPECTOR;
 var init_inspector = __esm({
   "src/components/inspector.js"() {
     init_consumo_sessione();
+    init_comando_shell();
     init_plurale();
     num = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
     numPercento = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     SELETTORE_RISPOSTA_TURNO = ".talos-message__copy .assistant-copy";
     SELETTORE_TESTO_UTENTE = ".talos-message--user .message-bubble p";
+    STATI_PROCESSO = Object.freeze({
+      "in-coda": { etichetta: "In coda", tono: "", icona: "i-list", vivo: true },
+      "in-avvio": { etichetta: "In avvio", tono: "accent", icona: "i-play", vivo: true },
+      "in-corso": { etichetta: "In corso", tono: "accent", icona: "i-bolt", vivo: true },
+      "in-attesa": { etichetta: "In attesa", tono: "warning", icona: "i-clock", vivo: true },
+      riuscito: { etichetta: "Riuscito", tono: "success", icona: "i-check", vivo: false },
+      fallito: { etichetta: "Non riuscito", tono: "danger", icona: "i-x", vivo: false },
+      annullato: { etichetta: "Annullato", tono: "", icona: "i-stop", vivo: false },
+      ucciso: { etichetta: "Terminato a forza", tono: "warning", icona: "i-stop", vivo: false }
+    });
+    TETTO_PROCESSI = 40;
+    SOGLIA_ATTESA_MS = 6e4;
     SVG_NS_INSPECTOR = "http://www.w3.org/2000/svg";
   }
 });
@@ -900,9 +1939,9 @@ function vociDaTurni(turni = []) {
     });
   }
   const tenute = voci.length > VOCI_MASSIME ? voci.slice(voci.length - VOCI_MASSIME) : voci;
-  tenute.forEach((v, i) => {
-    v.indice = i;
-    if (v.tono === "current" && i !== tenute.length - 1) v.tono = null;
+  tenute.forEach((v, i2) => {
+    v.indice = i2;
+    if (v.tono === "current" && i2 !== tenute.length - 1) v.tono = null;
     if (!v.testo) v.testo = v.diUtente ? "Messaggio senza testo" : v.tono === "current" ? "Sta rispondendo…" : "Risposta senza testo";
   });
   return tenute;
@@ -981,7 +2020,7 @@ function aggiornaCronologia(nav, conversazione, { fuoco = null, voci = null, seg
   const lista = nav.querySelector(".talos-cronologia__lista") || nav;
   nav.hidden = elenco2.length < 2;
   const esistenti = [...lista.querySelectorAll(".talos-cronologia__voce")];
-  for (let i = esistenti.length; i < elenco2.length; i += 1) {
+  for (let i2 = esistenti.length; i2 < elenco2.length; i2 += 1) {
     const b = d.createElement("button");
     b.type = "button";
     b.className = "talos-cronologia__voce";
@@ -993,26 +2032,26 @@ function aggiornaCronologia(nav, conversazione, { fuoco = null, voci = null, seg
     b.append(segno);
     lista.append(b);
   }
-  for (let i = elenco2.length; i < esistenti.length; i += 1) esistenti[i].remove();
+  for (let i2 = elenco2.length; i2 < esistenti.length; i2 += 1) esistenti[i2].remove();
   const attivo = Number.isFinite(fuoco) ? fuoco : Number(nav.dataset.attiva || 0);
   const attivaVera = Number(nav.dataset.attivaVera || nav.dataset.attiva || 0);
   let contaTuoi = 0;
   let contaSue = 0;
   const bottoni = [...lista.querySelectorAll(".talos-cronologia__voce")];
-  bottoni.forEach((b, i) => {
-    const v = elenco2[i];
+  bottoni.forEach((b, i2) => {
+    const v = elenco2[i2];
     const posizione = v.diUtente ? contaTuoi += 1 : contaSue += 1;
-    b.dataset.indice = String(i);
+    b.dataset.indice = String(i2);
     b.dataset.lato = v.lato;
     b.dataset.tono = v.tono || "";
     b.setAttribute("aria-label", etichettaVoce(v, posizione));
     b.removeAttribute("title");
-    const eAttiva = i === attivo;
+    const eAttiva = i2 === attivo;
     b.classList.toggle("talos-cronologia__voce--attiva", eAttiva);
-    if (i === attivaVera) b.setAttribute("aria-current", "location");
+    if (i2 === attivaVera) b.setAttribute("aria-current", "location");
     else b.removeAttribute("aria-current");
-    b.tabIndex = i === attivaVera ? 0 : -1;
-    b.querySelector(".talos-cronologia__linea").style.setProperty("--lente", `${larghezzaLente(i, attivo)}px`);
+    b.tabIndex = i2 === attivaVera ? 0 : -1;
+    b.querySelector(".talos-cronologia__linea").style.setProperty("--lente", `${larghezzaLente(i2, attivo)}px`);
   });
   nav.dataset.attiva = String(attivo);
   if (segui) {
@@ -1045,8 +2084,8 @@ function collegaCronologia(nav, conversazione, { finestra = globalThis } = {}) {
   const bottoni = () => [...nav.querySelectorAll(".talos-cronologia__voce")];
   const inMano = () => nav.dataset.inMano === "si";
   const mostraFumetto = (b) => {
-    const i = indiceDi(b);
-    riempiFumetto(fumetto, vociDaConversazione(conversazione)[i]);
+    const i2 = indiceDi(b);
+    riempiFumetto(fumetto, vociDaConversazione(conversazione)[i2]);
     fumetto.hidden = !fumetto.textContent;
     const r = b.getBoundingClientRect();
     const rn = nav.getBoundingClientRect();
@@ -1115,8 +2154,8 @@ function collegaCronologia(nav, conversazione, { finestra = globalThis } = {}) {
       if (!voci.length) return;
       const meta2 = scorrevole.getBoundingClientRect().top + scorrevole.clientHeight / 2;
       let attiva = 0;
-      voci.forEach((v, i) => {
-        if (v.elemento.getBoundingClientRect().top <= meta2) attiva = i;
+      voci.forEach((v, i2) => {
+        if (v.elemento.getBoundingClientRect().top <= meta2) attiva = i2;
       });
       nav.dataset.attivaVera = String(attiva);
       if (fumetto.hidden && !inMano()) aggiornaCronologia(nav, conversazione, { fuoco: attiva, voci, segui: true });
@@ -1389,17 +2428,17 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
       const elenco2 = el3("ul", "talos-stack");
       elenco2.setAttribute("aria-label", "Chiavi di " + (row.label || row.id));
       Object.assign(elenco2.style, { gridColumn: "1 / -1", margin: "0", padding: "0", listStyle: "none" });
-      for (const [i, chiave] of pool.entries()) {
+      for (const [i2, chiave] of pool.entries()) {
         const riga = el3("li", "talos-cluster"), testo3 = el3("div", "talos-stack"), impronta = /^[a-f0-9]{64}$/u.test(chiave.impronta || "") ? chiave.impronta.slice(0, 12) : "";
         Object.assign(riga.style, { flexWrap: "nowrap", justifyContent: "space-between", alignItems: "flex-start" });
         Object.assign(testo3.style, { gap: "4px", minWidth: "0", flex: "1" });
-        testo3.append(el3("strong", "", `Chiave ${i + 1}${impronta ? " · " + impronta : ""}`), el3("span", "talos-muted", statoChiavePool(chiave)));
+        testo3.append(el3("strong", "", `Chiave ${i2 + 1}${impronta ? " · " + impronta : ""}`), el3("span", "talos-muted", statoChiavePool(chiave)));
         if (chiave.origine === "ambiente") testo3.append(el3("span", "talos-muted", "Impostata fuori da TALOS"));
         riga.append(testo3);
         if (poolCollegato && chiave.origine !== "ambiente") {
           const rimuovi = el3("button", "talos-button talos-button--ghost talos-button--sm", "Rimuovi");
           rimuovi.type = "button";
-          rimuovi.setAttribute("aria-label", `Rimuovi chiave ${i + 1}`);
+          rimuovi.setAttribute("aria-label", `Rimuovi chiave ${i2 + 1}`);
           const aziona = async () => {
             rimuovi.disabled = true;
             try {
@@ -1416,7 +2455,7 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
           };
           if (typeof onMenu === "function") {
             rimuovi.textContent = "⋯";
-            rimuovi.setAttribute("aria-label", `Azioni per chiave ${i + 1}`);
+            rimuovi.setAttribute("aria-label", `Azioni per chiave ${i2 + 1}`);
             rimuovi.setAttribute("aria-haspopup", "menu");
             rimuovi.addEventListener("click", () => onMenu([{ chiave: "rimuovi", etichetta: "Rimuovi", pericolo: true, aziona }], { ancora: rimuovi }));
           } else rimuovi.addEventListener("click", aziona);
@@ -1508,8 +2547,8 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
           feedback2.hidden = false;
           delete card.dataset.salvataggioCollegamento;
           card.setAttribute("aria-busy", String(busy));
-          controlli.forEach((c, i) => {
-            c.disabled = prima[i];
+          controlli.forEach((c, i2) => {
+            c.disabled = prima[i2];
           });
         }
       });
@@ -1998,9 +3037,9 @@ function prefissoComuneDiParole(nomi2) {
   if (righe.length < 2 || righe.some((n) => !n)) return "";
   let comune = righe[0];
   for (const n of righe.slice(1)) {
-    let i = 0;
-    while (i < comune.length && i < n.length && comune[i] === n[i]) i += 1;
-    comune = comune.slice(0, i);
+    let i2 = 0;
+    while (i2 < comune.length && i2 < n.length && comune[i2] === n[i2]) i2 += 1;
+    comune = comune.slice(0, i2);
     if (!comune) return "";
   }
   const ultimoSpazio = comune.lastIndexOf(" ");
@@ -2030,8 +3069,8 @@ function ordinaSessioniAdAlbero(elenco2) {
   const distintivoPer = /* @__PURE__ */ new Map();
   for (const gruppo of figliePer.values()) {
     const nomi2 = nomiDistintiFraSorelle(gruppo.map((f) => f.taskDelega ?? ""));
-    gruppo.forEach((f, i) => {
-      if (nomi2[i] && nomi2[i] !== f.taskDelega) distintivoPer.set(f.sessionId, nomi2[i]);
+    gruppo.forEach((f, i2) => {
+      if (nomi2[i2] && nomi2[i2] !== f.taskDelega) distintivoPer.set(f.sessionId, nomi2[i2]);
     });
   }
   const fatte = /* @__PURE__ */ new Set();
@@ -2071,8 +3110,8 @@ function ordinaSessioniAdAlbero(elenco2) {
   });
   for (const s of ordinate) scendi(s, 0);
   for (const s of righe) if (!fatte.has(s.sessionId)) fuori.push({ sessione: s, profondita: 0 });
-  return fuori.map((v, i) => {
-    const dopo = fuori.slice(i + 1).find((altra) => altra.profondita <= v.profondita);
+  return fuori.map((v, i2) => {
+    const dopo = fuori.slice(i2 + 1).find((altra) => altra.profondita <= v.profondita);
     return { ...v, ultima: !dopo || dopo.profondita < v.profondita, nomeDistintivo: distintivoPer.get(v.sessione.sessionId) ?? null };
   });
 }
@@ -2467,12 +3506,12 @@ function montaCorniceModelLab(card) {
   const ledger = card.querySelector(".model-lab-ledger");
   const badge5 = card.querySelector("#modelLabRuntimeBadge");
   const rows = [...ledger?.children || []];
-  for (const [i, row] of rows.entries()) {
+  for (const [i2, row] of rows.entries()) {
     row.classList.add("talos-kv");
     row.dataset.c = "KeyValue";
     const label = row.querySelector("span");
     let value = row.querySelector("strong");
-    if (i === 3 && badge5 && value) {
+    if (i2 === 3 && badge5 && value) {
       value.replaceWith(badge5);
       value = badge5;
       value.textContent = "Verifica in corso…";
@@ -2501,8 +3540,8 @@ function montaCorniceModelLab(card) {
     if (index < 0 || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-    tabs.forEach((tab, i) => {
-      tab.tabIndex = i === next ? 0 : -1;
+    tabs.forEach((tab, i2) => {
+      tab.tabIndex = i2 === next ? 0 : -1;
     });
     tabs[next].focus();
   });
@@ -2565,7 +3604,7 @@ function creaScelteFonte(dati, { scegli } = {}) {
       if (!["ArrowRight", "ArrowLeft", "ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) return;
       e.preventDefault();
       if (gruppo.closest("[aria-busy=true]")) return;
-      const i = fonti.indexOf(fonte), n = e.key === "Home" ? 0 : e.key === "End" ? fonti.length - 1 : (i + (["ArrowRight", "ArrowDown"].includes(e.key) ? 1 : -1) + fonti.length) % fonti.length;
+      const i2 = fonti.indexOf(fonte), n = e.key === "Home" ? 0 : e.key === "End" ? fonti.length - 1 : (i2 + (["ArrowRight", "ArrowDown"].includes(e.key) ? 1 : -1) + fonti.length) % fonti.length;
       gruppo.children[n].focus();
       if (fonti[n].id !== stato.source) scegli?.(fonti[n].id);
     });
@@ -3661,6 +4700,33 @@ var init_en = __esm({
         "Pagina viva": "Live page",
         "Chiedi all’agente di leggerla": "Ask the agent to read it",
         "Nessuna pagina letta": "No page read yet",
+        /* ⭐ 16/09/2026, P0 corsia B — le frasi dei sei stati della scheda (apertura, ritentativo,
+           guasto, annullata, a riposo). Il cancello `tests/unit/i18n-copertura.test.mjs` legge le
+           TESTI di `components/browser.js` e pretende l'inglese per ciascuna: senza queste righe la
+           suite delle unità è rossa. */
+        "Se ci mette troppo puoi annullare: la scheda resta dov’è.": "If it takes too long you can cancel: the tab stays where it is.",
+        "Ogni tentativo aspetta un po’ di più del precedente.": "Each attempt waits a little longer than the one before.",
+        "Non sono riuscito ad aprire questa pagina": "I could not open this page",
+        "Apertura annullata": "Opening cancelled",
+        "Hai chiuso la scheda mentre apriva: non è stato scritto niente.": "You cancelled while it was opening: nothing was written.",
+        "Questa pagina era a riposo: la sto ricaricando": "This page was asleep: I am reloading it",
+        "Restano vive le ultime pagine che hai guardato; le altre si ricaricano quando ci torni.": "The pages you looked at most recently stay alive; the others reload when you come back.",
+        "Questa pagina è in pausa": "This page is paused",
+        "Riprova": "Try again",
+        "Annulla": "Cancel",
+        "{invito}: usa «Rileggi».": "{invito}: use “Reload”.",
+        /* ⛔ 16/09 — questa frase è composta da una FUNZIONE (`TESTI.statoRiprovo`), quindi il cancello
+           i18n, che scansiona solo le stringhe di TESTI, non la vede: mancava, e nella foto del tema
+           scuro il titolo usciva in italiano sopra un sottotitolo inglese. Trovata guardando la foto. */
+        "Non ha risposto: riprovo ({tentativo} di {totale})…": "No answer: trying again ({tentativo} of {totale})…",
+        /* ⛔ 16/09 — i quattro RIMEDI di `rimedioPerIlMotivo` (nati il 07/9) non erano mai stati
+           tradotti: finivano in una riga di avviso e nessuno ci aveva guardato. Adesso stanno nel
+           pannello dello stato, in grande, sotto un titolo inglese: mezza frase per lingua. */
+        "Controlla l’indirizzo.": "Check the address.",
+        "Il sito ha un certificato non valido: aprilo fuori da TALOS se ti fidi.": "The site has an invalid certificate: open it outside TALOS if you trust it.",
+        "Riprova fra un momento.": "Try again in a moment.",
+        "Controlla che il servizio sia acceso.": "Check that the service is running.",
+        "La pagina pilotata è una alla volta: aprendone un’altra questa resta nella sua scheda e si riapre quando ci torni.": "Only one driven page at a time: opening another leaves this one in its tab, and it reopens when you come back.",
         "Non è un indirizzo: scrivi un sito (es. localhost:5173 o example.org).": "That is not an address: type a site (e.g. localhost:5173 or example.org).",
         "L’agente chiede di leggere {url}. La scelta vale per questa richiesta.": "The agent asks to read {url}. The choice applies to this request only.",
         "Nota: {nota}": "Note: {nota}",
@@ -3670,7 +4736,55 @@ var init_en = __esm({
         "Prepara nel composer la richiesta di rileggere questa pagina": "Prepare in the composer the request to re-read this page",
         "Azioni sulla scheda": "Tab actions",
         "{titolo} — {url}": "{titolo} — {url}",
-        "Pagina": "Page"
+        "Pagina": "Page",
+        /* ⛔⛔⛔ 16/09/2026, GIRO DI RIPARAZIONE — LE FRASI DEI GUASTI, che prima le scriveva il SERVER.
+           Le foto della consegna precedente mostravano il pannello mezzo inglese e mezzo italiano: il
+           motivo lo componeva `src/browser-frame.mjs` con un numero dentro, e una chiave con un numero
+           dentro non può stare in nessun dizionario. Adesso le frasi nascono in `components/browser.js`
+           con `{secondi}` come SEGNAPOSTO, quindi la chiave è una sola per tutti i numeri e il cancello
+           `tests/unit/i18n-copertura.test.mjs` le vede e ne pretende l'inglese. */
+        "Il sito non ha risposto in tempo ({secondi} secondi)": "The site did not answer in time ({secondi} seconds)",
+        "Questo indirizzo non esiste": "That address does not exist",
+        "Nessuno risponde a questo indirizzo": "Nothing is answering at that address",
+        "Il sito ha un certificato non valido": "The site has an invalid certificate",
+        "Non sono riuscito a raggiungere il sito": "I could not reach the site",
+        "Questo non è un indirizzo che posso aprire": "That is not an address I can open",
+        "Il sito vieta di essere mostrato dentro un altro sito": "The site refuses to be shown inside another site",
+        "Il sito si mostra solo dentro le sue stesse pagine": "The site only shows itself inside its own pages",
+        "Il sito consente la cornice solo ad altri siti, non a TALOS": "The site allows framing only for other sites, not for TALOS",
+        /* le parole dello stato sulla striscia delle linguette: si ascoltano (sr-only) — WCAG 1.4.1,
+           un lettore di schermo non annuncia i colori */
+        "in apertura": "opening",
+        "sto riprovando": "trying again",
+        "non raggiunta": "not reached",
+        "annullata": "cancelled",
+        /* ⛔ 16/09 — il pulsante del pannello: il testo di partenza sta nel modello HTML, che nessuno
+           traduce, e nella foto inglese usciva «Annulla navigazione» sotto un titolo inglese. */
+        "Annulla navigazione": "Cancel navigation",
+        /* ⛔ 16/09 — le etichette della barra del Browser: stesso motivo, stesso posto (il modello HTML
+           le scriveva a mano e nessuno le traduceva). Le scrive il componente, quindi il cancello di
+           copertura le vede e ne pretende l inglese: infatti e stato lui a trovarle mancanti. */
+        "Rileggi": "Reload",
+        "Annota": "Annotate",
+        "Nota locale": "Local note",
+        "Copia testo": "Copy text",
+        "Testo dell’agente": "Agent text",
+        /* ⛔⛔ 16/09/2026, SECONDO GIRO DI RIPARAZIONE — le frasi del Browser che a schermo uscivano in
+           ITALIANO dentro una app inglese. Le prime due erano un pezzo di stringa attaccato a un numero
+           (`${n} caratteri`) e nessun dizionario poteva contenerle: adesso sono frasi con segnaposto.
+           Le altre erano `t(...)` regolari, semplicemente senza la riga inglese — misurate una per una
+           (9 prima della cura, 0 dopo; il comando è nel rapporto della corsia B). */
+        "{n} carattere": "{n} character",
+        "{n} caratteri": "{n} characters",
+        "Sorgente ricevuto dall’agente ({n} caratteri)": "Source received by the agent ({n} characters)",
+        "Sorgente ricevuto dall’agente": "Source received by the agent",
+        "Chiudi {titolo}": "Close {titolo}",
+        "Questo sito non si lascia mostrare dentro TALOS. Qui sotto c’è il testo che ha letto l’agente.": "This site refuses to be shown inside TALOS. Below is the text the agent read.",
+        "Qui sotto c’è il testo che ha letto l’agente.": "Below is the text the agent read.",
+        "di": "of",
+        "La pagina è stata tagliata: l’agente ne ha ricevuta solo una parte. Aprila per vedere quale.": "The page was cut: the agent received only part of it. Open it to see which part.",
+        "Segna gli elementi della pagina da cambiare: i commenti finiscono nel composer": "Mark the parts of the page to change: the comments end up in the composer",
+        "Prepara una bozza nella chat senza inviarla": "Prepare a draft in the chat without sending it"
       },
       /* la connessione col server (barra di stato) */
       connessione: {
@@ -3931,8 +5045,8 @@ function montaImpostazioni(schermo, valori, { recupera, cambiaSezione } = {}) {
   if (liste.length <= 1) liste[0]?.replaceChildren(...SEZIONI_IMPOSTAZIONI.map(voce));
   else {
     const gruppi = [...new Set(SEZIONI_IMPOSTAZIONI.map((s) => s.gruppo || "comportamento"))];
-    liste.forEach((lista, i) => {
-      const g = lista.dataset.settingsGruppo || gruppi[i];
+    liste.forEach((lista, i2) => {
+      const g = lista.dataset.settingsGruppo || gruppi[i2];
       lista.replaceChildren(...SEZIONI_IMPOSTAZIONI.filter((s) => (s.gruppo || "comportamento") === g).map(voce));
     });
   }
@@ -3942,12 +5056,12 @@ function montaImpostazioni(schermo, valori, { recupera, cambiaSezione } = {}) {
     if (cambiaSezione) cambiaSezione(id);
     else mostraSezioneImpostazioni(schermo, id);
   };
-  tabs.forEach((tab, i) => {
+  tabs.forEach((tab, i2) => {
     tab.addEventListener("click", () => scegli(tab.dataset.settingsTab));
     tab.addEventListener("keydown", (e) => {
       if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
       e.preventDefault();
-      const next = e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : (i + (e.key === "ArrowDown" ? 1 : -1) + tabs.length) % tabs.length;
+      const next = e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : (i2 + (e.key === "ArrowDown" ? 1 : -1) + tabs.length) % tabs.length;
       tabs[next].focus();
       scegli(tabs[next].dataset.settingsTab);
     });
@@ -4123,17 +5237,17 @@ function creaExtensionRow(tipo, v, { document: doc = globalThis.document, selezi
   r.setAttribute("role", "option");
   r.setAttribute("aria-selected", String(selezionata));
   r.tabIndex = selezionata ? 0 : -1;
-  const i = el6(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), u = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const i2 = el6(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), u = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg.setAttribute("class", "i");
   svg.setAttribute("aria-hidden", "true");
   u.setAttribute("href", tipo === "mcp" ? "#i-globe" : "#i-bolt");
   svg.append(u);
-  i.append(svg);
+  i2.append(svg);
   const t2 = el6(doc, "span", "talos-list-row__text");
   t2.append(el6(doc, "span", "talos-list-row__title", d.titolo), el6(doc, "span", "talos-list-row__sub", d.descrizione));
   const a = el6(doc, "span", "talos-list-row__aside");
   a.append(el6(doc, "span", "talos-badge" + (d.fidabile ? " talos-badge--warning" : ""), d.stato));
-  r.append(i, t2, a);
+  r.append(i2, t2, a);
   r.addEventListener("click", () => onSeleziona?.(d.id));
   return r;
 }
@@ -4180,13 +5294,13 @@ function render(panel, p) {
     render(panel, p);
     if (fuoco) [...lista.children].find((n) => n.dataset.extId === id)?.focus();
   }
-  lista.replaceChildren(...voci.map((v2, i) => {
+  lista.replaceChildren(...voci.map((v2, i2) => {
     const r = creaExtensionRow(o.tipo, v2, { document: doc, selezionata: v2.id === p.scelto, onSeleziona: scegli });
     r.setAttribute("aria-controls", panel.querySelector("[data-ext-detail]").id);
     r.addEventListener("keydown", (e) => {
       if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) return;
       e.preventDefault();
-      const j = e.key === "Home" ? 0 : e.key === "End" ? voci.length - 1 : (i + (e.key === "ArrowDown" ? 1 : -1) + voci.length) % voci.length;
+      const j = e.key === "Home" ? 0 : e.key === "End" ? voci.length - 1 : (i2 + (e.key === "ArrowDown" ? 1 : -1) + voci.length) % voci.length;
       scegli(voci[j].id, true);
     });
     return r;
@@ -4248,7 +5362,7 @@ function collegaSchedeCapability(schermo, onSezione) {
     b.addEventListener("keydown", (e) => {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
       e.preventDefault();
-      const i = tabs.indexOf(b), next = e.key === "Home" ? tabs[0] : e.key === "End" ? tabs.at(-1) : tabs[(i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+      const i2 = tabs.indexOf(b), next = e.key === "Home" ? tabs[0] : e.key === "End" ? tabs.at(-1) : tabs[(i2 + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
       for (const t2 of tabs) t2.tabIndex = t2 === next ? 0 : -1;
       next.focus();
     });
@@ -4471,7 +5585,7 @@ function aggiornaPaginaCapability(schermo, attrezzi, opzioni = {}) {
       t2.addEventListener("keydown", (e) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
         e.preventDefault();
-        const i = tabs.indexOf(t2), next = e.key === "Home" ? tabs[0] : e.key === "End" ? tabs.at(-1) : tabs[(i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+        const i2 = tabs.indexOf(t2), next = e.key === "Home" ? tabs[0] : e.key === "End" ? tabs.at(-1) : tabs[(i2 + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
         next.click();
         next.focus();
       });
@@ -4521,12 +5635,12 @@ function render2(schermo, p) {
     render2(schermo, p);
     if (f) [...lista.querySelectorAll("[data-tool-name]")].find((n) => n.dataset.toolName === id)?.focus();
   }
-  lista.replaceChildren(...visibili.map((a2, i) => {
+  lista.replaceChildren(...visibili.map((a2, i2) => {
     const r = creaToolListRow(a2, { document: doc, selezionata: a2.nome === p.scelto, onSeleziona: seleziona, uso: uso.get(a2.nome) });
     r.addEventListener("keydown", (e) => {
       if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) return;
       e.preventDefault();
-      const next = e.key === "Home" ? 0 : e.key === "End" ? visibili.length - 1 : (i + (e.key === "ArrowDown" ? 1 : -1) + visibili.length) % visibili.length;
+      const next = e.key === "Home" ? 0 : e.key === "End" ? visibili.length - 1 : (i2 + (e.key === "ArrowDown" ? 1 : -1) + visibili.length) % visibili.length;
       seleziona(visibili[next].nome, true);
     });
     return r;
@@ -4707,7 +5821,7 @@ function aggiornaPaginaAutomazioni(schermo, elenco2, opzioni = {}) {
       tab.addEventListener("keydown", (e) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
         e.preventDefault();
-        const i = tabs.indexOf(tab), nuovo = e.key === "Home" ? tabs[0] : e.key === "End" ? tabs.at(-1) : tabs[(i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+        const i2 = tabs.indexOf(tab), nuovo = e.key === "Home" ? tabs[0] : e.key === "End" ? tabs.at(-1) : tabs[(i2 + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
         nuovo.click();
         nuovo.focus();
       });
@@ -4841,7 +5955,7 @@ function aggiornaPaginaOfficina(schermo, strumenti, opzioni = {}) {
       tab.addEventListener("keydown", (e) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
         e.preventDefault();
-        const i = tabs.indexOf(tab), nuovo = e.key === "Home" ? tabs[0] : e.key === "End" ? tabs.at(-1) : tabs[(i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+        const i2 = tabs.indexOf(tab), nuovo = e.key === "Home" ? tabs[0] : e.key === "End" ? tabs.at(-1) : tabs[(i2 + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
         nuovo.click();
         nuovo.focus();
       });
@@ -4887,7 +6001,7 @@ function renderOfficina(schermo, pagina) {
     riga.addEventListener("keydown", (e) => {
       if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
       e.preventDefault();
-      const i = visibili.indexOf(s), nuovo = e.key === "Home" ? visibili[0] : e.key === "End" ? visibili.at(-1) : visibili[(i + (e.key === "ArrowDown" ? 1 : -1) + visibili.length) % visibili.length];
+      const i2 = visibili.indexOf(s), nuovo = e.key === "Home" ? visibili[0] : e.key === "End" ? visibili.at(-1) : visibili[(i2 + (e.key === "ArrowDown" ? 1 : -1) + visibili.length) % visibili.length];
       seleziona(nuovo.id, true);
     });
     return riga;
@@ -5118,7 +6232,7 @@ function bibtexDaCitazioni(citazioni) {
   const elenco2 = Array.isArray(citazioni) ? citazioni : [];
   if (elenco2.length === 0) return "";
   const chiavi = chiaviDistinte(elenco2);
-  return elenco2.map((c, i) => {
+  return elenco2.map((c, i2) => {
     const righe = [
       `  title = {${bibtexSicuro(c.title)}}`,
       `  url = {${String(c.url ?? "").trim()}}`,
@@ -5126,7 +6240,7 @@ function bibtexDaCitazioni(citazioni) {
     ];
     const quando = anno(c.publishedAt);
     if (quando) righe.splice(1, 0, `  year = {${quando}}`);
-    return `@misc{${chiavi[i]},
+    return `@misc{${chiavi[i2]},
 ${righe.join(",\n")},
 }`;
   }).join("\n\n");
@@ -6616,13 +7730,13 @@ function righeCsv(testo3, separatore = ",") {
     riga = [];
     vuota = true;
   };
-  for (let i = 0; i < t2.length; i += 1) {
-    const c = t2[i];
+  for (let i2 = 0; i2 < t2.length; i2 += 1) {
+    const c = t2[i2];
     if (dentroVirgolette) {
       if (c === '"') {
-        if (t2[i + 1] === '"') {
+        if (t2[i2 + 1] === '"') {
           cella += '"';
-          i += 1;
+          i2 += 1;
         } else dentroVirgolette = false;
       } else cella += c;
       vuota = false;
@@ -6739,9 +7853,9 @@ function tabellaCsv(doc, testo3, { nome, magazzino, chiave, ridisegna }) {
   }
   testa.append(rigaTesta);
   const corpo = nodo5(doc, "tbody");
-  for (let i = 1; i < quante; i += 1) {
+  for (let i2 = 1; i2 < quante; i2 += 1) {
     const tr = nodo5(doc, "tr");
-    for (const cella of righe[i]) tr.append(nodo5(doc, "td", "", cella));
+    for (const cella of righe[i2]) tr.append(nodo5(doc, "td", "", cella));
     corpo.append(tr);
   }
   tabella.append(testa, corpo);
@@ -7603,12 +8717,12 @@ function disegnaCrudo(schermo, doc, stato) {
   barraFiltri.hidden = config.filtri.length <= 1;
   const conteggi = contaPerFiltro(tutte, config.filtri);
   const fuocoFiltro = doc.activeElement?.dataset?.filtro;
-  barraFiltri.replaceChildren(...config.filtri.map((f, i) => {
+  barraFiltri.replaceChildren(...config.filtri.map((f, i2) => {
     const b = nodo6(doc, "button", "td-filter", f.etichetta);
     b.type = "button";
     b.dataset.filtro = f.id;
     b.setAttribute("aria-pressed", String(stato.filtro === f.id));
-    b.append(nodo6(doc, "small", "", String(conteggi[i])));
+    b.append(nodo6(doc, "small", "", String(conteggi[i2])));
     return b;
   }));
   if (fuocoFiltro) perId(barraFiltri, ".td-filter", "filtro", fuocoFiltro)?.focus({ preventScroll: true });
@@ -9175,9 +10289,9 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
         const codice = nodo9(doc, "code", "td-percorso");
         codice.dataset.percorso = p.percorso;
         const segmenti = p.percorso.split(/(?<=[\\/])/u);
-        segmenti.forEach((segmento, i) => {
+        segmenti.forEach((segmento, i2) => {
           codice.append(doc.createTextNode(segmento));
-          if (i < segmenti.length - 1) codice.append(doc.createElement("wbr"));
+          if (i2 < segmenti.length - 1) codice.append(doc.createElement("wbr"));
         });
         rigaKV("Percorso", codice);
       } else {
@@ -9610,7 +10724,7 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
     }
     if (ultimo < segmento.length) contenitore.appendChild(doc.createTextNode(segmento.slice(ultimo)));
   }
-  let i = 0;
+  let i2 = 0;
   let paragrafoCorrente = [];
   function chiudiParagrafo() {
     if (paragrafoCorrente.length === 0) return;
@@ -9622,8 +10736,8 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
     frammento.appendChild(p);
     paragrafoCorrente = [];
   }
-  while (i < righe.length) {
-    const riga = righe[i];
+  while (i2 < righe.length) {
+    const riga = righe[i2];
     const fenceMatch = /^```/.test(riga.trim());
     const hrMatch = /^(-{3,}|\*{3,}|_{3,})\s*$/.test(riga.trim());
     const listaMatch = /^(\s*)([-*])\s+(.*)$/.exec(riga);
@@ -9634,34 +10748,34 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
       chiudiParagrafo();
       const linguaggioDichiarato = riga.trim().slice(3).trim().split(/\s+/)[0] || "";
       const righeCodice = [];
-      i += 1;
-      while (i < righe.length && !/^```/.test(righe[i].trim())) {
-        righeCodice.push(righe[i]);
-        i += 1;
+      i2 += 1;
+      while (i2 < righe.length && !/^```/.test(righe[i2].trim())) {
+        righeCodice.push(righe[i2]);
+        i2 += 1;
       }
-      const chiuso = i < righe.length;
+      const chiuso = i2 < righe.length;
       frammento.appendChild(bloccoCodice(righeCodice.join("\n"), linguaggioDichiarato, chiuso));
-      i += 1;
+      i2 += 1;
       continue;
     }
     if (citazioneMatch) {
       chiudiParagrafo();
       const dentro = [];
       let paragrafoAperto = false;
-      while (i < righe.length) {
-        const corrente = righe[i];
+      while (i2 < righe.length) {
+        const corrente = righe[i2];
         if (/^ {0,3}>/.test(corrente)) {
           const contenuto = corrente.replace(/^ {0,3}> ?/, "");
           dentro.push(contenuto);
           paragrafoAperto = contenuto.trim() !== "";
-          i += 1;
+          i2 += 1;
           continue;
         }
         if (!paragrafoAperto || corrente.trim() === "") break;
         const apreUnAltroBlocco = /^```/.test(corrente.trim()) || /^(-{3,}|\*{3,}|_{3,})\s*$/.test(corrente.trim()) || /^(\s*)([-*])\s+/.test(corrente) || /^(\s*)(\d+)\.\s+/.test(corrente) || /^(#{1,6})\s+/.test(corrente);
         if (apreUnAltroBlocco) break;
         dentro.push(corrente);
-        i += 1;
+        i2 += 1;
       }
       const citazione = doc.createElement("blockquote");
       citazione.className = "md-quote";
@@ -9672,7 +10786,7 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
     if (hrMatch) {
       chiudiParagrafo();
       frammento.appendChild(doc.createElement("hr"));
-      i += 1;
+      i2 += 1;
       continue;
     }
     if (titoloMatch) {
@@ -9681,7 +10795,7 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
       const h = doc.createElement(`h${livello}`);
       applicaInline(h, titoloMatch[2]);
       frammento.appendChild(h);
-      i += 1;
+      i2 += 1;
       continue;
     }
     const separatoreTabella = (r) => typeof r === "string" && r.includes("|") && /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(r) && r.includes("-");
@@ -9691,10 +10805,10 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
       if (t2.endsWith("|")) t2 = t2.slice(0, -1);
       return t2.split("|").map((c) => c.trim());
     };
-    if (riga.includes("|") && i + 1 < righe.length && separatoreTabella(righe[i + 1]) && celle(riga).length > 1) {
+    if (riga.includes("|") && i2 + 1 < righe.length && separatoreTabella(righe[i2 + 1]) && celle(riga).length > 1) {
       chiudiParagrafo();
       const intestazioni = celle(riga);
-      const allineamenti = celle(righe[i + 1]).map((c) => c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : c.startsWith(":") ? "left" : "");
+      const allineamenti = celle(righe[i2 + 1]).map((c) => c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : c.startsWith(":") ? "left" : "");
       const involucro = doc.createElement("div");
       involucro.className = "md-table-wrap";
       const tabella = doc.createElement("table");
@@ -9710,9 +10824,9 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
       thead.appendChild(trTesta);
       tabella.appendChild(thead);
       const tbody = doc.createElement("tbody");
-      i += 2;
-      while (i < righe.length && righe[i].includes("|") && righe[i].trim() !== "") {
-        const valori = celle(righe[i]);
+      i2 += 2;
+      while (i2 < righe.length && righe[i2].includes("|") && righe[i2].trim() !== "") {
+        const valori = celle(righe[i2]);
         const tr = doc.createElement("tr");
         for (let n = 0; n < intestazioni.length; n += 1) {
           const td = doc.createElement("td");
@@ -9721,7 +10835,7 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
           tr.appendChild(td);
         }
         tbody.appendChild(tr);
-        i += 1;
+        i2 += 1;
       }
       tabella.appendChild(tbody);
       involucro.appendChild(tabella);
@@ -9732,24 +10846,24 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
       chiudiParagrafo();
       const ordinata = !!listaNumMatch;
       const lista = doc.createElement(ordinata ? "ol" : "ul");
-      while (i < righe.length) {
-        const m = ordinata ? /^(\s*)(\d+)\.\s+(.*)$/.exec(righe[i]) : /^(\s*)([-*])\s+(.*)$/.exec(righe[i]);
+      while (i2 < righe.length) {
+        const m = ordinata ? /^(\s*)(\d+)\.\s+(.*)$/.exec(righe[i2]) : /^(\s*)([-*])\s+(.*)$/.exec(righe[i2]);
         if (!m) break;
         const li = doc.createElement("li");
         applicaInline(li, m[3]);
         lista.appendChild(li);
-        i += 1;
+        i2 += 1;
       }
       frammento.appendChild(lista);
       continue;
     }
     if (riga.trim() === "") {
       chiudiParagrafo();
-      i += 1;
+      i2 += 1;
       continue;
     }
     paragrafoCorrente.push(riga);
-    i += 1;
+    i2 += 1;
   }
   chiudiParagrafo();
   return frammento;
@@ -9812,8 +10926,8 @@ var init_desktop_scenes = __esm({
         return ((v ^ v >>> 16) >>> 0) / 4294967296;
       }
       function noise1(v, seed = 0) {
-        const i = Math.floor(v), f = fract(v);
-        return mix(hash01(i, seed), hash01(i + 1, seed), f * f * (3 - 2 * f));
+        const i2 = Math.floor(v), f = fract(v);
+        return mix(hash01(i2, seed), hash01(i2 + 1, seed), f * f * (3 - 2 * f));
       }
       function noise2(x, y, seed = 0) {
         const ix = Math.floor(x), iy = Math.floor(y), fx = fract(x), fy = fract(y), sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
@@ -9838,12 +10952,12 @@ var init_desktop_scenes = __esm({
         const b = g.quality === "high" ? hi : g.quality === "low" ? lo : bal;
         return Math.max(2, Math.round(b * (g.mobile ? 0.78 : 1) * clamp2(g.densityScale * (0.72 + g.parameters.density / 360), 0.48, 1.38)));
       }
-      const primitiveCount = (i, lo, bal, hi) => i.effectiveQuality.tier === "high" ? hi : i.effectiveQuality.tier === "low" ? lo : bal;
+      const primitiveCount = (i2, lo, bal, hi) => i2.effectiveQuality.tier === "high" ? hi : i2.effectiveQuality.tier === "low" ? lo : bal;
       const seconds = (ms) => clamp2(ms / 1e3, 0, 0.05);
       function linearGradient(c, g, x0, y0, x1, y1, colors = [g.accent, g.secondary]) {
         const grad = c.createLinearGradient(x0, y0, x1, y1);
         grad.addColorStop(0, "transparent");
-        colors.forEach((v, i) => grad.addColorStop((i + 1) / (colors.length + 1), v));
+        colors.forEach((v, i2) => grad.addColorStop((i2 + 1) / (colors.length + 1), v));
         grad.addColorStop(1, "transparent");
         return grad;
       }
@@ -9864,7 +10978,7 @@ var init_desktop_scenes = __esm({
         if (!p.length) return;
         c.beginPath();
         c.moveTo(p[0].x, p[0].y);
-        for (let i = 1; i < p.length; i++) c.lineTo(p[i].x, p[i].y);
+        for (let i2 = 1; i2 < p.length; i2++) c.lineTo(p[i2].x, p[i2].y);
         if (close) c.closePath();
       }
       const polygon = (c, p) => polyline(c, p, true);
@@ -9876,8 +10990,8 @@ var init_desktop_scenes = __esm({
         c.lineTo(x - r, y);
         c.closePath();
       }
-      const ringPoints = (cx, cy, r, count2, phase = 0, warp = 0) => Array.from({ length: count2 }, (_, i) => {
-        const a = phase + i / count2 * TAU, rr = r * (1 + warp * Math.sin(a * 3 + phase * 0.7));
+      const ringPoints = (cx, cy, r, count2, phase = 0, warp = 0) => Array.from({ length: count2 }, (_, i2) => {
+        const a = phase + i2 / count2 * TAU, rr = r * (1 + warp * Math.sin(a * 3 + phase * 0.7));
         return { x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr };
       });
       const defineScene = (d) => Object.freeze(d);
@@ -9887,11 +11001,11 @@ var init_desktop_scenes = __esm({
           const inRank = rank === 0 || rank === rankCount - 1 ? 2 : Math.round(2 + rng() * 2);
           for (let local = 0; local < inRank; local++) nodes.push(Object.freeze({ x: base.width * (0.1 + 0.8 * rank / Math.max(1, rankCount - 1)) + (rng() - 0.5) * base.width * 0.035, y: base.height * (0.18 + 0.64 * (local + 1) / (inRank + 1)) + (rng() - 0.5) * base.height * 0.05, rank, heat: rng(), size: 4 + rng() * 7 }));
         }
-        for (let i = 0; i < nodes.length; i++) {
-          const from = nodes[i], candidates = nodes.map((node, j) => ({ node, i: j })).filter(({ node }) => node.rank === from.rank + 1);
-          candidates.slice(0, 1 + i % 2).forEach(({ i: j }, lane) => edges.push(Object.freeze({ from: i, to: j, bow: (rng() - 0.5) * base.height * 0.16, lane })));
+        for (let i2 = 0; i2 < nodes.length; i2++) {
+          const from = nodes[i2], candidates = nodes.map((node, j) => ({ node, i: j })).filter(({ node }) => node.rank === from.rank + 1);
+          candidates.slice(0, 1 + i2 % 2).forEach(({ i: j }, lane) => edges.push(Object.freeze({ from: i2, to: j, bow: (rng() - 0.5) * base.height * 0.16, lane })));
         }
-        const gears = Object.freeze(Array.from({ length: qCount(base, 2, 3, 4) }, (_, i) => Object.freeze({ x: base.width * (0.16 + i * 0.24 + rng() * 0.08), y: base.height * (0.78 - i % 2 * 0.46), radius: 18 + rng() * 28, teeth: 8 + Math.round(rng() * 7), direction: i % 2 === 0 ? 1 : -1, phase: rng() * TAU }))), rails = Object.freeze(Array.from({ length: qCount(base, 3, 5, 7) }, (_, i) => base.height * (0.13 + 0.74 * (i + 1) / (qCount(base, 3, 5, 7) + 1))));
+        const gears = Object.freeze(Array.from({ length: qCount(base, 2, 3, 4) }, (_, i2) => Object.freeze({ x: base.width * (0.16 + i2 * 0.24 + rng() * 0.08), y: base.height * (0.78 - i2 % 2 * 0.46), radius: 18 + rng() * 28, teeth: 8 + Math.round(rng() * 7), direction: i2 % 2 === 0 ? 1 : -1, phase: rng() * TAU }))), rails = Object.freeze(Array.from({ length: qCount(base, 3, 5, 7) }, (_, i2) => base.height * (0.13 + 0.74 * (i2 + 1) / (qCount(base, 3, 5, 7) + 1))));
         return { geometry: Object.freeze({ ...base, nodes: Object.freeze(nodes), edges: Object.freeze(edges), gears, rails }), primitiveCount: primitiveCount(input, 230, 310, 390) };
       }, update: ({ state, input, stepMs }) => {
         const dt = seconds(stepMs) * input.parameters.speed / 100;
@@ -9906,8 +11020,8 @@ var init_desktop_scenes = __esm({
         c.strokeStyle = g.border;
         c.lineWidth = 0.7;
         c.globalAlpha = alpha(g, 0.14);
-        for (let i = 0; i < g.rails.length; i++) {
-          const y = g.rails[i] + Math.sin(s.time * 2.1 + i) * 0.65;
+        for (let i2 = 0; i2 < g.rails.length; i2++) {
+          const y = g.rails[i2] + Math.sin(s.time * 2.1 + i2) * 0.65;
           strokeLine(c, g.width * 0.04, y, g.width * 0.96, y);
           for (let n = 0; n < 14; n++) {
             const x = g.width * (0.06 + 0.88 * n / 13);
@@ -9961,8 +11075,8 @@ var init_desktop_scenes = __esm({
           c.restore();
         }
         const pe = Math.floor(s.cycle * Math.max(1, g.edges.length));
-        g.edges.forEach((e, i) => {
-          const f = g.nodes[e.from], t2 = g.nodes[e.to], hot = i === pe || i === (pe + 1) % Math.max(1, g.edges.length);
+        g.edges.forEach((e, i2) => {
+          const f = g.nodes[e.from], t2 = g.nodes[e.to], hot = i2 === pe || i2 === (pe + 1) % Math.max(1, g.edges.length);
           c.beginPath();
           c.moveTo(f.x, f.y);
           c.bezierCurveTo(f.x + (t2.x - f.x) * 0.34, f.y + e.bow, t2.x - (t2.x - f.x) * 0.2, t2.y - e.bow * 0.45, t2.x, t2.y);
@@ -9973,8 +11087,8 @@ var init_desktop_scenes = __esm({
           c.shadowColor = g.accent;
           c.stroke();
         });
-        g.nodes.forEach((n, i) => {
-          const beat = 0.5 + 0.5 * Math.sin(s.time * 1.8 + i * 0.7), active = Math.abs(s.cycle - n.rank / Math.max(1, g.nodes.length)) < 0.11;
+        g.nodes.forEach((n, i2) => {
+          const beat = 0.5 + 0.5 * Math.sin(s.time * 1.8 + i2 * 0.7), active = Math.abs(s.cycle - n.rank / Math.max(1, g.nodes.length)) < 0.11;
           c.fillStyle = active ? g.warning : n.heat > 0.58 ? g.accent : g.secondary;
           c.strokeStyle = g.border;
           c.globalAlpha = alpha(g, 0.45 + beat * 0.18);
@@ -10000,10 +11114,10 @@ var init_desktop_scenes = __esm({
         c.restore();
       } });
       const paperComplexScene = defineScene({ id: "paper", createState: (seed) => ({ seed, time: 0, reading: 0, breath: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("paper", state.seed, input), rng = rngFor("paper", state.seed, 211), pageW = b.width * (b.mobile ? 0.84 : 0.68), pageH = b.height * 0.84, pageX = (b.width - pageW) * 0.5, pageY = b.height * 0.075, paragraphs = Array.from({ length: qCount(b, 4, 6, 8) }, (_, i) => ({ x: pageX + pageW * (0.13 + i % 2 * 0.03), y: pageY + pageH * (0.12 + i * 0.105), width: pageW * (0.55 + rng() * 0.22), lines: 3 + Math.floor(rng() * 4), rhythm: 0.72 + rng() * 0.25, emphasis: rng() })), notes = Array.from({ length: qCount(b, 3, 4, 6) }, (_, i) => ({ side: i % 2 === 0 ? -1 : 1, y: pageY + pageH * (0.18 + i * 0.13 + rng() * 0.035), length: pageW * (0.055 + rng() * 0.055), curl: (rng() - 0.5) * 22, phase: rng() * TAU })), fibers = Array.from({ length: qCount(b, 36, 58, 80) }, () => ({ x: pageX + rng() * pageW, y: pageY + rng() * pageH, length: 4 + rng() * 16, angle: (rng() - 0.5) * 0.6, alpha: 0.02 + rng() * 0.04 }));
+        const b = makePaletteGeometry("paper", state.seed, input), rng = rngFor("paper", state.seed, 211), pageW = b.width * (b.mobile ? 0.84 : 0.68), pageH = b.height * 0.84, pageX = (b.width - pageW) * 0.5, pageY = b.height * 0.075, paragraphs = Array.from({ length: qCount(b, 4, 6, 8) }, (_, i2) => ({ x: pageX + pageW * (0.13 + i2 % 2 * 0.03), y: pageY + pageH * (0.12 + i2 * 0.105), width: pageW * (0.55 + rng() * 0.22), lines: 3 + Math.floor(rng() * 4), rhythm: 0.72 + rng() * 0.25, emphasis: rng() })), notes = Array.from({ length: qCount(b, 3, 4, 6) }, (_, i2) => ({ side: i2 % 2 === 0 ? -1 : 1, y: pageY + pageH * (0.18 + i2 * 0.13 + rng() * 0.035), length: pageW * (0.055 + rng() * 0.055), curl: (rng() - 0.5) * 22, phase: rng() * TAU })), fibers = Array.from({ length: qCount(b, 36, 58, 80) }, () => ({ x: pageX + rng() * pageW, y: pageY + rng() * pageH, length: 4 + rng() * 16, angle: (rng() - 0.5) * 0.6, alpha: 0.02 + rng() * 0.04 }));
         return { geometry: { ...b, pageX, pageY, pageW, pageH, paragraphs, notes, fibers }, primitiveCount: primitiveCount(input, 150, 220, 310) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
+      }, update: ({ state: s, input: i2, stepMs }) => {
+        const dt = seconds(stepMs) * i2.parameters.speed / 100;
         s.time += dt;
         s.reading = (s.reading + dt * 0.055) % 1;
         s.breath += dt * 0.18;
@@ -10058,10 +11172,10 @@ var init_desktop_scenes = __esm({
           c.globalAlpha = alpha(g, t2 % 4 === 0 ? 0.18 : 0.07);
           strokeLine(c, left, y2, g.pageX + g.pageW * 0.9, y2);
         }
-        g.paragraphs.forEach((p, i) => {
-          const active = Math.abs(s.reading - i / Math.max(1, g.paragraphs.length)) < 0.08;
+        g.paragraphs.forEach((p, i2) => {
+          const active = Math.abs(s.reading - i2 / Math.max(1, g.paragraphs.length)) < 0.08;
           for (let l = 0; l < p.lines; l++) {
-            const y2 = p.y + lift + l * 8.5, w = p.width * (l === p.lines - 1 ? 0.58 + p.emphasis * 0.25 : 0.93 + Math.sin(l + i) * 0.04);
+            const y2 = p.y + lift + l * 8.5, w = p.width * (l === p.lines - 1 ? 0.58 + p.emphasis * 0.25 : 0.93 + Math.sin(l + i2) * 0.04);
             c.fillStyle = active && l === 0 ? g.accent : g.border;
             c.globalAlpha = alpha(g, active ? 0.5 : 0.24);
             c.fillRect(p.x, y2, w * p.rhythm, l === 0 && p.emphasis > 0.65 ? 2.4 : 1.15);
@@ -10069,15 +11183,15 @@ var init_desktop_scenes = __esm({
         });
         c.strokeStyle = g.accent;
         c.lineWidth = 1.2;
-        g.notes.forEach((n, i) => {
+        g.notes.forEach((n, i2) => {
           const x2 = n.side < 0 ? g.pageX + g.pageW * 0.055 : g.pageX + g.pageW * 0.945, inside = n.side < 0 ? 1 : -1, sway = Math.sin(s.time * 0.22 + n.phase) * 2;
-          c.globalAlpha = alpha(g, 0.32 + i % 2 * 0.08);
+          c.globalAlpha = alpha(g, 0.32 + i2 % 2 * 0.08);
           c.beginPath();
           c.moveTo(x2, n.y + sway);
           c.quadraticCurveTo(x2 + inside * n.length * 0.48, n.y - 7 + n.curl * 0.25, x2 + inside * n.length, n.y + 2 + n.curl * 0.08);
           c.stroke();
           c.beginPath();
-          c.arc(x2 + inside * n.length * 1.08, n.y + 2, 2.2 + i % 2, 0, TAU);
+          c.arc(x2 + inside * n.length * 1.08, n.y + 2, 2.2 + i2 % 2, 0, TAU);
           c.stroke();
         });
         const y = g.pageY + g.pageH * (0.11 + s.reading * 0.78);
@@ -10118,10 +11232,10 @@ var init_desktop_scenes = __esm({
         c.restore();
       }
       const terminalComplexScene = defineScene({ id: "terminal", createState: (seed) => ({ seed, time: 0, mutation: 0, blackout: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("terminal", state.seed, input), rng = rngFor("terminal", state.seed, 313), count2 = qCount(b, 14, 21, 29), cell = clamp2(b.width / count2, 12, b.mobile ? 23 : 29), rows = Math.ceil(b.height / cell) + 3, streams = Array.from({ length: count2 }, (_, i) => ({ x: (i + 0.5) * b.width / count2 + (rng() - 0.5) * cell * 0.4, speed: 3 + rng() * 9, offset: rng() * rows, length: Math.round(5 + rng() * 14), phase: rng() * TAU, bend: (rng() - 0.5) * cell * 1.5, cadence: 0.45 + rng() * 1.6, glyphSeed: Math.floor(rng() * 1e6) })), scars = Array.from({ length: qCount(b, 2, 3, 5) }, () => ({ y: rng() * b.height, width: 0.18 + rng() * 0.6, phase: rng() * TAU }));
+        const b = makePaletteGeometry("terminal", state.seed, input), rng = rngFor("terminal", state.seed, 313), count2 = qCount(b, 14, 21, 29), cell = clamp2(b.width / count2, 12, b.mobile ? 23 : 29), rows = Math.ceil(b.height / cell) + 3, streams = Array.from({ length: count2 }, (_, i2) => ({ x: (i2 + 0.5) * b.width / count2 + (rng() - 0.5) * cell * 0.4, speed: 3 + rng() * 9, offset: rng() * rows, length: Math.round(5 + rng() * 14), phase: rng() * TAU, bend: (rng() - 0.5) * cell * 1.5, cadence: 0.45 + rng() * 1.6, glyphSeed: Math.floor(rng() * 1e6) })), scars = Array.from({ length: qCount(b, 2, 3, 5) }, () => ({ y: rng() * b.height, width: 0.18 + rng() * 0.6, phase: rng() * TAU }));
         return { geometry: { ...b, streams, scars, cell, rows }, primitiveCount: primitiveCount(input, 300, 365, 398) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
+      }, update: ({ state: s, input: i2, stepMs }) => {
+        const dt = seconds(stepMs) * i2.parameters.speed / 100;
         s.time += dt;
         s.mutation = (s.mutation + dt * 6.8) % 1e5;
         s.blackout = (s.blackout + dt * 0.11) % 1;
@@ -10139,13 +11253,13 @@ var init_desktop_scenes = __esm({
           c.textAlign = "center";
           c.textBaseline = "middle";
         }
-        g.streams.forEach((st, i) => {
+        g.streams.forEach((st, i2) => {
           const cad = Math.floor(s.time * st.cadence + st.phase) % 13, sp = cad === 0 ? 0.05 : cad === 1 ? 0.28 : cad === 8 ? 1.7 : 1, head = fract((st.offset + s.time * st.speed * sp) / g.rows) * g.rows, tail = Math.max(5, Math.round(st.length * (0.7 + g.parameters.trails / 150)));
           for (let t2 = 0; t2 < tail; t2++) {
             let row = Math.floor(head - t2);
             while (row < 0) row += g.rows;
             row %= g.rows;
-            const y = row * g.cell - g.cell * 0.2, decay = 1 - t2 / tail, bend = Math.sin(y / Math.max(1, g.height) * 4.2 + s.time * 0.55 + st.phase) * st.bend * (0.2 + decay * 0.8), x = st.x + bend, gap = hash01(i * 31 + row, frame2 >> 2, g.seed);
+            const y = row * g.cell - g.cell * 0.2, decay = 1 - t2 / tail, bend = Math.sin(y / Math.max(1, g.height) * 4.2 + s.time * 0.55 + st.phase) * st.bend * (0.2 + decay * 0.8), x = st.x + bend, gap = hash01(i2 * 31 + row, frame2 >> 2, g.seed);
             if (gap < 0.1 && t2 > 1) continue;
             const glyph = GLYPHS[Math.floor(hash01(st.glyphSeed + row, frame2 >> (t2 === 0 ? 1 : 3), t2) * GLYPHS.length)] ?? "0", flash = t2 === 0, fresh = t2 < 3;
             c.globalAlpha = alpha(g, flash ? 0.92 : 0.05 + decay * decay * (fresh ? 0.58 : 0.4));
@@ -10153,20 +11267,20 @@ var init_desktop_scenes = __esm({
             c.strokeStyle = c.fillStyle;
             c.shadowBlur = flash ? 13 : fresh ? 4 : 0;
             c.shadowColor = g.accent;
-            if (canText && hash01(i, row, g.seed) > 0.36) c.fillText(glyph, x, y);
-            else proceduralGlyph(c, x, y, g.cell * 0.76, glyph.charCodeAt(0) + frame2 + t2 * 17, (hash01(row, i) - 0.5) * 0.18);
-            if (fresh && i % 5 === 2 && t2 === 2) {
+            if (canText && hash01(i2, row, g.seed) > 0.36) c.fillText(glyph, x, y);
+            else proceduralGlyph(c, x, y, g.cell * 0.76, glyph.charCodeAt(0) + frame2 + t2 * 17, (hash01(row, i2) - 0.5) * 0.18);
+            if (fresh && i2 % 5 === 2 && t2 === 2) {
               c.globalAlpha = alpha(g, 0.16);
               strokeLine(c, x - g.cell * 0.32, y + g.cell * 0.16, x + g.cell * 0.42, y - g.cell * 0.08);
             }
           }
         });
-        g.scars.forEach((scar, i) => {
-          const p = 0.5 + 0.5 * Math.sin(s.time * (0.7 + i * 0.17) + scar.phase), x = g.width * (0.5 - scar.width / 2);
+        g.scars.forEach((scar, i2) => {
+          const p = 0.5 + 0.5 * Math.sin(s.time * (0.7 + i2 * 0.17) + scar.phase), x = g.width * (0.5 - scar.width / 2);
           c.fillStyle = g.background;
           c.globalAlpha = alpha(g, 0.025 + p * 0.055);
           c.fillRect(x, scar.y, g.width * scar.width, 2 + p * 9);
-          c.strokeStyle = i % 2 === 0 ? g.secondary : g.accent;
+          c.strokeStyle = i2 % 2 === 0 ? g.secondary : g.accent;
           c.globalAlpha = alpha(g, 0.08 + p * 0.12);
           strokeLine(c, x, scar.y, x + g.width * scar.width, scar.y);
         });
@@ -10182,10 +11296,10 @@ var init_desktop_scenes = __esm({
         c.restore();
       } });
       const auroraComplexScene = defineScene({ id: "aurora", createState: (seed) => ({ seed, time: 0, magnetic: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("aurora", state.seed, input), rng = rngFor("aurora", state.seed, 419), curtains = Array.from({ length: qCount(b, 5, 7, 10) }, (_, i) => ({ anchor: b.width * (0.05 + 0.9 * i / Math.max(1, qCount(b, 5, 7, 10) - 1)), width: b.width * (0.055 + rng() * 0.07), reach: b.height * (0.42 + rng() * 0.33), phase: rng() * TAU, curl: (rng() - 0.5) * b.width * 0.12, brightness: 0.5 + rng() * 0.5 })), stars = Array.from({ length: qCount(b, 16, 28, 44) }, () => ({ x: rng() * b.width, y: rng() * b.height * 0.58, size: 0.5 + rng() * 1.4, phase: rng() * TAU }));
+        const b = makePaletteGeometry("aurora", state.seed, input), rng = rngFor("aurora", state.seed, 419), curtains = Array.from({ length: qCount(b, 5, 7, 10) }, (_, i2) => ({ anchor: b.width * (0.05 + 0.9 * i2 / Math.max(1, qCount(b, 5, 7, 10) - 1)), width: b.width * (0.055 + rng() * 0.07), reach: b.height * (0.42 + rng() * 0.33), phase: rng() * TAU, curl: (rng() - 0.5) * b.width * 0.12, brightness: 0.5 + rng() * 0.5 })), stars = Array.from({ length: qCount(b, 16, 28, 44) }, () => ({ x: rng() * b.width, y: rng() * b.height * 0.58, size: 0.5 + rng() * 1.4, phase: rng() * TAU }));
         return { geometry: { ...b, curtains, stars, horizon: b.height * 0.72 }, primitiveCount: primitiveCount(input, 170, 255, 350) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
+      }, update: ({ state: s, input: i2, stepMs }) => {
+        const dt = seconds(stepMs) * i2.parameters.speed / 100;
         s.time += dt;
         s.magnetic += dt * 0.14;
       }, draw: ({ context: c, state: s, geometry: g }) => {
@@ -10193,10 +11307,10 @@ var init_desktop_scenes = __esm({
         c.clearRect(0, 0, g.width, g.height);
         c.globalCompositeOperation = "lighter";
         c.fillStyle = g.focus;
-        g.stars.forEach((star, i) => {
+        g.stars.forEach((star, i2) => {
           c.globalAlpha = alpha(g, 0.05 + 0.08 * (0.5 + 0.5 * Math.sin(s.time * 0.3 + star.phase)));
           c.fillRect(star.x, star.y, star.size, star.size);
-          if (i % 9 === 0) c.fillRect(star.x - star.size * 2, star.y, star.size * 5, 0.45);
+          if (i2 % 9 === 0) c.fillRect(star.x - star.size * 2, star.y, star.size * 5, 0.45);
         });
         g.curtains.forEach((cu, ci) => {
           const rayCount = g.mobile ? 8 : g.quality === "high" ? 18 : 13;
@@ -10229,17 +11343,17 @@ var init_desktop_scenes = __esm({
         c.restore();
       } });
       const glacierComplexScene = defineScene({ id: "glacier", createState: (seed) => ({ seed, time: 0, strain: 0, refraction: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("glacier", state.seed, input), rng = rngFor("glacier", state.seed, 521), flowAngle = -0.42 + rng() * 0.84, fissures = Array.from({ length: qCount(b, 5, 8, 11) }, () => ({ x: b.width * (0.08 + rng() * 0.84), y: b.height * (0.1 + rng() * 0.78), length: b.height * (0.12 + rng() * 0.26), angle: flowAngle + Math.PI / 2 + (rng() - 0.5) * 0.55, branches: Array.from({ length: 2 + Math.floor(rng() * 3) }, () => (rng() - 0.5) * 0.85), phase: rng() * TAU })), facets = Array.from({ length: qCount(b, 7, 11, 16) }, (_, i) => ({ cx: b.width * (0.08 + rng() * 0.84), cy: b.height * (0.08 + rng() * 0.84), radius: 24 + rng() * (b.mobile ? 55 : 92), sides: 3 + i % 3, tilt: rng() * TAU, phase: rng() * TAU }));
+        const b = makePaletteGeometry("glacier", state.seed, input), rng = rngFor("glacier", state.seed, 521), flowAngle = -0.42 + rng() * 0.84, fissures = Array.from({ length: qCount(b, 5, 8, 11) }, () => ({ x: b.width * (0.08 + rng() * 0.84), y: b.height * (0.1 + rng() * 0.78), length: b.height * (0.12 + rng() * 0.26), angle: flowAngle + Math.PI / 2 + (rng() - 0.5) * 0.55, branches: Array.from({ length: 2 + Math.floor(rng() * 3) }, () => (rng() - 0.5) * 0.85), phase: rng() * TAU })), facets = Array.from({ length: qCount(b, 7, 11, 16) }, (_, i2) => ({ cx: b.width * (0.08 + rng() * 0.84), cy: b.height * (0.08 + rng() * 0.84), radius: 24 + rng() * (b.mobile ? 55 : 92), sides: 3 + i2 % 3, tilt: rng() * TAU, phase: rng() * TAU }));
         return { geometry: { ...b, fissures, facets, flowAngle }, primitiveCount: primitiveCount(input, 180, 270, 360) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
+      }, update: ({ state: s, input: i2, stepMs }) => {
+        const dt = seconds(stepMs) * i2.parameters.speed / 100;
         s.time += dt;
         s.strain += dt * 0.075;
         s.refraction += dt * 0.11;
       }, draw: ({ context: c, state: s, geometry: g }) => {
         c.save();
         c.clearRect(0, 0, g.width, g.height);
-        g.facets.forEach((f, i) => {
+        g.facets.forEach((f, i2) => {
           const sh = Math.sin(s.refraction + f.phase) * 0.035, p = Array.from({ length: f.sides }, (_, side) => {
             const a = f.tilt + side / f.sides * TAU, st = side % 2 === 0 ? 1.15 : 0.78;
             return { x: f.cx + Math.cos(a) * f.radius * st + Math.cos(g.flowAngle) * sh * f.radius, y: f.cy + Math.sin(a) * f.radius + Math.sin(g.flowAngle) * sh * f.radius };
@@ -10248,9 +11362,9 @@ var init_desktop_scenes = __esm({
           c.moveTo(p[0].x, p[0].y);
           p.slice(1).forEach((pt) => c.lineTo(pt.x, pt.y));
           c.closePath();
-          c.fillStyle = i % 3 === 0 ? g.surface : linearGradient(c, g, f.cx - f.radius, f.cy, f.cx + f.radius, f.cy, [g.info, g.accent]);
-          c.strokeStyle = i % 2 === 0 ? g.accent : g.border;
-          c.globalAlpha = alpha(g, 0.035 + i % 4 * 0.017);
+          c.fillStyle = i2 % 3 === 0 ? g.surface : linearGradient(c, g, f.cx - f.radius, f.cy, f.cx + f.radius, f.cy, [g.info, g.accent]);
+          c.strokeStyle = i2 % 2 === 0 ? g.accent : g.border;
+          c.globalAlpha = alpha(g, 0.035 + i2 % 4 * 0.017);
           c.lineWidth = 0.75;
           c.fill();
           c.stroke();
@@ -10262,9 +11376,9 @@ var init_desktop_scenes = __esm({
           const nx = Math.cos(g.flowAngle + Math.PI / 2), ny = Math.sin(g.flowAngle + Math.PI / 2), cx = g.width * 0.5 + nx * lane * g.width * 0.09, cy = g.height * 0.5 + ny * lane * g.height * 0.09, dx = Math.cos(g.flowAngle) * g.width * 0.65, dy = Math.sin(g.flowAngle) * g.width * 0.65;
           strokeLine(c, cx - dx, cy - dy, cx + dx, cy + dy);
         }
-        g.fissures.forEach((f, i) => {
+        g.fissures.forEach((f, i2) => {
           const opening = 0.65 + 0.35 * Math.sin(s.strain + f.phase);
-          c.strokeStyle = i % 3 === 0 ? g.secondary : g.accent;
+          c.strokeStyle = i2 % 3 === 0 ? g.secondary : g.accent;
           c.lineWidth = 1 + opening * 1.1;
           c.globalAlpha = alpha(g, 0.38 + opening * 0.15);
           c.shadowBlur = 5;
@@ -10287,10 +11401,10 @@ var init_desktop_scenes = __esm({
         c.restore();
       } });
       const emberComplexScene = defineScene({ id: "ember", createState: (seed) => ({ seed, time: 0, buoyancy: 0, alarm: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("ember", state.seed, input), rng = rngFor("ember", state.seed, 617), plumes = Array.from({ length: qCount(b, 4, 6, 9) }, (_, i) => ({ x: b.width * (0.1 + 0.8 * (i + 0.5) / qCount(b, 4, 6, 9)), base: b.height * (0.78 + rng() * 0.13), width: b.width * (0.04 + rng() * 0.08), height: b.height * (0.28 + rng() * 0.46), phase: rng() * TAU, lean: (rng() - 0.5) * b.width * 0.12, heat: rng() })), sparks = Array.from({ length: qCount(b, 22, 36, 54) }, () => ({ x: rng() * b.width, y: rng() * b.height, speed: 0.25 + rng() * 1.2, drift: (rng() - 0.5) * 34, size: 0.8 + rng() * 2.4, phase: rng() * TAU }));
+        const b = makePaletteGeometry("ember", state.seed, input), rng = rngFor("ember", state.seed, 617), plumes = Array.from({ length: qCount(b, 4, 6, 9) }, (_, i2) => ({ x: b.width * (0.1 + 0.8 * (i2 + 0.5) / qCount(b, 4, 6, 9)), base: b.height * (0.78 + rng() * 0.13), width: b.width * (0.04 + rng() * 0.08), height: b.height * (0.28 + rng() * 0.46), phase: rng() * TAU, lean: (rng() - 0.5) * b.width * 0.12, heat: rng() })), sparks = Array.from({ length: qCount(b, 22, 36, 54) }, () => ({ x: rng() * b.width, y: rng() * b.height, speed: 0.25 + rng() * 1.2, drift: (rng() - 0.5) * 34, size: 0.8 + rng() * 2.4, phase: rng() * TAU }));
         return { geometry: { ...b, plumes, sparks, alarmX: b.width * 0.82, alarmY: b.height * 0.2 }, primitiveCount: primitiveCount(input, 190, 285, 380) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
+      }, update: ({ state: s, input: i2, stepMs }) => {
+        const dt = seconds(stepMs) * i2.parameters.speed / 100;
         s.time += dt;
         s.buoyancy += dt * 0.22;
         s.alarm = (s.alarm + dt * 0.28) % 1;
@@ -10319,15 +11433,15 @@ var init_desktop_scenes = __esm({
         });
         c.shadowBlur = 4;
         c.shadowColor = g.warning;
-        g.sparks.forEach((sp, i) => {
-          const life = fract(sp.phase / TAU + s.time * 0.055 * sp.speed), y = g.height - life * g.height * 1.08, x = sp.x + Math.sin(s.time * sp.speed + sp.phase) * sp.drift + Math.sin(life * TAU * 1.7) * 8, hot = hash01(i, Math.floor(s.time * 3), g.seed) > 0.72;
-          c.fillStyle = hot ? g.focus : i % 3 === 0 ? g.warning : g.danger;
+        g.sparks.forEach((sp, i2) => {
+          const life = fract(sp.phase / TAU + s.time * 0.055 * sp.speed), y = g.height - life * g.height * 1.08, x = sp.x + Math.sin(s.time * sp.speed + sp.phase) * sp.drift + Math.sin(life * TAU * 1.7) * 8, hot = hash01(i2, Math.floor(s.time * 3), g.seed) > 0.72;
+          c.fillStyle = hot ? g.focus : i2 % 3 === 0 ? g.warning : g.danger;
           c.globalAlpha = alpha(g, (1 - life) * 0.42 + 0.08);
           c.fillRect(x, y, sp.size * (hot ? 1.6 : 1), sp.size * (2 + sp.speed));
         });
         c.shadowBlur = 0;
-        g.plumes.slice(0, 3).forEach((p, i) => {
-          const y = p.base - p.height * (0.32 + 0.16 * Math.sin(s.time * 0.18 + i));
+        g.plumes.slice(0, 3).forEach((p, i2) => {
+          const y = p.base - p.height * (0.32 + 0.16 * Math.sin(s.time * 0.18 + i2));
           c.fillStyle = radialGradient(c, p.x, y, p.width * 2.8, g.warning, g.danger);
           c.globalAlpha = alpha(g, 0.022);
           c.beginPath();
@@ -10348,8 +11462,8 @@ var init_desktop_scenes = __esm({
       const atlasComplexScene = defineScene({ id: "atlas", createState: (seed) => ({ seed, time: 0, survey: 0, route: 0 }), prepare: ({ state, input }) => {
         const b = makePaletteGeometry("atlas", state.seed, input), rng = rngFor("atlas", state.seed, 719), peaks = Array.from({ length: qCount(b, 3, 4, 6) }, () => ({ x: b.width * (0.12 + rng() * 0.76), y: b.height * (0.14 + rng() * 0.7), radius: Math.min(b.width, b.height) * (0.08 + rng() * 0.16), elevation: 0.4 + rng() * 0.6, phase: rng() * TAU })), route = Array.from({ length: qCount(b, 5, 7, 9) }, (_, rank) => ({ x: b.width * (0.08 + 0.84 * rank / Math.max(1, qCount(b, 5, 7, 9) - 1)), y: b.height * (0.18 + rng() * 0.64), rank }));
         return { geometry: { ...b, peaks, route, meridians: qCount(b, 5, 8, 11), parallels: qCount(b, 4, 7, 9) }, primitiveCount: primitiveCount(input, 220, 320, 395) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
+      }, update: ({ state: s, input: i2, stepMs }) => {
+        const dt = seconds(stepMs) * i2.parameters.speed / 100;
         s.time += dt;
         s.survey += dt * 0.045;
         s.route = (s.route + dt * 0.09) % 1;
@@ -10406,20 +11520,20 @@ var init_desktop_scenes = __esm({
         c.globalAlpha = alpha(g, 0.4);
         c.setLineDash([7, 6]);
         c.beginPath();
-        g.route.forEach((p, i) => {
-          if (i === 0) c.moveTo(p.x, p.y);
+        g.route.forEach((p, i2) => {
+          if (i2 === 0) c.moveTo(p.x, p.y);
           else {
-            const prev = g.route[i - 1];
+            const prev = g.route[i2 - 1];
             c.quadraticCurveTo((prev.x + p.x) * 0.5, Math.min(prev.y, p.y) - g.height * 0.04, p.x, p.y);
           }
         });
         c.stroke();
         c.setLineDash([]);
-        g.route.forEach((p, i) => {
-          c.fillStyle = i % 2 === 0 ? g.accent : g.secondary;
+        g.route.forEach((p, i2) => {
+          c.fillStyle = i2 % 2 === 0 ? g.accent : g.secondary;
           c.globalAlpha = alpha(g, 0.46);
           c.beginPath();
-          c.arc(p.x, p.y, 2.5 + i % 3, 0, TAU);
+          c.arc(p.x, p.y, 2.5 + i2 % 3, 0, TAU);
           c.fill();
         });
         const ri = s.route * Math.max(1, g.route.length - 1), ix = Math.min(g.route.length - 2, Math.floor(ri)), t2 = ri - ix, a = g.route[ix], b = g.route[ix + 1], px = mix(a.x, b.x, t2), py = mix(a.y, b.y, t2) - Math.sin(t2 * Math.PI) * g.height * 0.04;
@@ -10439,30 +11553,30 @@ var init_desktop_scenes = __esm({
         c.restore();
       } });
       const noirComplexScene = defineScene({ id: "noir", createState: (seed) => ({ seed, time: 0, iris: 0, shutter: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("noir", state.seed, input), rng = rngFor("noir", state.seed, 811), blinds = Array.from({ length: qCount(b, 9, 13, 18) }, (_, i) => ({ y: b.height * i / qCount(b, 9, 13, 18), height: b.height / qCount(b, 9, 13, 18) * (0.55 + rng() * 0.5), tilt: (rng() - 0.5) * 0.08, phase: rng() * TAU })), bc = qCount(b, 6, 8, 10), blades = Array.from({ length: bc }, (_, i) => ({ phase: i / bc * TAU, length: 0.92 + rng() * 0.12, width: 0.42 + rng() * 0.16 }));
+        const b = makePaletteGeometry("noir", state.seed, input), rng = rngFor("noir", state.seed, 811), blinds = Array.from({ length: qCount(b, 9, 13, 18) }, (_, i2) => ({ y: b.height * i2 / qCount(b, 9, 13, 18), height: b.height / qCount(b, 9, 13, 18) * (0.55 + rng() * 0.5), tilt: (rng() - 0.5) * 0.08, phase: rng() * TAU })), bc = qCount(b, 6, 8, 10), blades = Array.from({ length: bc }, (_, i2) => ({ phase: i2 / bc * TAU, length: 0.92 + rng() * 0.12, width: 0.42 + rng() * 0.16 }));
         return { geometry: { ...b, blinds, blades, cx: b.width * 0.64, cy: b.height * 0.46, radius: Math.min(b.width, b.height) * 0.26 }, primitiveCount: primitiveCount(input, 130, 190, 270) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
+      }, update: ({ state: s, input: i2, stepMs }) => {
+        const dt = seconds(stepMs) * i2.parameters.speed / 100;
         s.time += dt;
         s.iris += dt * 0.075;
         s.shutter += dt * 0.14;
       }, draw: ({ context: c, state: s, geometry: g }) => {
         c.save();
         c.clearRect(0, 0, g.width, g.height);
-        g.blinds.forEach((b, i) => {
+        g.blinds.forEach((b, i2) => {
           const off = Math.sin(s.shutter + b.phase) * g.height * 0.012;
           c.save();
           c.translate(g.width * 0.5, b.y + off);
           c.rotate(b.tilt + Math.sin(s.time * 0.11 + b.phase) * 0.01);
-          c.fillStyle = i % 5 === 0 ? g.secondary : g.surface;
-          c.globalAlpha = alpha(g, i % 5 === 0 ? 0.055 : 0.13);
+          c.fillStyle = i2 % 5 === 0 ? g.secondary : g.surface;
+          c.globalAlpha = alpha(g, i2 % 5 === 0 ? 0.055 : 0.13);
           c.fillRect(-g.width * 0.58, -b.height / 2, g.width * 1.16, b.height);
           c.restore();
         });
         c.save();
         c.translate(g.cx, g.cy);
         c.rotate(s.iris);
-        g.blades.forEach((b, i) => {
+        g.blades.forEach((b, i2) => {
           c.save();
           c.rotate(b.phase);
           c.beginPath();
@@ -10471,10 +11585,10 @@ var init_desktop_scenes = __esm({
           c.lineTo(g.radius * b.length * 0.82, g.radius * b.width * 0.55);
           c.lineTo(g.radius * 0.2, g.radius * 0.12);
           c.closePath();
-          c.fillStyle = i % 2 === 0 ? g.surface : g.background;
+          c.fillStyle = i2 % 2 === 0 ? g.surface : g.background;
           c.strokeStyle = g.accent;
           c.lineWidth = 0.8;
-          c.globalAlpha = alpha(g, 0.19 + i % 2 * 0.05);
+          c.globalAlpha = alpha(g, 0.19 + i2 % 2 * 0.05);
           c.fill();
           c.stroke();
           c.restore();
@@ -10507,10 +11621,10 @@ var init_desktop_scenes = __esm({
         c.restore();
       } });
       const signalComplexScene = defineScene({ id: "signal", createState: (seed) => ({ seed, time: 0, sync: 0, burst: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("signal", state.seed, input), rng = rngFor("signal", state.seed, 907), cc = qCount(b, 3, 4, 5), channels = Array.from({ length: cc }, (_, i) => ({ y: b.height * (0.19 + i * 0.14), frequency: 1.7 + rng() * 3.7, amplitude: b.height * (0.018 + rng() * 0.04), phase: rng() * TAU, jitter: 0.2 + rng() * 0.8, colorRole: i % 3 })), dropouts = Array.from({ length: qCount(b, 4, 6, 9) }, () => ({ x: rng() * b.width, width: b.width * (0.025 + rng() * 0.1), y: rng() * b.height, height: 2 + rng() * 18, phase: rng() * TAU }));
+        const b = makePaletteGeometry("signal", state.seed, input), rng = rngFor("signal", state.seed, 907), cc = qCount(b, 3, 4, 5), channels = Array.from({ length: cc }, (_, i2) => ({ y: b.height * (0.19 + i2 * 0.14), frequency: 1.7 + rng() * 3.7, amplitude: b.height * (0.018 + rng() * 0.04), phase: rng() * TAU, jitter: 0.2 + rng() * 0.8, colorRole: i2 % 3 })), dropouts = Array.from({ length: qCount(b, 4, 6, 9) }, () => ({ x: rng() * b.width, width: b.width * (0.025 + rng() * 0.1), y: rng() * b.height, height: 2 + rng() * 18, phase: rng() * TAU }));
         return { geometry: { ...b, channels, dropouts, radarX: b.width * 0.78, radarY: b.height * 0.73, radarR: Math.min(b.width, b.height) * 0.14 }, primitiveCount: primitiveCount(input, 180, 260, 350) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
+      }, update: ({ state: s, input: i2, stepMs }) => {
+        const dt = seconds(stepMs) * i2.parameters.speed / 100;
         s.time += dt;
         s.sync = (s.sync + dt * 0.31) % 1;
         s.burst += dt * 0.9;
@@ -10538,9 +11652,9 @@ var init_desktop_scenes = __esm({
           }
           c.stroke();
         });
-        g.dropouts.forEach((d, i) => {
-          const live = 0.5 + 0.5 * Math.sin(s.time * (0.7 + i * 0.09) + d.phase);
-          c.fillStyle = i % 2 === 0 ? g.background : g.surface;
+        g.dropouts.forEach((d, i2) => {
+          const live = 0.5 + 0.5 * Math.sin(s.time * (0.7 + i2 * 0.09) + d.phase);
+          c.fillStyle = i2 % 2 === 0 ? g.background : g.surface;
           c.globalAlpha = alpha(g, 0.035 + live * 0.09);
           c.fillRect(d.x, d.y, d.width, d.height * live);
           if (live > 0.72) {
@@ -10580,10 +11694,10 @@ var init_desktop_scenes = __esm({
         c.restore();
       } });
       const violetComplexScene = defineScene({ id: "violet", createState: (seed) => ({ seed, time: 0, phaseA: 0, phaseB: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("violet", state.seed, input), rng = rngFor("violet", state.seed, 1009), nodes = Array.from({ length: qCount(b, 8, 13, 20) }, (_, i) => ({ a: 1.1 + rng() * 2.7, b: 1.4 + rng() * 3.4, radius: 0.18 + rng() * 0.78, weight: 0.3 + rng() * 0.7, phase: rng() * TAU + i * 0.17 }));
+        const b = makePaletteGeometry("violet", state.seed, input), rng = rngFor("violet", state.seed, 1009), nodes = Array.from({ length: qCount(b, 8, 13, 20) }, (_, i2) => ({ a: 1.1 + rng() * 2.7, b: 1.4 + rng() * 3.4, radius: 0.18 + rng() * 0.78, weight: 0.3 + rng() * 0.7, phase: rng() * TAU + i2 * 0.17 }));
         return { geometry: { ...b, nodes, cx: b.width * 0.5, cy: b.height * 0.5, scaleX: b.width * 0.37, scaleY: b.height * 0.34, lobes: 3 + Math.floor(rng() * 4) }, primitiveCount: primitiveCount(input, 160, 240, 330) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
+      }, update: ({ state: s, input: i2, stepMs }) => {
+        const dt = seconds(stepMs) * i2.parameters.speed / 100;
         s.time += dt;
         s.phaseA += dt * 0.12;
         s.phaseB -= dt * 0.073;
@@ -10613,14 +11727,14 @@ var init_desktop_scenes = __esm({
         c.lineWidth = 0.9;
         c.globalAlpha = alpha(g, 0.24);
         c.stroke();
-        g.nodes.forEach((n, i) => {
+        g.nodes.forEach((n, i2) => {
           const t2 = n.phase + s.phaseA * n.a + s.phaseB * n.b, x = g.cx + Math.sin(t2 * 2.03) * g.scaleX * n.radius, y = g.cy + Math.sin(t2 * 3.01 + n.phase * 0.3) * g.scaleY * n.radius, p = 0.5 + 0.5 * Math.sin(s.time * (0.35 + n.weight * 0.4) + n.phase);
-          c.fillStyle = i % 3 === 0 ? g.secondary : g.accent;
+          c.fillStyle = i2 % 3 === 0 ? g.secondary : g.accent;
           c.globalAlpha = alpha(g, 0.15 + p * 0.28);
           c.beginPath();
           c.arc(x, y, 1.5 + n.weight * 3.2, 0, TAU);
           c.fill();
-          if (i % 4 === 0) {
+          if (i2 % 4 === 0) {
             c.strokeStyle = g.focus;
             c.lineWidth = 0.7;
             c.globalAlpha = alpha(g, 0.15);
@@ -10642,10 +11756,10 @@ var init_desktop_scenes = __esm({
         c.restore();
       } });
       const claudiusComplexScene = defineScene({ id: "claudius", createState: (seed) => ({ seed, time: 0, thought: 0, proof: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("claudius", state.seed, input), rng = rngFor("claudius", state.seed, 1103), columnW = b.width * (b.mobile ? 0.74 : 0.56), columnX = (b.width - columnW) * 0.5, blocks = Array.from({ length: qCount(b, 5, 7, 9) }, (_, i) => ({ x: columnX + columnW * (0.02 + rng() * 0.04), y: b.height * (0.1 + i * 0.095 + rng() * 0.015), width: columnW * (0.58 + rng() * 0.36), lines: 2 + Math.floor(rng() * 4), lead: 7 + rng() * 3, voice: rng() })), threads = Array.from({ length: qCount(b, 4, 6, 8) }, (_, i) => ({ fromY: b.height * (0.15 + i * 0.1), toY: b.height * (0.23 + i * 0.1 + rng() * 0.08), side: i % 2 === 0 ? -1 : 1, phase: rng() * TAU, weight: 0.45 + rng() * 0.55 }));
+        const b = makePaletteGeometry("claudius", state.seed, input), rng = rngFor("claudius", state.seed, 1103), columnW = b.width * (b.mobile ? 0.74 : 0.56), columnX = (b.width - columnW) * 0.5, blocks = Array.from({ length: qCount(b, 5, 7, 9) }, (_, i2) => ({ x: columnX + columnW * (0.02 + rng() * 0.04), y: b.height * (0.1 + i2 * 0.095 + rng() * 0.015), width: columnW * (0.58 + rng() * 0.36), lines: 2 + Math.floor(rng() * 4), lead: 7 + rng() * 3, voice: rng() })), threads = Array.from({ length: qCount(b, 4, 6, 8) }, (_, i2) => ({ fromY: b.height * (0.15 + i2 * 0.1), toY: b.height * (0.23 + i2 * 0.1 + rng() * 0.08), side: i2 % 2 === 0 ? -1 : 1, phase: rng() * TAU, weight: 0.45 + rng() * 0.55 }));
         return { geometry: { ...b, blocks, threads, columnX, columnW }, primitiveCount: primitiveCount(input, 145, 210, 290) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
+      }, update: ({ state: s, input: i2, stepMs }) => {
+        const dt = seconds(stepMs) * i2.parameters.speed / 100;
         s.time += dt;
         s.thought += dt * 0.075;
         s.proof = (s.proof + dt * 0.04) % 1;
@@ -10692,9 +11806,9 @@ var init_desktop_scenes = __esm({
             c.stroke();
           }
         });
-        g.threads.forEach((t2, i) => {
+        g.threads.forEach((t2, i2) => {
           const sx = t2.side < 0 ? g.columnX - g.columnW * 0.13 : g.columnX + g.columnW * 1.13, ix = t2.side < 0 ? g.columnX + g.columnW * 0.04 : g.columnX + g.columnW * 0.96, sw = Math.sin(s.time * 0.18 + t2.phase) * g.columnW * 0.018;
-          c.strokeStyle = i % 2 === 0 ? g.accent : g.secondary;
+          c.strokeStyle = i2 % 2 === 0 ? g.accent : g.secondary;
           c.lineWidth = 0.8 + t2.weight * 0.5;
           c.globalAlpha = alpha(g, 0.18 + t2.weight * 0.14);
           c.beginPath();
@@ -10724,8 +11838,8 @@ var init_desktop_scenes = __esm({
           modules.push({ x: b.width * 0.09 + col * (cw + gap), y: b.height * 0.14 + r * (ch + gap), w: cw, h: ch, depth: 0.25 + rng() * 0.75, phase: rng() * TAU, kind: ix % 4 });
         }
         return { geometry: { ...b, modules, rippleX: b.width * 0.76, rippleY: b.height * 0.83 }, primitiveCount: primitiveCount(input, 130, 200, 280) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
+      }, update: ({ state: s, input: i2, stepMs }) => {
+        const dt = seconds(stepMs) * i2.parameters.speed / 100;
         s.time += dt;
         s.elevation += dt * 0.28;
         s.ripple = (s.ripple + dt * 0.17) % 1;
@@ -10777,10 +11891,10 @@ var init_desktop_scenes = __esm({
         c.restore();
       } });
       const telemetryComplexScene = defineScene({ id: "telemetry", createState: (seed) => ({ seed, time: 0, acquisition: 0, sweep: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("telemetry", state.seed, input), rng = rngFor("telemetry", state.seed, 1301), gauges = Array.from({ length: qCount(b, 2, 3, 4) }, (_, i) => ({ x: b.width * (0.18 + i * 0.2), y: b.height * 0.28, radius: Math.min(b.width, b.height) * (0.055 + rng() * 0.035), minAngle: Math.PI * 0.72, maxAngle: Math.PI * 2.28, phase: rng() * TAU, value: 0.2 + rng() * 0.7 })), strips = Array.from({ length: qCount(b, 2, 3, 4) }, (_, i) => ({ y: b.height * (0.56 + i * 0.1), amplitude: b.height * (0.012 + rng() * 0.02), frequency: 1.4 + rng() * 3.2, phase: rng() * TAU }));
+        const b = makePaletteGeometry("telemetry", state.seed, input), rng = rngFor("telemetry", state.seed, 1301), gauges = Array.from({ length: qCount(b, 2, 3, 4) }, (_, i2) => ({ x: b.width * (0.18 + i2 * 0.2), y: b.height * 0.28, radius: Math.min(b.width, b.height) * (0.055 + rng() * 0.035), minAngle: Math.PI * 0.72, maxAngle: Math.PI * 2.28, phase: rng() * TAU, value: 0.2 + rng() * 0.7 })), strips = Array.from({ length: qCount(b, 2, 3, 4) }, (_, i2) => ({ y: b.height * (0.56 + i2 * 0.1), amplitude: b.height * (0.012 + rng() * 0.02), frequency: 1.4 + rng() * 3.2, phase: rng() * TAU }));
         return { geometry: { ...b, gauges, strips, rulerY: b.height * 0.82 }, primitiveCount: primitiveCount(input, 210, 310, 395) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
+      }, update: ({ state: s, input: i2, stepMs }) => {
+        const dt = seconds(stepMs) * i2.parameters.speed / 100;
         s.time += dt;
         s.acquisition = (s.acquisition + dt * 0.095) % 1;
         s.sweep += dt * 0.28;
@@ -10797,7 +11911,7 @@ var init_desktop_scenes = __esm({
           c.globalAlpha = alpha(g, cell % 3 === 0 ? 0.28 : 0.13);
           c.fillRect(x2, g.height * 0.115, g.width * 0.055, 2 + cell % 2 * 2);
         }
-        g.gauges.forEach((ga, i) => {
+        g.gauges.forEach((ga, i2) => {
           c.strokeStyle = g.border;
           c.lineWidth = 0.8;
           c.globalAlpha = alpha(g, 0.3);
@@ -10809,8 +11923,8 @@ var init_desktop_scenes = __esm({
             c.globalAlpha = alpha(g, long ? 0.28 : 0.13);
             strokeLine(c, ga.x + Math.cos(a2) * r0, ga.y + Math.sin(a2) * r0, ga.x + Math.cos(a2) * r1, ga.y + Math.sin(a2) * r1);
           }
-          const v = 0.5 + 0.5 * Math.sin(s.time * (0.35 + i * 0.12) + ga.phase) * 0.32 + (ga.value - 0.5) * 0.68, a = ga.minAngle + (ga.maxAngle - ga.minAngle) * Math.max(0.04, Math.min(0.96, v));
-          c.strokeStyle = i % 2 === 0 ? g.accent : g.secondary;
+          const v = 0.5 + 0.5 * Math.sin(s.time * (0.35 + i2 * 0.12) + ga.phase) * 0.32 + (ga.value - 0.5) * 0.68, a = ga.minAngle + (ga.maxAngle - ga.minAngle) * Math.max(0.04, Math.min(0.96, v));
+          c.strokeStyle = i2 % 2 === 0 ? g.accent : g.secondary;
           c.lineWidth = 1.5;
           c.globalAlpha = alpha(g, 0.54);
           strokeLine(c, ga.x, ga.y, ga.x + Math.cos(a) * ga.radius * 0.72, ga.y + Math.sin(a) * ga.radius * 0.72);
@@ -10862,8 +11976,8 @@ var init_desktop_scenes = __esm({
       const calmComplexScene = defineScene({ id: "calm", createState: (seed) => ({ seed, time: 0, breath: 0, drift: 0 }), prepare: ({ state, input }) => {
         const b = makePaletteGeometry("calm", state.seed, input), rng = rngFor("calm", state.seed, 1409), dust = Array.from({ length: b.mobile ? 9 : input.effectiveQuality.tier === "high" ? 22 : 15 }, () => ({ x: b.width * (0.08 + rng() * 0.84), y: b.height * (0.15 + rng() * 0.7), size: 0.4 + rng() * 1.1, phase: rng() * TAU }));
         return { geometry: { ...b, dust, horizon: b.height * 0.68, filamentY: b.height * 0.38 }, primitiveCount: primitiveCount(input, 72, 96, 124) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
+      }, update: ({ state: s, input: i2, stepMs }) => {
+        const dt = seconds(stepMs) * i2.parameters.speed / 100;
         s.time += dt;
         s.breath += dt * 0.07;
         s.drift += dt * 0.025;
@@ -10896,8 +12010,8 @@ var init_desktop_scenes = __esm({
         c.bezierCurveTo(g.width * 0.39, fy - g.height * 0.025, g.width * 0.61, fy + g.height * 0.025, g.width * 0.78, fy);
         c.stroke();
         c.fillStyle = g.accent;
-        g.dust.forEach((d, i) => {
-          const f = 0.5 + 0.5 * Math.sin(s.time * (0.07 + i * 2e-3) + d.phase);
+        g.dust.forEach((d, i2) => {
+          const f = 0.5 + 0.5 * Math.sin(s.time * (0.07 + i2 * 2e-3) + d.phase);
           c.globalAlpha = alpha(g, 0.018 + f * 0.035);
           c.beginPath();
           c.arc(d.x, d.y, d.size * 0.55, 0, TAU);
@@ -10930,8 +12044,8 @@ function nomiTemi(campi = CAMPI_IMPOSTAZIONI) {
   return (campo2?.opzioni || []).map(([id, nome]) => ({ id, nome }));
 }
 function conCalmPrimo(temi) {
-  const i = temi.findIndex((t2) => t2.id === "calm");
-  return i <= 0 ? temi.slice() : [temi[i], ...temi.slice(0, i), ...temi.slice(i + 1)];
+  const i2 = temi.findIndex((t2) => t2.id === "calm");
+  return i2 <= 0 ? temi.slice() : [temi[i2], ...temi.slice(0, i2), ...temi.slice(i2 + 1)];
 }
 function leggiSemiTemi(doc = globalThis.document) {
   const semi = /* @__PURE__ */ new Map();
@@ -11459,8 +12573,8 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     const passo = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
     if (passo === void 0 && e.key !== "Home" && e.key !== "End") return;
     e.preventDefault();
-    const i = scelte.findIndex((s) => s.id === scelto);
-    const prossimo = e.key === "Home" ? 0 : e.key === "End" ? scelte.length - 1 : (i + passo + scelte.length) % scelte.length;
+    const i2 = scelte.findIndex((s) => s.id === scelto);
+    const prossimo = e.key === "Home" ? 0 : e.key === "End" ? scelte.length - 1 : (i2 + passo + scelte.length) % scelte.length;
     scelte[prossimo].bottone.click();
   });
   let vista = null;
@@ -11724,8 +12838,8 @@ function testiBoard(sessione, metriche = {}, adesso = /* @__PURE__ */ new Date()
 }
 function cartellaDaExport(esportazione) {
   const eventi2 = Array.isArray(esportazione?.eventi) ? esportazione.eventi : [];
-  for (let i = eventi2.length - 1; i >= 0; i--) {
-    const evento = eventi2[i];
+  for (let i2 = eventi2.length - 1; i2 >= 0; i2--) {
+    const evento = eventi2[i2];
     if (evento?.type === "RunStarted" && typeof evento.contesto?.cartella === "string" && evento.contesto.cartella.trim()) return evento.contesto.cartella;
   }
   return null;
@@ -11807,14 +12921,14 @@ function creaTabellaBoard(sessioni, opzioni = {}) {
   tabella.setAttribute("aria-label", "Sessioni");
   const testa = el14(doc, "thead"), riga = el14(doc, "tr");
   const ordine = opzioni.ordine || "recenti";
-  ["Sessione", "Stato", "Modello", "Giri", "Token", "Cache", "Primo token", "Chiusa per", "Costo", "Avviata"].forEach((nome, i) => {
-    const th = el14(doc, "th", [3, 4, 5, 6, 8].includes(i) ? "num" : null, nome);
+  ["Sessione", "Stato", "Modello", "Giri", "Token", "Cache", "Primo token", "Chiusa per", "Costo", "Avviata"].forEach((nome, i2) => {
+    const th = el14(doc, "th", [3, 4, 5, 6, 8].includes(i2) ? "num" : null, nome);
     th.scope = "col";
-    if (i === 8) {
+    if (i2 === 8) {
       th.hidden = true;
       th.dataset.richiede = "fase3";
     }
-    if (ordine === "nome" && i === 0 || ordine === "token" && i === 4 || ["recenti", "vecchie"].includes(ordine) && i === 9) th.setAttribute("aria-sort", ["nome", "vecchie"].includes(ordine) ? "ascending" : "descending");
+    if (ordine === "nome" && i2 === 0 || ordine === "token" && i2 === 4 || ["recenti", "vecchie"].includes(ordine) && i2 === 9) th.setAttribute("aria-sort", ["nome", "vecchie"].includes(ordine) ? "ascending" : "descending");
     riga.append(th);
   });
   testa.append(riga);
@@ -11844,8 +12958,8 @@ function aggiornaBoard(schermo, sessioni, opzioni = {}) {
       tab.addEventListener("keydown", (event) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
         event.preventDefault();
-        const i = tabs.indexOf(tab);
-        const scelta = event.key === "Home" ? tabs[0] : event.key === "End" ? tabs.at(-1) : tabs[(i + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+        const i2 = tabs.indexOf(tab);
+        const scelta = event.key === "Home" ? tabs[0] : event.key === "End" ? tabs.at(-1) : tabs[(i2 + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
         scelta.click();
         scelta.focus();
       });
@@ -12703,12 +13817,12 @@ function aggiornaDettaglioHf(aside, detail, { stima: stima2 = /* @__PURE__ */ ne
   radio.id = "hfFileChoices";
   radio.setAttribute("role", "radiogroup");
   radio.setAttribute("aria-label", "File da scaricare");
-  gruppi.forEach((g, i) => {
+  gruppi.forEach((g, i2) => {
     const b = el17(d, "button", "talos-choice");
     b.type = "button";
     b.setAttribute("role", "radio");
     b.setAttribute("aria-checked", String(g === scelto));
-    b.dataset.hfFile = String(i);
+    b.dataset.hfFile = String(i2);
     b.dataset.variante = g.chiave;
     const st = descriviStima(stima2.get?.(g.chiave), g.bytes);
     const titolo2 = el17(d, "span", "talos-choice__title", `${g.quant} · ${gb(g.bytes)}${g.incompleto ? ` · set incompleto ${g.file.length}/${g.attesi}` : ""}`);
@@ -13896,11 +15010,11 @@ function datiDownload(item = {}, { stima: stima2 = null } = {}) {
 }
 function contaStati(items = []) {
   const c = { inCorso: 0, falliti: 0, completati: 0, inPausa: 0 };
-  for (const i of items) {
-    if (["queued", "running", "verifying"].includes(i.state)) c.inCorso += 1;
-    else if (i.state === "failed") c.falliti += 1;
-    else if (i.state === "ready") c.completati += 1;
-    else if (i.state === "paused") c.inPausa += 1;
+  for (const i2 of items) {
+    if (["queued", "running", "verifying"].includes(i2.state)) c.inCorso += 1;
+    else if (i2.state === "failed") c.falliti += 1;
+    else if (i2.state === "ready") c.completati += 1;
+    else if (i2.state === "paused") c.inPausa += 1;
   }
   return c;
 }
@@ -14019,12 +15133,12 @@ function aggiornaCodaDownload(panel, items = [], { soloAttivi = false, stime = /
     coda.replaceChildren(el20(d, "p", "talos-card--pad talos-muted", `Coda non disponibile: ${errore.message || errore}`));
     return;
   }
-  const visibili = items.filter((i) => !soloAttivi || (STATI_DOWNLOAD[i.state]?.attivo ?? true));
+  const visibili = items.filter((i2) => !soloAttivi || (STATI_DOWNLOAD[i2.state]?.attivo ?? true));
   if (!visibili.length) {
     coda.replaceChildren(el20(d, "p", "talos-card--pad talos-muted", items.length ? "Nessun download attivo." : "Nessun download: scegli un file da Hugging Face per cominciare."));
     return;
   }
-  coda.replaceChildren(...visibili.flatMap((i) => [d.createTextNode("\n"), creaRigaDownload(datiDownload(i, { stima: stime.get?.(i.id) || null }), { azioni, document: d })]), d.createTextNode("\n"));
+  coda.replaceChildren(...visibili.flatMap((i2) => [d.createTextNode("\n"), creaRigaDownload(datiDownload(i2, { stima: stime.get?.(i2.id) || null }), { azioni, document: d })]), d.createTextNode("\n"));
 }
 function montaCodaDownload(originale, canonico) {
   if (!originale || !canonico || originale.dataset.downloadMontato) return;
@@ -14271,7 +15385,7 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
     try {
       const r = await api.cartelle(path);
       const p = normalizzaCartella(r.path || path);
-      st.figli.set(p, (r.items || []).map((i) => ({ nome: i.name, path: normalizzaCartella(i.path) })));
+      st.figli.set(p, (r.items || []).map((i2) => ({ nome: i2.name, path: normalizzaCartella(i2.path) })));
       if (p !== path) st.figli.set(path, st.figli.get(p));
       if (!st.radice) st.radice = p;
     } catch (e) {
@@ -14567,10 +15681,10 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
       if (!n) return;
       const p = n.dataset.introPath;
       const righe = [...velo.querySelectorAll("#introAlbero [role=treeitem]")].filter((x) => !x.closest("[hidden]"));
-      const i = righe.indexOf(n);
+      const i2 = righe.indexOf(n);
       let target;
-      if (e.key === "ArrowDown") target = righe[Math.min(i + 1, righe.length - 1)];
-      else if (e.key === "ArrowUp") target = righe[Math.max(i - 1, 0)];
+      if (e.key === "ArrowDown") target = righe[Math.min(i2 + 1, righe.length - 1)];
+      else if (e.key === "ArrowUp") target = righe[Math.max(i2 - 1, 0)];
       else if (e.key === "Home") target = righe[0];
       else if (e.key === "End") target = righe.at(-1);
       else if (e.key === "ArrowRight") {
@@ -14600,7 +15714,7 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
         st.timer = setTimeout(() => {
           st.testo = "";
         }, 650);
-        target = [...righe.slice(i + 1), ...righe.slice(0, i)].find((x) => x.getAttribute("aria-label").toLocaleLowerCase("it").startsWith(st.testo));
+        target = [...righe.slice(i2 + 1), ...righe.slice(0, i2)].find((x) => x.getAttribute("aria-label").toLocaleLowerCase("it").startsWith(st.testo));
       }
       if (target) {
         e.preventDefault();
@@ -14716,9 +15830,9 @@ var init_intro = __esm({
     cartellaSuperiore = (p) => {
       const n = normalizzaCartella(p);
       if (/^[a-z]:\\$/i.test(n)) return null;
-      const i = n.lastIndexOf("\\");
-      if (i <= 0) return null;
-      const su = n.slice(0, i);
+      const i2 = n.lastIndexOf("\\");
+      if (i2 <= 0) return null;
+      const su = n.slice(0, i2);
       return /^[a-z]:$/i.test(su) ? `${su}\\` : su;
     };
   }
@@ -14731,8 +15845,8 @@ function accorciaPercorso(percorso, massimo = 46) {
   const pezzi = testo3.split(/(?<=[\\/])/);
   const radice2 = pezzi[0] + (pezzi[1] ?? "");
   let coda = "";
-  for (let i = pezzi.length - 1; i > 1; i -= 1) {
-    const prova = pezzi[i] + coda;
+  for (let i2 = pezzi.length - 1; i2 > 1; i2 -= 1) {
+    const prova = pezzi[i2] + coda;
     if (radice2.length + 1 + prova.length > massimo) break;
     coda = prova;
   }
@@ -14760,7 +15874,7 @@ function titoloScheda(voce, tutte = [voce]) {
   return `${t("tu")} · ${shell}${omonime.length > 1 && posizione > 0 ? ` ${posizione + 1}` : ""}`;
 }
 function prossimaAttivaDopoChiusura(lista, indice2) {
-  const resto = lista.filter((_, i) => i !== indice2);
+  const resto = lista.filter((_, i2) => i2 !== indice2);
   return resto[indice2] ?? resto[indice2 - 1] ?? null;
 }
 function cicla(lista, attiva, direzione) {
@@ -14780,16 +15894,48 @@ function svgIcona(nome, classi = "i i--sm") {
   svg.append(use);
   return svg;
 }
-function creaMenuContestuale(root) {
-  let menu = root.querySelector("#menuSchedaTerminale");
+function creaMenuContestuale(root, { id = "menuSchedaTerminale", etichetta: etichetta2 = "Azioni sulla scheda" } = {}) {
+  let menu = root.querySelector(`#${id}`);
   if (menu) return menu;
-  menu = document.createElement("div");
-  menu.id = "menuSchedaTerminale";
+  const documento = root.ownerDocument || globalThis.document;
+  menu = documento.createElement("div");
+  menu.id = id;
   menu.className = "talos-card talos-context-menu";
   menu.setAttribute("role", "menu");
-  menu.setAttribute("aria-label", t("Azioni sulla scheda"));
+  menu.setAttribute("aria-label", t(etichetta2));
   menu.hidden = true;
   root.append(menu);
+  return menu;
+}
+function apriMenuContestuale(menu, { titolo: titolo2 = "", voci = [], x = 0, y = 0, chiudi = () => {
+}, finestra = globalThis }) {
+  const documento = menu.ownerDocument || globalThis.document;
+  menu.replaceChildren();
+  if (titolo2) {
+    const intestazione = documento.createElement("div");
+    intestazione.className = "talos-context-menu__title";
+    intestazione.textContent = titolo2;
+    menu.append(intestazione);
+  }
+  for (const [testo3, fai, abilitato = true] of voci) {
+    const b = documento.createElement("button");
+    b.type = "button";
+    b.className = "talos-button talos-button--ghost";
+    b.setAttribute("role", "menuitem");
+    b.textContent = testo3;
+    b.disabled = !abilitato;
+    b.addEventListener("click", () => {
+      chiudi();
+      fai();
+    });
+    menu.append(b);
+  }
+  menu.hidden = false;
+  const larghezza = menu.offsetWidth || 240;
+  const altezza = menu.offsetHeight || 160;
+  menu.style.left = `${Math.max(8, Math.min(x, (finestra.innerWidth ?? 0) - larghezza - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, (finestra.innerHeight ?? 0) - altezza - 8))}px`;
+  menu.querySelector("[role=menuitem]:not([disabled])")?.focus();
   return menu;
 }
 function creaSchedeTerminale(pane, { azioni = {}, root = document.body } = {}) {
@@ -14812,36 +15958,19 @@ function creaSchedeTerminale(pane, { azioni = {}, root = document.body } = {}) {
     }
   });
   function apriMenu(voce, x, y) {
-    menu.replaceChildren();
-    const titolo2 = document.createElement("div");
-    titolo2.className = "talos-context-menu__title";
-    titolo2.textContent = titoloScheda(voce, stato.schede);
-    menu.append(titolo2);
-    const voci = [
-      [t(TESTI2.rinomina), () => avviaRinomina(voce), true],
-      [t(TESTI2.chiudi), () => azioni.chiudi?.(voce.terminalId), true],
-      [t(TESTI2.chiudiAltre), () => azioni.chiudiAltre?.(voce.terminalId), stato.schede.length > 1],
-      [t(TESTI2.chiudiTutte), () => azioni.chiudiTutte?.(), stato.schede.length > 0]
-    ];
-    for (const [testo3, fai, abilitato] of voci) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "talos-button talos-button--ghost";
-      b.setAttribute("role", "menuitem");
-      b.textContent = testo3;
-      b.disabled = !abilitato;
-      b.addEventListener("click", () => {
-        chiudiMenu();
-        fai();
-      });
-      menu.append(b);
-    }
-    menu.hidden = false;
-    const larghezza = menu.offsetWidth || 240;
-    const altezza = menu.offsetHeight || 160;
-    menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - larghezza - 8))}px`;
-    menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - altezza - 8))}px`;
-    menu.querySelector("[role=menuitem]:not([disabled])")?.focus();
+    apriMenuContestuale(menu, {
+      titolo: titoloScheda(voce, stato.schede),
+      voci: [
+        [t(TESTI2.rinomina), () => avviaRinomina(voce), true],
+        [t(TESTI2.chiudi), () => azioni.chiudi?.(voce.terminalId), true],
+        [t(TESTI2.chiudiAltre), () => azioni.chiudiAltre?.(voce.terminalId), stato.schede.length > 1],
+        [t(TESTI2.chiudiTutte), () => azioni.chiudiTutte?.(), stato.schede.length > 0]
+      ],
+      x,
+      y,
+      chiudi: chiudiMenu,
+      finestra: window
+    });
   }
   function avviaRinomina(voce) {
     inRinomina = voce.terminalId;
@@ -14954,8 +16083,8 @@ function creaSchedeTerminale(pane, { azioni = {}, root = document.body } = {}) {
   tabs.addEventListener("keydown", suTastiera);
   function renderizza() {
     tabs.replaceChildren();
-    stato.schede.forEach((voce, i) => {
-      tabs.append("\n", creaTab(voce, i));
+    stato.schede.forEach((voce, i2) => {
+      tabs.append("\n", creaTab(voce, i2));
     });
     const nuovo = document.createElement("button");
     nuovo.className = "talos-terminal__tab";
@@ -15076,8 +16205,8 @@ function raggruppa2(annotazioni) {
     if (chiavi.size > 1) break;
   }
   const gruppi = /* @__PURE__ */ new Map();
-  annotazioni.forEach((a, i) => {
-    const chiave = percorsi[i].slice(0, scelta).join(" > ") || a.fatto?.tag || "pagina";
+  annotazioni.forEach((a, i2) => {
+    const chiave = percorsi[i2].slice(0, scelta).join(" > ") || a.fatto?.tag || "pagina";
     if (!gruppi.has(chiave)) gruppi.set(chiave, []);
     gruppi.get(chiave).push(a);
   });
@@ -15147,14 +16276,14 @@ function renderizzaAnnotazioni(pannello, { annotazioni, attivo, onNota, onTogli,
   }
   if (!lista) return;
   lista.replaceChildren();
-  annotazioni.forEach((a, i) => {
+  annotazioni.forEach((a, i2) => {
     const li = document.createElement("li");
     li.className = "talos-annotazione";
     const testa = document.createElement("div");
     testa.className = "talos-annotazione__testa";
     const num2 = document.createElement("span");
     num2.className = "talos-badge talos-badge--accent talos-badge--sm";
-    num2.textContent = String(i + 1);
+    num2.textContent = String(i2 + 1);
     const sel = document.createElement("code");
     sel.className = "talos-mono talos-annotazione__selettore";
     sel.textContent = a.fatto?.selettore || a.fatto?.tag || "elemento";
@@ -15163,7 +16292,7 @@ function renderizzaAnnotazioni(pannello, { annotazioni, attivo, onNota, onTogli,
     togli.type = "button";
     togli.className = "talos-button talos-button--ghost talos-button--sm";
     togli.textContent = "Togli";
-    togli.addEventListener("click", () => onTogli?.(i));
+    togli.addEventListener("click", () => onTogli?.(i2));
     testa.append(num2, sel, togli);
     const meta2 = document.createElement("p");
     meta2.className = "talos-muted talos-browser__meta";
@@ -15174,7 +16303,7 @@ function renderizzaAnnotazioni(pannello, { annotazioni, attivo, onNota, onTogli,
     nota.rows = 2;
     nota.placeholder = "Cosa deve cambiare qui?";
     nota.value = a.nota || "";
-    nota.addEventListener("input", () => onNota?.(i, nota.value));
+    nota.addEventListener("input", () => onNota?.(i2, nota.value));
     li.append(testa, meta2, nota);
     lista.append(li);
   });
@@ -15260,6 +16389,81 @@ var init_testo_pagina = __esm({
 });
 
 // src/components/browser.js
+function frasePerGenere(genere, dettagli = {}) {
+  switch (String(genere || "")) {
+    case "timeout":
+      return t(TESTI3.guastoTimeout, { secondi: Number(dettagli?.secondi ?? 0) });
+    case "dns":
+      return t(TESTI3.guastoDns);
+    case "rifiuto":
+      return t(TESTI3.guastoRifiuto);
+    case "certificato":
+      return t(TESTI3.guastoCertificato);
+    case "rete":
+      return t(TESTI3.guastoRete);
+    case "indirizzo":
+      return t(TESTI3.guastoIndirizzo);
+    case "xfo-deny":
+      return t(TESTI3.rifiutoDeny);
+    case "xfo-sameorigin":
+      return t(TESTI3.rifiutoSameOrigin);
+    case "frame-ancestors":
+      return t(TESTI3.rifiutoFrameAncestors);
+    default:
+      return "";
+  }
+}
+function rimedioPerGenere(genere) {
+  switch (String(genere || "")) {
+    case "dns":
+    case "indirizzo":
+      return t(TESTI3.rimedioIndirizzo);
+    case "certificato":
+      return t(TESTI3.rimedioCertificato);
+    case "timeout":
+    case "rete":
+      return t(TESTI3.rimedioAspetta);
+    case "rifiuto":
+      return t(TESTI3.rimedioServizio);
+    /* un rifiuto del sito non è un guasto: la via è farla leggere all'agente, e quella resta */
+    default:
+      return t("{invito}: usa «Rileggi».", { invito: t(TESTI3.chiediAllAgente) });
+  }
+}
+function etichettaStatoScheda(situazione) {
+  switch (situazione) {
+    case "loading":
+      return t(TESTI3.etichettaApre);
+    case "retrying":
+      return t(TESTI3.etichettaRiprova);
+    case "error":
+    case "unreachable":
+      return t(TESTI3.etichettaNonRaggiunta);
+    case "cancelled":
+      return t(TESTI3.etichettaAnnullataBreve);
+    default:
+      return "";
+  }
+}
+function statoDellaScheda(s) {
+  if (!s) return "loaded";
+  switch (s.stato) {
+    case "caricamento":
+      return "loading";
+    case "ritento":
+      return "retrying";
+    case "annullata":
+      return "cancelled";
+    case "irraggiungibile":
+      return "unreachable";
+    case "bloccata":
+      return "error";
+    default:
+      break;
+  }
+  if (s.tipo !== "viva" && s.incorniciabile === null) return "loading";
+  return "loaded";
+}
 function localeAnnotabile(url) {
   try {
     const h = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, "");
@@ -15309,12 +16513,23 @@ function breve(n) {
   const k = v / 1e3;
   return `${k < 10 ? k.toFixed(1).replace(".", ",") : Math.round(k)}k`;
 }
+function numeroLocale(n) {
+  const v = Number(n) || 0;
+  try {
+    return v.toLocaleString(linguaCorrenteDiT());
+  } catch {
+    return String(v);
+  }
+}
 function formattaProvenienza(pagina) {
   const quando = pagina?.quando ? new Date(pagina.quando) : null;
   const chi = t(pagina?.origine === "tu" ? TESTI3.provenienzaTu : TESTI3.provenienzaAgente);
   const parti = [chi];
   if (quando && !Number.isNaN(quando.getTime())) parti.push(`${giornoRoma.format(quando)}, ${oraRoma.format(quando)} (Roma)`);
-  if (pagina?.tipo !== "viva") parti.push(`${String(pagina?.testo || "").length} caratteri`);
+  if (pagina?.tipo !== "viva") {
+    const quanti = String(pagina?.testo || "").length;
+    parti.push(tn(TESTI3.caratteriUno, TESTI3.caratteriMolti, quanti, { n: numeroLocale(quanti) }));
+  }
   return parti.join(" · ");
 }
 function statoHttpDiLettura(pagina) {
@@ -15329,7 +16544,7 @@ function titoloDaHtml(grezzo) {
   return testo3.length > 80 ? `${testo3.slice(0, 79)}…` : testo3;
 }
 function paginaAnnotabile(s) {
-  return Boolean(s && s.tipo === "viva" && (s.proxata || s.viaVista === "vivo") && s.stato !== "bloccata");
+  return Boolean(s && s.tipo === "viva" && (s.proxata || s.viaVista === "vivo") && statoDellaScheda(s) === "loaded");
 }
 function titoloScheda2(pagina) {
   if (pagina?.titolo) return pagina.titolo;
@@ -15339,7 +16554,7 @@ function titoloScheda2(pagina) {
   return hostDaUrl(pagina?.url) || titoloDaLettura(pagina);
 }
 function prossimaDopoChiusura(lista, indice2) {
-  const resto = lista.filter((_, i) => i !== indice2);
+  const resto = lista.filter((_, i2) => i2 !== indice2);
   return resto[indice2] ?? resto[indice2 - 1] ?? null;
 }
 function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
@@ -15379,7 +16594,24 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     modi: [...schermo.querySelectorAll("[data-browser-modo]")]
     // 06/9 O-28: Pagina / Testo dell'agente
   };
-  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false, modo: modoIniziale === "testo" ? "testo" : "pagina", modoChiesto: null, modiScelti: {}, riaperte: /* @__PURE__ */ new Set() };
+  let stato = {
+    schede: [],
+    attiva: null,
+    note: {},
+    richiesta: null,
+    annotazioni: {},
+    annotaAttivo: false,
+    modoPredefinito: modoIniziale === "testo" ? "testo" : "pagina",
+    modi: {},
+    modiChiesti: {},
+    riaperte: /* @__PURE__ */ new Set(),
+    riposate: /* @__PURE__ */ new Set()
+  };
+  const modoDi = (id) => id && stato.modi[id] || stato.modoPredefinito;
+  const impostaModo = (id, m) => {
+    if (id) stato.modi[id] = m;
+  };
+  const modoAttivo = () => modoDi(stato.attiva);
   const frameAttivo = () => el25.live?.querySelector("iframe") || null;
   const dialogaConOverlay = (messaggio) => {
     try {
@@ -15409,12 +16641,12 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   const attiva = () => stato.schede.find((s) => s.id === stato.attiva) || null;
   const indiceAttiva = () => stato.schede.findIndex((s) => s.id === stato.attiva);
   el25.indietro?.addEventListener("click", () => {
-    const i = indiceAttiva();
-    if (i > 0) azioni.seleziona?.(stato.schede[i - 1].id);
+    const i2 = indiceAttiva();
+    if (i2 > 0) azioni.seleziona?.(stato.schede[i2 - 1].id);
   });
   el25.avanti?.addEventListener("click", () => {
-    const i = indiceAttiva();
-    if (i >= 0 && i < stato.schede.length - 1) azioni.seleziona?.(stato.schede[i + 1].id);
+    const i2 = indiceAttiva();
+    if (i2 >= 0 && i2 < stato.schede.length - 1) azioni.seleziona?.(stato.schede[i2 + 1].id);
   });
   el25.fuori?.addEventListener("click", () => {
     const s = attiva();
@@ -15439,18 +16671,19 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       const suo = b.dataset.browserModo === "testo" ? "testo" : "pagina";
       const opposto = suo === "testo" ? "pagina" : "testo";
       const solo = (el25.modi || []).length < 2;
-      const scelto = stato.modo === suo ? solo ? opposto : suo : suo;
+      const scelto = modoAttivo() === suo ? solo ? opposto : suo : suo;
       const lettura = attiva();
       if (scelto === "pagina" && lettura && lettura.tipo !== "viva" && lettura.incorniciabile === false && lettura.url) {
-        stato.modoChiesto = "pagina";
-        if (lettura.id) stato.modiScelti[lettura.id] = "pagina";
+        if (lettura.id) {
+          stato.modiChiesti[lettura.id] = "pagina";
+          impostaModo(lettura.id, "pagina");
+        }
         azioni.apri?.(lettura.url, lettura.id);
         return;
       }
-      if (scelto === stato.modo) return;
-      stato.modoChiesto = scelto;
-      if (lettura && lettura.id) stato.modiScelti[lettura.id] = scelto;
-      stato.modo = scelto;
+      if (scelto === modoAttivo()) return;
+      if (lettura?.id) stato.modiChiesti[lettura.id] = scelto;
+      impostaModo(lettura?.id, scelto);
       if (scelto === "testo") mostraAvviso("");
       renderizza();
     });
@@ -15487,7 +16720,9 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   });
   el25.annulla?.addEventListener("click", () => {
     const s = attiva();
-    if (s) azioni.chiudi?.(s.id);
+    if (!s) return;
+    if (azioni.annullaApertura) azioni.annullaApertura(s);
+    else azioni.chiudi?.(s.id);
   });
   if (el25.url) {
     el25.url.addEventListener("keydown", (e) => {
@@ -15542,10 +16777,10 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     const tab = e.target.closest?.("[data-browser-tab]");
     if (!tab) return;
     const ids = stato.schede.map((s) => s.id);
-    const i = ids.indexOf(tab.dataset.browserId);
+    const i2 = ids.indexOf(tab.dataset.browserId);
     let prossima = null;
-    if (e.key === "ArrowRight") prossima = ids[(i + 1) % ids.length];
-    else if (e.key === "ArrowLeft") prossima = ids[(i - 1 + ids.length) % ids.length];
+    if (e.key === "ArrowRight") prossima = ids[(i2 + 1) % ids.length];
+    else if (e.key === "ArrowLeft") prossima = ids[(i2 - 1 + ids.length) % ids.length];
     else if (e.key === "Home") prossima = ids[0];
     else if (e.key === "End") prossima = ids[ids.length - 1];
     else if (e.key === "Delete") {
@@ -15570,21 +16805,23 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     if (cornice) cornice.hidden = stato.schede.length === 0;
     el25.schede.replaceChildren();
     const doc = el25.schede.ownerDocument;
-    stato.schede.forEach((s, i) => {
+    stato.schede.forEach((s, i2) => {
       const scheda = doc.createElement("div");
       scheda.className = "talos-tabstrip__scheda";
       scheda.setAttribute("role", "tab");
-      scheda.dataset.browserTab = String(i);
+      scheda.dataset.browserTab = String(i2);
       scheda.dataset.browserId = s.id;
       const sel = s.id === stato.attiva;
       scheda.setAttribute("aria-selected", String(sel));
       scheda.tabIndex = sel ? 0 : -1;
       if (s.tipo === "viva") scheda.dataset.stato = s.stato || "pronta";
+      const situazione = statoDellaScheda(s);
+      scheda.dataset.statoScheda = situazione;
       const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.setAttribute("class", "i talos-tabstrip__icona");
       svg.setAttribute("aria-hidden", "true");
       const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-      use.setAttribute("href", s.tipo === "viva" ? "#i-globe" : "#i-doc");
+      use.setAttribute("href", ICONA_PER_STATO[situazione] || (s.tipo === "viva" ? "#i-globe" : "#i-doc"));
       svg.append(use);
       scheda.append(svg);
       const nome = titoloScheda2(s);
@@ -15592,6 +16829,14 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       titolo2.className = "talos-tabstrip__titolo";
       titolo2.textContent = nome;
       scheda.append(titolo2);
+      const parola2 = etichettaStatoScheda(situazione);
+      if (parola2) {
+        const detto = doc.createElement("span");
+        detto.className = "sr-only";
+        detto.dataset.statoDetto = situazione;
+        detto.textContent = ` (${parola2})`;
+        scheda.append(detto);
+      }
       const http = statoHttpDiLettura(s);
       if (http !== null && (http < 200 || http >= 300)) {
         const pillola = doc.createElement("span");
@@ -15635,7 +16880,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     dettaglio.className = "talos-browser__sorgente";
     const riassunto = document.createElement("summary");
     const misure = riassuntoPulizia(grezzo);
-    riassunto.textContent = misure ? t("Sorgente ricevuto dall’agente ({n} caratteri)", { n: misure.caratteriPrima.toLocaleString("it-IT") }) : t("Sorgente ricevuto dall’agente");
+    riassunto.textContent = misure ? t("Sorgente ricevuto dall’agente ({n} caratteri)", { n: numeroLocale(misure.caratteriPrima) }) : t("Sorgente ricevuto dall’agente");
     const pre = document.createElement("pre");
     pre.className = "talos-browser__text";
     pre.textContent = grezzo;
@@ -15644,40 +16889,49 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   }
   function renderizzaCornice(s) {
     if (!el25.live) return;
-    const vuoleViva = s && s.tipo === "viva" && s.stato !== "bloccata" && s.viaVista !== "vivo";
-    const vuoleLettura = s && s.tipo !== "viva" && stato.modo === "pagina" && Boolean(s.url) && /^https?:/i.test(s.url) && s.incorniciabile !== false;
-    const vuole = vuoleViva || vuoleLettura;
+    const vuoleViva = s && s.tipo === "viva" && statoDellaScheda(s) === "loaded" && s.viaVista !== "vivo";
+    const vuoleLettura = s && s.tipo !== "viva" && modoDi(s.id) === "pagina" && Boolean(s.url) && /^https?:/i.test(s.url) && s.incorniciabile !== false && s.incorniciabile !== null;
+    const vuole = Boolean(vuoleViva || vuoleLettura);
+    const cornici = [...el25.live.querySelectorAll("iframe")];
+    for (const c of cornici) c.hidden = !(vuole && c.dataset.browserId === s.id);
     el25.live.hidden = !vuole;
-    if (!vuole) {
-      el25.live.replaceChildren();
+    if (!vuole) return;
+    let frame2 = cornici.find((c) => c.dataset.browserId === s.id) || null;
+    if (frame2) {
+      frame2.dataset.usata = String(Date.now());
       return;
     }
-    let frame2 = el25.live.querySelector("iframe");
-    if (!frame2 || frame2.dataset.browserId !== s.id) {
-      el25.live.replaceChildren();
-      frame2 = document.createElement("iframe");
-      frame2.dataset.browserId = s.id;
-      frame2.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups");
-      frame2.setAttribute("referrerpolicy", "no-referrer");
-      frame2.title = titoloDaLettura(s);
-      frame2.addEventListener("load", () => azioni.caricata?.(s.id));
-      frame2.src = s.proxata ? `${PROXY_BROWSER}${encodeURIComponent(s.url)}` : s.url;
-      frame2.dataset.proxata = String(Boolean(s.proxata));
-      if (s.tipo !== "viva") {
-        frame2.dataset.caricata = "no";
-        frame2.addEventListener("load", () => {
-          frame2.dataset.caricata = "si";
-          mostraAvviso("");
-        }, { once: true });
-        setTimeout(() => {
-          if (!frame2.isConnected || frame2.dataset.caricata === "si") return;
-          stato.modo = "testo";
-          mostraAvviso(t("Questo sito non si lascia mostrare dentro TALOS. Qui sotto c’è il testo che ha letto l’agente."));
-          renderizza();
-        }, 4e3);
-      }
-      el25.live.append(frame2);
+    const daScaricare = cornici.filter((c) => c.dataset.browserId !== s.id).sort((a, b) => Number(a.dataset.usata || 0) - Number(b.dataset.usata || 0)).slice(0, Math.max(0, cornici.length + 1 - MASSIMO_CORNICI_VIVE));
+    for (const vecchia of daScaricare) {
+      stato.riposate.add(vecchia.dataset.browserId);
+      vecchia.remove();
     }
+    frame2 = document.createElement("iframe");
+    frame2.dataset.browserId = s.id;
+    frame2.dataset.usata = String(Date.now());
+    frame2.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups");
+    frame2.setAttribute("referrerpolicy", "no-referrer");
+    frame2.title = titoloDaLettura(s);
+    frame2.addEventListener("load", () => azioni.caricata?.(s.id));
+    frame2.src = s.proxata ? `${PROXY_BROWSER}${encodeURIComponent(s.url)}` : s.url;
+    frame2.dataset.proxata = String(Boolean(s.proxata));
+    if (s.tipo !== "viva") {
+      frame2.dataset.caricata = "no";
+      frame2.addEventListener("load", () => {
+        frame2.dataset.caricata = "si";
+        stato.riposate.delete(s.id);
+        if (attiva()?.id === s.id) mostraAvviso("");
+      }, { once: true });
+      const idSuo = s.id;
+      setTimeout(() => {
+        if (!frame2.isConnected || frame2.dataset.caricata === "si") return;
+        if (stato.modiChiesti[idSuo] === "pagina") return;
+        impostaModo(idSuo, "testo");
+        if (attiva()?.id === idSuo) mostraAvviso(t("Questo sito non si lascia mostrare dentro TALOS. Qui sotto c’è il testo che ha letto l’agente."));
+        renderizza();
+      }, 4e3);
+    }
+    el25.live.append(frame2);
   }
   function corniceDellaLettura(s) {
     if (!s || s.tipo === "viva" || !s.url || !/^https?:/i.test(s.url)) return "";
@@ -15685,13 +16939,131 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       azioni.chiediCornice?.(s);
       return "";
     }
+    if (s.incorniciabile === null) return "";
     if (s.incorniciabile !== false) return "";
-    if (stato.modo === "pagina" && stato.modoChiesto !== "pagina") stato.modo = "testo";
+    if (modoDi(s.id) === "pagina" && stato.modiChiesti[s.id] !== "pagina") impostaModo(s.id, "testo");
     return `${t(s.motivoCornice || "Questo sito non si lascia mostrare dentro TALOS")}. ${t("Qui sotto c’è il testo che ha letto l’agente.")}`;
+  }
+  let pannelloStato = null;
+  function nodoStato() {
+    if (pannelloStato?.isConnected) return pannelloStato;
+    if (!el25.live?.parentNode) return null;
+    const doc = el25.live.ownerDocument;
+    const box = doc.createElement("div");
+    box.id = "browserStatoScheda";
+    box.className = "talos-browser__request talos-browser__stato";
+    box.setAttribute("role", "status");
+    box.hidden = true;
+    const titolo2 = doc.createElement("h3");
+    titolo2.className = "talos-browser__heading";
+    titolo2.dataset.statoTitolo = "";
+    const motivo = doc.createElement("p");
+    motivo.className = "talos-muted";
+    motivo.dataset.statoMotivo = "";
+    const rimedio = doc.createElement("p");
+    rimedio.className = "talos-muted talos-browser__meta";
+    rimedio.dataset.statoRimedio = "";
+    const cluster = doc.createElement("div");
+    cluster.className = "talos-cluster";
+    const riprova = doc.createElement("button");
+    riprova.type = "button";
+    riprova.className = "talos-button talos-button--primary talos-button--sm";
+    riprova.dataset.statoRiprova = "";
+    const annulla = doc.createElement("button");
+    annulla.type = "button";
+    annulla.className = "talos-button talos-button--ghost talos-button--sm";
+    annulla.dataset.statoAnnulla = "";
+    riprova.addEventListener("click", () => {
+      const x = attiva();
+      if (x) azioni.riprova?.(x);
+    });
+    annulla.addEventListener("click", () => {
+      const x = attiva();
+      if (x) azioni.annullaApertura?.(x);
+    });
+    cluster.append(riprova, annulla);
+    box.append(titolo2, motivo, rimedio, cluster);
+    el25.live.parentNode.insertBefore(box, el25.live);
+    pannelloStato = box;
+    return box;
+  }
+  function renderizzaStato(s) {
+    const box = nodoStato();
+    if (!box) return "loaded";
+    const bRiprova = box.querySelector("[data-stato-riprova]");
+    const bAnnulla = box.querySelector("[data-stato-annulla]");
+    if (bRiprova) bRiprova.textContent = t(TESTI3.riprova);
+    if (bAnnulla) bAnnulla.textContent = t(TESTI3.annulla);
+    const situazione = statoDellaScheda(s);
+    const riposata = Boolean(s && stato.riposate.has(s.id));
+    const lavora = situazione === "loading" || situazione === "retrying";
+    if (el25.caricamento) {
+      el25.caricamento.hidden = !lavora;
+      el25.caricamento.dataset.stato = lavora ? situazione : "";
+      const suoTitolo = el25.caricamento.querySelector(".talos-browser__heading");
+      if (suoTitolo && lavora) suoTitolo.textContent = situazione === "retrying" ? TESTI3.statoRiprovo(Number(s?.tentativi || 0), Number(s?.tentativiMassimi || 0)) : t(TESTI3.statoApro);
+      const suoSotto = el25.caricamento.querySelector("p.talos-muted");
+      if (suoSotto && lavora) suoSotto.textContent = t(situazione === "retrying" ? TESTI3.statoRiprovoSotto : TESTI3.statoAproSotto);
+      if (el25.annulla && lavora) el25.annulla.textContent = t(TESTI3.annullaNavigazione);
+    }
+    const vivaARiposo = Boolean(s?.vivaARiposo) && situazione === "loaded";
+    const parla = !lavora && situazione !== "loaded" || (riposata || vivaARiposo) && !lavora;
+    box.hidden = !parla;
+    box.dataset.stato = (riposata || vivaARiposo) && situazione === "loaded" ? "riposo" : situazione;
+    if (!parla) return situazione;
+    if (vivaARiposo) {
+      const h = box.querySelector("[data-stato-titolo]");
+      if (h) h.textContent = t(TESTI3.statoVivaInPausa);
+      const m = box.querySelector("[data-stato-motivo]");
+      if (m) {
+        m.textContent = "";
+        m.hidden = true;
+      }
+      const r = box.querySelector("[data-stato-rimedio]");
+      if (r) {
+        r.textContent = t(TESTI3.unaVivaAllaVolta);
+        r.hidden = false;
+      }
+      const ri = box.querySelector("[data-stato-riprova]");
+      if (ri) ri.hidden = false;
+      const an = box.querySelector("[data-stato-annulla]");
+      if (an) an.hidden = true;
+      return situazione;
+    }
+    const titolo2 = box.querySelector("[data-stato-titolo]");
+    const motivo = box.querySelector("[data-stato-motivo]");
+    const rimedio = box.querySelector("[data-stato-rimedio]");
+    const riprova = box.querySelector("[data-stato-riprova]");
+    const annulla = box.querySelector("[data-stato-annulla]");
+    const tentativi = Number(s?.tentativi || 0);
+    const massimi = Number(s?.tentativiMassimi || 0);
+    const detto = frasePerGenere(s?.genere, s?.dettagli) || (s?.genere ? "" : String(s?.motivo || ""));
+    const testi = {
+      loading: [t(TESTI3.statoApro), "", t(TESTI3.statoAproSotto)],
+      retrying: [TESTI3.statoRiprovo(tentativi, massimi), detto, t(TESTI3.statoRiprovoSotto)],
+      error: [t(TESTI3.statoNonRaggiunta), detto || t("Il sito non consente di essere mostrato dentro TALOS"), rimedioPerGenere(s?.genere)],
+      unreachable: [t(TESTI3.statoNonRaggiunta), detto, rimedioPerGenere(s?.genere)],
+      cancelled: [t(TESTI3.statoAnnullata), "", t(TESTI3.statoAnnullataSotto)],
+      loaded: [t(TESTI3.statoRiposo), "", t(TESTI3.statoRiposoSotto)]
+      // qui ci si arriva solo se la cornice era stata messa a riposo
+    };
+    const [t1, t2, t3] = testi[situazione] || testi.loaded;
+    if (titolo2) titolo2.textContent = t1;
+    if (motivo) {
+      motivo.textContent = t2 || "";
+      motivo.hidden = !t2;
+    }
+    if (rimedio) {
+      rimedio.textContent = t3 || "";
+      rimedio.hidden = !t3;
+    }
+    if (riprova) riprova.hidden = !(situazione === "error" || situazione === "unreachable" || situazione === "cancelled");
+    if (annulla) annulla.hidden = !(situazione === "loading" || situazione === "retrying");
+    return situazione;
   }
   function renderizza() {
     const s = attiva();
-    if (s && s.tipo !== "viva" && s.id && stato.modiScelti[s.id] === "pagina" && s.incorniciabile === false && s.url && !stato.riaperte.has(s.id)) {
+    if (s && s.tipo !== "viva" && s.id && stato.modiChiesti[s.id] === "pagina" && s.incorniciabile === false && s.url && !stato.riaperte.has(s.id)) {
       stato.riaperte.add(s.id);
       azioni.apri?.(s.url, s.id);
       return;
@@ -15701,23 +17073,28 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     const vive2 = stato.schede.length - letture;
     if (el25.riepilogo) el25.riepilogo.textContent = stato.schede.length === 0 ? t(TESTI3.riepilogoVuoto) : vive2 === 0 ? TESTI3.riepilogoLetture(letture) : TESTI3.riepilogoMisto(letture, vive2);
     renderizzaSchede();
-    const i = indiceAttiva();
-    if (el25.indietro) el25.indietro.disabled = i <= 0;
-    if (el25.avanti) el25.avanti.disabled = i < 0 || i >= stato.schede.length - 1;
+    if (el25.rileggi) el25.rileggi.textContent = t(TESTI3.barraRileggi);
+    if (el25.annota) el25.annota.textContent = t(TESTI3.barraAnnota);
+    if (el25.nota) el25.nota.textContent = t(TESTI3.barraNota);
+    if (el25.copia) el25.copia.textContent = t(TESTI3.barraCopia);
+    for (const b of el25.modi) b.textContent = t(b.dataset.browserModo === "pagina" ? TESTI3.barraModoPagina : TESTI3.barraModoTesto);
+    const i2 = indiceAttiva();
+    if (el25.indietro) el25.indietro.disabled = i2 <= 0;
+    if (el25.avanti) el25.avanti.disabled = i2 < 0 || i2 >= stato.schede.length - 1;
     if (el25.url && document.activeElement !== el25.url) el25.url.value = s?.url || "";
     if (el25.fuori) el25.fuori.disabled = !s || !/^https?:\/\//i.test(s.url);
     for (const b of [el25.rileggi, el25.annota, el25.nota, el25.copia]) if (b) b.disabled = !s;
     if (el25.copia) el25.copia.disabled = !s || s.tipo === "viva";
     if (el25.rileggi) el25.rileggi.title = t(s?.tipo === "viva" ? "Ricarica la pagina nella cornice" : "Prepara nel composer la richiesta di rileggere questa pagina");
     if (el25.posizione) {
-      el25.posizione.textContent = !s ? "" : s.tipo === "viva" ? t(s.stato === "caricamento" ? TESTI3.posizioneCaricamento : s.stato === "bloccata" ? TESTI3.posizioneBloccata : TESTI3.posizioneViva) : TESTI3.posizioneLettura(stato.schede.filter((x) => x.tipo !== "viva").indexOf(s) + 1, letture);
+      const qui = statoDellaScheda(s);
+      el25.posizione.textContent = !s ? "" : s.tipo === "viva" ? t(qui === "loading" || qui === "retrying" ? TESTI3.posizioneCaricamento : qui === "error" || qui === "unreachable" || qui === "cancelled" ? TESTI3.posizioneBloccata : TESTI3.posizioneViva) : TESTI3.posizioneLettura(stato.schede.filter((x) => x.tipo !== "viva").indexOf(s) + 1, letture);
     }
     const richiesta = stato.richiesta;
     if (el25.bloccato) {
       el25.bloccato.hidden = !richiesta;
       if (richiesta && el25.bloccatoTesto) el25.bloccatoTesto.textContent = t("L’agente chiede di leggere {url}. La scelta vale per questa richiesta.", { url: richiesta.url });
     }
-    if (el25.caricamento) el25.caricamento.hidden = !(s && s.tipo === "viva" && s.stato === "caricamento");
     if (el25.vuoto) el25.vuoto.hidden = stato.schede.length > 0;
     if (el25.articolo) el25.articolo.hidden = !s;
     const testata = el25.titolo?.closest(".talos-browser__testata");
@@ -15725,7 +17102,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     const lettura = Boolean(s) && s.tipo !== "viva";
     for (const b of el25.modi || []) {
       b.hidden = !lettura;
-      const suo = b.dataset.browserModo === stato.modo;
+      const suo = b.dataset.browserModo === modoDi(s?.id);
       b.setAttribute("aria-pressed", String(suo));
       b.classList.toggle("talos-button--secondary", suo);
       b.classList.toggle("talos-button--ghost", !suo);
@@ -15744,21 +17121,16 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
         b.title = t("La pagina è stata tagliata: l’agente ne ha ricevuta solo una parte. Aprila per vedere quale.");
       }
     }
-    if (el25.testo) el25.testo.hidden = !lettura || stato.modo === "pagina";
+    const modoQui = modoDi(s?.id);
+    if (el25.testo) el25.testo.hidden = !lettura || modoQui === "pagina";
     if (lettura) {
       if (el25.titolo) el25.titolo.textContent = titoloDaLettura(s);
       if (el25.provenienza) el25.provenienza.textContent = formattaProvenienza(s);
-      if (el25.testo && stato.modo !== "pagina") scriviTestoAcquisito(s.testo || "");
+      if (el25.testo && modoQui !== "pagina") scriviTestoAcquisito(s.testo || "");
     }
-    const rimedioPerIlMotivo = (motivo) => {
-      const m = String(motivo || "");
-      if (/non esiste|ERR_NAME/i.test(m)) return t("Controlla l’indirizzo.");
-      if (/certificato|SSL|TLS/i.test(m)) return t("Il sito ha un certificato non valido: aprilo fuori da TALOS se ti fidi.");
-      if (/non ha risposto in tempo|timed out/i.test(m)) return t("Riprova fra un momento.");
-      if (/Nessuno risponde/i.test(m)) return t("Controlla che il servizio sia acceso.");
-      return `${t(TESTI3.chiediAllAgente)}: usa «Rileggi».`;
-    };
-    mostraAvviso(avvisoCornice || (s?.tipo === "viva" && s.stato === "bloccata" ? `${s.motivo || t("Il sito non consente di essere mostrato dentro TALOS")}. ${rimedioPerIlMotivo(s.motivo)}` : ""));
+    const situazione = statoDellaScheda(s);
+    mostraAvviso(situazione === "loaded" ? avvisoCornice || "" : "");
+    renderizzaStato(s);
     renderizzaCornice(s);
     const nota = s ? stato.note[s.url] : "";
     if (el25.notaSalvata) {
@@ -15781,10 +17153,10 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
           annotazioni: lista,
           attivo: stato.annotaAttivo,
           onAttiva: (on) => azioni.annota?.(s, on),
-          onNota: (i2, testo3) => azioni.notaAnnotazione?.(s, i2, testo3),
-          onTogli: (i2) => {
-            dialogaConOverlay({ tipo: "togli", numero: i2 + 1 });
-            azioni.togliAnnotazione?.(s, i2);
+          onNota: (i3, testo3) => azioni.notaAnnotazione?.(s, i3, testo3),
+          onTogli: (i3) => {
+            dialogaConOverlay({ tipo: "togli", numero: i3 + 1 });
+            azioni.togliAnnotazione?.(s, i3);
           },
           onSvuota: () => {
             dialogaConOverlay({ tipo: "svuota" });
@@ -15806,10 +17178,12 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     aggiorna(nuovo) {
       if (nuovo && "attiva" in nuovo && nuovo.attiva !== stato.attiva) {
         stato.riaperte.delete(nuovo.attiva);
-        stato.modo = "pagina";
-        stato.modoChiesto = null;
       }
       stato = { ...stato, ...nuovo };
+      const vivi = new Set(stato.schede.map((x) => x.id));
+      for (const mappa of [stato.modi, stato.modiChiesti]) for (const k of Object.keys(mappa)) if (!vivi.has(k)) delete mappa[k];
+      for (const insieme of [stato.riaperte, stato.riposate]) for (const k of [...insieme]) if (!vivi.has(k)) insieme.delete(k);
+      for (const c of el25.live?.querySelectorAll("iframe") || []) if (!vivi.has(c.dataset.browserId)) c.remove();
       if (stato.annotaAttivo && stato.annotazioni && Object.values(stato.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato.annotaAttivo = false;
       renderizza();
     },
@@ -15834,7 +17208,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     }
   };
 }
-var TESTI3, MASSIMO_SCHEDE, PROXY_BROWSER, oraRoma, giornoRoma, RIGO_STATO, $;
+var TESTI3, ICONA_PER_STATO, MASSIMO_SCHEDE, STATI_SCHEDA, MASSIMO_CORNICI_VIVE, PROXY_BROWSER, oraRoma, giornoRoma, RIGO_STATO, $;
 var init_browser = __esm({
   "src/components/browser.js"() {
     init_lingua();
@@ -15845,7 +17219,7 @@ var init_browser = __esm({
       riepilogoLetture: (n) => tn("Testo acquisito dall’agente · {n} pagina", "Testo acquisito dall’agente · {n} pagine", n),
       riepilogoMisto: (letture, vive2) => `${tn("{n} lettura dell’agente", "{n} letture dell’agente", letture)} · ${tn("{n} pagina aperta da te", "{n} pagine aperte da te", vive2)}`,
       riepilogoVuoto: "Nessuna pagina ancora",
-      posizioneLettura: (i, n) => t("Lettura {i} di {n}", { i, n }),
+      posizioneLettura: (i2, n) => t("Lettura {i} di {n}", { i: i2, n }),
       posizioneViva: "Pagina aperta da te · viva dentro TALOS",
       posizioneBloccata: "Pagina aperta da te · non mostrabile qui",
       posizioneCaricamento: "Apertura in corso…",
@@ -15861,9 +17235,101 @@ var init_browser = __esm({
       provenienzaTu: "Tu",
       cornicePronta: "Pagina viva",
       chiediAllAgente: "Chiedi all’agente di leggerla",
-      nessunaScheda: "Nessuna pagina letta"
+      nessunaScheda: "Nessuna pagina letta",
+      /* ⭐ 16/09 — le facce dei sei stati. Nessun nome tecnico a schermo: «loading» è un nome per il
+         codice, a chi guarda si dice che cosa sta succedendo e che cosa può fare adesso. */
+      statoApro: "Apertura in corso…",
+      statoAproSotto: "Se ci mette troppo puoi annullare: la scheda resta dov’è.",
+      statoRiprovo: (tentativo, totale2) => t("Non ha risposto: riprovo ({tentativo} di {totale})…", { tentativo, totale: totale2 }),
+      statoRiprovoSotto: "Ogni tentativo aspetta un po’ di più del precedente.",
+      statoNonRaggiunta: "Non sono riuscito ad aprire questa pagina",
+      statoAnnullata: "Apertura annullata",
+      statoAnnullataSotto: "Hai chiuso la scheda mentre apriva: non è stato scritto niente.",
+      statoRiposo: "Questa pagina era a riposo: la sto ricaricando",
+      statoRiposoSotto: "Restano vive le ultime pagine che hai guardato; le altre si ricaricano quando ci torni.",
+      statoVivaInPausa: "Questa pagina è in pausa",
+      riprova: "Riprova",
+      annulla: "Annulla",
+      /*
+       * ⛔⛔ 16/09/2026, SECONDO GIRO DI RIPARAZIONE — «30 caratteri» IN UN PANNELLO INGLESE.
+       * Stavano nel codice come pezzo di stringa attaccato a un numero (`${n} caratteri`), quindi
+       * nessun dizionario poteva vederle e nessun cancello poteva accorgersene: si vedono nella foto
+       * `artifacts/p0-B/browser-p0-stato-light-en.png`, sotto un titolo inglese. Qui diventano due
+       * frasi di `TESTI` — cioè roba che `tests/unit/i18n-copertura.test.mjs` legge e di cui pretende
+       * l'inglese — con il numero come segnaposto e il plurale scelto dalla lingua risolta.
+       */
+      caratteriUno: "{n} carattere",
+      caratteriMolti: "{n} caratteri",
+      annullaNavigazione: "Annulla navigazione",
+      /*
+       * ⛔⛔ 16/09, GIRO DI RIPARAZIONE — LE ETICHETTE DELLA BARRA, trovate GUARDANDO la foto inglese.
+       *   In una app tutta inglese la barra del Browser diceva «Rileggi · Pagina · Testo dell'agente ·
+       *   Annota · Nota locale · Copia testo». Non era una dimenticanza del dizionario: quei testi sono
+       *   scritti a mano nel modello HTML (`public/index.html`) e nessuno li traduce mai, perché non
+       *   portano nessun marcatore. È la stessa malattia del motivo del server, in un altro punto
+       *   della stessa schermata — e il cancello i18n non poteva vederla, perché guarda le TESTI dei
+       *   componenti e quelle frasi non stavano in nessun componente.
+       * ⇒ Le scrive il componente, a ogni disegno (quindi anche al cambio di lingua, che ridisegna).
+       *   Il modello HTML resta com'è: non è un file di questa corsia, e il suo testo continua a valere
+       *   come partenza per chi apre la pagina prima che il codice giri.
+       */
+      barraRileggi: "Rileggi",
+      barraAnnota: "Annota",
+      barraNota: "Nota locale",
+      barraCopia: "Copia testo",
+      barraModoPagina: "Pagina",
+      barraModoTesto: "Testo dell’agente",
+      unaVivaAllaVolta: "La pagina pilotata è una alla volta: aprendone un’altra questa resta nella sua scheda e si riapre quando ci torni.",
+      /*
+       * ⛔⛔⛔ 16/09/2026, GIRO DI RIPARAZIONE — LE FRASI DEI GUASTI VIVONO QUI, non nel server.
+       *
+       * Bocciatura del controllore, con la prova: le foto consegnate mostravano il pannello col titolo
+       * in inglese («I could not open this page») e il motivo in italiano («Il sito non ha risposto in
+       * tempo (6 secondi)»), dentro una app per il resto tutta inglese. Il commit diceva quel difetto
+       * riparato: le foto dicevano di no.
+       *
+       * ⛔ La causa era STRUTTURALE, non una riga dimenticata: il motivo lo COMPONEVA il server, con un
+       *   numero interpolato dentro, e qui finiva dentro `t()` — un dizionario a chiavi fisse. La
+       *   chiave «Il sito non ha risposto in tempo (6 secondi)» non ci sarà mai, né quella con 11.
+       *
+       * ⇒ Il server manda ciò che sa — un `genere` stabile e i suoi `dettagli` — e la frase si scrive
+       *   QUI, con il numero come SEGNAPOSTO. Così la chiave è una sola per tutti i numeri, il cancello
+       *   `tests/unit/i18n-copertura.test.mjs` la vede (legge le stringhe di TESTI) e pretende
+       *   l'inglese, e una lingua nuova non richiede di toccare il server.
+       * Ricerca 16/09/2026 — api-craft «Shall REST API error messages be internationalized?»:
+       *   «locale-neutral errors with well-defined error values… allows the consumer to localize».
+       */
+      guastoTimeout: "Il sito non ha risposto in tempo ({secondi} secondi)",
+      guastoDns: "Questo indirizzo non esiste",
+      guastoRifiuto: "Nessuno risponde a questo indirizzo",
+      guastoCertificato: "Il sito ha un certificato non valido",
+      guastoRete: "Non sono riuscito a raggiungere il sito",
+      guastoIndirizzo: "Questo non è un indirizzo che posso aprire",
+      rifiutoDeny: "Il sito vieta di essere mostrato dentro un altro sito",
+      rifiutoSameOrigin: "Il sito si mostra solo dentro le sue stesse pagine",
+      rifiutoFrameAncestors: "Il sito consente la cornice solo ad altri siti, non a TALOS",
+      /* i rimedi: uno per genere, scelti perché portino a un gesto vero. Prima si sceglievano leggendo
+         la frase italiana del server con quattro regex — in inglese non agganciavano niente. */
+      rimedioIndirizzo: "Controlla l’indirizzo.",
+      rimedioCertificato: "Il sito ha un certificato non valido: aprilo fuori da TALOS se ti fidi.",
+      rimedioAspetta: "Riprova fra un momento.",
+      rimedioServizio: "Controlla che il servizio sia acceso.",
+      /* le parole degli stati sulla striscia: si ascoltano (sr-only), non si guardano soltanto */
+      etichettaApre: "in apertura",
+      etichettaRiprova: "sto riprovando",
+      etichettaNonRaggiunta: "non raggiunta",
+      etichettaAnnullataBreve: "annullata"
+    });
+    ICONA_PER_STATO = Object.freeze({
+      loading: "#i-clock",
+      retrying: "#i-clock",
+      error: "#i-ignoto",
+      unreachable: "#i-ignoto",
+      cancelled: "#i-x"
     });
     MASSIMO_SCHEDE = 12;
+    STATI_SCHEDA = Object.freeze(["loading", "loaded", "retrying", "error", "unreachable", "cancelled"]);
+    MASSIMO_CORNICI_VIVE = 4;
     PROXY_BROWSER = "/api/v1/browser/proxy?url=";
     oraRoma = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" });
     giornoRoma = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit" });
@@ -15924,9 +17390,9 @@ function el22(documentObj, tag2, className, testo3) {
   return nodo11;
 }
 function simbolo(documentObj, classe, nome) {
-  const svg = documentObj.createElementNS(SVG_NS, "svg");
+  const svg = documentObj.createElementNS(SVG_NS2, "svg");
   svg.setAttribute("class", classe);
-  const use = documentObj.createElementNS(SVG_NS, "use");
+  const use = documentObj.createElementNS(SVG_NS2, "use");
   use.setAttribute("href", `#${nome}`);
   svg.append(use);
   return svg;
@@ -16053,12 +17519,12 @@ function dimensioneLeggibile2(byte2) {
   if (n < 1024) return `${n} byte`;
   const unita = ["KB", "MB", "GB"];
   let valore = n / 1024;
-  let i = 0;
-  while (valore >= 1024 && i < unita.length - 1) {
+  let i2 = 0;
+  while (valore >= 1024 && i2 < unita.length - 1) {
     valore /= 1024;
-    i += 1;
+    i2 += 1;
   }
-  return `${valore.toFixed(valore < 10 ? 1 : 0).replace(".", ",")} ${unita[i]}`;
+  return `${valore.toFixed(valore < 10 ? 1 : 0).replace(".", ",")} ${unita[i2]}`;
 }
 function indirizzoScarico({ sessionId, percorso } = {}) {
   if (!sessionId || !percorso) return "";
@@ -16423,11 +17889,11 @@ function creaDiffInChat(gruppi, { percorso = "", apertoSeSotto = 40, document: d
   blocco.append(dettaglio);
   return blocco;
 }
-var SVG_NS, ALIAS_LINGUAGGIO, NOMI_LINGUAGGIO, PARTI_DEL_BLOCCO, copiaDiSerie, ICONA_ATTREZZO, FASI_NODI;
+var SVG_NS2, ALIAS_LINGUAGGIO, NOMI_LINGUAGGIO, PARTI_DEL_BLOCCO, copiaDiSerie, ICONA_ATTREZZO, FASI_NODI;
 var init_conversazione = __esm({
   "src/components/conversazione.js"() {
     init_conversazione_dom();
-    SVG_NS = "http://www.w3.org/2000/svg";
+    SVG_NS2 = "http://www.w3.org/2000/svg";
     ALIAS_LINGUAGGIO = Object.freeze({
       js: "javascript",
       jsx: "jsx",
@@ -16538,97 +18004,119 @@ function consegnaDaInput(input) {
   const testo3 = [input.consegnaCorta, input.consegna].find((v) => typeof v === "string" && v.trim());
   return { testo: testo3 ? testo3.trim() : "", meta: input.seguito === true ? "Follow-up" : "" };
 }
-function riduciEventiFiglia(eventi2) {
-  const lista = Array.isArray(eventi2) ? eventi2 : [];
-  const turni = [];
-  const perAttrezzo = /* @__PURE__ */ new Map();
-  const perMessaggio = /* @__PURE__ */ new Map();
-  let giri = 0;
-  let modello = null;
-  let attrezzi = 0;
-  let scartati = 0;
-  let stato = "in-corso";
-  let motivo = "";
-  const turnoCorrente = () => {
-    if (turni.length === 0) turni.push({ giro: 0, consegna: "", meta: "", blocchi: [] });
-    return turni[turni.length - 1];
+function creaRiduttoreFiglia() {
+  return {
+    turni: [],
+    /* Le chiavi vivono per TUTTA la sequenza, non per turno: un `ToolCallResult` può arrivare dopo che
+       un nuovo `RunStarted` ha aperto il turno successivo, e la sua riga sta nel turno di prima. */
+    perAttrezzo: /* @__PURE__ */ new Map(),
+    perMessaggio: /* @__PURE__ */ new Map(),
+    perRagionamento: /* @__PURE__ */ new Map(),
+    giri: 0,
+    modello: null,
+    attrezzi: 0,
+    scartati: 0,
+    stato: "in-corso",
+    motivo: "",
+    digeriti: 0
   };
-  for (const e of lista) {
-    if (!e || typeof e !== "object") {
-      scartati += 1;
-      continue;
-    }
-    switch (e.type) {
-      case "RunStarted": {
-        giri += 1;
-        const { testo: testo3, meta: meta2 } = consegnaDaInput(e.input);
-        turni.push({ giro: giri, consegna: testo3, meta: meta2, blocchi: [] });
-        const m = e.contesto && typeof e.contesto.modello === "string" ? e.contesto.modello.trim() : "";
-        if (m) modello = m;
-        stato = "in-corso";
-        motivo = "";
-        break;
-      }
-      case "TextMessageContent": {
-        const id = pezzo(e.messageId) || "senza-id";
-        let blocco = perMessaggio.get(id);
-        if (!blocco) {
-          blocco = { tipo: "testo", id, testo: "" };
-          perMessaggio.set(id, blocco);
-          turnoCorrente().blocchi.push(blocco);
-        }
-        blocco.testo += pezzo(e.delta);
-        break;
-      }
-      case "ToolCallStart": {
-        const id = pezzo(e.toolCallId);
-        if (!id || perAttrezzo.has(id)) {
-          scartati += 1;
-          break;
-        }
-        const blocco = { tipo: "attrezzo", id, attrezzo: pezzo(e.toolCallName), argomenti: "", esito: "running", contenuto: "" };
-        perAttrezzo.set(id, blocco);
-        turnoCorrente().blocchi.push(blocco);
-        attrezzi += 1;
-        break;
-      }
-      case "ToolCallArgs": {
-        const blocco = perAttrezzo.get(pezzo(e.toolCallId));
-        if (!blocco) {
-          scartati += 1;
-          break;
-        }
-        blocco.argomenti += pezzo(e.delta);
-        break;
-      }
-      case "ToolCallResult": {
-        const blocco = perAttrezzo.get(pezzo(e.toolCallId));
-        if (!blocco) {
-          scartati += 1;
-          break;
-        }
-        blocco.contenuto = pezzo(e.content);
-        blocco.esito = e.errore === true ? "error" : esitoDaContenuto(blocco.attrezzo, blocco.contenuto);
-        break;
-      }
-      case "RunFinished": {
-        const esito = pezzo(e.outcome);
-        stato = ESITI_FERMATA.has(esito) ? "interrotta" : ESITI_FALLITI.has(esito) ? "fallita" : "conclusa";
-        motivo = stato === "interrotta" ? "La figlia è stata fermata prima di concludere." : "";
-        break;
-      }
-      case "RunError": {
-        const codice = pezzo(e.code);
-        stato = CODICI_FERMATA.has(codice) ? "interrotta" : "fallita";
-        motivo = pezzo(e.message).trim() || "Il server non ha detto perché.";
-        turnoCorrente().blocchi.push({ tipo: "errore", id: `errore-${turnoCorrente().blocchi.length}`, codice, messaggio: motivo });
-        break;
-      }
-      default:
-        break;
-    }
+}
+function istantaneaFiglia(r) {
+  return { turni: r.turni, stato: r.stato, giri: r.giri, modello: r.modello, attrezzi: r.attrezzi, scartati: r.scartati, motivo: r.motivo };
+}
+function pesoIstantanea(ist) {
+  return (ist?.turni?.length || 0) + (ist?.turni || []).reduce((n, t2) => n + (t2.blocchi?.length || 0), 0);
+}
+function digerisciEventoFiglia(r, e) {
+  r.digeriti += 1;
+  const turnoCorrente = () => {
+    if (r.turni.length === 0) r.turni.push({ giro: 0, consegna: "", meta: "", blocchi: [] });
+    return r.turni[r.turni.length - 1];
+  };
+  if (!e || typeof e !== "object") {
+    r.scartati += 1;
+    return;
   }
-  return { turni, stato, giri, modello, attrezzi, scartati, motivo };
+  switch (e.type) {
+    case "RunStarted": {
+      r.giri += 1;
+      const { testo: testo3, meta: meta2 } = consegnaDaInput(e.input);
+      r.turni.push({ giro: r.giri, consegna: testo3, meta: meta2, blocchi: [] });
+      const m = e.contesto && typeof e.contesto.modello === "string" ? e.contesto.modello.trim() : "";
+      if (m) r.modello = m;
+      r.stato = "in-corso";
+      r.motivo = "";
+      break;
+    }
+    case "TextMessageContent": {
+      const id = pezzo(e.messageId) || "senza-id";
+      let blocco = r.perMessaggio.get(id);
+      if (!blocco) {
+        blocco = { tipo: "testo", id, testo: "" };
+        r.perMessaggio.set(id, blocco);
+        turnoCorrente().blocchi.push(blocco);
+      }
+      blocco.testo += pezzo(e.delta);
+      break;
+    }
+    case "ReasoningMessageContent": {
+      const id = pezzo(e.messageId) || "ragionamento-senza-id";
+      let blocco = r.perRagionamento.get(id);
+      if (!blocco) {
+        blocco = { tipo: "ragionamento", id, testo: "" };
+        r.perRagionamento.set(id, blocco);
+        turnoCorrente().blocchi.push(blocco);
+      }
+      blocco.testo += pezzo(e.delta);
+      break;
+    }
+    case "ToolCallStart": {
+      const id = pezzo(e.toolCallId);
+      if (!id || r.perAttrezzo.has(id)) {
+        r.scartati += 1;
+        break;
+      }
+      const blocco = { tipo: "attrezzo", id, attrezzo: pezzo(e.toolCallName), argomenti: "", esito: "running", contenuto: "" };
+      r.perAttrezzo.set(id, blocco);
+      turnoCorrente().blocchi.push(blocco);
+      r.attrezzi += 1;
+      break;
+    }
+    case "ToolCallArgs": {
+      const blocco = r.perAttrezzo.get(pezzo(e.toolCallId));
+      if (!blocco) {
+        r.scartati += 1;
+        break;
+      }
+      blocco.argomenti += pezzo(e.delta);
+      break;
+    }
+    case "ToolCallResult": {
+      const blocco = r.perAttrezzo.get(pezzo(e.toolCallId));
+      if (!blocco) {
+        r.scartati += 1;
+        break;
+      }
+      blocco.contenuto = pezzo(e.content);
+      blocco.esito = e.errore === true ? "error" : esitoDaContenuto(blocco.attrezzo, blocco.contenuto);
+      break;
+    }
+    case "RunFinished": {
+      const esito = pezzo(e.outcome);
+      r.stato = ESITI_FERMATA.has(esito) ? "interrotta" : ESITI_FALLITI.has(esito) ? "fallita" : "conclusa";
+      r.motivo = r.stato === "interrotta" ? "La figlia è stata fermata prima di concludere." : "";
+      break;
+    }
+    case "RunError": {
+      const codice = pezzo(e.code);
+      r.stato = CODICI_FERMATA.has(codice) ? "interrotta" : "fallita";
+      r.motivo = pezzo(e.message).trim() || "Il server non ha detto perché.";
+      turnoCorrente().blocchi.push({ tipo: "errore", id: `errore-${turnoCorrente().blocchi.length}`, codice, messaggio: r.motivo });
+      break;
+    }
+    default:
+      break;
+  }
 }
 function el23(d, tag2, classe, testo3) {
   const nodo11 = d.createElement(tag2);
@@ -16637,12 +18125,18 @@ function el23(d, tag2, classe, testo3) {
   return nodo11;
 }
 function simbolo2(d, classe, nome) {
-  const svg = d.createElementNS(SVG_NS2, "svg");
+  const svg = d.createElementNS(SVG_NS3, "svg");
   svg.setAttribute("class", classe);
-  const use = d.createElementNS(SVG_NS2, "use");
+  const use = d.createElementNS(SVG_NS3, "use");
   use.setAttribute("href", `#${nome}`);
   svg.append(use);
   return svg;
+}
+function ricorda(mappa, chiave, valore, tetto) {
+  if (!chiave) return;
+  mappa.delete(chiave);
+  mappa.set(chiave, valore);
+  while (mappa.size > tetto) mappa.delete(mappa.keys().next().value);
 }
 function riassuntoGruppo(quanti) {
   return `${plurale(quanti, "attrezzo")} ${parola(quanti, "usato", "usati")}`;
@@ -16656,8 +18150,14 @@ function montaConversazioneFiglia(contenitore, {
 } = {}) {
   const d = documentObj || globalThis.document;
   const eventi2 = [];
+  let riduttore = creaRiduttoreFiglia();
   let chiudiFlusso = null;
   let distrutto = false;
+  let flussoAperto = false;
+  let eventiNonDisegnati = 0;
+  let disegnoProgrammato = 0;
+  let scorrimentoDaRimettere = SCORRIMENTI.has(sessionId) ? SCORRIMENTI.get(sessionId) : null;
+  let istantaneaDaCache = ISTANTANEE.get(sessionId) || null;
   const fuocoPrecedente = d.activeElement ?? null;
   const elemento = el23(d, "div", "talos-card talos-inspector-card talos-figlia");
   elemento.dataset.c = "ConversazioneFiglia";
@@ -16690,7 +18190,9 @@ function montaConversazioneFiglia(contenitore, {
   corpo.tabIndex = 0;
   elemento.append(corpo);
   const vuoto = el23(d, "p", "talos-inspector__hint talos-figlia__vuoto", "Nessun evento ancora da questo sotto-agente. Il collegamento è aperto: appena la figlia dice o fa qualcosa, compare qui.");
-  corpo.append(vuoto);
+  const scheletro = el23(d, "p", "talos-inspector__hint talos-figlia__scheletro", "Mi collego a questo sotto-agente…");
+  scheletro.setAttribute("role", "status");
+  corpo.append(scheletro, vuoto);
   const disegnati = /* @__PURE__ */ new Map();
   const chiaveBlocco = (b) => b.tipo === "attrezzo" ? `a:${b.id}` : b.tipo === "testo" ? `t:${b.id}` : `e:${b.id}`;
   function creaVistaTurno(turno) {
@@ -16699,13 +18201,27 @@ function montaConversazioneFiglia(contenitore, {
     corpo.append(nodo11);
     return { elemento: nodo11, blocchi: /* @__PURE__ */ new Map() };
   }
+  const recinto = (testoCodice, linguaggio, chiuso) => creaBloccoCodice({ testo: testoCodice, linguaggio, chiuso: chiuso !== false }, { document: d });
+  function rendiMarkdown(contenitore2, testoGrezzo) {
+    contenitore2.replaceChildren(renderizzaMarkdown(testoGrezzo, { document: d, bloccoCodice: recinto }));
+  }
   function creaVistaBlocco(vistaTurno, blocco, gruppo, modello) {
     if (blocco.tipo === "testo") {
       const messaggio = creaMessaggioTalos({ modello: modello || "", paragrafi: [] }, { document: d });
-      const p = el23(d, "p", "assistant-copy", blocco.testo);
+      const p = el23(d, "div", "assistant-copy");
+      rendiMarkdown(p, blocco.testo);
       messaggio.append(p);
       vistaTurno.elemento.append(messaggio);
-      return { tipo: "testo", p };
+      return { tipo: "testo", p, testoMostrato: blocco.testo };
+    }
+    if (blocco.tipo === "ragionamento") {
+      const creato = creaAttivita({ riassunto: "Ragionamento", aperto: false }, { document: d });
+      creato.card.dataset.c = "ReasoningBundle";
+      const corpoTesto = el23(d, "div", "assistant-copy talos-figlia__ragionamento");
+      rendiMarkdown(corpoTesto, blocco.testo);
+      creato.contenitore.append(corpoTesto);
+      vistaTurno.elemento.append(creato.card);
+      return { tipo: "ragionamento", p: corpoTesto, testoMostrato: blocco.testo };
     }
     if (blocco.tipo === "errore") {
       const box = el23(d, "p", "talos-inspector__hint talos-inspector__hint--danger talos-figlia__errore", blocco.messaggio);
@@ -16722,8 +18238,11 @@ function montaConversazioneFiglia(contenitore, {
     return { tipo: "attrezzo", riga, summaryText, dettaglio };
   }
   function aggiornaVistaBlocco(vista, blocco) {
-    if (vista.tipo === "testo") {
-      if (vista.p.textContent !== blocco.testo) vista.p.textContent = blocco.testo;
+    if (vista.tipo === "testo" || vista.tipo === "ragionamento") {
+      if (vista.testoMostrato !== blocco.testo) {
+        rendiMarkdown(vista.p, blocco.testo);
+        vista.testoMostrato = blocco.testo;
+      }
       return;
     }
     if (vista.tipo === "errore") {
@@ -16745,9 +18264,26 @@ function montaConversazioneFiglia(contenitore, {
     if (!Number.isFinite(altezza) || !Number.isFinite(visibile2) || !Number.isFinite(dove)) return false;
     return altezza - dove - visibile2 <= VICINO_AL_FONDO_PX;
   }
+  function programmaDisegno() {
+    if (distrutto) return;
+    if (typeof globalThis.requestAnimationFrame !== "function") {
+      disegna2();
+      return;
+    }
+    if (disegnoProgrammato) return;
+    disegnoProgrammato = globalThis.requestAnimationFrame(() => {
+      disegnoProgrammato = 0;
+      if (!distrutto) disegna2();
+    });
+  }
   function disegna2() {
     const seguiva = seguivaIlFondo();
-    const ridotto = riduciEventiFiglia(eventi2);
+    const vivo = istantaneaFiglia(riduttore);
+    let ridotto = vivo;
+    if (istantaneaDaCache) {
+      if (pesoIstantanea(vivo) >= pesoIstantanea(istantaneaDaCache)) istantaneaDaCache = null;
+      else ridotto = istantaneaDaCache;
+    }
     badge5.textContent = ETICHETTA_STATO_FIGLIA[ridotto.stato];
     const tono = TONO_STATO[ridotto.stato];
     badge5.className = `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`;
@@ -16755,19 +18291,23 @@ function montaConversazioneFiglia(contenitore, {
     elemento.setAttribute("aria-label", `Conversazione del sotto-agente: ${titolo2.textContent} — ${ETICHETTA_STATO_FIGLIA[ridotto.stato]}`);
     misureValore.textContent = ridotto.modello || "—";
     conteggiValore.textContent = `${plurale(ridotto.giri, "giro")} · ${plurale(ridotto.attrezzi, "chiamata")}`;
-    const notaTesto = ridotto.motivo || (ridotto.scartati > 0 ? `${plurale(ridotto.scartati, "evento", "eventi")} che non ${parola(ridotto.scartati, "si è potuto", "si sono potuti")} collegare a niente: ${parola(ridotto.scartati, "scartato", "scartati")}.` : "");
+    const notaTesto = (eventiNonDisegnati > 0 ? nota.textContent : "") || ridotto.motivo || (ridotto.scartati > 0 ? `${plurale(ridotto.scartati, "evento", "eventi")} che non ${parola(ridotto.scartati, "si è potuto", "si sono potuti")} collegare a niente: ${parola(ridotto.scartati, "scartato", "scartati")}.` : "");
     nota.textContent = notaTesto;
     nota.hidden = notaTesto === "";
-    vuoto.hidden = ridotto.turni.length > 0;
+    const conTurni = ridotto.turni.length > 0;
+    const fase = conTurni ? null : riduttore.digeriti > 0 ? "ricostruisco" : flussoAperto ? null : "collego";
+    if (fase) scheletro.textContent = fase === "collego" ? "Mi collego a questo sotto-agente…" : "Ricostruisco la conversazione…";
+    scheletro.hidden = fase === null;
+    vuoto.hidden = conTurni || fase !== null;
     if (ridotto.turni.length < disegnati.size) {
       corpo.replaceChildren(vuoto);
       disegnati.clear();
     }
-    for (const [i, turno] of ridotto.turni.entries()) {
-      let vistaTurno = disegnati.get(i);
+    for (const [i2, turno] of ridotto.turni.entries()) {
+      let vistaTurno = disegnati.get(i2);
       if (!vistaTurno) {
         vistaTurno = creaVistaTurno(turno);
-        disegnati.set(i, vistaTurno);
+        disegnati.set(i2, vistaTurno);
       }
       let gruppo = null;
       for (const blocco of turno.blocchi) {
@@ -16797,6 +18337,11 @@ function montaConversazioneFiglia(contenitore, {
         aggiornaVistaBlocco(vista, blocco);
       }
     }
+    if (scorrimentoDaRimettere !== null && conTurni && corpo.scrollHeight > 0) {
+      corpo.scrollTop = scorrimentoDaRimettere;
+      scorrimentoDaRimettere = null;
+      return;
+    }
     if (seguiva) corpo.scrollTop = corpo.scrollHeight;
   }
   disegna2();
@@ -16813,12 +18358,32 @@ function montaConversazioneFiglia(contenitore, {
     torna();
   };
   elemento.addEventListener("keydown", suTasto);
+  const suScorrimento = () => {
+    scorrimentoDaRimettere = null;
+  };
+  corpo.addEventListener("scroll", suScorrimento);
   if (typeof apriFlusso === "function") {
     try {
       chiudiFlusso = apriFlusso(sessionId, (evento) => {
         if (distrutto) return;
-        eventi2.push(evento);
-        disegna2();
+        try {
+          eventi2.push(evento);
+          digerisciEventoFiglia(riduttore, evento);
+          programmaDisegno();
+        } catch (errore) {
+          eventiNonDisegnati += 1;
+          nota.textContent = `${plurale(eventiNonDisegnati, "evento", "eventi")} di questo sotto-agente non ${parola(eventiNonDisegnati, "si è potuto", "si sono potuti")} disegnare: ${errore instanceof Error ? errore.message : String(errore)}`;
+          nota.hidden = false;
+        }
+      }, {
+        /* ⛔ È l'unico modo che questa vista ha di SAPERE che il collegamento c'è. Chi monta il
+           componente senza passarlo non rompe niente: resta la fase «mi collego» finché non arriva
+           il primo evento, che è comunque una prova che il flusso funziona. */
+        onAperto: () => {
+          if (distrutto) return;
+          flussoAperto = true;
+          programmaDisegno();
+        }
       });
     } catch (errore) {
       nota.textContent = `Non riesco a seguire questo sotto-agente: ${errore instanceof Error ? errore.message : String(errore)}`;
@@ -16831,18 +18396,29 @@ function montaConversazioneFiglia(contenitore, {
     aggiorna(nuovi) {
       if (distrutto) return;
       eventi2.length = 0;
-      for (const e of Array.isArray(nuovi) ? nuovi : []) eventi2.push(e);
+      riduttore = creaRiduttoreFiglia();
+      istantaneaDaCache = null;
+      for (const e of Array.isArray(nuovi) ? nuovi : []) {
+        eventi2.push(e);
+        digerisciEventoFiglia(riduttore, e);
+      }
       disegna2();
     },
     distruggi() {
       if (distrutto) return;
       distrutto = true;
+      if (disegnoProgrammato && typeof globalThis.cancelAnimationFrame === "function") globalThis.cancelAnimationFrame(disegnoProgrammato);
+      disegnoProgrammato = 0;
+      if (sessionId && Number.isFinite(corpo.scrollTop)) ricorda(SCORRIMENTI, sessionId, corpo.scrollTop, TETTO_SCORRIMENTI);
+      const ultima = istantaneaFiglia(riduttore);
+      if (sessionId && ultima.turni.length && pesoIstantanea(ultima) <= PESO_MASSIMO_ISTANTANEA) ricorda(ISTANTANEE, sessionId, ultima, TETTO_ISTANTANEE);
       try {
         chiudiFlusso?.();
       } catch {
       }
       chiudiFlusso = null;
       elemento.removeEventListener?.("keydown", suTasto);
+      corpo.removeEventListener?.("scroll", suScorrimento);
       elemento.remove?.();
       contenitore?.classList?.remove?.("talos-figlia-ospite");
       disegnati.clear();
@@ -16850,10 +18426,11 @@ function montaConversazioneFiglia(contenitore, {
     }
   };
 }
-var ETICHETTA_STATO_FIGLIA, TONO_STATO, CODICI_FERMATA, ESITI_FERMATA, ESITI_FALLITI, pezzo, SVG_NS2;
+var ETICHETTA_STATO_FIGLIA, TONO_STATO, CODICI_FERMATA, ESITI_FERMATA, ESITI_FALLITI, pezzo, SVG_NS3, TETTO_SCORRIMENTI, TETTO_ISTANTANEE, PESO_MASSIMO_ISTANTANEA, SCORRIMENTI, ISTANTANEE;
 var init_conversazione_figlia = __esm({
   "src/components/conversazione-figlia.js"() {
     init_conversazione();
+    init_markdown();
     init_nomi_attrezzi();
     init_plurale();
     ETICHETTA_STATO_FIGLIA = Object.freeze({
@@ -16867,7 +18444,12 @@ var init_conversazione_figlia = __esm({
     ESITI_FERMATA = /* @__PURE__ */ new Set(["fermato"]);
     ESITI_FALLITI = /* @__PURE__ */ new Set(["errore"]);
     pezzo = (v) => typeof v === "string" ? v : v === void 0 || v === null ? "" : String(v);
-    SVG_NS2 = "http://www.w3.org/2000/svg";
+    SVG_NS3 = "http://www.w3.org/2000/svg";
+    TETTO_SCORRIMENTI = 24;
+    TETTO_ISTANTANEE = 3;
+    PESO_MASSIMO_ISTANTANEA = 400;
+    SCORRIMENTI = /* @__PURE__ */ new Map();
+    ISTANTANEE = /* @__PURE__ */ new Map();
   }
 });
 
@@ -16926,14 +18508,14 @@ function raggruppaInHunk(righe = [], { contesto: contesto2 = CONTESTO_PREDEFINIT
   const rimozioni = righe.filter(([t2]) => t2 === "del").length;
   if (aggiunte === 0 && rimozioni === 0) return { ...vuoto, pezzi: [] };
   const pezzi = [];
-  let i = 0;
-  while (i < righe.length) {
-    if (righe[i][0] === "ctx") {
-      i += 1;
+  let i2 = 0;
+  while (i2 < righe.length) {
+    if (righe[i2][0] === "ctx") {
+      i2 += 1;
       continue;
     }
-    const inizio = Math.max(0, i - ctx);
-    let fine = i;
+    const inizio = Math.max(0, i2 - ctx);
+    let fine = i2;
     while (fine < righe.length) {
       if (righe[fine][0] !== "ctx") {
         fine += 1;
@@ -16953,7 +18535,7 @@ function raggruppaInHunk(righe = [], { contesto: contesto2 = CONTESTO_PREDEFINIT
       aRiga: conNumero.length ? conNumero[conNumero.length - 1].numero : null,
       righe: dentro
     });
-    i = finePezzo;
+    i2 = finePezzo;
   }
   const tettoValido = Number.isFinite(tetto) && tetto > 0 ? Math.floor(tetto) : TETTO_RIGHE_PREDEFINITO;
   let mostrate = 0;
@@ -17304,7 +18886,7 @@ function gestoDaEvento(evento, { rettangolo, metadatiUltimoFrame } = {}) {
 function bytesDaBase64(base64, finestra) {
   const grezzo = finestra.atob(base64);
   const bytes = new Uint8Array(grezzo.length);
-  for (let i = 0; i < grezzo.length; i += 1) bytes[i] = grezzo.charCodeAt(i);
+  for (let i2 = 0; i2 < grezzo.length; i2 += 1) bytes[i2] = grezzo.charCodeAt(i2);
   return bytes;
 }
 function creaDecodificatore(finestra, documento) {
@@ -17943,7 +19525,7 @@ function etichettaTasto(combo, { apple = suApple() } = {}) {
 }
 function normalizzaTastiScritti(radice2 = globalThis.document, { apple = suApple() } = {}) {
   let cambiati = 0;
-  for (const nodo11 of radice2.querySelectorAll("kbd")) {
+  for (const nodo11 of radice2.querySelectorAll("kbd, .talos-kbd")) {
     const testo3 = (nodo11.textContent || "").trim();
     if (!/⌘|ctrl|cmd|shift/i.test(testo3)) continue;
     const nuovo = etichettaTasto(testo3, { apple });
@@ -18014,7 +19596,7 @@ function montaScorciatoie(velo, { apple = suApple(), righe = SCORCIATOIE } = {})
   }
   return disegna2(cerca?.value || "");
 }
-var SCORCIATOIE;
+var SCORCIATOIE, COMBO_RISERVATE_AL_BROWSER, COMBO_GESTITE_ALTROVE;
 var init_scorciatoie = __esm({
   "src/components/scorciatoie.js"() {
     SCORCIATOIE = Object.freeze([
@@ -18026,6 +19608,202 @@ var init_scorciatoie = __esm({
       { id: "terminale", combo: "mod `", area: "Sessione", nome: "Mostra o nascondi il terminale" },
       { id: "terminaleNuovo", combo: "mod ⇧ `", area: "Sessione", nome: "Nuova scheda del terminale" }
     ]);
+    COMBO_RISERVATE_AL_BROWSER = Object.freeze(["mod T", "mod W", "mod ⇧ T", "mod ⇧ W", "mod ⇧ N"]);
+    COMBO_GESTITE_ALTROVE = Object.freeze({
+      "mod ↵": "il composer, non il registro globale: accoda il messaggio invece di inviarlo (legacy/invio-durante-il-giro.js, decidiInvio)"
+    });
+  }
+});
+
+// src/components/terminale-xterm.js
+function codificaFrameClient(tipo, testo3) {
+  const corpo = new TextEncoder().encode(testo3);
+  const frame2 = new Uint8Array(corpo.length + 1);
+  frame2[0] = tipo;
+  frame2.set(corpo, 1);
+  return frame2;
+}
+function decodificaFrameServer(buffer) {
+  const byte2 = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  if (byte2.length === 0) return null;
+  return { tipo: byte2[0], corpo: new TextDecoder().decode(byte2.subarray(1)) };
+}
+function azioneAppunti(evento, { haSelezione = false, apple = false } = {}) {
+  if (!evento) return null;
+  if (evento.type && evento.type !== "keydown") return null;
+  if (evento.altKey) return null;
+  const mod = apple ? evento.metaKey === true : evento.ctrlKey === true;
+  const tasto = String(evento.key ?? "");
+  if (tasto === "Insert") {
+    if (mod && !evento.shiftKey) return haSelezione ? "copia" : null;
+    if (evento.shiftKey && !mod) return "incolla";
+    return null;
+  }
+  if (!mod) return null;
+  const lettera = tasto.toLowerCase();
+  if (lettera === "c") return haSelezione ? "copia" : null;
+  if (lettera === "v") return "incolla";
+  return null;
+}
+function vociMenuTerminale(term, { copia, incolla }) {
+  return [
+    [t(TESTI_APPUNTI.copia), () => copia(), Boolean(term?.hasSelection?.())],
+    [t(TESTI_APPUNTI.incolla), () => incolla(), true],
+    [t(TESTI_APPUNTI.selezionaTutto), () => term?.selectAll?.(), true],
+    [t(TESTI_APPUNTI.pulisci), () => term?.clear?.(), true]
+  ];
+}
+function creaTerminaleXterm({
+  documento = globalThis.document,
+  contenitore,
+  Terminal,
+  FitAddon,
+  id,
+  tema,
+  fontFamily = "Menlo, Consolas, monospace",
+  fontSize = 13,
+  scrollback = 5e3,
+  suDati = () => {
+  },
+  suMisura = () => {
+  },
+  Osservatore = globalThis.ResizeObserver
+} = {}) {
+  if (!contenitore || !Terminal || !FitAddon) return null;
+  const mount = documento.createElement("div");
+  mount.className = "talos-terminal__mount";
+  mount.dataset.terminaleMount = id;
+  contenitore.append(mount);
+  const term = new Terminal({
+    fontFamily,
+    fontSize,
+    cursorBlink: true,
+    scrollback,
+    theme: tema,
+    /* ⛔ 16/09 — il tasto destro seleziona la parola sotto il cursore (ITerminalOptions):
+       senza questa, il menu contestuale si apriva quasi sempre con «Copia» spenta, cioè inutile. */
+    rightClickSelectsWord: true
+  });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(mount);
+  fit.fit();
+  term.onData((dati) => suDati(dati));
+  const osservatore = new Osservatore(() => {
+    if (mount.hidden) return;
+    const primaCols = term.cols;
+    const primaRows = term.rows;
+    fit.fit();
+    if (term.cols !== primaCols || term.rows !== primaRows) suMisura({ cols: term.cols, rows: term.rows });
+  });
+  osservatore.observe(mount);
+  return {
+    term,
+    fit,
+    mount,
+    osservatore,
+    distruggi() {
+      osservatore.disconnect();
+      try {
+        term.dispose();
+      } catch {
+      }
+      mount.remove();
+    }
+  };
+}
+function collegaAppunti(term, {
+  documento = globalThis.document,
+  ospite,
+  radiceMenu = documento.body,
+  appunti = globalThis.navigator?.clipboard,
+  apple = false,
+  avvisa = () => {
+  },
+  finestra = globalThis
+} = {}) {
+  if (!term || !ospite) return () => {
+  };
+  const menu = creaMenuContestuale(radiceMenu, { id: "menuTerminale", etichetta: TESTI_APPUNTI.titoloMenu });
+  const chiudiMenu = () => {
+    menu.hidden = true;
+    menu.replaceChildren();
+  };
+  async function copia() {
+    const testo3 = term.getSelection?.() ?? "";
+    if (!testo3) return;
+    try {
+      await appunti?.writeText(testo3);
+    } catch {
+      avvisa(t(TESTI_APPUNTI.copiaNegataTitolo), t(TESTI_APPUNTI.copiaNegataTesto));
+    }
+  }
+  async function incolla() {
+    let testo3 = "";
+    try {
+      testo3 = await appunti?.readText() ?? "";
+    } catch {
+      avvisa(t(TESTI_APPUNTI.incollaNegataTitolo), t(TESTI_APPUNTI.incollaNegataTesto));
+      return;
+    }
+    if (!testo3) return;
+    term.paste(testo3);
+  }
+  term.attachCustomKeyEventHandler((evento) => {
+    const azione = azioneAppunti(evento, { haSelezione: Boolean(term.hasSelection?.()), apple });
+    if (!azione) return true;
+    evento.preventDefault?.();
+    if (azione === "copia") void copia();
+    else void incolla();
+    return false;
+  });
+  const suTastoDestro = (evento) => {
+    evento.preventDefault?.();
+    apriMenuContestuale(menu, {
+      titolo: t(TESTI_APPUNTI.titoloMenu),
+      voci: vociMenuTerminale(term, { copia, incolla }),
+      x: evento.clientX ?? 0,
+      y: evento.clientY ?? 0,
+      chiudi: chiudiMenu,
+      finestra
+    });
+  };
+  ospite.addEventListener("contextmenu", suTastoDestro);
+  if (!radiceMenu.__talosMenuTerminaleCollegato) {
+    radiceMenu.__talosMenuTerminaleCollegato = true;
+    radiceMenu.addEventListener("pointerdown", (evento) => {
+      if (!menu.hidden && !menu.contains?.(evento.target)) chiudiMenu();
+    });
+    radiceMenu.addEventListener("keydown", (evento) => {
+      if (evento.key === "Escape" && !menu.hidden) {
+        chiudiMenu();
+        evento.stopPropagation?.();
+      }
+    });
+  }
+  return function scollega() {
+    ospite.removeEventListener("contextmenu", suTastoDestro);
+    chiudiMenu();
+  };
+}
+var TIPO_FRAME_DATI, TIPO_FRAME_CONTROLLO, TESTI_APPUNTI;
+var init_terminale_xterm = __esm({
+  "src/components/terminale-xterm.js"() {
+    init_terminale();
+    init_lingua();
+    TIPO_FRAME_DATI = 0;
+    TIPO_FRAME_CONTROLLO = 1;
+    TESTI_APPUNTI = Object.freeze({
+      titoloMenu: "Terminale",
+      copia: "Copia",
+      incolla: "Incolla",
+      selezionaTutto: "Seleziona tutto",
+      pulisci: "Pulisci lo schermo",
+      copiaNegataTitolo: "Non ho potuto copiare",
+      copiaNegataTesto: "Gli appunti di sistema non sono raggiungibili da questa finestra: seleziona il testo e usa il menu del tasto destro del sistema.",
+      incollaNegataTitolo: "Non ho potuto incollare",
+      incollaNegataTesto: "Gli appunti di sistema non sono raggiungibili da questa finestra: dai il permesso agli appunti, oppure incolla con il tasto destro del sistema."
+    });
   }
 });
 
@@ -19173,9 +20951,9 @@ function el24(documentObj, tag2, className, testo3) {
   return nodo11;
 }
 function simbolo3(documentObj, classe, nome) {
-  const svg = documentObj.createElementNS(SVG_NS3, "svg");
+  const svg = documentObj.createElementNS(SVG_NS4, "svg");
   svg.setAttribute("class", classe);
-  const use = documentObj.createElementNS(SVG_NS3, "use");
+  const use = documentObj.createElementNS(SVG_NS4, "use");
   use.setAttribute("href", `#${nome}`);
   svg.append(use);
   return svg;
@@ -19239,10 +21017,10 @@ function creaStatoVuoto(dati = {}, opzioni = {}) {
   colonna.append(piede);
   return colonna;
 }
-var SVG_NS3;
+var SVG_NS4;
 var init_stato_vuoto = __esm({
   "src/components/stato-vuoto.js"() {
-    SVG_NS3 = "http://www.w3.org/2000/svg";
+    SVG_NS4 = "http://www.w3.org/2000/svg";
   }
 });
 
@@ -19408,6 +21186,7 @@ var init_app = __esm({
     init_migliora_prompt();
     init_browser_gesti();
     init_scorciatoie();
+    init_terminale_xterm();
     init_chat_foot();
     init_progetti();
     init_tooltip();
@@ -19817,6 +21596,12 @@ var init_app = __esm({
       let streamingAutoFollow = true;
       let streamingLastTargetTop = null;
       const CONVERSATION_FOLLOW_EPSILON_PX = 24;
+      function riarmaSeguiConversazione() {
+        streamingAutoFollow = true;
+        streamingLastTargetTop = null;
+        fermaFondoRipristino?.();
+      }
+      let fermaFondoRipristino = null;
       const STREAMING_LOG_CAP = 4e3;
       const streamingLog = [];
       function logStreaming(evento, dettagli) {
@@ -19853,10 +21638,10 @@ var init_app = __esm({
         if (!misura) return null;
         const presenti = TAPPE_LATENZA.filter((nome) => misura.tappe.has(nome));
         const tratti = [];
-        for (let i = 1; i < presenti.length; i += 1) {
+        for (let i2 = 1; i2 < presenti.length; i2 += 1) {
           tratti.push({
-            tratto: `${presenti[i - 1]} → ${presenti[i]}`,
-            ms: Math.round(misura.tappe.get(presenti[i]) - misura.tappe.get(presenti[i - 1]))
+            tratto: `${presenti[i2 - 1]} → ${presenti[i2]}`,
+            ms: Math.round(misura.tappe.get(presenti[i2]) - misura.tappe.get(presenti[i2 - 1]))
           });
         }
         const primo = misura.tappe.get(presenti[0]);
@@ -19940,9 +21725,14 @@ var init_app = __esm({
         const conversation = $2("#conversation");
         if (!conversation) return;
         const scroller = scrollerConversazione(conversation) || conversation;
+        if (scroller.dataset.seguiCollegato === "si") return;
+        scroller.dataset.seguiCollegato = "si";
         scroller.addEventListener("scroll", () => {
-          if (streamingLastTargetTop === null) return;
-          streamingAutoFollow = Math.abs(scroller.scrollTop - streamingLastTargetTop) <= CONVERSATION_FOLLOW_EPSILON_PX;
+          if (streamingLastTargetTop !== null && Math.abs(scroller.scrollTop - streamingLastTargetTop) <= CONVERSATION_FOLLOW_EPSILON_PX) {
+            streamingAutoFollow = true;
+            return;
+          }
+          streamingAutoFollow = fondoConversazioneInVista();
         }, { passive: true });
         if (typeof ResizeObserver === "function") new ResizeObserver(() => aggiornaSpazioCodaConversazione(conversation)).observe(scroller);
       }
@@ -19985,8 +21775,8 @@ var init_app = __esm({
         const nodi = [];
         let n;
         while (n = walker.nextNode()) nodi.push(n);
-        for (let i = nodi.length - 1; i >= 0 && restanti > 0; i -= 1) {
-          const nodo11 = nodi[i];
+        for (let i2 = nodi.length - 1; i2 >= 0 && restanti > 0; i2 -= 1) {
+          const nodo11 = nodi[i2];
           const genitore = nodo11.parentElement;
           if (!genitore) continue;
           if (genitore.classList.contains("stream-word")) {
@@ -20253,17 +22043,16 @@ var init_app = __esm({
         const sveglia = window.setTimeout(smetti, 1200);
         window.requestAnimationFrame(applica2);
       }
-      function scorriAllaBollaAppesa(article) {
-        window.setTimeout(() => {
-          const conversazione = $2("#conversation");
-          if (!article.isConnected || conversazione?.classList.contains("is-restoring")) return;
-          const scroller = scrollerConversazione(conversazione);
-          if (scroller) scorriInFondoConversazione(scroller);
-        }, 40);
+      function scorriAllaBollaAppesa(article, { azioneDellaPersona = false } = {}) {
+        if (azioneDellaPersona) riarmaSeguiConversazione();
+        const conversazione = $2("#conversation");
+        if (!article?.isConnected || conversazione?.classList.contains("is-restoring")) return;
+        scrollStreamingOutput(article);
       }
       const CONVERSAZIONE_FONDO_SOGLIA_PX = 24;
       function scorriInFondoConversazione(scroller) {
         if (!scroller) return;
+        riarmaSeguiConversazione();
         const distanza = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
         if (distanza <= CONVERSAZIONE_FONDO_SOGLIA_PX) {
           scroller.scrollTop = scroller.scrollHeight;
@@ -22385,8 +24174,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (privacy) {
           const voci = [];
           try {
-            for (let i = 0; i < window.localStorage.length; i += 1) {
-              const chiave = window.localStorage.key(i);
+            for (let i2 = 0; i2 < window.localStorage.length; i2 += 1) {
+              const chiave = window.localStorage.key(i2);
               if (!/^talos/i.test(chiave)) continue;
               voci.push([chiave, Buffer_len(window.localStorage.getItem(chiave) || "")]);
             }
@@ -24279,9 +26068,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         range.setAttribute("aria-label", "Livello di ragionamento");
         const labelsRow = document.createElement("div");
         labelsRow.className = "effort-picker-labels";
-        const labelEls = LIVELLI_RAGIONAMENTO.map((l, i) => {
+        const labelEls = LIVELLI_RAGIONAMENTO.map((l, i2) => {
           const el25 = textElement("span", "effort-picker-tick", l.etichetta);
-          el25.style.left = `${i / (LIVELLI_RAGIONAMENTO.length - 1) * 100}%`;
+          el25.style.left = `${i2 / (LIVELLI_RAGIONAMENTO.length - 1) * 100}%`;
           labelsRow.appendChild(el25);
           return el25;
         });
@@ -24292,7 +26081,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         function aggiorna() {
           range.value = String(indice2);
           selected.textContent = toccato ? LIVELLI_RAGIONAMENTO[indice2].etichetta : "Automatico";
-          labelEls.forEach((el25, i) => el25.classList.toggle("effort-picker-tick-selected", i === indice2));
+          labelEls.forEach((el25, i2) => el25.classList.toggle("effort-picker-tick-selected", i2 === indice2));
         }
         aggiorna();
         range.addEventListener("input", () => {
@@ -24619,10 +26408,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           }
           const tutte = items();
           if (tutte.length === 0) return;
-          const i = tutte.indexOf(document.activeElement);
+          const i2 = tutte.indexOf(document.activeElement);
           let j = null;
-          if (event.key === "ArrowDown") j = i < 0 ? 0 : (i + 1) % tutte.length;
-          else if (event.key === "ArrowUp") j = i <= 0 ? tutte.length - 1 : i - 1;
+          if (event.key === "ArrowDown") j = i2 < 0 ? 0 : (i2 + 1) % tutte.length;
+          else if (event.key === "ArrowUp") j = i2 <= 0 ? tutte.length - 1 : i2 - 1;
           else if (event.key === "Home") j = 0;
           else if (event.key === "End") j = tutte.length - 1;
           else if (event.key === "Tab") {
@@ -26365,9 +28154,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           }
           const gruppi = [...t2.querySelectorAll('[data-c="ActivityBundle"]:not(.real-reasoning-note)')];
           const risposta = titoloRispostaDaTurno(t2);
-          numeri.forEach((numero6, i) => {
-            const g = gruppi[i];
-            const riassunto = g?.querySelector(".tool-note-summary-text")?.textContent?.trim() || i === numeri.length - 1 && risposta || "Risposta";
+          numeri.forEach((numero6, i2) => {
+            const g = gruppi[i2];
+            const riassunto = g?.querySelector(".tool-note-summary-text")?.textContent?.trim() || i2 === numeri.length - 1 && risposta || "Risposta";
             giri.push({ numero: numero6, titolo: riassunto.length > 32 ? `${riassunto.slice(0, 31)}…` : riassunto, attrezzi: g ? g.querySelectorAll('[data-c="ToolRow"]').length : 0, inCorso: false });
           });
         }
@@ -26394,8 +28183,14 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         return Number.isFinite(m?.contextLength) ? m.contextLength : null;
       }
       let figliaAperta = null;
-      function apriFlussoFiglia(sessionId, onEvento) {
+      function apriFlussoFiglia(sessionId, onEvento, ganci = {}) {
         const sorgente = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
+        sorgente.onopen = () => {
+          try {
+            ganci.onAperto?.();
+          } catch {
+          }
+        };
         sorgente.onmessage = (messaggio) => {
           try {
             onEvento(JSON.parse(messaggio.data));
@@ -26420,7 +28215,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         aperta2.contenitore?.remove();
         const elenco2 = $2("#railAgenti");
         if (elenco2) elenco2.hidden = false;
-        aggiornaInspectorDaStato();
+        aggiornaInspectorDaStato({ subito: true });
       }
       function apriConversazioneFiglia(figlia) {
         if (!figlia?.sessionId) return;
@@ -26531,9 +28326,25 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           if (richiestaCacheSessione === richiesta) richiestaCacheSessione = null;
         });
       }
-      function aggiornaInspectorDaStato() {
+      let inspectorProgrammato = 0;
+      let inspectorSporco = false;
+      function aggiornaInspectorDaStato({ subito = false } = {}) {
+        inspectorSporco = true;
+        if (subito || typeof window.requestAnimationFrame !== "function") {
+          disegnaInspectorAdesso();
+          return;
+        }
+        if (inspectorProgrammato) return;
+        inspectorProgrammato = window.requestAnimationFrame(() => {
+          inspectorProgrammato = 0;
+          disegnaInspectorAdesso();
+        });
+      }
+      function disegnaInspectorAdesso() {
+        if (!inspectorSporco) return;
         const inspector = $2("#inspectorSessione") || $2(".talos-inspector");
         if (!inspector) return;
+        inspectorSporco = false;
         const file = [...state.realSession.reviewFiles?.values?.() || []].map((v) => {
           const c = contaDiff(v);
           return { path: v.path, aggiunte: c.aggiunte, rimozioni: c.rimozioni };
@@ -26814,7 +28625,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (allegatiVisibili?.length) disegnaChipAllegati(article, allegatiVisibili);
         void conversation;
         markMotionEnter(article);
-        scorriAllaBollaAppesa(article);
+        scorriAllaBollaAppesa(article, { azioneDellaPersona: true });
         state.realSession.taskBubbleMostrata = true;
       }
       function disegnaChipAllegati(articolo, allegati) {
@@ -26864,7 +28675,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const allegatiVisibili = daMostrare?.allegati?.length ? daMostrare.allegati : immagini;
         if (allegatiVisibili.length) disegnaChipAllegati(article, allegatiVisibili);
         markMotionEnter(article);
-        scorriAllaBollaAppesa(article);
+        scorriAllaBollaAppesa(article, { azioneDellaPersona: true });
       }
       function appendComandoDiretto(comando, contesto2 = null) {
         state.realSession.ultimaDomanda = comando;
@@ -26886,7 +28697,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           paragrafo.classList.add("talos-mono");
         }
         markMotionEnter(article);
-        scorriAllaBollaAppesa(article);
+        scorriAllaBollaAppesa(article, { azioneDellaPersona: true });
         return article;
       }
       const cronologiaComposer = creaCronologiaComposer({
@@ -27218,16 +29029,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           nellaChat(article);
         }
         markMotionEnter(article);
-        window.setTimeout(() => {
-          if (article.hidden) return;
-          if ($2("#conversation")?.classList.contains("is-restoring")) return;
-          if (fondoConversazioneInVista()) return;
-          const scorrevole = scrollerConversazione();
-          if (!scorrevole || !article.isConnected) return;
-          const top = scorrevole.scrollTop + article.getBoundingClientRect().bottom - scorrevole.getBoundingClientRect().top - scorrevole.clientTop - scorrevole.clientHeight;
-          const ridotto = movimentoRidottoDalSistema() || document.body.classList.contains("reduce-motion");
-          scorrevole.scrollTo({ top, behavior: ridotto ? "instant" : "smooth" });
-        }, 40);
+        if (!article.hidden && !$2("#conversation")?.classList.contains("is-restoring")) scrollStreamingOutput(article);
         return { article, summaryText, detail, dettaglio: riga.dettaglio };
       }
       function aggiornaVisibilitaRagionamento() {
@@ -27243,11 +29045,51 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       function adessoRagionamentoMs() {
         return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
       }
+      const testoRagionamentoPerScheda = /* @__PURE__ */ new WeakMap();
+      const montaggioRagionamentoPerScheda = /* @__PURE__ */ new WeakMap();
+      const RAGIONAMENTO_PEZZO_CARATTERI = 4e3;
+      function disegnaPezzoRagionamento(card) {
+        const stato = montaggioRagionamentoPerScheda.get(card);
+        if (!stato) return;
+        stato.frame = null;
+        const corpo = card.querySelector(".tool-note-detail");
+        const testo3 = testoRagionamentoPerScheda.get(card) || "";
+        if (!corpo || !corpo.isConnected || !ragionamentoAperto(card)) return;
+        const fine = Math.min(testo3.length, stato.mostrato + RAGIONAMENTO_PEZZO_CARATTERI);
+        if (fine <= stato.mostrato) return;
+        stato.mostrato = fine;
+        renderizzaMarkdownIncrementale(corpo, stato.render, testo3.slice(0, fine));
+        if (fine < testo3.length) chiediDisegnoRagionamento(card);
+      }
+      function chiediDisegnoRagionamento(card) {
+        if (!card) return;
+        let stato = montaggioRagionamentoPerScheda.get(card);
+        if (!stato) {
+          stato = { mostrato: 0, frame: null, render: { prefisso: null, nodiCoda: [] } };
+          montaggioRagionamentoPerScheda.set(card, stato);
+        }
+        if (stato.frame !== null) return;
+        stato.frame = window.requestAnimationFrame(() => disegnaPezzoRagionamento(card));
+      }
+      function depositaTestoRagionamento(card) {
+        const corpo = card?.querySelector(".tool-note-detail");
+        const testo3 = testoRagionamentoPerScheda.get(card);
+        if (!corpo || typeof testo3 !== "string") return;
+        const montaggio = montaggioRagionamentoPerScheda.get(card);
+        if (montaggio && montaggio.mostrato >= testo3.length) return;
+        if (corpo.textContent === testo3) return;
+        corpo.textContent = testo3;
+        if (montaggio) {
+          montaggio.mostrato = 0;
+          montaggio.render = { prefisso: null, nodiCoda: [] };
+        }
+      }
       function impostaAperturaRagionamento(card, aperto) {
         const testa = card?.querySelector(":scope > .talos-activity__head");
         const corpo = card?.querySelector(":scope > .talos-activity__body");
         if (!testa || !corpo) return;
         testa.setAttribute("aria-expanded", String(aperto));
+        if (aperto) chiediDisegnoRagionamento(card);
         corpo.hidden = !aperto;
       }
       function ragionamentoAperto(card) {
@@ -27726,8 +29568,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         renderRealReviewList();
         aggiornaSommarioReviewReale();
       }
-      const TIPO_FRAME_DATI_CLIENT = 0;
-      const TIPO_FRAME_CONTROLLO_CLIENT = 1;
+      const TIPO_FRAME_DATI_CLIENT = TIPO_FRAME_DATI;
+      const TIPO_FRAME_CONTROLLO_CLIENT = TIPO_FRAME_CONTROLLO;
       const CHIAVE_SCHEDE_TERMINALE = "talos-harness-terminali-v1";
       function statoTerminale() {
         if (!state.terminal) {
@@ -27789,13 +29631,6 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             brightWhite: "#f1efe9"
           }
         };
-      }
-      function codificaFrameClient(tipo, testo3) {
-        const corpo = new TextEncoder().encode(testo3);
-        const frame2 = new Uint8Array(corpo.length + 1);
-        frame2[0] = tipo;
-        frame2.set(corpo, 1);
-        return frame2;
       }
       function memoriaSchedeTerminale() {
         try {
@@ -27942,34 +29777,32 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           statoTerminale().enforcementColore = "xterm.js non caricato";
           return false;
         }
-        const mount = document.createElement("div");
-        mount.className = "talos-terminal__mount";
-        mount.dataset.terminaleMount = record.terminalId;
-        corpo.append(mount);
-        record.mount = mount;
-        const term = new window.Terminal({
+        const pezzi = creaTerminaleXterm({
+          documento: document,
+          contenitore: corpo,
+          Terminal: window.Terminal,
+          FitAddon: window.FitAddon,
+          id: record.terminalId,
+          tema: temaTerminaleReale(),
           fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--talos-font-mono").trim() || "Menlo, Consolas, monospace",
-          fontSize: 13,
-          cursorBlink: true,
-          scrollback: 5e3,
-          theme: temaTerminaleReale()
+          suDati: (dati) => {
+            if (record.ws?.readyState === WebSocket.OPEN) record.ws.send(codificaFrameClient(TIPO_FRAME_DATI_CLIENT, dati));
+          },
+          suMisura: () => inviaResizeTerminale(record)
         });
-        const fit = new window.FitAddon.FitAddon();
-        term.loadAddon(fit);
-        term.open(mount);
-        fit.fit();
-        term.onData((dati) => {
-          if (record.ws?.readyState === WebSocket.OPEN) record.ws.send(codificaFrameClient(TIPO_FRAME_DATI_CLIENT, dati));
+        if (!pezzi) {
+          statoTerminale().enforcementColore = "xterm.js non caricato";
+          return false;
+        }
+        Object.assign(record, { term: pezzi.term, fit: pezzi.fit, mount: pezzi.mount, osservatore: pezzi.osservatore });
+        record.scollegaAppunti = collegaAppunti(pezzi.term, {
+          documento: document,
+          ospite: pezzi.mount,
+          radiceMenu: ROOT().body || ROOT(),
+          // la stessa radice del menu delle SCHEDE: un menu solo, una grammatica sola
+          apple: suApple(),
+          avvisa: (titolo2, testo3) => toast(t(titolo2), t(testo3))
         });
-        const osservatore = new ResizeObserver(() => {
-          if (mount.hidden) return;
-          const primaCols = term.cols;
-          const primaRows = term.rows;
-          fit.fit();
-          if (term.cols !== primaCols || term.rows !== primaRows) inviaResizeTerminale(record);
-        });
-        osservatore.observe(mount);
-        Object.assign(record, { term, fit, osservatore });
         return true;
       }
       function accendiWebglTerminale(record) {
@@ -28014,10 +29847,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           inviaResizeTerminale(record);
         };
         ws.onmessage = (evento) => {
-          const buf = new Uint8Array(evento.data);
-          if (buf.length === 0) return;
-          const tipo = buf[0];
-          const corpo = new TextDecoder().decode(buf.subarray(1));
+          const frame2 = decodificaFrameServer(new Uint8Array(evento.data));
+          if (!frame2) return;
+          const { tipo, corpo } = frame2;
           if (tipo === TIPO_FRAME_DATI_CLIENT) {
             record.term?.write(corpo);
             return;
@@ -28223,11 +30055,113 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       }
       function appendBrowserEntry(url, testo3) {
         const pagine = state.realSession.browserPagine;
-        pagine.push({ url, testo: testo3, quando: (/* @__PURE__ */ new Date()).toISOString() });
+        const id = `lettura-${state.realSession.browserProssimoId = (state.realSession.browserProssimoId || 0) + 1}`;
+        pagine.push({ id, url, testo: testo3, quando: (/* @__PURE__ */ new Date()).toISOString() });
         mostraPaginaBrowser(pagine.length - 1);
       }
       const CHIAVE_NOTE_BROWSER = "talos-harness-browser-note-v1";
       let browserUi = null;
+      const BROWSER_RITENTATIVI = 2;
+      const BROWSER_ATTESA_BASE_MS = 400;
+      const BROWSER_ATTESA_TETTO_MS = 4e3;
+      function attesaRitentativo(n) {
+        const tetto = Math.min(BROWSER_ATTESA_TETTO_MS, BROWSER_ATTESA_BASE_MS * 2 ** Math.max(0, n - 1));
+        return Math.round(Math.random() * tetto);
+      }
+      const richiesteBrowser = /* @__PURE__ */ new Map();
+      function fermaRichiestaBrowser(id) {
+        const volo = richiesteBrowser.get(id);
+        if (!volo) return false;
+        richiesteBrowser.delete(id);
+        clearTimeout(volo.attesa);
+        try {
+          volo.controller?.abort();
+        } catch {
+        }
+        return true;
+      }
+      function iniziaRichiestaBrowser(id) {
+        fermaRichiestaBrowser(id);
+        const volo = { controller: new AbortController(), attesa: null };
+        richiesteBrowser.set(id, volo);
+        return volo;
+      }
+      const voloCorrente = (id, volo) => richiesteBrowser.get(id) === volo;
+      async function apiGetBrowser(pathname, signal) {
+        let risposta;
+        try {
+          risposta = await fetch(API(pathname), { method: "GET", headers: { Accept: "application/json" }, cache: "no-store", signal });
+          sorveglianza?.segnalaRete(true);
+        } catch (errore) {
+          if (errore?.name !== "AbortError") sorveglianza?.segnalaRete(false, "fetch");
+          throw errore;
+        }
+        let busta;
+        try {
+          busta = await risposta.json();
+        } catch {
+          const e = new Error("Risposta locale non valida");
+          e.code = "INTERNAL_ERROR";
+          throw e;
+        }
+        if (!risposta.ok || !busta?.ok) {
+          const e = new Error(busta?.error?.message || "Richiesta locale non riuscita");
+          e.code = busta?.error?.code || "INTERNAL_ERROR";
+          e.stato = risposta.status;
+          throw e;
+        }
+        return busta.data;
+      }
+      async function chiediIncorniciabileConRitentativi(voce, { onStato }) {
+        const id = voce.id;
+        voce.tentativi = 0;
+        voce.tentativiMassimi = BROWSER_RITENTATIVI + 1;
+        for (let tentativo = 1; tentativo <= BROWSER_RITENTATIVI + 1; tentativo += 1) {
+          const volo = iniziaRichiestaBrowser(id);
+          voce.tentativi = tentativo;
+          try {
+            const esito = await apiGetBrowser(`/api/v1/browser/incorniciabile?url=${encodeURIComponent(voce.url)}`, volo.controller.signal);
+            if (!voloCorrente(id, volo)) return null;
+            richiesteBrowser.delete(id);
+            if (esito?.genere && CLIENT_RITENTA.has(esito.genere) && tentativo <= BROWSER_RITENTATIVI) {
+              voce.stato = "ritento";
+              voce.motivo = esito.motivo || null;
+              voce.genere = esito.genere || null;
+              voce.dettagli = esito.dettagli || null;
+              onStato?.();
+              if (!await aspettaRitentativo(id, tentativo)) return null;
+              continue;
+            }
+            return esito;
+          } catch (errore) {
+            if (errore?.name === "AbortError" || !voloCorrente(id, volo)) return null;
+            richiesteBrowser.delete(id);
+            if (tentativo > BROWSER_RITENTATIVI) throw errore;
+            voce.stato = "ritento";
+            voce.motivo = messaggioErroreUtente(errore, "Il server non ha risposto");
+            voce.genere = null;
+            voce.dettagli = null;
+            onStato?.();
+            if (!await aspettaRitentativo(id, tentativo)) return null;
+          }
+        }
+        return null;
+      }
+      const CLIENT_RITENTA = /* @__PURE__ */ new Set(["timeout", "rete", "rifiuto"]);
+      const CLIENT_GUASTI = /* @__PURE__ */ new Set(["timeout", "dns", "rifiuto", "certificato", "rete", "indirizzo"]);
+      function aspettaRitentativo(id, tentativo) {
+        return new Promise((risolvi) => {
+          const volo = { controller: null, attesa: null };
+          richiesteBrowser.set(id, volo);
+          volo.attesa = setTimeout(() => {
+            if (richiesteBrowser.get(id) === volo) {
+              richiesteBrowser.delete(id);
+              risolvi(true);
+            } else risolvi(false);
+          }, attesaRitentativo(tentativo));
+          volo.controller = { abort: () => risolvi(false) };
+        });
+      }
       function noteBrowser() {
         try {
           const tutte = JSON.parse(localStorage.getItem(CHIAVE_NOTE_BROWSER) || "{}") || {};
@@ -28252,10 +30186,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         } catch {
         }
       }
+      function idDiLettura(p, i2) {
+        return p?.id || `lettura-e${i2}`;
+      }
       function schedeBrowser() {
         const rs = state.realSession;
-        const letture = rs.browserPagine.map((p, i) => ({ ...p, id: `lettura-${i}`, tipo: "lettura", origine: "agente" })).filter((p) => !rs.browserChiuse.has(p.id));
-        return [...letture, ...rs.browserVive];
+        const letture = rs.browserPagine.map((p, i2) => ({ ...p, id: idDiLettura(p, i2), tipo: "lettura", origine: "agente" }));
+        const vivi = new Set(letture.map((p) => p.id));
+        for (const id of [...rs.browserChiuse]) if (!vivi.has(id)) rs.browserChiuse.delete(id);
+        return [...letture.filter((p) => !rs.browserChiuse.has(p.id)), ...rs.browserVive];
       }
       function uiBrowser() {
         if (browserUi) return browserUi;
@@ -28295,18 +30234,76 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
            *   rotta. Le pagine VIVE chiedevano già al server se il sito si lascia incorniciare; le letture
            *   dell'agente no, e partivano a testa bassa. Stessa domanda, stessa rotta, una volta per pagina.
            */
+          /*
+           * ⛔ 16/09 — la domanda al server per una LETTURA passa dalla stessa catena delle pagine vive:
+           *   annullabile, con due ritentativi su ciò che è transitorio, e con lo stato visibile mentre
+           *   succede (prima: nessun ritentativo, nessun annullamento, e uno schermo vuoto nell'attesa).
+           * ⛔ La pagina si cerca per ID, non per URL: due letture dello stesso indirizzo esistono
+           *   (l'agente rilegge), e `find((p) => p.url === s.url)` scriveva sulla PRIMA — cioè su una
+           *   scheda diversa da quella che stava chiedendo.
+           */
           chiediCornice: (s) => {
-            const pagina = state.realSession.browserPagine.find((p) => p.url === s.url);
+            const rs = state.realSession;
+            const pagina = rs.browserPagine.find((p) => (p.id || null) === s.id) || rs.browserPagine.find((p) => p.url === s.url);
             if (!pagina || pagina.incorniciabile !== void 0) return;
+            if (!pagina.id) pagina.id = s.id;
             pagina.incorniciabile = null;
-            apiGet(`/api/v1/browser/incorniciabile?url=${encodeURIComponent(s.url)}`).then((esito) => {
+            pagina.stato = "caricamento";
+            chiediIncorniciabileConRitentativi(pagina, { onStato: renderizzaBrowser }).then((esito) => {
+              if (esito === null) {
+                pagina.stato = "annullata";
+                return;
+              }
+              pagina.stato = CLIENT_GUASTI.has(esito?.genere) ? "irraggiungibile" : "pronta";
               pagina.incorniciabile = Boolean(esito?.incorniciabile);
               pagina.motivoCornice = esito?.motivo || null;
+              pagina.motivo = esito?.incorniciabile ? null : esito?.motivo || null;
+              pagina.genere = esito?.incorniciabile ? null : esito?.genere || null;
+              pagina.dettagli = esito?.dettagli || null;
               if (esito?.titolo && !pagina.titolo) pagina.titolo = esito.titolo;
-            }).catch(() => {
+            }).catch((errore) => {
               pagina.incorniciabile = false;
-              pagina.motivoCornice = "Non ho potuto controllare se questa pagina si lascia mostrare qui dentro.";
+              pagina.stato = "irraggiungibile";
+              pagina.motivo = messaggioErroreUtente(errore, "Non ho potuto controllare se questa pagina si lascia mostrare qui dentro.");
+              pagina.motivoCornice = pagina.motivo;
+              pagina.genere = null;
+              pagina.dettagli = null;
             }).finally(() => renderizzaBrowser());
+          },
+          /*
+           * ⛔ 16/09 — «Riprova» e «Annulla» del pannello di stato. Riprovare è ricominciare da capo la
+           *   catena di quella scheda (e solo di quella); annullare interrompe DAVVERO la richiesta in
+           *   volo — non la lascia correre sperando che nessuno legga la risposta.
+           */
+          riprova: (s) => {
+            const rs = state.realSession;
+            fermaRichiestaBrowser(s.id);
+            if (s.tipo === "viva") {
+              apriPaginaVivaBrowser(s.url, s.id).catch((errore) => browserUi?.avvisa(messaggioErroreUtente(errore, "Non sono riuscito ad aprire questo indirizzo.")));
+              return;
+            }
+            const pagina = rs.browserPagine.find((p) => (p.id || null) === s.id);
+            if (!pagina) return;
+            pagina.incorniciabile = void 0;
+            pagina.stato = void 0;
+            pagina.motivo = null;
+            pagina.motivoCornice = null;
+            pagina.genere = null;
+            pagina.dettagli = null;
+            renderizzaBrowser();
+          },
+          annullaApertura: (s) => {
+            const rs = state.realSession;
+            const fermata = fermaRichiestaBrowser(s.id);
+            const voce = rs.browserVive.find((x) => x.id === s.id) || rs.browserPagine.find((p) => (p.id || null) === s.id);
+            if (voce) {
+              voce.stato = "annullata";
+              voce.motivo = null;
+              voce.genere = null;
+              voce.dettagli = null;
+            }
+            if (!fermata && !voce) return;
+            renderizzaBrowser();
           },
           // ⛔ stesso motivo di `apri` qui sopra: una ricarica che si rompe deve dirlo, non sparire.
           rileggi: (s) => {
@@ -28332,13 +30329,13 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             renderizzaBrowser();
             $2(`#browserAnnotazioni .talos-annotazione:last-child textarea`)?.focus();
           },
-          notaAnnotazione: (s, i, testo3) => {
+          notaAnnotazione: (s, i2, testo3) => {
             const l = state.realSession.browserAnnotazioni[s.id];
-            if (l?.[i]) l[i].nota = testo3;
+            if (l?.[i2]) l[i2].nota = testo3;
           },
-          togliAnnotazione: (s, i) => {
+          togliAnnotazione: (s, i2) => {
             const l = state.realSession.browserAnnotazioni[s.id];
-            if (l) l.splice(i, 1);
+            if (l) l.splice(i2, 1);
             renderizzaBrowser();
           },
           svuotaAnnotazioni: (s) => {
@@ -28378,8 +30375,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const rs = state.realSession;
         const schede = schedeBrowser();
         if (!schede.some((x) => x.id === rs.browserAttiva)) rs.browserAttiva = schede.length ? schede[schede.length - 1].id : null;
-        const m = /^lettura-(\d+)$/.exec(rs.browserAttiva || "");
-        rs.browserIndice = m ? Number(m[1]) : -1;
+        rs.browserIndice = rs.browserPagine.findIndex((p, i2) => idDiLettura(p, i2) === rs.browserAttiva);
         ui.aggiorna({ schede, attiva: rs.browserAttiva, note: noteBrowser(), richiesta: rs.browserRichiesta, annotazioni: rs.browserAnnotazioni, annotaAttivo: rs.browserAnnotaAttivo });
         const telaViva = $2("#browserVistaViva");
         if (telaViva) telaViva.hidden = !(vistaViva && vistaVivaDi && rs.browserAttiva === vistaVivaDi);
@@ -28387,7 +30383,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       }
       function mostraPaginaBrowser(indice2) {
         const rs = state.realSession;
-        rs.browserAttiva = rs.browserPagine[indice2] ? `lettura-${indice2}` : rs.browserAttiva;
+        const pagina = rs.browserPagine[indice2];
+        rs.browserAttiva = pagina ? idDiLettura(pagina, indice2) : rs.browserAttiva;
         renderizzaBrowser();
       }
       function chiudiSchedaBrowser(id) {
@@ -28395,6 +30392,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const lista = schedeBrowser().map((x) => x.id);
         const prossima = prossimaDopoChiusura(lista, lista.indexOf(id));
         const chiusa = schedeBrowser().find((x) => x.id === id);
+        fermaRichiestaBrowser(id);
         if (chiusa?.viaVista === "vivo") smontaVistaViva();
         if (id.startsWith("lettura-")) rs.browserChiuse.add(id);
         else rs.browserVive = rs.browserVive.filter((x) => x.id !== id);
@@ -28408,6 +30406,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       const IDENTITA_BROWSER = "browser-di-questa-pagina";
       const identitaBrowser = () => IDENTITA_BROWSER;
       function smontaVistaViva() {
+        if (vistaVivaDi) {
+          const suo = state.realSession.browserVive.find((x) => x.id === vistaVivaDi);
+          if (suo) suo.vivaARiposo = true;
+        }
         vistaVivaDi = null;
         if (flussoVivo) {
           try {
@@ -28468,6 +30470,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         await smontaVistaViva();
         contenitore.hidden = false;
         vistaVivaDi = voce.id;
+        voce.vivaARiposo = false;
         vistaViva = creaVistaViva(contenitore, {
           onGesto: (gesto) => {
             if (state.realSession.browserAnnotaAttivo && gesto?.tipo === "su" && gesto.dentro !== false) {
@@ -28605,8 +30608,16 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         rs.browserAttiva = voce.id;
         renderizzaBrowser();
         try {
-          const esito = await apiGet(`/api/v1/browser/incorniciabile?url=${encodeURIComponent(url)}`);
+          const esito = await chiediIncorniciabileConRitentativi(voce, { onStato: renderizzaBrowser });
           if (!rs.browserVive.includes(voce)) return;
+          if (esito === null) {
+            voce.stato = "annullata";
+            voce.motivo = null;
+            voce.genere = null;
+            voce.dettagli = null;
+            renderizzaBrowser();
+            return;
+          }
           voce.url = esito?.url || url;
           voce.titolo = esito?.titolo || null;
           if (esito?.incorniciabile || voce.proxata) {
@@ -28618,14 +30629,25 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             voce.percheVia = esito?.percheVia || null;
             const conVista = esito?.via === "cornice" ? false : await apriNelBrowserVivo(voce);
             if (!conVista) {
-              voce.stato = "bloccata";
+              voce.stato = CLIENT_GUASTI.has(esito?.genere) ? "irraggiungibile" : "bloccata";
               voce.motivo = esito?.motivo || "Il sito non consente di essere mostrato dentro TALOS";
+              voce.genere = esito?.genere || null;
+              voce.dettagli = esito?.dettagli || null;
             }
           }
           void dallaPaginaAgliOcchiDelModello(voce);
         } catch (error) {
-          voce.stato = "bloccata";
-          voce.motivo = error.message || "Il server non ha potuto controllare la pagina";
+          if (error?.name === "AbortError") {
+            voce.stato = "annullata";
+            voce.motivo = null;
+            voce.genere = null;
+            voce.dettagli = null;
+          } else {
+            voce.stato = "irraggiungibile";
+            voce.motivo = messaggioErroreUtente(error, "Il server non ha potuto controllare la pagina");
+            voce.genere = null;
+            voce.dettagli = null;
+          }
         }
         renderizzaBrowser();
       }
@@ -28702,30 +30724,30 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const n = a.length;
         const m = b.length;
         const lcs = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
-        for (let i2 = n - 1; i2 >= 0; i2--) {
+        for (let i3 = n - 1; i3 >= 0; i3--) {
           for (let j2 = m - 1; j2 >= 0; j2--) {
-            lcs[i2][j2] = a[i2] === b[j2] ? lcs[i2 + 1][j2 + 1] + 1 : Math.max(lcs[i2 + 1][j2], lcs[i2][j2 + 1]);
+            lcs[i3][j2] = a[i3] === b[j2] ? lcs[i3 + 1][j2 + 1] + 1 : Math.max(lcs[i3 + 1][j2], lcs[i3][j2 + 1]);
           }
         }
         const righe = [];
-        let i = 0;
+        let i2 = 0;
         let j = 0;
-        while (i < n && j < m) {
-          if (a[i] === b[j]) {
-            righe.push(["ctx", a[i]]);
-            i += 1;
+        while (i2 < n && j < m) {
+          if (a[i2] === b[j]) {
+            righe.push(["ctx", a[i2]]);
+            i2 += 1;
             j += 1;
-          } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
-            righe.push(["del", a[i]]);
-            i += 1;
+          } else if (lcs[i2 + 1][j] >= lcs[i2][j + 1]) {
+            righe.push(["del", a[i2]]);
+            i2 += 1;
           } else {
             righe.push(["add", b[j]]);
             j += 1;
           }
         }
-        while (i < n) {
-          righe.push(["del", a[i]]);
-          i += 1;
+        while (i2 < n) {
+          righe.push(["del", a[i2]]);
+          i2 += 1;
         }
         while (j < m) {
           righe.push(["add", b[j]]);
@@ -29041,11 +31063,11 @@ ${testo3}` : testo3;
           contenitore.dataset.tastiera = "si";
           contenitore.addEventListener("keydown", (event) => {
             const schede = [...contenitore.querySelectorAll('[role="tab"]')];
-            const i = schede.indexOf(document.activeElement);
-            if (i < 0 || schede.length === 0) return;
-            let j = i;
-            if (event.key === "ArrowRight") j = (i + 1) % schede.length;
-            else if (event.key === "ArrowLeft") j = (i - 1 + schede.length) % schede.length;
+            const i2 = schede.indexOf(document.activeElement);
+            if (i2 < 0 || schede.length === 0) return;
+            let j = i2;
+            if (event.key === "ArrowRight") j = (i2 + 1) % schede.length;
+            else if (event.key === "ArrowLeft") j = (i2 - 1 + schede.length) % schede.length;
             else if (event.key === "Home") j = 0;
             else if (event.key === "End") j = schede.length - 1;
             else return;
@@ -30196,17 +32218,17 @@ ${testo3}` : testo3;
         ul.setAttribute("aria-label", "File del workspace");
         ul.addEventListener("keydown", (e) => {
           const righe = righeVisibiliAlbero(ul);
-          const i = righe.indexOf(document.activeElement);
-          if (i === -1) return;
-          const row = righe[i];
+          const i2 = righe.indexOf(document.activeElement);
+          if (i2 === -1) return;
+          const row = righe[i2];
           const li = row.closest(".ft-node");
           const eCartella = li.hasAttribute("aria-expanded");
           if (e.key === "ArrowDown") {
             e.preventDefault();
-            if (righe[i + 1]) impostaFocusRigaAlbero(ul, righe[i + 1]);
+            if (righe[i2 + 1]) impostaFocusRigaAlbero(ul, righe[i2 + 1]);
           } else if (e.key === "ArrowUp") {
             e.preventDefault();
-            if (righe[i - 1]) impostaFocusRigaAlbero(ul, righe[i - 1]);
+            if (righe[i2 - 1]) impostaFocusRigaAlbero(ul, righe[i2 - 1]);
           } else if (e.key === "ArrowRight") {
             e.preventDefault();
             if (!eCartella) return;
@@ -30509,7 +32531,7 @@ ${testo3}` : testo3;
         if (evento.type === "CUSTOM" && evento.name === "consumo-fornitore" || ["RunStarted", "RunFinished", "RunError"].includes(evento.type)) caricaCacheSessioneDalRegistro();
         if (evento.type === "ToolCallStart") state.realSession.eventiAttrezzi.push({ type: "ToolCallStart", toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), giro: state.realSession.runCount || null });
         else if (evento.type === "ToolCallArgs") state.realSession.eventiAttrezzi.push({ type: "ToolCallArgs", toolCallId: evento.toolCallId, delta: evento.delta });
-        else if (evento.type === "ToolCallResult") state.realSession.eventiAttrezzi.push({ type: "ToolCallResult", toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error) });
+        else if (evento.type === "ToolCallResult") state.realSession.eventiAttrezzi.push({ type: "ToolCallResult", toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error), uscita: uscitaDaTestoAttrezzo(evento.content) });
         if (evento.type === "RunFinished" || evento.type === "RunError" || evento.type === "ComandoUtenteFinito") state.realSession.giroComandoDiretto = false;
         segnalaRigaSessioneViva();
         switch (evento.type) {
@@ -30553,9 +32575,8 @@ ${testo3}` : testo3;
             break;
           }
           case "RunStarted": {
-            streamingAutoFollow = true;
+            if (!state.realSession.deferHistoricalRendering) fermaFondoRipristino?.();
             contextMonitor?.setRunning(true);
-            streamingLastTargetTop = null;
             const eUnComandoDellaPersona = typeof evento.input?.comandoDiretto === "string" && evento.input.comandoDiretto.trim() !== "";
             if (!eUnComandoDellaPersona) {
               if (Number.isFinite(state.realSession.usage?.cached_tokens) && Number.isFinite(state.realSession.usage?.prompt_tokens) && state.realSession.usage.prompt_tokens > 0) state.realSession.cachePromptPrecedenti += state.realSession.usage.prompt_tokens;
@@ -30650,11 +32671,15 @@ ${testo3}` : testo3;
             const testaRagionamento = bubble.article.querySelector(":scope > .talos-activity__head");
             testaRagionamento?.addEventListener("click", () => {
               testaRagionamento.dataset.toccatoDaUtente = "si";
+              chiediDisegnoRagionamento(bubble.article);
             });
+            testoRagionamentoPerScheda.set(bubble.article, "");
             state.realSession.ragionamentoBubble.set(evento.messageId, {
               ...bubble,
               grezzo: "",
-              renderStato: { prefisso: null, nodiCoda: [] },
+              /* ⛔ 16/09: lo stato del render NON sta più qui. Sta in `montaggioRagionamentoPerScheda`,
+                 agganciato alla SCHEDA: `ReasoningMessageEnd` cancella questa voce dalla mappa, e il
+                 corpo va montato anche dopo — quando la persona apre una scheda già finita. */
               inizio: inizioRagionamentoDaRegistrare(evento.messageId),
               apertaDaSola: false
             });
@@ -30664,18 +32689,21 @@ ${testo3}` : testo3;
             const voce = state.realSession.ragionamentoBubble.get(evento.messageId);
             if (!voce) break;
             voce.grezzo += evento.delta;
+            testoRagionamentoPerScheda.set(voce.article, voce.grezzo);
             if (voce.article.hidden && voce.grezzo.trim() !== "") mostraRagionamento(voce);
             else if (voce.vivo) aggiornaArgomentoRagionamento(voce);
-            if (!state.realSession.deferHistoricalRendering) {
-              renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
-              if (ragionamentoAperto(voce.article)) scrollStreamingOutput(voce.article);
+            if (!state.realSession.deferHistoricalRendering && ragionamentoAperto(voce.article)) {
+              chiediDisegnoRagionamento(voce.article);
+              scrollStreamingOutput(voce.article);
             }
             break;
           }
           case "ReasoningMessageEnd": {
             const voce = state.realSession.ragionamentoBubble.get(evento.messageId);
-            if (voce && state.realSession.deferHistoricalRendering) {
-              renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
+            if (voce) {
+              testoRagionamentoPerScheda.set(voce.article, voce.grezzo);
+              if (ragionamentoAperto(voce.article)) chiediDisegnoRagionamento(voce.article);
+              else depositaTestoRagionamento(voce.article);
             }
             const eraAperto = Boolean(voce && !voce.chiuso);
             if (voce) chiudiRagionamento(voce);
@@ -31559,6 +33587,7 @@ ${testo3}` : testo3;
           window.clearInterval(fermaSeFinito);
           conversation.classList.remove("is-restoring");
           scroller?.removeEventListener("scroll", suScroll);
+          if (fermaFondoRipristino === smetti) fermaFondoRipristino = null;
         };
         function suScroll() {
           if (nostro || smesso || !scroller) return;
@@ -31584,6 +33613,8 @@ ${testo3}` : testo3;
             }
           }
         }, 200);
+        fermaFondoRipristino?.();
+        fermaFondoRipristino = smetti;
         const inizioRipristino = performance.now();
         const reteDiSicurezza = () => {
           if (smesso) return;
@@ -31636,6 +33667,7 @@ ${testo3}` : testo3;
         });
         setView("chat");
         closePanels();
+        collegaSeguiFondoConversazione();
         collegaEventiSessione(sessionId, generation);
         void caricaFigliSessione();
         if (state.realSession.deferHistoricalRendering) mantieniFondoDuranteRipristino(generation);
@@ -31777,8 +33809,8 @@ ${testo3}` : testo3;
         const valori = await Promise.all(liste.map(([, rotta, campo2]) => conta(`/api/v1/sessions/${encodeURIComponent(id)}/${rotta}`, campo2)));
         if (state.realSession.id !== id) return;
         const conteggi = {};
-        liste.forEach(([chiave], i) => {
-          conteggi[chiave] = valori[i];
+        liste.forEach(([chiave], i2) => {
+          conteggi[chiave] = valori[i2];
         });
         aggiornaConteggiNav(radice2, conteggi);
       }
@@ -31893,16 +33925,16 @@ ${testo3}` : testo3;
           contenitore.dataset.tastiera = "si";
           contenitore.addEventListener("keydown", (event) => {
             const tutte = [...contenitore.querySelectorAll(".talos-session-item")];
-            const i = tutte.indexOf(document.activeElement);
-            if (i < 0 || tutte.length === 0) return;
-            let j = i;
-            if (event.key === "ArrowDown") j = Math.min(tutte.length - 1, i + 1);
-            else if (event.key === "ArrowUp") j = Math.max(0, i - 1);
+            const i2 = tutte.indexOf(document.activeElement);
+            if (i2 < 0 || tutte.length === 0) return;
+            let j = i2;
+            if (event.key === "ArrowDown") j = Math.min(tutte.length - 1, i2 + 1);
+            else if (event.key === "ArrowUp") j = Math.max(0, i2 - 1);
             else if (event.key === "Home") j = 0;
             else if (event.key === "End") j = tutte.length - 1;
             else return;
             event.preventDefault();
-            fermataRiga(tutte[i], false);
+            fermataRiga(tutte[i2], false);
             fermataRiga(tutte[j], true);
             tutte[j].focus();
           });
@@ -33789,8 +35821,8 @@ ${blocchi.join("\n\n")}` : testa;
         riconoscimentoVocale.onresult = (event) => {
           let finale = "";
           let interim = "";
-          for (let i = 0; i < event.results.length; i += 1) {
-            const risultato = event.results[i];
+          for (let i2 = 0; i2 < event.results.length; i2 += 1) {
+            const risultato = event.results[i2];
             if (risultato.isFinal) finale += risultato[0].transcript;
             else interim += risultato[0].transcript;
           }
@@ -34269,8 +36301,8 @@ ${testo3}`;
         }
         try {
           const chiavi = [];
-          for (let i = 0; i < window.localStorage.length; i += 1) {
-            const k = window.localStorage.key(i);
+          for (let i2 = 0; i2 < window.localStorage.length; i2 += 1) {
+            const k = window.localStorage.key(i2);
             if (/^talos/i.test(k)) chiavi.push(k);
           }
           for (const k of chiavi) window.localStorage.removeItem(k);
@@ -35395,19 +37427,19 @@ function reviewFrame(id, width = 640, height = 360, atSeconds = 0, overrides = {
   const input = makeInput(stage, { ...config, scene: id, parameters: { ...config.parameters, ...overrides } });
   const state = definition.createState(SEED);
   const geometry = definition.prepare({ state, input }).geometry;
-  for (let i = 0; i < Math.round(atSeconds * 20); i += 1) definition.update({ state, input, stepMs: 50 });
+  for (let i2 = 0; i2 < Math.round(atSeconds * 20); i2 += 1) definition.update({ state, input, stepMs: 50 });
   definition.draw({ context, state, geometry });
   const pixels = context.getImageData(0, 0, width, height).data;
   let nonzero = 0;
-  let hash = 2166136261;
+  let hash2 = 2166136261;
   for (let p = 0; p < pixels.length; p += 4) {
     if (pixels[p + 3]) nonzero += 1;
-    hash = Math.imul(hash ^ pixels[p], 16777619);
-    hash = Math.imul(hash ^ pixels[p + 1], 16777619);
-    hash = Math.imul(hash ^ pixels[p + 2], 16777619);
-    hash = Math.imul(hash ^ pixels[p + 3], 16777619);
+    hash2 = Math.imul(hash2 ^ pixels[p], 16777619);
+    hash2 = Math.imul(hash2 ^ pixels[p + 1], 16777619);
+    hash2 = Math.imul(hash2 ^ pixels[p + 2], 16777619);
+    hash2 = Math.imul(hash2 ^ pixels[p + 3], 16777619);
   }
-  return { id, nonzero, hash: hash >>> 0 };
+  return { id, nonzero, hash: hash2 >>> 0 };
 }
 function initTalosDesktopBackground() {
   if (window.__talosDesktopMotion?.initialized) return window.__talosDesktopMotion;

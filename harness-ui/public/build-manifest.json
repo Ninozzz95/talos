@@ -8,13 +8,13 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 1825533,
-      "sha256": "660cf043e5b062dfc6acad27076991f2323408460a690add816fe5d0feda12e3"
+      "bytes": 1907686,
+      "sha256": "58bf05573227af4e05a7941a27962aa5542eaaee532ed713c4af7417b9c2d1f8"
     },
     {
       "path": "asset-manifest.json",
-      "bytes": 4623,
-      "sha256": "eb57dc577abc611f0ddc386433cb9473aaddc0f774e59e80325d1ba7b96d50df"
+      "bytes": 5121,
+      "sha256": "eef3a96e2bf8363b20e94b13d7cacff9d28697f676211b335e921b714c45312e"
     },
     {
       "path": "avvio.js",
@@ -73,13 +73,13 @@
     },
     {
       "path": "index.html",
-      "bytes": 359440,
-      "sha256": "e056ea0350a720ae6c0ab882b84e3b28e6ee7aa22c27300567e093a9ab1c4369"
+      "bytes": 359370,
+      "sha256": "ee5d84291451e67306b5d79bc9de054322816e09fd6edd795f1ecfa887d3a0a9"
     },
     {
       "path": "styles.css",
-      "bytes": 345027,
-      "sha256": "467cff0141d594e9733b389118ce41a6ad96a032bef6fabc9032b028a0047c73"
+      "bytes": 350397,
+      "sha256": "dd7b9dbd901f63a2568ff600a65f97506430547ac14c2e4b361b8ca7b69d5ef9"
     },
     {
       "path": "talos/brand/logo-short.svg",
@@ -120,6 +120,21 @@
       "path": "vendor/prism/prism.js",
       "bytes": 57892,
       "sha256": "eb466a02d4908021df6ad9c9d07066d5932d4d842c825807b738aff8f4af50f2"
+    },
+    {
+      "path": "vendor/shell-quote/LICENSE-shell-quote",
+      "bytes": 1095,
+      "sha256": "b5c029ec632540485bfb1ed24d4888e412235f1a6be4ab37622a12b53e71cc5f"
+    },
+    {
+      "path": "vendor/shell-quote/README.md",
+      "bytes": 2959,
+      "sha256": "a914e1e15d7e847c76556faa3f6490e65bf613c71cb355e89c517af56569b1d3"
+    },
+    {
+      "path": "vendor/shell-quote/parse.js",
+      "bytes": 8379,
+      "sha256": "94679dd3db989ec23f15dccb02ed03f6d7c7688990feac8539220c5056ced8b9"
     },
     {
       "path": "vendor/tanstack/LICENSE-virtual-core",

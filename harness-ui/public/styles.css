@@ -1648,7 +1648,7 @@ select:focus-visible,
   width: 100%;
   padding-bottom: var(--stream-follow-space, 0px);
 }
-.talos-chat-foot > * {
+.talos-chat-foot > *:not(#pannelloTerminale) {
   --talos-colonna-chat:min(calc(92px + var(--talos-measure-w)), 100%);
   --talos-testo-chat:min(var(--talos-measure-w), calc(var(--talos-colonna-chat) - var(--talos-turno-coda)));
   --talos-larghezza-piede:min(var(--composer-max-w, var(--talos-testo-chat)), 100%);
@@ -2165,7 +2165,7 @@ button.talos-turn-spine__tick:focus-visible {
 :root.chat-full-width .talos-conversation__column {
   max-width: none;
 }
-:root.chat-full-width .talos-chat-foot > * {
+:root.chat-full-width .talos-chat-foot > *:not(#pannelloTerminale) {
   --talos-colonna-chat:100%;
   width: calc(100% - var(--talos-turno-coda));
   max-width: none;
@@ -2683,6 +2683,37 @@ a.talos-button {
   border-color: var(--talos-accent-border);
   background: var(--talos-accent-soft);
   color: var(--talos-accent-text);
+}
+.talos-browser__stato {
+  border-left: 3px solid var(--talos-border);
+}
+.talos-browser__stato[data-stato=retrying] {
+  border-left-color: var(--talos-warning);
+}
+.talos-browser__stato[data-stato=error],
+.talos-browser__stato[data-stato=unreachable] {
+  border-left-color: var(--talos-danger);
+}
+.talos-browser__stato[data-stato=cancelled],
+.talos-browser__stato[data-stato=riposo] {
+  border-left-color: var(--talos-muted);
+}
+.talos-browser__stato [data-stato-titolo] {
+  margin: 0;
+}
+.talos-browser__stato [hidden] {
+  display: none;
+}
+#browserSchede [data-stato-scheda=loading] .talos-tabstrip__icona,
+#browserSchede [data-stato-scheda=retrying] .talos-tabstrip__icona {
+  color: var(--talos-warning);
+}
+#browserSchede [data-stato-scheda=error] .talos-tabstrip__icona,
+#browserSchede [data-stato-scheda=unreachable] .talos-tabstrip__icona {
+  color: var(--talos-danger);
+}
+#browserSchede [data-stato-scheda=cancelled] .talos-tabstrip__titolo {
+  opacity: .65;
 }
 .talos-browser__testo-pulito {
   white-space: pre-wrap;
@@ -3549,10 +3580,61 @@ a.talos-button {
   gap: 8px;
 }
 .talos-figlia__vuoto,
-.talos-figlia__nota {
+.talos-figlia__nota,
+.talos-figlia__scheletro {
   color: var(--talos-muted);
   font-size: 12px;
   line-height: 1.5;
+}
+.talos-figlia__corpo :is(h1, h2, h3, h4) {
+  font-size: 13.5px;
+  line-height: 1.35;
+  margin: 6px 0 4px;
+}
+.talos-figlia__corpo :is(p, ul, ol, blockquote, table) {
+  margin: 4px 0;
+}
+.talos-figlia__corpo :is(ul, ol) {
+  padding-left: 18px;
+}
+.talos-figlia__corpo blockquote {
+  margin-left: 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--talos-border-strong);
+  color: var(--talos-muted);
+}
+.talos-figlia__corpo table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+.talos-figlia__corpo :is(th, td) {
+  border: 1px solid var(--talos-border);
+  padding: 3px 6px;
+  font-size: 12px;
+}
+.talos-figlia__corpo .code-block {
+  max-width: 100%;
+  margin: 6px 0;
+}
+.talos-figlia__corpo .code-block pre {
+  max-height: 320px;
+  overflow: auto;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.talos-figlia__corpo .code-block-head {
+  font-size: 11px;
+}
+.talos-figlia__corpo code {
+  overflow-wrap: anywhere;
+}
+.talos-figlia__ragionamento {
+  color: var(--talos-muted);
+  font-size: 12px;
+  line-height: 1.55;
 }
 .talos-figlia__errore {
   color: var(--talos-danger, var(--talos-text));
@@ -3627,12 +3709,73 @@ a.talos-button {
 .talos-process + .talos-process {
   margin-top: 8px;
 }
+.talos-process__testa {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
 .talos-process__cmd {
+  flex: 1;
+  min-width: 0;
   font-family: var(--talos-font-mono);
   font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.talos-process__cmd .talos-cmd__eseguibile {
+  color: var(--talos-text);
+  font-weight: 600;
+}
+.talos-process__cmd .talos-cmd__sottocomando {
+  color: var(--talos-accent-text);
+  font-weight: 600;
+}
+.talos-process__cmd .talos-cmd__flag {
+  color: var(--talos-info);
+}
+.talos-process__cmd .talos-cmd__percorso {
+  color: var(--talos-assistant-text);
+}
+.talos-process__cmd .talos-cmd__url {
+  color: var(--talos-info);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.talos-process__cmd .talos-cmd__argomento {
+  color: var(--talos-assistant-text);
+}
+.talos-process__cmd .talos-cmd__operatore {
+  color: var(--talos-accent);
+  font-weight: 600;
+}
+.talos-process__cmd .talos-cmd__commento {
+  color: var(--talos-muted);
+  font-style: italic;
+}
+.talos-process__cmd .talos-cmd__grezzo {
+  color: var(--talos-assistant-text);
+}
+.talos-process .talos-cmd__icona {
+  flex: none;
+  margin-top: 2px;
+  color: var(--talos-muted);
+}
+.talos-process__apri {
+  flex: none;
+  padding: 2px 6px;
+  min-height: 0;
+}
+.talos-process__apri .i {
+  transition: transform var(--talos-motion-duration-control,.14s) var(--talos-motion-ease);
+}
+.talos-process__apri[aria-expanded=true] .i {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .talos-process__apri .i {
+    transition: none;
+  }
 }
 .talos-process__meta {
   display: flex;
@@ -3641,6 +3784,47 @@ a.talos-button {
   margin-top: 6px;
   font-size: 12px;
   color: var(--talos-muted);
+  flex-wrap: wrap;
+}
+.talos-process__stato {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.talos-process__misura {
+  white-space: nowrap;
+}
+.talos-process__ora {
+  white-space: nowrap;
+  font-size: 11px;
+  opacity: .8;
+}
+@keyframes talos-process-battito {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: .55;
+  }
+}
+.talos-process[data-stato=in-corso] .talos-process__stato,
+.talos-process[data-stato=in-avvio] .talos-process__stato {
+  animation: talos-process-battito var(--talos-motion-duration-pulse,1.6s) var(--talos-motion-ease) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .talos-process .talos-process__stato {
+    animation: none;
+  }
+}
+.talos-process__dettaglio {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--talos-border);
+}
+.talos-process__dettaglio .talos-kv__v {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 .talos-process__stall {
   margin-top: 8px;
@@ -3650,6 +3834,34 @@ a.talos-button {
   color: var(--talos-warning);
   font-size: 12.5px;
   border: 1px solid var(--talos-warning-border);
+}
+.talos-process[data-selezionato=si] {
+  border-color: var(--talos-accent-border);
+  background: var(--talos-panel-soft);
+}
+.talos-process:focus-visible {
+  outline: var(--talos-focus-width) solid var(--talos-ring);
+  outline-offset: 2px;
+}
+.talos-process-lista {
+  display: block;
+}
+.talos-process-filtro {
+  margin-bottom: 10px;
+}
+.talos-process-altri {
+  margin-top: 10px;
+}
+.talos-process-annuncio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 .talos-page {
   flex: 1 1 auto;
@@ -5429,6 +5641,9 @@ a.talos-button {
   border: 0;
   border-radius: var(--talos-radius-card);
   background: #fff;
+}
+.talos-browser__live iframe[hidden] {
+  display: none;
 }
 .talos-browser__annotazioni {
   padding: var(--talos-space-md);
@@ -10693,6 +10908,10 @@ dialog.command-dialog .tool-chips .status-chip,
 /* src/styles/terminale-basso.css */
 .talos-terminale-basso {
   --talos-terminale-h: 320px;
+  width: auto;
+  max-width: none;
+  margin-inline: calc(-1 * var(--talos-chat-gutter));
+  margin-bottom: -12px;
   display: flex;
   flex-direction: column;
   height: var(--talos-terminale-h);
@@ -10740,6 +10959,9 @@ dialog.command-dialog .tool-chips .status-chip,
   min-height: 0;
   border: 0;
   border-radius: 0;
+}
+:root.chat-full-width .talos-terminale-basso {
+  margin-inline: calc(-1 * (var(--talos-cronologia-ingombro) + var(--talos-turno-coda) + var(--talos-respiro-pieno))) calc(-1 * var(--talos-respiro-pieno));
 }
 #pillTerminale[aria-expanded=true] {
   border-color: var(--talos-accent-strong, var(--talos-accent));
