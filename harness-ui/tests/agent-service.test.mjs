@@ -2276,6 +2276,69 @@ test('⭐⭐⭐ onLibreriaElimina: cartella+id VERI passati a eliminaVoceFn, il 
   assert.equal(risultato.esito, '«via.md» has been removed from the Library.');
 });
 
+// --- ⭐ (16/09/2026) library_delete a LOTTI (richiesta owner): `ids` è un ramo NUOVO ---
+
+test('⭐⭐⭐ onLibreriaElimina con `ids` a lotti: eliminaVociFn riceve SOLO gli ids (id non si processa a parte), l\'esito elenca i nomi', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  let argomentiRicevuti;
+  let eliminaVoceChiamata = false;
+  const eliminaVociFn = async (argomenti) => {
+    argomentiRicevuti = argomenti;
+    return { eliminate: [{ id: 'lib-1', nome: 'uno.md' }, { id: 'lib-2', nome: 'due.md' }], assenti: [] };
+  };
+  const eliminaVoceFn = async () => { eliminaVoceChiamata = true; return { id: 'lib-1', nome: 'uno.md' }; };
+
+  await avviaSessione({ cartella: '/tmp/progetto-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, eliminaVociFn, eliminaVoceFn });
+
+  const risultato = await catturato.onLibreriaElimina({ id: 'lib-1', ids: ['lib-1', 'lib-2'] });
+  assert.deepEqual(argomentiRicevuti, { cartella: '/tmp/progetto-vero', ids: ['lib-1', 'lib-2'] }, 'via il lotto, e SOLO gli ids');
+  assert.equal(eliminaVoceChiamata, false, 'la via batch non tocca il flusso singolo');
+  assert.equal(risultato.ok, true);
+  assert.equal(risultato.esito, 'Removed 2 files from the Library: «uno.md», «due.md».');
+});
+
+test('⭐⭐ onLibreriaElimina a lotti: un id assente è ONESTO (in assenti, mai un guasto né un successo inventato)', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const eliminaVociFn = async () => ({ eliminate: [{ id: 'lib-1', nome: 'uno.md' }], assenti: ['lib-fantasma'] });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, eliminaVociFn });
+
+  const risultato = await catturato.onLibreriaElimina({ id: 'lib-1', ids: ['lib-1', 'lib-fantasma'] });
+  assert.equal(risultato.ok, true);
+  assert.equal(risultato.esito, 'Removed 1 file from the Library: «uno.md». Not found in the Library (already gone?): lib-fantasma.');
+});
+
+test('⭐⭐ onLibreriaElimina: `ids` assente o array VUOTO ⇒ flusso singolo IDENTICO a prima, byte per byte', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const ricevuti = [];
+  const eliminaVoceFn = async (argomenti) => { ricevuti.push(argomenti); return { id: 'lib-1', nome: 'via.md' }; };
+  const eliminaVociFn = async () => { throw new Error('la via del lotto non deve essere toccata'); };
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, eliminaVoceFn, eliminaVociFn });
+
+  for (const argomenti of [{ id: 'lib-1' }, { id: 'lib-1', ids: [] }]) {
+    const risultato = await catturato.onLibreriaElimina(argomenti);
+    assert.equal(risultato.esito, '«via.md» has been removed from the Library.');
+  }
+  assert.deepEqual(ricevuti, [{ cartella: '/tmp/x', id: 'lib-1' }, { cartella: '/tmp/x', id: 'lib-1' }]);
+});
+
+test('⛔ AL CONTRARIO — onLibreriaElimina a lotti: richieste non valide (eliminaVociFn lancia) propagano l\'errore, mai un finto ok', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const eliminaVociFn = async () => { throw new Error('Ogni elemento di `ids` deve essere un id non vuoto (stringa).'); };
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, eliminaVociFn });
+
+  await assert.rejects(
+    () => catturato.onLibreriaElimina({ id: 'lib-1', ids: ['lib-1', 42] }),
+    /Ogni elemento di `ids`/,
+  );
+});
+
 test('⭐⭐⭐ onLibreriaEsporta: risolve il riferimento, legge la voce, la scrive nel workspace VERO con creaFileWorkspaceFn', async () => {
   let catturato;
   const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });

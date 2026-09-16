@@ -4740,6 +4740,24 @@ describe('talosLavora - Libreria, mutazioni (FASE N seconda fetta, dispatch vers
         })
     }
 
+    // ⭐ (16/09/2026) — LOTTO per library_delete (richiesta owner): il kernel non deve
+    // SAPERNE niente — gli argomenti (id ripetuto + ids) arrivano VERBATIM alla callback,
+    // e l'esito della callback è la riga che torna al modello. Nessun tocco al dispatch.
+    it('library_delete con `ids` a LOTTI: argomenti VERBATIM alla callback, l\'esito passa senza ritocchi', async () => {
+        const cartella = cartellaVuota(it)
+        const argomenti = { id: 'lib-1', ids: ['lib-1', 'lib-2'] }
+        const rete = reteDiRisposte(chiamataTool('library_delete', argomenti), CONCLUSO_SUBITO)
+        const ricevuti = []
+        const esito = await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['library_delete'],
+            onLibreriaElimina: async (spec) => { ricevuti.push(spec); return { ok: true, esito: 'Removed 2 files from the Library: «uno.md», «due.md».' } },
+        })
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.deepEqual(ricevuti, [argomenti])
+        const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
+        assert.equal(messaggioTool.content, 'Removed 2 files from the Library: «uno.md», «due.md».')
+    })
+
     it('⛔⛔⛔ AL CONTRARIO — PARITÀ: senza strumentiEstesi, zero riferimenti alle 3 mutazioni Libreria', async () => {
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(CONCLUSO_SUBITO)
