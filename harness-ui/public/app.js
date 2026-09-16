@@ -7156,6 +7156,13 @@ function sommarioSezione(visibili, totale2, sostantivo, pluraleEsplicito) {
   if (visibili === totale2) return plurale(totale2, sostantivo, pluraleEsplicito);
   return `${visibili} di ${plurale(totale2, sostantivo, pluraleEsplicito)}`;
 }
+function selezioneDopoBatch(selezionati, risultato) {
+  const dopo = new Set(Array.from(selezionati || [], (id) => String(id)));
+  for (const esito of Array.isArray(risultato?.esiti) ? risultato.esiti : []) {
+    if (esito?.ok === true) dopo.delete(String(esito.id));
+  }
+  return dopo;
+}
 function leggiPreferenze(chiave, storage = globalThis.localStorage) {
   try {
     const tutte = JSON.parse(storage?.getItem(CHIAVE_PREFERENZE) || "{}");
@@ -7234,7 +7241,18 @@ function montaSezione(schermo, config) {
   let stato = STATI2.get(schermo);
   if (!stato) {
     const pref = leggiPreferenze(config.chiave);
-    stato = { ...pref, query: String(config.queryIniziale || ""), filtro: config.filtri?.[0]?.id || "tutte", selezione: null, espanso: false, config, schermo };
+    stato = {
+      ...pref,
+      query: String(config.queryIniziale || ""),
+      filtro: config.filtri?.[0]?.id || "tutte",
+      selezione: null,
+      selezionateInBlocco: /* @__PURE__ */ new Set(),
+      batchInCorso: false,
+      batchEsito: "",
+      espanso: false,
+      config,
+      schermo
+    };
     STATI2.set(schermo, stato);
     costruisciScheletro(schermo, doc, stato);
   }
@@ -7300,11 +7318,25 @@ function costruisciScheletro(schermo, doc, stato) {
   aggiorna.type = "button";
   aggiorna.dataset.aggiorna = "";
   barra.append(campo2, cresci, ordine, segmento, aggiorna);
+  const blocco = nodo6(doc, "div", "td-bulk");
+  const etichettaTutte = nodo6(doc, "label", "td-bulk-select");
+  const selezionaTutte = nodo6(doc, "input");
+  selezionaTutte.type = "checkbox";
+  selezionaTutte.dataset.selezionaVisibili = "";
+  const testoTutte = nodo6(doc, "span", "", "Seleziona visibili");
+  etichettaTutte.append(selezionaTutte, testoTutte);
+  const conteggioBlocco = nodo6(doc, "span", "td-bulk-count", "0 selezionati");
+  const eliminaBlocco = nodo6(doc, "button", "talos-button talos-button--danger talos-button--sm", "Elimina selezionati");
+  eliminaBlocco.type = "button";
+  eliminaBlocco.dataset.eliminaSelezionati = "";
+  const esitoBlocco = nodo6(doc, "span", "td-bulk-status");
+  esitoBlocco.setAttribute("role", "status");
+  blocco.append(etichettaTutte, conteggioBlocco, eliminaBlocco, esitoBlocco);
   const filtri = nodo6(doc, "div", "td-filters");
   filtri.setAttribute("role", "group");
   filtri.setAttribute("aria-label", `Filtri ${config.nome}`);
   const risultati = nodo6(doc, "div", "td-results");
-  master.append(intro, barra, filtri, risultati);
+  master.append(intro, barra, blocco, filtri, risultati);
   const divisorio = nodo6(doc, "button", "td-divider");
   divisorio.type = "button";
   divisorio.hidden = true;
@@ -7321,12 +7353,31 @@ function costruisciScheletro(schermo, doc, stato) {
   sezione.append(spazio);
   if (pagina) pagina.replaceWith(sezione);
   else schermo.append(sezione);
-  stato.nodi = { sezione, spazio, master, intro, cerca, ordine, segmento, aggiorna, filtri, risultati, divisorio, dettaglio, statoRiga };
+  stato.nodi = {
+    sezione,
+    spazio,
+    master,
+    intro,
+    cerca,
+    ordine,
+    segmento,
+    aggiorna,
+    blocco,
+    selezionaTutte,
+    conteggioBlocco,
+    eliminaBlocco,
+    esitoBlocco,
+    filtri,
+    risultati,
+    divisorio,
+    dettaglio,
+    statoRiga
+  };
   collegaBarra(schermo, doc, stato);
   collegaDivisorio(doc, stato);
 }
 function collegaBarra(schermo, doc, stato) {
-  const { cerca, ordine, segmento, aggiorna } = stato.nodi;
+  const { cerca, ordine, segmento, aggiorna, selezionaTutte, eliminaBlocco } = stato.nodi;
   cerca.addEventListener("input", () => {
     stato.query = cerca.value;
     disegna(schermo, doc, stato);
@@ -7344,6 +7395,37 @@ function collegaBarra(schermo, doc, stato) {
     disegna(schermo, doc, stato);
   });
   aggiorna.addEventListener("click", () => stato.config.onAggiorna?.());
+  selezionaTutte.addEventListener("change", () => {
+    for (const id of stato.idsVisibili || []) {
+      if (selezionaTutte.checked) stato.selezionateInBlocco.add(id);
+      else stato.selezionateInBlocco.delete(id);
+    }
+    disegna(schermo, doc, stato);
+  });
+  eliminaBlocco.addEventListener("click", async () => {
+    if (stato.batchInCorso || typeof stato.config.eliminaInBlocco !== "function") return;
+    const ids = [...stato.selezionateInBlocco];
+    if (!ids.length) return;
+    const domanda = `Eliminare ${ids.length} ${ids.length === 1 ? "voce selezionata" : "voci selezionate"}?`;
+    const confermata = typeof stato.config.confermaEliminazioneInBlocco === "function" ? await stato.config.confermaEliminazioneInBlocco(ids) : doc.defaultView?.confirm?.(domanda) ?? false;
+    if (!confermata) return;
+    stato.batchInCorso = true;
+    stato.batchEsito = "Eliminazione in corso…";
+    disegna(schermo, doc, stato);
+    try {
+      const risultato = await stato.config.eliminaInBlocco(ids);
+      stato.selezionateInBlocco = selezioneDopoBatch(stato.selezionateInBlocco, risultato);
+      const riusciti = Number(risultato?.riusciti) || 0;
+      const falliti = Number(risultato?.falliti) || 0;
+      stato.batchEsito = falliti ? `${riusciti} eliminate, ${falliti} non eliminate.` : `${riusciti} ${riusciti === 1 ? "voce eliminata" : "voci eliminate"}.`;
+      await stato.config.onBatchCompletato?.(risultato);
+    } catch (errore) {
+      stato.batchEsito = errore?.message || "Eliminazione non riuscita.";
+    } finally {
+      stato.batchInCorso = false;
+      disegna(schermo, doc, stato);
+    }
+  });
   stato.nodi.filtri.addEventListener("click", (e) => {
     const b = e.target.closest?.("[data-filtro]");
     if (!b) return;
@@ -7481,12 +7563,37 @@ function disegnaCrudo(schermo, doc, stato) {
   const filtrate = filtraVoci(tutte, { query: stato.query, filtro: stato.filtro, filtri: config.filtri, cercaIn: config.cercaIn });
   const visibili = ordinaVoci(filtrate, stato.ordine, { titoloDi: config.titoloDi, quandoDi: config.quandoDi });
   stato.ultimeVisibili = visibili.length;
-  const { risultati, filtri: barraFiltri, segmento, statoRiga, aggiorna } = stato.nodi;
+  const {
+    risultati,
+    filtri: barraFiltri,
+    segmento,
+    statoRiga,
+    aggiorna,
+    blocco,
+    selezionaTutte,
+    conteggioBlocco,
+    eliminaBlocco,
+    esitoBlocco
+  } = stato.nodi;
   const errore = config.stato?.errore || null;
   const caricamento = Boolean(config.stato?.caricamento);
   aggiorna.hidden = typeof config.onAggiorna !== "function";
   aggiorna.disabled = caricamento;
   for (const b of segmento.querySelectorAll("[data-vista]")) b.setAttribute("aria-pressed", String(b.dataset.vista === stato.vista));
+  const batchAttivo = typeof config.eliminaInBlocco === "function";
+  const idsPresenti = new Set(tutte.filter((voce) => !voce?.__bozza).map((voce) => String(config.idDi(voce) ?? "")).filter(Boolean));
+  if (!caricamento && !errore) {
+    for (const id of stato.selezionateInBlocco) if (!idsPresenti.has(id)) stato.selezionateInBlocco.delete(id);
+  }
+  stato.idsVisibili = visibili.filter((voce) => !voce?.__bozza).map((voce) => String(config.idDi(voce) ?? "")).filter(Boolean);
+  const visibiliSelezionati = stato.idsVisibili.filter((id) => stato.selezionateInBlocco.has(id)).length;
+  blocco.hidden = !batchAttivo || idsPresenti.size === 0;
+  selezionaTutte.checked = stato.idsVisibili.length > 0 && visibiliSelezionati === stato.idsVisibili.length;
+  selezionaTutte.indeterminate = visibiliSelezionati > 0 && visibiliSelezionati < stato.idsVisibili.length;
+  selezionaTutte.disabled = stato.batchInCorso || stato.idsVisibili.length === 0;
+  conteggioBlocco.textContent = `${stato.selezionateInBlocco.size} selezionat${stato.selezionateInBlocco.size === 1 ? "a" : "e"}`;
+  eliminaBlocco.disabled = stato.batchInCorso || stato.selezionateInBlocco.size === 0;
+  esitoBlocco.textContent = stato.batchEsito;
   if (statoRiga) {
     statoRiga.textContent = errore || (caricamento ? config.caricando || "Carico…" : typeof config.sommarioStato === "function" ? config.sommarioStato(visibili.length, tutte.length) : sommarioSezione(visibili.length, tutte.length, config.sostantivo, config.pluraleEsplicito));
     statoRiga.setAttribute("role", errore ? "alert" : "status");
@@ -7506,6 +7613,7 @@ function disegnaCrudo(schermo, doc, stato) {
   }));
   if (fuocoFiltro) perId(barraFiltri, ".td-filter", "filtro", fuocoFiltro)?.focus({ preventScroll: true });
   const fuocoVoce = doc.activeElement?.closest?.(".td-card")?.dataset?.item;
+  const fuocoSelezione = Boolean(doc.activeElement?.matches?.(".td-card-select"));
   if (!visibili.length) {
     risultati.replaceChildren(disegnaVuoto(doc, stato, tutte.length));
   } else {
@@ -7513,7 +7621,10 @@ function disegnaCrudo(schermo, doc, stato) {
     for (const voce of visibili) contenitore.append(disegnaScheda(doc, stato, voce));
     risultati.replaceChildren(contenitore);
   }
-  if (fuocoVoce) perId(risultati, ".td-card", "item", fuocoVoce)?.querySelector(".td-card-open")?.focus({ preventScroll: true });
+  if (fuocoVoce) {
+    const scheda = perId(risultati, ".td-card", "item", fuocoVoce);
+    (fuocoSelezione ? scheda?.querySelector(".td-card-select") : scheda?.querySelector(".td-card-open"))?.focus({ preventScroll: true });
+  }
   const scelta = tutte.find((v) => String(config.idDi(v)) === String(stato.selezione));
   if (!scelta) stato.selezione = null;
   stato.nodi.spazio.dataset.detail = String(Boolean(scelta));
@@ -7553,6 +7664,7 @@ function disegnaScheda(doc, stato, voce) {
   const scheda = nodo6(doc, "article", `td-card ${config.famiglia || ""}`.trim());
   scheda.dataset.item = id;
   scheda.dataset.selected = String(String(stato.selezione) === id);
+  scheda.dataset.batchSelected = String(stato.selezionateInBlocco.has(id));
   const pezzi = config.scheda(voce, { doc, icona: (n, c) => icona3(doc, n, c), etichetta: (t2, tono) => etichetta(doc, t2, tono) }) || {};
   if (pezzi.dati) for (const [k, v] of Object.entries(pezzi.dati)) scheda.dataset[k] = String(v);
   const apri = nodo6(doc, "button", "td-card-open");
@@ -7576,6 +7688,20 @@ function disegnaScheda(doc, stato, voce) {
     stato.selezione = id;
     disegna(stato.schermo, doc, stato);
   });
+  if (typeof config.eliminaInBlocco === "function" && !voce?.__bozza && id) {
+    scheda.dataset.batchCapable = "true";
+    const scegli = nodo6(doc, "input", "td-card-select");
+    scegli.type = "checkbox";
+    scegli.checked = stato.selezionateInBlocco.has(id);
+    scegli.disabled = stato.batchInCorso;
+    scegli.setAttribute("aria-label", `Seleziona ${titolo2}`);
+    scegli.addEventListener("change", () => {
+      if (scegli.checked) stato.selezionateInBlocco.add(id);
+      else stato.selezionateInBlocco.delete(id);
+      disegna(stato.schermo, doc, stato);
+    });
+    scheda.append(scegli);
+  }
   scheda.append(apri);
   if (pezzi.adorno) scheda.append(pezzi.adorno);
   return scheda;
@@ -7975,6 +8101,7 @@ function servizioVoci({ schema, sessionId, rete } = {}) {
     leggi: typeof rete.leggi === "function" ? (id) => rete.leggi(voceUrl(id)) : null,
     modifica: (id, corpo) => rete.patch(voceUrl(id), corpo),
     elimina: (id) => rete.elimina(voceUrl(id)),
+    eliminaInBlocco: (ids) => rete.post(`${base}/batch`, { azione: "elimina", ids }),
     /* Lo stato ha la SUA porta: `PATCH {stato}` è un 400 apposta, perché marcare fatta non è
        modificare (contratto §3, e lo stesso confine che ha l'attrezzo del modello). */
     cambiaStato: (id, stato) => rete.post(`${voceUrl(id)}/stato`, { stato })
@@ -8378,9 +8505,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
   const m = magazzinoScrittura(schermo);
   const avvisa = notificatore(opzioni);
   const servizio = opzioni.servizio || servizioVoci({ schema, sessionId: opzioni.sessionId, rete: opzioni.rete });
-  const ricarica = () => {
-    (opzioni.onCambiata || opzioni.onAggiorna)?.();
-  };
+  const ricarica = () => (opzioni.onCambiata || opzioni.onAggiorna)?.();
   const titoloDi = (v) => String(v?.titolo ?? "").trim() || `${schema.sostantivo.charAt(0).toUpperCase()}${schema.sostantivo.slice(1)} senza titolo`;
   function letturaDi(id) {
     return m.voci.get(String(id ?? "")) || null;
@@ -8586,6 +8711,7 @@ ${testoDi(schema, intera)}`);
   const inModulo = (v) => Boolean(m.modulo) && (v?.__bozza === true || String(m.modulo.id) === String(v?.id));
   return {
     servizio,
+    ricarica,
     modulo: m.modulo,
     inModulo,
     voceIntera,
@@ -8708,6 +8834,8 @@ function montaNote(schermo, note, opzioni = {}) {
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: "Leggo le note…",
     onAggiorna: opzioni.onAggiorna,
+    eliminaInBlocco: scrivi2.servizio?.eliminaInBlocco,
+    onBatchCompletato: scrivi2.ricarica,
     // Una sola famiglia di note sul disco: nessun filtro finto per riempire la riga.
     filtri: scrivi2.filtriSenzaBozza([{ id: "tutte", etichetta: "Tutte" }]),
     queryIniziale: cerca,
@@ -8780,6 +8908,8 @@ function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: "Caricamento ricordi…",
     onAggiorna: opzioni.onAggiorna,
+    eliminaInBlocco: scrivi2.servizio?.eliminaInBlocco,
+    onBatchCompletato: scrivi2.ricarica,
     filtri: scrivi2.filtriSenzaBozza(GENERI_FILTRO.map(([id, etichetta2, genere]) => ({ id, etichetta: etichetta2, quando: genere ? (m) => m?.genere === genere : null }))),
     idDi: (m) => m?.id,
     titoloDi: (m) => m?.__bozza ? "Nuovo ricordo" : testiMemoria(m).titolo,
@@ -8851,6 +8981,8 @@ function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: "Caricamento attività…",
     onAggiorna: opzioni.onAggiorna,
+    eliminaInBlocco: scrivi2.servizio?.eliminaInBlocco,
+    onBatchCompletato: scrivi2.ricarica,
     filtri: scrivi2.filtriSenzaBozza([
       { id: "tutte", etichetta: "Tutte" },
       { id: "todo", etichetta: "Da fare", quando: (a) => a?.stato === "todo" },
@@ -8932,6 +9064,7 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
   const avvisa = notificatore(opzioni);
   const sessionId = opzioni.sessionId || "";
   const servizioVero = opzioni.azioni || azioniLibreria({ sessionId });
+  const eliminaInBlocco = sessionId && typeof opzioni.rete?.post === "function" ? (ids) => opzioni.rete.post(`/api/v1/sessions/${encodeURIComponent(sessionId)}/library/batch`, { azione: "elimina", ids }) : null;
   const magazzinoFile = magazzinoFileLibreria(schermo);
   const prov = (v) => provenienzaVoceLibreria(v, { nomeSessione: opzioni.nomeSessione });
   const ridisegna = () => aggiornaPaginaLibreria(schermo, voci, opzioni);
@@ -8965,6 +9098,8 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: "Caricamento Libreria…",
     onAggiorna: opzioni.onAggiorna,
+    eliminaInBlocco,
+    onBatchCompletato: opzioni.onCambiata || opzioni.onAggiorna,
     filtri: [
       { id: "tutte", etichetta: "Tutti" },
       { id: "uploaded", etichetta: "Caricati", quando: (v) => v?.origine === "uploaded" },
@@ -9083,7 +9218,8 @@ function servizioRicerche({ sessionId, rete } = {}) {
     pausa: (id) => rete.post(`${voceUrl(id)}/pausa`, {}),
     ripresa: (id) => rete.post(`${voceUrl(id)}/ripresa`, {}),
     riverifica: (id) => rete.post(`${voceUrl(id)}/riverifica`, {}),
-    elimina: (id) => rete.elimina(voceUrl(id))
+    elimina: (id) => rete.elimina(voceUrl(id)),
+    eliminaInBlocco: (ids) => rete.post(`${base}/batch`, { azione: "elimina", ids })
   };
 }
 function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
@@ -9110,8 +9246,8 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   const servizio = servizioRicerche({ sessionId: opzioni.sessionId, rete: opzioni.rete });
   const leggiDettaglio = typeof opzioni.leggiDettaglio === "function" ? opzioni.leggiDettaglio : servizio?.leggi ? async (voce) => (await servizio.leggi(voce?.id))?.ricerca ?? null : null;
   function ricarica() {
-    if (typeof opzioni.onAggiorna === "function") opzioni.onAggiorna();
-    else ridisegna();
+    if (typeof opzioni.onAggiorna === "function") return opzioni.onAggiorna();
+    return ridisegna();
   }
   function aggiornaVoceInElenco(aggiornata) {
     if (!aggiornata?.id) return;
@@ -9270,6 +9406,8 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: "Caricamento ricerche…",
     onAggiorna: opzioni.onAggiorna,
+    eliminaInBlocco: servizio?.eliminaInBlocco,
+    onBatchCompletato: ricarica,
     /*
      * ⛔ QUATTRO filtri e non otto. Gli stati sono otto, ma un filtro per ognuno darebbe una riga
      *   di bottoni che nessuno legge, e quattro di essi direbbero sempre zero. Le domande che una
@@ -17437,13 +17575,18 @@ function montaMiglioraPrompt({
   chiedi,
   leggiPrompt,
   applica: applica2,
+  copiaTesto = async (testo3) => {
+    const appunti = globalThis.navigator?.clipboard;
+    if (!appunti || typeof appunti.writeText !== "function") throw new Error("CLIPBOARD_NOT_AVAILABLE");
+    await appunti.writeText(testo3);
+  },
   modello = "",
   onChiudi = () => {
   },
   document: doc = globalThis.document
 } = {}) {
-  if (typeof chiedi !== "function" || typeof leggiPrompt !== "function" || typeof applica2 !== "function") {
-    throw new TypeError("MiglioraPrompt richiede chiedi, leggiPrompt e applica.");
+  if (typeof chiedi !== "function" || typeof leggiPrompt !== "function" || typeof applica2 !== "function" || typeof copiaTesto !== "function") {
+    throw new TypeError("MiglioraPrompt richiede chiedi, leggiPrompt, applica e copiaTesto.");
   }
   let stato = "scelta";
   let profondita = PROFONDITA_PREDEFINITA;
@@ -17595,11 +17738,32 @@ function montaMiglioraPrompt({
   aggiungi.type = "button";
   aggiungi.dataset.miglioraAggiungi = "";
   aggiungi.addEventListener("click", () => decidi("aggiungi"));
+  const copiaBtn = elemento("button", "talos-button talos-button--secondary talos-button--sm", "Copia");
+  copiaBtn.type = "button";
+  copiaBtn.dataset.miglioraCopia = "";
+  const copiaStato = elemento("span", null, "");
+  copiaStato.dataset.miglioraCopiaStato = "";
+  copiaStato.setAttribute("role", "status");
+  copiaStato.setAttribute("aria-live", "polite");
+  copiaStato.style.cssText = "align-self:center;color:var(--talos-muted);font-size:var(--talos-font-size-xs)";
+  copiaBtn.addEventListener("click", async () => {
+    if (!esito || copiaBtn.disabled) return;
+    copiaBtn.disabled = true;
+    copiaStato.textContent = "";
+    try {
+      await copiaTesto(esito.promptMigliorato);
+      copiaStato.textContent = "Copiato";
+    } catch {
+      copiaStato.textContent = "Copia non riuscita";
+    } finally {
+      copiaBtn.disabled = false;
+    }
+  });
   const sostituisci = elemento("button", "talos-button talos-button--primary talos-button--sm", "Sostituisci");
   sostituisci.type = "button";
   sostituisci.dataset.miglioraSostituisci = "";
   sostituisci.addEventListener("click", () => decidi("sostituisci"));
-  azioni.append(annulla, aggiungi, sostituisci);
+  azioni.append(copiaStato, annulla, copiaBtn, aggiungi, sostituisci);
   const corpo = elemento("div");
   corpo.dataset.miglioraCorpo = "";
   corpo.style.cssText = "display:flex;flex-direction:column;gap:var(--talos-space-sm);flex:1 1 auto;min-height:0;overflow:hidden";
@@ -17646,6 +17810,7 @@ function montaMiglioraPrompt({
       return;
     }
     const mio = ++giro;
+    copiaStato.textContent = "";
     stato = "attesa";
     disegna2();
     try {
@@ -17676,6 +17841,7 @@ function montaMiglioraPrompt({
     stato = "scelta";
     esito = null;
     errore = "";
+    copiaStato.textContent = "";
     radice2.hidden = false;
     disegna2();
     const scelto = bottoniProfondita.find((bottone5) => bottone5.dataset.miglioraProfondita === profondita);
@@ -17687,6 +17853,7 @@ function montaMiglioraPrompt({
     stato = "scelta";
     esito = null;
     errore = "";
+    copiaStato.textContent = "";
     disegna2();
     onChiudi();
   }
@@ -19781,8 +19948,8 @@ var init_app = __esm({
       }
       collegaSeguiFondoConversazione();
       const RITMO_STREAMING = {
-        typewriter: { caratteriAlSecondo: 160, ritardoMassimoMs: 300, perParola: false },
-        fade: { caratteriAlSecondo: 140, ritardoMassimoMs: 350, perParola: true, dissolvenzaMs: 420 }
+        typewriter: { perParola: false },
+        fade: { perParola: true, dissolvenzaMs: 420 }
       };
       function modalitaAnimazioneStreaming() {
         if (state.realSession.deferHistoricalRendering) return "none";
@@ -19796,28 +19963,18 @@ var init_app = __esm({
       }
       function avanzaRitmoStreaming(statoRender, testo3, modalita, ora) {
         const ritmo = RITMO_STREAMING[modalita];
-        const arretrato = testo3.length - statoRender.mostrato;
-        if (arretrato <= 0) {
-          statoRender.ultimoTickMs = ora;
-          return 0;
-        }
-        const dtMs = Math.min(100, Math.max(0, ora - (statoRender.ultimoTickMs ?? ora)));
+        const precedente = statoRender.mostrato;
+        const rivelati = testo3.length - precedente;
         statoRender.ultimoTickMs = ora;
-        const velocita = Math.max(ritmo.caratteriAlSecondo, arretrato / (ritmo.ritardoMassimoMs / 1e3));
-        let passo = Math.min(arretrato, Math.max(1, Math.ceil(velocita * dtMs / 1e3)));
-        if (dtMs === 0 && statoRender.ultimoTickMs !== null) passo = Math.min(passo, 1);
-        let prossimo = statoRender.mostrato + passo;
+        if (rivelati <= 0) return 0;
+        statoRender.mostrato = testo3.length;
         if (ritmo.perParola) {
-          const fineParola = testo3.slice(prossimo).search(/\s/);
-          prossimo = fineParola === -1 ? testo3.length : prossimo + fineParola;
-          const nuoveParole = contaParole(testo3.slice(statoRender.mostrato, prossimo));
+          const nuoveParole = contaParole(testo3.slice(precedente));
           for (let k = 0; k < nuoveParole; k += 1) statoRender.paroleRecenti.push(ora);
           const soglia = ora - ritmo.dissolvenzaMs;
           while (statoRender.paroleRecenti.length > 0 && statoRender.paroleRecenti[0] < soglia) statoRender.paroleRecenti.shift();
           if (statoRender.paroleRecenti.length > 400) statoRender.paroleRecenti.splice(0, statoRender.paroleRecenti.length - 400);
         }
-        const rivelati = prossimo - statoRender.mostrato;
-        statoRender.mostrato = prossimo;
         return rivelati;
       }
       function avvolgiParoleRecenti(copia, tempi, ora) {
@@ -23175,6 +23332,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
               errore,
               caricamento,
               sessionId,
+              rete: reteVociDellaPersona(),
               notifica: toast,
               // 11/09 lotto E: la rinomina riuscita esce con «Annulla», non come nota di stato
               onAggiorna: () => caricaPannelloLibreria({ pagina: true }),
@@ -35898,9 +36056,6 @@ function montaPonteLegacy(documentObj = document) {
 // src/main.js
 montaPonteLegacy(document);
 await Promise.resolve().then(() => (init_app(), app_exports));
-if (!window.__talosHarnessHost) {
-  document.documentElement.dataset.talosStreamingAnimation = "none";
-}
 var { initTalosDesktopBackground: initTalosDesktopBackground2 } = await Promise.resolve().then(() => (init_desktop_background(), desktop_background_exports));
 initTalosDesktopBackground2();
 var { montaAnimazioniMockup: montaAnimazioniMockup2 } = await Promise.resolve().then(() => (init_animazioni_mockup(), animazioni_mockup_exports));
