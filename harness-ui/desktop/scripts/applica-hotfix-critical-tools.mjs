@@ -56,8 +56,8 @@ export function trasformaKernelCriticalTools(sorgente) {
 
   testo = sostituisciUnaVolta(
     testo,
-    "                if (nome === 'leggi') {",
-    `${firma}\n                if (nome === 'prova' && (\n                    String(argomenti.codice_prova ?? argomenti.codiceProva ?? '').trim()\n                    || ['libera', 'path'].includes(String(argomenti.tipo ?? '').trim().toLowerCase())\n                )) {\n                    esito = 'REFUSED. Arbitrary prova code/materialization is disabled by the desktop security hotfix. Use a structured prova mode; no probe file was created or executed.'\n                }\n                else if (nome === 'leggi') {`,
+    "                else if (nome === 'leggi') {",
+    `${firma}\n                else if (nome === 'prova' && (\n                    String(argomenti.codice_prova ?? argomenti.codiceProva ?? '').trim()\n                    || ['libera', 'path'].includes(String(argomenti.tipo ?? '').trim().toLowerCase())\n                )) {\n                    esito = 'REFUSED. Arbitrary prova code/materialization is disabled by the desktop security hotfix. Use a structured prova mode; no probe file was created or executed.'\n                }\n                else if (nome === 'leggi') {`,
     'prova: fail closed prima del dispatch',
   )
 
