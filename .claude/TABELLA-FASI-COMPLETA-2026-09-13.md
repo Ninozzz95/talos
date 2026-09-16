@@ -171,6 +171,40 @@ senza il motore sarebbe una finestrella che incolla testo con più passaggi. ⛔
 
 ---
 
+# FASE 3-ter · PO-26 — Una cartella dati sola, fuori dal workspace (domanda dell'owner del 16/09, DA APPROVARE)
+
+**Cosa succede oggi, misurato:** l'app scrive nella **radice del workspace** nove nomi diversi: `.harness-ui-library`
+(`library-store.mjs:55`), `.harness-ui-research` (`research-store.mjs:60`), `.notes-store`, `.tasks-store`, `.memory-store`,
+`.harness-ui-plugins`, `.harness-ui-skills`, `.harness-ui-hooks.json`, `.harness-ui-mcp.json` — tutti `join(cartella, NOME)`,
+tutti elencati a mano come protetti in `path-policy.mjs:35-40`. L'audit del 16/09 sul Desktop ha lasciato
+`Desktop\.harness-ui-library\lib-<uuid>` ×3; l'11/09 l'owner aveva già dovuto ripristinarle dal Cestino per finire BC-21/BC-25.
+Lo store delle sessioni invece sta già **fuori**: `%APPDATA%\TALOS\sessions\` nell'app (`TALOS_DESKTOP_DATA_DIR`,
+`runtime.mjs:58`), `harness-ui/.sessions-store/` sul 4174.
+
+**Come fanno gli altri (ricerca 16/09/2026):** Claude Code tiene tutto ciò che GENERA in `~/.claude/projects/<percorso
+assoluto codificato>/` (una cartella per progetto, dentro un file per sessione; nome troncato a 200 caratteri + hash se il
+percorso è lungo; `CLAUDE_CONFIG_DIR` e `CLAUDE_CODE_PROJECT_DIR_NAME` per spostarla) e lascia nel repo solo ciò che la persona
+SCRIVE (`.claude/`, `CLAUDE.md`). Codex CLI: `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. Gemini CLI: `~/.gemini/` per
+l'utente, `.gemini/` nel progetto solo per la configurazione.
+
+**La proposta (mia, da approvare):** due classi, non una.
+1. **Ciò che l'app genera** — libreria, ricerche, note, attività, memoria — va in **`<dati>/workspaces/<slug del percorso
+   assoluto>/{library,research,notes,tasks,memory}`**, dove `<dati>` è `TALOS_DESKTOP_DATA_DIR` nell'app e la cartella dello
+   store sul server. Per **workspace**, con dentro la suddivisione per sessione dove il dato è di una sessione (le voci della
+   libreria portano già `lib-<uuid>`; le sessioni sono già file per id). ⛔ Per sessione soltanto sarebbe peggio di Claude Code:
+   la memoria e le note servono alla sessione DOPO, nello stesso progetto.
+2. **Ciò che la persona scrive e può voler versionare** — hook, MCP, plugin, skill, `TALOS.md` — resta nel workspace ma sotto
+   **una cartella sola, `.talos/`** (che `workspace-info.mjs:134` riconosce già come marcatore di progetto), come `.claude/`.
+3. Migrazione automatica e una sola volta all'apertura (se c'è la cartella vecchia, si sposta e si scrive nel registro);
+   `path-policy` protegge `.talos/` e basta; il vecchio elenco sparisce.
+
+**Costo:** nove store + `path-policy` + `workspace-info` + i loro test: una corsia sola di un agente, dopo la P0 (non tocca
+`app.js`). **Finita quando:** un workspace nuovo, dopo una sessione con libreria/ricerca/note/attività/memoria, ha nella
+radice **zero** cartelle nostre oltre a `.talos/` (misurato con `ls -a`), i dati stanno sotto `<dati>/workspaces/<slug>/`,
+un workspace vecchio si ritrova i suoi dati al primo avvio, e cancellare `<dati>/workspaces/<slug>/` non tocca il progetto.
+
+---
+
 # FASE 4 · Il motore locale più rapido dei concorrenti
 
 **A cosa serve:** la riga a priorità 1 del 12/09 — «rendere il motore di modelli locali estremamente

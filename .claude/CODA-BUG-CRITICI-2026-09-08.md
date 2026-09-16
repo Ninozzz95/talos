@@ -586,3 +586,78 @@ rimesso → rosse; tetto a 4.096 → rossa; ripristino sha256 identico.
 
 **Finita quando:** ✅ un messaggio da 12 KB arriva al registro byte per byte; un corpo oltre il tetto riceve il 413 con la
 copia. Resta da riprovare **dal vivo sul 4174** dopo la consegna, incollando lo stesso prompt.
+
+## BC-54 | Nella shell (WSL) gli apici singoli non proteggono `$…`: `echo '$HOME'` stampa `/root`, `false; echo $?` stampa 0 (audit interno 16/09/2026, riprodotto sul banco) — APERTO, cura misurata
+
+**Cosa ha visto il modello dell'audit (sessione `4c3e1649`, app installata 0.1.13, cartella Desktop):** «espansione di `$`
+che ignora gli apici», e «il codice d'uscita è sempre quello dell'ultimo statement» (`false; echo "rc=$?"` → `rc=0`).
+Ha imparato a evitare `$` ovunque per finire l'audit.
+
+**Cosa è, misurato (banco `scratchpad/audit-banco/riproduci.mjs`, `eseguiComandoSandboxato` chiamata diretta, mai il 4174):**
+`echo '$HOME' ; echo "$HOME"` → `/root` `/root` con `dove: null` e con `dove: 'wsl2'`; `export Y=7; echo "Y=$Y"` → `Y=`;
+`X=42 sh -c 'echo "X=$X"'` → `X=`. **Causa:** `talosHarness.mjs:4268` lancia `wsl.exe -d <distro> -- bash -lc "<script>"`, e
+`--` consegna la riga alla **shell predefinita della distro**, che la espande UNA VOLTA PRIMA che il nostro `bash -lc` la veda:
+`$HOME`, `$?`, `$X` diventano testo (`/root`, `0`, vuoto) anche dentro gli apici singoli, perché per la shell esterna stanno
+dentro le virgolette doppie dell'argomento. Due strati di shell, non uno. ⇒ Anche il «B5» del report (exit code) è questo:
+`$?` viene espanso a 0 dalla shell esterna, non è bash che perde il codice.
+
+**Cura misurata (`wsl-strati.mjs`, stesso script, stessa distro Ubuntu):** con `wsl.exe -d <distro> --exec bash -lc "<script>"`
+(anche `-e`) → `$HOME` letterale, `"$HOME"` = `/root`, `X=42`. Un token: `'--'` → `'--exec'` in `:4268`. Fonte: Microsoft
+Learn, «Basic commands for WSL» — `--exec, -e`: «Execute the specified command without using the default Linux shell»
+(letta il 16/09/2026). Prova: test del kernel che asserisce l'argv (`--exec`, mai `--`) + un test d'integrazione che gira solo
+se `wsl.exe -l -q` risponde, con `echo '$X'` che deve tornare `$X` (al contrario: con `--` torna vuoto).
+
+**Finita quando:** i tre comandi sopra danno `$HOME` / `/root` / `Y=7` / `X=42` dal banco, e `false; echo $?` dà `1`.
+
+## BC-55 | Un comando che inizia con `VAR=` (o con un programma che WSL non ha) finisce su cmd.exe con `[sandbox: none]` senza che nessuno l'abbia scelto (audit interno 16/09/2026, riprodotto) — APERTO
+
+**Cosa ha visto il modello:** `X=abc; echo "X=[$X]"; false && echo YES || echo NO` → `"X" non è riconosciuto come comando
+interno o esterno` + `NO-branch; echo end`, `[sandbox: none]`; nella stessa sessione `pwd; uname -a` girava in WSL. Il
+report lo chiama «B3 routing cmd.exe non documentato» e «B2 statement splitting»: **B2 è una conseguenza di B3** — cmd.exe
+non capisce `;`, `&&` di bash, `printf`.
+
+**Cosa è, misurato:** con `dove: null` (il default finché la sessione non sceglie; la 0.1.13 non lo espone), `:4265`
+decide comando per comando con `programmaDisponibileInWsl(distro, primoProgramma(comando))`, e `primoProgramma`
+(`:3932`) è `split(/\s+/)[0]`: per `X=abc; …` è `X=abc;`, per `export Y=7` è `export` (builtin, non un file nel PATH),
+per `(cd a && ls)` è `(cd` ⇒ «non disponibile in WSL» ⇒ `eseguiSuWindows` ⇒ cmd.exe. Riprodotto: `X=42 sh -c …` → exit 1
+`[none]` con `dove: null`; con `dove: 'wsl2'` gira in Linux.
+
+**Cura proposta (da decidere con la P0-bis, stessa zona):** il ripiego automatico non guarda più il «primo token»: se la
+riga contiene sintassi POSIX (assegnazione `NAME=` in testa, `;`, `&&`, `||`, `|`, `$`, apici, `export`, `cd … &&`) e WSL c'è,
+va in WSL; il ripiego su Windows resta solo per un programma nudo assente in Linux. Meglio ancora: la scelta della sessione
+(`doveGiranoIComandi`, già letta in `session-registry.mjs:5076`) esposta nell'interfaccia, come Claude Code e Codex fanno
+(ricerca 10/09, commento D-10F), così il `null` sparisce. E l'esito dice SEMPRE dove ha girato (già `[sandbox: …]`).
+
+**Finita quando:** i tre comandi del report girano in WSL con `dove: null` e l'esito lo dichiara; un programma nudo assente
+in Linux ripiega su Windows dicendolo.
+
+## BC-56 | Un comando vuoto fa cadere `eseguiSuWindows` con un `TypeError` non catturato (e in WSL è un `syntax error`) — APERTO, piccolo
+
+**Misurato:** `eseguiComandoSandboxato('', cartella, { dove: 'windows' })` → `TypeError [ERR_INVALID_ARG_VALUE]: The argument
+'file' cannot be empty` lanciato dentro l'executor della Promise (`:4132`); con WSL → `bash: syntax error near unexpected
+token ';'` su `{  ; }` (esito onesto ma criptico). BC-17 (11/09) ha curato l'alias `command`/`comando` che PRODUCEVA il vuoto,
+non il vuoto in sé. **Cura:** una guardia in testa a `eseguiComandoSandboxato`: comando vuoto ⇒ `{ codice: -1, testo: 'Il
+comando è vuoto: scrivi cosa eseguire.', enforcement: 'none' }`, con test nei due rami.
+
+## BC-57 | `prova` risponde `exit 0` senza aver eseguito nessuna suite (audit interno 16/09/2026: confermato dal trascritto, NON riprodotto sul banco) — APERTO, causa da trovare
+
+**Nel trascritto (`%APPDATA%\TALOS\sessions\4c3e1649….jsonl`, `_sequenza` 16543-16552):** `ToolCallStart prova`, args `{}`,
+`ToolCallResult` = `"exit 0\n"`, testo vuoto. Intestazione: `cartella: C:\Users\Antonino\Desktop`, `comandoProva: 'npm test'`,
+`taskId: libero:full-access`, app installata **0.1.13** (`Programs\talos-desktop\TALOS.exe`, kernel identico al mio in
+`eseguiProva` `:3791-3805`). Sul Desktop non c'è `package.json`.
+
+**Sul banco NON succede:** lo stesso `spawn('npm test', { cwd: Desktop, shell: true })` dà `close codice = 4294963238`
+(= -4058, `npm error code ENOENT … C:\package.json`) sia con Node 24.18 sia dentro il Node di Electron
+(`ELECTRON_RUN_AS_NODE=1 TALOS.exe prova-desktop.mjs`). ⇒ Il difetto è vero (c'è la ricevuta) e la causa non è nel codice
+di `eseguiProva` letto da solo: manca il pezzo fra `talosLavora` e lo spawn nella sessione impacchettata (ambiente del figlio,
+`comandoProva` effettivo a runtime, o un `npm` diverso nel PATH del guscio). **Prossimo passo:** un banco con `server.mjs` su
+porta effimera, cartella Desktop, un giro vero con `glm-5.3-flash` che chiama `prova`, e la ricevuta letta con
+`evidence.exitCode`. Indipendentemente dalla causa, la cura di prodotto è quella che il report chiede: **`prova` senza una
+suite riconoscibile (nessun `package.json` con `scripts.test`, nessun runner trovato) non risponde `exit 0`, dice «nessuna
+suite trovata in <cartella>» e conta come NON provato** per il nudge «scritture senza prova».
+
+**Cosa NON è un difetto, dal report:** B4 (stdout e stderr fusi) è D-10C, scelta dichiarata: `insieme` nell'ordine di arrivo
+(l'ordine varia fra `uno tre due` e `due uno tre`, com'è per due pipe); B5 è BC-54; «nessun modello di approvazione, nessuna
+allowlist» è falso: `verificaPermessoScrittura` (`:7742`) e `permessiPerAttrezzo` esistono per `shell`, `prova`, `scrivi`,
+`document_create` — la sessione dell'audit era **Full access per scelta dell'owner**, e il modello ha misurato la propria
+sessione, non il prodotto.

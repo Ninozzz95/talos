@@ -507,3 +507,18 @@
 - ⛔ Lezione, stessa dell'11/09 in forma nuova: **il bundle nel commit dev'essere quello che i sorgenti producono**, e
   lo dicono le impronte del manifesto, non il ledger. Un controllo da un comando: ricostruire e confrontare gli sha
   prima di committare `public/*`. Curato in `df5aa730` («build(public): ship the bundle the sources actually produce»).
+
+## 2026-09-16 — l'audit «dall'interno»: cosa era vero, misurato
+
+- Il report (`5040c0a3-audit-harness-report.md`) veniva dall'**app installata 0.1.13** (`Programs\talos-desktop\TALOS.exe`,
+  processo 19992), sessione `4c3e1649` su `C:\Users\Antonino\Desktop`, trascritto in `%APPDATA%\TALOS\sessions\` — non dal 4174.
+- **B1 vero, causa trovata:** `wsl.exe -- bash -lc "…"` = DUE shell; la shell esterna espande `$HOME`, `$?`, `$X` prima
+  della nostra. `--exec` cura (misurato con lo stesso script: `$HOME` letterale, `X=42`). Un token. → BC-54.
+- **B3 vero:** `primoProgramma('X=abc; …')` = `X=abc;` → «assente in WSL» → cmd.exe. B2 è la conseguenza. → BC-55.
+- **B6:** comando vuoto = `TypeError` non catturato sul ramo Windows, `{  ; }` su WSL. → BC-56.
+- **B7 vero nel trascritto** (`prova {}` → `exit 0\n`, testo vuoto, `comandoProva: 'npm test'`, Desktop senza package.json),
+  **non riprodotto**: lo stesso spawn dà `4294963238` + ENOENT in Node 24.18 e nel Node di Electron. → BC-57, causa aperta.
+- **B4 e B5 non sono difetti:** B4 è D-10C per scelta; B5 è B1 (`$?` espanso a 0 dalla shell esterna).
+- **«Nessun modello di approvazione» è falso:** `verificaPermessoScrittura` `:7742`, `permessiPerAttrezzo`; la sessione era
+  Full access per scelta dell'owner. Il modello ha misurato la sua sessione, non il prodotto.
+- Banco: `scratchpad/audit-banco/{riproduci,wsl-strati,prova-b7,prova-desktop}.mjs`; nessun POST sul 4174, un solo GET.
