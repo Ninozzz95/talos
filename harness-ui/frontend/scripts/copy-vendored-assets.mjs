@@ -15,6 +15,15 @@ const FONT_NAMES = Object.freeze([
   'jetbrains-mono-latin-ext-500-normal.woff2',
 ]);
 const PRISM_NAMES = Object.freeze(['LICENSE-prism', 'README.md', 'prism.js']);
+/*
+ * ⛔ 16/09/2026, P0-E punto 9 — `shell-quote` 1.10.0 (MIT, nessuna dipendenza di produzione):
+ *   il parser della riga di comando che veste la colonna «Processi». Il sorgente è IMPORTATO dal
+ *   bundle (`src/components/comando-shell.js`), ma passa di qui lo stesso — licenza, provenienza e
+ *   impronta sha256 nel manifesto — per la stessa ragione di xterm e Prism: una sostituzione
+ *   silenziosa del file vendorizzato deve far cadere `tests/contract/vendored-assets.test.mjs`,
+ *   non passare inosservata.
+ */
+const SHELL_QUOTE_NAMES = Object.freeze(['LICENSE-shell-quote', 'README.md', 'parse.js']);
 const XTERM_NAMES = Object.freeze([
   'LICENSE-addon-fit', 'LICENSE-addon-webgl', 'LICENSE-xterm', 'README.md',
   'addon-fit.js', 'addon-webgl.js', 'xterm.css', 'xterm.js',
@@ -33,6 +42,7 @@ export async function copyVendoredAssets({ frontendRoot, outputDir }) {
     ...FONT_NAMES.map((name) => ({ source: path.join(assetsRoot, 'fonts', name), relativePath: `fonts/${name}` })),
     ...XTERM_NAMES.map((name) => ({ source: path.join(assetsRoot, 'xterm', name), relativePath: `vendor/xterm/${name}` })),
     ...PRISM_NAMES.map((name) => ({ source: path.join(assetsRoot, 'prism', name), relativePath: `vendor/prism/${name}` })),
+    ...SHELL_QUOTE_NAMES.map((name) => ({ source: path.join(assetsRoot, 'shell-quote', name), relativePath: `vendor/shell-quote/${name}` })),
     {
       source: path.join(frontendRoot, 'node_modules', '@tanstack', 'virtual-core', 'LICENSE'),
       relativePath: 'vendor/tanstack/LICENSE-virtual-core',

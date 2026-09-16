@@ -101,6 +101,12 @@ function documentoFinto() {
   doc.createElement = crea;
   doc.createElementNS = (_ns, tag) => crea(tag);
   doc.createTextNode = (t) => ({ testoProprio: String(t), figli: [], get textContent() { return this.testoProprio; } });
+  /* ⛔ 16/09 — serve da quando il testo della figlia passa dal renderer Markdown CONDIVISO
+     (`components/markdown.js`), che costruisce in un frammento. Nel DOM vero l'`append` di un
+     frammento ne travasa i figli; qui il frammento resta un nodo in mezzo, e i cercatori sotto
+     (`tutti`, `conClasse`) scendono comunque perché camminano su `figli`. La differenza è
+     dichiarata: un finto non deve fingere di essere il DOM, deve dire dove non lo è. */
+  doc.createDocumentFragment = () => crea('#fragment');
   doc.radice = crea('div'); // qualcosa a cui attaccare il contenitore, così `isConnected` ha senso
   return doc;
 }
@@ -235,8 +241,16 @@ test('FIGLIA-BERSAGLIO: JSON a metà non è un errore, ed è meglio niente che u
 
 /* ═════════════════════════════════════════════════ La vista ═══ */
 
+/*
+ * ⛔⛔ 16/09 — OGNI PROVA HA LA SUA SESSIONE, e non è pignoleria: da oggi il componente RICORDA
+ *   per `sessionId` (lo scorrimento e l'ultima riduzione, vedi `SCORRIMENTI`/`ISTANTANEE`). Con un
+ *   id condiviso una prova ereditava la posizione salvata dalla prova precedente — e due prove sullo
+ *   scorrimento sono diventate rosse per il motivo sbagliato. Trovato girando, non ragionando.
+ */
+let contatoreSessioniDiProva = 0;
+
 /** Monta con un flusso finto; ritorna la maniglia, il documento e la spia sul flusso. */
-function monta({ eventiIniziali = [], onIndietro = () => {} } = {}) {
+function monta({ eventiIniziali = [], onIndietro = () => {}, sessionId = `s-prova-${(contatoreSessioniDiProva += 1)}` } = {}) {
   const doc = documentoFinto();
   const contenitore = doc.createElement('div');
   doc.radice.append(contenitore);
@@ -244,20 +258,23 @@ function monta({ eventiIniziali = [], onIndietro = () => {} } = {}) {
   contenitore.append(chiamante);
   chiamante.focus(); // è la riga della scheda «Agenti» che è stata premuta
 
-  const spia = { aperture: 0, chiusure: 0, manda: null };
-  const apriFlusso = (id, onEvento) => {
+  const spia = { aperture: 0, chiusure: 0, manda: null, apri: null };
+  const apriFlusso = (id, onEvento, ganci = {}) => {
     spia.aperture += 1;
     spia.sessionId = id;
     spia.manda = onEvento;
+    /* ⛔ NON si chiama da soli: è il punto della cura. Finché nessuno conferma l'apertura, la vista
+       dice «mi collego» invece di garantire un collegamento che non sa di avere. */
+    spia.apri = () => ganci.onAperto?.();
     for (const e of eventiIniziali) onEvento(e); // il replay arriva SUBITO, come `iscriviti()`
     return () => { spia.chiusure += 1; };
   };
-  const vista = montaConversazioneFiglia(contenitore, { sessionId: 's-figlia-9', nome: 'leggi il ledger', apriFlusso, onIndietro, document: doc });
-  return { doc, contenitore, chiamante, spia, vista };
+  const vista = montaConversazioneFiglia(contenitore, { sessionId, nome: 'leggi il ledger', apriFlusso, onIndietro, document: doc });
+  return { doc, contenitore, chiamante, spia, vista, sessionId };
 }
 
 test('FIGLIA-VISTA: la testata porta il COMPITO e il MODELLO — e l’id di sessione NON è a schermo', () => {
-  const { doc, vista, spia } = monta({ eventiIniziali: [START(), DELTA('m1', 'Ho letto il ledger.'), TOOL_START('t1', 'leggi'), TOOL_ARGS('t1', '{"percorso":"docs/ledger.md"}'), TOOL_RESULT('t1', 'ok')] });
+  const { doc, vista, spia } = monta({ sessionId: 's-figlia-9', eventiIniziali: [START(), DELTA('m1', 'Ho letto il ledger.'), TOOL_START('t1', 'leggi'), TOOL_ARGS('t1', '{"percorso":"docs/ledger.md"}'), TOOL_RESULT('t1', 'ok')] });
 
   assert.equal(spia.aperture, 1);
   assert.equal(spia.sessionId, 's-figlia-9');
@@ -317,9 +334,24 @@ test('FIGLIA-VIVA: un evento che arriva DOPO il montaggio compare senza rimontar
   assert.equal(unaConClasse(vista.elemento, 'talos-badge').textContent, 'Conclusa');
 });
 
-test('FIGLIA-VUOTA: zero eventi non è un pannello bianco', () => {
-  const { vista } = monta({ eventiIniziali: [] });
+test('FIGLIA-VUOTA: zero eventi non è un pannello bianco — e prima dell’apertura non si PROMETTE un collegamento', () => {
+  /*
+   * ⛔⛔ 16/09 — QUESTA PROVA È CAMBIATA, e va detto perché. Prima chiedeva che a zero eventi si
+   *   leggesse subito «Nessun evento ancora… Il collegamento è aperto». Quella frase era una
+   *   AFFERMAZIONE DI FATTO che la vista non aveva modo di verificare: l'`EventSource` era appena
+   *   stato costruito, e se il server non rispondeva la frase restava lì a garantire un
+   *   collegamento inesistente. ⇒ Prima dell'apertura si dice cosa si sta facendo; lo stato vuoto
+   *   compare quando il collegamento è CONFERMATO (`onAperto`).
+   */
+  const { vista, spia } = monta({ eventiIniziali: [] });
+  const scheletro = unaConClasse(vista.elemento, 'talos-figlia__scheletro');
   const vuoto = unaConClasse(vista.elemento, 'talos-figlia__vuoto');
+  assert.equal(scheletro.hidden, false, 'prima dell’apertura si dice che ci si sta collegando');
+  assert.equal(scheletro.textContent, 'Mi collego a questo sotto-agente…');
+  assert.equal(vuoto.hidden, true, '⛔ e NON si promette un collegamento che non si sa di avere');
+
+  spia.apri(); // il flusso conferma l'apertura
+  assert.equal(scheletro.hidden, true);
   assert.equal(vuoto.hidden, false);
   assert.ok(vuoto.textContent.includes('Nessun evento ancora'), vuoto.textContent);
   assert.deepEqual(conClasse(vista.elemento, 'talos-kv__v').map((n) => n.textContent), ['—', '0 giri · 0 chiamate'], '⛔ «—» e non un modello di ripiego: non lo sappiamo ancora');
@@ -502,4 +534,258 @@ ${selettore}{`);
   }
   assert.match(regola('.talos-figlia__corpo'), /overflow-y:\s*auto/, 'il corpo è il contenitore che scorre');
   assert.match(regola('.talos-figlia__corpo'), /overscroll-behavior:\s*contain/, 'arrivati in fondo la rotella NON prosegue sulla chat della madre (MDN, scroll chaining)');
+});
+
+/* ═══════════════════ P0-E, punto 10 — 16/09/2026: markdown, riduzione incrementale,
+   coalescenza, scheletro, scorrimento e cache ═══ */
+
+/*
+ * ⛔ IL DIFETTO che queste prove riproducono, misurato sul file al commit 4c58c961:
+ *   (1) `creaVistaBlocco` scriveva `textContent` e lo DICHIARAVA: «Testo NUDO, non markdown». Era
+ *       vero quando è stato scritto; dal 12/09 (BC-29) il renderer è un componente condiviso.
+ *   (2) `disegna()` girava a OGNI evento (:580-581) e chiamava `riduciEventiFiglia(eventi)`
+ *       sull'INTERO array (:486): in replay è O(n²).
+ *   (3) `ReasoningMessage*` finiva nel `default`: del ragionamento di una figlia non arrivava NULLA.
+ *   (4) lo stato vuoto PROMETTEVA «Il collegamento è aperto» senza saperlo.
+ *   (5) chiudere e riaprire la stessa figlia ripartiva da un pannello bianco e dall'inizio.
+ *
+ * RICERCA 16/09/2026 (regola zero): il difetto (2) è APERTO anche nel visore di trascritti dei
+ * sotto-agenti di Claude Code (PR di luglio 2026): «full transcript re-parsing on every content
+ * change may be costly for live-tailed logs, resulting in O(n) work per append for long-running /
+ * large transcripts». ⇒ La cura è la stessa qui: lo stato della riduzione vive fra un evento e
+ * l'altro.
+ */
+
+test('FIGLIA-MD: il testo della figlia è MARKDOWN, col renderer CONDIVISO — non una seconda copia', () => {
+  const md = [
+    '# Titolo',
+    '',
+    'Testo con **grassetto**, `codice inline` e [un link](https://example.org).',
+    '',
+    '- primo',
+    '- secondo',
+    '',
+    '> una citazione',
+    '',
+    '| a | b |',
+    '| --- | --- |',
+    '| 1 | 2 |',
+    '',
+    '```js',
+    'const x = 1;',
+    '```',
+  ].join('\n');
+  const { vista } = monta({ eventiIniziali: [START(), DELTA('m1', md)] });
+  const copia = unaConClasse(vista.elemento, 'assistant-copy');
+
+  const tag = (t) => tutti(copia).filter((n) => n.tag === t);
+  assert.equal(tag('h1').length, 1, 'i titoli');
+  assert.equal(tag('li').length, 2, 'gli elenchi');
+  assert.equal(tag('blockquote').length, 1, 'le citazioni');
+  assert.equal(tag('table').length, 1, 'le tabelle');
+  assert.equal(tag('strong').length, 1, 'il grassetto');
+  /*
+   * ⛔ I LINK NON CI SONO, e non è un difetto di questa vista: `components/markdown.js` non ha un
+   *   ramo per `[testo](url)` — verificato il 16/09 cercando `createElement('a')` e `href` nel file:
+   *   zero occorrenze. La figlia usa il renderer CONDIVISO, quindi ha esattamente le sue capacità:
+   *   né una in meno né una in più. Aggiungerle qui vorrebbe dire scriverne un secondo, che è la
+   *   cosa che questa corsia ha tolto. ⇒ Registrato come FUORI REGIONE (markdown.js non è di questa
+   *   corsia), e questa riga resta a dire cosa succede OGGI: il testo del link si legge, la
+   *   parentesi con l'indirizzo pure. Il giorno in cui il renderer impara i link, questa prova
+   *   diventa rossa e va aggiornata — che è esattamente il servizio che deve rendere.
+   */
+  assert.equal(tag('a').length, 0, 'il renderer condiviso non fa ancora i link: vedi fuori_regione');
+  assert.ok(testoIntero(copia).includes('un link'), 'il testo del link si legge comunque');
+  assert.ok(tag('code').length >= 1, 'il codice inline');
+  /* ⛔ Il recinto passa da `creaBloccoCodice` — lo STESSO della chat: barra del linguaggio e
+     «Copia», non un `<pre>` nudo. Se qualcuno lo sostituisse con un pre, questa riga diventa rossa. */
+  const blocco = unaConClasse(copia, 'code-block');
+  assert.ok(blocco, 'il recinto è un blocco di codice della chat, non un <pre> nudo');
+  assert.equal(unaConClasse(blocco, 'code-block-lang').textContent, 'JavaScript');
+  assert.ok(unaConClasse(blocco, 'code-block-copy'), 'col suo «Copia»');
+  assert.ok(testoIntero(blocco).includes('const x = 1;'));
+  /* ⛔ AL CONTRARIO: il markdown NON deve restare letterale a schermo. */
+  assert.ok(!testoIntero(copia).includes('**grassetto**'), 'gli asterischi non arrivano a schermo');
+  assert.ok(!testoIntero(copia).includes('# Titolo'), 'e nemmeno il cancelletto');
+});
+
+test('FIGLIA-MD: si ri-rende SOLO il blocco vivo, e solo quando il suo testo è cambiato', () => {
+  const { vista, spia } = monta({ eventiIniziali: [START(), DELTA('m1', 'primo blocco'), DELTA('m2', 'secondo, **vivo**')] });
+  const copie = conClasse(vista.elemento, 'assistant-copy');
+  assert.equal(copie.length, 2);
+  const primoFiglio = copie[0].figli[0];
+
+  spia.manda(DELTA('m2', ' e **cresce** ancora'));
+  assert.equal(conClasse(vista.elemento, 'assistant-copy')[0].figli[0], primoFiglio, '⛔ il blocco CONCLUSO non si tocca: è lo stesso identico nodo');
+  const vivo = conClasse(vista.elemento, 'assistant-copy')[1];
+  assert.ok(testoIntero(vivo).includes('cresce'));
+  /*
+   * ⛔⛔ QUESTA RIGA È QUELLA CHE MORDE, e all'inizio non c'era: senza, rimettere `textContent` al
+   *   posto del render nell'AGGIORNAMENTO lasciava la prova VERDE — perché il caso felice (tutto il
+   *   markdown in un delta solo) passa dalla CREAZIONE, non dall'aggiornamento. Provato il 16/09:
+   *   guasto rimesso, trenta prove su trenta ancora verdi. Il difetto vero sarebbe stato in
+   *   streaming, cioè sempre.
+   */
+  assert.equal(tutti(vivo).filter((n) => n.tag === 'strong').length, 2, '⛔ anche CRESCENDO il blocco vivo resta markdown');
+  assert.ok(!testoIntero(vivo).includes('**'), 'e gli asterischi non ricompaiono a schermo');
+
+  /* ⛔ AL CONTRARIO: un disegno senza cambiamenti non deve ridisegnare nemmeno il blocco vivo —
+     ridisegnare per niente cancella la selezione di chi sta leggendo. */
+  const vivoPrima = conClasse(vista.elemento, 'assistant-copy')[1].figli[0];
+  spia.manda({ type: 'StateDelta', delta: [] });
+  assert.equal(conClasse(vista.elemento, 'assistant-copy')[1].figli[0], vivoPrima);
+});
+
+test('FIGLIA-RAGIONAMENTO: arriva, e arriva COLLASSATO', () => {
+  const { vista } = monta({ eventiIniziali: [
+    START(),
+    { type: 'ReasoningMessageStart', messageId: 'r1', role: 'reasoning' },
+    { type: 'ReasoningMessageContent', messageId: 'r1', delta: 'Devo prima **leggere** il ledger.' },
+    { type: 'ReasoningMessageEnd', messageId: 'r1' },
+    DELTA('m1', 'Ho finito.'),
+  ] });
+
+  const card = tutti(vista.elemento).find((n) => n.dataset?.c === 'ReasoningBundle');
+  assert.ok(card, '⛔ prima il ragionamento finiva nel `default` del riduttore: a schermo non arrivava NIENTE');
+  assert.equal(unaConClasse(card, 'tool-note-summary-text').textContent, 'Ragionamento');
+  assert.equal(unaConClasse(card, 'talos-activity__head').getAttribute('aria-expanded'), 'false', 'nasce chiuso: disponibile, non imposto');
+  assert.equal(unaConClasse(card, 'talos-activity__body').hidden, true);
+  /* Il contenuto c'è (ed è markdown), anche se chiuso: chi lo apre lo trova già pronto. */
+  assert.ok(testoIntero(card).includes('leggere'));
+  assert.equal(tutti(card).filter((n) => n.tag === 'strong').length, 1, 'anche il ragionamento è markdown');
+  /* ⛔ AL CONTRARIO: il ragionamento NON finisce nel corpo della risposta. */
+  const risposta = conClasse(vista.elemento, 'assistant-copy').find((n) => !n.classi.has('talos-figlia__ragionamento'));
+  assert.ok(!testoIntero(risposta).includes('ledger'), 'la risposta resta la risposta');
+  assert.ok(testoIntero(risposta).includes('Ho finito.'));
+});
+
+test('FIGLIA-INCREMENTALE: ogni evento si digerisce UNA volta sola — la riduzione non è più O(n²)', () => {
+  /*
+   * ⛔ La misura che morde: ogni evento è un oggetto che CONTA quante volte gli si chiede `type`.
+   *   Col codice di prima (`riduciEventiFiglia(eventi)` a ogni disegno) l'evento numero 1 veniva
+   *   riletto a ogni evento successivo: con 41 eventi, 41 letture per il primo. Adesso: una.
+   */
+  const letture = new Map();
+  const spiato = (evento) => {
+    const tipo = evento.type;
+    const chiave = { id: letture.size };
+    letture.set(chiave, 0);
+    return new Proxy(evento, { get(o, k) { if (k === 'type') letture.set(chiave, letture.get(chiave) + 1); return o[k]; } });
+  };
+  const grezzi = [START(), ...Array.from({ length: 40 }, (_, i) => DELTA('m1', `p${i} `))];
+  const eventiIniziali = grezzi.map(spiato);
+
+  monta({ eventiIniziali });
+
+  const conteggi = [...letture.values()];
+  assert.equal(conteggi.length, 41);
+  assert.ok(Math.max(...conteggi) <= 2, `⛔ ogni evento letto al più due volte, misurato: ${Math.max(...conteggi)}`);
+  /* ⛔ AL CONTRARIO, il numero che smentirebbe: col ri-riduci a ogni evento il primo sarebbe letto
+     41 volte, e il totale sarebbe ~861 invece di ~41. */
+  const totale = conteggi.reduce((a, b) => a + b, 0);
+  assert.ok(totale <= 90, `letture totali: ${totale} (col difetto erano ~861)`);
+});
+
+test('FIGLIA-RAF: cento eventi = UN disegno per frame, e il DOM non cambia prima del frame', () => {
+  const frames = [];
+  const vecchio = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = (fn) => { frames.push(fn); return frames.length; };
+  try {
+    const { vista, spia } = monta({ eventiIniziali: [START()] });
+    while (frames.length) frames.shift()(); // il frame programmato dal replay iniziale
+
+    for (let i = 0; i < 100; i += 1) spia.manda(DELTA('m1', `p${i} `));
+    assert.equal(frames.length, 1, '⛔ cento eventi programmano UN frame solo: prima erano cento disegni');
+    assert.ok(!testoIntero(vista.elemento).includes('p99'), 'e il DOM non è ancora cambiato');
+
+    frames.shift()();
+    assert.ok(testoIntero(vista.elemento).includes('p99'), 'al frame, il disegno è uno e porta TUTTO');
+
+    spia.manda(DELTA('m1', 'ancora'));
+    assert.equal(frames.length, 1, 'dopo il disegno la programmazione riparte: non resta bloccata');
+  } finally {
+    if (vecchio === undefined) delete globalThis.requestAnimationFrame; else globalThis.requestAnimationFrame = vecchio;
+  }
+});
+
+test('FIGLIA-RAF ⛔ AL CONTRARIO: un frame in ritardo su una vista DISTRUTTA non disegna niente', () => {
+  const frames = [];
+  const vecchio = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = (fn) => { frames.push(fn); return frames.length; };
+  try {
+    const { vista, spia } = monta({ eventiIniziali: [START()] });
+    while (frames.length) frames.shift()();
+    spia.manda(DELTA('m1', 'in volo'));
+    assert.equal(frames.length, 1);
+    vista.distruggi();
+    frames.shift()(); // il frame arriva DOPO lo smontaggio
+    assert.ok(!testoIntero(vista.elemento).includes('in volo'), '⛔ una vista smontata non si ridisegna');
+  } finally {
+    if (vecchio === undefined) delete globalThis.requestAnimationFrame; else globalThis.requestAnimationFrame = vecchio;
+  }
+});
+
+test('FIGLIA-RITORNO: riaprire la STESSA figlia ridà il posto e non riparte da un pannello bianco', () => {
+  const sessionId = 's-ritorno';
+  const primo = monta({ sessionId, eventiIniziali: [START(), DELTA('m1', 'una riga lunga da rileggere')] });
+  const corpo = unaConClasse(primo.vista.elemento, 'talos-figlia__corpo');
+  corpo.scrollHeight = 2000; corpo.clientHeight = 400; corpo.scrollTop = 830;
+  primo.vista.distruggi();
+
+  /* Si riapre: il flusso non ha ancora rigiocato NIENTE. */
+  const secondo = monta({ sessionId, eventiIniziali: [] });
+  assert.ok(testoIntero(secondo.vista.elemento).includes('una riga lunga da rileggere'), '⛔ il pannello non è bianco: dipinge l’ultima riduzione mentre il replay ricomincia');
+  assert.equal(unaConClasse(secondo.vista.elemento, 'talos-figlia__scheletro').hidden, true, 'e non c’è lo scheletro, perché c’è già qualcosa da leggere');
+
+  const corpo2 = unaConClasse(secondo.vista.elemento, 'talos-figlia__corpo');
+  corpo2.scrollHeight = 2000; corpo2.clientHeight = 400; corpo2.scrollTop = 0;
+  secondo.spia.manda(START(2)); // il replay comincia
+  assert.equal(corpo2.scrollTop, 830, '⛔ e riprende da dove stava a leggere');
+});
+
+test('FIGLIA-RITORNO ⛔ AL CONTRARIO: la memoria è PER FIGLIA, e chi scorre comanda', () => {
+  const uno = monta({ sessionId: 's-mem-A', eventiIniziali: [START(), DELTA('m1', 'testo di A')] });
+  const corpoA = unaConClasse(uno.vista.elemento, 'talos-figlia__corpo');
+  corpoA.scrollHeight = 2000; corpoA.clientHeight = 400; corpoA.scrollTop = 777;
+  uno.vista.distruggi();
+
+  /* Un'ALTRA figlia non eredita né la posizione né il contenuto di A. */
+  const due = monta({ sessionId: 's-mem-B', eventiIniziali: [] });
+  assert.ok(!testoIntero(due.vista.elemento).includes('testo di A'), '⛔ B non mostra la conversazione di A');
+  const corpoB = unaConClasse(due.vista.elemento, 'talos-figlia__corpo');
+  /* ⛔ 1.600 = 2.000 − 400: è il fondo. (La prima stesura metteva 10 e chiedeva che B «seguisse il
+     fondo»: a 10 non si è in fondo, si è in cima — la prova era rossa per la premessa sbagliata,
+     non per il codice. Un numero in una prova è un'affermazione come le altre.) */
+  corpoB.scrollHeight = 2000; corpoB.clientHeight = 400; corpoB.scrollTop = 1600;
+  due.spia.manda(START(1));
+  assert.equal(corpoB.scrollTop, corpoB.scrollHeight, 'B segue il fondo come una figlia nuova, senza ereditare i 777 di A');
+
+  /* E su A: se la persona scorre prima che il ripristino possa avvenire, comanda lei. */
+  const tre = monta({ sessionId: 's-mem-A', eventiIniziali: [] });
+  const corpoA2 = unaConClasse(tre.vista.elemento, 'talos-figlia__corpo');
+  corpoA2.scrollHeight = 2000; corpoA2.clientHeight = 400; corpoA2.scrollTop = 50;
+  corpoA2.lancia('scroll');
+  tre.spia.manda(START(1));
+  assert.notEqual(corpoA2.scrollTop, 777, '⛔ chi ha già cominciato a leggere non viene strappato via');
+});
+
+test('FIGLIA-A-B-C-A ⛔ AL CONTRARIO: gli eventi in ritardo di A non scrivono su B né su C', () => {
+  const a = monta({ sessionId: 's-abc-A', eventiIniziali: [START(), DELTA('m1', 'sono A')] });
+  const mandaA = a.spia.manda;
+  a.vista.distruggi();
+
+  const b = monta({ sessionId: 's-abc-B', eventiIniziali: [START(), DELTA('m1', 'sono B')] });
+  /* A è smontata ma il suo `onEvento` esiste ancora: la rete non è istantanea. */
+  mandaA(DELTA('m1', ' — coda di A'));
+  assert.ok(!testoIntero(b.vista.elemento).includes('coda di A'), '⛔ nessuna scrittura da una vista morta');
+  assert.ok(!testoIntero(a.vista.elemento).includes('coda di A'));
+
+  const c = monta({ sessionId: 's-abc-C', eventiIniziali: [START(), DELTA('m1', 'sono C')] });
+  b.vista.distruggi();
+  mandaA(DELTA('m1', ' — ancora A'));
+  assert.ok(!testoIntero(c.vista.elemento).includes('ancora A'));
+  assert.equal(a.spia.chiusure, 1, 'ogni figlia ha chiuso il SUO flusso, una volta sola');
+  assert.equal(b.spia.chiusure, 1);
+  c.vista.distruggi();
+  assert.equal(c.spia.chiusure, 1);
 });
