@@ -109,8 +109,11 @@ test('BC48-B-INDICE-RIGHE: sei sezioni su richiesta con righe e byte fisici dopo
 test('BC48-B-RICONCILIAZIONE: nessuna riga non vuota originale manca, salvo due riscritture dichiarate', async () => {
   const { originale } = await leggiPrima();
   const file = await sorgenti();
-  // Eccezioni chiuse: sezione 3 approvata (19-32) e viewport desktop/mobile (97).
-  const attese = new Set(righe(originale).flatMap((r, i) => ((i + 1 >= 19 && i + 1 <= 32) || i + 1 === 97) ? [] : [r.trim()]).filter(Boolean));
+  // Eccezioni chiuse: sezione 3 approvata (19-32), viewport desktop/mobile (97) e — dal 16/09/2026 —
+  // le tre righe 57-59 sulla delega («The main agent implements… Subagents may run only simple focused
+  // tests…»), sostituite in AGENTS.md dalla regola dell'owner del 13/09 e 16/09 (coordinatore che
+  // pianifica e rivede, fino a cinque agenti Opus 5 che implementano una fase per volta).
+  const attese = new Set(righe(originale).flatMap((r, i) => ((i + 1 >= 19 && i + 1 <= 32) || i + 1 === 97 || (i + 1 >= 57 && i + 1 <= 59)) ? [] : [r.trim()]).filter(Boolean));
   const unione = nonVuote(Object.values(file).join('\n'));
   assert.deepEqual([...attese].filter(r => !unione.has(r)), []);
   assert.doesNotMatch(Object.values(file).join('\n'), /Persistent Three-Lane Collaboration|Fable owns|Kimi owns|desktop and mobile viewports/);
@@ -121,7 +124,8 @@ test('BC48-B-DESTINAZIONI: ogni dettaglio originale si trova nella cartella appr
   const originali = righe(originale);
   const file = await sorgenti();
   const mappa = {
-    'AGENTS.md': [[1, 9], [34, 40], [42, 90], [92, 96], [98, 108], [111, 113], [126, 130], [140, 144], [155, 160], [172, 172]],
+    // 16/09/2026: le righe 57-59 (la vecchia regola di delega) non hanno più una destinazione — sostituite, non spostate.
+    'AGENTS.md': [[1, 9], [34, 40], [42, 56], [60, 90], [92, 96], [98, 108], [111, 113], [126, 130], [140, 144], [155, 160], [172, 172]],
     'core/AGENTS.md': [[13, 13], [17, 17], [122, 124], [132, 138], [162, 166], [170, 170]],
     'validator/AGENTS.md': [[14, 14], [132, 136], [162, 164], [167, 167], [170, 170]],
     'control-plane/AGENTS.md': [[15, 16], [109, 109], [115, 120], [146, 153], [162, 164], [168, 170]],
@@ -137,8 +141,26 @@ test('BC48-B-DESTINAZIONI: ogni dettaglio originale si trova nella cartella appr
 
 test('BC48-B-APPROVATI: sezione 3 e testo desktop copiati verbatim', async () => {
   const { approvati } = await leggiPrima();
-  assert.ok((await leggi('AGENTS.md')).includes(approvati.sezione3));
-  assert.ok((await leggi('harness-ui/AGENTS.md')).startsWith(approvati.desktop));
+  /*
+   * 16/09/2026: la sezione 3 approvata il 12/09 (`approvati.sezione3`, conservata intatta nella cattura
+   * «prima») è stata SOSTITUITA su ordine dell'owner (13/09 e 16/09: coordinatore che pianifica e rivede,
+   * fino a cinque agenti Opus 5 che implementano una fase per volta). Il testo vigente sta nella fixture
+   * datata, copiato verbatim: la cattura «prima» non si riscrive mai (flag `wx`), si aggiunge un atteso.
+   */
+  const sezione3Vigente = await readFile(new URL('./fixtures/bc48-b-sezione3-2026-09-16.md', import.meta.url), 'utf8');
+  assert.ok(sezione3Vigente.startsWith('## Persistent Lanes And Delegation'));
+  assert.ok(sezione3Vigente.includes('up to five Opus 5 agents'));
+  assert.ok((await leggi('AGENTS.md')).includes(sezione3Vigente));
+  assert.ok(!(await leggi('AGENTS.md')).includes(approvati.sezione3), 'la sezione del 12/09 è stata sostituita, non affiancata');
+  /*
+   * Stesso criterio per il testo desktop: il 16/09 le righe di verifica sono state portate allo stato vero
+   * (suite backend da sola, kernel 598 verdi) e sotto è nata la sezione «UI Regression Prevention». Il
+   * testo vigente è nella fixture datata; quello del 12/09 resta nella cattura «prima» come storia.
+   */
+  const desktopVigente = await readFile(new URL('./fixtures/bc48-b-desktop-2026-09-16.md', import.meta.url), 'utf8');
+  assert.ok(desktopVigente.startsWith('# TALOS desktop (harness-ui) — working rules'));
+  assert.ok((await leggi('harness-ui/AGENTS.md')).startsWith(desktopVigente));
+  assert.ok(!(await leggi('harness-ui/AGENTS.md')).startsWith(approvati.desktop), 'il testo del 12/09 è stato aggiornato, non lasciato com\'era');
 });
 
 test('BC48-B-VIEWPORT: regola UI conserva tutti i controlli con entrambe le dimensioni desktop', async () => {
