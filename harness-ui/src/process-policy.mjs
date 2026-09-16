@@ -185,7 +185,7 @@ export function createProcessPolicy({
     return [name, resolve(root)];
   }));
 
-  function prepare(command, args, options = {}) {
+  function prepare(command, args, options = {}, effectiveEnvKeys = environmentKeys) {
     const key = executableKey(command);
     if (!approved.has(key)) throw new ProcessPolicyError('Eseguibile non autorizzato', 'EXECUTABLE_NOT_ALLOWED');
     validateArgs(args);
@@ -199,7 +199,7 @@ export function createProcessPolicy({
         ...options,
         cwd,
         shell: false,
-        env: buildEnvironment(options.env, environmentKeys),
+        env: buildEnvironment(options.env, effectiveEnvKeys),
         windowsHide: true,
       },
     };
@@ -222,7 +222,7 @@ export function createProcessPolicy({
     const allowedKeys = keys.filter((key) => environmentKeys.includes(key));
     const options = {
       cwd: requestedCwd,
-      env: buildEnvironment(env, allowedKeys),
+      env,
       timeout: timeoutMs,
       signal,
       captureLimitBytes: validateCaptureLimit(captureLimitBytes),
@@ -230,7 +230,9 @@ export function createProcessPolicy({
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     };
-    const prepared = prepare(executable, args, options);
+    // Filter once with the request/policy intersection. Rebuilding from process.env
+    // with the policy-wide keys would restore variables this request excluded.
+    const prepared = prepare(executable, args, options, allowedKeys);
     return { ...prepared, capability };
   }
 
