@@ -62,6 +62,7 @@ dependencies, each explained in its header comment.
 | `TALOS_HARNESS_UI_SESSIONS_DIR` | no | Where sessions are stored. Defaults to `.sessions-store/` next to the server. Use a separate folder when you run a second instance, or the two share history. |
 | `TALOS_HARNESS_UI_PUBLIC_DIR` | no | Folder served as the UI. Defaults to `public/`, the built app. |
 | `TALOS_MCP_STARTUP_CONCURRENCY` | no | How many trusted MCP servers are started at once when a session begins. Defaults to `1` — serial, the behaviour this server has always had. Values `1..8`; anything else falls back to `1` rather than failing to start. Starting a server is waiting, not computing, so raising this shortens startup when you trust several servers (measured on four echo servers: 121 ms serial, 46 ms at four). |
+| `TALOS_HTTP_BODY_MAX_BYTES` | no | Largest request body the local API accepts, in bytes. Defaults to `10485760` (10 MiB, the same cap Hermes Agent uses on its API server); a body over the limit gets a `413` that says so instead of a dropped connection. Routes with a fixed-shape body (an OAuth code, a batch) keep their own smaller limits. |
 | `TALOS_INTRO` | no | `0` skips the first-run introduction. |
 
 ### The agent kernel

@@ -632,6 +632,14 @@ async function startServer() {
 
   const app = createHttpApp({
     /*
+     * ⛔ 16/09 — il tetto sul corpo delle richieste (10 MiB di serie, vedi `MAX_REQUEST_BODY_BYTES` in http-app.mjs):
+     *   `TALOS_HTTP_BODY_MAX_BYTES` lo cambia; un valore storto (vuoto, non numerico, ≤ 0) NON deve impedire
+     *   l'avvio, quindi si ignora e resta il default — stessa disciplina di `TALOS_MCP_STARTUP_CONCURRENCY`.
+     */
+    ...(Number.isInteger(Number(process.env.TALOS_HTTP_BODY_MAX_BYTES)) && Number(process.env.TALOS_HTTP_BODY_MAX_BYTES) > 0
+      ? { limiteCorpoByte: Number(process.env.TALOS_HTTP_BODY_MAX_BYTES) }
+      : {}),
+    /*
      * ⛔⛔ PO-01 (10/09) — l'UNICO punto in cui la chiave ottenuta dall'accesso lascia il flusso
      *   OAuth. Va nel PORTACHIAVI DEL SISTEMA, da dove entrano già tutte le altre chiavi
      *   (`providerStore`, cablato sopra con `@napi-rs/keyring`): così «Rimuovi chiave», il Doctor,

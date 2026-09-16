@@ -43,7 +43,26 @@ export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
 const MAX_REQUEST_TARGET_BYTES = 4096;
 /** ⛔ Un corpo POST qui è solo `{taskId}` — poche decine di byte. 4096 è già generoso, stesso ordine di grandezza di MAX_REQUEST_TARGET_BYTES. */
-const MAX_REQUEST_BODY_BYTES = 4096;
+/*
+ * ⛔⛔⛔ 16/09 — ERA 4.096 BYTE, E UN PROMPT INCOLLATO NELLA CHAT NON ARRIVAVA NEMMENO AL SERVER.
+ *   Owner, dal vivo: incolla un testo di ~12 KB, «Invio non riuscito: Failed to fetch». Il browser dice così quando
+ *   NESSUNA risposta HTTP arriva: `leggiCorpoJson` faceva `req.destroy()` al primo byte oltre il tetto, e il 413 con
+ *   la sua copia restava «non raggiungibile dall'esterno» — un commento in questo file lo confessava e un test lo
+ *   dichiarava «non provabile» invece di curarlo.
+ * ⛔ Il tetto RESTA, e non per pigrizia: un corpo senza tetto è un modo per far cadere il processo (`JSON.parse`
+ *   amplifica in memoria ~15× i byte ricevuti; il consiglio vale anche per un server di loopback, letto il
+ *   16/09/2026 su nodebestpractices «requestpayloadsizelimit» e sulle segnalazioni SecureBananaLabs #12441/#12426).
+ *   Ma la misura è quella di un messaggio di lavoro, non di un codice OAuth: Hermes Agent mette `MAX_REQUEST_BYTES`
+ *   a **10 MB** sul suo API server (docs «API Server», e la PR #58902 lo impone anche ai corpi chunked); l'API
+ *   Anthropic rifiuta sopra **32 MB** con un 413 «request too large» (docs Messages, 16/09/2026). Claude Code non
+ *   documenta un limite e sugli incolla lunghi TRONCA o si blocca in silenzio (issue anthropics/claude-code #65280,
+ *   #29375): è il difetto da non copiare. ⇒ 10 MiB di serie, configurabile con `TALOS_HTTP_BODY_MAX_BYTES`
+ *   (`server.mjs`) e iniettabile in `createHttpApp({ limiteCorpoByte })` per i test. Le rotte con un tetto
+ *   ESPLICITO piccolo (codice OAuth, batch) lo tengono: lì il corpo ha una forma fissa.
+ */
+const MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024;
+/** Oltre quante volte il limite si smette di DRENARE e si chiude davvero: un corpo che nessuno dovrebbe mandare. */
+const FATTORE_DRENAGGIO_OLTRE_IL_LIMITE = 4;
 const MAX_BATCH_BODY_BYTES = 64 * 1024;
 export const MAX_BATCH_ITEMS = 250;
 /** ⭐ 28/8 — vedi la doc sopra `res.on('close', ...)` nella rotta /events: abbastanza frequente da tenere il canale vivo, abbastanza raro da non essere rumore nei log/nel traffico. */
@@ -440,7 +459,7 @@ const MESSAGE_BY_CODE = Object.freeze({
   GIT_STORE_UNAVAILABLE: 'Le funzioni git non sono disponibili su questo server',
   GIT_TIMEOUT: 'git non ha risposto entro il tempo massimo',
   GIT_OUTPUT_TOO_LARGE: 'L’uscita di git supera il limite consentito',
-  PAYLOAD_LIMIT: 'Contenuto oltre il limite consentito',
+  PAYLOAD_LIMIT: 'Il contenuto supera la misura che il server accetta: accorcia il messaggio, oppure metti il testo in un file e allegalo',
   METHOD_NOT_ALLOWED: 'Metodo non consentito',
   NOT_FOUND: 'Risorsa non trovata',
   TASK_NOT_ALLOWED: 'Task non ammesso',
@@ -827,11 +846,11 @@ export const COPIA_CONTESTO = Object.freeze({
    *   fuori le due che nascono DENTRO il `try`: `requireNoQuery` e `leggiCorpoJson` lanciano
    *   `QUERY_INVALID`, e un errore senza codice diventa `INTERNAL_ERROR`. Stessa famiglia di rotte,
    *   stessa promessa: o vale per tutte, o non vale.
-   * ⛔ `PAYLOAD_LIMIT` ha la sua riga ma NON è raggiungibile dall'esterno: `leggiCorpoJson` fa
-   *   `req.destroy()` appena il corpo supera i 4096 byte, e la misura col socket grezzo (corpo da
-   *   5.000 byte, `Content-Length` onesto, `Connection: close`) torna ZERO byte — la connessione
-   *   muore prima che una risposta parta. La copia c'è per il giorno in cui quel ramo imparerà a
-   *   rispondere; la prova lo DICHIARA invece di fingere di averlo visto.
+   * ⛔ `PAYLOAD_LIMIT` fino al 16/09 NON era raggiungibile dall'esterno: `leggiCorpoJson` faceva
+   *   `req.destroy()` appena il corpo superava i 4096 byte, e la misura col socket grezzo tornava ZERO
+   *   byte. ✅ Dal 16/09 quel ramo RISPONDE (413, drenando il corpo) e il tetto è 10 MiB: la prova in
+   *   `bc07-contesto-indisponibile.test.mjs` lo produce con una richiesta vera invece di dichiararlo
+   *   non provabile — vedi il commento a `MAX_REQUEST_BODY_BYTES`.
    */
   QUERY_INVALID: Object.freeze({
     title: 'Richiesta del contesto malformata',
@@ -1348,22 +1367,36 @@ export function origineDellaRichiesta(req) {
   };
 }
 
-function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES) {
+/*
+ * ⛔ 16/09 — UN CORPO OLTRE IL LIMITE RICEVE UNA RISPOSTA, non una connessione morta. Prima si faceva `req.destroy()`
+ *   al primo byte di troppo: il client non riceveva mai il 413 e il browser diceva «Failed to fetch». Ora si rifiuta
+ *   SUBITO (chi chiama risponde 413 con la copia) e si continua a DRENARE il resto del corpo senza tenerlo in memoria,
+ *   così il client finisce di mandare e legge la risposta. Oltre `FATTORE_DRENAGGIO_OLTRE_IL_LIMITE` volte il limite
+ *   si chiude davvero: drenare senza fine sarebbe l'altro modo di farsi tenere occupati da un corpo infinito.
+ */
+function leggiCorpoJsonCon(req, limiteByte) {
   return new Promise((resolve, reject) => {
     let totale = 0;
+    let respinto = false;
     const pezzi = [];
     req.on('data', (pezzo) => {
       totale += pezzo.length;
+      if (respinto) {
+        if (totale > limiteByte * FATTORE_DRENAGGIO_OLTRE_IL_LIMITE) req.destroy();
+        return;
+      }
       if (totale > limiteByte) {
+        respinto = true;
+        pezzi.length = 0;
         const errore = new Error('Corpo oltre il limite consentito');
         errore.code = 'PAYLOAD_LIMIT';
         reject(errore);
-        req.destroy();
         return;
       }
       pezzi.push(pezzo);
     });
     req.on('end', () => {
+      if (respinto) return;
       try {
         const testo = Buffer.concat(pezzi).toString('utf8');
         resolve(testo.length ? JSON.parse(testo) : {});
@@ -2116,6 +2149,8 @@ export function leggiRispostaMiglioramento(contenuto) {
 }
 
 export function createHttpApp({
+  /** ⛔ 16/09 — il tetto sul corpo delle richieste: 10 MiB di serie, vedi `MAX_REQUEST_BODY_BYTES`. Iniettabile per i test. */
+  limiteCorpoByte = MAX_REQUEST_BODY_BYTES,
   staticHandler, sessionRegistry = null, contextService = null, listaTaskDisponibili = () => [],
   elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
   // ⭐ 04/9, R-02 — stato del primo avvio (src/setup-stato.mjs): quali passi dell'intro sono già fatti, letti dalla realtà, mai un segreto.
@@ -2218,6 +2253,9 @@ export function createHttpApp({
    */
   fetchMiglioraPromptFn = globalThis.fetch,
 }) {
+  /** Il lettore del corpo con il tetto di QUESTA app: le rotte che vogliono un tetto più stretto lo passano come secondo argomento. */
+  const leggiCorpoJson = (req, limiteByte = limiteCorpoByte) => leggiCorpoJsonCon(req, limiteByte);
+
   async function imageInput(body) {
     if (!body || !Object.hasOwn(body, 'immagini')) return { body, immagini: [] };
     if (!chatImageStore) throw Object.assign(new Error('Gli allegati immagine non sono configurati.'), { code: 'QUERY_INVALID' });
