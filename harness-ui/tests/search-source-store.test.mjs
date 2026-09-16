@@ -81,3 +81,23 @@ test('SEARCH-STORE-05 — senza portachiavi salvare una chiave fallisce chiuso, 
   assert.throws(() => store.setKey('tavily', 'x'), (e) => e.code === 'SEARCH_STORE_UNAVAILABLE');
   assert.equal(store.listPublic().readiness, 'chiave-mancante');
 });
+
+test('SEARCH-STORE-06 — con ignoraSemiAmbiente i semi TALOS_HARNESS_SEARCH_* NON esistono: l\'app installata parte da DuckDuckGo, come da macchina pulita (16/09/2026)', () => {
+  const secret = 'tvly-mai-visto-dall-installata';
+  const store = createSearchSourceStore({
+    env: { TALOS_HARNESS_SEARCH_PROVIDER: 'tavily', TALOS_HARNESS_SEARCH_API_KEY: secret, TALOS_HARNESS_SEARCH_ENDPOINT: 'https://tavily.example.com' },
+    keyring: keyringFinto(), file: null, ignoraSemiAmbiente: true,
+  });
+  const v = store.listPublic();
+  assert.equal(v.source, 'duckduckgo', 'nessun seme: la fonte di default è quella da macchina pulita');
+  assert.equal(v.endpoint, '');
+  assert.equal(v.readiness, 'pronta');
+  assert.equal(v.fonti.find((f) => f.id === 'tavily').keyConfigured, false, 'la chiave d\'ambiente non fa «collegare» nessuna scheda');
+  assert.doesNotMatch(JSON.stringify(v), /tvly-mai-visto/);
+  const k = store.perKernel({ trasportoSenzaChiave: () => 'trasporto' });
+  assert.match(k.ricercaWeb.endpoint, /ricerca-senza-chiave\.talos\.invalid/, 'il kernel riceve la fonte senza chiave, mai il seme');
+  assert.equal(k.ricercaWeb.apiKey, undefined);
+  // la scelta dalla UI resta pienamente operativa dopo l'avvio senza semi
+  store.setSource({ source: 'tavily' });
+  assert.equal(store.listPublic().readiness, 'chiave-mancante');
+});

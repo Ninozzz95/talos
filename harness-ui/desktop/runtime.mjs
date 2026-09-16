@@ -66,6 +66,12 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
     TALOS_HARNESS_UI_TOKEN: token, TALOS_HARNESS_UI_REPORT_FILE: reportFile,
     TALOS_DESKTOP_DATA_DIR: dataDir,
     TALOS_HARNESS_UI_SESSIONS_DIR: join(dataDir, 'sessions'),
+    /*
+     * ⛔ (16/09/2026) — l'app installata ha un namespace SUO nel portachiavi (`<servizio>-desktop`,
+     *   nasce vuoto, mai condiviso con il server da sorgente) e ignora i semi di chiavi
+     *   dall'ambiente: le chiavi arrivano solo dalla UI. Vedi `src/adattatore-keyring.mjs`.
+     */
+    TALOS_HARNESS_UI_KEYRING_SCOPE: 'desktop',
   });
   return { command: execPath, args: ['--import', pathToFileURL(percorsi.bootstrap).href, percorsi.server], options: {
     cwd: percorsi.root, env: ambiente, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true, shell: false,
