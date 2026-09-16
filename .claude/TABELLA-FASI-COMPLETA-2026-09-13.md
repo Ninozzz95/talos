@@ -107,6 +107,25 @@ si coordina con chi ha in mano il bug, invece di curare due volte lo stesso stra
 
 ---
 
+# FASE P0-bis · La shell chiede davanti a un segreto — **approvata dall'owner il 16/09** («Sì»)
+
+**Subito dopo la fusione della P0**, come corsia unica con un agente Opus 5 high e il suo
+controllore: una **classe di percorsi segreti** aggiunta alla stessa grammatica dei file di controllo
+(`ePercorsoDiControllo`, realpath risolto, alias e junction coperti), applicata all'**argomento**
+della shell dopo la tokenizzazione che il kernel usa già, che riporta la shell a **«chiedi» anche
+quando è su «sempre»** — esattamente come già succede per `.hooks-trust`/`.mcp-trust`/`CLAUDE.md`
+in scrittura. Lista di partenza: `.ssh`, `.aws`, `.gnupg`, `.netrc`, `.env*`, `*.pem`, `*.key`,
+`id_*`, i portachiavi di sistema. **Finita quando:** con la shell su «sempre», `cat ~/.ssh/id_rsa`
+chiede e `npm test` no; una junction verso `.ssh` chiede; provato al contrario; giro vero; **limite
+dichiarato** nel report: `grep -r AWS_SECRET ~` non nomina un file segreto e passa comunque (la
+difesa lì è D-10E, che pulisce l'ambiente, e il fatto che i segreti di TALOS vivono nel portachiavi).
+⛔ Stesso commit da riportare nella copia sorgente del kernel fuori repo. Tocca il kernel nella
+regione dei permessi (`ATTREZZI_CON_PERMESSO_PER_ATTREZZO`, `config.mjs:307`; l'esecuzione della
+shell in `talosHarness.mjs` ~7831), che nessuna corsia della P0 ha: per questo viene **dopo** la
+fusione, non in parallelo.
+
+---
+
 # FASE 3-bis · MODALITÀ WORKFLOW — i «Piani di lavoro»
 
 **A cosa serve:** oggi TALOS sa delegare **un** compito a **una** figlia, e il padre si ferma ad
@@ -248,7 +267,7 @@ esistono**: prima l'inventario di cosa fa oggi, poi ogni voce si ritrova o si se
 | corsia | cosa | finita quando |
 |---|---|---|
 | 1 🔒 | la finestra (guscio e `legacy/app.js`) | inventario prima e dopo, nessuna funzione sparita |
-| 2 | i segreti che viaggiano dove non dovrebbero: gettone e chiave di firma **nell'ambiente del processo** che esegue i comandi, quindi leggibili da qualunque comando. ⭐ La **0.1.13 pubblica ha già** un gate sul seme d'ambiente per la chiave OpenRouter (PR #22): riaccertare cosa resta scoperto | nessun segreto nell'ambiente di un figlio, provato leggendolo davvero |
+| 2 | i segreti che viaggiano dove non dovrebbero: gettone e chiave di firma **nell'ambiente del processo** che esegue i comandi, quindi leggibili da qualunque comando. ⭐ La **0.1.13 pubblica ha già** un gate sul seme d'ambiente per la chiave OpenRouter (PR #22): riaccertare cosa resta scoperto. ⛔ **Misurato il 16/09 (segnalazione della lane CLI, riga F15, riprodotta in forma desktop):** `leggi` è confinato al workspace (`path-policy.mjs`) e rifiuta `~/.ssh/id_rsa`; la `shell` ha solo la policy per attrezzo (`config.mjs:307`) e D-10E le toglie i segreti dall'**ambiente**, ma **nessuno esamina l'argomento del comando** — con la shell su «sempre», `cat ~/.ssh/id_rsa` o `grep -r AWS_SECRET ~` passano dove `leggi` si ferma. ⛔ **Decisione dell'owner** (non una cura da corsia): una classificazione dei percorsi segreti sull'argomento (`.ssh`, `.env`, `.aws`, `.netrc`, chiavi) che riporti la shell a «chiedi» anche quando è su «sempre», come già fanno i file di controllo | nessun segreto nell'ambiente di un figlio, provato leggendolo davvero; e la shell che legge un segreto **chiede**, provato al contrario |
 | 3 | il terminale: l'uscita arriva **tutta insieme alla fine** invece che mentre scorre; il comando `!` **non funziona mentre il modello lavora**. (D-10C, l'ordine dei due flussi, è chiuso con prova nella coda del 10/09: non si riapre senza riprodurlo.) ⛔ Si coordina con la **Fase P0 punti 1-3**, che tocca lo stesso terminale: una fase sola tocca quei file per volta | streaming durante l'esecuzione; `!` a modello occupato |
 | 4 | dove gira davvero un tuo comando (il sottosistema Linux, non dichiarato: percorsi sorprendenti) e la copia del motore lì presente, coi suoi difetti | dichiarato a schermo e nei percorsi |
 | 5 | il segnavia che non si muove sul Chrome dell'owner («rompicoglioni»). ⛔ Misurato **nel suo browser con l'accelerazione accesa**, non in quello senza finestra | riprodotto e chiuso con la foto |
@@ -339,6 +358,7 @@ piattaforma** che spetta all'owner, non a una corsia.
 | **Fase 3 · fare le cose in blocco** | 15/09, `3415c030` (+ pubblico `76f8c8c`): batch unico `POST …/:resource/batch` su cinque collezioni (250 id, esito per voce, 214 provate con una richiesta), selezione condivisa, guardia sui **tre** tool paginati (non quindici: censimento corretto), banco exporter rifatto (15/15, 2.224 rinomine), assistenza con fonti reali e «non lo so»; server 3.012/3.016, kernel 598/598 | `archivio/2026-09-16/LEDGER-FASE-3-2026-09-15.md` |
 | **Streaming fluido + Prompt Enhance** | 15/09 (altra sessione): via l'arretrato del ritmo 140-160 car/s, `Copia`, `Sostituisci` esatto — pubblicato nella 0.1.8. ⛔ L'owner vede **ancora** lo streaming a blocchi il 16/09: è un altro strato o è aperto; lo giudica chi ha in mano il bug | `archivio/2026-09-16/LEDGER-FLUIDITA-PROMPT-2026-09-15.md` |
 | **Gate rossi del pubblico** | 15/09 (altra sessione): CI pubblica verde su 7 gate, PR #12 e #9-#11 fuse, split desktop-core/desktop-ui | `archivio/2026-09-16/REPORT-GATE-ROSSI-TALOS-2026-09-15.md`, `LEDGER-GATE-MAIN-2026-09-15.md` |
+| **`cd` su Windows che non persisteva** | `3d292939`, 16/09 — segnalato dalla sessione «talos cli», riprodotto prima di curare: `staccaCartellaFinale` leggeva la prima riga dopo il marcatore, ma la coda Windows (`echo.`) va a capo e la coda POSIX (`printf`) no ⇒ `cartellaFinale: null` con CRLF **e** con un solo LF (non era il `\r`). Cura: prima riga **non vuota**. 5/5 in un file di test proprio, kernel 598/598, rottura al contrario 2 rosse, sha256 identico. ⛔ Da riportare nella copia sorgente del kernel fuori repo | TACCUINO non aggiornato: il commit è la prova |
 | **Le memorie superate** | «un agente alla volta», «niente più deleghe», «delega ad Astra», «stato release a cinque blocchi»: marcate storia negli indici il 13-14/09; la regola viva è quella del 16/09 qui sopra | indici di memoria |
 | **Documenti** | 380 voci spostate in `archivio/2026-09-16/` il 16/09 (prompt e consegne ad Astra, dossier, ledger e rapporti delle righe chiuse, foto 11-13/09, patch mai applicate); restano vivi tabella, taccuino, indici, code, regole e i 23 documenti citati dal codice | `archivio/2026-09-16/INDICE.md` |
 

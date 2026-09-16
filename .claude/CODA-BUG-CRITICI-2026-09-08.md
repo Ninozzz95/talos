@@ -559,3 +559,30 @@ scrive il prossimo attrezzo.
 
 **Finita quando:** un attrezzo nuovo che dichiara un campo di paginazione e non passa dal tetto fa
 **fallire** una prova; e il numero di voci per pagina e' uno solo, condiviso, non due copie.
+
+## BC-53 | Incolli un prompt lungo nella chat e l'invio muore con «Failed to fetch» (owner 16/09/2026, dal vivo) — ✅ CHIUSO lo stesso giorno
+
+**Cosa hai visto:** incollato un testo di ~12 KB (il prompt dell'audit tecnico) in una chat aperta, «TALOS · errore —
+Invio non riuscito: Failed to fetch», e la conversazione sembrava crashata.
+
+**Cosa era, misurato:** «Failed to fetch» è il browser che dice che NESSUNA risposta HTTP è arrivata. Il server accettava
+al massimo **4.096 byte** di corpo (`MAX_REQUEST_BODY_BYTES`, `http-app.mjs:46`) e, al primo byte in più, `leggiCorpoJson`
+faceva `req.destroy()`: la connessione moriva prima che partisse una risposta, e il 413 `PAYLOAD_LIMIT` — che aveva la sua
+riga e la sua copia — non era raggiungibile dall'esterno. ⛔ Il codice lo confessava in un commento (`:830-834`) e un test
+(bc07) lo aveva **escluso come «non provabile»** invece di curarlo: un difetto noto, dichiarato e lasciato lì.
+
+**La domanda dell'owner («ha senso un tetto?»), risposta con la ricerca (16/09):** sì, ma non a 4 KB. Hermes Agent mette
+`MAX_REQUEST_BYTES` a **10 MB** sul suo API server (e la PR #58902 lo impone anche ai corpi chunked); l'API Anthropic
+rifiuta sopra **32 MB** con un 413; Claude Code non documenta un limite e sugli incolla lunghi **tronca o si blocca in
+silenzio** (issue #65280, #29375: il difetto da non copiare); un corpo senza tetto è un modo per far cadere il processo
+(`JSON.parse` amplifica ~15× in memoria).
+
+**Cura:** tetto a **10 MiB** di serie, `TALOS_HTTP_BODY_MAX_BYTES` nel README, iniettabile nei test
+(`createHttpApp({ limiteCorpoByte })`); un corpo oltre il tetto riceve un **413 che dice cosa fare** («accorcia il
+messaggio, oppure metti il testo in un file e allegalo») e il server **drena** il resto invece di chiudere in faccia
+(oltre 4× il tetto chiude davvero). Le rotte con corpo a forma fissa (codice OAuth, batch) tengono i loro tetti piccoli.
+Prove sulla rotta vera (`POST …/resume`): 5/5, bc07 senza più esclusioni, suite HTTP verdi; al contrario: `destroy`
+rimesso → rosse; tetto a 4.096 → rossa; ripristino sha256 identico.
+
+**Finita quando:** ✅ un messaggio da 12 KB arriva al registro byte per byte; un corpo oltre il tetto riceve il 413 con la
+copia. Resta da riprovare **dal vivo sul 4174** dopo la consegna, incollando lo stesso prompt.
