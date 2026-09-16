@@ -5077,6 +5077,20 @@ function storeRicercaFinto() {
     },
     leggiGiornaleFn: async ({ cartella, id }) => ({ eventi: giornali.get(`${cartella}::${id}`) ?? [], righeSaltate: 0, byte: 0 }),
     leggiPianoFn: async () => null,
+    /*
+     * ⛔⛔ (16/09/2026) — le tre porte di SCRITTURA disco dell'orchestratore (L9, 12/09) mancano
+     *   qui e nessuno se n'è accorto per giorni: `scriviPianoFn` gira in try/catch silente
+     *   (research-orchestrator.mjs: «il piano su disco è una prova, non una condizione»), quindi
+     *   ogni test che avvia una ricerca con `onRicercaAvvia` ha scritto DAVVERO `piano.json` in
+     *   `<cartella>/.harness-ui-research/` — 360 cartelle contate sul disco (216 in C:\tmp\x,
+     *   144 in C:\tmp\progetto-vero, 72 run × 3 chiamate + 72 × 2, aritmetica combaciante al
+     *   pezzo con le domande nei piani). Le fonti e il loro indice non scattano oggi (la figlia
+     *   finta non gira mai) ma si fingono lo stesso: la prossima porta dimenticata non deve
+     *   ridare il problema. (Il precedente è `storeFinto()` di research-orchestrator.test.mjs.)
+     */
+    scriviPianoFn: async () => {},
+    scriviFonteFn: async () => {},
+    scriviIndiceFontiFn: async () => {},
     elencaFontiFn: async () => [],
     leggiIstantaneaCacheFn: async ({ cartella, id }) => istantanee.get(`${cartella}::${id}`) ?? null,
     scriviIstantaneaCacheFn: async ({ cartella, id, istantanea }) => { istantanee.set(`${cartella}::${id}`, istantanea); },
