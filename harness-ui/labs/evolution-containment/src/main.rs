@@ -8,7 +8,16 @@ mod windows;
 fn failure_code(error: &str) -> i32 {
     if error == "use --run-synthetic-probes; lab only" { return 64; }
     if error == "invalid probe arguments" { return 65; }
-    if error.starts_with("scratch open:") { return 66; }
+    if error.starts_with("scratch open:") {
+        // Diagnostic-only parsing of Rust's error display. An unknown format
+        // keeps the original failure code; this is never a success oracle.
+        if let Some((_, suffix)) = error.rsplit_once("(os error ") {
+            if let Ok(code) = suffix.trim_end_matches(')').parse::<i32>() {
+                if (1..=65535).contains(&code) { return 10000 + code; }
+            }
+        }
+        return 66;
+    }
     if error.starts_with("report pipe open:") { return 67; }
     if error == "invalid port" || error == "invalid probe mode" { return 68; }
     1
@@ -35,6 +44,9 @@ mod tests {
         assert_eq!(failure_code("use --run-synthetic-probes; lab only"), 64);
         assert_eq!(failure_code("invalid probe arguments"), 65);
         assert_eq!(failure_code("scratch open: access denied"), 66);
+        assert_eq!(failure_code("scratch open: Access denied (os error 5)"), 10005);
+        assert_eq!(failure_code("scratch open: Path missing (os error 3)"), 10003);
+        assert_eq!(failure_code("scratch open: bogus (os error 0)"), 66);
         assert_eq!(failure_code("report pipe open: not found"), 67);
         assert_eq!(failure_code("invalid port"), 68);
         assert_eq!(failure_code("unknown failure"), 1);
