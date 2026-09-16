@@ -6,6 +6,27 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.13 — 2026-09-16
+
+Same product as `desktop-v0.1.12`, which never published: its release job died building the
+installer, and a published tag is never rewritten, so this attempt gets a new number.
+
+### Fixed
+- The installer now builds. The uninstall-page work added an NSIS variable used only by the
+  uninstaller, but the installer build compiles the uninstaller in a separate pass (the template
+  includes it only when `BUILD_UNINSTALLER` is defined); the variable was declared in both passes
+  and used in one, and in this build every NSIS warning is an error — so the declaration now lives
+  only in the pass that uses it. The 0.1.12 run died exactly there: the uninstaller stub compiled
+  clean, then the main compile failed on `warning 6001` treated as an error.
+- A failed build no longer masquerades as success. The build script printed its failure and kept
+  going with a zero exit, so the release job's build step passed and the install smoke failed
+  seconds later against a truncated installer, reporting the smoke's confusion instead of the real
+  cause. Measured locally: the deep build failure loads `signal-exit@3.0.7` (via
+  `proper-lockfile`), which replaces `process.reallyExit` and zeroes the exit code with
+  `code || 0` when the process ends by draining the event loop — an instrumented run showed the
+  code at 1 in `beforeExit` and 0 at process exit. The script now exits non-zero explicitly at
+  the moment of the failure.
+
 ## desktop-v0.1.12 — 2026-09-16
 
 Same product as `desktop-v0.1.11`, which never published: its release job stopped at the

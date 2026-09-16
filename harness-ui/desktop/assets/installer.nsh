@@ -36,7 +36,16 @@
  * Il default resta «mantieni» in OGNI caso silenzioso: upgrade, CI (ci-smoke.ps1 disinstalla
  * con /S a ogni rilascio) e ogni invocazione /S manuale non vedono la domanda e non perdono dati.
  */
+; ⛔ La Var vive SOLO nel compilato che la usa (16/09/2026, cura della release 0.1.12 bruciata).
+; Le macro Un qui sotto si espandono SOLO nello stub disinstallatore: installer.nsi include
+; uninstaller.nsh solo con BUILD_UNINSTALLER definito, e app-builder-lib 26.16.1 definisce quel
+; simbolo per lo stub (NsisTarget.js:364) e lo cancella per il compilato principale (:390).
+; Nel compilato principale la macro non si espande mai, quindi una Var globale sarebbe
+; «dichiarata e mai usata»: makensis warning 6001, e l'electron-builder tratta OGNI warning
+; makensis come errore — la build della 0.1.12 è morta proprio lì.
+!ifdef BUILD_UNINSTALLER
 Var PulisciDatiUtente
+!endif
 
 !macro customUnInit
   StrCpy $PulisciDatiUtente "0"
