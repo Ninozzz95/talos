@@ -41,7 +41,7 @@ import { aggiornaCosti } from '../components/costi-consumo.js'; // 06/9 D21/D22:
 import { aggiornaContesto, ripartizioneContesto } from '../components/contesto.js'; // 06/9 D26: ripartizione della finestra di contesto
 import { montaHf } from '../components/hf-catalogo.js';
 import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
-import { aggiornaInspector, processiDagliEventi, schedaAgentiDaRileggere, titoloMessaggioUtente, titoloRispostaDaTurno } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento
+import { aggiornaInspector, processiDagliEventi, schedaAgentiDaRileggere, titoloMessaggioUtente, titoloRispostaDaTurno, uscitaDaTestoAttrezzo } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento; 16/09 P0-E: il codice di uscita si legge dal risultato dell'attrezzo
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
@@ -9101,8 +9101,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** L'unico posto che sa come si ascolta una sessione figlia: il componente resta puro, e le sue
       prove non hanno bisogno di rete. Ritorna la funzione che stacca il flusso. */
-  function apriFlussoFiglia(sessionId, onEvento) {
+  function apriFlussoFiglia(sessionId, onEvento, ganci = {}) {
     const sorgente = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
+    /*
+     * ⛔ 16/09, P0-E punto 10 — `onopen` è l'UNICO momento in cui si sa che il collegamento c'è.
+     *   Senza, la vista non poteva distinguere «mi sto collegando» da «collegato e la figlia tace»,
+     *   e mostrava lo stato vuoto — che diceva «Il collegamento è aperto» — nell'istante del
+     *   montaggio, cioè prima di sapere se fosse vero. Due fatti diversi, due frasi diverse.
+     */
+    sorgente.onopen = () => { try { ganci.onAperto?.(); } catch { /* chi ascolta si arrangia */ } };
     sorgente.onmessage = (messaggio) => {
       try { onEvento(JSON.parse(messaggio.data)); }
       catch { /* un frammento illeggibile non deve buttare giù la vista: si scarta */ }
@@ -9121,7 +9128,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     aperta.contenitore?.remove();
     const elenco = $('#railAgenti');
     if (elenco) elenco.hidden = false;
-    aggiornaInspectorDaStato();
+    /* ⛔ `subito`: da oggi la colonna si disegna su un frame, ma qui l'elenco è appena tornato
+       visibile e dev'essere aggiornato nello stesso istante in cui ricompare — un frame di elenco
+       vecchio dopo un «Indietro» è esattamente lo sfarfallio che questa corsia toglie. */
+    aggiornaInspectorDaStato({ subito: true });
   }
 
   function apriConversazioneFiglia(figlia) {
@@ -9239,9 +9249,35 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     })().finally(() => { if (richiestaCacheSessione === richiesta) richiestaCacheSessione = null; });
   }
 
-  function aggiornaInspectorDaStato() {
+  /*
+   * ⛔⛔⛔ 16/09, P0-E — LA COLONNA SI RIDISEGNAVA A OGNI EVENTO, SENZA COALESCENZA.
+   *   `aggiornaInspectorDaStato` è chiamata da 34 punti (quasi tutti via `syncRunComposerState`),
+   *   e ogni chiamata rifaceva TUTTO: `giriPerInspector()` scandisce ogni `.talos-turn` della chat,
+   *   `righeFile` rilegge i file toccati, `processiDagliEventi` ripercorre tutti gli eventi degli
+   *   attrezzi. Durante un giro vivo gli eventi arrivano a raffica: decine di ricostruzioni per
+   *   frame, tutte tranne l'ultima buttate via prima che il browser disegnasse.
+   * ⇒ Le chiamate si COALESCONO su un frame: chi chiama segna «sporco», e il disegno avviene una
+   *   volta sola prima del prossimo ridisegno del browser. Nessun `setTimeout` e nessun polling
+   *   nuovi: `requestAnimationFrame` è il battito che il browser ha già.
+   * ⛔ SENZA `requestAnimationFrame` (banchi Node, prove unitarie, pagina non ancora viva) si
+   *   disegna SUBITO: un ripiego che rimanda non è un ripiego, è una funzione che non fa niente.
+   * ⛔ `aggiornaInspectorDaStato({ subito: true })` resta per chi ha bisogno del DOM aggiornato
+   *   nella stessa battuta (una misura, una foto): il ritardo di un frame non deve diventare una
+   *   trappola per chi legge subito dopo aver scritto.
+   */
+  let inspectorProgrammato = 0;
+  let inspectorSporco = false;
+  function aggiornaInspectorDaStato({ subito = false } = {}) {
+    inspectorSporco = true;
+    if (subito || typeof window.requestAnimationFrame !== 'function') { disegnaInspectorAdesso(); return; }
+    if (inspectorProgrammato) return;
+    inspectorProgrammato = window.requestAnimationFrame(() => { inspectorProgrammato = 0; disegnaInspectorAdesso(); });
+  }
+  function disegnaInspectorAdesso() {
+    if (!inspectorSporco) return;
     const inspector = $('#inspectorSessione') || $('.talos-inspector');
-    if (!inspector) return;
+    if (!inspector) return; // ⛔ resta SPORCO: la colonna non c'è ancora, e il disegno va rifatto quando ci sarà
+    inspectorSporco = false;
     const file = [...(state.realSession.reviewFiles?.values?.() || [])].map((v) => { const c = contaDiff(v); return { path: v.path, aggiunte: c.aggiunte, rimozioni: c.rimozioni }; });
     /*
      * ⛔⛔⛔ 09/09/2026, owner: «UNIFICA». La stessa chat, nello stesso istante, diceva due cose:
@@ -14730,7 +14766,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     if (evento.type === 'ToolCallStart') state.realSession.eventiAttrezzi.push({ type: 'ToolCallStart', toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), giro: state.realSession.runCount || null }); // 06/9 B2: ora e giro per «Processi»
     else if (evento.type === 'ToolCallArgs') state.realSession.eventiAttrezzi.push({ type: 'ToolCallArgs', toolCallId: evento.toolCallId, delta: evento.delta });
-    else if (evento.type === 'ToolCallResult') state.realSession.eventiAttrezzi.push({ type: 'ToolCallResult', toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error) });
+    /*
+     * ⭐ 16/09, P0-E punto 9 — si copia ANCHE il codice di uscita, e solo quello. È l'unico posto in
+     *   cui esiste: `ToolCallResult` non ha un campo «uscita» (vedi `agui-events.mjs`), e il kernel
+     *   lo scrive in testa al contenuto (`talosHarness.mjs:7812`, `exit ${p.codice} [sandbox: …]`).
+     *   ⛔ Resta vera la nota qui sopra: il `content` NON si conserva, perché può essere enorme —
+     *   `uscitaDaTestoAttrezzo` ne ricava un intero e butta il resto. Serve a distinguere
+     *   «annullato» (130) e «terminato a forza» (124) da «non riuscito», che prima erano la stessa
+     *   cosa: un pallino rosso su un comando che qualcuno aveva semplicemente fermato.
+     */
+    else if (evento.type === 'ToolCallResult') state.realSession.eventiAttrezzi.push({ type: 'ToolCallResult', toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error), uscita: uscitaDaTestoAttrezzo(evento.content) });
     /*
      * ⛔ PO-06 (10/09) — il giro del comando scritto dalla persona finisce qui: da adesso le
      *   righe che arrivano sono di nuovo dell'agente e tornano al comportamento normale (card
