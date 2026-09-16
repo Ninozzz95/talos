@@ -1,6 +1,7 @@
 //! Non-production launch/measurement harness. All objects and permissions are
 //! temporary and per-run; no firewall, loopback exemptions, accounts or services.
 mod ffi;
+mod security;
 use ffi::*;
 use crate::protocol::{peer_matches, Report, FRAME_BYTES};
 use std::{ffi::{c_void, OsStr, OsString}, fs::{self, File, OpenOptions}, io::{self, Read, Write},
@@ -104,7 +105,7 @@ fn set_acl(path: &Path, owner: &str, packages: &[&str], access: &str, inherit: b
     for sid in packages { sddl.push_str(&format!("(A;{propagation};{access};;;{sid})")); }
     sddl.push_str("S:(ML;OICI;NW;;;LW)");
     let sd = descriptor(&sddl)?;
-    unsafe { check(SetFileSecurityW(wide(path.as_os_str())?.as_ptr(), 4 | 0x10, sd.0), "set fixture ACL") }
+    security::apply(path, &sd)
 }
 struct Fixture { root: PathBuf, exe: PathBuf, private: PathBuf, immutable: PathBuf, scratch: PathBuf }
 impl Fixture {
@@ -216,6 +217,7 @@ fn launch(exe: &Path, args: &[OsString], temp: &Path, job: &Owned, sid: Option<S
     unsafe { check(IsProcessInJob(child.process.0, job.0, &mut inside), "child Job identity")?; }
     ensure(inside != 0, "child not in mandatory Job")?;
     if let Some(sid) = sid { ensure(same_container(child.process.0, sid)?, "child container identity mismatch")?; }
+    security::describe_process(child.process.0, if sid.is_some() { "contained-child" } else { "control-child" })?;
     ensure(unsafe { ResumeThread(child.thread.0) } != u32::MAX, "ResumeThread failed")?;
     Ok(child)
 }
@@ -454,6 +456,7 @@ fn experiment() -> Result<()> {
     let mut foreign = Profile::new(&format!("{name}.B"))?;
     let a = sid_string(profile.sid)?; let b = sid_string(foreign.sid)?;
     let fixture = Fixture::new(&name, &owner, &[&a, &b])?;
+    security::parent_control(&fixture)?;
     let server = io_result(TcpListener::bind(("127.0.0.1", 0)))?;
     let port = io_result(server.local_addr())?.port();
     let original_env = std::env::var_os(SYNTHETIC);
