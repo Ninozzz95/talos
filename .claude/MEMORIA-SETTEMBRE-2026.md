@@ -1,5 +1,12 @@
 # MEMORIA — le regole di settembre 2026 (quarto file dell'indice)
 
+> ⛔ **16/09 — il paragrafo qui sotto è di un'ALTRA sessione (runtime Codex) e non vale per la
+> sessione Claude.** Owner, 16/09, al reset dei limiti: «coordinatore, code reviewer e orchestratore
+> di 5 agenti Opus 5 high o xhigh, in modalità separata o Workflow a tua scelta; 5 per fase divisa in
+> 5 parti o 1 per fase; al termine dei limiti si procede inline». Qui Opus 5 È esposto e i cinque
+> agenti sono la regola. La tabella canonica è stata riscritta il 16/09 e i documenti chiusi sono in
+> `archivio/2026-09-16/`.
+>
 > **14/09 — roadmap riconciliata:** stato corrente in
 > [TABELLA-FASI-COMPLETA-2026-09-13.md](TABELLA-FASI-COMPLETA-2026-09-13.md),
 > prove e proposta organizzativa in [RIALLINEAMENTO-ROADMAP-2026-09-14.md](RIALLINEAMENTO-ROADMAP-2026-09-14.md).
