@@ -4104,7 +4104,18 @@ export function staccaCartellaFinale(testo) {
     const t = String(testo ?? '')
     const i = t.lastIndexOf(MARCATORE_CARTELLA)
     if (i === -1) return { testo: t, cartella: null }
-    const cartella = t.slice(i + MARCATORE_CARTELLA.length).split('\n')[0].trim()
+    /*
+     * ⛔ 16/09 — SUL RAMO WINDOWS LA CARTELLA SI PERDEVA SEMPRE, e non per il CRLF. Misurato (segnalazione
+     *   della sessione «talos cli», riprodotta qui prima di curare): con la coda POSIX `printf '\n__TALOS_CWD__'; pwd`
+     *   il marcatore NON va a capo e il percorso sta sulla stessa riga; con la coda Windows `echo.__TALOS_CWD__& cd`
+     *   `echo.` va a capo PER COSTRUZIONE, quindi la «prima riga dopo il marcatore» era il resto vuoto di quella
+     *   riga e `cd` stampava sulla riga DOPO, che nessuno leggeva ⇒ `cartellaFinale: null`, e un `cd` della persona
+     *   non persisteva fra un comando e il successivo. Un solo LF perdeva uguale: la controprova che non era il \r.
+     *   ⇒ Si legge la prima riga NON VUOTA dopo il marcatore: regge le due forme di coda senza dipendere da `cmd`.
+     *   (La cura del 10/09 a `codaCheStampaLaCartella` — `%CD%` valutato prima del `cd` — resta giusta: guardava
+     *   QUALE cartella tornava, non SE tornava. Questo è il secondo difetto, indipendente.)
+     */
+    const cartella = t.slice(i + MARCATORE_CARTELLA.length).split(/\r?\n/).map((riga) => riga.trim()).find(Boolean) ?? ''
     return { testo: t.slice(0, i).replace(/[\r\n]+$/, ''), cartella: cartella || null }
 }
 
