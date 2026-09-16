@@ -493,3 +493,17 @@
   implementativa ancora da conciliare con AGENTS.md. Nessun agente avviato o commit/push.
 - Registro dei file, fonti primarie e verifica documentale:
   [RIALLINEAMENTO-ROADMAP-2026-09-14.md](RIALLINEAMENTO-ROADMAP-2026-09-14.md).
+
+## 2026-09-16 — il bundle committato con la Fase 3 NON conteneva la Fase 3
+
+- Misurato riavviando il 4174 con `npm run aggiorna` (per consegnare la cura di BC-53): la build dai sorgenti invariati ha
+  prodotto `public/app.js` da **1.825.533 byte** contro i **1.818.988** committati in `3415c030`. Build **deterministica**
+  (sha256 identici fra `dist/` e `public/` a una seconda costruzione; `verify:ui` 33 asset verdi). `selezioneDopoBatch`:
+  **0** nel bundle di `HEAD`, **2** nei sorgenti, **2** nel ricostruito. `3415c030` ha cambiato `public/app.js` di
+  **3 righe** mentre aggiungeva ai sorgenti selezione multipla, esiti del batch e assistenza; il suo ledger dichiarava
+  «artefatti deterministici della build».
+- ⇒ Chi serviva `public/` da quel commit senza ricostruire — il 4174 fino al riavvio di oggi, o un clone lanciato così —
+  **non ha mai visto la UI della Fase 3**. L'installatore pubblico no: la CI ricostruisce il frontend dai sorgenti.
+- ⛔ Lezione, stessa dell'11/09 in forma nuova: **il bundle nel commit dev'essere quello che i sorgenti producono**, e
+  lo dicono le impronte del manifesto, non il ledger. Un controllo da un comando: ricostruire e confrontare gli sha
+  prima di committare `public/*`. Curato in `df5aa730` («build(public): ship the bundle the sources actually produce»).
