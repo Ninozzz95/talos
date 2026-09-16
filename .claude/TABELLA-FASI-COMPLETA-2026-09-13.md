@@ -88,6 +88,22 @@ conclusi tornano dalla cache). Base dei worktree: `4c58c961`. Alla consegna: fus
 D, A, B, E, C con messaggi miei in inglese; i worktree delle corsie restano su disco finché non li
 ho fusi.
 
+**Stato della fusione, 16/09 sera (misurato):** il Workflow è finito — 18 agenti, 0 errori, 4 h 07 min,
+5,2 M token. Verdetti dei controllori avversariali: **D approvata** dopo un giro di riparazione (il
+failsafe era costruito e non agganciato), **E approvata** al primo passaggio, **A/B/C bocciate** anche
+dopo il giro di riparazione per residui piccoli e precisi (A: due numeri di uno sweep sbagliati nei
+commenti; B: le etichette dei due pulsanti del pannello di stato non seguono il cambio lingua a caldo, e
+«caratteri» non tradotto; C: **regressione vera** — chi apre e richiude il ragionamento durante la
+generazione perde il testo, 7.595 su 47.302 caratteri — e un commento che contraddice il file).
+⇒ **Fuse sul ramo**: D (`9b611182`), A (`7388969d`, dopo la mia correzione dei due numeri), E
+(`f4507891`). Cancelli rifatti da me sullo stato fuso, da soli: suite D+BC-53 **52/52**, unit frontend
+**1108/1108**, kernel **598 verdi, 1 skip**. **B e C**: secondo giro di riparazione mirato in corso
+(un agente Opus 5 high per corsia, nei loro worktree, coi verdetti in mano); poi fusione B, C, build,
+suite backend intera, parity/browser, consegna sul 4174, giro vero, foto, richiesta di push.
+⛔ Nota per chi fonde: i worktree C e D sono nati da `3415c030` (non da `4c58c961`); il diff fra i due
+su `frontend/src` e `frontend/tests` è vuoto, quindi i numeri di riga valgono; C ha committato foto e
+misure in `frontend/artifacts/p0-C/` (da NON portare nel ramo: le misure vanno nel registro).
+
 | # | punto | cosa succede oggi (dall'owner) | finita quando |
 |---|---|---|---|
 | 1 | **Terminale dal composer a tutta larghezza** | la pill «Terminale» apre il terminale con la larghezza del composer | si apre usando tutta l'area principale, coerente con la sezione dedicata, responsive |
