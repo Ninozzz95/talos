@@ -171,7 +171,10 @@ senza il motore sarebbe una finestrella che incolla testo con più passaggi. ⛔
 
 ---
 
-# FASE 3-ter · PO-26 — Una cartella dati sola, fuori dal workspace (domanda dell'owner del 16/09, DA APPROVARE)
+# FASE 3-ter · PO-26 — Una cartella dati sola, fuori dal workspace — **approvata dall'owner il 16/09** («PO-26 si»)
+
+> Parte **dopo la fusione della P0** (una fase alla volta): una corsia, un agente Opus 5 high in worktree, con revisore
+> avversariale; `server.mjs` e `README.md` sono in mano alla corsia D della P0 fino alla fusione, per questo non prima.
 
 **Cosa succede oggi, misurato:** l'app scrive nella **radice del workspace** nove nomi diversi: `.harness-ui-library`
 (`library-store.mjs:55`), `.harness-ui-research` (`research-store.mjs:60`), `.notes-store`, `.tasks-store`, `.memory-store`,
@@ -187,7 +190,7 @@ percorso è lungo; `CLAUDE_CONFIG_DIR` e `CLAUDE_CODE_PROJECT_DIR_NAME` per spos
 SCRIVE (`.claude/`, `CLAUDE.md`). Codex CLI: `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. Gemini CLI: `~/.gemini/` per
 l'utente, `.gemini/` nel progetto solo per la configurazione.
 
-**La proposta (mia, da approvare):** due classi, non una.
+**La proposta (approvata):** due classi, non una.
 1. **Ciò che l'app genera** — libreria, ricerche, note, attività, memoria — va in **`<dati>/workspaces/<slug del percorso
    assoluto>/{library,research,notes,tasks,memory}`**, dove `<dati>` è `TALOS_DESKTOP_DATA_DIR` nell'app e la cartella dello
    store sul server. Per **workspace**, con dentro la suddivisione per sessione dove il dato è di una sessione (le voci della
