@@ -6,7 +6,29 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
-## desktop-v0.1.9 — 2026-09-15
+## desktop-v0.1.10 — 2026-09-16
+
+Same product as `desktop-v0.1.9`, which never published: its release job stopped at the
+gates, and a published tag is never rewritten, so this attempt gets a new number.
+
+### Fixed
+- The gate that refused `desktop-v0.1.9` was the critical-tools hotfix transformer itself,
+  failing closed exactly as its own guard test demands. Its last patch was anchored to a
+  dispatch-ladder shape the kernel does not have: it sought `if (nome === 'leggi')` as the
+  head of the chain, but the kernel dispatches `elenca` and `cerca` first, so `leggi` has
+  been an `else if` at every commit the transformer ever existed in. That test lives in
+  `test:puri`, which only the release job executes, so this release run was its first CI
+  execution — the mismatch reached the tag undetected. Nothing unsafe shipped.
+- The `prova` refusal now inserts as an intermediate branch of the chain the kernel
+  actually has, still ahead of the legacy `prova` branch it must refuse; `elenca` and
+  `cerca` never capture `prova`, so nothing about the refusal changes.
+
+### Verification
+- Full `test:puri` locally, 60 tests, 0 failures, 4 declared-premise skips, with the
+  desktop dependencies installed the way the runner does; the transformer test applies
+  the four HIGH findings to the real kernel, 2/2.
+
+## desktop-v0.1.9 — 2026-09-15 (tag only, no release published)
 
 ### Added
 - **Built-in assistance.** A new `/api/v1/assistenza` route answers questions about the product from
