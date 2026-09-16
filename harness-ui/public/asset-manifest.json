@@ -92,6 +92,21 @@
       "sha256": "eb466a02d4908021df6ad9c9d07066d5932d4d842c825807b738aff8f4af50f2"
     },
     {
+      "path": "vendor/shell-quote/LICENSE-shell-quote",
+      "bytes": 1095,
+      "sha256": "b5c029ec632540485bfb1ed24d4888e412235f1a6be4ab37622a12b53e71cc5f"
+    },
+    {
+      "path": "vendor/shell-quote/README.md",
+      "bytes": 2959,
+      "sha256": "a914e1e15d7e847c76556faa3f6490e65bf613c71cb355e89c517af56569b1d3"
+    },
+    {
+      "path": "vendor/shell-quote/parse.js",
+      "bytes": 8379,
+      "sha256": "94679dd3db989ec23f15dccb02ed03f6d7c7688990feac8539220c5056ced8b9"
+    },
+    {
       "path": "vendor/tanstack/LICENSE-virtual-core",
       "bytes": 1079,
       "sha256": "a405ee70c632bb938acb7ac5f210e814409b3760ea9d2329d8ed8ffcfd11a0e7"
