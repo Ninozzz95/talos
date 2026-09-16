@@ -562,6 +562,37 @@ export async function eliminaVoce({ cartella, id }, deps = {}) {
   return { id, nome: meta.nome };
 }
 
+/*
+ * ⭐ (16/09/2026) — ELIMINAZIONE A LOTTI (richiesta owner): una sola chiamata
+ * `library_delete` con `ids` ripulisce N voci senza N giri del modello. L'iterazione
+ * riusa `eliminaVoce` COSÌ COM'È (mai una copia della sua logica: un credito futuro
+ * qui deve valere anche lì) e distingue l'eliminato dall'assente — un id già sparito
+ * NON è un guasto (stesso principio di `eliminaVoce`), finisce in `assenti` e l'esito
+ * resta onesto. Limiti spessi: mai un lotto che svuota la Libreria per sbaglio
+ * (tetto 100, una chiamata extra quando serve di più). `eliminaVoce` NON cambia.
+ */
+export async function eliminaVoci({ cartella, ids }, deps = {}) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new LibraryStoreError('Per eliminare a lotti serve un array `ids` con almeno un id.', 'LIBRARY_INVALID');
+  }
+  if (ids.length > 100) {
+    throw new LibraryStoreError('Massimo 100 id per chiamata: spegni la richiesta in più lotti.', 'LIBRARY_INVALID');
+  }
+  for (const id of ids) {
+    if (typeof id !== 'string' || !id.trim()) {
+      throw new LibraryStoreError('Ogni elemento di `ids` deve essere un id non vuoto (stringa).', 'LIBRARY_INVALID');
+    }
+  }
+  const eliminate = [];
+  const assenti = [];
+  for (const id of ids) {
+    const risultato = await eliminaVoce({ cartella, id }, deps);
+    if (risultato) eliminate.push(risultato);
+    else assenti.push(id);
+  }
+  return { eliminate, assenti };
+}
+
 /**
  * ⛔ NON un tool del modello — primitivo interno per seminare/testare
  * (e per la futura auto-archiviazione di document_create/generate_image
