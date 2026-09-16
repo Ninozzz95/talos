@@ -1,0 +1,161 @@
+{
+  "quando": "2026-09-16T20:29:28.875Z",
+  "etichetta": "dopo",
+  "scenario": {
+    "cronologia": "60 turni · 60 ragionamenti da ~20.000 caratteri · 60 righe attrezzo · 60 blocchi di codice",
+    "vivo": "240 delta di ragionamento a scheda CHIUSA",
+    "scala": "240 delta contro 480 delta, due schede distinte: dice se il costo è lineare o quadratico",
+    "apertura": "un clic (dentro la pagina) sulla testa di un ragionamento da ~480 righe",
+    "giri": 3
+  },
+  "replay": {
+    "durataMs": 560,
+    "dentroPaginaMs": 184,
+    "nodi": 11006,
+    "loafOltre50": 1,
+    "loafPeggiore": 334,
+    "mainThreadBloccatoMs": 0,
+    "longtaskMs": 384,
+    "jsHeapUsedMB": 0
+  },
+  "ragionamentoVivoCollassato": {
+    "durataMs": 37,
+    "dentroPaginaMs": 1,
+    "nodi": 11027,
+    "loafOltre50": 0,
+    "loafPeggiore": 0,
+    "mainThreadBloccatoMs": 0,
+    "longtaskMs": 0,
+    "jsHeapUsedMB": 0
+  },
+  "scalaRagionamento": {
+    "delta240Ms": 1,
+    "delta480Ms": 1,
+    "rapporto": 1
+  },
+  "aperturaRagionamento": {
+    "durataMs": 225,
+    "dentroPaginaMs": 205,
+    "nodi": 11522,
+    "loafOltre50": 0,
+    "loafPeggiore": 0,
+    "mainThreadBloccatoMs": 0,
+    "longtaskMs": 0,
+    "jsHeapUsedMB": 0
+  },
+  "grezzi": {
+    "replay": [
+      {
+        "durataMs": 378,
+        "dentroPaginaMs": 138,
+        "nodi": 11003,
+        "loafOltre50": 1,
+        "loafPeggiore": 233,
+        "mainThreadBloccatoMs": 0,
+        "longtaskMs": 268,
+        "jsHeapUsedMB": 0
+      },
+      {
+        "durataMs": 560,
+        "dentroPaginaMs": 184,
+        "nodi": 11006,
+        "loafOltre50": 1,
+        "loafPeggiore": 334,
+        "mainThreadBloccatoMs": 0,
+        "longtaskMs": 384,
+        "jsHeapUsedMB": 0
+      },
+      {
+        "durataMs": 716,
+        "dentroPaginaMs": 209,
+        "nodi": 11006,
+        "loafOltre50": 1,
+        "loafPeggiore": 373,
+        "mainThreadBloccatoMs": 3,
+        "longtaskMs": 476,
+        "jsHeapUsedMB": 0
+      }
+    ],
+    "vivo": [
+      {
+        "durataMs": 27,
+        "dentroPaginaMs": 1,
+        "nodi": 11024,
+        "loafOltre50": 0,
+        "loafPeggiore": 0,
+        "mainThreadBloccatoMs": 0,
+        "longtaskMs": 0,
+        "jsHeapUsedMB": 0
+      },
+      {
+        "durataMs": 37,
+        "dentroPaginaMs": 1,
+        "nodi": 11027,
+        "loafOltre50": 0,
+        "loafPeggiore": 0,
+        "mainThreadBloccatoMs": 0,
+        "longtaskMs": 0,
+        "jsHeapUsedMB": 0
+      },
+      {
+        "durataMs": 44,
+        "dentroPaginaMs": 1,
+        "nodi": 11027,
+        "loafOltre50": 0,
+        "loafPeggiore": 0,
+        "mainThreadBloccatoMs": 0,
+        "longtaskMs": 0,
+        "jsHeapUsedMB": 0
+      }
+    ],
+    "scala": [
+      {
+        "delta240Ms": 1,
+        "delta480Ms": 1,
+        "rapporto": 1
+      },
+      {
+        "delta240Ms": 1,
+        "delta480Ms": 1,
+        "rapporto": 1
+      },
+      {
+        "delta240Ms": 1,
+        "delta480Ms": 1,
+        "rapporto": 1
+      }
+    ],
+    "apertura": [
+      {
+        "durataMs": 186,
+        "dentroPaginaMs": 170,
+        "nodi": 11519,
+        "loafOltre50": 0,
+        "loafPeggiore": 0,
+        "mainThreadBloccatoMs": 0,
+        "longtaskMs": 0,
+        "jsHeapUsedMB": 0
+      },
+      {
+        "durataMs": 236,
+        "dentroPaginaMs": 208,
+        "nodi": 11522,
+        "loafOltre50": 0,
+        "loafPeggiore": 0,
+        "mainThreadBloccatoMs": 0,
+        "longtaskMs": 0,
+        "jsHeapUsedMB": 0
+      },
+      {
+        "durataMs": 225,
+        "dentroPaginaMs": 205,
+        "nodi": 11522,
+        "loafOltre50": 0,
+        "loafPeggiore": 0,
+        "mainThreadBloccatoMs": 0,
+        "longtaskMs": 0,
+        "jsHeapUsedMB": 0
+      }
+    ]
+  }
+}

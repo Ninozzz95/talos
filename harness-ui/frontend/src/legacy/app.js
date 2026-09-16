@@ -529,6 +529,49 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   let streamingAutoFollow = true;
   let streamingLastTargetTop = null;
   const CONVERSATION_FOLLOW_EPSILON_PX = 24;
+  /*
+   * ⛔⛔⛔ 16/09/2026 (P0, punto 6) — UN SOLO SCRITTORE, UN SOLO FLAG.
+   *
+   * Il flag qui sopra era giusto e lo consultava UNA funzione sola (`scrollStreamingOutput`).
+   * Gli altri tre scrittori di scroll non lo guardavano affatto, e sono quelli che rubavano la
+   * posizione di lettura: `scorriAllaBollaAppesa` (chiamata da cinque eventi del MODELLO, con un
+   * `setTimeout(40)` e uno `scrollTo` a molla verso il fondo), la coda di `appendToolNote` (che
+   * decideva DA SOLA — vedi il commento lungo lì sotto: portava in fondo chi non era in fondo,
+   * senza mai chiedere a `streamingAutoFollow` se quella persona stesse leggendo) e il riarmo su
+   * `RunStarted`, che rimetteva `true` a ogni giro — compresi i giri interni di un attrezzo.
+   * ⛔ CORREZIONE del 16/09, giro di riparazione: nel primo rapporto quella guardia l'avevo chiamata
+   *   «capovolta rispetto alla sua stessa glossa». È FALSO — commento e codice dicevano la stessa
+   *   cosa, e l'ha smentito il controllore rileggendo il commit base. Il difetto vero è quello
+   *   scritto qui sopra: DUE scrittori di scroll in gara, non una condizione scritta al rovescio.
+   *
+   * ⭐ Ricerca 16/09/2026, prima di scrivere (regola zero):
+   *   · anthropics/claude-code#53382 (desktop, chiusa «not planned») e la sua gemella risolta
+   *     sull'estensione VSCode (#11092, 12/11/2025): «IF user_scroll_position == bottom THEN
+   *     auto_scroll ELSE preserve_scroll_position», più un pulsante per rientrare. È esattamente il
+   *     pattern che manca qui, e il concorrente più diretto ce l'ha ancora rotto sul desktop.
+   *   · kirodotdev/KiroCrew#9652, openclaw#37500: «scrolling up must disengage follow and hold the
+   *     view» — stessa regola su altre due interfacce di chat con modello.
+   *   · MDN «overflow-anchor» + caniuse (16/09/2026): `auto` è il default e serve a NON perdere la
+   *     posizione quando cambia il contenuto SOPRA il viewport; si dichiara come guardia, non come cura.
+   *
+   * ⇒ Da qui in avanti il flag lo cambiano DUE cose sole, ed è tutta la regola:
+   *   1. lo scorrimento vero della persona (`collegaSeguiFondoConversazione`): si segue se e solo se
+   *      il FONDO DEL CONTENUTO è in vista — la stessa condizione con cui sparisce il pulsante
+   *      «torna in fondo», così ciò che la persona vede e ciò che il codice decide coincidono;
+   *   2. un'AZIONE della persona (`riarmaSeguiConversazione`): invia un messaggio, scrive un comando,
+   *      preme «torna in fondo». Un evento del modello non riarma mai niente, `RunStarted` compreso.
+   */
+  function riarmaSeguiConversazione() {
+    streamingAutoFollow = true;
+    streamingLastTargetTop = null; // nessun bersaglio nostro da confrontare: il prossimo scroll umano decide da solo
+    fermaFondoRipristino?.(); // la persona ha preso in mano la conversazione: il custode del ripristino si fa da parte
+  }
+  /*
+   * Il custode del fondo durante il ripristino (`mantieniFondoDuranteRipristino`) pubblica qui il suo
+   * `smetti`: così un'azione della persona e il primo giro DAL VIVO possono staccarlo senza che
+   * nessuno debba tenersi un riferimento. Vale null quando non c'è nessun ripristino in corso.
+   */
+  let fermaFondoRipristino = null;
 
   /*
    * ⭐⭐⭐ 02/9 — owner dal vivo: "lo streaming ha lag sostanziali a meta
@@ -758,19 +801,34 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * Confronta lo scrollTop reale con l'ultimo bersaglio che abbiamo
    * scritto NOI (streamingLastTargetTop): se combaciano (entro
    * un'epsilon) lo scroll è stato nostro o l'utente non si è mosso — si
-   * continua a seguire; se non combaciano, è stato l'utente a spostarsi
-   * di sua iniziativa — si smette di inseguirlo (si riarma su
-   * RunStarted). Prima che uno stream sia mai partito
-   * (streamingLastTargetTop ancora nullo) non c'è nulla da confrontare:
-   * non tocca streamingAutoFollow. Passive: mai bloccare lo scroll nativo.
+   * continua a seguire. Passive: mai bloccare lo scroll nativo.
+   *
+   * ⛔⛔ 16/09/2026 (P0, punto 6) — QUANDO NON COMBACIANO, SI GUARDA DOVE È FINITA.
+   *   Prima qui c'era `streamingAutoFollow = false` e basta, e il riarmo lo faceva `RunStarted`:
+   *   cioè la persona rientrava nel seguito per un evento del MODELLO invece che per un suo gesto.
+   *   Ora è il contrario: uno scorrimento non nostro riaccende il seguito se e solo se porta il
+   *   FONDO DEL CONTENUTO in vista — la stessa `fondoConversazioneInVista()` che decide se mostrare
+   *   il pulsante «torna in fondo». Così la regola è visibile a schermo: finché quel pulsante c'è,
+   *   nessuno insegue; quando sparisce, il seguito è tornato.
+   * ⛔ `streamingLastTargetTop === null` (nessuno stream ancora partito, o appena riarmato) non è
+   *   più un'uscita muta: è il caso in cui l'unica cosa che conta è dove sta la persona.
    */
   function collegaSeguiFondoConversazione() {
     const conversation = $('#conversation');
     if (!conversation) return;
     const scroller = scrollerConversazione(conversation) || conversation;
+    /* ⛔ Idempotente: si può richiamare a ogni cambio di sessione senza raddoppiare gli ascoltatori.
+       Verificato il 16/09 che `.talos-conversation` NON viene mai ricreato (lo stato vuoto
+       sostituisce i figli della COLONNA, non il contenitore) — il marchio è la guardia che rende la
+       cosa vera per costruzione invece che per fortuna. */
+    if (scroller.dataset.seguiCollegato === 'si') return;
+    scroller.dataset.seguiCollegato = 'si';
     scroller.addEventListener('scroll', () => {
-      if (streamingLastTargetTop === null) return;
-      streamingAutoFollow = Math.abs(scroller.scrollTop - streamingLastTargetTop) <= CONVERSATION_FOLLOW_EPSILON_PX;
+      if (streamingLastTargetTop !== null && Math.abs(scroller.scrollTop - streamingLastTargetTop) <= CONVERSATION_FOLLOW_EPSILON_PX) {
+        streamingAutoFollow = true; // siamo stati noi (o la persona non si è mossa): si continua
+        return;
+      }
+      streamingAutoFollow = fondoConversazioneInVista();
     }, { passive: true });
     // Lo spazio in coda è metà dell'altezza VISIBILE: se la finestra cambia, cambia anche lui.
     if (typeof ResizeObserver === 'function') new ResizeObserver(() => aggiornaSpazioCodaConversazione(conversation)).observe(scroller);
@@ -1273,62 +1331,45 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     window.requestAnimationFrame(applica);
   }
 
-  /**
-   * ⛔ 02/09, owner: "quando clicchi su una riga sessione la chat deve
-   * trovarsi già in fondo senza animazioni". Le bolle appese durante il
-   * RIPRISTINO di una sessione (#conversation.is-restoring) non scorrono
-   * da sole: il fondo lo tiene mantieniFondoDuranteRipristino, istantaneo,
-   * e la conversazione si mostra solo quando è già tutta in fondo. Prima
-   * ognuna di queste sette chiamate faceva partire uno scrollIntoView
-   * "smooth" 40ms dopo l'inserimento — decine di animazioni in gara con
-   * lo scroll istantaneo. Fuori dal ripristino: comportamento di sempre.
+  /*
+   * ⛔⛔⛔ 16/09/2026 (P0, punto 6) — QUESTA FUNZIONE ERA IL SECONDO SCRITTORE DI SCROLL, E NON
+   * CHIEDEVA PERMESSO A NESSUNO.
+   *
+   * Otto chiamanti, di cui CINQUE sono eventi del modello (l'attesa a ogni fase, la card del batch
+   * di attrezzi, l'artefatto, la spiegazione, il permesso) e TRE sono la persona (il suo messaggio,
+   * il suo follow-up, il suo comando). Tutti e otto finivano in `scorriInFondoConversazione`, che
+   * porta al fondo con un'animazione: più in alto stavi a leggere, più lontano ti riportava.
+   * In mezzo c'era anche un `setTimeout(40)` — una corsa nascosta, non una cura.
+   *
+   * ⇒ Adesso la funzione non scrive più lo scroll da sola: lo chiede all'UNICO scrittore
+   *   (`scrollStreamingOutput`), che consulta `streamingAutoFollow`, coalesce su un fotogramma e va
+   *   istantaneo. L'unica differenza fra i due gruppi di chiamanti è `azioneDellaPersona`: un gesto
+   *   suo riarma il seguito (ha appena scritto lei: rivedere la propria frase è ciò che si aspetta),
+   *   un evento del modello no.
+   * ⛔ Durante il ripristino comanda `mantieniFondoDuranteRipristino`: qui non si tocca niente,
+   *   come prima.
    */
-  function scorriAllaBollaAppesa(article) {
-    window.setTimeout(() => {
-      const conversazione = $('#conversation');
-      if (!article.isConnected || conversazione?.classList.contains('is-restoring')) return;
-      /*
-       * ⛔⛔⛔ 02/9 — owner dal vivo: "quando invio un messaggio la chat
-       * non resta ferma ma sale sopra" + "gap senza nulla" — riprodotto e
-       * isolato con strumentazione diretta (Element.prototype.scrollTo/
-       * scrollIntoView patchati, scrollTop campionato ogni 30-50ms):
-       * `article.scrollIntoView({block:'end'})` non produceva ALCUN
-       * movimento qui — zero pixel in 3s — anche su un elemento connesso
-       * dentro un #conversation genuinamente overflowing
-       * (scrollHeight 1630+ contro clientHeight 1214, misurato). Causa
-       * nella gerarchia: #conversation sta dentro .chat-view/.view-pane,
-       * che ha un `overflow` proprio (hidden, vince su .view-pane per
-       * ordine di sorgente — vedi styles.css) ed è quindi ANCH'ESSO una
-       * "scrolling box" per l'algoritmo nativo di scrollIntoView, che
-       * cammina tutti gli antenati scrollabili — la doppia gerarchia lo
-       * confondeva. `conversazione.scrollTo({top:scrollHeight})`,
-       * chiamato DIRETTAMENTE sull'UNICO contenitore che sappiamo
-       * scrollabile per davvero, non cammina antenati e non ha questo
-       * problema — stessa tecnica (assegnazione diretta) già in uso e
-       * verificata in passaASessione per il riclic sessione. Misurato:
-       * scrollIntoView 0px mossi; scrollTo diretto, in ~60ms, esatto.
-       */
-      /*
-       * ⛔ 06/9, owner: «non far partire l'animazione di scroll se la conversazione è già scrollata
-       * alla fine». Strumentato prima di scrivere: qui si chiamava `scrollTo` su `#conversation`, che
-       * dopo il passaggio al mockup è la COLONNA (non scorre) — quindi la chiamata era inerte e
-       * l'animazione la faceva partire qualcun altro. Corretto il bersaglio, resta il punto vero:
-       * un'animazione che parte da fermo per arrivare dov'è già è un movimento senza informazione.
-       * Se il fondo è già in vista si aggiusta di scatto (o non si muove niente); si anima solo quando
-       * c'è davvero una distanza da percorrere, così il movimento significa «ti sto portando altrove».
-       * Ricerca 06/09/2026: shadcn/ui «Message scroller» e stackblitz-labs/use-stick-to-bottom — si
-       * segue solo mentre si sta già in fondo, e si distingue lo scorrimento della persona da quello
-       * dell'animazione senza debounce.
-       */
-      const scroller = scrollerConversazione(conversazione);
-      if (scroller) scorriInFondoConversazione(scroller);
-    }, 40);
+  function scorriAllaBollaAppesa(article, { azioneDellaPersona = false } = {}) {
+    if (azioneDellaPersona) riarmaSeguiConversazione();
+    const conversazione = $('#conversation');
+    if (!article?.isConnected || conversazione?.classList.contains('is-restoring')) return;
+    scrollStreamingOutput(article);
   }
 
-  /** Il fondo, con l'animazione solo se serve davvero. Soglia condivisa con fondoConversazioneInVista. */
+
+  /**
+   * Il fondo, con l'animazione solo se serve davvero. Soglia condivisa con fondoConversazioneInVista.
+   *
+   * ⛔ 16/09/2026 (P0, punto 6) — da oggi ha UN SOLO chiamante: il pulsante «torna in fondo»
+   *   (`talos-vai-in-fondo`). Cioè significa una cosa sola, «la persona ha CHIESTO il fondo» — e
+   *   allora il seguito si riarma qui, nel punto in cui la richiesta arriva, invece che su un
+   *   evento del modello. L'animazione resta: questa è una navigazione voluta, e un movimento
+   *   voluto si vede volentieri.
+   */
   const CONVERSAZIONE_FONDO_SOGLIA_PX = 24;
   function scorriInFondoConversazione(scroller) {
     if (!scroller) return;
+    riarmaSeguiConversazione();
     const distanza = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
     if (distanza <= CONVERSAZIONE_FONDO_SOGLIA_PX) { scroller.scrollTop = scroller.scrollHeight; return; } // già in fondo: nessuna animazione
     // BC-43: anche il sistema può chiedere movimento ridotto; 'auto' dipende dal CSS.
@@ -9773,7 +9814,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     void conversation;
     markMotionEnter(article);
     /* ⛔ 28/8, owner: "auto centramento dello scroll dei messaggi appena se ne invia uno nuovo (meta schermo)" — questa era l'UNICA delle sei chiamate scrollIntoView di questo file con block:'center' invece di 'end': ogni messaggio inviato veniva centrato a metà schermo invece di scorrere in fondo come ogni altro elemento appeso alla conversazione. */
-    scorriAllaBollaAppesa(article);
+    scorriAllaBollaAppesa(article, { azioneDellaPersona: true }); // ⛔ 16/09: è la persona che ha scritto — il suo messaggio la riporta in fondo e riarma il seguito
     state.realSession.taskBubbleMostrata = true;
   }
 
@@ -9848,7 +9889,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const allegatiVisibili = daMostrare?.allegati?.length ? daMostrare.allegati : immagini;
     if (allegatiVisibili.length) disegnaChipAllegati(article, allegatiVisibili);
     markMotionEnter(article);
-    scorriAllaBollaAppesa(article);
+    scorriAllaBollaAppesa(article, { azioneDellaPersona: true }); // ⛔ 16/09: è la persona che ha scritto — il suo messaggio la riporta in fondo e riarma il seguito
   }
 
   /*
@@ -9895,7 +9936,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       paragrafo.classList.add('talos-mono'); // ripiego onesto: meglio monospazio che niente
     }
     markMotionEnter(article);
-    scorriAllaBollaAppesa(article);
+    scorriAllaBollaAppesa(article, { azioneDellaPersona: true }); // ⛔ 16/09: è la persona che ha scritto — il suo messaggio la riporta in fondo e riarma il seguito
     return article;
   }
 
@@ -10499,18 +10540,26 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       nellaChat(article);
     }
     markMotionEnter(article);
-    window.setTimeout(() => {
-      if (article.hidden) return;
-      if ($('#conversation')?.classList.contains('is-restoring')) return;
-      // 06/9 (owner): se il fondo è già in vista non c'è niente da raggiungere — nessuna animazione.
-      if (fondoConversazioneInVista()) return;
-      const scorrevole = scrollerConversazione();
-      if (!scorrevole || !article.isConnected) return;
-      const top = scorrevole.scrollTop + article.getBoundingClientRect().bottom
-        - scorrevole.getBoundingClientRect().top - scorrevole.clientTop - scorrevole.clientHeight;
-      const ridotto = movimentoRidottoDalSistema() || document.body.classList.contains('reduce-motion');
-      scorrevole.scrollTo({ top, behavior: ridotto ? 'instant' : 'smooth' });
-    }, 40);
+    /*
+     * ⛔⛔⛔ 16/09/2026 (P0, punto 6) — QUI LO SCROLL SI SCRIVEVA SENZA CHIEDERE A NESSUNO.
+     *
+     * C'era `if (fondoConversazioneInVista()) return;` dietro un `setTimeout(40)`, e poi uno
+     * `scrollTo` a molla verso la riga nuova.
+     * ⛔ CORREZIONE del 16/09, giro di riparazione: nel primo rapporto avevo scritto che quella
+     *   guardia era «capovolta rispetto alla sua stessa glossa». È FALSO, e l'ha smentito il
+     *   controllore rileggendo il commento al commit base: la glossa («se il fondo è già in vista
+     *   non c'è niente da raggiungere») descrive esattamente ciò che la condizione faceva. Commento
+     *   e codice dicevano la stessa cosa — una root cause sbagliata in un verbale è quello che
+     *   leggerà la prossima persona, quindi si corregge dove sta scritta.
+     * ⇒ Il difetto vero è un altro, e non si vede rileggendo il blocco da solo: questo pezzo
+     *   decideva per conto suo, senza consultare mai `streamingAutoFollow`. Trattava «non sono in
+     *   fondo» come «portami in fondo», mentre per chi ha scorso in su vuol dire l'opposto — sto
+     *   leggendo, non toccarmi la vista. Erano due scrittori di scroll in gara con quello vero, e
+     *   uno dei due arrivava con un timer.
+     *
+     * ⇒ Una riga nuova la si segue con l'unico scrittore, che consulta il flag. Nessun timer.
+     */
+    if (!article.hidden && !$('#conversation')?.classList.contains('is-restoring')) scrollStreamingOutput(article);
     return { article, summaryText, detail, dettaglio: riga.dettaglio }; // 05/9 Fase 2: anche il dettaglio mono della riga
   }
 
@@ -10535,12 +10584,114 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
   }
 
+  /*
+   * ⛔⛔⛔ 16/09/2026 (P0, punto 8) — IL CORPO DI UN RAGIONAMENTO COMPRESSO NON SI DISEGNA.
+   *
+   * Prima: `ReasoningMessageContent` chiamava `renderizzaMarkdownIncrementale` a OGNI delta, anche a
+   * scheda chiusa. E «incrementale» lì valeva poco: `confineBlocchiStabili` chiude un blocco solo su
+   * una riga VUOTA, e una traccia di pensiero è un elenco di righe senza righe vuote ⇒ nessun blocco
+   * stabile, tutto il testo ri-parsato e tutti i suoi nodi ricostruiti a ogni frammento.
+   * Misurato il 16/09 sul banco (Chrome vero, 3 giri, mediana): 240 delta a scheda chiusa = 29 ms di
+   * main thread e 241 elementi nel DOM che nessuno guardava; **480 delta = 112 ms, cioè 3,86×** —
+   * il costo è QUADRATICO, non lineare, e una traccia vera è molte volte più lunga di questa.
+   *
+   * ⭐ Ricerca 16/09/2026 (fonti citate per intero in `tests/browser/chat-lunga-p0.spec.mjs`):
+   *   mawentory/hermes-fastui#46 — «the collapsed header stays cheap (one line, Thinking…)», il
+   *   buffer del pensiero non entra nel nodo markdown vivo, «expanding is opt-in per block»;
+   *   vellum-ai/vellum-assistant#42658 — all'apertura si disegna «one markdown block at a time».
+   *
+   * ⇒ Tre stati, uno solo alla volta:
+   *   · CHIUSA e in corso  → non si tocca il DOM: il testo cresce solo in `voce.grezzo`;
+   *   · CHIUSA e finita    → si deposita il testo GREZZO come unico nodo di testo dentro il `<pre>`
+   *                          (zero elementi): la ricerca nella pagina lo trova, l'export lo trova,
+   *                          e i cancelli LAG che leggono `textContent` continuano a valere;
+   *   · APERTA             → markdown come sempre, ma montato A PEZZI, uno per fotogramma, così
+   *                          l'apertura di una traccia lunga non produce un fotogramma da 118 ms
+   *                          (misurato prima della cura).
+   * ⛔ Il testo vive in una `WeakMap` sulla SCHEDA, non solo nella mappa delle voci: `ReasoningMessageEnd`
+   *   toglie la voce dalla mappa, e senza questo una scheda finita non avrebbe più niente da montare
+   *   quando la persona la apre dieci minuti dopo.
+   */
+  const testoRagionamentoPerScheda = new WeakMap();
+  const montaggioRagionamentoPerScheda = new WeakMap();
+  const RAGIONAMENTO_PEZZO_CARATTERI = 4000;
+
+  /** Disegna il prossimo pezzo del pensiero dentro la scheda, e si riprenota finché non è in pari. */
+  function disegnaPezzoRagionamento(card) {
+    const stato = montaggioRagionamentoPerScheda.get(card);
+    if (!stato) return;
+    stato.frame = null;
+    const corpo = card.querySelector('.tool-note-detail');
+    const testo = testoRagionamentoPerScheda.get(card) || '';
+    if (!corpo || !corpo.isConnected || !ragionamentoAperto(card)) return; // richiusa (o staccata) nel frattempo: si riprende alla prossima apertura
+    const fine = Math.min(testo.length, stato.mostrato + RAGIONAMENTO_PEZZO_CARATTERI);
+    if (fine <= stato.mostrato) return;
+    stato.mostrato = fine;
+    renderizzaMarkdownIncrementale(corpo, stato.render, testo.slice(0, fine));
+    if (fine < testo.length) chiediDisegnoRagionamento(card);
+  }
+
+  /** Un pezzo per fotogramma, mai due prenotazioni per la stessa scheda. */
+  function chiediDisegnoRagionamento(card) {
+    if (!card) return;
+    let stato = montaggioRagionamentoPerScheda.get(card);
+    if (!stato) { stato = { mostrato: 0, frame: null, render: { prefisso: null, nodiCoda: [] } }; montaggioRagionamentoPerScheda.set(card, stato); }
+    if (stato.frame !== null) return;
+    stato.frame = window.requestAnimationFrame(() => disegnaPezzoRagionamento(card));
+  }
+
+  /**
+   * Il testo grezzo dentro il `<pre>`, una volta sola: un nodo di TESTO, nessun elemento.
+   * Serve a chi non ha mai aperto la scheda — la ricerca nella pagina e l'esportazione dal DOM.
+   *
+   * ⛔⛔⛔⛔ 16/09/2026, SECONDO GIRO DI RIPARAZIONE — QUI LA MIA CURA AVEVA APERTO UN BUCO NUOVO,
+   *   e non l'ho trovato io: l'ha riprodotto il controllore.
+   *   La riga di prima era `if (montaggio?.mostrato) return;` — «già disegnato in markdown: non si
+   *   torna indietro». Ma `mostrato` non dice «disegnato TUTTO»: dice «disegnato fin qui». Chi apre
+   *   il ragionamento mentre il modello scrive e lo RICHIUDE a metà montaggio lascia `mostrato` a
+   *   una fetta, e `ReasoningMessageEnd` trovava quella fetta e se ne andava ⇒ il corpo restava con
+   *   il primo pezzo e il resto del pensiero spariva dal documento. Misurato su 480 righe: 7.595
+   *   caratteri su 47.302, 84 nodi, ultima riga ASSENTE (al commit base c'erano tutte).
+   *   ⇒ Non era un dettaglio di disegno: la ricerca nella pagina, l'export dal DOM e i cancelli LAG
+   *   leggono `textContent`, e per loro quel pensiero non esisteva più (CHAT-LUNGA-P0-03).
+   *
+   * ⭐ Ricerca 16/09/2026, prima di scrivere (regola zero — «render on expand» senza perdere il
+   *   contenuto): Chrome for Developers, «Making collapsed content accessible with
+   *   hidden=until-found» (developer.chrome.com/docs/css-ui/hidden-until-found, letto 16/09/2026):
+   *   ciò che sta in una sezione collassata con `display:none` «becomes impossible to search using a
+   *   find-in-page search», e `hidden=until-found` usa `content-visibility:hidden` proprio perché
+   *   «skipped contents must be accessible to the find-in-page algorithm». Più TypeFox/baukasten#60
+   *   e mherod/swiz#857 (lazy mount di righe collassate, letti 16/09/2026): il montaggio pigro
+   *   regge solo se la SORGENTE DI VERITÀ sta nel DATO, non nel DOM parziale.
+   * ⇒ Qui la verità è `testoRagionamentoPerScheda`, non la fetta montata: un montaggio interrotto
+   *   si BUTTA e si riparte, non si conserva. Si rinuncia al deposito solo quando il markdown è già
+   *   in pari col grezzo — cioè quando sostituirlo con testo semplice sarebbe un passo indietro.
+   */
+  function depositaTestoRagionamento(card) {
+    const corpo = card?.querySelector('.tool-note-detail');
+    const testo = testoRagionamentoPerScheda.get(card);
+    if (!corpo || typeof testo !== 'string') return;
+    const montaggio = montaggioRagionamentoPerScheda.get(card);
+    if (montaggio && montaggio.mostrato >= testo.length) return; // markdown COMPLETO: quello sì che non si torna indietro
+    if (corpo.textContent === testo) return;
+    corpo.textContent = testo;
+    /* ⛔ Il grezzo ha appena sostituito i nodi del montaggio parziale: lo stato del render li nomina
+       ancora, e riprendere da lì appenderebbe la seconda fetta in coda al testo intero. Si riparte
+       da zero, così la prossima apertura rimonta tutto il markdown a pezzi (`prefisso: null` fa
+       `replaceChildren`, vedi `renderizzaMarkdownIncrementale`). */
+    if (montaggio) { montaggio.mostrato = 0; montaggio.render = { prefisso: null, nodiCoda: [] }; }
+  }
+
   /** Apre o chiude la scheda come fa la regia del mockup: `aria-expanded` sulla testa, `hidden` sul corpo. */
   function impostaAperturaRagionamento(card, aperto) {
     const testa = card?.querySelector(':scope > .talos-activity__head');
     const corpo = card?.querySelector(':scope > .talos-activity__body');
     if (!testa || !corpo) return;
     testa.setAttribute('aria-expanded', String(aperto));
+    /* ⛔ Si apre ⇒ il corpo va montato (a pezzi). `chiediDisegnoRagionamento` è idempotente e legge
+       lo stato VERO al fotogramma dopo, quindi un'apertura e una chiusura nello stesso giro non
+       lasciano niente a metà. */
+    if (aperto) chiediDisegnoRagionamento(card);
     corpo.hidden = !aperto;
   }
 
@@ -15134,9 +15285,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         break;
       }
       case 'RunStarted': {
-        streamingAutoFollow = true; // un nuovo giro ri-arma il "segui il centro" — stesso principio visto in ricerca
+        /*
+         * ⛔⛔⛔ 16/09/2026 (P0, punto 6) — QUI C'ERA IL RIARMO, ED È STATO TOLTO.
+         *
+         * `streamingAutoFollow = true; streamingLastTargetTop = null;` rimetteva il seguito a ogni
+         * RunStarted. Sembra innocuo — «è un giro nuovo» — ma un giro nuovo è un evento del MODELLO,
+         * non un gesto della persona: chi stava leggendo trecento righe più su veniva riportato giù
+         * da qualcosa che non aveva chiesto. E i RunStarted non sono uno per conversazione: arrivano
+         * a ogni ripresa e a ogni giro interno, quindi la persona veniva strappata via di continuo.
+         * Misurato il 16/09 (SCROLL-P0-03, prima della cura): 5.334 px di salto su un solo RunStarted.
+         * ⇒ Il seguito si riarma SOLO da un gesto suo: `riarmaSeguiConversazione`, chiamato dal suo
+         *   messaggio, dal suo comando e dal pulsante «torna in fondo».
+         * ⛔ Ed è qui che il custode del fondo del RIPRISTINO si fa da parte: un giro DAL VIVO vuol
+         *   dire che la cronologia non si sta più ricostruendo, e un osservatore che riporta al fondo
+         *   a ogni mutazione non ha più niente da tenere (durante la rigiocata il flag è ancora vero,
+         *   quindi i RunStarted storici non lo staccano).
+         */
+        if (!state.realSession.deferHistoricalRendering) fermaFondoRipristino?.();
         contextMonitor?.setRunning(true);
-        streamingLastTargetTop = null;
         /*
          * ⛔⛔⛔ 06/9, CB-04 — QUI è il confine fra due invii: il consumo
          * dell'invio che si chiude entra nel totale della sessione, e il
@@ -15357,11 +15523,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         bubble.article.dataset.ragionamentoId = evento.messageId; // ⭐ 13/09 sera: per darle la sua durata quando la sessione si riapre
         // ⛔ Solo `hidden`, non anche `aria-hidden`: toglie già la riga dall'albero dell'accessibilità, e ogni attributo in più è una modifica del DOM che LAG-REPLAY-REASONING-36 conta — misurato 22 contro un tetto di 20, mentre il pacchetto di prima passava.
         const testaRagionamento = bubble.article.querySelector(':scope > .talos-activity__head');
-        testaRagionamento?.addEventListener('click', () => { testaRagionamento.dataset.toccatoDaUtente = 'si'; });
+        /*
+         * ⛔ 16/09 (P0, punto 8) — il clic lo apre la regia generica dei disclosure, che ascolta più
+         *   in alto e quindi gira DOPO questo ascoltatore: qui `aria-expanded` è ancora quello di
+         *   prima. Non si indovina il valore nuovo — si guarda quello VERO al fotogramma dopo, che è
+         *   esattamente quello che fa `chiediDisegnoRagionamento` (e se nel frattempo è stata
+         *   richiusa, non disegna niente).
+         */
+        testaRagionamento?.addEventListener('click', () => {
+          testaRagionamento.dataset.toccatoDaUtente = 'si';
+          chiediDisegnoRagionamento(bubble.article);
+        });
+        testoRagionamentoPerScheda.set(bubble.article, '');
         state.realSession.ragionamentoBubble.set(evento.messageId, {
           ...bubble,
           grezzo: '',
-          renderStato: { prefisso: null, nodiCoda: [] },
+          /* ⛔ 16/09: lo stato del render NON sta più qui. Sta in `montaggioRagionamentoPerScheda`,
+             agganciato alla SCHEDA: `ReasoningMessageEnd` cancella questa voce dalla mappa, e il
+             corpo va montato anche dopo — quando la persona apre una scheda già finita. */
           inizio: inizioRagionamentoDaRegistrare(evento.messageId),
           apertaDaSola: false,
         });
@@ -15371,18 +15550,30 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const voce = state.realSession.ragionamentoBubble.get(evento.messageId);
         if (!voce) break; // difensivo: un Content senza il suo Start non deve far crashare la sessione
         voce.grezzo += evento.delta;
+        testoRagionamentoPerScheda.set(voce.article, voce.grezzo);
         if (voce.article.hidden && voce.grezzo.trim() !== '') mostraRagionamento(voce);
         else if (voce.vivo) aggiornaArgomentoRagionamento(voce); // l'argomento corrente, a passo lento: vedi `accendiRagionamentoVivo`
-        if (!state.realSession.deferHistoricalRendering) {
-          renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
-          if (ragionamentoAperto(voce.article)) scrollStreamingOutput(voce.article);
+        /*
+         * ⛔⛔⛔ 16/09 (P0, punto 8) — QUI C'ERA IL COSTO NASCOSTO: `renderizzaMarkdownIncrementale`
+         *   girava a ogni delta anche a scheda CHIUSA, cioè su testo che nessuno stava guardando, e
+         *   su una traccia senza righe vuote ri-parsava TUTTO ogni volta (misurato 16/09: 480 delta
+         *   costano 3,86× quello che costano 240 — quadratico). Adesso si disegna solo se è aperta;
+         *   se è chiusa il testo cresce e basta, e il DOM lo vedrà all'apertura o alla fine.
+         */
+        if (!state.realSession.deferHistoricalRendering && ragionamentoAperto(voce.article)) {
+          chiediDisegnoRagionamento(voce.article);
+          scrollStreamingOutput(voce.article);
         }
         break;
       }
       case 'ReasoningMessageEnd': {
         const voce = state.realSession.ragionamentoBubble.get(evento.messageId);
-        if (voce && state.realSession.deferHistoricalRendering) {
-          renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
+        if (voce) {
+          testoRagionamentoPerScheda.set(voce.article, voce.grezzo);
+          /* ⛔ Finita: o si finisce di disegnarla (è aperta), o si deposita il testo grezzo — un solo
+             nodo di TESTO, zero elementi — così la ricerca nella pagina e l'export lo trovano lo stesso. */
+          if (ragionamentoAperto(voce.article)) chiediDisegnoRagionamento(voce.article);
+          else depositaTestoRagionamento(voce.article);
         }
         /* ⛔ 13/09 notte: se era già concluso al primo testo, questa fine arriva a risposta SCRITTA — e un'attesa
            «TALOS sta preparando la risposta…» sotto una risposta finita direbbe il falso. */
@@ -16819,7 +17010,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       window.clearInterval(fermaSeFinito);
       conversation.classList.remove('is-restoring'); // mai lasciare la conversazione nascosta perché la persona ha scorso
       scroller?.removeEventListener('scroll', suScroll);
+      if (fermaFondoRipristino === smetti) fermaFondoRipristino = null;
     };
+    /*
+     * ⛔ 16/09/2026 (P0, punto 6) — il custode si fa TROVARE. Prima l'unico modo di fermarlo era da
+     *   dentro: uno scorrimento della persona, l'evento terminale, o la rete di sicurezza a 30 s.
+     *   Restava quindi in piedi fino a mezzo minuto dopo l'apertura, e nel frattempo riportava in
+     *   fondo a ogni mutazione — `class` e `style` compresi. ⇒ Pubblicando il suo `smetti` qui, anche
+     *   un'AZIONE della persona (`riarmaSeguiConversazione`) e il primo giro DAL VIVO (`RunStarted`)
+     *   possono staccarlo nell'istante in cui succedono, invece di aspettare un timeout.
+     * ⛔ Un ripristino nuovo sostituisce il precedente: prima lo si ferma, così non restano due
+     *   osservatori a contendersi lo stesso scorrevole.
+     */
     function suScroll() {
       if (nostro || smesso || !scroller) return;
       const distanza = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
@@ -16840,6 +17042,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (generation === state.realSession.generation) { scopri(); window.requestAnimationFrame(inFondo); window.setTimeout(inFondo, 250); }
       }
     }, 200);
+    fermaFondoRipristino?.(); fermaFondoRipristino = smetti; // ⛔ dopo `fermaSeFinito`: `smetti` lo legge, e prima di qui sarebbe nella sua zona morta
     // Rete di sicurezza per la VISIBILITÀ: una sessione conclusa senza evento terminale nel replay (interrotta) non resta nascosta per sempre — 8s bastano a qualunque cronologia vista finora (1.235 righe in ~1s).
     /* ⛔ 11/09 — gli 8 s erano tarati su «1.235 righe in ~1s» (il commento sopra lo dichiara):
        su 34.026 righe scoprire a 8 s vuol dire scoprire una cronologia a METÀ. Il tetto non è più
@@ -16949,6 +17152,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     setView('chat');
     closePanels();
+    /* ⛔ 16/09 (P0, punto 6) — il «segui» vive su un ascoltatore attaccato allo scorrevole. Verificato
+       che `.talos-conversation` non viene mai ricreato (lo stato vuoto tocca i figli della COLONNA),
+       ma affidare una regola a quella verifica vuol dire rifarla ogni volta che qualcuno cambia il
+       guscio: la funzione è idempotente e qui la si richiama, così se un giorno lo scorrevole cambia
+       identità l'ascoltatore ci sarà comunque — e se non cambia, questa riga non fa niente. */
+    collegaSeguiFondoConversazione();
     collegaEventiSessione(sessionId, generation);
     void caricaFigliSessione(); // 06/9: la scheda «Agenti» della colonna si riempie dalle deleghe vere
     if (state.realSession.deferHistoricalRendering) mantieniFondoDuranteRipristino(generation);
