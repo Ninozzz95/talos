@@ -1361,10 +1361,21 @@ async function chiamaConRitentaBase({
              * chiuso. `AbortSignal.any` (Node ≥ 20.3; qui gira v24.18.0)
              * compone i due: chiude chi arriva primo, e il timeout resta
              * intatto per chi non ha nessuno stop.
+             *
+             * ⛔⛔⛔ P0 · punto 7 (16/09/2026) — IL TIMEOUT SE N'È ANDATO, LO STOP È RIMASTO.
+             * `AbortSignal.timeout(180_000)` era una deadline TOTALE sulla fetch di ogni giro,
+             * streaming compreso: contava anche mentre il modello stava emettendo token, e a tre
+             * minuti esatti tagliava una risposta viva. È la stessa forma del tetto sui GIRI tolto
+             * l'11/09 («avevamo detto che non c'erano limiti»): un tetto sulla durata non protegge
+             * dal guasto, incontra per primo il compito lungo ma SANO.
+             * ⇒ Qui resta SOLO `segnaleStop`. Ciò che protegge dal canale morto è il failsafe di
+             *   INATTIVITÀ del trasporto (`src/generation-idle.mjs`, `TALOS_GENERATION_IDLE_MS`),
+             *   che si azzera a ogni byte — commenti SSE compresi — e vale per tutti i fornitori e
+             *   per il motore locale. Un tetto di durata punisce chi lavora; un tetto di inattività
+             *   punisce solo chi è morto.
+             * ⛔ Il kernel vive in DUE copie (desktop e mobile): questa riga va riportata anche là.
              */
-            signal: segnaleStop
-                ? AbortSignal.any([segnaleStop, AbortSignal.timeout(180_000)])
-                : AbortSignal.timeout(180_000),
+            signal: segnaleStop,
         })
         if (r.ok) {
             if (inStreaming) {

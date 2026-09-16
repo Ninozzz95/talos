@@ -41,7 +41,17 @@ const testo = z.string().max(LIMITE);
 const runtimeSchema = z.object({
   comando: z.string().min(1).max(4096), argomenti: z.array(z.string().max(4096)).max(64).default([]),
   cwd: z.string().min(1).max(4096), variabiliAmbiente: z.array(z.string().regex(/^[A-Z][A-Z0-9_]*$/u)).max(32).default([]),
-  timeoutMs: z.number().int().min(50).max(3_600_000).default(180_000),
+  /*
+   * ⛔ P0 · punto 7 (16/09/2026) — il default era 180_000, gli stessi tre minuti scritti a mano che
+   * il kernel aveva sulla fetch del modello. Un agente esterno che ragiona (Claude Code, Codex,
+   * Gemini CLI via ACP) supera i tre minuti su un compito serio senza essere guasto.
+   * ⛔ Resta una deadline TOTALE, non un'inattività: il protocollo ACP qui è a messaggi, non a
+   *   byte, e trasformarlo in inattività vuole toccare il ciclo delle notifiche — fuori dal
+   *   perimetro di questa corsia, e dichiarato nel rapporto come limite noto. Il default sale
+   *   all'unica soglia che il prodotto conosce (il failsafe di generazione, 30 min) invece di
+   *   restare un secondo numero arbitrario; chi vuole meno lo scrive nella configurazione.
+   */
+  timeoutMs: z.number().int().min(50).max(3_600_000).default(1_800_000),
 }).strict();
 const variabiliEseguibili = /^(?:NODE_OPTIONS|NODE_PATH|LD_.*|DYLD_.*|PYTHONPATH|PYTHONHOME|BASH_ENV|ENV|COMSPEC|PATHEXT)$/u;
 

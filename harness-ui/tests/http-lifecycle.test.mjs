@@ -2,15 +2,28 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
 
-import { closeRuntimeResources, createRequestLifecycle, createSseSession } from '../src/http-lifecycle.mjs';
+import { TEMPI_SERVER_HTTP, applicaTempiDelServer, closeRuntimeResources, createSseSession } from '../src/http-lifecycle.mjs';
 
-test('request lifecycle aborts exactly once on client disconnect and timeout is cleaned', async () => {
-  const req = new EventEmitter(); const res = new EventEmitter(); res.destroyed = false; res.writableEnded = false;
-  const lifecycle = createRequestLifecycle(req, res, { timeoutMs: 50 });
-  assert.equal(lifecycle.signal.aborted, false);
-  req.emit('aborted'); req.emit('aborted'); res.emit('close');
-  assert.equal(lifecycle.signal.aborted, true);
-  lifecycle.close();
+/*
+ * ⛔ P0 · punto 7 (16/09/2026): la prova di `createRequestLifecycle` è sparita insieme alla
+ * funzione — era una deadline di 30 s su ogni richiesta, senza chiamanti, pronta a essere cablata
+ * sulla rotta SSE. Il motivo per esteso sta in `src/http-lifecycle.mjs`; il cancello che impedisce
+ * di rimetterla è `P0-D-13` in `tests/timeout-generazione-p0.test.mjs`. Al suo posto, la prova dei
+ * tempi del server, che è la cosa che quel file doveva davvero dire.
+ */
+test('i tempi del server si applicano davvero, e headersTimeout resta sopra keepAliveTimeout', () => {
+  const server = {};
+  const letti = applicaTempiDelServer(server);
+  assert.deepEqual(letti, { ...TEMPI_SERVER_HTTP });
+  assert.equal(server.timeout, 0, 'nessun guardiano sul socket: una risposta SSE lunga deve poter vivere');
+  assert.ok(
+    TEMPI_SERVER_HTTP.headersTimeout > TEMPI_SERVER_HTTP.keepAliveTimeout,
+    'headersTimeout sotto keepAliveTimeout fa chiudere i socket riusati senza colpevole',
+  );
+  /* AL CONTRARIO: un server che non accetta i valori non deve farci credere di averli imposti. */
+  const testardo = { set timeout(_v) { /* ignora */ }, get timeout() { return 120_000; }, keepAliveTimeout: 0, headersTimeout: 0, requestTimeout: 0 };
+  assert.equal(applicaTempiDelServer(testardo).timeout, 120_000);
+  assert.equal(applicaTempiDelServer(null), null);
 });
 
 test('SSE session sends id before data, heartbeats, and removes listeners/timer on close', () => {

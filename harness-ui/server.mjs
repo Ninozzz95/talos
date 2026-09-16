@@ -38,7 +38,8 @@ import { createContextTokenCounter, buildPreparedDesktopContextRequest } from '.
 import { createChatImageStore } from './src/chat-image-attachments.mjs';
 import { avviaSessione } from './src/agent-service.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA } from './src/runtime-contract.mjs';
-import { closeRuntimeResources } from './src/http-lifecycle.mjs';
+import { applicaTempiDelServer, closeRuntimeResources } from './src/http-lifecycle.mjs';
+import { leggiInattivitaGenerazioneMs } from './src/generation-idle.mjs';
 import { createWorkspaceLaunchStore } from './src/workspace-launch-store.mjs';
 import { cartelleConsigliate } from './src/frequent-dirs.mjs';
 import { createWorkspaceBrowser } from './src/workspace-browser.mjs';
@@ -728,6 +729,19 @@ async function startServer() {
   const server = createServer(app);
 
   /*
+   * ⛔⛔ P0 · punto 7 (16/09/2026) — I TEMPI DEL SERVER SI DICHIARANO, PRIMA DI `listen`.
+   *
+   * Fin qui questa riga era solo `createServer(app)`: nessuno dei quattro tempi era impostato, e
+   * quelli attivi erano i default di qualunque Node fosse installato (misurati su v24.18.0:
+   * timeout 0 · headersTimeout 60 s · keepAliveTimeout 5 s · requestTimeout 300 s — e
+   * `server.timeout` valeva 120 s fino a Node 13). La rotta `/events` deve reggere un
+   * ragionamento lungo: non può dipendere da questo.
+   * I numeri e le ragioni stanno in `src/http-lifecycle.mjs` (`TEMPI_SERVER_HTTP`), nello stesso
+   * posto da cui li legge la prova che il battito regge oltre il vecchio muro.
+   */
+  const tempiDelServer = applicaTempiDelServer(server);
+
+  /*
    * ⭐⭐⭐ 03/9 — R-01 (lanciatore doppio-clic, owner: "porta libera scelta
    * da sola"). Il legame avviene QUI, prima di costruire l'allowlist delle
    * origini del terminale sotto: quella allowlist e il log finale devono
@@ -830,6 +844,12 @@ async function startServer() {
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
   console.log(`Harness UI disponibile su http://${config.host}:${portaAscolto}`);
+  /*
+   * ⭐ P0 · punto 7: si stampa ciò che il server ha DAVVERO (rilettura, non ciò che gli abbiamo
+   * chiesto) più il failsafe attivo. Sono i due numeri che servono quando qualcuno segnala «si è
+   * fermato da solo»: senza, la diagnosi ricomincia dalla lettura del codice.
+   */
+  console.log(`[tempi] socket ${tempiDelServer.timeout === 0 ? 'senza scadenza' : `${tempiDelServer.timeout} ms`} · keep-alive ${tempiDelServer.keepAliveTimeout} ms · intestazioni ${tempiDelServer.headersTimeout} ms · richiesta ${tempiDelServer.requestTimeout} ms · silenzio del fornitore ${leggiInattivitaGenerazioneMs() === 0 ? 'nessun limite' : `${Math.round(leggiInattivitaGenerazioneMs() / 60_000)} min`}`);
   /*
    * ⭐⭐⭐ 02/09 — stesso principio di `hermes doctor`/`claude doctor`
    * (ricerca fatta lo stesso giorno, vedi

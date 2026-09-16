@@ -209,17 +209,33 @@ test('OPENROUTER-IDLE-01 — keepalive SSE rinnova il limite di inattività oltr
   assert.match(await risposta.text(), /"content":"ok"/);
 });
 
-test('OPENROUTER-IDLE-01 contrario — silenzio vero produce 408 ritentabile, non attesa infinita', async () => {
+test('OPENROUTER-IDLE-01 contrario — silenzio vero è un errore di CONNESSIONE ritentabile, non attesa infinita', async () => {
+  /*
+   * ⛔ P0 · punto 7 (16/09/2026) — questa prova è stata aggiornata, non indebolita: l'invariante che
+   *   difende («silenzio vero ⇒ si esce, e si esce in modo ripetibile») è identica. Sono cambiati
+   *   la LEVA e il NOME dell'esito.
+   *   · La leva: sul flusso non comanda più `timeoutMsFn` (il tempo del FORNITORE, che ora vale solo
+   *     fino agli header) ma `inattivitaMsFn`, il failsafe di generazione. Col vecchio aggancio,
+   *     bastava scrivere 60 s nella scheda Fornitori per uccidere un ragionamento lungo legittimo.
+   *   · L'esito: non più un 408 travestito da risposta HTTP, ma l'errore con il suo codice
+   *     (`PROVIDER_SILENCE`) e la sua classe (`rete`, transitoria). Un 408 sarebbe stato riletto
+   *     dalla tabella BC-44 come «timeout del fornitore» — cioè avrebbe mandato a studiare il
+   *     modello invece del cavo, che è esattamente ciò che questo punto doveva smettere di fare.
+   */
   const { creaFetchOpenRouterResiliente } = await import('../src/runtime-owner-adapter.mjs');
   const upstream = async () => new Response(new ReadableStream({ start() {} }), {
     status: 200, headers: { 'content-type': 'text/event-stream' },
   });
-  const risposta = await creaFetchOpenRouterResiliente(upstream, { timeoutMsFn: () => 10 })(
+  const inizio = Date.now();
+  const errore = await creaFetchOpenRouterResiliente(upstream, { timeoutMsFn: () => 1_000, inattivitaMsFn: () => 10 })(
     'https://openrouter.ai/api/v1/chat/completions',
     { method: 'POST', body: JSON.stringify({ model: 'qwen/qwen3.8-flash', stream: true }) },
-  );
-  assert.equal(risposta.status, 408);
-  assert.match(await risposta.text(), /inattiv/i);
+  ).then(() => null, (e) => e);
+  assert.notEqual(errore, null, 'il silenzio vero non deve diventare un’attesa infinita');
+  assert.equal(errore.code, 'PROVIDER_SILENCE');
+  assert.equal(errore.classe, 'rete');
+  assert.equal(errore.transitorio, true, 'ritentabile come prima: è ciò che questa prova difende');
+  assert.ok(Date.now() - inizio < 5_000, 'si esce al limite di inattività, non al vecchio muro');
 });
 
 test('OPENROUTER-STOP-03 — stop utente interrompe subito e non viene trasformato in retry', async () => {
