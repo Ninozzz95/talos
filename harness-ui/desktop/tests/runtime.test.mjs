@@ -54,6 +54,9 @@ test('R01-AMBIENTE — eseguibile Electron, segreto solo in ambiente e porta esp
   assert.equal(avvio.options.env.TALOS_HARNESS_UI_PORT, '49152');
   assert.equal(avvio.options.env.TALOS_HARNESS_UI_HOST, '127.0.0.1');
   assert.equal(avvio.options.env.TALOS_HARNESS_UI_SESSIONS_DIR, join(resolve('profilo'), 'sessions'));
+  // ⛔ (16/09/2026) — il figlio riceve sempre lo scope desktop: namespace `-desktop` nel
+  // portachiavi e semi d'ambiente ignorati (`src/adattatore-keyring.mjs`).
+  assert.equal(avvio.options.env.TALOS_HARNESS_UI_KEYRING_SCOPE, 'desktop');
   assert.equal(avvio.options.env.NODE_OPTIONS, undefined);
   assert.equal(avvio.options.env.TALOS_PACKAGED_NODE, undefined);
   assert.equal(avvio.options.env.TALOS_HARNESS_UI_TOKEN, token);
