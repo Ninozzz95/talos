@@ -450,6 +450,14 @@ test('⭐⭐⭐ L8 — la CONSEGNA della figlia chiede i tre argomenti e NON il 
     accodaEventoFn: async () => {},
     leggiGiornaleFn: async () => ({ eventi: [], righeSaltate: 0, byte: 0 }),
     leggiPianoFn: async () => null,
+    /*
+     * ⛔ (16/09/2026, review) — le tre porte di scrittura mancano qui come in
+     *   research-orchestrator.test.mjs: `avvia` con la cartella '/p' scriveva DAVVERO
+     *   `piano.json` in `C:\p\.harness-ui-research\ric-consegna\` a ogni run, in silenzio.
+     */
+    scriviPianoFn: async () => {},
+    scriviFonteFn: async () => {},
+    scriviIndiceFontiFn: async () => {},
     elencaFontiFn: async () => [],
     leggiIstantaneaCacheFn: async () => null,
     scriviIstantaneaCacheFn: async () => {},

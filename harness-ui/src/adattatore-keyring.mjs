@@ -7,7 +7,10 @@
  * una disinstallazione+reinstallazione ereditava tutto. La cura è un suffisso: quando lo scope è
  * `desktop` OGNI servizio che passa dall'adattatore viene scritto/letto come `<servizio>-desktop`
  * — un namespace proprio, che nasce vuoto su qualunque macchina e sopravvive agli upgrade (è
- * sempre lo stesso). Il dev continua sui nomi di sempre: nessuna migrazione.
+ * sempre lo stesso). Il dev continua sui nomi di sempre. ⭐ (16/09/2026, decisione owner) le
+ * chiavi del namespace VECCHIO vengono COPIATE una volta sola nel namespace dell'app al primo
+ * avvio (`src/migrazione-chiavi.mjs`): chi aveva l'app ≤ 0.1.10 non reinserisce nulla, e i
+ * servizi senza suffisso restano allo sviluppo.
  *
  * ⛔ Il wrapping è GENERICO (qualunque nome servizio in ingresso riceve il suffisso): i negozi
  *   conoscono i loro nomi, questo modulo no — la prossima fonte che userà il portachiavi eredita
