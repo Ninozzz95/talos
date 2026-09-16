@@ -18,7 +18,7 @@
  * della pagina). Al documento proxato NON si applica la CSP di TALOS (bloccherebbe gli script del
  * dev server): resta `frame-ancestors 'self'` — nessun altro può incorniciarlo.
  */
-import { urlAmmesso, MILLISECONDI_MASSIMI } from './browser-frame.mjs';
+import { urlAmmesso, MILLISECONDI_MASSIMI, classificaGuasto } from './browser-frame.mjs'; // 16/09: il guasto si nomina in UN posto solo
 
 export const BYTE_MASSIMI = 5 * 1024 * 1024;
 export const SCRIPT_OVERLAY = '/talos/browser-annota.js';
@@ -72,7 +72,15 @@ export async function proxyPagina(indirizzo, { fetchFn = globalThis.fetch, milli
     if (testo.length > BYTE_MASSIMI) return { ok: false, codice: 'BROWSER_PROXY_TROPPO_GRANDE', motivo: 'La pagina supera i 5 MB', stato: risposta.status };
     return { ok: true, html: riscriviHtml(testo, finale.href, origineNostra), url: finale.href, stato: risposta.status };
   } catch (errore) {
-    return { ok: false, codice: 'BROWSER_PROXY_IRRAGGIUNGIBILE', motivo: errore?.name === 'AbortError' ? `Nessuna risposta entro ${Math.round(millisecondi / 1000)} secondi` : 'La pagina non risponde' };
+    /* ⛔ 16/09 — stessa cura di `browser-frame.mjs`, stessa tabella: su un dev server «non l'hai
+       acceso» e «ci ho messo troppo» sono due gesti diversi per chi programma, e prima uscivano
+       con la stessa frase. La classificazione è importata, non ricopiata. */
+    /* ⛔ 16/09, giro di riparazione — passano anche i `dettagli` (i secondi di un timeout): il
+       motivo qui è italiano e composto dal server, quindi chi disegna deve poter riscrivere la
+       frase nella lingua di chi guarda invece di provare a tradurre una chiave che contiene un
+       numero. Stessa cura del percorso della cornice, stesso contratto. */
+    const { genere, motivo, dettagli } = classificaGuasto(errore, { millisecondi });
+    return { ok: false, codice: 'BROWSER_PROXY_IRRAGGIUNGIBILE', motivo, genere, dettagli };
   } finally {
     clearTimeout(timer);
   }

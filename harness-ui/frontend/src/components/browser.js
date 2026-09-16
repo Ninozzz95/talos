@@ -18,7 +18,7 @@
  * permette) — registrato nel ledger.
  */
 
-import { t, tn } from './lingua.js';
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
 import { renderizzaAnnotazioni, MASSIMO_ANNOTAZIONI } from './annotazioni.js';
 import { sembraHtml, testoLeggibile, riassuntoPulizia } from './testo-pagina.js'; // 06/9 O-28: il sorgente di una pagina non si legge
 
@@ -44,9 +44,233 @@ export const TESTI = Object.freeze({
   cornicePronta: 'Pagina viva',
   chiediAllAgente: 'Chiedi all’agente di leggerla',
   nessunaScheda: 'Nessuna pagina letta',
+  /* ⭐ 16/09 — le facce dei sei stati. Nessun nome tecnico a schermo: «loading» è un nome per il
+     codice, a chi guarda si dice che cosa sta succedendo e che cosa può fare adesso. */
+  statoApro: 'Apertura in corso…',
+  statoAproSotto: 'Se ci mette troppo puoi annullare: la scheda resta dov’è.',
+  statoRiprovo: (tentativo, totale) => t('Non ha risposto: riprovo ({tentativo} di {totale})…', { tentativo, totale }),
+  statoRiprovoSotto: 'Ogni tentativo aspetta un po’ di più del precedente.',
+  statoNonRaggiunta: 'Non sono riuscito ad aprire questa pagina',
+  statoAnnullata: 'Apertura annullata',
+  statoAnnullataSotto: 'Hai chiuso la scheda mentre apriva: non è stato scritto niente.',
+  statoRiposo: 'Questa pagina era a riposo: la sto ricaricando',
+  statoRiposoSotto: 'Restano vive le ultime pagine che hai guardato; le altre si ricaricano quando ci torni.',
+  statoVivaInPausa: 'Questa pagina è in pausa',
+  riprova: 'Riprova',
+  annulla: 'Annulla',
+  /*
+   * ⛔⛔ 16/09/2026, SECONDO GIRO DI RIPARAZIONE — «30 caratteri» IN UN PANNELLO INGLESE.
+   * Stavano nel codice come pezzo di stringa attaccato a un numero (`${n} caratteri`), quindi
+   * nessun dizionario poteva vederle e nessun cancello poteva accorgersene: si vedono nella foto
+   * `artifacts/p0-B/browser-p0-stato-light-en.png`, sotto un titolo inglese. Qui diventano due
+   * frasi di `TESTI` — cioè roba che `tests/unit/i18n-copertura.test.mjs` legge e di cui pretende
+   * l'inglese — con il numero come segnaposto e il plurale scelto dalla lingua risolta.
+   */
+  caratteriUno: '{n} carattere',
+  caratteriMolti: '{n} caratteri',
+  annullaNavigazione: 'Annulla navigazione',
+  /*
+   * ⛔⛔ 16/09, GIRO DI RIPARAZIONE — LE ETICHETTE DELLA BARRA, trovate GUARDANDO la foto inglese.
+   *   In una app tutta inglese la barra del Browser diceva «Rileggi · Pagina · Testo dell'agente ·
+   *   Annota · Nota locale · Copia testo». Non era una dimenticanza del dizionario: quei testi sono
+   *   scritti a mano nel modello HTML (`public/index.html`) e nessuno li traduce mai, perché non
+   *   portano nessun marcatore. È la stessa malattia del motivo del server, in un altro punto
+   *   della stessa schermata — e il cancello i18n non poteva vederla, perché guarda le TESTI dei
+   *   componenti e quelle frasi non stavano in nessun componente.
+   * ⇒ Le scrive il componente, a ogni disegno (quindi anche al cambio di lingua, che ridisegna).
+   *   Il modello HTML resta com'è: non è un file di questa corsia, e il suo testo continua a valere
+   *   come partenza per chi apre la pagina prima che il codice giri.
+   */
+  barraRileggi: 'Rileggi',
+  barraAnnota: 'Annota',
+  barraNota: 'Nota locale',
+  barraCopia: 'Copia testo',
+  barraModoPagina: 'Pagina',
+  barraModoTesto: 'Testo dell’agente',
+  unaVivaAllaVolta: 'La pagina pilotata è una alla volta: aprendone un’altra questa resta nella sua scheda e si riapre quando ci torni.',
+  /*
+   * ⛔⛔⛔ 16/09/2026, GIRO DI RIPARAZIONE — LE FRASI DEI GUASTI VIVONO QUI, non nel server.
+   *
+   * Bocciatura del controllore, con la prova: le foto consegnate mostravano il pannello col titolo
+   * in inglese («I could not open this page») e il motivo in italiano («Il sito non ha risposto in
+   * tempo (6 secondi)»), dentro una app per il resto tutta inglese. Il commit diceva quel difetto
+   * riparato: le foto dicevano di no.
+   *
+   * ⛔ La causa era STRUTTURALE, non una riga dimenticata: il motivo lo COMPONEVA il server, con un
+   *   numero interpolato dentro, e qui finiva dentro `t()` — un dizionario a chiavi fisse. La
+   *   chiave «Il sito non ha risposto in tempo (6 secondi)» non ci sarà mai, né quella con 11.
+   *
+   * ⇒ Il server manda ciò che sa — un `genere` stabile e i suoi `dettagli` — e la frase si scrive
+   *   QUI, con il numero come SEGNAPOSTO. Così la chiave è una sola per tutti i numeri, il cancello
+   *   `tests/unit/i18n-copertura.test.mjs` la vede (legge le stringhe di TESTI) e pretende
+   *   l'inglese, e una lingua nuova non richiede di toccare il server.
+   * Ricerca 16/09/2026 — api-craft «Shall REST API error messages be internationalized?»:
+   *   «locale-neutral errors with well-defined error values… allows the consumer to localize».
+   */
+  guastoTimeout: 'Il sito non ha risposto in tempo ({secondi} secondi)',
+  guastoDns: 'Questo indirizzo non esiste',
+  guastoRifiuto: 'Nessuno risponde a questo indirizzo',
+  guastoCertificato: 'Il sito ha un certificato non valido',
+  guastoRete: 'Non sono riuscito a raggiungere il sito',
+  guastoIndirizzo: 'Questo non è un indirizzo che posso aprire',
+  rifiutoDeny: 'Il sito vieta di essere mostrato dentro un altro sito',
+  rifiutoSameOrigin: 'Il sito si mostra solo dentro le sue stesse pagine',
+  rifiutoFrameAncestors: 'Il sito consente la cornice solo ad altri siti, non a TALOS',
+  /* i rimedi: uno per genere, scelti perché portino a un gesto vero. Prima si sceglievano leggendo
+     la frase italiana del server con quattro regex — in inglese non agganciavano niente. */
+  rimedioIndirizzo: 'Controlla l’indirizzo.',
+  rimedioCertificato: 'Il sito ha un certificato non valido: aprilo fuori da TALOS se ti fidi.',
+  rimedioAspetta: 'Riprova fra un momento.',
+  rimedioServizio: 'Controlla che il servizio sia acceso.',
+  /* le parole degli stati sulla striscia: si ascoltano (sr-only), non si guardano soltanto */
+  etichettaApre: 'in apertura',
+  etichettaRiprova: 'sto riprovando',
+  etichettaNonRaggiunta: 'non raggiunta',
+  etichettaAnnullataBreve: 'annullata',
+});
+
+/**
+ * La frase da mostrare per un guasto o un rifiuto, nella lingua di chi guarda.
+ * ⛔ Il `motivo` del server NON si traduce e non si mostra: è diagnostica. Qui si compone dal
+ *   `genere` (stabile) e dai `dettagli` (i parametri), che è l'unica forma traducibile.
+ * @param {string|null|undefined} genere @param {{secondi?:number}} [dettagli]
+ * @returns {string} '' se il genere è sconosciuto — meglio niente che una frase sbagliata
+ */
+export function frasePerGenere(genere, dettagli = {}) {
+  switch (String(genere || '')) {
+    case 'timeout': return t(TESTI.guastoTimeout, { secondi: Number(dettagli?.secondi ?? 0) });
+    case 'dns': return t(TESTI.guastoDns);
+    case 'rifiuto': return t(TESTI.guastoRifiuto);
+    case 'certificato': return t(TESTI.guastoCertificato);
+    case 'rete': return t(TESTI.guastoRete);
+    case 'indirizzo': return t(TESTI.guastoIndirizzo);
+    case 'xfo-deny': return t(TESTI.rifiutoDeny);
+    case 'xfo-sameorigin': return t(TESTI.rifiutoSameOrigin);
+    case 'frame-ancestors': return t(TESTI.rifiutoFrameAncestors);
+    default: return '';
+  }
+}
+
+/**
+ * Il consiglio che c'entra con QUEL guasto.
+ * ⛔ 07/9, guardando lo screenshot di un dominio inesistente: il rimedio era «Chiedi all'agente di
+ *   leggerla» — falso, un nome che non esiste non lo risolve nemmeno l'agente.
+ * ⛔ 16/09: prima si sceglieva leggendo la frase italiana del server con quattro espressioni
+ *   regolari. In inglese non agganciavano niente, e una parola cambiata nel server spegneva il
+ *   rimedio in silenzio. Ora si sceglie dal genere, che è un codice e non una frase.
+ * @param {string|null|undefined} genere
+ */
+export function rimedioPerGenere(genere) {
+  switch (String(genere || '')) {
+    case 'dns': case 'indirizzo': return t(TESTI.rimedioIndirizzo);
+    case 'certificato': return t(TESTI.rimedioCertificato);
+    case 'timeout': case 'rete': return t(TESTI.rimedioAspetta);
+    case 'rifiuto': return t(TESTI.rimedioServizio);
+    /* un rifiuto del sito non è un guasto: la via è farla leggere all'agente, e quella resta */
+    default: return t('{invito}: usa «Rileggi».', { invito: t(TESTI.chiediAllAgente) });
+  }
+}
+
+/**
+ * La parola dello stato per chi ASCOLTA (WCAG 1.4.1: un lettore di schermo non annuncia i colori).
+ * ⛔ Una scheda sana non ha etichetta: scriverla su ogni riga sarebbe rumore, non informazione.
+ * @param {string} situazione uno di STATI_SCHEDA
+ */
+export function etichettaStatoScheda(situazione) {
+  switch (situazione) {
+    case 'loading': return t(TESTI.etichettaApre);
+    case 'retrying': return t(TESTI.etichettaRiprova);
+    case 'error': case 'unreachable': return t(TESTI.etichettaNonRaggiunta);
+    case 'cancelled': return t(TESTI.etichettaAnnullataBreve);
+    default: return '';
+  }
+}
+
+/*
+ * ⛔⛔⛔ 16/09/2026, GIRO DI RIPARAZIONE — LO STATO DI UNA LINGUETTA HA TRE CANALI, non uno.
+ *
+ * Bocciatura: il blocco CSS del 16/09 portava lo stato di una scheda non attiva col SOLO colore,
+ * su un'icona `aria-hidden="true"`. Chi non distingue i colori non vedeva niente; chi usa un
+ * lettore di schermo non sentiva niente. E il punto citava WCAG 1.4.1 come fonte: la regola era
+ * citata e violata nello stesso blocco.
+ *
+ * Ricerca 16/09/2026 (testparty.ai «Guide to WCAG 1.4.1 — Use of Color», accessibility.chat
+ * «Status Indicators Beyond Color Coding»): «screen readers don't announce colors… combine color
+ * with text labels, icons, or patterns». ⇒ Tre canali insieme: il COLORE (già c'era), la FORMA
+ * (un'icona diversa per stato — un orologio, un quadrato tratteggiato col punto interrogativo, una
+ * croce) e il TESTO (`sr-only`, che si ascolta e si trova con una ricerca nella pagina).
+ */
+const ICONA_PER_STATO = Object.freeze({
+  loading: '#i-clock',
+  retrying: '#i-clock',
+  error: '#i-ignoto',
+  unreachable: '#i-ignoto',
+  cancelled: '#i-x',
 });
 
 export const MASSIMO_SCHEDE = 12;
+
+/*
+ * ⭐⭐⭐ 16/09/2026, P0 corsia B — LA SCHEDA DIVENTA UNO STATO, NON UNA COINCIDENZA.
+ *
+ * Fino a ieri una scheda era «quello che si vede adesso»: il modo Pagina/Testo era UNA variabile
+ * per tutto il browser, il caricamento si mostrava solo per le pagine vive, l'errore era una riga
+ * sola in cima (`#browserAvviso`) e una lettura che stava interrogando il server non mostrava
+ * niente — schermo vuoto, senza spiegazione. ⇒ Ogni scheda ha adesso il SUO stato, e ogni stato ha
+ * la sua faccia. Sei, non uno:
+ *   loading      sto aprendo (vale anche per una lettura dell'agente e per una cornice)
+ *   loaded       c'è
+ *   retrying     non ha risposto, sto riprovando (con quale tentativo e fra quanto)
+ *   error        ha risposto di no: il motivo vero, e un rimedio che c'entra col motivo
+ *   unreachable  non ci sono arrivato nemmeno riprovando
+ *   cancelled    hai chiuso o hai cambiato pagina mentre apriva: niente scritture in ritardo
+ *
+ * Ricerca 16/09/2026 (per il vocabolario e per il fatto che «loading» non è un booleano):
+ * TanStack Query «Query States» (pending/error/success + fetchStatus a parte), MDN «AbortController»
+ * (un annullamento NON è un errore e non si racconta come tale), AWS Architecture Blog «Exponential
+ * Backoff And Jitter» (il ritentativo è uno stato che si dichiara, non un silenzio).
+ */
+export const STATI_SCHEDA = Object.freeze(['loading', 'loaded', 'retrying', 'error', 'unreachable', 'cancelled']);
+
+/**
+ * Lo stato di UNA scheda, qualunque sia il suo tipo. Il modello che arriva da `legacy/app.js` parla
+ * italiano (`stato: 'caricamento'|'pronta'|'ritento'|'bloccata'|'irraggiungibile'|'annullata'`);
+ * qui si traduce nei sei nomi canonici, e le letture dell'agente — che uno stato non l'hanno mai
+ * avuto — lo prendono da ciò che sta succedendo davvero (la domanda al server è in volo?).
+ * @param {object|null} s
+ * @returns {'loading'|'loaded'|'retrying'|'error'|'unreachable'|'cancelled'}
+ */
+export function statoDellaScheda(s) {
+  if (!s) return 'loaded';
+  switch (s.stato) {
+    case 'caricamento': return 'loading';
+    case 'ritento': return 'retrying';
+    case 'annullata': return 'cancelled';
+    case 'irraggiungibile': return 'unreachable';
+    case 'bloccata': return 'error';
+    default: break;
+  }
+  /* ⛔ Una LETTURA mentre chiede al server se il sito si lascia incorniciare: `incorniciabile` vale
+     `null` (in volo, vedi `chiediCornice` in app.js) oppure non c'è ancora. Prima qui non si
+     mostrava niente: la cornice arrivava dopo, e nel mezzo lo schermo era vuoto. */
+  if (s.tipo !== 'viva' && s.incorniciabile === null) return 'loading';
+  return 'loaded';
+}
+
+/*
+ * ⛔ 16/09 — QUANTE CORNICI RESTANO VIVE INSIEME. Dal 16/09 l'iframe di una scheda non si
+ *   ricostruisce più al cambio scheda (si nasconde), quindi le pagine restano caricate: è ciò che
+ *   rende istantaneo tornare indietro, ed è anche memoria che non si libera più da sola.
+ *   Con `MASSIMO_SCHEDE = 12` sarebbero dodici documenti vivi insieme.
+ * Ricerca 16/09/2026 (Chromium «Process Model and Site Isolation»; Chrome for Developers «Tab
+ * Discarding» e Memory Saver): una cornice di un'altra origine gira in un PROCESSO suo, 20-100 MB
+ * l'uno, e Chrome stesso non tiene tutto — scarica i documenti meno usati di recente e li ricarica
+ * quando ci torni. Stessa regola qui, e detta a schermo invece che di nascosto.
+ * ⛔ Il numero non è a caso: quattro è il numero di schede che si alternano davvero mentre si
+ *   lavora (una pagina, la sua documentazione, il dev server, una ricerca) — sopra quel numero si
+ *   scarica la più vecchia, e la scheda lo DICE quando ci torni («era stata messa a riposo»).
+ */
+export const MASSIMO_CORNICI_VIVE = 4;
 
 /** Un dev server sul computer della persona: la scheda passa dal proxy locale e si può annotare. */
 export function localeAnnotabile(url) {
@@ -116,13 +340,27 @@ export function breve(n) {
   return `${k < 10 ? k.toFixed(1).replace('.', ',') : Math.round(k)}k`;
 }
 
+/*
+ * ⛔ 16/09/2026 — un numero si scrive col separatore della LINGUA RISOLTA, non con uno fisso.
+ *   Prima qui c'era `toLocaleString('it-IT')`: «12.345» dentro una app inglese, dove si scrive
+ *   «12,345». Il codice della lingua (`it`, `en`) è già un tag BCP-47 valido, quindi non serve
+ *   nessuna tabella di conversione: si passa quello che `t()` sta usando in questo momento.
+ */
+function numeroLocale(n) {
+  const v = Number(n) || 0;
+  try { return v.toLocaleString(linguaCorrenteDiT()); } catch { return String(v); }
+}
+
 /** «Agente · 05/09, 10:42 (Roma) · 365 caratteri» — la provenienza di una lettura, nel formato del mockup. */
 export function formattaProvenienza(pagina) {
   const quando = pagina?.quando ? new Date(pagina.quando) : null;
   const chi = t(pagina?.origine === 'tu' ? TESTI.provenienzaTu : TESTI.provenienzaAgente);
   const parti = [chi];
   if (quando && !Number.isNaN(quando.getTime())) parti.push(`${giornoRoma.format(quando)}, ${oraRoma.format(quando)} (Roma)`);
-  if (pagina?.tipo !== 'viva') parti.push(`${String(pagina?.testo || '').length} caratteri`);
+  if (pagina?.tipo !== 'viva') {
+    const quanti = String(pagina?.testo || '').length;
+    parti.push(tn(TESTI.caratteriUno, TESTI.caratteriMolti, quanti, { n: numeroLocale(quanti) }));
+  }
   return parti.join(' · ');
 }
 
@@ -160,7 +398,9 @@ export function titoloDaHtml(grezzo) {
  * cornice altrui no: di quelle non possiamo toccare il documento.
  */
 export function paginaAnnotabile(s) {
-  return Boolean(s && s.tipo === 'viva' && (s.proxata || s.viaVista === 'vivo') && s.stato !== 'bloccata');
+  // ⛔ 16/09 — si annota ciò che è DAVVERO a schermo: non solo «non bloccata», ma caricata (una
+  //   pagina che sta aprendo, che sta riprovando o annullata non ha niente da annotare).
+  return Boolean(s && s.tipo === 'viva' && (s.proxata || s.viaVista === 'vivo') && statoDellaScheda(s) === 'loaded');
 }
 
 export function titoloScheda(pagina) {
@@ -229,7 +469,42 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     annotazioni: $(schermo, '#browserAnnotazioni'),
     modi: [...schermo.querySelectorAll('[data-browser-modo]')], // 06/9 O-28: Pagina / Testo dell'agente
   };
-  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false, modo: modoIniziale === 'testo' ? 'testo' : 'pagina', modoChiesto: null, modiScelti: {}, riaperte: new Set() };
+  /*
+   * ⛔⛔⛔ 16/09/2026, ordine dell'owner (P0, punto 5): «ogni tab deve mantenere indipendentemente il
+   *   proprio stato… Tab A → Pagina, B → Testo, C → Pagina; tornando su A deve restare Pagina;
+   *   associato all'ID della singola tab; sopravvive a switch, re-render, aggiornamento contenuto,
+   *   navigazione nella stessa tab, streaming, modifiche delle altre tab».
+   *
+   * ⛔ Questo RIBALTA la decisione dell'11/09 («al cambio scheda il modo torna sempre a pagina»),
+   *   e va detto perché il capovolgimento non è un capriccio: quella cura curava il sintomo giusto
+   *   con lo strumento sbagliato. Il difetto dell'11/09 era che `stato.modo` era UNA VARIABILE SOLA
+   *   per tutto il browser — si trascinava dietro l'ultimo valore, e `modiScelti` copriva metà dei
+   *   casi. Riazzerare quella variabile faceva sparire il trascinamento *e* la memoria della scheda.
+   *   ⇒ La forma giusta non è «azzera», è «tienilo per scheda»: `modi[id]`, con `'pagina'` come
+   *     nascita di ogni scheda nuova. Il trascinamento sparisce lo stesso (una scheda mai toccata
+   *     nasce in «pagina», sempre), e la scelta di chi guarda non si perde più.
+   *
+   * Ricerca 16/09/2026: MDN «WebExtensions tabs» e Chrome «chrome.tabs» — lo stato per scheda si
+   * tiene in una mappa indicizzata dall'ID della scheda, e l'ID dev'essere STABILE (di lì la
+   * seconda metà di questa cura: gli id posizionali `lettura-<indice>` cambiavano significato ogni
+   * volta che l'agente leggeva una pagina nuova).
+   *
+   * Le tre mappe, e perché sono tre:
+   *   · `modi`        ciò che si VEDE per quella scheda (Pagina o Testo);
+   *   · `modiChiesti` ciò che la PERSONA ha chiesto: disattiva il ripiego automatico al testo, e
+   *                   vale solo per la scheda sua (prima era una variabile globale, quindi la
+   *                   richiesta fatta su una scheda zittiva il ripiego su TUTTE le altre);
+   *   · `riaperte`    freno anti-anello per la riapertura col browser pilotato (era già così).
+   */
+  let stato = {
+    schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false,
+    modoPredefinito: modoIniziale === 'testo' ? 'testo' : 'pagina',
+    modi: {}, modiChiesti: {}, riaperte: new Set(), riposate: new Set(),
+  };
+  /** Il modo di UNA scheda: quello scelto per lei, o il predefinito — mai quello della scheda di prima. */
+  const modoDi = (id) => (id && stato.modi[id]) || stato.modoPredefinito;
+  const impostaModo = (id, m) => { if (id) stato.modi[id] = m; };
+  const modoAttivo = () => modoDi(stato.attiva);
   const frameAttivo = () => el.live?.querySelector('iframe') || null;
   const dialogaConOverlay = (messaggio) => { try { frameAttivo()?.contentWindow?.postMessage({ fonte: 'talos-genitore', ...messaggio }, '*'); } catch { /* cornice non pronta */ } };
   window.addEventListener('message', (e) => {
@@ -271,7 +546,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
       const suo = b.dataset.browserModo === 'testo' ? 'testo' : 'pagina';
       const opposto = suo === 'testo' ? 'pagina' : 'testo';
       const solo = (el.modi || []).length < 2;
-      const scelto = stato.modo === suo ? (solo ? opposto : suo) : suo;
+      const scelto = modoAttivo() === suo ? (solo ? opposto : suo) : suo;
       /*
        * ⛔ 08/09/2026, owner: «quando clicco pagina la pagina non si ricarica». Riprodotto: su un
        *   sito che vieta la cornice, `corniceDellaLettura` rimetteva il modo a 'testo' a OGNI
@@ -283,19 +558,21 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
        */
       const lettura = attiva();
       if (scelto === 'pagina' && lettura && lettura.tipo !== 'viva' && lettura.incorniciabile === false && lettura.url) {
-        stato.modoChiesto = 'pagina'; // la scelta della persona vale piu' del ripiego automatico
-        if (lettura.id) stato.modiScelti[lettura.id] = 'pagina';
+        // ⛔ 16/09 — la richiesta vale piu' del ripiego automatico, ma SOLO per la scheda sua: prima
+        //   era una variabile globale e zittiva il ripiego su tutte le altre schede.
+        if (lettura.id) { stato.modiChiesti[lettura.id] = 'pagina'; impostaModo(lettura.id, 'pagina'); }
         azioni.apri?.(lettura.url, lettura.id);
         return;
       }
-      if (scelto === stato.modo) return;
-      stato.modoChiesto = scelto;
+      if (scelto === modoAttivo()) return;
+      if (lettura?.id) stato.modiChiesti[lettura.id] = scelto;
       /* ⛔ 08/09/2026, owner: «se il pulsante pagina viene cliccato e cambio scheda mi va a
          visualizzazione sorgente, non deve succedere, deve ricordare la mia scelta». Io avevo
          scritto l'opposto di proposito — azzeravo la scelta al cambio scheda — e sbagliavo: e' una
-         PREFERENZA, e si ricorda. Per scheda, cosi' due pagine diverse restano indipendenti. */
-      if (lettura && lettura.id) stato.modiScelti[lettura.id] = scelto;
-      stato.modo = scelto;
+         PREFERENZA, e si ricorda. Per scheda, cosi' due pagine diverse restano indipendenti.
+         ⭐ 16/09: adesso è vero anche nella forma — la preferenza VIVE nella mappa per id, non in
+         una variabile globale copiata nella mappa. */
+      impostaModo(lettura?.id, scelto);
       if (scelto === 'testo') mostraAvviso('');
       renderizza();
     });
@@ -305,7 +582,11 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
   el.chiudiNota?.addEventListener('click', () => { el.editorNota.hidden = true; el.nota?.setAttribute('aria-expanded', 'false'); el.nota?.focus(); });
   el.consenti?.addEventListener('click', () => { if (stato.richiesta) azioni.decidi?.(stato.richiesta.requestId, true); });
   el.nega?.addEventListener('click', () => { if (stato.richiesta) azioni.decidi?.(stato.richiesta.requestId, false); });
-  el.annulla?.addEventListener('click', () => { const s = attiva(); if (s) azioni.chiudi?.(s.id); });
+  /* ⛔ 16/09 — «Annulla navigazione» faceva `chiudi`: chiudeva la scheda intera, cioè faceva una
+     cosa diversa da quella scritta sul pulsante. Adesso ANNULLA l'apertura (la richiesta in volo
+     viene interrotta davvero, vedi `annullaApertura` in app.js) e la scheda resta dov'è, in stato
+     «annullata», con «Riprova». Chi vuole chiuderla ha la ✕ sulla linguetta. */
+  el.annulla?.addEventListener('click', () => { const s = attiva(); if (!s) return; if (azioni.annullaApertura) azioni.annullaApertura(s); else azioni.chiudi?.(s.id); });
   if (el.url) {
     el.url.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); const u = urlApribile(el.url.value); if (u) { azioni.apri?.(u); el.url.blur(); } else { el.url.setAttribute('aria-invalid', 'true'); mostraAvviso(t('Non è un indirizzo: scrivi un sito (es. localhost:5173 o example.org).')); } }
@@ -370,18 +651,47 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
       scheda.dataset.browserTab = String(i); scheda.dataset.browserId = s.id;
       const sel = s.id === stato.attiva;
       scheda.setAttribute('aria-selected', String(sel)); scheda.tabIndex = sel ? 0 : -1;
+      /* ⛔ 16/09 — lo stato sta su OGNI linguetta, non solo su quelle vive: una lettura che sta
+         aprendo o che non si è raggiunta si deve riconoscere dalla striscia, senza aprirla.
+         ⛔ `data-stato` (in italiano) NON si tocca: lo legge una regola di `.talos-tabstrip`, che è
+         condivisa col Terminale. Il nome canonico va in un attributo suo, che si stila solo da
+         dentro `#browserSchede`. */
       if (s.tipo === 'viva') scheda.dataset.stato = s.stato || 'pronta';
+      const situazione = statoDellaScheda(s);
+      scheda.dataset.statoScheda = situazione;
 
       const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('class', 'i talos-tabstrip__icona'); svg.setAttribute('aria-hidden', 'true');
       const use = doc.createElementNS('http://www.w3.org/2000/svg', 'use');
-      use.setAttribute('href', s.tipo === 'viva' ? '#i-globe' : '#i-doc'); // tua o letta dall'agente: si vede
+      /*
+       * ⛔⛔ 16/09, GIRO DI RIPARAZIONE (WCAG 1.4.1) — la FORMA cambia con lo stato, non solo il
+       *   colore. Prima l'icona era sempre la stessa e solo il CSS la coloriva: chi non distingue
+       *   i colori non vedeva alcuna differenza fra una scheda aperta e una non raggiunta.
+       *   Le forme sono già nello sprite e si distinguono anche in bianco e nero: un orologio
+       *   (sto lavorando), un quadrato tratteggiato col punto interrogativo (non l'ho raggiunta),
+       *   una croce (annullata).
+       */
+      use.setAttribute('href', ICONA_PER_STATO[situazione] || (s.tipo === 'viva' ? '#i-globe' : '#i-doc'));
       svg.append(use); scheda.append(svg);
 
       const nome = titoloScheda(s);
       const titolo = doc.createElement('span');
       titolo.className = 'talos-tabstrip__titolo'; titolo.textContent = nome;
       scheda.append(titolo);
+
+      /*
+       * ⛔⛔ Il terzo canale: la PAROLA. Un lettore di schermo non annuncia i colori e non legge la
+       *   forma di un'icona `aria-hidden`; senza questa riga lo stato di una scheda non attiva era
+       *   invisibile a chi ascolta e a chi cerca nella pagina. Si scrive solo quando c'è qualcosa
+       *   da dire: su una scheda sana sarebbe rumore su ogni riga.
+       */
+      const parola = etichettaStatoScheda(situazione);
+      if (parola) {
+        const detto = doc.createElement('span');
+        detto.className = 'sr-only'; detto.dataset.statoDetto = situazione;
+        detto.textContent = ` (${parola})`;
+        scheda.append(detto);
+      }
 
       // lo stato si scrive solo quando c'è qualcosa da dire: 200 su sette schede non è informazione
       const http = statoHttpDiLettura(s);
@@ -431,7 +741,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     const riassunto = document.createElement('summary');
     const misure = riassuntoPulizia(grezzo);
     riassunto.textContent = misure
-      ? t('Sorgente ricevuto dall’agente ({n} caratteri)', { n: misure.caratteriPrima.toLocaleString('it-IT') })
+      ? t('Sorgente ricevuto dall’agente ({n} caratteri)', { n: numeroLocale(misure.caratteriPrima) })
       : t('Sorgente ricevuto dall’agente');
     const pre = document.createElement('pre');
     pre.className = 'talos-browser__text';
@@ -458,38 +768,72 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
      *   Visto nello screenshot: GitHub si vedeva davvero, ma sotto l'iframe rotto che gli stava
      *   sopra. Chi ha `viaVista === 'vivo'` ha già il suo schermo altrove.
      */
-    const vuoleViva = s && s.tipo === 'viva' && s.stato !== 'bloccata' && s.viaVista !== 'vivo';
+    /*
+     * ⛔⛔⛔ 16/09/2026, P0 corsia B punto 4(d) — L'IFRAME DI UNA SCHEDA NON SI RICOSTRUISCE PIÙ AL
+     *   CAMBIO SCHEDA. Prima bastava `frame.dataset.browserId !== s.id` per fare `replaceChildren()`
+     *   e creare un iframe nuovo: passando da A a B e tornando su A, la pagina A si RICARICAVA da
+     *   zero — form svuotato, scorrimento perso, la rete ripercorsa. Un browser vero non lo fa.
+     *
+     * Ricerca 16/09/2026 (whatwg «keepalive attribute on iframe», thread del 2012 tuttora la fonte;
+     * Richard Fu «Keeping iframes Running When Hidden»; W3C public-whatwg-archive, Erik Arvidsson):
+     * SPOSTARE un iframe nell'albero lo ricarica (IE9 in poi e tutti i motori moderni), NASCONDERLO
+     * no — al più il documento viene messo a riposo dalle ottimizzazioni del browser, ma resta quello.
+     * ⇒ Le cornici restano tutte dentro `#browserLive`, una sola visibile. Nessuna si sposta.
+     *
+     * ⛔ E ciò che resta vivo occupa memoria (una cornice di un'altra origine è un PROCESSO suo,
+     *   20-100 MB — Chromium «Process Model and Site Isolation»): oltre `MASSIMO_CORNICI_VIVE` si
+     *   scarica la meno usata di recente, e quando ci si torna la scheda lo DICE invece di fingere.
+     */
+    const vuoleViva = s && s.tipo === 'viva' && statoDellaScheda(s) === 'loaded' && s.viaVista !== 'vivo';
     // la lettura si incornicia solo se il server ha detto che quel sito si lascia incorniciare (vedi `corniceDellaLettura`)
-    const vuoleLettura = s && s.tipo !== 'viva' && stato.modo === 'pagina' && Boolean(s.url) && /^https?:/i.test(s.url) && s.incorniciabile !== false;
-    const vuole = vuoleViva || vuoleLettura;
+    const vuoleLettura = s && s.tipo !== 'viva' && modoDi(s.id) === 'pagina' && Boolean(s.url) && /^https?:/i.test(s.url) && s.incorniciabile !== false && s.incorniciabile !== null;
+    const vuole = Boolean(vuoleViva || vuoleLettura);
+    const cornici = [...el.live.querySelectorAll('iframe')];
+    // ⭐ una sola visibile, le altre NASCOSTE e vive: `hidden` non tocca il documento dentro
+    for (const c of cornici) c.hidden = !(vuole && c.dataset.browserId === s.id);
     el.live.hidden = !vuole;
-    if (!vuole) { el.live.replaceChildren(); return; }
-    let frame = el.live.querySelector('iframe');
-    if (!frame || frame.dataset.browserId !== s.id) {
-      el.live.replaceChildren();
-      frame = document.createElement('iframe');
-      frame.dataset.browserId = s.id;
-      frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups');
-      frame.setAttribute('referrerpolicy', 'no-referrer');
-      frame.title = titoloDaLettura(s);
-      frame.addEventListener('load', () => azioni.caricata?.(s.id));
-      frame.src = s.proxata ? `${PROXY_BROWSER}${encodeURIComponent(s.url)}` : s.url; // un dev server locale passa dal proxy: stessa origine, annotabile
-      frame.dataset.proxata = String(Boolean(s.proxata));
-      if (s.tipo !== 'viva') {
-        frame.dataset.caricata = 'no';
-        frame.addEventListener('load', () => { frame.dataset.caricata = 'si'; mostraAvviso(''); }, { once: true });
-        // Rete di sicurezza: la domanda al server qui sopra copre il caso normale, ma una pagina può
-        // fallire per altro (rete, redirect infinito). ⛔ Non è una guardia sull'X-Frame-Options: lì
-        // Chrome manda `load` sulla propria pagina d'errore e questa attesa non scatta mai (07/9).
-        setTimeout(() => {
-          if (!frame.isConnected || frame.dataset.caricata === 'si') return;
-          stato.modo = 'testo';
-          mostraAvviso(t('Questo sito non si lascia mostrare dentro TALOS. Qui sotto c’è il testo che ha letto l’agente.'));
-          renderizza();
-        }, 4000);
-      }
-      el.live.append(frame);
+    if (!vuole) return;
+    let frame = cornici.find((c) => c.dataset.browserId === s.id) || null;
+    if (frame) {
+      frame.dataset.usata = String(Date.now()); // per l'ordine di scarico: la meno usata di recente se ne va per prima
+      return;
     }
+    /* ⛔ Il tetto si applica PRIMA di aggiungere: si scarica la cornice meno usata di recente, e la
+       sua scheda se lo ricorda (`riposate`) per poterlo dire quando ci si torna. */
+    const daScaricare = cornici
+      .filter((c) => c.dataset.browserId !== s.id)
+      .sort((a, b) => Number(a.dataset.usata || 0) - Number(b.dataset.usata || 0))
+      .slice(0, Math.max(0, cornici.length + 1 - MASSIMO_CORNICI_VIVE));
+    for (const vecchia of daScaricare) { stato.riposate.add(vecchia.dataset.browserId); vecchia.remove(); }
+    frame = document.createElement('iframe');
+    frame.dataset.browserId = s.id;
+    frame.dataset.usata = String(Date.now());
+    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    frame.title = titoloDaLettura(s);
+    frame.addEventListener('load', () => azioni.caricata?.(s.id));
+    frame.src = s.proxata ? `${PROXY_BROWSER}${encodeURIComponent(s.url)}` : s.url; // un dev server locale passa dal proxy: stessa origine, annotabile
+    frame.dataset.proxata = String(Boolean(s.proxata));
+    if (s.tipo !== 'viva') {
+      frame.dataset.caricata = 'no';
+      frame.addEventListener('load', () => { frame.dataset.caricata = 'si'; stato.riposate.delete(s.id); if (attiva()?.id === s.id) mostraAvviso(''); }, { once: true });
+      // Rete di sicurezza: la domanda al server qui sopra copre il caso normale, ma una pagina può
+      // fallire per altro (rete, redirect infinito). ⛔ Non è una guardia sull'X-Frame-Options: lì
+      // Chrome manda `load` sulla propria pagina d'errore e questa attesa non scatta mai (07/9).
+      /* ⛔⛔ 16/09 — il ripiego scrive il modo DELLA SUA SCHEDA, non quello del browser: prima
+         `stato.modo = 'testo'` era globale, quindi una cornice che non si caricava buttava in
+         «Testo» anche le schede che stavano benissimo. Ed è l'id catturato QUI a decidere, non
+         quale scheda è attiva quando l'attesa scade. */
+      const idSuo = s.id;
+      setTimeout(() => {
+        if (!frame.isConnected || frame.dataset.caricata === 'si') return;
+        if (stato.modiChiesti[idSuo] === 'pagina') return; // chi ha chiesto la pagina non si vede rispondere col testo
+        impostaModo(idSuo, 'testo');
+        if (attiva()?.id === idSuo) mostraAvviso(t('Questo sito non si lascia mostrare dentro TALOS. Qui sotto c’è il testo che ha letto l’agente.'));
+        renderizza();
+      }, 4000);
+    }
+    el.live.append(frame);
   }
 
   /*
@@ -507,11 +851,172 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
   function corniceDellaLettura(s) {
     if (!s || s.tipo === 'viva' || !s.url || !/^https?:/i.test(s.url)) return '';
     if (s.incorniciabile === undefined) { azioni.chiediCornice?.(s); return ''; }
+    if (s.incorniciabile === null) return ''; // la domanda è in volo: lo stato «apertura in corso» lo dice il pannello
     if (s.incorniciabile !== false) return '';
     /* ⛔ Il ripiego al testo vale per l'APERTURA, non contro chi ha appena chiesto la pagina: senza
-       questa condizione il clic su «Pagina» veniva annullato dal render successivo, per sempre. */
-    if (stato.modo === 'pagina' && stato.modoChiesto !== 'pagina') stato.modo = 'testo';
+       questa condizione il clic su «Pagina» veniva annullato dal render successivo, per sempre.
+       ⛔⛔ 16/09 — e vale SOLO PER QUESTA SCHEDA: `stato.modo`/`stato.modoChiesto` erano due
+       variabili globali, quindi il ripiego di una scheda cambiava il modo di tutte le altre (e la
+       richiesta «Pagina» fatta su una zittiva il ripiego dappertutto). Adesso si legge e si scrive
+       per id, e una scheda che fallisce lascia le altre dov'erano. */
+    if (modoDi(s.id) === 'pagina' && stato.modiChiesti[s.id] !== 'pagina') impostaModo(s.id, 'testo');
     return `${t(s.motivoCornice || 'Questo sito non si lascia mostrare dentro TALOS')}. ${t('Qui sotto c’è il testo che ha letto l’agente.')}`;
+  }
+
+  /*
+   * ⛔⛔⛔ 16/09/2026, P0 corsia B punto 4(b) — LA MACCHINA A STATI SI VEDE, PER OGNI TIPO DI SCHEDA.
+   *
+   * Che cosa c'era prima, misurato sul file: `#browserCaricamento` si accendeva SOLO per una pagina
+   * viva in stato «caricamento» (riga 552 della versione dell'11/09); una lettura dell'agente che
+   * stava chiedendo al server se il sito si lascia incorniciare non mostrava NIENTE — schermo vuoto
+   * finché la risposta non arrivava; e l'errore era una riga sola in cima, `#browserAvviso`, quindi
+   * il guasto di una scheda si leggeva anche stando su un'altra.
+   *
+   * ⇒ Un pannello unico che racconta lo stato DELLA SCHEDA ATTIVA, con le azioni che servono in
+   *   quello stato e niente parole tecniche. Il nodo lo crea il componente (nel mockup non esiste:
+   *   il mockup disegna una schermata a regime, non i suoi guasti) e resta `hidden` quando la
+   *   scheda è a posto — chi confronta con il disegno non vede una differenza in più.
+   */
+  let pannelloStato = null;
+  function nodoStato() {
+    if (pannelloStato?.isConnected) return pannelloStato;
+    if (!el.live?.parentNode) return null;
+    const doc = el.live.ownerDocument;
+    const box = doc.createElement('div');
+    box.id = 'browserStatoScheda';
+    box.className = 'talos-browser__request talos-browser__stato';
+    box.setAttribute('role', 'status');
+    box.hidden = true;
+    const titolo = doc.createElement('h3'); titolo.className = 'talos-browser__heading'; titolo.dataset.statoTitolo = '';
+    const motivo = doc.createElement('p'); motivo.className = 'talos-muted'; motivo.dataset.statoMotivo = '';
+    const rimedio = doc.createElement('p'); rimedio.className = 'talos-muted talos-browser__meta'; rimedio.dataset.statoRimedio = '';
+    const cluster = doc.createElement('div'); cluster.className = 'talos-cluster';
+    /* ⛔ Qui NON si scrivono le PAROLE dei due pulsanti: questa fabbrica gira una volta sola (la
+       riga della cache, qui sopra) e un'etichetta scritta qui resterebbe per sempre nella lingua
+       del primo disegno. Le scrive `renderizzaStato()`, a ogni disegno — vedi il blocco lì. */
+    const riprova = doc.createElement('button'); riprova.type = 'button'; riprova.className = 'talos-button talos-button--primary talos-button--sm'; riprova.dataset.statoRiprova = '';
+    const annulla = doc.createElement('button'); annulla.type = 'button'; annulla.className = 'talos-button talos-button--ghost talos-button--sm'; annulla.dataset.statoAnnulla = '';
+    riprova.addEventListener('click', () => { const x = attiva(); if (x) azioni.riprova?.(x); });
+    annulla.addEventListener('click', () => { const x = attiva(); if (x) azioni.annullaApertura?.(x); });
+    cluster.append(riprova, annulla);
+    box.append(titolo, motivo, rimedio, cluster);
+    el.live.parentNode.insertBefore(box, el.live);
+    pannelloStato = box;
+    return box;
+  }
+
+  /** @param {object|null} s */
+  function renderizzaStato(s) {
+    const box = nodoStato();
+    if (!box) return 'loaded';
+    /*
+     * ⛔⛔⛔ 16/09/2026, SECONDO GIRO DI RIPARAZIONE — LE ETICHETTE SI RISCRIVONO A OGNI DISEGNO.
+     *
+     * Bocciatura del controllore, riprodotta: app in italiano, scheda in `unreachable`, poi la
+     * lingua cambiata A CALDO dalle Impostazioni (`#setting-uiLanguageSelect` → `en` + `change`).
+     * Titolo, motivo e rimedio passavano all'inglese; i due pulsanti restavano «Riprova» e
+     * «Annulla». Causa, misurata sul file: le loro parole le scriveva `nodoStato()` — una fabbrica
+     * a CACHE, che gira una volta sola — mentre questa funzione riscriveva tutto il resto. Il nodo
+     * sopravvive al cambio di lingua, quindi quelle due parole non venivano mai più toccate.
+     *
+     * ⇒ Stessa forma della barra (`renderizza()`, più sotto): chi disegna RILEGGE `t()` ogni volta,
+     *   e il cambio di lingua è solo un altro disegno — la catena è viva, `app.js` aggancia
+     *   `EVENTO_LINGUA` e richiama `renderizzaBrowser()`.
+     * Ricerca prima di scrivere (letta il 16/09/2026): è il pattern canonico di i18next per il DOM
+     *   senza framework — `i18next.on('languageChanged', updateContent)` dove `updateContent`
+     *   rilegge `t()` per OGNI elemento invece di ricostruire i nodi (dev.to, «Using
+     *   internationalization with i18n», walternascimentobarroso); il difetto opposto è noto in
+     *   react-i18next (issue #1171): a `languageChanged` i nodi già resi non si ridisegnano da soli
+     *   e restano nella lingua vecchia. ⛔ Le parole vanno scritte PRIMA di ogni uscita anticipata
+     *   di questa funzione, altrimenti uno stato che ritorna presto le lascia indietro.
+     */
+    const bRiprova = box.querySelector('[data-stato-riprova]');
+    const bAnnulla = box.querySelector('[data-stato-annulla]');
+    if (bRiprova) bRiprova.textContent = t(TESTI.riprova);
+    if (bAnnulla) bAnnulla.textContent = t(TESTI.annulla);
+    const situazione = statoDellaScheda(s);
+    const riposata = Boolean(s && stato.riposate.has(s.id));
+    /*
+     * ⭐ 16/09 — i due stati «sto lavorando» (loading, retrying) li racconta il nodo del mockup,
+     *   `#browserCaricamento`, che esiste apposta e finora si accendeva solo per le pagine vive.
+     *   Questo pannello prende gli altri: ciò che si è fermato, e ciò che era a riposo.
+     */
+    const lavora = situazione === 'loading' || situazione === 'retrying';
+    if (el.caricamento) {
+      el.caricamento.hidden = !lavora;
+      /* ⛔ 16/09 — lo stato sta anche in un ATTRIBUTO, non solo nelle parole: le parole passano dal
+         dizionario delle lingue e una prova che le legge dice rosso su un profilo inglese (misurato
+         il 16/09: «Apertura in corso…» esce «Opening…»). Chi guarda legge la frase, chi misura legge
+         l'attributo — e nessuno dei due dipende dall'altro. */
+      el.caricamento.dataset.stato = lavora ? situazione : '';
+      const suoTitolo = el.caricamento.querySelector('.talos-browser__heading');
+      if (suoTitolo && lavora) suoTitolo.textContent = situazione === 'retrying' ? TESTI.statoRiprovo(Number(s?.tentativi || 0), Number(s?.tentativiMassimi || 0)) : t(TESTI.statoApro);
+      const suoSotto = el.caricamento.querySelector('p.talos-muted');
+      if (suoSotto && lavora) suoSotto.textContent = t(situazione === 'retrying' ? TESTI.statoRiprovoSotto : TESTI.statoAproSotto);
+      /*
+       * ⛔⛔ 16/09, GIRO DI RIPARAZIONE, trovato GUARDANDO la foto del tema chiaro in inglese e non
+       *   da un conteggio verde: dentro un pannello tutto inglese («No answer: trying again (2 of
+       *   3)…» / «Each attempt waits a little longer than the one before.») il pulsante diceva
+       *   «Annulla navigazione». È la stessa malattia del motivo del server, in un posto diverso:
+       *   il testo è scritto a mano nel modello HTML (`public/index.html`), che nessuno traduce.
+       * ⇒ L'etichetta la scrive il componente, come tutto il resto del pannello. Il modello resta
+       *   com'è (non è un file di questa corsia) e continua a valere come testo di partenza.
+       */
+      if (el.annulla && lavora) el.annulla.textContent = t(TESTI.annullaNavigazione);
+    }
+    /*
+     * ⛔ 16/09, punto 4(f) — LA PAGINA PILOTATA È UNA ALLA VOLTA (assunzione approvata dall'owner
+     *   per questa fase: il server tiene UNA scheda Chromium, `IDENTITA_BROWSER`). Prima, aprirne
+     *   un'altra smontava quella di prima IN SILENZIO: si tornava sulla scheda e non c'era niente,
+     *   senza una riga che dicesse perché. Adesso la scheda resta, se lo ricorda, e lo DICE — con
+     *   il pulsante per riaprirla dov'era.
+     */
+    const vivaARiposo = Boolean(s?.vivaARiposo) && situazione === 'loaded';
+    const parla = (!lavora && situazione !== 'loaded') || ((riposata || vivaARiposo) && !lavora);
+    box.hidden = !parla;
+    box.dataset.stato = (riposata || vivaARiposo) && situazione === 'loaded' ? 'riposo' : situazione;
+    if (!parla) return situazione;
+    if (vivaARiposo) {
+      const h = box.querySelector('[data-stato-titolo]'); if (h) h.textContent = t(TESTI.statoVivaInPausa);
+      const m = box.querySelector('[data-stato-motivo]'); if (m) { m.textContent = ''; m.hidden = true; }
+      const r = box.querySelector('[data-stato-rimedio]'); if (r) { r.textContent = t(TESTI.unaVivaAllaVolta); r.hidden = false; }
+      const ri = box.querySelector('[data-stato-riprova]'); if (ri) ri.hidden = false;
+      const an = box.querySelector('[data-stato-annulla]'); if (an) an.hidden = true;
+      return situazione;
+    }
+    const titolo = box.querySelector('[data-stato-titolo]');
+    const motivo = box.querySelector('[data-stato-motivo]');
+    const rimedio = box.querySelector('[data-stato-rimedio]');
+    const riprova = box.querySelector('[data-stato-riprova]');
+    const annulla = box.querySelector('[data-stato-annulla]');
+    const tentativi = Number(s?.tentativi || 0);
+    const massimi = Number(s?.tentativiMassimi || 0);
+    /*
+     * ⛔⛔ 16/09, GIRO DI RIPARAZIONE — la frase del guasto si COMPONE dal genere, non si traduce.
+     *   Prima qui c'era `t(s.motivo)`: una frase già scritta dal server, con un numero dentro,
+     *   passata a un dizionario a chiavi fisse. Non poteva funzionare per nessun numero e per
+     *   nessuna lingua, ed è ciò che si vedeva nelle foto (titolo inglese, motivo italiano).
+     * ⛔ `s.motivo` resta come ULTIMA rete quando il genere manca (un server più vecchio del
+     *   frontend): in quel caso si mostra così com'è, senza fingere di averlo tradotto.
+     */
+    const detto = frasePerGenere(s?.genere, s?.dettagli) || (s?.genere ? '' : String(s?.motivo || ''));
+    const testi = {
+      loading: [t(TESTI.statoApro), '', t(TESTI.statoAproSotto)],
+      retrying: [TESTI.statoRiprovo(tentativi, massimi), detto, t(TESTI.statoRiprovoSotto)],
+      error: [t(TESTI.statoNonRaggiunta), detto || t('Il sito non consente di essere mostrato dentro TALOS'), rimedioPerGenere(s?.genere)],
+      unreachable: [t(TESTI.statoNonRaggiunta), detto, rimedioPerGenere(s?.genere)],
+      cancelled: [t(TESTI.statoAnnullata), '', t(TESTI.statoAnnullataSotto)],
+      loaded: [t(TESTI.statoRiposo), '', t(TESTI.statoRiposoSotto)], // qui ci si arriva solo se la cornice era stata messa a riposo
+    };
+    const [t1, t2, t3] = testi[situazione] || testi.loaded;
+    if (titolo) titolo.textContent = t1;
+    if (motivo) { motivo.textContent = t2 || ''; motivo.hidden = !t2; }
+    if (rimedio) { rimedio.textContent = t3 || ''; rimedio.hidden = !t3; }
+    // ⛔ Le azioni dipendono dallo stato: «Riprova» non ha senso mentre sto già provando, e
+    //   «Annulla» non ha senso su una cosa già ferma. Un pulsante che non fa niente è peggio di uno assente.
+    if (riprova) riprova.hidden = !(situazione === 'error' || situazione === 'unreachable' || situazione === 'cancelled');
+    if (annulla) annulla.hidden = !(situazione === 'loading' || situazione === 'retrying');
+    return situazione;
   }
 
   function renderizza() {
@@ -524,7 +1029,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
      * ⛔ Una volta sola per scheda: `azioni.apri` fa ri-renderizzare, e senza questo freno sarebbe
      *   un anello che si richiama da solo.
      */
-    if (s && s.tipo !== 'viva' && s.id && stato.modiScelti[s.id] === 'pagina'
+    if (s && s.tipo !== 'viva' && s.id && stato.modiChiesti[s.id] === 'pagina'
         && s.incorniciabile === false && s.url && !stato.riaperte.has(s.id)) {
       stato.riaperte.add(s.id);
       azioni.apri?.(s.url, s.id);
@@ -535,6 +1040,13 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     const vive = stato.schede.length - letture;
     if (el.riepilogo) el.riepilogo.textContent = stato.schede.length === 0 ? t(TESTI.riepilogoVuoto) : (vive === 0 ? TESTI.riepilogoLetture(letture) : TESTI.riepilogoMisto(letture, vive));
     renderizzaSchede();
+    /* ⛔ 16/09 — la barra parla la lingua di chi guarda. Si riscrive a ogni disegno, che è anche
+       ciò che accade al cambio di lingua (`EVENTO_LINGUA` ridisegna le superfici del codice). */
+    if (el.rileggi) el.rileggi.textContent = t(TESTI.barraRileggi);
+    if (el.annota) el.annota.textContent = t(TESTI.barraAnnota);
+    if (el.nota) el.nota.textContent = t(TESTI.barraNota);
+    if (el.copia) el.copia.textContent = t(TESTI.barraCopia);
+    for (const b of el.modi) b.textContent = t(b.dataset.browserModo === 'pagina' ? TESTI.barraModoPagina : TESTI.barraModoTesto);
     const i = indiceAttiva();
     if (el.indietro) el.indietro.disabled = i <= 0;
     if (el.avanti) el.avanti.disabled = i < 0 || i >= stato.schede.length - 1;
@@ -544,12 +1056,17 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     if (el.copia) el.copia.disabled = !s || s.tipo === 'viva';
     if (el.rileggi) el.rileggi.title = t(s?.tipo === 'viva' ? 'Ricarica la pagina nella cornice' : 'Prepara nel composer la richiesta di rileggere questa pagina');
     if (el.posizione) {
-      el.posizione.textContent = !s ? '' : s.tipo === 'viva' ? t(s.stato === 'caricamento' ? TESTI.posizioneCaricamento : s.stato === 'bloccata' ? TESTI.posizioneBloccata : TESTI.posizioneViva) : TESTI.posizioneLettura(stato.schede.filter((x) => x.tipo !== 'viva').indexOf(s) + 1, letture);
+      // ⛔ 16/09 — la riga di posizione legge lo stato canonico della scheda, non due valori scelti a mano
+      const qui = statoDellaScheda(s);
+      el.posizione.textContent = !s ? '' : s.tipo === 'viva'
+        ? t(qui === 'loading' || qui === 'retrying' ? TESTI.posizioneCaricamento : (qui === 'error' || qui === 'unreachable' || qui === 'cancelled') ? TESTI.posizioneBloccata : TESTI.posizioneViva)
+        : TESTI.posizioneLettura(stato.schede.filter((x) => x.tipo !== 'viva').indexOf(s) + 1, letture);
     }
     // stati
     const richiesta = stato.richiesta;
     if (el.bloccato) { el.bloccato.hidden = !richiesta; if (richiesta && el.bloccatoTesto) el.bloccatoTesto.textContent = t('L’agente chiede di leggere {url}. La scelta vale per questa richiesta.', { url: richiesta.url }); }
-    if (el.caricamento) el.caricamento.hidden = !(s && s.tipo === 'viva' && s.stato === 'caricamento');
+    // ⛔ 16/09 — `#browserCaricamento` non è più solo delle pagine vive: lo accende `renderizzaStato`
+    //   per QUALUNQUE scheda che sta aprendo o riprovando (prima una lettura in attesa non diceva niente).
     if (el.vuoto) el.vuoto.hidden = stato.schede.length > 0;
     // l'articolo resta per le note anche su una pagina viva: si nascondono solo testata e testo acquisito
     if (el.articolo) el.articolo.hidden = !s;
@@ -561,7 +1078,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     // i due modi valgono solo per una lettura dell'agente: una pagina viva e' gia' una pagina
     for (const b of el.modi || []) {
       b.hidden = !lettura;
-      const suo = b.dataset.browserModo === stato.modo;
+      const suo = b.dataset.browserModo === modoDi(s?.id); // 16/09: il premuto è quello DI QUESTA scheda
       b.setAttribute('aria-pressed', String(suo));
       b.classList.toggle('talos-button--secondary', suo);
       b.classList.toggle('talos-button--ghost', !suo);
@@ -585,26 +1102,31 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
         b.title = t('La pagina è stata tagliata: l’agente ne ha ricevuta solo una parte. Aprila per vedere quale.');
       }
     }
-    if (el.testo) el.testo.hidden = !lettura || stato.modo === 'pagina';
+    const modoQui = modoDi(s?.id);
+    if (el.testo) el.testo.hidden = !lettura || modoQui === 'pagina';
     if (lettura) {
       if (el.titolo) el.titolo.textContent = titoloDaLettura(s);
       if (el.provenienza) el.provenienza.textContent = formattaProvenienza(s);
-      if (el.testo && stato.modo !== 'pagina') scriviTestoAcquisito(s.testo || '');
+      if (el.testo && modoQui !== 'pagina') scriviTestoAcquisito(s.testo || '');
     }
     /*
-     * ⛔ 07/9, guardando lo screenshot di un dominio inesistente: il rimedio era «Chiedi all'agente
-     *   di leggerla: usa Rileggi» — falso. Se il nome del sito non esiste, non può leggerla nemmeno
-     *   l'agente: il consiglio manda a sbattere una seconda volta. Il rimedio dipende dal MOTIVO.
+     * ⛔⛔ 16/09 — l'errore di una scheda NON è più la riga globale in cima. `#browserAvviso` resta
+     *   per ciò che riguarda il browser e non una scheda (un indirizzo scritto male, il ripiego al
+     *   testo di una lettura che non si lascia incorniciare); il guasto di una scheda vive nel suo
+     *   pannello, con il motivo VERO e il rimedio che c'entra con quel motivo.
      */
-    const rimedioPerIlMotivo = (motivo) => {
-      const m = String(motivo || '');
-      if (/non esiste|ERR_NAME/i.test(m)) return t('Controlla l’indirizzo.');
-      if (/certificato|SSL|TLS/i.test(m)) return t('Il sito ha un certificato non valido: aprilo fuori da TALOS se ti fidi.');
-      if (/non ha risposto in tempo|timed out/i.test(m)) return t('Riprova fra un momento.');
-      if (/Nessuno risponde/i.test(m)) return t('Controlla che il servizio sia acceso.');
-      return `${t(TESTI.chiediAllAgente)}: usa «Rileggi».`;
-    };
-    mostraAvviso(avvisoCornice || (s?.tipo === 'viva' && s.stato === 'bloccata' ? `${s.motivo || t('Il sito non consente di essere mostrato dentro TALOS')}. ${rimedioPerIlMotivo(s.motivo)}` : ''));
+    /*
+     * ⛔⛔ 16/09, trovato GUARDANDO LA FOTO del tema chiaro e non da un conteggio verde: lo stesso
+     *   motivo usciva DUE VOLTE — nella riga in cima («Il sito non ha risposto in tempo (6
+     *   secondi). Qui sotto c'è il testo…») e nel pannello dello stato, tre righe sotto. È la
+     *   stessa malattia del 07/9 («quattro cose a schermo per lo stesso fatto»).
+     * ⇒ Il confine è netto: quando la scheda si è FERMATA (guasto, non raggiunta, annullata) parla
+     *   solo il suo pannello; la riga in cima resta per il ripiego al testo di una scheda SANA —
+     *   cioè quando il sito ha risposto e ha detto di no alla cornice, che non è un guasto.
+     */
+    const situazione = statoDellaScheda(s);
+    mostraAvviso(situazione === 'loaded' ? (avvisoCornice || '') : '');
+    renderizzaStato(s);
     renderizzaCornice(s);
     // nota
     const nota = s ? stato.note[s.url] : '';
@@ -675,10 +1197,29 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
        */
       if (nuovo && 'attiva' in nuovo && nuovo.attiva !== stato.attiva) {
         stato.riaperte.delete(nuovo.attiva); // tornandoci si puo' riaprire di nuovo
-        stato.modo = 'pagina';
-        stato.modoChiesto = null;
+        /*
+         * ⛔⛔⛔ 16/09/2026 — QUI NON SI RIAZZERA PIÙ NIENTE, ed è un ordine dell'owner che
+         *   capovolge quello dell'11/09 riportato qui sopra: «ogni tab deve mantenere
+         *   indipendentemente il proprio stato… tornando su A deve restare Pagina».
+         * ⇒ Il riazzeramento non serve più perché la causa che lo rendeva necessario non c'è più:
+         *   il modo non è una variabile sola che si trascina, è `modi[id]`, e una scheda mai
+         *   toccata nasce col predefinito («pagina»). Il trascinamento che l'owner vedeva l'11/09
+         *   è impossibile per COSTRUZIONE, non per un azzeramento che cancellava anche la memoria.
+         */
       }
-      stato = { ...stato, ...nuovo }; if (stato.annotaAttivo && stato.annotazioni && Object.values(stato.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato.annotaAttivo = false; renderizza();
+      stato = { ...stato, ...nuovo };
+      /*
+       * ⛔ 16/09 — LE MAPPE NON CRESCONO PER SEMPRE. Ogni cosa tenuta per id (il modo, la richiesta
+       *   esplicita, i freni, le cornici vive) vale finché quella scheda esiste: quando la scheda se
+       *   ne va, se ne vanno anche le sue righe. Prima l'unica memoria per id era `modiScelti`, che
+       *   non veniva mai ripulita — e `browserChiuse`, dall'altra parte in app.js, cresceva a vita.
+       */
+      const vivi = new Set(stato.schede.map((x) => x.id));
+      for (const mappa of [stato.modi, stato.modiChiesti]) for (const k of Object.keys(mappa)) if (!vivi.has(k)) delete mappa[k];
+      for (const insieme of [stato.riaperte, stato.riposate]) for (const k of [...insieme]) if (!vivi.has(k)) insieme.delete(k);
+      for (const c of el.live?.querySelectorAll('iframe') || []) if (!vivi.has(c.dataset.browserId)) c.remove();
+      if (stato.annotaAttivo && stato.annotazioni && Object.values(stato.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato.annotaAttivo = false;
+      renderizza();
     },
     fuocoSullaScheda() { el.schede?.querySelector('[aria-selected="true"]')?.focus(); },
     /*

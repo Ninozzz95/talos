@@ -11734,7 +11734,30 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   function appendBrowserEntry(url, testo) {
     const pagine = state.realSession.browserPagine;
-    pagine.push({ url, testo, quando: new Date().toISOString() });
+    /*
+     * ⛔⛔⛔ 16/09/2026, P0 corsia B punto 4(a) — L'ID DI UNA SCHEDA NASCE CON LA SCHEDA.
+     *
+     * ⛔ RISCRITTO NEL GIRO DI RIPARAZIONE, perché la spiegazione che stava qui era FALSA e sarebbe
+     *   rimasta a ingannare chi la legge fra sei mesi. Diceva: «chiudo la seconda scheda e il modo
+     *   scelto per la terza diventa quello della quarta». Non poteva succedere: `browserPagine` si
+     *   riempie solo con `push` (qui sotto) e la chiusura non fa `splice` — aggiunge l'id a
+     *   `browserChiuse` (`chiudiSchedaBrowser`). Dentro UNA sessione gli indici non scivolano mai.
+     *
+     * ⭐ Il difetto vero era un altro, ed era peggiore. `browserPagine` si SVUOTA al cambio di
+     *   sessione (`state.realSession.browserPagine = []`, più in basso in questo file) mentre
+     *   `browserChiuse` NON si svuota: sopravvive. Con gli id posizionali, la prima lettura di una
+     *   sessione nuova si chiamava `lettura-0` — un nome che con ogni probabilità era già
+     *   nell'insieme delle chiuse, perché in una sessione precedente qualcuno aveva chiuso la sua
+     *   prima scheda. ⇒ La prima pagina letta dall'agente nella sessione nuova nasceva INVISIBILE,
+     *   senza un errore e senza una riga a schermo.
+     *
+     * ⇒ Due cure, non una: l'identità si assegna QUI, una volta, con un contatore che non torna mai
+     *   indietro (MDN «WebExtensions tabs»: gli id sono unici nella sessione e non si riusano); e
+     *   `schedeBrowser` pota `browserChiuse` contro le letture che esistono davvero, così un id
+     *   chiuso non può sopravvivere alla pagina che nominava.
+     */
+    const id = `lettura-${(state.realSession.browserProssimoId = (state.realSession.browserProssimoId || 0) + 1)}`;
+    pagine.push({ id, url, testo, quando: new Date().toISOString() });
     mostraPaginaBrowser(pagine.length - 1);
   }
 
@@ -11747,6 +11770,145 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   const CHIAVE_NOTE_BROWSER = 'talos-harness-browser-note-v1';
   let browserUi = null;
+  /*
+   * ⛔⛔⛔ 16/09/2026, P0 corsia B punto 4(c) — LE RICHIESTE IN VOLO SI ANNULLANO, E I RITENTATIVI
+   *   ASPETTANO UN TEMPO DICHIARATO.
+   *
+   * Che cosa c'era prima, misurato: NESSUN `AbortController` in tutta la catena del Browser (né in
+   * `app.js` né in `components/browser.js`) e nessun ritentativo. Conseguenze vere:
+   *   · chiudevi una scheda mentre stava aprendo e la risposta arrivava lo stesso, scrivendo su una
+   *     scheda che non c'era più (o su quella che nel frattempo aveva preso il suo posto);
+   *   · un sito che non rispondeva ti dava un guasto secco dopo 6 secondi, senza mai riprovare —
+   *     mentre il 90% di quei guasti sono transitori.
+   *
+   * Ricerca 16/09/2026:
+   *   · MDN «AbortController» / «AbortSignal.any()» — la cancellazione si propaga al `fetch`, e un
+   *     annullamento NON è un errore: si riconosce da `name === 'AbortError'` e non si racconta
+   *     come un guasto del sito;
+   *   · AWS Architecture Blog «Exponential Backoff And Jitter» (Marc Brooker) — attesa esponenziale
+   *     con jitter PIENO: `attesa = random() * min(tetto, base * 2^tentativo)`. Senza jitter tutte
+   *     le schede riprovano nello stesso istante; con il jitter pieno si distribuiscono.
+   *   · Google SRE, cap. «Handling Overload» — un tetto ai tentativi, sempre: un ritentativo senza
+   *     fine è un guasto che non si vede.
+   * ⛔ I numeri qui sotto sono quelli, non «a occhio»: base 400 ms (sotto, un ritentativo arriva
+   *   prima che la rete si sia ripresa), tetto 4 s (sopra, chi guarda crede che sia morto), DUE
+   *   ritentativi (il terzo, sul timeout del server di 6 s, porterebbe l'attesa totale oltre i 20 s).
+   */
+  const BROWSER_RITENTATIVI = 2;
+  const BROWSER_ATTESA_BASE_MS = 400;
+  const BROWSER_ATTESA_TETTO_MS = 4_000;
+  /** Attesa del tentativo `n` (1-based), jitter PIENO come da AWS: fra 0 e il tetto esponenziale. */
+  function attesaRitentativo(n) {
+    const tetto = Math.min(BROWSER_ATTESA_TETTO_MS, BROWSER_ATTESA_BASE_MS * (2 ** Math.max(0, n - 1)));
+    return Math.round(Math.random() * tetto);
+  }
+  /** id scheda → { controller, attesa } — ciò che è in volo per quella scheda, e niente di più. */
+  const richiesteBrowser = new Map();
+  /**
+   * Interrompe ciò che è in volo per una scheda: la richiesta al server e l'attesa del prossimo
+   * tentativo. ⛔ Chi scrive un esito controlla SEMPRE di essere ancora il titolare del volo: una
+   * risposta che arriva dopo un annullamento non tocca più niente.
+   */
+  function fermaRichiestaBrowser(id) {
+    const volo = richiesteBrowser.get(id);
+    if (!volo) return false;
+    richiesteBrowser.delete(id);
+    clearTimeout(volo.attesa);
+    try { volo.controller?.abort(); } catch { /* già interrotta */ }
+    return true;
+  }
+  /** Registra un volo per la scheda, interrompendo quello precedente (una scheda, una richiesta). */
+  function iniziaRichiestaBrowser(id) {
+    fermaRichiestaBrowser(id);
+    const volo = { controller: new AbortController(), attesa: null };
+    richiesteBrowser.set(id, volo);
+    return volo;
+  }
+  const voloCorrente = (id, volo) => richiesteBrowser.get(id) === volo;
+  /**
+   * `apiGet` con un `signal`. ⛔ Non è una seconda API: è la stessa busta (`ok`/`data`/`error`),
+   *   letta con lo stesso codice. Esiste perché `apiGet` (riga ~2713) non accetta opzioni e quel
+   *   file non è di questa corsia — e perché `fetchSorvegliata` segnerebbe «rete caduta» anche per
+   *   un annullamento NOSTRO, che rete caduta non è (MDN: `AbortError` non è un guasto di rete).
+   * @param {string} pathname @param {AbortSignal} signal
+   */
+  async function apiGetBrowser(pathname, signal) {
+    let risposta;
+    try {
+      risposta = await fetch(API(pathname), { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store', signal });
+      sorveglianza?.segnalaRete(true);
+    } catch (errore) {
+      if (errore?.name !== 'AbortError') sorveglianza?.segnalaRete(false, 'fetch');
+      throw errore;
+    }
+    let busta;
+    try { busta = await risposta.json(); } catch { const e = new Error('Risposta locale non valida'); e.code = 'INTERNAL_ERROR'; throw e; }
+    if (!risposta.ok || !busta?.ok) {
+      const e = new Error(busta?.error?.message || 'Richiesta locale non riuscita');
+      e.code = busta?.error?.code || 'INTERNAL_ERROR';
+      e.stato = risposta.status;
+      throw e;
+    }
+    return busta.data;
+  }
+  /**
+   * Chiede al server se un indirizzo si lascia incorniciare, RITENTANDO ciò che è transitorio.
+   * Lo stato della scheda si muove sotto gli occhi: loading → retrying → loaded | error | unreachable.
+   * @param {object} voce la scheda (lettura o viva) su cui scrivere lo stato
+   * @param {{onStato:()=>void}} opzioni `onStato` ridisegna (è `renderizzaBrowser`)
+   * @returns {Promise<object|null>} l'esito, o null se la scheda è stata chiusa/annullata nel frattempo
+   */
+  async function chiediIncorniciabileConRitentativi(voce, { onStato }) {
+    const id = voce.id;
+    voce.tentativi = 0;
+    voce.tentativiMassimi = BROWSER_RITENTATIVI + 1;
+    for (let tentativo = 1; tentativo <= BROWSER_RITENTATIVI + 1; tentativo += 1) {
+      const volo = iniziaRichiestaBrowser(id);
+      voce.tentativi = tentativo;
+      try {
+        const esito = await apiGetBrowser(`/api/v1/browser/incorniciabile?url=${encodeURIComponent(voce.url)}`, volo.controller.signal);
+        if (!voloCorrente(id, volo)) return null; // annullata mentre era in volo: nessuna scrittura tardiva
+        richiesteBrowser.delete(id);
+        /* ⛔ Un esito ARRIVATO non è un esito BUONO: il server risponde 200 anche quando dice «non
+           sono riuscito a raggiungere il sito», e il genere lo dichiara (browser-frame.mjs, 16/09). */
+        if (esito?.genere && CLIENT_RITENTA.has(esito.genere) && tentativo <= BROWSER_RITENTATIVI) {
+          voce.stato = 'ritento'; voce.motivo = esito.motivo || null;
+          voce.genere = esito.genere || null; voce.dettagli = esito.dettagli || null; onStato?.();
+          if (!await aspettaRitentativo(id, tentativo)) return null;
+          continue;
+        }
+        return esito;
+      } catch (errore) {
+        if (errore?.name === 'AbortError' || !voloCorrente(id, volo)) return null;
+        richiesteBrowser.delete(id);
+        if (tentativo > BROWSER_RITENTATIVI) throw errore;
+        voce.stato = 'ritento'; voce.motivo = messaggioErroreUtente(errore, 'Il server non ha risposto');
+        voce.genere = null; voce.dettagli = null; onStato?.();
+        if (!await aspettaRitentativo(id, tentativo)) return null;
+      }
+    }
+    return null;
+  }
+  /** I generi che vale la pena riprovare: gli stessi di `siRitenta` nel server, scritti una volta sola qui. */
+  const CLIENT_RITENTA = new Set(['timeout', 'rete', 'rifiuto']);
+  /*
+   * ⛔⛔ 16/09, GIRO DI RIPARAZIONE — i generi che vogliono dire «non ci sono arrivato». Gli stessi
+   *   di `eUnGuasto` in `src/browser-frame.mjs`, che è dove vengono assegnati. ⛔ Da quando anche i
+   *   RIFIUTI del sito portano un genere (`xfo-deny`, `xfo-sameorigin`, `frame-ancestors`, per
+   *   poterli dire in due lingue), leggere la PRESENZA del genere come «guasto» classificava un
+   *   sito perfettamente vivo come irraggiungibile, con «Riprova» acceso su una cosa che riprovare
+   *   non cambia. Un rifiuto si ripiega sul testo dell'agente, e non è un guasto.
+   */
+  const CLIENT_GUASTI = new Set(['timeout', 'dns', 'rifiuto', 'certificato', 'rete', 'indirizzo']);
+  /** Aspetta l'attesa del tentativo, restando annullabile. @returns {Promise<boolean>} false se annullata */
+  function aspettaRitentativo(id, tentativo) {
+    return new Promise((risolvi) => {
+      const volo = { controller: null, attesa: null };
+      richiesteBrowser.set(id, volo);
+      volo.attesa = setTimeout(() => { if (richiesteBrowser.get(id) === volo) { richiesteBrowser.delete(id); risolvi(true); } else risolvi(false); }, attesaRitentativo(tentativo));
+      volo.controller = { abort: () => risolvi(false) }; // chiudere la scheda ferma anche l'attesa
+    });
+  }
   function noteBrowser() { try { const tutte = JSON.parse(localStorage.getItem(CHIAVE_NOTE_BROWSER) || '{}') || {}; return tutte[state.realSession.id || '-'] || {}; } catch { return {}; } }
   function salvaNotaBrowser(url, testo) {
     let tutte = {}; try { tutte = JSON.parse(localStorage.getItem(CHIAVE_NOTE_BROWSER) || '{}') || {}; } catch { tutte = {}; }
@@ -11755,10 +11917,40 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (testo) tutte[chiave][url] = testo; else delete tutte[chiave][url];
     try { localStorage.setItem(CHIAVE_NOTE_BROWSER, JSON.stringify(tutte)); } catch { /* quota o finestra privata: la nota vive solo in memoria */ }
   }
+  /*
+   * ⛔⛔⛔ 16/09/2026, GIRO DI RIPARAZIONE — DUE FAMIGLIE DI NOMI CHE NON POSSONO INCONTRARSI.
+   *
+   * Bocciatura del controllore, verificata: il contatore delle letture nuove parte da 1
+   * (`lettura-1`) e il ripiego delle letture SENZA id partiva da 0 (`lettura-0`, `lettura-1`, …).
+   * In una sessione già aperta quando arriva una build nuova, la seconda lettura vecchia e la
+   * prima lettura nuova finivano con LO STESSO id: due schede con un modo solo, una chiusura che
+   * ne nasconde due, e `cornici.find(c => c.dataset.browserId === s.id)` che pesca la cornice
+   * dell'altra. Era PEGGIO del difetto che la cura doveva chiudere.
+   *
+   * ⇒ Il ripiego prende un prefisso suo, `lettura-e` («ereditata»), che il contatore non può
+   *   produrre: le due famiglie sono disgiunte per COSTRUZIONE, non per fortuna.
+   * ⛔ Resta dentro `lettura-`, perché `chiudiSchedaBrowser` distingue lettura e pagina viva dal
+   *   prefisso: cambiarlo del tutto avrebbe rotto la chiusura in silenzio.
+   * ⛔ E la decisione sta in UNA funzione, non in tre copie della stessa espressione: erano tre
+   *   (qui, in `renderizzaBrowser` e in `mostraPaginaBrowser`), e tre copie divergono.
+   * @param {{id?:string}} p @param {number} i
+   */
+  function idDiLettura(p, i) { return p?.id || `lettura-e${i}`; }
   function schedeBrowser() {
     const rs = state.realSession;
-    const letture = rs.browserPagine.map((p, i) => ({ ...p, id: `lettura-${i}`, tipo: 'lettura', origine: 'agente' })).filter((p) => !rs.browserChiuse.has(p.id));
-    return [...letture, ...rs.browserVive];
+    /*
+     * ⛔ 16/09 — l'id viene dalla lettura (assegnato alla nascita in `appendBrowserEntry`), non
+     *   dalla posizione; `idDiLettura` copre le letture arrivate PRIMA di questa cura dentro una
+     *   sessione già aperta, che un id non ce l'hanno.
+     * ⛔ E le chiuse non crescono più per sempre: `browserChiuse` teneva ogni id chiuso per tutta
+     *   la vita della sessione, anche quando quella lettura non esisteva più — ed è esattamente
+     *   così che la PRIMA lettura di una sessione nuova nasceva invisibile (vedi il commento in
+     *   `appendBrowserEntry`). Qui si potano contro ciò che esiste davvero.
+     */
+    const letture = rs.browserPagine.map((p, i) => ({ ...p, id: idDiLettura(p, i), tipo: 'lettura', origine: 'agente' }));
+    const vivi = new Set(letture.map((p) => p.id));
+    for (const id of [...rs.browserChiuse]) if (!vivi.has(id)) rs.browserChiuse.delete(id);
+    return [...letture.filter((p) => !rs.browserChiuse.has(p.id)), ...rs.browserVive];
   }
   function uiBrowser() {
     if (browserUi) return browserUi;
@@ -11788,21 +11980,86 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        *   rotta. Le pagine VIVE chiedevano già al server se il sito si lascia incorniciare; le letture
        *   dell'agente no, e partivano a testa bassa. Stessa domanda, stessa rotta, una volta per pagina.
        */
+      /*
+       * ⛔ 16/09 — la domanda al server per una LETTURA passa dalla stessa catena delle pagine vive:
+       *   annullabile, con due ritentativi su ciò che è transitorio, e con lo stato visibile mentre
+       *   succede (prima: nessun ritentativo, nessun annullamento, e uno schermo vuoto nell'attesa).
+       * ⛔ La pagina si cerca per ID, non per URL: due letture dello stesso indirizzo esistono
+       *   (l'agente rilegge), e `find((p) => p.url === s.url)` scriveva sulla PRIMA — cioè su una
+       *   scheda diversa da quella che stava chiedendo.
+       */
       chiediCornice: (s) => {
-        const pagina = state.realSession.browserPagine.find((p) => p.url === s.url);
+        const rs = state.realSession;
+        const pagina = rs.browserPagine.find((p) => (p.id || null) === s.id) || rs.browserPagine.find((p) => p.url === s.url);
         if (!pagina || pagina.incorniciabile !== undefined) return;
+        if (!pagina.id) pagina.id = s.id; // lettura nata prima della cura del 16/09: da qui in poi ha un id suo
         pagina.incorniciabile = null; // in volo: non si chiede due volte
-        apiGet(`/api/v1/browser/incorniciabile?url=${encodeURIComponent(s.url)}`)
+        pagina.stato = 'caricamento';
+        chiediIncorniciabileConRitentativi(pagina, { onStato: renderizzaBrowser })
           .then((esito) => {
+            /* ⛔ Annullata mentre era in volo: nessuna scrittura tardiva, e `incorniciabile` resta
+               `null` — se tornasse `undefined` il render successivo ricomincerebbe la domanda da
+               solo, cioè l'annullamento durerebbe un fotogramma. Ci ritorna solo «Riprova». */
+            if (esito === null) { pagina.stato = 'annullata'; return; }
+            /*
+             * ⛔ 16/09 — «il sito RIFIUTA la cornice» e «il sito non l'ho RAGGIUNTO» sono due esiti
+             *   diversi che arrivavano uguali (`incorniciabile: false`), e la differenza la dice il
+             *   `genere`: il server lo valorizza solo quando la richiesta è fallita (DNS, timeout,
+             *   certificato, rete — `browser-frame.mjs`), mentre un X-Frame-Options è un NO ricevuto.
+             *   Nel primo caso la scheda è «non raggiunta» e si può riprovare; nel secondo si ripiega
+             *   sul testo dell'agente, che è la cosa giusta da fare e non è un guasto.
+             */
+            pagina.stato = CLIENT_GUASTI.has(esito?.genere) ? 'irraggiungibile' : 'pronta';
             pagina.incorniciabile = Boolean(esito?.incorniciabile);
             pagina.motivoCornice = esito?.motivo || null;
+            pagina.motivo = esito?.incorniciabile ? null : (esito?.motivo || null);
+            /* ⛔⛔ 16/09, GIRO DI RIPARAZIONE — il `genere` e i suoi `dettagli` viaggiano fino alla
+               scheda, e sono ciò con cui il pannello SCRIVE la frase nella lingua di chi guarda.
+               Prima arrivava solo `motivo`, cioè una frase già composta dal server (con dentro un
+               numero), e il pannello provava a tradurla: da lì il titolo inglese sopra il motivo
+               italiano che si vede nelle foto della consegna precedente. */
+            pagina.genere = esito?.incorniciabile ? null : (esito?.genere || null);
+            pagina.dettagli = esito?.dettagli || null;
             // ⛔ 07/9 — la stessa risposta porta già il `<title>` della pagina (`browser-frame.mjs` lo
             //   legge quando è HTML) e nessuno lo usava: le schede scrivevano l'host. Un browser scrive
             //   il titolo. Se non c'è, `titoloScheda` ricade sul <title> nel testo e poi sull'host.
             if (esito?.titolo && !pagina.titolo) pagina.titolo = esito.titolo;
           })
-          .catch(() => { pagina.incorniciabile = false; pagina.motivoCornice = 'Non ho potuto controllare se questa pagina si lascia mostrare qui dentro.'; })
+          .catch((errore) => {
+            pagina.incorniciabile = false;
+            pagina.stato = 'irraggiungibile';
+            pagina.motivo = messaggioErroreUtente(errore, 'Non ho potuto controllare se questa pagina si lascia mostrare qui dentro.');
+            pagina.motivoCornice = pagina.motivo;
+            // il server non ha risposto affatto: nessun genere da nominare, il pannello mostra il messaggio così com'è
+            pagina.genere = null; pagina.dettagli = null;
+          })
           .finally(() => renderizzaBrowser());
+      },
+      /*
+       * ⛔ 16/09 — «Riprova» e «Annulla» del pannello di stato. Riprovare è ricominciare da capo la
+       *   catena di quella scheda (e solo di quella); annullare interrompe DAVVERO la richiesta in
+       *   volo — non la lascia correre sperando che nessuno legga la risposta.
+       */
+      riprova: (s) => {
+        const rs = state.realSession;
+        fermaRichiestaBrowser(s.id);
+        if (s.tipo === 'viva') {
+          apriPaginaVivaBrowser(s.url, s.id).catch((errore) => browserUi?.avvisa(messaggioErroreUtente(errore, 'Non sono riuscito ad aprire questo indirizzo.')));
+          return;
+        }
+        const pagina = rs.browserPagine.find((p) => (p.id || null) === s.id);
+        if (!pagina) return;
+        pagina.incorniciabile = undefined; pagina.stato = undefined; pagina.motivo = null; pagina.motivoCornice = null;
+        pagina.genere = null; pagina.dettagli = null;
+        renderizzaBrowser(); // il render successivo richiede la cornice (`chiediCornice`) da capo
+      },
+      annullaApertura: (s) => {
+        const rs = state.realSession;
+        const fermata = fermaRichiestaBrowser(s.id);
+        const voce = rs.browserVive.find((x) => x.id === s.id) || rs.browserPagine.find((p) => (p.id || null) === s.id);
+        if (voce) { voce.stato = 'annullata'; voce.motivo = null; voce.genere = null; voce.dettagli = null; }
+        if (!fermata && !voce) return;
+        renderizzaBrowser();
       },
       // ⛔ stesso motivo di `apri` qui sopra: una ricarica che si rompe deve dirlo, non sparire.
       rileggi: (s) => {
@@ -11846,8 +12103,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const rs = state.realSession;
     const schede = schedeBrowser();
     if (!schede.some((x) => x.id === rs.browserAttiva)) rs.browserAttiva = schede.length ? schede[schede.length - 1].id : null;
-    const m = /^lettura-(\d+)$/.exec(rs.browserAttiva || '');
-    rs.browserIndice = m ? Number(m[1]) : -1;
+    /* ⛔ 16/09 — l'indice si CERCA, non si legge dal nome: con gli id stabili il numero dentro
+       `lettura-7` è un numero di nascita, non più una posizione nell'elenco. Leggerlo come indice
+       avrebbe puntato alla pagina sbagliata appena una lettura viene chiusa. */
+    rs.browserIndice = rs.browserPagine.findIndex((p, i) => idDiLettura(p, i) === rs.browserAttiva);
     ui.aggiorna({ schede, attiva: rs.browserAttiva, note: noteBrowser(), richiesta: rs.browserRichiesta, annotazioni: rs.browserAnnotazioni, annotaAttivo: rs.browserAnnotaAttivo });
     /* ⛔ La vista viva si mostra SOLO sulla sua scheda. Senza questa riga restava incollata addosso
        a tutte le altre (owner, 08/9). Non si smonta: si nasconde, così tornando indietro la pagina
@@ -11859,7 +12118,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /** Compatibilità coi chiamanti di prima (appendBrowserEntry, il reset di sessione): mostra la lettura all'indice dato. */
   function mostraPaginaBrowser(indice) {
     const rs = state.realSession;
-    rs.browserAttiva = rs.browserPagine[indice] ? `lettura-${indice}` : rs.browserAttiva;
+    // ⛔ 16/09 — l'id lo porta la pagina (assegnato alla nascita); `idDiLettura` copre le letture vecchie
+    const pagina = rs.browserPagine[indice];
+    rs.browserAttiva = pagina ? idDiLettura(pagina, indice) : rs.browserAttiva;
     renderizzaBrowser();
   }
   function chiudiSchedaBrowser(id) {
@@ -11873,6 +12134,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   cose diverse, e finora solo la prima si chiudeva.
      */
     const chiusa = schedeBrowser().find((x) => x.id === id);
+    /* ⛔ 16/09 — chiudere una scheda INTERROMPE ciò che stava facendo: la richiesta al server e
+       l'attesa del prossimo tentativo. Prima la risposta arrivava lo stesso e scriveva su una
+       scheda che non c'era più (o su quella che aveva preso il suo posto, visto che gli id erano
+       posizionali). MDN «AbortController»: la cancellazione si fa dove la promessa nasce. */
+    fermaRichiestaBrowser(id);
     if (chiusa?.viaVista === 'vivo') smontaVistaViva();
     if (id.startsWith('lettura-')) rs.browserChiuse.add(id); else rs.browserVive = rs.browserVive.filter((x) => x.id !== id);
     if (rs.browserAttiva === id) rs.browserAttiva = prossima;
@@ -11927,6 +12193,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⇒ Chi smonta restituisce la sua promessa, e chi apre la aspetta.
    */
   function smontaVistaViva() {
+    /*
+     * ⛔⛔ 16/09, P0 corsia B punto 4(f) — LA PAGINA PILOTATA È UNA ALLA VOLTA (una sola scheda
+     *   Chromium sul server, `IDENTITA_BROWSER`: assunzione approvata dall'owner per questa fase).
+     *   Fin qui smontarla era MUTO: si tornava sulla scheda di prima e non c'era niente, senza una
+     *   riga che dicesse perché — e la scheda sembrava rotta. Adesso la scheda se lo ricorda e il
+     *   pannello lo dice, con «Riprova» per riaprirla dov'era. Lo stato delle ALTRE schede (modo,
+     *   cornici, commenti) non viene toccato: la vista viva se ne va, le schede restano.
+     */
+    if (vistaVivaDi) {
+      const suo = state.realSession.browserVive.find((x) => x.id === vistaVivaDi);
+      if (suo) suo.vivaARiposo = true;
+    }
     vistaVivaDi = null;
     if (flussoVivo) { try { flussoVivo.close(); } catch { /* già chiuso */ } flussoVivo = null; }
     if (vistaViva) { try { vistaViva.distruggi(); } catch { /* già andata */ } vistaViva = null; }
@@ -11986,6 +12264,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     await smontaVistaViva(); // ⛔ si ASPETTA: senza, la chiusura arriva dopo e uccide la scheda nuova
     contenitore.hidden = false;
     vistaVivaDi = voce.id; // da qui la tela appartiene a QUESTA scheda, e a nessun altra
+    voce.vivaARiposo = false; // ⭐ 16/09: questa è la viva; le altre lo sanno da `smontaVistaViva`
 
     vistaViva = creaVistaViva(contenitore, {
       onGesto: (gesto) => {
@@ -12143,8 +12422,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     rs.browserAttiva = voce.id;
     renderizzaBrowser();
     try {
-      const esito = await apiGet(`/api/v1/browser/incorniciabile?url=${encodeURIComponent(url)}`);
+      /* ⛔ 16/09 — la domanda al server è ANNULLABILE e si RITENTA (due volte, attesa esponenziale
+         con jitter pieno — vedi `chiediIncorniciabileConRitentativi`). Prima era una `apiGet` secca:
+         un singhiozzo di rete diventava una scheda «bloccata» per sempre, e chiudere la scheda non
+         fermava niente. */
+      const esito = await chiediIncorniciabileConRitentativi(voce, { onStato: renderizzaBrowser });
       if (!rs.browserVive.includes(voce)) return; // chiusa nel frattempo
+      if (esito === null) { voce.stato = 'annullata'; voce.motivo = null; voce.genere = null; voce.dettagli = null; renderizzaBrowser(); return; } // annullata: niente scritture tardive
       voce.url = esito?.url || url;
       voce.titolo = esito?.titolo || null;
       // un dev server locale passa dal proxy: la cornice è nostra anche se il sito vietasse l'incorniciatura
@@ -12185,11 +12469,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          *   VERO — quello che il server ha appena detto in italiano.
          */
         const conVista = esito?.via === 'cornice' ? false : await apriNelBrowserVivo(voce);
-        if (!conVista) { voce.stato = 'bloccata'; voce.motivo = esito?.motivo || 'Il sito non consente di essere mostrato dentro TALOS'; }
+        /* ⛔ 16/09 — «non ci sono arrivato» e «il sito dice di no» sono due stati diversi: il primo
+           si riprova (ed è `irraggiungibile`, col motivo classificato dal server), il secondo no. */
+        if (!conVista) {
+          voce.stato = CLIENT_GUASTI.has(esito?.genere) ? 'irraggiungibile' : 'bloccata';
+          voce.motivo = esito?.motivo || 'Il sito non consente di essere mostrato dentro TALOS';
+          voce.genere = esito?.genere || null; voce.dettagli = esito?.dettagli || null;
+        }
       }
       void dallaPaginaAgliOcchiDelModello(voce); // 06/9: quello che guardi tu, lo deve vedere anche lui
     } catch (error) {
-      voce.stato = 'bloccata'; voce.motivo = error.message || 'Il server non ha potuto controllare la pagina';
+      if (error?.name === 'AbortError') { voce.stato = 'annullata'; voce.motivo = null; voce.genere = null; voce.dettagli = null; } // annullare non è un guasto
+      else { voce.stato = 'irraggiungibile'; voce.motivo = messaggioErroreUtente(error, 'Il server non ha potuto controllare la pagina'); voce.genere = null; voce.dettagli = null; }
     }
     renderizzaBrowser();
   }

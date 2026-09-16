@@ -41,3 +41,43 @@ test('PROXY-PAGINA: un sito remoto è rifiutato prima di qualunque fetch; un dev
   const morto = await proxyPagina('http://localhost:1/', { fetchFn: async () => { throw new TypeError('fetch failed'); } });
   assert.equal(morto.codice, 'BROWSER_PROXY_IRRAGGIUNGIBILE');
 });
+
+/*
+ * ⛔ 16/09/2026, P0 corsia B punto 4 — lo stesso difetto del modulo accanto, e nello stesso giorno:
+ *   il `catch` del proxy diceva «La pagina non risponde» per QUALUNQUE guasto. Su un dev server la
+ *   differenza è tutta: «non l'hai acceso» (ECONNREFUSED) e «ci ho messo troppo» (scadenza) portano
+ *   due gesti diversi di chi sta programmando. La classificazione è una sola, condivisa con
+ *   `browser-frame.mjs`: due tabelle che dicono la stessa cosa divergono senza che nessuno lo veda.
+ */
+test('PROXY-GUASTO: porta chiusa, nome inesistente e scadenza si raccontano per quello che sono', async () => {
+  const conCausa = (code) => { const e = new TypeError('fetch failed'); e.cause = Object.assign(new Error(code), { code }); return e; };
+  const chiedi = (errore) => proxyPagina('http://localhost:5173/', { fetchFn: async () => { throw errore; } });
+
+  const spento = await chiedi(conCausa('ECONNREFUSED'));
+  assert.equal(spento.genere, 'rifiuto');
+  assert.match(spento.motivo, /Nessuno risponde/i, 'un dev server spento si dice così, non «la pagina non risponde»');
+
+  const scaduto = await chiedi(conCausa('UND_ERR_CONNECT_TIMEOUT'));
+  assert.equal(scaduto.genere, 'timeout');
+  assert.match(scaduto.motivo, /non ha risposto in tempo/i);
+
+  // AL CONTRARIO: un guasto che non so nominare non si traveste da uno che conosco
+  const ignoto = await chiedi(new TypeError('fetch failed'));
+  assert.equal(ignoto.genere, 'rete');
+  assert.match(ignoto.motivo, /raggiungere il sito/i);
+});
+
+/*
+ * ⛔ 16/09/2026, giro di riparazione — anche il percorso del proxy porta i PARAMETRI del guasto,
+ * non solo la frase italiana già composta: è la metà del contratto che permette a chi disegna di
+ * scrivere la frase nella lingua di chi guarda. Senza, il proxy resterebbe l’unico punto in cui
+ * il pannello può tornare mezzo inglese e mezzo italiano.
+ */
+test('PROXY-PARAMETRI: i secondi del timeout arrivano come dato, e un guasto senza parametri non ne inventa', async () => {
+  const lento = await proxyPagina('http://127.0.0.1:5173/', { fetchFn: () => { const e = new Error('x'); e.name = 'AbortError'; throw e; }, millisecondi: 6000 });
+  assert.equal(lento.ok, false);
+  assert.equal(lento.genere, 'timeout');
+  assert.equal(lento.dettagli.secondi, 6);
+  const morto = await proxyPagina('http://127.0.0.1:5173/', { fetchFn: () => { const e = new TypeError('fetch failed'); e.cause = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' }); throw e; } });
+  assert.deepEqual(morto.dettagli, {});
+});
