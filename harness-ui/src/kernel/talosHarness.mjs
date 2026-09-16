@@ -2134,12 +2134,19 @@ const ATTREZZI_ESTESI = [
     },
     {
         name: 'library_delete',
-        description: 'Remove a file from the project Library. Call this ONLY when asked to delete something. '
-            + 'Get the id from library_list or library_search first, and say the file\'s name in your message '
-            + 'before calling, so the user can stop you if it is the wrong one.',
+        description: 'Remove file(s) from the project Library. Call this ONLY when asked to delete something. '
+            + 'Get the id(s) from library_list or library_search first, and say the file\'s name(s) in your message '
+            + 'before calling, so the user can stop you if it is the wrong one. To delete several files in one '
+            + 'call, pass `ids` as an array of ids (max 100) — and repeat the FIRST of them in `id` as well. '
+            + 'Never guess ids, never pass file names as ids.',
         input_schema: {
             type: 'object',
-            properties: { id: { type: 'string', description: 'The file id from library_list or library_search.' } },
+            properties: {
+                id: { type: 'string', description: 'The file id from library_list or library_search.' },
+                ids: { type: 'array', items: { type: 'string' },
+                    description: 'Optional: several file ids to delete in one batch (max 100). When present, '
+                        + 'only `ids` is processed — repeat the first of them in `id` too.' },
+            },
             required: ['id'],
         },
     },

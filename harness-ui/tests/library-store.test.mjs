@@ -11,6 +11,7 @@ import {
   cercaVoci,
   creaCursoriLibreria,
   eliminaVoce,
+  eliminaVoci,
   elencaVoci,
   elencaVociConTesto,
   idVoceLibreriaValido,
@@ -436,6 +437,48 @@ test('⛔ AL CONTRARIO — eliminaVoce: un id già sparito torna null, MAI un\'e
   const cartella = cartellaVera();
   try {
     assert.equal(await eliminaVoce({ cartella, id: 'lib-mai-esistito' }), null);
+  } finally {
+    rimuoviCartellaDiProva(cartella);
+  }
+});
+
+// --- ⭐ (16/09/2026) eliminaVoci: il LOTTO per library_delete (richiesta owner) ---
+
+test('⭐⭐⭐ eliminaVoci: UNA chiamata cancella più voci DAVVERO dal disco, un id assente finisce in `assenti` (onesto, non un guasto)', async () => {
+  const cartella = cartellaVera();
+  try {
+    const idA = await salvaVoce({ cartella, nome: 'a.md', mediaType: 'text/plain', testo: 'x' });
+    const idB = await salvaVoce({ cartella, nome: 'b.md', mediaType: 'text/plain', testo: 'y' });
+    const idResta = await salvaVoce({ cartella, nome: 'resta.md', mediaType: 'text/plain', testo: 'z' });
+    const esito = await eliminaVoci({ cartella, ids: [idA, idB, 'lib-fantasma'] });
+    assert.deepEqual(esito.eliminate, [{ id: idA, nome: 'a.md' }, { id: idB, nome: 'b.md' }]);
+    assert.deepEqual(esito.assenti, ['lib-fantasma']);
+    const voci = await elencaVoci({ cartella });
+    assert.deepEqual(voci.map((v) => v.id), [idResta], 'la voce fuori dal lotto NON si tocca');
+    assert.equal(await leggiVoce({ cartella, id: idA }), null, 'il lotto cancella DAVVERO');
+  } finally {
+    rimuoviCartellaDiProva(cartella);
+  }
+});
+
+test('⛔ AL CONTRARIO — eliminaVoci: richieste non valide sono rifiute PRIMA di ogni I/O, mai un lotto parziale', async () => {
+  const cartella = cartellaVera();
+  try {
+    const id = await salvaVoce({ cartella, nome: 'sopravvivo.md', mediaType: 'text/plain', testo: 'x' });
+    for (const [ids, motivo] of [
+      [[], 'array vuoto'],
+      [['lib-1', 42], 'elemento non stringa'],
+      [['lib-1', ''], 'stringa vuota'],
+    ]) {
+      await assert.rejects(() => eliminaVoci({ cartella, ids }), (errore) => {
+        assert.ok(errore instanceof LibraryStoreError, motivo);
+        assert.equal(errore.code, 'LIBRARY_INVALID', motivo);
+        return true;
+      }, motivo);
+    }
+    await assert.rejects(() => eliminaVoci({ cartella, ids: Array.from({ length: 101 }, (_, i) => `lib-${i}`) }), /100/);
+    const voci = await elencaVoci({ cartella });
+    assert.deepEqual(voci.map((v) => v.id), [id], 'il tentativo rifiutato non ha toccato niente');
   } finally {
     rimuoviCartellaDiProva(cartella);
   }

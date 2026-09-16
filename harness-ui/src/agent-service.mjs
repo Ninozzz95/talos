@@ -46,6 +46,7 @@ import {
   elencaVoci as elencaVociReale,
   elencaVociConTesto as elencaVociConTestoReale,
   eliminaVoce as eliminaVoceReale,
+  eliminaVoci as eliminaVociReale,
   impaginaVoci as impaginaVociLibreria,
   leggiBytesVoce as leggiBytesVoceReale,
   leggiVoce as leggiVoceReale,
@@ -470,6 +471,11 @@ export async function avviaSessione({
    */
   rinominaVoceFn = rinominaVoceReale,
   eliminaVoceFn = eliminaVoceReale,
+  /*
+   * ⭐ (16/09/2026) — la porta del LOTTO per library_delete (richiesta owner): sorella di
+   * `eliminaVoceFn`, stessa forma contrattuale, iniettabile per gli stessi motivi.
+   */
+  eliminaVociFn = eliminaVociReale,
   /*
    * ⭐⭐⭐ 29/8 — FASE N, terza fetta (library_context_policy_update).
    * Stesso principio dei punti I/O sopra: solo leggiPoliticaFn/
@@ -1445,6 +1451,23 @@ export async function avviaSessione({
   };
 
   const onLibreriaElimina = async (argomenti) => {
+    /*
+     * ⭐ (16/09/2026) — via a LOTTI (richiesta owner): `ids` array non vuoto ⇒ si elaborano SOLO
+     * gli `ids` — `id` NON si processa a parte (ramo nuovo, non una fusione; lo schema chiede al
+     * modello di ripetere in `id` il primo degli `ids` per compatibilità col campo richiesto).
+     * Un id già sparito NON è un guasto: finisce nell'elenco degli assenti, l'esito resta onesto.
+     * In ogni altro caso (`ids` assente o array vuoto) il flusso singolo resta IDENTICO a prima.
+     */
+    if (Array.isArray(argomenti?.ids) && argomenti.ids.length > 0) {
+      const { eliminate, assenti } = await eliminaVociFn({ cartella, ids: argomenti.ids });
+      const parti = [];
+      if (eliminate.length > 0) {
+        parti.push(`Removed ${eliminate.length} ${eliminate.length === 1 ? 'file' : 'files'} from the Library: `
+          + eliminate.map((voce) => `«${voce.nome}»`).join(', ') + '.');
+      }
+      if (assenti.length > 0) parti.push(`Not found in the Library (already gone?): ${assenti.join(', ')}.`);
+      return { ok: true, esito: parti.join(' ') || 'Nothing was deleted.' };
+    }
     const risultato = await eliminaVoceFn({ cartella, id: argomenti?.id ?? '' });
     if (!risultato) {
       return { ok: false, esito: `No Library file has the id "${argomenti?.id}". It may already be gone.` };
