@@ -965,3 +965,27 @@ l'hanno misurato loro; io no.
 sottocartella senza file compare lo stesso nell'elenco (`sub/`). È la stessa famiglia di «un modello che non vede non tace:
 spiega» (P-13, 10/09): una risposta vuota e una risposta «è vuota» non sono la stessa cosa. Kernel ⇒ va nel ramo `cli-req` o
 in una riga sua, con `npm run test:kernel` intero e ricerca prima di scrivere.
+
+## CLI-REQ-08..11 | Portare gli attrezzi dei FILE del modello (`leggi`, `cerca`, `scrivi`, `file_edit`) al contratto di Hermes, tenendo i miglioramenti di TALOS (17/09/2026, dalla sessione della CLI) — REGISTRATE; l'approvazione dell'owner mi è stata RIFERITA, a me non l'ha ancora detta
+
+Testo: `git show bc17c98f:docs/talos-cli/handoffs/2026-09-17-CLI-REQ-08-11-agent-file-tools-like-hermes.md` (84 righe, una RED per
+richiesta); confronto di origine: `git show b0d32717:docs/talos-cli/research/2026-09-17-hermes-agent-tools-comparison.md`
+(Hermes `98f758ae`, `tools/file_tools.py:1088-1260`). Misurate da loro in sola lettura al nostro `13d9b986`.
+- **08 — `leggi` con numeri di riga e pagine:** oggi `leggi(percorso)` (`talosHarness.mjs:7824`) restituisce il testo com'è.
+  Chiedono `offset`/`limit` facoltativi, righe numerate, un tetto di caratteri tagliato a fine riga che dice da dove
+  continuare, e i nomi esistenti più vicini quando il percorso è sbagliato.
+- **09 — `cerca` restituisce le righe trovate:** oggi solo percorsi (`cercaNelProgetto`, `:3584`). Chiedono righe con percorso
+  e numero, contesto facoltativo, `limit`/`offset` col totale, un modo «conta», un filtro glob; «solo percorsi» resta un modo.
+- **10 — niente sovrascrittura alla cieca:** `scrivi` in `create` rimpiazza un file esistente col solo consiglio «leggilo
+  prima». Chiedono il rifiuto se questa sessione non ne ha letto TUTTO il contenuto corrente (o non l'ha scritto lei) o se è
+  cambiato sul disco da allora.
+- **11 — `file_edit` mostra cosa ha cambiato:** oggi risponde «edited: … N occurrence(s)»; chiedono un diff unificato con
+  tetto dichiarato; il confronto resta esatto, quello tollerante agli spazi solo come secondo tentativo dichiarato.
+⛔ **Perché NON è una cura piccola, e va decisa dall'owner con me:** cambia ciò che il MODELLO riceve da quattro attrezzi
+(i nomi restano, ma parametri e uscite no) — e qui (a) il banco confronta l'uscita degli attrezzi BYTE PER BYTE fra campagne
+(`talosHarness.mjs:1563, 2774`), quindi ogni campagna passata smette di essere confrontabile; (b) la scommessa di TALOS è il
+contesto MAGRO (`talos-esaurisce-i-giri`: i token sono la somma sui giri): righe numerate e righe trovate costano token a ogni
+chiamata e vanno MISURATE prima/dopo, non assunte; (c) la 10 tocca la grammatica dei permessi e la 11 la ricevuta della
+scrittura; (d) il kernel ha più copie (decisione sulla sorgente ancora aperta) e il mobile lo condivide. ⇒ È una FASE
+(ricerca, misura di token su task veri, additivo per costruzione dove si può: parametri facoltativi che a vuoto lasciano
+l'uscita identica), con revisore avversariale e un giro vero con `glm-5.3-flash`. Hermes è l'obiettivo da battere: il verso è giusto.
