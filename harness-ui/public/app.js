@@ -31344,11 +31344,24 @@ ${testo3}` : testo3;
         if (!voce) return null;
         return voce.nuovo ? "new" : "modified";
       }
+      function scriviStatoRigaAlbero(segno, stato) {
+        segno.className = `ft-status-dot ft-${stato} talos-file-row__state`;
+        segno.textContent = stato === "new" ? "A" : "M";
+        const frase = stato === "new" ? "Creato in questa sessione" : "Modificato in questa sessione";
+        segno.title = frase;
+        segno.setAttribute("aria-label", frase);
+        segno.setAttribute("role", "img");
+      }
       function alberoInAnteprima() {
         return !state.realSession.id && Boolean(state.realSession.previewProjectId);
       }
       function syncFileTreeToolbar(enabled = Boolean(state.realSession.id) && !alberoInAnteprima()) {
-        for (const id of ["fileTreeNewFile", "fileTreeNewFolder", "fileTreeRefresh", "fileTreeCollapse"]) {
+        const nomeRadice = $2("#alberoNomeRadice");
+        if (nomeRadice) {
+          nomeRadice.textContent = nomeRadiceAlberoReale();
+          nomeRadice.title = state.realSession.cartellaAssoluta || "";
+        }
+        for (const id of ["fileTreeAdd", "fileTreeMore", "fileVista", "fileTreeNewFile", "fileTreeNewFolder", "fileTreeRefresh", "fileTreeCollapse"]) {
           const button2 = $2(`#${id}`);
           if (button2) button2.disabled = !enabled;
         }
@@ -31359,7 +31372,51 @@ ${testo3}` : testo3;
           bottoneUp.setAttribute("aria-pressed", String(aperto));
           bottoneUp.title = aperto ? "Chiudi, torna alla sessione" : "Risali fuori dalla sessione";
           bottoneUp.setAttribute("aria-label", aperto ? "Chiudi, torna alla sola cartella della sessione" : "Risali fuori dalla sessione (sola lettura)");
+          const testoUp = $2("span", bottoneUp);
+          if (testoUp) testoUp.textContent = aperto ? "Torna alla sola cartella della sessione" : "Guarda fuori dalla cartella, in sola lettura";
+          aggiornaVistaFile();
         }
+      }
+      const VISTE_FILE = Object.freeze({ tutti: "Tutti i file", modificati: "Modificati in questa sessione" });
+      function vistaFileScelta() {
+        return $2("#fileVista")?.dataset.vista === "modificati" ? "modificati" : "tutti";
+      }
+      function aggiornaVistaFile() {
+        const vista = vistaFileScelta();
+        const albero = $2("#alberoFile");
+        const modificati = $2("#fileModificati");
+        const campo2 = $2("#fileTreeFilter")?.closest(".talos-field");
+        if (albero) albero.hidden = vista !== "tutti";
+        if (modificati) modificati.hidden = vista !== "modificati";
+        if (campo2) campo2.hidden = vista !== "tutti";
+        const nome = $2("#fileVistaNome");
+        if (nome) nome.textContent = VISTE_FILE[vista];
+        const conteggio2 = $2("#fileConteggio");
+        if (!conteggio2) return;
+        if (vista === "modificati") {
+          const n = state.realSession.reviewFiles instanceof Map ? state.realSession.reviewFiles.size : 0;
+          conteggio2.textContent = n === 0 ? "" : `${n} file`;
+        } else {
+          const n = albero ? albero.querySelectorAll(".ft-node:not([aria-expanded])").length : 0;
+          conteggio2.textContent = n === 0 ? "" : `${n} a vista`;
+          conteggio2.title = n === 0 ? "" : "I file si caricano aprendo le cartelle: questo è il numero di quelli già a vista.";
+        }
+      }
+      function scegliVistaFile(ancora) {
+        const scelta = vistaFileScelta();
+        apriMenuAzioni({
+          etichetta: "Quali file mostrare",
+          posizionamento: { ancoraEl: ancora },
+          voci: Object.entries(VISTE_FILE).map(([id, etichetta2]) => ({
+            icona: id === scelta ? "i-check" : id === "tutti" ? "i-folder" : "i-file",
+            etichetta: etichetta2,
+            azione: () => {
+              const b = $2("#fileVista");
+              if (b) b.dataset.vista = id;
+              aggiornaVistaFile();
+            }
+          }))
+        });
       }
       function cartellaSelezionataAlbero() {
         const selected = $2("#inspector-files .ft-row.ft-selected");
@@ -32096,9 +32153,7 @@ ${testo3}` : testo3;
         const stato = !cartella ? statoFileAlbero(percorsoCompleto) : null;
         if (stato) {
           const dot = document.createElement("span");
-          dot.className = `ft-status-dot ft-${stato} talos-file-row__state`;
-          dot.title = stato === "new" ? "Nuovo" : "Modificato";
-          dot.textContent = stato === "new" ? "nuovo" : "mod.";
+          scriviStatoRigaAlbero(dot, stato);
           row.appendChild(dot);
         }
         if (!alberoInAnteprima()) {
@@ -32416,6 +32471,7 @@ ${testo3}` : testo3;
             treeRenderNeedsRerun = false;
             await renderizzaAlberoRealeUnaVolta();
           } while (treeRenderNeedsRerun);
+          aggiornaVistaFile();
         })().finally(() => {
           treeRenderInFlight = null;
         });
@@ -32557,10 +32613,9 @@ ${testo3}` : testo3;
           if (stato) {
             if (!dot) {
               dot = document.createElement("span");
-              row.appendChild(dot);
+              row.insertBefore(dot, $2(".ft-actions-btn", row));
             }
-            dot.className = `ft-status-dot ft-${stato}`;
-            dot.title = stato === "new" ? "Nuovo" : "Modificato";
+            scriviStatoRigaAlbero(dot, stato);
           } else if (dot) {
             dot.remove();
           }
@@ -36620,7 +36675,8 @@ ${testo3}`;
           chiudiCassettoBarra();
         } else if (event.key === "Escape" && bivioInvio && !bivioInvio.hidden) chiudiBivioInvio({ tornaAlComposer: true });
         else if (event.key === "Escape" && (sessionsPanel.classList.contains("open") || inspectorPanel.classList.contains("open"))) closePanels();
-        else if (event.key === "Escape" && runRealeAttivo() && !$2(".overlay-layer:not([hidden])") && !ROOT().querySelector("dialog[open]")) {
+        else if (event.key === "Escape" && document.querySelector(":popover-open")) {
+        } else if (event.key === "Escape" && runRealeAttivo() && !$2(".overlay-layer:not([hidden])") && !ROOT().querySelector("dialog[open]")) {
           event.preventDefault();
           setTimeout(chiediSeFermareIlGiro, 0);
         }
@@ -36777,6 +36833,23 @@ ${testo3}`;
       $2("#fileTreeFilter")?.addEventListener("input", (e) => {
         filtraAlberoReale(e.target.value);
         salvaImpostazioniAlbero();
+      });
+      $2("#fileVista")?.addEventListener("click", (evento) => scegliVistaFile(evento.currentTarget));
+      if ($2("#alberoFile") && typeof MutationObserver === "function") {
+        let contaInAttesa = false;
+        new MutationObserver(() => {
+          if (contaInAttesa) return;
+          contaInAttesa = true;
+          requestAnimationFrame(() => {
+            contaInAttesa = false;
+            aggiornaVistaFile();
+          });
+        }).observe($2("#alberoFile"), { childList: true, subtree: true });
+      }
+      $2("#fileModificati")?.addEventListener("click", (evento) => {
+        const percorso = evento.target.closest?.(".talos-kv")?.querySelector(".talos-kv__k")?.textContent?.trim();
+        if (!percorso || !state.realSession.reviewFiles.has(percorso)) return;
+        apriFileAlbero(percorso, percorso.split("/").pop());
       });
       $2("#fileTreeNewFile")?.addEventListener("click", () => avviaCreaVoce(cartellaSelezionataAlbero(), "file"));
       $2("#fileTreeNewFolder")?.addEventListener("click", () => avviaCreaVoce(cartellaSelezionataAlbero(), "cartella"));
