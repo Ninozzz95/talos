@@ -1,3 +1,8 @@
+// The probe is a headless worker, not a terminal. Windows CI identified
+// implicit conhost.exe members despite CREATE_NO_WINDOW. Do not exclude
+// those processes from accounting: avoid creating the console in this binary.
+#![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
+
 mod protocol;
 #[cfg(all(windows, target_arch = "x86_64"))]
 mod windows;
