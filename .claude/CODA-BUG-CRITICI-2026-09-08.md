@@ -876,7 +876,12 @@ posizioni nel MIO albero a `c022f756` e il codice citato c'è, riga per riga. **
 - **CLI-REQ-03** — il nostro `PROVIDER_KEY_MISSING` (`runtime-owner-adapter.mjs:845`, confermato) verrebbe riclassificato nel
   catch del ripiego (~`:954-958`) in «Il fornitore non ha accettato la richiesta.», con un record di consumo per una chiamata
   mai partita. Dicono che l'owner l'ha incontrato quattro volte il 17/09 con un modello Z.ai senza chiave Z.ai. Solo traccia
-  del codice, non eseguito né da loro né da me. Vicino a BC-61 (nome del fornitore) e alla corsia PO-27 («Collega un modello»).
+  del codice da parte loro. ✅ **RIPRODOTTA da me il 17/09** (sonda `scratchpad/sonda-cli-req-03b.mjs`, nessuna rete, store senza chiavi, modello
+  `zai:glm-5.3-flash`): per la strada VERA del runtime, `fetchMultiProvider.eseguiConFallback`, esce `PROVIDER_REQUEST_ERROR` «Il
+  fornitore non ha accettato la richiesta.» (classe `ignoto`) con **0 chiamate di rete** e **1 consumo scritto**
+  (`{provider:'zai', usage:null, esito:'interrotto'}`). ⛔ Per la fetch nuda (`creaFetchMultiProvider(...)(url, init)`) l'errore
+  esce GIUSTO (`PROVIDER_KEY_MISSING`, «Manca la chiave del fornitore scelto.», 0 consumi): il difetto è SOLO nel catch di
+  `eseguiConFallback`. La RED si scrive su quella strada, o passa per costruzione. Vicino a BC-61 (nome del fornitore) e alla corsia PO-27 («Collega un modello»).
 - **CLI-REQ-04** — 🔒 `pty-terminal.mjs:157` avvia la shell con `env: process.env` (confermato) e `desktop/runtime.mjs:57` dà al
   server `TALOS_HARNESS_UI_TOKEN` (confermato): qualunque cosa giri nel terminale dell'app può leggere il token e chiamare la
   API locale. Proposta: togliere un elenco CHIUSO di variabili solo-server; il filtro più stretto sulle credenziali resta una
@@ -884,3 +889,66 @@ posizioni nel MIO albero a `c022f756` e il codice citato c'è, riga per riga. **
 
 **Il mio consiglio sull'ordine, quando l'owner decide:** 04 e 02 per primi (sicurezza, cure piccole), poi 03 (messaggio falso
 che lui ha già visto), poi 01 (compromesso da scegliere). Ognuna con la sua prova RED e la ricerca prima di scrivere.
+
+## BC-70 | La CAMPANELLA non conta chi aspetta, e il pannello la contraddice (trovato il 17/09/2026 riportando in vita NOTIFICHE-REALI-43) — APERTO
+
+Misurato dall'agente di BC-63 sul banco, con la rotta `**/api/v1/sessions*` intercettata (con la stella: senza, la query string
+sfugge): (a) una sessione con `inAttesaApprovazione: true` già in elenco lascia la campanella su «Notifiche: nessuna» alla
+prima lettura — il commento del 02/09 diceva «un'approvazione in attesa notifica sempre», e non è più vero; (b) poi la
+campanella dice «1 cosa aspetta te» mentre il pannello ne ELENCA DUE; (c) una voce del pannello legge **«Invalid Date»**.
+La prova NON è stata adattata: è `test.fail()` dichiarato in `tests/browser/review-browser-notifiche.spec.mjs`, così il giorno
+della cura Playwright segnala «atteso rosso, è passato». ⛔ Non riprodotto da me. **Finita quando:** un'approvazione in attesa
+accende la campanella alla prima lettura, il numero della campanella è uguale al numero di voci del pannello, nessuna data
+illeggibile, e il `test.fail()` sparisce.
+
+## BC-71 | Tre residui visti nel giro di BC-63/BC-67 (17/09/2026) — APERTI, non curati
+
+- **`#copyAllDiffs` è DUPLICATO nel DOM** (due nodi, stesso id: uno nel vecchio pannello `[data-view="diff"]`, uno nella
+  testata della Revisione): il `$()` del prodotto aggiorna solo il primo, quello invisibile. L'id vive nel markup legacy.
+- **Il riassunto in testata si contraddice**: `renderRealReviewList` scrive «Nessuna modifica in questa sessione» in
+  `.talos-topbar__path` e `aggiornaSommarioReviewReale`, subito dopo, lo riscrive vuoto; e quel nodo è `display:none` sotto i
+  900 px di contenitore (`index.css:534`).
+- **`#browserTesto` mostra il testo dimostrativo del template** mentre le schede sono «in apertura»: possibile gemello di
+  BC-67 nel Browser, visto in una sonda e non misurato a fondo.
+
+## CLI-REQ-05 e CLI-REQ-06 | Altre due richieste al kernel dalla sessione della CLI (17/09/2026, pomeriggio) — ✅ APPROVATE dall'owner il 17/09 («sì, ho già autorizzato l'agente CLI per CLI-REQ»), nella collocazione che avevo proposto: **05 punto 1** (chiave OpenRouter pretesa a vuoto) SUBITO nel ramo `cli-req`; **05 punto 2 e 3** (compattazione e giudice verso il fornitore DELLA SESSIONE) dentro BC-65/BC-66 come vincolo di chiusura; **06** (verifica chiave da un token, forma OpenAI, per i quattro fornitori) in coda ai fornitori
+
+Commit `b2be144b` sulla lane della CLI, misurate contro il nostro `cc8a25c9`; testo intero con
+`git show b2be144b:docs/talos-cli/handoffs/2026-09-17-CLI-REQ-05-session-registry-tied-to-openrouter.md` e `…-CLI-REQ-06-minimal-key-check-openai-shape.md`.
+Io ho riaperto le posizioni nel nostro albero: **il codice citato c'è**. Non ho riprodotto niente.
+
+- **CLI-REQ-05 — le sessioni sono legate a OpenRouter.** (1) `session-registry.mjs:2648-2650` rifiuta l'avvio di ogni sessione
+  non locale se `chiaveFn()` è vuota, e `server.mjs:418` cabla `chiaveFn` alla chiave di OPENROUTER (confermati entrambi, e il
+  messaggio dice proprio «OPENROUTER_API_KEY»): una sessione DeepSeek con la chiave DeepSeek e senza quella di OpenRouter non
+  parte, e quando parte OpenRouter non riceve niente — chiave pretesa e mai usata. (2) 🔒 **Riservatezza:** `compatta()`
+  (`session-registry.mjs:4244`) passa a `compattaSessione` (`agent-service.mjs:1947`) che usa `chiamaConRitenta`, il cui URL è
+  FISSO `https://openrouter.ai/api/v1/chat/completions` (`talosHarness.mjs:1326`, confermato); l'unica eccezione è
+  `contextCompactFn`, che `server.mjs:411` passa solo con `config.contextTrial`. Loro l'hanno misurato ermeticamente: compattare
+  una sessione DeepSeek con una chiave OpenRouter salvata fa UN tentativo di rete, verso openrouter.ai ⇒ l'intera conversazione
+  andrebbe a un fornitore che la persona non ha scelto. (3) Solo letto: il giudice della ricerca (`:1712-1716`) fa la stessa strada.
+  ⭐ **È lo stesso terreno di BC-65/BC-66** (compattazione e motore del contesto): quando si aprono, questa entra lì come vincolo
+  — la compattazione va al fornitore DELLA SESSIONE, attraverso `creaFetchMultiProvider`. Nota mia: l'owner sul 4174 usa
+  `z-ai/glm-5.3-flash`, che È un modello di OpenRouter ⇒ per lui oggi non esce niente dove non dovrebbe; il difetto morde chi
+  usa un fornitore diretto.
+- **CLI-REQ-06 — verifica della chiave con una richiesta da un token.** `deepinfra`, `novita`, `ollama-cloud`, `huggingface`
+  dichiarano `catalogoPubblico` e nessuna `richiestaMinima` (`provider-registry.mjs:911, 953, 1089, 1136`, confermato: quattro
+  voci) ⇒ le loro chiavi non si possono verificare. La sonda ha già `richiestaMinima` dietro `consentiGenerazione:true`
+  (`provider-probe.mjs:195-197`) ma convalida solo il corpo in forma Anthropic. Chiedono la forma OpenAI (`/chat/completions`,
+  `max_tokens:1`) per quei quattro. Dicono che l'owner l'abbia deciso il 17/09 nella LORO sessione: io non l'ho sentito da lui.
+
+**Consiglio, quando l'owner decide:** la 05 punto 2 è l'unica urgente (riservatezza) e si cura bene solo insieme a BC-65/66;
+il punto 1 è piccolo e può andare subito; la 06 è un miglioramento, in coda ai fornitori.
+
+## BC-72 | La cartella `tests/browser` INTERA ha 77 rossi su 277, e il mio elenco di consegna ne girava solo una parte (misurato il 17/09/2026 fondendo BC-63) — APERTO
+
+**Misura:** build fusa di BC-63, banco 4176, un worker, 31,6 minuti: **197 passed · 77 failed · 3 skipped**. Dei 77: `baseline-shell`
+(debito già noto), `workspace-chooser` (28, l'intero file), `visual-matrix` (1), e sei in quattro file: `context-compactor` ×2,
+`immagini-chat` NATIVE-UI-02, `settings-fatti-reali` SETTINGS-FATTI-44, `ragionamento-compresso` SCHERMO-10 ×2 temi.
+**A/B sugli ultimi quattro file, stessa macchina, uno dopo l'altro:** build FUSA 6 failed / 32 passed; pacchetto di PRIMA
+(`public/` di `fd3bfd0b`) 5 failed / 33 passed — stesso insieme, tranne SCHERMO-10 nel tema chiaro che passa in un giro e cade
+nell'altro mentre lo scuro cade in entrambi ⇒ **non vengono da BC-63**; SCHERMO-10 è instabile o già rotto (era nel mio elenco
+verde della P0-bis: da riaccertare quando e perché è diventato rosso).
+⛔ **Il difetto di processo è lo stesso di BC-67:** consegno guardando un elenco scelto a mano, e ciò che sta fuori marcisce in
+silenzio. **Finita quando:** ogni file di `tests/browser` è o verde, o `test.fail()` dichiarato con la sua riga di coda, o
+cancellato perché prova una superficie che non esiste più (con la prova che non esiste); e la consegna gira la CARTELLA, non un
+elenco.
