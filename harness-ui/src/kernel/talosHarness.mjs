@@ -63,6 +63,15 @@ import { imageMessageContent } from '../chat-image-attachments.mjs'
 import { ESTENSIONI_ESCLUSE_PREDEFINITE } from '../elenco-profondo.mjs'
 import { creaFiltroGitignore } from '../gitignore-elenco.mjs'
 /*
+ * ⛔ F15 (17/09/2026) — la GRAMMATICA DEI SEGRETI vive in `path-policy.mjs`, dove già vive
+ * quella dei file di controllo: sono la stessa domanda («questo percorso è speciale?») fatta su
+ * due classi diverse, e tenerle nello stesso posto è il motivo per cui `.provider-runtime.json`
+ * compare in entrambe senza che nessuno debba ricordarselo. Pura, senza dipendenze esterne
+ * (solo `node:fs`/`node:os`/`node:path`) come gli altri tre import qui sopra: il kernel resta
+ * trasportabile nel bundle del banco.
+ */
+import { motivoDaChiedere } from '../path-policy.mjs'
+/*
  * ⛔ L1 (11/09/2026) — TRE costanti pure, non una dipendenza: `CARTELLA_RICERCA`/`NOME_RAPPORTO`
  * sono il posto dove vive il rapporto di una ricerca, e `idRicercaValido` la forma di un id.
  * Importate invece che ricopiate per la ragione di sempre: chi SCRIVE il rapporto (questo file) e
@@ -6135,6 +6144,42 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
     const sempreDaConfermare = ATTREZZI_SEMPRE_DA_CONFERMARE.includes(azione.tipo)
 
     /*
+     * ⛔⛔⛔⛔ F15, 17/09/2026 — LA SHELL CHIEDE DAVANTI A UN SEGRETO, ANCHE CON «SEMPRE».
+     * Owner, P0-bis corsia D: «entrambi stretto».
+     *
+     * Il difetto, misurato PRIMA della cura: con `permessiPerAttrezzo: { shell: 'sempre' }` —
+     * cioè la configurazione che una persona sceglie il primo giorno per non essere interrotta
+     * a ogni `ls` — un `cat ~/.ssh/id_rsa` girava senza che NESSUNO fosse interpellato:
+     * `chiediApprovazioneFn` non veniva chiamato nemmeno una volta. Quel «sempre» era stato
+     * dato per i comandi di lavoro, e si applicava anche alla chiave privata.
+     *
+     * ⇒ Due inneschi, e SOLO questi due (la grammatica sta in `path-policy.mjs`,
+     *   `motivoDaChiedere`, pura e provata da sola):
+     *   1. il testo del comando (o il percorso di `leggi`) NOMINA la classe dichiarata dei
+     *      segreti — `.env`, `~/.ssh`, `~/.aws`, `*.pem`, `id_rsa*`, il portachiavi di sistema,
+     *      il file delle chiavi di TALOS;
+     *   2. il percorso ESCE dal workspace E finisce in qualcosa di nascosto (segmento con `.`).
+     *   ⛔ Nient'altro. Nessuna euristica sul contenuto del comando: ogni «chiedi» in più
+     *   addestra a cliccare sì, e un sì cliccato senza leggere non protegge da niente.
+     *
+     * ⛔ E NARROWING PURO, mai il contrario: questo innesco può solo trasformare un «sempre»
+     *   in una domanda. Non scavalca `nega` (il ramo qui sotto resta il primo di tutti), non
+     *   apre un livello che negherebbe, non crea un permesso che prima non c'era. Se la
+     *   persona risponde no — o se non c'è nessuno a cui chiedere — l'azione non parte.
+     *
+     * ⛔ `leggi` è il caso speciale, e per costruzione: è l'UNICO attrezzo che arriva qui
+     *   senza passare da nessun altro motivo (il suo ramo chiama questo cancello soltanto
+     *   quando `motivoDaChiedere` ha già detto sì). Per questo `soloSegreto` salta i rami dei
+     *   livelli più sotto: un livello «lettura» deve poter LEGGERE — negarlo lì risponderebbe
+     *   «nessuna scrittura è permessa» a una lettura, che è falso e confonde chi lo riceve.
+     */
+    const segreto = (azione.tipo === 'shell' || azione.tipo === 'leggi')
+        ? motivoDaChiedere({ tipo: azione.tipo, comando: azione.comando, percorso: azione.percorso, cartella })
+        : null
+    const segretoForzaConferma = Boolean(segreto)
+    const soloSegreto = segretoForzaConferma && azione.tipo === 'leggi'
+
+    /*
      * ⭐⭐⭐ 29/8, continuazione FASE D — ENFORCEMENT della trifecta, non
      * più solo osservativa. Porta diretta del principio di `executor.ts`
      * (`forceConfirmation: tool.confirmation === 'always' || trifecta.closed`):
@@ -6172,10 +6217,10 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
     if (haOverride && override === 'nega') {
         return { consentito: false, via: 'permesso-per-attrezzo-nega', motivo: `l'attrezzo "${azione.tipo}" è disattivato per questa sessione (permesso per-attrezzo: nega).` }
     }
-    if (haOverride && override === 'sempre' && !trifectaChiude && !sempreDaConfermare) {
+    if (haOverride && override === 'sempre' && !trifectaChiude && !sempreDaConfermare && !segretoForzaConferma) {
         return { consentito: true, via: 'permesso-per-attrezzo-sempre' }
     }
-    if (!haOverride && livelloAccesso === 'lettura') {
+    if (!soloSegreto && !haOverride && livelloAccesso === 'lettura') {
         return { consentito: false, via: 'livello-lettura', motivo: 'la sessione è in sola lettura: nessuna scrittura, comando o documento è permesso in questo momento.' }
     }
     /*
@@ -6193,7 +6238,7 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
      *   senza `cartella`. Una ricerca senza una cartella propria non ha un posto dove
      *   depositare, e «non so dove» non è «ovunque».
      */
-    if (!haOverride && livelloAccesso === 'ricerca') {
+    if (!soloSegreto && !haOverride && livelloAccesso === 'ricerca') {
         if (azione.tipo !== 'research_deposit') {
             return {
                 consentito: false,
@@ -6212,7 +6257,7 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
             }
         }
     }
-    if (!haOverride && livelloAccesso === 'scrittura-area') {
+    if (!soloSegreto && !haOverride && livelloAccesso === 'scrittura-area') {
         /*
          * ⛔⛔⛔ PO-12, 13/09/2026 — LA TRAPPOLA TROVATA LEGGENDO QUESTO CANCELLO, non provandolo.
          * Questa riga elencava UN SOLO attrezzo (`scrivi`): un attrezzo di modifica appena nato
@@ -6259,13 +6304,24 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
      * ⛔ Il canale che manca resta un errore, non un permesso: il ramo `!chiediApprovazioneFn` qui
      * sotto continua a rifiutare chi avrebbe dovuto chiedere.
      */
-    const vaChiesto = sempreDaConfermare || (haOverride && override === 'chiedi') || trifectaForzaConferma || richiestoDalLivello
-    const viaRichiesta = sempreDaConfermare ? 'attrezzo-sempre-da-confermare' : trifectaForzaConferma ? 'trifecta-forza-conferma' : richiestoDalLivello ? 'livello-su-richiesta' : 'permesso-per-attrezzo-chiedi'
+    const vaChiesto = sempreDaConfermare || (haOverride && override === 'chiedi') || trifectaForzaConferma || richiestoDalLivello || segretoForzaConferma
+    /*
+     * ⛔ F15 — `segreto-forza-conferma` viene PRIMA di «trifecta» e di «per-attrezzo: chiedi»
+     * nella scelta della via: quando due meccanismi avrebbero chiesto la stessa cosa, la
+     * ricevuta deve nominare quello che dice di più a chi la rilegge. «C'era un segreto in
+     * mezzo» è un fatto sul comando; «l'attrezzo era su chiedi» è un fatto sulle impostazioni.
+     */
+    const viaRichiesta = segretoForzaConferma ? 'segreto-forza-conferma' : sempreDaConfermare ? 'attrezzo-sempre-da-confermare' : trifectaForzaConferma ? 'trifecta-forza-conferma' : richiestoDalLivello ? 'livello-su-richiesta' : 'permesso-per-attrezzo-chiedi'
     if (!vaChiesto) {
         return { consentito: true, via: 'nessun-vincolo' }
     }
     if (!chiediApprovazioneFn) {
-        const percheRichiesto = sempreDaConfermare
+        const percheRichiesto = segretoForzaConferma
+            // ⛔ F15 — al MODELLO si dice il fatto tecnico (è lui che legge questo testo e deve
+            //   capire cosa riprovare); la frase in lingua naturale è per la PERSONA, e viaggia
+            //   in `azione.segreto.frase` qui sotto. Due destinatari, due testi.
+            ? `il percorso "${segreto.percorso}" appartiene alla classe dei file riservati (chiavi, credenziali, portachiavi): serve una conferma umana anche con un permesso "sempre"`
+            : sempreDaConfermare
             ? 'questo attrezzo richiede sempre una conferma umana separata, per costruzione — mai un\'eccezione'
             : trifectaForzaConferma
                 ? 'la trifecta si chiude su questa chiamata (dati privati + contenuto non attendibile + un modo per farli uscire): il "sempre" concesso prima non basta più'
@@ -6303,7 +6359,19 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
          * `azione` originale intatta per ogni altro chiamante, PARITÀ
          * bit-per-bit già provata altrove per la sua forma.
          */
-        const domanda = chiediApprovazioneFn(trifectaForzaConferma ? { ...azione, trifecta: true } : azione)
+        /*
+         * ⛔ F15 — la RAGIONE viaggia con la domanda, come già per la trifecta: chi risponde
+         * deve vedere la frase in lingua naturale («Il comando tocca un file che può contenere
+         * chiavi o password (~/.ssh/id_rsa): vuoi che lo esegua?»), non dedurla dal comando.
+         * Campo ADDITIVO su un oggetto NUOVO (l'`azione` originale resta intatta per ogni altro
+         * chiamante), stessa forma già in uso qui sopra.
+         */
+        // ⛔ I due possono valere INSIEME, e allora la scheda deve portarli tutti e due: un `else`
+        //   qui avrebbe fatto sparire la trifecta ogni volta che un segreto la precedeva.
+        const azioneDaChiedere = (segretoForzaConferma || trifectaForzaConferma)
+            ? { ...azione, ...(trifectaForzaConferma ? { trifecta: true } : {}), ...(segretoForzaConferma ? { segreto } : {}) }
+            : azione
+        const domanda = chiediApprovazioneFn(azioneDaChiedere)
         approvato = gara ? await Promise.race([domanda, gara]) : await domanda
     }
     catch {
@@ -7761,9 +7829,40 @@ export async function talosLavora({
                      * messaggio che non nomina nessun campo e non dice cosa fare.
                      */
                     const percorso = percorsoDiFile(argomenti)
+                    /*
+                     * ⛔⛔⛔⛔ F15, 17/09/2026 — L'UNICO CANCELLO CHE `leggi` ATTRAVERSA, e solo
+                     * quando c'è qualcosa da chiedere.
+                     *
+                     * `leggi` è sola lettura e per questo non è mai passata da
+                     * `verificaPermessoScrittura` (vedi la sua doc: «elenca/cerca/leggi/naviga
+                     * non sono gated, per costruzione non mutano nulla»). Resta vero per ciò
+                     * che quel cancello giudica — il DANNO. Ma un segreto non si danneggia
+                     * leggendolo: si PORTA FUORI, e da lì in poi vive dentro la conversazione.
+                     * ⇒ Qui non si chiede il permesso di scrivere: si chiede se quel file
+                     *   specifico può entrare nel contesto.
+                     *
+                     * ⛔ La chiamata è CONDIZIONATA apposta: se `motivoDaChiedere` torna `null`
+                     *   — cioè in tutte le letture normali — il cancello non viene nemmeno
+                     *   sfiorato, e questo ramo è bit per bit quello di ieri. Non è un
+                     *   risparmio: è la garanzia che `leggi` non possa cominciare a essere
+                     *   negato da un livello di accesso che non l'ha mai riguardato.
+                     * ⛔ Il motivo si calcola due volte (qui e dentro il cancello) di
+                     *   proposito: è una funzione PURA sugli stessi dati, e il cancello deve
+                     *   restare vero anche se un giorno qualcun altro lo chiamerà con `leggi`
+                     *   senza aver fatto questo controllo.
+                     */
+                    const daChiedere = percorso === '' ? null : motivoDaChiedere({ tipo: 'leggi', percorso, cartella })
+                    const permessoLettura = daChiedere
+                        ? await verificaPermessoScrittura(
+                            { tipo: 'leggi', percorso },
+                            { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
+                        )
+                        : null
                     esito = percorso === ''
                         ? messaggioArgomentiAssenti('leggi', { troncati: argomentiTroncati.has(c.id) })
-                        : await disco.leggi(percorso)
+                        : permessoLettura && !permessoLettura.consentito
+                            ? `REFUSED. ${permessoLettura.motivo} The file was not read.`
+                            : await disco.leggi(percorso)
                 }
                 else if (nome === 'scrivi') {
                     /*

@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 
-import { ePercorsoDiControllo, FILE_DI_CONTROLLO, PathPolicyError, isPathInside, openContainedFile, resolveContainedRealPath } from '../src/path-policy.mjs';
+import { ePercorsoDiControllo, esceDalWorkspaceVersoUnNascosto, FILE_DI_CONTROLLO, motivoDaChiedere, nominaUnSegreto, PathPolicyError, PERCORSI_SEGRETI, isPathInside, openContainedFile, resolveContainedRealPath } from '../src/path-policy.mjs';
 import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /*
@@ -231,4 +231,148 @@ test('ePercorsoDiControllo AL CONTRARIO: input degeneri (non stringa, vuoti) tor
   assert.equal(ePercorsoDiControllo('/x', ''), false);
   assert.equal(ePercorsoDiControllo('/x', null), false);
   assert.equal(ePercorsoDiControllo(undefined, undefined), false);
+});
+
+/*
+ * ⛔⛔⛔⛔ F15 (17/09/2026) — LA GRAMMATICA DEI SEGRETI, provata da sola.
+ *
+ * Questi test non avviano nessuna sessione e non toccano il disco: `motivoDaChiedere` e le sue
+ * due metà sono funzioni PURE, ed è il motivo per cui stanno qui invece che nel kernel. Le prove
+ * end-to-end (il cancello che chiede davvero, lo stop, il «nega» che resta «nega») stanno in
+ * `tests/shell-chiede-davanti-a-un-segreto.test.mjs`.
+ *
+ * ⛔ `home` e `cartella` sono SEMPRE passate a mano: una prova che cambia esito a seconda della
+ *   macchina su cui gira non è una prova.
+ */
+const HOME_DI_PROVA = '/casa/persona';
+const LAVORO_DI_PROVA = '/casa/persona/progetti/talos';
+const daChiedere = (comando) => motivoDaChiedere({ tipo: 'shell', comando, cartella: LAVORO_DI_PROVA, home: HOME_DI_PROVA });
+
+test('F15 — la CLASSE DICHIARATA innesca la domanda, in tutte le sue voci', () => {
+  const nominano = [
+    'cat .env', 'cat .env.local', 'cat config/.env.production', 'cat prod.env',
+    'cat ~/.ssh/id_rsa', 'ls ~/.ssh', 'cat ~/.ssh/config',
+    'cat ~/.aws/credentials', 'cat ~/.gnupg/secring.gpg', 'cat ~/.netrc', 'cat ~/.npmrc', 'cat ~/.pypirc',
+    'cat ~/.docker/config.json', 'cat ~/.kube/config',
+    'openssl x509 -in server.pem', 'cat chiave.key', 'cat certificato.p12', 'cat certificato.pfx',
+    'cat id_ed25519', 'cat ../.provider-runtime.json', 'cat ~/.local/share/keyrings/login.keyring',
+    'cmdkey /list', 'vaultcmd /list', 'secret-tool search servizio talos',
+    'security find-generic-password -s talos',
+  ];
+  const muti = nominano.filter((c) => daChiedere(c) === null);
+  assert.deepEqual(muti, [], `queste voci della classe dichiarata devono innescare la domanda: ${muti.join(' · ')}`);
+});
+
+test('F15 — le tre scritture della home e i separatori Windows portano allo STESSO esito', () => {
+  for (const scrittura of ['~/.aws/credentials', '$HOME/.aws/credentials', '${HOME}/.aws/credentials', '%USERPROFILE%/.aws/credentials', '~\\.aws\\credentials', '"~/.aws/credentials"']) {
+    assert.notEqual(daChiedere(`cat ${scrittura}`), null, `«${scrittura}» deve innescare come le altre`);
+  }
+});
+
+/*
+ * ⛔⛔⛔ B2, 17/09/2026 — IL TEST QUI SOPRA NON MORDEVA, e l'ha trovato il controllore
+ * togliendo l'espansione della home e rilanciando: la suite restava 52/52. Il motivo è che ogni
+ * suo caso nomina `.aws`, che appartiene alla CLASSE e scatta comunque, espansione o no —
+ * misurava il secondo innesco credendo di misurare il primo.
+ * ⇒ Questi casi innescano SOLO via CONFINE, cioè soltanto se la home viene espansa davvero:
+ *   senza espansione il pezzo resta relativo, risolve DENTRO il workspace, e la domanda sparisce.
+ *   Sono i tre casi che diventano rossi se la riga dell'espansione se ne va.
+ */
+test('F15 — B2: i casi che MORDONO sull\'espansione della home (solo confine, nessuna voce della classe)', () => {
+  for (const comando of [
+    'cat %USERPROFILE%\\.config\\appunti.txt',
+    'Get-Content $env:USERPROFILE\\.vault\\nota.txt',
+    'cat $HOME/.config/x',
+    'cat ${HOME}/.config/x',
+    'cat ~/.config/x',
+  ]) {
+    const esito = daChiedere(comando);
+    assert.equal(esito?.classe, 'fuori-workspace-nascosto', `«${comando}» deve innescare SOLO via confine — cioè solo se la home è stata espansa`);
+  }
+  // ⛔ AL CONTRARIO nello stesso test: senza la home davanti, le stesse cartelle nascoste sono
+  //   dentro il workspace e NON chiedono. È la prova che sopra si misura l'espansione, non altro.
+  for (const comando of ['cat .config/appunti.txt', 'cat .vault/nota.txt', 'cat .config/x']) {
+    assert.equal(daChiedere(comando), null, `«${comando}» è dentro il workspace: non deve chiedere`);
+  }
+});
+
+test('F15 AL CONTRARIO — i comandi comuni NON chiedono: ogni «chiedi» in più addestra a cliccare sì', () => {
+  const comuni = [
+    'echo $HOME', 'echo ~', 'ls -la', 'ls', 'git status --short', 'git log --oneline -3',
+    'npm run test:kernel', 'npm install', 'node --version', 'node scripts/x.mjs --sorgente=src/app.js',
+    'grep -rn "chiave" ./src', 'cat package.json', 'mkdir -p build/out', 'rm build/tmp.txt',
+    'curl https://example.com/.well-known/openid-configuration', 'echo fatto > build/marker.txt',
+    'cat .env.example', 'cat .env.sample', 'cat id_rsa.pub', 'cat .ssh/id_rsa.pub',
+    'cat .cache/appunti.txt', 'ls ./.git', 'cat ../fratello/note.txt', 'cd .. && ls',
+  ];
+  const chiesti = comuni.filter((c) => daChiedere(c) !== null);
+  assert.deepEqual(chiesti, [], `questi comandi NON devono chiedere: ${chiesti.join(' · ')}`);
+});
+
+/*
+ * ⛔⛔⛔ B3, 17/09/2026 — L'ESENZIONE `.pub` VINCE ANCHE SUL CONFINE, e prima non era così.
+ *
+ * Il difetto era una incoerenza fra codice, commento e test: il commento su `esenzioniOvunque`
+ * portava come esempio `~/.ssh/id_rsa.pub`, e proprio su quell'esempio l'esenzione era INERTE —
+ * il percorso chiedeva lo stesso, inciampando nel confine. Un'esenzione che non esenta il caso
+ * che il suo commento cita non è un'esenzione: è una frase.
+ * ⇒ Scelta (indicazione del controllore, e la ragione regge): una chiave pubblica è pubblica,
+ *   chiedere lì insegna a cliccare sì e la volta che conta — `id_rsa`, senza `.pub` — la persona
+ *   clicca sì per abitudine. Vale SOLO per `.pub` e SOLO per il file: la CARTELLA `~/.ssh` resta
+ *   un segreto, perché `ls ~/.ssh` elenca anche ciò che pubblico non è.
+ */
+test('F15 — B3: `.pub` è esente in entrambi gli inneschi, la cartella no', () => {
+  assert.equal(daChiedere('cat .ssh/id_rsa.pub'), null, 'dentro il workspace');
+  assert.equal(daChiedere('cat ~/.ssh/id_rsa.pub'), null, 'e fuori: l\'esenzione vince anche sul confine');
+  assert.equal(daChiedere('cat ~/.config/chiave.pub'), null, 'una chiave pubblica è pubblica ovunque stia');
+  assert.equal(daChiedere('cat ~/.ssh/id_rsa')?.classe, 'segreto', 'ma la chiave PRIVATA resta un segreto');
+  assert.equal(daChiedere('ls ~/.ssh')?.classe, 'segreto', 'e la CARTELLA resta un segreto: elenca anche ciò che pubblico non è');
+  assert.equal(daChiedere('cat ~/.ssh/config')?.classe, 'segreto', 'e ogni altro file lì dentro pure');
+  assert.equal(daChiedere('cat ~/.config/nota.txt')?.classe, 'fuori-workspace-nascosto', 'un file NON `.pub` fuori dal workspace inciampa ancora nel confine');
+});
+
+test('F15 — il CONFINE vuole DUE condizioni: fuori dal workspace E nascosto', () => {
+  const fuoriENascosto = esceDalWorkspaceVersoUnNascosto('../.config/appunti.txt', { cartella: LAVORO_DI_PROVA, home: HOME_DI_PROVA });
+  assert.equal(fuoriENascosto?.classe, 'fuori-workspace-nascosto');
+  // Fuori ma NON nascosto: no. Nascosto ma DENTRO: no. Nessuna delle due: no.
+  assert.equal(esceDalWorkspaceVersoUnNascosto('../fratello/note.txt', { cartella: LAVORO_DI_PROVA, home: HOME_DI_PROVA }), null);
+  assert.equal(esceDalWorkspaceVersoUnNascosto('.cache/appunti.txt', { cartella: LAVORO_DI_PROVA, home: HOME_DI_PROVA }), null);
+  assert.equal(esceDalWorkspaceVersoUnNascosto('src/app.js', { cartella: LAVORO_DI_PROVA, home: HOME_DI_PROVA }), null);
+  // ⛔ Senza radice non si può dire «fuori»: si tace, non si indovina.
+  assert.equal(esceDalWorkspaceVersoUnNascosto('../.config/appunti.txt', { home: HOME_DI_PROVA }), null);
+});
+
+test('F15 — la COPIA per la persona: lingua naturale, nomina il file, nessun nome tecnico', () => {
+  const comando = daChiedere('cat ~/.ssh/id_rsa');
+  assert.equal(comando.frase, 'Il comando tocca un file che può contenere chiavi o password (~/.ssh/id_rsa): vuoi che lo esegua?');
+  const lettura = motivoDaChiedere({ tipo: 'leggi', percorso: '~/.aws/credentials', cartella: LAVORO_DI_PROVA, home: HOME_DI_PROVA });
+  assert.equal(lettura.frase, 'Questa lettura apre un file che può contenere chiavi o password (~/.aws/credentials): vuoi che la faccia?');
+  const portachiavi = daChiedere('cmdkey /list');
+  assert.equal(portachiavi.frase, 'Il comando apre il portachiavi del sistema, dove sono custodite le password: vuoi che lo esegua?');
+  const confine = daChiedere('cat ../.config/appunti.txt');
+  assert.equal(confine.frase, 'Il comando tocca una cartella nascosta fuori dalla cartella di lavoro (../.config/appunti.txt): vuoi che lo esegua?');
+  for (const frase of [comando.frase, lettura.frase, portachiavi.frase, confine.frase]) {
+    for (const tecnico of ['shell', 'leggi', 'workspace', 'PERCORSI_SEGRETI', 'permessiPerAttrezzo', 'null']) {
+      assert.ok(!frase.includes(tecnico), `nessun nome tecnico nella copia: «${tecnico}» in «${frase}»`);
+    }
+  }
+});
+
+test('F15 AL CONTRARIO — input degeneri tornano null, mai un\'eccezione', () => {
+  for (const testo of [undefined, null, '', '   ', 123, {}]) {
+    assert.equal(motivoDaChiedere({ tipo: 'shell', comando: testo, cartella: LAVORO_DI_PROVA, home: HOME_DI_PROVA }), null);
+  }
+  assert.equal(motivoDaChiedere(), null);
+  assert.equal(nominaUnSegreto('', { home: HOME_DI_PROVA }), null);
+  assert.equal(esceDalWorkspaceVersoUnNascosto(null, { cartella: LAVORO_DI_PROVA }), null);
+});
+
+test('F15 — la classe è DICHIARATA e congelata: chi la legge non può cambiarla per sbaglio', () => {
+  assert.equal(Object.isFrozen(PERCORSI_SEGRETI), true);
+  assert.equal(Object.isFrozen(PERCORSI_SEGRETI.cartelle), true);
+  assert.ok(PERCORSI_SEGRETI.cartelle.includes('.ssh') && PERCORSI_SEGRETI.cartelle.includes('.aws'));
+  // ⛔ Il file delle chiavi di TALOS sta in ENTRAMBE le liste, e le due dicono cose diverse:
+  //   `FILE_DI_CONTROLLO` guarda le SCRITTURE del modello, questa guarda shell e letture.
+  assert.ok(PERCORSI_SEGRETI.nomiFile.includes('.provider-runtime.json'));
+  assert.ok(FILE_DI_CONTROLLO.file.includes('.provider-runtime.json'));
 });

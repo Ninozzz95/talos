@@ -15,6 +15,10 @@ import {
   SOGLIE_STALLO_PREDEFINITE,
 } from '../src/session-registry.mjs';
 import { CustomTaskError } from '../src/custom-task.mjs';
+// ⛔ F15 (17/09/2026) — il kernel VERO: da quando il canale di approvazione si costruisce sempre,
+//   le garanzie che prima si leggevano dalla sua ASSENZA («in sola lettura non scrive», «sempre e
+//   nega li decide il cancello da solo») vanno provate dove vivono davvero, cioè nel cancello.
+import { talosLavora as talosLavoraReale } from '../src/kernel/talosHarness.mjs';
 // BC-09 (13/09/2026): la copia locale dei ritentativi e diventata l'aiuto condiviso, uno solo per tutta la suite.
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
@@ -934,7 +938,10 @@ test('OPEN-WITH-TALOS-REGISTRY-01 — un launch id server-owned usa Workspace wr
   assert.ok(risultato.sessionId);
   assert.equal(finta.ultimoInput.cartella, '/tmp/workspace-da-shell');
   assert.equal(finta.ultimoInput.livelloAccesso, undefined);
-  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined);
+  // ⛔ F15 (17/09) — ciò che questa riga protegge è «Workspace write, non Full access», e lo dice
+  //   `livelloAccesso` qui sopra. Il canale ora c'è sempre (vedi la doc a :1031): la sua presenza
+  //   non concede niente — è solo il modo di CHIEDERE invece di negare.
+  assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function');
   assert.equal(registro.elenca().find((sessione) => sessione.sessionId === risultato.sessionId)?.permessi, 'Workspace write');
   assert.deepEqual(consumati, ['launch-vero']);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
@@ -1028,26 +1035,70 @@ test('⭐⭐ un resume eredita il modelloPlanner della voce originale, mai perso
  * assenza di un'approvazione interattiva è esattamente il gap che
  * "On request" qui sotto colma).
  */
-test('⭐ default: senza permessi espliciti, la voce è "Workspace write" — nessun livelloAccesso, nessun chiediApprovazioneFn', () => {
+/*
+ * ⛔⛔⛔⛔ F15, 17/09/2026 — QUESTI TEST FISSAVANO UN CONTRATTO CHE È CAMBIATO, di proposito.
+ *
+ * Fino a oggi il registro costruiva `chiediApprovazioneFn` SOLO per «Su richiesta» (o se un
+ * attrezzo era su «chiedi»), e questi test lo verificavano con `chiediApprovazioneFn ===
+ * undefined`. Quel canale assente faceva sì che un cancello che deve CHIEDERE finisse per
+ * NEGARE: il kernel, davanti a un `vaChiesto` vero senza canale, risponde `REFUSED … nessun
+ * canale di approvazione attivo`. Misurato su F15: `cat .env` dentro il workspace, che prima
+ * girava, diventava REFUSED nella configurazione PREDEFINITA.
+ *
+ * ⇒ Il canale ora si costruisce sempre. ⛔ Ma la GARANZIA che questi test proteggevano non è
+ *   «il canale non esiste»: è «una sessione in sola lettura non scrive, e una predefinita non
+ *   comincia a chiedere per ogni cosa». Quella garanzia vive nel LIVELLO, non nell'assenza del
+ *   canale — e infatti è ciò che questi test asseriscono adesso, insieme al fatto che il canale
+ *   c'è. `livelloAccesso` è rimasto identico in tutti e tre i casi: quello è il contratto vero.
+ */
+test('⭐ default: senza permessi espliciti, la voce è "Workspace write" — nessun livelloAccesso, e il canale c\'è (F15)', () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero');
 
   assert.equal(finta.ultimoInput.livelloAccesso, undefined);
-  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined);
+  assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function', 'il canale esiste sempre: senza, un cancello che deve chiedere nega');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
-test('⭐⭐⭐ "Read only" diventa livelloAccesso:\'lettura\' per il kernel, MAI chiediApprovazioneFn', () => {
+test('⭐⭐⭐ "Read only" diventa livelloAccesso:\'lettura\' per il kernel — è il LIVELLO a vietare la scrittura, non l\'assenza del canale', () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero', { permessiScelto: 'Read only' });
 
   assert.equal(finta.ultimoInput.livelloAccesso, 'lettura');
-  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined);
+  assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
+ * ⛔⛔⛔ E LA GARANZIA VERA, PROVATA INVECE DI ESSERE DEDOTTA: il test qui sopra prima diceva
+ * «niente canale ⇒ non può scrivere». Tolta quella premessa, la frase va PROVATA — altrimenti
+ * si è cambiato un contratto fidandosi di un ragionamento. Il kernel vero, in sola lettura, con
+ * un canale che direbbe SÌ a tutto: la scrittura resta negata e il file non compare.
+ */
+test('⛔⛔⛔ AL CONTRARIO (F15) — in sola lettura, un canale che approva TUTTO non fa passare una scrittura', async (t) => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-f15-lettura-'));
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  const risposte = [
+    { role: 'assistant', content: null, tool_calls: [{ id: 'c1', function: { name: 'scrivi', arguments: '{"percorso":"nuovo.txt","contenuto":"ciao"}' } }] },
+    { role: 'assistant', content: 'fatto', tool_calls: [] },
+  ];
+  let indice = 0;
+  const fetchDiRete = async () => {
+    const scelta = risposte[Math.min(indice++, risposte.length - 1)];
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: scelta }], usage: { prompt_tokens: 1, completion_tokens: 1 } }), text: async () => '' };
+  };
+  let interpellato = 0;
+  await talosLavoraReale({
+    cartella, task: { consegna: 'prova' }, modello: 'x', chiave: 'y', fetchDiRete,
+    livelloAccesso: 'lettura',
+    chiediApprovazioneFn: async () => { interpellato += 1; return true; },
+  });
+  assert.equal(existsSync(join(cartella, 'nuovo.txt')), false, 'il livello «lettura» nega PRIMA di chiedere: il canale non lo scavalca');
+  assert.equal(interpellato, 0, 'e non viene nemmeno interpellato: non è una domanda a cui si può rispondere sì');
 });
 
 test('⭐⭐⭐ 06/9 — "On request" dichiara il LIVELLO al kernel, oltre al canale', () => {
@@ -1076,7 +1127,9 @@ test('FULL-ACCESS-REGISTRY-01 Full access arriva esplicito al kernel, Workspace 
     const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
     registro.avvia('task-vero', { permessiScelto });
     assert.equal(finta.ultimoInput.livelloAccesso, permessiScelto === 'Full access' ? 'accesso-pieno' : undefined, permessiScelto);
-    assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, permessiScelto);
+    // ⛔ F15 (17/09) — il contratto che questa riga fissa è il LIVELLO, e resta identico nei due casi.
+    //   Il canale c'è sempre (doc a :1031): serve a chiedere, non a permettere.
+    assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function', permessiScelto);
     finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
   }
 });
@@ -1374,14 +1427,37 @@ test('⭐⭐⭐ "Workspace write" con permessiPerAttrezzo:{shell:\'chiedi\'} COS
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
-test('⭐⭐ AL CONTRARIO — "Workspace write" con permessiPerAttrezzo SENZA alcun \'chiedi\' (solo sempre/nega) NON costruisce chiediApprovazioneFn', () => {
-  const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
-
-  registro.avvia('task-vero', { permessiScelto: 'Workspace write', permessiPerAttrezzoScelto: { scrivi: 'sempre', shell: 'nega' } });
-
-  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, 'sempre/nega non hanno bisogno di un canale interattivo: li decide il gate da solo');
-  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+/*
+ * ⛔ F15 (17/09/2026) — questo test provava «sempre/nega non costruiscono il canale» per dire
+ * «li decide il gate da solo». La premessa è caduta (il canale c'è sempre, doc a :1031), la
+ * frase che contava no — e adesso si prova quella, sul kernel VERO invece che su un proxy: con
+ * `scrivi:'sempre'` e `shell:'nega'`, un canale che direbbe sì a tutto non viene interpellato
+ * nemmeno una volta. È una prova più forte di quella di prima, non più debole.
+ */
+test('⭐⭐ AL CONTRARIO — "sempre"/"nega" li decide il cancello DA SOLO: con un canale che approverebbe tutto, ZERO domande', async (t) => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-f15-sempre-nega-'));
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  const risposte = [
+    { role: 'assistant', content: null, tool_calls: [
+      { id: 'c1', function: { name: 'scrivi', arguments: '{"percorso":"nuovo.txt","contenuto":"ciao"}' } },
+      { id: 'c2', function: { name: 'shell', arguments: '{"comando":"echo segno>marker.txt"}' } },
+    ] },
+    { role: 'assistant', content: 'fatto', tool_calls: [] },
+  ];
+  let indice = 0;
+  const fetchDiRete = async () => {
+    const scelta = risposte[Math.min(indice++, risposte.length - 1)];
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: scelta }], usage: { prompt_tokens: 1, completion_tokens: 1 } }), text: async () => '' };
+  };
+  let interpellato = 0;
+  await talosLavoraReale({
+    cartella, task: { consegna: 'prova' }, modello: 'x', chiave: 'y', fetchDiRete,
+    permessiPerAttrezzo: { scrivi: 'sempre', shell: 'nega' },
+    chiediApprovazioneFn: async () => { interpellato += 1; return true; },
+  });
+  assert.equal(interpellato, 0, 'sempre/nega non hanno bisogno di un canale interattivo: li decide il cancello da solo');
+  assert.equal(existsSync(join(cartella, 'nuovo.txt')), true, '«sempre» scrive senza chiedere');
+  assert.equal(existsSync(join(cartella, 'marker.txt')), false, '«nega» resta «nega», e non diventa una domanda');
 });
 
 /*
@@ -1504,7 +1580,16 @@ test('⭐⭐⭐ W1-13 — il cancello chiede approvazione ANCHE in Full access, 
   });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
 
-  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, 'Full access non costruisce mai il canale ordinario — è esattamente il buco che questa riga chiude');
+  /*
+   * ⛔ F15 (17/09/2026) — questa riga diceva «Full access non costruisce mai il canale
+   * ordinario». Non è più vero (vedi la doc a :1031: il canale c'è sempre, altrimenti un
+   * cancello che deve chiedere nega), e NON era comunque ciò che il test prova: W1-13 prova che
+   * il cancello dei file di controllo passa dal PROPRIO canale, quello dentro `hookFn`, e chiede
+   * anche dove `verificaPermessoScrittura` lascerebbe passare in silenzio. Quella prova è le
+   * venti righe qui sotto, ed è intatta — il livello di questa sessione resta `accesso-pieno`,
+   * cioè il caso in cui il kernel NON chiederebbe.
+   */
+  assert.equal(finta.ultimoInput.livelloAccesso, 'accesso-pieno', 'è il caso in cui il cancello ordinario del kernel non chiederebbe: il buco che questa riga chiude');
 
   const ricevuti = [];
   registro.iscriviti(sessionId, (e) => ricevuti.push(e));
