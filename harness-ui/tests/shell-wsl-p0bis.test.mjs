@@ -34,13 +34,23 @@ function wslRisponde() {
     try {
         const r = spawnSync('wsl.exe', ['-l', '-q'], { encoding: 'utf16le', timeout: 10_000, windowsHide: true })
         if (r.status !== 0) return false
-        return String(r.stdout || '').replace(/\0/g, '').split('\n').some((riga) => riga.trim() !== '')
+        if (!String(r.stdout || '').replace(/\0/g, '').split('\n').some((riga) => riga.trim() !== '')) return false
+        /*
+         * ⛔ 17/09 — ELENCARE le distro non prova che una distro PARTA. Misurato nella suite intera dopo la
+         *   fusione della P0-bis: `wsl -l -q` rispondeva, ma la macchina virtuale si stava riavviando e ogni
+         *   comando tornava «Errore irreparabile · Codice errore: Wsl/Service/…» in UTF-16 — cinque prove
+         *   d'integrazione ROSSE per un guasto dell'ambiente; due minuti dopo, stesse prove, 50 su 50.
+         *   ⇒ La guardia esegue davvero un comando: se WSL non lo porta a termine, le prove si DICHIARANO
+         *   saltate col loro motivo, che è il contratto scritto in testa a questo file.
+         */
+        const prova = spawnSync('wsl.exe', ['--exec', 'true'], { timeout: 30_000, windowsHide: true })
+        return prova.status === 0
     }
     catch { return false }
 }
 
 const WSL_C_E = wslRisponde()
-const MOTIVO_SALTO = 'wsl.exe non risponde su questa macchina (`wsl -l -q` vuoto o in errore): prova d\'integrazione NON eseguita, non passata'
+const MOTIVO_SALTO = 'wsl.exe non risponde su questa macchina (`wsl -l -q` vuoto o in errore, oppure la distro non esegue un comando): prova d\'integrazione NON eseguita, non passata'
 
 let cartella
 before(() => { cartella = mkdtempSync(join(tmpdir(), 'p0bis-shell-')) })

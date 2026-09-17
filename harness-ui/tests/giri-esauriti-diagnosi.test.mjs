@@ -3,8 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { nomeUmanoAttrezzo as nomeUmanoAttrezzoCondiviso, nomeDiRipiegoAttrezzo } from '../frontend/src/components/nomi-attrezzi.js';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const root =join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = await readFile(join(root, 'frontend/src/legacy/app.js'), 'utf8');
 const css = await readFile(join(root, 'frontend/src/styles/index.css'), 'utf8');
 
@@ -16,7 +17,15 @@ function ok(testo, regex, messaggio) { assert.ok(regex.test(testo), messaggio ||
  * `state` finto — stesso attrezzo di `aperti-minori.test.mjs`: si prova il
  * COMPORTAMENTO, non solo il testo.
  */
-function funzioneDalMonolite(nome, { state = {}, deps = [] } = {}) {
+/*
+ * 17/09 — `legami`: dal BC-59 `nomeUmanoAttrezzo` non porta più una copia della mappa dei nomi, legge quella UNICA
+ * di `components/nomi-attrezzi.js`. Un nome importato non si estrae dal testo del monolite: si inietta qui, così il
+ * test valuta la funzione VERA di app.js con la mappa VERA (trovato dalla suite intera dopo la fusione della corsia C:
+ * `ReferenceError: nomeUmanoAttrezzoCondiviso is not defined`, tre rossi che nessun cancello della corsia vedeva).
+ */
+const LEGAMI_NOMI = { nomeUmanoAttrezzoCondiviso, nomeDiRipiegoAttrezzo };
+
+function funzioneDalMonolite(nome, { state = {}, deps = [], legami = LEGAMI_NOMI } = {}) {
   const estrai = (n) => {
     const inizio = app.indexOf(`  function ${n}(`);
     assert.ok(inizio > 0, `${n} deve esistere in app.js`);
@@ -25,7 +34,7 @@ function funzioneDalMonolite(nome, { state = {}, deps = [] } = {}) {
   };
   const sorgente = deps.map(estrai).join('\n') + estrai(nome);
   // eslint-disable-next-line no-new-func
-  return new Function('state', `${sorgente}\nreturn ${nome};`)(state);
+  return new Function('state', ...Object.keys(legami), `${sorgente}\nreturn ${nome};`)(state, ...Object.values(legami));
 }
 
 const DEPS_RIASSUNTO = ['chiaveStabile', 'chiaveChiamataAttrezzo'];
@@ -195,8 +204,10 @@ test('O-02/owner — nomeUmanoAttrezzo: un nome che una persona capisce per OGNI
   assert.equal(nomeUmanoAttrezzo('delega_sottotask'), 'delega a un sotto-agente');
   assert.equal(nomeUmanoAttrezzo('time_now'), 'data e ora');
   assert.equal(nomeUmanoAttrezzo('generate_image'), 'generazione di un’immagine');
-  // ⛔ Ripiego ONESTO: un attrezzo nato da `tool_create` e mai etichettato mostra il suo nome grezzo, mai un'etichetta inventata.
-  assert.equal(nomeUmanoAttrezzo('attrezzo_inventato_dall_owner'), 'attrezzo_inventato_dall_owner');
+  // ⛔ Ripiego ONESTO (17/09): un attrezzo nato da `tool_create` e mai etichettato mostra il SUO nome, reso leggibile —
+  //   mai un'etichetta inventata («attrezzo senza nome»), mai l'id grezzo coi trattini bassi (regola del 04/09).
+  assert.equal(nomeUmanoAttrezzo('attrezzo_inventato_dall_owner'), 'attrezzo inventato dall owner');
+  assert.equal(nomeUmanoAttrezzo('mcp__github__create_issue'), 'create issue (github)');
   assert.equal(nomeUmanoAttrezzo(undefined), '');
 });
 

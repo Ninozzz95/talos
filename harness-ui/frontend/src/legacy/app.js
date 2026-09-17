@@ -43,7 +43,7 @@ import { montaHf } from '../components/hf-catalogo.js';
 import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
 import { aggiornaInspector, processiDagliEventi, schedaAgentiDaRileggere, titoloMessaggioUtente, titoloRispostaDaTurno, uscitaDaTestoAttrezzo } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento; 16/09 P0-E: il codice di uscita si legge dal risultato dell'attrezzo
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
-import { nomeUmanoAttrezzo as nomeUmanoAttrezzoCondiviso } from '../components/nomi-attrezzi.js'; // BC-59 (17/09): la mappa dei nomi umani vive in UN posto solo — qui c'era una copia, e si era fermata al 12/09
+import { nomeUmanoAttrezzo as nomeUmanoAttrezzoCondiviso, nomeDiRipiegoAttrezzo } from '../components/nomi-attrezzi.js'; // BC-59 (17/09): la mappa dei nomi umani vive in UN posto solo — qui c'era una copia, e si era fermata al 12/09
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
@@ -2571,7 +2571,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   nel `title`, come dettaglio secondario. Restituire l’id era comodo e rompeva la regola
      *   in silenzio proprio nel caso in cui serviva rispettarla.
      */
-    return nomeUmanoAttrezzoCondiviso(nome) || 'attrezzo senza nome';
+    /* 17/09: né l'id grezzo né un'etichetta inventata — il nome stesso, reso leggibile (vedi `nomeDiRipiegoAttrezzo`). */
+    return nomeUmanoAttrezzoCondiviso(nome) || nomeDiRipiegoAttrezzo(nome);
   }
 
   /** Serializzazione stabile (chiavi ordinate, ricorsiva): due argomenti equivalenti scritti diversi devono dare la STESSA chiave. */
