@@ -706,7 +706,7 @@ documenta che il sottotitolo è «Tema <preset> · <chi serve il modello>» per 
 mappano a nomi umani in un posto solo («Z.AI», «OpenRouter», «Anthropic»…). **Cura:** leggere il nome dal registro dei fornitori
 (lo stesso che usa la sezione Fornitori), con test che per ogni fornitore del registro il piede non mostri mai l'id.
 
-## BC-62 | Aprendo la scheda «Terminale» nasce ogni volta una NUOVA tab di terminale, senza motivo (owner 17/09/2026, dal vivo) — APERTO, debito
+## BC-62 | Aprendo la scheda «Terminale» nasce ogni volta una NUOVA tab di terminale, senza motivo (owner 17/09/2026, dal vivo) — ✅ CURATO il 17/09 (`e5f4d9b1`), sul 4174, da confermare dal vivo dall'owner
 
 **Cosa hai visto:** «quando apro scheda terminale si apre una nuova tab terminale senza motivo». Entrare nella vista Terminale
 non deve creare niente: deve mostrare le schede che ci sono; una scheda nuova nasce solo da «+ Nuovo» (o se non ce n'è nessuna).
@@ -761,4 +761,12 @@ prossima release).
 ma due chiamanti creano una scheda se non trovano il mount: `app.js:20499` (`if (!pane.querySelector('.talos-terminal__mount')) void
 nuovaSchedaTerminale()`) e `:11912`. Dalla P0/A il terminale della sezione viene SPOSTATO nel pannello sotto il composer e viceversa:
 se il mount sta nell'altro ospite, il controllo «non c'è» è vero e nasce una scheda in più. Va riprodotto su un banco (crea PTY: mai il 4174).
+
+**BC-62 — causa MISURATA e cura (17/09), che SMENTISCE la mia ipotesi di lavoro qui sopra:** il mount spostato fra sezione e
+pannello non c'entra (senza sessione: una scheda sola su nove passaggi). Con una sessione VERA su un banco, al primo ingresso
+partivano due `GET …/terminals` nello stesso millisecondo e due `POST …/terminals` 7 ms dopo: `caricaSchedeTerminale` è un
+«controlla poi agisci» con una POST idempotente solo a registro vuoto, e due chiamanti insieme la facevano partire due volte —
+la seconda creava «tu · Git Bash 2». Cura: volo unico per sessione (chi arriva a metà riceve la stessa promessa). Cancello
+`tests/browser/terminale-una-scheda-sola.spec.mjs`: una scheda per sessione su A → B → A e dopo una ricarica, e al più UNA POST per
+sessione; rosso sul pacchetto senza cura («attese 1, trovate 2»), verde dopo; «Nuovo» ne aggiunge esattamente una.
 

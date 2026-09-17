@@ -273,8 +273,9 @@ senza il motore sarebbe una finestrella che incolla testo con più passaggi. ⛔
 # FASE 3-quater · PO-27 — Via la modale «Primo avvio» — **approvata dall'owner il 17/09** («sì confermo rimozione»)
 
 > **Tre DEBITI segnalati dall'owner il 17/09 («segna adesso i bug come debiti»), da fare con PO-27 subito dopo la P0-bis:**
-> **BC-62** — aprire la vista Terminale crea ogni volta una nuova tab di terminale: finita quando aprire e richiudere dieci volte
-> lascia lo stesso numero di schede, una PTY per scheda. **BC-63** — la Revisione deve usare lo STESSO componente a schede
+> **BC-62** — aprire la vista Terminale creava una tab in più: ✅ **curato il 17/09** (`e5f4d9b1`: due caricamenti insieme facevano
+> partire due POST, la seconda creava una scheda vera; ora volo unico per sessione, con cancello browser), sul 4174, **da confermare
+> dal vivo dall'owner**. **BC-63** — la Revisione deve usare lo STESSO componente a schede
 > (stile Chrome) del Terminale: un componente condiviso fra Terminale, Browser e Revisione, zero copie. **BC-64** —
 > «Visualizza in Esplora file» non apriva niente: ✅ **curato il 17/09** (`0f711a4c`: la politica di processo nascondeva la finestra,
 > misurato `Visible=False`), consegnato sul 4174 e **confermato dal vivo dall'owner il 17/09 («ok funziona»)**; l'app installata lo prende alla prossima release.
