@@ -266,7 +266,9 @@ fusione, non in parallelo.
 > DICHIARATO e ripetibile («queste cinque in parallelo, un revisore per ognuna, poi la sintesi») con uscita strutturata e ripresa.
 > Tetti degli altri, letti nel loro codice il 10/09: Claude Code 20 concorrenti, Codex 4, Hermes con lucchetto per percorso.
 >
-> ⛔ NON ha ancora un posto nel piano a tre fasi del 17/09: decide l'owner (proposta: Fase D, dopo la C).
+> ✅ **Collocata da me il 17/09 (owner: «decidilo tu per priorità e complessità»): FASE D, dopo la C.** È la più grossa (cinque
+> corsie più le cinque mancanze qui sopra) e poggia su ciò che la C rende robusto: molte figlie a lungo vogliono sessioni lunghe
+> che reggono (BC-65/66) e i dati fuori dal workspace (PO-26). Le fonti si rinfrescano all'apertura.
 
 
 **A cosa serve:** oggi TALOS sa delegare **un** compito a **una** figlia, e il padre si ferma ad
@@ -320,11 +322,47 @@ senza il motore sarebbe una finestrella che incolla testo con più passaggi. ⛔
 > | fase | corsia backend | corsia frontend |
 > |---|---|---|
 > | **A · l'agente locale, e ciò che esce dalla macchina** | BC-76 → BC-73 | BC-77 → BC-71 → BC-70 → BC-68 |
-> | **B · attrezzi dei file come Hermes, e il modello che sa CHIEDERE** | CLI-REQ-11 → 10 → 08 → 09 → **PO-28** (kernel, con interruttore per il banco) | BC-72, poi la scheda «TALOS ti chiede» di **PO-28** |
+> | **A-bis · sicurezza di secondo livello** (mini-fase, solo backend, dopo BC-73) | gli hook dei plugin riverificano la fiducia all'USO · i nove punti che ereditano l'ambiente intero del server (`ELENCO-SPAWN-AMBIENTE`) · gli hook standalone non accettano più `node -e` · `scansionaPatternSospetti` dice cose vere o sparisce | — |
+> | **B · attrezzi dei file come Hermes, il modello che sa CHIEDERE e che sa PIANIFICARE** | CLI-REQ-11 → 10 → 08 → 09 → **PO-28** → **PO-29** (kernel, con interruttore per il banco) | BC-72, poi la scheda «TALOS ti chiede» di **PO-28** e la scheda del piano di **PO-29** |
 > | **C · dove stanno i dati, e sessioni lunghe che reggono** | PO-26 → BC-66 → BC-65 | l'interfaccia del compattamento: barra di avanzamento e separatore |
+> | **D · il modello che LANCIA E COORDINA sotto-agenti** (FASE 3-bis, «workflow» nel senso dell'owner) | sfondo con avviso alla fine · riprendere una figlia · modello, sforzo e tipo per figlia · prenotazione dei file PRIMA della scrittura · una copia di lavoro per figlia (D3 via C) · schema dichiarato e ripetibile · ripresa dopo la chiusura | dentro la scheda Agenti che esiste: ogni figlia col suo stato, chi aspetta cosa, e «che cosa la fa avanzare adesso» |
 >
 > In coda, con l'owner: sorgente del kernel · FASE 12 · pre-release. Da collocare (nessuna risposta ancora): i residui di
 > sicurezza dei plugin e degli spawn. Brief pronti: `BRIEF-BC-76-…`, `BRIEF-BC-73-…`, `BRIEF-FASE-A-FRONTEND-…`, `BRIEF-ATTREZZI-FILE-…`.
+
+---
+
+# PO-29 · MODALITÀ PIANO — il modello esplora in sola lettura, presenta un piano, e tocca qualcosa solo dopo il sì (come la plan mode di Claude Code) — owner 17/09/2026
+
+> **Parole dell'owner:** «la modalità plan e workflow stile Claude a che fase sono?» … «non mi interessa dove le metti, decidilo tu
+> per priorità e complessità, l'importante che non dimentichi di inserirle nella tabella di marcia». **Collocata da me in Fase B,
+> subito dopo PO-28**: è piccola, e usa lo STESSO canale (la scheda di approvazione e l'attrezzo «chiedi»).
+
+**Cosa succede oggi (misurato col grep il 17/09):** non esiste. I livelli di permesso a schermo sono tre — «Solo lettura», «Scrive
+nel progetto», «Accesso pieno» — e «Solo lettura» è una gabbia senza uscita: il modello non può PROPORRE di passare all'azione, può
+solo fallire sugli attrezzi di scrittura. L'unica cosa vicina è il permesso speciale `'ricerca'` della Ricerca approfondita
+(`talosHarness.mjs` ~6316-6334), modellato proprio sull'uscita dalla plan mode («l'unica via d'uscita da una modalità di sola
+lettura è un attrezzo dedicato, mai un allargamento del livello»).
+**Ricerca (17/09/2026):** Claude Code — la plan mode è uno STATO DI PERMESSO in sola lettura: il modello legge, cerca, fa domande,
+poi chiama `ExitPlanMode` col piano; l'approvazione della persona è ciò che riapre `Edit`/`Write`; si entra con Shift+Tab, `/plan`
+o `--permission-mode plan`; il piano si può annotare e riordinare prima di approvarlo; se l'esecuzione deraglia si rientra e si
+ripianifica il resto (claudelog.com/mechanics/plan-mode, how-claude-code-works `10-plan-mode.md`). ⛔ Limite dichiarato da loro: è un
+cancello sulle MODIFICHE, non una gabbia — i comandi di shell girano lo stesso. ⛔ Letto nel clone il 09/09: tre BYPASS diversi della
+plan mode nel loro changelog, tutti al cancello di chiamata. Codex: `request_user_input` funziona solo in Plan mode (vedi PO-28).
+**Cosa cambia — parità, e il +1:**
+1. Un quarto modo nella pillola dei permessi, «Prima il piano»: attrezzi di lettura e ricerca accesi, scritture ed esecuzioni
+   SPENTE al cancello del kernel (non nel prompt), più due attrezzi: «chiedi» (PO-28) e «presenta il piano».
+2. «Presenta il piano» apre una scheda con la stessa meccanica dell'approvazione: passi leggibili, i FILE che toccherà, i comandi
+   che vorrà lanciare. Risposte: approva (e il giro PROSEGUE nello stesso punto col livello scelto), correggi (testo libero che
+   torna al modello), rifiuta. Il piano approvato resta nella cronologia come riga, sopravvive a ricarica e riapertura.
+3. **Il +1 su Claude Code: è una GABBIA vera.** Da loro la shell gira anche in plan mode; qui in «Prima il piano» la shell è spenta
+   al cancello (o ristretta ai soli comandi che il kernel sa classificare di sola lettura — da decidere con la misura), e la prova
+   sta nei DUE versi: ogni attrezzo che scrive è respinto, e dopo il sì torna a funzionare senza un giro nuovo.
+4. Onestà: senza nessuno che possa approvare (banco, automazioni) il modo non si può scegliere, o il piano si deposita come file
+   e il giro si chiude dicendolo. Mai un'auto-approvazione.
+**Finita quando:** in un giro vero con `glm-5.3-flash` il modello in «Prima il piano» legge, chiede, presenta; una scrittura tentata
+PRIMA del sì è respinta dal kernel (non dal prompt); dopo il sì lo stesso giro scrive; il piano è nella cronologia dopo una
+ricarica. Due temi, 1024 e 1440. Dietro lo stesso interruttore degli attrezzi nuovi, così il banco resta confrontabile.
 
 ---
 

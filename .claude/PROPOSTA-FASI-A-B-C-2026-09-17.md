@@ -23,6 +23,16 @@
 | backend | **PO-26** → **BC-66** → **BC-65** | PO-26 prima: sposta anche lo store di BC-66, farlo dopo = migrare due volte. BC-65 sopra BC-66 (già deciso dall'owner). Qui si chiude il residuo di CLI-REQ-05 sulla compattazione |
 | frontend | l'interfaccia di BC-65: barra di avanzamento e separatore | la barra esiste (`components/context-progress.js`), va accesa e collegata; il separatore va disegnato |
 
+## Fase A-bis — sicurezza di secondo livello (mini-fase backend, dopo BC-73) — collocata da me il 17/09
+Hook dei plugin riverificati all'uso · i nove spawn che ereditano l'ambiente intero · hook standalone senza `node -e` ·
+`scansionaPatternSospetti` vera o via.
+
+## Fase B, aggiunta del 17/09 — PO-29, la modalità piano
+In coda a PO-28 (stesso canale). Riga completa nella tabella di marcia.
+
+## Fase D — il modello che lancia e coordina sotto-agenti (FASE 3-bis) — collocata da me il 17/09
+Dopo la C: è la più grossa e poggia su sessioni lunghe robuste e dati fuori dal workspace. Riga completa nella tabella di marcia.
+
 ## In coda, con l'owner
 Decisione sulla sorgente del kernel · valutazione della FASE 12 (audit indipendente) · pre-release.
 

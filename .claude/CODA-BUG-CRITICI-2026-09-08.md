@@ -1176,3 +1176,9 @@ binario vero, Vulkan/CPU; (4) il rapporto CORREGGE una mia lettura di BC-76: le 
    oggi) vuol dire che «suite intera verde» dipende da cosa gira sulla macchina. **Finita quando:** la consegna lancia la suite
    con una concorrenza scelta in base alla memoria libera (o fissa e bassa), i file che vogliono WSL si dichiarano saltati con un
    motivo invece di cadere, e un giro sporco si riconosce da solo (conta gli errori di memoria e lo dice).
+
+**BC-72, misura MIA del 17/09 sera sulla lane fusa dopo PO-27** (`d4ca608e`, banco 4176, un worker, 17,6 minuti, 12 GB liberi):
+cartella `tests/browser` INTERA → **323 prove · 267 verdi · 53 rosse · 3 saltate**. I 53 per file: `baseline-shell` 44 ·
+`workspace-chooser` 4 · `context-compactor` 2 · `visual-matrix` 1 · `settings-fatti-reali` 1 · `immagini-chat` 1. ⇒ NESSUN rosso
+nuovo da PO-27; rispetto ai 77 del mattino (su 277) sono 24 in meno con 46 prove in più: 22 le ha guarite la rimozione della
+modale, e `ragionamento-compresso` SCHERMO-10 (×2) qui è VERDE — era instabile, come sospettato. Conferma il conteggio dell'agente.
