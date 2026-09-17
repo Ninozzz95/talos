@@ -8,13 +8,17 @@ import { creaCicloDiVita } from './lifecycle.mjs';
 import { leggiStatoFinestra, salvaStatoFinestra } from './window-state.mjs';
 import { creaAvvioFiglio, risolviPercorsi, scegliMotoreLocale, scegliPortaEffimera, urlIngresso, validaHandshake } from './runtime.mjs';
 import { creaRegistro } from './log.mjs';
+import { desktopProfile } from './profile.mjs';
 
-app.setName('TALOS');
-if (process.platform === 'win32') app.setAppUserModelId('it.talos.desktop');
-if (process.env.TALOS_DESKTOP_DATA_DIR) {
-  if (!isAbsolute(process.env.TALOS_DESKTOP_DATA_DIR)) throw new Error('La cartella dati deve essere assoluta.');
-  app.setPath('userData', process.env.TALOS_DESKTOP_DATA_DIR);
-}
+const packageMetadata = JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8'));
+const profile = desktopProfile({ metadata: packageMetadata, env: process.env, appData: app.getPath('appData') });
+app.setName(profile.name);
+if (process.platform === 'win32') app.setAppUserModelId(profile.appId);
+// Set both paths before the single-instance lock and before Chromium creates a session.
+mkdirSync(profile.dataDir, { recursive: true });
+mkdirSync(profile.sessionData, { recursive: true });
+app.setPath('userData', profile.dataDir);
+app.setPath('sessionData', profile.sessionData);
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('lang', 'it');
 /*
@@ -27,7 +31,10 @@ app.commandLine.appendSwitch('lang', 'it');
  * di qualunque finestra: questa non è una sessione, è una pulizia — e deve poter girare anche
  * se un'altra istanza fosse rimasta appesa.
  */
-if (process.argv.includes('--talos-pulizia-dati')) {
+if (profile.preview && process.argv.includes('--talos-pulizia-dati')) {
+  console.error('La preview non esegue la pulizia dei dati o delle credenziali di TALOS Desktop.');
+  app.exit(1);
+} else if (process.argv.includes('--talos-pulizia-dati')) {
   void (async () => {
     try {
       const percorsi = risolviPercorsi({ appPath: app.getAppPath(), isPackaged: app.isPackaged, resourcesPath: process.resourcesPath });
@@ -135,7 +142,7 @@ function avviaGuscio() {
       const port = await scegliPortaEffimera();
       if (staUscendo) throw new Error('Chiusura in corso.');
       const reportFile = join(cartellaHandshake, 'figlio-' + (++generazione) + '.json');
-      const avvio = creaAvvioFiglio({ execPath: process.execPath, percorsi, port, token, reportFile, dataDir, motoreLocale });
+      const avvio = creaAvvioFiglio({ execPath: process.execPath, percorsi, port, token, reportFile, dataDir, motoreLocale, keyringScope: profile.keyringScope });
       const proc = spawn(avvio.command, avvio.args, avvio.options);
       const handle = { proc, port, reportFile, generazione, terminato: false, get exitCode() { return proc.exitCode; } };
       figli.add(handle);
@@ -221,12 +228,13 @@ function avviaGuscio() {
       const stato = leggiStatoFinestra(fileStato, screen.getAllDisplays().map(d => d.workArea));
       finestra = new BrowserWindow({
         width: stato.width, height: stato.height, x: stato.x, y: stato.y, minWidth: 900, minHeight: 600,
-        title: 'TALOS', show: false, backgroundColor: '#1e1f22', icon: join(app.getAppPath(), 'assets', 'talos.png'),
+        title: profile.name, show: false, backgroundColor: '#1e1f22', icon: join(app.getAppPath(), 'assets', 'talos.png'),
         webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
       });
       const questa = finestra;
       if (stato.massimizzata) questa.maximize();
       questa.once('ready-to-show', () => { if (!staUscendo && !questa.isDestroyed()) questa.show(); });
+      if (profile.preview) questa.webContents.on('page-title-updated', (event, title) => { event.preventDefault(); questa.setTitle(`${profile.name} — ${title}`); });
       questa.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
       const controllaNavigazione = (evento, destinazione) => {
         try { if (new URL(destinazione).origin === base) return; } catch { /* URL non valido */ }
@@ -268,7 +276,7 @@ function avviaGuscio() {
   });
   app.whenReady().then(async () => {
     vassoio = new Tray(join(app.getAppPath(), 'assets', 'talos-tray.png'));
-    vassoio.setToolTip('TALOS'); vassoio.on('double-click', portaDavanti); creaMenu();
+    vassoio.setToolTip(profile.name); vassoio.on('double-click', portaDavanti); creaMenu();
     powerMonitor.on('suspend', () => ciclo.sospendi());
     powerMonitor.on('resume', () => { void ciclo.riprendi(); });
     await ciclo.avvia();

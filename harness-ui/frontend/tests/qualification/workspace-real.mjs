@@ -93,12 +93,10 @@ try {
     await expect(page.locator('dialog[open],.overlay-layer:not([hidden])')).not.toHaveCount(0);
     check('home opens existing model sheet', true);
     await page.keyboard.press('Escape');
-    // The first Escape belongs to the expanded inner model picker, not its enclosing sheet.
-    await expect(page.locator('#veloModello')).toBeVisible();
-    await page.keyboard.press('Escape');
+    // An always-open picker has no hidden-trigger dropdown to dismiss first.
     await expect(page.locator('#veloModello')).toBeHidden();
     await expect(page.getByRole('button', { name: 'Scegli un modello', exact: true })).toBeFocused();
-    check('model picker and parent close in two distinct Escape actions', true);
+    check('standalone model sheet closes with one Escape and restores its opener', true);
     await page.getByRole('button', { name: 'Apri un progetto', exact: true }).click();
     await expect(page.locator('dialog[open],.overlay-layer:not([hidden])')).not.toHaveCount(0);
     check('project uses real workspace chooser', true);
@@ -119,7 +117,6 @@ try {
     await expect(page.locator('#veloModello')).toBeVisible();
     await expect(page.locator('#sheetDialog')).toBeVisible();
     check('nested sheet leaves the project underneath', true);
-    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await expect(page.locator('#veloModello')).toBeHidden();
     await expect(page.locator('#sheetDialog')).toBeVisible();

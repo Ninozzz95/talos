@@ -6279,7 +6279,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     searchInput.addEventListener('input', renderLista);
     refreshBtn.addEventListener('click', (event) => { event.preventDefault(); carica({ forza: true }); });
     panel.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
+      // In the standalone model sheet this panel IS the surface, and its trigger is hidden.
+      // Escape belongs to the enclosing modal; only a real dropdown consumes it locally.
+      if (event.key === 'Escape' && !apriSubito) {
         event.preventDefault();
         event.stopPropagation();
         chiudi();

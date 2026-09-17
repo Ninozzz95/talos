@@ -34,7 +34,7 @@
     "publish": null,
     "toolsets": { "nsis": "1.2.1" },
     "artifactName": "TALOS-Setup-${version}.${ext}",
-    "files": ["main.mjs", "runtime.mjs", "child-bootstrap.mjs", "lifecycle.mjs", "log.mjs", "window-state.mjs", "package.json", "assets/talos.png", "assets/talos-tray.png"],
+    "files": ["main.mjs", "profile.mjs", "runtime.mjs", "child-bootstrap.mjs", "lifecycle.mjs", "log.mjs", "window-state.mjs", "package.json", "assets/talos.png", "assets/talos-tray.png"],
     "extraResources": [
       { "from": ".staging/harness-ui", "to": "harness-ui" },
       { "from": ".staging/harness-ui/node_modules", "to": "harness-ui/node_modules" },
