@@ -706,7 +706,7 @@ documenta che il sottotitolo è «Tema <preset> · <chi serve il modello>» per 
 mappano a nomi umani in un posto solo («Z.AI», «OpenRouter», «Anthropic»…). **Cura:** leggere il nome dal registro dei fornitori
 (lo stesso che usa la sezione Fornitori), con test che per ogni fornitore del registro il piede non mostri mai l'id.
 
-## BC-62 | Aprendo la scheda «Terminale» nasce ogni volta una NUOVA tab di terminale, senza motivo (owner 17/09/2026, dal vivo) — ✅ CURATO il 17/09 (`e5f4d9b1`), sul 4174, da confermare dal vivo dall'owner
+## BC-62 | Aprendo la scheda «Terminale» nasce ogni volta una NUOVA tab di terminale, senza motivo (owner 17/09/2026, dal vivo) — ✅ CURATO il 17/09 (`e5f4d9b1`), sul 4174 — ✅ **CONFERMATO dal vivo dall'owner il 17/09/2026: «BC-62 confermo, funziona»**
 
 **Cosa hai visto:** «quando apro scheda terminale si apre una nuova tab terminale senza motivo». Entrare nella vista Terminale
 non deve creare niente: deve mostrare le schede che ci sono; una scheda nuova nasce solo da «+ Nuovo» (o se non ce n'è nessuna).
