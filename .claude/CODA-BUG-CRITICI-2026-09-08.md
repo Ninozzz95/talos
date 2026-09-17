@@ -998,3 +998,13 @@ vero di OGGI non è la numerazione, è l'assenza di PAGINE — `talosHarness.mjs
 `leggi` lo restituisce intero; **10 file su 501 superano i 100.000 caratteri, 21 i 50.000**. Un tetto con «continua da riga N»
 fa RISPARMIARE ordini di grandezza proprio dove il contesto si brucia, e il +7% lo si paga su pagine piccole. ⇒ La 08 è un
 guadagno netto sul contesto, non un rincaro; resta da misurare su task veri quante volte il modello rilegge pagine successive.
+
+## BC-73 | L'attrezzo IMMAGINI manda il prompt a OpenRouter qualunque sia il fornitore della sessione (trovato il 17/09/2026 dal secondo revisore del ramo `cli-req`) — APERTO, decide l'owner
+
+`src/image-generator.mjs:48-49`: `OPENROUTER_IMAGES_URL` / `OPENROUTER_CHAT_URL` FISSI, `generaImmagineOpenRouter` con `fetch`
+nuda e la chiave di OpenRouter. ⇒ In una sessione DeepSeek (o di qualunque fornitore diretto) il prompt dell'immagine va a
+OpenRouter. È una scelta DICHIARATA nel codice («zero provider nuovo»), non una svista — ma dopo CLI-REQ-05 è l'ULTIMA strada
+che ignora la destinazione della sessione (censimento del revisore: compattazione manuale e automatica, giudice, figlie, ACP,
+motore locale passano tutte dal fornitore della sessione; letto, in parte eseguito). **Da decidere:** lasciarla com'è ma DIRLO
+alla persona prima dell'invio («le immagini si generano con OpenRouter»), oppure instradare sul fornitore della sessione quando
+ne ha uno capace di immagini. Solo letto, non riprodotto da me.
