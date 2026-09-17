@@ -687,3 +687,21 @@ kernel (l'audit interno del 16/09 lo loda) e nessuno l'ha aggiunto alle mappe de
 dei nomi è DUPLICATA in `app.js:2560-2566`: due posti, contro la regola. **Cura:** `file_edit` → «modifica di un file» (icona,
 descrizione, permesso); una mappa sola; un test di contratto che legge l'elenco degli attrezzi che il kernel espone e pretende che
 ognuno abbia nome umano, icona e descrizione — così il prossimo attrezzo nuovo non può arrivare a schermo col nome tecnico.
+
+## BC-60 | Sotto la risposta del modello: tre icone in fila, nessun «⋯», nessun Elimina, nessun tasto destro (visto dal revisore della corsia C nelle foto del 17/09, confermato nel codice) — APERTO
+
+**Misurato:** `frontend/src/components/conversazione.js:180-203` (`creaAzioniMessaggio`) costruisce ESATTAMENTE tre bottoni a
+icona — «Copia la risposta», «Ascolta la risposta», «Chiedi di nuovo» — e nient'altro: nessun menu di overflow, nessun
+`contextmenu`, nessuna azione per eliminare la risposta. **Regole dell'owner violate:** 10/09 «più di due azioni su un oggetto ⇒
+un menu "⋯" più il tasto destro»; 13/09 «riga e menu: intersezione vuota, unione completa; una lista di azioni si giudica da ciò
+che MANCA» (lì mancava proprio Elimina, sul mobile); 11/09 CRUD completo su ogni entità che la persona vede. **Cura:** in riga al
+più due azioni (Copia + una), le altre nel «⋯» e nel tasto destro, con **Elimina** (e la sua conferma) e ciò che il messaggio
+dell'utente ha e la risposta no; stessa forma per il messaggio della persona. Skill `frontend-design`, due temi, 1024 e 1440.
+
+## BC-61 | Il piede della barra laterale scrive l'id grezzo del fornitore: «Tema Calm · z-ai» (17/09) — APERTO, piccolo
+
+⛔ **Non è il difetto che sembrava:** il revisore l'ha letto come «il prefisso al posto del modello», ma `workspace-footer.js:15-27`
+documenta che il sottotitolo è «Tema <preset> · <chi serve il modello>» per scelta (05/09). Il difetto vero è più piccolo:
+`fornitoreDelModello('z-ai/glm-5.3-flash')` restituisce `z-ai`, un **id tecnico**, e la regola dice che gli id dei fornitori si
+mappano a nomi umani in un posto solo («Z.AI», «OpenRouter», «Anthropic»…). **Cura:** leggere il nome dal registro dei fornitori
+(lo stesso che usa la sezione Fornitori), con test che per ogni fornitore del registro il piede non mostri mai l'id.

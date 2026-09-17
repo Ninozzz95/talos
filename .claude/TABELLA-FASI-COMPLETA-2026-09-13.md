@@ -271,6 +271,13 @@ senza il motore sarebbe una finestrella che incolla testo con più passaggi. ⛔
 
 # FASE 3-quater · PO-27 — Via la modale «Primo avvio» — **approvata dall'owner il 17/09** («sì confermo rimozione»)
 
+> **Nella stessa corsia di PO-27 (frontend, dopo la P0-bis) entrano i due difetti trovati nelle foto del 17/09:**
+> **BC-60** — sotto la risposta tre icone in fila, nessun «⋯», nessun Elimina, nessun tasto destro (`conversazione.js:180-203`):
+> finita quando in riga restano al più due azioni, il resto sta nel menu e nel tasto destro con Elimina, nei due temi;
+> **BC-61** — il piede della barra laterale mostra l'id grezzo del fornitore («z-ai»): finita quando legge il nome umano dal
+> registro dei fornitori, con un test su tutti i fornitori. Schede in `CODA-BUG-CRITICI`.
+
+
 **Cosa succede oggi, misurato:** la modale è viva (`#veloIntro`, si apre da `/api/v1/setup/stato` in `app.js:21546`,
 `apriIntroMockup`), quattro passi (la prima cartella, con quale modello lavori, e due successivi), **18 file di test** la citano
 (la saltano scrivendo `talos.harness.desktop.intro.v1 = {esito:'saltata'}`). Tutto ciò che fa esiste già altrove: la cartella dal
