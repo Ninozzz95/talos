@@ -334,6 +334,9 @@ function nomiMessiNellAmbiente(corpo) {
   // 3 · Letture innocue: la dichiarazione e il passaggio a `spawn`.
   consuma(/const\s+ambiente\s*=/g);
   consuma(/env:\s*ambiente\b/g);
+  // 18/09/2026 — la LETTURA in una condizione, `if (!ambiente.NOME?.trim())`, entrata col lavoro di rilascio («se nessuno ha
+  //   scelto il kernel, usa l'hotfix»). Legge e basta: la scrittura che la segue è la forma 2, e il suo nome è già contato lì.
+  consuma(/!\s*ambiente\.[A-Za-z_$][\w$]*\?\.trim\(\)/g);
   // ⛔ Tutto ciò che nomina ancora `ambiente` è una forma che questa guardia NON sa leggere.
   const avanzi = [...resto.matchAll(/.{0,60}\bambiente\b.{0,60}/g)].map((m) => m[0].trim());
   assert.deepEqual(avanzi, [], `forme di scrittura su \`ambiente\` che la guardia non sa leggere:\n  ${avanzi.join('\n  ')}`);
