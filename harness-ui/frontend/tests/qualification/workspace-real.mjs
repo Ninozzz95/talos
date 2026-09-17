@@ -1,3 +1,4 @@
+import {selectValue,checkValue,pickerVisible} from './custom-control-driver.mjs';
 /** Real server and built application. No mocked API, injected session or model call. */
 import { chromium } from 'playwright';
 import { expect } from '@playwright/test';
@@ -135,13 +136,13 @@ try {
   });
   await scenario('canonical-preferences', async () => {
     await navigate('impostazioni', 'settings');
-    await page.locator('#setting-uiDensitySelect').selectOption('compatta');
+    await selectValue(page.locator('#setting-uiDensitySelect'),'compatta');
     await expect(page.locator('html')).toHaveAttribute('data-density', 'compact');
     await expect(page.locator('[data-workspace-density]')).toHaveAttribute('aria-pressed', 'true');
     await page.locator('[data-workspace-density]').click();
     await expect(page.locator('#setting-uiDensitySelect')).toHaveValue('comoda');
     check('settings and workspace density use one canonical preference', true);
-    await page.locator('[data-workspace-restore]').uncheck();
+    await checkValue(page.locator('[data-workspace-restore]'),false);
     await page.reload(); await page.locator('#talosAvvio').waitFor({ state: 'hidden' });
     await navigate('impostazioni', 'settings');
     await expect(page.locator('[data-workspace-restore]')).not.toBeChecked();
@@ -151,7 +152,7 @@ try {
     await expect(page.locator('[data-setting-row="workspaceRestore"]')).toBeVisible();
     check('new startup preference is discoverable through Settings search', true);
     await query.clear();
-    await page.locator('[data-workspace-restore]').check();
+    await checkValue(page.locator('[data-workspace-restore]'),true);
     await navigate('home', 'home');
   });
   await scenario('command-palette', async () => {
@@ -217,7 +218,7 @@ try {
   });
   await scenario('workspace-english', async () => {
     await navigate('impostazioni', 'settings');
-    await page.locator('#setting-uiLanguageSelect').selectOption('en');
+    await selectValue(page.locator('#setting-uiLanguageSelect'),'en');
     await navigate('home', 'home');
     await expect(page.locator('#schermoHome h1')).toHaveText('Where shall we pick up?');
     await expect(page.locator('#schermoHome [data-home-action="project"]')).toHaveText('Open a project');
@@ -239,7 +240,7 @@ try {
     await expect(page.locator('#schermoAttivita')).toBeVisible();
     check('localized command navigates without changing protocol identifiers', true);
     await navigate('impostazioni', 'settings');
-    await page.locator('#setting-uiLanguageSelect').selectOption('it');
+    await selectValue(page.locator('#setting-uiLanguageSelect'),'it');
     await navigate('home', 'home');
     await expect(page.locator('#schermoHome h1')).toHaveText('Da dove ripartiamo?');
   });

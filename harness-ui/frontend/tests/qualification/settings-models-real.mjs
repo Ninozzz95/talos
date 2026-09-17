@@ -1,3 +1,4 @@
+import {selectValue,checkValue,pickerVisible} from './custom-control-driver.mjs';
 /** SET-01/MODEL-01 visual inventory, actual server and original storage contracts. No inference. */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -34,7 +35,7 @@ async function captureSection(name) {
 }
 async function choose(id) {
   const select = page.locator('[data-settings-mobile]');
-  if (await select.isVisible()) await select.selectOption(id);
+  if (await pickerVisible(select)) await selectValue(select,id);
   else await page.locator('#schermoImpostazioni [data-settings-tab="'+id+'"]').click();
   // Exact outer panel: legacy fragments and the nested lab also have data-settings-panel.
   await page.locator('#setting-panel-'+id).waitFor({state:'visible'});
@@ -76,32 +77,32 @@ try {
       assert.equal(labs.length,6);result.modelSections=labs;
       for(const id of labs)await check('models-'+id+'-'+mode+'-'+width,async()=>{
         const select=page.locator('[data-model-lab-mobile]');
-        if(await select.isVisible())await select.selectOption(id);else await page.locator('#setting-panel-models [data-model-lab-tab="'+id+'"]').click();
+        if(await pickerVisible(select))await selectValue(select,id);else await page.locator('#setting-panel-models [data-model-lab-tab="'+id+'"]').click();
         await page.locator('#setting-panel-models [data-model-lab-panel="'+id+'"]').waitFor({state:'visible'});await captureSection('models-'+id+'-'+mode+'-'+width);
       });
     }
   }
   await page.setViewportSize({width:1440,height:1000});await color('dark');
   if(result.redesigned) {
-    await check('search-advanced',async()=>{await search('elastica');await snapshot('search-advanced');await page.locator('[data-settings-result="motionEasingSelect"]').click();assert.equal(await page.locator('[data-settings-advanced]').getAttribute('open'),'');assert.equal(await page.locator('#motionEasingSelect').evaluate(el=>el===document.activeElement),true);await snapshot('advanced-focused');});
-    await check('search-theme-studio',async()=>{await search('bilanciata');await snapshot('search-studio');await page.locator('[data-settings-result="motionQualitySelect"]').click();await page.locator('#td-studio-motionQualitySelect').waitFor({state:'visible'});await snapshot('studio-deep-link');await page.keyboard.press('Escape');});
+    await check('search-advanced',async()=>{await search('elastica');await snapshot('search-advanced');await page.locator('[data-settings-result="motionEasingSelect"]').click();assert.equal(await page.locator('[data-settings-advanced]').getAttribute('open'),'');assert.equal(await page.locator('#motionEasingSelect--calm').evaluate(el=>el===document.activeElement),true);await snapshot('advanced-focused');});
+    await check('search-theme-studio',async()=>{await search('bilanciata');await snapshot('search-studio');await page.locator('[data-settings-result="motionQualitySelect"]').click();await page.locator('#td-studio-motionQualitySelect--calm').waitFor({state:'visible'});await snapshot('studio-deep-link');await page.keyboard.press('Escape');});
     await check('search-provider-section',async()=>{await search('api key');await snapshot('search-provider');await page.locator('[data-settings-result="providers"]').click();await page.locator('#setting-panel-providers').waitFor({state:'visible'});});
     await check('search-no-results',async()=>{await search('zz-no-setting');assert.equal(await page.locator('[data-settings-result]').count(),0);await snapshot('search-empty');await page.locator('[data-settings-clear]').click();});
     await check('single-setting-reset-and-save',async()=>{
-      await choose('appearance');const control=page.locator('#uiFontScaleSelect');await control.selectOption('large');
+      await choose('appearance');const control=page.locator('#uiFontScaleSelect');await selectValue(control,'large');
       await page.locator('[data-settings-save][data-state="saved"]').waitFor();await snapshot('setting-changed');
       await page.locator('[data-setting-reset="uiFontScaleSelect"]').click();assert.equal(await control.inputValue(),'default');assert.equal(await page.locator('[data-setting-reset="uiFontScaleSelect"]').isVisible(),false);await snapshot('setting-reset');
       await page.reload();await page.locator('#talosAvvio').waitFor({state:'hidden'});await page.locator('.talos-sidebar [data-vaia="impostazioni"]').first().click();await choose('appearance');assert.equal(await page.locator('#uiFontScaleSelect').inputValue(),'default');
     });
     await check('save-failure-is-not-success',async()=>{
       await page.evaluate(()=>{window.__restoreSettingsWrite=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k==='talos.harness.desktop.settings.v1')throw new DOMException('Synthetic storage failure','QuotaExceededError');return window.__restoreSettingsWrite.call(this,k,v);};});
-      try{await page.locator('#uiFontScaleSelect').selectOption('large');await page.locator('[data-settings-save][data-state="unsaved"]').waitFor();await snapshot('settings-save-error');}
-      finally{await page.evaluate(()=>{Storage.prototype.setItem=window.__restoreSettingsWrite;delete window.__restoreSettingsWrite;});await page.locator('#uiFontScaleSelect').selectOption('default');}
+      try{await selectValue(page.locator('#uiFontScaleSelect'),'large');await page.locator('[data-settings-save][data-state="unsaved"]').waitFor();await snapshot('settings-save-error');}
+      finally{await page.evaluate(()=>{Storage.prototype.setItem=window.__restoreSettingsWrite;delete window.__restoreSettingsWrite;});await selectValue(page.locator('#uiFontScaleSelect'),'default');}
     });
     await check('vertical-keyboard-navigation',async()=>{await choose('appearance');await page.locator('#setting-tab-appearance').focus();await page.keyboard.press('ArrowDown');await page.locator('#setting-panel-chat').waitFor({state:'visible'});assert.equal(await page.locator('#setting-tab-chat').evaluate(el=>el===document.activeElement),true);await snapshot('settings-keyboard');});
-    await check('english-without-remount',async()=>{await choose('appearance');await page.locator('#setting-uiLanguageSelect').selectOption('en');assert.equal(await page.locator('.settings-header h1').textContent(),'Settings');await search('elastica');assert.equal(await page.locator('[data-settings-result="motionEasingSelect"]').count(),1);await snapshot('search-english');await search('');});
+    await check('english-without-remount',async()=>{await choose('appearance');await selectValue(page.locator('#setting-uiLanguageSelect'),'en');assert.equal(await page.locator('.settings-header h1').textContent(),'Settings');await search('elastica');assert.equal(await page.locator('[data-settings-result="motionEasingSelect"]').count(),1);await snapshot('search-english');await search('');});
     for(const id of sections)await check('settings-'+id+'-english',async()=>{await choose(id);await captureSection('settings-'+id+'-english');});
-    await choose('appearance');await page.locator('#setting-uiLanguageSelect').selectOption('it');
+    await choose('appearance');await selectValue(page.locator('#setting-uiLanguageSelect'),'it');
     for(const width of [320,768])await check('appearance-reflow-'+width,async()=>{await page.setViewportSize({width,height:1000});await choose('appearance');await captureSection('settings-reflow-'+width);});
     await page.setViewportSize({width:1440,height:1000});await choose('appearance');
     await page.emulateMedia({reducedMotion:'reduce',forcedColors:'active'});await captureSection('settings-forced-colors');await page.emulateMedia({reducedMotion:'no-preference',forcedColors:'none'});
