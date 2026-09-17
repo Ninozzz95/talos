@@ -323,7 +323,23 @@ export function datiProcesso(p = {}) {
   const durata = Number.isFinite(p.durataMs) && p.durataMs >= 0
     ? (p.durataMs < 100 ? '<0,1 s' : `${num.format(p.durataMs / 1000)} s`) // «0,3 s», «18,1 s», «74 s» come nel mockup
     : null;
-  const misura = [durata, !descrittore.vivo && Number.isFinite(p.uscita) ? `uscita ${p.uscita}` : null].filter(Boolean).join(' · ') || (descrittore.vivo ? '' : '—');
+  /*
+   * ⛔⛔⛔ D3, 17/09 sera — UN COMANDO RIFIUTATO AVEVA UNA DURATA E UN'USCITA, e le aveva INVENTATE
+   *   tutte e due. Foto `04-processi-dark-1440.png` del giro vero: la riga di `cat .env` negata
+   *   dalla persona diceva «Non eseguito» (giusto) e sotto «1,2 s · uscita 0». Quell'1,2 s è il
+   *   tempo che la persona ci ha messo a cliccare «Nega» — il delta fra i due arrivi — e lo zero
+   *   non viene da nessuna parte: il risultato è `REFUSED. …`, che non porta nessun `exit N`, e il
+   *   ripiego `e.errore ? 1 : 0` lo ha fabbricato. Un comando mai partito che dichiara di essere
+   *   durato un secondo e di essere uscito bene è la bugia più grande di tutta la scheda.
+   * ⇒ Chi non è stato eseguito non porta NUMERI: porta il motivo, in parole. La riga dice
+   *   «negato da te», che è un fatto e si legge senza traduzione.
+   * ⛔ Non vale per `exit 127` della `prova` senza suite: lì il 127 arriva DAL SERVER ed è un dato
+   *   vero (è «command not found»), quindi resta a schermo. La differenza non è lo stato: è se il
+   *   numero l'abbiamo ricevuto o costruito.
+   */
+  const misura = stato === 'non-eseguito' && p.rifiutato === true
+    ? 'negato da te'
+    : [durata, !descrittore.vivo && Number.isFinite(p.uscita) ? `uscita ${p.uscita}` : null].filter(Boolean).join(' · ') || (descrittore.vivo ? '' : '—');
   const chi = `${p.chi === 'tu' ? 'tu' : 'agente'} · ${p.chi === 'tu' ? 'terminale' : `giro ${p.giro ?? '—'}`}`;
   const fermo = Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= SOGLIA_ATTESA_MS
     ? `Nessuna uscita da ${Math.round(p.fermoDaMs / 1000)} secondi. Il processo è vivo: potrebbe aspettare un input. TALOS non lo ferma da solo.`
@@ -1149,6 +1165,19 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
         if (p.stato === 'in-avvio') p.stato = 'in-corso';
       }
       if (typeof e.cwd === 'string' && e.cwd.trim()) p.cwd = e.cwd.trim();
+      /*
+       * ⛔⛔ D3 — E I NUMERI SI CANCELLANO ALLA FONTE, non solo a schermo. `p.uscita` l'aveva appena
+       *   riempito il ripiego `e.errore ? 1 : 0` con uno zero che nessuno ha mandato, e la durata
+       *   sarebbe arrivata dal delta fra gli arrivi — cioè dal tempo di reazione della persona.
+       *   Toglierli qui vuol dire che nessun altro consumatore di questi dati (dettaglio, filtro,
+       *   un domani un export) potrà ripescarli: un dato inventato cancellato in un posto solo
+       *   sarebbe rimasto inventato in tutti gli altri.
+       */
+      if (e.rifiutato === true) { p.rifiutato = true; p.durataMs = null; p.uscita = null; }
+      /* ⛔ Sta in FONDO al ramo, dopo la durata e l'uscita: messo prima, il calcolo del delta qui
+         sopra avrebbe rimesso dentro il numero che questa riga serve a togliere. Trovato rileggendo
+         l'ordine, non da una prova — una cancellazione che avviene prima di chi riempie non
+         cancella niente. */
     }
   }
   for (const p of lista) {

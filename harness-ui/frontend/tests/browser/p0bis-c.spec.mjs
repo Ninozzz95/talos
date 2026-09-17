@@ -433,6 +433,198 @@ for (const modo of ['dark', 'light']) {
       expect(letto.badge).toBe('Chiede di leggere');
     });
 
+
+    /* ─────────────────────────────────────────── D1 · il rientro della carta di approvazione ─── */
+
+    for (const larghezza of [1024, 1440]) {
+      test(`D1 — nella carta la riga del motivo è rientrata come le altre, e la prima lettera c'è (${larghezza}px, ${modo})`, async ({ page }, info) => {
+        /*
+         * ⛔ Dal giro vero del 17/09: la frase del segreto cominciava a filo del bordo della carta,
+         *   che ha `overflow:hidden`, e si leggeva «ll comando tocca un file…» — la «I» mangiata.
+         *   La misura non è «sembra storto»: è che il testo del motivo e quello della riga sopra
+         *   devono partire dalla STESSA colonna, perché entrambi sono testo della carta.
+         */
+        await page.setViewportSize({ width: larghezza, height: larghezza === 1024 ? 800 : 900 });
+        await page.locator('[data-vaia="chat"]').first().click();
+        const carta = await cartaDiApprovazione(page, {
+          tipo: 'shell', comando: 'cat .env',
+          segreto: { frase: FRASE_SEGRETO, classe: 'segreto' },
+        }, 'd1-1');
+        await expect(carta).toBeVisible();
+
+        const m = await carta.evaluate((n) => {
+          /*
+           * ⛔ Si misura il TESTO, non la scatola. La prima stesura confrontava
+           *   `getBoundingClientRect()` dei due `<p>`: sono due blocchi larghi quanto la carta, e
+           *   partivano tutti e due dal suo bordo anche quando uno dei due aveva il rientro e
+           *   l'altro no. La misura diceva «allineati» mentre la «I» spariva. Un `Range` sul primo
+           *   nodo di testo dà la colonna da cui la lettera comincia davvero.
+           */
+          const sinistraDelTesto = (el) => {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            return r.getBoundingClientRect().left;
+          };
+          const why = n.querySelector('.talos-approval__why');
+          const motivo = n.querySelector('.talos-approval__motivo');
+          const piede = n.querySelector('.talos-approval__foot button');
+          return {
+            whyTesto: Math.round(sinistraDelTesto(why)),
+            motivoTestoLeft: Math.round(sinistraDelTesto(motivo)),
+            piedeLeft: Math.round(piede.getBoundingClientRect().left),
+            cartaLeft: Math.round(n.getBoundingClientRect().left),
+            motivoScroll: motivo.scrollWidth, motivoClient: motivo.clientWidth,
+            motivoTesto: motivo.textContent,
+          };
+        });
+        misura(`d1.rientro.${larghezza}.${modo}`, m);
+
+        /* ⛔ ±1 px: il testo del motivo parte dove parte quello della riga sopra. */
+        expect(Math.abs(m.motivoTestoLeft - m.whyTesto), `testo del motivo a ${m.motivoTestoLeft}, «Vuole eseguire…» a ${m.whyTesto}`).toBeLessThanOrEqual(1);
+        /* ⛔ E non è allineato «per caso»: dev'essere staccato dal bordo della carta, che taglia. */
+        expect(m.motivoTestoLeft - m.cartaLeft, 'il testo del motivo è ancora a filo del bordo della carta').toBeGreaterThan(8);
+        expect(m.motivoScroll, 'il motivo nasconde parte di sé').toBeLessThanOrEqual(m.motivoClient);
+        expect(m.motivoTesto.startsWith('Il comando tocca'), `il testo comincia con: «${m.motivoTesto.slice(0, 24)}»`).toBe(true);
+
+        await info.attach(`d1-motivo-${larghezza}-${modo}.png`, { body: await foto(page, `d1-motivo-${larghezza}-${modo}.png`, '[data-c="ApprovalCard"]'), contentType: 'image/png' });
+      });
+    }
+
+    /* ──────────────────────────────── D2 · la scala scatta solo quando serve davvero ─── */
+
+    /**
+     * Accende le pillole come fa il prodotto e legge cosa resta a schermo.
+     * ⛔ `conSpesa:false` NON è uno stato inventato: `chat-foot.js` tiene la pillola della spesa
+     *   `hidden` finché un costo non c'è (`costoChip.hidden = !dati.costo`), ed è lo stato in cui si
+     *   trova ogni sessione appena comincia — cioè quello che l'owner vede più spesso.
+     */
+    async function statoBarra(page, { giri, costo, conSpesa, pienaLarghezza = false }) {
+      await page.evaluate(({ g, c, conSpesa: cs, piena }) => {
+        document.documentElement.classList.toggle('chat-full-width', Boolean(piena));
+        const composer = document.querySelector('#composerForm');
+        const pg = composer.querySelector('[data-runtime-giri]');
+        const pc = composer.querySelector('[data-runtime-costo]');
+        pg.hidden = false;
+        pg.querySelector('.talos-mono').textContent = g;
+        pc.hidden = !cs;
+        if (cs) pc.querySelector('.talos-mono').textContent = c;
+        composer.querySelector('[data-open-sheet="model"] .talos-chip__label').textContent = 'glm-5.3-flash';
+        composer.querySelector('[data-open-sheet="permissions"] .talos-chip__label').textContent = 'Scrive nel progetto';
+      }, { g: giri, c: costo, conSpesa, piena: pienaLarghezza });
+      return page.evaluate(() => {
+        const composer = document.querySelector('#composerForm');
+        const barra = composer.querySelector('.talos-composer__bar');
+        const leggi = (sel) => {
+          const el = composer.querySelector(sel);
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          const st = getComputedStyle(el);
+          const ceduta = st.display === 'none' || st.visibility === 'hidden' || st.position === 'absolute' || r.width < 1;
+          return { larghezza: Math.round(r.width), scroll: el.scrollWidth, testo: el.textContent, ceduta, intero: !ceduta && r.width >= el.scrollWidth - 1 };
+        };
+        const numero = (sel) => { const n = composer.querySelector(`${sel} .talos-mono`); return { scroll: n.scrollWidth, client: n.clientWidth, testo: n.textContent }; };
+        return {
+          composerW: Math.round(composer.getBoundingClientRect().width),
+          giri: numero('[data-runtime-giri]'),
+          costoVisibile: !composer.querySelector('[data-runtime-costo]').hidden,
+          costo: composer.querySelector('[data-runtime-costo]').hidden ? null : numero('[data-runtime-costo]'),
+          modello: leggi('[data-open-sheet="model"] .talos-chip__label'),
+          permesso: leggi('[data-open-sheet="permissions"] .talos-chip__label'),
+          terminale: leggi('#pillTerminale .talos-chip__label'),
+          parolaGiri: leggi('[data-runtime-giri] .talos-chip__label'),
+          barraSfonda: barra.scrollWidth > barra.clientWidth + 1,
+          vuotoADestra: Math.round(composer.querySelector('.talos-composer__mic').getBoundingClientRect().left - composer.querySelector('#pillTerminale').getBoundingClientRect().right),
+        };
+      });
+    }
+
+    test(`D2 (a) — con la SOLA pillola dei giri le etichette non cedono: a 1440 tutte intere (${modo})`, async ({ page }, info) => {
+      /*
+       * ⛔ IL DIFETTO, dal giro vero: a 1440 con «Giri 1» e nessuna spesa, il permesso era ridotto
+       *   allo scudo e «Terminale» all'icona, con ~250 px VUOTI fra l'icona e il microfono. Cioè
+       *   l'interfaccia era SOTTO quella del giorno prima per pagare un caso che non c'era.
+       */
+      await page.setViewportSize({ width: 1440, height: 900 });
+      const m = await statoBarra(page, { giri: '1', costo: '$0,00', conSpesa: false });
+      misura(`d2a.1440.${modo}`, m);
+
+      expect(m.costoVisibile, 'la prova deve girare proprio nello stato senza spesa').toBe(false);
+      expect(m.permesso.ceduta, 'a 1440 senza spesa il permesso non ha ragione di cedere').toBe(false);
+      expect(m.terminale.ceduta, 'a 1440 senza spesa «Terminale» non ha ragione di cedere').toBe(false);
+      expect(m.permesso.intero, `«Scrive nel progetto»: ${m.permesso.larghezza}px su ${m.permesso.scroll}`).toBe(true);
+      expect(m.terminale.intero, `«Terminale»: ${m.terminale.larghezza}px su ${m.terminale.scroll}`).toBe(true);
+      expect(m.modello.intero, `«glm-5.3-flash»: ${m.modello.larghezza}px su ${m.modello.scroll}`).toBe(true);
+      expect(m.barraSfonda).toBe(false);
+      await info.attach(`d2a-solo-giri-1440-${modo}.png`, { body: await foto(page, `d2a-solo-giri-1440-${modo}.png`, '#composerForm'), contentType: 'image/png' });
+    });
+
+    test(`D2 (a) — con la sola pillola dei giri, a 1024 nessun nome sotto i 5 caratteri (${modo})`, async ({ page }, info) => {
+      await page.setViewportSize({ width: 1024, height: 800 });
+      const m = await statoBarra(page, { giri: '128/128', costo: '$0,00', conSpesa: false });
+      misura(`d2a.1024.${modo}`, m);
+      expect(m.giri.scroll).toBeLessThanOrEqual(m.giri.client);
+      expect(m.barraSfonda).toBe(false);
+      /* ⛔ Prima ancora dei caratteri: senza spesa NESSUNO deve cedere, nemmeno a 1024. Senza questa
+         riga il test passava anche col CSS di prima (le etichette cedute venivano saltate dal
+         controllo qui sotto) — cioè non distingueva la cura dal difetto. */
+      for (const [chi, n] of [['modello', m.modello], ['permesso', m.permesso], ['terminale', m.terminale]]) {
+        expect(n.ceduta, `${chi} ceduto a 1024 senza spesa: la scala non doveva scattare`).toBe(false);
+      }
+      for (const [chi, n] of [['modello', m.modello], ['permesso', m.permesso], ['terminale', m.terminale]]) {
+        if (n.ceduta || n.intero) continue;
+        const visibili = Math.floor((n.larghezza / Math.max(1, n.scroll)) * n.testo.length);
+        expect(visibili, `${chi}: ${visibili} caratteri su ${n.testo.length}`).toBeGreaterThanOrEqual(CARATTERI_MINIMI_MODELLO);
+      }
+      await info.attach(`d2a-solo-giri-1024-${modo}.png`, { body: await foto(page, `d2a-solo-giri-1024-${modo}.png`, '#composerForm'), contentType: 'image/png' });
+    });
+
+    test(`D2 (c) — dove il composer È largo abbastanza, la scala NON scatta nemmeno con la spesa (${modo})`, async ({ page }, info) => {
+      /*
+       * ⛔⛔ IL CRITERIO CHIESTO ERA «con `:root.chat-full-width` a 1440 tutto intero anche con la
+       *   spesa», e MISURANDOLO si scopre che a 1440 quella classe NON allarga il composer: 680 px
+       *   contro i 690 della disposizione normale — dieci in MENO. La colonna della chat è già al
+       *   suo tetto (`--talos-measure-w: 768px`), quindi «piena larghezza» lì non aggiunge spazio.
+       *   ⇒ Il criterio non era sbagliato: era irraggiungibile a quella viewport. Quello che va
+       *   provato è la cosa che il criterio voleva dire — **quando lo spazio c'è, nessuno cede** —
+       *   e per provarla bisogna prima TROVARE una larghezza in cui c'è, invece di assumerla.
+       */
+      const misurate = [];
+      for (const larghezza of [1440, 1920, 2560]) {
+        for (const piena of [false, true]) {
+          await page.setViewportSize({ width: larghezza, height: 900 });
+          const m = await statoBarra(page, { giri: '128/128', costo: '$12.345,67', conSpesa: true, pienaLarghezza: piena });
+          misurate.push({ larghezza, piena, composerW: m.composerW, permessoCeduta: m.permesso.ceduta, terminaleCeduta: m.terminale.ceduta, barraSfonda: m.barraSfonda, modelloIntero: m.modello.intero });
+        }
+      }
+      misura(`d2c.larghezze.${modo}`, misurate);
+
+      /* ⛔ In OGNI caso misurato la barra non deve sfondare e i numeri restano interi: è la
+         garanzia che non dipende dalla larghezza. */
+      for (const m of misurate) expect(m.barraSfonda, `sfonda a ${m.larghezza}px (piena: ${m.piena})`).toBe(false);
+
+      /* ⛔ E la scala deve essere SPENTA dove il composer supera la soglia dichiarata (800 px), e
+         ACCESA dove non la supera. Le due metà insieme: se un giorno la soglia sparisse, la prima
+         riga diventerebbe rossa; se scattasse sempre, la seconda. */
+      const SOGLIA = 800;
+      for (const m of misurate) {
+        if (m.composerW > SOGLIA) {
+          expect(m.terminaleCeduta, `composer ${m.composerW}px > ${SOGLIA}: nessuno deve cedere`).toBe(false);
+          expect(m.permessoCeduta, `composer ${m.composerW}px > ${SOGLIA}: nessuno deve cedere`).toBe(false);
+        } else {
+          expect(m.terminaleCeduta, `composer ${m.composerW}px ≤ ${SOGLIA} con la spesa accesa: la scala deve scattare`).toBe(true);
+        }
+      }
+      /* ⛔ E si dichiara se una larghezza sopra la soglia esiste davvero in questa disposizione:
+         un elenco che non contiene mai il caso «largo» non prova la prima metà di sopra. */
+      const sopraSoglia = misurate.filter((m) => m.composerW > SOGLIA).length;
+      misura(`d2c.casiSopraSoglia.${modo}`, sopraSoglia);
+
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await statoBarra(page, { giri: '128/128', costo: '$12.345,67', conSpesa: true, pienaLarghezza: true });
+      await info.attach(`d2c-piena-larghezza-1440-${modo}.png`, { body: await foto(page, `d2c-piena-larghezza-1440-${modo}.png`, '#composerForm'), contentType: 'image/png' });
+      await page.evaluate(() => document.documentElement.classList.remove('chat-full-width'));
+    });
+
     /* ──────────────────────────────────────────────────────────────────────────────── OSS-3 ─── */
 
     test(`OSS-3 — gli errori del sandbox di una pagina ospitata NON sono nostri (${modo})`, async ({ page }, info) => {

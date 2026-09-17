@@ -239,3 +239,51 @@ test('OSS-2 · un `comando` dal risultato non SOVRASCRIVE gli argomenti quando i
   ], { adesso: t });
   assert.equal(p.comando, 'git status --short');
 });
+
+/* ───────────────────────────────── D3 · un rifiuto non ha né durata né uscita ─── */
+
+test('D3 · un comando NEGATO non mostra né durata né codice di uscita: dice chi l’ha negato', () => {
+  /*
+   * ⛔ Dal giro vero del 17/09 (foto `04-processi-dark-1440.png`): la riga di `cat .env` negata
+   *   dalla persona diceva «Non eseguito · 1,2 s · uscita 0». L'1,2 s era il tempo che la persona ci
+   *   ha messo a premere «Nega» (il delta fra i due arrivi) e lo zero l'aveva fabbricato il ripiego
+   *   `e.errore ? 1 : 0`. Due numeri inventati su una riga che dichiara di non essere partita.
+   */
+  const t = 1_700_000_000_000;
+  const [p] = processiDagliEventi([
+    { type: 'ToolCallStart', toolCallId: 'n1', toolCallName: 'shell', ricevutoA: t },
+    { type: 'ToolCallArgs', toolCallId: 'n1', delta: JSON.stringify({ comando: 'cat .env' }) },
+    /* ⛔ 1.200 ms di scarto: sopra la risoluzione degli arrivi, quindi SENZA la cura diventerebbe
+       davvero «1,2 s» — è il caso esatto della foto, non uno addomesticato. */
+    { type: 'ToolCallResult', toolCallId: 'n1', ricevutoA: t + 1_200, errore: true, rifiutato: true },
+  ], { adesso: t + 1_200 });
+
+  assert.equal(p.durataMs, null, 'la durata si cancella ALLA FONTE, non solo a schermo');
+  assert.equal(p.uscita, null, 'e con lei il codice di uscita fabbricato dal ripiego');
+  const d = datiProcesso(p);
+  assert.equal(d.misura, 'negato da te');
+  assert.doesNotMatch(d.misura, /uscita/u);
+  assert.equal(d.dettaglio.find(([k]) => k === 'Durata')[1], '—');
+  assert.equal(d.dettaglio.find(([k]) => k === 'Uscita')[1], '—');
+  assert.equal(d.uscita, null);
+});
+
+test('D3 · AL CONTRARIO: un comando ESEGUITO continua a mostrare durata e uscita', () => {
+  const t = 1_700_000_000_000;
+  const [p] = processiDagliEventi(giroShell({ ricevutoAStart: t, ricevutoAFine: t, durataMs: 18_100 }), { adesso: t });
+  assert.equal(datiProcesso(p).misura, '18,1 s · uscita 0');
+});
+
+test('D3 · AL CONTRARIO: l’uscita 127 della `prova` senza suite È un dato del server e RESTA', () => {
+  /* ⛔ La differenza non è lo stato — sono «non eseguito» tutti e due — ma se il numero l'abbiamo
+     RICEVUTO o COSTRUITO. Il 127 arriva dal kernel dentro `exit 127`, quindi si mostra. */
+  const t = 1_700_000_000_000;
+  const [p] = processiDagliEventi([
+    { type: 'ToolCallStart', toolCallId: 'n2', toolCallName: 'prova', ricevutoA: t },
+    { type: 'ToolCallArgs', toolCallId: 'n2', delta: '{}' },
+    { type: 'ToolCallResult', toolCallId: 'n2', ricevutoA: t, uscita: 127, errore: true, comando: 'npm test' },
+  ], { adesso: t });
+  const d = datiProcesso(p);
+  assert.equal(d.etichetta, 'Non eseguito');
+  assert.equal(d.misura, 'uscita 127');
+});
