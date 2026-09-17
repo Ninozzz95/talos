@@ -101,6 +101,8 @@ try {
     await expect(page.locator('dialog[open],.overlay-layer:not([hidden])')).not.toHaveCount(0);
     check('project uses real workspace chooser', true);
     await page.keyboard.press('Escape');
+    await expect(page.locator('#sheetDialog')).not.toHaveAttribute('open', '');
+    await expect(page.getByRole('button', { name: 'Apri un progetto', exact: true })).toBeFocused();
   });
   await scenario('modal-stack', async () => {
     const originalInert = await page.locator('[inert]').count();
