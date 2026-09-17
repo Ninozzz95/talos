@@ -30,11 +30,12 @@ import { describe, it } from 'node:test'
 
 import { talosLavora } from '../src/kernel/talosHarness.mjs'
 import { createSessionRegistry } from '../src/session-registry.mjs'
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs'
 
 describe('F15 — la shell chiede davanti a un segreto, anche con «sempre»', () => {
     function cartellaVuota(t) {
         const radice = mkdtempSync(join(tmpdir(), 'talos-f15-segreti-'))
-        t.after(() => rmSync(radice, { recursive: true, force: true }))
+        t.after(() => rimuoviCartellaDiProva(radice))
         return radice
     }
 

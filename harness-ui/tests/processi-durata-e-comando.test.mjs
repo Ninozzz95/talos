@@ -34,6 +34,7 @@ import { describe, it } from 'node:test'
 import { eventoPerEsitoTool, toolCallResult, toolCallStart } from '../src/agui-events.mjs'
 import { avviaSessione } from '../src/agent-service.mjs'
 import { talosLavora } from '../src/kernel/talosHarness.mjs'
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs'
 
 const enc = new TextEncoder()
 const fintoBackend = (fotogrammi) => new Response(new ReadableStream({
@@ -117,7 +118,7 @@ describe('OSS-1/OSS-2 — i campi nuovi dei due eventi di tool-call', () => {
 describe('OSS-1/OSS-2 — il kernel misura e dichiara', () => {
     function cartellaTemporanea(t, { packageJson } = {}) {
         const cartella = mkdtempSync(join(tmpdir(), 'oss12-'))
-        t.after(() => rmSync(cartella, { recursive: true, force: true }))
+        t.after(() => rimuoviCartellaDiProva(cartella))
         if (packageJson) writeFileSync(join(cartella, 'package.json'), JSON.stringify(packageJson))
         return cartella
     }

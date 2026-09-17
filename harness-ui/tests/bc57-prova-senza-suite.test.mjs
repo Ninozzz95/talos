@@ -41,6 +41,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { describe, it } from 'node:test'
 import { talosLavora } from '../src/kernel/talosHarness.mjs'
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs'
 
 const enc = new TextEncoder()
 
@@ -91,7 +92,7 @@ function manifestoPiuVicinoNelTest(dove) {
 
 function cartellaTemporanea(t, { packageJson } = {}) {
     const cartella = mkdtempSync(join(tmpdir(), 'bc57-'))
-    t.after(() => rmSync(cartella, { recursive: true, force: true }))
+    t.after(() => rimuoviCartellaDiProva(cartella))
     if (packageJson) writeFileSync(join(cartella, 'package.json'), JSON.stringify(packageJson))
     return cartella
 }
