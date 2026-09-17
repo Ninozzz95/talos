@@ -53,7 +53,7 @@
    quindi deve essere valutato dopo di loro (esbuild incolla gli @import sul posto, nell'ordine). */
 @import './mockup-td.css';
 /*
- * 11/09 — le ANIMAZIONI del mockup interattivo (ordine dell'owner: «riportate alla perfezione»).
+ * 11/09 — le ANIMAZIONI del mockup approvato (ordine dell'owner: «riportate alla perfezione»).
  * ⛔ IN CODA, e per la stessa ragione dei due sopra: due sue regole devono battere per ORDINE, non
  *   con `!important`, le omonime dei fogli precedenti — `.td-progress > i` (mockup-td.css:113, che
  *   non dichiara `transition`) e `:root.td-dragging *` (mockup-td.css:257, che parla solo del
@@ -68,3 +68,5 @@
 @import '../design-system/command-palette.css'; /* NAV-02: real command registry */
 
 @import '../design-system/settings.css'; /* SET-01: existing controls in searchable settings */
+
+@import '../design-system/calm-controls.css'; /* CP14: custom pickers, switches and sliders */
