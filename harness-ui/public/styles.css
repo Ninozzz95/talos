@@ -1712,6 +1712,18 @@ select:focus-visible,
   max-width: 58ch;
   font-size: 14.5px;
 }
+.talos-empty--avvio[hidden] {
+  display: none;
+}
+.talos-empty--avvio {
+  max-width: calc(92px + var(--talos-measure-w));
+  margin: 0 auto;
+  padding-top: clamp(24px, 8vh, 96px);
+}
+.talos-empty--avvio .talos-empty__foot {
+  margin-top: 20px;
+  gap: var(--talos-space-md);
+}
 .talos-empty__foot {
   margin-top: 14px;
 }
@@ -1849,6 +1861,11 @@ button.talos-turn-spine__tick:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+}
+.talos-message--user > .talos-message__actions {
+  flex: 0 0 auto;
+  align-items: center;
+  align-self: flex-end;
 }
 .talos-message--user .talos-message__body--comando {
   max-width: min(86%, 52rem);
@@ -2184,15 +2201,37 @@ button.talos-turn-spine__tick:focus-visible {
   overflow: hidden;
 }
 .talos-touched__head {
-  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
   border-bottom: 1px solid var(--talos-border-subtle);
+}
+.talos-touched__titolo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--talos-text);
 }
 .talos-touched__row {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   min-height: var(--talos-row);
   padding: 0 14px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.talos-touched__row:hover {
+  background: var(--talos-card-subtle);
+}
+.talos-touched__freccia {
+  flex: 0 0 auto;
+  color: var(--talos-muted);
 }
 .talos-touched__row + .talos-touched__row {
   border-top: 1px solid var(--talos-border-subtle);
@@ -2217,8 +2256,8 @@ button.talos-turn-spine__tick:focus-visible {
 .talos-chat-return__button {
   position: absolute;
   bottom: 12px;
-  left: 50%;
-  translate: -50% 0;
+  left: auto;
+  right: calc((var(--talos-larghezza-piede) - var(--talos-testo-chat)) / 2 - var(--talos-turno-coda) + 5px);
   width: 36px;
   height: 36px;
   min-width: 36px;
@@ -2282,6 +2321,49 @@ button.talos-turn-spine__tick:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+.talos-system-note__azioni {
+  margin-top: 12px;
+}
+.talos-trust-frase {
+  margin: 8px 0;
+  color: var(--talos-assistant-text);
+}
+.talos-trust-frase .i {
+  flex: none;
+  margin-top: 1px;
+  color: var(--talos-warning);
+}
+.talos-ext-colonna {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.talos-falliti {
+  padding: 12px 14px 4px;
+}
+.talos-trust-falliti-titolo {
+  margin: 0 0 4px;
+}
+.talos-trust-falliti {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.talos-trust-fallito {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-top: 1px solid var(--talos-border-subtle);
+  font-size: 12.5px;
+  text-align: left;
+}
+.talos-trust-fallito:first-child {
+  border-top: 0;
 }
 .talos-system-note__tecnico {
   margin: 10px 0 0;
@@ -2730,10 +2812,9 @@ a.talos-button {
 }
 .talos-approval__codice {
   margin: 8px 0 0;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--talos-border);
-  background: var(--talos-code-bg, var(--talos-surface-sunken, rgba(0,0,0,.18)));
+  padding: 10px var(--talos-approval-gutter);
+  border-block: 1px solid var(--talos-border);
+  background: var(--talos-panel-soft);
   color: var(--talos-text);
   font-family: var(--talos-font-mono);
   font-size: 12.5px;
@@ -5890,12 +5971,6 @@ a.talos-button {
   overflow-y: auto;
   min-height: 0;
 }
-#veloIntro [data-intro-passo][aria-current=step],
-#veloIntro [data-intro-policy][aria-checked=true] {
-  background: var(--talos-accent-soft);
-  color: var(--talos-accent-text);
-  box-shadow: inset var(--talos-focus-width) 0 var(--talos-accent);
-}
 .talos-lab__tabs {
   margin-bottom: var(--talos-space-md);
 }
@@ -6226,69 +6301,9 @@ input[type=range]:focus-visible {
 #veloModello .talos-dialog[data-user-sized] .talos-dialog__body {
   display: block;
 }
-.talos-intro-folders {
-  max-height: calc(var(--talos-row)*5);
-  overflow: auto;
-}
-#passoIntroCartella .talos-stack {
-  gap: var(--talos-space-sm);
-}
-#introCartellaSu .i {
-  transform: rotate(90deg);
-}
-#introCartella {
-  width: auto;
-  min-width: 0;
-  flex: 1 1 0;
-  padding-inline: var(--talos-space-md);
-}
-#passoIntroCartella .talos-toolbar {
-  flex-wrap: nowrap;
-  margin-bottom: 0;
-}
-#passoIntroCartella .talos-field {
-  min-width: 0;
-}
-.talos-intro-folders {
-  max-height: calc(var(--talos-row)*4);
-}
-.talos-intro-folders:empty {
-  display: none;
-}
 .talos-dialog[data-user-sized] {
   width: var(--talos-dialog-w);
   height: var(--talos-dialog-h);
-}
-#veloIntro:not([data-intro-passo-attivo="0"]) .talos-dialog[data-user-sized] {
-  height: auto;
-}
-#veloIntro:not([data-intro-passo-attivo="0"]) .talos-resizer--dialog-height,
-#veloIntro:not([data-intro-passo-attivo="0"]) .talos-resizer--dialog-both {
-  display: none;
-}
-#veloIntro .talos-dialog__body {
-  display: flex;
-  flex-direction: column;
-}
-#veloIntro .talos-picker {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-#veloIntro .talos-picker > .talos-stack {
-  min-height: 0;
-}
-#passoIntroCartella,
-#passoIntroCartella [data-c=FolderPicker] {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-.talos-dialog[data-user-sized] .talos-intro-folders {
-  flex: 1 1 auto;
-  min-height: calc(var(--talos-row)*4);
-  max-height: none;
-}
-#introMessaggio:empty {
-  display: none;
 }
 [data-c=TaskRow][data-aperta=true] .talos-list-row__sub,
 [data-c=TaskRow][data-aperta=true] .talos-list-row__title {
@@ -9902,274 +9917,6 @@ dialog.command-dialog .provider-field,
 }
 .provider-row-body .sheet-input {
   width: 100%;
-}
-.intro-dialog {
-  position: fixed;
-  inset: 0;
-  margin: auto;
-  width: min(640px, calc(100vw - 24px));
-  max-height: min(760px, calc(100dvh - 32px));
-  padding: 0;
-  border: 1px solid var(--line-strong);
-  border-radius: 18px;
-  background: var(--surface-elevated);
-  color: var(--text);
-  box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.intro-dialog:not([open]) {
-  display: none;
-}
-.intro-dialog::backdrop {
-  background: color-mix(in srgb, var(--bg-deep) 62%, transparent);
-  backdrop-filter: blur(6px);
-}
-.intro-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 20px 6px;
-}
-.intro-brand {
-  font-family: var(--font-ui);
-  font-weight: 750;
-  font-size: calc(11px * var(--talos-ui-font-scale));
-  letter-spacing: .3em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-.intro-skip {
-  min-height: 36px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font-size: calc(12px * var(--talos-ui-font-scale));
-  cursor: pointer;
-}
-.intro-skip:hover,
-.intro-skip:focus-visible {
-  color: var(--text);
-  background: var(--surface-highlight-subtle);
-}
-.intro-rail {
-  list-style: none;
-  display: flex;
-  gap: 12px;
-  margin: 0;
-  padding: 8px 20px 0;
-}
-.intro-rail li {
-  flex: 1;
-  min-width: 0;
-}
-.intro-rail-line {
-  display: block;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--line);
-  transition: background-color var(--motion-control) var(--motion-ease);
-}
-.intro-rail li[data-fatto=true] .intro-rail-line {
-  background: var(--accent);
-}
-.intro-rail li[aria-current=step] .intro-rail-line {
-  background: var(--text);
-}
-.intro-rail-label {
-  display: block;
-  margin-top: 8px;
-  font-size: calc(9px * var(--talos-ui-font-scale));
-  letter-spacing: .2em;
-  text-transform: uppercase;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.intro-rail li[aria-current=step] .intro-rail-label {
-  color: var(--text);
-}
-.intro-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  padding: 22px 20px 8px;
-}
-.intro-title {
-  margin: 0;
-  font-size: calc(22px * var(--talos-ui-font-scale));
-  font-weight: 650;
-  line-height: 1.2;
-}
-.intro-copy {
-  margin: 10px 0 0;
-  color: var(--muted);
-  font-size: calc(13px * var(--talos-ui-font-scale));
-  line-height: 1.6;
-}
-.intro-copy strong {
-  color: var(--text);
-  font-weight: 600;
-}
-.intro-list {
-  list-style: none;
-  margin: 18px 0 0;
-  padding: 0;
-  display: grid;
-  gap: 6px;
-}
-.intro-choice {
-  width: 100%;
-  min-height: 54px;
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: transparent;
-  color: var(--text-2);
-  padding: 8px 12px;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease);
-}
-.intro-choice:hover,
-.intro-choice:focus-visible {
-  border-color: var(--line-strong);
-  background: var(--surface-highlight-subtle);
-}
-.intro-choice.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--text);
-}
-.intro-choice strong {
-  display: block;
-  font-size: calc(13px * var(--talos-ui-font-scale));
-  color: var(--text);
-}
-.intro-choice small {
-  display: block;
-  margin-top: 2px;
-  font-size: calc(11px * var(--talos-ui-font-scale));
-  color: var(--muted);
-}
-.intro-choice .intro-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  background: var(--surface-2);
-  color: var(--text-2);
-  font-weight: 700;
-  font-size: calc(12px * var(--talos-ui-font-scale));
-}
-.intro-choice .intro-state {
-  font-family: var(--font-mono);
-  font-size: calc(10px * var(--talos-ui-font-scale));
-  color: var(--muted);
-  white-space: nowrap;
-}
-.intro-choice[data-stato=ok] .intro-state {
-  color: var(--ok, var(--accent));
-}
-.intro-choice[data-stato=rotto] .intro-state {
-  color: var(--danger);
-}
-.intro-key {
-  display: grid;
-  gap: 8px;
-  margin: 8px 0 4px;
-  padding: 12px;
-  border: 1px dashed var(--line-strong);
-  border-radius: 12px;
-}
-.intro-key input {
-  min-height: 40px;
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--text);
-  padding: 0 12px;
-  font-family: var(--font-mono);
-  font-size: calc(12px * var(--talos-ui-font-scale));
-}
-.intro-key input:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 1px;
-  border-color: var(--focus);
-}
-.intro-key-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.intro-key-esito {
-  font-size: calc(11px * var(--talos-ui-font-scale));
-  color: var(--muted);
-}
-.intro-key-esito[data-esito=ok] {
-  color: var(--ok, var(--accent));
-}
-.intro-key-esito[data-esito=rotto] {
-  color: var(--danger);
-}
-.intro-note {
-  margin: 14px 0 0;
-  color: var(--muted);
-  font-size: calc(11px * var(--talos-ui-font-scale));
-  line-height: 1.5;
-}
-.intro-picker {
-  margin-top: 16px;
-}
-.intro-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px 20px 18px;
-  border-top: 1px solid var(--line);
-}
-.intro-foot .intro-back[hidden] {
-  display: none;
-}
-.intro-foot .intro-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.intro-foot .intro-back svg {
-  width: 15px;
-  height: 15px;
-}
-.intro-foot .intro-next {
-  margin-left: auto;
-  min-width: 140px;
-}
-@media (max-width: 780px) {
-  .intro-dialog {
-    width: 100vw;
-    max-height: 100dvh;
-    margin: 0;
-    border-radius: 0;
-    border: 0;
-  }
-  .intro-rail-label {
-    letter-spacing: .12em;
-  }
-}
-.search-source-choice .intro-mark svg {
-  width: 15px;
-  height: 15px;
 }
 dialog.sheet-dialog .search-source-details .provider-field input,
 dialog.command-dialog .search-source-details .provider-field input,
