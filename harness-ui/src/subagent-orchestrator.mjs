@@ -240,7 +240,30 @@ export function compitoDaPromptDiDelega(prompt) {
   return dopo || testo;
 }
 
-export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsisteFn = esisteCartella }) {
+/**
+ * ⛔⛔⛔⛔ BC-76, secondo giro (17/09/2026) — CON QUALE MODELLO NASCE UNA FIGLIA.
+ *
+ * Era `padre.modello ?? null`, scritto qui dentro. Reggeva finché una madre era per forza cloud;
+ * da quando una sessione `provider:'local'` esegue gli attrezzi, quella riga **mandava fuori casa**
+ * il compito delegato: `voce.modello` di una madre locale è il `modelId` NUDO del GGUF, e
+ * `separaFonteModello` legge un id nudo come OpenRouter.
+ *
+ * ⇒ La domanda «come si chiama in rete il modello di questa sessione» ha già una risposta sola, in
+ *   `session-registry.mjs` (`modelloDellaFiglia` → `modelloDiSessionePerRete`). Qui NON si ricopia:
+ *   si riceve. ⛔ E non si importa nemmeno — `session-registry` importa già questo file, e un ciclo
+ *   fra i due metterebbe una costante di modulo in zona morta a seconda di chi viene caricato prima.
+ *
+ * Il default riproduce il comportamento di prima **parola per parola**: un host che non passa questa
+ * dipendenza non cambia di un byte.
+ *
+ * @callback ModelloPerLaFiglia
+ * @param {object} padre la voce della sessione madre
+ * @returns {{ok: true, modello: string|null} | {ok: false, motivo: string}}
+ */
+export function creaSubagentOrchestrator({
+  sessioni, avviaESeguiFn, cartellaEsisteFn = esisteCartella,
+  modelloPerLaFigliaFn = (padre) => ({ ok: true, modello: padre?.modello ?? null }),
+}) {
   function contaFigliAttivi(sessionPadreId) {
     let n = 0;
     for (const voce of sessioni.values()) {
@@ -307,6 +330,19 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
       const padre = sessioni.get(sessionPadreId);
       if (!padre) {
         resolve({ esito: 'rifiutato', motivo: 'la sessione padre non esiste più' });
+        return;
+      }
+      /*
+       * ⛔⛔⛔⛔ BC-76, secondo giro — PRIMA di tutto il resto, perché è l'unico rifiuto che protegge
+       *   qualcosa che non si può disfare: una conversazione già uscita dal computer.
+       * ⛔ Se la madre è locale e il suo nome di rete non si sa costruire, si RIFIUTA con una frase.
+       *   Non si ripiega sul cloud e non si ripiega sul modello di serie del server: chi ha scelto
+       *   il locale l'ha scelto perché niente esca, e un ripiego silenzioso su quel punto è
+       *   esattamente il difetto misurato il 17/09 (`openrouter.ai`, corpo col testo della madre).
+       */
+      const modelloScelto = modelloPerLaFigliaFn(padre);
+      if (modelloScelto?.ok !== true) {
+        resolve({ esito: 'rifiutato', motivo: modelloScelto?.motivo ?? 'non si sa con quale modello far partire la sotto-sessione' });
         return;
       }
       /*
@@ -432,7 +468,10 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
         task: { consegna: task, consegnaCorta: compitoDaPromptDiDelega(task) },
         padreId: sessionPadreId,
         profonditaDelega: profonditaVoluta,
-        modelloRichiesta: padre.modello ?? null,
+        /* ⛔ BC-76: non `padre.modello` — vedi `modelloPerLaFigliaFn` in testa a questa funzione.
+           Per una madre cloud è lo stesso valore di prima; per una madre locale è il nome con il
+           prefisso della sua fonte, cioè l'unico che tiene la figlia sul motore di casa. */
+        modelloRichiesta: modelloScelto.modello,
         reasoningRichiesto: padre.reasoning ?? null,
         permessiRichiesti: padre.permessi ?? null,
         permessiPerAttrezzoRichiesti: padre.permessiPerAttrezzo ?? null,

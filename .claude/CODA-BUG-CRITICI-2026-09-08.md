@@ -1068,7 +1068,45 @@ disegna. Due azioni per riga al massimo (regola dei menu). Sopravvive a ricarica
 uno stato volatile), non compare nei giri senza scritture, e nei giri lunghi non si duplica a ogni scrittura. Skill
 `frontend-design`, tema Calm, nei due temi a 1024 e 1440; nessun componente nuovo: si CABLA quello che c'è.
 
-## BC-76 | Una sessione col modello LOCALE disegna le chiamate agli attrezzi e non ne esegue NESSUNA (trovato dalla PR bozza #28 dell'owner, confermato nel nostro albero il 17/09/2026) — APERTO, è il blocco vero del motore locale sul desktop
+## BC-76 | Una sessione col modello LOCALE disegna le chiamate agli attrezzi e non ne esegue NESSUNA (trovato dalla PR bozza #28 dell'owner, confermato nel nostro albero il 17/09/2026) — ✅ CURATA il 17/09 sul ramo `fase-a-bc76`, in attesa del giro vero sul 4174
+
+✅ **CHIUSA nel codice il 17/09/2026** (ramo `fase-a-bc76`, da `d4ca608e`). ⛔ **E la premessa della scheda era
+INCOMPLETA**, misurato prima di scrivere una riga: le strade locali sono DUE e **solo una era rotta**.
+· `POST /api/v1/sessions/custom` (la CHAT: il selettore scrive `local:<id>` in `modello`, e quel corpo non ammette
+nemmeno il campo `provider`) andava GIÀ al kernel — misurato: `tools: 45` nel corpo, `ToolCallResult` presente,
+due richieste al motore, `generateStream` mai chiamata. **Era già un agente.**
+· `POST /api/v1/sessions` con `{provider:'local', runtimeId, modelId}` — cioè il **solo** pulsante «prova» del
+Laboratorio modelli (`frontend/src/legacy/app.js:3877`) — finiva su `eseguiRuntimeLocale`: eventi
+`RunStarted, ToolCallStart, ToolCallArgs, RunFinished`, zero `ToolCallResult`, zero richieste al motore.
+**Cura:** `eseguiRuntimeLocale` RIMOSSA (59 righe), e una sessione `provider:'local'` entra in `avviaSessioneFn`
+col nome del modello prefissato dalla sua fonte (`fonteLocaleDelRuntime`: `llama.cpp`→`local:`, `ollama`→`ollama:`,
+`lmstudio`→`lmstudio:`, derivato dal registro dei fornitori, non scritto a mano). Prove:
+`tests/bc76-sessione-locale-agente.test.mjs` (7, dalla strada vera con un motore OpenAI finto su 127.0.0.1) e le
+quattro `SESSION-LOCAL-*` riscritte. Backend intero **3347 · 3341 pass · 0 fail · 6 skipped**.
+⛔ **NON verificato:** nessun modello vero, nessun giro sul 4174 — li fa l'owner.
+⛔ **Trovato per strada e NON curato:** un motore locale che RIFIUTA `tools` (HTTP 400) arriva all'utente come
+`RunError code:'internal-error'` col messaggio grezzo del server («tools param requires --jinja flag»), **dopo 4
+tentativi** — la ritentata sta in `chiamaConRitenta` (kernel), fuori dalla proprietà di questa riga.
+⛔ **Misura del prompt (strada del Laboratorio modelli):** **133 → 38.201 caratteri** (287×), `tools: 0 → 45`. È il
+prezzo di diventare un agente, e non tocca la chat, che mandava già 38.640 caratteri prima e dopo.
+
+⛔⛔⛔⛔ **SECONDO GIRO, 17/09 — LA CURA APRIVA UNA FUGA, trovata dalla revisione e chiusa sullo stesso ramo.**
+Da quando una sessione locale ESEGUE gli attrezzi, può chiamare i due che aprono una sessione nuova —
+`delega_sottotask` e `research_start` — e nessuno dei due era scritto per una madre locale. Misurato con la rete
+intercettata (niente è uscito davvero): la delega passava `padre.modello`, cioè il `modelId` NUDO del GGUF ⇒
+`{"host":"openrouter.ai","model":"mio.gguf","contieneSegreto":true}`; la ricerca passava `modello: null` per le madri
+locali ⇒ la figlia nasceva con `vendor/modello-di-serie`, cioè il cloud. **In entrambi i casi la conversazione di chi
+aveva scelto il locale usciva dal computer senza nessun consenso al ripiego.**
+**Cura:** `modelloDellaFiglia` in `session-registry.mjs` (una verità sola per delega e ricerca: madre non locale →
+`padre.modello` identico a prima; madre locale → il nome con il prefisso della sua fonte; madre locale senza nome
+leggibile → **RIFIUTO con una frase**, mai il modello di serie), passata all'orchestratore come
+`modelloPerLaFigliaFn` (niente import circolare, e il default riproduce il comportamento storico).
+Prove: `tests/bc76-figlie-di-madre-locale.test.mjs` (3, con `globalThis.fetch` sostituita da una spia che lascia
+passare solo 127.0.0.1), più `BC76-08`/`BC76-09` per le due condizioni del ripiego che la revisione aveva trovato
+**non difese** (rompendole, la suite restava verde). Backend intero **3352 · 3346 pass · 0 fail · 6 skipped**.
+⛔ Trovato misurando: `GIRI_MASSIMI` nel kernel è `Number.POSITIVE_INFINITY` (`talosHarness.mjs:156`) — «giri
+esauriti» non è più un esito raggiungibile. E uno STOP torna dal ramo RIUSCITO di `avviaSessione` con un `esito`
+valorizzato, quindi la guardia `!aborted` del ripiego morde solo dove il giro salta PRIMA del kernel (contextHooks).
 
 `src/session-registry.mjs:2452` `eseguiRuntimeLocale`: una sola `generateStream`, e su `tool_call` (`:2480-2484`) emette
 `ToolCallStart` + `ToolCallArgs` e BASTA — nessun attrezzo eseguito, nessun risultato, nessun messaggio `tool`, nessuna
@@ -1195,6 +1233,13 @@ modale, e `ragionamento-compresso` SCHERMO-10 (×2) qui è VERDE — era instabi
    forma di rete `local:`/`ollama:`/`lmstudio:`, oppure rifiuto onesto; mai cloud senza `fallbackConsent`).
    Stessa revisione, due mie rotture passate VERDI (356/356), cioè due prove mancanti, chieste sullo stesso ramo: il ripiego su ogni
    `ok:false` invece che su `esito == null`, e — grave — il ripiego che parte anche a sessione FERMATA.
+   ✅ **CHIUSO sul ramo prima della fusione (17/09 sera).** Secondo passaggio dell'agente (`4075dfb8`, `6989059f`): `modelloDellaFiglia`
+   dà alla figlia di una madre locale il nome in forma di rete, oppure RIFIUTA; la ricerca era vera anche lei, misurata (partiva su
+   `vendor/modello-di-serie`). Revisione MIA sul nuovo HEAD: la mia sonda ⇒ `RICHIESTE USCITE: []`, figlia `local:mio.gguf`, tre richieste
+   al motore di casa; cinque rotture mie, tutte ROSSE (BC76-08, BC76-09, FIG-01, FIG-02), ripristino sha256 identico. Una correzione mia
+   in fusione: su un rifiuto la ricerca ricadeva ancora sul modello di serie (`?? null`) — ora rifiuta come la delega. Il giudice della
+   ricerca l'ho LETTO: il solo candidato è il modello della sessione, quindi per una madre locale non c'è giudice e niente esce.
+   ⛔ NON verificato: nessun modello vero, nessun Ollama / LM Studio vero, la profondità 2 della delega (letta, non misurata).
 2. ⛔⛔ **Un motore che rifiuta `tools` viene ritentato quattro volte e arriva a schermo come errore grezzo** — misurato dall'agente
    con un motore finto che risponde `HTTP 400 {"error":{"message":"tools param requires --jinja flag"}}`: eventi `RunStarted,
    RunError`, `code: internal-error`, messaggio = il grezzo del server con un flag interno dentro. Tre difetti: un 400 ritentato

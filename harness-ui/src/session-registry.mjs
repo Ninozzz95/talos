@@ -42,8 +42,13 @@ import {
 import {
   approvalRequested, approvalResolved, hookInvoked, queuedMessageDelivered, workspaceChanged, contextEngineEvent,
   runRedirectApplied, runRedirectCancelled, runRedirectFailed, runRedirectRequested,
-  runStarted, runFinished, runError, textMessageStart, textMessageContent, textMessageEnd,
-  reasoningMessageStart, reasoningMessageContent, reasoningMessageEnd, toolCallStart, toolCallArgs,
+  /* ⛔ BC-76 (17/09/2026): qui c'erano anche `runStarted`, `runFinished`, i `textMessage*`, i
+     `reasoningMessage*`, `toolCallStart` e `toolCallArgs`. Li usava SOLO `eseguiRuntimeLocale`, che
+     traduceva a mano il flusso del motore locale in eventi AG-UI; adesso quel flusso lo traduce il
+     kernel, una volta sola, per ogni fornitore.
+     ⛔ Via anche `runError`, che però era già inerte PRIMA di questa riga: misurato sul commit di
+     base `d4ca608e`, dove compare **una volta sola** in tutto il file — cioè qui, importato e mai
+     chiamato. Nessun comportamento cambia; se ne va perché adesso si vede. */
 } from './agui-events.mjs';
 import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReale } from './custom-task.mjs';
 import { imageMessageContent } from './chat-image-attachments.mjs';
@@ -123,6 +128,31 @@ import {
 import { cartellaFinaleValida } from './kernel/talosHarness.mjs';
 /* ⛔ D3: per dedurre il fornitore dal modello invece di scriverlo a mano. */
 import { separaFonteModello } from './model-destination.mjs';
+/* ⛔ BC-76: la fonte di un motore locale si CHIEDE al registro dei fornitori, non si scrive qui. */
+import { ID_MOTORI_LOCALI_OPENAI, idPerWire } from './provider-registry.mjs';
+
+/**
+ * ⛔⛔⛔ BC-76 (17/09/2026) — DA QUALE MOTORE LOCALE PASSA UNA SESSIONE, E COME SI CHIAMA IN RETE.
+ *
+ * `runtimeId` è il nome del MOTORE installato su questo computer (`localRuntimes` in `server.mjs`:
+ * `llama.cpp`, `ollama`, `lmstudio`); la FONTE è il prefisso che `model-destination.mjs` usa per
+ * decidere indirizzo e intestazioni. I due insiemi coincidono per Ollama e LM Studio — che si
+ * raggiungono a un indirizzo, e nel registro hanno `wire: 'openai-chat'` — e NON coincidono per
+ * llama.cpp, il cui runtimeId è il nome del binario mentre la fonte è `local`: il supervisore non
+ * ha un indirizzo pubblicabile (la sua `--api-key` è effimera e non esce di lì), quindi ha un wire
+ * suo, `locale`.
+ *
+ * ⇒ La regola si DERIVA dal registro e non è un elenco parallelo: chi ha un wire OpenAI si chiama
+ *   come il suo runtime, tutti gli altri passano dal ponte del supervisore — che è l'unica fonte
+ *   con `wire: 'locale'` (`idPerWire('locale')` misurato il 17/09/2026: `["local"]`).
+ * ⛔ `runtimeId` assente vale `local`: una voce ripristinata da un disco scritto prima che il campo
+ *   esistesse non deve cambiare comportamento.
+ */
+const FONTE_DEL_SUPERVISORE_LOCALE = idPerWire('locale')[0];
+
+export function fonteLocaleDelRuntime(runtimeId) {
+  return ID_MOTORI_LOCALI_OPENAI.includes(runtimeId) ? runtimeId : FONTE_DEL_SUPERVISORE_LOCALE;
+}
 
 /**
  * ⛔⛔⛔ D3 (17/09/2026) — IL NOME DEL MODELLO DI UNA SESSIONE, NELLA FORMA CHE LA RETE CAPISCE.
@@ -144,7 +174,10 @@ import { separaFonteModello } from './model-destination.mjs';
  */
 export function modelloDiSessionePerRete(voce) {
   if (!voce) return null;
-  if (voce.provider === 'local') return voce.modelId ? `local:${voce.modelId}` : null;
+  /* ⛔ BC-76 (17/09): il prefisso non è più la costante `local:` — una sessione avviata su Ollama
+     o LM Studio deve parlare col SUO processo, non col ponte del supervisore llama-server, che è
+     un altro programma. Vedi `fonteLocaleDelRuntime`. */
+  if (voce.provider === 'local') return voce.modelId ? `${fonteLocaleDelRuntime(voce.runtimeId)}:${voce.modelId}` : null;
   const nome = typeof voce.modello === 'string' ? voce.modello.trim() : '';
   /*
    * ⛔⛔⛔ TERZO CONTROLLO (17/09/2026) — LA FORMA, non solo la presenza.
@@ -171,6 +204,44 @@ export function modelloDiSessionePerRete(voce) {
  *   cosa»: `separaFonteModello` su un id NUDO non lancia, risponde `openrouter`, e un id nudo è
  *   esattamente il nome di un GGUF locale. Un ripiego silenzioso sul cloud è la cosa da impedire.
  */
+/**
+ * ⛔⛔⛔⛔ BC-76, secondo giro (17/09/2026) — CON QUALE MODELLO NASCE LA FIGLIA DI QUESTA SESSIONE.
+ *
+ * Due attrezzi aprono una sessione nuova — `delega_sottotask` e `research_start` — e nessuno dei due
+ * era stato scritto pensando a una madre LOCALE, perché prima una madre locale non poteva chiamarli:
+ * non eseguiva attrezzi. Da quando li esegue, le due strade perdevano la casa in due modi opposti e
+ * con lo stesso esito:
+ *   · la DELEGA passava `padre.modello`, che per una madre locale è il `modelId` NUDO del GGUF ⇒
+ *     `separaFonteModello` lo legge OpenRouter ⇒ misurato il 17/09 con la rete intercettata:
+ *     `{"host":"openrouter.ai","model":"mio.gguf","contieneSegreto":true}`;
+ *   · la RICERCA passava `null` per le madri locali (era una scelta deliberata e documentata, e
+ *     aveva ragione finché la figlia non poteva parlare col motore locale) ⇒ la figlia partiva col
+ *     modello DI SERIE del server — misurato: `vendor/modello-di-serie`, cioè il cloud.
+ * ⇒ In entrambi i casi la conversazione di chi aveva scelto il locale **usciva dal computer, senza
+ *   nessun consenso al ripiego**.
+ *
+ * Tre risposte, e la terza è la ragione per cui questa funzione non ritorna una stringa:
+ *   · madre NON locale → `padre.modello ?? null`, **identico a prima**, byte per byte (la regola del
+ *     06/09 «la figlia eredita il modello della madre» resta intatta);
+ *   · madre locale con un `modelId` → il nome con il prefisso della sua fonte (`local:`/`ollama:`/
+ *     `lmstudio:`), lo stesso che usa un turno normale e la compattazione;
+ *   · madre locale senza un nome leggibile → **RIFIUTO con una frase**. Mai il modello di serie:
+ *     un ripiego silenzioso è ciò che questa riga esiste per impedire.
+ *
+ * ⛔ Vive qui, e non dentro `subagent-orchestrator.mjs`, per due motivi: la regola è la stessa che
+ *   già governa turno e compattazione (una verità sola), e `session-registry` importa
+ *   l'orchestratore — l'import inverso sarebbe un ciclo.
+ */
+export function modelloDellaFiglia(padre) {
+  if (padre?.provider !== 'local') return { ok: true, modello: padre?.modello ?? null };
+  const nome = modelloDiSessionePerRete(padre);
+  if (nome) return { ok: true, modello: nome };
+  return {
+    ok: false,
+    motivo: 'This session runs on the local engine, but it does not say which local model: a sub-session cannot be started without sending the work to a remote provider, which was not authorised. Reopen the session choosing the local model.',
+  };
+}
+
 function formaDiModelloRiconosciuta(nome) {
   if (typeof nome !== 'string' || !nome.trim()) return false;
   const n = nome.trim();
@@ -249,13 +320,9 @@ export const EXPORT_SCHEMA = 'talos.harness-ui.session-export.v1';
  */
 export const SCHEMA_SESSIONE = 1;
 
-class LocalRuntimeSessionError extends Error {
-  constructor(message, code = 'LOCAL_RUNTIME_FAILED') {
-    super(message);
-    this.name = 'LocalRuntimeSessionError';
-    this.code = code;
-  }
-}
+/* ⛔ BC-76 (17/09/2026): qui c'era `LocalRuntimeSessionError`, l'errore di `eseguiRuntimeLocale`.
+   Con quella funzione se n'è andato anche il suo errore: un guasto del motore locale adesso lo
+   classifica il kernel, come per ogni altro fornitore, e il suo `code` arriva in `RunError`. */
 
 /* =====================================================================
  * ⭐⭐⭐ W1-02 (04/9) — PROCESS LEDGER + GUARDIA DI STALLO.
@@ -1988,7 +2055,12 @@ export function createSessionRegistry({
   let sessioniCorrotte = [];
   let sessioniScartate = []; // ⭐ 04/9, W0-01 — [{ sessionId, motivo, dettaglio? }]
   // ⭐⭐⭐ FASE C (28/8) — istanziato qui: `avviaESegui` è una function declaration (issata), riferibile prima della sua definizione testuale più sotto.
-  const subagentOrchestrator = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: avviaESegui, cartellaEsisteFn });
+  /* ⛔ BC-76, secondo giro: `modelloPerLaFigliaFn` è la riga che tiene una figlia DELEGATA sul motore
+     di casa quando la madre è locale — vedi `modelloDellaFiglia`. Senza, l'orchestratore ricade sul
+     suo default storico (`padre.modello`), cioè sul nome nudo del GGUF, cioè su openrouter.ai. */
+  const subagentOrchestrator = creaSubagentOrchestrator({
+    sessioni, avviaESeguiFn: avviaESegui, cartellaEsisteFn, modelloPerLaFigliaFn: modelloDellaFiglia,
+  });
   /*
    * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research. Stesso principio
    * di subagentOrchestrator appena sopra: `avviaESegui` issata, `sessioni`
@@ -2782,66 +2854,30 @@ export function createSessionRegistry({
     };
   }
 
-  async function eseguiRuntimeLocale({ voce, task, messaggiIniziali, runtimeId, modelId, reasoning, sessionId }) {
-    const runtime = localRuntimes?.[runtimeId];
-    if (!runtime || typeof runtime.generateStream !== 'function') {
-      throw new LocalRuntimeSessionError(`runtime locale non disponibile: ${runtimeId}`, 'RUNTIME_NOT_AVAILABLE');
-    }
-    const runId = randomUUID();
-    const messages = Array.isArray(messaggiIniziali) && messaggiIniziali.length > 0
-      ? messaggiIniziali
-      : [{ role: 'user', content: typeof task?.consegna === 'string' ? task.consegna : String(task ?? '') }];
-    const emit = (event) => broadcast(voce, { ...event, provider: 'local', runtimeId, modelId, backend: runtimeId, at: clock().toISOString() });
-    emit(runStarted({ threadId: sessionId, runId, input: messages }));
-    let textId = null;
-    let reasoningId = null;
-    let text = '';
-    const messaggiCanonici = () => [...messages, ...(text ? [{ role: 'assistant', content: text }] : [])];
-    let done = false;
-    try {
-      for await (const event of runtime.generateStream({
-        provider: runtimeId, runId, turnId: runId, modelId, messages, reasoning,
-        signal: voce.controller.signal, requestId: sessionId,
-      })) {
-        if (event?.type === 'text' && typeof event.value === 'string' && event.value !== '') {
-          if (!textId) { textId = randomUUID(); emit(textMessageStart({ messageId: textId })); }
-          text += event.value;
-          emit(textMessageContent({ messageId: textId, delta: event.value }));
-        } else if (event?.type === 'reasoning' && typeof event.value === 'string' && event.value !== '') {
-          if (!reasoningId) { reasoningId = randomUUID(); emit(reasoningMessageStart({ messageId: reasoningId })); }
-          emit(reasoningMessageContent({ messageId: reasoningId, delta: event.value }));
-        } else if (event?.type === 'tool_call') {
-          const toolCallId = event.id || randomUUID();
-          emit(toolCallStart({ toolCallId, toolCallName: event.name || 'unknown' }));
-          const args = typeof event.arguments === 'string' ? event.arguments : JSON.stringify(event.arguments ?? {});
-          emit(toolCallArgs({ toolCallId, delta: args }));
-        } else if (event?.type === 'error') {
-          throw new LocalRuntimeSessionError(event.message || 'runtime locale fallito', event.code || 'LOCAL_RUNTIME_FAILED');
-        } else if (event?.type === 'done') {
-          done = true;
-        }
-      }
-    } catch (error) {
-      if (voce.controller.signal.aborted) {
-        if (textId) emit(textMessageEnd({ messageId: textId }));
-        if (reasoningId) emit(reasoningMessageEnd({ messageId: reasoningId }));
-        emit(runFinished({ threadId: sessionId, runId, outcome: 'fermato' }));
-        return { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: messaggiCanonici() } };
-      }
-      throw error instanceof LocalRuntimeSessionError
-        ? error
-        : new LocalRuntimeSessionError(error?.message || 'runtime locale fallito', error?.code || 'LOCAL_RUNTIME_FAILED');
-    }
-    if (textId) emit(textMessageEnd({ messageId: textId }));
-    if (reasoningId) emit(reasoningMessageEnd({ messageId: reasoningId }));
-    if (voce.controller.signal.aborted) {
-      emit(runFinished({ threadId: sessionId, runId, outcome: 'fermato' }));
-      return { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: messaggiCanonici() } };
-    }
-    if (!done) throw new LocalRuntimeSessionError('runtime locale non ha chiuso lo stream', 'LOCAL_RUNTIME_INCOMPLETE');
-    emit(runFinished({ threadId: sessionId, runId, outcome: 'concluso' }));
-    return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: messaggiCanonici() } };
-  }
+  /*
+   * ⛔⛔⛔ BC-76 (17/09/2026) — QUI VIVEVA `eseguiRuntimeLocale`, ED È STATA TOLTA.
+   *
+   * Faceva UNA `runtime.generateStream({messages, reasoning, …})` — senza `tools` né
+   * `tool_choice` — e su `event.type === 'tool_call'` emetteva `ToolCallStart` + `ToolCallArgs`
+   * e basta: nessun attrezzo eseguito, nessun `ToolCallResult`, nessun messaggio `tool`, nessuna
+   * continuazione. Una chat che mostrava un'attività mai avvenuta.
+   *
+   * ⛔ Non è stata riparata, è stata RIMOSSA: ripararla avrebbe voluto dire scriverle dentro un
+   *   SECONDO esecutore di attrezzi accanto a quello del kernel — cioè una seconda copia di
+   *   permessi, hook, approvazioni, cancello semantico, ricevute e coda dei messaggi, destinata a
+   *   divergere dalla prima. Adesso una sessione locale passa dal giro di tutte le altre
+   *   (`avviaIlGiro`, più sotto) e il motore locale fa il TRASPORTO, che è il mestiere che ha.
+   *
+   * Le sue 59 righe stanno nella storia del file, al commit che le toglie.
+   *
+   * ⛔ Con lei se ne vanno anche i campi `provider`/`runtimeId`/`modelId`/`backend` che il suo
+   *   `emit` appiccicava a OGNI evento di una sessione locale. Misurato col grep il 17/09/2026
+   *   prima di toglierli: nessuno li legge — né il server, né il pannello del Laboratorio modelli
+   *   (`frontend/src/legacy/app.js`, `collegaEventiProvaModelLab`, che guarda solo `type`, `delta`,
+   *   `toolCallName`, `message` e `code`). L'appartenenza di una sessione al motore locale resta
+   *   dove è sempre stata e dove qualcuno la legge davvero: sull'intestazione della voce
+   *   (`elenca()` → `provider`/`runtimeId`/`modelId`).
+   */
 
   /**
    * ⭐⭐⭐ 03/9 — Full access: owner, parole esatte — *"se ho abilitato full
@@ -3451,15 +3487,40 @@ export function createSessionRegistry({
      *   né `provider` né `runtimeId`). Passarglielo sarebbe un guasto garantito alla prima
      *   chiamata: `null` ⇒ la figlia usa il default del server, cioè esattamente ciò che
      *   succedeva prima di questa riga. L'eredità vale dove ha senso, e dove non ne ha tace.
+     *
+     * ⛔⛔⛔⛔ 17/09/2026, BC-76 SECONDO GIRO — QUEL `null` ERA UNA FUGA, e il paragrafo qui sopra
+     *   è stato vero fino a poche ore fa. Aveva ragione su un punto («il nome nudo non si passa») e
+     *   torto sul ripiego: `null` non è «tace», è «usa il modello di serie del server», cioè il
+     *   CLOUD. Misurato con la rete intercettata su una madre `provider:'local'`: la figlia nasceva
+     *   con `vendor/modello-di-serie` e il testo della madre partiva verso un fornitore remoto,
+     *   **senza nessun consenso al ripiego**. La premessa che lo giustificava è caduta il giorno
+     *   stesso: da quando il motore locale è un TRASPORTO, una figlia `provider:'cloud'` con
+     *   `modello: 'local:<id>'` parla col motore di casa esattamente come la madre.
+     * ⇒ Il nome lo dà `modelloDellaFiglia`, la stessa regola della delega. Un rifiuto (madre locale
+     *   senza nome leggibile) diventa `modello: null` **solo per una madre non locale**; per una
+     *   locale non può succedere (il cancello `RUNTIME_NOT_AVAILABLE` all'avvio lo impedisce) e se
+     *   succedesse, l'assenza di modello fa fallire l'avvio della ricerca invece di spedirla fuori.
+     * ⛔ `reasoning` resta come prima — `null` per una madre locale: quello è un parametro che il
+     *   server locale non ha mai ricevuto, e allargarlo non è questa riga. Debito dichiarato, non
+     *   dimenticato.
      */
-    const onRicercaAvvia = (argomenti) => researchOrchestrator.avvia({
-      cartella: voce.cartella,
-      question: argomenti?.question,
-      depth: argomenti?.depth,
-      padreId: sessionId,
-      modello: voce.provider === 'local' ? null : (voce.modello ?? null),
-      reasoning: voce.provider === 'local' ? null : (voce.reasoning ?? null),
-    });
+    /* ⛔ Revisione del 17/09: qui c'era `modelloDellaFiglia(voce).modello ?? null`, cioè su un RIFIUTO
+       (`ok:false`, madre locale senza nome leggibile) la ricerca ricadeva in silenzio sul modello di
+       serie del server — il cloud, proprio ciò che `modelloDellaFiglia` rifiuta. Oggi quel ramo è
+       irraggiungibile per una voce viva (il cancello `RUNTIME_NOT_AVAILABLE` la ferma prima), ma la
+       delega rifiuta e la ricerca deve fare lo stesso: il kernel porta `esito` al modello così com'è. */
+    const onRicercaAvvia = (argomenti) => {
+      const modelloScelto = modelloDellaFiglia(voce);
+      if (modelloScelto.ok !== true) return Promise.resolve({ ok: false, esito: `REFUSED. ${modelloScelto.motivo}` });
+      return researchOrchestrator.avvia({
+        cartella: voce.cartella,
+        question: argomenti?.question,
+        depth: argomenti?.depth,
+        padreId: sessionId,
+        modello: modelloScelto.modello,
+        reasoning: voce.provider === 'local' ? null : (voce.reasoning ?? null),
+      });
+    };
     const onRicercaLeggi = (argomenti) => researchOrchestrator.leggi({ cartella: voce.cartella, id: argomenti?.id });
     const onRicercaRinomina = (argomenti) => researchOrchestrator.rinomina({ cartella: voce.cartella, id: argomenti?.id, title: argomenti?.title ?? null });
     const onRicercaPausa = (argomenti) => researchOrchestrator.mettiInPausa({ id: argomenti?.id });
@@ -3599,21 +3660,108 @@ export function createSessionRegistry({
       ),
       onEvento: (evento, opzioni) => broadcast(voce, evento, opzioni),
     };
-    const esecuzione = providerEffettivo === 'local'
-      ? eseguiRuntimeLocale({ voce, task, messaggiIniziali, runtimeId: runtimeIdEffettivo, modelId: voce.modelId, reasoning: reasoningEffettivo, sessionId })
+    /*
+     * ⛔⛔⛔ BC-76 (17/09/2026) — UN GIRO SOLO PER TUTTI, e il motore locale è un TRASPORTO.
+     *
+     * Qui c'era un bivio: `provider === 'local'` andava a `eseguiRuntimeLocale`, che faceva UNA
+     * `generateStream` senza `tools`, e su una `tool_call` emetteva `ToolCallStart` + `ToolCallArgs`
+     * e si fermava. Nessun attrezzo eseguito, nessun `ToolCallResult`, nessun messaggio `tool`,
+     * nessuna continuazione: la chat mostrava un'attività mai avvenuta, e il modello locale non
+     * poteva leggere un file.
+     *
+     * ⇒ La cura NON è un secondo esecutore di attrezzi (scavalcherebbe permessi, hook, cancello
+     *   semantico e ricevute): è mandare anche questa sessione dal giro del kernel, con il nome del
+     *   modello nella forma che il trasporto capisce (`local:`/`ollama:`/`lmstudio:`, vedi
+     *   `modelloDiSessionePerRete`). Da lì `risolviDestinazioneModello` accende il motore se serve
+     *   (`avviaLocale`) e `chiamaLocale` spedisce attraverso il supervisore, che possiede la chiave.
+     *
+     * ⛔ MISURATO il 17/09, prima di scrivere: una sessione creata dalla CHAT con un modello locale
+     *   NON passava di qui — il selettore scrive `local:<id>` in `modello` e
+     *   `POST /api/v1/sessions/custom` non ammette nemmeno il campo `provider`. Quella strada era
+     *   già quella del kernel (`tools: 45` nel corpo, `ToolCallResult` presente). Rotta era solo
+     *   questa, cioè `POST /api/v1/sessions` con `{provider:'local', …}`: il pulsante «prova» del
+     *   Laboratorio modelli. ⇒ La cura fa combaciare le due, non ne inventa una terza.
+     *
+     * ⛔ Il server locale accetta `tools` perché il supervisore lo lancia con `--jinja`
+     *   (`llama-server-supervisor.mjs`), e con quel flag llama.cpp dichiara «Function calling is
+     *   supported for all models» — chi non ha un template nativo passa dal formato «Generic»
+     *   (`docs/function-calling.md`, letto il 17/09/2026). Nessun modello «consigliato», nessun
+     *   `--chat-template` forzato: la regola vale per un GGUF qualunque.
+     *
+     * ⛔ E `avviaIlGiro` vale ADESSO anche per una sessione locale: prima i `contextHooks` erano
+     *   riservati alle sessioni cloud, per il solo fatto che il ramo locale usciva prima. Non è
+     *   una svista corretta per simmetria — `context-runtime.mjs` tratta esplicitamente
+     *   `provider: 'local'` (riga 16 e 44-45, `isLocal` include `local`, `ollama`, `llama.cpp`),
+     *   cioè il motore del contesto era già scritto PER queste sessioni e non le riceveva mai. Il
+     *   rischio resta piccolo per un'altra ragione misurata: `contextHooksFn` esiste solo con
+     *   `config.contextTrial`, che `config.mjs` (`parseContextTrial`) lascia `null` se non c'è
+     *   `TALOS_CONTEXT_TRIAL`, e pretende comunque una porta diversa da 4174.
+     */
+    const avviaIlGiro = (opzioni) => (typeof contextHooksFn === 'function'
+      ? Promise.resolve().then(async () => {
+        const contextHooks = await contextHooksFn({ sessionId, runId: `${sessionId}:${versioneGiro}`, signal: controller.signal });
+        controller.signal.throwIfAborted();
+        return avviaSessioneFn({ ...opzioni, ...(contextHooks ? { contextHooks } : {}) });
+      })
+      : avviaSessioneFn(opzioni));
+
+    /*
+     * ⛔⛔ IL RIPIEGO SUL CLOUD, e le DUE cose che cambiano rispetto a prima — dette per nome.
+     *
+     * 1. Il CONSENSO resta identico: niente ripiego senza `fallbackConsent` esplicito, niente
+     *    ripiego a sessione fermata, niente ripiego senza una chiave utilizzabile.
+     * 2. Il MODELLO del ripiego è quello di serie del server, non più `cloudOptions.modello`.
+     *    ⛔ Quello era il `modelId` NUDO del GGUF (`modelloEffettivo = modelIdEffettivo || …`), e
+     *      `separaFonteModello` legge un id nudo come OpenRouter: il ripiego mandava a
+     *      openrouter.ai il nome di un file che sta sul disco di casa. Misurato il 17/09 con un
+     *      motore locale che cade e il consenso dato: il modello uscente era
+     *      `un-gguf-che-non-esiste-su-openrouter.gguf`. Senza un modello di serie configurato non
+     *      si ripiega affatto: meglio l'errore vero del motore locale che una chiamata che non può
+     *      riuscire.
+     * 3. ⛔ E il MOMENTO cambia, perché il kernel possiede il proprio canale d'errore: prima
+     *    `eseguiRuntimeLocale` LANCIAVA e il ripiego partiva prima di qualunque `RunError`; ora
+     *    `avviaSessioneFn` non lancia mai (`agent-service.mjs`: emette `RunError` e torna
+     *    `{ok:false, esito:null, erroreInterno}`), quindi il ripiego si decide sul VALORE DI
+     *    RITORNO e arriva dopo quel `RunError`. L'alternativa sarebbe stata leggere il guasto
+     *    prima del kernel, cioè un secondo esecutore: è esattamente ciò che questa riga toglie.
+     * ⛔ `esito: null` è il discriminante, non `ok === false`: «giri esauriti», «fermato» e
+     *   «premesse negate» sono ESITI DEL TASK, tornano `ok:false` con un esito valorizzato, e non
+     *   sono guasti del motore — ripiegare su quelli manderebbe al cloud una conversazione che il
+     *   motore locale ha condotto fino in fondo.
+     */
+    const modelloDiRipiegoCloud = modelloRichiesta || modello || null;
+    const ripiegoPossibile = () => !voce.controller.signal.aborted
+      && fallbackConsentEffettivo === true
+      && typeof chiaveEffettiva === 'string' && chiaveEffettiva.length > 0
+      && typeof modelloDiRipiegoCloud === 'string' && modelloDiRipiegoCloud.length > 0;
+    const ripiegaSulCloud = (codice) => {
+      voce.fallbackProvider = 'openrouter';
+      broadcast(voce, { type: 'RuntimeFallback', from: 'local', to: 'openrouter', reason: codice || 'LOCAL_RUNTIME_FAILED', provider: 'local', runtimeId: runtimeIdEffettivo, modelId: voce.modelId, backend: runtimeIdEffettivo, at: clock().toISOString() });
+      return avviaIlGiro({ ...cloudOptions, modello: modelloDiRipiegoCloud });
+    };
+
+    let esecuzione;
+    if (providerEffettivo === 'local') {
+      /*
+       * ⛔ `modelloDiSessionePerRete` qui non può rispondere `null`, e non è una speranza: il
+       *   cancello `RUNTIME_NOT_AVAILABLE` in testa a questa stessa funzione rifiuta una sessione
+       *   locale senza `runtimeId`, senza `modelId` o con un runtime non configurato, e `voce.modelId`
+       *   nasce da quel `modelIdEffettivo` già verificato. Nessun ramo di scorta inventato qui:
+       *   sarebbe codice che nessuna prova può far girare.
+       */
+      esecuzione = avviaIlGiro({ ...cloudOptions, modello: modelloDiSessionePerRete(voce) })
+        .then((risultato) => (risultato?.esito == null && ripiegoPossibile()
+          ? ripiegaSulCloud(risultato?.codiceErrore)
+          : risultato))
+        /* Un throw resta possibile prima del kernel (contextHooks, un avvio che non parte): la
+           stessa decisione, presa sull'eccezione invece che sul valore. */
         .catch((errore) => {
-          if (voce.controller.signal.aborted || fallbackConsentEffettivo !== true || typeof chiaveEffettiva !== 'string' || chiaveEffettiva.length === 0) throw errore;
-          voce.fallbackProvider = 'openrouter';
-          broadcast(voce, { type: 'RuntimeFallback', from: 'local', to: 'openrouter', reason: errore?.code || 'LOCAL_RUNTIME_FAILED', provider: 'local', runtimeId: runtimeIdEffettivo, modelId: voce.modelId, backend: runtimeIdEffettivo, at: clock().toISOString() });
-          return avviaSessioneFn(cloudOptions);
-        })
-      : typeof contextHooksFn === 'function'
-        ? Promise.resolve().then(async () => {
-          const contextHooks = await contextHooksFn({ sessionId, runId: `${sessionId}:${versioneGiro}`, signal: controller.signal });
-          controller.signal.throwIfAborted();
-          return avviaSessioneFn({ ...cloudOptions, ...(contextHooks ? { contextHooks } : {}) });
-        })
-        : avviaSessioneFn(cloudOptions);
+          if (!ripiegoPossibile()) throw errore;
+          return ripiegaSulCloud(errore?.code);
+        });
+    } else {
+      esecuzione = avviaIlGiro(cloudOptions);
+    }
     esecuzione.then((risultato) => {
       /*
        * ⭐ Catturato per un resume/fork FUTURO. Se talosLavora non ha
