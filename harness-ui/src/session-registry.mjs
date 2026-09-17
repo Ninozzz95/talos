@@ -54,6 +54,7 @@ import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReal
 import { imageMessageContent } from './chat-image-attachments.mjs';
 import { TaskCatalogError, preparaEsecuzione as preparaEsecuzioneReale } from './task-catalog.mjs';
 import { leggiAlberoWorkspace as leggiAlberoWorkspaceReale, WorkspaceTreeError } from './workspace-tree.mjs';
+import { cercaNelWorkspace as cercaNelWorkspaceReale, WorkspaceSearchError } from './workspace-search.mjs';
 import {
   copiaFile as copiaFileReale,
   creaVoceWorkspace as creaVoceWorkspaceReale,
@@ -1677,6 +1678,7 @@ export function createSessionRegistry({
   contextCompactFn,
   eseguiComandoDirettoFn = eseguiComandoDirettoReale,
   leggiAlberoWorkspaceFn = leggiAlberoWorkspaceReale,
+  cercaNelWorkspaceFn = cercaNelWorkspaceReale, // PO-30: la ricerca di un file in tutta la cartella della sessione
   leggiContenutoFileFn = leggiContenutoFileReale,
   leggiFilePerScaricoFn = leggiFilePerScaricoReale,
   rinominaFileFn = rinominaFileReale,
@@ -5922,6 +5924,20 @@ export function createSessionRegistry({
      *
      * @returns {Promise<{ok:true, voci:Array<{nome:string,cartella:boolean}>}|{erroreAvvio:string, code:string}>}
      */
+    /* ⛔ PO-30 (17/09/2026): cercare un file in TUTTA la cartella della sessione, non solo fra le cartelle già aperte
+       nell'albero. Stessa forma di `albero()` qui sotto: la sessione si risolve qui, la camminata e i suoi tetti
+       vivono tutti in `workspace-search.mjs`. Sola lettura: vale a sessione in corso come a sessione chiusa. */
+    async cercaFile(sessionId, query) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try {
+        return { ok: true, ...(await cercaNelWorkspaceFn({ cartella: voce.cartella, query })) };
+      } catch (errore) {
+        if (errore instanceof WorkspaceSearchError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
     async albero(sessionId, percorso = '') {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };

@@ -1161,6 +1161,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/export$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/file$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/search$/, metodi: ['GET'] }, // PO-30: cerca un file in tutta la cartella
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/file$/, metodi: ['GET'] }, // PO-05: lo scarico di un file, in byte
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/hooks$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tools$/, metodi: ['GET'] },
@@ -5553,6 +5554,7 @@ export function createHttpApp({
         const exportMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/export$/.exec(url.pathname);
         const treeMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree$/.exec(url.pathname);
         const treeFileMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree\/file$/.exec(url.pathname);
+        const treeSearchMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree\/search$/.exec(url.pathname);
         // ⭐⭐⭐ 28/8 — FASE A (hook): il pannello Control-plane elenca gli hook dichiarati e il loro stato di fiducia vero — stesso principio di exportMatch sotto.
         const hooksMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/hooks$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE E: il Capability hub elenca i server MCP dichiarati e il loro stato di fiducia vero, stesso principio esatto di hooksMatch appena sopra.
@@ -5746,6 +5748,25 @@ export function createHttpApp({
             throw errore;
           }
           data = { voci: esito.voci };
+        } else if (treeSearchMatch) {
+          /* ⛔ PO-30 (17/09/2026): un solo parametro ammesso, `q`. Tutto il resto è una query non valida — stessa
+             severità di `parseTreeQuery`: una rotta che ignora i parametri in più finisce per averne di non detti. */
+          let sessionId;
+          try { sessionId = decodeURIComponent(treeSearchMatch[1]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          const chiavi = [...url.searchParams.keys()];
+          const q = url.searchParams.get('q');
+          if (chiavi.length !== 1 || chiavi[0] !== 'q' || q === null) {
+            const errore = new Error('Query non valida');
+            errore.code = 'QUERY_INVALID';
+            throw errore;
+          }
+          const esito = await sessionRegistry.cercaFile(sessionId, q);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = { risultati: esito.risultati, troncato: esito.troncato, motivo: esito.motivo, saltate: esito.saltate };
         } else if (treeFileMatch) {
           /* ⭐ 27/8 — "Apri" un file dell'albero: stessa forma di treeMatch, endpoint separato perché la risposta porta contenuto, non un elenco. */
           let sessionId;
