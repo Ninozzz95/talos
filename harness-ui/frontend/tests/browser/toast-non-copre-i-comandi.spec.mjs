@@ -206,3 +206,36 @@ for (const [larghezza, altezza] of [[1024, 800], [1440, 900]]) {
     });
   }
 }
+
+/*
+ * ⛔⛔ 17/09/2026 notte — IL COMANDO CHE GALLEGGIA SOPRA IL PIEDE. Regressione entrata con la fusione di BC-77 e
+ *   trovata dal giro INTERO delle prove browser (CHAT-FONDO-01), non da queste: alzato sopra il piede, il toast
+ *   finiva esattamente sul pulsante «Torna in fondo alla conversazione», che nasce scorrendo in su e sta appena
+ *   sopra il piede, a destra. Le prove qui sopra contavano i soli comandi DENTRO il piede — cioè una misura
+ *   ristretta a dove ci si aspettava il difetto. Questa mette in scena il caso per nome.
+ */
+for (const tema of ['dark', 'light']) {
+  test(`BC77-A-FONDO (1024x800, ${tema}) — il toast non copre «Torna in fondo alla conversazione»`, async ({ page }) => {
+    await scenaConGiro(page, { larghezza: 1024, altezza: 800, tema });
+    await page.evaluate(() => {
+      const r = window.__talosHarnessUiRuntime;
+      r.handleRealEvent({ type: 'TextMessageContent', messageId: 'm1', delta: Array.from({ length: 70 }, (_, i) => `Paragrafo ${i + 1}: il progetto conserva la cronologia.\n\n`).join('') }, r.realSessionState.generation);
+    });
+    await page.locator('#schermoChat .talos-conversation').hover();
+    await page.mouse.wheel(0, -20000);
+    const pulsante = page.getByRole('button', { name: 'Torna in fondo alla conversazione', exact: true });
+    await expect(pulsante, 'la scena non si è formata: il pulsante non è comparso').toBeVisible();
+    await accendiIlToastVero(page);
+    const m = await page.evaluate(() => {
+      const b = document.querySelector('#chatTornaInFondo').getBoundingClientRect();
+      const toasts = [...document.querySelectorAll('#regioneToast .talos-toast')].filter((n) => !n.hidden && !n.dataset.demo).map((n) => n.getBoundingClientRect());
+      const area = (p, q) => Math.round(Math.max(0, Math.min(p.right, q.right) - Math.max(p.left, q.left)) * Math.max(0, Math.min(p.bottom, q.bottom) - Math.max(p.top, q.top)));
+      const centro = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2);
+      return { toasts: toasts.length, coperto: toasts.reduce((s, r) => s + area(r, b), 0), cimaPulsante: Math.round(b.top), fondoToast: toasts.length ? Math.round(Math.max(...toasts.map((r) => r.bottom))) : null, centroSulPulsante: document.querySelector('#chatTornaInFondo').contains(centro) };
+    });
+    console.log(`MISURA-BC77-FONDO ${tema} = ${JSON.stringify(m)}`);
+    expect(m.toasts, 'la scena non si è formata: nessun toast').toBeGreaterThan(0);
+    expect(m.coperto, `il toast copre il pulsante di ${m.coperto} px² (fondo toast ${m.fondoToast}, cima pulsante ${m.cimaPulsante})`).toBe(0);
+    expect(m.centroSulPulsante, 'al centro del pulsante deve esserci il pulsante').toBe(true);
+  });
+}

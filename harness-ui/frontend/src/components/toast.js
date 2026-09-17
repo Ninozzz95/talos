@@ -74,7 +74,7 @@ export const MASSIMO_IN_PILA = 3;
  */
 export function ancoraToastSopraIComandi(zonaComandi, {
   radice = null, finestra = globalThis, variabile = '--talos-toast-fondo',
-  regione = null, zonaIntoccabile = null,
+  regione = null, zonaIntoccabile = null, comandiSopra = [],
 } = {}) {
   const host = radice || zonaComandi?.ownerDocument?.documentElement || null;
   const misura = () => {
@@ -85,6 +85,19 @@ export function ancoraToastSopraIComandi(zonaComandi, {
        e un piede che non si vede non copre niente. `height > 0` copre il resto. */
     const visibile = Boolean(rettangolo) && rettangolo.height > 0 && zonaComandi.offsetParent !== null;
     let ingombro = visibile ? Math.max(0, Math.round(altezzaFinestra - rettangolo.top)) : 0;
+    /*
+     * ⛔⛔ 17/09/2026 notte — REGRESSIONE MIA, trovata dal giro intero delle prove browser (CHAT-FONDO-01) dopo
+     *   la fusione: alzato sopra il piede, il toast finiva ESATTAMENTE sul pulsante «Torna in fondo alla
+     *   conversazione», che vive appena sopra il piede, a destra — cioè un comando coperto, il difetto che
+     *   questa funzione esiste per togliere. La prova di BC-77 misurava i soli comandi DENTRO il piede.
+     * ⇒ I comandi che galleggiano SOPRA il piede si dichiarano (`comandiSopra`) e, quando si vedono,
+     *   alzano il pavimento fino alla loro cima. Stessa misura, stesso metro: il rettangolo vero.
+     */
+    for (const comando of comandiSopra) {
+      const r = comando?.getBoundingClientRect?.();
+      if (!r || r.height <= 0 || comando.offsetParent === null) continue;
+      ingombro = Math.max(ingombro, Math.max(0, Math.round(altezzaFinestra - r.top)));
+    }
     host.style.setProperty(variabile, `${ingombro}px`);
     /*
      * Il tetto, misurato e non stimato: posata la pila, si guarda dove è finita la sua CIMA. Se sta
@@ -110,6 +123,8 @@ export function ancoraToastSopraIComandi(zonaComandi, {
     /* ⛔ Anche la REGIONE: un toast che arriva o se ne va cambia l'altezza della pila, e con essa
        il tetto. Senza questa riga il tetto varrebbe per la pila che c'era, non per quella che c'è. */
     if (regione) osservatore.observe(regione);
+    /* Un comando che compare o sparisce (il «torna in fondo» nasce scorrendo in su) cambia il pavimento. */
+    for (const comando of comandiSopra) if (comando) osservatore.observe(comando);
   }
   const suRidimensiona = () => misura();
   finestra.addEventListener?.('resize', suRidimensiona);

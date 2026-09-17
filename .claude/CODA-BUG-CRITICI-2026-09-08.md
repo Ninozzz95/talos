@@ -1335,6 +1335,20 @@ sospetta fosse il dettaglio del plugin nel FOGLIO, altra superficie — resta ap
 erano QUATTRO; `$()` prendeva il nodo VISIBILE, non l'invisibile; il «trattino a x≈303» è la barra della cronologia, un componente
 voluto; delle tre accuse di BC-70 una sola era vera.
 
+### ⛔ REGRESSIONE MIA entrata con questa fusione, trovata e curata la stessa notte (17/09/2026)
+
+Il giro INTERO di `tests/browser` sull'albero fuso (385 prove · 326 verdi · 56 rosse · 3 saltate) ha dato le 53 rosse note più TRE. Rilanciate
+da sole: `ragionamento-compresso` SCHERMO-10 verde (instabile nota), `chat-lunga-p0` P0-02 verde da sola (soglia di 50 ms per fotogramma, con
+37 processi node/chrome vivi sulla macchina: carico, non codice) — e **`chat-attesa-fondo` CHAT-FONDO-01 ROSSA DAVVERO**: il toast, alzato
+sopra il piede da BC-77, finiva esattamente sul pulsante «Torna in fondo alla conversazione», che sta appena sopra il piede. Un comando
+coperto: il difetto che BC-77 doveva togliere, traslocato. La prova di BC-77 contava i soli comandi DENTRO il piede, e io l'ho fusa senza
+aver lanciato la cartella intera (l'avevo dichiarato; è la cartella intera che l'ha trovata).
+**Cura:** `ancoraToastSopraIComandi` riceve `comandiSopra` (qui `#chatTornaInFondo`): quando si vedono, alzano il pavimento fino alla loro
+cima, e l'osservatore li segue. **Prova nuova** `BC77-A-FONDO` nei due temi: con la cura `coperto: 0` (fondo toast 514, cima pulsante 538);
+senza, `coperto: 855 px²` e al centro del pulsante non c'è il pulsante. Ripristino sha256 identico. CHAT-FONDO-01 torna verde.
+⇒ Lezione: una prova che misura «i comandi del piede» è una misura RISTRETTA a dove mi aspettavo il difetto. Prima di fondere una cura
+che SPOSTA qualcosa a schermo, la cartella browser intera si lancia, anche se dura venti minuti.
+
 ## BC-82 | Residui visti nelle foto della Fase A, fuori dalle righe chiuse (17/09/2026) — APERTI, corsia frontend
 
 1. **L'elenco SESSIONI della barra laterale si taglia a metà riga contro il piede** (visto nelle foto dell'agente e nelle mie dal vivo, a
