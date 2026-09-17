@@ -100,6 +100,7 @@ pub(super) fn observe_control_connection(listener: &TcpListener) -> Result<()> {
 }
 
 pub(super) fn no_extra_connection(listener: &TcpListener) -> Result<()> {
+    wfp::record_listener_events(io_result(listener.local_addr())?.port())?;
     match listener.accept() {
         Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(()),
         Err(error) => Err(format!("listener observation failed: {error}")),
