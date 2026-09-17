@@ -336,6 +336,17 @@ senza il motore sarebbe una finestrella che incolla testo con più passaggi. ⛔
 | **D** | ⬜ | — | il modello che lancia e coordina sotto-agenti (FASE 3-bis) |
 | **Rilascio** | ⬜ | modello: 0.1.13 (sei gate locali + build dist, poi tag) | decidere COSA entra; i sei gate; bump in tre punti + changelog; smoke reale solo col via dell'owner |
 
+**PO-30 · IL LABORATORIO FILE/AGENTI DELLA PR #33 VA IMPLEMENTATO NEL PRODOTTO — owner 17/09/2026 notte («il laboratorio file agenti VA implementato»).**
+Della PR #33 è già viva la sola guardia CSS (`4c28fe74`). Il laboratorio è un prototipo su dati finti (~2.600 righe: `explorer-model/-view`,
+`agent-views`, `workspace-views`, `actions`, `events`, `controller`), dossier in `scratchpad/evidenze-pr33`. **Cosa esiste già da noi, misurato
+col grep:** il backend ha TUTTE le operazioni sui file (`workspace-files.mjs`: leggi, crea, rinomina, sposta, copia, elimina, rivela, apri);
+la colonna ha le schede File (`righeFile`, elenco piatto) e Agenti (`disegnaAgenti`, dettaglio della figlia con il suo flusso di eventi).
+**Fette proposte da me (decide l'owner quali entrano PRIMA del rilascio):** (1) scheda File = l'esploratore del laboratorio sui dati VERI:
+albero, ricerca, selettore delle viste, stato M/A per file, chi lo sta toccando, azioni nel menu «⋯» + tasto destro sulle rotte che
+esistono; (2) dettaglio Agente = Panoramica / File / Eventi dai dati veri della figlia, con i collegamenti file↔agente; (3) il DIAGRAMMA
+della sessione (grafo, pan/zoom, filtri, replay): è la parte più grossa ed è la faccia della Fase D — proposta: DOPO il rilascio.
+⛔ Dal prototipo si prendono disegno e interazioni, NON i dati finti né gli «stati demo»; niente nomi tecnici; skill `frontend-design`.
+
 **Misure sulla lane a `16935954`:** backend 3425 prove · 3419 pass · 0 fail · 6 skipped; unit frontend 1236/1236; cartella `tests/browser` intera
 385 · 326 verdi · 56 rosse (le 53 note di BC-72 + 1 curata + 2 di carico, verdi da sole) · 3 saltate.
 **NON verificato da nessuno:** un modello LOCALE vero dopo BC-76/79.2/PR #28-#30-#31; il caso degli 86 secondi (il registratore c'è, la cattura no);
