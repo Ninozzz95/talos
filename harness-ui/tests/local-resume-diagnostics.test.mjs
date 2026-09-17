@@ -139,10 +139,29 @@ test('previous-request memory is bounded and eviction yields no invented compari
 });
 
 test('bounded sink reserves queued bytes synchronously and reports dropped writes', async () => {
-  let release; const writes = [];
-  const s = createBoundedResumeSink({ directory: '/unused', maxQueuedBytes: 20, maxDiskBytes: 50, write: async (...a) => { writes.push(a); await new Promise(r => { release = r; }); } });
-  assert.equal(s.privateRequest('r1', 'x'.repeat(15)), true); assert.equal(s.privateRequest('r2', 'x'.repeat(15)), false);
-  await new Promise(r => setImmediate(r)); release(); const stats = await s.flush(); assert.equal(stats.dropped, 1); assert.equal(stats.queuedBytes, 0); assert.equal(writes.length, 1);
+  let releaseWrite, signalStarted;
+  const writeGate = new Promise(resolve => { releaseWrite = resolve; });
+  const writeStarted = new Promise(resolve => { signalStarted = resolve; });
+  const writes = [];
+  const s = createBoundedResumeSink({ directory: '/unused', maxQueuedBytes: 20, maxDiskBytes: 50,
+    write: async (...args) => { writes.push(args); signalStarted(); await writeGate; },
+  });
+  try {
+    assert.equal(s.privateRequest('r1', 'x'.repeat(15)), true);
+    assert.equal(s.privateRequest('r2', 'x'.repeat(15)), false);
+    assert.equal(s.stats().queuedBytes, 15);
+    let flushed = false;
+    const completion = s.flush().then(stats => { flushed = true; return stats; });
+    await writeStarted;
+    assert.equal(flushed, false);
+    assert.equal(writes.length, 1);
+    releaseWrite();
+    assert.deepEqual(await completion, { queuedBytes: 0, reservedBytes: 15, dropped: 1, errors: 0 });
+  } finally {
+    // Assertion failures must not strand a pending mock writer.
+    releaseWrite();
+    await s.flush();
+  }
 });
 
 test('disk write failure is contained and visible in sink stats', async () => {
