@@ -1248,6 +1248,20 @@ modale, e `ragionamento-compresso` SCHERMO-10 (×2) qui è VERDE — era instabi
    attrezzi. **Cura onesta:** ritentare UNA volta senza `tools` quando il motore rifiuta proprio quel parametro, e dire «questo
    modello non usa gli attrezzi: resta una chat», con un codice suo. ⛔ Tocca `runtime-owner-adapter.mjs` o il kernel: vuole il sì
    dell'owner. ✅ **APPROVATA dall'owner il 17/09/2026 («si ovviamente»).** Brief: `.claude/BRIEF-BC-79-2-MOTORE-CHE-RIFIUTA-GLI-ATTREZZI-2026-09-17.md`
+   ✅ **CHIUSA e fusa il 17/09 notte.** ⛔ **E LA PREMESSA ERA FALSA, scritta da me come misurata:** il 400 NON veniva ritentato quattro
+   volte. L'agente ha contato le richieste che il motore riceve davvero sulla base `f29c8e91`: 400/401/404 → **1**, 429/503 → **4**;
+   `siRitenta` limitava già il ritento a 408/429/5xx per tutti. A mentire era il MESSAGGIO: «dopo ${tentativiMassimi} tentativi» stampava
+   la costante 4 qualunque cosa fosse successa. In due (l'agente di BC-76 e io, con la mia sonda del 401) abbiamo letto quella frase e
+   diagnosticato un ritento inesistente: una misura che non può smentirti non sta misurando. Curato il numero, nessuna regola di ritento
+   cambiata. La cura vera: per `local:`/`ollama:`/`lmstudio:` (insieme derivato dal registro) un 400 su una richiesta con `tools` dà UNA
+   riprova senza `tools`/`tool_choice`; se riesce, avviso una volta e per il resto del giro niente più `tools`; se fallisce,
+   `LOCAL_ENGINE_REJECTED_REQUEST` con frase umana, e i fornitori di riserva non vengono provati. Mai sul cloud. Revisione MIA: base 8
+   rosse su 10, ramo 10/10; tre rotture mie rosse (riprova su ogni non-ok → BC79-05 · `tool_choice` lasciato → BC79-01 · avviso taciuto →
+   BC79-01/06/09), sha256 identico; backend intero sulla lane fusa 3416 · 3411 pass · 0 fail · 5 skipped. ⛔ Debiti: la memoria dura il
+   GIRO, non la sessione (una ripresa rifà 400 + riprova); nessuna carta dedicata nel frontend per il codice nuovo; con un portachiavi che
+   ha una chiave di Ollama il caso «rifiuta sempre» la mette in panchina due volte (letto). La lettura di `/props` NON è stata fatta, con
+   la ragione: con `--jinja` l'assenza di `chat_template_tool_use` NON vuol dire «non regge gli attrezzi» — sarebbe un falso negativo
+   silenzioso; ha senso solo per Ollama e LM Studio, riga a parte se la si vuole. NON verificato: nessun motore locale vero.
    (ricerca del 17/09: un 400 con `tools` ha anche ALTRE cause — regex PCRE negli schemi, template che lanciano — quindi il caso si
    riconosce dal comportamento, la stessa richiesta senza `tools` riesce, mai dal testo). Parte dopo la fusione di BC-76. Mai riconoscere il testo dell'errore con una regex (un filtro che riconosce la MENZIONE invece della cosa).
 3. ⛔ **Il pannello «prova» del Laboratorio modelli non disegna l'esito degli attrezzi** (`frontend/src/legacy/app.js`

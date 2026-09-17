@@ -1312,6 +1312,22 @@ async function chiamaConRitentaBase({
     const inStreaming = Boolean(onDelta)
     let ultimoStato = null
     let ultimoTesto = ''
+    /*
+     * ⛔⛔⛔ BC-79.2 (17/09/2026) — IL NUMERO CHE NON POTEVA SMENTIRTI.
+     *
+     * L'errore in fondo a questa funzione stampava `dopo ${tentativiMassimi} tentativi`, cioè la
+     * COSTANTE 4, qualunque cosa fosse successo. Ma `siRitenta` esce dal giro al primo colpo per
+     * ogni 4xx che è una RISPOSTA (400, 401, 403, 404, 422): quella frase diceva «dopo 4 tentativi»
+     * dopo UNO solo, e da anni.
+     * ⭐ Misurato sulla base `f29c8e91`, contando le richieste che un motore finto riceve DAVVERO
+     *   (`tests/bc79-2-motore-che-rifiuta-gli-attrezzi.test.mjs`, sonda del 17/09): **1** per
+     *   400/401/404, **4** per 429/503. Il ritento era già quello giusto; a mentire era il numero.
+     * ⛔ Costo del difetto: due diagnosi sbagliate in un giorno — l'agente di BC-76 e io — che
+     *   hanno letto «quattro tentativi» e sono andati a cercare un ritento inesistente. Una misura
+     *   che risponde sempre uguale non sta misurando.
+     * ⇒ Qui si conta il numero VERO, e basta. Nessuna regola di ritento è cambiata da questa riga.
+     */
+    let tentativiFatti = 0
     for (let tentativo = 0; tentativo < tentativiMassimi; tentativo += 1) {
         /*
          * ⛔ 08/09/2026 — chi ha premuto «Ferma» non aspetta il prossimo
@@ -1323,6 +1339,9 @@ async function chiamaConRitentaBase({
             fermata.fermatoSuRichiesta = true
             throw fermata
         }
+        /* ⛔ Si conta QUI e non in testa al giro: un tentativo fermato prima di chiamare non è un
+           tentativo, e conterebbe una richiesta che non è mai partita. */
+        tentativiFatti = tentativo + 1
         const r = await fetchDiRete('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: { Authorization: `Bearer ${chiave}`, 'Content-Type': 'application/json' },
@@ -1435,7 +1454,7 @@ async function chiamaConRitentaBase({
             catch { /* lo stop ha cancellato il timer: il giro dopo dirà perché ci fermiamo */ }
         }
     }
-    const e = new Error(`HTTP ${ultimoStato} dopo ${tentativiMassimi} tentativi: ${ultimoTesto}`)
+    const e = new Error(`HTTP ${ultimoStato} dopo ${tentativiFatti} ${tentativiFatti === 1 ? 'tentativo' : 'tentativi'}: ${ultimoTesto}`)
     e.stato = ultimoStato
     e.limitatoDalFornitore = siRitenta(ultimoStato)
     throw e

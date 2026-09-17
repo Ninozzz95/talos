@@ -15,7 +15,7 @@ import { createParser } from 'eventsource-parser';
 import { eseguiFlowForgeLocale, FORGE_PREFISSO_NOME_TOOL, validaManifestForgeLocale } from './forge-contract.mjs';
 import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
 import { risolviDestinazioneModello, separaFonteModello, FONTI_MODELLO, validaFallbackProviders } from './model-destination.mjs';
-import { REGISTRO_FORNITORI } from './provider-registry.mjs';
+import { REGISTRO_FORNITORI, ID_MOTORI_LOCALI_OPENAI, idPerWire } from './provider-registry.mjs';
 import { classificaErroreDiCorsa } from './research-orchestrator.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
@@ -78,6 +78,72 @@ class OpenRouterStreamError extends Error {
 
 function rispostaRitentabile(status) {
   return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+/**
+ * ⛔⛔⛔ BC-79.2 (17/09/2026) — LE FONTI CHE GIRANO SU QUESTO COMPUTER, DERIVATE DAL REGISTRO.
+ *
+ * Non è un elenco: è una domanda fatta al registro dei fornitori. `idPerWire('locale')` è il ponte
+ * del supervisore llama-server (`local`, la cui `--api-key` non esce di lì), `ID_MOTORI_LOCALI_OPENAI`
+ * sono quelli che girano in casa e parlano il wire OpenAI (`ollama`, `lmstudio`). Misurato il
+ * 17/09/2026: `["local","ollama","lmstudio"]`.
+ *
+ * ⛔ Scriverli a mano sarebbe la quattordicesima copia dello stesso insieme — è il difetto che
+ *   `provider-registry.mjs` esiste per chiudere, e che `fonteLocaleDelRuntime` (BC-76) ha già
+ *   chiuso per il registro delle sessioni. Un motore locale aggiunto domani entra qui da solo.
+ */
+export const FONTI_DI_MOTORE_LOCALE = Object.freeze(new Set([...idPerWire('locale'), ...ID_MOTORI_LOCALI_OPENAI]));
+
+/**
+ * L'unica frase che chi legge vedrà: dice che cosa cambia per LEI, non che cosa è successo al
+ * protocollo. ⛔ Nessun nome tecnico (`tools`, `--jinja`, `HTTP`), nessun modello «consigliato» e
+ * nessun elenco di modelli che reggono gli attrezzi (owner 11/09: «non forziamo nulla»).
+ */
+const AVVISO_MOTORE_SENZA_ATTREZZI = 'Questo modello non usa gli attrezzi: qui resta una chat. Può rispondere, non può leggere file né eseguire comandi.';
+
+/**
+ * ⛔⛔⛔ BC-79.2 — LA RIPROVA SENZA ATTREZZI, E PERCHÉ NON SI LEGGE IL TESTO DELL'ERRORE.
+ *
+ * ## Il difetto, MISURATO sulla base `f29c8e91` prima di scrivere
+ *
+ * Un motore locale che risponde 400 a una richiesta con `tools` arrivava a schermo come
+ * `[internal-error] HTTP 400 dopo 4 tentativi: {…grezzo del server…}`. Misurato con una sonda
+ * sulla strada vera (registro, kernel, adattatore, motore finto su 127.0.0.1) contando le
+ * richieste che il motore riceve davvero: **1** per 400/401/404, **4** per 429/503.
+ * ⇒ I quattro tentativi NON ESISTEVANO: `siRitenta` (kernel) escludeva già i 4xx-risposta. A
+ *   mentire era il MESSAGGIO, che stampava la costante `tentativiMassimi` invece dei tentativi
+ *   fatti — «una misura che non può smentirti», corretta nel kernel nella sola riga del ritento.
+ *
+ * ## La cura, e i suoi confini
+ *
+ * Solo per una fonte di MOTORE LOCALE, solo su un **400**, solo se la richiesta portava `tools`:
+ * UNA riprova identica senza `tools` né `tool_choice`.
+ *  · riesce ⇒ il giro prosegue come chat, si dice UNA volta con una frase umana, e per il resto
+ *    del giro di sessione `tools` non si manda più. ⛔ Questa memoria non è un ottimizzazione: la
+ *    ricerca del 17/09 dice che *«simply retrying without changes will loop»* — senza memoria ogni
+ *    giro rifarebbe il suo 400 e la riprova diventerebbe il doppio delle chiamate, per sempre.
+ *  · fallisce anche senza ⇒ l'errore ORIGINALE con un codice SUO e una frase umana; il grezzo resta
+ *    sull'errore (`dettaglio`) e non arriva a schermo.
+ *
+ * ⛔ MAI sul cloud: un fornitore remoto che rifiuta gli attrezzi è un errore da dire, non da
+ *   aggirare togliendo metà del prodotto a chi non l'ha chiesto.
+ * ⛔ MAI dal TESTO dell'errore. Un 400 con `tools` nel corpo ha altre cause (una regex PCRE che
+ *   llama.cpp non compila in GBNF, un template che lancia sull'ordine dei messaggi, il formato
+ *   dell'esito di un attrezzo): un filtro sulla frase «does not support tools» riconoscerebbe la
+ *   MENZIONE invece della cosa, e lascerebbe morire tutti gli altri. Si riconosce dal
+ *   COMPORTAMENTO — la stessa richiesta senza `tools` riesce. Prova: BC79-03.
+ * ⛔ Nessun secondo esecutore di attrezzi, nessun modello «consigliato», nessun template forzato.
+ */
+class MotoreLocaleRifiutaError extends Error {
+  constructor(stato, dettaglio) {
+    super('Il motore locale non ha accettato questa richiesta, nemmeno senza gli attrezzi.');
+    this.name = 'MotoreLocaleRifiutaError';
+    this.code = 'LOCAL_ENGINE_REJECTED_REQUEST';
+    this.stato = stato;
+    /* ⛔ Il grezzo del server si CONSERVA (serve a chi apre una segnalazione) ma non viaggia nel
+       messaggio: `agent-service` mette il solo `message` dentro `RunError`, e lì finisce a schermo. */
+    this.dettaglio = dettaglio;
+  }
 }
 
 function attesaEsponenziale(tentativo) {
@@ -551,7 +617,14 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
  *   (P0-D-20: stessi byte, stesso stato, stessi header). ⇒ Le prove della cache iniettano il
  *   guardiano identità e misurano il loro contratto; il guardiano vero si prova da solo (P0-D-15/16).
  */
-function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null, instradaOpenRouter = false, inattivitaGenerazioneMs = null, sorvegliaCorpo = sorvegliaCorpoDiGenerazione } = {}) {
+function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null, instradaOpenRouter = false, inattivitaGenerazioneMs = null, sorvegliaCorpo = sorvegliaCorpoDiGenerazione,
+  /*
+   * BC-79.2 — la memoria del giro di sessione, CONDIVISA e non di questa chiusura: sulla strada del
+   * multi-provider `creaFetchInstradata` viene ricostruita a OGNI richiesta (`invia`), quindi una
+   * variabile locale ricorderebbe per un solo giro e il 400 tornerebbe a ogni turno. Chi non la
+   * passa (nessuno oggi, oltre ai test) ottiene il comportamento di prima, byte per byte.
+   */
+  memoriaAttrezzi = { rifiutati: false } } = {}) {
   if (!dipendenze) return fetchDiRete;
   return async function fetchMultiProvider(url, opzioni = {}) {
     let corpo = null;
@@ -643,7 +716,23 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       if (typeof onAvviso !== 'function') throw new OpenAiCompatibleRuntimeError(avviso, 'PROVIDER_REASONING_UNSUPPORTED');
       await onAvviso(avviso);
     }
-    const corpoRiscritto = JSON.stringify(adattata.corpo);
+    /*
+     * ⛔⛔⛔ BC-79.2 (17/09/2026) — LA RIPROVA SENZA ATTREZZI VIVE QUI, e il kernel non la conosce.
+     * La doc per esteso sta su `MotoreLocaleRifiutaError`, sopra: qui restano i tre fatti che
+     * decidono se questo blocco morde — la fonte gira su questo computer, la richiesta portava
+     * `tools`, la risposta è un 400. Manca uno dei tre ⇒ la riga qui sotto è quella di sempre.
+     */
+    const motoreLocale = FONTI_DI_MOTORE_LOCALE.has(destinazione.fonte);
+    const portavaAttrezzi = Array.isArray(adattata.corpo?.tools) && adattata.corpo.tools.length > 0;
+    const corpoSenzaAttrezzi = () => {
+      const { tools: _tools, tool_choice: _toolChoice, ...resto } = adattata.corpo;
+      return JSON.stringify(resto);
+    };
+    /* ⛔ Già saputo che questo motore li rifiuta: non si rimanda `tools` per poi riprendersi lo
+       stesso 400 — è il «retrying without changes will loop» della ricerca. */
+    const giaSenzaAttrezzi = motoreLocale && portavaAttrezzi && memoriaAttrezzi?.rifiutati === true;
+    const corpoRiscritto = giaSenzaAttrezzi ? corpoSenzaAttrezzi() : JSON.stringify(adattata.corpo);
+
     /*
      * ⛔ Il motore locale si chiama attraverso il SUO supervisore, non con una
      * fetch nuda: llama-server parte con `--api-key randomBytes(32)` e quella
@@ -651,44 +740,76 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
      * perché quella risposta arriva al browser). Misurato costruendo l'URL a
      * mano: HTTP 401 «Invalid API Key» in 4 ms.
      */
-    if (destinazione.locale) {
-      if (typeof dipendenze.chiamaLocale !== 'function') {
-        const errore = new Error('Il motore locale non è collegato a questo server.');
-        errore.code = 'LOCAL_RUNTIME_NOT_READY';
-        throw errore;
+    const spedisci = async (corpo) => {
+      if (destinazione.locale) {
+        if (typeof dipendenze.chiamaLocale !== 'function') {
+          const errore = new Error('Il motore locale non è collegato a questo server.');
+          errore.code = 'LOCAL_RUNTIME_NOT_READY';
+          throw errore;
+        }
+        return sorveglia(await dipendenze.chiamaLocale(destinazione.percorso, { ...opzioni, ...conDispatcher, headers: { 'Content-Type': 'application/json' }, body: corpo }));
       }
-      return sorveglia(await dipendenze.chiamaLocale(destinazione.percorso, { ...opzioni, ...conDispatcher, headers: { 'Content-Type': 'application/json' }, body: corpoRiscritto }));
-    }
+      return spedisciAltrove(corpo);
+    };
+
     /*
-     * ⛔⛔⛔ 16/09/2026, GIRO DI RIPARAZIONE — L'ORDINE DI QUESTE DUE FUNZIONI È LA CURA.
-     *
-     * Prima era `sorveglia(conCacheDichiarata(await fetch(...)))`, e aveva DUE difetti in una riga:
-     *   1. `conCacheDichiarata` è `async` ⇒ `sorveglia` riceveva una **Promise**, non una
-     *      `Response`, e la restituiva intatta: il failsafe non era attaccato a niente su
-     *      deepseek / z.ai / openai / cloud, in streaming e non (ora `sorvegliaCorpoDiGenerazione`
-     *      LANCIA se gli si passa una Promise, così non può più succedere in silenzio);
-     *   2. anche con l'`await` al posto giusto, `conCacheDichiarata` legge il corpo
-     *      (`risposta.clone().text()`) per dichiarare la cache: sorvegliare DOPO vuol dire
-     *      sorvegliare un corpo già bevuto, e su una risposta `stream:false` che si pianta a metà
-     *      JSON quella lettura non finisce mai.
-     *
-     * ⇒ Si sorveglia PRIMA e si dichiara la cache DOPO: `conCacheDichiarata` clona un corpo già
-     *   sorvegliato, quindi anche la sua lettura è coperta. Misurato il 16/09/2026 con un fornitore
-     *   che manda gli header e poi tace: prima **1506 ms** e sempre `UND_ERR_BODY_TIMEOUT` (cioè il
-     *   trasporto a 1,2×, mai il guardiano) o nessuna uscita affatto senza dispatcher; dopo
-     *   `PROVIDER_SILENCE` al limite chiesto. Prove `P0-D-15`/`P0-D-16`/`P0-D-17`.
+     * ⛔ BC-79.2: la destinazione non locale resta ESATTAMENTE quella di prima, spostata dentro una
+     *   funzione perché la riprova senza attrezzi deve poter spedire due volte lo stesso corpo su
+     *   qualunque strada. `ollama:` e `lmstudio:` passano di qui — sono motori locali con un
+     *   indirizzo, non col ponte del supervisore — e quindi la cura li copre senza un secondo ramo.
      */
-    // P-K — nessun redirect con credenziali cloud, anche senza pool collegato.
-    if (destinazione.cloud) return conCacheDichiarata(sorveglia(await inviaCloudProtetta(fetchDiRete, destinazione.url, {
-      ...opzioni, ...conDispatcher, headers: { ...destinazione.headers }, body: corpoRiscritto, redirect: 'error',
-    })), destinazione.fonte);
-    // P-K — fine
-    return conCacheDichiarata(sorveglia(await fetchDiRete(destinazione.url, {
-      ...opzioni,
-      ...conDispatcher,
-      headers: { ...destinazione.headers },
-      body: corpoRiscritto,
-    })), destinazione.fonte);
+    async function spedisciAltrove(corpo) {
+      /*
+       * ⛔⛔⛔ 16/09/2026, GIRO DI RIPARAZIONE — L'ORDINE DI QUESTE DUE FUNZIONI È LA CURA.
+       *
+       * Prima era `sorveglia(conCacheDichiarata(await fetch(...)))`, e aveva DUE difetti in una riga:
+       *   1. `conCacheDichiarata` è `async` ⇒ `sorveglia` riceveva una **Promise**, non una
+       *      `Response`, e la restituiva intatta: il failsafe non era attaccato a niente su
+       *      deepseek / z.ai / openai / cloud, in streaming e non (ora `sorvegliaCorpoDiGenerazione`
+       *      LANCIA se gli si passa una Promise, così non può più succedere in silenzio);
+       *   2. anche con l'`await` al posto giusto, `conCacheDichiarata` legge il corpo
+       *      (`risposta.clone().text()`) per dichiarare la cache: sorvegliare DOPO vuol dire
+       *      sorvegliare un corpo già bevuto, e su una risposta `stream:false` che si pianta a metà
+       *      JSON quella lettura non finisce mai.
+       *
+       * ⇒ Si sorveglia PRIMA e si dichiara la cache DOPO: `conCacheDichiarata` clona un corpo già
+       *   sorvegliato, quindi anche la sua lettura è coperta. Misurato il 16/09/2026 con un fornitore
+       *   che manda gli header e poi tace: prima **1506 ms** e sempre `UND_ERR_BODY_TIMEOUT` (cioè il
+       *   trasporto a 1,2×, mai il guardiano) o nessuna uscita affatto senza dispatcher; dopo
+       *   `PROVIDER_SILENCE` al limite chiesto. Prove `P0-D-15`/`P0-D-16`/`P0-D-17`.
+       */
+      // P-K — nessun redirect con credenziali cloud, anche senza pool collegato.
+      if (destinazione.cloud) return conCacheDichiarata(sorveglia(await inviaCloudProtetta(fetchDiRete, destinazione.url, {
+        ...opzioni, ...conDispatcher, headers: { ...destinazione.headers }, body: corpo, redirect: 'error',
+      })), destinazione.fonte);
+      // P-K — fine
+      return conCacheDichiarata(sorveglia(await fetchDiRete(destinazione.url, {
+        ...opzioni,
+        ...conDispatcher,
+        headers: { ...destinazione.headers },
+        body: corpo,
+      })), destinazione.fonte);
+    }
+
+    if (motoreLocale && portavaAttrezzi && !giaSenzaAttrezzi) {
+      const prima = await spedisci(corpoRiscritto);
+      if (prima.status !== 400) return prima;
+      /* Il grezzo si legge ORA: dopo la riprova questa risposta non serve più, e il suo corpo
+         resterebbe aperto. Serve solo come dettaglio dell'errore, mai a schermo. */
+      let dettaglio = '';
+      try { dettaglio = String(await prima.text()).slice(0, 2_000); } catch { /* lo stato basta */ }
+      const seconda = await spedisci(corpoSenzaAttrezzi());
+      if (!seconda.ok) {
+        await seconda.body?.cancel().catch(() => {});
+        throw new MotoreLocaleRifiutaError(prima.status, dettaglio);
+      }
+      /* ⛔ Prima la memoria, poi l'avviso: se `onAvviso` lancia, il giro deve comunque smettere di
+         mandare `tools` — altrimenti si tornerebbe a un 400 per giro con in più un'eccezione. */
+      if (memoriaAttrezzi) memoriaAttrezzi.rifiutati = true;
+      if (typeof onAvviso === 'function') await onAvviso(AVVISO_MOTORE_SENZA_ATTREZZI);
+      return seconda;
+    }
+    return spedisci(corpoRiscritto);
   };
 }
 
@@ -827,7 +948,16 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
   sorvegliaCorpo = sorvegliaCorpoDiGenerazione,
 } = {}) {
   const catena = validaFallbackProviders(fallbackProviders);
-  if (!providerStore && !catena.length) return creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo });
+  /*
+   * ⛔ BC-79.2 — la memoria «questo motore rifiuta gli attrezzi» nasce QUI, una per giro di
+   *   sessione (una chiamata a `talosLavora`), e non dentro `creaFetchInstradata`: là sotto, sulla
+   *   strada del multi-provider, la fetch instradata si ricostruisce a ogni richiesta.
+   * ⛔ Dichiarato e non risolto in silenzio: la memoria vive quanto il GIRO DI SESSIONE, non quanto
+   *   la sessione persistente. Una ripresa (`resume`) ricomincia da capo — un 400 e una riprova —
+   *   perché l'adattatore non riceve nessun handle di sessione. È il confine di questa riga.
+   */
+  const memoriaAttrezzi = { rifiutati: false };
+  if (!providerStore && !catena.length) return creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi });
   if (!dipendenze || (catena.length && (!providerStore || typeof onCambioFornitore !== 'function' || typeof onConsumoFornitore !== 'function'))) {
     throw new OwnerRuntimeUnavailableError('Per continuare con un altro fornitore occorrono accessi, avvisi in chat e registrazione dei consumi.', 'PROVIDER_FALLBACK_NOT_CONNECTED');
   }
@@ -911,9 +1041,17 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     };
     const instradata = creaFetchInstradata(rete, { risolvi, dipendenze: {
       ...dipendenze, leggiChiave: p => p === fonte && scelta ? scelta.chiave : dipendenze.leggiChiave(p),
-    }, onAvviso, instradaOpenRouter: true, inattivitaGenerazioneMs, sorvegliaCorpo });
+    }, onAvviso, instradaOpenRouter: true, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi });
     try { return await instradata(url, opzioni); }
     catch (error) {
+      /*
+       * ⛔ BC-79.2 — un motore locale che rifiuta la richiesta ANCHE senza attrezzi non è un guasto
+       *   del fornitore da riclassificare: ha già il suo codice e la sua frase, ed è stato deciso
+       *   a valle con due misure (400 con attrezzi, 400 senza). Passarlo per `classificaGuasto`
+       *   lo trasformerebbe in «Il fornitore non ha accettato la richiesta» — la frase generica che
+       *   questa riga esiste per togliere. Stessa forma di `PROVIDER_KEY_MISSING` più sotto.
+       */
+      if (error?.code === 'LOCAL_ENGINE_REJECTED_REQUEST') throw error;
       // P-K — token scaduto o involucro malformato: panchina senza partire in rete.
       if (record.cloud && scelta && ['PROVIDER_CLOUD_TOKEN_EXPIRED', 'PROVIDER_CLOUD_CREDENTIAL_INVALID'].includes(error?.code)) {
         providerStore.mettiInPanchina(fonte, scelta.impronta, { classe: 'credenziale' });
@@ -984,6 +1122,9 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
            *   (aden-hive/hive #4391, OpenHands/software-agent-sdk #4867, DataQ #1849/#1853).
            */
           if (error?.code === 'PROVIDER_KEY_MISSING') throw error;
+          /* ⛔ BC-79.2 — e nemmeno il rifiuto di un motore locale: non è transitorio, non è colpa di
+             una chiave, e un fornitore di riserva non c'entra niente con un GGUF che sta in casa. */
+          if (error?.code === 'LOCAL_ENGINE_REJECTED_REQUEST') throw error;
           const classificazione = contesto.errore ?? classificaGuasto(error, error?.stato ?? error?.statusCode);
           const pulito = erroreFornitorePubblico(classificazione, error?.stato ?? contesto.errore?.stato);
           if (!contesto.errore && contesto.scelta) providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, { classe: classificazione.classe });
