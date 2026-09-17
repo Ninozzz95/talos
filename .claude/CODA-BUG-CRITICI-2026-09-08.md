@@ -736,3 +736,15 @@ server è l'unico che può aprire Esplora.
 **Finita quando:** dalla riga di un file, su Windows, si apre Esplora file con QUEL file selezionato, sia dall'app installata
 sia dal 4174; un percorso che non esiste più dice perché; prova sul percorso vero con lo spawn iniettato (argv asserito) e
 una prova manuale dichiarata.
+
+## OSS-3 — RETTIFICA del 17/09: l'errore «localStorage… sandboxed» lo produceva LA MIA SONDA, non il prodotto
+
+**Misurato nei due versi sul 4174 (solo GET):** con `page.addInitScript(() => localStorage.setItem(…))` → un `pageerror`
+«Failed to read the 'localStorage' property from 'Window': The document is sandboxed and lacks the 'allow-same-origin' flag» a
+**30 ms** dall'avvio, con **zero iframe** nel documento; **senza** quello script → **nessun errore**. Playwright esegue lo
+script d'avvio in OGNI cornice, anche nelle sandboxate (l'anteprima degli artefatti è `sandbox="allow-scripts"`,
+`conversazione.js:787`; i widget annidati nelle pagine terze idem), e lì `localStorage` è vietato per costruzione.
+⇒ L'osservazione del 17/09 («due errori JS aprendo il Browser su iana.org») era un **artefatto dello strumento**. Il lavoro
+della corsia C resta valido per ciò che ha riprodotto davvero con una fixture (widget terzi annidati che lanciano da sé), ma
+la riga d'origine va letta così. **Regola per le sonde:** uno script d'avvio che tocca `localStorage` si protegge con
+`if (window.top === window)` e `try/catch`, oppure si imposta lo stato con `context.addCookies`/`storageState`.

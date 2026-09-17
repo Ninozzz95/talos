@@ -605,3 +605,24 @@ ode_modules`. `wf_a38b4449-882-1` resta su disco: NON si tocca senza prima guard
 - Conseguenza pratica di oggi: `AVM-harness` (2,3 GB) non l'ho tolta dalla pulizia del disco solo perché lo script legge quel
   percorso. La decisione vera — quale copia è la fonte, e come il kernel arriva al mobile — è dell'owner e della lane mobile:
   io non scrivo sotto `mobile/`.
+
+## 2026-09-17 — P0-bis completa sul 4174, e ciò che le foto dal vivo hanno trovato
+
+- Quattro corsie fuse (A `c936f3a8`, B `f32673ef`, D `6c3db56d`, C `891055f0`), TUTTE bocciate una volta dal proprio revisore
+  per un difetto vero e riparate. Stato finale misurato: backend 3146 · 3141 verdi · 0 rossi · 5 skip; kernel 598 + 1 skip;
+  unit frontend 1214/1214; sei spec browser 63 verdi + 1 skip (un worker); parità 15/15.
+- ⛔ QUARTA volta: la suite backend intera dopo la fusione di C ha dato 8 rossi che nessuna corsia vedeva — 3 nostri (un test
+  del backend valuta `nomeUmanoAttrezzo` estratto dal TESTO di `app.js`: l'import della mappa unica lo lasciava senza legami) e
+  5 d'ambiente (`wsl -l -q` rispondeva ma la VM di WSL si stava riavviando: «Errore irreparabile · Wsl/Service»; due minuti
+  dopo 50/50). Elencare le distro non prova che una distro PARTA: la guardia ora esegue un comando vero.
+- Due regole dell'owner dello stesso giorno (04/09) in collisione sul ripiego dei nomi: «niente nomi tecnici» contro «ripiego
+  onesto, mai un'etichetta inventata». Né l'id grezzo né «attrezzo senza nome»: il nome stesso reso leggibile
+  (`converti_pdf` → «converti pdf», `mcp__github__create_issue` → «create issue (github)»), id intero nel `title`.
+- Giro vero `768fd4ba` con la carta A SCHERMO, risposte date dalla UI (Nega, poi Consenti una volta): la frase del segreto
+  c'è, le azioni sono due. Trovato GUARDANDO le foto, non dai test: la «I» iniziale della frase è tagliata (manca il rientro
+  della riga del motivo); a 1440 le etichette del composer cedono con ~250 px liberi (sotto la UI di ieri); la riga del
+  comando negato dice «1,2 s · uscita 0» (il tempo del MIO clic, e un'uscita inventata). Rimandati alla corsia C.
+- ⛔ L'errore «localStorage… sandboxed» era della MIA sonda (`addInitScript` gira in ogni cornice): con lo script 1 errore a
+  30 ms e zero iframe, senza lo script zero errori. Una misura che non può smentirti non misura: qui l'ha smentita il verso contrario.
+- All'apertura il 4174 risponde 503 a `GET …/context` (motore del contesto spento per costruzione, BC-07): in console è un
+  «Failed to load resource» rosso a ogni sessione aperta — noto, ma l'owner lo vede.
