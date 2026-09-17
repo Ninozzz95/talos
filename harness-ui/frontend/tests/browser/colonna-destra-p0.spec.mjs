@@ -325,6 +325,15 @@ for (const modo of ['dark', 'light']) {
       await apriScheda(page, 'agenti');
       await page.locator('#railAgenti [data-c="AgentRow"]').click();
       await expect(page.locator('[data-c="PannelloFiglia"] .talos-figlia')).toBeVisible();
+      await apriScheda(page, 'file');
+      const m = await page.evaluate(() => { const f = document.querySelector('[data-c="PannelloFiglia"]'); const r = f.getBoundingClientRect(); const file = document.querySelector('#railFile')?.getBoundingClientRect(); return { figliaVisibile: r.height > 0 && getComputedStyle(f).display !== 'none', altezzaFiglia: Math.round(r.height), schedaFileAlta: file ? Math.round(file.height) : null, scelta: document.querySelector('#railTabs [aria-selected="true"]')?.dataset.rail }; });
+      console.log('MISURA-PR33 ' + JSON.stringify(m));
+      /* ⛔ PR #33 dell'owner (17/09/2026): il dettaglio della figlia è un FRATELLO di #railAgenti, non un pannello: cambiando scheda
+         restava a schermo (misurato prima della cura: 448 px visibili con «File» scelta). La visibilità appartiene alla scheda scelta. */
+      expect(m.scelta).toBe('file');
+      expect(m.figliaVisibile, `il dettaglio della figlia resta a schermo (${m.altezzaFiglia} px) con la scheda File scelta`).toBe(false);
+      await apriScheda(page, 'agenti');
+      await expect(page.locator('[data-c="PannelloFiglia"] .talos-figlia'), 'tornando ad Agenti il dettaglio c’è ancora: nascosto, non distrutto').toBeVisible();
       await page.locator('.talos-figlia__indietro').click();
       await apriScheda(page, 'processi');
       await expect(page.locator('#railProcessi [data-c="ProcessRow"]').first()).toBeVisible();
