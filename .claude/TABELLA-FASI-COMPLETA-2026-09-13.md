@@ -314,6 +314,35 @@ senza il motore sarebbe una finestrella che incolla testo con più passaggi. ⛔
 
 ---
 
+# 📍 STATO AL 17/09/2026, ore 22:30 — dove siamo, e che cosa aspetta (questa sezione vince su ciò che sta sotto)
+
+> **Owner, 17/09 notte:** tre PR sue da integrare → finire il lavoro → se possibile RILASCIARE una nuova versione. Io ATTENDO il suo via.
+> **Regole cambiate oggi:** nessuna delega a subagenti (tutto inline, modifiche mirate e veloci, costi al minimo); le review avversariali le
+> faccio io; il mockup dell'owner non si tocca. Lane pubblicata fino a `16935954`; il 4174 gira con quel codice.
+
+| Fase | Stato | Che cosa è chiuso (commit) | Che cosa manca |
+|---|---|---|---|
+| **P0** (16/09 notte) | ✅ chiusa e viva | terminale a tutta larghezza + clipboard `7388969d` · browser a stati per scheda `5e667b96` · uno scrittore di scroll e ragionamento chiuso a costo zero `26199280` · nessun tetto di durata alla generazione `9b611182` · Processi per riga e figlia in Markdown `f4507891` | — |
+| **P0-bis** (17/09 mattina) | ✅ chiusa e viva | uno strato di shell sotto WSL `c936f3a8` · `prova` onesta `f32673ef` · la shell chiede davanti a un segreto (F15) `6c3db56d` · scheda di approvazione `891055f0`/`d6889134` · BC-62 `e5f4d9b1` · BC-64 `0f711a4c` | — |
+| **CLI-REQ** (richieste della corsia CLI sui miei file) | ✅ 01, 02, 04, 05, 06, 07 + browser pilotato | `95716162` · `ba420a95` · `3cbecf60` · `6a57714b` | 03 chiusa dentro PO-27; **08→11** = Fase B |
+| **PR dell'owner** | ✅ #28 `93650914` · #30 `2a0350a9` · #31 `b49d5a68` (spenta di serie) | #29 NON applicata (stesso scopo di BC-76; se ne tengono due idee) | le **tre PR nuove** annunciate il 17/09 notte |
+| **PO-27** | ✅ chiusa e viva `f0b03c26` | niente modale di primo avvio · cancellazione vera dei messaggi · i file di un giro a fine turno (BC-75) · BC-60/61/74 · BC-63/67 `c75b0d3a` | — |
+| **A · backend** | 🟡 | BC-76 `f29c8e91` (sessione locale = agente, figlie sul motore locale) · BC-79.2 `598867c1` (motore che rifiuta gli attrezzi) | **BC-73** + campo `RunError.fornitore`: FERMO sul ramo `fase-a-bc73` @ `8a2873c9` (WIP non rivisto, era alla verifica finale) |
+| **A · frontend** | 🟡 | BC-77/71/70/68/78.2/78.3/78.4/80 `381c27ad` · regressione mia del toast curata `e9c147cc` | FERMO sul ramo `fase-a-frontend-2` @ `02385928`: BC-82.1/.2/.3 fatte dall'agente e non riviste; mancano BC-82.5, BC-78.1 (frontend), proposta nomi per «Capability» (BC-82.4) |
+| **A-bis · sicurezza** | 🟡 inline | BC-83 `911f6db7` (`git.exe` del workspace) · BC-84 `7298b0f9` (impronta degli hook sui file + ricontrollo all'uso) · riga 3 `12d3edb1` (spawn senza ambiente del server + cancello) | riga 1 (hook dei PLUGIN: ricontrollo all'uso) · riga 4 (`scansionaPatternSospetti` vera o via) — dopo la fusione di BC-73 |
+| **BC-81** | ⬜ | letta nel supervisore (`request` usa il processo pronto ADESSO) | misura con la fixture, poi cura |
+| **B** | ⬜ | brief pronti (attrezzi dei file, PO-28, PO-29) | tutta |
+| **C** | ⬜ | — | PO-26 → BC-66 → BC-65 + barra e separatore del compattamento |
+| **D** | ⬜ | — | il modello che lancia e coordina sotto-agenti (FASE 3-bis) |
+| **Rilascio** | ⬜ | modello: 0.1.13 (sei gate locali + build dist, poi tag) | decidere COSA entra; i sei gate; bump in tre punti + changelog; smoke reale solo col via dell'owner |
+
+**Misure sulla lane a `16935954`:** backend 3425 prove · 3419 pass · 0 fail · 6 skipped; unit frontend 1236/1236; cartella `tests/browser` intera
+385 · 326 verdi · 56 rosse (le 53 note di BC-72 + 1 curata + 2 di carico, verdi da sole) · 3 saltate.
+**NON verificato da nessuno:** un modello LOCALE vero dopo BC-76/79.2/PR #28-#30-#31; il caso degli 86 secondi (il registratore c'è, la cattura no);
+cancellazione dei messaggi, menu e stato vuoto dal vivo sul 4174.
+**Per il rilascio, i rischi che conosco:** i 53 rossi di BC-72 (44 in `baseline-shell`) sono un gate rosso da aprire onestamente o da dichiarare;
+il kernel del repo è più avanti della fonte dell'owner (`kernel:controlla` lo dice ed esce 0); due rami fermi da fondere PRIMA del tag.
+
 # ⭐ ORDINE DI LAVORO DAL 17/09/2026 — tre fasi, approvate dall'owner («sì»)
 
 > Piano per esteso: [PROPOSTA-FASI-A-B-C-2026-09-17.md](PROPOSTA-FASI-A-B-C-2026-09-17.md). Criterio: proprietà dei file, due corsie
