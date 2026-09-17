@@ -26,7 +26,16 @@ const input = Object.freeze({
  * qui, col perché; una chiave che sparisce senza essere in questa lista è un test rosso.
  */
 const RITIRATE = Object.freeze({
-  endpointFragments: ['/api/v1/chat'], // owner 24/8: niente sezione chat separata — l'harness è l'unica chat
+  endpointFragments: [
+    '/api/v1/chat', // owner 24/8: niente sezione chat separata — l'harness è l'unica chat
+    /* ⛔ PO-27 (17/09/2026, `f0b03c26`): la modale del primo avvio è stata tolta, ed era l'unico
+       punto del frontend che chiamava `/api/v1/setup`. La rotta sul server RESTA
+       (`/api/v1/setup/stato`, la legge `scripts/avvia-talos.mjs`): è la BUILD a non nominarla più.
+       ⛔ Questo rosso è passato alla consegna di PO-27 perché la suite era stata contata PRIMA di
+       ricostruire `public/` (`744a00ee`): il contratto legge il pacchetto servito, non il sorgente.
+       Trovato il 17/09 sera dall'agente della Fase A frontend, riprodotto da me sulla lane. */
+    '/api/v1/setup',
+  ],
 });
 test('il contratto pubblico del monolite è conservato dalla build modulare (cutover 06/09)', async () => {
   const expected = JSON.parse(await readFile(fixturePath, 'utf8'));
