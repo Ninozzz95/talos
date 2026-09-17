@@ -989,3 +989,12 @@ chiamata e vanno MISURATE prima/dopo, non assunte; (c) la 10 tocca la grammatica
 scrittura; (d) il kernel ha più copie (decisione sulla sorgente ancora aperta) e il mobile lo condivide. ⇒ È una FASE
 (ricerca, misura di token su task veri, additivo per costruzione dove si può: parametri facoltativi che a vuoto lasciano
 l'uscita identica), con revisore avversariale e un giro vero con `glm-5.3-flash`. Hermes è l'obiettivo da battere: il verso è giusto.
+
+**Misura mia del 17/09 per CLI-REQ-08, PRIMA di decidere** (`scratchpad/misura-righe-numerate.mjs`, sola lettura, 501 file veri
+di `harness-ui/src`, `frontend/src/components`, `tests`; 9.076.522 caratteri; caratteri e non token: conta il rapporto):
+numerare le righe nella forma di Hermes (`N|riga`) costa **+7,2%** (mediana per file +6,5%, p90 +8,3%, massimo +20,0% su un
+file di righe corte); nella forma `cat -n` **+12,7%** ⇒ se si fa, la forma è `N|riga`. ⭐ E corregge il mio timore: il costo
+vero di OGGI non è la numerazione, è l'assenza di PAGINE — `talosHarness.mjs` da solo è **600.565 caratteri in 10.025 righe**, e
+`leggi` lo restituisce intero; **10 file su 501 superano i 100.000 caratteri, 21 i 50.000**. Un tetto con «continua da riga N»
+fa RISPARMIARE ordini di grandezza proprio dove il contesto si brucia, e il +7% lo si paga su pagine piccole. ⇒ La 08 è un
+guadagno netto sul contesto, non un rincaro; resta da misurare su task veri quante volte il modello rilegge pagine successive.
