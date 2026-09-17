@@ -1,0 +1,201 @@
+name: desktop-ledger-preview
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['harness-ui/**', 'context-engine/**', '.github/workflows/desktop-ledger-preview.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ledger-preview-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  linux:
+    if: github.repository == 'Ninozzz95/talos' && github.ref == 'refs/heads/refactor/desktop-ledger-2026-09-17'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.18.0'
+      - name: Install the existing locked dependencies and browsers
+        run: |
+          set -euo pipefail
+          npm ci --prefix harness-ui --no-audit --no-fund
+          npm ci --prefix harness-ui/frontend --no-audit --no-fund
+          npm ci --prefix context-engine --no-audit --no-fund
+          node harness-ui/frontend/node_modules/playwright/cli.js install --with-deps chromium chrome
+      - name: Build, strict types and focused regressions
+        run: |
+          set -euo pipefail
+          npm --prefix harness-ui/frontend run build
+          node harness-ui/node_modules/typescript/bin/tsc -p harness-ui/frontend/tsconfig.refactor.json
+          node --test harness-ui/frontend/tests/refactor/*.test.mjs harness-ui/frontend/tests/unit/ui-experience-regression.test.mjs harness-ui/desktop/tests/profile-isolation.test.mjs
+      - id: unit
+        name: Complete frontend unit suite
+        continue-on-error: true
+        run: npm --prefix harness-ui/frontend run test:unit
+      - id: journeys
+        name: Real application, navigation, stacked modals, PTY and accessibility
+        continue-on-error: true
+        run: node harness-ui/frontend/tests/qualification/workspace-real.mjs
+      - name: Persist the exact checkpoint and evidence even on failure
+        if: always()
+        run: |
+          mkdir -p recovery
+          git rev-parse HEAD > recovery/SOURCE_COMMIT.txt
+          git archive --format=zip --output=recovery/source.zip HEAD harness-ui context-engine docs .github README.md LICENSE NOTICE THIRD_PARTY_NOTICES.md
+          cp -r harness-ui/frontend/test-results recovery/evidence || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: talos-ledger-recovery-${{ github.sha }}
+          path: recovery/
+          retention-days: 14
+          if-no-files-found: error
+      - name: Both qualification results are mandatory
+        if: always()
+        env:
+          UNIT: ${{ steps.unit.outcome }}
+          JOURNEYS: ${{ steps.journeys.outcome }}
+        run: test "$UNIT" = success && test "$JOURNEYS" = success
+  windows:
+    needs: linux
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      TALOS_R02_BUILDER_NETWORK: '1'
+      TALOS_BUILD_PROFILE: preview
+      TALOS_BUILD_SOURCE_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.18.0'
+      - name: Prepare checkout and cache paths
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git switch --create ci-ledger-preview HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot create the local qualification branch.' }
+          "ELECTRON_BUILDER_CACHE=$env:LOCALAPPDATA/electron-builder/Cache" >> $env:GITHUB_ENV
+          "electron_config_cache=$env:LOCALAPPDATA/electron/Cache" >> $env:GITHUB_ENV
+      - uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8
+        with:
+          path: |
+            ${{ env.electron_config_cache }}
+            ${{ env.ELECTRON_BUILDER_CACHE }}
+            harness-ui/desktop/.cache-r02/npm
+            harness-ui/desktop/.cache-r02/llama-b10517-bin-win-cpu-x64.zip
+            harness-ui/desktop/.cache-r02/llama-b10517-bin-win-vulkan-x64.zip
+          key: desktop-ledger-preview-${{ runner.os }}-${{ hashFiles('harness-ui/package-lock.json', 'harness-ui/desktop/package-lock.json', 'context-engine/package-lock.json') }}
+      - name: Install all locked project dependencies
+        run: |
+          foreach ($dir in @('harness-ui', 'harness-ui/frontend', 'harness-ui/desktop', 'context-engine')) {
+            npm ci --prefix $dir --no-audit --no-fund
+            if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed: $dir" }
+          }
+          node harness-ui/frontend/node_modules/playwright/cli.js install chromium
+          if ($LASTEXITCODE -ne 0) { throw 'Chromium installation failed.' }
+      - name: Build and deliver the actual frontend
+        run: |
+          npm --prefix harness-ui/frontend run build
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
+          node harness-ui/node_modules/typescript/bin/tsc -p harness-ui/frontend/tsconfig.refactor.json
+          if ($LASTEXITCODE -ne 0) { throw 'Strict typecheck failed.' }
+          Copy-Item harness-ui/frontend/dist/* harness-ui/public/ -Recurse -Force
+          if ((Get-FileHash harness-ui/frontend/dist/app.js).Hash -cne (Get-FileHash harness-ui/public/app.js).Hash) { throw 'Delivered frontend is stale.' }
+      - name: Server, kernel, frontend and actual Electron gates
+        timeout-minutes: 15
+        run: |
+          node --test harness-ui/tests/*.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Server suite failed.' }
+          npm --prefix harness-ui run test:kernel
+          if ($LASTEXITCODE -ne 0) { throw 'Kernel suite failed.' }
+          npm --prefix harness-ui run kernel:controlla
+          if ($LASTEXITCODE -ne 0) { throw 'Kernel identity gate failed.' }
+          npm --prefix harness-ui/frontend run test:unit
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend unit suite failed.' }
+          node --test harness-ui/frontend/tests/refactor/*.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Refactor regression suite failed.' }
+          npm --prefix harness-ui/desktop run test:puri
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop pure suite failed.' }
+          npm --prefix harness-ui/desktop run test:guscio
+          if ($LASTEXITCODE -ne 0) { throw 'Real Electron shell suite failed.' }
+      - name: Package ZIP-only preview with baked isolated identity
+        timeout-minutes: 15
+        run: |
+          npm --prefix harness-ui/desktop run dist
+          if ($LASTEXITCODE -ne 0) { throw 'Preview packaging failed.' }
+      - id: package
+        name: Verify the packaged code and profile
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $short = $env:TALOS_BUILD_SOURCE_COMMIT.Substring(0,7)
+          $archives = @(Get-ChildItem harness-ui/desktop/dist-preview -Filter "TALOS-Preview-*-$short-win.zip")
+          if ($archives.Count -ne 1) { throw 'Expected one exact preview ZIP.' }
+          $out = Join-Path $env:GITHUB_WORKSPACE 'preview-output/application'
+          Expand-Archive -LiteralPath $archives[0].FullName -DestinationPath $out
+          $exe = Join-Path $out 'TALOS Preview.exe'
+          if (-not (Test-Path $exe)) { throw 'Packaged executable is missing.' }
+          if ((Get-FileHash harness-ui/frontend/dist/app.js).Hash -cne (Get-FileHash (Join-Path $out 'resources/harness-ui/public/app.js')).Hash) { throw 'Packaged UI differs from qualified source.' }
+          $metadata = Get-Content (Join-Path $out 'resources/app/package.json') -Raw | ConvertFrom-Json
+          if ($metadata.talosProfile -cne 'preview' -or $metadata.talosSourceCommit -cne $env:TALOS_BUILD_SOURCE_COMMIT) { throw 'Isolated identity is not baked into the package.' }
+          "exe=$exe" >> $env:GITHUB_OUTPUT
+      - name: Run the packaged application and verify real PTY and credentials isolation
+        run: |
+          node harness-ui/desktop/scripts/ledger-preview-smoke.mjs '${{ steps.package.outputs.exe }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged preview qualification failed.' }
+      - name: Write runnable entry and full integrity manifest
+        run: |
+          $out = (Resolve-Path preview-output/application).Path
+          @'
+          @echo off
+          setlocal
+          set "ELECTRON_RUN_AS_NODE="
+          set "NODE_OPTIONS="
+          start "" "%~dp0TALOS Preview.exe"
+          '@ | Set-Content (Join-Path $out 'AVVIA-TALOS.cmd') -Encoding ascii
+          @"
+          TALOS PREVIEW - HARNESS REALE CON REFACTOR APPLICATO
+          Commit: $env:TALOS_BUILD_SOURCE_COMMIT
+          Estrarre tutto lo ZIP e aprire AVVIA-TALOS.cmd oppure TALOS Preview.exe.
+          Electron, Node, backend, frontend compilato e runtime locali sono inclusi.
+          Dati: %APPDATA%\TALOS Preview; profilo e portachiavi separati da TALOS Desktop.
+          Nessuna importazione automatica delle credenziali della versione abituale.
+          Le operazioni sono reali. Modelli GGUF e credenziali non sono inclusi.
+          Nessuna chiamata a pagamento eseguita nelle prove di questa build.
+          Build di avanzamento del ledger, non chiusura dell'intero refactoring.
+          Non firmata: non disabilitare SmartScreen, Defender o criteri del dispositivo.
+          Non installa, aggiorna o sostituisce la versione abituale. Nessun tag o release.
+          "@ | Set-Content (Join-Path $out 'LEGGIMI.txt') -Encoding utf8
+          Get-ChildItem $out -File -Recurse | Sort-Object FullName | ForEach-Object {
+            $relative = [IO.Path]::GetRelativePath($out, $_.FullName).Replace('\','/')
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $relative"
+          } | Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding utf8
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: TALOS-Refactor-Preview-Windows-x64-${{ github.sha }}
+          path: preview-output/application/
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: error
+          compression-level: 6
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: TALOS-Refactor-Windows-evidence-${{ github.sha }}
+          path: harness-ui/desktop/.prove/
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: warn
