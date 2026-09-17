@@ -1047,3 +1047,23 @@ vera. ⛔ Si discosta dal handoff della CLI su un punto, apposta: `usage.prompt_
 (Novita e Ollama non documentano il corpo della risposta). Il modello di prova di Novita è `meta-llama/llama-3.1-8b-instruct`
 (quello dell'esempio nella loro documentazione non ha più una scheda). Toccato un record di un'altra corsia (`zai-anthropic`:
 una riga additiva, la fonte datata del modello, senza la quale il registro non si carica).
+
+## BC-75 | A FINE GIRO la chat deve riportare i file modificati in quel giro, ognuno col collegamento alla sua scheda nella Revisione (owner 17/09/2026, con una foto di Claude Code) — APPROVATA, entra nel giro di riparazione di PO-27
+
+**Parole dell'owner:** «piccola modifica UI, usando stesso stile coerente TALOS: come fa Claude Code a fine turno bisogna
+riportare lista file modificati in quel turno con link a review in quella scheda file». Nella foto: una carta «Modificati 3
+file» con «Annulla» e «Visualizza le modifiche», e una riga per file (nome, `+19 −0`, freccia).
+**Cosa esiste già (misurato col grep il 17/09, prima di scrivere una riga):** il componente C'È e non lo chiama NESSUNO —
+`frontend/src/components/conversazione.js:743` `creaFileToccati(file)` («File toccati in questo giro», `data-c="TouchedFiles"`) e
+`:754` `rigaFileToccato({percorso, aggiunte, rimozioni, onApri, onDiff})`, con «Apri» e «Differenza» (`data-vaia="review"`), portati
+dal mockup; in `legacy/app.js` zero chiamanti. È la forma già vista il 20/08: una funzione coi test e nessun chiamante. Oggi la
+chat mostra solo, PER OGNI scrittura, la riga «1 file scritto» (`app.js:11112`). I dati ci sono: `state.realSession.reviewFiles`
+(percorso → file, col giro) e `renderReviewFile(key)` (`app.js` ~9507) apre la Revisione su QUEL file; dopo BC-63 la linguetta
+giusta va in vista da sola.
+**Da fare:** alla fine di ogni giro che ha scritto almeno un file, sotto la risposta, UNA carta con i file di QUEL giro (non della
+sessione): nome del file (percorso intero nel `title`, cartella madre solo se due nomi coincidono — la regola di BC-63), `+N −M`
+misurati, e il clic sulla riga apre la Revisione sulla scheda di quel file; in testa «Visualizza le modifiche» (apre la Revisione
+sul primo). ⛔ Niente «Annulla» finché non esiste un annullamento VERO del giro (checkpoint): un bottone che non fa niente non si
+disegna. Due azioni per riga al massimo (regola dei menu). Sopravvive a ricarica e riapertura (si ricostruisce dal replay, non da
+uno stato volatile), non compare nei giri senza scritture, e nei giri lunghi non si duplica a ogni scrittura. Skill
+`frontend-design`, tema Calm, nei due temi a 1024 e 1440; nessun componente nuovo: si CABLA quello che c'è.
