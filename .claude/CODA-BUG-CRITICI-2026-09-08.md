@@ -717,7 +717,7 @@ in `app.js:19816-19826`, e la P0/A ha messo la guardia sul toggle ma non sulla c
 **Finita quando:** aprire e richiudere la vista dieci volte lascia lo STESSO numero di schede (prova browser che conta le
 linguette), con una sessione PTY sola per scheda; «+ Nuovo» ne aggiunge esattamente una.
 
-## BC-63 | La vista «Revisione» deve avere lo STESSO componente a schede del Terminale (schede stile Chrome) (owner 17/09/2026) — APERTO, debito
+## BC-63 | La vista «Revisione» deve avere lo STESSO componente a schede del Terminale (schede stile Chrome) (owner 17/09/2026) — APERTO, debito — ✅ FATTA e sul 4174 il 17/09 (`c75b0d3a`; revisore avversariale: accettata con riserve, un giro di riparazione; residuo Browser → BC-68)
 
 **Richiesta:** «la scheda revisione deve avere lo stesso component tab di terminale (schede stile chrome)». Oggi il Terminale ha
 le linguette di `components/terminale.js` (linguetta con titolo, chiusura, «+ Nuovo», menu contestuale) e il Browser le sue;
@@ -826,7 +826,7 @@ una sessione lunga vera con guasti iniettati (worker che muore, DB bloccato, mig
 corrompere niente, è acceso dove l'owner lavora, e BC-65 ci gira sopra verde.
 
 
-## BC-67 | Senza sessione la REVISIONE mostra DATI FINTI (tre file, un diff, una ricevuta, «Accetta questo file») — e la prova che lo vietava è rossa da giorni in silenzio (17/09/2026) — APERTO, difetto di PRODOTTO
+## BC-67 | Senza sessione la REVISIONE mostra DATI FINTI (tre file, un diff, una ricevuta, «Accetta questo file») — e la prova che lo vietava è rossa da giorni in silenzio (17/09/2026) — ✅ CURATO e sul 4174 il 17/09 (`c75b0d3a`, pacchetto `05bb98a4`): la Revisione si ridisegna dai fatti all'avvio e a ogni ingresso, il markup d'esempio è uscito dal template, REVIEW-REAL-41 rafforzata (vuota → piena → vuota) e BROWSER-REAL-42 riportata ai selettori veri; NOTIFICHE-REALI-43 è `test.fail()` dichiarato → BC-70. ⛔ Dal vivo lo stato VUOTO non l'ho visto: il 4174 riapre da solo l'ultima sessione. Testo originale:
 
 **Misurato il 17/09 sulla lane (`870988d6`), banco 4193, un worker, 1440x900, profilo nuovo con la modale saltata:** aperta la
 Revisione con «Nessuna sessione», a schermo ci sono tre linguette VISIBILI (`offsetParent` presente, larghezze 253/281/173 px):
