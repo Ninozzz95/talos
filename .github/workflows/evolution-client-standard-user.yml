@@ -23,11 +23,11 @@ jobs:
           persist-credentials: false
       - name: provision pinned x64 compiler for the explicit emulated profile
         run: |
-          rustup toolchain install 1.90.0-x86_64-pc-windows-msvc --profile minimal
+          New-Item -ItemType Directory -Path evidence-client-build -Force | Out-Null
+          rustup toolchain install 1.90.0-x86_64-pc-windows-msvc --profile minimal --force-non-host 2>&1 | Tee-Object evidence-client-build/toolchain.log
           if ($LASTEXITCODE -ne 0) { throw 'Pinned x64 compiler unavailable' }
       - name: compile and test native preflight
         run: |
-          New-Item -ItemType Directory -Path evidence-client-build | Out-Null
           rustc -Vv | Tee-Object evidence-client-build/rustc.txt
           cargo test --frozen 2>&1 | Tee-Object evidence-client-build/unit.log
           if ($LASTEXITCODE -ne 0) { throw 'Native unit tests failed' }
