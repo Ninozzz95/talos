@@ -1182,3 +1182,29 @@ cartella `tests/browser` INTERA → **323 prove · 267 verdi · 53 rosse · 3 sa
 `workspace-chooser` 4 · `context-compactor` 2 · `visual-matrix` 1 · `settings-fatti-reali` 1 · `immagini-chat` 1. ⇒ NESSUN rosso
 nuovo da PO-27; rispetto ai 77 del mattino (su 277) sono 24 in meno con 46 prove in più: 22 le ha guarite la rimozione della
 modale, e `ragionamento-compresso` SCHERMO-10 (×2) qui è VERDE — era instabile, come sospettato. Conferma il conteggio dell'agente.
+
+## BC-79 | Tre cose trovate dalla consegna e dalla MIA revisione di BC-76 (17/09/2026) — la prima in cura sul ramo, le altre APERTE
+
+1. ⛔⛔⛔ **Una sessione `provider:'local'` che DELEGA mandava il testo delegato a openrouter.ai, senza consenso** — trovato da me in
+   revisione, MISURATO con la rete intercettata (niente è uscito): `RICHIESTE USCITE: [{"host":"openrouter.ai","model":"mio.gguf",
+   "contieneSegreto":true}]`, figlia `{"provider":"cloud","modello":"mio.gguf"}`. Causa: `subagent-orchestrator.mjs:435` passa
+   `padre.modello`, che per una madre locale è il nome NUDO del GGUF, e un nome nudo si legge come OpenRouter. Prima di BC-76 era
+   irraggiungibile (quella strada non eseguiva attrezzi): è la cura stessa che lo apre, quindi si chiude SUL RAMO prima di fondere.
+   Stessa fuga, solo LETTA: `onRicercaAvvia` passa `modello: null` per una madre locale ⇒ modello di serie del server, cioè cloud.
+   Sonda: `scratchpad/sonda-bc76-delega-esce-sul-cloud.test.mjs`. Rimandata all'agente di BC-76 con i vincoli (la figlia eredita la
+   forma di rete `local:`/`ollama:`/`lmstudio:`, oppure rifiuto onesto; mai cloud senza `fallbackConsent`).
+   Stessa revisione, due mie rotture passate VERDI (356/356), cioè due prove mancanti, chieste sullo stesso ramo: il ripiego su ogni
+   `ok:false` invece che su `esito == null`, e — grave — il ripiego che parte anche a sessione FERMATA.
+2. ⛔⛔ **Un motore che rifiuta `tools` viene ritentato quattro volte e arriva a schermo come errore grezzo** — misurato dall'agente
+   con un motore finto che risponde `HTTP 400 {"error":{"message":"tools param requires --jinja flag"}}`: eventi `RunStarted,
+   RunError`, `code: internal-error`, messaggio = il grezzo del server con un flag interno dentro. Tre difetti: un 400 ritentato
+   (`chiamaConRitenta`, kernel), un codice che la chat non distingue da un bug, una frase non umana. Col nostro supervisore non
+   dovrebbe capitare (`--jinja` + formato «Generic»); il caso vero è Ollama / LM Studio con un modello senza template per gli
+   attrezzi. **Cura onesta:** ritentare UNA volta senza `tools` quando il motore rifiuta proprio quel parametro, e dire «questo
+   modello non usa gli attrezzi: resta una chat», con un codice suo. ⛔ Tocca `runtime-owner-adapter.mjs` o il kernel: vuole il sì
+   dell'owner. Mai riconoscere il testo dell'errore con una regex (un filtro che riconosce la MENZIONE invece della cosa).
+3. ⛔ **Il pannello «prova» del Laboratorio modelli non disegna l'esito degli attrezzi** (`frontend/src/legacy/app.js`
+   ~3845-3850: gestisce `TextMessageContent`, `ReasoningMessageContent`, `ToolCallStart`, `ToolCallArgs`, `RunError`, non
+   `ToolCallResult`). Dopo BC-76 quel pannello fa girare un agente vero e ne mostra metà. Frontend: entra nella corsia frontend
+   dopo la consegna della Fase A. E il preambolo su quella strada passa da 133 a ~38.000 caratteri (misura dell'agente): il primo
+   token della «prova» arriverà molto più tardi — è la stessa riga della ricerca sulla ripresa lenta, non una regressione nuova.
