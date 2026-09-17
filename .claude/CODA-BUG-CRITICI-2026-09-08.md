@@ -859,7 +859,7 @@ tastiera delle schede. Nello stesso giro: `aria-controls` → `role="tabpanel"` 
 Terminale mostra insieme il dettaglio della cartella e la frase generica «Ogni scheda dichiara chi l'ha aperta e dove», contro
 il commento del 07/09 (preesistente a BC-63).
 
-## CLI-REQ-01..04 | Quattro richieste al kernel arrivate dalla sessione della CLI (17/09/2026) — REGISTRATE, nessuna autorizzata
+## CLI-REQ-01..04 | Quattro richieste al kernel arrivate dalla sessione della CLI (17/09/2026) — ✅ APPROVATE TUTTE dall'owner il 17/09 («ok approvo»), nell'ordine 04 → 02 → 01 come mini-fase backend dopo PO-27 (`.claude/BRIEF-CLI-REQ-2026-09-17.md`), e la 03 DENTRO PO-27. Decisioni sue: elenco CHIUSO di variabili (no al filtro che toglie i suoi GH_TOKEN/NPM_TOKEN); i plugin già approvati richiedono la fiducia con una frase umana; sulla 01, se su cmd non si possono avere codice e cartella insieme, vince il CODICE D'USCITA
 
 Arrivate come messaggio fra sessioni dalla lane `lane/talos-cli-competitive-upgrade` (commit `154a7296`, file in
 `docs/talos-cli/handoffs/2026-09-17-CLI-REQ-0N-*.md`; si leggono con `git show 154a7296:<file>`). La CLI resta FUORI SCOPE per
