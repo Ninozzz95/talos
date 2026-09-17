@@ -1,0 +1,145 @@
+name: desktop-source-delivery
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths:
+      - 'tools/delivery/**'
+      - 'AVVIA-TALOS.cmd'
+      - 'README-AVVIO.md'
+      - 'harness-ui/**'
+      - 'context-engine/**'
+      - 'docs/refactor/REVIEW-AGENT.md'
+      - '.github/workflows/desktop-source-delivery.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: source-delivery-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source:
+    if: github.repository == 'Ninozzz95/talos' && github.ref == 'refs/heads/refactor/desktop-ledger-2026-09-17'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.18.0'
+      - name: Locked dependencies and exact tests
+        run: |
+          set -euo pipefail
+          mkdir -p .delivery-evidence
+          for dir in harness-ui harness-ui/frontend context-engine; do npm ci --prefix "$dir" --no-audit --no-fund; done
+          node --test tools/delivery/start.test.mjs | tee .delivery-evidence/launcher-unit.log
+          npm --prefix harness-ui/frontend run build
+          node harness-ui/node_modules/typescript/bin/tsc -p harness-ui/frontend/tsconfig.refactor.json
+          node --test harness-ui/frontend/tests/refactor/*.test.mjs harness-ui/desktop/tests/profile-isolation.test.mjs | tee .delivery-evidence/refactor-unit.log
+          npm --prefix harness-ui/frontend run test:unit > .delivery-evidence/frontend-unit.log 2>&1
+          node harness-ui/frontend/node_modules/playwright/cli.js install --with-deps chromium chrome
+      - name: Qualify the actual built application
+        run: |
+          set -euo pipefail
+          GITHUB_SHA=$(git rev-parse HEAD) TALOS_EVIDENCE_DIR="$GITHUB_WORKSPACE/.delivery-evidence/workspace-real" node harness-ui/frontend/tests/qualification/workspace-real.mjs
+      - name: Assemble immutable complete source and verify every archive entry
+        run: |
+          set -euo pipefail
+          python tools/delivery/assemble.py --output .delivery-output
+          python - <<'PY'
+          import pathlib,zipfile,json,hashlib
+          root=pathlib.Path('.delivery-output')
+          info=json.loads((root/'delivery.json').read_text())
+          with zipfile.ZipFile(root/info['zip']) as z:
+            manifest=json.loads(z.read('TALOS/SOURCE-MANIFEST.json'))
+            for item in manifest['files']:
+              assert hashlib.sha256(z.read('TALOS/'+item['path'])).hexdigest()==item['sha256'],item['path']
+            assert not any(pathlib.PurePosixPath(n).suffix.lower() in {'.woff','.woff2','.ttf','.otf','.ttc','.eot'} for n in z.namelist())
+          print('All archive bytes and source manifest verified.')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: talos-source-candidate-${{ github.sha }}
+          path: .delivery-output/
+          retention-days: 14
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: talos-source-linux-evidence-${{ github.sha }}
+          path: .delivery-evidence/
+          retention-days: 14
+          if-no-files-found: warn
+  windows:
+    needs: source
+    runs-on: windows-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: talos-source-candidate-${{ github.sha }}
+          path: candidate
+      - name: Extract independently, with spaces in the source path
+        run: |
+          $ErrorActionPreference='Stop'
+          $info=Get-Content candidate/delivery.json -Raw | ConvertFrom-Json
+          if ($info.sourceCommit -cne '${{ github.sha }}') { throw 'Source identity mismatch.' }
+          $zip=Join-Path (Resolve-Path candidate).Path $info.zip
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant() -cne $info.sha256) { throw 'Source ZIP is not the verified candidate.' }
+          Expand-Archive -LiteralPath $zip -DestinationPath 'Extracted Talos source'
+          $root=Join-Path $env:GITHUB_WORKSPACE 'Extracted Talos source/TALOS'
+          "TALOS_EXTRACTED_SOURCE=$root" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Path evidence -Force | Out-Null
+      - name: One-click source preparation without a preinstalled Node dependency
+        run: |
+          $ErrorActionPreference='Stop'
+          $env:CI='true'
+          & "$env:TALOS_EXTRACTED_SOURCE/AVVIA-TALOS.cmd" --verify *> evidence/source-integrity.log
+          if ($LASTEXITCODE -ne 0) { Get-Content evidence/source-integrity.log -Tail 60; throw 'Source verification or portable Node bootstrap failed.' }
+          & "$env:TALOS_EXTRACTED_SOURCE/AVVIA-TALOS.cmd" --prepare-only --cpu *> evidence/one-click-preparation.log
+          if ($LASTEXITCODE -ne 0) { Get-Content evidence/one-click-preparation.log -Tail 100; throw 'One-click preparation failed.' }
+          Copy-Item "$env:TALOS_EXTRACTED_SOURCE/.talos-runtime/prepared.json" evidence/prepared.json
+      - name: Second preparation reuses the locked local dependencies
+        run: |
+          & "$env:TALOS_EXTRACTED_SOURCE/AVVIA-TALOS.cmd" --prepare-only --cpu *> evidence/second-preparation.log
+          if ($LASTEXITCODE -ne 0) { Get-Content evidence/second-preparation.log -Tail 60; throw 'Repeat preparation failed.' }
+          $log=Get-Content evidence/second-preparation.log -Raw
+          if (($log | Select-String 'Dipendenze gia preparate:' -AllMatches).Matches.Count -ne 4) { throw 'Prepared dependencies were not reused for all four projects.' }
+      - name: Run actual extracted source app, authenticated backend and PTY
+        run: |
+          $node=Join-Path $env:TALOS_EXTRACTED_SOURCE '.talos-runtime/node-v24.18.0-win-x64/node.exe'
+          $env:TALOS_EVIDENCE_DIR=Join-Path $env:GITHUB_WORKSPACE 'evidence/source-app'
+          & $node "$env:TALOS_EXTRACTED_SOURCE/tools/delivery/source-smoke.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Extracted source application qualification failed.' }
+      - name: Seal source qualification
+        run: |
+          $data=[ordered]@{ sourceCommit='${{ github.sha }}'; workflowRun='${{ github.run_id }}'; sourceZipVerified=$true; oneClickPreparation=$true; repeatedPreparation=$true; actualElectronSource=$true; paidInference=$false; globalLedgerCompleted=$false }
+          $data | ConvertTo-Json | Set-Content evidence/delivery-qualification.json -Encoding utf8
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: TALOS-Sorgenti-OneClick-VERIFICATI-${{ github.sha }}
+          path: |
+            candidate/TALOS-Sorgenti-OneClick-*.zip
+            candidate/delivery.json
+            candidate/SOURCE-SHA256SUMS.txt
+            candidate/source-inventory.json
+            candidate/all-changes.patch
+            candidate/commits.tsv
+            evidence/delivery-qualification.json
+          retention-days: 14
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: TALOS-Sorgenti-Windows-evidence-${{ github.sha }}
+          path: evidence/
+          retention-days: 14
+          if-no-files-found: warn
