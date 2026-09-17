@@ -104,9 +104,12 @@ try {
   check('preview cannot see stable browser state', await page.evaluate(() => localStorage.getItem('talos.isolation.probe')) === null);
   await page.evaluate(() => localStorage.setItem('talos.isolation.probe', 'preview'));
   check('preview writes leave normal browser state unchanged', await stablePage.evaluate(() => localStorage.getItem('talos.isolation.probe')) === 'stable');
-  // Test the real OS keyring with a unique synthetic service, never personal credentials.
-  result.keyring = await preview.evaluate(async (_electron, account) => {
-    const { createRequire } = await import('node:module'); const { join } = await import('node:path');
+  // The Playwright evaluation VM has no ESM dynamic-import callback. Use the
+  // Node built-in loader in the *main process*, not a renderer bridge or eval bypass.
+  // This still loads and tests the actual native keyring shipped in the package.
+  result.keyring = await preview.evaluate((_electron, account) => {
+    const { createRequire } = process.getBuiltinModule('module');
+    const { join } = process.getBuiltinModule('path');
     const req = createRequire(join(process.resourcesPath, 'harness-ui', 'package.json'));
     const { Entry } = req('@napi-rs/keyring');
     const stable = new Entry('talos-ledger-isolation-probe-desktop', account);
