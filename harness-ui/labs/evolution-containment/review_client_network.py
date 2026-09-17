@@ -14,6 +14,7 @@ import sys
 import review_network_correlation as net
 
 SCOPE = "windows11-arm64-x64-emulated-standard-user-ipv4-loopback"
+WINDOW_POLICY = "observed-elapsed-ceiling-plus-six-seconds-max60.v1"
 SOURCES = ("ci-observe-client-network.ps1", "ci-client-standard-user.ps1", "run-client.ps1",
            "review_client_network.py", "test_client_network.py", "review_network_correlation.py")
 HEX = re.compile(r"[0-9a-f]{64}")
@@ -124,6 +125,11 @@ def native_checks(records, profile, fixture, run):
     return groups[0]["pid_list"]
 
 
+def query_window(started: int, collected: int) -> int:
+    age = net.integer(collected-started, "observation age", 1, 54000)
+    return (age+999)//1000+6
+
+
 def match_flow(records, selection, collection, xml):
     pos, positive=net.unique(records,"check","positive_control_prerequisite")
     obs_pos, obs=net.unique(records,"diagnostic","broker_tcp_subjects")
@@ -159,7 +165,9 @@ def match_flow(records, selection, collection, xml):
     earliest,latest=max(started,first-100),min(finished,last+100)
     args=['wfp','show','netevents','file='+ntpath.join(selection['witness_directory'],'events.xml'),
           'protocol=6','localaddr=127.0.0.1','remoteaddr=127.0.0.1',f'localport={target}',f'remoteport={source}',
-          'appid='+selection['listener_image_dos'],'userid='+selection['owner_sid'],'timewindow=60']
+          'appid='+selection['listener_image_dos'],'userid='+selection['owner_sid'],
+          'timewindow='+str(query_window(started,collected))]
+    exact(collection.get('timewindow_seconds'),query_window(started,collected),'incorrect WFP time window')
     exact(collection.get("arguments"),args,"witness query not exactly scoped/read-only")
     matches=[]
     for event in net.xml_events(xml):
@@ -198,6 +206,7 @@ def evaluate(bundle: dict[str,bytes]) -> dict:
         run=load_json(bundle['run']);fixture=load_json(bundle['fixture']);profile=load_json(bundle['profile'])
         records=[load_json(line) for line in bundle['probes'].splitlines() if line.strip()]
         require(selection.get('schema')=='talos.client-network-witness.selection.v1' and selection.get('scope')==SCOPE,'unknown selection')
+        require(selection.get('query_window_policy')==WINDOW_POLICY,'unknown WFP window policy')
         require(selection.get('observer_elevated') is True and selection.get('measured_runtime_elevated') is False,'observer/runtime role mismatch')
         require(selection.get('network_configuration_changed') is False,'network configuration changed')
         require(re.fullmatch(r'S-1-5-21-\d+-\d+-\d+-\d+',selection.get('owner_sid','')) is not None,'invalid fixture owner')

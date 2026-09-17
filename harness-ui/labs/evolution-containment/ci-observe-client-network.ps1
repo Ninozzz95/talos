@@ -49,6 +49,7 @@ function Start-ClientNetworkWitness([string]$Executable, [string]$UserSid, [stri
     $selection = [ordered]@{
         schema='talos.client-network-witness.selection.v1'
         scope='windows11-arm64-x64-emulated-standard-user-ipv4-loopback'
+        query_window_policy='observed-elapsed-ceiling-plus-six-seconds-max60.v1'
         selected_at_ms=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
         checkout=(& git rev-parse HEAD); owner_sid=$UserSid; witness_directory=$Directory
         listener_image_dos=$Executable; listener_image_nt=(Get-ClientWitnessImage $Executable)
@@ -65,7 +66,7 @@ function Complete-ClientNetworkWitness($Selection, [string]$ProbeLog, [string]$D
         schema='talos.client-network-witness.collection.v1'; status='FAIL'
         selection_sha256=(Get-FileHash -LiteralPath (Join-Path $Directory 'selection.json') -Algorithm SHA256).Hash.ToLowerInvariant()
         probes_sha256=$null; started_ms=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-        finished_ms=$null; netsh_exit_code=$null; arguments=@(); xml_sha256=$null
+        finished_ms=$null; netsh_exit_code=$null; arguments=@(); xml_sha256=$null; timewindow_seconds=$null
         observer_elevated=$true; configuration_changed=$false; error=$null
     }
     $process = $null
@@ -93,11 +94,18 @@ function Complete-ClientNetworkWitness($Selection, [string]$ProbeLog, [string]$D
         if ((Get-FileHash -LiteralPath $Selection.listener_image_dos -Algorithm SHA256).Hash.ToLowerInvariant() -cne $Selection.binary_sha256) {
             throw 'CI-owned executable changed'
         }
+        # Query only this measurement plus the five-second utility deadline
+        # and one second of rounding margin. Never remove the time filter or
+        # widen/retry a failed query. Invalid/too-old intervals remain failures.
+        $ageMs = $receipt.started_ms - [long]$tcp['started_ms']
+        $windowSeconds = [int][Math]::Ceiling($ageMs / 1000.0) + 6
+        if ($windowSeconds -lt 7 -or $windowSeconds -gt 60) { throw 'Measured interval does not fit the bounded WFP window' }
+        $receipt.timewindow_seconds = $windowSeconds
         $xml = Join-Path $Directory 'events.xml'
         # Arguments are individual literal values, not shell text or a candidate-supplied command.
         $query = @('wfp','show','netevents',"file=$xml",'protocol=6','localaddr=127.0.0.1',
                    'remoteaddr=127.0.0.1',"localport=$target","remoteport=$source",
-                   "appid=$($Selection.listener_image_dos)","userid=$($Selection.owner_sid)",'timewindow=60')
+                   "appid=$($Selection.listener_image_dos)","userid=$($Selection.owner_sid)","timewindow=$windowSeconds")
         $receipt.arguments = $query
         $info = [Diagnostics.ProcessStartInfo]::new((Join-Path ([Environment]::SystemDirectory) 'netsh.exe'))
         foreach ($arg in $query) { $info.ArgumentList.Add($arg) }

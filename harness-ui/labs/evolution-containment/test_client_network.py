@@ -27,7 +27,7 @@ def fixture():
     original=next(r for r in records if r.get('diagnostic')=='broker_wfp_localport_events')
     xml=original.pop('text').replace('MS_FWP_DIRECTION_OUT','MS_FWP_DIRECTION_IN').replace('</internalFields>','<processId>4000</processId></internalFields>').encode()
     original['error']='read-only WFP query failed: exit 1'
-    selection={'schema':'talos.client-network-witness.selection.v1','scope':v.SCOPE,
+    selection={'schema':'talos.client-network-witness.selection.v1','scope':v.SCOPE,'query_window_policy':v.WINDOW_POLICY,
                'selected_at_ms':TIME-2000,'checkout':'a'*40,'owner_sid':OWNER,
                'listener_image_dos':r'C:\fixture\parent.exe','listener_image_nt':IMAGE,
                'witness_directory':r'C:\evidence\network-observer','binary_sha256':'b'*64,
@@ -35,10 +35,10 @@ def fixture():
                'measured_runtime_elevated':False,'network_configuration_changed':False,
                'full_containment_verified':False,'release_ready':False}
     collection={'schema':'talos.client-network-witness.collection.v1','status':'COLLECTED_NOT_VERIFIED',
-                'started_ms':TIME+3000,'finished_ms':TIME+3100,'netsh_exit_code':0,
+                'started_ms':TIME+3000,'finished_ms':TIME+3100,'netsh_exit_code':0,'timewindow_seconds':10,
                 'arguments':['wfp','show','netevents',r'file=C:\evidence\network-observer\events.xml',
                     'protocol=6','localaddr=127.0.0.1','remoteaddr=127.0.0.1','localport=64917',
-                    'remoteport=64924',r'appid=C:\fixture\parent.exe','userid='+OWNER,'timewindow=60'],
+                    'remoteport=64924',r'appid=C:\fixture\parent.exe','userid='+OWNER,'timewindow=10'],
                 'observer_elevated':True,'configuration_changed':False,'error':None}
     ci={'schema':'talos.client-ci-fixture.v1','checkout':'a'*40,'clientNativeExit':1,'binarySha256':'b'*64,
         'cleanupErrors':[],'error':None,**{key:True for key in ('provisionerElevated','accountCreated','accountRemoved',
@@ -76,6 +76,14 @@ class WitnessTests(unittest.TestCase):
             self.assertIs(result[key],False)
         self.assertTrue(result['privileged_ci_observer_required'])
 
+    def test_query_window_rounds_observed_elapsed_time_not_arbitrary_history(self):
+        for age, expected in ((1,7),(999,7),(1000,7),(1001,8),(3500,10),(54000,60)):
+            self.assertEqual(v.query_window(TIME,TIME+age),expected)
+
+    def test_query_window_rejects_old_or_reversed_observation(self):
+        for age in (-1,0,54001,60000):
+            with self.assertRaises(ValueError):v.query_window(TIME,TIME+age)
+
     def test_raw_hash_changes_are_refused(self):
         for name in ('selection','xml','probes'):
             data=fixture();data[name]+=b' '
@@ -111,6 +119,11 @@ class WitnessTests(unittest.TestCase):
 
 
 CASES={
+ 'wrong_window_policy':lambda b:update(b,'selection','query_window_policy','unbounded'),
+ 'wider_window':lambda b:update(b,'collection','timewindow_seconds',60),
+ 'narrower_window':lambda b:update(b,'collection','timewindow_seconds',9),
+ 'missing_window':lambda b:update(b,'collection','timewindow_seconds',None),
+ 'boolean_window':lambda b:update(b,'collection','timewindow_seconds',True),
  'wrong_event_direction':lambda b:b.__setitem__('xml',b['xml'].replace(b'MS_FWP_DIRECTION_IN',b'MS_FWP_DIRECTION_OUT')),
  'missing_listener_process':lambda b:b.__setitem__('xml',b['xml'].replace(b'<processId>4000</processId>',b'')),
  'candidate_pid_is_not_listener':lambda b:b.__setitem__('xml',b['xml'].replace(b'<processId>4000</processId>',b'<processId>4001</processId>')),

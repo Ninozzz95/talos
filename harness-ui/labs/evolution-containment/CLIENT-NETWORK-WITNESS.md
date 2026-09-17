@@ -18,8 +18,8 @@ System/Administrators-only directory outside the standard-user scratch tree.
 After the original client run, the provisioner checks the broker TCP observation
 against that known image and owner. The only query is System32 netsh.exe with
 `wfp show netevents`, TCP, both IPv4 loopback addresses, the exact listener and
-source ports, the immutable listener appid, the fixture user SID and a 60-second
-window. Arguments are individual ProcessStartInfo.ArgumentList values. No shell
+source ports, the immutable listener appid, the fixture user SID and a measurement-derived
+window of at most 60 seconds. Arguments are individual ProcessStartInfo.ArgumentList values. No shell
 expression or child-selected executable is evaluated. Deadline is five seconds;
 XML and utility diagnostics are bounded and failures are retained.
 
@@ -86,3 +86,23 @@ A new Windows execution must measure the revised client-only predicate.
 
 Direction reference:
 https://learn.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_net_event_classify_drop1
+
+## Bounded measurement window, not an unfiltered retry
+
+At source 89f76d2 the first fresh Windows run correlated two client block events.
+The repeated run returned FWP_E_INVALID_INTERVAL from the read-only netsh query;
+no XML was emitted and the reviewer correctly rejected the missing evidence.
+The raw failed attempt remains available. The precise internal cause of that
+netsh error has not been established; no Windows bug fix is claimed.
+
+The witness now preselects the rule `observed-elapsed-ceiling-plus-six-seconds-max60.v1`.
+The sole query's window is ceil((collection_start - observation_start)/1000) + 6
+seconds: observed time plus the five-second utility deadline and rounding margin.
+It must be between 7 and 60 seconds. The reviewer recomputes the same value and
+requires the exact matching command argument. This reduces unrelated history;
+it does not remove or broaden filtering, retry a failed command, change firewall
+policy, or accept an enumeration error. All flow, timing, PID, token, filter and
+cleanup predicates remain required. A failure still rejects the run.
+
+Primary API interval definition:
+https://learn.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_net_event_enum_template0
