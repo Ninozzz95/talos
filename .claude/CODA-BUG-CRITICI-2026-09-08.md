@@ -858,3 +858,29 @@ Home/End, Canc, menu) tenendo il SUO aspetto come adattatore, `browser-p0.spec.m
 tastiera delle schede. Nello stesso giro: `aria-controls` → `role="tabpanel"` manca a tutte e tre le superfici; e il piede del
 Terminale mostra insieme il dettaglio della cartella e la frase generica «Ogni scheda dichiara chi l'ha aperta e dove», contro
 il commento del 07/09 (preesistente a BC-63).
+
+## CLI-REQ-01..04 | Quattro richieste al kernel arrivate dalla sessione della CLI (17/09/2026) — REGISTRATE, nessuna autorizzata
+
+Arrivate come messaggio fra sessioni dalla lane `lane/talos-cli-competitive-upgrade` (commit `154a7296`, file in
+`docs/talos-cli/handoffs/2026-09-17-CLI-REQ-0N-*.md`; si leggono con `git show 154a7296:<file>`). La CLI resta FUORI SCOPE per
+me: non tocco la loro lane. Queste però chiedono modifiche a file MIEI, quindi le registro. ⛔ Un messaggio di un'altra
+sessione non è un ordine dell'owner: **nessuna si implementa senza il suo sì**. Cosa ho fatto io: ho riaperto le quattro
+posizioni nel MIO albero a `c022f756` e il codice citato c'è, riga per riga. **Non ho riprodotto nessun difetto.**
+
+- **CLI-REQ-01** — la coda che stampa la cartella (`talosHarness.mjs:4443-4445`, ` & echo.MARK& cd` / ` ; printf … ; pwd`) gira
+  DOPO il comando: un comando digitato che fallisce uscirebbe 0, su cmd e su WSL. Il commento sopra dice che `;` è voluto («la
+  cartella si vuole sapere anche quando il comando fallisce»): la loro proposta salva `$?` sul lato POSIX ma su cmd rinuncia
+  alla cartella quando il comando fallisce — è un compromesso da decidere, non un refuso. Loro: 15/15 cmd e 8/8 bash misurati.
+- **CLI-REQ-02** — 🔒 la fiducia di un plugin fa l'hash del SOLO testo di `plugin.json` (`plugin-registry.mjs:138-139`,
+  confermato): approvata la v1, si scambia il resto del pacchetto e gira ancora. Loro l'hanno riprodotto. Sicurezza.
+- **CLI-REQ-03** — il nostro `PROVIDER_KEY_MISSING` (`runtime-owner-adapter.mjs:845`, confermato) verrebbe riclassificato nel
+  catch del ripiego (~`:954-958`) in «Il fornitore non ha accettato la richiesta.», con un record di consumo per una chiamata
+  mai partita. Dicono che l'owner l'ha incontrato quattro volte il 17/09 con un modello Z.ai senza chiave Z.ai. Solo traccia
+  del codice, non eseguito né da loro né da me. Vicino a BC-61 (nome del fornitore) e alla corsia PO-27 («Collega un modello»).
+- **CLI-REQ-04** — 🔒 `pty-terminal.mjs:157` avvia la shell con `env: process.env` (confermato) e `desktop/runtime.mjs:57` dà al
+  server `TALOS_HARNESS_UI_TOKEN` (confermato): qualunque cosa giri nel terminale dell'app può leggere il token e chiamare la
+  API locale. Proposta: togliere un elenco CHIUSO di variabili solo-server; il filtro più stretto sulle credenziali resta una
+  decisione dell'owner (toglierebbe anche i suoi `GH_TOKEN`/`NPM_TOKEN`). Solo traccia del codice. Sicurezza.
+
+**Il mio consiglio sull'ordine, quando l'owner decide:** 04 e 02 per primi (sicurezza, cure piccole), poi 03 (messaggio falso
+che lui ha già visto), poi 01 (compromesso da scegliere). Ognuna con la sua prova RED e la ricerca prima di scrivere.
