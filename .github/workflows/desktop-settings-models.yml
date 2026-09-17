@@ -1,0 +1,50 @@
+name: desktop-settings-models
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths:
+      - 'harness-ui/frontend/**'
+      - '.github/workflows/desktop-settings-models.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: settings-models-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  visual:
+    if: github.repository == 'Ninozzz95/talos' && github.ref == 'refs/heads/refactor/desktop-ledger-2026-09-17'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.18.0'
+      - name: Locked dependencies, browser and actual build
+        run: |
+          set -euo pipefail
+          for dir in harness-ui harness-ui/frontend context-engine; do npm ci --prefix "$dir" --no-audit --no-fund; done
+          node harness-ui/frontend/node_modules/playwright/cli.js install --with-deps chromium
+          npm --prefix harness-ui/frontend run build
+          node harness-ui/node_modules/typescript/bin/tsc -p harness-ui/frontend/tsconfig.refactor.json
+      - name: Capture each actual settings and model laboratory section
+        id: capture
+        continue-on-error: true
+        run: node harness-ui/frontend/tests/qualification/settings-models-real.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: settings-models-visual-${{ github.sha }}
+          path: harness-ui/frontend/test-results/settings-models/
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: error
+      - name: Runtime failures remain blocking
+        if: always()
+        env:
+          CAPTURE: ${{ steps.capture.outcome }}
+        run: test "$CAPTURE" = success
