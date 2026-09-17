@@ -79,6 +79,11 @@ export function cartelleScratchpad(ambiente = process.env, deps = {}) {
    «la ricerca del 07/09/2026»: il modello voleva «ricerca» attaccata alla data. Un cancello che nega
    a chi ha obbedito è già costato caro qui (04/09, la ricerca web negata a un agente delegato) e
    finisce disattivato: le forme ammesse sono quelle che una persona scrive davvero. */
+/* ⛔ 17/09 — SECONDA VOLTA che questo cancello nega a chi ha obbedito: dal 14/09 i messaggi di commit
+   sono in INGLESE (owner: «d'ora in poi i messaggi commit sempre in inglese»), e l'elenco conosceva solo
+   le forme italiane. Un agente della P0-bis, col messaggio giusto e le fonti datate, si è visto rispondere
+   «Il messaggio non cita né una fonte con la data né una misura» e ha dovuto aggirarlo con gli URL.
+   Le forme inglesi che una persona scrive davvero stanno accanto a quelle italiane; nessuna tolta. */
 const SEGNI_DI_RICERCA = [
   /fonti?\s*[:(]/i,
   /ricerc.{0,24}\d{2}\/\d{2}\/\d{4}/i,
@@ -86,6 +91,11 @@ const SEGNI_DI_RICERCA = [
   /https?:\/\//i,
   /\bmisurat[oa]\b/i,
   /\bprovato dal vivo\b/i,
+  /\bsources?\s*[:(]/i,
+  /\bresearch.{0,24}\d{2}\/\d{2}\/\d{4}/i,
+  /\bread (?:on )?\d{2}\/\d{2}\/\d{4}/i,
+  /\bmeasured\b/i,
+  /\bproven live\b/i,
 ];
 
 export function tocca(percorso, superfici = SUPERFICI_VISIBILI) {
