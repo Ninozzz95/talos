@@ -1093,3 +1093,22 @@ skipped**. ⛔ NON verificato: nessun modello vero è girato, nessuna misura sul
 locale** — una sessione locale che non esegue gli attrezzi non è un agente, e misurarne la velocità ha poco senso. Forma: la
 sessione locale entra nel giro del kernel (`talosLavora`) col motore locale come TRASPORTO; mai un secondo esecutore che scavalchi
 permessi e hook. Tocca `session-registry.mjs` e il kernel ⇒ dopo la fusione di `cli-req`, prima della fase degli attrezzi dei file.
+
+**CLI-REQ-01, 02, 04, 05, 07 e il browser pilotato — ✅ CHIUSE e sul 4174 il 17/09/2026: `ba420a95`** (tre revisioni avversariali
+delegate, quattro giri di riparazione; l'ULTIMO giro l'ho rivisto IO, per la regola nuova dell'owner). Misurato da me sulla lane
+fusa: kernel 599 · 598 pass · 1 skipped; backend intero da solo **3269 · 3264 pass · 0 fail · 5 skipped**. Mia revisione della
+grammatica dei plugin dalla porta vera (`caricaPlugin` su cartelle vere, `scratchpad/mia-review-clireq.mjs`): **47 forme, 0
+buchi** (`node -pe`, `--run`, `-`, `--eval=`, `-r./x`, maiuscole, `node.exe`, virgolette, `;`/`&&`/`|`, `$(…)`, `%COMSPEC%`,
+`cmd /c`, `deno eval`, percorsi fuori dal pacchetto, un file chiamato `-e`; anche come HOOK) e 9 forme legittime su 9 accettate.
+**Giro vero sul 4174** con `glm-5.3-flash` (sessione `4578469d`, 34 s): la sessione PARTE col controllo nuovo della chiave;
+`elenca "sub-vuota"` → «no files and no folders. "sub-vuota" is empty — this is the complete listing, not a failure.»; `elenca`
+sulla radice → `giro.mjs` e **`sub-vuota/`** (la sottocartella vuota ora è nominata); `node -e "process.exit(3)"` → **`exit 3`**.
+⛔ **Debito di copertura trovato dalle MIE rotture (nessuna prova diventa rossa):** (1) l'id del plugin ricavato dal nome invece
+che dalla mappa — oggi equivalente, perché gli id con `__` sono rifiutati al caricamento; (2) il controllo del disco di
+PRODUZIONE in `cartellaFinaleValida` (`eUnaCartellaLocale`) è provato solo attraverso una funzione iniettata: `return true` al
+posto di `statSync().isDirectory()` lascia tutto verde. ⛔ Residui dichiarati: gli hook riverificano la fiducia solo all'avvio;
+`require()` dentro un file del pacchetto; `TALOS_HARNESS_RECEIPT_KEY_ID` ed `ELECTRON_RUN_AS_NODE` arrivano ancora a
+`shell`/`prova` del modello; nove punti che ereditano l'ambiente intero (`.claude/ELENCO-SPAWN-AMBIENTE-2026-09-17.md`); il
+giudice della ricerca di norma non c'è più quando l'unico candidato è l'autore (prezzo di non uscire dal fornitore della
+sessione: da decidere se dare alla persona la scelta del giudice nelle Impostazioni); gli hook STANDALONE
+(`.harness-ui-hooks.json`) accettano ancora `node -e`; `scansionaPatternSospetti` oggi rassicura e basta.
