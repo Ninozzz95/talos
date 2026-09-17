@@ -15,6 +15,7 @@ jobs:
         working-directory: harness-ui/native/evolution-prototype
         shell: pwsh
     env:
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       RUSTFLAGS: '-C target-feature=+crt-static'
       CARGO_BUILD_JOBS: '2'
       CARGO_PROFILE_DEV_DEBUG: '0'
@@ -29,13 +30,28 @@ jobs:
           rustup toolchain install 1.90.0 --profile minimal
           if ($LASTEXITCODE -ne 0) { throw 'Compiler provisioning failed' }
           rustc -Vv | Tee-Object evidence/rustc.txt
-          # One-time bootstrap only; generated lock is retained for source review.
-          if (-not (Test-Path Cargo.lock)) {
-            cargo generate-lockfile
-            if ($LASTEXITCODE -ne 0) { throw 'Lockfile bootstrap failed' }
-          }
+          if (-not (Test-Path Cargo.lock)) { throw 'Reviewed lockfile missing; resolution is not allowed in verification' }
           cargo fetch --locked
           if ($LASTEXITCODE -ne 0) { throw 'Dependency provisioning failed' }
+          git diff --exit-code -- Cargo.lock
+          if ($LASTEXITCODE -ne 0) { throw 'Provisioning changed the reviewed dependency inventory' }
+          $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+          $inputs = @(Get-ChildItem src,contracts,fixtures -File -Recurse)
+          $inputs += @(Get-Item Cargo.toml,Cargo.lock,rust-toolchain.toml,build.rs)
+          $manifest = [ordered]@{
+            schema = 'talos.extension-prototype.inputs.v1'
+            checkout = (& git rev-parse HEAD)
+            head = $env:PR_HEAD_SHA
+            os = [Environment]::OSVersion.VersionString
+            processArchitecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
+            osArchitecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+            launcherElevated = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+            productReady = $false
+            sources = @($inputs | Sort-Object FullName | ForEach-Object {
+              @{ path = [IO.Path]::GetRelativePath((Get-Location).Path, $_.FullName); sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+            })
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 evidence/sources.json
       - name: unit tests and real contained worker
         run: |
           cargo test --frozen -- --test-threads=1 2>&1 | Tee-Object evidence/tests.log
@@ -46,6 +62,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Contained invocation failed' }
           Get-FileHash target/debug/talos-extension-worker.exe -Algorithm SHA256 | Format-List | Out-File evidence/worker-hash.txt
           git rev-parse HEAD | Out-File evidence/checkout.txt
+          git diff --exit-code -- Cargo.lock
+          if ($LASTEXITCODE -ne 0) { throw 'Verification changed the reviewed lockfile' }
       - name: retain failure logs and exact dependency inventory
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

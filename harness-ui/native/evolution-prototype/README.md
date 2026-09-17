@@ -67,10 +67,15 @@ cargo build --bins --frozen
 ./target/debug/talos-supervisor-prototype.exe --self-test
 ```
 
-The initial draft CI may bootstrap Cargo.lock once and retain it as an artifact.
-That bootstrap is not a hermetic candidate build or a reproducibility claim.
-Before finalizing the increment the generated lock must be reviewed, committed
-and the bootstrap removed. No synthetic positive receipt is checked into source.
+Cargo.lock is checked in from the first measured Windows resolution and was
+identical in the following run. The inventory contains 160 packages, including
+platform/optional packages (not all are enabled or linked). Its SHA-256 is
+`c26580803a064e70f18c1b6f94b1efd228a4ae1b02ae191ab03bd87d2dcbd760`.
+CI refuses a missing/changed lockfile and never regenerates it. Provisioning is
+still a trusted network step; only compilation/tests subsequently use --frozen.
+This is not a claim of OS-enforced offline candidate builds, bit-reproducibility,
+or a complete supply-chain/license/security audit. Source/host facts are recorded
+before execution. No synthetic positive receipt is checked into source.
 
 Tests cover single-use concurrency, scope/generation/request/epoch mismatch,
 expiration, revocation, shared budget, unknown references, real Wasm execution,
