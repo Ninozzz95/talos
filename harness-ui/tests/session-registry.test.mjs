@@ -1081,7 +1081,7 @@ test('⭐⭐⭐ "Read only" diventa livelloAccesso:\'lettura\' per il kernel —
  */
 test('⛔⛔⛔ AL CONTRARIO (F15) — in sola lettura, un canale che approva TUTTO non fa passare una scrittura', async (t) => {
   const cartella = mkdtempSync(join(tmpdir(), 'talos-f15-lettura-'));
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const risposte = [
     { role: 'assistant', content: null, tool_calls: [{ id: 'c1', function: { name: 'scrivi', arguments: '{"percorso":"nuovo.txt","contenuto":"ciao"}' } }] },
     { role: 'assistant', content: 'fatto', tool_calls: [] },
@@ -1436,7 +1436,7 @@ test('⭐⭐⭐ "Workspace write" con permessiPerAttrezzo:{shell:\'chiedi\'} COS
  */
 test('⭐⭐ AL CONTRARIO — "sempre"/"nega" li decide il cancello DA SOLO: con un canale che approverebbe tutto, ZERO domande', async (t) => {
   const cartella = mkdtempSync(join(tmpdir(), 'talos-f15-sempre-nega-'));
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const risposte = [
     { role: 'assistant', content: null, tool_calls: [
       { id: 'c1', function: { name: 'scrivi', arguments: '{"percorso":"nuovo.txt","contenuto":"ciao"}' } },
