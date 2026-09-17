@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {initialState,reduce,TABS,createStore} from '../src/inspector-state.mjs';
+test('detail cannot own tab; every tab switches both ways',()=>{let s=reduce(initialState(),{type:'AGENT',id:'audit'});for(const tab of TABS){s=reduce(s,{type:'TAB',value:tab});assert.equal(s.activeTab,tab);assert.equal(s.selectedAgent,'audit');}});
+test('session selection has separate remembered detail',()=>{let s=reduce(initialState(),{type:'AGENT',id:'audit'});s=reduce(s,{type:'SESSION',id:'other'});assert.equal(s.selectedAgent,null);s=reduce(s,{type:'AGENT',id:'test'});s=reduce(s,{type:'SESSION',id:'sidebar'});assert.equal(s.selectedAgent,'audit');});
+test('return to list does not change current tab',()=>{const s=reduce({...initialState(),activeTab:'files',selectedAgent:'audit'},{type:'LIST'});assert.equal(s.activeTab,'files');assert.equal(s.selectedAgent,null);});
+test('resize clamps and rejects non-finite values',()=>{assert.equal(reduce(initialState(),{type:'WIDTH',value:10}).width,300);assert.equal(reduce(initialState(),{type:'WIDTH',value:2000}).width,600);assert.equal(reduce(initialState(),{type:'WIDTH',value:NaN}).width,380);});
+test('conflict prevents mock integration',()=>{let s={...initialState(),conflict:true};assert.equal(reduce(s,{type:'APPLY'}),s);assert.equal(reduce({...s,conflict:false},{type:'APPLY'}).reviewStatus,'applied');});
+test('invalid scopes and tabs fail explicitly',()=>{assert.throws(()=>reduce(initialState(),{type:'TAB',value:'x'}));assert.throws(()=>reduce(initialState(),{type:'SCOPE',value:'x'}));});
+test('unsubscribe removes listener',()=>{const s=createStore();let n=0;const off=s.subscribe(()=>n++);s.dispatch({type:'LIST'});off();s.dispatch({type:'LIST'});assert.equal(n,1);});
+test('revision increments without silently applying',()=>{const s=reduce(initialState(),{type:'REVISION'});assert.equal(s.revision,1);assert.equal(s.reviewStatus,'ready');});
