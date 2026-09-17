@@ -649,10 +649,14 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
         <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false" data-t="chat">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="true" data-t="terminale">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="false" data-t="review">Review <span class="talos-tabs__count">3</span></button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="false" data-t="browser">Browser</button></div></div>
       <div class="talos-topbar__actions"><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-apre-velo="veloAlbero" title="Albero dei rami" aria-label="Albero dei rami"><svg class="i"><use href="#i-branch"/></svg></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-azione="comandi" title="Comandi (Ctrl K)" aria-label="Comandi (Ctrl K)"><svg class="i"><use href="#i-command"/></svg></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-azione="comprimi" title="Context Manager" aria-label="Context Manager"><svg class="i"><use href="#i-grid"/></svg></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-azione="dettagli" title="Mostra o nascondi i dettagli" aria-label="Mostra o nascondi i dettagli" aria-expanded="true"><svg class="i"><use href="#i-layout"/></svg></button></div></div>
       <div class="talos-terminal" data-c="TerminalPane">
-        <div class="talos-terminal__tabs" role="tablist">
-          <button class="talos-terminal__tab" role="tab" aria-selected="true"><span class="talos-dot talos-dot--live"></span>agente · giro 7</button>
-          <button class="talos-terminal__tab" role="tab" aria-selected="false"><span class="talos-dot talos-dot--success"></span>tu · PowerShell</button>
-          <button class="talos-terminal__tab" role="tab" aria-selected="false"><svg class="i i--sm"><use href="#i-plus"/></svg>Nuovo</button>
+        <!-- BC-63, 17/09: `talos-schede` è la classe del componente condiviso (`src/components/schede.js`),
+             quello che disegna anche le linguette dei file della Revisione. Le classi
+             `talos-terminal__tabs`/`__tab` restano e portano solo ciò che è del Terminale: i badge,
+             la «×» in coda alla scheda, il container query dell'isolamento. -->
+        <div class="talos-terminal__tabs talos-schede" role="tablist">
+          <button class="talos-terminal__tab talos-schede__tab" role="tab" aria-selected="true"><span class="talos-dot talos-dot--live"></span>agente · giro 7</button>
+          <button class="talos-terminal__tab talos-schede__tab" role="tab" aria-selected="false"><span class="talos-dot talos-dot--success"></span>tu · PowerShell</button>
+          <button class="talos-terminal__tab talos-schede__tab" role="tab" aria-selected="false"><svg class="i i--sm"><use href="#i-plus"/></svg>Nuovo</button>
           <span class="talos-grow"></span>
           <span class="talos-badge talos-badge--success talos-badge--sm">Isolato · sandbox locale</span>
           <span class="talos-badge talos-badge--sm">harness-ui/</span>
@@ -685,32 +689,23 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
 
       </div>
       <div class="talos-review talos-review--schede" data-c="ReviewPane">
-        <div class="talos-tabs talos-review__schede" data-c="ReviewFileTabs"><div class="talos-tabs__list" role="tablist" aria-label="File modificati">
-          <button class="talos-tabs__tab talos-review__scheda" role="tab" aria-selected="true"><span class="talos-mono">src/session-registry.mjs</span><span class="talos-diff-num talos-diff-num--plus">+18</span><span class="talos-diff-num talos-diff-num--minus">−2</span></button>
-          <button class="talos-tabs__tab talos-review__scheda" role="tab" aria-selected="false"><span class="talos-mono">tests/session-registry.test.mjs</span><span class="talos-diff-num talos-diff-num--plus">+64</span></button>
-          <button class="talos-tabs__tab talos-review__scheda" role="tab" aria-selected="false"><span class="talos-mono">src/http-app.mjs</span><span class="talos-diff-num talos-diff-num--plus">+30</span></button>
+        <!-- BC-63, owner 17/09: «la scheda revisione deve avere lo stesso component tab di terminale
+             (schede stile chrome)». Prima qui c'era il gruppo a pillole GENERICO (`talos-tabs`), che
+             non è quello del Terminale. Ora è il componente condiviso `src/components/schede.js`:
+             stessa striscia, stessa linguetta, stessa tastiera, e in più lo scorrimento orizzontale
+             perché i file scritti in una sessione sono molti più delle schede di una shell. -->
+        <div class="talos-schede talos-schede--scorre talos-review__schede" data-c="ReviewFileTabs"><div class="talos-schede__lista" role="tablist" aria-label="File modificati">
+          <!-- ⛔ BC-67, 17/09: qui c'erano TRE linguette d'esempio («session-registry.mjs +18 −2»…), e
+               su una app appena aperta si vedevano come se fossero file veri. Il markup dimostrativo
+               resta nel MOCKUP, che è il posto del disegno; qui la lista nasce VUOTA e la riempiono i
+               fatti — `renderRealReviewList` nella app, le fixture nel laboratorio dei componenti.
+               Sulla linguetta va il NOME del file, non il percorso (visto in foto il 17/09): il
+               percorso intero sta nel `title` e nella testa del diff qui sotto. -->
         </div></div>
         <div class="talos-card talos-card--pad talos-stack talos-review__vuoto" data-c="EmptyState" id="vuotoReview" hidden><svg class="i" aria-hidden="true"><use href="#i-diff"/></svg><h3>Nessun file scritto finora</h3><p class="talos-muted">Quando TALOS scrive o modifica un file, qui compare la differenza, giro per giro.</p></div><div class="talos-card talos-review__diff" data-c="DiffView">
-          <div class="talos-review__diff-head"><span class="talos-mono talos-measure talos-grow talos-truncate">src/session-registry.mjs</span><span class="talos-badge talos-badge--success talos-badge--sm">Ricevuta a1f4…9c02</span><span class="talos-diff-num talos-diff-num--plus">+18</span><span class="talos-diff-num talos-diff-num--minus">−2</span><span class="talos-mono talos-muted">giro 5</span></div>
-          <div class="talos-diff">
-            <div class="talos-diff__line talos-diff__line--ctx">@@ -178,8 +178,24 @@ export const SOGLIE_STALLO_PREDEFINITE</div>
-            <div class="talos-diff__line talos-diff__line--ctx">  /*</div>
-            <div class="talos-diff__line talos-diff__line--ctx">   * Le soglie sono PARAMETRI, non numeri nella logica.</div>
-            <div class="talos-diff__line talos-diff__line--ctx">   */</div>
-            <div class="talos-diff__line talos-diff__line--del">− const SOGLIE = { silenzioMs: 30_000 };</div>
-            <div class="talos-diff__line talos-diff__line--del">− export function guardiaDiStallo(eventi) { return valuta(eventi, SOGLIE); }</div>
-            <div class="talos-diff__line talos-diff__line--add">+ export const SOGLIE_STALLO_PREDEFINITE = Object.freeze({</div>
-            <div class="talos-diff__line talos-diff__line--add">+   silenzioMs: 60_000,        // 30-60 s è lo stato dell'arte (ricerca 04/09)</div>
-            <div class="talos-diff__line talos-diff__line--add">+   ripetizioniPerAllarme: 3,  // misurato: 65 identiche su 634 chiamate</div>
-            <div class="talos-diff__line talos-diff__line--add">+   finestraChiamate: 10,</div>
-            <div class="talos-diff__line talos-diff__line--add">+ });</div>
-            <div class="talos-diff__line talos-diff__line--add">+</div>
-            <div class="talos-diff__line talos-diff__line--add">+ export function guardiaDiStallo(eventi, { istanti, adesso, soglie } = {}) {</div>
-            <div class="talos-diff__line talos-diff__line--add">+   const soglieEffettive = { ...SOGLIE_STALLO_PREDEFINITE, ...(soglie ?? {}) };</div>
-            <div class="talos-diff__line talos-diff__line--add">+   return { silenzio: valutaSilenzio(eventi, istanti, adesso, soglieEffettive),</div>
-            <div class="talos-diff__line talos-diff__line--add">+            giroAVuoto: valutaRipetizioni(eventi, soglieEffettive), interviene: false };</div>
-            <div class="talos-diff__line talos-diff__line--add">+ }</div>
-          </div>
+          <!-- BC-67, 17/09: i nodi restano (li riempie `aggiornaDiffReview` dai fatti), i VALORI no: un percorso, una ricevuta e un numero di giro inventati si leggevano come veri su una app appena aperta. -->
+          <div class="talos-review__diff-head"><span class="talos-mono talos-measure talos-grow talos-truncate">—</span><span class="talos-badge talos-badge--success talos-badge--sm" hidden></span><span class="talos-diff-num talos-diff-num--plus" hidden></span><span class="talos-diff-num talos-diff-num--minus" hidden></span><span class="talos-mono talos-muted" hidden></span></div>
+          <div class="talos-diff"></div>
           <div class="talos-review__foot"><button class="talos-button talos-button--primary talos-button--md" data-richiede="fase3">Accetta questo file</button><button class="talos-button talos-button--secondary" data-richiede="fase3">Apri nell'editor</button><button class="talos-button talos-button--ghost talos-button--danger" data-richiede="fase3">Scarta</button><span class="talos-grow"></span><span class="talos-muted talos-approval__foot-note" data-richiede="fase3">Scartare ripristina il file dal checkpoint del giro 4.</span></div>
         </div>
       </div>
