@@ -50,3 +50,10 @@ test('SET-01 production entry imports the settings stylesheet and passes canonic
   assert.match(app,/talos:settings-persisted.*saved: true/);assert.match(app,/talos:settings-persisted.*saved: false/);
   assert.match(app,/if \(!salvaImpostazioniDesktop\(letto\)\) throw/);
 });
+
+// Visual review: help must describe the actual range unit, not invent milliseconds.
+test('SET-01 motion duration help follows the percent control contract', () => {
+  assert.equal(CAMPI_IMPOSTAZIONI.find(f=>f.id==='motionDurationRange').unita, '%');
+  assert.match(FIELD_HELP.motionDurationRange.en, /percentage/);
+  assert.doesNotMatch(FIELD_HELP.motionDurationRange.it, /millisecondi/);
+});

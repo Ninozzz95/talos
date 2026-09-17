@@ -1,3 +1,4 @@
+import { localizeSettingsCopy } from './static-copy.ts';
 import { SETTINGS_SECTIONS, CHAT_FIELDS, FIELD_HELP, buildSettingsIndex, searchSettings, localText } from './schema.ts';
 import type { LegacySettingField, SettingsLanguage, SettingsSection } from './schema.ts';
 
@@ -126,6 +127,7 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     render();
   }
   function render() {
+    localizeSettingsCopy(screen, options.language());
     const searching = Boolean(search!.value.trim());
     for (const [id, button] of buttons) {
       const active = id === selected && !searching;
@@ -172,6 +174,7 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     const sessionFacts = q<HTMLElement>('#settingsChatFacts'); const sessionCard = sessionFacts?.closest<HTMLElement>('.talos-settings__section');
     if (sessionCard) { const name = sessionCard.querySelector('h3'); const note = sessionCard.querySelector(':scope > p'); const link = sessionCard.querySelector('[data-settings-go="appearance"]'); if (name) name.textContent = tx('currentSession'); if (note) note.textContent = tx('currentSessionHelp'); if (link) link.textContent = tx('appearanceLink'); }
     const summary = q<HTMLElement>('[data-settings-advanced] > summary'); if (summary) { summary.querySelector('span')!.textContent = tx('advanced'); summary.querySelector('small')!.textContent = tx('advancedHelp'); }
+    localizeSettingsCopy(screen, options.language());
     render();
   }
   mobile.addEventListener('change', () => choose(mobile.value as SettingsSection), { signal });

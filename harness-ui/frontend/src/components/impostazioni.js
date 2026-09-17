@@ -2,6 +2,7 @@ import { CAMPI_IMPOSTAZIONI, SEZIONI_IMPOSTAZIONI } from './impostazioni-campi.j
 import { t, linguaCorrenteDiT } from './lingua.js';
 import { CONTROLLI_MIGRATI, apriStudioTemi } from './theme-studio.js';
 import { FIELD_HELP, localText, normalizeSearch } from '../features/settings/schema.ts';
+import { localizeSettingsCopy } from '../features/settings/static-copy.ts';
 import { createSettingsView } from '../features/settings/settings-view.ts';
 
 const views = new WeakMap();
@@ -111,6 +112,7 @@ export function montaImpostazioni(screen, values, { recupera, cambiaSezione, def
     },
   });
   views.set(screen, view);
+  localizeSettingsCopy(screen, linguaCorrenteDiT());
 }
 /** Retranslate in place; never replace a field containing unsaved text. */
 export function ritraduciImpostazioni(screen) {
@@ -121,5 +123,5 @@ export function ritraduciImpostazioni(screen) {
   for (const reset of screen.querySelectorAll('[data-reset-label]')) {
     const name = (linguaCorrenteDiT() === 'en' ? 'Reset: ' : 'Ripristina: ') + t(reset.dataset.resetLabel); reset.setAttribute('aria-label', name); reset.title = name;
   }
-  views.get(screen)?.refresh(); return count;
+  views.get(screen)?.refresh(); localizeSettingsCopy(screen, linguaCorrenteDiT()); return count;
 }

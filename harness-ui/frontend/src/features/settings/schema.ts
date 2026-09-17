@@ -59,7 +59,7 @@ export const FIELD_HELP: Readonly<Record<string, LocalText>> = {
   motionParallaxRange: text('Spostamento della scena rispetto al puntatore.', 'Scene movement relative to the pointer.'),
   motionProfileSelect: text('Profilo delle transizioni dell’interfaccia.', 'Interface transition profile.'),
   motionEasingSelect: text('Accelerazione e rallentamento delle transizioni.', 'How transitions accelerate and slow down.'),
-  motionDurationRange: text('Durata delle transizioni, in millisecondi.', 'Transition duration, in milliseconds.'),
+  motionDurationRange: text('Scala la durata delle transizioni rispetto al profilo, in percentuale.', 'Scale transition duration relative to the profile, as a percentage.'),
   motionUiIntensityRange: text('Ampiezza delle animazioni dei controlli.', 'Control animation strength.'),
   motionStaggerRange: text('Intervallo tra elementi animati in sequenza.', 'Delay between elements animated in sequence.'),
   motionWindowsToggle: text('Apertura e chiusura delle finestre.', 'Window opening and closing.'),
