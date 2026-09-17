@@ -21,6 +21,7 @@
 
 /** Fonte: ricerca su un progetto open source dello stesso spazio, letto il 28/8. */
 import { existsSync, statSync } from 'node:fs';
+import { riassuntoAttivitaSessione } from './attivita-figlia.mjs';
 import { parse as parsePath } from 'node:path';
 
 export const LIMITE_FIGLI_CONCORRENTI = 10;
@@ -311,6 +312,15 @@ export function creaSubagentOrchestrator({
           esitoDelega: voce.esitoDelega ?? null,
           evidenzaDelega: voce.evidenzaDelega ?? null,
           avviataAlle: voce.avviataAlle ?? null,
+          /*
+           * ⛔⛔ PO-30 (18/09/2026) — ciò che serve al DETTAGLIO di un agente e alla scheda File («chi sta toccando questo
+           *   file»), come nel laboratorio dell'owner ma dai dati veri: il modello e i permessi con cui la figlia gira, e che
+           *   cosa ha LETTO e SCRITTO — ricavato dagli eventi che la figlia ha già emesso (`attivita-figlia.mjs`, pura, con un
+           *   tetto che dice quanti file ha tagliato). Niente di nuovo si raccoglie e niente si scrive sul disco.
+           */
+          modello: voce.modello ?? null,
+          permessi: voce.permessi ?? null,
+          attivita: riassuntoAttivitaSessione(voce.eventi),
         });
       }
     }
