@@ -1360,6 +1360,7 @@ function uscitaDaTestoAttrezzo(testo3) {
 function statoDaUscita(uscita, errore) {
   if (uscita === 130 || uscita === 143) return "annullato";
   if (uscita === 124 || uscita === 137) return "ucciso";
+  if (uscita === 127) return "non-eseguito";
   if (errore === true) return "fallito";
   if (!Number.isFinite(uscita)) return "fallito";
   return uscita === 0 ? "riuscito" : "fallito";
@@ -1373,11 +1374,12 @@ function datiProcesso(p = {}) {
   if (p.preparato === true) return p;
   const stato = STATI_PROCESSO[p.stato] ? p.stato : p.stato === "ok" ? "riuscito" : p.stato === "errore" ? "fallito" : "in-corso";
   const descrittore = STATI_PROCESSO[stato];
-  const durata = Number.isFinite(p.durataMs) ? `${num.format(p.durataMs / 1e3)} s` : null;
+  const durata = Number.isFinite(p.durataMs) && p.durataMs >= 0 ? p.durataMs < 100 ? "<0,1 s" : `${num.format(p.durataMs / 1e3)} s` : null;
   const misura = [durata, !descrittore.vivo && Number.isFinite(p.uscita) ? `uscita ${p.uscita}` : null].filter(Boolean).join(" · ") || (descrittore.vivo ? "" : "—");
   const chi = `${p.chi === "tu" ? "tu" : "agente"} · ${p.chi === "tu" ? "terminale" : `giro ${p.giro ?? "—"}`}`;
   const fermo = Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= SOGLIA_ATTESA_MS ? `Nessuna uscita da ${Math.round(p.fermoDaMs / 1e3)} secondi. Il processo è vivo: potrebbe aspettare un input. TALOS non lo ferma da solo.` : null;
   const analisi = analizzaComando(p.comando || "");
+  const cartella = typeof p.cwd === "string" && p.cwd.trim() ? p.cwd.trim() : "—";
   const quando = oraConSecondi(p.avviatoA);
   const dettaglio = [
     ["Comando", p.comando || "—"],
@@ -1385,7 +1387,9 @@ function datiProcesso(p = {}) {
     ["Avviato", quando],
     ["Durata", durata || "—"],
     ["Uscita", Number.isFinite(p.uscita) && !descrittore.vivo ? String(p.uscita) : "—"],
-    ["Cartella", "—"],
+    /* ⛔ 17/09, OSS-2 — la cartella NON è più «—» per costruzione: `ToolCallResult` porta `cwd`
+       (corsia B). Resta «—» quando il campo non arriva davvero, che è un fatto, non un ripiego. */
+    ["Cartella", cartella],
     ["PID", "—"],
     ["Chi", chi],
     ["Descrizione", typeof p.descrizione === "string" && p.descrizione.trim() ? p.descrizione.trim() : "—"]
@@ -1396,7 +1400,9 @@ function datiProcesso(p = {}) {
     comando: p.comando || "—",
     descrizione: typeof p.descrizione === "string" ? p.descrizione.trim() : "",
     analisi,
-    famiglia: analisi.famiglia,
+    /* ⛔ 17/09, OSS-2 — la famiglia DICHIARATA dall'attrezzo vince sull'analisi del testo: `prova`
+       è della famiglia «prove» anche quando non manda nessun comando da analizzare. */
+    famiglia: p.famiglia || analisi.famiglia,
     stato,
     etichetta: descrittore.etichetta,
     tono: descrittore.tono,
@@ -1406,7 +1412,7 @@ function datiProcesso(p = {}) {
     misura,
     fermo,
     quando,
-    cartella: "—",
+    cartella,
     pid: "—",
     uscita: Number.isFinite(p.uscita) ? p.uscita : null,
     dettaglio
@@ -1842,13 +1848,26 @@ function descrizioneDagliArgomenti(testo3 = "") {
     return "";
   }
 }
-function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = ["shell", "bash", "esegui", "comando", "terminal"] } = {}) {
+function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = ["shell", "bash", "esegui", "comando", "terminal", "prova"] } = {}) {
   const avviati = /* @__PURE__ */ new Map();
   const argomenti = /* @__PURE__ */ new Map();
   const lista = [];
   for (const e of eventi2) {
     if (e.type === "ToolCallStart" && nomiComando.includes(e.toolCallName)) {
-      const p = { id: e.toolCallId, comando: "", descrizione: "", stato: "in-avvio", chi: "agente", giro: e.giro ?? null, avviatoA: e.ricevutoA ?? null, durataMs: null, uscita: null };
+      const p = {
+        id: e.toolCallId,
+        comando: "",
+        descrizione: "",
+        stato: "in-avvio",
+        chi: "agente",
+        giro: e.giro ?? null,
+        avviatoA: Number.isFinite(e.avviatoA) ? e.avviatoA : e.ricevutoA ?? null,
+        ricevutoA: Number.isFinite(e.ricevutoA) ? e.ricevutoA : null,
+        famiglia: FAMIGLIA_DELL_ATTREZZO[e.toolCallName] || null,
+        durataMs: null,
+        uscita: null,
+        cwd: null
+      };
       avviati.set(e.toolCallId, p);
       argomenti.set(e.toolCallId, "");
       lista.push(p);
@@ -1861,18 +1880,24 @@ function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = 
     } else if (e.type === "ToolCallResult" && avviati.has(e.toolCallId)) {
       const p = avviati.get(e.toolCallId);
       p.uscita = Number.isFinite(e.uscita) ? e.uscita : e.errore ? 1 : 0;
-      p.stato = statoDaUscita(p.uscita, Boolean(e.errore));
-      if (Number.isFinite(p.avviatoA) && Number.isFinite(e.ricevutoA)) p.durataMs = e.ricevutoA - p.avviatoA;
+      p.stato = e.rifiutato === true ? "non-eseguito" : statoDaUscita(p.uscita, Boolean(e.errore));
+      if (Number.isFinite(e.durataMs) && e.durataMs >= 0) p.durataMs = Math.round(e.durataMs);
+      else if (Number.isFinite(p.ricevutoA) && Number.isFinite(e.ricevutoA) && e.ricevutoA - p.ricevutoA >= RISOLUZIONE_ARRIVI_MS) p.durataMs = e.ricevutoA - p.ricevutoA;
+      if (!p.comando && typeof e.comando === "string" && e.comando.trim()) {
+        p.comando = e.comando.trim();
+        if (p.stato === "in-avvio") p.stato = "in-corso";
+      }
+      if (typeof e.cwd === "string" && e.cwd.trim()) p.cwd = e.cwd.trim();
     }
   }
   for (const p of lista) {
-    if (!STATI_PROCESSO[p.stato]?.vivo || !Number.isFinite(p.avviatoA)) continue;
-    p.fermoDaMs = adesso - p.avviatoA;
+    if (!STATI_PROCESSO[p.stato]?.vivo || !Number.isFinite(p.ricevutoA)) continue;
+    p.fermoDaMs = adesso - p.ricevutoA;
     if (p.stato === "in-corso" && p.fermoDaMs >= SOGLIA_ATTESA_MS) p.stato = "in-attesa";
   }
   return lista.reverse();
 }
-var num, numPercento, SELETTORE_RISPOSTA_TURNO, SELETTORE_TESTO_UTENTE, STATI_PROCESSO, TETTO_PROCESSI, SOGLIA_ATTESA_MS, SVG_NS_INSPECTOR;
+var num, numPercento, SELETTORE_RISPOSTA_TURNO, SELETTORE_TESTO_UTENTE, STATI_PROCESSO, TETTO_PROCESSI, SOGLIA_ATTESA_MS, SVG_NS_INSPECTOR, FAMIGLIA_DELL_ATTREZZO, RISOLUZIONE_ARRIVI_MS;
 var init_inspector = __esm({
   "src/components/inspector.js"() {
     init_consumo_sessione();
@@ -1890,11 +1915,22 @@ var init_inspector = __esm({
       riuscito: { etichetta: "Riuscito", tono: "success", icona: "i-check", vivo: false },
       fallito: { etichetta: "Non riuscito", tono: "danger", icona: "i-x", vivo: false },
       annullato: { etichetta: "Annullato", tono: "", icona: "i-stop", vivo: false },
-      ucciso: { etichetta: "Terminato a forza", tono: "warning", icona: "i-stop", vivo: false }
+      ucciso: { etichetta: "Terminato a forza", tono: "warning", icona: "i-stop", vivo: false },
+      /*
+       * ⛔ 17/09, OSS-2 — «NON ESEGUITO» non è «NON RIUSCITO», e la differenza si vede in una foto.
+       *   Una `prova` su un progetto senza suite torna `exit 127` con «nessuna suite trovata», e il
+       *   pannello diceva «Non riuscito» col pallino rosso: sembrava che i test fossero FALLITI. Sono
+       *   due fatti opposti — uno dice «il tuo codice è rotto», l'altro «non c'è niente da lanciare».
+       *   ⛔ 127 non è una scelta nostra: nella shell POSIX è «command not found», cioè esattamente
+       *   «non è partito». Tono neutro, non `danger`: non c'è niente di rotto da segnalare.
+       */
+      "non-eseguito": { etichetta: "Non eseguito", tono: "warning", icona: "i-stop", vivo: false }
     });
     TETTO_PROCESSI = 40;
     SOGLIA_ATTESA_MS = 6e4;
     SVG_NS_INSPECTOR = "http://www.w3.org/2000/svg";
+    FAMIGLIA_DELL_ATTREZZO = Object.freeze({ prova: "test" });
+    RISOLUZIONE_ARRIVI_MS = 100;
   }
 });
 
@@ -4630,6 +4666,7 @@ var init_en = __esm({
         "lettura del rapporto di ricerca": "reading the research report",
         "lettura di un file": "reading a file",
         "lettura di un file di Libreria": "reading a Library file",
+        "modifica di un file": "editing a file",
         "modifica di una nota": "editing a note",
         "modifica di un’attività": "editing a task",
         "origine di un file di Libreria": "origin of a Library file",
@@ -5394,6 +5431,13 @@ function nomeUmanoAttrezzoItaliano(id, catalogo = null) {
 function nomeUmanoAttrezzo(id, catalogo = null) {
   return t(nomeUmanoAttrezzoItaliano(id, catalogo));
 }
+function nomeDiRipiegoAttrezzo(id) {
+  const grezzo = typeof id === "string" ? id.trim() : "";
+  if (!grezzo) return "";
+  const mcp = /^mcp__([^_](?:.*?[^_])?)__(.+)$/u.exec(grezzo);
+  const leggibile = (testo3) => testo3.replace(/[_-]+/gu, " ").replace(/\s+/gu, " ").trim();
+  return mcp ? `${leggibile(mcp[2])} (${leggibile(mcp[1])})` : leggibile(grezzo);
+}
 function corrispondeARicerca(id, query, catalogo = null) {
   const q = String(query ?? "").trim().toLowerCase();
   if (q === "") return true;
@@ -5413,6 +5457,9 @@ var init_nomi_attrezzi = __esm({
       cerca: "ricerca nei file",
       leggi: "lettura di un file",
       scrivi: "scrittura di un file",
+      // ⛔ BC-59 (owner 17/09): nella riga attività si leggeva «file_edit…». L'attrezzo esiste nel kernel
+      //    dal 16/09 (`talosHarness.mjs:2768`) e non era mai entrato qui: un nome tecnico a schermo.
+      file_edit: "modifica di un file",
       prova: "esecuzione dei test",
       shell: "comando nel terminale",
       naviga: "apertura di una pagina web",
@@ -5460,6 +5507,9 @@ var init_nomi_attrezzi = __esm({
       cerca: "Trova file in tutto il progetto, anche in fondo, per nome o per il testo che contengono.",
       leggi: "Legge un file del progetto.",
       scrivi: "Riscrive un file del progetto per intero. È una modifica al tuo disco.",
+      // ⛔ BC-59 — la differenza con `scrivi` è la sola cosa che conta per chi legge: questo cambia un
+      //    pezzo e lascia il resto com'è. Se il pezzo non si trova, o si trova due volte, non scrive niente.
+      file_edit: "Cambia una parte di un file che esiste già e lascia il resto com’è. Se il testo da sostituire non si trova, o compare più di una volta, non scrive niente e lo dice.",
       prova: "Lancia la suite di test del progetto ed è il giudice: il compito è finito quando passa.",
       shell: "Esegue un comando nel terminale, dentro la cartella del progetto. È l’attrezzo che può fare qualunque cosa: installare, spostare, cancellare.",
       naviga: "Apre una pagina web pubblica e ne legge il contenuto. Solo lettura, solo http e https.",
@@ -17959,7 +18009,10 @@ var init_conversazione = __esm({
       elenca: "i-search",
       shell: "i-terminal",
       prova: "i-terminal",
+      // ⛔ BC-59 (17/09): `file_edit` scriveva sul disco e nella riga attività arrivava senza icona
+      //    propria (ripiego `i-bolt`) e senza nome. Stessa icona di `scrivi`: è la stessa cosa al file.
       scrivi: "i-code",
+      file_edit: "i-code",
       naviga: "i-globe",
       web_search: "i-globe",
       delega_sottotask: "i-user",
@@ -19955,6 +20008,14 @@ var SCRIVONO_LO_STESSO, POLICY_CHE_SCRIVONO_IN_SILENZIO;
 var init_permessi = __esm({
   "src/components/permessi.js"() {
     SCRIVONO_LO_STESSO = Object.freeze({
+      /*
+       * ⛔ BC-59 (17/09) — `file_edit` è entrato nel kernel il 16/09 e cambia i file del progetto con un
+       *   cancello SUO: chi chiude «Scrivi un file» credendo di aver chiuso la porta ai file la lascia
+       *   aperta esattamente come con `shell`. È lo stesso difetto di T03-D2, su un attrezzo nuovo.
+       *   ⛔ Sta per PRIMO perché è la via più vicina a quella che la persona crede di aver chiuso:
+       *   `shell` almeno è un altro mestiere, questo scrive file e basta.
+       */
+      file_edit: "la modifica di una parte di un file",
       shell: "un comando nel terminale",
       document_create: "la creazione di un documento",
       generate_image: "la generazione di un’immagine"
@@ -21166,6 +21227,7 @@ var init_app = __esm({
     init_download_coda();
     init_inspector();
     init_review();
+    init_nomi_attrezzi();
     init_dialoghi();
     init_intro();
     init_terminale();
@@ -22766,54 +22828,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         return `${kilo3(totale2)} token${parteGiri}${cacheParte}${live ? " · live" : ""}`;
       }
       function nomeUmanoAttrezzo2(nome) {
-        const UMANI = {
-          elenca: "elenco della cartella",
-          cerca: "ricerca nei file",
-          leggi: "lettura di un file",
-          scrivi: "scrittura di un file",
-          prova: "esecuzione dei test",
-          shell: "comando nel terminale",
-          naviga: "apertura di una pagina web",
-          web_search: "ricerca sul web",
-          artifact_create: "creazione di un artefatto",
-          document_create: "creazione di un documento",
-          generate_image: "generazione di un’immagine",
-          delega_sottotask: "delega a un sotto-agente",
-          time_now: "data e ora",
-          tool_create: "creazione di un attrezzo nuovo",
-          library_list: "elenco della Libreria",
-          library_search: "ricerca in Libreria",
-          library_read: "lettura di un file di Libreria",
-          library_file_origin: "origine di un file di Libreria",
-          library_rename: "rinomina di un file di Libreria",
-          library_delete: "eliminazione di un file di Libreria",
-          library_export: "copia di un file di Libreria nel workspace",
-          library_context_policy_update: "regole d’uso della Libreria",
-          notes_list: "elenco delle note",
-          notes_create: "scrittura di una nota",
-          notes_update: "modifica di una nota",
-          notes_delete: "eliminazione di una nota",
-          tasks_list: "elenco delle attività",
-          tasks_create: "creazione di un’attività",
-          tasks_complete: "chiusura di un’attività",
-          tasks_update: "modifica di un’attività",
-          tasks_delete: "eliminazione di un’attività",
-          memory_search: "ricerca nella memoria",
-          memory_write: "scrittura in memoria",
-          memory_update: "correzione di una memoria",
-          memory_delete: "eliminazione di una memoria",
-          research_list: "elenco delle ricerche",
-          research_start: "avvio di una ricerca approfondita",
-          research_read: "lettura del rapporto di ricerca",
-          research_rename: "rinomina di una ricerca",
-          research_pause: "pausa di una ricerca",
-          research_resume: "ripresa di una ricerca",
-          research_cancel: "annullamento di una ricerca",
-          research_delete: "eliminazione di una ricerca",
-          research_deposit: "consegna del rapporto di ricerca"
-          // 12/09: L8. ⛔ Copia della mappa di nomi-attrezzi.js: debito, la mappa deve vivere in UN posto solo
-        };
-        return UMANI[nome] || String(nome ?? "");
+        return nomeUmanoAttrezzo(nome) || nomeDiRipiegoAttrezzo(nome);
       }
       function chiaveStabile(valore) {
         if (Array.isArray(valore)) return `[${valore.map((v) => chiaveStabile(v)).join(",")}]`;
@@ -24970,10 +24985,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         return creaToolListRow(attrezzo, { selezionabile: false, uso });
       }
       const ICONA_ATTREZZO2 = {
+        // ⛔ BC-59 (17/09): `file_edit` mancava anche qui — stessa icona di `scrivi`.
         elenca: "i-list",
         cerca: "i-search",
         leggi: "i-eye",
         scrivi: "i-code",
+        file_edit: "i-code",
         prova: "i-check",
         shell: "i-terminal",
         naviga: "i-web",
@@ -27127,6 +27144,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           <span class="sheet-label">Permesso per attrezzo · vince su quello della sessione qui sopra</span>
           ${[
             ["scrivi", "Scrive un file — passa dal cancello semantico"],
+            /* ⛔ BC-59 (17/09) — il SESTO, mancante anche qui: vedi la nota lunga su ATTREZZI_COL_CANCELLO. */
+            ["file_edit", "Cambia una parte di un file esistente — stesso cancello di «Scrivi un file»"],
             ["prova", "Esegue la suite di test del progetto"],
             ["shell", "Comando di shell nella cartella progetto"],
             ["document_create", "Genera un documento (PDF, foglio, slide, report)"],
@@ -27556,6 +27575,16 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       }
       const ATTREZZI_COL_CANCELLO = Object.freeze([
         ["scrivi", "Scrive un file — passa dal cancello semantico", "i-code"],
+        /*
+         * ⛔⛔ BC-59 (17/09) — IL SESTO. È la stessa forma di O-01, che questa lista aveva già pagato
+         *   il 04/09 col quinto: `ATTREZZI_CON_PERMESSO_PER_ATTREZZO` (config.mjs:307) ne dichiara SEI
+         *   dal 16/09 e qui ne comparivano cinque. Un attrezzo che ha un cancello vero e non ha la sua
+         *   riga nel foglio è un cancello che nessuno può chiudere: peggio di un permesso mancante,
+         *   perché la pagina sembra completa.
+         * ⇒ E perché non succeda una terza volta, la lista non si controlla più a occhio: il test
+         *   `tests/unit/nomi-attrezzi-copertura.test.mjs` la confronta con quella del server.
+         */
+        ["file_edit", "Cambia una parte di un file esistente — passa dal cancello per-attrezzo come «Scrivi un file»", "i-code"],
         ["prova", "Esegue la suite di test del progetto", "i-check"],
         ["shell", "Comando di shell nella cartella progetto", "i-terminal"],
         ["document_create", "Genera un documento (PDF, foglio, slide, report)", "i-files"],
@@ -29284,6 +29313,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         switch (nome) {
           case "scrivi":
             return a.percorso ? `Scrittura di ${a.percorso}…` : "Scrittura file…";
+          /* ⛔ BC-59 (17/09): senza questo ramo la riga cadeva nel ripiego e diceva «file_edit…». Il
+             percorso c'è già negli argomenti (`talosHarness.mjs:2768`): dirlo costa zero e vale molto. */
+          case "file_edit":
+            return a.percorso ? `Modifica di ${a.percorso}…` : "Modifica di un file…";
           case "leggi":
             return a.percorso ? `Lettura di ${a.percorso}…` : "Lettura file…";
           case "cerca": {
@@ -29314,6 +29347,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         switch (nome) {
           case "scrivi":
             return a.percorso ? `Scritto ${a.percorso}` : "Scrittura file…";
+          /* ⛔ BC-59 (17/09): il verbo al passato come per `scrivi` — l'azione tiene lo stesso nome
+             dall'inizio alla fine, «Modifica di x» mentre gira e «Modificato x» quando ha finito. */
+          case "file_edit":
+            return a.percorso ? `Modificato ${a.percorso}` : "Modifica di un file…";
           case "leggi":
             return a.percorso ? `Letto ${a.percorso}` : "Lettura file…";
           case "cerca": {
@@ -29478,6 +29515,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       function descriviAzioneApprovazione(azione) {
         if (azione?.tipo === "scrivi" && azione.fileDiControllo) return "Vuole scrivere un file di controllo di TALOS: una regola dell’agente (hook, MCP, istruzioni, memoria), non un file del progetto.";
         if (azione?.tipo === "scrivi") return "Vuole scrivere questo file:";
+        if (azione?.tipo === "leggi") return "Vuole leggere questo file:";
         if (azione?.tipo === "shell") return "Vuole eseguire questo comando nel terminale:";
         if (azione?.tipo === "document_create") return `Vuole creare un documento (formato ${azione.formato || "?"})`;
         if (azione?.tipo === "prova") return "Vuole eseguire la suite di test:";
@@ -29486,7 +29524,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       }
       function codiceAzioneApprovazione(azione) {
         if (azione?.tipo === "shell" || azione?.tipo === "prova") return azione.comando || "";
-        if (azione?.tipo === "scrivi") return azione.percorso || "";
+        if (azione?.tipo === "scrivi" || azione?.tipo === "leggi") return azione.percorso || "";
         if (azione?.tipo === "naviga") return azione.url || "";
         return "";
       }
@@ -29494,15 +29532,18 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const perAttrezzo = state.permessiPerAttrezzo || {};
         const regola = azione?.tipo ? perAttrezzo[azione.tipo] : null;
         const politica2 = etichettaPermesso(state.permissions);
+        const frasiVere = [];
+        if (typeof azione?.segreto?.frase === "string" && azione.segreto.frase.trim()) frasiVere.push(azione.segreto.frase.trim());
+        const trifecta = typeof azione?.trifecta === "string" ? azione.trifecta.trim() : azione?.trifecta === true ? "Questa chiamata chiude la trifecta: dati privati, contenuto non attendibile e un modo per farli uscire." : "";
+        if (trifecta) frasiVere.push(trifecta);
+        if (frasiVere.length) return frasiVere.join(" ");
         if (regola === "chiedi") return `Chiede perché «${nomeUmanoAttrezzo2(azione.tipo)}» ha il cancello «Chiedi conferma», anche con la sessione su «${politica2}».`;
         if (state.permissions === "On request") return `Chiede perché la sessione è su «${politica2}»: ogni azione che cambia qualcosa passa da te.`;
-        const altri = Object.entries(perAttrezzo).filter(([, v]) => v === "chiedi").map(([k]) => nomeUmanoAttrezzo2(k));
-        if (altri.length) return `Chiede perché questa sessione ha un canale di approvazione aperto per ${altri.join(" e ")}: finché c'è, il kernel chiede anche per gli altri attrezzi.`;
-        return `Chiede perché questa azione tocca qualcosa fuori dalla sola lettura, e la sessione è su «${politica2}».`;
+        return `Chiede perché il kernel considera questa azione da confermare, anche con la sessione su «${politica2}».`;
       }
       function appendApprovalCard(requestId, azione) {
         const bersaglio = azione?.percorso || azione?.comando || azione?.question || azione?.title || "";
-        const badge5 = azione?.tipo === "scrivi" ? "Chiede di scrivere" : azione?.tipo === "shell" || azione?.tipo === "prova" ? "Chiede di eseguire" : azione?.tipo === "research_start" ? "Chiede di cercare" : "Chiede il permesso";
+        const badge5 = azione?.tipo === "scrivi" ? "Chiede di scrivere" : azione?.tipo === "leggi" ? "Chiede di leggere" : azione?.tipo === "shell" || azione?.tipo === "prova" ? "Chiede di eseguire" : azione?.tipo === "research_start" ? "Chiede di cercare" : "Chiede il permesso";
         const scheda = creaApprovazione({ badge: badge5, bersaglio, perche: descriviAzioneApprovazione(azione), codice: codiceAzioneApprovazione(azione), motivo: motivoRichiestaApprovazione(azione), nota: "Vale solo per questa richiesta" });
         const article = scheda.scheda;
         article.classList.add("real-approval-card");
@@ -29516,6 +29557,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         negaBtn.dataset.nega = "";
         approvaBtn.dataset.approvaUnaVolta = "";
         const sessioneBtn = scheda.pulsanti.sessione;
+        const davantiAUnSegreto = Boolean(azione?.segreto);
+        if (davantiAUnSegreto) sessioneBtn.remove();
         let rispostaDataDaQuestaScheda = false;
         const rispondi = async (approvato, perSessione = false) => {
           negaBtn.disabled = true;
@@ -29903,7 +29946,18 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         }
         renderizzaSchedeTerminale();
       }
-      async function caricaSchedeTerminale() {
+      let caricamentoSchedeInVolo = null;
+      function caricaSchedeTerminale() {
+        const sessioneId = state.realSession.id || null;
+        if (caricamentoSchedeInVolo && caricamentoSchedeInVolo.sessioneId === sessioneId) return caricamentoSchedeInVolo.promessa;
+        const volo = { sessioneId, promessa: null };
+        volo.promessa = caricaSchedeTerminaleUnaVolta().finally(() => {
+          if (caricamentoSchedeInVolo === volo) caricamentoSchedeInVolo = null;
+        });
+        caricamentoSchedeInVolo = volo;
+        return volo.promessa;
+      }
+      async function caricaSchedeTerminaleUnaVolta() {
         const t2 = statoTerminale();
         const sessioneId = state.realSession.id || null;
         t2.sessioneId = sessioneId;
@@ -32529,9 +32583,27 @@ ${testo3}` : testo3;
           state.realSession.sequenzeViste.add(evento._sequenza);
         }
         if (evento.type === "CUSTOM" && evento.name === "consumo-fornitore" || ["RunStarted", "RunFinished", "RunError"].includes(evento.type)) caricaCacheSessioneDalRegistro();
-        if (evento.type === "ToolCallStart") state.realSession.eventiAttrezzi.push({ type: "ToolCallStart", toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), giro: state.realSession.runCount || null });
+        if (evento.type === "ToolCallStart") state.realSession.eventiAttrezzi.push({ type: "ToolCallStart", toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), avviatoA: Number.isFinite(evento.avviatoA) ? evento.avviatoA : null, giro: state.realSession.runCount || null });
         else if (evento.type === "ToolCallArgs") state.realSession.eventiAttrezzi.push({ type: "ToolCallArgs", toolCallId: evento.toolCallId, delta: evento.delta });
-        else if (evento.type === "ToolCallResult") state.realSession.eventiAttrezzi.push({ type: "ToolCallResult", toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error), uscita: uscitaDaTestoAttrezzo(evento.content) });
+        else if (evento.type === "ToolCallResult") state.realSession.eventiAttrezzi.push({
+          type: "ToolCallResult",
+          toolCallId: evento.toolCallId,
+          ricevutoA: Date.now(),
+          errore: Boolean(evento.isError || evento.error),
+          uscita: uscitaDaTestoAttrezzo(evento.content),
+          durataMs: Number.isFinite(evento.durataMs) ? evento.durataMs : null,
+          comando: typeof evento.comando === "string" ? evento.comando : null,
+          cwd: typeof evento.cwd === "string" ? evento.cwd : null,
+          /*
+           * ⛔ 17/09 sera — UN COMANDO RIFIUTATO NON È UN COMANDO FALLITO. Una `shell` negata
+           *   all'approvazione torna con `content: 'REFUSED. …'` e SENZA `comando`, `cwd` e `durataMs`:
+           *   non è mai partita. Senza questa riga la scheda «Processi» le metteva il pallino rosso di
+           *   «Non riuscito», cioè accusava di un guasto una decisione presa dalla persona.
+           *   ⛔ Si porta un BOOLEANO, non il contenuto: il `content` può essere enorme (nota qui sopra)
+           *   e per sapere «è partito o no» basta il fatto.
+           */
+          rifiutato: typeof evento.content === "string" && /^\s*REFUSED\b/u.test(evento.content)
+        });
         if (evento.type === "RunFinished" || evento.type === "RunError" || evento.type === "ComandoUtenteFinito") state.realSession.giroComandoDiretto = false;
         segnalaRigaSessioneViva();
         switch (evento.type) {
