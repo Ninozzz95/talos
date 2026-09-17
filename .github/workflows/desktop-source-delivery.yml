@@ -30,17 +30,17 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24.18.0'
-      - name: Locked dependencies and exact tests
+      - name: Locked dependencies, browsers and exact tests
         run: |
           set -euo pipefail
           mkdir -p .delivery-evidence
           for dir in harness-ui harness-ui/frontend context-engine; do npm ci --prefix "$dir" --no-audit --no-fund; done
+          node harness-ui/frontend/node_modules/playwright/cli.js install --with-deps chromium chrome
           node --test tools/delivery/start.test.mjs | tee .delivery-evidence/launcher-unit.log
           npm --prefix harness-ui/frontend run build
           node harness-ui/node_modules/typescript/bin/tsc -p harness-ui/frontend/tsconfig.refactor.json
           node --test harness-ui/frontend/tests/refactor/*.test.mjs harness-ui/desktop/tests/profile-isolation.test.mjs | tee .delivery-evidence/refactor-unit.log
-          npm --prefix harness-ui/frontend run test:unit > .delivery-evidence/frontend-unit.log 2>&1
-          node harness-ui/frontend/node_modules/playwright/cli.js install --with-deps chromium chrome
+          npm --prefix harness-ui/frontend run test:unit > .delivery-evidence/frontend-unit.log 2>&1 || { tail -n 100 .delivery-evidence/frontend-unit.log; exit 1; }
       - name: Qualify the actual built application
         run: |
           set -euo pipefail
@@ -64,6 +64,7 @@ jobs:
         with:
           name: talos-source-candidate-${{ github.sha }}
           path: .delivery-output/
+          include-hidden-files: true
           retention-days: 14
           if-no-files-found: error
           compression-level: 0
@@ -72,6 +73,7 @@ jobs:
         with:
           name: talos-source-linux-evidence-${{ github.sha }}
           path: .delivery-evidence/
+          include-hidden-files: true
           retention-days: 14
           if-no-files-found: warn
   windows:
