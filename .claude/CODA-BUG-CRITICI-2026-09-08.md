@@ -1008,3 +1008,20 @@ che ignora la destinazione della sessione (censimento del revisore: compattazion
 motore locale passano tutte dal fornitore della sessione; letto, in parte eseguito). **Da decidere:** lasciarla com'è ma DIRLO
 alla persona prima dell'invio («le immagini si generano con OpenRouter»), oppure instradare sul fornitore della sessione quando
 ne ha uno capace di immagini. Solo letto, non riprodotto da me.
+
+**Misurato e letto da me il 17/09, su richiesta dell'owner («fai molta attenzione»):**
+- ESCE solo la descrizione scritta dal MODELLO più la forma, non la conversazione — ma la descrizione può portare dettagli della
+  conversazione. Va a DUE terzi: OpenRouter e il fornitore del modello immagini fisso, `bytedance-seed/seedream-4.5` (ByteDance)
+  (`config.mjs` `IMMAGINE_MODELLO_DEDICATO_DEFAULT`).
+- ✅ MISURATO (`%TEMP%/s73.mjs`, fetch finta): SENZA chiave OpenRouter la descrizione PARTE LO STESSO —
+  `POST https://openrouter.ai/api/v1/images`, `Authorization: "Bearer undefined"`, corpo con il prompt intero — e torna 401.
+  In `onImmagine` (`agent-service.mjs` ~1331) l'unica guardia è `if (!immagine)`: sulla chiave nessuna. Fuga inutile.
+- LETTO: l'attrezzo è offerto in OGNI sessione (`session-registry.mjs` ~1622, `strumentiEstesi` non dipende dal fornitore),
+  comprese le LOCALI — dove l'app promette «niente esce da questa macchina». Ha il suo permesso
+  (`requiredActions: ['outbound','write']`, `talosHarness.mjs:5414`) ma a schermo dice solo «Genera un'immagine»
+  (`nomi-attrezzi.js:167`): non dice DOVE va.
+**Il mio consiglio all'owner (in attesa della sua decisione):** NON instradare sul fornitore della sessione (pochi fanno
+immagini, interfacce diverse, «zero provider nuovo» era voluto); tre cure strette: (1) la destinazione detta nella scheda di
+approvazione e nel foglio dei permessi, letta dalla configurazione; (2) nelle sessioni LOCALI e in quelle di un fornitore ≠
+OpenRouter l'attrezzo CHIEDE SEMPRE, anche con «sempre» (stessa regola di F15); (3) senza chiave OpenRouter nessuna chiamata
+di rete. Più avanti: scelta del fornitore delle immagini in Impostazioni.
