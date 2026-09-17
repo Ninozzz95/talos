@@ -189,6 +189,10 @@ fusione, non in parallelo.
 | **BC-55** | `VAR=…`, `export`, `(cd …` finiscono su cmd.exe `[sandbox: none]` perché `primoProgramma` prende il primo token e WSL «non ce l'ha» | i tre comandi del report girano in WSL con `dove: null` e l'esito dice dove; la scelta della sessione (`doveGiranoIComandi`) esposta nell'interfaccia |
 | **BC-56** | comando vuoto = `TypeError` non catturato sul ramo Windows, `{  ; }` su WSL | esito `-1` con «Il comando è vuoto», nei due rami |
 | **BC-57** | `prova` → `exit 0` senza suite (trascritto `4c3e1649`, app 0.1.13), non riprodotto sul banco | causa trovata con un giro vero su banco; e comunque «nessuna suite trovata in <cartella>» al posto del verde, che conta come NON provato |
+| **BC-58** | a 1024 la pill del composer tronca «Giri 10» in «Giri 1…» (owner 17/09: «mettile nella P0-bis») | il contatore non si tronca mai: a 1024, con un numero a due cifre, si legge intero nei due temi (foto) |
+| **OSS-1** | nel replay la scheda Processi dice «0 s» per ogni comando: i tempi non sopravvivono al registro | la durata viaggia nell'evento di fine attrezzo (`durataMs`) e al replay si legge da lì; se non è misurata, la riga non dice «0 s» ma niente |
+| **OSS-2** | `prova` non compare fra i processi: la scheda elenca solo `shell` | `npm test` lanciato da `prova` è una riga della scheda come le altre, con uscita e durata |
+| **OSS-3** | due errori JS «Failed to read localStorage… sandboxed» a ogni apertura del Browser su una pagina terza con script (iframe `sandbox`) | misurato da quale frame nascono; se sono della pagina terza, la console della nostra app non li riporta come nostri (o li etichetta); se sono nostri, si curano |
 
 ---
 
