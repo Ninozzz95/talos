@@ -1,0 +1,179 @@
+name: sidebar-candidate
+
+# Temporary verification only. The immutable candidate is applied in the runner,
+# never to main. This file is removed before the sidebar PR is finalized.
+on:
+  pull_request:
+    paths: ['.github/workflows/sidebar-apply.yml']
+permissions:
+  contents: read
+concurrency:
+  group: sidebar-candidate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    if: github.event.pull_request.number == 32 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'refactor/desktop-left-sidebar-2026-09-17'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Apply hash-locked sidebar candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import base64, hashlib, json, lzma, pathlib, subprocess
+          chunks = ['87a10ba4bd21d2ee37d7cb2f1ae2be09d695f110', '121186f412b15a59cb172affd40723ebff631841', '3214269194074631c4f8993fcbce72ace8b8371d', '063aaf8a94eb442d7c7c34eb093fb3e33b97f211']
+          expected = {
+            'harness-ui/docs/sidebar-desktop-design.md': '06d8bc49419aeea8e65a2ff701fcd104e34a5775',
+            'harness-ui/frontend/playwright.sidebar.config.mjs': '8541c408450ccaa64a52b7b58f2bd1175587d1e4',
+            'harness-ui/frontend/src/components/sidebar-desktop.js': '7e53bbc61a64b85ac4a7aa823af1e081a6278e19',
+            'harness-ui/frontend/src/components/sidebar-state.js': '543c643f1fac28590c6b2a2c4b90b73f08f2a184',
+            'harness-ui/frontend/src/components/sidebar-view.js': 'f2fdef2548d0b4d11e4fadb391db28724ebcf6dd',
+            'harness-ui/frontend/src/legacy/app.js': '80f51f27ca46bdabb8b955c43c8480899c2ed1c2',
+            'harness-ui/frontend/src/styles/main.css': 'c00a40a3930a7a135182df74bc4bae0a664c0e3d',
+            'harness-ui/frontend/src/styles/sidebar-desktop.css': '7eb1f6772b5c5429b0a0700eb200dc8b4a12d8a5',
+            'harness-ui/frontend/tests/browser/elenco-dopo-lo-stop.spec.mjs': '60c414a227a10572e8105a2b24cd0dca73f66b3e',
+            'harness-ui/frontend/tests/browser/sidebar-desktop.spec.mjs': 'a3185c431496784c2bc1912ebf8b1deaae2ae69d',
+            'harness-ui/frontend/tests/fixtures/sidebar-fixture.mjs': 'b736f5185605b640d082d8178a323e089e42ed19',
+            'harness-ui/frontend/tests/unit/sidebar-state.test.mjs': 'fb6bce9e2a84e569d11b6b8842da61b2a79912b6',
+            'harness-ui/src/http-app.mjs': '3e81fdca86c29e81dacced3cc5d6fba8838cfeb8',
+            'harness-ui/src/session-registry.mjs': '5e28fc5fc8a8be443d181756ac1cbea967850ba2',
+            'harness-ui/src/sidebar-activity.mjs': 'e86f6a75cb22a8767596a761f0b5fd83c25017f0',
+            'harness-ui/src/sidebar-feed.mjs': '84dc552eed05c88acca903b0c43281c48320ecb8',
+            'harness-ui/tests/sidebar-feed.test.mjs': 'a819602ac8f8a493437669718a91961ef65978aa',
+          }
+          compressed = b''
+          for sha in chunks:
+            data = json.loads(subprocess.check_output(['gh', 'api', f'repos/Ninozzz95/talos/git/blobs/{sha}']))
+            raw = base64.b64decode(data['content'])
+            assert hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest() == sha
+            compressed += raw
+          assert len(compressed) == 39644
+          patch = lzma.decompress(compressed, memlimit=128*1024*1024)
+          assert len(patch) == 164166
+          assert hashlib.sha256(patch).hexdigest() == '67ec4240f80af7924c0f4d30b2be2798c802c1f89ed295d6e405aac3b916178d'
+          subprocess.run(['git', 'config', 'core.autocrlf', 'false'], check=True)
+          subprocess.run(['git', 'reset', '--hard', 'HEAD'], check=True)
+          pathlib.Path('candidate.patch').write_bytes(patch)
+          subprocess.run(['git', 'apply', '--check', '--index', '--unidiff-zero', 'candidate.patch'], check=True)
+          subprocess.run(['git', 'apply', '--index', '--unidiff-zero', 'candidate.patch'], check=True)
+          changed = subprocess.check_output(['git','diff','--cached','--name-only'], text=True).splitlines()
+          assert set(changed) == set(expected), changed
+          for path, sha in expected.items():
+            assert subprocess.check_output(['git','rev-parse',':'+path], text=True).strip() == sha, path
+          pathlib.Path('evidence').mkdir(exist_ok=True)
+          pathlib.Path('evidence/candidate-manifest.json').write_text(json.dumps(expected, indent=2))
+          print('Verified exact candidate: 17 sidebar-related files; no workflow, credential or release changes.')
+          PY
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            harness-ui/frontend/package-lock.json
+            context-engine/package-lock.json
+      - name: Locked dependencies
+        run: |
+          npm ci --prefix harness-ui
+          npm ci --prefix harness-ui/frontend
+          npm ci --prefix context-engine
+          node --version | tee evidence/node-version.txt
+      - name: Chromium
+        if: runner.os == 'Linux'
+        working-directory: harness-ui/frontend
+        run: npx playwright install --with-deps chromium
+      - name: Feed and controller regressions
+        id: focused
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          node --test harness-ui/tests/sidebar-feed.test.mjs harness-ui/frontend/tests/unit/sidebar-state.test.mjs 2>&1 | tee evidence/focused.log
+      - name: Full frontend unit suite
+        id: unit
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm --prefix harness-ui/frontend run test:unit 2>&1 | tee evidence/frontend-unit.log
+      - name: Frontend build
+        id: build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm --prefix harness-ui/frontend run build 2>&1 | tee evidence/frontend-build.log
+      - name: Component parity
+        id: parity
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm --prefix harness-ui/frontend run test:componenti 2>&1 | tee evidence/component-parity.log
+      - name: Sidebar browser and real two-window server
+        id: browser
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        working-directory: harness-ui/frontend
+        run: |
+          set -o pipefail
+          npx playwright test --config=playwright.sidebar.config.mjs 2>&1 | tee ../../evidence/sidebar-browser.log
+      - name: Full Windows server suite
+        id: server
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        working-directory: harness-ui
+        run: |
+          set -o pipefail
+          node --test tests/*.test.mjs 2>&1 | tee ../evidence/server-windows.log
+      - name: Windows Electron dependencies
+        if: runner.os == 'Windows'
+        run: |
+          npm ci --prefix harness-ui/desktop
+          cp -R harness-ui/frontend/dist/. harness-ui/public/
+      - name: Windows Electron and desktop pure tests
+        id: electron
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm --prefix harness-ui/desktop test 2>&1 | tee evidence/desktop-electron.log
+      - name: Preserve evidence, including failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sidebar-candidate-${{ runner.os }}
+          path: |
+            evidence/
+            harness-ui/frontend/artifacts/
+            harness-ui/frontend/test-results/
+          retention-days: 7
+          if-no-files-found: warn
+      - name: Enforce every executed gate
+        if: always()
+        env:
+          FOCUSED: ${{ steps.focused.outcome }}
+          UNIT: ${{ steps.unit.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          PARITY: ${{ steps.parity.outcome }}
+          BROWSER: ${{ steps.browser.outcome }}
+          SERVER: ${{ steps.server.outcome }}
+          ELECTRON: ${{ steps.electron.outcome }}
+        run: |
+          python - <<'PY'
+          import os
+          gates = ['FOCUSED','BUILD'] + (['UNIT','PARITY','BROWSER'] if os.environ['RUNNER_OS'] == 'Linux' else ['SERVER','ELECTRON'])
+          results = {gate: os.environ.get(gate) for gate in gates}
+          print(results)
+          assert all(value == 'success' for value in results.values()), results
+          PY
