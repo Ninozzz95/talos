@@ -82,9 +82,12 @@ export function creaSettingRow(field, value, { controllo, output, prefisso = 'se
 export function mostraSezioneImpostazioni(screen, section) {
   if (!screen) return;
   const selected = SEZIONI_IMPOSTAZIONI.some(item => item.id === section) ? section : 'appearance';
+  // A repeated render/restoration of the same section must not erase a query typed meanwhile.
+  // Explicit tabs/results already clear the query in SettingsView.choose(). A new section still clears it.
+  const preserveSearch = screen.dataset.settingsSection === selected;
   screen.dataset.settingsSection = selected;
   const view = views.get(screen);
-  if (view) view.select(selected);
+  if (view) view.select(selected, preserveSearch);
   else for (const panel of screen.querySelectorAll('[data-settings-panel]')) panel.hidden = panel.dataset.settingsPanel !== selected;
 }
 export function montaImpostazioni(screen, values, { recupera, cambiaSezione, defaultValues = {} } = {}) {
