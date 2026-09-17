@@ -802,6 +802,11 @@ mi riferisco al compattamento». ⇒ Due elementi obbligatori, sul modello di Cl
 compattata», con ciò che è stato tenuto apribile), che resta nella cronologia e sopravvive a ricarica e riapertura. Entrano
 nel punto (3) qui sopra e nel criterio di chiusura: senza barra e separatore a schermo, nei due temi, BC-65 non è chiusa.
 All'apertura: skill `frontend-design`, e prima si guarda cosa il progetto ha già (separatori di giro, righe di stato).
+⭐ **Esiste già, trovato il 17/09:** `frontend/src/components/context-progress.js` + `context-compactor.js` — una barra di
+avanzamento della compattazione con stima del tempo residuo (09/09, ricerca Win32 «Progress Bars» citata nel file, spec
+`context-compactor.spec.mjs`). Vive però col solo Context Manager, che sul 4174 è SPENTO: per questo l'owner non l'ha mai
+vista. ⇒ La barra non si riscrive: si accende dove lui lavora e si collega ANCHE alla compattazione del kernel. Il
+separatore invece non risulta esistere (da accertare all'apertura).
 
 ## BC-66 | REFACTOR o IRROBUSTIMENTO del CONTEXT ENGINE (owner 17/09/2026, insieme a BC-65) — DEBITO, «lo facciamo dopo»
 
