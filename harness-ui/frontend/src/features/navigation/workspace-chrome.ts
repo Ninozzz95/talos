@@ -182,6 +182,12 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     const select = header?.querySelector<HTMLSelectElement>('[data-workspace-preset]'); if (select) { select.value = preset; select.setAttribute('aria-label', t('Disposizione del workspace')); }
     const density = header?.querySelector<HTMLButtonElement>('[data-workspace-density]');
     if (density) { density.setAttribute('aria-pressed', String(prefs.density === 'compact')); density.textContent = t(prefs.density === 'compact' ? 'Compatta' : 'Confortevole'); }
+    const commands = header?.querySelector<HTMLElement>('[data-azione="comandi"]');
+    if (commands) {
+      commands.setAttribute('aria-label', t('Cerca un comando'));
+      commands.setAttribute('title', t('Cerca un comando'));
+      const label = commands.querySelector('span'); if (label) label.textContent = t('Comandi');
+    }
     const location = header?.querySelector('[data-workspace-location]');
     const labels: Partial<Record<View, string>> = { home: 'Home', chat: 'Conversazione', terminal: 'Terminale', diff: 'Revisione', dashboard: 'Sessioni', settings: 'Impostazioni', doctor: 'Diagnostica', libreria: 'Libreria', ricerca: 'Ricerca', progetti: 'Progetti', note: 'Note', attivita: 'Attività', memoria: 'Memoria', automations: 'Automazioni', browser: 'Browser', officina: 'Officina', capability: 'Capacità' };
     if (location) location.textContent = t(labels[currentView] || currentView);

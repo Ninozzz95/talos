@@ -43,6 +43,21 @@ export function createCommandPalette(options: CommandPaletteOptions) {
     field.placeholder = t('Cerca comandi, sezioni o strumenti…');
     field.setAttribute('aria-label', t('Cerca comandi e destinazioni'));
     list.setAttribute('aria-label', t('Comandi e destinazioni'));
+    const layer = field.closest('.overlay-layer, dialog');
+    const heading = layer?.querySelector<HTMLElement>('.talos-dialog__title');
+    if (heading) heading.textContent = t('Comandi');
+    const close = layer?.querySelector<HTMLElement>('[data-chiudi], #closeCommand');
+    close?.setAttribute('aria-label', t('Chiudi Comandi'));
+    const hint = layer?.querySelector<HTMLElement>('.talos-dialog__footer-note');
+    if (hint) {
+      const parts: Node[] = [];
+      for (const [keys, label] of [['↑ ↓', 'scegli'], ['Invio', 'apri'], ['Esc', 'chiudi']]) {
+        if (parts.length) parts.push(doc.createTextNode(' · '));
+        const key = doc.createElement('kbd'); key.className = 'talos-kbd'; key.textContent = t(keys!);
+        parts.push(key, doc.createTextNode(' ' + t(label!)));
+      }
+      hint.replaceChildren(...parts);
+    }
     const fragment = doc.createDocumentFragment();
     // Stable groups with labelled options; no HTML from a command or translated string is parsed.
     for (const group of [...new Set(matches.map(item => item.command.group))]) {
@@ -72,7 +87,7 @@ export function createCommandPalette(options: CommandPaletteOptions) {
     const order = rows().map(row => row.dataset.command);
     matches.sort((a, b) => order.indexOf(a.command.id) - order.indexOf(b.command.id));
     if (empty) { empty.hidden = matches.length > 0; empty.textContent = t('Nessun comando trovato. Prova un nome di sezione o cancella la ricerca.'); }
-    status.textContent = matches.length ? `${matches.length} ${t('risultati')}` : '';
+    status.textContent = matches.length ? `${matches.length} ${t(matches.length === 1 ? 'risultato' : 'risultati')}` : '';
     const previousIndex = matches.findIndex(item => item.command.id === former);
     const firstEnabled = matches.findIndex(item => !item.disabledReason);
     setActive(previousIndex >= 0 ? previousIndex : firstEnabled >= 0 ? firstEnabled : matches.length ? 0 : -1, false);

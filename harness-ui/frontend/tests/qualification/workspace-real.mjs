@@ -165,6 +165,7 @@ try {
     check('editing the command query does not toggle the list as an accordion', true);
     await expect(page.locator('#risultatiComandi [role="option"]')).toHaveCount(30);
     check('actual command registry is rendered in the application', true);
+    await expect.poll(() => page.locator('#veloComandi [role="dialog"]').evaluate(el => getComputedStyle(el).opacity)).toBe('1');
     await page.screenshot({ path: join(out, 'commands-dark-1440.png') });
     await field.fill('attivita');
     await expect(page.locator('#risultatiComandi [role="option"]')).toHaveCount(1);
@@ -224,8 +225,15 @@ try {
     await page.locator('[data-workspace-bar] [data-azione="comandi"]').click();
     const field = page.locator('#veloComandi [role="combobox"]');
     await expect(field).toHaveAttribute('aria-label', 'Search commands and destinations');
+    await expect(page.locator('#titoloveloComandi')).toHaveText('Commands');
+    await expect(page.locator('#veloComandi [data-chiudi]')).toHaveAttribute('aria-label', 'Close commands');
+    await expect(page.locator('[data-workspace-bar] [data-azione="comandi"]')).toHaveAttribute('aria-label', 'Search commands');
+    await expect(page.locator('#veloComandi .talos-dialog__footer-note')).toContainText('choose');
     await field.fill('Tasks');
     await expect(page.locator('#risultatiComandi [data-command="tasks"]')).toContainText('Tasks');
+    await expect(page.locator('.command-palette__status')).toHaveText('1 result');
+    check('command title, close action, keyboard hints and singular result translate', true);
+    await expect.poll(() => page.locator('#veloComandi [role="dialog"]').evaluate(el => getComputedStyle(el).opacity)).toBe('1');
     await page.screenshot({ path: join(out, 'commands-english-1440.png') });
     await field.press('Enter');
     await expect(page.locator('#schermoAttivita')).toBeVisible();
