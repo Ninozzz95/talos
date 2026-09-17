@@ -182,36 +182,47 @@ test('BROWSER-REAL-42 — il Browser parte senza telefono finto, mostra le pagin
 });
 
 /*
- * ⛔⛔⛔ NOTIFICHE-REALI-43 — QUESTA PROVA È ATTESA ROSSA, e non è una resa: è un difetto misurato
- *   che resta scritto dove si vede. 17/09/2026, BC-70.
+ * ⛔⛔⛔ NOTIFICHE-REALI-43 — BC-70, 17/09/2026: IL `test.fail()` È SPARITO, E VA SPIEGATO COME.
  *
- *   Cercava `#notificationsBadge` e `.notifications-menu`, che oggi non esistono più: la campanella
- *   è `#notificationsBtn` e il conteggio vive nella sua etichetta accessibile, il pannello è
- *   `#pannelloNotifiche`. Fin qui sarebbe stato solo un cambio di selettori.
+ * Il 17/09 questa prova è stata dichiarata «attesa rossa» con tre accuse. Riprodotte tutte e tre,
+ * una per una, con una sonda sulla app viva (rotta `**\/api/v1/sessions*`, con la stella) e
+ * guardando `localStorage` fra una lettura e l'altra. Il verdetto è che erano TRE accuse e UN
+ * difetto solo:
  *
- *   ⛔ Ma quello che la prova PROVAVA non è più vero, e adattarla avrebbe timbrato il difetto come
- *   comportamento giusto. Misurato con una sonda, con la rotta scritta `**\/api/v1/sessions*` (con
- *   la stella: senza, la query string non viene intercettata — lezione dell'11/09):
- *     · con una sessione `inAttesaApprovazione: true` già nell'elenco, alla PRIMA lettura la
- *       campanella dice «Notifiche: nessuna». Il commento originale diceva, giustamente,
- *       «un'approvazione in attesa notifica sempre»: non lo fa più.
- *     · dopo che una seconda sessione finisce, la campanella dice «Notifiche: 1 cosa aspetta te»
- *       mentre il pannello ne ELENCA DUE («Aspetta te», «In corso ha finito»). Il numero sulla
- *       campanella e le voci del pannello non sono d'accordo.
- *     · e nel pannello una voce porta «Invalid Date».
+ *  1. «un'approvazione già in attesa non accende la campanella alla prima lettura» — VERO nella
+ *     scena della prova, e NON è un difetto del prodotto. Le tre sessioni della fixture avevano lo
+ *     STESSO `avviataAlle`, e `apriUltimaSessioneDisponibileAllAvvio` ordina per quel campo: con
+ *     tre valori uguali apriva la prima, cioè proprio «Aspetta te». E la regola scritta dal 06/09 è
+ *     che *la sessione aperta non notifica mai se stessa* — la sua approvazione è già una scheda in
+ *     chat. Misura che lo prova: dando alle tre sessioni tre istanti DIVERSI, con l'approvazione
+ *     che non è la più recente, la campanella dice «Notifiche: 1 cosa aspetta te» **alla prima
+ *     lettura**, e `localStorage` non contiene la chiave di quella sessione.
+ *     ⇒ La scena si corregge (istanti diversi, e la sessione aperta dichiarata), l'atteso NO.
+ *  2. «dice 1 mentre il pannello ne elenca DUE» — NON RIPRODOTTA, e non può esserlo per
+ *     costruzione: il numero della campanella è `nomeCampanella(state.notifiche.length)` e le righe
+ *     del pannello sono `aggiornaPannelloNotifiche(pannello, state.notifiche)`. È lo stesso array.
+ *     Misurato: campanella 1 · pannello 1. La prova lo mette per iscritto contando tutti e due.
+ *  3. «una voce legge Invalid Date» — VERA, ed è il difetto. Curata: vedi `app.js`, il punto in cui
+ *     il pannello riceveva la SESSIONE dove serviva una stringa ISO, e la funzione con lo stesso
+ *     nome dichiarata due volte.
  *
- * ⇒ `test.fail()` e non un test cancellato né un atteso riscritto: così la suite resta onesta (il
- *   rosso è dichiarato, non subito) e la prova MORDE NEL VERSO OPPOSTO — il giorno in cui qualcuno
- *   cura il conteggio, questa diventa verde e Playwright lo segnala come «atteso rosso, è passato».
- *   È il modo di non far sparire un difetto dentro un verde.
+ * ⛔ Perché questo NON è «adattare una prova finché passa»: l'accusa 1 è stata misurata nei DUE
+ *   versi (scena ambigua → nessuna notifica; scena disambiguata → notifica), e la regola che la
+ *   spiega era scritta nel codice dal 06/09. Se la risposta fosse cambiata si segnalava un difetto;
+ *   qui è cambiata la domanda, perché la fixture ne faceva due in una.
  */
-test('NOTIFICHE-REALI-43 — la campanella conta solo le sessioni che chiedono attenzione e il pannello porta alla sessione', async ({ page }) => {
-  test.fail(true, 'BC-70: il conteggio della campanella non concorda con le voci del pannello, e un’approvazione in attesa non notifica alla prima lettura');
-  const base = { taskId: 'workspace', modello: 'qwen/qwen3.8-flash', avviataAlle: '2026-09-02T08:00:00.000Z', interrotta: false, usage: null };
+test('NOTIFICHE-REALI-43 — la campanella conta solo le sessioni che chiedono attenzione, il pannello elenca esattamente quelle, e nessuna data è illeggibile', async ({ page }) => {
+  const base = { taskId: 'workspace', modello: 'qwen/qwen3.8-flash', interrotta: false, usage: null };
+  /*
+   * ⛔ Tre istanti DIVERSI, e il più recente è «Aperta da sola»: così si sa CHI la app apre
+   *   all'avvio, invece di lasciarlo decidere all'ordine di un array. È la premessa di tutto il
+   *   resto — senza, questa prova misura l'ordinamento e non le notifiche.
+   */
   const elenco = [
-    { ...base, sessionId: 'n-approvazione', nome: 'Aspetta te', conclusa: false, inAttesaApprovazione: true },
-    { ...base, sessionId: 'n-conclusa', nome: 'Gia vista', conclusa: true, inAttesaApprovazione: false },
-    { ...base, sessionId: 'n-incorso', nome: 'In corso', conclusa: false, inAttesaApprovazione: false },
+    { ...base, sessionId: 'n-aperta', nome: 'Aperta da sola', conclusa: false, inAttesaApprovazione: false, avviataAlle: '2026-09-02T12:00:00.000Z' },
+    { ...base, sessionId: 'n-approvazione', nome: 'Aspetta te', conclusa: false, inAttesaApprovazione: true, avviataAlle: '2026-09-02T08:00:00.000Z' },
+    { ...base, sessionId: 'n-conclusa', nome: 'Gia vista', conclusa: true, inAttesaApprovazione: false, avviataAlle: '2026-09-02T07:00:00.000Z' },
+    { ...base, sessionId: 'n-incorso', nome: 'In corso', conclusa: false, inAttesaApprovazione: false, avviataAlle: '2026-09-02T09:00:00.000Z' },
   ];
   await page.route('**/api/v1/sessions*', async (route) => {
     if (new URL(route.request().url()).pathname !== '/api/v1/sessions') return route.fallback();
@@ -223,12 +234,17 @@ test('NOTIFICHE-REALI-43 — la campanella conta solo le sessioni che chiedono a
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
 
   const etichetta = () => page.locator('#notificationsBtn').getAttribute('aria-label');
+  /* La PREMESSA, dichiarata e non sperata: la app ha aperto da sola la sessione più recente. */
+  await expect.poll(() => page.evaluate(() => window.__talosHarnessUiRuntime.realSessionState.id), {
+    message: 'la scena non si è formata: la app non ha aperto la sessione più recente',
+  }).toBe('n-aperta');
+
   // prima lettura: le sessioni concluse esistenti sono già viste; un'approvazione in attesa notifica sempre
   await page.evaluate(() => window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali());
   expect(await etichetta(), 'un’approvazione in attesa si annuncia subito').toContain('1');
 
   // la sessione in corso finisce: alla prossima lettura dell'elenco diventa una notifica
-  elenco[2].conclusa = true;
+  elenco[3].conclusa = true;
   await page.evaluate(() => window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali());
   expect(await etichetta(), 'ora le cose che aspettano sono due').toContain('2');
 
@@ -236,4 +252,27 @@ test('NOTIFICHE-REALI-43 — la campanella conta solo le sessioni che chiedono a
   await expect(page.locator('#pannelloNotifiche')).toBeVisible();
   const voci = await page.locator('#pannelloNotifiche [data-notifica]').allTextContents();
   expect(voci.length, 'il pannello elenca esattamente quelle che la campanella ha contato').toBe(2);
+  /* ⛔ E nessuna data illeggibile: il difetto vero di BC-70. Si guarda il testo delle voci, che è
+     quello che la persona legge, non un campo interno. */
+  for (const voce of voci) {
+    expect(voce, `una voce del pannello porta una data illeggibile: «${voce.replace(/\s+/g, ' ').trim()}»`).not.toContain('Invalid Date');
+    expect(voce, 'né una data vuota mascherata da separatore').not.toMatch(/·\s*$/u);
+    /*
+     * ⛔ E il tempo si DEVE leggere. Senza questa riga la prova passerebbe anche con la data
+     *   sempre vuota — cioè con mezza cura: basterebbe la guardia che impedisce «Invalid Date»,
+     *   e nessuno si accorgerebbe che il quando è sparito. Misurato: con l'argomento sbagliato
+     *   rimesso al suo posto la guardia torna stringa vuota, e questa riga cade da sola.
+     */
+    expect(voce.replace(/\s+/g, ' '), `una voce del pannello non dice QUANDO: «${voce.replace(/\s+/g, ' ').trim()}»`).toMatch(/avviata \d+ (s|min|h|g) fa/u);
+  }
+  /* AL CONTRARIO, nello stesso giro: la sessione APERTA non notifica mai se stessa, nemmeno se
+     aspetta un'approvazione. È la regola che spiega la prima accusa di BC-70, e senza questa riga
+     resterebbe un'assunzione invece di un fatto provato. */
+  const conApprovazioneAperta = await page.evaluate(async () => {
+    const r = window.__talosHarnessUiRuntime;
+    r.passaASessione('n-approvazione', 'workspace', 'Aspetta te', 'qwen/qwen3.8-flash', { conclusa: false, inAttesaApprovazione: true });
+    await r.aggiornaElencoSessioniReali();
+    return document.querySelector('#notificationsBtn')?.getAttribute('aria-label');
+  });
+  expect(conApprovazioneAperta, 'la sessione aperta non si annuncia da sola: la sua richiesta è già in chat').not.toContain('2');
 });

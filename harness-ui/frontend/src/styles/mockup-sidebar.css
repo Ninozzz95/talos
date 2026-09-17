@@ -33,7 +33,44 @@
    restringimento attivo il blocco stava in 310 px contro i 365 che gli servivano, e i 55 px tagliati
    erano ESATTAMENTE la testata «Strumenti», cioè la porta di cinque luoghi, sparita senza che nulla
    lo dicesse. Il tetto del 50% resta ed è la vera guardia contro una barra che si mangia le sessioni. */
-.td-sidebar-nav { flex: 0 0 auto; min-height: 0; max-height: 50%; overflow-y: auto; padding: 0 10px 8px; }
+/*
+ * ⭐⭐ BC-78.2, 17/09/2026 — IL TETTO TAGLIA UNA VOCE A METÀ, E IL TAGLIO SEMBRA UN GUASTO.
+ *
+ * Il difetto: `max-height:50%` cade dove capita — a 900 px di finestra sono 450, e i 450 cascano in
+ * mezzo a «Officina attrezzi». Non è una sovrapposizione: è metà riga, e metà riga letta da lontano
+ * è un errore di disegno, non un invito a scorrere.
+ *
+ * ⛔ Le due vie erano «tetto a passo di riga» e «sfumatura che dice continua». Il passo di riga qui
+ *   NON si può calcolare: le voci sono `height:auto` con `min-height:36px`, quindi una voce che va a
+ *   capo è più alta delle altre e un multiplo fisso taglierebbe lo stesso — indovinerebbe una sola
+ *   composizione della barra. ⇒ Si sceglie la seconda, che è anche la grammatica che il progetto ha
+ *   GIÀ: le linguette di BC-63 dicono «c'è dell'altro» con una sfumatura sul bordo che può ancora
+ *   scorrere (`.talos-schede__lista[data-bordi]`). Qui è la stessa cosa, in verticale.
+ *
+ * ⛔ E il tetto del 50% RESTA: è la guardia che impedisce ai luoghi di mangiarsi le sessioni, ed è
+ *   stata difesa con una misura (vedi il blocco qui sopra). Cambia che cosa si vede sul taglio, non
+ *   dove cade.
+ *
+ * ⭐ Ricerca del 17/09/2026 — Lea Verou «Pure CSS scrolling shadows with background-attachment:
+ *   local» (lea.verou.me/blog/2012/04/background-attachment-local) e CSS-Tricks «Scroll Shadows»:
+ *   due coppie di gradienti, una che scorre col contenuto (`local`) e una ferma (`scroll`), si
+ *   coprono a vicenda — l'ombra compare SOLO dal lato in cui si può ancora scorrere, e sparisce da
+ *   sola quando non c'è altro. Niente JavaScript, niente misure, niente da ricordare.
+ *   ⛔ È la ragione per cui non basta una sfumatura fissa in basso: con «Strumenti» chiuso (il
+ *   default) il tetto non viene nemmeno toccato, e un velo permanente smorzerebbe l'ultima voce
+ *   senza motivo — cioè un secondo difetto al posto del primo.
+ *
+ * I colori sono token: la maschera è lo sfondo della barra (`--talos-background`), l'ombra il suo
+ * bordo (`--talos-border`). Nessun valore scritto a mano, e i due temi si comportano uguale.
+ */
+.td-sidebar-nav {
+  flex: 0 0 auto; min-height: 0; max-height: 50%; overflow-y: auto; padding: 0 10px 8px;
+  background:
+    linear-gradient(var(--talos-background) 30%, transparent) top / 100% 18px no-repeat local,
+    linear-gradient(transparent, var(--talos-background) 70%) bottom / 100% 18px no-repeat local,
+    linear-gradient(var(--talos-border), transparent) top / 100% 8px no-repeat scroll,
+    linear-gradient(transparent, var(--talos-border)) bottom / 100% 8px no-repeat scroll;
+}
 .td-sidebar-nav .talos-nav-item { height: auto; min-height: 36px; font-size: 13px; }
 .td-sidebar-nav .talos-nav-item .i { width: 16px; height: 16px; }
 

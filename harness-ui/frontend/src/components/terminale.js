@@ -104,6 +104,26 @@ function svgIcona(nome, classi = 'i i--sm') {
 }
 
 /**
+ * ⭐⭐ BC-68, 17/09/2026 — CHE COSA SI SCRIVE IN CODA AL PIEDE, come regola con un nome.
+ *
+ * La regola è del 07/09 («dove c'è un dato vero, lo spazio è suo: la frase generica resta solo
+ * quando non c'è un percorso da mostrare») e viveva dentro `renderizza`, cioè dentro una chiusura,
+ * dove nessuna prova poteva chiamarla. La scheda di BC-68 la dava per rotta: **non lo è** — la
+ * misura del 17/09 sulla app viva mostra il piede con «Nessuna scheda aperta» e l'invito, senza
+ * percorso, cioè il caso in cui i due NON convivono. Ma una regola che nessuno può interrogare è
+ * una regola che il prossimo giro può rompere in silenzio: esce dalla chiusura e prende la sua
+ * prova (`tests/unit/terminale.test.mjs`).
+ *
+ * @param {{nota?:string, dettaglio?:string}} piede
+ * @returns {string} la frase in coda, o stringa vuota
+ */
+export function codaDelPiede(piede = {}) {
+  const nota = piede?.nota;
+  if (typeof nota === 'string') return nota;        // chi passa una nota comanda, anche se è vuota
+  return piede?.dettaglio ? '' : t(TESTI.nota);     // niente percorso ⇒ la spiegazione ha senso
+}
+
+/**
  * @param {HTMLElement} pane `.talos-terminal`
  * @param {object} opzioni
  * @param {{seleziona:Function, nuova:Function, chiudi:Function, chiudiAltre?:Function, chiudiTutte?:Function, rinomina:Function}} opzioni.azioni
@@ -122,6 +142,9 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
     chiudibile: true,
     rinominabile: true,
     identifica: (voce) => voce.terminalId,
+    /* BC-68, 17/09: il corpo del terminale è il pannello che la linguetta governa (uno solo,
+       riusato: `aria-labelledby` segue la scheda scelta). */
+    controlla: () => 'pannelloSchedaTerminale',
     etichetta: (voce, tutte) => titoloScheda(voce, tutte),
     suggerimento: (voce, indice, tutte) => [`${indice + 1}. ${titoloScheda(voce, tutte)}`, voce.cartella].filter(Boolean).join(' — '),
     inerte: (voce) => inRinomina === voce.terminalId,
@@ -189,9 +212,16 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
   function disegnaCoda() {
     const nodi = [];
     const nuovo = document.createElement('button');
-    nuovo.className = 'talos-terminal__tab talos-schede__tab';
-    nuovo.setAttribute('role', 'tab');
-    nuovo.setAttribute('aria-selected', 'false');
+    nuovo.className = 'talos-terminal__tab talos-schede__tab talos-schede__nuova';
+    /*
+     * ⛔⛔ BC-68, 17/09/2026 — «+ Nuovo» NON è più `role="tab"`, e non ha più `aria-selected`.
+     *   Misurato prima: con nessuna shell aperta la striscia del Terminale conteneva UNA sola cosa
+     *   con `role="tab"`, ed era questo pulsante — cioè un lettore di schermo annunciava «scheda 1
+     *   di 1» su una striscia senza nessuna scheda. Non è una scheda: è il comando che ne crea una,
+     *   esattamente come `#browserNuovaScheda` nel Browser, che infatti non l'ha mai avuto.
+     *   ⇒ Resta un `<button>` normale, raggiungibile con Tab; le frecce continuano a saltarlo,
+     *   perché la tastiera di `schede.js` si muove solo fra i `[role=tab]` con l'id della scheda.
+     */
     nuovo.type = 'button';
     nuovo.dataset.terminaleNuova = '';
     nuovo.append(svgIcona('i-plus'), document.createTextNode(t(TESTI.nuovo)));
@@ -226,7 +256,8 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
         const g = document.createElement('span'); g.className = 'talos-grow';
         // ⛔ La frase generica solo quando NON c'è un percorso da mostrare: dove c'è un dato vero,
         //    lo spazio è suo. Una spiegazione che ruba posto al fatto che spiega è di troppo.
-        const coda = p.nota ?? (p.dettaglio ? '' : t(TESTI.nota));
+        //    ⭐ 17/09, BC-68: la regola ha un nome e una prova sua — `codaDelPiede`.
+        const coda = codaDelPiede(p);
         foot.append(g, ...(coda ? [span(coda)] : []));
       }
     }

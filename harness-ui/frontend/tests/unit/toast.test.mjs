@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tonoDaTitolo, messaggioUmano, TONI, MASSIMO_IN_PILA } from '../../src/components/toast.js';
+import { tonoDaTitolo, messaggioUmano, TONI, MASSIMO_IN_PILA, ancoraToastSopraIComandi } from '../../src/components/toast.js';
 
 // 05/9 T-16 — il toast del mockup: tono dal titolo, testo umano (H22), durate.
 
@@ -32,4 +32,37 @@ test('TOAST-DURATE: ricerca 05/09 — minimo 5 s, i guasti restano, al più tre'
   assert.equal(TONI.guasto.ruolo, 'alert');
   assert.equal(TONI.nota.ruolo, 'status');
   assert.equal(MASSIMO_IN_PILA, 3);
+});
+
+/*
+ * BC-77 (a) — il pavimento della pila: l'ingombro VERO della zona dei comandi.
+ * Qui si provano i due rami che la prova nel browser non puo' mettere in scena a comando: la vista
+ * chiusa (il piede c'e' nel DOM ma non si vede) e l'assenza del piede.
+ */
+function finestraFinta(altezza) {
+  return { innerHeight: altezza, addEventListener() {}, removeEventListener() {} };
+}
+function radiceFinta() {
+  const scritte = {};
+  return { scritte, style: { setProperty(k, v) { scritte[k] = v; } } };
+}
+
+test('TOAST-BC77: il fondo è l’ingombro del piede misurato dal basso della finestra', () => {
+  const radice = radiceFinta();
+  const piede = { getBoundingClientRect: () => ({ top: 586, height: 190 }), offsetParent: {} };
+  const a = ancoraToastSopraIComandi(piede, { radice, finestra: finestraFinta(800) });
+  assert.equal(a.misura(), 214); // 800 - 586, gli stessi numeri misurati nel browser
+  assert.equal(radice.scritte['--talos-toast-fondo'], '214px');
+});
+
+test('TOAST-BC77 al contrario: piede invisibile o assente ⇒ zero, e la regione torna in fondo', () => {
+  const radice = radiceFinta();
+  /* Vista chiusa: il nodo esiste, la misura c'e', ma non e' disegnato. */
+  const chiuso = { getBoundingClientRect: () => ({ top: 586, height: 190 }), offsetParent: null };
+  assert.equal(ancoraToastSopraIComandi(chiuso, { radice, finestra: finestraFinta(800) }).misura(), 0);
+  assert.equal(radice.scritte['--talos-toast-fondo'], '0px');
+  /* Piede alto zero (chat senza composer) e piede che non c'e' proprio. */
+  const piatto = { getBoundingClientRect: () => ({ top: 800, height: 0 }), offsetParent: {} };
+  assert.equal(ancoraToastSopraIComandi(piatto, { radice, finestra: finestraFinta(800) }).misura(), 0);
+  assert.equal(ancoraToastSopraIComandi(null, { radice, finestra: finestraFinta(800) }).misura(), 0);
 });

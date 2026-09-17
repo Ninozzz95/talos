@@ -32,7 +32,7 @@ import { renderizzaMarkdown } from '../components/markdown.js'; // BC-29 (12/09)
 import { confermaModale } from '../components/modale-td.js'; // 11/09 lotto G: al posto di window.confirm()
 import { montaScorciatoiaTemi } from '../components/theme-studio.js'; // 11/09 lotto F
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
-import { creaPilaToast } from '../components/toast.js';
+import { ancoraToastSopraIComandi, creaPilaToast } from '../components/toast.js';
 import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione
 import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella, deveAvvisareFuoriDallaFinestra, testoNotificaSistema, statoConsensoNotifiche } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup; 06/9 G29: notifica di sistema
 import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab
@@ -43,7 +43,7 @@ import { montaHf } from '../components/hf-catalogo.js';
 import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
 import { aggiornaInspector, processiDagliEventi, schedaAgentiDaRileggere, titoloMessaggioUtente, titoloRispostaDaTurno, uscitaDaTestoAttrezzo } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento; 16/09 P0-E: il codice di uscita si legge dal risultato dell'attrezzo
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
-import { nomeUmanoAttrezzo as nomeUmanoAttrezzoCondiviso, nomeDiRipiegoAttrezzo } from '../components/nomi-attrezzi.js'; // BC-59 (17/09): la mappa dei nomi umani vive in UN posto solo — qui c'era una copia, e si era fermata al 12/09
+import { nomeUmanoAttrezzo as nomeUmanoAttrezzoCondiviso, nomeDiRipiegoAttrezzo, origineAvvisoPlugin } from '../components/nomi-attrezzi.js'; // BC-59 (17/09): la mappa dei nomi umani vive in UN posto solo — qui c'era una copia, e si era fermata al 12/09
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
 import { LINGUE as LINGUE_MENU, risolviLingua, applicaLingua, etichettaLinguaRisolta, t as tr, EVENTO_LINGUA } from '../components/lingua.js'; // 06/9 B8 + P-i18n: la lingua dei menu e delle superfici
@@ -84,7 +84,7 @@ import { aggiornaSeparatoreContesto } from '../components/context-separator.js';
 import { createContextClient } from '../services/context-client.js';
 import { createContextMonitor } from '../services/context-monitor.js';
 import { aggiornaAvanzamentoContesto } from '../components/context-progress.js';
-import { aggiornaDiffReview, chiaveFileReview, creaSchedeReview, etichettaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno; 17/09 BC-75: `etichettaFileReview` è la regola del nome, e non si riscrive qui del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
+import { aggiornaDiffReview, aggiornaSommarioSchedeReview, chiaveFileReview, creaSchedeReview, etichettaFileReview, nascondiAzioniFase3, riassuntoReviewTestata as riassuntoReviewPerTestata } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno; 17/09 BC-75: `etichettaFileReview` è la regola del nome, e non si riscrive qui del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
 import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
@@ -2206,7 +2206,32 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     entra: (el) => markMotionEnter(el),
     fuocoDiRitorno: () => $('#campanella') || $('#composerInput'),
   });
+  /*
+   * ⛔⛔ BC-77 (a), 17/09/2026 — il pavimento della pila dei toast è l'ingombro VERO del piede
+   *   della chat, non un numero. Misurato prima della cura, a 1024×800: «Collegato di nuovo»
+   *   copriva cinque comandi, fra cui quello che ferma il giro. Dettaglio e ricerca in
+   *   `components/toast.js`; la prova è `tests/browser/toast-non-copre-i-comandi.spec.mjs`.
+   */
+  const ancoraggioToast = ancoraToastSopraIComandi($('#schermoChat .talos-chat-foot'), {
+    radice: HOST(),
+    regione: toastRegion,
+    /*
+     * ⛔ La zona intoccabile è la TESTATA della schermata che si sta guardando: sotto ci sta il
+     *   contenuto, sopra ci sono il nome della sessione, le quattro viste e le azioni. Si legge il
+     *   suo bordo inferiore VERO, schermata per schermata, invece di scrivere un numero: le testate
+     *   cambiano altezza con la scala dell'interfaccia scelta nelle Impostazioni.
+     */
+    zonaIntoccabile: () => {
+      const testata = $('.talos-screen:not([hidden]) .talos-topbar') || $('.talos-topbar');
+      const r = testata?.getBoundingClientRect?.();
+      return r && r.height > 0 ? r.bottom : null;
+    },
+  });
   function toast(title, message = '', opzioni = {}) {
+    /* Si rimisura ANCHE qui: il `ResizeObserver` vede il piede cambiare misura, non la vista che si
+       apre o si chiude — e un toast che arriva mentre si torna in chat deve trovare il pavimento
+       giusto già al primo disegno, non dopo il primo sussulto. */
+    ancoraggioToast.misura();
     return mostraToast(String(title), message == null ? '' : String(message?.message ?? message), opzioni);
   }
 
@@ -2693,12 +2718,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * zero meccanismo nuovo lato dati). Nessuna espansione/dettaglio: a
    * differenza della vecchia riga campagna, qui non c'è un'"evidenza" da
    * mostrare o nascondere, solo un riepilogo.
+   *
+   * ⛔⛔ BC-70, 17/09/2026 — QUI STAVA UNA SECONDA `formattaOraSessione`, e non lo sapeva nessuno.
+   *   Una identica per nome ne esiste un'altra più in basso (ora `oraDelGiorno`): due dichiarazioni
+   *   di funzione nello STESSO ambito non danno né errore né avviso — l'ultima vince, in silenzio.
+   *   ⇒ Questa, con la sua guardia su `NaN` e il formato data+ora, non è mai stata eseguita: era
+   *   codice morto che SEMBRAVA la funzione chiamata da due punti diversi. Tolta invece che
+   *   rinominata: non ha chiamanti, e in questo progetto un ramo morto che «tanto non scatta» è
+   *   esattamente ciò che torna a scattare (vedi il blocco poche righe più su).
    */
-  function formattaOraSessione(iso) {
-    const data = new Date(iso);
-    if (Number.isNaN(data.getTime())) return iso;
-    return data.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
-  }
 
   // 05/9 Fase 2: Board — righe e comandi nel DataTable approvato.
   function creaRigaSessioneBoard(sessione) {
@@ -5652,7 +5680,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!plugin.fidato && plugin.avvisi?.length > 0) {
       const avvisi = document.createElement('div');
       avvisi.className = 'plugin-panel-warnings';
-      avvisi.append(...plugin.avvisi.map((a) => textElement('span', 'status-chip error', `${a.origine}: ${a.avviso}`)));
+      /*
+       * ⛔ BC-78.4, 17/09/2026 — QUI SI LEGGEVA UN NOME TECNICO: «tool:check_notes: legge una
+       *   credenziale…». Il `tool:` e il nome col trattino basso arrivano dal server
+       *   (`session-registry.mjs`, `origine: tool:<nome>`), che è il contratto e non si tocca: la
+       *   traduzione sta dove si legge, in `components/nomi-attrezzi.js` — un posto solo, come per
+       *   ogni altro nome di attrezzo. L'origine grezza resta come dettaglio secondario nel `title`.
+       */
+      avvisi.append(...plugin.avvisi.map((a) => {
+        const chip = textElement('span', 'status-chip error', `${origineAvvisoPlugin(a.origine)}: ${a.avviso}`);
+        if (a.origine) chip.title = a.origine;
+        return chip;
+      }));
       wrapper.append(avvisi);
     }
     return wrapper;
@@ -6714,7 +6753,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!pannello) return;
     if (chiudiPannelloNotifiche) { chiudiPannelloNotifiche(true); chiudiPannelloNotifiche = null; return; }
     const notifiche = state.notifiche || [];
-    const { righe, tutte } = aggiornaPannelloNotifiche(pannello, notifiche, { ora: (sessione) => formattaOraSessione(sessione) });
+    /*
+     * ⛔⛔ BC-70, 17/09/2026 — QUI NASCEVA «Invalid Date». Questa riga passava la SESSIONE a una
+     *   funzione che si aspetta una stringa ISO: `new Date({…})` non lancia, torna una data non
+     *   valida, e `toLocaleTimeString` di una data non valida stampa proprio la parola «Invalid
+     *   Date» dentro il sottotitolo della notifica. Misurato, non dedotto: «Aspetta te · aspetta la
+     *   tua approvazione · Invalid Date».
+     * ⇒ L'elenco delle sessioni porta UN solo istante, `avviataAlle`; qui si usa la regola dell'età
+     *   che il prodotto ha già (`formattaEta`), la stessa del toast della ripresa — e che davanti a
+     *   una data assente o rotta torna `null` invece di inventare, così il separatore sparisce con
+     *   lei.
+     */
+    const { righe, tutte } = aggiornaPannelloNotifiche(pannello, notifiche, {
+      ora: (sessione) => { const eta = formattaEta(sessione?.avviataAlle); return eta ? `avviata ${eta} fa` : ''; },
+    });
     righe.forEach((riga, indice) => {
       const { sessione } = notifiche[indice];
       riga.addEventListener('click', () => {
@@ -13584,10 +13636,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (cardDiff) cardDiff.hidden = voci.length === 0;
     if (schedeReview) schedeReview.hidden = voci.length === 0;
     if (voci.length === 0) aggiornaDiffReview(cardDiff, null);
-    const percorsoTestata = schermo.querySelector('.talos-topbar__path');
-    if (percorsoTestata) percorsoTestata.textContent = riassuntoReview(voci);
-    const titoloTestata = schermo.querySelector('.talos-topbar__title h1');
-    if (titoloTestata && state.session) titoloTestata.textContent = state.session;
+    /* ⭐ BC-80, 17/09: il riassunto sta accanto alle linguette, dove si legge — la testata lo
+       nasconde sotto i 900 px di contenitore, cioè a tutte e due le misure del desktop. */
+    aggiornaSommarioSchedeReview(schermo.querySelector('.talos-review__schede'), voci);
+    /*
+     * ⛔⛔ BC-71 (b), 17/09/2026 — QUI C'ERANO DUE SCRITTORI PER LO STESSO POSTO.
+     *   Questa funzione scriveva `riassuntoReview(voci)` dentro `.talos-topbar__path` e il titolo
+     *   dentro `h1`; ma `aggiornaTestataSessione()` — chiamata dieci righe più su da questa stessa
+     *   funzione, e di nuovo da `aggiornaSommarioReviewReale()` subito dopo — ci scrive la regola
+     *   decisa il 06/09: «il terzo posto porta SEMPRE la cartella, e il riassunto della vista si
+     *   aggiunge dopo un separatore». Vinceva l'ultimo che passava, e le due forme non erano nemmeno
+     *   la stessa frase («Nessuna modifica in questa sessione» contro la cartella).
+     * ⇒ Uno scrittore solo: `aggiornaTestataSessione`. Le righe sono sparite, non commentate.
+     */
     nascondiAzioniFase3(schermo);
     /* ⛔ BC-63, 17/09: qui c'era una SECONDA tastiera, scritta a mano (frecce, Home/End,
        `focus()` + `click()`), che faceva quello che il componente del Terminale già faceva. È
@@ -17617,14 +17678,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * (`reviewFiles`); Terminale = le schede aperte — le schede (W1-01) non hanno
    * ancora una UI (B1): finché non c'è, il badge non si scrive.
    */
-  /** «3 file modificati · +112 −2» per la testata della Review, o stringa vuota se non c'e' niente. */
+  /**
+   * «3 file modificati · +112 −2» per la testata della Review, o stringa vuota se non c'e' niente.
+   *
+   * ⛔ BC-71 (b), 17/09/2026 — la regola di conteggio è UNA, e sta in `components/review.js`
+   *   (`riassuntoReviewTestata` → `riassuntoReview` → `contaDiff`). Qui ce n'era una seconda, scritta
+   *   a mano, che leggeva `v.aggiunte`/`v.rimozioni`: campi che una scrittura normale NON porta,
+   *   perché il diff lo calcola il browser e la voce porta `code`. Misurato prima della cura, con due
+   *   file scritti davvero: testata «2 file modificati», senza `+` e senza `−`.
+   */
   function riassuntoReviewTestata() {
-    const n = state.realSession.reviewFiles instanceof Map ? state.realSession.reviewFiles.size : 0;
-    if (!n) return '';
-    let piu = 0; let meno = 0;
-    for (const v of state.realSession.reviewFiles.values()) { piu += Number(v?.aggiunte || 0); meno += Number(v?.rimozioni || 0); }
-    const conteggio = `${n} file modificat${n === 1 ? 'o' : 'i'}`;
-    return piu || meno ? `${conteggio} · +${piu} −${meno}` : conteggio;
+    const voci = state.realSession.reviewFiles instanceof Map ? [...state.realSession.reviewFiles.values()] : [];
+    return riassuntoReviewPerTestata(voci);
   }
   function aggiornaTestataSessione() {
     const dati = {
@@ -17701,12 +17766,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return `circa ${totale >= 1000 ? `${(totale / 1000).toFixed(1)}k` : totale} token (stima)`;
   }
 
-  function formattaOraSessione(iso) {
-    try {
-      return new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return '';
-    }
+  /**
+   * L'ora del giorno di un istante ISO («14:30»). La usa il riepilogo delle automazioni
+   * («Prossima esecuzione 14:30»).
+   *
+   * ⛔ BC-70, 17/09/2026 — si chiamava `formattaOraSessione`, come un'ALTRA funzione dichiarata
+   *   quindicimila righe più su: due dichiarazioni nello stesso ambito, l'ultima vince e la prima
+   *   diventa codice morto senza che niente protesti. Rinominata per quello che fa davvero.
+   * ⛔ E non basta il `try`: `new Date({...}).toLocaleTimeString()` NON lancia — torna la stringa
+   *   «Invalid Date», che è come quella parola è finita nel pannello delle notifiche. Un `catch`
+   *   non protegge da un argomento del tipo sbagliato: la data si controlla.
+   */
+  function oraDelGiorno(iso) {
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return '';
+    return new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
   }
 
   /*
@@ -18024,7 +18098,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (titolo) titolo.textContent = `${elenco.length} automazion${elenco.length === 1 ? 'e' : 'i'}`;
     if (sottotitolo) {
       const prossime = elenco.filter((a) => a.attiva && a.prossimaEsecuzione).map((a) => a.prossimaEsecuzione).sort();
-      sottotitolo.textContent = prossime.length > 0 ? `Prossima esecuzione ${formattaOraSessione(prossime[0])}` : 'Nessuna attiva';
+      sottotitolo.textContent = prossime.length > 0 ? `Prossima esecuzione ${oraDelGiorno(prossime[0])}` : 'Nessuna attiva';
     }
   }
 
@@ -21417,6 +21491,7 @@ ${testo}`;
   };
   window.__talosHarnessDestroy = () => {
     contextCompactor?.destroy(); contextCompactor = null;
+    ancoraggioToast?.ferma();
     contextMonitor?.stop(); contextMonitor = null;
     window.clearInterval(notificheTimer);
     document.querySelector('.notifications-menu')?.remove();

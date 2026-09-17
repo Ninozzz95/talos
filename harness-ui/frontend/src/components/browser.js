@@ -21,6 +21,7 @@
 import { t, tn, linguaCorrenteDiT } from './lingua.js';
 import { renderizzaAnnotazioni, MASSIMO_ANNOTAZIONI } from './annotazioni.js';
 import { sembraHtml, testoLeggibile, riassuntoPulizia } from './testo-pagina.js'; // 06/9 O-28: il sorgente di una pagina non si legge
+import { creaSchede } from './schede.js'; // BC-68, 17/09: la MECCANICA delle linguette è una sola, condivisa con Terminale e Revisione
 
 export const TESTI = Object.freeze({
   intestazione: 'Letture della sessione',
@@ -671,15 +672,6 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     el.url.addEventListener('focus', () => el.url.select());
     el.url.addEventListener('input', () => el.url.removeAttribute('aria-invalid'));
   }
-  el.schede?.addEventListener('click', (e) => {
-    // ⛔ 07/9 — prima la «X» era una MISURA: «sei negli ultimi 24 px della linguetta». Con una ✕
-    //   vera il bersaglio è un elemento, e chi usa la tastiera o tocca lo schermo la trova come tutti.
-    const x = e.target.closest?.('[data-browser-chiudi]');
-    if (x) { e.preventDefault(); azioni.chiudi?.(x.dataset.browserChiudi); return; }
-    const tab = e.target.closest?.('[data-browser-tab]'); if (!tab) return;
-    const id = tab.dataset.browserId;
-    if (e.ctrlKey || e.metaKey) azioni.chiudi?.(id); else azioni.seleziona?.(id);
-  });
   /*
    * Il «+»: in un browser apre una scheda vuota col cursore nell'indirizzo. Qui non si crea una
    * scheda finta — si porta il fuoco nel campo e si svuota, così il primo tasto che premi scrive
@@ -691,18 +683,6 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     el.url.focus();
     el.url.removeAttribute('aria-invalid');
   });
-  el.schede?.addEventListener('auxclick', (e) => { const tab = e.target.closest?.('[data-browser-tab]'); if (tab && e.button === 1) { e.preventDefault(); azioni.chiudi?.(tab.dataset.browserId); } });
-  el.schede?.addEventListener('keydown', (e) => {
-    const tab = e.target.closest?.('[data-browser-tab]'); if (!tab) return;
-    const ids = stato.schede.map((s) => s.id); const i = ids.indexOf(tab.dataset.browserId);
-    let prossima = null;
-    if (e.key === 'ArrowRight') prossima = ids[(i + 1) % ids.length]; else if (e.key === 'ArrowLeft') prossima = ids[(i - 1 + ids.length) % ids.length];
-    else if (e.key === 'Home') prossima = ids[0]; else if (e.key === 'End') prossima = ids[ids.length - 1];
-    else if (e.key === 'Delete') { e.preventDefault(); azioni.chiudi?.(tab.dataset.browserId); return; }
-    else return;
-    e.preventDefault(); if (prossima) { azioni.seleziona?.(prossima); el.schede.querySelector(`[data-browser-id="${CSS.escape(prossima)}"]`)?.focus(); }
-  });
-
   function mostraAvviso(testo) { if (!el.avviso) return; el.avviso.textContent = testo || ''; el.avviso.hidden = !testo; }
 
   /*
@@ -714,88 +694,128 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
    *   non si affida al solo colore, e quando non ci stanno più la striscia SCORRE invece di ridurre
    *   tutto a icone.
    */
+  /*
+   * ⭐⭐⭐ BC-68, 17/09/2026 — LE LINGUETTE DEL BROWSER SONO L'ADATTATORE DEL COMPONENTE CONDIVISO.
+   *
+   * Prima di oggi questo file aveva un suo giro di disegno E una sua tastiera: frecce, Home/End e
+   * Canc riscritte a mano, un `click` e un `auxclick` propri. Erano la stessa meccanica di
+   * `schede.js` (BC-63) copiata una terza volta — e già divergevano: qui mancavano il ripristino
+   * del fuoco dopo un ridisegno, la sfumatura sui bordi quando la striscia scorre, il «porta in
+   * vista» che aspetta una misura utile, e il menu contestuale da tastiera (Maiusc+F10).
+   *
+   * ⇒ Qui resta ciò che è DAVVERO del Browser, e che era la ragione dichiarata per non migrare:
+   *   l'icona che cambia FORMA con lo stato (WCAG 1.4.1), la ✕ come elemento vero, la pillola HTTP,
+   *   la parola `sr-only` per chi ascolta, il fumetto. La meccanica arriva dal componente.
+   *
+   * ⛔ La linguetta resta un `div[role=tab]` e non un `<button>`: dentro c'è la ✕, che è un bottone
+   *   vero, e un `button` dentro un `button` non è HTML valido. `schede.js` accetta il tag e in
+   *   cambio aggiunge Invio e Spazio, che un `div` non ha per natura.
+   */
+  const schedeBrowser = el.schede ? creaSchede(el.schede.closest('.talos-tabstrip') || el.schede, {
+    lista: el.schede,
+    root: schermo.ownerDocument?.body || document.body,
+    chiave: 'browserId',
+    classe: 'talos-tabstrip__scheda',
+    tag: 'div',
+    idMenu: 'menuSchedaBrowser',
+    etichettaMenu: t('Azioni sulla pagina'),
+    scorre: true,
+    chiudibile: true,
+    identifica: (s) => s.id,
+    etichetta: (s) => titoloScheda(s),
+    controlla: () => 'pannelloBrowser',
+    contenuto: (scheda, s, i) => riempiLinguettaBrowser(scheda, s, i),
+    suClick: (s, e) => {
+      /* La ✕ è un elemento vero: un clic su di lei chiude quella scheda e non ne sceglie nessuna. */
+      if (e.target?.closest?.('[data-browser-chiudi]')) { e.preventDefault(); azioni.chiudi?.(s.id); return true; }
+      return false;
+    },
+    vociMenu: (s) => [
+      [t('Chiudi'), () => azioni.chiudi?.(s.id), true],
+      [t('Copia l’indirizzo'), () => { navigator.clipboard?.writeText?.(s.url || ''); }, Boolean(s.url)],
+    ],
+    azioni: {
+      seleziona: (id) => azioni.seleziona?.(id),
+      chiudi: (id) => azioni.chiudi?.(id),
+    },
+  }) : null;
+
+  /** Ciò che sta DENTRO una linguetta del Browser: tutto quello che il componente non sa. */
+  function riempiLinguettaBrowser(scheda, s, i) {
+    const doc = scheda.ownerDocument;
+    scheda.dataset.browserTab = String(i);
+    /* ⛔ 16/09 — lo stato sta su OGNI linguetta, non solo su quelle vive: una lettura che sta
+       aprendo o che non si è raggiunta si deve riconoscere dalla striscia, senza aprirla.
+       ⛔ `data-stato` (in italiano) NON si tocca: lo legge una regola di `.talos-tabstrip`, che è
+       condivisa col Terminale. Il nome canonico va in un attributo suo, che si stila solo da
+       dentro `#browserSchede`. */
+    if (s.tipo === 'viva') scheda.dataset.stato = s.stato || 'pronta';
+    const situazione = statoDellaScheda(s);
+    scheda.dataset.statoScheda = situazione;
+
+    const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'i talos-tabstrip__icona'); svg.setAttribute('aria-hidden', 'true');
+    const use = doc.createElementNS('http://www.w3.org/2000/svg', 'use');
+    /*
+     * ⛔⛔ 16/09, GIRO DI RIPARAZIONE (WCAG 1.4.1) — la FORMA cambia con lo stato, non solo il
+     *   colore. Prima l'icona era sempre la stessa e solo il CSS la coloriva: chi non distingue
+     *   i colori non vedeva alcuna differenza fra una scheda aperta e una non raggiunta.
+     *   Le forme sono già nello sprite e si distinguono anche in bianco e nero: un orologio
+     *   (sto lavorando), un quadrato tratteggiato col punto interrogativo (non l'ho raggiunta),
+     *   una croce (annullata).
+     */
+    use.setAttribute('href', ICONA_PER_STATO[situazione] || (s.tipo === 'viva' ? '#i-globe' : '#i-doc'));
+    svg.append(use); scheda.append(svg);
+
+    const nome = titoloScheda(s);
+    const titolo = doc.createElement('span');
+    titolo.className = 'talos-tabstrip__titolo'; titolo.textContent = nome;
+    scheda.append(titolo);
+
+    /*
+     * ⛔⛔ Il terzo canale: la PAROLA. Un lettore di schermo non annuncia i colori e non legge la
+     *   forma di un'icona `aria-hidden`; senza questa riga lo stato di una scheda non attiva era
+     *   invisibile a chi ascolta e a chi cerca nella pagina. Si scrive solo quando c'è qualcosa
+     *   da dire: su una scheda sana sarebbe rumore su ogni riga.
+     */
+    const parola = etichettaStatoScheda(situazione);
+    if (parola) {
+      const detto = doc.createElement('span');
+      detto.className = 'sr-only'; detto.dataset.statoDetto = situazione;
+      detto.textContent = ` (${parola})`;
+      scheda.append(detto);
+    }
+
+    // lo stato si scrive solo quando c'è qualcosa da dire: 200 su sette schede non è informazione
+    const http = statoHttpDiLettura(s);
+    if (http !== null && (http < 200 || http >= 300)) {
+      const pillola = doc.createElement('span');
+      pillola.className = 'talos-tabstrip__stato'; pillola.textContent = String(http);
+      scheda.append(pillola);
+    }
+
+    const chiudi = doc.createElement('button');
+    chiudi.type = 'button'; chiudi.className = 'talos-tabstrip__chiudi'; chiudi.tabIndex = -1;
+    chiudi.dataset.browserChiudi = s.id;
+    chiudi.setAttribute('aria-label', t('Chiudi {titolo}', { titolo: nome }));
+    const svgX = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svgX.setAttribute('class', 'i'); svgX.setAttribute('aria-hidden', 'true');
+    const useX = doc.createElementNS('http://www.w3.org/2000/svg', 'use');
+    useX.setAttribute('href', '#i-x'); svgX.append(useX); chiudi.append(svgX);
+    scheda.append(chiudi);
+
+    /* ⛔ 07/9, guardando lo screenshot: quando il nome della scheda è l'host, il fumetto diceva
+       «www.iana.org/domains — https://www.iana.org/domains»: due volte la stessa cosa. */
+    const indirizzoBreve = hostDaUrl(s.url) || s.url;
+    scheda.dataset.tip = nome === indirizzoBreve ? s.url : `${nome} — ${s.url}`;
+    scheda.dataset.tipLato = 'sotto'; // il fumetto va SOTTO: sopra copre la barra delle viste
+  }
+
   function renderizzaSchede() {
-    if (!el.schede) return;
+    if (!el.schede || !schedeBrowser) return;
     const cornice = el.schede.closest('.talos-tabstrip');
     if (cornice) cornice.hidden = stato.schede.length === 0; // senza schede la lista vuota disegnava una pillola (taccuino, browser-1.png)
-    el.schede.replaceChildren();
-    const doc = el.schede.ownerDocument;
-    stato.schede.forEach((s, i) => {
-      const scheda = doc.createElement('div');
-      scheda.className = 'talos-tabstrip__scheda';
-      scheda.setAttribute('role', 'tab');
-      scheda.dataset.browserTab = String(i); scheda.dataset.browserId = s.id;
-      const sel = s.id === stato.attiva;
-      scheda.setAttribute('aria-selected', String(sel)); scheda.tabIndex = sel ? 0 : -1;
-      /* ⛔ 16/09 — lo stato sta su OGNI linguetta, non solo su quelle vive: una lettura che sta
-         aprendo o che non si è raggiunta si deve riconoscere dalla striscia, senza aprirla.
-         ⛔ `data-stato` (in italiano) NON si tocca: lo legge una regola di `.talos-tabstrip`, che è
-         condivisa col Terminale. Il nome canonico va in un attributo suo, che si stila solo da
-         dentro `#browserSchede`. */
-      if (s.tipo === 'viva') scheda.dataset.stato = s.stato || 'pronta';
-      const situazione = statoDellaScheda(s);
-      scheda.dataset.statoScheda = situazione;
-
-      const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('class', 'i talos-tabstrip__icona'); svg.setAttribute('aria-hidden', 'true');
-      const use = doc.createElementNS('http://www.w3.org/2000/svg', 'use');
-      /*
-       * ⛔⛔ 16/09, GIRO DI RIPARAZIONE (WCAG 1.4.1) — la FORMA cambia con lo stato, non solo il
-       *   colore. Prima l'icona era sempre la stessa e solo il CSS la coloriva: chi non distingue
-       *   i colori non vedeva alcuna differenza fra una scheda aperta e una non raggiunta.
-       *   Le forme sono già nello sprite e si distinguono anche in bianco e nero: un orologio
-       *   (sto lavorando), un quadrato tratteggiato col punto interrogativo (non l'ho raggiunta),
-       *   una croce (annullata).
-       */
-      use.setAttribute('href', ICONA_PER_STATO[situazione] || (s.tipo === 'viva' ? '#i-globe' : '#i-doc'));
-      svg.append(use); scheda.append(svg);
-
-      const nome = titoloScheda(s);
-      const titolo = doc.createElement('span');
-      titolo.className = 'talos-tabstrip__titolo'; titolo.textContent = nome;
-      scheda.append(titolo);
-
-      /*
-       * ⛔⛔ Il terzo canale: la PAROLA. Un lettore di schermo non annuncia i colori e non legge la
-       *   forma di un'icona `aria-hidden`; senza questa riga lo stato di una scheda non attiva era
-       *   invisibile a chi ascolta e a chi cerca nella pagina. Si scrive solo quando c'è qualcosa
-       *   da dire: su una scheda sana sarebbe rumore su ogni riga.
-       */
-      const parola = etichettaStatoScheda(situazione);
-      if (parola) {
-        const detto = doc.createElement('span');
-        detto.className = 'sr-only'; detto.dataset.statoDetto = situazione;
-        detto.textContent = ` (${parola})`;
-        scheda.append(detto);
-      }
-
-      // lo stato si scrive solo quando c'è qualcosa da dire: 200 su sette schede non è informazione
-      const http = statoHttpDiLettura(s);
-      if (http !== null && (http < 200 || http >= 300)) {
-        const pillola = doc.createElement('span');
-        pillola.className = 'talos-tabstrip__stato'; pillola.textContent = String(http);
-        scheda.append(pillola);
-      }
-
-      const chiudi = doc.createElement('button');
-      chiudi.type = 'button'; chiudi.className = 'talos-tabstrip__chiudi'; chiudi.tabIndex = -1;
-      chiudi.dataset.browserChiudi = s.id;
-      chiudi.setAttribute('aria-label', t('Chiudi {titolo}', { titolo: nome }));
-      const svgX = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svgX.setAttribute('class', 'i'); svgX.setAttribute('aria-hidden', 'true');
-      const useX = doc.createElementNS('http://www.w3.org/2000/svg', 'use');
-      useX.setAttribute('href', '#i-x'); svgX.append(useX); chiudi.append(svgX);
-      scheda.append(chiudi);
-
-      /* ⛔ 07/9, guardando lo screenshot: quando il nome della scheda è l'host, il fumetto diceva
-         «www.iana.org/domains — https://www.iana.org/domains»: due volte la stessa cosa. */
-      const indirizzoBreve = hostDaUrl(s.url) || s.url;
-      scheda.dataset.tip = nome === indirizzoBreve ? s.url : `${nome} — ${s.url}`;
-      scheda.dataset.tipLato = 'sotto'; // il fumetto va SOTTO: sopra copre la barra delle viste
-      el.schede.append(scheda);
-    });
-    // la scheda attiva resta in vista quando la striscia scorre
-    el.schede.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    schedeBrowser.aggiorna(stato.schede, stato.attiva);
   }
 
 

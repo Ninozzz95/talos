@@ -17,8 +17,12 @@ import { expect, test } from '@playwright/test';
  */
 test.use({ locale: 'it-IT' });
 
-const linguette = (page) => page.evaluate(() => [...document.querySelectorAll('.talos-terminal__tab[role="tab"]')]
-  .map((b) => b.innerText.replace(/\s+/g, ' ').trim()).filter((t) => !/^(\+\s*)?(Nuovo|New)$/i.test(t)));
+/* ⛔ BC-68, 17/09: le schede si contano dall'ATTRIBUTO che le identifica, non filtrando via la
+   parola «Nuovo» dal testo. Il «+ Nuovo» non è più `role="tab"` (non lo era mai stato davvero: è
+   il comando che crea una scheda), quindi il filtro per testo non serviva più — e un filtro per
+   testo si rompe in silenzio a ogni cambio di lingua o di etichetta. */
+const linguette = (page) => page.evaluate(() => [...document.querySelectorAll('.talos-terminal__tab[role="tab"][data-terminale-id]')]
+  .map((b) => b.innerText.replace(/\s+/g, ' ').trim()));
 
 test('BC62-01 — entrare nella vista Terminale non crea schede: una per sessione, anche passando da A a B e ritorno, anche dopo una ricarica', async ({ page, request, baseURL }) => {
   test.setTimeout(180_000);
@@ -65,6 +69,6 @@ test('BC62-02 — al contrario: «Nuovo» crea ESATTAMENTE una scheda in più', 
   await page.evaluate((i) => window.__talosHarnessUiRuntime.passaASessione(i, 'workspace', 'Nuovo', 'z-ai/glm-5.3-flash', { conclusa: true, modello: 'z-ai/glm-5.3-flash' }), id);
   await page.locator('[data-mode="terminal"]:visible').first().click();
   await expect.poll(() => linguette(page), { timeout: 10_000 }).toHaveLength(1);
-  await page.locator('.talos-terminal__tab[role="tab"]', { hasText: /^\s*(Nuovo|New)\s*$/ }).click();
+  await page.locator('[data-terminale-nuova]').click();
   await expect.poll(() => linguette(page), { timeout: 10_000 }).toHaveLength(2);
 });

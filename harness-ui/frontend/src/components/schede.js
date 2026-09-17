@@ -10,7 +10,7 @@
  *         `grep -rn "Ctrl+Tab\|ctrlKey && .*Tab" src/` non trova un gestore. Il commento del
  *         06/09 in cima a `terminale.js` lo nominava, ma `cicla()` serve alle FRECCE.
  *      2. Browser    — `browser.js:717`, `.talos-tabstrip__scheda[role=tab]`: icona per stato,
- *         ✕ vera, pillola HTTP, scroll-snap. Resta com'è (vedi in fondo a questo commento).
+ *         ✕ vera, pillola HTTP, scroll-snap. ⭐ Entrato qui il 17/09 con BC-68 (vedi in fondo).
  *      3. Revisione  — `review.js:73`, `.talos-tabs__tab` + `.talos-review__scheda`: il gruppo a
  *         pillole GENERICO, senza menu contestuale, senza tetto alla larghezza della linguetta
  *         e con la tastiera cablata a parte dentro `app.js`.
@@ -37,11 +37,23 @@
  *    un elemento normale resta `false`. Lo dichiariamo lo stesso, perché Safari fa eccezione e
  *    perché una `preventDefault()` dentro un listener passivo non fa niente e non protesta.
  *
- * ⛔ Il Browser NON è stato portato qui: le sue linguette hanno una forma propria (bordo
- *    superiore arrotondato, icona che cambia FORMA con lo stato per la WCAG 1.4.1, ✕ come
- *    elemento vero, pillola HTTP, `scroll-snap`), e riscriverle avrebbe toccato 13 prove che
- *    oggi sono verdi per guadagnare una somiglianza che l'owner non ha chiesto. Sta scritto nel
- *    resoconto, non lasciato in silenzio.
+ * ⭐⭐⭐ BC-68, 17/09/2026 — IL BROWSER È ENTRATO. Il 17/09 mattina era rimasto fuori con una ragione
+ *    scritta qui sotto: «le sue linguette hanno una forma propria (bordo superiore arrotondato,
+ *    icona che cambia FORMA con lo stato per la WCAG 1.4.1, ✕ come elemento vero, pillola HTTP,
+ *    `scroll-snap`), e riscriverle avrebbe toccato 13 prove che oggi sono verdi».
+ *    ⛔ La ragione era vera e la conclusione sbagliata: la FORMA non è la MECCANICA. Le due
+ *    implementazioni stavano già divergendo — al Browser mancavano il ripristino del fuoco dopo un
+ *    ridisegno, la sfumatura sui bordi, il «porta in vista» che aspetta una misura utile e il menu
+ *    da tastiera, cioè tutto ciò che qui è nato dopo. ⇒ `browser.js` è diventato un ADATTATORE:
+ *    tiene il suo aspetto intero e prende la meccanica da qui. Le 13 prove di `browser-p0` restano
+ *    verdi, e il conto delle tastiere è passato da due a una
+ *    (`tests/unit/bc68-una-tastiera-sola.test.mjs`).
+ *
+ * ⛔ Due cose sono nate per lui e servono a chiunque altro abbia la stessa forma:
+ *    · `tag` — una linguetta che ospita un BOTTONE vero (la ✕) non può essere un `<button>`; quando
+ *      non lo è, Invio e Spazio li aggiunge questo componente, perché un `div` non li ha;
+ *    · `controlla` — `aria-controls` verso il pannello, che riceve `role="tabpanel"` e
+ *      `aria-labelledby`. Mancava a tutte e tre le superfici: 0 linguette su 4, misurato.
  */
 
 import { t } from './lingua.js';
@@ -175,6 +187,10 @@ export function attributoDi(chiave) {
  * @param {(voce:object)=>Array} [opzioni.vociMenu] le voci del menu contestuale, o `null` per non averlo
  * @param {(voce:object, evento:MouseEvent, bottone:HTMLElement)=>boolean} [opzioni.suClick] gestione propria del clic
  * @param {()=>Node[]} [opzioni.coda] i nodi dopo le linguette (il «+», i badge)
+ * @param {string} [opzioni.tag] l'elemento della linguetta; `button` salvo che dentro ci vada un
+ *   altro bottone (la ✕ vera del Browser), perché un `button` dentro un `button` non è HTML valido
+ * @param {(voce:object)=>string|null} [opzioni.controlla] l'id del pannello che la linguetta governa
+ *   (`aria-controls`); il pannello riceve `role="tabpanel"` e `aria-labelledby`
  * @param {boolean} [opzioni.scorre] la striscia scorre in orizzontale (rotella compresa)
  * @param {boolean} [opzioni.chiudibile] Canc chiude, clic centrale chiude
  * @param {boolean} [opzioni.rinominabile] F2 e doppio clic rinominano
@@ -196,6 +212,8 @@ export function creaSchede(striscia, {
   suDoppioClick = null,
   inerte = null,
   coda = null,
+  tag = 'button',
+  controlla = null,
   scorre = false,
   chiudibile = false,
   rinominabile = false,
@@ -308,15 +326,35 @@ export function creaSchede(striscia, {
   }
 
   function creaLinguetta(voce, indice) {
-    const b = documento.createElement('button');
+    const b = documento.createElement(tag);
     b.className = classe;
     b.setAttribute('role', 'tab');
-    b.type = 'button';
+    if (tag === 'button') b.type = 'button';
     const id = identifica(voce);
     const scelta = id === attiva;
     b.setAttribute('aria-selected', String(scelta));
     b.tabIndex = scelta ? 0 : -1;               // roving tabindex (APG «Tabs», 17/09/2026)
     b.dataset[chiave] = id;
+    /*
+     * ⛔ BC-68, 17/09/2026 — `aria-controls` mancava a TUTTE E TRE le strisce: misurato sulla app
+     *   viva, 0 linguette su 4 lo portavano. L'APG «Tabs» (w3.org/WAI/ARIA/apg/patterns/tabs,
+     *   riletto il 17/09/2026) lo chiede su ogni `tab`, col pannello che ha `role="tabpanel"` e
+     *   `aria-labelledby` verso la linguetta. Qui le tre superfici hanno UN pannello solo, riusato:
+     *   `aria-labelledby` segue quindi la linguetta ATTIVA, che è l'unica che lo descrive davvero.
+     */
+    const idPannello = controlla?.(voce, indice, voci) || null;
+    if (idPannello) {
+      b.setAttribute('aria-controls', idPannello);
+      /* Un id di elemento, non un id qualunque: i nostri identificativi contengono `/`, `:` e spazi
+         (i percorsi dei file, gli indirizzi delle pagine). Si riducono a lettere, cifre e trattini
+         e si fa unica la stringa con l'indice, che nella striscia è già unico. */
+      if (!b.id) b.id = `${idMenu}-tab-${indice}-${String(id).replace(/[^\w-]+/g, '-').slice(0, 40)}`;
+      const pannello = documento.getElementById(idPannello);
+      if (pannello) {
+        pannello.setAttribute('role', 'tabpanel');
+        if (scelta) pannello.setAttribute('aria-labelledby', b.id);
+      }
+    }
     const suggerisci = suggerimento(voce, indice, voci);
     if (suggerisci) b.title = suggerisci;
     if (contenuto) contenuto(b, voce, indice, voci);
@@ -325,6 +363,10 @@ export function creaSchede(striscia, {
        menu contestuale significherebbe che un gesto dentro il campo chiude o rinomina un'altra
        volta. Chi ha uno stato così lo dichiara e la linguetta resta INERTE finché dura. */
     if (inerte?.(voce)) return b;
+    /* ⛔ BC-68 — APG «Tabs» (riletto il 17/09/2026): «Tabs with menus have `aria-haspopup` set to
+       `menu` or `true`». Le nostre linguette un menu ce l'hanno (tasto destro, tasto Menu,
+       Maiusc+F10) e non lo dicevano: chi ascolta non aveva modo di sapere che c'era altro. */
+    if (menu) b.setAttribute('aria-haspopup', 'menu');
     b.addEventListener('click', (e) => {
       if (suClick?.(voce, e, b)) return;
       if (chiudibile && (e.ctrlKey || e.metaKey)) azioni.chiudi?.(id);
@@ -352,6 +394,10 @@ export function creaSchede(striscia, {
     else if (e.key === 'Home') prossima = ids[0];
     else if (e.key === 'End') prossima = ids[ids.length - 1];
     else if (e.key === 'Delete' && chiudibile) { e.preventDefault(); azioni.chiudi?.(id); return; }
+    /* ⛔ BC-68 — un `div[role=tab]` NON si attiva da solo con Invio o Spazio: quella è una gentilezza
+       del `<button>` nativo, e chi usa il tag alternativo (il Browser, che dentro la linguetta ha la
+       sua ✕ vera) la perderebbe in silenzio. Si aggiunge solo lì, o sul bottone scatterebbe due volte. */
+    else if (tag !== 'button' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); azioni.seleziona?.(id); return; }
     else if (e.key === 'F2' && rinominabile) { e.preventDefault(); if (voce) suDoppioClick?.(voce, e, tab); return; }
     else if (menu && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) { e.preventDefault(); const r = tab.getBoundingClientRect(); if (voce) apriMenu(voce, r.left, r.bottom); return; }
     else return;
@@ -427,6 +473,11 @@ export function creaSchede(striscia, {
         const scelta = b.dataset[chiave] === id;
         b.setAttribute('aria-selected', String(scelta));
         b.tabIndex = scelta ? 0 : -1;
+        /* ⛔ BC-68 — il pannello è UNO SOLO e riusato: `aria-labelledby` deve seguire la linguetta
+           scelta, o continuerebbe a dire che quel contenuto è di una scheda che non si vede più. */
+        const idPannello = b.getAttribute('aria-controls');
+        const pannello = idPannello ? documento.getElementById(idPannello) : null;
+        if (pannello && scelta && b.id) pannello.setAttribute('aria-labelledby', b.id);
       }
       portaInVista(bottoneDi(id));
     },

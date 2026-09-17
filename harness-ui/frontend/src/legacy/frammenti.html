@@ -62,10 +62,16 @@
             </div>
           </div>
         </section>
-<!-- pannello diff del monolite -->
+<!-- pannello diff del monolite
+     ⛔ BC-71 (17/09/2026): il pulsante «Copia tutti i diff» qui sotto NON ha più `id="copyAllDiffs"`.
+     Quell'id vive nella testata della Revisione disegnata dal mockup (`index.template.html`), ed
+     esisteva due volte nello stesso documento: misurato sulla app viva, `document.querySelectorAll('[id="copyAllDiffs"]')`
+     tornava **2**. Un id doppio rende ambigui `getElementById`, `aria-controls` e `aria-labelledby`, e
+     il secondo nodo non riceve mai né l'ascoltatore né lo stato `disabled`. Il pulsante resta qui
+     perché questo frammento è un calco del monolite: quello che sparisce è la collisione. -->
 <section class="legacy-pane">
           <div class="review-shell">
-            <div class="view-heading"><div><span class="eyebrow">Review center</span><h2 id="reviewHeading">Nessuna modifica in questa sessione</h2><p>Ogni file che TALOS scrive compare qui, riga per riga, con ciò che c'era prima.</p></div><button class="secondary-btn compact" id="copyAllDiffs" type="button" disabled>Copia tutti i diff</button></div>
+            <div class="view-heading"><div><span class="eyebrow">Review center</span><h2 id="reviewHeading">Nessuna modifica in questa sessione</h2><p>Ogni file che TALOS scrive compare qui, riga per riga, con ciò che c'era prima.</p></div><button class="secondary-btn compact" type="button" disabled>Copia tutti i diff</button></div>
             <div class="review-summary">
               <div><span id="reviewSummaryNuovi">0</span><small>nuovi</small></div><div><span id="reviewSummaryModificati">0</span><small>modificati</small></div><div><span id="reviewSummaryTest">—</span><small>test</small></div><div><span id="reviewSummaryRischio">—</span><small>rischio</small></div>
             </div>
@@ -119,13 +125,18 @@
         <div><span class="eyebrow">Context rail</span><strong>Sessione</strong></div>
         <button class="icon-btn nav-close" data-close-panel="inspector" aria-label="Chiudi inspector"><svg><use href="#i-x"/></svg></button>
       </div>
+      <!-- ⛔ BC-71 (17/09/2026): `legacy-` davanti ai tre id. Gli id VIVI (`inspector-tab-context`,
+           `-files`, `-agents`) li assegna `bridge/legacy-dom.js` al rail del mockup; qui erano gli
+           stessi, e il documento li portava due volte ciascuno. Rinominati invece che tolti perché i
+           pannelli qui sotto li nominano in `aria-labelledby`: un id tolto lascerebbe un riferimento
+           che non punta a niente, cioè un secondo difetto al posto del primo. -->
       <div class="inspector-tabs" role="tablist" aria-label="Inspector sessione">
-        <button class="active" id="inspector-tab-context" role="tab" aria-selected="true" aria-controls="inspector-context" data-inspector-tab="context">Context</button>
-        <button id="inspector-tab-files" role="tab" aria-selected="false" aria-controls="inspector-files" data-inspector-tab="files">Files</button>
-        <button id="inspector-tab-agents" role="tab" aria-selected="false" aria-controls="inspector-agents" data-inspector-tab="agents">Agents</button>
+        <button class="active" id="legacy-inspector-tab-context" role="tab" aria-selected="true" aria-controls="inspector-context" data-inspector-tab="context">Context</button>
+        <button id="legacy-inspector-tab-files" role="tab" aria-selected="false" aria-controls="inspector-files" data-inspector-tab="files">Files</button>
+        <button id="legacy-inspector-tab-agents" role="tab" aria-selected="false" aria-controls="inspector-agents" data-inspector-tab="agents">Agents</button>
       </div>
       <div class="inspector-body">
-        <section class="inspector-section active" id="inspector-context" role="tabpanel" aria-labelledby="inspector-tab-context" data-inspector-section="context" data-demo-surface="inspector-context">
+        <section class="inspector-section active" id="inspector-context" role="tabpanel" aria-labelledby="legacy-inspector-tab-context" data-inspector-section="context" data-demo-surface="inspector-context">
           <div class="inspector-card">
             <div class="card-title"><span>Ambiente</span><svg><use href="#i-branch"/></svg></div>
             <dl><div><dt>Workspace</dt><dd id="envWorkspace">—</dd></div><div><dt>Branch</dt><dd id="envBranch">—</dd></div><div><dt>Worktree</dt><dd id="envWorktree">—</dd></div><div><dt>Root</dt><dd id="envRoot">—</dd></div><div><dt>Repo annidati</dt><dd id="envRepoAnnidati">—</dd></div></dl>
@@ -146,7 +157,7 @@
             <div class="topology-actions"><button class="secondary-btn compact" data-action="fork-session">Fork questa sessione</button></div>
           </div>
         </section>
-        <section class="inspector-section" id="inspector-files" role="tabpanel" aria-labelledby="inspector-tab-files" data-inspector-section="files" data-demo-surface="inspector-files">
+        <section class="inspector-section" id="inspector-files" role="tabpanel" aria-labelledby="legacy-inspector-tab-files" data-inspector-section="files" data-demo-surface="inspector-files">
           <div class="ft-search-row">
             <svg class="ft-search-icon" aria-hidden="true"><use href="#i-search"/></svg>
             <input type="text" id="fileTreeFilter" class="ft-search-input" placeholder="Filtra i file caricati…" aria-label="Filtra i file per nome" autocomplete="off" spellcheck="false">
@@ -170,7 +181,7 @@
           </div>
         </section>
         <!-- ⛔⛔⛔ 30/8, QA visiva (batch-fix): NIENTE data-demo-surface qui, a differenza di inspector-context/inspector-files. Trovato dal vivo con una sonda mirata: quei due hanno un vero "reale disponibile → nascondi" (renderizzaAlberoReale, ecc.); questo tab non ha mai avuto un contenuto condizionale — prima diceva "non ancora implementato" in modo statico, ora dice sempre il puntatore vero, ugualmente statico. Un badge "Demo UI" senza NESSUN codice che lo nasconda mai sarebbe rimasto acceso per sempre (verificato: hidden:false anche con una sessione reale aperta, mentre context/files erano già hidden:true). -->
-        <section class="inspector-section" id="inspector-agents" role="tabpanel" aria-labelledby="inspector-tab-agents" data-inspector-section="agents">
+        <section class="inspector-section" id="inspector-agents" role="tabpanel" aria-labelledby="legacy-inspector-tab-agents" data-inspector-section="agents">
           <p class="board-empty">Le deleghe a sotto-agenti isolati (attrezzo delega_sottotask) appaiono nella card "Session topology" del tab Context, e nel foglio "Albero sessione" — apri il titolo sessione in cima alla chat.</p>
         </section>
       </div>
