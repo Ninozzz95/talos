@@ -44,6 +44,8 @@
 import { spawn, execFile } from 'node:child_process';
 import { mkdirSync, existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+
+import { ambienteSenzaVariabiliDelServer } from './ambiente-solo-server.mjs';
 import { urlAmmesso } from './browser-frame.mjs';
 
 /** Tetto d'attesa della riga «DevTools listening on …»: oltre, errore parlante. */
@@ -289,8 +291,10 @@ export async function avviaBrowserVivo({
 
   const argomenti = argomentiChromium({ cartellaProfilo });
   const lancia = typeof avvia === 'function' ? avvia : avviaDiSistema;
+  /* ⛔ D1: l'ambiente del browser NON è quello del server — vedi `opzioniAvvioBrowser`. */
+  const opzioni = opzioniAvvioBrowser();
   let processo;
-  try { processo = lancia(percorso, argomenti); } catch (causa) {
+  try { processo = lancia(percorso, argomenti, opzioni); } catch (causa) {
     throw errore('BROWSER_VIVO_NON_PARTE', `Non riesco ad avviare il browser (${percorso})`, causa);
   }
   if (!processo || !processo.stderr) {
@@ -310,9 +314,31 @@ export async function avviaBrowserVivo({
   return { pid: processo.pid ?? null, wsUrl, percorso, processo, chiudi };
 }
 
-/** Il lancio vero. `stdio` con stderr a tubo: è la nostra unica fonte per la porta. */
-function avviaDiSistema(percorso, argomenti) {
-  return spawn(percorso, argomenti, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: false });
+/**
+ * ⛔⛔⛔ D1 del secondo giro CLI-REQ (17/09/2026), autorizzato dall'owner: «la stessa cura del
+ * terminale». Fino a oggi questo `spawn` non passava `env`, e il valore predefinito di
+ * `node:child_process` è `process.env` INTERO (nodejs.org/api/child_process.html, letto il
+ * 17/09/2026) ⇒ il Chromium che TALOS avvia PER LA PERSONA nasceva col token di loopback che
+ * protegge tutta la nostra API locale, con la chiave privata che firma le ricevute e con la
+ * chiave della ricerca web. Un'estensione, o un processo figlio del browser, li leggeva.
+ *
+ * ⛔ Stesso elenco del terminale, IMPORTATO e non ricopiato: due copie divergerebbero al primo
+ * segreto nuovo, e nessuno se ne accorgerebbe (il risultato sbagliato ha lo stesso aspetto di
+ * quello giusto). La fonte unica è `ambiente-solo-server.mjs`, che sta in un file suo proprio
+ * perché `pty-terminal.mjs` importa `node-pty` — un modulo nativo che qui non serve.
+ *
+ * ⛔ Le opzioni vivono in una funzione con un nome perché la prova possa LEGGERLE: l'iniezione
+ * `avvia` riceve anche loro, quindi «quale ambiente riceve il browser» è una cosa misurabile e
+ * non una cosa che si legge nel sorgente e si spera.
+ */
+export function opzioniAvvioBrowser(ambienteFn = ambienteSenzaVariabiliDelServer) {
+  /* `stdio` con stderr a tubo: è la nostra unica fonte per la porta. */
+  return { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: false, env: ambienteFn() };
+}
+
+/** Il lancio vero. */
+function avviaDiSistema(percorso, argomenti, opzioni) {
+  return spawn(percorso, argomenti, opzioni);
 }
 
 /**

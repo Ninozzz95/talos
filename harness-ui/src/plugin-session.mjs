@@ -117,8 +117,17 @@ export async function preparaToolPluginPerSessione({ cartella, cartellaTrust }, 
   const eseguiComandoPluginFn = deps.eseguiComandoPluginFn ?? eseguiComandoPlugin;
 
   let plugin = [];
+  /*
+   * ⛔⛔ A-4 (17/09/2026) — `falliti` MORIVA QUI. Questa funzione dichiara di tornare `falliti` e
+   *   tornava sempre `[]`, perché scartava quello che `caricaPlugin` le dava. Dal secondo giro
+   *   `caricaPlugin` raccoglie i guasti PER PLUGIN (un collegamento, troppi file, un comando che
+   *   esce dalla cartella): buttarli qui significa che un pacchetto guasto sparisce dalla sessione
+   *   senza che niente dica perché — cioè il difetto che quei `falliti` esistono per chiudere.
+   * ⛔ Il commento storico qui sotto («mai usata oggi») non vale più: adesso è piena.
+   */
+  let falliti = [];
   try {
-    ({ plugin } = await caricaPluginFn({ cartella }));
+    ({ plugin, falliti = [] } = await caricaPluginFn({ cartella }));
   } catch {
     // ⭐ stesso principio di hook/MCP: un manifesto malformato non blocca la sessione, degrada a "nessun plugin".
     return { toolPlugin: [], eseguiToolPluginFn: null, hookPlugin: [], falliti: [] };
@@ -127,7 +136,6 @@ export async function preparaToolPluginPerSessione({ cartella, cartellaTrust }, 
   const toolPlugin = [];
   const hookPlugin = [];
   const instradamento = new Map(); // nomeEsposto -> { comando }
-  const falliti = [];
 
   for (const p of plugin) {
     let fidato = false;
@@ -141,7 +149,14 @@ export async function preparaToolPluginPerSessione({ cartella, cartellaTrust }, 
     for (const t of p.tools) {
       const nomeEsposto = nomeEspostoPlugin(p.id, t.nome);
       toolPlugin.push({ nome: nomeEsposto, descrizione: t.descrizione, parametri: t.parametri });
-      instradamento.set(nomeEsposto, { comando: t.comando });
+      /*
+       * ⛔⛔⛔ A-3 (17/09/2026): nella mappa ci va l'id VERO, non lo si ricava dal nome esposto.
+       *   Chi deve riverificare la fiducia prima di eseguire (`agent-service.mjs`) tagliava il
+       *   nome su `__` e ricostruiva l'id: due verità sulla stessa cosa, che il terzo controllo ha
+       *   fatto divergere in due modi (un id `a__b` faceva controllare `a`; un id `_sano` non si
+       *   riconosceva affatto). Qui l'id lo abbiamo in mano: si porta, non si indovina.
+       */
+      instradamento.set(nomeEsposto, { comando: t.comando, pluginId: p.id });
     }
     for (const h of p.hooks) {
       hookPlugin.push({ id: hookIdQualificato(p.id, h.id), eventi: h.eventi, comando: h.comando });
@@ -156,5 +171,10 @@ export async function preparaToolPluginPerSessione({ cartella, cartellaTrust }, 
     }
     : null;
 
-  return { toolPlugin, eseguiToolPluginFn, hookPlugin, falliti };
+  /*
+   * ⛔ A-3: `pluginIdDiTool` è la sola strada per sapere DI CHI è un attrezzo. Chi riverifica la
+   *   fiducia prima di eseguirlo (`agent-service.mjs`) la usa al posto di tagliare il nome
+   *   esposto: se l'attrezzo non è in questa mappa, non è di questa sessione e non si esegue.
+   */
+  return { toolPlugin, eseguiToolPluginFn, hookPlugin, falliti, pluginIdDiTool: (n) => instradamento.get(n)?.pluginId ?? null };
 }

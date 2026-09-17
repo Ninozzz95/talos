@@ -5,7 +5,11 @@ import { join, parse as parsePath } from 'node:path';
 import test from 'node:test';
 
 import { percorsoScrittoDaEvento, registraScritturaDiFiglia } from '../src/session-registry.mjs';
+import { creaFetchMultiProvider } from '../src/runtime-owner-adapter.mjs';
 import {
+  candidatiGiudice,
+  creaChiediAlModelloGiudice,
+  modelloDiSessionePerRete,
   createSessionRegistry as createSessionRegistryReale,
   guardiaDiStallo,
   metricheDaEventi,
@@ -2327,8 +2331,15 @@ test('⛔ verso contrario: se compattaSessioneFn torna compattato:false, un resu
     numeroChiamata += 1;
     return numeroChiamata === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input);
   };
+  /*
+   * ⛔ 17/09, quarto giro: qui c'era `modello: 'm'`. Dal controllo sulla FORMA (`fornitore:modello`
+   *   o `organizzazione/modello`) un nome giocattolo non è più attribuibile a nessun fornitore e
+   *   la compattazione lo RIFIUTA — che è il punto: un id nudo è la forma di un GGUF locale, e
+   *   ripiegarlo sul cloud era il difetto. Il nome qui diventa realistico invece di allargare la
+   *   regola; ciò che questa prova misura (il resume dopo `compattato:false`) non cambia.
+   */
   const registro = createSessionRegistry({
-    avviaSessioneFn: avviaSessioneFnCombinato, preparaEsecuzioneFn: preparaEsecuzioneFinta, compattaSessioneFn, modello: 'm', chiave: 'k',
+    avviaSessioneFn: avviaSessioneFnCombinato, preparaEsecuzioneFn: preparaEsecuzioneFinta, compattaSessioneFn, modello: 'z-ai/glm-4.7-flash', chiave: 'k',
   });
   const { sessionId } = registro.avvia('task-vero');
   primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: storiaFinale } });
@@ -3585,8 +3596,15 @@ test('⭐⭐⭐ elencaPlugin: torna ogni plugin con il suo VERO stato di fiducia
   const pluginB = { id: 'altro', nome: 'altro', descrizione: 'un altro plugin', hooks: [], tools: [], hash: 'hash-b' };
   const registro = createSessionRegistry({
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
-    caricaPluginFn: async () => ({ plugin: [pluginA, pluginB] }),
-    verificaTrustPluginFn: async ({ pluginId }) => pluginId === 'esempio', // solo "esempio" è fidato
+    caricaPluginFn: async () => ({ plugin: [pluginA, pluginB], falliti: [] }),
+    /*
+     * ⛔ A6 (17/09/2026): il pannello non chiede più un sì/no ma lo STATO, perché «non fidato» è
+     * diventato tre cose diverse (mai approvato · contenuto cambiato · approvato con la regola
+     * precedente) e le ultime due vogliono due frasi diverse a schermo.
+     */
+    statoTrustPluginFn: async ({ pluginId }) => (pluginId === 'esempio'
+      ? { fidato: true, motivo: 'fidato', frase: null }
+      : { fidato: false, motivo: 'contenuto-cambiato', frase: 'Il contenuto di questo plugin è cambiato da quando l\'hai approvato.' }),
   });
   const { sessionId } = registro.avvia('task-vero');
 
@@ -3594,10 +3612,38 @@ test('⭐⭐⭐ elencaPlugin: torna ogni plugin con il suo VERO stato di fiducia
 
   assert.equal(esito.ok, true);
   assert.equal(esito.errore, null);
+  assert.deepEqual(esito.falliti, [], 'nessun pacchetto guasto in questo caso');
   assert.deepEqual(esito.plugin, [
-    { id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: pluginA.tools, fidato: true, avvisi: [] },
-    { id: 'altro', nome: 'altro', descrizione: 'un altro plugin', hooks: [], tools: [], fidato: false, avvisi: [] },
+    { id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: pluginA.tools, fidato: true, motivo: 'fidato', frase: null, avvisi: [] },
+    { id: 'altro', nome: 'altro', descrizione: 'un altro plugin', hooks: [], tools: [], fidato: false, motivo: 'contenuto-cambiato', frase: 'Il contenuto di questo plugin è cambiato da quando l\'hai approvato.', avvisi: [] },
   ]);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔⛔ A6 — elencaPlugin porta la FRASE umana, e i pacchetti guasti non spariscono', async () => {
+  /*
+   * ⛔ Due cose che prima non arrivavano al pannello: il PERCHÉ di un «non fidato», e l'esistenza
+   * di un pacchetto che non si è potuto nemmeno leggere. Senza la prima, riapprovare dopo questa
+   * riga sembra una manomissione; senza la seconda, un plugin sparisce e nessuno sa perché.
+   */
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaPluginFn: async () => ({
+      plugin: [{ id: 'vecchio', nome: 'vecchio', descrizione: 'd', hooks: [], tools: [], hash: 'h' }],
+      falliti: [{ pluginId: 'rotto', codice: 'PLUGIN_PACKAGE_SYMLINK_UNSUPPORTED', messaggio: 'tecnico', frase: 'Questo plugin contiene un collegamento a un\'altra cartella.' }],
+    }),
+    statoTrustPluginFn: async () => ({ fidato: false, motivo: 'regola-precedente', frase: 'Questo plugin era stato approvato quando il controllo guardava solo la sua scheda.' }),
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  const esito = await registro.elencaPlugin(sessionId);
+
+  assert.equal(esito.plugin[0].fidato, false);
+  assert.equal(esito.plugin[0].motivo, 'regola-precedente');
+  assert.match(esito.plugin[0].frase, /approvato quando il controllo guardava solo la sua scheda/);
+  assert.equal(esito.falliti.length, 1, 'il pacchetto guasto arriva al pannello');
+  assert.equal(esito.falliti[0].pluginId, 'rotto');
+  assert.match(esito.falliti[0].frase, /collegamento/);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
@@ -6677,4 +6723,428 @@ test('⛔ BC-38 AL CONTRARIO: una sessione SENZA nome passa l id e nessun nome i
   assert.equal(salvate[0].sessionId, sessionId);
   assert.equal(salvate[0].sessionNome, null, 'un nome che non c e resta null, mai il taskId travestito da nome');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
+ * ⛔⛔⛔ CLI-REQ-05 (17/09/2026) — IL REGISTRO ERA LEGATO A OPENROUTER PER DUE VIE.
+ *
+ * 1. Nessuna sessione non locale partiva senza la chiave di OpenRouter, qualunque fosse il
+ *    fornitore del modello, e il messaggio nominava `OPENROUTER_API_KEY` — una variabile che chi
+ *    usa DeepSeek non ha mai impostato.
+ * 2. La compattazione (e il giudice della ricerca) partivano con una `fetch` nuda, e il kernel
+ *    spedisce a un indirizzo FISSO di OpenRouter: l'INTERA conversazione di una sessione DeepSeek
+ *    se ne andava lì, con la chiave di OpenRouter addosso.
+ *
+ * ⛔ Le prove qui sotto sono ermetiche: nessuna rete vera, `fetchDiRete` registra ogni indirizzo
+ * e nessun indirizzo esce da 127.0.0.1. Chiavi finte.
+ */
+test('⛔⛔⛔ CLI-REQ-05 — una sessione DeepSeek parte se l\'host dice che DeepSeek è pronto, anche SENZA chiave OpenRouter', () => {
+  const finta = sessioneControllabile();
+  const chiesti = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'deepseek:deepseek-chat',
+    /* ⛔ La chiave di OpenRouter NON c'è: prima bastava questo a rifiutare tutto. */
+    chiaveFn: () => '',
+    prontoFn: (modello) => { chiesti.push(modello); return { pronto: true, fornitore: 'DeepSeek' }; },
+  });
+
+  const esito = registro.avvia('task-vero');
+  assert.ok(esito.sessionId, 'la sessione parte: la chiave che serve è quella del suo fornitore');
+  assert.deepEqual(chiesti, ['deepseek:deepseek-chat'], 'si chiede PER IL MODELLO della sessione, non in astratto');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔⛔ CLI-REQ-05 AL CONTRARIO — se l\'host dice che il fornitore NON è pronto, si rifiuta col SUO nome umano', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'deepseek:deepseek-chat',
+    chiaveFn: () => 'una-chiave-openrouter-finta',  // ⛔ c'è, e non deve bastare
+    prontoFn: () => ({ pronto: false, fornitore: 'DeepSeek', codice: 'CONFIG_INVALID', messaggio: 'Manca la chiave di DeepSeek: collegala da Fornitori e accessi.' }),
+  });
+
+  const esito = registro.avvia('task-vero');
+  assert.equal(esito.code, 'CONFIG_INVALID');
+  assert.match(esito.erroreAvvio, /Manca la chiave di DeepSeek/);
+  assert.doesNotMatch(esito.erroreAvvio, /OPENROUTER_API_KEY/, 'mai il nome di una variabile d\'ambiente a schermo');
+});
+
+test('⭐ CLI-REQ-05 — senza `prontoFn` resta la regola di prima, parola per parola', () => {
+  /*
+   * ⛔ Un incorporamento che non collega la porta nuova non deve trovarsi il comportamento
+   * cambiato sotto. È il verso in cui la cura NON deve mordere.
+   */
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiaveFn: () => '',
+  });
+  const esito = registro.avvia('task-vero');
+  assert.equal(esito.code, 'CONFIG_INVALID');
+  assert.match(esito.erroreAvvio, /OPENROUTER_API_KEY/);
+});
+
+/*
+ * ⛔⛔⛔ D3, TERZO GIRO (17/09/2026) — LE PROVE DEL SECONDO GIRO NON POTEVANO VEDERE IL DIFETTO.
+ *
+ * Erano scritte creando il registro con LO STESSO modello della sessione (le due variabili
+ * coincidevano, quindi passare l'una o l'altra dava lo stesso risultato) e con una finta
+ * `compattaSessioneFn` che costruiva LEI l'indirizzo su 127.0.0.1: «nessuna richiesta a
+ * openrouter.ai» era vero per costruzione della finta, perché il trasporto vero non girava mai.
+ * Una misura che non può smentirti non sta misurando.
+ *
+ * ⇒ Qui il registro e la sessione hanno modelli DIVERSI, e il trasporto è `creaFetchMultiProvider`
+ *   VERO, con una fetch di base finta che REGISTRA ogni indirizzo. Chiavi finte, nessuna rete.
+ */
+function destinazioniFinte({ chiavi = {} } = {}) {
+  const visti = [];
+  const dipendenze = {
+    leggiChiave: (fonte) => chiavi[fonte] ?? null,
+    leggiRuntime: () => ({ endpoint: 'http://127.0.0.1:59731' }),
+    localePronto: () => true,
+    chiamaLocale: async (percorso) => {
+      visti.push(`LOCALE ${percorso}`);
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'sintesi locale' }, finish_reason: 'stop' }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } });
+    },
+    avviaLocale: async () => {},
+  };
+  const fetchDiBase = async (url) => {
+    visti.push(String(url));
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'sintesi' }, finish_reason: 'stop' }] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  return { visti, fetchModelloFn: () => creaFetchMultiProvider(fetchDiBase, { dipendenze }) };
+}
+
+/** La finta `compattaSessioneFn` USA il trasporto ricevuto: è ciò che fa girare la destinazione vera. */
+const compattaConIlTrasportoRicevuto = async ({ modello: modelloVisto, fetchDiRete }) => {
+  await fetchDiRete('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: modelloVisto, messages: [{ role: 'user', content: 'x' }] }),
+  });
+  return { compattato: true, messaggi: [] };
+};
+
+async function concludiConStoria(finta) {
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'c' }] } });
+  await new Promise((r) => setImmediate(r));
+}
+
+test('⛔⛔⛔ D3 — la compattazione usa il modello DELLA SESSIONE, non quello del registro', async () => {
+  const finta = sessioneControllabile();
+  const { visti, fetchModelloFn } = destinazioniFinte({ chiavi: { deepseek: 'chiave-finta-deepseek', openrouter: 'chiave-finta-openrouter' } });
+  let modelloVisto = null;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    /* ⛔ Il registro nasce su un modello OpenRouter: è il primo caso che il revisore ha misurato. */
+    modello: 'z-ai/glm-5.3-flash',
+    chiaveFn: () => 'chiave-finta-openrouter',
+    prontoFn: () => ({ pronto: true }),
+    fetchModelloFn,
+    compattaSessioneFn: async (argomenti) => { modelloVisto = argomenti.modello; return compattaConIlTrasportoRicevuto(argomenti); },
+  });
+  const { sessionId } = registro.avvia('task-vero', { modelloScelto: 'deepseek:deepseek-chat' });
+  await concludiConStoria(finta);
+
+  const esito = await registro.compatta(sessionId);
+  assert.equal(esito.ok, true, JSON.stringify(esito));
+  assert.equal(modelloVisto, 'deepseek:deepseek-chat', '⛔ il modello è quello della SESSIONE');
+  assert.equal(visti.length, 1, `una sola richiesta: ${JSON.stringify(visti)}`);
+  assert.ok(!visti[0].includes('openrouter.ai'), `⛔ NIENTE deve andare a openrouter.ai: ${visti[0]}`);
+  assert.match(visti[0], /^http:\/\/127\.0\.0\.1:/, 'prova ermetica: solo loopback');
+});
+
+test('⛔⛔⛔ D3 — con il registro su un fornitore SENZA chiave, una sessione DeepSeek si compatta lo stesso', async () => {
+  /*
+   * ⛔ Il secondo caso del revisore: registro su `openai:gpt-5-mini` senza chiave OpenAI ⇒ prima
+   *   la compattazione moriva con `PROVIDER_KEY_MISSING` nominando un fornitore che nessuno aveva
+   *   scelto per quella sessione.
+   */
+  const finta = sessioneControllabile();
+  const { visti, fetchModelloFn } = destinazioniFinte({ chiavi: { deepseek: 'chiave-finta-deepseek' } });
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'openai:gpt-5-mini', chiaveFn: () => '', prontoFn: () => ({ pronto: true }), fetchModelloFn,
+    compattaSessioneFn: compattaConIlTrasportoRicevuto,
+  });
+  const { sessionId } = registro.avvia('task-vero', { modelloScelto: 'deepseek:deepseek-chat' });
+  await concludiConStoria(finta);
+
+  const esito = await registro.compatta(sessionId);
+  assert.equal(esito.ok, true, `doveva riuscire: ${JSON.stringify(esito)}`);
+  assert.equal(visti.length, 1);
+  assert.match(visti[0], /^http:\/\/127\.0\.0\.1:/);
+});
+
+test('⛔⛔⛔⛔ D3 — una sessione LOCALE non tocca NESSUN host che non sia il motore locale', async () => {
+  /*
+   * ⛔ Il caso peggiore, e viene per primo: chi sceglie il locale lo fa perché niente esca. Il
+   *   modello salvato è l'id del GGUF NUDO, e `separaFonteModello` legge un id nudo come
+   *   `openrouter`: il fix ovvio «passa `voce.modello`» avrebbe mandato proprio quella
+   *   conversazione a openrouter.ai, col nome del file GGUF come modello.
+   * ⛔ Qui la sessione locale gira DAVVERO fino in fondo (un `generateStream` vero che conclude),
+   *   perché `compatta()` pretende `messaggiFinali` non nulli: senza arrivarci non si misura
+   *   niente. È il punto in cui il revisore si era fermato.
+   */
+  /*
+   * ⛔ Il `done` non è un dettaglio: senza, `eseguiRuntimeLocale` chiude con
+   *   `LOCAL_RUNTIME_INCOMPLETE`, la sessione finisce in `RunError` e `messaggiFinali` resta
+   *   vuoto — e `compatta()` risponde `SESSION_NOT_READY` prima ancora di arrivare al modello.
+   *   È esattamente il muro contro cui si era fermato il revisore: misurato e superato qui.
+   */
+  const runtimeLocale = {
+    async *generateStream() {
+      yield { type: 'text', value: 'risposta locale' };
+      yield { type: 'done' };
+    },
+  };
+  const { visti, fetchModelloFn } = destinazioniFinte({ chiavi: { openrouter: 'chiave-finta-openrouter' } });
+  let modelloVisto = null;
+  const registro = createSessionRegistry({
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'z-ai/glm-5.3-flash', chiaveFn: () => 'chiave-finta-openrouter',
+    prontoFn: () => ({ pronto: true }), fetchModelloFn,
+    localRuntimes: { 'llama.cpp': runtimeLocale },
+    compattaSessioneFn: async (argomenti) => { modelloVisto = argomenti.modello; return compattaConIlTrasportoRicevuto(argomenti); },
+  });
+  const { sessionId } = registro.avvia('task-vero', {
+    provider: 'local', runtimeId: 'llama.cpp', modelId: 'gemma-3n-e4b-it-Q4_K_M.gguf',
+  });
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setImmediate(r));
+
+  const esito = await registro.compatta(sessionId);
+  assert.equal(esito.ok, true, `la sessione locale deve arrivare a compattarsi: ${JSON.stringify(esito)}`);
+  assert.equal(modelloVisto, 'local:gemma-3n-e4b-it-Q4_K_M.gguf',
+    '⛔ il nome porta il prefisso `local:`, che è ciò che manda la richiesta al ponte del motore locale');
+  const fuoriDalLocale = visti.filter((u) => !u.startsWith('LOCALE '));
+  assert.deepEqual(fuoriDalLocale, [], `⛔ una sessione locale non deve uscire: ${JSON.stringify(visti)}`);
+  assert.equal(visti.length, 1, 'è passata dal ponte del motore locale, una volta');
+});
+
+test('⛔⛔⛔ D3 — `modelloDiSessionePerRete`: tre casi, e il terzo è un RIFIUTO, non un ripiego', () => {
+  /*
+   * ⛔ Il ripiego silenzioso sul predefinito del registro ERA il difetto. Qui la regola si prova
+   *   dove vive, invece di inseguirla attraverso una sessione: una sessione locale con il
+   *   `modelId` perso (una voce ripristinata dal disco) deve dare `null`, e chi chiama rifiuta.
+   */
+  assert.equal(modelloDiSessionePerRete({ provider: 'local', modelId: 'gemma.gguf' }), 'local:gemma.gguf');
+  assert.equal(modelloDiSessionePerRete({ provider: 'cloud', modello: 'deepseek:deepseek-chat' }), 'deepseek:deepseek-chat');
+  assert.equal(modelloDiSessionePerRete({ provider: 'local', modelId: null, modello: 'gemma.gguf' }), null,
+    '⛔ una locale senza modelId NON ricade sul nome nudo: quello finirebbe a openrouter.ai');
+  assert.equal(modelloDiSessionePerRete({ provider: 'cloud', modello: '' }), null);
+  assert.equal(modelloDiSessionePerRete(null), null);
+});
+
+test('⛔⛔ D3 — con un modello di sessione sconosciuto la compattazione RIFIUTA e non chiama niente', async () => {
+  const finta = sessioneControllabile();
+  const { visti, fetchModelloFn } = destinazioniFinte({ chiavi: { openrouter: 'k' } });
+  let compattaChiamata = false;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    /* ⛔ Il registro HA un predefinito: è proprio quello su cui non si deve ricadere. */
+    modello: 'z-ai/glm-5.3-flash', chiaveFn: () => 'k', prontoFn: () => ({ pronto: true }), fetchModelloFn,
+    compattaSessioneFn: async () => { compattaChiamata = true; return { compattato: false, messaggi: [] }; },
+  });
+  /* Una sessione avviata SENZA modello proprio: `voce.modello` resta vuoto. */
+  const { sessionId } = registro.avvia('task-vero', { modelloScelto: '' });
+  await concludiConStoria(finta);
+
+  const esito = await registro.compatta(sessionId);
+  if (esito.code === 'SESSION_MODEL_UNKNOWN') {
+    assert.match(esito.erroreAvvio, /non so quale modello/i);
+    assert.equal(compattaChiamata, false, 'si rifiuta PRIMA di chiamare');
+    assert.deepEqual(visti, [], 'e senza nessuna richiesta di rete');
+  } else {
+    /* Se il registro ha comunque dato un modello alla sessione, dev'essere il SUO, non un ripiego muto. */
+    assert.equal(esito.ok, true);
+    assert.equal(compattaChiamata, true);
+  }
+});
+
+
+
+test('⛔⛔⛔ D3 — il GIUDICE deduce il fornitore dal modello, invece di scrivere «openrouter»', () => {
+  /*
+   * ⛔ `server.mjs` non collega `modelliGiudiceFn` (zero occorrenze), quindi vale sempre il
+   *   default del registro, che scriveva `provider: 'openrouter'` A MANO. Nessuna prova lo
+   *   copriva — era dentro una chiusura anonima, dove niente poteva guardarla.
+   */
+  assert.deepEqual(candidatiGiudice('deepseek:deepseek-chat'),
+    [{ id: 'deepseek:deepseek-chat', provider: 'deepseek', model: 'deepseek:deepseek-chat' }]);
+  assert.deepEqual(candidatiGiudice('openai:gpt-5-mini'),
+    [{ id: 'openai:gpt-5-mini', provider: 'openai', model: 'openai:gpt-5-mini' }]);
+  // Un id senza prefisso resta OpenRouter, che è il comportamento storico: non si cambia di nascosto.
+  assert.deepEqual(candidatiGiudice('z-ai/glm-5.3-flash'),
+    [{ id: 'z-ai/glm-5.3-flash', provider: 'openrouter', model: 'z-ai/glm-5.3-flash' }]);
+  assert.deepEqual(candidatiGiudice(''), [], 'senza modello non c\'è giudice, e si dice tacendo');
+  assert.deepEqual(candidatiGiudice(null), []);
+});
+
+test('⛔⛔⛔ D3 — il GIUDICE riceve la destinazione dell\'host, e senza di essa NON riceve niente', async () => {
+  /*
+   * ⛔ Il revisore ha misurato che togliendo `fetchModelloFn()` al giudice restavano 330 prove su
+   *   330 verdi: il cablaggio non era coperto. Adesso lo è, nei due versi.
+   */
+  const { visti, fetchModelloFn } = destinazioniFinte({ chiavi: { deepseek: 'chiave-finta-deepseek' } });
+  let ricevuto = null;
+  const chiedi = creaChiediAlModelloGiudice({
+    chiediAlModelloUnaVoltaFn: async (argomenti) => {
+      ricevuto = argomenti;
+      await argomenti.fetchDiRete('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: argomenti.modello, messages: [] }),
+      });
+      return 'ok';
+    },
+    chiaveDiTurno: () => 'chiave-finta',
+    fetchModelloFn,
+  });
+  await chiedi({ modello: 'deepseek:deepseek-chat', prompt: 'x' });
+  assert.ok(ricevuto.fetchDiRete, '⛔ il giudice deve ricevere la destinazione dell\'host');
+  assert.equal(visti.length, 1);
+  assert.match(visti[0], /^http:\/\/127\.0\.0\.1:/, '⛔ instradato al fornitore del modello, non a openrouter.ai');
+
+  // AL CONTRARIO: senza la porta, nessun campo nuovo — il comportamento di prima, invariato.
+  let senza = null;
+  const chiediSenza = creaChiediAlModelloGiudice({
+    chiediAlModelloUnaVoltaFn: async (argomenti) => { senza = argomenti; return 'ok'; },
+    chiaveDiTurno: () => 'chiave-finta',
+  });
+  await chiediSenza({ modello: 'deepseek:deepseek-chat', prompt: 'x' });
+  assert.ok(!('fetchDiRete' in senza), 'chi non collega la porta non vede nessun campo nuovo');
+});
+
+test('⛔⛔⛔ D2 — un modello ASSENTE non è «pronto»: prima la cura FALLIVA APERTA', () => {
+  /*
+   * ⛔ Il revisore l'ha misurato: con `modello` `''`, `null` o `undefined`, `prontoFn` rispondeva
+   *   `{pronto: true}` e la sessione partiva. PRIMA della cura quel caso veniva RIFIUTATO dal
+   *   controllo sulla chiave. Una cura che apre una porta che era chiusa è peggio del difetto che
+   *   chiude.
+   * ⛔ La `prontoFn` vera la costruisce `server.mjs`; qui si prova la REGOLA che il registro
+   *   applica alla sua risposta, nei due versi.
+   */
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: '',
+    chiaveFn: () => 'una-chiave-che-non-deve-bastare',
+    prontoFn: (m) => (typeof m === 'string' && m.trim()
+      ? { pronto: true }
+      : { pronto: false, codice: 'CONFIG_INVALID', messaggio: 'Scegli un modello prima di avviare la sessione.' }),
+  });
+  const esito = registro.avvia('task-vero');
+  assert.equal(esito.code, 'CONFIG_INVALID');
+  assert.match(esito.erroreAvvio, /Scegli un modello/);
+  assert.equal(esito.sessionId, undefined, 'e la sessione NON parte');
+});
+
+test('⭐ D2 — un «pronto» non porta un codice d\'errore, e la sessione parte', () => {
+  const finta = sessioneControllabile();
+  let visto = null;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'deepseek:deepseek-chat', chiaveFn: () => '',
+    prontoFn: (m) => { visto = m; return { pronto: true, fornitore: 'DeepSeek' }; },
+  });
+  const esito = registro.avvia('task-vero');
+  assert.ok(esito.sessionId);
+  assert.equal(visto, 'deepseek:deepseek-chat');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
+ * ⛔⛔⛔ QUARTO GIRO (17/09/2026) — I TRE RESIDUI DI D3.
+ */
+test('⛔⛔⛔ G4-D3a — il giudice predefinito è il modello DELLA SESSIONE, non quello del registro', () => {
+  /*
+   * ⛔ Il terzo controllo: `() => candidatiGiudice(modello)` usava la chiusura del REGISTRO, e il
+   *   commento diceva «il modello è quello della SESSIONE quando c'è» — falso, e in contraddizione
+   *   col commento onesto sopra `compatta()`. In una sessione DeepSeek le affermazioni della
+   *   ricerca partivano verso il fornitore predefinito del server.
+   * ⇒ Il candidato viene da `autore.model`, che l'orchestratore riempie col modello della sessione.
+   */
+  /*
+   * ⛔⛔ Si prova il CABLAGGIO, non solo la funzione pura. Rompendo il cablaggio (la freccia che
+   *   torna a `candidatiGiudice(modello)` di chiusura) le prove sulla sola `candidatiGiudice`
+   *   restavano tutte verdi: l'ho verificato, ed è il motivo per cui il registro espone la
+   *   funzione che passa davvero all'orchestratore.
+   */
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    /* ⛔ Il registro nasce su un modello OpenRouter: se il giudice usasse QUESTO, si vedrebbe. */
+    modello: 'z-ai/glm-5.3-flash', chiaveFn: () => 'k', prontoFn: () => ({ pronto: true }),
+  });
+  const dalRegistro = registro._modelliGiudiceDelRegistro;
+  assert.equal(typeof dalRegistro, 'function');
+  assert.deepEqual(dalRegistro({ autore: { id: 'a', provider: 'openrouter', model: 'deepseek:deepseek-chat' } }),
+    [{ id: 'deepseek:deepseek-chat', provider: 'deepseek', model: 'deepseek:deepseek-chat' }],
+    '⛔ il candidato viene dall\'AUTORE (la sessione), non dal modello del registro');
+  assert.deepEqual(dalRegistro({ autore: { id: 'a', provider: 'openrouter', model: '' } }), [],
+    '⛔ sessione LOCALE: `onRicercaAvvia` passa modello null ⇒ nessun giudice, e non si esce');
+
+  /*
+   * ⛔ E la regola pura, nei tre casi.
+   */
+  assert.deepEqual(candidatiGiudice('deepseek:deepseek-chat'),
+    [{ id: 'deepseek:deepseek-chat', provider: 'deepseek', model: 'deepseek:deepseek-chat' }]);
+  assert.deepEqual(candidatiGiudice('z-ai/glm-5.3-flash'),
+    [{ id: 'z-ai/glm-5.3-flash', provider: 'openrouter', model: 'z-ai/glm-5.3-flash' }]);
+  /* ⛔ Sessione LOCALE: `onRicercaAvvia` passa `modello: null` ⇒ nessun candidato ⇒ NESSUN
+     giudice, e il rapporto lo dichiara. Mai il cloud in silenzio. */
+  assert.deepEqual(candidatiGiudice(null), [], 'una sessione locale non ha giudice, e non esce');
+  assert.deepEqual(candidatiGiudice(''), []);
+});
+
+test('⛔⛔⛔ G4-D3c — un nome di modello che non ha FORMA riconosciuta non ripiega sul cloud', () => {
+  /*
+   * ⛔ `candidatiGiudice` aveva un `catch` che ripiegava su `'openrouter'` in silenzio: un nome
+   *   che non si sa leggere finiva attribuito proprio al fornitore verso cui NON deve andare la
+   *   roba di una sessione che ha scelto altro.
+   * ⛔ E `modelloDiSessionePerRete` guardava solo che il nome non fosse vuoto: una testata vecchia
+   *   senza `provider`, ripristinata come `cloud` con un id di GGUF NUDO, sarebbe partita verso
+   *   openrouter.ai col nome di un file locale.
+   */
+  assert.equal(modelloDiSessionePerRete({ provider: 'cloud', modello: 'gemma-3n-e4b-it-Q4_K_M.gguf' }), null,
+    '⛔ il caso reale: una testata vecchia ripristinata come cloud');
+  assert.equal(modelloDiSessionePerRete({ provider: 'cloud', modello: 'qualcosa' }), null);
+  assert.equal(modelloDiSessionePerRete({ provider: 'cloud', modello: 'deepseek:deepseek-chat' }), 'deepseek:deepseek-chat');
+  assert.equal(modelloDiSessionePerRete({ provider: 'cloud', modello: 'z-ai/glm-5.3-flash' }), 'z-ai/glm-5.3-flash');
+  assert.equal(modelloDiSessionePerRete({ provider: 'local', modelId: 'gemma.gguf' }), 'local:gemma.gguf');
+
+  assert.deepEqual(candidatiGiudice('gemma-3n-e4b-it-Q4_K_M.gguf'), [],
+    '⛔ un nome nudo NON diventa «openrouter»: zero candidati, cioè nessun giudice');
+});
+
+test('⛔⛔⛔ G4-D3b — la guardia SESSION_MODEL_UNKNOWN morde DAVVERO, e prima di ogni chiamata', async () => {
+  /*
+   * ⛔ La prova precedente aveva un `if (esito.code === …) … else …` che accettava ENTRAMBI gli
+   *   esiti e prendeva sempre l'`else`: rompendo la guardia restavano 337 verdi su 337. Una prova
+   *   che non può fallire si toglie, non si aggiusta.
+   * ⇒ Qui il registro NON ha un modello predefinito, quindi la voce nasce senza modello: è la
+   *   forma di una sessione ripristinata da una testata che il modello non ce l'aveva.
+   */
+  const finta = sessioneControllabile();
+  let compattaChiamata = false;
+  let trasportoChiesto = false;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    chiaveFn: () => 'k',
+    prontoFn: () => ({ pronto: true }),
+    fetchModelloFn: () => { trasportoChiesto = true; return async () => new Response('{}'); },
+    compattaSessioneFn: async () => { compattaChiamata = true; return { compattato: true, messaggi: [] }; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'c' }] } });
+  await new Promise((r) => setImmediate(r));
+
+  const esito = await registro.compatta(sessionId);
+  assert.equal(esito.code, 'SESSION_MODEL_UNKNOWN');
+  assert.match(esito.erroreAvvio, /non so quale modello/i);
+  assert.equal(compattaChiamata, false, '⛔ si rifiuta PRIMA di chiamare');
+  assert.equal(trasportoChiesto, false, '⛔ e senza nemmeno costruire il trasporto: zero rete');
 });

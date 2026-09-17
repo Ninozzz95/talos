@@ -115,8 +115,120 @@ import {
   fidaPlugin as fidaPluginReale,
   PluginRegistryError,
   scansionaPatternSospetti,
+  statoTrustPlugin as statoTrustPluginReale,
   verificaTrustPlugin as verificaTrustPluginReale,
 } from './plugin-registry.mjs';
+/* ⛔ C-3: la MEDESIMA regola del kernel, importata e non ricopiata — come già fa `acp-agent.mjs`
+   con `eUnaCredenziale`. Due copie divergerebbero al primo ramo nuovo. */
+import { cartellaFinaleValida } from './kernel/talosHarness.mjs';
+/* ⛔ D3: per dedurre il fornitore dal modello invece di scriverlo a mano. */
+import { separaFonteModello } from './model-destination.mjs';
+
+/**
+ * ⛔⛔⛔ D3 (17/09/2026) — IL NOME DEL MODELLO DI UNA SESSIONE, NELLA FORMA CHE LA RETE CAPISCE.
+ *
+ * Una sola funzione perché i clienti sono due — la compattazione e il giudice — e due copie
+ * darebbero due risposte diverse alla stessa domanda il giorno in cui una delle due cambia.
+ *
+ * Tre casi, e il primo è quello che conta:
+ *   · sessione LOCALE → `local:<modelId>`. Sul disco il modello di una sessione locale è l'id del
+ *     GGUF NUDO, e `separaFonteModello` legge un id nudo come `openrouter`: passarlo com'è
+ *     manderebbe la conversazione a openrouter.ai proprio per chi ha scelto il locale affinché
+ *     niente uscisse. Il prefisso è ciò che manda la richiesta al ponte del motore locale, la
+ *     stessa strada di un turno normale.
+ *   · sessione cloud con un modello suo → quello.
+ *   · niente di tutto ciò → `null`, e chi chiama RIFIUTA con una frase. Mai un ripiego silenzioso
+ *     sul predefinito del server: era esattamente il difetto.
+ *
+ * @returns {string|null}
+ */
+export function modelloDiSessionePerRete(voce) {
+  if (!voce) return null;
+  if (voce.provider === 'local') return voce.modelId ? `local:${voce.modelId}` : null;
+  const nome = typeof voce.modello === 'string' ? voce.modello.trim() : '';
+  /*
+   * ⛔⛔⛔ TERZO CONTROLLO (17/09/2026) — LA FORMA, non solo la presenza.
+   *
+   * Prima bastava che `voce.modello` non fosse vuoto. Ma una testata vecchia, senza `provider`,
+   * viene ripristinata come `cloud` (~3731) portandosi dietro un id di GGUF NUDO, e un id nudo
+   * `separaFonteModello` lo legge `openrouter`: quel modello sarebbe partito verso openrouter.ai
+   * col nome di un file locale. È lo stesso difetto della compattazione, entrato da un'altra porta.
+   * ⇒ Si ammettono SOLO le due forme riconosciute — `fornitore:modello` e `organizzazione/modello`
+   *   — e tutto il resto è `null`, cioè un RIFIUTO dichiarato da chi chiama. Mai un ripiego sul
+   *   cloud per un nome che non sappiamo leggere.
+   */
+  return formaDiModelloRiconosciuta(nome) ? nome : null;
+}
+
+/**
+ * ⛔⛔⛔ La FORMA di un nome di modello, in un posto solo (17/09/2026, quarto giro).
+ *
+ * Due sole forme riconosciute: `fornitore:modello` (DeepSeek, OpenAI, `local:`…) e
+ * `organizzazione/modello` (OpenRouter). Tutto il resto è un nome che non sappiamo attribuire.
+ *
+ * ⛔ Serve a DUE chiamanti — il modello della compattazione e i candidati del giudice — e la
+ *   regola sta qui una volta sola perché il difetto che chiude è proprio «due verità sulla stessa
+ *   cosa»: `separaFonteModello` su un id NUDO non lancia, risponde `openrouter`, e un id nudo è
+ *   esattamente il nome di un GGUF locale. Un ripiego silenzioso sul cloud è la cosa da impedire.
+ */
+function formaDiModelloRiconosciuta(nome) {
+  if (typeof nome !== 'string' || !nome.trim()) return false;
+  const n = nome.trim();
+  return /^[a-z0-9][a-z0-9._-]*:.+$/i.test(n) || /^[a-z0-9][a-z0-9._-]*\/.+$/i.test(n);
+}
+
+/**
+ * ⛔⛔⛔ D3 (17/09/2026) — I CANDIDATI GIUDICE, e il loro fornitore DEDOTTO.
+ *
+ * Estratta da una chiusura anonima dentro `createSessionRegistry` per una ragione sola: lì dentro
+ * nessuna prova poteva guardarla, e infatti scriveva `provider: 'openrouter'` A MANO da sempre
+ * senza che niente se ne accorgesse. Una decisione che nessuno può misurare non è una decisione,
+ * è un'abitudine.
+ *
+ * ⛔⛔⛔ TERZO CONTROLLO (17/09/2026) — E IL `catch` RIPIEGAVA SU `'openrouter'` IN SILENZIO.
+ *   Un nome che non si sa leggere finiva attribuito a OpenRouter, cioè proprio il fornitore verso
+ *   cui NON deve andare la roba di una sessione che ha scelto altro. Adesso un nome che non ha
+ *   una forma riconosciuta dà ZERO candidati: nessun giudice è una risposta vera, un giudice
+ *   inventato no.
+ *
+ * ⛔⛔ E il candidato è il modello DELLA SESSIONE, non il predefinito del server (decisione del
+ *   coordinatore, 17/09). CONSEGUENZA DA GUARDARE IN FACCIA, perché non è piccola: quando il solo
+ *   candidato è anche l'AUTORE, `talosResearchPickJudge` lo scarta — e allora non c'è giudice, e
+ *   il rapporto lo dichiara. Cioè, con questa regola, di norma NON c'è giudice. È il prezzo di
+ *   non far uscire le affermazioni di una sessione verso un fornitore che nessuno ha scelto, ed è
+ *   scritto qui perché si veda, invece di scoprirlo da un rapporto senza giudizi.
+ */
+export function candidatiGiudice(modello) {
+  /*
+   * ⛔ La FORMA prima del fornitore: `separaFonteModello` su un id NUDO non lancia, risponde
+   *   `openrouter` — quindi un `catch` non basta, e infatti non bastava. Stessa regola della
+   *   compattazione, stessa funzione.
+   */
+  if (!formaDiModelloRiconosciuta(modello)) return [];
+  let fonte = null;
+  try { ({ fonte } = separaFonteModello(modello)); } catch { return []; }
+  if (!fonte) return [];
+  return [{ id: modello.trim(), provider: fonte, model: modello.trim() }];
+}
+
+/**
+ * ⛔⛔⛔ D3 — la porta del GIUDICE verso il modello, estratta per lo stesso motivo.
+ *
+ * Il revisore ha misurato che togliendo `fetchModelloFn()` da qui restavano 330 prove su 330
+ * verdi: il cablaggio del trasporto non era coperto da niente. Dentro una chiusura anonima non si
+ * poteva provare; con un nome sì.
+ *
+ * ⛔ Senza `fetchModelloFn` non si passa NESSUN campo, e il comportamento resta quello di prima:
+ *   un incorporamento che non collega la porta non si trova niente cambiato sotto.
+ */
+export function creaChiediAlModelloGiudice({ chiediAlModelloUnaVoltaFn, chiaveDiTurno, fetchModelloFn }) {
+  return ({ modello: modelloGiudice, prompt }) => chiediAlModelloUnaVoltaFn({
+    modello: modelloGiudice,
+    chiave: chiaveDiTurno(),
+    prompt,
+    ...(typeof fetchModelloFn === 'function' ? { fetchDiRete: fetchModelloFn() } : {}),
+  });
+}
 import {
   elencaSessioniPersistite as elencaSessioniPersistiteReale,
   eliminaSessionePersistita as eliminaSessionePersistitaReale,
@@ -1466,7 +1578,25 @@ export function createSessionRegistry({
   cartellaTrustPlugin = fileURLToPath(new URL('../.plugin-trust/', import.meta.url)),
   caricaPluginFn = caricaPluginReale,
   verificaTrustPluginFn = verificaTrustPluginReale,
+  /* ⛔ A6: il pannello vuole il PERCHÉ, non solo il sì/no — vedi `elencaPlugin`. */
+  statoTrustPluginFn = statoTrustPluginReale,
   fidaPluginFn = fidaPluginReale,
+  /*
+   * ⛔⛔⛔ CLI-REQ-05 (17/09/2026) — LE DUE PORTE VERSO L'HOST CHE QUESTO REGISTRO NON AVEVA.
+   *
+   * `prontoFn(modello)` — «questo modello si può usare adesso?», risposta dell'HOST, che è l'unico
+   *   a sapere quali fornitori sono collegati. Senza, il registro chiedeva la chiave di OpenRouter
+   *   a QUALUNQUE sessione non locale: vedi il commento in `avvia`.
+   * `fetchModelloFn()` — la destinazione multi-fornitore dell'host, quella che usa un giro normale.
+   *   Senza, compattazione e giudice partivano verso l'indirizzo fisso di OpenRouter.
+   *
+   * ⛔ Tutt'e due OPZIONALI, e l'assenza è il comportamento di prima: un incorporamento che non le
+   *   collega (una prova, la CLI finché non le passa) non cambia di una riga. Un default che
+   *   INVENTASSE una risposta sarebbe peggio del difetto — direbbe «pronto» per un fornitore che
+   *   nessuno ha collegato.
+   */
+  prontoFn = null,
+  fetchModelloFn = null,
   /*
    * ⭐⭐⭐ FASE N, quarto sistema (30/8) — Notes, GLOBALE non per-progetto
    * (vedi la doc in notes-store.mjs). Stesso pattern REALE di
@@ -1694,6 +1824,19 @@ export function createSessionRegistry({
    * di subagentOrchestrator appena sopra: `avviaESegui` issata, `sessioni`
    * la STESSA Map — nessun secondo registro nascosto.
    */
+  /*
+   * ⛔⛔⛔ QUARTO GIRO (17/09/2026) — questa funzione ha un NOME e si può guardare da fuori.
+   *
+   * Finché era una freccia anonima dentro la chiamata all'orchestratore, la prova che scrivevo
+   * riusciva solo a misurare `candidatiGiudice` — cioè la funzione PURA — mentre il difetto stava
+   * nel CABLAGGIO (quale modello le si passa). L'ho verificato rompendo apposta la riga: le prove
+   * restavano tutte verdi. È la terza volta in questo lavoro che una chiusura anonima nasconde la
+   * decisione che conta.
+   */
+  const modelliGiudiceEffettiva = typeof modelliGiudiceFn === 'function'
+    ? modelliGiudiceFn
+    : ({ autore } = {}) => candidatiGiudice(typeof autore?.model === 'string' ? autore.model : null);
+
   const researchOrchestrator = creaResearchOrchestrator({
     sessioni, avviaESeguiFn: avviaESegui,
     creaRicercaFn, leggiRicercaFn, aggiornaRicercaFn, eliminaRicercaFn, elencaRicercheFn, leggiRapportoFn,
@@ -1709,21 +1852,41 @@ export function createSessionRegistry({
      *   «leggiudice non ha risposto» sull'affermazione — onesto, e diverso da «non ce n'era uno».
      */
     scriviPianoFn, scriviFonteFn, leggiFonteFn, scriviIndiceFontiFn, leggiIndiceFontiFn,
-    chiediAlModelloFn: ({ modello: modelloGiudice, prompt }) => chiediAlModelloUnaVoltaFn({
-      modello: modelloGiudice,
-      chiave: typeof chiaveFn === 'function' ? chiaveFn() : chiave,
-      prompt,
+    /* ⛔ CLI-REQ-05, punto 3: stessa strada della compattazione — il giudice non deve finire a
+       OpenRouter solo perché il trasporto predefinito ci punta. Vedi il commento in `compatta()`. */
+    chiediAlModelloFn: creaChiediAlModelloGiudice({
+      chiediAlModelloUnaVoltaFn,
+      chiaveDiTurno: () => (typeof chiaveFn === 'function' ? chiaveFn() : chiave),
+      fetchModelloFn,
     }),
     /*
      * ⛔ Il default è «il modello predefinito del server, e nient'altro»: l'unico che questo
      *   registro conosce di sicuro. `talosResearchPickJudge` lo scarta da solo quando è anche
      *   l'autore, e allora non c'è giudice — detto, mai aggirato.
      */
-    modelliGiudiceFn: typeof modelliGiudiceFn === 'function'
-      ? modelliGiudiceFn
-      : () => (typeof modello === 'string' && modello
-        ? [{ id: modello, provider: 'openrouter', model: modello }]
-        : []),
+    /*
+     * ⛔⛔⛔ D3 del terzo giro (17/09/2026) — IL GIUDICE SCRIVEVA `'openrouter'` A MANO.
+     *
+     * `server.mjs` non collega `modelliGiudiceFn` (zero occorrenze), quindi vale SEMPRE questo
+     * default: modello del REGISTRO — non della sessione — e fornitore scritto a mano. Su una
+     * sessione DeepSeek il giudice partiva quindi verso OpenRouter col modello del registro, e
+     * nessuna prova lo copriva.
+     * ⇒ Il fornitore si DEDUCE dal modello.
+     *
+     * ⛔⛔⛔ TERZO CONTROLLO (17/09/2026) — E IL MODELLO ERA ANCORA QUELLO DEL REGISTRO. Il
+     *   commento che stava qui diceva «il modello è quello della SESSIONE quando c'è»: FALSO, e
+     *   contraddiceva il commento onesto che sta sopra `compatta()`. Passava `modello` di
+     *   chiusura, quindi in una sessione DeepSeek o locale le affermazioni della ricerca andavano
+     *   al fornitore predefinito del SERVER.
+     * ⇒ Il candidato è il modello della SESSIONE, che l'orchestratore ha già in mano come
+     *   `autore.model` (`research-orchestrator.mjs:1866`, riempito da `onRicercaAvvia` con
+     *   `voce.modello`, e `null` per una sessione LOCALE).
+     * ⛔ Per una sessione LOCALE `autore.model` è vuoto ⇒ zero candidati ⇒ NESSUN giudice, e il
+     *   rapporto lo dichiara. Mai il cloud in silenzio: è esattamente ciò che si voleva.
+     * ⛔ Vedi `candidatiGiudice` per la conseguenza generale: quando il solo candidato è l'autore,
+     *   `talosResearchPickJudge` lo scarta e giudice non ce n'è.
+     */
+    modelliGiudiceFn: modelliGiudiceEffettiva,
     salvaVoceLibreriaFn, leggiVoceLibreriaFn, eliminaVoceLibreriaFn, randomUUIDFn,
   });
 
@@ -2646,9 +2809,6 @@ export function createSessionRegistry({
     const modelIdEffettivo = voceEsistente?.modelId ?? modelId;
     const fallbackConsentEffettivo = voceEsistente?.fallbackConsent ?? fallbackConsent;
     const chiaveEffettiva = typeof chiaveFn === 'function' ? chiaveFn() : chiave;
-    if (providerEffettivo !== 'local' && (typeof chiaveEffettiva !== 'string' || chiaveEffettiva.length === 0)) {
-      return { erroreAvvio: 'Chiave API non configurata sul server (OPENROUTER_API_KEY)', code: 'CONFIG_INVALID' };
-    }
     if (providerEffettivo === 'local' && (!runtimeIdEffettivo || !modelIdEffettivo || !localRuntimes?.[runtimeIdEffettivo])) {
       return { erroreAvvio: 'Runtime locale o modello non disponibile', code: 'RUNTIME_NOT_AVAILABLE' };
     }
@@ -2665,6 +2825,56 @@ export function createSessionRegistry({
      * di tutto.
      */
     const modelloEffettivo = modelIdEffettivo || modelloRichiesta || voceEsistente?.modello || modello;
+
+    /*
+     * ⛔⛔⛔ CLI-REQ-05, punto 1 (17/09/2026) — SI CHIEDE LA CHIAVE DEL FORNITORE DEL MODELLO,
+     *   NON QUELLA DI OPENROUTER.
+     *
+     * Prima, qui sopra, c'era: «se non è `local` e `chiaveFn()` è vuota, rifiuta con
+     *   "Chiave API non configurata sul server (OPENROUTER_API_KEY)"». E `chiaveFn` è cablata alla
+     *   chiave di OPENROUTER dai due host (`server.mjs:418`,
+     *   `providerStore.getKey('openrouter') ?? config.chiaveApi`). ⇒ Chi sceglieva DeepSeek, o
+     *   Z.AI, o OpenAI, e aveva messo la SUA chiave, veniva rifiutato lo stesso — con un messaggio
+     *   che nomina una variabile d'ambiente che non ha mai impostato. Misurato dalla corsia della
+     *   CLI con due finti su 127.0.0.1: con la sola chiave DeepSeek la sessione non parte; con
+     *   anche quella di OpenRouter parte, va a DeepSeek con la chiave DeepSeek, e il finto
+     *   OpenRouter non riceve NESSUNA richiesta. Era una precondizione che il giro non usava.
+     *
+     * ⇒ La domanda giusta la sa solo l'HOST, che conosce i fornitori collegati: `prontoFn(modello)`
+     *   risponde `{pronto, codice, fornitore}`. Il messaggio nomina il fornitore con il suo nome
+     *   umano, mai una variabile d'ambiente.
+     * ⛔ Il controllo si fa QUI e non più sopra, perché sopra il modello della sessione non era
+     *   ancora stato risolto: chiedere «è pronto?» prima di sapere PER QUALE modello è la forma
+     *   esatta del difetto che si sta curando.
+     * ⛔ Senza `prontoFn` (un incorporamento che non lo collega) resta la regola di prima, parola
+     *   per parola: nessun host si trova un comportamento cambiato sotto senza averlo chiesto.
+     */
+    /*
+     * ⛔⛔⛔ E `prontoFn` È SINCRONA, di proposito. `avviaESegui` non è `async`, e non lo diventa
+     *   per questa riga: `avviaSessione` emette `RunStarted` come sua prima cosa e chi chiama
+     *   conta su quell'evento già nel buffer al ritorno sincrono — il repo l'ha già misurato una
+     *   volta (un solo tick di ritardo fece cadere 148 prove, un `await` nella catena 213). La
+     *   domanda non ha bisogno di rete: l'host la risponde guardando il suo portachiavi.
+     */
+    if (providerEffettivo !== 'local') {
+      if (typeof prontoFn === 'function') {
+        let esito;
+        try {
+          esito = prontoFn(modelloEffettivo);
+        } catch (errore) {
+          return { erroreAvvio: errore?.message || 'Il fornitore di questo modello non è disponibile.', code: errore?.code || 'CONFIG_INVALID' };
+        }
+        if (!esito?.pronto) {
+          const nome = esito?.fornitore ? ` di ${esito.fornitore}` : '';
+          return {
+            erroreAvvio: esito?.messaggio || `Manca la chiave${nome}: collegala dalle impostazioni dei fornitori.`,
+            code: esito?.codice || 'CONFIG_INVALID',
+          };
+        }
+      } else if (typeof chiaveEffettiva !== 'string' || chiaveEffettiva.length === 0) {
+        return { erroreAvvio: 'Chiave API non configurata sul server (OPENROUTER_API_KEY)', code: 'CONFIG_INVALID' };
+      }
+    }
     /*
      * ⭐⭐⭐ 29/8 — FASE K, stessa disciplina esatta di `modelloEffettivo`
      * appena sopra — MA senza un `|| modello` finale: un planner
@@ -3405,6 +3615,14 @@ export function createSessionRegistry({
   }
 
   return Object.freeze({
+    /*
+     * ⛔ SOLO PER LE PROVE — mai usato dal prodotto. Stesso precedente di `_terminali` in
+     *   `pty-terminal.mjs`, e per la stessa ragione: senza, la funzione che questo registro passa
+     *   all'orchestratore non è guardabile da fuori, e una prova può misurare solo la funzione
+     *   pura invece del CABLAGGIO. Rompendo il cablaggio con la freccia anonima le prove restavano
+     *   verdi: è per quello che questa riga esiste.
+     */
+    _modelliGiudiceDelRegistro: modelliGiudiceEffettiva,
     async pubblicaEventoContesto({ sessionId, event }) {
       const voce = sessioni.get(sessionId);
       if (!voce || !cartellaStore) throw Object.assign(new Error('Registro persistente della conversazione non disponibile.'), { code: 'CTX_SESSION_NOT_FOUND' });
@@ -4241,7 +4459,59 @@ export function createSessionRegistry({
           code: 'SESSION_NOT_READY',
         };
       }
-      const risultato = await compattaSessioneFn({ messaggiFinali: voce.messaggiFinali, modello, chiave: typeof chiaveFn === 'function' ? chiaveFn() : chiave });
+      /*
+       * ⛔⛔⛔ CLI-REQ-05, punto 2 (17/09/2026) — LA COMPATTAZIONE ANDAVA SEMPRE A OPENROUTER.
+       *
+       * `compattaSessione` riceve un `fetchDiRete` che vale `fetch` per difetto, e con una fetch
+       * nuda il kernel spedisce all'indirizzo FISSO `https://openrouter.ai/api/v1/chat/completions`
+       * (`kernel/talosHarness.mjs:1326`). ⇒ La conversazione INTERA di una sessione DeepSeek — con
+       * la chiave di OpenRouter addosso — partiva verso un fornitore che la persona non aveva
+       * scelto per quella sessione, e nemmeno verso l'indirizzo OpenRouter che aveva configurato.
+       * Misurato dalla corsia della CLI in modo ermetico: durante `compact()` l'unico tentativo di
+       * rete era verso `https://openrouter.ai`; il finto DeepSeek e il finto OpenRouter
+       * configurato non ricevevano niente.
+       *
+       * ⇒ Qui passa la destinazione multi-fornitore dell'HOST, quella che usa un giro normale:
+       *   sceglie fornitore, indirizzo e chiave dal MODELLO. Se l'host non la fornisce (una prova,
+       *   un incorporamento che non la collega) resta il comportamento di prima, dichiarato.
+       * ⛔ Questa riga NON riprogetta la compattazione (è BC-65, un'altra riga): tocca solo il
+       *   trasporto e QUALE modello si nomina.
+       *
+       * ⛔⛔⛔ D3 del terzo giro (17/09/2026) — E IL MODELLO ERA QUELLO SBAGLIATO. Il commento che
+       *   stava qui diceva «il modello è quello della SESSIONE, ed è già così»: FALSO. Passava
+       *   `modello`, la variabile di CHIUSURA del registro, cioè il predefinito del server
+       *   (`server.mjs`, `config.modello`). Misurato dal revisore in modo ermetico, con il
+       *   trasporto instradato VERO: registro su `z-ai/glm-5.3-flash` + sessione
+       *   `deepseek:deepseek-chat` ⇒ la conversazione se ne andava a `openrouter.ai` con la chiave
+       *   OpenRouter; registro su `openai:gpt-5-mini` ⇒ `PROVIDER_KEY_MISSING` nominando un
+       *   fornitore che nessuno aveva scelto.
+       *   ⛔ E la mia prova non poteva vederlo: creavo il registro con LO STESSO modello della
+       *   sessione (le due variabili coincidevano) e la finta costruiva lei l'indirizzo. Una
+       *   misura che non può smentirti non sta misurando.
+       *
+       * ⛔⛔ LE SESSIONI LOCALI PRIMA DI TUTTO. `voce.modello` di una sessione locale è l'id del
+       *   GGUF NUDO, senza prefisso, e `separaFonteModello` legge un id nudo come `openrouter`:
+       *   passare `voce.modello` così com'è manderebbe a openrouter.ai la conversazione di chi ha
+       *   scelto il locale PROPRIO perché non uscisse niente. È il caso peggiore, e viene per
+       *   primo. ⇒ Si ricompone `local:<modelId>`, che è il nome che la strada di un giro normale
+       *   riconosce: `risolviDestinazioneModello` lo manda al ponte del supervisore
+       *   (`chiamaLocale`), che rimpiazza gli header — quindi nemmeno la chiave di OpenRouter
+       *   viaggia. Nessuna strada nuova inventata: la stessa che usa un turno.
+       * ⛔ Se una sessione locale non porta `modelId` non si indovina: si risponde e basta.
+       */
+      const perRete = modelloDiSessionePerRete(voce);
+      if (perRete === null) {
+        return {
+          erroreAvvio: 'Non so quale modello usare per compattare questa sessione, quindi non la compatto.',
+          code: 'SESSION_MODEL_UNKNOWN',
+        };
+      }
+      const risultato = await compattaSessioneFn({
+        messaggiFinali: voce.messaggiFinali,
+        modello: perRete,
+        chiave: typeof chiaveFn === 'function' ? chiaveFn() : chiave,
+        ...(typeof fetchModelloFn === 'function' ? { fetchDiRete: fetchModelloFn() } : {}),
+      });
       if (risultato.compattato) voce.messaggiFinali = risultato.messaggi;
       return { ok: true, compattato: risultato.compattato };
     },
@@ -4953,16 +5223,35 @@ export function createSessionRegistry({
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       let plugin;
+      let falliti = [];
       try {
-        ({ plugin } = await caricaPluginFn({ cartella: voce.cartella }));
+        ({ plugin, falliti = [] } = await caricaPluginFn({ cartella: voce.cartella }));
       } catch (errore) {
         if (errore instanceof PluginRegistryError) return { ok: true, plugin: null, errore: errore.message };
         throw errore;
       }
       const conFiducia = await Promise.all(plugin.map(async (p) => {
+        /*
+         * ⛔⛔⛔ A6 (17/09/2026) — LA RIGA PORTA IL PERCHÉ, non solo il sì/no.
+         *
+         * Prima qui c'era `verificaTrustPluginFn`, che risponde `true`/`false`. Con la fiducia
+         * estesa a tutto il pacchetto, «false» è diventato TRE cose diverse: mai approvato, il
+         * contenuto è cambiato, oppure era approvato con la regola precedente (quella che
+         * guardava solo la scheda). Le ultime due hanno lo stesso aspetto — il plugin smette di
+         * funzionare — ma una è un costo nostro, dichiarato, e l'altra è una possibile
+         * manomissione. Mostrarle uguali vorrebbe dire far sembrare un allarme ciò che abbiamo
+         * deciso noi, e far sembrare normale ciò che non lo è.
+         * ⇒ `statoTrustPluginFn` le separa, e la riga porta anche la `frase` umana da mostrare.
+         * ⛔ `verificaTrustPlugin` resta un BOOLEANO e resta la porta dei cancelli
+         *   (`plugin-session.mjs:135`): qui serve il perché, lì serve il sì/no.
+         * ⛔ Il `motivo` è un nome tecnico e NON si mostra: a schermo va `frase`.
+         */
         let fidato = false;
+        let motivo = 'mai-approvato';
+        let frase = null;
         try {
-          fidato = await verificaTrustPluginFn({ cartellaTrust: cartellaTrustPlugin, pluginId: p.id, hash: p.hash });
+          const stato = await statoTrustPluginFn({ cartellaTrust: cartellaTrustPlugin, pluginId: p.id, hash: p.hash });
+          ({ fidato, motivo, frase } = stato);
         } catch {
           fidato = false;
         }
@@ -4981,9 +5270,14 @@ export function createSessionRegistry({
           ...p.tools.flatMap((t) => scansionaPatternSospetti(t.comando).map((avviso) => ({ origine: `tool:${t.nome}`, avviso }))),
           ...p.hooks.flatMap((h) => scansionaPatternSospetti(h.comando).map((avviso) => ({ origine: `hook:${h.id}`, avviso }))),
         ];
-        return { id: p.id, nome: p.nome, descrizione: p.descrizione, hooks: p.hooks, tools: p.tools, fidato, avvisi };
+        return { id: p.id, nome: p.nome, descrizione: p.descrizione, hooks: p.hooks, tools: p.tools, fidato, motivo, frase, avvisi };
       }));
-      return { ok: true, plugin: conFiducia, errore: null };
+      /*
+       * ⛔⛔ A3: i pacchetti GUASTI non spariscono. Prima un pacchetto rotto faceva lanciare
+       *   `caricaPlugin` e spegneva tutti i plugin del workspace, in silenzio; ora è un guasto
+       *   suo, e arriva al pannello con la sua frase invece di lasciare un buco inspiegato.
+       */
+      return { ok: true, plugin: conFiducia, falliti, errore: null };
     },
 
     /**
@@ -5131,7 +5425,21 @@ export function createSessionRegistry({
         dove: voce.doveGiranoIComandi ?? null,
       })
         .then((esito) => {
-          if (esito?.cartellaFinale) voce.cartellaComandi = esito.cartellaFinale;
+          /*
+           * ⛔⛔⛔ C-3 (17/09/2026) — LA SECONDA GUARDIA, QUI DOVE IL VALORE DIVENTA UN `cwd`.
+           *
+           * Il kernel già non manda più testo di stderr in `cartellaFinale`, ma questa riga è il
+           * punto in cui una stringa qualunque diventerebbe la cartella di lavoro del comando
+           * SUCCESSIVO, e una guardia sola in fondo alla catena è una guardia che il giorno di un
+           * ramo nuovo non c'è. Misurato dal revisore prima della cura: con
+           * `enable -n command 2>/dev/null ; false` qui arrivava
+           * `'bash: line 1: command: command not found'`.
+           * ⛔ Qui NON si guarda il disco: il percorso può essere di WSL, che da questo processo
+           *   non si stat-a senza spendere un `wsl.exe`. Forma e assolutezza, e basta — l'esistenza
+           *   l'ha già controllata chi ci era dentro.
+           */
+          const cartellaProposta = cartellaFinaleValida(esito?.cartellaFinale);
+          if (cartellaProposta) voce.cartellaComandi = cartellaProposta;
           /*
            * ⭐⭐⭐ D-10S — l'interruttore, e perché il suo default è SPENTO (owner 11/09: «facciamo
            *   entrambi con switch scelto da utente, default off»).

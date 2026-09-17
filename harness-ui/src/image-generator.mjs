@@ -45,6 +45,23 @@
  */
 import { talosSafeFileStem } from './document-filename.mjs';
 
+/*
+ * ⛔⛔⛔ DICHIARATO E NON CURATO — CLI-REQ-05, punto 3 del terzo giro (17/09/2026).
+ *
+ * Questi due indirizzi sono FISSI e la chiamata parte da una `fetch` nuda: in una sessione il cui
+ * fornitore NON è OpenRouter — una DeepSeek, una locale — il prompt dell'immagine va comunque a
+ * openrouter.ai. È la stessa classe del difetto curato per la compattazione e per il giudice
+ * (`session-registry.mjs`, `compatta()` e `creaChiediAlModelloGiudice`), che adesso passano dalla
+ * destinazione multi-fornitore dell'host col modello DELLA SESSIONE.
+ *
+ * ⇒ NON si cura qui, ed è una scelta dichiarata, non una dimenticanza: la generazione di immagini
+ *   è nata su OpenRouter come unico fornitore («zero provider nuovo»), e spostarla vuol dire
+ *   decidere quale fornitore genera le immagini per una sessione che non è di OpenRouter — una
+ *   decisione dell'owner, non di questa riga.
+ * ⛔ Finché resta così: chi sceglie una sessione locale perché niente esca, e poi chiede
+ *   un'immagine, manda comunque il suo prompt a openrouter.ai. Sta scritto qui perché la prossima
+ *   persona che legge questo file lo sappia senza doverlo scoprire.
+ */
 const OPENROUTER_IMAGES_URL = 'https://openrouter.ai/api/v1/images';
 const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 

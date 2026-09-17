@@ -48,7 +48,7 @@ SEGNAPOSTO **42.272 token di prompt di sistema a ogni giro**. Aider vince perch�
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash, generateKeyPairSync, randomUUID, sign as firmaCrypto, verify as verificaCrypto } from 'node:crypto'
 import { lookup as risolviDns } from 'node:dns'
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { request as richiestaHttp } from 'node:http'
 import { request as richiestaHttps } from 'node:https'
@@ -3500,9 +3500,55 @@ export async function elencaDaCartella(disco, base) {
         /* ⛔ Una sottocartella illeggibile (permessi, link rotto) non fa cadere l'elenco INTERO:
            sparisce lei, non tutto il resto. Alla radice il caso non capitava mai; aprendo una
            cartella a scelta del modello capita. */
-        .map(async (v) => (await disco.elenca(`${prefisso}${v.nome}`).catch(() => []))
-            .map((f) => `${prefisso}${v.nome}/${f.nome}`)))
-    return [...voci.filter((v) => !v.cartella).map((v) => `${prefisso}${v.nome}`), ...dentro.flat()].join('\n')
+        .map(async (v) => {
+            const figli = await disco.elenca(`${prefisso}${v.nome}`).then((f) => f, () => null)
+            /*
+             * ⛔⛔⛔ CLI-REQ-07, punto 2 (17/09/2026) — UNA SOTTOCARTELLA SENZA FILE NON SPARISCE.
+             *   Una cartella qui si vede solo ATTRAVERSO i suoi figli, quindi una che non ne ha
+             *   non compariva affatto: il modello non poteva sapere che esiste. Misurato prima
+             *   della cura: una radice che contiene solo `sub/` vuota rispondeva `""`.
+             * ⛔ Si nomina SOLO la cartella LETTA e trovata vuota (`[]`), mai quella ILLEGGIBILE
+             *   (`null`): quella continua a sparire, ed è un comportamento voluto, provato e
+             *   commentato qui sopra. Sono due fatti diversi — «so che è vuota» e «non sono
+             *   riuscito a guardarci dentro» — e confonderli sarebbe la solita coppia di stati
+             *   fatta passare per uno.
+             * ⛔ La barra finale c'è perché è l'unico segno che quella riga è una CARTELLA. Resta
+             *   una differenza dichiarata con le cartelle di secondo livello (`src/kernel/motore`,
+             *   senza barra): quella forma è confrontata BYTE PER BYTE dal banco e non si tocca
+             *   per coerenza estetica.
+             */
+            if (figli === null) return []
+            if (figli.length === 0) return [`${prefisso}${v.nome}/`]
+            return figli.map((f) => `${prefisso}${v.nome}/${f.nome}`)
+        }))
+    const righe = [...voci.filter((v) => !v.cartella).map((v) => `${prefisso}${v.nome}`), ...dentro.flat()]
+    /*
+     * ⛔⛔⛔ CLI-REQ-07, punto 1 (17/09/2026) — UNA CARTELLA VUOTA NON RISPONDE IL VUOTO.
+     *
+     *   L'owner ha avviato TALOS in una cartella nuova e vuota: il modello ha chiamato `elenca`
+     *   QUATTRO volte (con `percorso` `""` e `"."`), ogni volta senza una riga di uscita, e poi
+     *   gli ha detto che l'elenco «non è arrivato», offrendosi di riprovare. Gli attrezzi
+     *   funzionavano: `scrivi` e `leggi` subito dopo sono andati. ⇒ Una stringa vuota non è una
+     *   risposta: è indistinguibile da un attrezzo che non ha risposto, ed è il caso in cui il
+     *   risultato giusto ha lo stesso aspetto di quello sbagliato.
+     *   Riprodotto qui prima di curare: `elencaDaCartella({elenca: async () => []}, '')` → `""`.
+     *
+     * ⛔ La forma segue quella che il kernel usa già per un esito vuoto, non una inventata:
+     *   `cerca` risponde `no file matches. Scanned N files. Try a shorter or different "testo".`
+     *   — minuscolo, in inglese come tutti i messaggi di questi attrezzi, il fatto negativo per
+     *   primo, e poi cosa farne. Qui: il fatto, QUALE cartella, e che è la risposta INTERA.
+     * ⛔ Il nome dell'attrezzo e i suoi parametri non cambiano, e nemmeno l'uscita di una cartella
+     *   che ha qualcosa: il banco confronta byte per byte, e questo ramo prima non produceva nulla
+     *   da confrontare.
+     * ⛔ Nessun preambolo si gonfia: `elencaDaCartella` ha UN solo chiamante di produzione, il
+     *   ramo `elenca` di questo file. `contestoDelProgetto` costruisce la mappa con
+     *   `mappa-cartelle.mjs`/`costo-elenco.mjs` e non passa di qui (verificato col grep, 17/09).
+     */
+    if (righe.length === 0) {
+        const quale = base ? `"${base}" is empty` : 'the workspace root is empty'
+        return `no files and no folders. ${quale} — this is the complete listing, not a failure.`
+    }
+    return righe.join('\n')
 }
 
 /**
@@ -4428,8 +4474,60 @@ async function sondaRuntimeMobileNode(seriale) {
  */
 export const MARCATORE_CARTELLA = '__TALOS_CWD__'
 
-/** La coda che stampa la cartella finale, nella lingua della shell che esegue davvero. */
-export function codaCheStampaLaCartella(perWindows) {
+/*
+ * ⛔⛔⛔ CLI-REQ-01, secondo giro (17/09/2026) — UN MARCATORE NUOVO A OGNI ESECUZIONE.
+ *
+ * Il marcatore fisso era falsificabile da sempre (residuo noto, «B1 slice 12»), e la coda `&&`
+ * adottata stamattina ha reso la falsificazione SFRUTTABILE: al fallimento la coda non gira,
+ * quindi l'ultima occorrenza del marcatore nell'uscita e' quella che ha stampato il COMANDO.
+ * ⛔ RIPRODOTTO sull'albero curato il 17/09:
+ *   `cmd /c "echo __TALOS_CWD__& echo C:\\Windows& exit 1"` con `tracciaCartella` →
+ *   `cartellaFinale: 'C:\\Windows'`, che `session-registry.mjs:5134` prende come `cwd` del
+ *   comando SUCCESSIVO, senza nessuna validazione. Un comando sceglieva dove sarebbe girato
+ *   quello dopo.
+ *
+ * ⇒ Il marcatore non e' piu' una costante: sono 16 esadecimali casuali per esecuzione. Un
+ *   comando non puo' stamparne uno che non conosce. `MARCATORE_CARTELLA` resta come valore
+ *   predefinito, perche' e' esportato e alcune prove lo usano per costruire uscite finte.
+ *
+ * ⛔ Cio' che il nonce NON chiude, dichiarato invece che addolcito: in cmd un comando puo'
+ *   leggere la propria riga di comando (`%CMDCMDLINE%`) e quindi il nonce.
+ *
+ * ⛔⛔⛔⛔ IL MODELLO DI MINACCIA, dichiarato — e il commit `bff36712` diceva una cosa FALSA.
+ *
+ *   Lì c'era scritto «la difesa che regge da sola» a proposito della regola sul codice 0. Non
+ *   regge: il secondo revisore l'ha smontata in una riga, su cmd,
+ *   `echo %CMDCMDLINE:~-36,30%& echo C:\\Windows& exit 0` → `{codice: 0, cartellaFinale:
+ *   'C:\\Windows'}`. Con lo stdout condiviso fra il comando e la coda, QUALUNQUE difesa qui è
+ *   un'euristica: il comando scrive sullo stesso canale da cui leggiamo.
+ *
+ *   ⇒ E va detto per intero, perché cambia cosa si sta difendendo. Questa strada è quella del
+ *   `!comando` DIGITATO DALLA PERSONA — l'unico chiamante con `tracciaCartella: true` è
+ *   `agent-service.mjs:2060`, il comando che l'owner scrive nel compositore. Quel comando può
+ *   già fare `cd` dove vuole PER DISEGNO: falsificare il marcatore non gli dà nessuna autorità
+ *   che non abbia già. Non c'è un avversario da cui difendersi qui: c'è l'autorità della persona.
+ *
+ *   ⇒ Quindi il nonce esiste contro le COLLISIONI ACCIDENTALI — un `grep` su questo file, un
+ *   programma che stampa per caso quella stringa, un log — non contro un comando ostile. Chiamarlo
+ *   sicurezza sarebbe la stessa bugia di prima, scritta meglio.
+ *
+ * ⛔ Ciò che invece è un difetto vero, e si cura: che nella cartella di stato finisca una cosa che
+ *   NON è una cartella. `enable -n command 2>/dev/null ; false` faceva arrivare
+ *   `cartellaFinale: 'bash: line 1: command: command not found'`, cioè testo di stderr promosso a
+ *   `cwd` del comando successivo. Quello si chiude, e si chiude due volte: la coda POSIX emette il
+ *   percorso solo se è una cartella VERA, e chi legge accetta solo un percorso assoluto che
+ *   esiste. Vedi `cartellaFinaleValida`.
+ */
+export function nuovoMarcatoreCartella() {
+    return `__TALOS_CWD_${randomUUID().replace(/-/g, '').slice(0, 16)}__`
+}
+
+/**
+ * La coda che stampa la cartella finale, nella lingua della shell che esegue davvero.
+ * `marcatore` va passato da chi esegue (uno nuovo per esecuzione); il valore predefinito serve
+ * solo alle prove che lo confrontano per forma.
+ */
+export function codaCheStampaLaCartella(perWindows, marcatore = MARCATORE_CARTELLA) {
     /*
      * ⛔⛔ MISURATO il 10/09, e la prima versione sbagliava proprio qui: con `"$(pwd)"` (bash) e
      *   `%CD%` (cmd) la cartella tornava quella di PARTENZA anche dopo un `cd` riuscito — il
@@ -4437,22 +4535,171 @@ export function codaCheStampaLaCartella(perWindows) {
      *   Provato a mano in WSL: `… ; printf "MARCA%s" "$(pwd)"` → cartella iniziale;
      *   `… ; printf "MARCA" ; pwd` → **cartella giusta**. La sostituzione viene valutata prima
      *   che il `cd` abbia effetto; `pwd` come COMANDO, invece, chiede alla shell dov'e' adesso.
-     * ⛔ `;` e non `&&`: la cartella si vuole sapere ANCHE quando il comando fallisce — anzi
-     *   soprattutto allora, perche' e' il caso in cui si riprova da dove si era rimasti.
+     *
+     * ⛔⛔⛔ CLI-REQ-01, 17/09/2026 — E LA CODA MANGIAVA IL CODICE D'USCITA. La coda e' l'ULTIMA
+     *   cosa che la shell esegue, quindi il codice della shell era il codice della coda — e la
+     *   coda riesce sempre. ⇒ Un comando digitato che falliva arrivava alla persona come
+     *   `exit 0` (`agent-service.mjs:2069`), e col commutatore «comandi nella conversazione»
+     *   acceso anche al modello. Il commento che stava qui sceglieva `;` invece di `&&`
+     *   apposta, per sapere la cartella anche al fallimento: la scelta era consapevole, e il
+     *   prezzo non lo era.
+     *
+     * ⛔ Le DUE code non pagano lo stesso prezzo, perche' le due shell non sono simmetriche.
+     *
+     *   POSIX: nessun prezzo. Si cattura `$?` come PRIMA cosa dopo il comando — qualunque altro
+     *   comando in mezzo lo riscriverebbe — si stampa la cartella, e si esce con lo stato
+     *   catturato. Codice esatto E cartella, anche al fallimento.
+     *
+     *   cmd: il prezzo c'e', ed e' la CARTELLA AL FALLIMENTO. `&&` fa girare la coda solo dopo
+     *   un successo, quindi un comando fallito conserva il suo codice ma non riporta dove si e'
+     *   fermato. ⛔ Non e' pigrizia: in cmd il codice d'uscita del PROCESSO e `%ERRORLEVEL%`
+     *   sono due cose diverse («ERRORLEVEL is not %ERRORLEVEL%»,
+     *   devblogs.microsoft.com/oldnewthing/20080926-00, e ss64.com/nt/errorlevel.html —
+     *   entrambi letti il 17/09/2026: ERRORLEVEL si riscrive quasi a ogni comando, `set
+     *   errorlevel=` crea una variabile utente che SCHERMA quella interna, e dentro un blocco
+     *   fra parentesi `%ERRORLEVEL%` si espande al momento del PARSE, prima che il comando sia
+     *   girato). Ogni forma che prova a rileggerlo per restituirlo e' quindi inesatta per
+     *   costruzione, e la misura lo conferma.
+     *
+     * ⛔ MISURATO da me il 17/09/2026 (Windows 11, Node v24.18.0, `spawn(riga, {shell:true})`
+     *   cioe' lo stesso `cmd /d /s /c` del kernel), sui 15 comandi della tabella della corsia
+     *   della CLI, in una cartella pulita E in una ostile con `exit.bat/.cmd`, `set.bat/.cmd`,
+     *   `cd.bat/.cmd`, `echo.bat` e un file chiamato `echo` — 30 righe, confrontate col codice
+     *   di `cmd` nudo. Codici uguali a `cmd` nudo:
+     *     · coda di oggi ` & echo.MARCA& cd`                                   **12 / 30**
+     *     · coda adottata ` && (echo.MARCA& cd)`                               **30 / 30**
+     *     · `… || (echo.MARCA& cd& exit /b 1)`                                 26 / 30
+     *       (tiene la cartella su tutte e 18 le righe fallite, ma schiaccia ogni
+     *        fallimento a 1: `cmd /c exit 5` → 1, `node … exit(3)` → 1)
+     *     · `… || (echo.MARCA& cd& exit /b)` nudo                              12 / 30
+     *       (`cd` riesce e azzera ERRORLEVEL prima che `exit /b` lo legga)
+     *     · `& call set TALOS_RC=%%ERRORLEVEL%%& … & call exit /b %%TALOS_RC%%` 12 / 30
+     *   In nessuna delle 30 righe un file batch della cartella e' stato invocato: la coda non
+     *   apre una porta nuova alla cartella ostile.
+     *   Su WSL Ubuntu, 8 comandi: coda di oggi **4 / 8**, coda adottata **8 / 8**, con la
+     *   cartella ancora nota su 4 dei 5 fallimenti (il quinto e' `exit 3`, che uccide la shell
+     *   prima della coda — identico a prima).
+     *
+     * ⇒ Decisione dell'owner, 17/09/2026: se non si possono avere tutte e due, **vince il
+     *   codice d'uscita**. Si adotta ` && (echo.MARCA& cd)`.
+     * ⛔ E il prezzo non azzera niente: `session-registry.mjs:5134` scrive
+     *   `if (esito?.cartellaFinale) voce.cartellaComandi = esito.cartellaFinale`, quindi una
+     *   cartella assente lascia lo stato dov'era — il comando dopo riparte dall'ultima cartella
+     *   NOTA, non dalla radice della sessione. Verificato nel codice e asserito per nome in
+     *   `tests/kernel-cartella-finale-windows.test.mjs` (CWD-USCITA-WIN-04).
+     * ⛔ `&&` lega piu' stretto di `&`: in `a & b` la coda si attacca a `b`, ed e' proprio cio'
+     *   che fa `cmd` nudo — misurato su `type assente & echo ok` (0 in tutte e due).
+     * ⛔ Chi NON chiede `tracciaCartella` non vede nessuna differenza: l'attrezzo `shell` del
+     *   modello (`:8324`) non la chiede, quindi non e' toccato.
+     *
+     * ⛔⛔ SECONDO GIRO (17/09, dopo la bocciatura del revisore) — LA CODA POSIX NON ERA GRATIS.
+     *   Avevo scritto «POSIX pays nothing»: era falso. E la forma che avevo adottato per rimediare
+     *   — `command pwd` / `command exit` — il SECONDO revisore l'ha smontata: basta definire una
+     *   funzione chiamata `command`. Rimisurato da me su bash E su `sh` (dash) dentro WSL, con la
+     *   tabella ESTESA che il revisore chiede (`command()`, `builtin()`, `unset()`), 14 comandi per
+     *   shell, sempre contro la shell NUDA. Esito giusto = stesso codice della shell nuda E nessuna
+     *   cartella bugiarda. Punteggi bash / sh:
+     *     · coda di `bff36712` (`command pwd` / `command exit`)               **10/14 · 9/14**
+     *     · `unset -f pwd printf exit` + builtin nudi                          12/14 · 10/14
+     *     · **adottata**: `unset -f` + la cartella emessa SOLO se `[ -d ]`      12/14 · 10/14
+     *     · come l'adottata ma senza `unset -f`                                12/14 · 11/14
+     *   Le righe che la coda di `bff36712` sbagliava e che questa chiude:
+     *     · `command() { : ; } ; false`          → dava **0** (il difetto di partenza, di ritorno)
+     *     · `command() { echo /rubata ; } ; false` → dava 0 e cartella **`/rubata`**
+     *     · `enable -n command 2>/dev/null ; false` → dava **127** e
+     *       `cartellaFinale: 'bash: line 1: command: command not found'`
+     *
+     * ⛔⛔ E UNA CHE ERA COLPA MIA, trovata da questa misura: mettere il marcatore dentro il NOME
+     *   della variabile di stato faceva finire il marcatore dentro i messaggi d'errore della
+     *   shell che nominano quella variabile (`readonly ...: readonly variable`) ⇒ il lettore
+     *   trovava il marcatore NELL'ERRORE e leggeva il resto come cartella. I nomi di stato adesso
+     *   portano un nonce PROPRIO, che con il marcatore non c'entra niente.
+     *
+     * ⛔ Cosa resta aggirabile, per nome e senza addolcirlo — e ricordando che qui l'avversario
+     *   non esiste (vedi il modello di minaccia sopra: è il comando della PERSONA):
+     *     · `readonly <nome di stato>=…` uccide la shell prima della coda, se chi scrive il
+     *       comando indovina il nome (nella misura gliel'ho passato io);
+     *     · `[` o `test` ridefiniti fanno passare una cartella che non esiste — contro cui resta
+     *       il secondo controllo, quello di chi legge (`cartellaFinaleValida`);
+     *     · su `sh` (dash) `exit(){ }` e `unset(){ }` sono errori di sintassi della shell NUDA
+     *       (codice 2): non è un buco nostro, la shell nuda fa lo stesso.
+     *   ⛔ `printf() { : ; }` invece NON è più un problema: `unset -f printf` lo toglie, e la
+     *     cartella torna giusta — misurato, ed è meglio della coda di prima.
      */
+    /*
+     * ⛔ I nomi di stato hanno un nonce PROPRIO, mai il marcatore: un errore della shell che
+     *   nomina la variabile non deve poter contenere la stringa che il lettore cerca.
+     */
+    const nonceStato = randomUUID().replace(/-/g, '').slice(0, 12)
+    const rc = `talos_rc_${nonceStato}`
+    const dir = `talos_dir_${nonceStato}`
     return perWindows
-        ? ` & echo.${MARCATORE_CARTELLA}& cd`
-        : ` ; printf '\\n${MARCATORE_CARTELLA}' ; pwd`
+        ? ` && (echo.${marcatore}& cd)`
+        : ` ; ${rc}=$? ; unset -f pwd printf exit 2>/dev/null ; ${dir}=$(pwd) ; [ -d "$${dir}" ] && printf '\\n${marcatore}%s\\n' "$${dir}" ; exit $${rc}`
+}
+
+/**
+ * ⛔⛔⛔ C-3 (17/09/2026) — CIÒ CHE SI LEGGE DOPO IL MARCATORE NON È ANCORA UNA CARTELLA.
+ *
+ * Il secondo revisore l'ha riprodotto: `enable -n command 2>/dev/null ; false` faceva arrivare
+ * `cartellaFinale: 'bash: line 1: command: command not found'`. Quella stringa andava dritta in
+ * `voce.cartellaComandi` (`session-registry.mjs`) e diventava il `cwd` del comando successivo.
+ * ⇒ Testo di stderr promosso a cartella di lavoro. Questo NON è il modello di minaccia (vedi
+ * `codaCheStampaLaCartella`): è un difetto semplice, e si chiude semplicemente.
+ *
+ * Tre condizioni, tutte necessarie:
+ *   1. una riga sola, senza caratteri di controllo — un messaggio d'errore ne porta quasi sempre;
+ *   2. un percorso ASSOLUTO: `X:\…`, `\\server\share`, oppure `/…` per la strada POSIX;
+ *   3. che ESISTA e sia una cartella — chi chiama passa il modo di chiederlo al disco.
+ *
+ * ⛔ Il punto 3 è iniettabile perché le due strade non hanno lo stesso disco: sul ramo cmd il
+ *   percorso è di questa macchina e Node lo può guardare senza spendere un processo; sul ramo WSL
+ *   il percorso vive dentro la distro, e a chiederlo da qui servirebbe un `wsl.exe` in più PER
+ *   OGNI COMANDO. Lì il controllo lo fa la coda stessa (`[ -d "$dir" ]`, dentro la shell che ha
+ *   già quella cartella sotto i piedi) e qui restano i punti 1 e 2. È la stessa strada, come
+ *   chiesto, solo percorsa nel punto in cui non costa un processo.
+ *
+ * @param {string|null} percorso
+ * @param {{esisteCartellaFn?: (p:string)=>boolean}} [deps] assente = si controllano solo forma e assolutezza
+ */
+export function cartellaFinaleValida(percorso, { esisteCartellaFn } = {}) {
+    const p = typeof percorso === 'string' ? percorso.trim() : ''
+    if (!p || p.length > 4096) return null
+    /* eslint-disable-next-line no-control-regex -- un messaggio d'errore porta spesso caratteri di controllo */
+    if (/[\u0000-\u001f\u007f]/.test(p)) return null
+    const assoluto = /^[A-Za-z]:[\\/]/.test(p) || /^\\\\[^\\/]/.test(p) || p.startsWith('/')
+    if (!assoluto) return null
+    if (typeof esisteCartellaFn === 'function' && !esisteCartellaFn(p)) return null
+    return p
+}
+
+/** Il disco di QUESTA macchina: usato solo dal ramo cmd, dove il percorso è locale. */
+function eUnaCartellaLocale(percorso) {
+    try { return statSync(percorso).isDirectory() }
+    catch { return false }
 }
 
 /**
  * Stacca il marcatore dall'uscita: torna il testo pulito e la cartella finale (o `null`).
  * ⛔ Si guarda l'ULTIMA occorrenza: un comando puo' stampare quella stringa per conto suo (un
- *   `grep` su questo file, per dire), e la NOSTRA e' sempre in fondo.
+ *   `grep` su questo file, per dire).
+ *
+ * ⛔⛔⛔ 17/09, secondo giro — IL COMMENTO CHE STAVA QUI SI REGGEVA SU UN'INVARIANTE CHE NON
+ *   VALE PIU'. Diceva «e la NOSTRA e' sempre in fondo»: era vero finche' la coda girava SEMPRE
+ *   (` & …`). Con la coda `&& …` adottata oggi, su cmd la coda NON gira quando il comando
+ *   fallisce, quindi l'ultima occorrenza puo' essere quella stampata dal COMANDO. Riprodotto:
+ *   `cmd /c "echo __TALOS_CWD__& echo C:\\Windows& exit 1"` dava `cartellaFinale: 'C:\\Windows'`.
+ *   ⇒ Questa funzione resta «l'ultima occorrenza», che e' giusto, ma NON basta piu' da sola:
+ *   le due difese stanno in chi chiama — un marcatore NUOVO a ogni esecuzione
+ *   (`nuovoMarcatoreCartella`) e, sul ramo cmd, la cartella accettata SOLO con codice 0.
+ *   Chi aggiunge una terza strada che usa questa funzione deve portarsi dietro entrambe.
+ *
+ * @param {string} testo
+ * @param {string} [marcatore] il marcatore di QUELLA esecuzione; il predefinito serve alle prove.
  */
-export function staccaCartellaFinale(testo) {
+export function staccaCartellaFinale(testo, marcatore = MARCATORE_CARTELLA) {
     const t = String(testo ?? '')
-    const i = t.lastIndexOf(MARCATORE_CARTELLA)
+    const i = t.lastIndexOf(marcatore)
     if (i === -1) return { testo: t, cartella: null }
     /*
      * ⛔ 16/09 — SUL RAMO WINDOWS LA CARTELLA SI PERDEVA SEMPRE, e non per il CRLF. Misurato (segnalazione
@@ -4465,7 +4712,7 @@ export function staccaCartellaFinale(testo) {
      *   (La cura del 10/09 a `codaCheStampaLaCartella` — `%CD%` valutato prima del `cd` — resta giusta: guardava
      *   QUALE cartella tornava, non SE tornava. Questo è il secondo difetto, indipendente.)
      */
-    const cartella = t.slice(i + MARCATORE_CARTELLA.length).split(/\r?\n/).map((riga) => riga.trim()).find(Boolean) ?? ''
+    const cartella = t.slice(i + marcatore.length).split(/\r?\n/).map((riga) => riga.trim()).find(Boolean) ?? ''
     return { testo: t.slice(0, i).replace(/[\r\n]+$/, ''), cartella: cartella || null }
 }
 
@@ -4478,7 +4725,10 @@ export function staccaCartellaFinale(testo) {
 function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false, segnaleStop } = {}) {
     return new Promise((risolvi) => {
         /* ⛔ Su Windows la shell qui e' cmd: la coda parla la sua lingua, non quella di bash. */
-        const coda = tracciaCartella ? codaCheStampaLaCartella(process.platform === 'win32') : ''
+        const perWindows = process.platform === 'win32'
+        /* ⛔ CLI-REQ-01 (2º giro): un marcatore NUOVO per esecuzione — vedi `nuovoMarcatoreCartella`. */
+        const marcatore = nuovoMarcatoreCartella()
+        const coda = tracciaCartella ? codaCheStampaLaCartella(perWindows, marcatore) : ''
         const p = spawn(`${comando}${coda}`, { cwd: cartella, shell: true, windowsHide: true, env: ambienteSenzaCredenziali() })
         let fuori = ''
         let errori = ''
@@ -4495,7 +4745,7 @@ function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false, 
         const aggiungi = (dove, d) => (dove.length > TETTO_ACCUMULO ? dove : dove + d)
         /* ⛔ D-10B, come sopra: chi ascolta non puo' buttare giu' la lettura del flusso. */
         /* ⛔ Il marcatore non si vede mai, nemmeno nei pezzi che escono mentre escono (D-10B). */
-        const avvisa = (flusso, d) => { try { onPezzo?.({ flusso, testo: staccaCartellaFinale(String(d)).testo }) } catch { /* chi ascolta si arrangia */ } }
+        const avvisa = (flusso, d) => { try { onPezzo?.({ flusso, testo: staccaCartellaFinale(String(d), marcatore).testo }) } catch { /* chi ascolta si arrangia */ } }
         p.stdout?.on('data', (d) => { fuori = aggiungi(fuori, d); insieme = aggiungi(insieme, d); avvisa('fuori', d) })
         p.stderr?.on('data', (d) => { errori = aggiungi(errori, d); insieme = aggiungi(insieme, d); avvisa('errori', d) })
         /*
@@ -4519,10 +4769,37 @@ function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false, 
         p.on('close', (codice) => {
             clearTimeout(timer)
             sciogli()
-            const ripulito = staccaCartellaFinale((insieme || `${fuori}\n${errori}`).trim())
+            const ripulito = staccaCartellaFinale((insieme || `${fuori}\n${errori}`).trim(), marcatore)
             const uscita = uscitaUtile(ripulito.testo, 4_000, 0.25)
+            const codiceFinale = fermatoSuRichiesta ? USCITA_FERMATO_SU_RICHIESTA : fermatoDalTempo ? 124 : codice
+            /*
+             * ⛔⛔⛔ CLI-REQ-01 (2º giro) — SU cmd LA CARTELLA VALE SOLO SE IL CODICE E' 0.
+             *
+             *   Su cmd la coda e' attaccata con `&&`: gira SE E SOLO SE il comando e' riuscito.
+             *   ⇒ Con un codice diverso da zero nessun marcatore nell'uscita puo' essere nostro,
+             *   e quello che c'e' l'ha stampato il COMANDO. Riprodotto prima di scrivere questa
+             *   riga: `cmd /c "echo <marcatore>& echo C:\\Windows& exit 1"` restituiva
+             *   `cartellaFinale: 'C:\\Windows'`, che `session-registry.mjs:5134` avrebbe preso
+             *   come `cwd` del comando successivo — nessuno valida quel percorso.
+             *   La regola e' esatta perche' e' la stessa condizione che decide se la coda parte:
+             *   `a & b` e `a || b` che escono 0 riportano la cartella come prima (misurato), e
+             *   ogni riga che esce diversa da zero non ne riporta nessuna.
+             * ⛔ SOLO su cmd: altrove `eseguiSuWindows` usa la coda POSIX, che gira sempre e
+             *   riporta la cartella anche al fallimento.
+             * ⛔ Non e' l'unica difesa: il marcatore e' nuovo a ogni esecuzione. Questa regge da
+             *   sola anche se il comando riesce a leggere la propria riga di comando.
+             */
+            const cartellaAccettabile = !perWindows || codiceFinale === 0
+            /*
+             * ⛔ C-3: e comunque non basta che sia accettabile — dev'essere una CARTELLA. Su questa
+             *   strada il percorso è di questa macchina, quindi il controllo costa una `statSync`
+             *   e zero processi.
+             */
+            const cartellaSicura = cartellaAccettabile
+                ? cartellaFinaleValida(ripulito.cartella, { esisteCartellaFn: eUnaCartellaLocale })
+                : null
             risolvi({
-                codice: fermatoSuRichiesta ? USCITA_FERMATO_SU_RICHIESTA : fermatoDalTempo ? 124 : codice, // 124: il codice che `timeout(1)` usa da sempre per «tempo scaduto»
+                codice: codiceFinale, // 124: il codice che `timeout(1)` usa da sempre per «tempo scaduto»
                 fermatoDalTempo,
                 ...(fermatoSuRichiesta ? { fermatoSuRichiesta: true } : {}),
                 testo: fermatoSuRichiesta
@@ -4531,7 +4808,7 @@ function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false, 
                         ? `${uscita}\n\n⛔ Fermato allo scadere dei 120 secondi: non ha finito da solo.`.trim()
                         : uscita,
                 enforcement: 'none',
-                cartellaFinale: ripulito.cartella,
+                cartellaFinale: cartellaSicura,
             })
         })
         p.on('error', (e) => {
@@ -4645,12 +4922,23 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
     if (distro && (dove === 'wsl2' || rigaEDaShellPosix
         || (dove === null && await programmaDisponibileInWsl(distro, primoProgramma(comando))))) {
         const percorsoWsl = convertiPercorsoWsl(cartella)
+        /* ⛔ CLI-REQ-01 (2º giro): marcatore NUOVO per esecuzione anche qui — una sola fonte, `nuovoMarcatoreCartella`. */
+        const marcatoreWsl = nuovoMarcatoreCartella()
         const { codice, fuori, errori, insieme, fermatoSuRichiesta } = await eseguiComando(
-            'wsl.exe', argomentiWslPerScript(distro, `cd ${JSON.stringify(percorsoWsl)} && { ${comando} ; }${tracciaCartella ? codaCheStampaLaCartella(false) : ''}`),
+            'wsl.exe', argomentiWslPerScript(distro, `cd ${JSON.stringify(percorsoWsl)} && { ${comando} ; }${tracciaCartella ? codaCheStampaLaCartella(false, marcatoreWsl) : ''}`),
             /* ⛔ Il marcatore non si vede nemmeno nei pezzi che escono mentre escono (D-10B). */
-            { timeoutMs: 120_000, segnaleStop, onPezzo: onPezzo && ((pezzo) => onPezzo({ ...pezzo, testo: staccaCartellaFinale(pezzo.testo).testo })) },
+            { timeoutMs: 120_000, segnaleStop, onPezzo: onPezzo && ((pezzo) => onPezzo({ ...pezzo, testo: staccaCartellaFinale(pezzo.testo, marcatoreWsl).testo })) },
         )
-        const ripulito = staccaCartellaFinale((insieme ?? `${fuori}\n${errori}`).trim())
+        /*
+         * ⛔ Qui NON si applica la regola «cartella solo con codice 0» del ramo cmd: la coda POSIX
+         *   gira sempre, quindi la cartella al fallimento e' NOSTRA e serve.
+         * ⛔ 17/09, CORRETTO: questa riga diceva ancora che la difesa e' «piu' `command pwd` nella
+         *   coda». Non lo e' piu' — C-2 ha tolto `command`, che e' un builtin ORDINARIO e si copre
+         *   con una funzione. Su questa strada le difese sono DUE: il marcatore nuovo a ogni
+         *   esecuzione, e la coda che emette il percorso SOLO se `[ -d ]` dice che e' una cartella
+         *   (piu' `cartellaFinaleValida` qui sotto, che pretende un percorso assoluto).
+         */
+        const ripulito = staccaCartellaFinale((insieme ?? `${fuori}\n${errori}`).trim(), marcatoreWsl)
         const uscitaWsl = uscitaUtile(ripulito.testo, 4_000, 0.25)
         /* ⛔ Un comando ucciso dallo stop deve DIRLO anche da qui, non solo dal ramo Windows: stessa marca, stesso lettore. */
         return {
@@ -4658,7 +4946,13 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
             ...(fermatoSuRichiesta ? { fermatoSuRichiesta: true } : {}),
             testo: fermatoSuRichiesta ? `${MARCA_FERMATO_MENTRE_GIRAVA} il comando e stato interrotto mentre girava.\n\n${uscitaWsl}`.trim() : uscitaWsl,
             enforcement: 'wsl2',
-            cartellaFinale: ripulito.cartella,
+            /*
+             * ⛔ C-3, ramo WSL: l'esistenza l'ha già controllata la coda dentro la distro
+             *   (`[ -d "$dir" ]`), che è l'unico posto dove quel disco si vede senza spendere un
+             *   `wsl.exe` in più per OGNI comando. Qui restano forma e assolutezza — che bastano a
+             *   tenere fuori il testo di stderr, che è il difetto misurato.
+             */
+            cartellaFinale: cartellaFinaleValida(ripulito.cartella),
         }
     }
     return eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella, segnaleStop })

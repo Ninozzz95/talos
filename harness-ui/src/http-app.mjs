@@ -5978,7 +5978,9 @@ export function createHttpApp({
             errore.code = esito.code;
             throw errore;
           }
-          data = { plugin: esito.plugin, errore: esito.errore };
+          /* ⛔ A-4 (17/09/2026): `falliti` moriva QUI. Un pacchetto guasto spariva dal pannello
+             senza che niente dicesse perché — vedi `caricaPlugin` e `elencaPlugin`. */
+          data = { plugin: esito.plugin, falliti: esito.falliti ?? [], errore: esito.errore };
         } else if (childrenMatch) {
           requireNoQuery(url);
           let sessionId;
