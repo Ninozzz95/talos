@@ -1210,3 +1210,20 @@ modale, e `ragionamento-compresso` SCHERMO-10 (×2) qui è VERDE — era instabi
    `ToolCallResult`). Dopo BC-76 quel pannello fa girare un agente vero e ne mostra metà. Frontend: entra nella corsia frontend
    dopo la consegna della Fase A. E il preambolo su quella strada passa da 133 a ~38.000 caratteri (misura dell'agente): il primo
    token della «prova» arriverà molto più tardi — è la stessa riga della ricerca sulla ripresa lenta, non una regressione nuova.
+
+## BC-80 | Il riassunto della Revisione («2 file modificati · +4 −1») non si vede né a 1024 né a 1440 — APPROVATA dall'owner il 17/09/2026 («approvo»)
+
+**Misurato dall'agente di BC-71 (17/09):** la testata della Revisione è larga 748 px a 1024×800 e non più larga a 1440×900; sotto i
+900 px di contenitore `.talos-topbar__path` è `display:none` (`index.css`, regola `@container (max-width:900px)`). Il riassunto è giusto
+nel DOM (dopo BC-71: uno scrittore solo, una regola di conteggio sola) e invisibile a schermo alle due misure desktop.
+**Decisione (consiglio mio, approvato):** nella testata NON cede niente — titolo e azioni non hanno un'altra porta (regola del 10/09).
+Il riassunto prende posto DENTRO il pannello della Revisione, in fondo alla riga delle linguette dei file, a destra, sempre visibile;
+la testata resta com'è (cartella + riassunto sopra i 900 px). Coerente con la lista dei file a fine turno di BC-75 e con Claude Code,
+che mette il conteggio accanto ai file.
+**Vincoli:** il testo esce da `riassuntoReviewTestata`/`riassuntoReview` (`components/review.js`) — nessun secondo conteggio; a zero file
+non si scrive niente; la riga delle linguette è il componente condiviso col Terminale (`components/schede.js`): il riassunto NON entra nel
+componente condiviso, sta accanto nel contenitore della Revisione; con molte linguette cede il riassunto per ultimo? NO — si tronca la
+striscia delle linguette (scorre già), il riassunto resta. Skill `frontend-design`, due temi, 1024 e 1440, nessun controllo nativo.
+**Finita quando:** con due file scritti davvero il riassunto si LEGGE a 1024×800 e 1440×900 nei due temi (rettangolo visibile misurato,
+non la presenza nel DOM), si aggiorna al terzo file senza ricarica, sparisce a zero file, e con dodici linguette resta visibile.
+Al contrario: tolto il nodo, la prova cade. Corsia frontend della Fase A, dopo la consegna in corso.
