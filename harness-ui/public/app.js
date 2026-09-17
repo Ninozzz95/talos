@@ -5513,6 +5513,14 @@ function nomeDiRipiegoAttrezzo(id) {
   const leggibile = (testo3) => testo3.replace(/[_-]+/gu, " ").replace(/\s+/gu, " ").trim();
   return mcp ? `${leggibile(mcp[2])} (${leggibile(mcp[1])})` : leggibile(grezzo);
 }
+function origineAvvisoPlugin(origine) {
+  const grezzo = typeof origine === "string" ? origine.trim() : "";
+  if (!grezzo) return "";
+  const diviso = /^(tool|hook):(.+)$/u.exec(grezzo);
+  if (!diviso) return nomeDiRipiegoAttrezzo(grezzo);
+  const nome = diviso[1] === "tool" ? nomeUmanoAttrezzo(diviso[2]) || nomeDiRipiegoAttrezzo(diviso[2]) : nomeDiRipiegoAttrezzo(diviso[2]);
+  return `${t(diviso[1] === "tool" ? "attrezzo" : "gancio")} ${nome}`;
+}
 function corrispondeARicerca(id, query, catalogo = null) {
   const q = String(query ?? "").trim().toLowerCase();
   if (q === "") return true;
@@ -9116,6 +9124,49 @@ var init_modale_td = __esm({
 });
 
 // src/components/toast.js
+function ancoraToastSopraIComandi(zonaComandi, {
+  radice: radice2 = null,
+  finestra = globalThis,
+  variabile = "--talos-toast-fondo",
+  regione = null,
+  zonaIntoccabile = null
+} = {}) {
+  const host = radice2 || zonaComandi?.ownerDocument?.documentElement || null;
+  const misura = () => {
+    if (!host) return 0;
+    const rettangolo = zonaComandi?.getBoundingClientRect?.();
+    const altezzaFinestra = finestra.innerHeight || 0;
+    const visibile2 = Boolean(rettangolo) && rettangolo.height > 0 && zonaComandi.offsetParent !== null;
+    let ingombro = visibile2 ? Math.max(0, Math.round(altezzaFinestra - rettangolo.top)) : 0;
+    host.style.setProperty(variabile, `${ingombro}px`);
+    const cima = zonaIntoccabile?.();
+    const pila = regione?.getBoundingClientRect?.();
+    if (Number.isFinite(cima) && pila && pila.height > 0) {
+      const eccesso = Math.round(cima - pila.top);
+      if (eccesso > 0) {
+        ingombro = Math.max(0, ingombro - eccesso);
+        host.style.setProperty(variabile, `${ingombro}px`);
+      }
+    }
+    return ingombro;
+  };
+  misura();
+  let osservatore = null;
+  if (typeof finestra.ResizeObserver === "function") {
+    osservatore = new finestra.ResizeObserver(() => misura());
+    if (zonaComandi) osservatore.observe(zonaComandi);
+    if (regione) osservatore.observe(regione);
+  }
+  const suRidimensiona = () => misura();
+  finestra.addEventListener?.("resize", suRidimensiona);
+  return {
+    misura,
+    ferma() {
+      osservatore?.disconnect();
+      finestra.removeEventListener?.("resize", suRidimensiona);
+    }
+  };
+}
 function tonoDaTitolo(titolo2 = "") {
   const t2 = String(titolo2).toLowerCase();
   if (/non riuscit|non eseguit|non liberat|errore|guasto|fallit|interrott|negat/.test(t2)) return "guasto";
@@ -15404,6 +15455,8 @@ function creaSchede(striscia, {
   suDoppioClick = null,
   inerte = null,
   coda = null,
+  tag: tag2 = "button",
+  controlla = null,
   scorre = false,
   chiudibile = false,
   rinominabile = false,
@@ -15497,20 +15550,31 @@ function creaSchede(striscia, {
     return contenitore.querySelector(`[role=tab][${attributo}="${CSS.escape(id)}"]`);
   }
   function creaLinguetta(voce, indice2) {
-    const b = documento.createElement("button");
+    const b = documento.createElement(tag2);
     b.className = classe;
     b.setAttribute("role", "tab");
-    b.type = "button";
+    if (tag2 === "button") b.type = "button";
     const id = identifica(voce);
     const scelta = id === attiva;
     b.setAttribute("aria-selected", String(scelta));
     b.tabIndex = scelta ? 0 : -1;
     b.dataset[chiave] = id;
+    const idPannello = controlla?.(voce, indice2, voci) || null;
+    if (idPannello) {
+      b.setAttribute("aria-controls", idPannello);
+      if (!b.id) b.id = `${idMenu}-tab-${indice2}-${String(id).replace(/[^\w-]+/g, "-").slice(0, 40)}`;
+      const pannello = documento.getElementById(idPannello);
+      if (pannello) {
+        pannello.setAttribute("role", "tabpanel");
+        if (scelta) pannello.setAttribute("aria-labelledby", b.id);
+      }
+    }
     const suggerisci = suggerimento(voce, indice2, voci);
     if (suggerisci) b.title = suggerisci;
     if (contenuto) contenuto(b, voce, indice2, voci);
     else b.append(documento.createTextNode(etichetta2(voce, voci)));
     if (inerte?.(voce)) return b;
+    if (menu) b.setAttribute("aria-haspopup", "menu");
     b.addEventListener("click", (e) => {
       if (suClick?.(voce, e, b)) return;
       if (chiudibile && (e.ctrlKey || e.metaKey)) azioni.chiudi?.(id);
@@ -15546,6 +15610,10 @@ function creaSchede(striscia, {
     else if (e.key === "Delete" && chiudibile) {
       e.preventDefault();
       azioni.chiudi?.(id);
+      return;
+    } else if (tag2 !== "button" && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      azioni.seleziona?.(id);
       return;
     } else if (e.key === "F2" && rinominabile) {
       e.preventDefault();
@@ -15615,6 +15683,9 @@ function creaSchede(striscia, {
         const scelta = b.dataset[chiave] === id;
         b.setAttribute("aria-selected", String(scelta));
         b.tabIndex = scelta ? 0 : -1;
+        const idPannello = b.getAttribute("aria-controls");
+        const pannello = idPannello ? documento.getElementById(idPannello) : null;
+        if (pannello && scelta && b.id) pannello.setAttribute("aria-labelledby", b.id);
       }
       portaInVista(bottoneDi(id));
     },
@@ -15661,6 +15732,18 @@ function riassuntoReview(voci = []) {
   }
   return `${voci.length} file modificat${voci.length === 1 ? "o" : "i"} · +${aggiunte} −${rimozioni}`;
 }
+function riassuntoReviewTestata(voci = []) {
+  return voci.length === 0 ? "" : riassuntoReview(voci);
+}
+function aggiornaSommarioSchedeReview(contenitore, voci = []) {
+  const nodo11 = contenitore?.querySelector("[data-review-sommario]");
+  if (!nodo11) return null;
+  const testo3 = riassuntoReviewTestata(voci);
+  nodo11.textContent = testo3;
+  nodo11.hidden = testo3 === "";
+  nodo11.title = testo3;
+  return testo3;
+}
 function sottotitoloFile(voce = {}) {
   const pezzi = [];
   if (Number.isFinite(voce.giro)) pezzi.push(`giro ${voce.giro}`);
@@ -15701,6 +15784,8 @@ function creaSchedeReview(striscia, { azioni = {}, root = globalThis.document?.b
     etichettaMenu: "Azioni sul file",
     scorre: true,
     identifica: chiaveFileReview,
+    /* BC-68, 17/09: il DiffView è il pannello che la linguetta governa (uno solo, riusato). */
+    controlla: () => "pannelloRevisione",
     etichetta: etichettaFileReview,
     suggerimento: suggerimentoFile,
     contenuto: (scheda, voce, indice2, tutte) => riempiLinguettaFile(scheda, voce, tutte),
@@ -15813,6 +15898,11 @@ function svgIcona(nome, classi = "i i--sm") {
   svg.append(use);
   return svg;
 }
+function codaDelPiede(piede = {}) {
+  const nota = piede?.nota;
+  if (typeof nota === "string") return nota;
+  return piede?.dettaglio ? "" : t(TESTI2.nota);
+}
 function creaSchedeTerminale(pane, { azioni = {}, root = document.body } = {}) {
   const tabs = pane.querySelector(".talos-terminal__tabs");
   const foot = pane.querySelector(".talos-terminal__foot");
@@ -15826,6 +15916,9 @@ function creaSchedeTerminale(pane, { azioni = {}, root = document.body } = {}) {
     chiudibile: true,
     rinominabile: true,
     identifica: (voce) => voce.terminalId,
+    /* BC-68, 17/09: il corpo del terminale è il pannello che la linguetta governa (uno solo,
+       riusato: `aria-labelledby` segue la scheda scelta). */
+    controlla: () => "pannelloSchedaTerminale",
     etichetta: (voce, tutte) => titoloScheda(voce, tutte),
     suggerimento: (voce, indice2, tutte) => [`${indice2 + 1}. ${titoloScheda(voce, tutte)}`, voce.cartella].filter(Boolean).join(" — "),
     inerte: (voce) => inRinomina === voce.terminalId,
@@ -15903,9 +15996,7 @@ function creaSchedeTerminale(pane, { azioni = {}, root = document.body } = {}) {
   function disegnaCoda() {
     const nodi = [];
     const nuovo = document.createElement("button");
-    nuovo.className = "talos-terminal__tab talos-schede__tab";
-    nuovo.setAttribute("role", "tab");
-    nuovo.setAttribute("aria-selected", "false");
+    nuovo.className = "talos-terminal__tab talos-schede__tab talos-schede__nuova";
     nuovo.type = "button";
     nuovo.dataset.terminaleNuova = "";
     nuovo.append(svgIcona("i-plus"), document.createTextNode(t(TESTI2.nuovo)));
@@ -15948,7 +16039,7 @@ function creaSchedeTerminale(pane, { azioni = {}, root = document.body } = {}) {
         if (p.stato) foot.append(span("·"), span(p.stato));
         const g = document.createElement("span");
         g.className = "talos-grow";
-        const coda = p.nota ?? (p.dettaglio ? "" : t(TESTI2.nota));
+        const coda = codaDelPiede(p);
         foot.append(g, ...coda ? [span(coda)] : []);
       }
     }
@@ -16567,123 +16658,106 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     el25.url.addEventListener("focus", () => el25.url.select());
     el25.url.addEventListener("input", () => el25.url.removeAttribute("aria-invalid"));
   }
-  el25.schede?.addEventListener("click", (e) => {
-    const x = e.target.closest?.("[data-browser-chiudi]");
-    if (x) {
-      e.preventDefault();
-      azioni.chiudi?.(x.dataset.browserChiudi);
-      return;
-    }
-    const tab = e.target.closest?.("[data-browser-tab]");
-    if (!tab) return;
-    const id = tab.dataset.browserId;
-    if (e.ctrlKey || e.metaKey) azioni.chiudi?.(id);
-    else azioni.seleziona?.(id);
-  });
   el25.nuovaScheda?.addEventListener("click", () => {
     if (!el25.url) return;
     el25.url.value = "";
     el25.url.focus();
     el25.url.removeAttribute("aria-invalid");
   });
-  el25.schede?.addEventListener("auxclick", (e) => {
-    const tab = e.target.closest?.("[data-browser-tab]");
-    if (tab && e.button === 1) {
-      e.preventDefault();
-      azioni.chiudi?.(tab.dataset.browserId);
-    }
-  });
-  el25.schede?.addEventListener("keydown", (e) => {
-    const tab = e.target.closest?.("[data-browser-tab]");
-    if (!tab) return;
-    const ids = stato.schede.map((s) => s.id);
-    const i2 = ids.indexOf(tab.dataset.browserId);
-    let prossima = null;
-    if (e.key === "ArrowRight") prossima = ids[(i2 + 1) % ids.length];
-    else if (e.key === "ArrowLeft") prossima = ids[(i2 - 1 + ids.length) % ids.length];
-    else if (e.key === "Home") prossima = ids[0];
-    else if (e.key === "End") prossima = ids[ids.length - 1];
-    else if (e.key === "Delete") {
-      e.preventDefault();
-      azioni.chiudi?.(tab.dataset.browserId);
-      return;
-    } else return;
-    e.preventDefault();
-    if (prossima) {
-      azioni.seleziona?.(prossima);
-      el25.schede.querySelector(`[data-browser-id="${CSS.escape(prossima)}"]`)?.focus();
-    }
-  });
   function mostraAvviso(testo3) {
     if (!el25.avviso) return;
     el25.avviso.textContent = testo3 || "";
     el25.avviso.hidden = !testo3;
   }
+  const schedeBrowser = el25.schede ? creaSchede(el25.schede.closest(".talos-tabstrip") || el25.schede, {
+    lista: el25.schede,
+    root: schermo.ownerDocument?.body || document.body,
+    chiave: "browserId",
+    classe: "talos-tabstrip__scheda",
+    tag: "div",
+    idMenu: "menuSchedaBrowser",
+    etichettaMenu: t("Azioni sulla pagina"),
+    scorre: true,
+    chiudibile: true,
+    identifica: (s) => s.id,
+    etichetta: (s) => titoloScheda2(s),
+    controlla: () => "pannelloBrowser",
+    contenuto: (scheda, s, i2) => riempiLinguettaBrowser(scheda, s, i2),
+    suClick: (s, e) => {
+      if (e.target?.closest?.("[data-browser-chiudi]")) {
+        e.preventDefault();
+        azioni.chiudi?.(s.id);
+        return true;
+      }
+      return false;
+    },
+    vociMenu: (s) => [
+      [t("Chiudi"), () => azioni.chiudi?.(s.id), true],
+      [t("Copia l’indirizzo"), () => {
+        navigator.clipboard?.writeText?.(s.url || "");
+      }, Boolean(s.url)]
+    ],
+    azioni: {
+      seleziona: (id) => azioni.seleziona?.(id),
+      chiudi: (id) => azioni.chiudi?.(id)
+    }
+  }) : null;
+  function riempiLinguettaBrowser(scheda, s, i2) {
+    const doc = scheda.ownerDocument;
+    scheda.dataset.browserTab = String(i2);
+    if (s.tipo === "viva") scheda.dataset.stato = s.stato || "pronta";
+    const situazione = statoDellaScheda(s);
+    scheda.dataset.statoScheda = situazione;
+    const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "i talos-tabstrip__icona");
+    svg.setAttribute("aria-hidden", "true");
+    const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", ICONA_PER_STATO[situazione] || (s.tipo === "viva" ? "#i-globe" : "#i-doc"));
+    svg.append(use);
+    scheda.append(svg);
+    const nome = titoloScheda2(s);
+    const titolo2 = doc.createElement("span");
+    titolo2.className = "talos-tabstrip__titolo";
+    titolo2.textContent = nome;
+    scheda.append(titolo2);
+    const parola2 = etichettaStatoScheda(situazione);
+    if (parola2) {
+      const detto = doc.createElement("span");
+      detto.className = "sr-only";
+      detto.dataset.statoDetto = situazione;
+      detto.textContent = ` (${parola2})`;
+      scheda.append(detto);
+    }
+    const http = statoHttpDiLettura(s);
+    if (http !== null && (http < 200 || http >= 300)) {
+      const pillola = doc.createElement("span");
+      pillola.className = "talos-tabstrip__stato";
+      pillola.textContent = String(http);
+      scheda.append(pillola);
+    }
+    const chiudi = doc.createElement("button");
+    chiudi.type = "button";
+    chiudi.className = "talos-tabstrip__chiudi";
+    chiudi.tabIndex = -1;
+    chiudi.dataset.browserChiudi = s.id;
+    chiudi.setAttribute("aria-label", t("Chiudi {titolo}", { titolo: nome }));
+    const svgX = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svgX.setAttribute("class", "i");
+    svgX.setAttribute("aria-hidden", "true");
+    const useX = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+    useX.setAttribute("href", "#i-x");
+    svgX.append(useX);
+    chiudi.append(svgX);
+    scheda.append(chiudi);
+    const indirizzoBreve = hostDaUrl(s.url) || s.url;
+    scheda.dataset.tip = nome === indirizzoBreve ? s.url : `${nome} — ${s.url}`;
+    scheda.dataset.tipLato = "sotto";
+  }
   function renderizzaSchede() {
-    if (!el25.schede) return;
+    if (!el25.schede || !schedeBrowser) return;
     const cornice = el25.schede.closest(".talos-tabstrip");
     if (cornice) cornice.hidden = stato.schede.length === 0;
-    el25.schede.replaceChildren();
-    const doc = el25.schede.ownerDocument;
-    stato.schede.forEach((s, i2) => {
-      const scheda = doc.createElement("div");
-      scheda.className = "talos-tabstrip__scheda";
-      scheda.setAttribute("role", "tab");
-      scheda.dataset.browserTab = String(i2);
-      scheda.dataset.browserId = s.id;
-      const sel = s.id === stato.attiva;
-      scheda.setAttribute("aria-selected", String(sel));
-      scheda.tabIndex = sel ? 0 : -1;
-      if (s.tipo === "viva") scheda.dataset.stato = s.stato || "pronta";
-      const situazione = statoDellaScheda(s);
-      scheda.dataset.statoScheda = situazione;
-      const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("class", "i talos-tabstrip__icona");
-      svg.setAttribute("aria-hidden", "true");
-      const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-      use.setAttribute("href", ICONA_PER_STATO[situazione] || (s.tipo === "viva" ? "#i-globe" : "#i-doc"));
-      svg.append(use);
-      scheda.append(svg);
-      const nome = titoloScheda2(s);
-      const titolo2 = doc.createElement("span");
-      titolo2.className = "talos-tabstrip__titolo";
-      titolo2.textContent = nome;
-      scheda.append(titolo2);
-      const parola2 = etichettaStatoScheda(situazione);
-      if (parola2) {
-        const detto = doc.createElement("span");
-        detto.className = "sr-only";
-        detto.dataset.statoDetto = situazione;
-        detto.textContent = ` (${parola2})`;
-        scheda.append(detto);
-      }
-      const http = statoHttpDiLettura(s);
-      if (http !== null && (http < 200 || http >= 300)) {
-        const pillola = doc.createElement("span");
-        pillola.className = "talos-tabstrip__stato";
-        pillola.textContent = String(http);
-        scheda.append(pillola);
-      }
-      const chiudi = doc.createElement("button");
-      chiudi.type = "button";
-      chiudi.className = "talos-tabstrip__chiudi";
-      chiudi.tabIndex = -1;
-      chiudi.dataset.browserChiudi = s.id;
-      chiudi.setAttribute("aria-label", t("Chiudi {titolo}", { titolo: nome }));
-      const svgX = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svgX.setAttribute("class", "i");
-      svgX.setAttribute("aria-hidden", "true");
-      const useX = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-      useX.setAttribute("href", "#i-x");
-      svgX.append(useX);
-      chiudi.append(svgX);
-      scheda.append(chiudi);
-      const indirizzoBreve = hostDaUrl(s.url) || s.url;
-      scheda.dataset.tip = nome === indirizzoBreve ? s.url : `${nome} — ${s.url}`;
-      scheda.dataset.tipLato = "sotto";
-      el25.schede.append(scheda);
-    });
-    el25.schede.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    schedeBrowser.aggiorna(stato.schede, stato.attiva);
   }
   function scriviTestoAcquisito(grezzo) {
     const contenitore = el25.testo;
@@ -17034,6 +17108,7 @@ var init_browser = __esm({
     init_lingua();
     init_annotazioni();
     init_testo_pagina();
+    init_schede();
     TESTI3 = Object.freeze({
       intestazione: "Letture della sessione",
       riepilogoLetture: (n) => tn("Testo acquisito dall’agente · {n} pagina", "Testo acquisito dall’agente · {n} pagine", n),
@@ -22645,7 +22720,23 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         entra: (el25) => markMotionEnter(el25),
         fuocoDiRitorno: () => $2("#campanella") || $2("#composerInput")
       });
+      const ancoraggioToast = ancoraToastSopraIComandi($2("#schermoChat .talos-chat-foot"), {
+        radice: HOST(),
+        regione: toastRegion,
+        /*
+         * ⛔ La zona intoccabile è la TESTATA della schermata che si sta guardando: sotto ci sta il
+         *   contenuto, sopra ci sono il nome della sessione, le quattro viste e le azioni. Si legge il
+         *   suo bordo inferiore VERO, schermata per schermata, invece di scrivere un numero: le testate
+         *   cambiano altezza con la scala dell'interfaccia scelta nelle Impostazioni.
+         */
+        zonaIntoccabile: () => {
+          const testata = $2(".talos-screen:not([hidden]) .talos-topbar") || $2(".talos-topbar");
+          const r = testata?.getBoundingClientRect?.();
+          return r && r.height > 0 ? r.bottom : null;
+        }
+      });
       function toast(title, message = "", opzioni = {}) {
+        ancoraggioToast.misura();
         return mostraToast(String(title), message == null ? "" : String(message?.message ?? message), opzioni);
       }
       const barraStatoChat = $2("#schermoChat .talos-statusbar");
@@ -22858,11 +22949,6 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       function aggiornaContatoreUsage() {
         const nodo11 = $2("[data-usage-summary]");
         if (nodo11) nodo11.textContent = `Main · ${formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage, { live: true })}`;
-      }
-      function formattaOraSessione(iso) {
-        const data = new Date(iso);
-        if (Number.isNaN(data.getTime())) return iso;
-        return data.toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" });
       }
       function creaRigaSessioneBoard(sessione) {
         return creaRigaBoard(sessione, {
@@ -25572,7 +25658,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (!plugin.fidato && plugin.avvisi?.length > 0) {
           const avvisi = document.createElement("div");
           avvisi.className = "plugin-panel-warnings";
-          avvisi.append(...plugin.avvisi.map((a) => textElement("span", "status-chip error", `${a.origine}: ${a.avviso}`)));
+          avvisi.append(...plugin.avvisi.map((a) => {
+            const chip = textElement("span", "status-chip error", `${origineAvvisoPlugin(a.origine)}: ${a.avviso}`);
+            if (a.origine) chip.title = a.origine;
+            return chip;
+          }));
           wrapper.append(avvisi);
         }
         return wrapper;
@@ -26302,7 +26392,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           return;
         }
         const notifiche = state.notifiche || [];
-        const { righe, tutte } = aggiornaPannelloNotifiche(pannello, notifiche, { ora: (sessione) => formattaOraSessione(sessione) });
+        const { righe, tutte } = aggiornaPannelloNotifiche(pannello, notifiche, {
+          ora: (sessione) => {
+            const eta = formattaEta(sessione?.avviataAlle);
+            return eta ? `avviata ${eta} fa` : "";
+          }
+        });
         righe.forEach((riga, indice2) => {
           const { sessione } = notifiche[indice2];
           riga.addEventListener("click", () => {
@@ -31233,10 +31328,7 @@ ${testo3}` : testo3;
         if (cardDiff) cardDiff.hidden = voci.length === 0;
         if (schedeReview) schedeReview.hidden = voci.length === 0;
         if (voci.length === 0) aggiornaDiffReview(cardDiff, null);
-        const percorsoTestata = schermo.querySelector(".talos-topbar__path");
-        if (percorsoTestata) percorsoTestata.textContent = riassuntoReview(voci);
-        const titoloTestata = schermo.querySelector(".talos-topbar__title h1");
-        if (titoloTestata && state.session) titoloTestata.textContent = state.session;
+        aggiornaSommarioSchedeReview(schermo.querySelector(".talos-review__schede"), voci);
         nascondiAzioniFase3(schermo);
       }
       function statoFileAlbero(percorsoCompleto) {
@@ -33895,17 +33987,9 @@ ${testo3}` : testo3;
         });
         aggiornaInvitoPrimoAvvio();
       }
-      function riassuntoReviewTestata() {
-        const n = state.realSession.reviewFiles instanceof Map ? state.realSession.reviewFiles.size : 0;
-        if (!n) return "";
-        let piu = 0;
-        let meno = 0;
-        for (const v of state.realSession.reviewFiles.values()) {
-          piu += Number(v?.aggiunte || 0);
-          meno += Number(v?.rimozioni || 0);
-        }
-        const conteggio2 = `${n} file modificat${n === 1 ? "o" : "i"}`;
-        return piu || meno ? `${conteggio2} · +${piu} −${meno}` : conteggio2;
+      function riassuntoReviewTestata2() {
+        const voci = state.realSession.reviewFiles instanceof Map ? [...state.realSession.reviewFiles.values()] : [];
+        return riassuntoReviewTestata(voci);
       }
       function aggiornaTestataSessione() {
         const dati = {
@@ -33918,7 +34002,7 @@ ${testo3}` : testo3;
         aggiornaTopbar($2("#schermoChat .talos-topbar"), dati);
         aggiornaTopbar($2("#schermoTerminale .talos-topbar"), dati);
         aggiornaTopbar($2("#schermoBrowser .talos-topbar"), dati);
-        aggiornaTopbar($2("#schermoReview .talos-topbar"), { ...dati, riassunto: riassuntoReviewTestata() });
+        aggiornaTopbar($2("#schermoReview .talos-topbar"), { ...dati, riassunto: riassuntoReviewTestata2() });
       }
       function aggiornaSottotitoloSessione() {
         aggiornaPiedeSidebar();
@@ -33961,12 +34045,10 @@ ${testo3}` : testo3;
         if (totale2 <= 0) return "consumo non registrato";
         return `circa ${totale2 >= 1e3 ? `${(totale2 / 1e3).toFixed(1)}k` : totale2} token (stima)`;
       }
-      function formattaOraSessione(iso) {
-        try {
-          return new Date(iso).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
-        } catch {
-          return "";
-        }
+      function oraDelGiorno(iso) {
+        const t2 = Date.parse(iso);
+        if (!Number.isFinite(t2)) return "";
+        return new Date(t2).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
       }
       const contatoriLuoghi = { sessione: void 0, quando: 0 };
       async function aggiornaContatoriLuoghi(numeroSessioni) {
@@ -34143,7 +34225,7 @@ ${testo3}` : testo3;
         if (titolo2) titolo2.textContent = `${elenco2.length} automazion${elenco2.length === 1 ? "e" : "i"}`;
         if (sottotitolo) {
           const prossime = elenco2.filter((a) => a.attiva && a.prossimaEsecuzione).map((a) => a.prossimaEsecuzione).sort();
-          sottotitolo.textContent = prossime.length > 0 ? `Prossima esecuzione ${formattaOraSessione(prossime[0])}` : "Nessuna attiva";
+          sottotitolo.textContent = prossime.length > 0 ? `Prossima esecuzione ${oraDelGiorno(prossime[0])}` : "Nessuna attiva";
         }
       }
       let generazioneAutomazioni = 0, scritturaAutomazioni = null;
@@ -36637,6 +36719,7 @@ ${testo3}`;
       window.__talosHarnessDestroy = () => {
         contextCompactor?.destroy();
         contextCompactor = null;
+        ancoraggioToast?.ferma();
         contextMonitor?.stop();
         contextMonitor = null;
         window.clearInterval(notificheTimer);
@@ -37502,245 +37585,7 @@ var init_animazioni_mockup = __esm({
 });
 
 // src/legacy/frammenti.html
-var frammenti_default = `<!-- Pannello impostazioni + Model Lab del monolite: tutti gli id che app.js cerca. -->
-<section class="legacy-pane">
-          <div class="generic-shell">
-            <div class="view-heading"><div><span class="eyebrow">TALOS</span><h2>Impostazioni Codice</h2><p>La superficie segue i token del tema TALOS attivo.</p></div></div>
-            <div class="settings-layout">
-              <nav class="settings-category-nav" role="tablist" aria-label="Sezioni impostazioni">
-                <button type="button" role="tab" aria-selected="true" aria-controls="appearanceSettingsCard" data-settings-tab="appearance">Aspetto e movimento</button>
-                <button type="button" role="tab" aria-selected="false" aria-controls="settingsChatPanel" data-settings-tab="chat">Chat e composer</button>
-                <button type="button" role="tab" aria-selected="false" aria-controls="modelLabCard" data-settings-tab="models">Laboratorio modelli</button>
-                <button type="button" role="tab" aria-selected="false" aria-controls="settingsProvidersPanel" data-settings-tab="providers">Provider e accessi</button>
-                <button type="button" role="tab" aria-selected="false" aria-controls="settingsToolsPanel" data-settings-tab="tools">Strumenti agente e permessi</button>
-                <button type="button" role="tab" aria-selected="false" aria-controls="settingsPrivacyPanel" data-settings-tab="privacy">Privacy e dati locali</button>
-                <button type="button" role="tab" aria-selected="false" aria-controls="settingsWorkspacePanel" data-settings-tab="workspace">File e workspace</button>
-                <button type="button" role="tab" aria-selected="false" aria-controls="settingsAccountPanel" data-settings-tab="account">Account, Doctor e backup</button>
-              </nav>
-              <div class="settings-detail-panels">
-              <article class="settings-card settings-card-wide" id="appearanceSettingsCard" data-settings-panel="appearance">
-                <div class="settings-card-heading"><div><span class="eyebrow">Aspetto</span><h3>Interfaccia e movimento</h3><p class="muted-copy">Tema, layout, sfondo e animazioni seguono i token TALOS. Token colore, tipo, raggio e densità restano locali a questo desktop.</p></div><button class="secondary-btn compact" type="button" id="resetMotionButton" data-action="reset-motion">Ripristina movimento</button></div>
-                <div class="settings-section"><h4>Design</h4><div class="settings-control-grid">
-                  <label class="setting-control" for="themePresetSelect"><span>Tema TALOS</span><select id="themePresetSelect"><option value="forge">Forge</option><option value="paper">Paper</option><option value="terminal">Terminal</option><option value="aurora">Aurora</option><option value="glacier">Glacier</option><option value="ember">Ember</option><option value="atlas">Atlas</option><option value="noir">Noir</option><option value="signal">Signal</option><option value="violet">Violet</option><option value="claudius">Claudius</option><option value="basicus">Basicus</option><option value="telemetry">Telemetry</option><option value="calm">Calm</option></select></label>
-                  <label class="setting-control" for="colorModeSelect"><span>Modalità colore</span><select id="colorModeSelect"><option value="system">Segui il sistema</option><option value="dark">Scuro</option><option value="light">Chiaro</option></select></label>
-                  <label class="setting-control" for="sceneOverrideSelect"><span>Sfondo animato</span><select id="sceneOverrideSelect"><option value="follow-theme">Segui il tema</option><option value="forge">Forge</option><option value="paper">Paper</option><option value="terminal">Terminal</option><option value="aurora">Aurora</option><option value="glacier">Glacier</option><option value="ember">Ember</option><option value="atlas">Atlas</option><option value="noir">Noir</option><option value="signal">Signal</option><option value="violet">Violet</option><option value="claudius">Claudius</option><option value="basicus">Basicus</option><option value="telemetry">Telemetry</option><option value="calm">Calm</option></select></label>
-                  <label class="setting-control" for="uiFontScaleSelect"><span>Dimensione interfaccia</span><select id="uiFontScaleSelect"><option value="xsmall">Extra piccola</option><option value="small">Piccola</option><option value="default">Predefinita</option><option value="large">Grande</option><option value="xlarge">Extra grande</option></select></label>
-                  <label class="setting-control" for="chatFontScaleSelect"><span>Testo chat</span><select id="chatFontScaleSelect"><option value="xcompact">Extra piccolo</option><option value="compact">Piccolo</option><option value="balanced">Predefinito</option><option value="expanded">Grande</option></select></label>
-                  <label class="setting-control" for="composerShapeSelect"><span>Forma del composer</span><select id="composerShapeSelect"><option value="classic">Classica</option><option value="standard">Standard</option><option value="compact">Compatta</option></select></label>
-                  <label class="setting-control" for="composerPlusSelect"><span>Apertura del pulsante +</span><select id="composerPlusSelect"><option value="drawer">Cassetto</option><option value="menu">Menu</option></select></label>
-                  <label class="setting-control" for="messageStyleSelect"><span>Stile dei messaggi</span><select id="messageStyleSelect"><option value="sections">Sezioni</option><option value="bubbles">Bolle</option></select></label>
-                  <label class="setting-control" for="streamingAnimationSelect"><span>Animazione risposta</span><select id="streamingAnimationSelect"><option value="typewriter">Cursore testo</option><option value="fade">Dissolvenza</option></select></label>
-                  <label class="setting-control" for="windowPresentationSelect"><span>Pannelli strumenti</span><select id="windowPresentationSelect"><option value="drawer">Pannello laterale</option><option value="fullscreen">Finestra</option></select></label>
-                </div></div>
-                <div class="settings-section"><h4>Movimento dello sfondo</h4><div class="settings-switch-grid"><label><span>Sfondo attivo</span><input type="checkbox" id="backgroundMotionToggle" checked /></label><label><span>Animazioni interfaccia</span><input type="checkbox" id="interfaceMotionToggle" checked /></label><label><span>Sospendi finestra nascosta</span><input type="checkbox" id="pauseWhenHiddenToggle" checked /></label><label><span>Rispetta risparmio dati</span><input type="checkbox" id="respectDataSaverToggle" checked /></label><label><span>Riduci movimento</span><input type="checkbox" id="reducedMotionToggle" /></label></div><div class="settings-control-grid"><label class="setting-control" for="motionModeSelect"><span>Renderer</span><select id="motionModeSelect"><option value="off">Spento</option><option value="static">Statico</option><option value="simple">Semplice</option><option value="complex">Complessità alta</option><option value="adaptive">Adattivo</option></select></label><label class="setting-control" for="motionQualitySelect"><span>Qualità</span><select id="motionQualitySelect"><option value="low">Bassa</option><option value="balanced">Bilanciata</option><option value="high">Alta</option><option value="adaptive">Adattiva</option></select></label></div><div class="range-grid">
-                  <label class="range-control"><span>Velocità <b class="range-value"><output id="motionSpeedOutput">100</output>%</b></span><input id="motionSpeedRange" type="range" min="25" max="200" value="100" /></label><label class="range-control"><span>Intensità <b class="range-value"><output id="motionIntensityOutput">20</output>%</b></span><input id="motionIntensityRange" type="range" min="0" max="100" value="20" /></label><label class="range-control"><span>Bagliore <b class="range-value"><output id="motionGlowOutput">10</output>%</b></span><input id="motionGlowRange" type="range" min="0" max="100" value="10" /></label><label class="range-control"><span>Densità <b class="range-value"><output id="motionDensityOutput">100</output>%</b></span><input id="motionDensityRange" type="range" min="25" max="150" value="100" /></label><label class="range-control"><span>Profondità <b class="range-value"><output id="motionDepthOutput">92</output>%</b></span><input id="motionDepthRange" type="range" min="0" max="100" value="92" /></label><label class="range-control"><span>Scie <b class="range-value"><output id="motionTrailsOutput">50</output>%</b></span><input id="motionTrailsRange" type="range" min="0" max="100" value="50" /></label><label class="range-control"><span>Contrasto <b class="range-value"><output id="motionContrastOutput">80</output>%</b></span><input id="motionContrastRange" type="range" min="0" max="100" value="80" /></label><label class="range-control"><span>Parallasse <b class="range-value"><output id="motionParallaxOutput">20</output>%</b></span><input id="motionParallaxRange" type="range" min="0" max="100" value="20" /></label>
-                </div></div>
-                <div class="settings-section"><h4>Animazioni dell’interfaccia</h4><div class="settings-control-grid"><label class="setting-control" for="motionProfileSelect"><span>Profilo</span><select id="motionProfileSelect"><option value="preset">Predefinito</option><option value="minimal">Minimale</option><option value="expressive">Espressivo</option><option value="custom">Personalizzato</option><option value="off">Spento</option></select></label><label class="setting-control" for="motionEasingSelect"><span>Curva</span><select id="motionEasingSelect"><option value="precise">Precisa</option><option value="soft">Morbida</option><option value="elastic-light">Elastica leggera</option><option value="linear">Lineare</option><option value="cinematic">Cinematografica</option></select></label></div><div class="range-grid"><label class="range-control"><span>Durata <b class="range-value"><output id="motionDurationOutput">50</output>%</b></span><input id="motionDurationRange" type="range" min="50" max="150" value="50" /></label><label class="range-control"><span>Intensità UI <b class="range-value"><output id="motionUiIntensityOutput">65</output>%</b></span><input id="motionUiIntensityRange" type="range" min="0" max="100" value="65" /></label><label class="range-control"><span>Ritardo progressivo <b class="range-value"><output id="motionStaggerOutput">40</output>ms</b></span><input id="motionStaggerRange" type="range" min="0" max="120" value="40" /></label></div><div class="settings-switch-grid categories"><label><span>Finestre</span><input type="checkbox" id="motionWindowsToggle" checked /></label><label><span>Superfici</span><input type="checkbox" id="motionSurfacesToggle" checked /></label><label><span>Navigazione</span><input type="checkbox" id="motionNavigationToggle" checked /></label><label><span>Composer</span><input type="checkbox" id="motionComposerToggle" checked /></label><label><span>Messaggi</span><input type="checkbox" id="motionMessagesToggle" checked /></label><label><span>Feedback</span><input type="checkbox" id="motionFeedbackToggle" checked /></label></div></div>
-                <div class="settings-section"><h4>Chrome desktop</h4><div class="settings-switch-grid"><label><span>Intestazione immersiva</span><input type="checkbox" id="immersiveHeaderToggle" /></label></div><p class="muted-copy">Icona launcher collegata al tema e limiti FPS/DPR restano proprietà dell’host desktop, non del documento web.</p></div>
-                <span class="settings-status" id="appearanceSettingsStatus" role="status">Preferenze locali · nessun segreto nel browser</span>
-              </article>
-              <article class="settings-card settings-card-wide model-lab-card" id="modelLabCard" data-model-lab data-settings-panel="models" hidden>
-                <div class="settings-card-heading"><div><span class="eyebrow">Laboratorio modelli</span><h3>Modelli, provider e runtime</h3><p class="muted-copy">Il laboratorio separa dati osservati, preferenze locali e funzioni che richiedono un runtime LLM. Nulla viene presentato come disponibile se non è verificato.</p></div><span class="runtime-gate" id="modelLabRuntimeBadge">Runtime locale · non scelto</span></div>
-                <div class="model-lab-ledger" aria-label="Stato laboratorio modelli"><div><strong id="machineCapacityStatus">Misurazione in corso…</strong><span>Capacità macchina</span></div><div><strong id="modelLabProviderStatus">Provider da verificare</strong><span>Accessi server</span></div><div><strong id="modelLabCatalogStatus">Catalogo non caricato</strong><span>Modelli osservati</span></div><div><strong>Gated</strong><span>Runtime locale</span></div></div>
-                <div class="model-lab-tabs" role="tablist" aria-label="Sezioni laboratorio modelli"><button class="active" id="modelLabOverviewTab" role="tab" aria-selected="true" aria-controls="modelLabOverviewPanel" data-model-lab-tab="overview">Panoramica</button><button id="modelLabProvidersTab" role="tab" aria-selected="false" aria-controls="modelLabProvidersPanel" data-model-lab-tab="providers">Provider</button><button id="modelLabCatalogTab" role="tab" aria-selected="false" aria-controls="modelLabCatalogPanel" data-model-lab-tab="catalog">Catalogo API</button><button id="modelLabInstalledTab" role="tab" aria-selected="false" aria-controls="modelLabInstalledPanel" data-model-lab-tab="installed">Installati</button><button id="modelLabHfTab" role="tab" aria-selected="false" aria-controls="modelLabHfPanel" data-model-lab-tab="huggingface">Hugging Face</button><button id="modelLabDownloadsTab" role="tab" aria-selected="false" aria-controls="modelLabDownloadsPanel" data-model-lab-tab="downloads">Download</button></div>
-                <section class="model-lab-panel active" id="modelLabOverviewPanel" role="tabpanel" aria-labelledby="modelLabOverviewTab" data-model-lab-panel="overview"><div class="model-lab-layout"><div><h4>Capacità di questa macchina</h4><div class="model-lab-metrics"><div><span>RAM totale</span><strong id="machineMemoryMetric">—</strong></div><div><span>RAM libera</span><strong id="machineFreeMemoryMetric">—</strong></div><div><span>Spazio disponibile</span><strong id="machineStorageMetric">—</strong></div><div><span>Allocabile dopo riserva 1 GB</span><strong id="machineAllocatableMetric">—</strong></div></div><p class="settings-status" id="machineCapacityDetail">La misura usa solo le API del server locale.</p><div class="memoria-libera" id="memoriaLibera"><div class="memoria-barra" role="img" aria-labelledby="memoriaBarraEtichetta"><span class="memoria-barra-usata" id="memoriaBarraUsata"></span></div><p class="memoria-riga" id="memoriaBarraEtichetta">Misura non ancora eseguita.</p><p class="memoria-tenuta" id="memoriaTenuta" hidden></p><div class="memoria-azioni"><button class="secondary-btn compact" id="memoriaRimisura" type="button">Rimisura</button><button class="primary-btn compact" id="memoriaScarica" type="button" disabled>Libera la memoria del modello</button></div><p class="muted-copy memoria-nota">TALOS libera solo la memoria che tiene lui: il modello locale caricato. <strong>Non chiude processi di sistema o altre app</strong> — terminare un processo che non si riconosce è il modo più rapido per far cadere il computer, e nessuno dei runtime affermati lo fa: scaricano il modello, non uccidono processi.</p></div></div><div class="runtime-gate runtime-gate-large" id="modelLabRuntimeGate"><h4>Runtime locale</h4><p id="modelLabRuntimeStatus">Verifica in corso…</p><div id="modelLabRuntimeList" class="model-lab-runtime-list" aria-live="polite"><p class="model-lab-empty">Nessun runtime osservato.</p></div><div class="model-lab-runtime-controls"><label class="setting-control"><span>Backend</span><select id="modelLabRuntimeSelect" disabled><option value="">Nessun runtime pronto</option></select></label><label class="setting-control"><span>Modello</span><select id="modelLabModelSelect" disabled><option value="">Nessun modello osservato</option></select></label></div><div class="model-lab-runtime-actions"><button class="secondary-btn compact" id="modelLabRuntimeRefresh" type="button">Aggiorna runtime</button><button class="primary-btn compact" id="modelLabRunButton" type="button" disabled>Prova runtime</button><button class="secondary-btn compact" id="modelLabCancelButton" type="button" hidden>Ferma prova</button></div><label class="model-lab-prompt"><span>Prompt di prova</span><textarea id="modelLabPrompt" rows="2" placeholder="Scrivi una richiesta breve…" disabled></textarea></label><div id="modelLabStream" class="model-lab-stream" aria-live="polite"><p class="model-lab-empty">Nessuna prova avviata.</p></div></div></div><p class="model-lab-active-model">Modello attivo condiviso con Chat: <strong id="modelLabActiveModel">Nessun modello selezionato</strong></p></section>
-                <section class="model-lab-panel" id="modelLabProvidersPanel" role="tabpanel" aria-labelledby="modelLabProvidersTab" data-model-lab-panel="providers" hidden>
-                  <div class="model-lab-panel-heading"><div><h4>Provider e accessi</h4><p class="muted-copy">Le chiavi restano nel portachiavi del computer: qui non compaiono mai. Premi «Prova» per chiedere al provider se accetta la credenziale.</p></div><div class="provider-heading-actions"><button class="secondary-btn compact" type="button" id="providerTestAll">Prova tutti</button></div></div>
-                  <div class="provider-list" id="providerList"></div>
-                </section>
-                <section class="model-lab-panel" id="modelLabCatalogPanel" role="tabpanel" aria-labelledby="modelLabCatalogTab" data-model-lab-panel="catalog" hidden><div class="model-lab-panel-heading"><div><h4>Catalogo API osservato</h4><p class="muted-copy">Dati reali OpenRouter; capacità e prezzi provengono dalla risposta upstream.</p></div><button class="secondary-btn compact" id="modelLabRefreshButton" type="button">Aggiorna catalogo</button></div><div class="model-lab-filters"><label class="search-field"><svg><use href="#i-search"/></svg><input id="modelLabSearch" type="search" placeholder="Cerca modello o provider…" aria-label="Cerca modelli" /></label><label class="setting-control"><span>Provider</span><select id="modelLabProviderFilter"><option value="all">Tutti i provider</option></select></label><span class="settings-status" id="modelLabCatalogCount">Catalogo non caricato</span></div><div class="model-lab-catalog-layout"><div class="model-lab-list" id="modelLabCatalogList"><p class="model-lab-empty" id="modelLabCatalogEmpty">Apri questa sezione per caricare il catalogo reale.</p></div><aside class="model-lab-detail" id="modelLabModelDetail"><p class="model-lab-empty">Seleziona un modello per vedere capacità osservate, contesto e prezzi.</p></aside></div></section>
-                <section class="model-lab-panel" id="modelLabInstalledPanel" role="tabpanel" aria-labelledby="modelLabInstalledTab" data-model-lab-panel="installed" hidden><div class="model-lab-panel-heading"><div><h4>Modelli installati</h4><p class="muted-copy">Manifest locali verificati dal server: hash, licenza e origine sono osservati; i percorsi assoluti non arrivano al browser.</p></div></div><div id="modelLabInstalledList" class="model-lab-installed-list"><p class="model-lab-empty">Nessun modello locale osservabile.</p></div></section>
-                <section class="model-lab-panel" id="modelLabHfPanel" role="tabpanel" aria-labelledby="modelLabHfTab" data-model-lab-panel="huggingface" hidden><div class="model-lab-panel-heading"><div><h4>Catalogo Hugging Face</h4><p class="muted-copy">Ricerca e download diretti dall’app. Token e percorsi restano sul server.</p></div><button class="secondary-btn compact" id="modelLabHfSearchButton" type="button">Cerca</button></div><div class="model-lab-filters"><label class="search-field"><svg><use href="#i-search"/></svg><input id="modelLabHfSearch" type="search" placeholder="Cerca repository GGUF…" aria-label="Cerca Hugging Face" /></label><span class="settings-status" id="modelLabHfStatus">Nessuna ricerca</span></div><div class="model-lab-catalog-layout"><div class="model-lab-list" id="modelLabHfResults"><p class="model-lab-empty">Cerca un modello per iniziare.</p></div><aside class="model-lab-detail" id="modelLabHfDetail"><p class="model-lab-empty">Seleziona un repository per vedere i file GGUF.</p></aside></div></section>
-                <section class="model-lab-panel" id="modelLabDownloadsPanel" role="tabpanel" aria-labelledby="modelLabDownloadsTab" data-model-lab-panel="downloads" hidden><div class="model-lab-panel-heading"><div><h4>Centro download</h4><p class="muted-copy">Coda globale con progresso, pausa, ripresa, verifica e annullamento.</p></div></div><div id="modelLabDownloadsList" class="model-lab-installed-list"><p class="model-lab-empty">Nessun download attivo.</p></div></section>
-                <span class="settings-status" id="modelLabStatus" role="status">Preferenze di ricerca locali · credenziali e file restano fuori dal browser</span>
-              </article>
-              <article class="settings-card settings-card-wide" data-settings-panel="chat" id="settingsChatPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Chat</span><h3>Chat e composer</h3></div></div><div class="settings-section"><h4>Spazio di lettura</h4><div class="settings-switch-grid"><label><span>Chat a tutta larghezza</span><input type="checkbox" id="chatFullWidthToggle" /></label></div><p class="muted-copy">Risposte e domande lunghe usano tutta la larghezza disponibile. Le domande brevi, il composer e le sidebar non cambiano.</p></div><div class="settings-section"><h4>Com’è impostata adesso</h4><dl class="settings-facts" id="settingsChatFacts"><div><dt>Testo chat</dt><dd>—</dd></div></dl><p class="muted-copy">Testo, forma del composer e animazione delle risposte si regolano in Aspetto e movimento: qui vedi i valori attivi.</p><button type="button" class="secondary-btn compact" data-settings-go="appearance">Regola in Aspetto e movimento</button></div></article>
-              <article class="settings-card settings-info-card" data-settings-panel="providers" id="settingsProvidersPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Accessi</span><h3>Provider e accessi</h3></div></div><p class="muted-copy">Le chiavi restano sul server locale, mai nel browser. Qui lo stato letto adesso, provider per provider.</p><ul class="settings-facts-list" id="settingsProvidersList" aria-live="polite"><li class="muted-copy">Lettura dello stato…</li></ul><button type="button" class="secondary-btn compact" data-settings-go="models" data-model-lab-go="providers">Gestisci chiavi e indirizzi</button></article>
-              <article class="settings-card settings-info-card" data-settings-panel="tools" id="settingsToolsPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Agente</span><h3>Strumenti agente e permessi</h3></div></div><p class="muted-copy">Policy della sessione e regole per singolo attrezzo vengono salvate con la sessione e restano attive dopo un reload.</p><dl class="settings-facts" id="settingsToolsFacts"><div><dt>Policy attiva</dt><dd>—</dd></div></dl><div class="provider-actions"><button type="button" class="primary-btn compact" data-open-sheet="permissions">Gestisci permessi</button><button type="button" class="secondary-btn compact" data-open-sheet="capabilities">Gestisci strumenti</button></div></article>
-              <!-- ⭐⭐⭐ 04/9, R-03 — RICERCA WEB: la fonte si sceglie qui, come sul mobile (TalosMobileSearchSourcePanel.vue), più DuckDuckGo senza chiave. Riempita da caricaPannelloRicercaWeb() in app.js con lo stato vero del server; nessuna chiave passa mai dal browser in lettura. -->
-              <article class="settings-card settings-info-card" data-settings-panel="tools" id="settingsSearchPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Ricerca web</span><h3>Origine della ricerca web</h3></div></div><p class="muted-copy">TALOS non possiede un indice del web: interroga uno di questi servizi. Le pagine vengono lette su questo computer; solo la query lo lascia. Senza chiave usa DuckDuckGo.</p><div id="searchSourceMount" aria-live="polite"><p class="muted-copy">Lettura dello stato…</p></div></article>
-              <article class="settings-card settings-info-card" data-settings-panel="privacy" id="settingsPrivacyPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Dati</span><h3>Privacy e dati locali</h3></div></div><p class="muted-copy">Le preferenze restano in questo browser; chiavi, percorsi assoluti e log tecnici non vengono salvati nell’interfaccia.</p><ul class="settings-facts-list" id="settingsPrivacyList"><li class="muted-copy">Lettura…</li></ul><span class="settings-status">Nessuna credenziale salvata nel browser</span><div class="provider-actions"><button type="button" class="secondary-btn compact danger" id="settingsSvuotaLocali">Svuota le preferenze di questo browser</button></div></article>
-              <article class="settings-card settings-info-card" data-settings-panel="workspace" id="settingsWorkspacePanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Workspace</span><h3>File e workspace</h3></div></div><p class="muted-copy">Il workspace attivo e l’albero dei file si gestiscono dal Context rail, con operazioni reali e permessi espliciti.</p><dl class="settings-facts" id="settingsWorkspaceFacts"><div><dt>Workspace attivo</dt><dd>—</dd></div></dl><div class="provider-actions"><button type="button" class="secondary-btn compact" data-legacy-open-panel="inspector">Apri l’albero dei file</button><button type="button" class="secondary-btn compact" id="settingsNuovaSessioneAltrove">Nuova sessione in un’altra cartella</button></div></article>
-              <article class="settings-card control-plane-card" data-settings-panel="account" id="settingsAccountPanel" hidden><h3>Account, Doctor e backup</h3><p class="muted-copy">Parità CLI senza costringere l’utente al terminale.</p><div class="control-grid"><button data-open-sheet="control">Agents</button><button data-open-sheet="control">Hooks</button><button data-open-sheet="capabilities">Skills</button><button data-open-sheet="capabilities">Plugins</button><button data-open-sheet="capabilities">MCP</button><button data-control-action="doctor">Doctor</button></div></article>
-              </div>
-            </div>
-          </div>
-        </section>
-<!-- pannello diff del monolite -->
-<section class="legacy-pane">
-          <div class="review-shell">
-            <div class="view-heading"><div><span class="eyebrow">Review center</span><h2 id="reviewHeading">Nessuna modifica in questa sessione</h2><p>Ogni file che TALOS scrive compare qui, riga per riga, con ciò che c'era prima.</p></div><button class="secondary-btn compact" id="copyAllDiffs" type="button" disabled>Copia tutti i diff</button></div>
-            <div class="review-summary">
-              <div><span id="reviewSummaryNuovi">0</span><small>nuovi</small></div><div><span id="reviewSummaryModificati">0</span><small>modificati</small></div><div><span id="reviewSummaryTest">—</span><small>test</small></div><div><span id="reviewSummaryRischio">—</span><small>rischio</small></div>
-            </div>
-            <div class="file-review-list"><p class="board-empty review-empty" id="reviewEmptyList">Nessun file scritto finora.</p></div>
-            <div class="diff-panel">
-              <div class="diff-toolbar"><span id="diffPath">—</span><div><button class="secondary-btn compact" type="button" data-review-action="comment" disabled>Commenta</button><button class="secondary-btn compact" type="button" data-review-action="open" disabled>Apri file</button></div></div>
-              <p class="board-empty review-empty" id="diffEmpty">Il diff del file selezionato compare qui: righe tolte in rosso, aggiunte in verde.</p>
-              <pre hidden id="diffPre"><code id="diffCode"></code></pre>
-            </div>
-          </div>
-        </section>
-<!-- pannello dashboard del monolite -->
-<section class="legacy-pane" data-demo-surface="board">
-          <div class="dashboard-shell">
-            <div class="view-heading board-heading">
-              <div><span class="eyebrow" id="boardEyebrow">Codice</span><h2 id="boardTitle">Sessioni</h2><p id="boardDescription">Le sessioni reali di Codice — modello, stato, consumo.</p></div>
-              <div class="board-heading-actions"><button class="primary-btn compact" type="button" data-action="refresh-sessions-board"><svg><use href="#i-history"/></svg>Aggiorna</button></div>
-            </div>
-
-            <section class="session-board-list" id="sessionsBoardList" data-real-surface="sessions" aria-label="Sessioni">
-              <p class="board-empty">Nessuna sessione ancora — premi «Nuova» per iniziare.</p>
-            </section>
-          </div>
-        </section>
-<!-- pannello browser del monolite -->
-<section class="legacy-pane">
-          <div class="browser-shell">
-            <div class="browser-bar"><div class="browser-nav"><button type="button" data-browser-action="back" aria-label="Pagina letta precedente" disabled>‹</button><button type="button" data-browser-action="forward" aria-label="Pagina letta successiva" disabled>›</button><button type="button" data-browser-action="open" aria-label="Apri nel browser" disabled>↗</button></div><div class="browser-url"><span class="status-pulse"></span>—</div><div class="browser-tools"><button class="secondary-btn compact" type="button" data-browser-action="annotate" disabled>Annota</button><button class="secondary-btn compact" type="button" data-browser-action="copy" disabled>Copia testo</button></div></div>
-            <div class="device-preview"><p class="board-empty">Nessuna pagina letta in questa sessione. Quando TALOS legge una pagina web, il testo ricevuto compare qui.</p></div>
-          </div>
-        </section>
-<!-- pannello automations del monolite -->
-<section class="legacy-pane" data-demo-surface="automations">
-          <div class="generic-shell">
-            <div class="view-heading"><div><span class="eyebrow">Automazioni</span><h2>Run programmati</h2><p>Task isolati con stato, cronologia e modello dedicato.</p></div><button class="primary-btn compact" data-automation-action="new">Nuova automazione</button></div>
-            <div class="automation-list">
-              <article class="automation-row"><div class="automation-icon"><svg><use href="#i-clock"/></svg></div><div><strong>Sconto a scaglioni</strong><small>Task reale del corpus · avvio manuale, non ancora su una schedulazione vera</small></div><span class="status-chip">Task reale</span><button class="secondary-btn compact" data-automation-action="run" data-task-id="sconto-a-scaglioni">Esegui ora</button></article>
-            </div>
-            <div class="automation-list" id="automationListReal"></div>
-          </div>
-        </section>
-<!-- hero della chat vuota (fase 2: EmptySessionScreen) -->
-<div id="conversationEmptyState" hidden></div>
-<button type="button" data-legacy-id="capabilityBtn" hidden aria-hidden="true"></button>
-<button type="button" data-legacy-id="redirectRunButton" hidden aria-hidden="true">Reindirizza</button>
-<button type="button" class="run-state" id="runStateToggle" hidden aria-hidden="true" aria-pressed="false"><strong>In esecuzione</strong><span>—</span></button>
-<!-- colonna dei dettagli del monolite: ambiente, albero file, sotto-agenti (fase 2: rail del mockup) -->
-<div id="legacyInspector">
-      <div class="panel-resize-handle" id="inspectorResizeHandle" data-resize="inspector" role="separator" aria-orientation="vertical" aria-label="Ridimensiona l'inspector" tabindex="0"></div>
-      <div class="inspector-head">
-        <div><span class="eyebrow">Context rail</span><strong>Sessione</strong></div>
-        <button class="icon-btn nav-close" data-close-panel="inspector" aria-label="Chiudi inspector"><svg><use href="#i-x"/></svg></button>
-      </div>
-      <div class="inspector-tabs" role="tablist" aria-label="Inspector sessione">
-        <button class="active" id="inspector-tab-context" role="tab" aria-selected="true" aria-controls="inspector-context" data-inspector-tab="context">Context</button>
-        <button id="inspector-tab-files" role="tab" aria-selected="false" aria-controls="inspector-files" data-inspector-tab="files">Files</button>
-        <button id="inspector-tab-agents" role="tab" aria-selected="false" aria-controls="inspector-agents" data-inspector-tab="agents">Agents</button>
-      </div>
-      <div class="inspector-body">
-        <section class="inspector-section active" id="inspector-context" role="tabpanel" aria-labelledby="inspector-tab-context" data-inspector-section="context" data-demo-surface="inspector-context">
-          <div class="inspector-card">
-            <div class="card-title"><span>Ambiente</span><svg><use href="#i-branch"/></svg></div>
-            <dl><div><dt>Workspace</dt><dd id="envWorkspace">—</dd></div><div><dt>Branch</dt><dd id="envBranch">—</dd></div><div><dt>Worktree</dt><dd id="envWorktree">—</dd></div><div><dt>Root</dt><dd id="envRoot">—</dd></div><div><dt>Repo annidati</dt><dd id="envRepoAnnidati">—</dd></div></dl>
-          </div>
-          <div class="inspector-card">
-            <div class="card-title"><span>Capability</span><svg><use href="#i-link"/></svg></div>
-            <div class="capability-row"><span>Attrezzi</span><b data-capability-row="attrezzi">Non osservato</b></div><div class="capability-row"><span>MCP</span><b data-capability-row="mcp">Non osservato</b></div><div class="capability-row"><span>Web search</span><b data-capability-row="ricerca">Non osservato</b></div><div class="capability-row"><span>Browser</span><b data-capability-row="browser">Non osservato</b></div>
-            <button class="secondary-btn full" id="manageCapabilitiesBtn">Gestisci capability</button>
-          </div>
-          <div class="inspector-card">
-            <div class="card-title"><span>Memory</span><svg><use href="#i-brain"/></svg></div>
-            <p class="muted-copy">Le preferenze salvate (attrezzo memory_write) appaiono nel Capability hub — apri la palette comandi (⌘K) → "Skills, MCP, plugin e gateway".</p>
-          </div>
-          <div class="inspector-card session-topology">
-            <div class="card-title"><span>Session topology</span><svg><use href="#i-branch"/></svg></div>
-            <div class="topology-row root"><span class="topology-node"></span><div><strong data-current-session-title>Nessuna sessione</strong><small>sessione corrente</small></div></div>
-            <p class="muted-copy">Le deleghe a sotto-agenti isolati (attrezzo delega_sottotask) appaiono nel foglio "Albero sessione" — apri il titolo sessione qui sopra.</p>
-            <div class="topology-actions"><button class="secondary-btn compact" data-action="fork-session">Fork questa sessione</button></div>
-          </div>
-        </section>
-        <section class="inspector-section" id="inspector-files" role="tabpanel" aria-labelledby="inspector-tab-files" data-inspector-section="files" data-demo-surface="inspector-files">
-          <div class="ft-search-row">
-            <svg class="ft-search-icon" aria-hidden="true"><use href="#i-search"/></svg>
-            <input type="text" id="fileTreeFilter" class="ft-search-input" placeholder="Filtra i file caricati…" aria-label="Filtra i file per nome" autocomplete="off" spellcheck="false">
-          </div>
-          <div class="ft-commandbar" role="toolbar" aria-label="Comandi file del workspace">
-            <button type="button" class="ft-command" id="fileTreeNewFile" aria-label="Nuovo file" title="Nuovo file" disabled><svg><use href="#i-edit"/></svg></button>
-            <button type="button" class="ft-command" id="fileTreeNewFolder" aria-label="Nuova cartella" title="Nuova cartella" disabled><svg><use href="#i-folder"/></svg></button>
-            <button type="button" class="ft-command" id="fileTreeUp" aria-label="Risali fuori dalla sessione (sola lettura)" title="Risali fuori dalla sessione" aria-pressed="false" disabled><svg><use href="#i-arrow-left"/></svg></button>
-            <span class="ft-commandbar-spacer"></span>
-            <button type="button" class="ft-command" id="fileTreeRefresh" aria-label="Aggiorna file" title="Aggiorna" disabled><svg><use href="#i-history"/></svg></button>
-            <button type="button" class="ft-command" id="fileTreeCollapse" aria-label="Comprimi cartelle" title="Comprimi tutto" disabled><svg><use href="#i-chevron"/></svg></button>
-          </div>
-          <p class="ft-search-hint" id="fileTreeFilterHint" aria-live="polite"></p>
-          <div class="ft-legend">
-            <span class="ft-legend-new"><i></i>nuovo</span>
-            <span class="ft-legend-modified"><i></i>modificato</span>
-          </div>
-          <!-- ⛔⛔⛔ 30/8, owner dal vivo: "nella sidebar di destra ci sono ancora dei componenti mockup... il file tree ha ancora la struttura mockup" — QUESTO era esattamente il markup incriminato (un albero finto "talos/src/components/TalosComposer.vue"), mai sostituito prima del primo giro reale. Stessa famiglia già corretta il 27/8 per Terminale/Browser/Review (vedi resettaSuperficiRealiDedicate() in app.js) — qui mancava. Il placeholder onesto sotto viene aggiornato da JS (resettaSuperficiRealiDedicate/avviaSessionePendente) e sostituito per intero da renderizzaAlberoReale() appena una sessione vera ha una radice. -->
-          <div class="file-tree">
-            <p class="board-empty" id="fileTreeEmptyState">Nessuna cartella ancora scelta — i file appariranno qui appena inizi una sessione.</p>
-          </div>
-        </section>
-        <!-- ⛔⛔⛔ 30/8, QA visiva (batch-fix): NIENTE data-demo-surface qui, a differenza di inspector-context/inspector-files. Trovato dal vivo con una sonda mirata: quei due hanno un vero "reale disponibile → nascondi" (renderizzaAlberoReale, ecc.); questo tab non ha mai avuto un contenuto condizionale — prima diceva "non ancora implementato" in modo statico, ora dice sempre il puntatore vero, ugualmente statico. Un badge "Demo UI" senza NESSUN codice che lo nasconda mai sarebbe rimasto acceso per sempre (verificato: hidden:false anche con una sessione reale aperta, mentre context/files erano già hidden:true). -->
-        <section class="inspector-section" id="inspector-agents" role="tabpanel" aria-labelledby="inspector-tab-agents" data-inspector-section="agents">
-          <p class="board-empty">Le deleghe a sotto-agenti isolati (attrezzo delega_sottotask) appaiono nella card "Session topology" del tab Context, e nel foglio "Albero sessione" — apri il titolo sessione in cima alla chat.</p>
-        </section>
-      </div>
-    </div>
-<!-- barra superiore del monolite: i pulsanti che app.js aggancia in modo diretto -->
-<div class="topbar">
-        <div class="topbar-left">
-<button class="icon-btn mobile-only" data-open-panel="sessions" aria-label="Apri sessioni"><svg class="sessions-menu-icon"><use href="#i-menu"/></svg><svg class="embedded-session-back-icon"><use href="#i-arrow-left"/></svg></button>
-          <button class="icon-btn desktop-only" data-legacy-id="sessionsCollapseBtn" aria-label="Comprimi o espandi le sessioni" aria-expanded="true"><svg><use href="#i-menu"/></svg></button>
-          <button class="title-button" data-legacy-id="sessionTitleButton" data-open-sheet="sessionTree" aria-haspopup="dialog" aria-label="Apri dettagli e albero della sessione">
-            <span><strong data-legacy-id="sessionTitle" data-current-session-title>Nessuna sessione</strong><small>premi «Nuova» per iniziare</small></span>
-            <svg><use href="#i-chevron"/></svg>
-          </button>
-        </div>
-        <div class="topbar-center">
-          <button class="mode-tab active" data-mode="chat" aria-pressed="true">Chat</button>
-          <button class="mode-tab" data-mode="terminal" aria-pressed="false">Terminale</button>
-          <button class="mode-tab" data-mode="dashboard" aria-pressed="false">Board</button>
-        </div>
-        <div class="topbar-right">
-          <button class="context-chip environment-chip" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span data-environment-label>Ambiente non osservato</span></button>
-          <!--
-            ⭐ FASE M (29/8) — resumeSession()/compactSession() esistevano
-            già, testate, ma raggiungibili solo scrivendo un messaggio
-            (resume) o mai da un umano (compact, solo via ⌘K). Due
-            bottoni reali, stesse funzioni, nessuna duplicazione — vedi
-            app.js.
-          -->
-          <button class="icon-btn" data-legacy-id="resumeSessionBtn" aria-label="Riprendi la sessione"><svg><use href="#i-play"/></svg></button>
-          <button class="icon-btn" data-legacy-id="compactSessionBtn" aria-label="Comprimi il contesto"><svg><use href="#i-grid"/></svg></button>
-          <button class="icon-btn" data-legacy-id="commandPaletteBtn" aria-label="Comandi"><svg><use href="#i-command"/></svg></button>
-          <button class="icon-btn" data-legacy-open-panel="inspector" aria-label="Mostra o nascondi inspector" aria-expanded="true"><svg><use href="#i-layout"/></svg></button>
-        </div>
-      </header>
-<!-- STRATO VISIBILE -->
-<!-- dialoghi nativi del monolite -->
-<dialog class="command-dialog" id="commandDialog" aria-labelledby="commandDialogTitle">
-    <h2 class="sr-only" id="commandDialogTitle">Comandi TALOS</h2>
-    <div class="command-search"><svg><use href="#i-search"/></svg><input id="commandSearch" aria-label="Cerca comando o azione" placeholder="Cerca comando o azione..." autocomplete="off"/><button class="command-close" id="closeCommand" type="button" aria-label="Chiudi comandi"><svg><use href="#i-x"/></svg></button></div>
-    <div class="command-results" id="commandResults">
-      <button data-command="new"><span><svg><use href="#i-plus"/></svg>Nuova sessione</span><kbd>⌘N</kbd></button>
-      <button data-command="review"><span><svg><use href="#i-diff"/></svg>Apri review</span><kbd>⌘R</kbd></button>
-      <button data-command="terminal"><span><svg><use href="#i-terminal"/></svg>Apri terminale</span><kbd>⌘T</kbd></button>
-      <button data-command="browser"><span><svg><use href="#i-web"/></svg>Apri browser</span><kbd>⌘B</kbd></button>
-      <button data-command="resume"><span><svg><use href="#i-play"/></svg>Riprendi sessione</span><kbd>R</kbd></button>
-      <button data-command="fork"><span><svg><use href="#i-branch"/></svg>Fork sessione</span><kbd>F</kbd></button>
-      <button data-command="compact"><span><svg><use href="#i-brain"/></svg>Compatta contesto</span><kbd>C</kbd></button>
-      <button data-command="permissions"><span><svg><use href="#i-shield"/></svg>Permessi</span><kbd>P</kbd></button>
-      <button data-command="dashboard"><span><svg><use href="#i-grid"/></svg>Session board</span><kbd>D</kbd></button>
-      <button data-command="tree"><span><svg><use href="#i-branch"/></svg>Albero sessione e side thread</span><kbd>Y</kbd></button>
-      <button data-command="skills"><span><svg><use href="#i-bolt"/></svg>Skills, MCP, plugin e gateway</span><kbd>S</kbd></button>
-      <button data-command="control"><span><svg><use href="#i-settings"/></svg>Agents, hooks e doctor</span><kbd>G</kbd></button>
-      <button data-command="rename"><span><svg><use href="#i-list"/></svg>Rinomina sessione</span><kbd>N</kbd></button>
-      <button data-command="export"><span><svg><use href="#i-copy"/></svg>Esporta sessione</span><kbd>E</kbd></button>
-      <button data-command="share"><span><svg><use href="#i-link"/></svg>Condividi snapshot</span><kbd>H</kbd></button>
-      <div class="command-empty" id="commandEmpty" hidden>Nessun comando corrisponde alla ricerca.</div>
-    </div>
-  </dialog>
-<dialog class="sheet-dialog" id="sheetDialog" aria-labelledby="sheetTitle" data-demo-surface="dynamic-sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-head"><div><span class="eyebrow" id="sheetEyebrow">Contesto</span><h2 id="sheetTitle">Capability</h2></div><button class="icon-btn" id="closeSheet" aria-label="Chiudi pannello"><svg><use href="#i-x"/></svg></button></div>
-    <div class="sheet-body" id="sheetBody"></div>
-  </dialog>
-<button class="harness-dialog-backdrop" id="harnessDialogBackdrop" type="button" aria-label="Chiudi finestra Codice" hidden></button>
-<button class="overlay-backdrop" id="overlayBackdrop" aria-label="Chiudi pannelli"></button>
-<div class="toast-region" data-legacy-id="toastRegion" hidden></div>`;
+var frammenti_default = '<!-- Pannello impostazioni + Model Lab del monolite: tutti gli id che app.js cerca. -->\n<section class="legacy-pane">\n          <div class="generic-shell">\n            <div class="view-heading"><div><span class="eyebrow">TALOS</span><h2>Impostazioni Codice</h2><p>La superficie segue i token del tema TALOS attivo.</p></div></div>\n            <div class="settings-layout">\n              <nav class="settings-category-nav" role="tablist" aria-label="Sezioni impostazioni">\n                <button type="button" role="tab" aria-selected="true" aria-controls="appearanceSettingsCard" data-settings-tab="appearance">Aspetto e movimento</button>\n                <button type="button" role="tab" aria-selected="false" aria-controls="settingsChatPanel" data-settings-tab="chat">Chat e composer</button>\n                <button type="button" role="tab" aria-selected="false" aria-controls="modelLabCard" data-settings-tab="models">Laboratorio modelli</button>\n                <button type="button" role="tab" aria-selected="false" aria-controls="settingsProvidersPanel" data-settings-tab="providers">Provider e accessi</button>\n                <button type="button" role="tab" aria-selected="false" aria-controls="settingsToolsPanel" data-settings-tab="tools">Strumenti agente e permessi</button>\n                <button type="button" role="tab" aria-selected="false" aria-controls="settingsPrivacyPanel" data-settings-tab="privacy">Privacy e dati locali</button>\n                <button type="button" role="tab" aria-selected="false" aria-controls="settingsWorkspacePanel" data-settings-tab="workspace">File e workspace</button>\n                <button type="button" role="tab" aria-selected="false" aria-controls="settingsAccountPanel" data-settings-tab="account">Account, Doctor e backup</button>\n              </nav>\n              <div class="settings-detail-panels">\n              <article class="settings-card settings-card-wide" id="appearanceSettingsCard" data-settings-panel="appearance">\n                <div class="settings-card-heading"><div><span class="eyebrow">Aspetto</span><h3>Interfaccia e movimento</h3><p class="muted-copy">Tema, layout, sfondo e animazioni seguono i token TALOS. Token colore, tipo, raggio e densità restano locali a questo desktop.</p></div><button class="secondary-btn compact" type="button" id="resetMotionButton" data-action="reset-motion">Ripristina movimento</button></div>\n                <div class="settings-section"><h4>Design</h4><div class="settings-control-grid">\n                  <label class="setting-control" for="themePresetSelect"><span>Tema TALOS</span><select id="themePresetSelect"><option value="forge">Forge</option><option value="paper">Paper</option><option value="terminal">Terminal</option><option value="aurora">Aurora</option><option value="glacier">Glacier</option><option value="ember">Ember</option><option value="atlas">Atlas</option><option value="noir">Noir</option><option value="signal">Signal</option><option value="violet">Violet</option><option value="claudius">Claudius</option><option value="basicus">Basicus</option><option value="telemetry">Telemetry</option><option value="calm">Calm</option></select></label>\n                  <label class="setting-control" for="colorModeSelect"><span>Modalità colore</span><select id="colorModeSelect"><option value="system">Segui il sistema</option><option value="dark">Scuro</option><option value="light">Chiaro</option></select></label>\n                  <label class="setting-control" for="sceneOverrideSelect"><span>Sfondo animato</span><select id="sceneOverrideSelect"><option value="follow-theme">Segui il tema</option><option value="forge">Forge</option><option value="paper">Paper</option><option value="terminal">Terminal</option><option value="aurora">Aurora</option><option value="glacier">Glacier</option><option value="ember">Ember</option><option value="atlas">Atlas</option><option value="noir">Noir</option><option value="signal">Signal</option><option value="violet">Violet</option><option value="claudius">Claudius</option><option value="basicus">Basicus</option><option value="telemetry">Telemetry</option><option value="calm">Calm</option></select></label>\n                  <label class="setting-control" for="uiFontScaleSelect"><span>Dimensione interfaccia</span><select id="uiFontScaleSelect"><option value="xsmall">Extra piccola</option><option value="small">Piccola</option><option value="default">Predefinita</option><option value="large">Grande</option><option value="xlarge">Extra grande</option></select></label>\n                  <label class="setting-control" for="chatFontScaleSelect"><span>Testo chat</span><select id="chatFontScaleSelect"><option value="xcompact">Extra piccolo</option><option value="compact">Piccolo</option><option value="balanced">Predefinito</option><option value="expanded">Grande</option></select></label>\n                  <label class="setting-control" for="composerShapeSelect"><span>Forma del composer</span><select id="composerShapeSelect"><option value="classic">Classica</option><option value="standard">Standard</option><option value="compact">Compatta</option></select></label>\n                  <label class="setting-control" for="composerPlusSelect"><span>Apertura del pulsante +</span><select id="composerPlusSelect"><option value="drawer">Cassetto</option><option value="menu">Menu</option></select></label>\n                  <label class="setting-control" for="messageStyleSelect"><span>Stile dei messaggi</span><select id="messageStyleSelect"><option value="sections">Sezioni</option><option value="bubbles">Bolle</option></select></label>\n                  <label class="setting-control" for="streamingAnimationSelect"><span>Animazione risposta</span><select id="streamingAnimationSelect"><option value="typewriter">Cursore testo</option><option value="fade">Dissolvenza</option></select></label>\n                  <label class="setting-control" for="windowPresentationSelect"><span>Pannelli strumenti</span><select id="windowPresentationSelect"><option value="drawer">Pannello laterale</option><option value="fullscreen">Finestra</option></select></label>\n                </div></div>\n                <div class="settings-section"><h4>Movimento dello sfondo</h4><div class="settings-switch-grid"><label><span>Sfondo attivo</span><input type="checkbox" id="backgroundMotionToggle" checked /></label><label><span>Animazioni interfaccia</span><input type="checkbox" id="interfaceMotionToggle" checked /></label><label><span>Sospendi finestra nascosta</span><input type="checkbox" id="pauseWhenHiddenToggle" checked /></label><label><span>Rispetta risparmio dati</span><input type="checkbox" id="respectDataSaverToggle" checked /></label><label><span>Riduci movimento</span><input type="checkbox" id="reducedMotionToggle" /></label></div><div class="settings-control-grid"><label class="setting-control" for="motionModeSelect"><span>Renderer</span><select id="motionModeSelect"><option value="off">Spento</option><option value="static">Statico</option><option value="simple">Semplice</option><option value="complex">Complessità alta</option><option value="adaptive">Adattivo</option></select></label><label class="setting-control" for="motionQualitySelect"><span>Qualità</span><select id="motionQualitySelect"><option value="low">Bassa</option><option value="balanced">Bilanciata</option><option value="high">Alta</option><option value="adaptive">Adattiva</option></select></label></div><div class="range-grid">\n                  <label class="range-control"><span>Velocità <b class="range-value"><output id="motionSpeedOutput">100</output>%</b></span><input id="motionSpeedRange" type="range" min="25" max="200" value="100" /></label><label class="range-control"><span>Intensità <b class="range-value"><output id="motionIntensityOutput">20</output>%</b></span><input id="motionIntensityRange" type="range" min="0" max="100" value="20" /></label><label class="range-control"><span>Bagliore <b class="range-value"><output id="motionGlowOutput">10</output>%</b></span><input id="motionGlowRange" type="range" min="0" max="100" value="10" /></label><label class="range-control"><span>Densità <b class="range-value"><output id="motionDensityOutput">100</output>%</b></span><input id="motionDensityRange" type="range" min="25" max="150" value="100" /></label><label class="range-control"><span>Profondità <b class="range-value"><output id="motionDepthOutput">92</output>%</b></span><input id="motionDepthRange" type="range" min="0" max="100" value="92" /></label><label class="range-control"><span>Scie <b class="range-value"><output id="motionTrailsOutput">50</output>%</b></span><input id="motionTrailsRange" type="range" min="0" max="100" value="50" /></label><label class="range-control"><span>Contrasto <b class="range-value"><output id="motionContrastOutput">80</output>%</b></span><input id="motionContrastRange" type="range" min="0" max="100" value="80" /></label><label class="range-control"><span>Parallasse <b class="range-value"><output id="motionParallaxOutput">20</output>%</b></span><input id="motionParallaxRange" type="range" min="0" max="100" value="20" /></label>\n                </div></div>\n                <div class="settings-section"><h4>Animazioni dell’interfaccia</h4><div class="settings-control-grid"><label class="setting-control" for="motionProfileSelect"><span>Profilo</span><select id="motionProfileSelect"><option value="preset">Predefinito</option><option value="minimal">Minimale</option><option value="expressive">Espressivo</option><option value="custom">Personalizzato</option><option value="off">Spento</option></select></label><label class="setting-control" for="motionEasingSelect"><span>Curva</span><select id="motionEasingSelect"><option value="precise">Precisa</option><option value="soft">Morbida</option><option value="elastic-light">Elastica leggera</option><option value="linear">Lineare</option><option value="cinematic">Cinematografica</option></select></label></div><div class="range-grid"><label class="range-control"><span>Durata <b class="range-value"><output id="motionDurationOutput">50</output>%</b></span><input id="motionDurationRange" type="range" min="50" max="150" value="50" /></label><label class="range-control"><span>Intensità UI <b class="range-value"><output id="motionUiIntensityOutput">65</output>%</b></span><input id="motionUiIntensityRange" type="range" min="0" max="100" value="65" /></label><label class="range-control"><span>Ritardo progressivo <b class="range-value"><output id="motionStaggerOutput">40</output>ms</b></span><input id="motionStaggerRange" type="range" min="0" max="120" value="40" /></label></div><div class="settings-switch-grid categories"><label><span>Finestre</span><input type="checkbox" id="motionWindowsToggle" checked /></label><label><span>Superfici</span><input type="checkbox" id="motionSurfacesToggle" checked /></label><label><span>Navigazione</span><input type="checkbox" id="motionNavigationToggle" checked /></label><label><span>Composer</span><input type="checkbox" id="motionComposerToggle" checked /></label><label><span>Messaggi</span><input type="checkbox" id="motionMessagesToggle" checked /></label><label><span>Feedback</span><input type="checkbox" id="motionFeedbackToggle" checked /></label></div></div>\n                <div class="settings-section"><h4>Chrome desktop</h4><div class="settings-switch-grid"><label><span>Intestazione immersiva</span><input type="checkbox" id="immersiveHeaderToggle" /></label></div><p class="muted-copy">Icona launcher collegata al tema e limiti FPS/DPR restano proprietà dell’host desktop, non del documento web.</p></div>\n                <span class="settings-status" id="appearanceSettingsStatus" role="status">Preferenze locali · nessun segreto nel browser</span>\n              </article>\n              <article class="settings-card settings-card-wide model-lab-card" id="modelLabCard" data-model-lab data-settings-panel="models" hidden>\n                <div class="settings-card-heading"><div><span class="eyebrow">Laboratorio modelli</span><h3>Modelli, provider e runtime</h3><p class="muted-copy">Il laboratorio separa dati osservati, preferenze locali e funzioni che richiedono un runtime LLM. Nulla viene presentato come disponibile se non è verificato.</p></div><span class="runtime-gate" id="modelLabRuntimeBadge">Runtime locale · non scelto</span></div>\n                <div class="model-lab-ledger" aria-label="Stato laboratorio modelli"><div><strong id="machineCapacityStatus">Misurazione in corso…</strong><span>Capacità macchina</span></div><div><strong id="modelLabProviderStatus">Provider da verificare</strong><span>Accessi server</span></div><div><strong id="modelLabCatalogStatus">Catalogo non caricato</strong><span>Modelli osservati</span></div><div><strong>Gated</strong><span>Runtime locale</span></div></div>\n                <div class="model-lab-tabs" role="tablist" aria-label="Sezioni laboratorio modelli"><button class="active" id="modelLabOverviewTab" role="tab" aria-selected="true" aria-controls="modelLabOverviewPanel" data-model-lab-tab="overview">Panoramica</button><button id="modelLabProvidersTab" role="tab" aria-selected="false" aria-controls="modelLabProvidersPanel" data-model-lab-tab="providers">Provider</button><button id="modelLabCatalogTab" role="tab" aria-selected="false" aria-controls="modelLabCatalogPanel" data-model-lab-tab="catalog">Catalogo API</button><button id="modelLabInstalledTab" role="tab" aria-selected="false" aria-controls="modelLabInstalledPanel" data-model-lab-tab="installed">Installati</button><button id="modelLabHfTab" role="tab" aria-selected="false" aria-controls="modelLabHfPanel" data-model-lab-tab="huggingface">Hugging Face</button><button id="modelLabDownloadsTab" role="tab" aria-selected="false" aria-controls="modelLabDownloadsPanel" data-model-lab-tab="downloads">Download</button></div>\n                <section class="model-lab-panel active" id="modelLabOverviewPanel" role="tabpanel" aria-labelledby="modelLabOverviewTab" data-model-lab-panel="overview"><div class="model-lab-layout"><div><h4>Capacità di questa macchina</h4><div class="model-lab-metrics"><div><span>RAM totale</span><strong id="machineMemoryMetric">—</strong></div><div><span>RAM libera</span><strong id="machineFreeMemoryMetric">—</strong></div><div><span>Spazio disponibile</span><strong id="machineStorageMetric">—</strong></div><div><span>Allocabile dopo riserva 1 GB</span><strong id="machineAllocatableMetric">—</strong></div></div><p class="settings-status" id="machineCapacityDetail">La misura usa solo le API del server locale.</p><div class="memoria-libera" id="memoriaLibera"><div class="memoria-barra" role="img" aria-labelledby="memoriaBarraEtichetta"><span class="memoria-barra-usata" id="memoriaBarraUsata"></span></div><p class="memoria-riga" id="memoriaBarraEtichetta">Misura non ancora eseguita.</p><p class="memoria-tenuta" id="memoriaTenuta" hidden></p><div class="memoria-azioni"><button class="secondary-btn compact" id="memoriaRimisura" type="button">Rimisura</button><button class="primary-btn compact" id="memoriaScarica" type="button" disabled>Libera la memoria del modello</button></div><p class="muted-copy memoria-nota">TALOS libera solo la memoria che tiene lui: il modello locale caricato. <strong>Non chiude processi di sistema o altre app</strong> — terminare un processo che non si riconosce è il modo più rapido per far cadere il computer, e nessuno dei runtime affermati lo fa: scaricano il modello, non uccidono processi.</p></div></div><div class="runtime-gate runtime-gate-large" id="modelLabRuntimeGate"><h4>Runtime locale</h4><p id="modelLabRuntimeStatus">Verifica in corso…</p><div id="modelLabRuntimeList" class="model-lab-runtime-list" aria-live="polite"><p class="model-lab-empty">Nessun runtime osservato.</p></div><div class="model-lab-runtime-controls"><label class="setting-control"><span>Backend</span><select id="modelLabRuntimeSelect" disabled><option value="">Nessun runtime pronto</option></select></label><label class="setting-control"><span>Modello</span><select id="modelLabModelSelect" disabled><option value="">Nessun modello osservato</option></select></label></div><div class="model-lab-runtime-actions"><button class="secondary-btn compact" id="modelLabRuntimeRefresh" type="button">Aggiorna runtime</button><button class="primary-btn compact" id="modelLabRunButton" type="button" disabled>Prova runtime</button><button class="secondary-btn compact" id="modelLabCancelButton" type="button" hidden>Ferma prova</button></div><label class="model-lab-prompt"><span>Prompt di prova</span><textarea id="modelLabPrompt" rows="2" placeholder="Scrivi una richiesta breve…" disabled></textarea></label><div id="modelLabStream" class="model-lab-stream" aria-live="polite"><p class="model-lab-empty">Nessuna prova avviata.</p></div></div></div><p class="model-lab-active-model">Modello attivo condiviso con Chat: <strong id="modelLabActiveModel">Nessun modello selezionato</strong></p></section>\n                <section class="model-lab-panel" id="modelLabProvidersPanel" role="tabpanel" aria-labelledby="modelLabProvidersTab" data-model-lab-panel="providers" hidden>\n                  <div class="model-lab-panel-heading"><div><h4>Provider e accessi</h4><p class="muted-copy">Le chiavi restano nel portachiavi del computer: qui non compaiono mai. Premi «Prova» per chiedere al provider se accetta la credenziale.</p></div><div class="provider-heading-actions"><button class="secondary-btn compact" type="button" id="providerTestAll">Prova tutti</button></div></div>\n                  <div class="provider-list" id="providerList"></div>\n                </section>\n                <section class="model-lab-panel" id="modelLabCatalogPanel" role="tabpanel" aria-labelledby="modelLabCatalogTab" data-model-lab-panel="catalog" hidden><div class="model-lab-panel-heading"><div><h4>Catalogo API osservato</h4><p class="muted-copy">Dati reali OpenRouter; capacità e prezzi provengono dalla risposta upstream.</p></div><button class="secondary-btn compact" id="modelLabRefreshButton" type="button">Aggiorna catalogo</button></div><div class="model-lab-filters"><label class="search-field"><svg><use href="#i-search"/></svg><input id="modelLabSearch" type="search" placeholder="Cerca modello o provider…" aria-label="Cerca modelli" /></label><label class="setting-control"><span>Provider</span><select id="modelLabProviderFilter"><option value="all">Tutti i provider</option></select></label><span class="settings-status" id="modelLabCatalogCount">Catalogo non caricato</span></div><div class="model-lab-catalog-layout"><div class="model-lab-list" id="modelLabCatalogList"><p class="model-lab-empty" id="modelLabCatalogEmpty">Apri questa sezione per caricare il catalogo reale.</p></div><aside class="model-lab-detail" id="modelLabModelDetail"><p class="model-lab-empty">Seleziona un modello per vedere capacità osservate, contesto e prezzi.</p></aside></div></section>\n                <section class="model-lab-panel" id="modelLabInstalledPanel" role="tabpanel" aria-labelledby="modelLabInstalledTab" data-model-lab-panel="installed" hidden><div class="model-lab-panel-heading"><div><h4>Modelli installati</h4><p class="muted-copy">Manifest locali verificati dal server: hash, licenza e origine sono osservati; i percorsi assoluti non arrivano al browser.</p></div></div><div id="modelLabInstalledList" class="model-lab-installed-list"><p class="model-lab-empty">Nessun modello locale osservabile.</p></div></section>\n                <section class="model-lab-panel" id="modelLabHfPanel" role="tabpanel" aria-labelledby="modelLabHfTab" data-model-lab-panel="huggingface" hidden><div class="model-lab-panel-heading"><div><h4>Catalogo Hugging Face</h4><p class="muted-copy">Ricerca e download diretti dall’app. Token e percorsi restano sul server.</p></div><button class="secondary-btn compact" id="modelLabHfSearchButton" type="button">Cerca</button></div><div class="model-lab-filters"><label class="search-field"><svg><use href="#i-search"/></svg><input id="modelLabHfSearch" type="search" placeholder="Cerca repository GGUF…" aria-label="Cerca Hugging Face" /></label><span class="settings-status" id="modelLabHfStatus">Nessuna ricerca</span></div><div class="model-lab-catalog-layout"><div class="model-lab-list" id="modelLabHfResults"><p class="model-lab-empty">Cerca un modello per iniziare.</p></div><aside class="model-lab-detail" id="modelLabHfDetail"><p class="model-lab-empty">Seleziona un repository per vedere i file GGUF.</p></aside></div></section>\n                <section class="model-lab-panel" id="modelLabDownloadsPanel" role="tabpanel" aria-labelledby="modelLabDownloadsTab" data-model-lab-panel="downloads" hidden><div class="model-lab-panel-heading"><div><h4>Centro download</h4><p class="muted-copy">Coda globale con progresso, pausa, ripresa, verifica e annullamento.</p></div></div><div id="modelLabDownloadsList" class="model-lab-installed-list"><p class="model-lab-empty">Nessun download attivo.</p></div></section>\n                <span class="settings-status" id="modelLabStatus" role="status">Preferenze di ricerca locali · credenziali e file restano fuori dal browser</span>\n              </article>\n              <article class="settings-card settings-card-wide" data-settings-panel="chat" id="settingsChatPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Chat</span><h3>Chat e composer</h3></div></div><div class="settings-section"><h4>Spazio di lettura</h4><div class="settings-switch-grid"><label><span>Chat a tutta larghezza</span><input type="checkbox" id="chatFullWidthToggle" /></label></div><p class="muted-copy">Risposte e domande lunghe usano tutta la larghezza disponibile. Le domande brevi, il composer e le sidebar non cambiano.</p></div><div class="settings-section"><h4>Com’è impostata adesso</h4><dl class="settings-facts" id="settingsChatFacts"><div><dt>Testo chat</dt><dd>—</dd></div></dl><p class="muted-copy">Testo, forma del composer e animazione delle risposte si regolano in Aspetto e movimento: qui vedi i valori attivi.</p><button type="button" class="secondary-btn compact" data-settings-go="appearance">Regola in Aspetto e movimento</button></div></article>\n              <article class="settings-card settings-info-card" data-settings-panel="providers" id="settingsProvidersPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Accessi</span><h3>Provider e accessi</h3></div></div><p class="muted-copy">Le chiavi restano sul server locale, mai nel browser. Qui lo stato letto adesso, provider per provider.</p><ul class="settings-facts-list" id="settingsProvidersList" aria-live="polite"><li class="muted-copy">Lettura dello stato…</li></ul><button type="button" class="secondary-btn compact" data-settings-go="models" data-model-lab-go="providers">Gestisci chiavi e indirizzi</button></article>\n              <article class="settings-card settings-info-card" data-settings-panel="tools" id="settingsToolsPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Agente</span><h3>Strumenti agente e permessi</h3></div></div><p class="muted-copy">Policy della sessione e regole per singolo attrezzo vengono salvate con la sessione e restano attive dopo un reload.</p><dl class="settings-facts" id="settingsToolsFacts"><div><dt>Policy attiva</dt><dd>—</dd></div></dl><div class="provider-actions"><button type="button" class="primary-btn compact" data-open-sheet="permissions">Gestisci permessi</button><button type="button" class="secondary-btn compact" data-open-sheet="capabilities">Gestisci strumenti</button></div></article>\n              <!-- ⭐⭐⭐ 04/9, R-03 — RICERCA WEB: la fonte si sceglie qui, come sul mobile (TalosMobileSearchSourcePanel.vue), più DuckDuckGo senza chiave. Riempita da caricaPannelloRicercaWeb() in app.js con lo stato vero del server; nessuna chiave passa mai dal browser in lettura. -->\n              <article class="settings-card settings-info-card" data-settings-panel="tools" id="settingsSearchPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Ricerca web</span><h3>Origine della ricerca web</h3></div></div><p class="muted-copy">TALOS non possiede un indice del web: interroga uno di questi servizi. Le pagine vengono lette su questo computer; solo la query lo lascia. Senza chiave usa DuckDuckGo.</p><div id="searchSourceMount" aria-live="polite"><p class="muted-copy">Lettura dello stato…</p></div></article>\n              <article class="settings-card settings-info-card" data-settings-panel="privacy" id="settingsPrivacyPanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Dati</span><h3>Privacy e dati locali</h3></div></div><p class="muted-copy">Le preferenze restano in questo browser; chiavi, percorsi assoluti e log tecnici non vengono salvati nell’interfaccia.</p><ul class="settings-facts-list" id="settingsPrivacyList"><li class="muted-copy">Lettura…</li></ul><span class="settings-status">Nessuna credenziale salvata nel browser</span><div class="provider-actions"><button type="button" class="secondary-btn compact danger" id="settingsSvuotaLocali">Svuota le preferenze di questo browser</button></div></article>\n              <article class="settings-card settings-info-card" data-settings-panel="workspace" id="settingsWorkspacePanel" hidden><div class="settings-card-heading"><div><span class="eyebrow">Workspace</span><h3>File e workspace</h3></div></div><p class="muted-copy">Il workspace attivo e l’albero dei file si gestiscono dal Context rail, con operazioni reali e permessi espliciti.</p><dl class="settings-facts" id="settingsWorkspaceFacts"><div><dt>Workspace attivo</dt><dd>—</dd></div></dl><div class="provider-actions"><button type="button" class="secondary-btn compact" data-legacy-open-panel="inspector">Apri l’albero dei file</button><button type="button" class="secondary-btn compact" id="settingsNuovaSessioneAltrove">Nuova sessione in un’altra cartella</button></div></article>\n              <article class="settings-card control-plane-card" data-settings-panel="account" id="settingsAccountPanel" hidden><h3>Account, Doctor e backup</h3><p class="muted-copy">Parità CLI senza costringere l’utente al terminale.</p><div class="control-grid"><button data-open-sheet="control">Agents</button><button data-open-sheet="control">Hooks</button><button data-open-sheet="capabilities">Skills</button><button data-open-sheet="capabilities">Plugins</button><button data-open-sheet="capabilities">MCP</button><button data-control-action="doctor">Doctor</button></div></article>\n              </div>\n            </div>\n          </div>\n        </section>\n<!-- pannello diff del monolite\n     ⛔ BC-71 (17/09/2026): il pulsante «Copia tutti i diff» qui sotto NON ha più `id="copyAllDiffs"`.\n     Quell\'id vive nella testata della Revisione disegnata dal mockup (`index.template.html`), ed\n     esisteva due volte nello stesso documento: misurato sulla app viva, `document.querySelectorAll(\'[id="copyAllDiffs"]\')`\n     tornava **2**. Un id doppio rende ambigui `getElementById`, `aria-controls` e `aria-labelledby`, e\n     il secondo nodo non riceve mai né l\'ascoltatore né lo stato `disabled`. Il pulsante resta qui\n     perché questo frammento è un calco del monolite: quello che sparisce è la collisione. -->\n<section class="legacy-pane">\n          <div class="review-shell">\n            <div class="view-heading"><div><span class="eyebrow">Review center</span><h2 id="reviewHeading">Nessuna modifica in questa sessione</h2><p>Ogni file che TALOS scrive compare qui, riga per riga, con ciò che c\'era prima.</p></div><button class="secondary-btn compact" type="button" disabled>Copia tutti i diff</button></div>\n            <div class="review-summary">\n              <div><span id="reviewSummaryNuovi">0</span><small>nuovi</small></div><div><span id="reviewSummaryModificati">0</span><small>modificati</small></div><div><span id="reviewSummaryTest">—</span><small>test</small></div><div><span id="reviewSummaryRischio">—</span><small>rischio</small></div>\n            </div>\n            <div class="file-review-list"><p class="board-empty review-empty" id="reviewEmptyList">Nessun file scritto finora.</p></div>\n            <div class="diff-panel">\n              <div class="diff-toolbar"><span id="diffPath">—</span><div><button class="secondary-btn compact" type="button" data-review-action="comment" disabled>Commenta</button><button class="secondary-btn compact" type="button" data-review-action="open" disabled>Apri file</button></div></div>\n              <p class="board-empty review-empty" id="diffEmpty">Il diff del file selezionato compare qui: righe tolte in rosso, aggiunte in verde.</p>\n              <pre hidden id="diffPre"><code id="diffCode"></code></pre>\n            </div>\n          </div>\n        </section>\n<!-- pannello dashboard del monolite -->\n<section class="legacy-pane" data-demo-surface="board">\n          <div class="dashboard-shell">\n            <div class="view-heading board-heading">\n              <div><span class="eyebrow" id="boardEyebrow">Codice</span><h2 id="boardTitle">Sessioni</h2><p id="boardDescription">Le sessioni reali di Codice — modello, stato, consumo.</p></div>\n              <div class="board-heading-actions"><button class="primary-btn compact" type="button" data-action="refresh-sessions-board"><svg><use href="#i-history"/></svg>Aggiorna</button></div>\n            </div>\n\n            <section class="session-board-list" id="sessionsBoardList" data-real-surface="sessions" aria-label="Sessioni">\n              <p class="board-empty">Nessuna sessione ancora — premi «Nuova» per iniziare.</p>\n            </section>\n          </div>\n        </section>\n<!-- pannello browser del monolite -->\n<section class="legacy-pane">\n          <div class="browser-shell">\n            <div class="browser-bar"><div class="browser-nav"><button type="button" data-browser-action="back" aria-label="Pagina letta precedente" disabled>‹</button><button type="button" data-browser-action="forward" aria-label="Pagina letta successiva" disabled>›</button><button type="button" data-browser-action="open" aria-label="Apri nel browser" disabled>↗</button></div><div class="browser-url"><span class="status-pulse"></span>—</div><div class="browser-tools"><button class="secondary-btn compact" type="button" data-browser-action="annotate" disabled>Annota</button><button class="secondary-btn compact" type="button" data-browser-action="copy" disabled>Copia testo</button></div></div>\n            <div class="device-preview"><p class="board-empty">Nessuna pagina letta in questa sessione. Quando TALOS legge una pagina web, il testo ricevuto compare qui.</p></div>\n          </div>\n        </section>\n<!-- pannello automations del monolite -->\n<section class="legacy-pane" data-demo-surface="automations">\n          <div class="generic-shell">\n            <div class="view-heading"><div><span class="eyebrow">Automazioni</span><h2>Run programmati</h2><p>Task isolati con stato, cronologia e modello dedicato.</p></div><button class="primary-btn compact" data-automation-action="new">Nuova automazione</button></div>\n            <div class="automation-list">\n              <article class="automation-row"><div class="automation-icon"><svg><use href="#i-clock"/></svg></div><div><strong>Sconto a scaglioni</strong><small>Task reale del corpus · avvio manuale, non ancora su una schedulazione vera</small></div><span class="status-chip">Task reale</span><button class="secondary-btn compact" data-automation-action="run" data-task-id="sconto-a-scaglioni">Esegui ora</button></article>\n            </div>\n            <div class="automation-list" id="automationListReal"></div>\n          </div>\n        </section>\n<!-- hero della chat vuota (fase 2: EmptySessionScreen) -->\n<div id="conversationEmptyState" hidden></div>\n<button type="button" data-legacy-id="capabilityBtn" hidden aria-hidden="true"></button>\n<button type="button" data-legacy-id="redirectRunButton" hidden aria-hidden="true">Reindirizza</button>\n<button type="button" class="run-state" id="runStateToggle" hidden aria-hidden="true" aria-pressed="false"><strong>In esecuzione</strong><span>—</span></button>\n<!-- colonna dei dettagli del monolite: ambiente, albero file, sotto-agenti (fase 2: rail del mockup) -->\n<div id="legacyInspector">\n      <div class="panel-resize-handle" id="inspectorResizeHandle" data-resize="inspector" role="separator" aria-orientation="vertical" aria-label="Ridimensiona l\'inspector" tabindex="0"></div>\n      <div class="inspector-head">\n        <div><span class="eyebrow">Context rail</span><strong>Sessione</strong></div>\n        <button class="icon-btn nav-close" data-close-panel="inspector" aria-label="Chiudi inspector"><svg><use href="#i-x"/></svg></button>\n      </div>\n      <!-- ⛔ BC-71 (17/09/2026): `legacy-` davanti ai tre id. Gli id VIVI (`inspector-tab-context`,\n           `-files`, `-agents`) li assegna `bridge/legacy-dom.js` al rail del mockup; qui erano gli\n           stessi, e il documento li portava due volte ciascuno. Rinominati invece che tolti perché i\n           pannelli qui sotto li nominano in `aria-labelledby`: un id tolto lascerebbe un riferimento\n           che non punta a niente, cioè un secondo difetto al posto del primo. -->\n      <div class="inspector-tabs" role="tablist" aria-label="Inspector sessione">\n        <button class="active" id="legacy-inspector-tab-context" role="tab" aria-selected="true" aria-controls="inspector-context" data-inspector-tab="context">Context</button>\n        <button id="legacy-inspector-tab-files" role="tab" aria-selected="false" aria-controls="inspector-files" data-inspector-tab="files">Files</button>\n        <button id="legacy-inspector-tab-agents" role="tab" aria-selected="false" aria-controls="inspector-agents" data-inspector-tab="agents">Agents</button>\n      </div>\n      <div class="inspector-body">\n        <section class="inspector-section active" id="inspector-context" role="tabpanel" aria-labelledby="legacy-inspector-tab-context" data-inspector-section="context" data-demo-surface="inspector-context">\n          <div class="inspector-card">\n            <div class="card-title"><span>Ambiente</span><svg><use href="#i-branch"/></svg></div>\n            <dl><div><dt>Workspace</dt><dd id="envWorkspace">—</dd></div><div><dt>Branch</dt><dd id="envBranch">—</dd></div><div><dt>Worktree</dt><dd id="envWorktree">—</dd></div><div><dt>Root</dt><dd id="envRoot">—</dd></div><div><dt>Repo annidati</dt><dd id="envRepoAnnidati">—</dd></div></dl>\n          </div>\n          <div class="inspector-card">\n            <div class="card-title"><span>Capability</span><svg><use href="#i-link"/></svg></div>\n            <div class="capability-row"><span>Attrezzi</span><b data-capability-row="attrezzi">Non osservato</b></div><div class="capability-row"><span>MCP</span><b data-capability-row="mcp">Non osservato</b></div><div class="capability-row"><span>Web search</span><b data-capability-row="ricerca">Non osservato</b></div><div class="capability-row"><span>Browser</span><b data-capability-row="browser">Non osservato</b></div>\n            <button class="secondary-btn full" id="manageCapabilitiesBtn">Gestisci capability</button>\n          </div>\n          <div class="inspector-card">\n            <div class="card-title"><span>Memory</span><svg><use href="#i-brain"/></svg></div>\n            <p class="muted-copy">Le preferenze salvate (attrezzo memory_write) appaiono nel Capability hub — apri la palette comandi (⌘K) → "Skills, MCP, plugin e gateway".</p>\n          </div>\n          <div class="inspector-card session-topology">\n            <div class="card-title"><span>Session topology</span><svg><use href="#i-branch"/></svg></div>\n            <div class="topology-row root"><span class="topology-node"></span><div><strong data-current-session-title>Nessuna sessione</strong><small>sessione corrente</small></div></div>\n            <p class="muted-copy">Le deleghe a sotto-agenti isolati (attrezzo delega_sottotask) appaiono nel foglio "Albero sessione" — apri il titolo sessione qui sopra.</p>\n            <div class="topology-actions"><button class="secondary-btn compact" data-action="fork-session">Fork questa sessione</button></div>\n          </div>\n        </section>\n        <section class="inspector-section" id="inspector-files" role="tabpanel" aria-labelledby="legacy-inspector-tab-files" data-inspector-section="files" data-demo-surface="inspector-files">\n          <div class="ft-search-row">\n            <svg class="ft-search-icon" aria-hidden="true"><use href="#i-search"/></svg>\n            <input type="text" id="fileTreeFilter" class="ft-search-input" placeholder="Filtra i file caricati…" aria-label="Filtra i file per nome" autocomplete="off" spellcheck="false">\n          </div>\n          <div class="ft-commandbar" role="toolbar" aria-label="Comandi file del workspace">\n            <button type="button" class="ft-command" id="fileTreeNewFile" aria-label="Nuovo file" title="Nuovo file" disabled><svg><use href="#i-edit"/></svg></button>\n            <button type="button" class="ft-command" id="fileTreeNewFolder" aria-label="Nuova cartella" title="Nuova cartella" disabled><svg><use href="#i-folder"/></svg></button>\n            <button type="button" class="ft-command" id="fileTreeUp" aria-label="Risali fuori dalla sessione (sola lettura)" title="Risali fuori dalla sessione" aria-pressed="false" disabled><svg><use href="#i-arrow-left"/></svg></button>\n            <span class="ft-commandbar-spacer"></span>\n            <button type="button" class="ft-command" id="fileTreeRefresh" aria-label="Aggiorna file" title="Aggiorna" disabled><svg><use href="#i-history"/></svg></button>\n            <button type="button" class="ft-command" id="fileTreeCollapse" aria-label="Comprimi cartelle" title="Comprimi tutto" disabled><svg><use href="#i-chevron"/></svg></button>\n          </div>\n          <p class="ft-search-hint" id="fileTreeFilterHint" aria-live="polite"></p>\n          <div class="ft-legend">\n            <span class="ft-legend-new"><i></i>nuovo</span>\n            <span class="ft-legend-modified"><i></i>modificato</span>\n          </div>\n          <!-- ⛔⛔⛔ 30/8, owner dal vivo: "nella sidebar di destra ci sono ancora dei componenti mockup... il file tree ha ancora la struttura mockup" — QUESTO era esattamente il markup incriminato (un albero finto "talos/src/components/TalosComposer.vue"), mai sostituito prima del primo giro reale. Stessa famiglia già corretta il 27/8 per Terminale/Browser/Review (vedi resettaSuperficiRealiDedicate() in app.js) — qui mancava. Il placeholder onesto sotto viene aggiornato da JS (resettaSuperficiRealiDedicate/avviaSessionePendente) e sostituito per intero da renderizzaAlberoReale() appena una sessione vera ha una radice. -->\n          <div class="file-tree">\n            <p class="board-empty" id="fileTreeEmptyState">Nessuna cartella ancora scelta — i file appariranno qui appena inizi una sessione.</p>\n          </div>\n        </section>\n        <!-- ⛔⛔⛔ 30/8, QA visiva (batch-fix): NIENTE data-demo-surface qui, a differenza di inspector-context/inspector-files. Trovato dal vivo con una sonda mirata: quei due hanno un vero "reale disponibile → nascondi" (renderizzaAlberoReale, ecc.); questo tab non ha mai avuto un contenuto condizionale — prima diceva "non ancora implementato" in modo statico, ora dice sempre il puntatore vero, ugualmente statico. Un badge "Demo UI" senza NESSUN codice che lo nasconda mai sarebbe rimasto acceso per sempre (verificato: hidden:false anche con una sessione reale aperta, mentre context/files erano già hidden:true). -->\n        <section class="inspector-section" id="inspector-agents" role="tabpanel" aria-labelledby="legacy-inspector-tab-agents" data-inspector-section="agents">\n          <p class="board-empty">Le deleghe a sotto-agenti isolati (attrezzo delega_sottotask) appaiono nella card "Session topology" del tab Context, e nel foglio "Albero sessione" — apri il titolo sessione in cima alla chat.</p>\n        </section>\n      </div>\n    </div>\n<!-- barra superiore del monolite: i pulsanti che app.js aggancia in modo diretto -->\n<div class="topbar">\n        <div class="topbar-left">\n<button class="icon-btn mobile-only" data-open-panel="sessions" aria-label="Apri sessioni"><svg class="sessions-menu-icon"><use href="#i-menu"/></svg><svg class="embedded-session-back-icon"><use href="#i-arrow-left"/></svg></button>\n          <button class="icon-btn desktop-only" data-legacy-id="sessionsCollapseBtn" aria-label="Comprimi o espandi le sessioni" aria-expanded="true"><svg><use href="#i-menu"/></svg></button>\n          <button class="title-button" data-legacy-id="sessionTitleButton" data-open-sheet="sessionTree" aria-haspopup="dialog" aria-label="Apri dettagli e albero della sessione">\n            <span><strong data-legacy-id="sessionTitle" data-current-session-title>Nessuna sessione</strong><small>premi «Nuova» per iniziare</small></span>\n            <svg><use href="#i-chevron"/></svg>\n          </button>\n        </div>\n        <div class="topbar-center">\n          <button class="mode-tab active" data-mode="chat" aria-pressed="true">Chat</button>\n          <button class="mode-tab" data-mode="terminal" aria-pressed="false">Terminale</button>\n          <button class="mode-tab" data-mode="dashboard" aria-pressed="false">Board</button>\n        </div>\n        <div class="topbar-right">\n          <button class="context-chip environment-chip" data-open-sheet="environment"><svg><use href="#i-branch"/></svg><span data-environment-label>Ambiente non osservato</span></button>\n          <!--\n            ⭐ FASE M (29/8) — resumeSession()/compactSession() esistevano\n            già, testate, ma raggiungibili solo scrivendo un messaggio\n            (resume) o mai da un umano (compact, solo via ⌘K). Due\n            bottoni reali, stesse funzioni, nessuna duplicazione — vedi\n            app.js.\n          -->\n          <button class="icon-btn" data-legacy-id="resumeSessionBtn" aria-label="Riprendi la sessione"><svg><use href="#i-play"/></svg></button>\n          <button class="icon-btn" data-legacy-id="compactSessionBtn" aria-label="Comprimi il contesto"><svg><use href="#i-grid"/></svg></button>\n          <button class="icon-btn" data-legacy-id="commandPaletteBtn" aria-label="Comandi"><svg><use href="#i-command"/></svg></button>\n          <button class="icon-btn" data-legacy-open-panel="inspector" aria-label="Mostra o nascondi inspector" aria-expanded="true"><svg><use href="#i-layout"/></svg></button>\n        </div>\n      </header>\n<!-- STRATO VISIBILE -->\n<!-- dialoghi nativi del monolite -->\n<dialog class="command-dialog" id="commandDialog" aria-labelledby="commandDialogTitle">\n    <h2 class="sr-only" id="commandDialogTitle">Comandi TALOS</h2>\n    <div class="command-search"><svg><use href="#i-search"/></svg><input id="commandSearch" aria-label="Cerca comando o azione" placeholder="Cerca comando o azione..." autocomplete="off"/><button class="command-close" id="closeCommand" type="button" aria-label="Chiudi comandi"><svg><use href="#i-x"/></svg></button></div>\n    <div class="command-results" id="commandResults">\n      <button data-command="new"><span><svg><use href="#i-plus"/></svg>Nuova sessione</span><kbd>⌘N</kbd></button>\n      <button data-command="review"><span><svg><use href="#i-diff"/></svg>Apri review</span><kbd>⌘R</kbd></button>\n      <button data-command="terminal"><span><svg><use href="#i-terminal"/></svg>Apri terminale</span><kbd>⌘T</kbd></button>\n      <button data-command="browser"><span><svg><use href="#i-web"/></svg>Apri browser</span><kbd>⌘B</kbd></button>\n      <button data-command="resume"><span><svg><use href="#i-play"/></svg>Riprendi sessione</span><kbd>R</kbd></button>\n      <button data-command="fork"><span><svg><use href="#i-branch"/></svg>Fork sessione</span><kbd>F</kbd></button>\n      <button data-command="compact"><span><svg><use href="#i-brain"/></svg>Compatta contesto</span><kbd>C</kbd></button>\n      <button data-command="permissions"><span><svg><use href="#i-shield"/></svg>Permessi</span><kbd>P</kbd></button>\n      <button data-command="dashboard"><span><svg><use href="#i-grid"/></svg>Session board</span><kbd>D</kbd></button>\n      <button data-command="tree"><span><svg><use href="#i-branch"/></svg>Albero sessione e side thread</span><kbd>Y</kbd></button>\n      <button data-command="skills"><span><svg><use href="#i-bolt"/></svg>Skills, MCP, plugin e gateway</span><kbd>S</kbd></button>\n      <button data-command="control"><span><svg><use href="#i-settings"/></svg>Agents, hooks e doctor</span><kbd>G</kbd></button>\n      <button data-command="rename"><span><svg><use href="#i-list"/></svg>Rinomina sessione</span><kbd>N</kbd></button>\n      <button data-command="export"><span><svg><use href="#i-copy"/></svg>Esporta sessione</span><kbd>E</kbd></button>\n      <button data-command="share"><span><svg><use href="#i-link"/></svg>Condividi snapshot</span><kbd>H</kbd></button>\n      <div class="command-empty" id="commandEmpty" hidden>Nessun comando corrisponde alla ricerca.</div>\n    </div>\n  </dialog>\n<dialog class="sheet-dialog" id="sheetDialog" aria-labelledby="sheetTitle" data-demo-surface="dynamic-sheet">\n    <div class="sheet-handle"></div>\n    <div class="sheet-head"><div><span class="eyebrow" id="sheetEyebrow">Contesto</span><h2 id="sheetTitle">Capability</h2></div><button class="icon-btn" id="closeSheet" aria-label="Chiudi pannello"><svg><use href="#i-x"/></svg></button></div>\n    <div class="sheet-body" id="sheetBody"></div>\n  </dialog>\n<button class="harness-dialog-backdrop" id="harnessDialogBackdrop" type="button" aria-label="Chiudi finestra Codice" hidden></button>\n<button class="overlay-backdrop" id="overlayBackdrop" aria-label="Chiudi pannelli"></button>\n<div class="toast-region" data-legacy-id="toastRegion" hidden></div>';
 
 // src/bridge/legacy-dom.js
 var VISTA_PER_SCHERMATA = Object.freeze({

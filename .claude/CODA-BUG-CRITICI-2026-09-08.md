@@ -1315,3 +1315,27 @@ come prova fallita: una richiesta legata che aggira il recorder). ⛔ PRIMA si m
 identità a metà giro; se oggi la richiesta arriva al processo nuovo, la riga è vera; se no, si chiude con la misura.
 **Finita quando:** la prova col motore finto è rossa sulla base e verde dopo; stop, scaricamento e riavvio invalidano; il registratore
 vede tutte le richieste; nessun cambio al kernel. Corsia backend, dopo BC-79.2 e prima o dopo BC-73 secondo i file toccati.
+
+## Fase A frontend — CHIUSA e VIVA il 17/09/2026 notte (`381c27ad`), tranne BC-78.1
+
+BC-77, BC-71, BC-70, BC-68, BC-78.2, BC-78.3, BC-78.4 e BC-80 fusi. Revisione MIA sull'albero fuso: unit **1236/1236**; le nove prove
+browser nuove o toccate **45/45** con un worker; tre rotture mie tutte ROSSE (riassunto non nascosto a zero file → BC-80 · un id doppio
+rimesso → BC-71 · piede nascosto contato come ingombro → toast unit), sha256 identico; foto dell'agente: **6 guardate su 40**; dal vivo sul
+4174 (sola lettura, la sonda ferma ogni richiesta non GET: 0 fermate) alle due misure nei due temi: **0 errori di pagina, 0 id doppi**.
+⛔ NON verificato: la cartella `tests/browser` INTERA su questo albero; il riassunto di BC-80 dal vivo con file veri (la sessione aperta
+non ne ha scritti: nodo nascosto, come deve); i «899 px» di BC-78.3 non sono stati riprodotti dall'agente (415 e 456 px misurati:
+sospetta fosse il dettaglio del plugin nel FOGLIO, altra superficie — resta aperto). ⛔ I sette tag malformati restano in
+`mockup/talos-mockup.html`, artefatto dell'owner: vuole il suo sì. Correzioni alla coda portate dall'agente, con la misura: gli id doppi
+erano QUATTRO; `$()` prendeva il nodo VISIBILE, non l'invisibile; il «trattino a x≈303» è la barra della cronologia, un componente
+voluto; delle tre accuse di BC-70 una sola era vera.
+
+## BC-82 | Residui visti nelle foto della Fase A, fuori dalle righe chiuse (17/09/2026) — APERTI, corsia frontend
+
+1. **L'elenco SESSIONI della barra laterale si taglia a metà riga contro il piede** (visto nelle foto dell'agente e nelle mie dal vivo, a
+   1024×800 e 1440×900): stessa classe di BC-78.2, altro contenitore — la sfumatura di scorrimento lì non c'è.
+2. **La riga del comando nella chat ripete due volte la stessa frase** («Esegue node e termina con codice di usci… Esegue node e termina
+   con codice di …»): visto dal vivo sul 4174, giro `488f64e9`. Titolo e dettaglio dicono la stessa cosa; il dettaglio dovrebbe essere il
+   comando.
+3. **Il piede del pannello notifiche apre con «Negate nelle impostazioni del browser…» senza un soggetto**: non dice CHE COSA è negato.
+4. **«Capability» resta una parola tecnica a schermo** (barra laterale e testata): regola «niente nomi tecnici nella UI».
+5. **Lo stato vuoto della Revisione porta un «+» come icona**, che si legge come un comando per aggiungere.

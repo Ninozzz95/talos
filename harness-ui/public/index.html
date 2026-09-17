@@ -435,7 +435,7 @@
         </div>
         <div class="talos-conversation__column">
         <div class="talos-turn" data-c="Turn">
-          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">1</span><button type="button" class="talos-turn-spine__tick" data-tick="1"></span aria-label="Vai al giro"></button></div>
+          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">1</span><button type="button" class="talos-turn-spine__tick" data-tick="1" aria-label="Vai al giro"></button></div>
           <div class="talos-message talos-message--user" data-c="Message">
             <div class="talos-message__head"><span class="talos-message__who">Tu</span><span class="talos-message__meta">18:04</span></div>
             <div class="talos-message__body"><p>Aggiungi la guardia di stallo al registro dei processi e falla riconoscere due casi diversi: silenzio prolungato e giri a vuoto. Non deve uccidere niente.</p></div>
@@ -444,9 +444,9 @@
 
         <div class="talos-turn" data-c="Turn">
           <div class="talos-turn-spine" data-c="TurnSpine">
-            <span class="talos-turn-spine__n">2</span><button type="button" class="talos-turn-spine__tick" data-tick="2"></span aria-label="Vai al giro"></button>
-            <span class="talos-turn-spine__n">3</span><button type="button" class="talos-turn-spine__tick talos-turn-spine__tick--info" data-tick="4"></span aria-label="Vai al giro"></button>
-            <span class="talos-turn-spine__n">4</span><button type="button" class="talos-turn-spine__tick" data-tick="1"></span aria-label="Vai al giro"></button>
+            <span class="talos-turn-spine__n">2</span><button type="button" class="talos-turn-spine__tick" data-tick="2" aria-label="Vai al giro"></button>
+            <span class="talos-turn-spine__n">3</span><button type="button" class="talos-turn-spine__tick talos-turn-spine__tick--info" data-tick="4" aria-label="Vai al giro"></button>
+            <span class="talos-turn-spine__n">4</span><button type="button" class="talos-turn-spine__tick" data-tick="1" aria-label="Vai al giro"></button>
           </div>
           <div class="talos-message" data-c="Message">
             <div class="talos-message__head"><span class="talos-message__who talos-message__who--talos">TALOS</span><span class="talos-message__meta">claude-opus-5 · 18:04</span></div>
@@ -481,7 +481,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
         </div>
 
         <div class="talos-turn" data-c="Turn">
-          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">5</span><button type="button" class="talos-turn-spine__tick" data-tick="3"></span aria-label="Vai al giro"></button><span class="talos-turn-spine__n">6</span><button type="button" class="talos-turn-spine__tick talos-turn-spine__tick--warning" data-tick="5"></span aria-label="Vai al giro"></button></div>
+          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">5</span><button type="button" class="talos-turn-spine__tick" data-tick="3" aria-label="Vai al giro"></button><span class="talos-turn-spine__n">6</span><button type="button" class="talos-turn-spine__tick talos-turn-spine__tick--warning" data-tick="5" aria-label="Vai al giro"></button></div>
           <div class="talos-message" data-c="Message">
             <div class="talos-message__head"><span class="talos-message__who talos-message__who--talos">TALOS</span><span class="talos-message__meta">claude-opus-5 · 18:07</span></div>
             <p>La guardia è scritta e i test la coprono nei due versi. Prima di applicare la modifica al file vero ti mostro cosa cambia.</p>
@@ -531,7 +531,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
         </div>
 
         <div class="talos-turn" data-c="Turn">
-          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">7</span><button type="button" class="talos-turn-spine__tick talos-turn-spine__tick--current" data-tick="2"></span aria-label="Vai al giro"></button></div>
+          <div class="talos-turn-spine" data-c="TurnSpine"><span class="talos-turn-spine__n">7</span><button type="button" class="talos-turn-spine__tick talos-turn-spine__tick--current" data-tick="2" aria-label="Vai al giro"></button></div>
           <div class="talos-message" data-c="Message">
             <div class="talos-message__head"><span class="talos-message__who talos-message__who--talos">TALOS</span><span class="talos-message__meta">claude-opus-5 · 18:09</span></div>
             <p>Lancio la suite completa per vedere se qualcosa è regredito…</p>
@@ -695,7 +695,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
           <span class="talos-badge talos-badge--success talos-badge--sm">Isolato · sandbox locale</span>
           <span class="talos-badge talos-badge--sm">harness-ui/</span>
         </div>
-        <div class="talos-terminal__body"><span class="p">❯</span> node --test tests/*.test.mjs
+        <div class="talos-terminal__body" id="pannelloSchedaTerminale"><span class="p">❯</span> node --test tests/*.test.mjs
 <span class="dim">✔ W0-07 — due appendFile concorrenti sullo stesso file non si intrecciano (12.4ms)</span>
 <span class="dim">✔ W1-13 — cancello sui file di controllo: senza ascoltatori rifiuta subito (2.1ms)</span>
 <span class="dim">✔ W1-02 — guardiaDiStallo: silenzio di 61 s su un processo aperto → allarme «processo» (0.9ms)</span>
@@ -735,8 +735,17 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
                fatti — `renderRealReviewList` nella app, le fixture nel laboratorio dei componenti.
                Sulla linguetta va il NOME del file, non il percorso (visto in foto il 17/09): il
                percorso intero sta nel `title` e nella testa del diff qui sotto. -->
-        </div></div>
-        <div class="talos-card talos-card--pad talos-stack talos-review__vuoto" data-c="EmptyState" id="vuotoReview" hidden><svg class="i" aria-hidden="true"><use href="#i-diff"/></svg><h3>Nessun file scritto finora</h3><p class="talos-muted">Quando TALOS scrive o modifica un file, qui compare la differenza, giro per giro.</p></div><div class="talos-card talos-review__diff" data-c="DiffView">
+        </div><!-- ⛔⛔ BC-80, 17/09/2026 — IL RIASSUNTO DELLA REVISIONE STA QUI, non nella testata.
+             Misurato chiudendo BC-71: la testata della Revisione è larga **748 px** a 1024×800 e non
+             di più a 1440×900, e sotto i 900 px di contenitore `.talos-topbar__path` è
+             `display:none` — quindi «2 file modificati · +4 −1» era giusto nel DOM e invisibile a
+             schermo a tutte e due le misure del desktop. Decisione dell'owner: nella testata non
+             cede niente; il riassunto prende posto qui, in fondo alla riga delle linguette, a
+             destra, sempre visibile. ⛔ FUORI dalla lista `role="tablist"`: lì dentro ci vanno solo
+             le linguette (APG «Tabs»), e fuori dal componente condiviso col Terminale, che non ha
+             niente da riassumere. Con molte linguette scorre la striscia; il riassunto resta. -->
+        <span class="talos-review__sommario talos-mono talos-muted" data-review-sommario hidden></span></div>
+        <div class="talos-card talos-card--pad talos-stack talos-review__vuoto" data-c="EmptyState" id="vuotoReview" hidden><svg class="i" aria-hidden="true"><use href="#i-diff"/></svg><h3>Nessun file scritto finora</h3><p class="talos-muted">Quando TALOS scrive o modifica un file, qui compare la differenza, giro per giro.</p></div><div class="talos-card talos-review__diff" data-c="DiffView" id="pannelloRevisione">
           <!-- BC-67, 17/09: i nodi restano (li riempie `aggiornaDiffReview` dai fatti), i VALORI no: un percorso, una ricevuta e un numero di giro inventati si leggevano come veri su una app appena aperta. -->
           <div class="talos-review__diff-head"><span class="talos-mono talos-measure talos-grow talos-truncate">—</span><span class="talos-badge talos-badge--success talos-badge--sm" hidden></span><span class="talos-diff-num talos-diff-num--plus" hidden></span><span class="talos-diff-num talos-diff-num--minus" hidden></span><span class="talos-mono talos-muted" hidden></span></div>
           <div class="talos-diff"></div>
@@ -770,7 +779,11 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
       <button type="button" class="talos-tabstrip__nuova" id="browserNuovaScheda" aria-label="Apri una scheda nuova" data-tip="Apri una scheda nuova"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></button>
     </div>
   </div>
-  <div class="talos-card talos-browser__space" data-c="BrowserViewport">
+  <!-- ⛔ BC-68, 17/09/2026: l'id serve ad `aria-controls`. Misurato prima: **0 linguette su 4**, su
+       tutte e tre le strisce, portavano `aria-controls` — e senza quello l'APG «Tabs» dice che chi
+       ascolta non ha modo di sapere quale parte della pagina una linguetta governi. Il pannello è
+       UNO e riusato dalle schede: `aria-labelledby` segue quella attiva. -->
+  <div class="talos-card talos-browser__space" data-c="BrowserViewport" id="pannelloBrowser">
     <div class="talos-browser__bar">
       <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="back" aria-label="Pagina letta precedente" title="Pagina letta precedente"><svg class="i talos-browser__back" aria-hidden="true"><use href="#i-chev"/></svg></button>
       <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="forward" disabled aria-label="Pagina letta successiva" title="Pagina letta successiva"><svg class="i talos-browser__next" aria-hidden="true"><use href="#i-chev"/></svg></button>
@@ -823,16 +836,18 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
            browser più grande». Il titolo occupava due righe alte sopra la pagina (un h2 da 20px con
            l’indirizzo intero, più la riga della provenienza): quello spazio ora è della pagina.
            Titolo e provenienza stanno sulla STESSA riga dei due modi, in piccolo, e si troncano. -->
-      <pre id="browserTesto" class="talos-browser__text" tabindex="0" aria-label="Testo acquisito della pagina">Registro dei processi
-
-Il registro raccoglie i processi avviati durante una sessione e mostra l’ultimo evento ricevuto.
-
-Riconoscere uno stallo
-- Silenzio prolungato: nessun nuovo evento.
-- Giri a vuoto: la stessa richiesta ripetuta senza progresso.
-- Il processo resta disponibile per una decisione dell’utente.
-
-Una segnalazione di stallo non termina il processo.</pre>
+      <!-- ⛔⛔ BC-71 (c), 17/09/2026 — QUI STAVA IL TESTO DIMOSTRATIVO del mockup («Registro dei
+           processi… Riconoscere uno stallo…»): il gemello, nel Browser, dei file finti che BC-67 ha
+           tolto dalla Revisione. Misurato prima della cura sulla app viva: la frase era nel DOM in
+           TRE stati su quattro (all'avvio, col Browser aperto e nessuna scheda, con una scheda «in
+           apertura») e spariva solo quando arrivava una lettura vera.
+           ⛔ Onestà sulla scheda della coda: a schermo non l'ho MAI vista — la regia del Browser
+           tiene `#browserTesto` nascosto finché non c'è una lettura, e la misura lo conferma
+           (`visibile:false` in tutti e tre gli stati). Resta però dato d'esempio depositato nel
+           prodotto, cioè esattamente ciò che BC-67 vieta: un giro futuro che dimentichi una riga di
+           `hidden` lo metterebbe a schermo senza che nessuno lo abbia scritto.
+           ⇒ Vuoto e nascosto di partenza: ciò che si legge qui lo scrive `scriviTestoAcquisito`. -->
+      <pre id="browserTesto" class="talos-browser__text" tabindex="0" aria-label="Testo acquisito della pagina" hidden></pre>
       <div id="browserEditorNota" class="talos-browser__note" hidden>
         <label class="talos-stack" for="browserNotaInput">Nota su questa lettura<textarea class="talos-field__input" id="browserNotaInput" rows="3" placeholder="Un dubbio, un controllo da fare…" aria-describedby="browserNotaScope"></textarea></label>
         <div class="talos-cluster"><span id="browserNotaScope" class="talos-muted talos-browser__meta">Nota non inviata · si azzera al ricaricamento</span><span class="talos-grow"></span><button class="talos-button talos-button--primary talos-button--sm" data-action="conservaNotaBrowser">Conserva nota</button><button class="talos-button talos-button--ghost talos-button--sm" data-action="chiudiNotaBrowser">Annulla</button></div>
