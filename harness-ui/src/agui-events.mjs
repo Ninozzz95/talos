@@ -112,9 +112,35 @@ export function reasoningMessageEnd({ messageId }) {
     return { type: 'ReasoningMessageEnd', messageId }
 }
 
-export function toolCallStart({ toolCallId, toolCallName, parentMessageId }) {
+/**
+ * ⛔⛔ OSS-1 (17/09/2026) — UNA DURATA MISURATA SULL'OSSERVATORE NON E' UNA DURATA.
+ *
+ * Nella scheda «Processi» ogni riga diceva «0 s» al REPLAY di una sessione, e il conto era
+ * giusto: il client sottraeva due `ricevutoA`, cioe' due ore di ARRIVO dell'evento, e al replay
+ * tutti gli eventi arrivano insieme. Il tempo va misurato dove succede — nel kernel, intorno
+ * all'esecuzione — e viaggiare dentro l'evento.
+ *
+ * ⛔ `avviatoA` (epoch ms del SERVER) e `durataMs` (interi) sono campi ADDITIVI, fuori dallo
+ *   schema pubblico AG-UI come gia' `contesto` su RunStarted e `prima`/`allegato` su StateDelta:
+ *   la spec dichiara «loose event format matching», e un consumer che non li conosce li ignora.
+ * ⛔⛔ E si OMETTONO quando non ci sono. Uno zero al posto di «non misurato» e' indistinguibile
+ *   da «istantaneo» — cioe' esattamente il difetto che questa riga cura, riportato da un'altra
+ *   porta. Stessa disciplina di `usage`/`totali` nel kernel: «mai un contatore che dice zero dove
+ *   la verita' e' ignoto».
+ */
+function oraValida(valore) {
+    return typeof valore === 'number' && Number.isFinite(valore)
+}
+
+/** ⛔ Una durata e' un intero di millisecondi >= 0: un decimale si arrotonda, tutto il resto sparisce. */
+function durataValida(valore) {
+    return typeof valore === 'number' && Number.isFinite(valore) && valore >= 0
+}
+
+export function toolCallStart({ toolCallId, toolCallName, parentMessageId, avviatoA }) {
     const evento = { type: 'ToolCallStart', toolCallId, toolCallName }
     if (parentMessageId !== undefined) evento.parentMessageId = parentMessageId
+    if (oraValida(avviatoA)) evento.avviatoA = Math.round(avviatoA)
     return evento
 }
 
@@ -173,8 +199,23 @@ export function toolCallOutput({ toolCallId, delta }) {
     return { type: 'ToolCallOutput', toolCallId, delta: String(delta ?? '') }
 }
 
-export function toolCallResult({ messageId, toolCallId, content, role = 'tool' }) {
-    return { type: 'ToolCallResult', messageId, toolCallId, content, role }
+/**
+ * ⭐ OSS-1 — `durataMs`: i millisecondi misurati nel kernel INTORNO all'esecuzione dell'attrezzo
+ *   (`performance.now()`, un orologio monotono: non torna indietro se l'ora di sistema cambia a
+ *   meta' comando). Assente per gli attrezzi che non misuriamo — vedi `oraValida`/`durataValida`.
+ *
+ * ⭐ OSS-2 — `comando` e `cwd`: `prova` non compariva fra i processi perche' i suoi
+ *   `ToolCallArgs` sono `{}` — il comando eseguito non e' un argomento del modello, e' una
+ *   impostazione della sessione (`comandoProva`). Senza questi due campi chi guarda gli eventi
+ *   non poteva sapere CHE COSA e' stato eseguito ne' DOVE. Per `shell` `cwd` e' la cartella
+ *   EFFETTIVA (quella che il comando ha visto davvero), non quella richiesta.
+ */
+export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd }) {
+    const evento = { type: 'ToolCallResult', messageId, toolCallId, content, role }
+    if (durataValida(durataMs)) evento.durataMs = Math.round(durataMs)
+    if (typeof comando === 'string' && comando !== '') evento.comando = comando
+    if (typeof cwd === 'string' && cwd !== '') evento.cwd = cwd
+    return evento
 }
 
 export function stateDelta({ delta }) {
@@ -345,8 +386,11 @@ export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoG
  * talosLavora mette in `messaggi.push({role:'tool', tool_call_id,
  * content})`, talosHarness.mjs riga ~836) a ToolCallResult.
  */
-export function eventoPerEsitoTool({ messageId, toolCallId, content }) {
-    return toolCallResult({ messageId, toolCallId, content: String(content) })
+export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd }) {
+    /* ⭐ OSS-1/OSS-2 — inoltro puro: la decisione su COSA entra nell'evento sta tutta in
+       `toolCallResult` qui sopra, un posto solo. Chi non passa i tre campi ottiene l'oggetto
+       identico di prima, byte per byte. */
+    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd })
 }
 
 /**
