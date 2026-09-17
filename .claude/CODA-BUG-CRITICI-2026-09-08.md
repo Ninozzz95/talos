@@ -726,7 +726,7 @@ Terminale, Browser e Revisione, con lo stesso comportamento di tastiera, chiusur
 `frontend-design`, tema Calm, due temi, 1024 e 1440, confronto affiancato fra le tre viste.
 **Finita quando:** le tre viste montano lo stesso componente (un solo file, zero copie), e le foto affiancate lo mostrano.
 
-## BC-64 | «Visualizza in Esplora file» non apre nessuna finestra di Esplora file (owner 17/09/2026, dal vivo) — APERTO, debito
+## BC-64 | «Visualizza in Esplora file» non apre nessuna finestra di Esplora file (owner 17/09/2026, dal vivo) — ✅ CURATO lo stesso giorno (`0f711a4c`), da confermare dal vivo dall'owner
 
 **Cosa hai visto:** la voce non fa niente. **Da misurare:** quale rotta chiama (`/api/v1/…/reveal` o simile), cosa risponde, e
 cosa esegue il server: su Windows la forma giusta è `explorer.exe /select,"<percorso>"` (che esce con codice 1 ANCHE quando
@@ -748,3 +748,17 @@ script d'avvio in OGNI cornice, anche nelle sandboxate (l'anteprima degli artefa
 della corsia C resta valido per ciò che ha riprodotto davvero con una fixture (widget terzi annidati che lanciano da sé), ma
 la riga d'origine va letta così. **Regola per le sonde:** uno script d'avvio che tocca `localStorage` si protegge con
 `if (window.top === window)` e `try/catch`, oppure si imposta lo stato con `context.addCookies`/`storageState`.
+
+**BC-64 — causa MISURATA e cura (17/09):** la politica di processo imponeva `windowsHide: true` a ogni `execFile`
+(`process-policy.mjs`), e libuv lo traduce in `SW_HIDE`: `explorer.exe /select,<file>` riusciva e creava la finestra con
+`Visible=False`. Misurato nei due versi (`true` → `Visible=False`, `false` → `Visible=True`); ⛔ una prima sonda che CONTAVA
+soltanto le finestre non vedeva differenza — una finestra che esiste non è una finestra che si vede. Cura: `createProcessPolicy`
+accetta `finestreVisibili` (default `false`) e solo la porta di Esplora la dichiara; 5 test, 2 rossi col fix tolto, ripristino a
+sha identico. Consegnata sul 4174. **Resta:** la tua conferma dal vivo (dal 4174 e dall'app installata, che prende il fix alla
+prossima release).
+
+**BC-62 — ipotesi di lavoro (NON misurata):** `apriVistaTerminaleReale` (`app.js:11879`) è protetta (`t.ordine.length > 0 → avvia`),
+ma due chiamanti creano una scheda se non trovano il mount: `app.js:20499` (`if (!pane.querySelector('.talos-terminal__mount')) void
+nuovaSchedaTerminale()`) e `:11912`. Dalla P0/A il terminale della sezione viene SPOSTATO nel pannello sotto il composer e viceversa:
+se il mount sta nell'altro ospite, il controllo «non c'è» è vero e nasce una scheda in più. Va riprodotto su un banco (crea PTY: mai il 4174).
+

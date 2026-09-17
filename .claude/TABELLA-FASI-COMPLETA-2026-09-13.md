@@ -276,7 +276,8 @@ senza il motore sarebbe una finestrella che incolla testo con più passaggi. ⛔
 > **BC-62** — aprire la vista Terminale crea ogni volta una nuova tab di terminale: finita quando aprire e richiudere dieci volte
 > lascia lo stesso numero di schede, una PTY per scheda. **BC-63** — la Revisione deve usare lo STESSO componente a schede
 > (stile Chrome) del Terminale: un componente condiviso fra Terminale, Browser e Revisione, zero copie. **BC-64** —
-> «Visualizza in Esplora file» non apre niente: finita quando apre Esplora col file selezionato, dall'app e dal 4174.
+> «Visualizza in Esplora file» non apriva niente: ✅ **curato il 17/09** (`0f711a4c`: la politica di processo nascondeva la finestra,
+> misurato `Visible=False`), consegnato sul 4174, **da confermare dal vivo dall'owner**.
 >
 > **Nella stessa corsia di PO-27 (frontend, dopo la P0-bis) entrano i due difetti trovati nelle foto del 17/09:**
 > **BC-60** — sotto la risposta tre icone in fila, nessun «⋯», nessun Elimina, nessun tasto destro (`conversazione.js:180-203`):
