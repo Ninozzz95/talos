@@ -1,19 +1,26 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { after } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { extractLegacyContract } from '../../scripts/extract-legacy-contract.mjs';
+import { buildProduction } from '../../scripts/build.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '../../../..');
 const fixturePath = path.join(here, '../fixtures/legacy-contract.snapshot.json');
 
+// Test the actual current production entry, never a stale public/ checked into Git.
+// Each worker owns its temporary output; parallel tests cannot replace our bundle.
+const outputDir = await mkdtemp(path.join(tmpdir(), 'talos-phase1-contract-'));
+after(() => rm(outputDir, { recursive: true, force: true }));
+await buildProduction({ outputDir });
 const input = Object.freeze({
-  appPath: path.join(repoRoot, 'harness-ui/public/app.js'),
-  htmlPath: path.join(repoRoot, 'harness-ui/public/index.html'),
-  cssPath: path.join(repoRoot, 'harness-ui/public/styles.css'),
+  appPath: path.join(outputDir, 'app.js'),
+  htmlPath: path.join(outputDir, 'index.html'),
+  cssPath: path.join(outputDir, 'styles.css'),
   aguiPath: path.join(repoRoot, 'harness-ui/src/agui-events.mjs'),
   staticPath: path.join(repoRoot, 'harness-ui/src/static-files.mjs'),
 });
@@ -26,6 +33,9 @@ const input = Object.freeze({
  * qui, col perché; una chiave che sparisce senza essere in questa lista è un test rosso.
  */
 const RITIRATE = Object.freeze({
+  // D21, owner approval: the wizard is removed, not silently marked completed.
+  // No key is read/written and existing legacy markers must never reopen the wizard.
+  storageKeys: ['talos.harness.desktop.intro.v1'],
   endpointFragments: ['/api/v1/chat'], // owner 24/8: niente sezione chat separata — l'harness è l'unica chat
 });
 test('il contratto pubblico del monolite è conservato dalla build modulare (cutover 06/09)', async () => {
@@ -40,6 +50,19 @@ test('il contratto pubblico del monolite è conservato dalla build modulare (cut
   assert.deepEqual(actual.terminalFrames, expected.terminalFrames);
   assert.equal(actual.source, expected.source);
   for (const nome of ['app', 'html', 'css']) assert.ok(actual.assets[nome].bytes > 0, `${nome}: la build servita è vuota`);
+});
+
+test('D21: il bundle reale non conserva wizard o riaperture manuali', async () => {
+  const [app, html] = await Promise.all([readFile(input.appPath, 'utf8'), readFile(input.htmlPath, 'utf8')]);
+  assert.ok(html.includes('id="schermoHome"'), 'la destinazione iniziale deve esistere nella build');
+  for (const id of ['veloIntro', 'introDialog']) {
+    assert.ok(!html.includes(`id="${id}"`), `wizard rimasto nel template: ${id}`);
+    assert.ok(!app.includes(`id="${id}"`), `wizard rimasto nel markup dinamico: ${id}`);
+  }
+  assert.ok(!html.includes('data-apre-velo="veloIntro"'), 'nessuna azione delle impostazioni deve riaprire il wizard');
+  assert.ok(!app.includes('talos.harness.desktop.intro.v1'), 'la build non deve leggere o scrivere lo stato del wizard ritirato');
+  const expected = JSON.parse(await readFile(fixturePath, 'utf8'));
+  assert.ok(expected.storageKeys.includes('talos.harness.desktop.intro.v1'), 'la fixture storica non va riscritta per cancellare la decisione di ritiro');
 });
 
 test('la baseline contiene i contratti pubblici che il refactor deve conservare', async () => {
