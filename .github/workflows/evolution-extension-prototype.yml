@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - 'harness-ui/native/evolution-prototype/**'
+      - 'harness-ui/src/evolution-dev/**'
+      - 'harness-ui/src/evolution-dev-adapter.mjs'
+      - 'harness-ui/tests/evolution-dev-adapter.test.mjs'
+      - 'harness-ui/scripts/evolution-dev.mjs'
       - '.github/workflows/evolution-extension-prototype.yml'
 permissions:
   contents: read
@@ -24,6 +28,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.18.0
+          package-manager-cache: false
       - name: provision pinned compiler and dependency inventory
         run: |
           New-Item -ItemType Directory -Path evidence | Out-Null
@@ -38,6 +46,8 @@ jobs:
           $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
           $inputs = @(Get-ChildItem src,contracts,fixtures,tests -File -Recurse)
           $inputs += @(Get-Item Cargo.toml,Cargo.lock,rust-toolchain.toml,build.rs)
+          $inputs += @(Get-ChildItem ../../src/evolution-dev -File)
+          $inputs += @(Get-Item ../../src/evolution-dev-adapter.mjs,../../tests/evolution-dev-adapter.test.mjs,../../scripts/evolution-dev.mjs)
           $manifest = [ordered]@{
             schema = 'talos.extension-prototype.inputs.v1'
             checkout = (& git rev-parse HEAD)
@@ -70,6 +80,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Lifecycle fault injection failed' }
           git diff --exit-code -- Cargo.lock
           if ($LASTEXITCODE -ne 0) { throw 'Fault verification changed reviewed dependencies' }
+      - name: opt-in Node development adapter and actual native bridge
+        run: |
+          node --test ../../tests/evolution-dev-adapter.test.mjs 2>&1 | Tee-Object evidence/dev-adapter-unit.log
+          if ($LASTEXITCODE -ne 0) { throw 'Node development adapter tests failed' }
+          cargo test --frozen --features dev-adapter --target-dir target/dev-adapter --lib -- --test-threads=1 2>&1 | Tee-Object evidence/dev-bridge-rust.log
+          if ($LASTEXITCODE -ne 0) { throw 'Native development bridge unit tests failed' }
+          cargo build --frozen --features dev-adapter --target-dir target/dev-adapter --bins 2>&1 | Tee-Object evidence/dev-bridge-build.log
+          if ($LASTEXITCODE -ne 0) { throw 'Development bridge build failed' }
+          node --test --test-concurrency=1 tests/dev-adapter.integration.mjs 2>&1 | Tee-Object evidence/dev-adapter-integration.log
+          if ($LASTEXITCODE -ne 0) { throw 'Real Node/native adapter integration failed' }
+          git diff --exit-code -- Cargo.lock
+          if ($LASTEXITCODE -ne 0) { throw 'Development build changed reviewed lockfile' }
       - name: retain failure logs and exact dependency inventory
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

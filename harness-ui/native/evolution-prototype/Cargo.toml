@@ -31,6 +31,8 @@ path = "src/bin/supervisor.rs"
 [features]
 default = []
 fault-injection = []
+# Explicit development bridge; no effect on the normal Supervisor CLI.
+dev-adapter = []
 
 [[bin]]
 name = "talos-lifecycle-fixture"

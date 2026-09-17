@@ -17,3 +17,6 @@ pub fn random_id() -> anyhow::Result<[u8; 16]> {
 }
 pub const SAMPLE: &[u8] = b"TODO: mediated snapshot\nFIXME: no ambient access\n";
 pub const COMPONENT: &str = include_str!("../fixtures/sum.wat");
+
+#[cfg(feature = "dev-adapter")]
+pub mod dev_bridge;

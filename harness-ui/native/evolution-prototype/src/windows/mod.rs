@@ -191,13 +191,24 @@ pub fn invoke(worker:&Path,component:&[u8],snapshot:&[u8],policy:Policy)->Result
 pub fn invoke_cancellable(worker:&Path,component:&[u8],snapshot:&[u8],policy:Policy,control:&InvocationControl)->Result<Outcome>{
  invoke_inner(worker,component,snapshot,policy,control,false)
 }
+#[cfg(feature="dev-adapter")]
+pub(crate) fn invoke_dev_fixture(worker:&Path,control:&InvocationControl,
+ before_start:&dyn Fn()->Result<()>)->Result<Outcome>{
+ invoke_inner_hook(worker,crate::COMPONENT.as_bytes(),crate::SAMPLE,Policy::Active,control,false,Some(before_start))
+}
 fn invoke_inner(worker:&Path,component:&[u8],snapshot:&[u8],policy:Policy,control:&InvocationControl,pause_read:bool)->Result<Outcome>{
+ invoke_inner_hook(worker,component,snapshot,policy,control,pause_read,None)
+}
+fn invoke_inner_hook(worker:&Path,component:&[u8],snapshot:&[u8],policy:Policy,control:&InvocationControl,pause_read:bool,
+ before_start:Option<&dyn Fn()->Result<()>>)->Result<Outcome>{
  ensure!(component.len()<=wire::MAX_COMPONENT && snapshot.len()<=MAX_SNAPSHOT,"prototype input bound");
  let wait=control.claim()?;
  let mut session=match Session::new(worker,&wait){Ok(s)=>s,Err(e)=>{
   let _=control.cancel();control.set_phase(Phase::Closed);return Err(e);
  }};
  let result:Result<Outcome>=(||{
+  // Opt-in trusted development controller checkpoint, after OS/peer checks.
+  if let Some(ready)=before_start{ready()?;wait.checkpoint()?;}
   let generation=digest(component);let mut binding=b"TALOS.READ.SNAPSHOT.v1\0".to_vec();binding.extend(generation);binding.extend(digest(snapshot));
   let subject=Subject{session:random_id()?,generation,request:digest(&binding),epoch:1};let id=LeaseId(random_id()?);
   let broker=control.broker();
