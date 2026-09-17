@@ -142,14 +142,33 @@ test('BC63-CONDIVISO-TERMINALE: il Terminale disegna la stessa linguetta, e non 
     classeStriscia: striscia.className,
     classi: [...striscia.querySelectorAll('[role=tab]')].map((b) => b.className),
     nuova: striscia.querySelectorAll('[data-terminale-nuova]').length,
+    /* ⛔ BC-68, 17/09: il «+ Nuovo» NON è più `role="tab"` — con nessuna shell aperta questa
+       striscia conteneva UNA cosa con quel ruolo ed era lui, cioè un lettore di schermo annunciava
+       «scheda 1 di 1» su una striscia senza schede. Qui si pretende il contrario. */
+    nuovaEUnaScheda: striscia.querySelector('[data-terminale-nuova]')?.getAttribute('role') === 'tab',
+    nuovaHaAriaSelected: striscia.querySelector('[data-terminale-nuova]')?.hasAttribute('aria-selected'),
     badge: striscia.querySelectorAll('.talos-badge').length,
-    righe: new Set([...striscia.querySelectorAll('[role=tab]')].map((b) => Math.round(b.getBoundingClientRect().top))).size,
+    /* «Una riga sola» si misura su TUTTO ciò che la striscia disegna (linguette, «+ Nuovo», badge),
+       non sui soli `[role=tab]`: da quando il «+ Nuovo» non è più una scheda, contare i `role=tab`
+       su una striscia senza shell aperte darebbe zero e la prova passerebbe a vuoto.
+       ⛔ E non si contano i `top` distinti: elementi alti diversi, centrati nella stessa riga, hanno
+       `top` diversi di un pixel — misurato, 2 «righe» su una barra che ne ha una. La domanda giusta
+       è se si SOVRAPPONGONO tutti in verticale: il più basso dei bordi inferiori deve stare sotto il
+       più alto dei bordi superiori. */
+    unaRigaSola: (() => {
+      const r = [...striscia.children].map((n) => n.getBoundingClientRect()).filter((q) => q.height > 0);
+      return r.length > 0 && Math.min(...r.map((q) => q.bottom)) > Math.max(...r.map((q) => q.top));
+    })(),
+    quantiDisegnati: [...striscia.children].filter((n) => n.getBoundingClientRect().height > 0).length,
   }));
   expect(terminale.classeStriscia, 'la striscia del Terminale porta la classe condivisa').toContain('talos-schede');
   expect(terminale.classeStriscia, 'e tiene la sua, che porta i badge e la «×»').toContain('talos-terminal__tabs');
   expect(terminale.nuova, 'il «+ Nuovo» c’è ancora').toBe(1);
+  expect(terminale.nuovaEUnaScheda, 'ma non è una scheda: è il comando che ne crea una').toBe(false);
+  expect(terminale.nuovaHaAriaSelected, 'e non ha nulla da dire su una selezione che non ha').toBe(false);
   expect(terminale.badge, 'i badge della barra ci sono ancora').toBeGreaterThan(0);
-  expect(terminale.righe, 'una riga sola').toBe(1);
+  expect(terminale.quantiDisegnati, 'la premessa: la striscia disegna qualcosa').toBeGreaterThan(1);
+  expect(terminale.unaRigaSola, 'una riga sola').toBe(true);
   for (const classe of terminale.classi) {
     expect(classe, 'anche il Terminale usa la linguetta condivisa').toContain('talos-schede__tab');
     expect(classe, 'senza perdere la propria').toContain('talos-terminal__tab');

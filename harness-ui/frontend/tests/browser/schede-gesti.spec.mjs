@@ -69,7 +69,9 @@ async function apriTerminaleConSchede(page, request, baseURL, etichetta, quante 
   await page.waitForTimeout(700); // assestamento: un doppione tardivo deve avere il tempo di comparire
   expect(await linguette(page), `${etichetta}: una sola scheda anche dopo l'assestamento`).toHaveLength(1);
   for (let n = 1; n < quante; n += 1) {
-    await page.locator('.talos-terminal__tab[role="tab"]', { hasText: /^\s*(Nuovo|New)\s*$/ }).click();
+    /* ⛔ BC-68, 17/09: il «+ Nuovo» non è più `role="tab"` — si prende dal suo attributo, che è
+       quello che il prodotto usa per riconoscerlo, e non dalla parola scritta sopra. */
+    await page.locator('[data-terminale-nuova]').click();
     await expect.poll(() => linguette(page), { message: `${etichetta}: scheda ${n + 1}`, timeout: 20_000 }).toHaveLength(n + 1);
   }
   return id;

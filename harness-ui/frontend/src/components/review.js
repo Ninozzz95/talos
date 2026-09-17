@@ -67,6 +67,56 @@ export function riassuntoReview(voci = []) {
   return `${voci.length} file modificat${voci.length === 1 ? 'o' : 'i'} · +${aggiunte} −${rimozioni}`;
 }
 
+/**
+ * ⭐⭐ BC-71 (b), 17/09/2026 — LO STESSO RIASSUNTO, PER LA TESTATA.
+ *
+ * Il terzo posto della testata porta SEMPRE la cartella e, dopo un separatore, il riassunto della
+ * vista (regola del 06/09, `components/topbar.js`): a zero file non si aggiunge niente — «Nessuna
+ * modifica in questa sessione» dentro uno slot monospazio da 11,5 px che si tronca non è una frase,
+ * è un moncone.
+ *
+ * ⛔ Perché sta QUI e non in `app.js`: là c'era un secondo conteggio, `Number(v?.aggiunte || 0)`,
+ *   che dava **zero** ogni volta che il server non aveva già contato le righe — cioè sempre, per una
+ *   scrittura normale, dove il diff lo calcola il browser e la voce porta `code` e basta. Misurato
+ *   sulla app viva prima della cura: due file scritti davvero, testata «2 file modificati», nessun
+ *   `+` e nessun `−`. `contaDiff` sa già contare da `code`: una regola sola, non due.
+ */
+export function riassuntoReviewTestata(voci = []) {
+  return voci.length === 0 ? '' : riassuntoReview(voci);
+}
+
+/**
+ * ⭐⭐⭐ BC-80, 17/09/2026 — IL RIASSUNTO DOVE SI LEGGE DAVVERO.
+ *
+ * Nato dal «non curato» di BC-71 (b): dopo quella cura il riassunto era giusto — uno scrittore solo,
+ * una regola di conteggio sola — e INVISIBILE. Misurato: la testata della Revisione è larga **748
+ * px** a 1024×800 e non di più a 1440×900, e sotto i 900 px di contenitore `.talos-topbar__path` è
+ * `display:none` (`index.css`). Un riassunto che nessuno vede è mezza cura.
+ *
+ * Decisione dell'owner (17/09, «approvo»): nella testata NON cede niente — titolo e azioni non hanno
+ * un'altra porta. Il riassunto prende posto dentro il pannello della Revisione, in fondo alla riga
+ * delle linguette, a destra, sempre visibile; la testata resta com'è.
+ *
+ * ⛔ Sta QUI e non in `components/schede.js`: quel componente è condiviso col Terminale, che non ha
+ *   niente da riassumere, e una superficie non allarga un componente comune per un bisogno suo.
+ * ⛔ E il testo esce da `riassuntoReviewTestata`: nessun secondo conteggio, nessuna seconda frase.
+ *   È la stessa lezione di BC-71 (b), applicata prima di ripeterla.
+ *
+ * @param {HTMLElement|null} contenitore `.talos-review__schede`
+ * @param {Array} voci i file scritti nella sessione
+ */
+export function aggiornaSommarioSchedeReview(contenitore, voci = []) {
+  const nodo = contenitore?.querySelector('[data-review-sommario]');
+  if (!nodo) return null;
+  const testo = riassuntoReviewTestata(voci);
+  nodo.textContent = testo;
+  /* A zero file non si scrive niente: `hidden` invece di una stringa vuota, così la riga non tiene
+     uno spazio per qualcosa che non c'è. */
+  nodo.hidden = testo === '';
+  nodo.title = testo;
+  return testo;
+}
+
 /** Il sottotitolo di una riga: «giro 5 · scrittura con ricevuta a1f4…9c02», o «giro 5 · nuovo file». */
 export function sottotitoloFile(voce = {}) {
   const pezzi = [];
@@ -174,6 +224,8 @@ export function creaSchedeReview(striscia, { azioni = {}, root = globalThis.docu
     etichettaMenu: 'Azioni sul file',
     scorre: true,
     identifica: chiaveFileReview,
+    /* BC-68, 17/09: il DiffView è il pannello che la linguetta governa (uno solo, riusato). */
+    controlla: () => 'pannelloRevisione',
     etichetta: etichettaFileReview,
     suggerimento: suggerimentoFile,
     contenuto: (scheda, voce, indice, tutte) => riempiLinguettaFile(scheda, voce, tutte),

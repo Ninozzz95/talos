@@ -1808,7 +1808,19 @@ a.talos-button{text-decoration:none}
 .talos-list-row__misure{display:flex; align-items:center; gap:10px; font-size:11.5px; color:var(--talos-muted); font-variant-numeric:tabular-nums}
 .talos-list-row__misura{white-space:nowrap}
 .talos-split{display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:14px; align-items:start}
-.talos-detail{padding:16px; position:sticky; top:0}
+/* ⛔⛔ BC-78.3, 17/09/2026 — UN PANNELLO APPICCICATO SENZA SCORRIMENTO PROPRIO NASCONDE IL SUO PIEDE.
+   `position:sticky; top:0` tiene il pannello incollato in cima allo scorrimento: se è più alto dello
+   spazio che ha, la sua parte bassa — dove stanno i pulsanti, «Fida» compreso — non si raggiunge
+   PIÙ, perché scorrendo il pannello resta fermo. Non è un caso di scuola: misurato a 1024×800 il
+   dettaglio arrivava a 1228 su una finestra di 800.
+   ⇒ Il pannello prende un tetto e uno scorrimento SUO. Il tetto è composto di token esistenti
+   (l'altezza della testata più un respiro), non è un numero: le testate cambiano altezza con la
+   scala dell'interfaccia. `overscroll-behavior:contain` impedisce che arrivato in fondo lo
+   scorrimento passi alla pagina dietro (ricerca 17/09/2026, MDN «overscroll-behavior»).
+   ⛔ Il tetto vale SOLO finché il pannello è appiccicato: sotto i 1100 px la colonna si impila e
+   torna `static`, e lì un tetto lo farebbe scorrere dentro una pagina che già scorre — due
+   scorrimenti annidati per lo stesso contenuto. Vedi il ripristino nelle due regole più in basso. */
+.talos-detail{padding:16px; position:sticky; top:0; max-height:calc(100dvh - var(--talos-topbar-h) - var(--talos-space-lg)); overflow-y:auto; overscroll-behavior:contain}
 .talos-detail h3{font-size:15px}
 .talos-detail__desc{color:var(--talos-muted); font-size:13px; margin:4px 0 12px}
 .talos-detail .talos-eyebrow{display:block; margin:14px 0 4px}
@@ -1952,6 +1964,18 @@ a.talos-button{text-decoration:none}
    non sono mai visibili insieme alle schede (`renderRealReviewList`: o lo stato vuoto, o le schede
    più il diff), quindi nessuna coppia resta senza respiro. */
 .talos-review__schede{flex:none; min-width:0; border:1px solid var(--talos-border); border-bottom:0; border-radius:var(--talos-radius-card) var(--talos-radius-card) 0 0}
+/* ⛔⛔ BC-80, 17/09/2026 — il riassunto («2 file modificati · +4 −1») in fondo alla riga delle
+   linguette, a destra. `flex:0 0 auto` e `margin-left:auto`: sta FUORI dalla lista che scorre, così
+   con dodici file scorrono le linguette e lui resta dov'è — era il vincolo scritto nella scheda.
+   La misura e il colore sono quelli del terzo posto della testata (mono 11,5 px, `--talos-muted`):
+   stessa informazione, stesso peso visivo, nessuna grammatica nuova. Il `padding-left` lo stacca
+   dall'ultima linguetta senza una linea in più. */
+.talos-review__sommario{flex:0 0 auto; margin-left:auto; padding-left:var(--talos-space-sm); font-size:11.5px; white-space:nowrap; display:flex; align-items:center; align-self:stretch; border-left:1px solid var(--talos-border); margin-inline-start:var(--talos-space-sm)}
+/* ⛔ Il filetto NON è decorazione, ed è nato da una foto: con la striscia piena (tre file a 1024) il
+   riassunto finiva appiccicato all'ultima linguetta e si leggeva come una QUARTA scheda —
+   `margin-left:auto` non separa niente quando la lista occupa già tutto lo spazio. La riga verticale
+   dice, senza parole, che da lì in poi non si preme: è lo stesso `--talos-border` di ogni altro
+   confine della app, e non aggiunge un linguaggio nuovo. */
 .talos-review__scheda{display:inline-flex; align-items:center; gap:8px; white-space:nowrap; min-width:0}
 .talos-review__scheda .talos-mono{font-size:12px; overflow:hidden; text-overflow:ellipsis}
 .talos-review__diff{flex:1 1 auto; min-height:0}
@@ -2133,7 +2157,9 @@ a.talos-button{text-decoration:none}
    px di vuoto a lato — la barra si svuotava senza stringersi. Le due righe adesso sono due, e la
    modalita' a icone tiene i suoi 64 px a ogni misura (0-2-0 batte 0-1-0, stessa media query). */
 @media (max-width:1240px){ :root{--talos-inspector-flottante:1} .talos-shell{grid-template-columns:var(--talos-sidebar-w) minmax(0,1fr)} :root[data-sidebar="icone"] .talos-shell{grid-template-columns:64px minmax(0,1fr)} .talos-inspector{display:none} }
-@media (max-width:1100px){ .talos-split{grid-template-columns:minmax(0,1fr)} .talos-detail{position:static} }
+/* ⛔ BC-78.3: quando la colonna si impila il pannello torna `static`, e con lui se ne va il tetto —
+   un pannello che scorre dentro una pagina che già scorre è peggio del difetto che cura. */
+@media (max-width:1100px){ .talos-split{grid-template-columns:minmax(0,1fr)} .talos-detail{position:static; max-height:none; overflow-y:visible} }
 @media (max-width:980px){ .talos-settings{grid-template-columns:minmax(0,1fr)} .talos-review{grid-template-columns:minmax(0,1fr)} }
 /* ⛔ `:root[data-sidebar="icone"]` nell'elenco: senza, la regola a 64 px della media query qui sopra
    (0-2-0) batterebbe questa (0-1-0) e sotto gli 860 resterebbe una colonna di 64 px per una barra
@@ -2466,7 +2492,13 @@ a.talos-button{text-decoration:none}
 #schermoModelLab .talos-toolbar>input{width:auto;min-width:0}
 #schermoModelLab .talos-kv__k{white-space:normal;overflow:visible;text-overflow:clip}
 #promptProva{min-height:calc(var(--talos-control-height) * 3);resize:vertical;padding:var(--talos-space-control)}
-.talos-toast-region{position:fixed;right:var(--talos-space-md);bottom:var(--talos-space-lg);width:min(var(--talos-inspector-w),calc(100% - var(--talos-space-lg) - var(--talos-space-lg)));display:grid;gap:var(--talos-space-sm);z-index:calc(var(--talos-z-app-overlay) - 1)}
+/* ⛔⛔ BC-77 (a), 17/09/2026 — il `bottom` non è più solo un respiro: è il respiro PIÙ l'ingombro
+   vero della zona dei comandi (`--talos-toast-fondo`, scritta da `ancoraToastSopraIComandi` in
+   `components/toast.js` misurando il piede della chat). Misurato prima della cura, a 1024×800: il
+   toast «Collegato di nuovo» copriva cinque comandi, fra cui la riga che ferma il giro — 4.204,
+   3.410, 1.764, 1.444 e 1.176 px². Il valore predefinito `0px` tiene il comportamento di prima
+   ovunque il piede non si veda. */
+.talos-toast-region{position:fixed;right:var(--talos-space-md);bottom:calc(var(--talos-space-lg) + var(--talos-toast-fondo, 0px));width:min(var(--talos-inspector-w),calc(100% - var(--talos-space-lg) - var(--talos-space-lg)));display:grid;gap:var(--talos-space-sm);z-index:calc(var(--talos-z-app-overlay) - 1)}
 .talos-toast{padding:var(--talos-space-md);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
 .talos-toast p{margin-block:var(--talos-space-sm);overflow-wrap:anywhere}
 .talos-toast{position:relative}.talos-toast--breve>[role]{padding-inline-end:2.25rem}.talos-toast--breve .talos-toolbar{position:absolute;inset-inline-end:var(--talos-space-sm);inset-block-start:var(--talos-space-sm)}
@@ -2486,7 +2518,15 @@ a.talos-button{text-decoration:none}
 .talos-file-row:hover{background:var(--talos-card)}
 .talos-file-tree [aria-expanded=false]>.talos-file-row>.talos-file-chevron{transform:rotate(-90deg)}
 .talos-file-tools{margin-block:var(--talos-space-sm);gap:var(--talos-space-xs)}
-.talos-context-menu{position:fixed;z-index:var(--talos-z-menu);width:var(--talos-inspector-w);max-width:calc(100vw - var(--talos-space-lg));padding:var(--talos-space-sm);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
+/* ⛔⛔ BC-68, 17/09/2026 — LA LARGHEZZA DEL MENU CONTESTUALE, DECISA UNA VOLTA PER TUTTI E TRE.
+   Era `width:var(--talos-inspector-w)`, cioè **340 px fissi**: la misura della COLONNA DEI DETTAGLI,
+   presa in prestito da un menu che non c'entra niente con quella colonna. Con due voci («Chiudi»,
+   «Copia l'indirizzo») restava un rettangolo mezzo vuoto, e con una voce sola peggio.
+   ⇒ `max-content` — larga quanto la voce più lunga — dentro due limiti: un minimo perché un menu di
+   due parole non diventi un francobollo difficile da centrare col mouse, e un massimo perché il
+   titolo (che porta il percorso di un file) non la faccia crescere fino a coprire la vista. Lo
+   usano il Terminale, la Revisione, il Browser e la chat: un valore solo, in un posto solo. */
+.talos-context-menu{position:fixed;z-index:var(--talos-z-menu);width:max-content;min-width:13rem;max-width:min(var(--talos-inspector-w),calc(100vw - var(--talos-space-lg)));padding:var(--talos-space-sm);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
 .talos-context-menu [role=menuitem]{justify-content:flex-start;width:100%;font-size:var(--talos-font-size-sm)}
 .talos-context-menu__title{padding:var(--talos-space-sm);overflow-wrap:anywhere;font-size:var(--talos-font-size-xs);color:var(--talos-muted)}
 .talos-inspector-close{display:none}
@@ -2606,7 +2646,7 @@ a.talos-button{text-decoration:none}
 #schermoImpostazioni [data-catalog-detail] .talos-kv__v{max-width:none}
 [data-catalog-panel] .talos-list-row__title{white-space:normal;overflow-wrap:anywhere}
 [data-catalog-panel] [role=alert]{color:var(--talos-danger)}
-@container (max-width:700px){[data-catalog-panel] .talos-split{grid-template-columns:minmax(0,1fr)}[data-catalog-panel] .talos-detail{position:static}}
+@container (max-width:700px){[data-catalog-panel] .talos-split{grid-template-columns:minmax(0,1fr)}[data-catalog-panel] .talos-detail{position:static; max-height:none; overflow-y:visible}}
 .talos-model-lab>.talos-page__head{margin-bottom:var(--talos-space-md)}
 .talos-model-lab .model-lab-ledger{margin-bottom:var(--talos-space-md)}
 .talos-model-lab .model-lab-ledger .talos-kv{min-height:34px;align-items:baseline}

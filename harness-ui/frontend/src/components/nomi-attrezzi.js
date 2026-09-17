@@ -107,6 +107,34 @@ export function nomeDiRipiegoAttrezzo(id) {
   return mcp ? `${leggibile(mcp[2])} (${leggibile(mcp[1])})` : leggibile(grezzo);
 }
 
+/**
+ * ⭐⭐ BC-78.4, 17/09/2026 — DA DOVE VIENE UN AVVISO DELLA SCANSIONE DEI PLUGIN, in parole.
+ *
+ * Il difetto: nel pannello Estensioni si leggeva «`tool:check_notes`: legge una credenziale e la
+ * manda in rete nello stesso comando». Quel `tool:` e quel nome col trattino basso arrivano dal
+ * server (`src/session-registry.mjs` costruisce `origine: \`tool:${t.nome}\``), che questa corsia non
+ * tocca e che NON deve cambiare: è il contratto, e il nome dell'attrezzo è quello che l'autore del
+ * plugin gli ha dato.
+ *
+ * ⇒ Si traduce QUI, dove si legge, con la stessa regola di tutto il resto di questo file: il
+ *   prefisso diventa una parola («attrezzo», «gancio») e il nome si rende leggibile con il ripiego
+ *   onesto che già esiste — mai inventato, mai nascosto. L'origine grezza resta come dettaglio
+ *   secondario nel `title`, come vuole la regola dell'owner del 04/09.
+ *
+ * @param {string} origine per esempio `tool:check_notes` o `hook:pre-commit`
+ * @returns {string} «attrezzo check notes», «gancio pre commit», o il testo reso leggibile
+ */
+export function origineAvvisoPlugin(origine) {
+  const grezzo = typeof origine === 'string' ? origine.trim() : '';
+  if (!grezzo) return '';
+  const diviso = /^(tool|hook):(.+)$/u.exec(grezzo);
+  if (!diviso) return nomeDiRipiegoAttrezzo(grezzo);
+  const nome = diviso[1] === 'tool'
+    ? (nomeUmanoAttrezzo(diviso[2]) || nomeDiRipiegoAttrezzo(diviso[2]))
+    : nomeDiRipiegoAttrezzo(diviso[2]);
+  return `${t(diviso[1] === 'tool' ? 'attrezzo' : 'gancio')} ${nome}`;
+}
+
 /** Gli id tecnici per cui non abbiamo ancora un nome: un debito che si misura. */
 export function attrezziSenzaNome(ids, catalogo = null) {
   return [...new Set(ids || [])].filter((id) => nomeUmanoAttrezzo(id, catalogo) === null);
