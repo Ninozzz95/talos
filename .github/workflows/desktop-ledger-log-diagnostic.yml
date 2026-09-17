@@ -18,11 +18,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir evidence
-          gh api repos/Ninozzz95/talos/actions/jobs/105221785658/logs > evidence/windows-job.log
+          gh api repos/Ninozzz95/talos/actions/jobs/105221785658/logs --allow-escape-sequences > evidence/windows-job.log
           python - <<'PY'
           import re, pathlib
           path = pathlib.Path('evidence/windows-job.log')
-          lines = path.read_text(encoding='utf-8-sig').splitlines()
+          raw = path.read_text(encoding='utf-8-sig')
+          clean = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', raw)
+          lines = clean.splitlines()
           starts = [i for i,line in enumerate(lines) if re.search(r'\bnot ok\b', line)]
           output = []
           for i in starts:
