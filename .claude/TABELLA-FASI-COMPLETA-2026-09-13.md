@@ -362,6 +362,12 @@ restare appeso; a interruttore spento definizioni e uscite degli attrezzi sono i
 
 # FASE 3-quater · PO-27 — Via la modale «Primo avvio» — **approvata dall'owner il 17/09** («sì confermo rimozione»)
 
+> ✅ **CHIUSA il 17/09/2026: `f0b03c26`, sul 4174 (pacchetto `744a00ee`).** Dentro anche BC-60, BC-61, BC-74, BC-75, CLI-REQ-03 e la frase
+> dei plugin da riapprovare. Una revisione avversariale delegata, poi due giri di riparazione rivisti da ME (regola dell'owner del
+> 17/09). Unit 1224/1224; backend un file alla volta 3340 · 3333 pass · 1 rosso che passa da solo (la macchina aveva 3,1 GB
+> liberi: BC-78.5); 22 prove browser GUARITE dalla rimozione della modale. Foto dal vivo nei due temi: nessuna modale, la carta
+> «1 file modificato · NOTA.md +1 −0» a fine giro, piede «Tema Calm · Z.AI». Residui: BC-78.
+
 > **Tre DEBITI segnalati dall'owner il 17/09 («segna adesso i bug come debiti»), da fare con PO-27 subito dopo la P0-bis:**
 > **BC-62** — aprire la vista Terminale creava una tab in più: ✅ **curato il 17/09** (`e5f4d9b1`: due caricamenti insieme facevano
 > partire due POST, la seconda creava una scheda vera; ora volo unico per sessione, con cancello browser), sul 4174, ✅ **confermato

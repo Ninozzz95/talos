@@ -688,7 +688,7 @@ dei nomi è DUPLICATA in `app.js:2560-2566`: due posti, contro la regola. **Cura
 descrizione, permesso); una mappa sola; un test di contratto che legge l'elenco degli attrezzi che il kernel espone e pretende che
 ognuno abbia nome umano, icona e descrizione — così il prossimo attrezzo nuovo non può arrivare a schermo col nome tecnico.
 
-## BC-60 | Sotto la risposta del modello: tre icone in fila, nessun «⋯», nessun Elimina, nessun tasto destro (visto dal revisore della corsia C nelle foto del 17/09, confermato nel codice) — APERTO
+## BC-60 | Sotto la risposta del modello: tre icone in fila, nessun «⋯», nessun Elimina, nessun tasto destro (visto dal revisore della corsia C nelle foto del 17/09, confermato nel codice) — APERTO — ✅ FATTA e sul 4174 il 17/09 (`f0b03c26`, pacchetto servito nel commit successivo; review MIA)
 
 **Misurato:** `frontend/src/components/conversazione.js:180-203` (`creaAzioniMessaggio`) costruisce ESATTAMENTE tre bottoni a
 icona — «Copia la risposta», «Ascolta la risposta», «Chiedi di nuovo» — e nient'altro: nessun menu di overflow, nessun
@@ -698,7 +698,7 @@ che MANCA» (lì mancava proprio Elimina, sul mobile); 11/09 CRUD completo su og
 più due azioni (Copia + una), le altre nel «⋯» e nel tasto destro, con **Elimina** (e la sua conferma) e ciò che il messaggio
 dell'utente ha e la risposta no; stessa forma per il messaggio della persona. Skill `frontend-design`, due temi, 1024 e 1440.
 
-## BC-61 | Il piede della barra laterale scrive l'id grezzo del fornitore: «Tema Calm · z-ai» (17/09) — APERTO, piccolo
+## BC-61 | Il piede della barra laterale scrive l'id grezzo del fornitore: «Tema Calm · z-ai» (17/09) — APERTO, piccolo — ✅ FATTA e sul 4174 il 17/09 (`f0b03c26`, pacchetto servito nel commit successivo; review MIA)
 
 ⛔ **Non è il difetto che sembrava:** il revisore l'ha letto come «il prefisso al posto del modello», ma `workspace-footer.js:15-27`
 documenta che il sottotitolo è «Tema <preset> · <chi serve il modello>» per scelta (05/09). Il difetto vero è più piccolo:
@@ -1026,7 +1026,7 @@ approvazione e nel foglio dei permessi, letta dalla configurazione; (2) nelle se
 OpenRouter l'attrezzo CHIEDE SEMPRE, anche con «sempre» (stessa regola di F15); (3) senza chiave OpenRouter nessuna chiamata
 di rete. Più avanti: scelta del fornitore delle immagini in Impostazioni.
 
-## BC-74 | Tre script del repo puntano DI SERIE al 4174 VIVO dell'owner (17/09/2026: l'agente di PO-27 ne ha lanciato uno per errore) — APERTO
+## BC-74 | Tre script del repo puntano DI SERIE al 4174 VIVO dell'owner (17/09/2026: l'agente di PO-27 ne ha lanciato uno per errore) — APERTO — ✅ FATTA e sul 4174 il 17/09 (`f0b03c26`, pacchetto servito nel commit successivo; review MIA)
 
 Misurato col grep il 17/09: `frontend/scripts/cancello/veli-sani.mjs:44` (`TALOS_VELI_BASE || 'http://127.0.0.1:4174'`),
 `frontend/scripts/diagnose-interaction-lag.mjs:5` (`TALOS_LAG_URL || …4174/`), `scripts/qa-visual-pipeline.mjs:89`
@@ -1048,7 +1048,7 @@ vera. ⛔ Si discosta dal handoff della CLI su un punto, apposta: `usage.prompt_
 (quello dell'esempio nella loro documentazione non ha più una scheda). Toccato un record di un'altra corsia (`zai-anthropic`:
 una riga additiva, la fonte datata del modello, senza la quale il registro non si carica).
 
-## BC-75 | A FINE GIRO la chat deve riportare i file modificati in quel giro, ognuno col collegamento alla sua scheda nella Revisione (owner 17/09/2026, con una foto di Claude Code) — APPROVATA, entra nel giro di riparazione di PO-27
+## BC-75 | A FINE GIRO la chat deve riportare i file modificati in quel giro, ognuno col collegamento alla sua scheda nella Revisione (owner 17/09/2026, con una foto di Claude Code) — APPROVATA, entra nel giro di riparazione di PO-27 — ✅ FATTA e sul 4174 il 17/09 (`f0b03c26`, pacchetto servito nel commit successivo; review MIA)
 
 **Parole dell'owner:** «piccola modifica UI, usando stesso stile coerente TALOS: come fa Claude Code a fine turno bisogna
 riportare lista file modificati in quel turno con link a review in quella scheda file». Nella foto: una carta «Modificati 3
