@@ -6,11 +6,14 @@
 mod protocol;
 #[cfg(all(windows, target_arch = "x86_64"))]
 mod windows;
+#[cfg(all(windows, target_arch = "x86_64"))]
+mod client_profile;
 
 // Workers intentionally inherit no console handles. Their retained process
 // handle still exposes an exit code, so distinguish bootstrap/argument errors
 // from I/O failures without granting another communication capability.
 fn failure_code(error: &str) -> i32 {
+    if error.starts_with("CLIENT_PREFLIGHT:") { return 78; }
     if error == "use --run-synthetic-probes; lab only" { return 64; }
     if error == "invalid probe arguments" { return 65; }
     if error.starts_with("scratch open:") {
@@ -30,7 +33,7 @@ fn failure_code(error: &str) -> i32 {
 
 fn main() {
     #[cfg(all(windows, target_arch = "x86_64"))]
-    if let Err(error) = windows::run() {
+    if let Err(error) = client_profile::before_run().and_then(|()| windows::run()) {
         eprintln!("SPIKE_FAILED: {error}");
         std::process::exit(failure_code(&error));
     }
@@ -55,5 +58,6 @@ mod tests {
         assert_eq!(failure_code("report pipe open: not found"), 67);
         assert_eq!(failure_code("invalid port"), 68);
         assert_eq!(failure_code("unknown failure"), 1);
+        assert_eq!(failure_code("CLIENT_PREFLIGHT: elevated"), 78);
     }
 }
