@@ -1994,6 +1994,7 @@ button.talos-turn-spine__tick:focus-visible {
   margin-top: 2px;
 }
 .talos-approval {
+  --talos-approval-gutter:14px;
   margin: 12px 0;
   border: 1px solid var(--talos-accent-border);
   border-radius: var(--talos-radius-card);
@@ -2005,11 +2006,11 @@ button.talos-turn-spine__tick:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 14px;
+  padding: 12px var(--talos-approval-gutter);
   border-bottom: 1px solid var(--talos-border);
 }
 .talos-approval__why {
-  padding: 10px 14px;
+  padding: 10px var(--talos-approval-gutter);
   color: var(--talos-assistant-text);
   font-size: 13px;
   border-bottom: 1px solid var(--talos-border);
@@ -2018,7 +2019,7 @@ button.talos-turn-spine__tick:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px;
+  padding: 12px var(--talos-approval-gutter);
   border-top: 1px solid var(--talos-border);
   flex-wrap: wrap;
 }
@@ -2745,6 +2746,7 @@ a.talos-button {
 }
 .talos-approval__motivo {
   margin: 8px 0 0;
+  padding-inline: var(--talos-approval-gutter);
   font-size: 12.5px;
   color: var(--talos-muted);
 }
@@ -3118,7 +3120,7 @@ a.talos-button {
   display: flex;
   align-items: center;
   gap: 7px;
-  margin: 10px 0 0;
+  margin: 10px var(--talos-approval-gutter) 0;
   padding: 7px 10px;
   border-radius: 9px;
   border: 1px solid var(--talos-border);
@@ -3386,8 +3388,8 @@ a.talos-button {
 .talos-composer__bar [data-open-sheet=model] .talos-chip__label {
   min-width: 6ch;
 }
-@container (max-width:900px) {
-  .talos-composer__bar #pillTerminale .talos-chip__label {
+@container (max-width:800px) {
+  .talos-composer__bar:has([data-runtime-costo]:not([hidden])) #pillTerminale .talos-chip__label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -3404,9 +3406,9 @@ a.talos-button {
     display: none;
   }
 }
-@container (max-width:760px) {
-  .talos-composer__bar [data-open-sheet=permissions] .talos-chip__label,
-  .talos-composer__bar [data-runtime-costo] .talos-chip__label {
+@container (max-width:740px) {
+  .talos-composer__bar:has([data-runtime-costo]:not([hidden])) [data-open-sheet=permissions] .talos-chip__label,
+  .talos-composer__bar:has([data-runtime-costo]:not([hidden])) [data-runtime-costo] .talos-chip__label {
     position: absolute;
     width: 1px;
     height: 1px;
