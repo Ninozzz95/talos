@@ -34,6 +34,8 @@ pub struct ExtendedLimits {
 pub struct Accounting { pub times: [i64; 4], pub faults: u32, pub total: u32, pub active: u32, pub terminated: u32 }
 #[repr(C)]
 pub struct Overlapped { pub internal: usize, pub high: usize, pub offsets: [u32; 2], pub event: Handle }
+#[repr(C)]
+struct ProcessIdList { assigned: u32, count: u32, ids: [usize; 16] }
 
 #[link(name = "kernel32")]
 extern "system" {
@@ -46,7 +48,8 @@ extern "system" {
     pub fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
     pub fn CreateJobObjectW(attributes: *const SecurityAttributes, name: *const u16) -> Handle;
     pub fn SetInformationJobObject(job: Handle, class: i32, data: *const c_void, length: u32) -> i32;
-    pub fn QueryInformationJobObject(job: Handle, class: i32, data: *mut c_void, length: u32, returned: *mut u32) -> i32;
+    #[link_name = "QueryInformationJobObject"]
+    fn QueryInformationJobObjectRaw(job: Handle, class: i32, data: *mut c_void, length: u32, returned: *mut u32) -> i32;
     pub fn IsProcessInJob(process: Handle, job: Handle, result: *mut i32) -> i32;
     pub fn InitializeProcThreadAttributeList(list: *mut c_void, count: u32, flags: u32, size: *mut usize) -> i32;
     pub fn UpdateProcThreadAttribute(list: *mut c_void, flags: u32, attribute: usize, value: *mut c_void, size: usize, previous: *mut c_void, returned: *mut usize) -> i32;
@@ -67,6 +70,31 @@ extern "system" {
     pub fn GetOverlappedResult(file: Handle, overlapped: *mut Overlapped, transferred: *mut u32, wait: i32) -> i32;
     pub fn CancelIoEx(file: Handle, overlapped: *const Overlapped) -> i32;
 }
+
+/// Diagnostic wrapper: retains the native result and never edits the returned
+/// accounting data. The separate ID list is observation, not an alternate PASS.
+/// SAFETY: callers must supply the live handle and output buffer required by the
+/// Windows API, with its correct size and alignment.
+pub unsafe fn QueryInformationJobObject(job: Handle, class: i32, data: *mut c_void,
+    length: u32, returned: *mut u32) -> i32 {
+    let mut local_returned = 0;
+    let output_length = if returned.is_null() { &mut local_returned } else { returned };
+    let result = unsafe { QueryInformationJobObjectRaw(job, class, data, length, output_length) };
+    if result != 0 && class == 1 && length as usize >= std::mem::size_of::<Accounting>() && !data.is_null() {
+        let info = unsafe { &*data.cast::<Accounting>() };
+        let actual_length = unsafe { *output_length };
+        let mut ids = ProcessIdList { assigned: 0, count: 0, ids: [0; 16] };
+        let mut ids_length = 0;
+        let ids_ok = unsafe { QueryInformationJobObjectRaw(job, 3,
+            (&mut ids as *mut ProcessIdList).cast(), std::mem::size_of::<ProcessIdList>() as u32, &mut ids_length) };
+        let ids_error = if ids_ok != 0 { 0 } else { unsafe { GetLastError() } };
+        let count = (ids.count as usize).min(ids.ids.len());
+        println!("{{\"diagnostic\":\"job_accounting\",\"returned_bytes\":{actual_length},\"total\":{},\"active\":{},\"terminated\":{},\"pid_list_status\":{ids_error},\"assigned\":{},\"listed\":{},\"pid_list\":{:?}}}",
+            info.total, info.active, info.terminated, ids.assigned, ids.count, &ids.ids[..count]);
+    }
+    result
+}
+
 #[link(name = "advapi32")]
 extern "system" {
     pub fn OpenProcessToken(process: Handle, access: u32, token: *mut Handle) -> i32;
@@ -87,7 +115,15 @@ extern "system" {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::mem::size_of;
+    use std::mem::{size_of, offset_of};
+    #[test] fn accounting_and_id_list_field_offsets_match_sdk() {
+        assert_eq!(offset_of!(Accounting, total), 36);
+        assert_eq!(offset_of!(Accounting, active), 40);
+        assert_eq!(offset_of!(Accounting, terminated), 44);
+        assert_eq!(offset_of!(ProcessIdList, count), 4);
+        assert_eq!(offset_of!(ProcessIdList, ids), 8);
+        assert_eq!(size_of::<ProcessIdList>(), 136);
+    }
     #[test] fn sdk_x64_layouts() {
         assert_eq!(size_of::<SecurityAttributes>(), 24);
         assert_eq!(size_of::<SecurityCapabilities>(), 24);
