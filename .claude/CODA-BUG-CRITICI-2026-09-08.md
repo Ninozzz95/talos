@@ -794,6 +794,15 @@ che fallisce a metà, che scatta durante un attrezzo, che perde l'ultimo messagg
 **Finita quando:** un compito di più ore con tre compattazioni di fila si chiude come senza compattazione, con la prova che i
 fatti dichiarati all'inizio sopravvivono, e la persona vede e capisce ogni compattazione. Da fare DOPO le fasi in corso.
 
+**Aggiunta dell'owner, 17/09/2026 (stesso giorno) — l'INTERFACCIA è parte del debito, non un contorno:** «sì, anche a livello
+di interfaccia ci deve essere **barra completamento e separatore** come fa Claude Code (chi meglio di te per implementarlo)…
+mi riferisco al compattamento». ⇒ Due elementi obbligatori, sul modello di Claude Code: (a) mentre la compattazione gira, una
+**barra di avanzamento** nella chat (stato vivo, non uno spinner muto: la persona sa che sta compattando e quanto manca);
+(b) a compattazione finita, un **separatore** nella conversazione nel punto esatto in cui è avvenuta («conversazione
+compattata», con ciò che è stato tenuto apribile), che resta nella cronologia e sopravvive a ricarica e riapertura. Entrano
+nel punto (3) qui sopra e nel criterio di chiusura: senza barra e separatore a schermo, nei due temi, BC-65 non è chiusa.
+All'apertura: skill `frontend-design`, e prima si guarda cosa il progetto ha già (separatori di giro, righe di stato).
+
 ## BC-66 | REFACTOR o IRROBUSTIMENTO del CONTEXT ENGINE (owner 17/09/2026, insieme a BC-65) — DEBITO, «lo facciamo dopo»
 
 **Parole dell'owner:** «un refactor o irrobustimento del context engine anche». È il motore su cui poggia la compattazione
