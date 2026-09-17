@@ -1339,3 +1339,19 @@ voluto; delle tre accuse di BC-70 una sola era vera.
 3. **Il piede del pannello notifiche apre con «Negate nelle impostazioni del browser…» senza un soggetto**: non dice CHE COSA è negato.
 4. **«Capability» resta una parola tecnica a schermo** (barra laterale e testata): regola «niente nomi tecnici nella UI».
 5. **Lo stato vuoto della Revisione porta un «+» come icona**, che si legge come un comando per aggiungere.
+
+## BC-83 | Aprire in TALOS una cartella che contiene un `git.exe` lo ESEGUIVA (Windows) — trovato e CURATO da me il 17/09/2026 notte, preparando la Fase A-bis
+
+**Misurato** (Node v24.18.0, finto INNOCUO = copia di `whoami.exe` chiamata `git.exe`, `spawnSync('git', [], {cwd: <cartella col finto>})`):
+genitore SENZA `NoDefaultCurrentDirectoryInExePath` → esce il nome utente (ha girato il FINTO) · genitore con la variabile → `usage: git …`
+· genitore senza, che se la imposta da sé a inizio processo → `usage: git …`. `workspace-info.mjs` e `scheda-di-lavoro.mjs` lanciano `git`
+per nome con `cwd` = il workspace a ogni apertura di sessione ⇒ bastava aprire una cartella scaricata.
+⛔ **E la mia PRIMA sonda diceva «tutto bene»:** la shell da cui la lanciavo ha già la variabile a 1, e conta l'ambiente di chi LANCIA, non
+l'`env` passato al figlio. Tre righe di «git VERO» che non misuravano niente. L'ho presa solo perché ho controllato che la sonda sapesse
+mordere (il finto lanciato per percorso girava, per nome no: due misure che non tornavano). ⇒ Il 4174 avviato da me era protetto PER CASO;
+l'app installata e il server avviato dalla shell dell'owner no.
+**Cura:** `src/difesa-ricerca-programmi.mjs`, import a effetto messo PER PRIMO in `server.mjs`; la ereditano i figli (anche `cmd.exe` la
+rispetta). Prova nei due versi, col genitore lanciato ad ambiente RIPULITO: `tests/difesa-ricerca-programmi.test.mjs` (01 difesa, 02 il
+finto gira senza difesa — la prova sa mordere, 03 il server la importa per primo). Fonti, 17/09/2026: nodejs/node #46264, cline/cline
+#14171, ausardcompany/alexi #1752. ⛔ NON verificato: il processo main di Electron (`desktop/main.mjs`) — LETTO: lancia il server con un
+percorso assoluto e la sonda del motore con un percorso, non nomi nudi; la CLI è fuori scope (glielo segnalo).

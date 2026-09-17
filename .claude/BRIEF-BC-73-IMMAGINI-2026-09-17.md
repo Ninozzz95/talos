@@ -1,7 +1,7 @@
 # Brief — BC-73: l'attrezzo immagini dice dove va, chiede sempre fuori da OpenRouter, e senza chiave non chiama
 
 > Approvato dall'owner il 17/09/2026 («sì a tutte» sulle tre cure). Parte DOPO la fusione del ramo `cli-req` (tocca
-> `src/agent-service.mjs` e `src/session-registry.mjs`, in mano a quel ramo). Un agente Opus 5 high, revisore avversariale dopo.
+> `src/agent-service.mjs` e `src/session-registry.mjs`, in mano a quel ramo). Un agente Opus 5 high; la revisione avversariale la fa l'orchestratore, non un agente (owner 17/09).
 > La scheda con le misure è in `.claude/CODA-BUG-CRITICI-2026-09-08.md`, cerca `BC-73`.
 
 ## Cosa esiste già (misurato/letto il 17/09 — riaccertalo sul tuo albero)

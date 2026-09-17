@@ -40,6 +40,13 @@
 | 9 | `scripts/avvia-talos.mjs` (`{...process.env, TALOS_HARNESS_UI_REPORT_FILE}`) | il server, da riga di comando | **FUORI PRODOTTO** — script di avvio per sviluppo, non spedito |
 | 10 | `desktop/main.mjs` (via `creaAvvioFiglio`, `desktop/runtime.mjs`) | il server figlio | **VOLUTO** — copia filtrata (toglie `NODE_OPTIONS`, `NODE_PATH`, `ELECTRON_*`) più i `TALOS_*` aggiunti. È l'ORIGINE dei segreti, non un difetto |
 
+✅ **CURATO il 17/09/2026 notte, e il rischio era PIÙ GRAVE di come sta scritto qui sotto.** Non serviva un `PATH` ostile: su Windows
+un nome nudo si cerca PRIMA nella cartella di lavoro del figlio, cioè nel WORKSPACE. Misurato con un finto `git.exe` innocuo (copia di
+`whoami.exe`): un processo Node senza `NoDefaultCurrentDirectoryInExePath` esegue il FINTO; con la variabile, o impostandosela da sé a
+inizio processo, esegue il git vero. Cura: `src/difesa-ricerca-programmi.mjs`, importato per PRIMO da `server.mjs` — vale per i punti 4,
+4-bis e per ogni `spawn` per nome che verrà. Prova nei due versi: `tests/difesa-ricerca-programmi.test.mjs`. ⛔ Il punto 5 (sonda del
+binario) è già stato curato applicando la PR #30 (`llama-binary-probe.mjs`, ambiente filtrato): questa tabella lo dà ancora «aperto».
+
 ⛔ Il candidato più serio che resta aperto è il **n. 4**: `git` è il nome che si risolve dal `PATH`
 ereditato, quindi in una cartella ostile con un `git` proprio nel percorso si sposterebbe il
 bersaglio. Non è la riga di oggi, ed è scritto qui perché non si perda.
