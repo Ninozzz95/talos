@@ -13691,12 +13691,31 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return voce.nuovo ? 'new' : 'modified';
   }
 
+  /*
+   * ⛔⛔ PO-30, fetta 1 (17/09/2026) — LA LETTERA DI STATO, come nel laboratorio della PR #33: «M» e «A».
+   *   Ricerca del 17/09/2026 (VS Code, decorazioni dell'esploratore): le lettere sono un'abbreviazione che
+   *   chi programma riconosce, MA da sole non dicono niente a chi ascolta uno screen reader e, qui, mentirebbero
+   *   a chi le legge come stato di git: il nostro «M» vuol dire «modificato IN QUESTA SESSIONE», non «diverso
+   *   dall'ultimo commit». ⇒ la lettera si vede, il significato intero sta nel titolo e nel nome accessibile.
+   *   Un solo posto la scrive: prima la riga nuova portava la parola e l'aggiornamento successivo no.
+   */
+  function scriviStatoRigaAlbero(segno, stato) {
+    segno.className = `ft-status-dot ft-${stato} talos-file-row__state`;
+    segno.textContent = stato === 'new' ? 'A' : 'M';
+    const frase = stato === 'new' ? 'Creato in questa sessione' : 'Modificato in questa sessione';
+    segno.title = frase;
+    segno.setAttribute('aria-label', frase);
+    segno.setAttribute('role', 'img');
+  }
+
   function alberoInAnteprima() {
     return !state.realSession.id && Boolean(state.realSession.previewProjectId);
   }
 
   function syncFileTreeToolbar(enabled = Boolean(state.realSession.id) && !alberoInAnteprima()) {
-    for (const id of ['fileTreeNewFile', 'fileTreeNewFolder', 'fileTreeRefresh', 'fileTreeCollapse']) {
+    const nomeRadice = $('#alberoNomeRadice');
+    if (nomeRadice) { nomeRadice.textContent = nomeRadiceAlberoReale(); nomeRadice.title = state.realSession.cartellaAssoluta || ''; }
+    for (const id of ['fileTreeAdd', 'fileTreeMore', 'fileVista', 'fileTreeNewFile', 'fileTreeNewFolder', 'fileTreeRefresh', 'fileTreeCollapse']) {
       const button = $(`#${id}`);
       if (button) button.disabled = !enabled;
     }
@@ -13708,7 +13727,55 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       bottoneUp.setAttribute('aria-pressed', String(aperto));
       bottoneUp.title = aperto ? 'Chiudi, torna alla sessione' : 'Risali fuori dalla sessione';
       bottoneUp.setAttribute('aria-label', aperto ? 'Chiudi, torna alla sola cartella della sessione' : 'Risali fuori dalla sessione (sola lettura)');
+      const testoUp = $('span', bottoneUp);
+      if (testoUp) testoUp.textContent = aperto ? 'Torna alla sola cartella della sessione' : 'Guarda fuori dalla cartella, in sola lettura';
+      aggiornaVistaFile();
     }
+  }
+
+  /*
+   * ⛔⛔ PO-30, fetta 1 — LE VISTE DELLA SCHEDA FILE («Tutti i file ▾» del laboratorio), sui dati veri.
+   *   «Modificati in questa sessione» è la scheda che stava in cima al pannello: stessi dati, stesso scrittore
+   *   (`aggiornaInspector` la riempie da `reviewFiles`), ora si SCEGLIE invece di occupare sempre il primo posto.
+   *   ⛔ Il selettore è un menu NOSTRO (`apriMenuAzioni`), non un `<select>` nativo: nel laboratorio è un select
+   *   perché lì non c'è un sistema di componenti; qui i controlli nativi sono vietati.
+   *   ⛔ Il conteggio dice ciò che CONTA davvero: nell'albero i file si caricano cartella per cartella, quindi
+   *   «N file» sarebbe una bugia — è «N a vista». Nella vista dei modificati il numero è esatto, e lo dice.
+   */
+  const VISTE_FILE = Object.freeze({ tutti: 'Tutti i file', modificati: 'Modificati in questa sessione' });
+  function vistaFileScelta() { return $('#fileVista')?.dataset.vista === 'modificati' ? 'modificati' : 'tutti'; }
+  function aggiornaVistaFile() {
+    const vista = vistaFileScelta();
+    const albero = $('#alberoFile');
+    const modificati = $('#fileModificati');
+    const campo = $('#fileTreeFilter')?.closest('.talos-field');
+    if (albero) albero.hidden = vista !== 'tutti';
+    if (modificati) modificati.hidden = vista !== 'modificati';
+    if (campo) campo.hidden = vista !== 'tutti'; // la ricerca lavora sull'albero: fuori dall'albero non cercherebbe niente
+    const nome = $('#fileVistaNome');
+    if (nome) nome.textContent = VISTE_FILE[vista];
+    const conteggio = $('#fileConteggio');
+    if (!conteggio) return;
+    if (vista === 'modificati') {
+      const n = state.realSession.reviewFiles instanceof Map ? state.realSession.reviewFiles.size : 0;
+      conteggio.textContent = n === 0 ? '' : `${n} file`;
+    } else {
+      const n = albero ? albero.querySelectorAll('.ft-node:not([aria-expanded])').length : 0;
+      conteggio.textContent = n === 0 ? '' : `${n} a vista`;
+      conteggio.title = n === 0 ? '' : 'I file si caricano aprendo le cartelle: questo è il numero di quelli già a vista.';
+    }
+  }
+  function scegliVistaFile(ancora) {
+    const scelta = vistaFileScelta();
+    apriMenuAzioni({
+      etichetta: 'Quali file mostrare',
+      posizionamento: { ancoraEl: ancora },
+      voci: Object.entries(VISTE_FILE).map(([id, etichetta]) => ({
+        icona: id === scelta ? 'i-check' : (id === 'tutti' ? 'i-folder' : 'i-file'),
+        etichetta,
+        azione: () => { const b = $('#fileVista'); if (b) b.dataset.vista = id; aggiornaVistaFile(); },
+      })),
+    });
   }
 
   function cartellaSelezionataAlbero() {
@@ -14561,9 +14628,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const stato = !cartella ? statoFileAlbero(percorsoCompleto) : null;
     if (stato) {
       const dot = document.createElement('span');
-      dot.className = `ft-status-dot ft-${stato} talos-file-row__state`;
-      dot.title = stato === 'new' ? 'Nuovo' : 'Modificato';
-      dot.textContent = stato === 'new' ? 'nuovo' : 'mod.'; // 06/9 B2: la parola del mockup, non solo un pallino
+      scriviStatoRigaAlbero(dot, stato);
       row.appendChild(dot);
     }
 
@@ -15070,6 +15135,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         treeRenderNeedsRerun = false;
         await renderizzaAlberoRealeUnaVolta();
       } while (treeRenderNeedsRerun);
+      aggiornaVistaFile();
     })().finally(() => {
       treeRenderInFlight = null;
     });
@@ -15262,9 +15328,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const stato = statoFileAlbero(li.dataset.percorso);
       let dot = $('.ft-status-dot', row);
       if (stato) {
-        if (!dot) { dot = document.createElement('span'); row.appendChild(dot); }
-        dot.className = `ft-status-dot ft-${stato}`;
-        dot.title = stato === 'new' ? 'Nuovo' : 'Modificato';
+        if (!dot) { dot = document.createElement('span'); row.insertBefore(dot, $('.ft-actions-btn', row)); }
+        scriviStatoRigaAlbero(dot, stato);
       } else if (dot) {
         dot.remove();
       }
@@ -21354,6 +21419,10 @@ ${testo}`;
      * giro sta girando, Esc chiede se fermarlo. Mai prima: uno strato aperto si smonta
      * per primo (WAI-ARIA APG), altrimenti Esc diventerebbe imprevedibile.
      */
+    /* ⛔ PO-30 (17/09/2026), trovato dalla prova del menu dei file: un menu aperto come `popover` è anche lui uno STRATO.
+       Con un giro in corso, Esc sul menu «+» della scheda File chiedeva «Fermo il giro?» e il menu restava aperto.
+       Lo strato più alto si smonta per primo (è la regola scritta qui sopra): se c'è un popover aperto, Esc è suo. */
+    else if (event.key === 'Escape' && document.querySelector(':popover-open')) { /* lo chiude il browser */ }
     else if (event.key === 'Escape' && runRealeAttivo() && !$('.overlay-layer:not([hidden])') && !ROOT().querySelector('dialog[open]')) {
       event.preventDefault();
       /*
@@ -21541,6 +21610,25 @@ ${testo}`;
   $('#fileTreeFilter')?.addEventListener('input', (e) => {
     filtraAlberoReale(e.target.value);
     salvaImpostazioniAlbero();
+  });
+  $('#fileVista')?.addEventListener('click', (evento) => scegliVistaFile(evento.currentTarget));
+  /* ⛔ Visto nella PRIMA foto: «2 a vista» restava 2 anche con le cartelle aperte e cinque file sullo schermo — il numero si
+     aggiornava solo quando l'albero si ridisegnava per intero. L'albero cambia in molti modi (si apre una cartella, arriva una
+     scrittura, si crea un file): invece di rincorrerli uno per uno si guarda l'albero, e si riconta al fotogramma dopo. */
+  if ($('#alberoFile') && typeof MutationObserver === 'function') {
+    let contaInAttesa = false;
+    new MutationObserver(() => {
+      if (contaInAttesa) return;
+      contaInAttesa = true;
+      requestAnimationFrame(() => { contaInAttesa = false; aggiornaVistaFile(); });
+    }).observe($('#alberoFile'), { childList: true, subtree: true });
+  }
+  /* Nella vista dei modificati una riga È un file: si apre come dall'albero. Il percorso è il testo della riga,
+     scritto da `righeFile`; una riga che non è un file (il «Nessun file scritto finora») non è in `reviewFiles`. */
+  $('#fileModificati')?.addEventListener('click', (evento) => {
+    const percorso = evento.target.closest?.('.talos-kv')?.querySelector('.talos-kv__k')?.textContent?.trim();
+    if (!percorso || !state.realSession.reviewFiles.has(percorso)) return;
+    apriFileAlbero(percorso, percorso.split('/').pop());
   });
   $('#fileTreeNewFile')?.addEventListener('click', () => avviaCreaVoce(cartellaSelezionataAlbero(), 'file'));
   $('#fileTreeNewFolder')?.addEventListener('click', () => avviaCreaVoce(cartellaSelezionataAlbero(), 'cartella'));

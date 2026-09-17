@@ -1,0 +1,54 @@
+/*
+ * ⛔⛔ PO-30, fetta 1 (17/09/2026) — LA SCHEDA «FILE» DELLA COLONNA DESTRA, col disegno del laboratorio della PR #33.
+ *
+ * Dal laboratorio si prendono la GRAMMATICA e le MISURE (testata col nome della cartella e due soli comandi, ricerca,
+ * selettore delle viste col conteggio a destra, righe da 36 px, lettera di stato, «⋯» che compare sulla riga che si sta
+ * usando); colori, raggi, caratteri e ombre restano i token del tema Calm — nessun valore nuovo, nessun colore scritto a mano.
+ * I due menu della testata usano lo STESSO ancoraggio del menu «⋯» della barra in alto (`position-anchor`), con gli stessi
+ * valori di `.talos-menu`: non un terzo modo di aprire un menu.
+ */
+#railFile #alberoCartella{display:flex; flex-direction:column; gap:var(--talos-space-sm); min-height:0}
+
+.talos-file-head{display:flex; align-items:center; gap:var(--talos-space-sm); min-height:var(--talos-control-height)}
+.talos-file-head > .i{width:16px; height:16px; flex:none; color:var(--talos-muted)}
+.talos-file-head__nome{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600}
+#fileTreeAdd{anchor-name:--talos-file-nuovo}
+#fileTreeMore{anchor-name:--talos-file-altro}
+
+.talos-file-menu{display:none}
+.talos-file-menu:popover-open{
+  display:flex; flex-direction:column; gap:2px;
+  position:fixed; inset:auto; margin:6px 0 0; z-index:60;
+  min-width:15rem; max-width:min(22rem, calc(100vw - 16px)); padding:6px;
+  border:1px solid var(--talos-border-strong); border-radius:12px;
+  background:var(--talos-panel); color:var(--talos-text); box-shadow:var(--talos-shadow-card);
+  position-area:block-end span-inline-start;
+  position-try-fallbacks:flip-block;
+}
+#menuFileNuovo:popover-open{position-anchor:--talos-file-nuovo}
+#menuFileAltro:popover-open{position-anchor:--talos-file-altro}
+.talos-file-menu__voce{width:100%; min-width:0; justify-content:flex-start; gap:8px; padding:0 10px; border-color:transparent; background:transparent; text-align:start; white-space:normal; line-height:1.25; min-height:var(--talos-control-height)}
+.talos-file-menu__voce:hover:not(:disabled){background:var(--talos-card)}
+.talos-file-menu__voce[aria-pressed="true"]{color:var(--talos-accent-text, var(--talos-accent))}
+.talos-file-menu__voce .i{width:15px; height:15px; flex:none}
+
+.talos-file-viste{display:flex; align-items:center; justify-content:space-between; gap:var(--talos-space-sm)}
+.talos-file-viste__scelta{gap:6px; padding-inline:var(--talos-space-xs); font-size:var(--talos-font-size-xs); border-color:transparent; max-width:75%}
+.talos-file-viste__scelta > span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.talos-file-viste__scelta > .i{width:12px; height:12px; flex:none}
+.talos-file-viste__scelta:hover:not(:disabled){border-color:var(--talos-border)}
+.talos-file-viste__conteggio{font-size:var(--talos-font-size-xs); white-space:nowrap}
+
+/* La riga del laboratorio: 36 px, e la lettera di stato a larghezza fissa così le «M» e le «A» stanno in colonna. */
+#railFile .talos-file-row{min-height:36px; padding-block:3px}
+#railFile .talos-file-row__state{flex:none; inline-size:1.25rem; text-align:center; font-weight:600; font-size:var(--talos-font-size-xs); color:var(--talos-accent)}
+#railFile .talos-file-row__state.ft-new{color:var(--talos-success, var(--talos-accent))}
+
+/* La vista «Modificati in questa sessione»: le stesse righe chiave-valore della scheda, ma ogni riga È un file che si apre. */
+.talos-file-modificati .talos-kv{cursor:pointer; border-radius:var(--talos-radius-control); padding-inline:var(--talos-space-xs)}
+.talos-file-modificati .talos-kv:hover{background:var(--talos-card)}
+.talos-file-modificati .talos-kv__k{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+
+/* Il nome della cartella sta nella testata: la riga-radice dell'albero lo ripeterebbe subito sotto (visto nella prima foto).
+   Resta nel DOM — è il bersaglio del trascinamento sulla radice — ma non occupa una riga. */
+#railFile .talos-file-tree .tree-root{display:none}
