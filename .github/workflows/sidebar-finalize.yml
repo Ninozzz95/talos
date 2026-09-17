@@ -37,8 +37,6 @@ jobs:
           python - <<'PY'
           import base64, hashlib, json, pathlib, subprocess
 
-          # Reuse the original hash-locked candidate constructor directly.
-          # Do not parse another parser: this is the bug that broke the previous gate.
           text = pathlib.Path('.github/workflows/sidebar-apply.yml').read_text()
           marker = '      - name: Apply hash-locked sidebar candidate\n'
           start = text.index(marker) + len(marker)
@@ -48,9 +46,11 @@ jobs:
           block = text[start:end]
           assert all(not line.strip() or line.startswith('          ') for line in block.splitlines())
           script = '\n'.join(line[10:] for line in block.splitlines()) + '\n'
-          subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', script], check=True)
+          lines = script.splitlines()
+          assert lines[0] == "python - <<'PY'" and lines[-1] == 'PY'
+          constructor = '\n'.join(lines[1:-1]) + '\n'
+          exec(compile(constructor, 'sidebar-apply.yml', 'exec'), {})
 
-          # Follow-up patches discovered by the full browser/stress gates.
           patches = [
               '0ac0fb72f40ffceee64dceb09c572e8b91891037',
               '8715b3287b1dea80fc63f6e3bd60d2d0fba6fb0c',
