@@ -288,6 +288,22 @@ senza il motore sarebbe una finestrella che incolla testo con più passaggi. ⛔
 
 ---
 
+# ⭐ ORDINE DI LAVORO DAL 17/09/2026 — tre fasi, approvate dall'owner («sì»)
+
+> Piano per esteso: [PROPOSTA-FASI-A-B-C-2026-09-17.md](PROPOSTA-FASI-A-B-C-2026-09-17.md). Criterio: proprietà dei file, due corsie
+> disgiunte per fase (una backend, una frontend), al massimo DUE agenti vivi, review fatte da me. Si apre DOPO la fusione di PO-27.
+>
+> | fase | corsia backend | corsia frontend |
+> |---|---|---|
+> | **A · l'agente locale, e ciò che esce dalla macchina** | BC-76 → BC-73 | BC-77 → BC-71 → BC-70 → BC-68 |
+> | **B · attrezzi dei file come Hermes** | CLI-REQ-11 → 10 → 08 → 09 (kernel, con interruttore per il banco) | BC-72 (la cartella `tests/browser` a zero rossi non dichiarati) |
+> | **C · dove stanno i dati, e sessioni lunghe che reggono** | PO-26 → BC-66 → BC-65 | l'interfaccia del compattamento: barra di avanzamento e separatore |
+>
+> In coda, con l'owner: sorgente del kernel · FASE 12 · pre-release. Da collocare (nessuna risposta ancora): i residui di
+> sicurezza dei plugin e degli spawn. Brief pronti: `BRIEF-BC-76-…`, `BRIEF-BC-73-…`, `BRIEF-FASE-A-FRONTEND-…`, `BRIEF-ATTREZZI-FILE-…`.
+
+---
+
 # FASE 3-quater · PO-27 — Via la modale «Primo avvio» — **approvata dall'owner il 17/09** («sì confermo rimozione»)
 
 > **Tre DEBITI segnalati dall'owner il 17/09 («segna adesso i bug come debiti»), da fare con PO-27 subito dopo la P0-bis:**

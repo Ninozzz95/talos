@@ -1,4 +1,4 @@
-# PROPOSTA — le righe in coda accorpate in tre fasi (17/09/2026) — IN ATTESA del sì dell'owner
+# PIANO APPROVATO — le righe in coda accorpate in tre fasi (17/09/2026) — ✅ owner: «sì»
 
 > Owner, 17/09: «BC-73, la fase degli attrezzi dei file, PO-26, BC-66, BC-65, BC-68, BC-70, BC-71, BC-72, BC-77: accorpa questi
 > per fasi, cosa proponi?». Criterio: la PROPRIETÀ DEI FILE (due righe sullo stesso file stanno nella stessa corsia, in fila) e il
