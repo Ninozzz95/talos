@@ -1,0 +1,83 @@
+name: local-engine-kernel
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'harness-ui/src/**'
+      - 'harness-ui/server.mjs'
+      - 'harness-ui/tests/**'
+      - 'harness-ui/scripts/**'
+      - 'harness-ui/docs/performance/**'
+      - '.github/workflows/local-engine-kernel.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  local-engine-contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - name: Install unchanged locked backend and context dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --prefix harness-ui
+          npm ci --prefix context-engine
+      - name: Record source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/local-engine-evidence"
+          node harness-ui/scripts/local-engine-source-baseline.mjs > "$RUNNER_TEMP/local-engine-evidence/source-baseline.json"
+          git rev-parse HEAD > "$RUNNER_TEMP/local-engine-evidence/head.txt"
+          git diff --exit-code
+      - name: Local kernel contracts and actual temporary-file tool loop
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap harness-ui/tests/local-kernel-*.test.mjs harness-ui/tests/local-engine-source-baseline.test.mjs harness-ui/tests/local-runtime-llama-server.test.mjs | tee "$RUNNER_TEMP/local-engine-evidence/local-contracts.tap"
+      - name: Existing shared-kernel regression suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap harness-ui/tests/session-registry.test.mjs harness-ui/tests/agent-service.test.mjs harness-ui/tests/model-destination.test.mjs harness-ui/tests/runtime-owner-adapter-fallback.test.mjs harness-ui/tests/kernel-loop-locale-e-stop.test.mjs | tee "$RUNNER_TEMP/local-engine-evidence/shared-contracts.tap"
+      - name: A/B fixture benchmark against the unchanged functional base
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASELINE="$RUNNER_TEMP/talos-local-kernel-baseline"
+          git worktree add --detach "$BASELINE" 13f65c15cdeaf8986b882993a0773cdeafb867d2
+          ln -s "$GITHUB_WORKSPACE/harness-ui/node_modules" "$BASELINE/harness-ui/node_modules"
+          ln -s "$GITHUB_WORKSPACE/context-engine/node_modules" "$BASELINE/context-engine/node_modules"
+          node harness-ui/scripts/bench-local-kernel-loop.mjs --baseline-root "$BASELINE" --iterations 31 --warmup 3 --out "$RUNNER_TEMP/local-engine-evidence/fixture-benchmark.json"
+          git -C "$BASELINE" diff --exit-code
+      - name: Preserve exact source history for offline reproduction
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git bundle create "$RUNNER_TEMP/local-engine-evidence/source.bundle" HEAD
+          sha256sum "$RUNNER_TEMP/local-engine-evidence/source.bundle" > "$RUNNER_TEMP/local-engine-evidence/source.sha256"
+      - name: Preserve source identity, TAP and measured fixture evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: local-engine-contract-evidence-${{ matrix.os }}
+          path: ${{ runner.temp }}/local-engine-evidence/
+          retention-days: 7
+          if-no-files-found: error

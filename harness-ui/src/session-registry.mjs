@@ -1671,6 +1671,7 @@ export function createSessionRegistry({
    */
   firma,
   localRuntimes = {},
+  avviaSessioneLocaleFn = null, // Opt-in shared-kernel route for llama.cpp; other runtimes stay unchanged.
   /*
    * ⭐⭐⭐ O-01 (04/9) — L'ELENCO VERO DEGLI ATTREZZI, per il Capability hub.
    * Torna `{base, estesi}` letti dal kernel (runtime-owner-adapter.mjs,
@@ -3192,7 +3193,30 @@ export function createSessionRegistry({
       ),
       onEvento: (evento, opzioni) => broadcast(voce, evento, opzioni),
     };
-    const esecuzione = providerEffettivo === 'local'
+    const usaKernelLocale = providerEffettivo === 'local' && runtimeIdEffettivo === 'llama.cpp'
+      && typeof avviaSessioneLocaleFn === 'function';
+    const esecuzione = usaKernelLocale
+      ? Promise.resolve().then(async () => {
+          // Use the same effective task/history, policy, hooks and event persistence
+          // as the main agent route. Never restart this run in the cloud after effects.
+          const contextHooks = typeof contextHooksFn === 'function'
+            ? await contextHooksFn({ sessionId, runId: `${sessionId}:${versioneGiro}`, signal: controller.signal })
+            : null;
+          controller.signal.throwIfAborted();
+          return avviaSessioneLocaleFn({
+            ...cloudOptions, ...(contextHooks ? { contextHooks } : {}),
+            sessionId, runtimeId: runtimeIdEffettivo, modelId: voce.modelId,
+            fallbackConsent: fallbackConsentEffettivo,
+            onRuntimeInvalidated: (error) => {
+              if (voce.controller !== controller) return;
+              negaApprovazionePendente(voce);
+              controller.abort(error);
+              broadcast(voce, { type: 'RuntimeInvalidated', code: error?.code ?? 'LOCAL_KERNEL_MODEL_CHANGED',
+                provider: 'local', runtimeId: runtimeIdEffettivo, modelId: voce.modelId });
+            },
+          });
+        })
+      : providerEffettivo === 'local'
       ? eseguiRuntimeLocale({ voce, task, messaggiIniziali, runtimeId: runtimeIdEffettivo, modelId: voce.modelId, reasoning: reasoningEffettivo, sessionId })
         .catch((errore) => {
           if (voce.controller.signal.aborted || fallbackConsentEffettivo !== true || typeof chiaveEffettiva !== 'string' || chiaveEffettiva.length === 0) throw errore;

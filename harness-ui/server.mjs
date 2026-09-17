@@ -29,6 +29,7 @@ import { createHfDirectTransfer } from './src/hf-direct-transfer.mjs';
 import { fetchAllowedHfImage } from './src/hf-image-proxy.mjs';
 import { createLlamaServerSupervisor } from './src/llama-server-supervisor.mjs';
 import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
+import { createLocalKernelRunner } from './src/local-kernel-session.mjs';
 import { createProviderProbe } from './src/provider-probe.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
 import { leggiScopePortachiavi, avvolgiAdattatoreKeyring, creaAdattatorePortachiaviSistema } from './src/adattatore-keyring.mjs';
@@ -432,13 +433,16 @@ async function startServer() {
    * parte comunque — avviare una sessione fallisce per-richiesta con
    * CONFIG_INVALID, dichiarato al chiamante, non un rifiuto all'avvio.
    */
+  const avviaSessioneConOwner = (input) => avviaSessione({
+    ...input, talosLavoraFn: (runtimeInput) => ownerRuntime.talosLavora(runtimeInput),
+  });
   const sessionRegistry = createSessionRegistry({
+    avviaSessioneLocaleFn: config.localAgentKernel ? createLocalKernelRunner({
+      getSupervisor: () => supervisoreLocale, runSession: avviaSessioneConOwner,
+    }) : null,
     contextHooksFn: config.contextTrial ? input => contextRuntime.service.createKernelHooks(input) : undefined,
     contextCompactFn: config.contextTrial ? input => contextRuntime.service.compact(input) : undefined,
-    avviaSessioneFn: (input) => avviaSessione({
-      ...input,
-      talosLavoraFn: (runtimeInput) => ownerRuntime.talosLavora(runtimeInput),
-    }),
+    avviaSessioneFn: avviaSessioneConOwner,
     modello: config.modello,
     /*
      * ⛔ (16/09/2026, review) — la riserva `config.chiaveApi` è la OPENROUTER_API_KEY
