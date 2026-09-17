@@ -9129,7 +9129,8 @@ function ancoraToastSopraIComandi(zonaComandi, {
   finestra = globalThis,
   variabile = "--talos-toast-fondo",
   regione = null,
-  zonaIntoccabile = null
+  zonaIntoccabile = null,
+  comandiSopra = []
 } = {}) {
   const host = radice2 || zonaComandi?.ownerDocument?.documentElement || null;
   const misura = () => {
@@ -9138,6 +9139,11 @@ function ancoraToastSopraIComandi(zonaComandi, {
     const altezzaFinestra = finestra.innerHeight || 0;
     const visibile2 = Boolean(rettangolo) && rettangolo.height > 0 && zonaComandi.offsetParent !== null;
     let ingombro = visibile2 ? Math.max(0, Math.round(altezzaFinestra - rettangolo.top)) : 0;
+    for (const comando of comandiSopra) {
+      const r = comando?.getBoundingClientRect?.();
+      if (!r || r.height <= 0 || comando.offsetParent === null) continue;
+      ingombro = Math.max(ingombro, Math.max(0, Math.round(altezzaFinestra - r.top)));
+    }
     host.style.setProperty(variabile, `${ingombro}px`);
     const cima = zonaIntoccabile?.();
     const pila = regione?.getBoundingClientRect?.();
@@ -9156,6 +9162,7 @@ function ancoraToastSopraIComandi(zonaComandi, {
     osservatore = new finestra.ResizeObserver(() => misura());
     if (zonaComandi) osservatore.observe(zonaComandi);
     if (regione) osservatore.observe(regione);
+    for (const comando of comandiSopra) if (comando) osservatore.observe(comando);
   }
   const suRidimensiona = () => misura();
   finestra.addEventListener?.("resize", suRidimensiona);
@@ -22722,6 +22729,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       });
       const ancoraggioToast = ancoraToastSopraIComandi($2("#schermoChat .talos-chat-foot"), {
         radice: HOST(),
+        comandiSopra: [$2("#chatTornaInFondo")],
         regione: toastRegion,
         /*
          * ⛔ La zona intoccabile è la TESTATA della schermata che si sta guardando: sotto ci sta il
