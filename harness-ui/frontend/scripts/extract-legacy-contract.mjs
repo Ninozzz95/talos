@@ -27,7 +27,7 @@ export async function extractLegacyContract({ appPath, htmlPath, cssPath, aguiPa
     [appPath, htmlPath, cssPath, aguiPath, staticPath].map((file) => readFile(file, 'utf8')),
   );
 
-  const hostGlobals = sortedUnique(captureAll(app, /window\.(__talosHarness[A-Za-z0-9_]+)/g));
+  const hostGlobals = sortedUnique(captureAll(app, /\b(?:window|windowObj)\.(__talosHarness[A-Za-z0-9_]+)/g));
   const storageKeys = sortedUnique([
     ...captureAll(app, /(?:const|let|var)\s+[A-Z0-9_]*STORAGE_KEY\s*=\s*['"]([^'"]+)['"]/g),
     ...captureAll(app, /DESKTOP_SETTINGS_KEY\s*=\s*['"]([^'"]+)['"]/g),

@@ -1,3 +1,10 @@
+import { createApplicationState } from '../app/state.ts';
+import { createLifetime } from '../infrastructure/lifecycle.ts';
+import { createRequestCoordinator } from '../domain/resource-state.ts';
+import { createApiClient } from '../infrastructure/api/client.ts';
+import { createHostBridge } from '../infrastructure/host/bridge.ts';
+import { createPreferences } from '../infrastructure/persistence/preferences.ts';
+import { createSessionStreamFactory } from '../infrastructure/events/session-stream.ts';
 import {creaSceltaFallback} from '../components/fonti-modelli.js';
 import { AZIONE_ACCODA, AZIONE_BIVIO, AZIONE_COMANDO, ORIGINE_SCELTA_ESPLICITA, SELETTORE_SCELTA_PREDEFINITA, creaCronologiaComposer, decidiInvio, mostraPulsanteReindirizzo, reindirizzoConsentito } from './invio-durante-il-giro.js'; // Corsia 1 (13/09): il bivio accoda/reindirizza, e la freccia su
 import { colonnaConversazione, scorrevoleConversazione } from '../bridge/conversazione-dom.js';
@@ -91,6 +98,26 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 (() => {
   'use strict';
 
+  // L02: the new owners are on the production path. The legacy controller
+  // remains a compatibility facade until its feature lots are migrated.
+  const applicationLifetime = createLifetime(() => console.warn('Risorsa UI non rilasciata correttamente.'));
+  const hostBridge = createHostBridge(window);
+  const apiClient = createApiClient({ fetchImpl: fetchSorvegliata, endpoint: API, signal: applicationLifetime.signal });
+  const metricsRequests = createRequestCoordinator();
+  const sessionStreams = createSessionStreamFactory({ endpoint: id => API(`/api/v1/sessions/${encodeURIComponent(id)}/events`) });
+  applicationLifetime.own(() => metricsRequests.dispose());
+  applicationLifetime.own(() => sessionStreams.dispose());
+  let desktopPreferences = null;
+  function preferenceStore() {
+    return desktopPreferences ||= createPreferences({ storage: () => window.localStorage, allowedKeys: [DESKTOP_SETTINGS_KEY] });
+  }
+  const streamWarnings = new Set();
+  function segnalaProblemaFlusso(tipo) {
+    if (streamWarnings.has(tipo)) return;
+    streamWarnings.add(tipo);
+    console.warn(tipo === 'unsupported' ? 'Evento sessione non supportato dalla UI.' : 'Evento sessione non leggibile.');
+  }
+
   /*
    * Owner 24/8: montato dentro uno shadow root da `HarnessSessionScreen.vue`
    * (non più un documento a sé tramite `window.location.assign` — la stessa
@@ -100,7 +127,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * torna a `document` se qualcuno lo apre com'era prima (nessuna regressione
    * per un test/anteprima diretto del file).
    */
-  function ROOT() { return window.__talosHarnessRoot || document; }
+  function ROOT() { return hostBridge.root(); }
   /*
    * `:root` nel CSS di questo file è diventato `:host` (vedi styles.css) —
    * `:root` dentro un foglio di stile di uno shadow root punta SEMPRE
@@ -112,7 +139,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * `:host`. HOST() punta all'elemento giusto per leggere/scrivere queste
    * proprietà personalizzate.
    */
-  function HOST() { return window.__talosHarnessHost || document.documentElement; }
+  function HOST() { return hostBridge.host(); }
   const $ = (selector, root = ROOT()) => root.querySelector(selector);
   const $$ = (selector, root = ROOT()) => [...root.querySelectorAll(selector)];
   /*
@@ -126,7 +153,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * `http://localhost:4174` — l'origine reale del tunnel `adb reverse`,
    * diversa dall'origine Capacitor da cui questo script gira.
    */
-  function API(pathname) { return `${window.__talosHarnessApiBase || ''}${pathname}`; }
+  function API(pathname) { return hostBridge.apiUrl(pathname); }
   /*
    * Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 4 — trovato
    * verificando dal vivo, non ipotizzato: `talos-embedded` da solo
@@ -138,9 +165,9 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * `API()` ha una base reale (mobile col tunnel attivo), il comportamento
    * torna quello vero, identico al desktop.
    */
-  function embeddedDemoOnly() { return HOST().classList.contains('talos-embedded') && !window.__talosHarnessApiBase; }
+  function embeddedDemoOnly() { return hostBridge.embedded() && !hostBridge.baseUrl(); }
 
-  const state = {
+  const applicationState = createApplicationState({
     view: 'chat',
     mode: 'chat',
     settingsSection: 'appearance',
@@ -418,7 +445,9 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       codaMessaggi: [],
       codaInPausa: false, // ⭐ 14/09: la dice il server (`talos.coda`), mai questa finestra da sola
     },
-  };
+  });
+  const state = applicationState.legacy;
+
 
   const QA_VIEWPORTS = Object.freeze({
     'desktop': '1440x900',
@@ -1591,7 +1620,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     // Il cassetto della barra si chiude appena si naviga: è il `closeDrawer()` in coda a `navigate` del mockup (riga 6097).
     chiudiCassettoBarra({ restituisciFuoco: false });
     resetEmbeddedTopbarScroll(view === 'chat' ? chatConversation : target);
-    window.__talosHarnessHostViewChange?.(view);
+    hostBridge.changeView(view);
     if (view === 'settings') inizializzaModelLab();
     if (view === 'dashboard') ensureSessionsBoard();
     if (view === 'ricerca') caricaPannelloRicerca({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Ricerca
@@ -2208,8 +2237,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
     },
   });
-  window.addEventListener('offline', () => sorveglianza.segnalaBrowser(false));
-  window.addEventListener('online', () => sorveglianza.segnalaBrowser(true));
+  applicationLifetime.listen(window, 'offline', () => sorveglianza.segnalaBrowser(false));
+  applicationLifetime.listen(window, 'online', () => sorveglianza.segnalaBrowser(true));
+  applicationLifetime.own(() => sorveglianza.ferma());
   barraStatoChat?.querySelector('[data-runtime-riprova]')?.addEventListener('click', () => sorveglianza.riprova());
   /** fetch delle API centrali: ogni esito informa la sorveglianza (T-15). */
   async function fetchSorvegliata(url, init) {
@@ -2218,7 +2248,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       sorveglianza?.segnalaRete(true);
       return risposta;
     } catch (error) {
-      sorveglianza?.segnalaRete(false, 'fetch');
+      if (!init?.signal?.aborted && error?.name !== 'AbortError') sorveglianza?.segnalaRete(false, 'fetch');
       throw error;
     }
   }
@@ -2710,27 +2740,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (badge) badge.hidden = true;
   }
 
-  async function apiGet(pathname) {
-    const response = await fetchSorvegliata(API(pathname), {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-    });
-    let envelope;
-    try {
-      envelope = await response.json();
-    } catch {
-      const error = new Error('Risposta locale non valida');
-      error.code = 'INTERNAL_ERROR';
-      throw error;
-    }
-    if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
-      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
-      throw error;
-    }
-    return envelope.data;
-  }
+  function apiGet(pathname, options) { return apiClient.get(pathname, options); }
 
   function formattaByteModelLab(bytes) {
     const value = Number(bytes);
@@ -3816,24 +3826,32 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function collegaEventiProvaModelLab(sessionId) {
     if (state.modelLab.runtimeEventSource) state.modelLab.runtimeEventSource.close();
     if (typeof EventSource !== 'function') { aggiungiBloccoStreamModelLab('error', 'Errore', 'EventSource non disponibile nel browser.'); return; }
-    const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
-    state.modelLab.runtimeEventSource = source;
-    window.__talosHarnessModelLabEventSource = source;
-    source.onmessage = (message) => {
-      let event;
-      try { event = JSON.parse(message.data); } catch { return; }
-      if (event.type === 'TextMessageContent') aggiungiBloccoStreamModelLab('text', 'Risposta', event.delta);
-      else if (event.type === 'ReasoningMessageContent') aggiungiBloccoStreamModelLab('reasoning', 'Ragionamento', event.delta);
-      else if (event.type === 'ToolCallStart') aggiungiBloccoStreamModelLab('tool', 'Tool call', event.toolCallName || event.toolCallId);
-      else if (event.type === 'ToolCallArgs') aggiungiBloccoStreamModelLab('tool', 'Tool call', event.delta);
-      else if (event.type === 'RunError') aggiungiBloccoStreamModelLab('error', 'Errore', event.message || event.code || 'Runtime locale fallito');
-      if (event.type === 'RunFinished' || event.type === 'RunError') {
-        source.close();
-        state.modelLab.runtimeEventSource = null;
-        const cancel = $('#modelLabCancelButton'); if (cancel) cancel.hidden = true;
-      }
-    };
-    source.onerror = () => { if (source.readyState === EventSource.CLOSED) aggiungiBloccoStreamModelLab('error', 'Errore', 'Connessione agli eventi interrotta.'); };
+    state.realSession.eventSource?.close();
+    const source = sessionStreams.open({
+      sessionId,
+      isCurrent: () => generation === state.realSession.generation && state.realSession.id === sessionId,
+      onState: stato => { if (stato === 'open') state.realSession.inRigiocata = true; },
+      onEvent: evento => {
+        sorveglianza?.segnalaEventoVivo();
+        segnaTappaLatenza('primoEvento');
+        handleRealEvent(evento, generation);
+      },
+      onError: () => segnalaProblemaFlusso('invalid'),
+      onUnsupported: () => segnalaProblemaFlusso('unsupported'),
+      onChannelError: readyState => {
+        // Replay can contain multiple completed turns: only the expected EOF,
+        // not the first RunFinished, closes this subscription.
+        if (state.realSession.eventoTerminaleVisto) {
+          source.close();
+          if (state.realSession.eventSource === source) state.realSession.eventSource = null;
+          return;
+        }
+        sorveglianza?.segnalaSse(readyState);
+        if (readyState === EventSource.CLOSED) appendStatusNote('Connessione agli eventi interrotta.', true);
+      },
+    });
+    state.realSession.eventSource = source;
+    segnaTappaLatenza('sseCollegato');
   }
 
   async function avviaProvaRuntimeModelLab() {
@@ -4535,27 +4553,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   /** ⭐ 26/8, riconciliazione desktop→mobile — stesso contratto envelope di apiGet, per POST /api/v1/sessions/*. */
-  async function apiPost(pathname, body) {
-    const response = await fetchSorvegliata(API(pathname), {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    let envelope;
-    try {
-      envelope = await response.json();
-    } catch {
-      const error = new Error('Risposta locale non valida');
-      error.code = 'INTERNAL_ERROR';
-      throw error;
-    }
-    if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
-      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
-      throw error;
-    }
-    return envelope.data;
-  }
+  function apiPost(pathname, body, options) { return apiClient.post(pathname, body, options); }
 
   /*
    * ⭐ 12/09 — LE DUE PORTE CHE MANCAVANO. Fino a ieri la app sapeva solo chiedere (`apiGet`) e
@@ -4567,27 +4565,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   sostituisce il messaggio): è su quello che il modulo sceglie cosa dire, quindi qui si
    *   conserva com'è invece di appiattirlo su un testo generico.
    */
-  async function apiScrivi(metodo, pathname, body) {
-    const response = await fetchSorvegliata(API(pathname), {
-      method: metodo,
-      headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    let envelope;
-    try {
-      envelope = await response.json();
-    } catch {
-      const error = new Error('Risposta locale non valida');
-      error.code = 'INTERNAL_ERROR';
-      throw error;
-    }
-    if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
-      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
-      throw error;
-    }
-    return envelope.data;
-  }
+  function apiScrivi(metodo, pathname, body, options) { return apiClient.request(metodo, pathname, { ...options, body }); }
   function apiPatch(pathname, body) { return apiScrivi('PATCH', pathname, body); }
   function apiDelete(pathname) { return apiScrivi('DELETE', pathname); }
 
@@ -8187,7 +8165,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function aggiornaPillolaPermessi() {
     aggiornaPiedeChatDaStato(); // 05/9 Fase 2: il chip del permesso col nome umano (H22)
     $$('.selector-pill span').filter((span) => ['Workspace write', 'Read only', 'On request', 'Full access'].includes(span.textContent)).forEach((span) => { span.textContent = state.permissions; });
-    window.__talosHarnessHostPermissionChange?.(state.permissions);
+    hostBridge.changePermission(state.permissions);
   }
 
   function impostaPermesso(nuovoPermesso, messaggioToast = nuovoPermesso) {
@@ -9101,12 +9079,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /** L'unico posto che sa come si ascolta una sessione figlia: il componente resta puro, e le sue
       prove non hanno bisogno di rete. Ritorna la funzione che stacca il flusso. */
   function apriFlussoFiglia(sessionId, onEvento) {
-    const sorgente = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
-    sorgente.onmessage = (messaggio) => {
-      try { onEvento(JSON.parse(messaggio.data)); }
-      catch { /* un frammento illeggibile non deve buttare giù la vista: si scarta */ }
-    };
-    return () => { try { sorgente.close(); } catch { /* già chiusa */ } };
+    const sorgente = sessionStreams.open({ sessionId, onEvent: onEvento,
+      onError: () => segnalaProblemaFlusso('invalid'), onUnsupported: () => segnalaProblemaFlusso('unsupported') });
+    return () => sorgente.close();
   }
 
   /** Torna all'elenco. ⛔ `distruggi()` chiude già il flusso, stacca l'elemento e ridià il fuoco:
@@ -9205,7 +9180,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function caricaCacheSessioneDalRegistro() {
     const sessionId = state.realSession.id;
     const generation = state.realSession.generation;
-    if (!sessionId) { state.realSession.cacheSessione = null; return; }
+    if (!sessionId) { metricsRequests.invalidate(); state.realSession.cacheSessione = null; return; }
     if (richiestaCacheSessione?.sessionId === sessionId && richiestaCacheSessione.generation === generation) {
       richiestaCacheSessione.ancora = true;
       return;
@@ -9220,13 +9195,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         let inCorso = null;
         let giroInCorsoDaMs = null;
         try {
-          const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/metrics`);
+          const risposta = await metricsRequests.run({ workspaceId: null, sessionId }, signal =>
+            apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/metrics`, { signal }));
+          if (risposta.kind !== 'current' || applicationLifetime.disposed) return;
+          const dati = risposta.value;
           misura = dati?.cacheSessione ?? null;
           durate = dati?.ragionamentiMs ?? null; // ⭐ 13/09 sera: la stessa lettura porta anche quanto ha ragionato
           inCorso = dati?.ragionamentiInCorsoDaMs ?? null; // ⭐ 13/09 notte: e da quanto ragiona quello ancora aperto
           giroInCorsoDaMs = Number.isFinite(dati?.primoToken?.inCorsoDaMs) ? dati.primoToken.inCorsoDaMs : null; // e da quanto è partito il giro
         } catch { /* La lettura fallita lascia una misura assente, mai quella di un'altra chat. */ }
-        if (richiestaCacheSessione !== richiesta || state.realSession.id !== sessionId || state.realSession.generation !== generation) return;
+        if (applicationLifetime.disposed || richiestaCacheSessione !== richiesta || state.realSession.id !== sessionId || state.realSession.generation !== generation) return;
         state.realSession.cacheSessione = misura;
         if (durate) applicaDurateRagionamento(sessionId, durate);
         if (inCorso) applicaRagionamentiInCorso(sessionId, inCorso);
@@ -13203,7 +13181,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   function leggiImpostazioniDesktop() {
     try {
-      const raw = JSON.parse(window.localStorage.getItem(DESKTOP_SETTINGS_KEY) || '{}');
+      const lettura = preferenceStore().read(DESKTOP_SETTINGS_KEY);
+      const raw = lettura.kind === 'ready' ? lettura.value : {};
       return {
         version: 1,
         appearance: normalizzaAspettoDesktop(raw?.appearance),
@@ -13219,12 +13198,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const safe = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
       const appearance = normalizzaAspettoDesktop(safe.appearance);
       const sparseAppearance = Object.fromEntries(Object.entries(appearance).filter(([key, value]) => value !== DESKTOP_APPEARANCE_DEFAULTS[key]));
-      window.localStorage.setItem(DESKTOP_SETTINGS_KEY, JSON.stringify({
+      preferenceStore().write(DESKTOP_SETTINGS_KEY, {
         version: 1,
         appearance: sparseAppearance,
         chat: normalizzaPreferenzeChatDesktop(safe.chat),
         workspaces: normalizzaWorkspaces(safe.workspaces),
-      }));
+      });
     } catch {
       // Le preferenze perse non devono impedire la navigazione del workspace.
     }
@@ -15705,6 +15684,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** Chiude l'EventSource corrente (se c'è) e apre una nuova generazione. */
   function nuovaGenerazioneSessione({ continua = false } = {}) {
+    metricsRequests.invalidate();
     if (!continua) { contextCompactor?.close(); contextCompactor?.setSession(null); contextMonitor?.stop(); contextChatSnapshot = null; aggiornaAvanzamentoContesto($('#conversation'), null); }
     nascondiAttesaRisposta();
     cancellaRenderMessaggiStreaming();
@@ -19626,7 +19606,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   $$('[data-open-panel]').forEach((button) => button.addEventListener('click', () => {
     if (button.dataset.openPanel === 'sessions' && HOST().classList.contains('talos-embedded')) {
-      window.__talosHarnessHostBack?.();
+      hostBridge.back();
     /* ⛔ Niente soglia qui: `toggleDesktopInspector()` decide da se' se collassare la colonna o
        aprire lo strato (`pannelloFlottante`). Prima la stessa domanda era scritta due volte, e
        fra 1041 e 1240 px le due risposte non combaciavano. */
@@ -20696,6 +20676,7 @@ ${testo}`;
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {
+    applicationLifetime.dispose();
     contextCompactor?.destroy(); contextCompactor = null;
     contextMonitor?.stop(); contextMonitor = null;
     window.clearInterval(notificheTimer);
@@ -20737,6 +20718,7 @@ ${testo}`;
     HOST().classList.remove('talos-embedded-wide-short');
     nativeKeyboardOpen = null;
     applyKeyboardOpen(false);
+    applicationState.dispose();
     delete window.__talosHarnessUiRuntime;
     delete window.__talosHarnessDestroy;
   };

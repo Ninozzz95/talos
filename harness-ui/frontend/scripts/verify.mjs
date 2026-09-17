@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const commands = [
+  ['typecheck', process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit']],
   ['build', process.execPath, ['scripts/build.mjs']],
   ['unit-and-contract', process.execPath, ['scripts/run-node-tests.mjs']],
   ['determinism', process.execPath, ['scripts/verify-build.mjs']],

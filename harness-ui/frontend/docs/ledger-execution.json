@@ -1,0 +1,60 @@
+{
+  "schema": "talos.desktop.ledger-execution.v1",
+  "baseline": "13f65c15cdeaf8986b882993a0773cdeafb867d2",
+  "approvedLedgerSha256": "c18e25d8d91a8e7c752d88073e1a5fa7e650a5faa443dfc796c91fe6f8aaf4da",
+  "authorization": "User approved ledger v1: ottimo procedi. No merge or release authorized.",
+  "finalDeliverable": "Complete runnable TALOS application ZIP with the final approved refactoring compiled and applied; see ledger-delivery.md.",
+  "finalApplicationReady": false,
+  "lots": [
+    { "id": "L00", "state": "BASELINE_VERIFIED", "tasks": ["F01"], "notes": "Frontend/harness/desktop/context-engine tree identity verified. Root/main remains unchanged." },
+    { "id": "L01", "state": "OBSERVED_WITH_EXPLICIT_BLOCKS", "tasks": ["F02"], "runId": 35210450795, "artifactId": 10490534938, "observations": 28, "blockedObservations": 34, "pageErrors": 0 },
+    { "id": "L02", "state": "FOUNDATION_IMPLEMENTED_AND_QUALIFIED", "tasks": ["F03", "F04", "K01", "K02", "K03", "K05", "K06"], "openTask": "X03", "notes": "Typed owners are imported by the actual legacy controller. Nested feature state and feature-specific payload validation migrate with their respective feature lots. X03 capability inventory is not declared complete." },
+    { "id": "L03", "state": "NOT_IMPLEMENTED" },
+    { "id": "L04", "state": "NOT_IMPLEMENTED", "mandatoryDecision": "D21: remove the first-run modal entirely, retaining explicit configuration and permissions." },
+    { "id": "L05", "state": "NOT_IMPLEMENTED" },
+    { "id": "L06", "state": "NOT_IMPLEMENTED" },
+    { "id": "L07", "state": "NOT_IMPLEMENTED" },
+    { "id": "L08", "state": "NOT_IMPLEMENTED" },
+    { "id": "L09", "state": "NOT_IMPLEMENTED" },
+    { "id": "L10", "state": "NOT_IMPLEMENTED" },
+    { "id": "L11", "state": "NOT_IMPLEMENTED" },
+    { "id": "L12", "state": "NOT_IMPLEMENTED" },
+    { "id": "L13", "state": "NOT_IMPLEMENTED" },
+    { "id": "L14", "state": "NOT_IMPLEMENTED" },
+    { "id": "L15", "state": "NOT_IMPLEMENTED" },
+    { "id": "L16", "state": "NOT_IMPLEMENTED" },
+    { "id": "L17", "state": "NOT_IMPLEMENTED" },
+    { "id": "L18", "state": "NOT_IMPLEMENTED" },
+    { "id": "L19", "state": "NOT_IMPLEMENTED" },
+    { "id": "L20", "state": "NOT_IMPLEMENTED" },
+    { "id": "L21", "state": "NOT_IMPLEMENTED" },
+    { "id": "L22", "state": "NOT_IMPLEMENTED" }
+  ],
+  "foundationEvidence": {
+    "runId": 35214492488,
+    "artifactId": 10493114211,
+    "artifactSha256": "57549be01ee39d795854ac2de609ad3ac836415075725b3b10a63165071a958e",
+    "qualificationParent": "d7d4632addfbe67985123ca8241c56d028d2d679",
+    "qualifiedSourceTree": "570a140bbd59ff5dfca5c764d81de535389d5019",
+    "candidateFileCount": 22,
+    "candidateBytesMatchReviewedManifest": true,
+    "environment": { "os": "Windows runner 10.0.26100", "node": "24.18.0", "typescript": "5.9.2" },
+    "typecheck": "PASS",
+    "build": "PASS",
+    "frontendUnitAndContract": { "passed": 1106, "failed": 0, "skipped": 2, "total": 1108 },
+    "desktopPure": { "passed": 60, "failed": 0, "skipped": 4, "total": 64 },
+    "electronBackendAndShell": { "passed": 3, "failed": 0, "skipped": 0 },
+    "realRuntime": { "observations": 28, "blocked": 34, "pageErrors": 0, "consoleWarningsAndErrors": 0, "apiStubs": false, "modelTurns": 0 },
+    "skips": [
+      "One animation-inventory assertion required dist before the unit run; the continuous workflow now builds before unit tests.",
+      "The original owner's external mockup is absent from this tree.",
+      "Four desktop license-manifest tests target private directories absent from the public tree."
+    ]
+  },
+  "limits": [
+    "No visual redesign is claimed in the L02 foundation extraction.",
+    "The actual shell minimum width is 884 CSS pixels; requests for 390/320 were clamped, not passed as responsive tests.",
+    "Blocked surfaces need their real prerequisites and dedicated coverage in the corresponding lots.",
+    "No paid provider call, user credential, regular user profile, Android change, merge, release tag or final executable delivery."
+  ]
+}
