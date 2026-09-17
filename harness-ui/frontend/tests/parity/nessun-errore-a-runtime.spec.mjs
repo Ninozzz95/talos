@@ -3,6 +3,15 @@ import { createServer } from 'node:http';
 import { createHttpApp } from '../../../src/http-app.mjs';
 import { erroreDiUnaPaginaTerza } from '../../src/components/browser.js'; // OSS-3 (17/09): chi ha lanciato l'errore, noi o una pagina che ospitiamo
 
+// D21/BOOT-03 starts on Home. Tests exercising the composer must navigate through
+// the real sidebar, not force hidden controls or measure a hidden conversation.
+async function apriConversazioneVisibile(page) {
+  await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
+  await page.locator('#talosAvvio').waitFor({ state: 'hidden' });
+  await page.locator('.talos-sidebar [data-vaia="chat"]').first().click();
+  await expect(page.locator('#schermoChat')).toBeVisible();
+}
+
 test('RELEASE-018-PROMPT-ENHANCE: composer through real route and session provider', async ({ page }) => {
   const improved = 'Scrivi un resoconto chiaro con obiettivo, vincoli e risultato atteso.';
   let providerRequest;
@@ -35,7 +44,7 @@ test('RELEASE-018-PROMPT-ENHANCE: composer through real route and session provid
       await route.fulfill({ status: response.status, contentType: 'application/json', body: await response.text() });
     });
     await page.goto(process.env.TALOS_URL_CANCELLO);
-    await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
+    await apriConversazioneVisibile(page);
     await page.evaluate(() => { window.__talosHarnessUiRuntime.realSessionState.id = 'release-018'; });
     const composer = page.locator('#composerInput');
     const originale = 'vecchio prompt\n\ncon istruzioni da eliminare';
@@ -86,7 +95,7 @@ test('FASE3-MULTISELECT-UNA-POST — conferma unica ed esito parziale restano vi
   await page.goto(process.env.TALOS_URL_CANCELLO);
   await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
   await page.evaluate(() => { window.__talosHarnessUiRuntime.realSessionState.id = 'fase-3-ui'; });
-  await page.getByRole('button', { name: /^Libreria \d+$/ }).click();
+  await page.locator('.talos-sidebar [data-vaia="libreria"]').first().click();
   await expect(page.locator('#schermoLibreria .td-card-select')).toHaveCount(3);
   await page.getByLabel('Seleziona visibili', { exact: true }).check();
   await page.getByLabel('Seleziona Terzo.md', { exact: true }).uncheck();
@@ -149,6 +158,9 @@ test('RUNTIME-01: aprire la app non produce nessun errore JavaScript', async ({ 
     errori.push(`console: ${testo}`);
   });
 
+  await page.addInitScript(() => {
+    try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* Historical preference must not restore the removed wizard. */ }
+  });
   /*
    * ⛔ URL intero: questa config non fissa un `baseURL`, e un percorso relativo non naviga.
    * ⛔ 11/09 — la porta si puo' scegliere da fuori (`TALOS_URL_CANCELLO`). Prima era scritta a mano
@@ -157,6 +169,7 @@ test('RUNTIME-01: aprire la app non produce nessun errore JavaScript', async ({ 
    *   cancello che, per girare, deve toccare il server di chi lavora, non si lancia mai.
    */
   await page.goto(process.env.TALOS_URL_CANCELLO || 'http://127.0.0.1:4174/');
+  await apriConversazioneVisibile(page);
   await page.waitForTimeout(4000);
 
   /* ⛔ E poi si TOCCA la app: metà degli errori a runtime nasce quando qualcosa viene chiamato, non
@@ -215,7 +228,7 @@ test('RUNTIME-01: aprire la app non produce nessun errore JavaScript', async ({ 
  */
 test('STREAMING-LIVE-SMOOTH-03 — cursore e dissolvenza raggiungono il DOM al frame successivo senza backlog', async ({ page }) => {
   await page.goto(process.env.TALOS_URL_CANCELLO || 'http://127.0.0.1:4174/');
-  await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
+  await apriConversazioneVisibile(page);
 
   const risultati = await page.evaluate(async () => {
     const runtime = window.__talosHarnessUiRuntime;
@@ -284,7 +297,7 @@ test('STREAMING-LIVE-SMOOTH-02 — 240 delta regolari raggiungono il DOM entro d
     try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* niente storage */ }
   });
   await page.goto(process.env.TALOS_URL_CANCELLO || 'http://127.0.0.1:4174/');
-  await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
+  await apriConversazioneVisibile(page);
 
   const risultato = await page.evaluate(async () => {
     const runtime = window.__talosHarnessUiRuntime;

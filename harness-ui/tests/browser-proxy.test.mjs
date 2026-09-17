@@ -30,7 +30,7 @@ test('PROXY-RISCRITTURA: via la CSP in pagina, base sull’origine vera, il nost
 test('PROXY-PAGINA: un sito remoto è rifiutato prima di qualunque fetch; un dev server locale viene riscritto; non-HTML rifiutato', async () => {
   const remoto = await proxyPagina('https://github.com/', { fetchFn: async () => { throw new Error('mai chiamato'); } });
   assert.deepEqual([remoto.ok, remoto.codice], [false, 'BROWSER_PROXY_SOLO_LOCALE']);
-  const locale = await proxyPagina('http://localhost:5173/', { fetchFn: async () => ({ url: 'http://localhost:5173/', status: 200, headers: intestazioni({ 'content-type': 'text/html; charset=utf-8' }), text: async () => '<html><head></head><body>dev</body></html>' }), origineNostra: 'http://127.0.0.1:4175' });
+  const locale = await proxyPagina('http://localhost:5173/', { fetchFn: async () => new Response('<html><head></head><body>dev</body></html>', { headers: { 'content-type': 'text/html; charset=utf-8' } }), origineNostra: 'http://127.0.0.1:4175' });
   assert.equal(locale.ok, true);
   assert.ok(locale.html.includes('http://127.0.0.1:4175' + SCRIPT_OVERLAY) && locale.html.includes('<base href="http://localhost:5173/">'));
   const css = await proxyPagina('http://localhost:5173/a.css', { fetchFn: async () => ({ url: 'http://localhost:5173/a.css', status: 200, headers: intestazioni({ 'content-type': 'text/css' }), body: { cancel: async () => {} } }) });

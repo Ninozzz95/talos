@@ -2,6 +2,21 @@
 .talos/
 vendor/
 node_modules/
+.prove/
+.staging/
+dist/
+test-results/
+test-results-context/
+playwright-report/
+.cache-r02/
+.talos-runtime/
+.delivery-output/
+*.log
+*.jks
+*.keystore
+keystore.properties
+.env
+.env.local
 
 # ⭐ 28/8 — `vendor/` sopra esclude alberi di dipendenze generate
 # (core/vendor/, control-plane/vendor/, sotto). mobile/public/harness-ui/vendor/

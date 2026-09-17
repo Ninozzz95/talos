@@ -67,7 +67,7 @@ test('funzioniDichiarate non conta due volte lo stesso nome, e ignora i metodi',
   assert.ok(!nomi.includes('b'), 'un metodo abbreviato non è una funzione dichiarata');
 });
 
-test('⛔ sul monolite VERO: le sette funzioni morte del 06/9 sono ancora lì', () => {
+test('⛔ sul monolite VERO: debito residuo limitato e vecchia intro rimossa', () => {
   /*
    * Questa non è una prova sintetica: è il codice di produzione. Se un giorno qualcuno le rimuove,
    * questo test lo dice — e va aggiornato, non silenziato.
@@ -84,4 +84,5 @@ test('⛔ sul monolite VERO: le sette funzioni morte del 06/9 sono ancora lì', 
    *   di nuovo, e un morto in meno non è un morto da dichiarare.
    */
   assert.ok(!morte.includes('apriIntroPrimoAvvio'), 'la vecchia intro è stata tolta il 17/09: se ricompare, qualcuno l\'ha rimessa');
+  assert.ok(!funzioniDichiarate(app).includes('apriIntroPrimoAvvio'), 'D21: il percorso introduttivo rimosso non deve rientrare');
 });

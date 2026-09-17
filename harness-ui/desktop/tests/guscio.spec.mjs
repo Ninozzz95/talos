@@ -82,6 +82,8 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
       if (frame[0] === 1) { try { controlli.push(JSON.parse(frame.subarray(1).toString())); } catch {} }
       else if (frame[0] === 0) uscitaPty += frame.subarray(1).toString('utf8'); // 13/09 review: xterm con WebGL disegna su canvas, niente .xterm-rows nel DOM — si legge il flusso PTY vero
     }));
+    // BOOT-03 starts on Home: reach the real conversation before its mode switch.
+    await pagina.locator('.talos-sidebar [data-vaia="chat"]').first().click();
     await pagina.locator('[data-mode="terminal"]').first().click();
     const tastiera = pagina.locator('.xterm-helper-textarea').first();
     await tastiera.waitFor({ state: 'attached' });
@@ -89,6 +91,8 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
     await finche(() => /(^|\n)TALOS-R01\r?\n/.test(uscitaPty.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')));
     await pagina.reload();
     assert.equal(await pagina.evaluate(async () => (await fetch('/api/v1/health')).status), 200);
+    // BOOT-03 starts on Home: reach the real conversation before its mode switch.
+    await pagina.locator('.talos-sidebar [data-vaia="chat"]').first().click();
     await pagina.locator('[data-mode="terminal"]').first().click();
     await pagina.locator('.xterm-helper-textarea').first().focus();
     await pagina.keyboard.type('exit'); await pagina.keyboard.press('Enter');

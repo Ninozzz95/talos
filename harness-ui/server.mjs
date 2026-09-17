@@ -75,7 +75,7 @@ async function startServer() {
    * l'app prende le chiavi SOLO dalla UI. Vedi `src/adattatore-keyring.mjs`.
    */
   const scopePortachiavi = leggiScopePortachiavi(process.env);
-  const ignoraSemiAmbiente = scopePortachiavi === 'desktop';
+  const ignoraSemiAmbiente = scopePortachiavi !== null; // PR #27: vale per OGNI scope (anche l'anteprima), non solo «desktop»
   // Opt-in only: observe the real resumed turn without changing prompts or cache flags.
   const resumeDiagnostics = await createLocalResumeDiagnostics({ sourceFiles: {
     server: fileURLToPath(import.meta.url),
@@ -99,7 +99,8 @@ async function startServer() {
    * una volta sola (marcatore su disco). I servizi vecchi restano allo sviluppo; vedi
    * `src/migrazione-chiavi.mjs`.
    */
-  if (ignoraSemiAmbiente) {
+  // Preview never imports legacy or production credentials.
+  if (scopePortachiavi === 'desktop') {
     try {
       const migrazione = await migraChiaviLegacySuDesktop({ markerFile: percorsoDatiDesktop('.chiavi-migrate.json') });
       if (migrazione.migrati.length) {

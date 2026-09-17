@@ -1,3 +1,4 @@
+import { SCREEN_BY_VIEW, VIEW_BY_DESTINATION } from '../domain/navigation.ts';
 import frammenti from '../legacy/frammenti.html';
 
 /*
@@ -32,32 +33,10 @@ import frammenti from '../legacy/frammenti.html';
  */
 
 /** Vista del monolite → schermata del mockup. */
-export const VISTA_PER_SCHERMATA = Object.freeze({
-  chat: 'schermoChat',
-  vuota: 'schermoVuota',
-  terminal: 'schermoTerminale',
-  browser: 'schermoBrowser', // 06/9 B8: senza questa riga setView('browser') non trovava la vista e la scheda «Browser» non faceva niente
-  diff: 'schermoReview',
-  capability: 'schermoCapability',
-  dashboard: 'schermoBoard',
-  memoria: 'schermoMemoria',
-  attivita: 'schermoAttivita',
-  note: 'schermoNote', // 06/9 C24: senza questa riga #schermoNote non riceveva `data-view` e setView('note') usciva subito
-  progetti: 'schermoProgetti', // 06/9: la stessa riga che era mancata alle Note — trovato dal cancello, non ripetuto
-  settings: 'schermoImpostazioni',
-  doctor: 'schermoDoctor',
-  libreria: 'schermoLibreria',
-  ricerca: 'schermoRicerca',
-  officina: 'schermoOfficina',
-  automations: 'schermoAutomazioni',
-});
+export const VISTA_PER_SCHERMATA = SCREEN_BY_VIEW;
 
 /** `data-vaia` del mockup → vista del monolite (`setView`). */
-export const VISTA_PER_VAIA = Object.freeze({
-  chat: 'chat', vuota: 'vuota', terminale: 'terminal', review: 'diff', browser: 'browser', capability: 'capability', // 06/9 B8 (taccuino tema chiaro): la scheda «Browser» aveva data-mode="undefined" e portava alla Board
-  board: 'dashboard', memoria: 'memoria', attivita: 'attivita', note: 'note', progetti: 'progetti', impostazioni: 'settings',
-  doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automazioni: 'automations',
-});
+export const VISTA_PER_VAIA = VIEW_BY_DESTINATION;
 
 function uno(root, selettore) {
   const el = root.querySelector(selettore);
@@ -107,8 +86,9 @@ export function montaPonteLegacy(documentObj = document) {
 
   /* 2) Il guscio, e gli attributi di radice che la regia del mockup scrive all'avvio. */
   battezza(radice, { id: 'app', classi: ['app-shell'] });
-  documentObj.documentElement.setAttribute('data-vista', 'sessione');
-  documentObj.documentElement.setAttribute('data-schermo', 'chat');
+  if (documentObj.getElementById('schermoHome')) documentObj.documentElement.dataset.workspaceUi = 'v2';
+  documentObj.documentElement.setAttribute('data-vista', documentObj.getElementById('schermoHome') ? 'pagina' : 'sessione');
+  documentObj.documentElement.setAttribute('data-schermo', documentObj.getElementById('schermoHome') ? 'home' : 'chat');
 
   /* 3) La sidebar. */
   const sidebar = uno(radice, '.talos-sidebar');
@@ -140,6 +120,7 @@ export function montaPonteLegacy(documentObj = document) {
 
   /* 4) Le schermate diventano le «viste» del monolite: `.view-pane[data-view]`. */
   for (const [vista, id] of Object.entries(VISTA_PER_SCHERMATA)) {
+    if (vista === 'home' && !radice.querySelector(`#${id}`)) continue; // Embedded legacy host owns its route.
     const schermata = uno(radice, `#${id}`);
     battezza(schermata, { classi: ['view-pane'], dati: { view: vista } });
     if (!schermata.hidden) schermata.classList.add('active');

@@ -1,0 +1,98 @@
+name: desktop-calm-review
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['harness-ui/frontend/**', '.github/workflows/desktop-calm-review.yml']
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: calm-review-${{ inputs.source_sha || github.sha }}
+  cancel-in-progress: false
+jobs:
+  real-settings:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.18.0'
+      - name: Locked dependencies and actual production build
+        run: |
+          set -euo pipefail
+          for dir in harness-ui harness-ui/frontend context-engine; do npm ci --prefix "$dir" --no-audit --no-fund; done
+          node harness-ui/frontend/node_modules/playwright/cli.js install --with-deps chromium chrome
+          mkdir -p harness-ui/frontend/test-results/calm-controls
+          npm --prefix harness-ui/frontend run build
+          node harness-ui/node_modules/typescript/bin/tsc -p harness-ui/frontend/tsconfig.refactor.json
+      - name: Real backend, all forty fields, fourteen themes and persisted reload
+        id: browser
+        continue-on-error: true
+        run: node harness-ui/frontend/tests/qualification/calm-controls-real.mjs
+      - name: Full frontend regression suite
+        id: unit
+        continue-on-error: true
+        run: npm --prefix harness-ui/frontend run test:unit > harness-ui/frontend/test-results/calm-controls/full-unit.log 2>&1
+      - name: Existing workspace and settings-models qualification, assertions preserved
+        id: regression
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          TALOS_EVIDENCE_DIR="$GITHUB_WORKSPACE/harness-ui/frontend/test-results/calm-controls/workspace" node harness-ui/frontend/tests/qualification/workspace-real.mjs
+          TALOS_EVIDENCE_DIR="$GITHUB_WORKSPACE/harness-ui/frontend/test-results/calm-controls/settings-models" node harness-ui/frontend/tests/qualification/settings-models-real.mjs
+      - name: Reference tests, separate from product qualification
+        id: reference
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          p=harness-ui/frontend/prototypes/calm-lab
+          if test -d "$p"; then
+            mkdir -p "$p/evidence"
+            node "$p/make-contract.mjs"
+            node "$p/build.mjs"
+            node --test "$p"/tests/*.test.mjs > "$p/evidence/ci-unit.log" 2>&1
+            python3 -m pip install playwright==1.57.0
+            export CHROMIUM_PATH=$(node --input-type=module -e "import {chromium} from './harness-ui/frontend/node_modules/playwright/index.mjs';console.log(chromium.executablePath())")
+            python3 "$p/tests/controls-browser.py"
+            python3 "$p/tests/appearance-browser.py"
+            python3 "$p/tests/browser03.py" --label ci-final
+            git diff --exit-code -- "$p/shared" "$p/TALOS-Calm-Lab.html"
+          else
+            echo 'Reference not yet materialized at this transport commit.'
+          fi
+      - name: Record exact source identity and reviewable bytes
+        if: always()
+        run: |
+          mkdir -p harness-ui/frontend/test-results/calm-controls/review-sources
+          git rev-parse HEAD > harness-ui/frontend/test-results/calm-controls/source-sha.txt
+          git diff --binary 726c106f9e1dea681bf24a332ac6b0cc9115a299 HEAD -- harness-ui/frontend docs/refactor/calm-lab .github/workflows/desktop-calm-review.yml > harness-ui/frontend/test-results/calm-controls/component.patch
+          git ls-tree -r HEAD > harness-ui/frontend/test-results/calm-controls/source-tree.txt
+          cp harness-ui/frontend/src/components/calm-controls.js harness-ui/frontend/src/design-system/calm-controls.css harness-ui/frontend/src/main.js harness-ui/frontend/tests/qualification/*.mjs harness-ui/frontend/test-results/calm-controls/review-sources/
+          cp harness-ui/frontend/src/components/impostazioni-campi.js harness-ui/frontend/src/components/theme-studio.js harness-ui/frontend/test-results/calm-controls/review-sources/
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: calm-review-${{ inputs.source_sha || github.sha }}
+          path: |
+            harness-ui/frontend/test-results/calm-controls/
+            harness-ui/frontend/prototypes/calm-lab/
+          retention-days: 14
+          if-no-files-found: error
+      - name: No failure is converted into success
+        if: always()
+        env:
+          BROWSER: ${{ steps.browser.outcome }}
+          UNIT: ${{ steps.unit.outcome }}
+          REGRESSION: ${{ steps.regression.outcome }}
+          REFERENCE: ${{ steps.reference.outcome }}
+        run: test "$BROWSER" = success && test "$UNIT" = success && test "$REGRESSION" = success && test "$REFERENCE" = success
