@@ -1,0 +1,37 @@
+name: desktop-source-export
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['.github/workflows/desktop-source-export.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  export:
+    if: github.repository == 'Ninozzz95/talos' && github.ref == 'refs/heads/refactor/desktop-ledger-2026-09-17'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Archive the complete tracked source and the exact review diff
+        run: |
+          set -euo pipefail
+          mkdir export
+          git rev-parse HEAD > export/SOURCE_COMMIT.txt
+          git archive --format=zip --output=export/source.zip HEAD
+          git diff --binary 13f65c15cdeaf8986b882993a0773cdeafb867d2 HEAD > export/review.patch
+          git diff --stat 13f65c15cdeaf8986b882993a0773cdeafb867d2 HEAD > export/diff-stat.txt
+          git log --format='%H %s' 13f65c15cdeaf8986b882993a0773cdeafb867d2..HEAD > export/commits.txt
+          git ls-tree -r HEAD > export/source-tree.txt
+          git bundle create export/recovery.bundle --all
+          sha256sum export/source.zip export/review.patch export/recovery.bundle > export/SHA256SUMS.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: talos-complete-source-${{ github.sha }}
+          path: export/
+          retention-days: 14
+          if-no-files-found: error
