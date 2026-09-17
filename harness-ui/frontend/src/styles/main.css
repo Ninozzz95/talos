@@ -1,5 +1,7 @@
 /* Punto d'ingresso dei fogli (06/09): il foglio del mockup generato + il tampone del foglio «Nuova sessione» del monolite. */
 @import './index.css';
+@import '../design-system/foundations.css';
+@import '../design-system/controls.css';
 @import './foglio-monolite.css';
 @import './immagini-chat.css';
 @import './diff-in-chat.css';
@@ -60,3 +62,5 @@
  *   ordering»): spostarlo più in alto lo disattiverebbe in silenzio.
  */
 @import './mockup-animazioni.css';
+
+@import '../design-system/workspace.css';

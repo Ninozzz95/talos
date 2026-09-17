@@ -1,35 +1,35 @@
 /* Font locali: la app e' local-first, niente Google Fonts. */
 @font-face {
-  font-family: 'Instrument Sans';
-  src: url('./fonts/instrument-sans-latin-400-normal.woff2') format('woff2');
+  font-family: "Instrument Sans";
+  src: url("./fonts/instrument-sans-latin-400-normal.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Instrument Sans';
-  src: url('./fonts/instrument-sans-latin-500-normal.woff2') format('woff2');
+  font-family: "Instrument Sans";
+  src: url("./fonts/instrument-sans-latin-500-normal.woff2") format("woff2");
   font-style: normal;
   font-weight: 500;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Instrument Sans';
-  src: url('./fonts/instrument-sans-latin-600-normal.woff2') format('woff2');
+  font-family: "Instrument Sans";
+  src: url("./fonts/instrument-sans-latin-600-normal.woff2") format("woff2");
   font-style: normal;
   font-weight: 600;
   font-display: swap;
 }
 @font-face {
-  font-family: 'JetBrains Mono';
-  src: url('./fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+  font-family: "JetBrains Mono";
+  src: url("./fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
-  font-family: 'JetBrains Mono';
-  src: url('./fonts/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+  font-family: "JetBrains Mono";
+  src: url("./fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
   font-style: normal;
   font-weight: 500;
   font-display: swap;
@@ -251,176 +251,7 @@ use[href="#glifo"],.talos-brand__mark .glyph,.talos-empty__mark .glyph,.talos-av
 .talos-stack{display:flex; flex-direction:column; gap:var(--talos-gap)}
 .talos-cluster{display:flex; align-items:center; gap:var(--talos-space-sm); flex-wrap:wrap}
 
-/* ---------- 3. PRIMITIVE (primitives.css, stesse classi) ---------- */
-.talos-button{min-height:var(--talos-control-height); display:inline-flex; align-items:center; justify-content:center; gap:var(--talos-space-inline); padding:0 var(--talos-space-md); border:var(--talos-focus-width) solid transparent; border-radius:10px; background:transparent; color:var(--talos-text); font:600 13.5px/1 var(--talos-font-ui); white-space:nowrap; cursor:pointer; transition:color var(--talos-motion-duration-control) var(--talos-motion-ease),background-color var(--talos-motion-duration-control) var(--talos-motion-ease),border-color var(--talos-motion-duration-control) var(--talos-motion-ease),transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
-.talos-button:hover:not(:disabled){transform:translateY(-1px)}
-.talos-button:active:not(:disabled){transform:translateY(0)}
-.talos-button:disabled{color:var(--talos-muted); cursor:not-allowed; opacity:.58}
-/* ⛔ 07/9, guardando gli screenshot: un pulsante PRIMARIO disabilitato restava oro pieno con il
-   testo scuro sopra — «Porta i commenti nella chat» sembrava il pulsante da premere e non si
-   leggeva. L'opacità da sola non basta su un fondo saturo: chi è spento si spegne davvero. */
-.talos-button--primary:disabled{background:var(--talos-panel-soft); border-color:var(--talos-border); color:var(--talos-muted); opacity:.75}
-.talos-button--primary{min-height:var(--talos-primary-height); background:var(--talos-accent); color:var(--talos-text-on-accent); box-shadow:inset 0 1px rgba(255,255,255,.14)}
-.talos-button--primary:hover:not(:disabled){background:var(--talos-accent-hover)}
-.talos-button--secondary{border-color:var(--talos-border); background:var(--talos-panel-soft)}
-.talos-button--secondary:hover:not(:disabled),.talos-button--ghost:hover:not(:disabled){border-color:var(--talos-border-strong); background:var(--talos-card-hover)}
-.talos-button--ghost{color:var(--talos-assistant-text)}
-.talos-button--danger{color:var(--talos-danger)}
-.talos-button--sm{min-height:30px; padding-inline:var(--talos-space-inline); font-size:var(--talos-font-size-xs); border-radius:8px}
-.talos-button--md{min-height:var(--talos-control-height)}
-.talos-button--lg{min-height:var(--talos-primary-height); padding-inline:var(--talos-space-lg); font-size:var(--talos-font-size-md)}
-.talos-button--block{width:100%}
-.talos-icon-button{width:var(--talos-touch-target); min-width:var(--talos-touch-target); padding:0}
-.talos-icon-button.talos-button--round{border-radius:var(--talos-radius-pill)}
-
-.talos-badge{min-height:26px; display:inline-flex; align-items:center; gap:var(--talos-space-sm); padding:0 10px; border:1px solid var(--talos-border-subtle); border-radius:var(--talos-radius-pill); background:var(--talos-card); color:var(--talos-assistant-text); font:500 12px/1 var(--talos-font-ui); white-space:nowrap}
-.talos-badge--dot::before{width:6px; height:6px; border-radius:var(--talos-radius-pill); background:currentColor; content:""}
-.talos-badge--accent{color:var(--talos-accent-text); border-color:var(--talos-accent-border); background:var(--talos-accent-soft)}
-.talos-badge--success{color:var(--talos-success); border-color:var(--talos-success-border); background:var(--talos-success-soft)}
-.talos-badge--warning{color:var(--talos-warning); border-color:var(--talos-warning-border); background:var(--talos-warning-soft)}
-.talos-badge--danger{color:var(--talos-danger); border-color:var(--talos-danger-border); background:var(--talos-danger-soft)}
-.talos-badge--info{color:var(--talos-info); border-color:var(--talos-info-border); background:var(--talos-info-soft)}
-.talos-badge--sm{min-height:22px; font-size:11px; padding:0 8px}
-.talos-badge--lg{min-height:34px; font-size:13px; padding:0 12px; border-color:var(--talos-border); background:var(--talos-panel-soft)}
-.talos-badge__kbd{font-family:var(--talos-font-mono); font-size:10.5px; opacity:.7}
-
-.talos-kbd{font-family:var(--talos-font-mono); font-size:11px; color:var(--talos-muted); border:1px solid var(--talos-border); border-radius:6px; padding:1px 6px; background:var(--talos-panel-soft)}
-
-.talos-tabs{min-width:0}
-.talos-tabs__list{display:inline-flex; gap:2px; padding:4px; border-radius:var(--talos-radius-control); background:var(--talos-panel-soft); border:1px solid var(--talos-border-subtle)}
-.talos-tabs__tab{min-height:32px; flex:0 0 auto; padding:0 14px; border:0; border-radius:9px; background:transparent; color:var(--talos-muted); font:500 13.5px/1 var(--talos-font-ui); display:inline-flex; align-items:center; gap:7px; cursor:pointer; transition:color var(--talos-motion-duration-tab-change) var(--talos-motion-ease),background-color var(--talos-motion-duration-tab-change) var(--talos-motion-ease)}
-.talos-tabs__tab:hover{color:var(--talos-text)}
-.talos-tabs__tab[aria-selected="true"]{background:var(--talos-card); color:var(--talos-text); box-shadow:0 1px 2px rgba(0,0,0,.2)}
-.talos-tabs__count{font-family:var(--talos-font-mono); font-size:11px; color:var(--talos-muted)}
-.talos-tabs--underline .talos-tabs__list{padding:0; gap:2px; background:transparent; border:0; border-radius:0}
-.talos-tabs--underline .talos-tabs__tab{min-height:38px; padding:0 10px; border-radius:0; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; font-size:13px}
-.talos-tabs--underline .talos-tabs__tab[aria-selected="true"]{background:transparent; box-shadow:none; border-bottom-color:var(--talos-accent)}
-.talos-tabs--pills .talos-tabs__list{background:transparent; border:0; padding:0; gap:var(--talos-space-sm); flex-wrap:wrap}
-.talos-tabs--pills .talos-tabs__tab{min-height:30px; padding:0 12px; border-radius:var(--talos-radius-pill); border:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-assistant-text); font-size:12.5px}
-.talos-tabs--pills .talos-tabs__tab[aria-selected="true"]{background:var(--talos-accent-soft); border-color:var(--talos-accent-border); color:var(--talos-accent-text); box-shadow:none}
-.talos-tabs--compact .talos-tabs__list{padding:3px}
-.talos-tabs--compact .talos-tabs__tab{min-height:26px; padding:0 10px; font-size:12px; border-radius:7px}
-
-/* ⛔⛔ 07/9 — owner, tre richieste in fila: «ricorda lo stile delle caselle e falle un po piu
-   piccole», «tutti i component devono essere stilizzati custom anche il dialog non legacy ma custom
-   nostro legato tutto ai temi». Il difetto era vero e si vedeva nello screenshot della sidebar: la
-   casella della riga di sessione e un `<input type="checkbox">` VERO, e `.talos-checkbox` rispondeva
-   solo a `[aria-checked="true"]` — un attributo che un input non ha mai. Lo stato «spuntata» lo
-   disegnava quindi CHROME, col suo blu di sistema, dentro un tema che non e il nostro.
-   Stessa forma per gli switch delle Impostazioni: `<input class="talos-switch" role="switch">`
-   prendeva la pillola, ma il pomello e un `<span>` figlio che un input non puo avere, e lo stato
-   vive su `:checked`, non su aria. ⇒ Ogni controllo qui sotto vale in DUE forme: il bottone del
-   mockup (`aria-checked`) e l'input vero (`:checked`). Nessuna delle due lascia un pixel al sistema.
-   ⛔ Le misure: la casella scende da 28 a 20 px (e la «grande» da 36 a 28) — nella riga di sessione,
-   alta 66, 28 px pesavano quanto il titolo.
-   Ricerca 07/09/2026 — Modern CSS «Pure CSS Custom Checkbox Style» (moderncss.dev) e Evinced
-   «Creating accessible styled checkboxes»: `appearance:none` toglie il disegno ma TIENE la semantica
-   (fuoco, barra spaziatrice, ruolo annunciato) e apre gli pseudo-elementi dell'input; non si nasconde
-   mai con `display:none`; il fuoco vuole `:focus-visible` con un `outline-offset` che scavalchi
-   l'angolo tondo; e in alto contrasto (`forced-colors`) lo stato si dice col FONDO, perche le ombre
-   vengono buttate via. */
-.talos-switch{width:calc(var(--talos-control-height) * 1.75); height:var(--talos-control-height); display:inline-flex; align-items:center; padding:var(--talos-space-xs); border:var(--talos-focus-width) solid var(--talos-border-strong); border-radius:var(--talos-radius-pill); background:var(--talos-panel-soft); cursor:pointer; transition:background-color var(--talos-motion-duration-control) var(--talos-motion-ease),border-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
-.talos-switch__thumb{width:calc(var(--talos-control-height) - 12px); height:calc(var(--talos-control-height) - 12px); border-radius:var(--talos-radius-pill); background:var(--talos-muted); transform:translateX(0); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease),background-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
-.talos-switch[aria-checked="true"]{border-color:var(--talos-accent-border); background:var(--talos-accent-soft)}
-.talos-switch[aria-checked="true"] .talos-switch__thumb{background:var(--talos-accent); transform:translateX(calc(var(--talos-control-height) * .75))}
-input.talos-switch{appearance:none; -webkit-appearance:none; margin:0; flex:none}
-input.talos-switch::after{content:""; width:calc(var(--talos-control-height) - 12px); height:calc(var(--talos-control-height) - 12px); border-radius:var(--talos-radius-pill); background:var(--talos-muted); transform:translateX(0); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease),background-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
-input.talos-switch:checked{border-color:var(--talos-accent-border); background:var(--talos-accent-soft)}
-input.talos-switch:checked::after{background:var(--talos-accent); transform:translateX(calc(var(--talos-control-height) * .75))}
-.talos-switch:focus-visible{outline:2px solid var(--talos-accent); outline-offset:2px}
-
-/* ⛔ 07/9 — «tutti i component custom»: valgono anche per le tredici caselle NUDE del monolite
-   (`frammenti.html`), che senza classe prendevano il quadratino blu di Windows. */
-.talos-checkbox,input[type="checkbox"]:not(.talos-switch){width:20px; height:20px; border-radius:6px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); display:grid; place-items:center; color:var(--talos-text-on-accent); flex:none; cursor:pointer; transition:background-color var(--talos-motion-duration-control) var(--talos-motion-ease),border-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
-.talos-checkbox[aria-checked="true"]{background:var(--talos-accent); border-color:var(--talos-accent)}
-.talos-checkbox--lg{width:28px; height:28px; border-radius:8px}
-.talos-checkbox .i{width:13px; height:13px}
-.talos-checkbox--lg .i{width:16px; height:16px}
-input.talos-checkbox,input[type="checkbox"]:not(.talos-switch){appearance:none; -webkit-appearance:none; margin:0}
-/* La spunta e disegnata, non un carattere: cosi eredita il colore del tema e non cambia col font.
-   Il triangolo di `clip-path` e la forma di Modern CSS, ridotta alla nostra casella da 20 px. */
-input.talos-checkbox::before,input[type="checkbox"]:not(.talos-switch)::before{content:""; width:11px; height:11px; background:var(--talos-text-on-accent); clip-path:polygon(14% 44%,0 65%,50% 100%,100% 16%,80% 0,43% 62%); transform:scale(0); transform-origin:center; transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
-input.talos-checkbox--lg::before{width:15px; height:15px}
-input.talos-checkbox:checked,input[type="checkbox"]:not(.talos-switch):checked{background:var(--talos-accent); border-color:var(--talos-accent)}
-input.talos-checkbox:checked::before,input[type="checkbox"]:not(.talos-switch):checked::before{transform:scale(1)}
-input.talos-checkbox:disabled,input[type="checkbox"]:not(.talos-switch):disabled{opacity:.5; cursor:not-allowed}
-.talos-checkbox:focus-visible,input[type="checkbox"]:not(.talos-switch):focus-visible{outline:2px solid var(--talos-accent); outline-offset:2px}
-@media (forced-colors: active){
-  input.talos-checkbox:checked,.talos-checkbox[aria-checked="true"]{background:SelectedItem; border-color:SelectedItem}
-  input.talos-checkbox::before{background:SelectedItemText}
-  input.talos-switch:checked::after,.talos-switch[aria-checked="true"] .talos-switch__thumb{background:SelectedItem}
-}
-
-.talos-field{position:relative}
-.talos-field__input{height:40px; width:100%; padding:0 12px 0 38px; border-radius:11px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-size:13.5px}
-.talos-field__input::placeholder{color:var(--talos-muted)}
-.talos-field__input:focus{outline:none; border-color:var(--talos-accent-border); box-shadow:0 0 0 3px var(--talos-accent-soft)}
-.talos-field__icon{position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--talos-muted); width:16px; height:16px}
-.talos-field--sm .talos-field__input{height:36px; padding-left:34px}
-/* ⛔ 07/9 — la regola vale per OGNI `select`, non solo per quelli che ricordano la classe. Nel
-   foglio Permessi del monolite i menu erano grigio chiaro col testo scuro, cioe' il disegno di
-   Windows dentro il tema Calm (foto `C02-fogli/permissions.png`). Vestire l'ELEMENTO invece della
-   classe chiude anche i quattordici del monolite e quelli che nasceranno domani. */
-select,.talos-select{height:36px; padding:0 32px 0 12px; border-radius:9px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-size:13px; appearance:none; -webkit-appearance:none; background-image:linear-gradient(45deg,transparent 50%,var(--talos-muted) 50%),linear-gradient(135deg,var(--talos-muted) 50%,transparent 50%); background-position:calc(100% - 16px) 15px,calc(100% - 11px) 15px; background-size:5px 5px; background-repeat:no-repeat}
-.talos-select--sm{height:32px}
-select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-accent); outline-offset:2px}
-/* ⭐ 07/9 — il bottone del select era già nostro (appearance:none + freccia disegnata), ma il MENU
-   che si apre lo disegnava ancora il sistema operativo: fondo bianco, font di sistema, angoli vivi
-   dentro un tema scuro. Con `appearance:base-select` il menu diventa un elemento come gli altri e
-   prende i token del tema; il ripiego resta quello di prima dove il motore non ce l'ha.
-   Ricerca 07/09/2026 — Chrome for Developers, «The <select> element can now be customized with CSS»
-   (Chrome 135+, Safari 27) e modern-css.com «Customizable selects without a JavaScript library»:
-   si adotta dentro `@supports`, e la freccia disegnata col gradiente va spenta o se ne vedono due. */
-@supports (appearance: base-select){
-  select,.talos-select{appearance:base-select; background-image:none; padding:0 12px; display:inline-flex; align-items:center; justify-content:space-between; gap:8px}
-  /* il segno del menu e un CHEVRON come tutti gli altri della app, non il triangolo pieno del motore */
-  select::picker-icon,.talos-select::picker-icon{content:""; width:8px; height:8px; border-right:1.6px solid var(--talos-muted); border-bottom:1.6px solid var(--talos-muted); transform:translateY(-2px) rotate(45deg); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
-  select:open::picker-icon,.talos-select:open::picker-icon{transform:translateY(1px) rotate(-135deg)}
-  select::picker(select),.talos-select::picker(select){appearance:base-select; margin-top:6px; padding:6px; border:1px solid var(--talos-border); border-radius:11px; background:var(--talos-panel); box-shadow:var(--talos-shadow-card); color:var(--talos-text)}
-  select option,.talos-select option{display:flex; align-items:center; gap:8px; padding:7px 10px 7px 28px; border-radius:8px; font-size:13px; color:var(--talos-text); background:transparent; position:relative}
-  select option:hover,select option:focus,.talos-select option:hover,.talos-select option:focus{background:var(--talos-panel-soft)}
-  select option:checked,.talos-select option:checked{background:var(--talos-accent-soft); color:var(--talos-accent-text)}
-  /* ⛔ lo spazio della spunta si riserva col PADDING, non nascondendo il segno: il motore genera
-     `::checkmark` SOLO sulla voce scelta, quindi «visibility:hidden» sulle altre non riserva niente
-     e le voci si spostano di 15 px quando la scelta cambia (visto nella foto `08-menu-select.png`). */
-  select option::checkmark,.talos-select option::checkmark{position:absolute; left:9px; color:var(--talos-accent)}
-}
-
-.talos-card{border:1px solid var(--talos-border); border-radius:var(--talos-radius-card); background:linear-gradient(180deg,var(--talos-card-subtle),var(--talos-card-faint))}
-.talos-card--pad{padding:var(--talos-space-control) 14px}
-.talos-dot{width:8px; height:8px; border-radius:50%; background:var(--talos-border-strong); flex:none}
-.talos-dot--sm{width:6px; height:6px}
-.talos-dot--success{background:var(--talos-success)} .talos-dot--danger{background:var(--talos-danger)} .talos-dot--warning{background:var(--talos-warning)}
-.talos-dot--live{background:var(--talos-accent-hover); box-shadow:0 0 0 4px var(--talos-accent-soft)}
-.talos-diff-num{font-family:var(--talos-font-mono); font-size:12px}
-.talos-diff-num--plus{color:var(--talos-success)} .talos-diff-num--minus{color:var(--talos-danger)}
-.talos-code{font-family:var(--talos-font-mono); font-size:11px; color:var(--talos-muted); border:1px solid var(--talos-border); border-radius:6px; padding:2px 7px; background:var(--talos-panel-soft)}
-
-/* scheletro (stato di caricamento 1-10 s, ricerca 04/09) */
-.talos-skeleton{display:block; height:12px; border-radius:6px; background:linear-gradient(90deg,var(--talos-card-hover),var(--talos-card-subtle),var(--talos-card-hover)); background-size:200% 100%; animation:talos-shimmer 1.4s var(--talos-motion-ease) infinite}
-.talos-skeleton--w40{width:40%} .talos-skeleton--w70{width:70%} .talos-skeleton--w90{width:90%}
-.talos-waiting{margin-top:6px}
-.talos-waiting__row{display:flex; align-items:center; gap:10px; min-height:22px; font-size:12.5px; color:var(--talos-muted)}
-.talos-waiting__label{flex:1 1 auto; min-width:0}
-/* ⛔ 10/09, owner: «non vedo il segnavia a tre nodi animato su 4174». MISURATO prima di toccarlo, in
-   un giro vero con glm-5.3-flash: il segnavia c'e' e si muove — a schermo 5.040 ms su un giro di
-   5.914, `talosSegnaviaScorre` in `running`, 41 valori di `stroke-dashoffset` distinti su 41
-   campioni. Non era fermo: era PICCOLO. 48x8 px con la traccia al 18% di opacita', accanto a
-   un'etichetta di testo che si prende tutta l'attenzione. Qui cresce a 72x12 e la traccia si vede. */
-.talos-line-loader{display:block; width:48px; height:8px; overflow:visible; flex:none}
-.talos-line-loader-track{stroke:var(--talos-accent); stroke-opacity:.28; stroke-width:2.5; stroke-linecap:round}
-/* ⛔ 10/09: il movimento dello sweep e' SMIL (`<animate>` dentro l'SVG, vedi creaAttesa). Una
-   dichiarazione CSS di `stroke-dashoffset` VINCE sull'attributo animato da SMIL e lo
-   inchioderebbe: qui non se ne dichiara nessuna, e nemmeno un'`animation` che farebbe a botte
-   con quella. Il dasharray lo mette diff-in-chat.css. */
-.talos-line-loader-sweep{stroke:var(--talos-accent); stroke-width:2.5; stroke-linecap:round}
-/* ⛔ 10/09: i nodi si accendono con SMIL (`fill-opacity`, vedi creaAttesa). Niente `fill` e
-   niente `animation` qui: una dichiarazione CSS vince sull'attributo che SMIL anima. */
-.talos-line-loader-node{stroke:var(--talos-accent); stroke-width:2.5}
-/* gli sfasamenti stanno negli attributi `begin` dell'SMIL, non qui */
-@keyframes talosLineSweep{0%{stroke-dashoffset:88} 70%,100%{stroke-dashoffset:0}}
-@keyframes talosLineNodeFill{0%,12%{fill:transparent} 22%,82%{fill:var(--talos-accent)} 100%{fill:transparent}}
-@keyframes talos-shimmer{0%{background-position:200% 0} 100%{background-position:-200% 0}}
+/* Primitive styles are owned by design-system/controls.css. */
 
 /* ---------- 4. REGIA DEL MOCKUP (non è prodotto) ---------- */
 .talos-regia{flex:none; display:flex; align-items:center; gap:14px; padding:8px 16px; background:var(--talos-window-bg); border-bottom:1px solid var(--talos-border); flex-wrap:wrap; row-gap:6px}
@@ -435,8 +266,8 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 .talos-screen{display:flex; flex-direction:column; flex:1 1 auto; min-height:0; min-width:0}
 
 /* ---------- 6. SIDEBAR (A1, A2, A7, A8, A9) ---------- */
-.talos-sidebar{position:relative; background:var(--talos-background); border-right:1px solid var(--talos-border); display:flex; flex-direction:column; min-height:0; overflow:hidden}
-.talos-brand{display:flex; align-items:center; gap:10px; padding:18px 18px 14px}
+.talos-sidebar{position:relative; background:var(--talos-panel); border-right:1px solid var(--talos-border); display:flex; flex-direction:column; min-height:0; overflow:hidden}
+.talos-brand{display:flex; align-items:center; gap:10px; padding:20px 14px 18px}
 .talos-brand__mark{width:30px; height:30px; display:grid; place-items:center; color:var(--talos-accent-hover)}
 .talos-brand__mark .glyph{width:22px; height:22px}
 /* ⛔ 10/09, owner, due volte e alla fine in maiuscolo: «aumenta la grandezza del logo TALOS brand
@@ -862,7 +693,7 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-system-note__tecnico{margin:10px 0 0}
 .talos-system-note__tecnico > summary{cursor:pointer; font-size:12px; color:var(--talos-muted); list-style:none}
 .talos-system-note__tecnico > summary::-webkit-details-marker{display:none}
-.talos-system-note__tecnico > summary::before{content:'▸'; display:inline-block; margin-right:6px; transition:transform var(--talos-motion-duration-control,.15s) var(--talos-motion-ease)}
+.talos-system-note__tecnico > summary::before{content:"▸"; display:inline-block; margin-right:6px; transition:transform var(--talos-motion-duration-control,.15s) var(--talos-motion-ease)}
 .talos-system-note__tecnico[open] > summary::before{transform:rotate(90deg)}
 .talos-system-note__grezzo{margin:8px 0 0; padding:10px 12px; border-radius:10px; border:1px solid var(--talos-border); background:var(--talos-code-bg, rgba(0,0,0,.18)); font-family:var(--talos-font-mono); font-size:12px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; overflow:auto; max-height:12em}
 /* ⛔⛔ PO-05 — IL FILE GENERATO SI SCARICA CON UN CLIC. Owner: «ogni file generato deve avere un
@@ -1217,7 +1048,7 @@ a.talos-button{text-decoration:none}
    per quei due nomi. Due esiti opposti, lo stesso grigio: chi rilegge la conversazione non sa cosa
    ha deciso. Il colore non e decorazione qui, e l'unica cosa che distingue un si da un no. */
 .talos-approval__esito{display:flex; align-items:center; gap:7px; margin:10px 0 0; padding:7px 10px; border-radius:9px; border:1px solid var(--talos-border); background:var(--talos-card-subtle); color:var(--talos-muted); font-size:12px; font-weight:600}
-.talos-approval__esito::before{content:''; width:7px; height:7px; border-radius:50%; background:currentColor; flex:0 0 auto}
+.talos-approval__esito::before{content:""; width:7px; height:7px; border-radius:50%; background:currentColor; flex:0 0 auto}
 /* i token del tema, quelli VERI: si chiamano `success`, non `ok` — e ci sono gia in entrambi i temi */
 .talos-approval__esito--si{border-color:var(--talos-success-border); background:var(--talos-success-soft); color:var(--talos-success)}
 .talos-approval__esito--no{border-color:var(--talos-danger-border); background:var(--talos-danger-soft); color:var(--talos-danger)}
@@ -1533,7 +1364,7 @@ a.talos-button{text-decoration:none}
 .talos-terminal__tab[data-terminale-id] .talos-dot{display:inline-block; margin-right:8px; vertical-align:middle}
 .talos-terminal__tab:disabled{opacity:.45; cursor:not-allowed}
 .talos-terminal__tabs .talos-badge{flex:0 6 auto; min-width:44px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap} /* i badge cedono spazio per primi (taccuino 06/09, terminale-5.png: le schede si troncavano con tre schede sole) */
-.talos-terminal__tab[data-terminale-id]::after{content:'×'; position:absolute; right:6px; top:50%; width:16px; height:16px; margin-top:-8px; border-radius:4px; line-height:16px; text-align:center; font-size:13px; color:var(--talos-muted); opacity:0; transition:opacity 120ms ease}
+.talos-terminal__tab[data-terminale-id]::after{content:"×"; position:absolute; right:6px; top:50%; width:16px; height:16px; margin-top:-8px; border-radius:4px; line-height:16px; text-align:center; font-size:13px; color:var(--talos-muted); opacity:0; transition:opacity 120ms ease}
 .talos-terminal__tab[data-terminale-id]:hover::after, .talos-terminal__tab[data-terminale-id]:focus-visible::after, .talos-terminal__tab[data-terminale-id][aria-selected="true"]::after{opacity:1}
 .talos-terminal__rinomina{height:22px; width:140px; padding:0 6px; font-size:12px}
 .talos-terminal__body.terminal-window{position:relative; padding:8px 12px; overflow:hidden; white-space:normal}
@@ -1880,8 +1711,8 @@ a.talos-button{text-decoration:none}
    Shadows Using Scroll-Driven Animations», MDN «CSS scroll-driven animations» (Chrome 115+,
    Safari 18+, Firefox 132+). ⭐ Con una striscia che NON scorre la timeline e' inattiva e le due
    lunghezze restano al loro initial-value 0px: nessuna sfumatura dove non serve. */
-@property --talos-sfuma-sx{syntax:'<length>'; inherits:false; initial-value:0px}
-@property --talos-sfuma-dx{syntax:'<length>'; inherits:false; initial-value:0px}
+@property --talos-sfuma-sx{syntax:"<length>"; inherits:false; initial-value:0px}
+@property --talos-sfuma-dx{syntax:"<length>"; inherits:false; initial-value:0px}
 @supports (animation-timeline:scroll(self inline)){
   @keyframes talos-sfuma-schede{
     from{--talos-sfuma-sx:0px; --talos-sfuma-dx:22px}
@@ -1903,7 +1734,7 @@ a.talos-button{text-decoration:none}
 .talos-browser .talos-toolbar .talos-tabs{max-width:100%}
 .talos-browser .talos-tabs__list{flex-wrap:wrap}
 .talos-tabs__tab[data-browser-tab]{position:relative;max-width:220px;padding-right:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.talos-tabs__tab[data-browser-tab]::after{content:'×';position:absolute;right:6px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:4px;line-height:16px;text-align:center;font-size:13px;color:var(--talos-muted);opacity:0;transition:opacity 120ms ease}
+.talos-tabs__tab[data-browser-tab]::after{content:"×";position:absolute;right:6px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:4px;line-height:16px;text-align:center;font-size:13px;color:var(--talos-muted);opacity:0;transition:opacity 120ms ease}
 .talos-tabs__tab[data-browser-tab]:hover::after,.talos-tabs__tab[data-browser-tab]:focus-visible::after,.talos-tabs__tab[data-browser-tab][aria-selected="true"]::after{opacity:1}
 /* ⛔ 07/9, owner sullo screenshot: «l'altezza dello spazio della finestra browser deve essere alta
    quanto tutto il resto della pagina, quello spazio fra la fine della pagina e la parte inferiore
@@ -2049,7 +1880,7 @@ a.talos-button{text-decoration:none}
    `flex` in una colonna flex l'elenco prende la sua altezza naturale e sborda invece di
    restringersi: `overflow-y:auto` non serve a niente su un elemento che non si stringe. */
 #risultatiComandi{flex:1 1 auto;overflow-y:auto;min-height:0}
-#veloIntro [data-intro-passo][aria-current="step"],#veloIntro [data-intro-policy][aria-checked="true"]{background:var(--talos-accent-soft);color:var(--talos-accent-text);box-shadow:inset var(--talos-focus-width) 0 var(--talos-accent)}
+
 .talos-lab__tabs{margin-bottom:var(--talos-space-md)}
 #labTabs{flex-wrap:wrap}
 .talos-lab__space{margin-top:var(--talos-space-md)}
@@ -2152,27 +1983,27 @@ a.talos-button{text-decoration:none}
 .talos-dialog[data-user-sized] .talos-dialog__body{overflow:auto}
 #veloModello .talos-dialog[data-user-sized] .talos-dialog__body{display:block}
 
-.talos-intro-folders{max-height:calc(var(--talos-row)*5);overflow:auto}
+
 #passoIntroCartella .talos-stack{gap:var(--talos-space-sm)}
 #introCartellaSu .i{transform:rotate(90deg)}
 
 #introCartella{width:auto;min-width:0;flex:1 1 0;padding-inline:var(--talos-space-md)}
 #passoIntroCartella .talos-toolbar{flex-wrap:nowrap;margin-bottom:0}
 #passoIntroCartella .talos-field{min-width:0}
-.talos-intro-folders{max-height:calc(var(--talos-row)*4)}
 
-.talos-intro-folders:empty{display:none}
+
+
 /* Misura ricordata (06/09): la misura sta in due custom property, così il foglio decide dove vale. Nel primo avvio l'altezza
    ricordata vale solo sul passo Cartella, dove l'albero cresce per riempirla (è il motivo per cui si allarga); gli altri passi
    restano aderenti al contenuto, come da profilo pulito (PatternFly, wizard: «the modal adjusts to the body of each step»). */
 .talos-dialog[data-user-sized]{width:var(--talos-dialog-w);height:var(--talos-dialog-h)}
-#veloIntro:not([data-intro-passo-attivo="0"]) .talos-dialog[data-user-sized]{height:auto}
-#veloIntro:not([data-intro-passo-attivo="0"]) .talos-resizer--dialog-height,#veloIntro:not([data-intro-passo-attivo="0"]) .talos-resizer--dialog-both{display:none}
-#veloIntro .talos-dialog__body{display:flex;flex-direction:column}
-#veloIntro .talos-picker{flex:1 1 auto;min-height:0}
-#veloIntro .talos-picker>.talos-stack{min-height:0}
+
+
+
+
+
 #passoIntroCartella,#passoIntroCartella [data-c="FolderPicker"]{flex:1 1 auto;min-height:0}
-.talos-dialog[data-user-sized] .talos-intro-folders{flex:1 1 auto;min-height:calc(var(--talos-row)*4);max-height:none}
+
 
 #introMessaggio:empty{display:none}
 [data-c="TaskRow"][data-aperta="true"] .talos-list-row__sub,[data-c="TaskRow"][data-aperta="true"] .talos-list-row__title{white-space:pre-wrap;overflow-wrap:anywhere}
@@ -2251,8 +2082,8 @@ a.talos-button{text-decoration:none}
 .talos-provider-list{display:flex;flex-direction:column;gap:var(--talos-space-control)}
 .talos-provider{min-width:0;overflow:hidden}
 .talos-provider__head{display:flex;align-items:center;justify-content:space-between;gap:var(--talos-space-control);width:100%;padding:var(--talos-space-control) var(--talos-space-md);background:transparent;border:0;text-align:left;color:inherit;font:inherit;cursor:pointer}
-.talos-provider__head:after{content:'+';flex-shrink:0;color:var(--talos-muted)}
-.talos-provider__head[aria-expanded=true]:after{content:'−'}
+.talos-provider__head:after{content:"+";flex-shrink:0;color:var(--talos-muted)}
+.talos-provider__head[aria-expanded=true]:after{content:"−"}
 .talos-provider__head:focus-visible{outline:2px solid var(--talos-accent);outline-offset:-3px}
 .talos-provider__name{min-width:110px;margin-right:auto}
 .talos-provider__head .talos-cluster{justify-content:flex-end}
