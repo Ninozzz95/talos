@@ -52,3 +52,11 @@
 /* Il nome della cartella sta nella testata: la riga-radice dell'albero lo ripeterebbe subito sotto (visto nella prima foto).
    Resta nel DOM — è il bersaglio del trascinamento sulla radice — ma non occupa una riga. */
 #railFile .talos-file-tree .tree-root{display:none}
+
+/* PO-30 (18/09/2026) — i risultati della ricerca in tutta la cartella: la stessa riga dell'albero, col percorso accanto al
+   nome in tono smorzato (è il percorso a distinguere due file con lo stesso nome). Una riga È un pulsante: prende il fuoco. */
+.talos-file-risultati{display:flex; flex-direction:column; min-height:0; overflow-y:auto}
+.talos-file-risultato{width:100%; border:0; background:transparent; color:inherit; font:inherit; text-align:start}
+.talos-file-risultato:focus-visible{outline:var(--talos-focus-width) solid var(--talos-accent); outline-offset:calc(-1 * var(--talos-focus-width))}
+.talos-file-risultato .talos-file-row__name{flex:0 1 auto}
+.talos-file-risultato__dove{flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--talos-font-size-xs)}

@@ -13703,6 +13703,94 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   ⛔ Il conteggio dice ciò che CONTA davvero: nell'albero i file si caricano cartella per cartella, quindi
    *   «N file» sarebbe una bugia — è «N a vista». Nella vista dei modificati il numero è esatto, e lo dice.
    */
+  /*
+   * ⛔⛔ PO-30, fetta 1 (18/09/2026) — IL CAMPO «CERCA FILE» CERCA IN TUTTA LA CARTELLA.
+   *   Prima filtrava «fra i file già caricati»: l'albero si carica cartella per cartella, quindi un file in una cartella mai
+   *   aperta non si trovava. Ora chiede al server (`GET …/tree/search?q=`, `workspace-search.mjs`) e mostra i risultati al
+   *   posto dell'albero; svuotato il campo, torna l'albero com'era. Il filtro locale resta come ripiego dove il server non può
+   *   cercare: l'anteprima di un progetto senza sessione.
+   *   ⛔ Una risposta in ritardo non deve sovrascrivere quella di una ricerca più recente: ogni richiesta porta un numero, e
+   *   vale solo l'ultima. ⛔ Ciò che il server ha SALTATO o TAGLIATO si dice a schermo, con parole sue: un elenco che sembra
+   *   completo e non lo è fa cercare il file altrove.
+   */
+  let ricercaFileNumero = 0;
+  let ricercaFileTimer = 0;
+  function mostraRisultatiRicercaFile(mostra) {
+    const risultati = $('#fileRisultati');
+    const albero = $('#alberoFile');
+    if (risultati) risultati.hidden = !mostra;
+    if (albero && vistaFileScelta() === 'tutti') albero.hidden = mostra;
+  }
+  function programmaRicercaFile(valore) {
+    const query = String(valore || '').trim();
+    window.clearTimeout(ricercaFileTimer);
+    ricercaFileNumero += 1;
+    const hint = $('#fileTreeFilterHint');
+    if (query.length < 2 || !state.realSession.id || alberoInAnteprima()) {
+      mostraRisultatiRicercaFile(false);
+      if (hint && query.length === 0) hint.hidden = true;
+      return;
+    }
+    const numero = ricercaFileNumero;
+    ricercaFileTimer = window.setTimeout(async () => {
+      let dati;
+      try {
+        dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/search?q=${encodeURIComponent(query)}`);
+      } catch (errore) {
+        if (numero !== ricercaFileNumero) return;
+        mostraRisultatiRicercaFile(false);
+        if (hint) { hint.hidden = false; hint.textContent = `Non sono riuscito a cercare in tutta la cartella: ${errore?.message || 'riprova'}. Qui sotto restano i file già aperti.`; }
+        return;
+      }
+      if (numero !== ricercaFileNumero) return; // è arrivata tardi: nel frattempo la persona ha scritto altro
+      disegnaRisultatiRicercaFile(dati, query);
+    }, 220);
+  }
+  function disegnaRisultatiRicercaFile(dati, query) {
+    const contenitore = $('#fileRisultati');
+    const hint = $('#fileTreeFilterHint');
+    if (!contenitore) return;
+    const risultati = Array.isArray(dati?.risultati) ? dati.risultati : [];
+    contenitore.replaceChildren(...risultati.map((voce) => {
+      const riga = document.createElement('button');
+      riga.type = 'button';
+      riga.className = 'talos-file-row talos-file-risultato';
+      riga.setAttribute('role', 'option');
+      riga.dataset.percorso = voce.percorso;
+      riga.dataset.cartella = String(voce.cartella === true);
+      const icona = document.createElement('span');
+      icona.className = 'ft-icon';
+      icona.appendChild(iconaSvgAlbero(voce.cartella ? 'i-folder' : categoriaFileAlbero(voce.nome) === 'code' ? 'i-code' : 'i-file'));
+      const dove = voce.percorso.includes('/') ? voce.percorso.slice(0, voce.percorso.lastIndexOf('/')) : '';
+      riga.append(icona, textElement('span', 'talos-file-row__name', voce.nome), textElement('span', 'talos-file-risultato__dove talos-muted', dove));
+      const stato = voce.cartella ? null : statoFileAlbero(voce.percorso);
+      if (stato) { const segno = document.createElement('span'); scriviStatoRigaAlbero(segno, stato); riga.appendChild(segno); }
+      riga.title = voce.percorso;
+      return riga;
+    }));
+    mostraRisultatiRicercaFile(true);
+    const conteggio = $('#fileConteggio');
+    if (conteggio) conteggio.textContent = risultati.length === 0 ? '' : `${risultati.length} trovat${risultati.length === 1 ? 'o' : 'i'}`;
+    if (!hint) return;
+    const pezzi = [];
+    if (risultati.length === 0) pezzi.push(`Nessun file con «${query}» in questa cartella.`);
+    if (dati?.troncato) pezzi.push(`L'elenco non è completo: ${dati.motivo || 'la ricerca si è fermata prima'}. Scrivi qualche lettera in più.`);
+    if (Array.isArray(dati?.saltate) && dati.saltate.length) pezzi.push(`Non ho guardato dentro ${dati.saltate.join(' e ')}.`);
+    hint.textContent = pezzi.join(' ');
+    hint.hidden = pezzi.length === 0;
+  }
+  async function apriRisultatoRicercaFile(percorso, cartella) {
+    if (!cartella) { await apriFileAlbero(percorso, percorso.split('/').pop()); return; }
+    /* Una CARTELLA trovata si apre nell'albero: si svuota la ricerca e la si porta in vista. */
+    const campo = $('#fileTreeFilter');
+    if (campo) campo.value = '';
+    filtraAlberoReale('');
+    programmaRicercaFile('');
+    aggiornaVistaFile();
+    await rivelaERivelaRigaAlbero(`${percorso}/.`); // apre lei e i suoi antenati
+    await rivelaERivelaRigaAlbero(percorso); // poi la seleziona e la porta in vista
+  }
+
   const VISTE_FILE = Object.freeze({ tutti: 'Tutti i file', modificati: 'Modificati in questa sessione' });
   function vistaFileScelta() { return $('#fileVista')?.dataset.vista === 'modificati' ? 'modificati' : 'tutti'; }
   function aggiornaVistaFile() {
@@ -21474,6 +21562,11 @@ ${testo}`;
   $('#fileTreeFilter')?.addEventListener('input', (e) => {
     filtraAlberoReale(e.target.value);
     salvaImpostazioniAlbero();
+    programmaRicercaFile(e.target.value);
+  });
+  $('#fileRisultati')?.addEventListener('click', (evento) => {
+    const riga = evento.target.closest?.('[data-percorso]');
+    if (riga) apriRisultatoRicercaFile(riga.dataset.percorso, riga.dataset.cartella === 'true');
   });
   $('#fileVista')?.addEventListener('click', (evento) => scegliVistaFile(evento.currentTarget));
   /* ⛔ Visto nella PRIMA foto: «2 a vista» restava 2 anche con le cartelle aperte e cinque file sullo schermo — il numero si
