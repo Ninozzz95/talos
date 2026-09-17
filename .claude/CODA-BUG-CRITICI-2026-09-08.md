@@ -1020,7 +1020,7 @@ ne ha uno capace di immagini. Solo letto, non riprodotto da me.
   comprese le LOCALI — dove l'app promette «niente esce da questa macchina». Ha il suo permesso
   (`requiredActions: ['outbound','write']`, `talosHarness.mjs:5414`) ma a schermo dice solo «Genera un'immagine»
   (`nomi-attrezzi.js:167`): non dice DOVE va.
-**Il mio consiglio all'owner (in attesa della sua decisione):** NON instradare sul fornitore della sessione (pochi fanno
+✅ **APPROVATO dall'owner il 17/09 («sì a tutte»)** — brief in `.claude/BRIEF-BC-73-IMMAGINI-2026-09-17.md`, parte dopo la fusione del ramo `cli-req`. **Il consiglio approvato:** NON instradare sul fornitore della sessione (pochi fanno
 immagini, interfacce diverse, «zero provider nuovo» era voluto); tre cure strette: (1) la destinazione detta nella scheda di
 approvazione e nel foglio dei permessi, letta dalla configurazione; (2) nelle sessioni LOCALI e in quelle di un fornitore ≠
 OpenRouter l'attrezzo CHIEDE SEMPRE, anche con «sempre» (stessa regola di F15); (3) senza chiave OpenRouter nessuna chiamata
