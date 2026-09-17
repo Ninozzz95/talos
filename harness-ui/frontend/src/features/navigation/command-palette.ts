@@ -85,6 +85,9 @@ export function createCommandPalette(options: CommandPaletteOptions) {
     try { Promise.resolve(options.execute(item.command.id)).catch(options.reportError); }
     catch (error) { options.reportError(error); }
   }
+  // Editing the query is not an accordion toggle. The legacy root delegates
+  // aria-expanded/aria-controls clicks; this field owns its list's visibility.
+  field.addEventListener('click', event => event.stopPropagation(), { signal: scope.signal });
   field.addEventListener('input', () => render(), { signal: scope.signal });
   field.addEventListener('keydown', event => {
     if (event.isComposing || event.key === 'Process' || event.keyCode === 229 || event.defaultPrevented) return;

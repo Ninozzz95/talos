@@ -159,6 +159,10 @@ try {
     const field = page.locator('#veloComandi [role="combobox"]');
     await opener.click();
     await expect(field).toBeFocused();
+    await field.click();
+    await expect(field).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#risultatiComandi')).toBeVisible();
+    check('editing the command query does not toggle the list as an accordion', true);
     await expect(page.locator('#risultatiComandi [role="option"]')).toHaveCount(30);
     check('actual command registry is rendered in the application', true);
     await page.screenshot({ path: join(out, 'commands-dark-1440.png') });
