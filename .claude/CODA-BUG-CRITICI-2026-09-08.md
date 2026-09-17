@@ -1131,7 +1131,7 @@ vecchia → 2 rosse. Backend intero da solo: **3277 · 3272 pass · 0 fail · 5 
 «misurato» quella funzione ricopiandone i byte, e nessuno aveva provato lo STATO che la rompe — una chiave che c'è e non si può
 usare. Una regola dentro una chiusura non ha prove sue: si estrae PRIMA di fonderla, non dopo che qualcuno ci inciampa.
 
-## PR #30 dell'owner (bozza, `Ninozzz95/talos`, ramo `perf/local-engine-async-preflight`, commit `84d7d265`) — la sonda del motore locale diventa ASINCRONA — VALUTATA da me il 17/09/2026, NON applicata (aspetta il suo sì)
+## PR #30 dell'owner (bozza, `Ninozzz95/talos`, ramo `perf/local-engine-async-preflight`, commit `84d7d265`) — la sonda del motore locale diventa ASINCRONA — ✅ APPLICATA il 17/09/2026 su suo ordine («sì approvo»): `2a0350a9`, sul 4174 — con la riga in più sull'ambiente ripulito della sonda. Review MIA: tre rotture (cache da sonda annullata → 1 rossa; tetto dell'uscita → 2 rosse; guardia della salute tardiva → NESSUNA rossa: buco di copertura dichiarato). Backend intero da solo 3326 · 3321 pass · 0 fail · 5 skipped
 
 **Cosa fa:** il supervisore del llama-server sondava il binario (fit f16, fit q8, `--help`) con `spawnSync`, che BLOCCA il ciclo
 degli eventi del backend: mentre si carica un modello il server non risponde a niente (SSE delle altre sessioni, terminale,
