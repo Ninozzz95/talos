@@ -136,6 +136,7 @@ try {
   });
   await scenario('canonical-preferences', async () => {
     await navigate('impostazioni', 'settings');
+    await page.locator('#setting-tab-appearance').click();
     await selectValue(page.locator('#setting-uiDensitySelect'),'compatta');
     await expect(page.locator('html')).toHaveAttribute('data-density', 'compact');
     await expect(page.locator('[data-workspace-density]')).toHaveAttribute('aria-pressed', 'true');
@@ -149,6 +150,11 @@ try {
     check('startup restoration can be disabled and survives reload', true);
     const query = page.locator('#schermoImpostazioni [data-settings-query]');
     await query.fill('riprendi');
+    // Settings v3 presents search results first; opening a result reveals its original control.
+    const restoreResult = page.locator('[data-settings-result="workspaceRestore"]');
+    await expect(restoreResult).toBeVisible();
+    await restoreResult.click();
+    await expect(query).toHaveValue('');
     await expect(page.locator('[data-setting-row="workspaceRestore"]')).toBeVisible();
     check('new startup preference is discoverable through Settings search', true);
     await query.clear();
@@ -218,6 +224,7 @@ try {
   });
   await scenario('workspace-english', async () => {
     await navigate('impostazioni', 'settings');
+    await page.locator('#setting-tab-appearance').click();
     await selectValue(page.locator('#setting-uiLanguageSelect'),'en');
     await navigate('home', 'home');
     await expect(page.locator('#schermoHome h1')).toHaveText('Where shall we pick up?');
@@ -240,6 +247,7 @@ try {
     await expect(page.locator('#schermoAttivita')).toBeVisible();
     check('localized command navigates without changing protocol identifiers', true);
     await navigate('impostazioni', 'settings');
+    await page.locator('#setting-tab-appearance').click();
     await selectValue(page.locator('#setting-uiLanguageSelect'),'it');
     await navigate('home', 'home');
     await expect(page.locator('#schermoHome h1')).toHaveText('Da dove ripartiamo?');
