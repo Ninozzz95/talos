@@ -21,6 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir export
+          # Recovery captures concurrent navigation fixes; it never reapplies old transports.
           git rev-parse HEAD > export/SOURCE_COMMIT.txt
           git archive --format=zip --output=export/source.zip HEAD
           git diff --binary 13f65c15cdeaf8986b882993a0773cdeafb867d2 HEAD > export/review.patch
