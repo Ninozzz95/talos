@@ -6,6 +6,7 @@ import { NOMI_UMANI_ATTREZZI } from '../../src/components/nomi-attrezzi.js';
 import { TESTI as TESTI_TERMINALE, ETICHETTA_STATO } from '../../src/components/terminale.js';
 import { TESTI as TESTI_BROWSER } from '../../src/components/browser.js';
 import { TESTI as TESTI_CONNESSIONE } from '../../src/components/connessione.js';
+import { AZIONI_FILE } from '../../src/components/review.js'; // BC-63, 17/09: le voci del menu delle linguette della Revisione
 
 // P-i18n (06/09) — la copertura dell'inglese si MISURA sulle frasi vere del codice, categoria per categoria.
 
@@ -21,6 +22,8 @@ const frasiComponenti = [
   ...Object.values(ETICHETTA_STATO),
   ...Object.values(TESTI_BROWSER).filter((v) => typeof v === 'string' && v),
   ...Object.values(TESTI_CONNESSIONE).filter((v) => typeof v === 'string' && v),
+  ...Object.values(AZIONI_FILE),
+  'Azioni sul file', // l'etichetta del menu, che `creaMenuContestuale` passa a t()
 ];
 
 test('I18N-COPERTURA: ogni frase di Impostazioni, attrezzi e componenti ha l’inglese', () => {

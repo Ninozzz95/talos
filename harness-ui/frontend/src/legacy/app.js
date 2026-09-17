@@ -85,7 +85,7 @@ import { aggiornaSeparatoreContesto } from '../components/context-separator.js';
 import { createContextClient } from '../services/context-client.js';
 import { createContextMonitor } from '../services/context-monitor.js';
 import { aggiornaAvanzamentoContesto } from '../components/context-progress.js';
-import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
+import { aggiornaDiffReview, chiaveFileReview, creaSchedeReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
 import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
@@ -1648,6 +1648,11 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (view === 'progetti') void caricaPaginaProgetti(); // 06/9: stessa storia delle Note, trovata dal cancello
     if (view === 'automations') renderAutomationsReali();
     if (view === 'browser') renderizzaBrowser(); // 06/9 K-I
+    /* BC-67, 17/09: stessa riga del Browser e per la stessa ragione — entrando nella Revisione si
+       ridisegna dai FATTI della sessione corrente, altrimenti restano a schermo i file d'esempio del
+       template (o quelli della sessione di prima). ⛔ L'avvio da solo non basta: `aggiornaTestataSessione`
+       gira anche dopo, e il riassunto della testata tornava vuoto — misurato, non previsto. */
+    if (view === 'review') { renderRealReviewList(); aggiornaSommarioReviewReale(); }
     if (view === 'terminal') apriVistaTerminaleReale(); // ⭐ 28/8 — Terminale REALE: montaggio/connessione PIGRI, solo alla prima apertura del tab (LEDGER-TERMINALE-REALE.md)
   }
 
@@ -9505,7 +9510,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const schermo = $('#schermoReview');
     if (!file || !schermo) return;
     state.reviewFileCorrente = file.path;
-    for (const scheda of schermo.querySelectorAll('.talos-review__scheda[role="tab"]')) { const attiva = scheda.dataset.reviewFile === key; scheda.setAttribute('aria-selected', String(attiva)); scheda.tabIndex = attiva ? 0 : -1; }
+    /* BC-63, 17/09: la selezione la fa il componente condiviso (roving tabindex + `aria-selected`
+       in un posto solo, lo stesso del Terminale).
+       ⛔ Qui c'era anche un giro a mano come «ripiego per il markup statico»: MISURATO il 17/09 su
+          segnalazione del revisore, quel ramo non poteva girare — `uiSchedeReview()` torna `null`
+          solo se `#schermoReview .talos-review__schede` non esiste, e due righe più su ci siamo già
+          fermati se `#schermoReview` manca; la striscia è dentro quella schermata, sempre. Un
+          ripiego che non può essere raggiunto non è una rete di sicurezza: è codice morto con un
+          commento che dice il falso. */
+    uiSchedeReview()?.seleziona(key);
     aggiornaDiffReview(schermo.querySelector('.talos-review__diff'), file);
     $$('[data-review-action]').forEach((b) => { b.disabled = false; });
   }
@@ -11767,6 +11780,23 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const t = statoTerminale();
     const record = t.schede.get(id);
     if (!record) return;
+    /*
+     * ⛔⛔ BC-63/R1, 17/09/2026 — MISURATO con una sonda, non dedotto: il doppio clic sulla linguetta
+     *   apriva il campo di rinomina e il campo spariva da solo entro tre secondi. La sonda ha
+     *   contato cinque mutazioni della barra e ha trovato il fuoco su `xterm-helper-textarea`:
+     *   i due clic del doppio clic passano da qui, e il `record.term?.focus()` dentro il
+     *   `requestAnimationFrame` qui sotto arriva DOPO l'apertura del campo, gli porta via il fuoco,
+     *   il `blur` chiude la rinomina. Con F2 non succedeva — nessun clic, nessun furto — ed è per
+     *   questo che la prova col tasto funzionava e quella col mouse no.
+     * ⇒ Il fuoco va nel terminale quando la scheda CAMBIA o quando nasce adesso; ricliccare la
+     *   scheda già attiva non è un'azione e non deve spostare niente. È anche lo stato dell'arte:
+     *   microsoft/terminal#9886 «Clicking a tab triggers focus lose» descrive lo stesso difetto
+     *   proprio sulla scheda già attiva, e microsoft/vscode#166821 «Terminal Tabs: disable dragging
+     *   and clicking during renaming» dice che durante la rinomina clic e doppio clic non devono
+     *   fare il loro mestiere (qui è la guardia `inerte` di `schede.js`). Letti il 17/09/2026.
+     */
+    const cambiaScheda = t.attiva !== id;
+    const eraGiaMontata = Boolean(record.term);
     t.attiva = id;
     ricordaAttivaTerminale(t.sessioneId, id);
     for (const altra of t.schede.values()) {
@@ -11789,7 +11819,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (terminaleAschermo() && montaSchedaTerminale(record)) {
       accendiWebglTerminale(record);
       collegaWsScheda(record);
-      requestAnimationFrame(() => { record.fit?.fit(); inviaResizeTerminale(record); record.term?.focus(); });
+      requestAnimationFrame(() => { record.fit?.fit(); inviaResizeTerminale(record); if (cambiaScheda || !eraGiaMontata) record.term?.focus(); });
     }
     renderizzaSchedeTerminale();
   }
@@ -13259,13 +13289,50 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
   }
 
+  /** ⭐ 02/09 — il diff di UN file come testo semplice; ⭐ 17/09 BC-63: lo usa anche il menu della linguetta. */
+  function testoDiffDiUnFile(file) {
+    return [
+      `### ${file.path}${file.nuovo ? ' (nuovo)' : ''}`,
+      ...(file.code || []).map(([kind, text]) => text),
+      '',
+    ].join('\n');
+  }
+
   /** ⭐ 02/09 — il diff di TUTTI i file scritti in questa sessione come testo unificato semplice (per incollarlo in una PR, un messaggio, una nota). */
   function testoDiffCompleto() {
-    return [...state.realSession.reviewFiles.values()].map((file) => [
-      `### ${file.path}${file.nuovo ? ' (nuovo)' : ''}`,
-      ...file.code.map(([kind, text]) => text),
-      '',
-    ].join('\n')).join('\n');
+    return [...state.realSession.reviewFiles.values()].map(testoDiffDiUnFile).join('\n');
+  }
+
+  /*
+   * BC-63, owner 17/09/2026: «la scheda revisione deve avere lo stesso component tab di terminale
+   * (schede stile chrome)». Il componente si monta UNA volta sola (come `uiSchedeTerminale`), così
+   * i suoi ascoltatori — tastiera e menu contestuale — non si moltiplicano a ogni scrittura.
+   *
+   * ⛔ Le tre voci del menu sono le sole che hanno un comportamento VERO dietro:
+   *   · «Apri il file» è lo stesso visualizzatore dell'albero Files (`apriFileAlbero`), e si
+   *     spegne quando non c'è una sessione da cui leggerlo — non si offre e poi si nega;
+   *   · le due copie passano da `copyText`, che dice anche cosa ha copiato.
+   *   Non c'è «Chiudi le altre»: nella Revisione una linguetta NON si chiude — l'elenco è quello
+   *   dei file che la sessione ha scritto, e un comando che finge di toglierne uno sarebbe una
+   *   funzione senza niente dietro.
+   */
+  let uiReview = null;
+  function uiSchedeReview() {
+    if (uiReview) return uiReview;
+    const striscia = $('#schermoReview .talos-review__schede');
+    if (!striscia) return null;
+    const radice = ROOT();
+    uiReview = creaSchedeReview(striscia, {
+      root: radice.body || radice,
+      azioni: {
+        seleziona: (chiave) => renderReviewFile(chiave),
+        puoAprire: () => Boolean(state.realSession.id),
+        apri: (voce) => { void apriFileAlbero(voce.path, voce.path.split('/').pop()); },
+        copiaPercorso: (voce) => { void copyText(voce.path, 'Percorso copiato'); },
+        copiaDiff: (voce) => { void copyText(testoDiffDiUnFile(voce), `Diff di ${voce.path.split('/').pop()} copiato`); },
+      },
+    });
+    return uiReview;
   }
 
   /** ⭐ 02/09 — scrive nel composer (senza inviare) e porta il fuoco lì: è il gesto "Commenta"/"Annota" — la persona completa e decide se mandare. */
@@ -13293,20 +13360,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * che aspettano una rotta (Accetta/Scarta/Apri nell'editor) restano nascosti.
      */
     const schermo = $('#schermoReview');
-    const contenitore = schermo?.querySelector('.talos-review__schede .talos-tabs__list'); // owner 05/09: schede in alto, diff sotto
-    if (!contenitore) return;
+    const ui = uiSchedeReview(); // BC-63, 17/09: lo stesso componente del Terminale (owner 05/09: schede in alto, diff sotto)
+    const contenitore = schermo?.querySelector('.talos-review__schede .talos-schede__lista');
+    if (!ui || !contenitore) return;
     const voci = [...state.realSession.reviewFiles.values()];
     aggiornaTestataSessione(); // 05/9 Fase 2: Topbar — il badge della Review segue i file toccati
     const ultimoPercorso = state.reviewFileCorrente && state.realSession.reviewFiles.has(state.reviewFileCorrente) ? state.reviewFileCorrente : voci.at(-1)?.path;
-    contenitore.replaceChildren(...voci.map((file) => creaRigaFileReview(file, {
-      attiva: file.path === ultimoPercorso,
-      onApri: () => renderReviewFile(`real:${file.path}`),
-    })));
+    ui.aggiorna(voci, ultimoPercorso ? chiaveFileReview({ path: ultimoPercorso }) : null);
     // 06/09: stato vuoto ONESTO — una scheda EmptyState del mockup al posto della
     // finta scheda «−» con la stessa frase ripetuta nel diff; il DiffView si nasconde finché non c'è un file.
     const vuotoReview = schermo.querySelector('#vuotoReview');
     const cardDiff = schermo.querySelector('.talos-review__diff');
-    const schedeReview = contenitore.closest('.talos-tabs');
+    const schedeReview = contenitore.closest('.talos-schede');
     if (vuotoReview) vuotoReview.hidden = voci.length > 0;
     if (cardDiff) cardDiff.hidden = voci.length === 0;
     if (schedeReview) schedeReview.hidden = voci.length === 0;
@@ -13316,24 +13381,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const titoloTestata = schermo.querySelector('.talos-topbar__title h1');
     if (titoloTestata && state.session) titoloTestata.textContent = state.session;
     nascondiAzioniFase3(schermo);
-    // tastiera sulle schede dei file (WAI-ARIA tabs, attivazione automatica: il diff e' gia' nel DOM)
-    if (!contenitore.dataset.tastiera) {
-      contenitore.dataset.tastiera = 'si';
-      contenitore.addEventListener('keydown', (event) => {
-        const schede = [...contenitore.querySelectorAll('[role="tab"]')];
-        const i = schede.indexOf(document.activeElement);
-        if (i < 0 || schede.length === 0) return;
-        let j = i;
-        if (event.key === 'ArrowRight') j = (i + 1) % schede.length;
-        else if (event.key === 'ArrowLeft') j = (i - 1 + schede.length) % schede.length;
-        else if (event.key === 'Home') j = 0;
-        else if (event.key === 'End') j = schede.length - 1;
-        else return;
-        event.preventDefault();
-        schede[j].focus();
-        schede[j].click();
-      });
-    }
+    /* ⛔ BC-63, 17/09: qui c'era una SECONDA tastiera, scritta a mano (frecce, Home/End,
+       `focus()` + `click()`), che faceva quello che il componente del Terminale già faceva. È
+       sparita insieme alla terza implementazione delle schede: adesso la tastiera è quella di
+       `schede.js`, la stessa per le due superfici, e in più c'è il menu contestuale da tastiera
+       (Maiusc+F10 e il tasto Menu) che qui non c'era. */
   }
 
   /**
@@ -21707,6 +21759,24 @@ ${testo}`;
   collegaScorciatoieTerminale(); // 06/9 B1: Ctrl+` e Ctrl+Shift+`, e la barra delle schede onesta da subito
   collegaRidisegnoLingua(); // P-i18n 06/9
   renderizzaBrowser(); // 06/9 K-I: via le letture dimostrative del mockup da subito
+  /*
+   * ⛔⛔ BC-67, 17/09/2026, misurato su un banco con «Nessuna sessione»: aprendo la Revisione si
+   *   vedevano TRE file che nessuno aveva scritto (`src/session-registry.mjs +18 −2`, …), il diff
+   *   di una `guardiaDiStallo` mai esistita, la pillola «Ricevuta a1f4…9c02», «giro 5» e i bottoni
+   *   «Accetta questo file · Apri nell'editor · Scarta» con la frase sul checkpoint del giro 4.
+   *   Tutto vero nel mockup, tutto FALSO nella app: è il markup dimostrativo del template, che
+   *   nessuno aveva mai sostituito perché `renderRealReviewList()` parte solo da una sessione o da
+   *   una scrittura — e una app appena aperta non ne ha né l'una né l'altra.
+   * ⇒ Si chiama qui, all'avvio, esattamente come il Browser fa dal 06/09 nella riga qui sopra e per
+   *   la stessa ragione. Con zero file le due funzioni rendono lo stato vuoto ONESTO che esiste già
+   *   (`#vuotoReview`), nascondono il diff e le schede, spengono «Copia i diff» e scrivono
+   *   «Nessuna modifica in questa sessione» nella testata.
+   * ⛔ Non basta togliere il markup dal template: se un domani qualcuno rimette dei dati d'esempio
+   *   lì dentro, questa riga li copre lo stesso. È il markup a essere un promemoria del disegno,
+   *   non la fonte di ciò che si vede.
+   */
+  renderRealReviewList();
+  aggiornaSommarioReviewReale();
   setInspectorTab($('.inspector-tabs button.active'));
   renderReviewFile('composer');
   autoGrowTextarea();

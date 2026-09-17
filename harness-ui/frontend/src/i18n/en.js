@@ -91,6 +91,12 @@ export default Object.freeze({
     'Serve una sessione': 'A session is needed', 'Troppe schede': 'Too many tabs', 'Scheda non aperta': 'Tab not opened', 'Shell non chiusa sul server': 'Shell not closed on the server',
   },
 
+  /* le linguette dei file della Revisione (BC-63, 17/09: stesso componente del Terminale) */
+  revisione: {
+    'Azioni sul file': 'File actions', 'Apri il file': 'Open the file', 'Copia il percorso': 'Copy the path',
+    'Copia il diff di questo file': 'Copy this file’s diff',
+  },
+
   /* il Browser a schede */
   browser: {
     'Letture della sessione': 'Session readings', 'Nessuna pagina ancora': 'No pages yet',

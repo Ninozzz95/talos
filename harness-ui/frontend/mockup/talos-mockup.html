@@ -1347,19 +1347,27 @@ a.talos-button{text-decoration:none}
 #schermoImpostazioni li strong{display:block;margin-bottom:4px}
 
 .talos-terminal{flex:1 1 auto; min-height:0; margin:14px 18px; border-radius:var(--talos-radius-card); border:1px solid var(--talos-border); background:var(--talos-window-bg); display:flex; flex-direction:column; overflow:hidden}
-.talos-terminal__tabs{display:flex; align-items:center; gap:2px; padding:8px 10px; border-bottom:1px solid var(--talos-border); background:var(--talos-panel)}
-.talos-terminal__tab{height:32px; padding:0 12px; border-radius:8px; color:var(--talos-muted); font-size:13px; display:inline-flex; align-items:center; gap:8px}
-.talos-terminal__tab[aria-selected="true"]{background:var(--talos-card); color:var(--talos-text)}
+/* BC-63, owner 17/09/2026 («la scheda revisione deve avere lo stesso component tab di terminale —
+   schede stile chrome»): `.talos-schede`/`.talos-schede__tab` sono le classi del componente
+   CONDIVISO. Stesse dichiarazioni di sempre, con un secondo selettore davanti: il Terminale non
+   cambia di un pixel e la Revisione eredita la STESSA linguetta invece di una sua imitazione. */
+.talos-terminal__tabs, .talos-schede{display:flex; align-items:center; gap:2px; padding:8px 10px; border-bottom:1px solid var(--talos-border); background:var(--talos-panel)}
+.talos-terminal__tab, .talos-schede__tab{height:32px; padding:0 12px; border-radius:8px; color:var(--talos-muted); font-size:13px; display:inline-flex; align-items:center; gap:8px}
+.talos-terminal__tab[aria-selected="true"], .talos-schede__tab[aria-selected="true"]{background:var(--talos-card); color:var(--talos-text)}
+/* il passaggio del mouse: `.talos-tabs__tab` (il gruppo generico che la Revisione usava prima) ce
+   l'aveva, queste no — senza, la Revisione avrebbe PERSO una risposta al gesto. */
+.talos-terminal__tab:hover:not([aria-selected="true"]):not(:disabled), .talos-schede__tab:hover:not([aria-selected="true"]):not(:disabled){color:var(--talos-text)}
 .talos-terminal__body{flex:1; padding:14px 16px; font-family:var(--talos-font-mono); font-size:12.5px; line-height:1.7; color:var(--talos-assistant-text); overflow:auto; white-space:pre}
 .talos-terminal__body .p{color:var(--talos-accent-hover)} .talos-terminal__body .ok{color:var(--talos-success)} .talos-terminal__body .ko{color:var(--talos-danger)} .talos-terminal__body .dim{color:var(--talos-muted)}
 .talos-terminal__foot{display:flex; align-items:center; gap:10px; padding:8px 14px; border-top:1px solid var(--talos-border); font-size:12px; color:var(--talos-muted); background:var(--talos-panel)}
 /* B1 06/09 — Terminale A SCHEDE (K-G): il corpo ospita una xterm.js vera per scheda (una visibile, le altre montate e nascoste: xterm.js #3029 non si misura in display:none); le schede non si spezzano e la barra scorre quando sono tante; nel piede il percorso si tronca coi puntini (taccuino 06/09, terminale-2.png). */
 .talos-terminal__tabs{overflow:hidden; min-width:0}
+.talos-schede{min-width:0}
 .talos-terminal__tabs .talos-grow{flex:1 1 0; min-width:6px}
-.talos-terminal__tab{position:relative; flex:0 0 auto; white-space:nowrap}
+.talos-terminal__tab, .talos-schede__tab{position:relative; flex:0 0 auto; white-space:nowrap}
 .talos-terminal__tab[data-terminale-id]{flex:0 1 auto; min-width:96px; max-width:200px; padding-right:26px; overflow:hidden; text-overflow:ellipsis; display:block; line-height:32px; text-align:left}
 .talos-terminal__tab[data-terminale-id] .talos-dot{display:inline-block; margin-right:8px; vertical-align:middle}
-.talos-terminal__tab:disabled{opacity:.45; cursor:not-allowed}
+.talos-terminal__tab:disabled, .talos-schede__tab:disabled{opacity:.45; cursor:not-allowed}
 .talos-terminal__tabs .talos-badge{flex:0 6 auto; min-width:44px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap} /* i badge cedono spazio per primi (taccuino 06/09, terminale-5.png: le schede si troncavano con tre schede sole) */
 .talos-terminal__tab[data-terminale-id]::after{content:'×'; position:absolute; right:6px; top:50%; width:16px; height:16px; margin-top:-8px; border-radius:4px; line-height:16px; text-align:center; font-size:13px; color:var(--talos-muted); opacity:0; transition:opacity 120ms ease}
 .talos-terminal__tab[data-terminale-id]:hover::after, .talos-terminal__tab[data-terminale-id]:focus-visible::after, .talos-terminal__tab[data-terminale-id][aria-selected="true"]::after{opacity:1}
@@ -1375,13 +1383,29 @@ a.talos-button{text-decoration:none}
 .talos-terminal{container-type:inline-size}
 .talos-terminal__tabs:has([data-terminale-id]:nth-of-type(3)) [data-badge="isolamento"]{display:none} /* da tre schede in su il badge dell'isolamento lascia il posto alle schede: la frase intera resta nel title del badge della cartella (taccuino 06/09, terminale-7-laptop.png) */
 @container (max-width:720px){ .talos-terminal__tabs [data-badge="isolamento"]{display:none} } /* sul portatile (1024: riquadro ~712px) il badge lungo perdeva 2px e mostrava i puntini */
-.talos-review{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:10px; padding:12px 18px 14px}
-.talos-review__schede{flex:none; min-width:0}
-.talos-review__schede .talos-tabs__list{display:flex; max-width:100%; overflow-x:auto; scrollbar-width:thin}
-.talos-review__scheda{display:inline-flex; align-items:center; gap:8px; white-space:nowrap}
-.talos-review__scheda .talos-mono{font-size:12px}
+/* BC-63, owner 17/09/2026 — la variante che SCORRE del componente condiviso. Il Terminale tiene
+   `overflow:hidden` e stringe le linguette fra 96 e 200 px (le schede di una shell sono al massimo
+   otto); la Revisione no, i file scritti in una sessione sono molti di più. Ricerca 17/09/2026
+   (Eleken «Tabs UX Best Practices», Chrome «scrollable-tabstrip»): quando non ci stanno la striscia
+   SCORRE — mai una seconda riga, mai linguette strizzate a due lettere. */
+.talos-schede--scorre{overflow:hidden}
+.talos-schede__lista{display:flex; align-items:center; gap:2px; flex:1 1 auto; min-width:0; overflow-x:auto; overflow-y:hidden; scrollbar-width:thin}
+/* 320 misurato il 17/09: un nome di 32 caratteri più i contatori arriva a ~310 px; a 280 veniva
+   tagliato pur avendo spazio attorno. */
+.talos-schede--scorre .talos-schede__tab{flex:0 0 auto; max-width:320px}
+/* la sfumatura sul lato dove si può ancora scorrere: `data-bordi` lo scrive `schede.js` */
+.talos-schede__lista[data-bordi="destra"]{mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}
+.talos-schede__lista[data-bordi="sinistra"]{mask-image:linear-gradient(to right,transparent,#000 28px)}
+.talos-schede__lista[data-bordi="entrambi"]{mask-image:linear-gradient(to right,transparent,#000 28px,#000 calc(100% - 28px),transparent)}
+.talos-review{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:0; padding:12px 18px 14px}
+/* `gap:0` e non 10px: la striscia è la TESTA della carta del diff, come nel Terminale. Gli altri due
+   figli di `.talos-review` non sono mai visibili insieme alle schede (o lo stato vuoto, o le schede
+   più il diff), quindi nessuna coppia resta senza respiro. */
+.talos-review__schede{flex:none; min-width:0; border:1px solid var(--talos-border); border-bottom:0; border-radius:var(--talos-radius-card) var(--talos-radius-card) 0 0}
+.talos-review__scheda{display:inline-flex; align-items:center; gap:8px; white-space:nowrap; min-width:0}
+.talos-review__scheda .talos-mono{font-size:12px; overflow:hidden; text-overflow:ellipsis}
 .talos-review__diff{flex:1 1 auto; min-height:0}
-.talos-review__diff{overflow:auto; display:flex; flex-direction:column}
+.talos-review__diff{overflow:auto; display:flex; flex-direction:column; border-top-left-radius:0; border-top-right-radius:0}
 .talos-review__diff-head{display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--talos-border)}
 .talos-review__diff .talos-diff{flex:1; background:transparent}
 .talos-review__foot{display:flex; align-items:center; gap:8px; padding:10px 14px; border-top:1px solid var(--talos-border); flex-wrap:wrap}
@@ -2873,10 +2897,13 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
         <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false" data-t="chat">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="true" data-t="terminale">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="false" data-t="review">Review <span class="talos-tabs__count">3</span></button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="false" data-t="browser">Browser</button></div></div>
       <div class="talos-topbar__actions"><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-apre-velo="veloAlbero" title="Albero dei rami" aria-label="Albero dei rami"><svg class="i"><use href="#i-branch"/></svg></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-azione="comandi" title="Comandi (Ctrl K)" aria-label="Comandi (Ctrl K)"><svg class="i"><use href="#i-command"/></svg></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-azione="comprimi" title="Context Manager" aria-label="Context Manager"><svg class="i"><use href="#i-grid"/></svg></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-azione="dettagli" title="Mostra o nascondi i dettagli" aria-label="Mostra o nascondi i dettagli" aria-expanded="true"><svg class="i"><use href="#i-layout"/></svg></button></div></div>
       <div class="talos-terminal" data-c="TerminalPane">
-        <div class="talos-terminal__tabs" role="tablist">
-          <button class="talos-terminal__tab" role="tab" aria-selected="true"><span class="talos-dot talos-dot--live"></span>agente · giro 7</button>
-          <button class="talos-terminal__tab" role="tab" aria-selected="false"><span class="talos-dot talos-dot--success"></span>tu · PowerShell</button>
-          <button class="talos-terminal__tab" role="tab" aria-selected="false"><svg class="i i--sm"><use href="#i-plus"/></svg>Nuovo</button>
+        <!-- BC-63, owner 17/09/2026: `talos-schede` è la classe del componente condiviso, quello che
+             disegna anche le linguette dei file della Revisione. `talos-terminal__tabs`/`__tab`
+             restano e portano solo ciò che è del Terminale: i badge, la «×», il container query. -->
+        <div class="talos-terminal__tabs talos-schede" role="tablist">
+          <button class="talos-terminal__tab talos-schede__tab" role="tab" aria-selected="true"><span class="talos-dot talos-dot--live"></span>agente · giro 7</button>
+          <button class="talos-terminal__tab talos-schede__tab" role="tab" aria-selected="false"><span class="talos-dot talos-dot--success"></span>tu · PowerShell</button>
+          <button class="talos-terminal__tab talos-schede__tab" role="tab" aria-selected="false"><svg class="i i--sm"><use href="#i-plus"/></svg>Nuovo</button>
           <span class="talos-grow"></span>
           <span class="talos-badge talos-badge--success talos-badge--sm">Isolato · sandbox locale</span>
           <span class="talos-badge talos-badge--sm">harness-ui/</span>
@@ -2909,10 +2936,18 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
 
       </div>
       <div class="talos-review talos-review--schede" data-c="ReviewPane">
-        <div class="talos-tabs talos-review__schede" data-c="ReviewFileTabs"><div class="talos-tabs__list" role="tablist" aria-label="File modificati">
-          <button class="talos-tabs__tab talos-review__scheda" role="tab" aria-selected="true"><span class="talos-mono">src/session-registry.mjs</span><span class="talos-diff-num talos-diff-num--plus">+18</span><span class="talos-diff-num talos-diff-num--minus">−2</span></button>
-          <button class="talos-tabs__tab talos-review__scheda" role="tab" aria-selected="false"><span class="talos-mono">tests/session-registry.test.mjs</span><span class="talos-diff-num talos-diff-num--plus">+64</span></button>
-          <button class="talos-tabs__tab talos-review__scheda" role="tab" aria-selected="false"><span class="talos-mono">src/http-app.mjs</span><span class="talos-diff-num talos-diff-num--plus">+30</span></button>
+        <!-- BC-63, owner 17/09/2026: «la scheda revisione deve avere lo stesso component tab di
+             terminale (schede stile chrome)». Qui c'era il gruppo a pillole GENERICO (`talos-tabs`),
+             che non è quello del Terminale: ora è il componente condiviso `talos-schede`, con la
+             variante che scorre perché i file scritti in una sessione sono molti più delle schede
+             di una shell. -->
+        <div class="talos-schede talos-schede--scorre talos-review__schede" data-c="ReviewFileTabs"><div class="talos-schede__lista" role="tablist" aria-label="File modificati">
+          <!-- BC-63, 17/09: sulla linguetta va il NOME del file, non il percorso — con dodici file
+               aperti il percorso mangia lo spazio e sparisce proprio il nome (visto in una foto). Il
+               percorso intero resta nel `title` e nella testa del diff. -->
+          <button class="talos-schede__tab talos-review__scheda" role="tab" aria-selected="true"><span class="talos-mono">session-registry.mjs</span><span class="talos-diff-num talos-diff-num--plus">+18</span><span class="talos-diff-num talos-diff-num--minus">−2</span></button>
+          <button class="talos-schede__tab talos-review__scheda" role="tab" aria-selected="false"><span class="talos-mono">session-registry.test.mjs</span><span class="talos-diff-num talos-diff-num--plus">+64</span></button>
+          <button class="talos-schede__tab talos-review__scheda" role="tab" aria-selected="false"><span class="talos-mono">http-app.mjs</span><span class="talos-diff-num talos-diff-num--plus">+30</span></button>
         </div></div>
         <div class="talos-card talos-card--pad talos-stack talos-review__vuoto" data-c="EmptyState" id="vuotoReview" hidden><svg class="i" aria-hidden="true"><use href="#i-diff"/></svg><h3>Nessun file scritto finora</h3><p class="talos-muted">Quando TALOS scrive o modifica un file, qui compare la differenza, giro per giro.</p></div><div class="talos-card talos-review__diff" data-c="DiffView">
           <div class="talos-review__diff-head"><span class="talos-mono talos-measure talos-grow talos-truncate">src/session-registry.mjs</span><span class="talos-badge talos-badge--success talos-badge--sm">Ricevuta a1f4…9c02</span><span class="talos-diff-num talos-diff-num--plus">+18</span><span class="talos-diff-num talos-diff-num--minus">−2</span><span class="talos-mono talos-muted">giro 5</span></div>

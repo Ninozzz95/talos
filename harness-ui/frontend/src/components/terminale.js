@@ -3,10 +3,10 @@
  * `.talos-terminal__foot` del mockup, «a partire dai dati». Il corpo (dove vive xterm.js) NON è
  * di questo componente: chi lo monta decide cosa ci va.
  *
- *   <div class="talos-terminal__tabs" role="tablist">
- *     <button class="talos-terminal__tab" role="tab" aria-selected="true"><span class="talos-dot talos-dot--live"></span>agente · giro 7</button>
- *     <button class="talos-terminal__tab" role="tab" aria-selected="false"><span class="talos-dot talos-dot--success"></span>tu · PowerShell</button>
- *     <button class="talos-terminal__tab" role="tab" aria-selected="false"><svg class="i i--sm"><use href="#i-plus"/></svg>Nuovo</button>
+ *   <div class="talos-terminal__tabs talos-schede" role="tablist">
+ *     <button class="talos-terminal__tab talos-schede__tab" role="tab" aria-selected="true"><span class="talos-dot talos-dot--live"></span>agente · giro 7</button>
+ *     <button class="talos-terminal__tab talos-schede__tab" role="tab" aria-selected="false"><span class="talos-dot talos-dot--success"></span>tu · PowerShell</button>
+ *     <button class="talos-terminal__tab talos-schede__tab" role="tab" aria-selected="false"><svg class="i i--sm"><use href="#i-plus"/></svg>Nuovo</button>
  *     <span class="talos-grow"></span>
  *     <span class="talos-badge talos-badge--success talos-badge--sm">Isolato · sandbox locale</span>
  *     <span class="talos-badge talos-badge--sm">harness-ui/</span>
@@ -20,9 +20,21 @@
  * (`next[index] ?? next[index-1]`), Ctrl+` mostra il terminale e Ctrl+Shift+` ne apre uno nuovo.
  * In più rispetto a quello stato dell'arte: tastiera dentro la lista (WAI-ARIA tabs: frecce, Home/End, Canc chiude,
  * F2 rinomina), e ogni scheda dichiara dove sta e chi l'ha aperta (piede).
+ *
+ * ⭐ 17/09/2026, BC-63 — la MECCANICA delle linguette (giro di disegno, roving tabindex, tastiera,
+ *   menu contestuale, scorrimento) è uscita da qui ed è finita in `schede.js`, che adesso usano sia
+ *   questo file sia la Revisione. Qui resta solo ciò che è del Terminale: il pallino di stato, la
+ *   «×» disegnata dal CSS, la rinomina dal vivo, il «+ Nuovo», i badge e il piede. Il DOM prodotto
+ *   è lo STESSO di prima, più la classe condivisa `talos-schede__tab` sulle linguette.
  */
 
 import { t } from './lingua.js';
+import { accorciaPercorso, cicla, creaMenuContestuale, apriMenuContestuale, creaSchede, nomeSchedaValido, prossimaAttivaDopoChiusura } from './schede.js';
+
+/* Gli aiuti che stavano qui e ora vivono in `schede.js`: si ri-esportano perché i chiamanti (e le
+   prove) li importano da questo modulo da settembre, e una rinomina di percorso non è la cura di
+   BC-63 — sarebbe solo un diff più grande su file che non c'entrano. */
+export { accorciaPercorso, cicla, creaMenuContestuale, apriMenuContestuale, nomeSchedaValido, prossimaAttivaDopoChiusura };
 
 export const ZONA_CHIUSURA_PX = 26; // la larghezza della «×» disegnata dal CSS in coda alla scheda
 export const SCHEDE_MASSIME = 8; // stesso tetto di `SCHEDE_MASSIME_PER_SESSIONE` del server (conhost superstiti su Windows)
@@ -40,39 +52,6 @@ export const TESTI = Object.freeze({
   nota: "Ogni scheda dichiara chi l'ha aperta e dove.",
   apertaDaTe: 'Aperta da te',
 });
-
-/*
- * ⛔ 07/9, visto in una foto del Terminale: nel piede il percorso della cartella era tagliato in
- *   CODA — «C:\Users\<utente>\AppData\Local\Temp\claude\C--Users-<u…» — cioè spariva proprio la
- *   parte che serve, il nome della cartella dove i comandi girano davvero. E accanto restava una
- *   frase generica («Ogni scheda dichiara chi l'ha aperta e dove») che si legge una volta e poi
- *   occupa spazio per sempre, proprio mentre il dato utile non ci stava.
- *
- * ⛔ La via ovvia — `direction:rtl` per troncare in testa — è SBAGLIATA qui: con la punteggiatura
- *   sposta i segni all'inizio della riga (ricerca 07/09/2026: David Walsh «CSS Ellipsis Beginning
- *   of String», WebKit #164999), e un percorso Windows è tutto `\` e `:`. Si taglia nel MEZZO,
- *   come fa un editor: restano la radice e la coda, che sono le due parti che dicono qualcosa.
- */
-export function accorciaPercorso(percorso, massimo = 46) {
-  const testo = String(percorso ?? '');
-  if (testo.length <= massimo) return testo;
-  /* ⛔ Il taglio cade su un CONFINE di cartella, non in mezzo a una parola: «…hpad\banco-umano»
-     (visto in una foto) non è un percorso, è un rebus. Si tengono le ultime cartelle intere che
-     entrano nello spazio, e la radice davanti. */
-  const pezzi = testo.split(/(?<=[\\/])/);              // i separatori restano attaccati al pezzo
-  const radice = pezzi[0] + (pezzi[1] ?? '');           // «C:\» + «Users\» — dice disco e persona
-  let coda = '';
-  for (let i = pezzi.length - 1; i > 1; i -= 1) {
-    const prova = pezzi[i] + coda;
-    if (radice.length + 1 + prova.length > massimo) break;
-    coda = prova;
-  }
-  if (!coda) { // nemmeno una cartella intera ci sta: si torna al taglio secco, meglio che niente
-    const quanti = Math.max(6, massimo - radice.length - 1);
-    coda = testo.slice(-quanti);
-  }
-  return `${radice}…${coda}`;
-}
 
 /** Lo stato di una scheda → il pallino del mockup. */
 export const PALLINO = Object.freeze({
@@ -115,24 +94,6 @@ export function titoloScheda(voce, tutte = [voce]) {
   return `${t('tu')} · ${shell}${omonime.length > 1 && posizione > 0 ? ` ${posizione + 1}` : ''}`;
 }
 
-/** Chi prende il fuoco quando si chiude la scheda in posizione `indice` (stessa regola nota). */
-export function prossimaAttivaDopoChiusura(lista, indice) {
-  const resto = lista.filter((_, i) => i !== indice);
-  return (resto[indice] ?? resto[indice - 1]) ?? null;
-}
-
-/** La scheda dopo/prima di quella attiva, ciclica. */
-export function cicla(lista, attiva, direzione) {
-  if (lista.length < 2) return attiva ?? lista[0] ?? null;
-  const corrente = Math.max(0, lista.indexOf(attiva));
-  return lista[(corrente + direzione + lista.length) % lista.length];
-}
-
-export function nomeSchedaValido(nome) {
-  const pulito = String(nome ?? '').trim();
-  return pulito.length > 0 && pulito.length <= 40;
-}
-
 function svgIcona(nome, classi = 'i i--sm') {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('class', classi);
@@ -140,58 +101,6 @@ function svgIcona(nome, classi = 'i i--sm') {
   use.setAttribute('href', `#${nome}`);
   svg.append(use);
   return svg;
-}
-
-/*
- * ⛔ 16/09/2026 — i due aiuti del menu contestuale sono ESPORTATI, e non è generalizzazione
- *   preventiva: il corpo del terminale (`terminale-xterm.js`, P0/A punto 3) ha bisogno dello stesso
- *   menu con altre voci, e la regola di casa dice di guardare cosa il progetto ha già prima di
- *   disegnare una superficie nuova. Un secondo menu scritto a parte avrebbe avuto un'altra
- *   grammatica visiva a una settimana di distanza.
- */
-
-/** Il nodo del menu, creato una volta sola per id. */
-export function creaMenuContestuale(root, { id = 'menuSchedaTerminale', etichetta = 'Azioni sulla scheda' } = {}) {
-  let menu = root.querySelector(`#${id}`);
-  if (menu) return menu;
-  const documento = root.ownerDocument || globalThis.document;
-  menu = documento.createElement('div');
-  menu.id = id;
-  menu.className = 'talos-card talos-context-menu';
-  menu.setAttribute('role', 'menu');
-  menu.setAttribute('aria-label', t(etichetta));
-  menu.hidden = true;
-  root.append(menu);
-  return menu;
-}
-
-/**
- * Riempie il menu e lo mette dove sta il puntatore, senza uscire dalla finestra.
- * @param {HTMLElement} menu il nodo di `creaMenuContestuale`
- * @param {{titolo?:string, voci:Array<[string, Function, boolean?]>, x:number, y:number, chiudi:Function, finestra?:object}} opzioni
- */
-export function apriMenuContestuale(menu, { titolo = '', voci = [], x = 0, y = 0, chiudi = () => {}, finestra = globalThis }) {
-  const documento = menu.ownerDocument || globalThis.document;
-  menu.replaceChildren();
-  if (titolo) {
-    const intestazione = documento.createElement('div');
-    intestazione.className = 'talos-context-menu__title';
-    intestazione.textContent = titolo;
-    menu.append(intestazione);
-  }
-  for (const [testo, fai, abilitato = true] of voci) {
-    const b = documento.createElement('button');
-    b.type = 'button'; b.className = 'talos-button talos-button--ghost'; b.setAttribute('role', 'menuitem');
-    b.textContent = testo; b.disabled = !abilitato;
-    b.addEventListener('click', () => { chiudi(); fai(); });
-    menu.append(b);
-  }
-  menu.hidden = false;
-  const larghezza = menu.offsetWidth || 240; const altezza = menu.offsetHeight || 160;
-  menu.style.left = `${Math.max(8, Math.min(x, (finestra.innerWidth ?? 0) - larghezza - 8))}px`;
-  menu.style.top = `${Math.max(8, Math.min(y, (finestra.innerHeight ?? 0) - altezza - 8))}px`;
-  menu.querySelector('[role=menuitem]:not([disabled])')?.focus();
-  return menu;
 }
 
 /**
@@ -204,27 +113,39 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
   const foot = pane.querySelector('.talos-terminal__foot');
   let stato = { schede: [], attiva: null, puoAprire: true, motivoNoNuova: '', badges: [], piede: null };
   let inRinomina = null;
-  const menu = creaMenuContestuale(root);
 
-  const chiudiMenu = () => { menu.hidden = true; menu.replaceChildren(); };
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target)) chiudiMenu(); });
-  root.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) { chiudiMenu(); e.stopPropagation(); } });
-
-  function apriMenu(voce, x, y) {
-    apriMenuContestuale(menu, {
-      titolo: titoloScheda(voce, stato.schede),
-      voci: [
-        [t(TESTI.rinomina), () => avviaRinomina(voce), true],
-        [t(TESTI.chiudi), () => azioni.chiudi?.(voce.terminalId), true],
-        [t(TESTI.chiudiAltre), () => azioni.chiudiAltre?.(voce.terminalId), stato.schede.length > 1],
-        [t(TESTI.chiudiTutte), () => azioni.chiudiTutte?.(), stato.schede.length > 0],
-      ],
-      x,
-      y,
-      chiudi: chiudiMenu,
-      finestra: window,
-    });
-  }
+  const schede = creaSchede(tabs, {
+    root,
+    chiave: 'terminaleId',
+    classe: 'talos-terminal__tab talos-schede__tab',
+    idMenu: 'menuSchedaTerminale',
+    chiudibile: true,
+    rinominabile: true,
+    identifica: (voce) => voce.terminalId,
+    etichetta: (voce, tutte) => titoloScheda(voce, tutte),
+    suggerimento: (voce, indice, tutte) => [`${indice + 1}. ${titoloScheda(voce, tutte)}`, voce.cartella].filter(Boolean).join(' — '),
+    inerte: (voce) => inRinomina === voce.terminalId,
+    contenuto: disegnaLinguetta,
+    coda: disegnaCoda,
+    suClick: (voce, e, b) => {
+      // la «×» è un ::after in CSS (la struttura resta quella del mockup): un clic nella zona destra della scheda chiude
+      const sullaX = e.clientX > 0 && e.clientX >= b.getBoundingClientRect().right - ZONA_CHIUSURA_PX;
+      if (sullaX) { azioni.chiudi?.(voce.terminalId); return true; }
+      return false;
+    },
+    suDoppioClick: (voce) => avviaRinomina(voce),
+    vociMenu: (voce) => [
+      [t(TESTI.rinomina), () => avviaRinomina(voce), true],
+      [t(TESTI.chiudi), () => azioni.chiudi?.(voce.terminalId), true],
+      [t(TESTI.chiudiAltre), () => azioni.chiudiAltre?.(voce.terminalId), stato.schede.length > 1],
+      [t(TESTI.chiudiTutte), () => azioni.chiudiTutte?.(), stato.schede.length > 0],
+    ],
+    azioni: {
+      seleziona: (id) => azioni.seleziona?.(id),
+      chiudi: (id) => azioni.chiudi?.(id),
+      tastieraSospesa: () => Boolean(inRinomina),
+    },
+  });
 
   function avviaRinomina(voce) {
     inRinomina = voce.terminalId;
@@ -238,20 +159,11 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
     const id = inRinomina; inRinomina = null;
     if (salva && input && id && nomeSchedaValido(input.value)) azioni.rinomina?.(id, input.value.trim());
     renderizza();
-    if (id) tabs.querySelector(`[role=tab][data-terminale-id="${CSS.escape(id)}"]`)?.focus();
+    if (id) schede.bottoneDi(id)?.focus();
   }
 
-  function creaTab(voce, indice) {
-    const b = document.createElement('button');
-    b.className = 'talos-terminal__tab';
-    b.setAttribute('role', 'tab');
-    b.type = 'button';
-    const attiva = voce.terminalId === stato.attiva;
-    b.setAttribute('aria-selected', String(attiva));
-    b.tabIndex = attiva ? 0 : -1;
-    b.dataset.terminaleId = voce.terminalId;
+  function disegnaLinguetta(b, voce) {
     const titolo = titoloScheda(voce, stato.schede);
-    b.title = [`${indice + 1}. ${titolo}`, voce.cartella].filter(Boolean).join(' — ');
     const dot = document.createElement('span');
     dot.className = `talos-dot ${PALLINO[voce.stato] ?? ''}`.trim();
     b.append(dot);
@@ -269,45 +181,15 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
       input.addEventListener('blur', () => { if (inRinomina === voce.terminalId) chiudiRinomina(true); });
       input.addEventListener('click', (e) => e.stopPropagation());
       b.append(input);
-      return b;
+      return;
     }
     b.append(document.createTextNode(titolo));
-    // la «×» è un ::after in CSS (la struttura resta quella del mockup): un clic nella zona destra della scheda chiude
-    b.addEventListener('click', (e) => {
-      const sullaX = e.clientX > 0 && e.clientX >= b.getBoundingClientRect().right - ZONA_CHIUSURA_PX;
-      if (e.ctrlKey || e.metaKey || sullaX) azioni.chiudi?.(voce.terminalId); else azioni.seleziona?.(voce.terminalId);
-    });
-    b.addEventListener('auxclick', (e) => { if (e.button === 1) { e.preventDefault(); azioni.chiudi?.(voce.terminalId); } });
-    b.addEventListener('dblclick', (e) => { e.preventDefault(); avviaRinomina(voce); });
-    b.addEventListener('contextmenu', (e) => { e.preventDefault(); apriMenu(voce, e.clientX, e.clientY); });
-    return b;
   }
 
-  function suTastiera(e) {
-    const tab = e.target.closest?.('[role=tab][data-terminale-id]');
-    if (!tab || inRinomina) return;
-    const lista = stato.schede.map((v) => v.terminalId);
-    const id = tab.dataset.terminaleId;
-    const voce = stato.schede.find((v) => v.terminalId === id);
-    let prossima = null;
-    if (e.key === 'ArrowRight') prossima = cicla(lista, id, 1);
-    else if (e.key === 'ArrowLeft') prossima = cicla(lista, id, -1);
-    else if (e.key === 'Home') prossima = lista[0];
-    else if (e.key === 'End') prossima = lista[lista.length - 1];
-    else if (e.key === 'Delete') { e.preventDefault(); azioni.chiudi?.(id); return; }
-    else if (e.key === 'F2') { e.preventDefault(); if (voce) avviaRinomina(voce); return; }
-    else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); const r = tab.getBoundingClientRect(); if (voce) apriMenu(voce, r.left, r.bottom); return; }
-    else return;
-    e.preventDefault();
-    if (prossima && prossima !== id) { azioni.seleziona?.(prossima); tabs.querySelector(`[role=tab][data-terminale-id="${CSS.escape(prossima)}"]`)?.focus(); }
-  }
-  tabs.addEventListener('keydown', suTastiera);
-
-  function renderizza() {
-    tabs.replaceChildren();
-    stato.schede.forEach((voce, i) => { tabs.append('\n', creaTab(voce, i)); });
+  function disegnaCoda() {
+    const nodi = [];
     const nuovo = document.createElement('button');
-    nuovo.className = 'talos-terminal__tab';
+    nuovo.className = 'talos-terminal__tab talos-schede__tab';
     nuovo.setAttribute('role', 'tab');
     nuovo.setAttribute('aria-selected', 'false');
     nuovo.type = 'button';
@@ -317,18 +199,22 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
     nuovo.title = stato.puoAprire ? `${t(TESTI.nuovaScheda)} (Ctrl+Shift+\`)` : (stato.motivoNoNuova || t(TESTI.nuovaSchedaSenzaSessione));
     nuovo.setAttribute('aria-label', nuovo.title);
     nuovo.addEventListener('click', () => azioni.nuova?.());
-    tabs.append('\n', nuovo);
+    nodi.push(nuovo);
     const grow = document.createElement('span'); grow.className = 'talos-grow';
-    tabs.append('\n', grow);
+    nodi.push(grow);
     for (const badge of stato.badges) {
       const s = document.createElement('span');
       s.className = `talos-badge${badge.tono ? ` talos-badge--${badge.tono}` : ''} talos-badge--sm`;
       s.textContent = badge.testo;
       if (badge.titolo) s.title = badge.titolo;
       if (badge.chiave) s.dataset.badge = badge.chiave;
-      tabs.append('\n', s);
+      nodi.push(s);
     }
-    tabs.append('\n');
+    return nodi;
+  }
+
+  function renderizza() {
+    schede.aggiorna(stato.schede, stato.attiva);
     if (foot) {
       foot.replaceChildren();
       const p = stato.piede;
@@ -353,8 +239,8 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
       if (inRinomina && !stato.schede.some((v) => v.terminalId === inRinomina)) inRinomina = null;
       renderizza();
     },
-    fuocoSullaAttiva() { tabs.querySelector('[role=tab][aria-selected="true"]')?.focus(); },
-    chiudiMenu,
+    fuocoSullaAttiva() { schede.fuocoSullaAttiva(); },
+    chiudiMenu: schede.chiudiMenu,
     get stato() { return stato; },
   };
 }
