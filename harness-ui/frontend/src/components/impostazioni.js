@@ -1,95 +1,125 @@
-import {CAMPI_IMPOSTAZIONI, SEZIONI_IMPOSTAZIONI} from './impostazioni-campi.js';
-import { t } from './lingua.js';
-const testo = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('it');
-export function filtraImpostazioni(campi, query) {
-  const termini = testo(query).trim().split(/\s+/).filter(Boolean);
-  return campi.filter(campo => { const contenuto = testo([campo.titolo, campo.gruppo, ...(campo.opzioni || []).flat()].join(' ')); return termini.every(t => contenuto.includes(t)); });
-}
-function nodo(tag, classe, testo) { const el = document.createElement(tag); if (classe) el.className = classe; if (testo != null) el.textContent = testo; return el; }
-export function creaSettingRow(campo, valore, {controllo, output, prefisso='setting-'} = {}) {
-  const riga = nodo('div','talos-setting'); riga.dataset.c = 'SettingRow'; riga.dataset.settingRow = campo.id;
-  const info = nodo('div'); const label = nodo('label','talos-setting__label',t(campo.titolo));
-  const input = controllo || document.createElement(campo.tipo === 'select' ? 'select' : 'input');
-  if (!controllo) {
-    input.id = prefisso + campo.id;
-    if (campo.tipo === 'select') for (const [value, nome] of campo.opzioni) {const op = nodo('option','',t(nome));op.value=value;op.dataset.testoIt=nome;input.append(op);}
-    else {input.type=campo.tipo;if(campo.tipo==='range'){input.min=campo.min;input.max=campo.max;}}
-  }
-  if (controllo) { for (const vecchiaLabel of [...input.labels]) vecchiaLabel.removeAttribute('for'); if (campo.tipo === 'select') for (const op of input.options) { const originale = op.dataset.testoIt || op.textContent; op.dataset.testoIt = originale; op.textContent = t(originale); } }
-  label.dataset.testoIt = campo.titolo;
-  label.htmlFor=input.id; info.append(label); riga.append(info);
-  if (campo.tipo === 'checkbox') { input.className='talos-switch';input.setAttribute('role','switch');input.dataset.c='Switch';input.checked=Boolean(valore);riga.append(input); }
-  else {
-    input.value=String(valore ?? '');
-    if(campo.tipo==='select'){input.className='talos-select';riga.append(input);}
-    else {const contenitore=nodo('div','talos-setting__control');input.className='';const uscita=output || nodo('output','',input.value);uscita.htmlFor=input.id;uscita.className='talos-mono';uscita.value=input.value;const misura=nodo('span','talos-measure');misura.append(uscita,campo.unita);contenitore.append(input,misura);riga.append(contenitore);input.addEventListener('input',()=>{uscita.value=input.value;});}
-  }
-  return riga;
-}
-function applicaFiltro(schermo, sezione) {
-  const query=schermo.querySelector('[data-settings-query]')?.value || '';
-  const trovati=new Set(filtraImpostazioni(CAMPI_IMPOSTAZIONI,query).map(c=>c.id));
-  // Some preferences have a dedicated owner rather than CAMPI_IMPOSTAZIONI.
-  // They participate in the same search without duplicating their value or write path.
-  const termini = testo(query).trim().split(/\s+/).filter(Boolean);
-  for (const row of schermo.querySelectorAll('[data-setting-search]')) {
-    const content = testo(`${row.dataset.settingSearch} ${row.textContent}`);
-    if (termini.every(term => content.includes(term))) trovati.add(row.dataset.settingRow);
-  }
-  for(const panel of schermo.querySelectorAll('[data-settings-panel]')) {
-    const righe=[...panel.querySelectorAll('[data-setting-row]')];
-    for(const riga of righe) riga.hidden=Boolean(query.trim()) && !trovati.has(riga.dataset.settingRow);
-    for(const gruppo of panel.querySelectorAll('[data-settings-group]')) gruppo.hidden=Boolean(query.trim()) && ![...gruppo.querySelectorAll('[data-setting-row]')].some(r=>!r.hidden);
-    panel.hidden=query.trim() ? !righe.some(r=>!r.hidden) : panel.dataset.settingsPanel !== sezione;
-  }
-  const stato=schermo.querySelector('[data-settings-results]');if(stato){stato.hidden=!query.trim();stato.textContent=query.trim() ? (trovati.size ? 'Preferenze trovate: '+trovati.size : 'Nessuna preferenza trovata. Prova un altro nome.') : '';}
-}
-export function mostraSezioneImpostazioni(schermo, sezione) {
-  if(!schermo) return;
-  const scelta=SEZIONI_IMPOSTAZIONI.some(s=>s.id===sezione) ? sezione : 'appearance';schermo.dataset.settingsSection=scelta;
-  for(const tab of schermo.querySelectorAll('[data-settings-tab]')){const attivo=tab.dataset.settingsTab===scelta;tab.setAttribute('aria-selected',String(attivo));tab.tabIndex=attivo?0:-1;if(attivo)tab.setAttribute('aria-current','page');else tab.removeAttribute('aria-current');}
-  applicaFiltro(schermo,scelta);
-}
-export function montaImpostazioni(schermo, valori, {recupera, cambiaSezione} = {}) {
-  if(!schermo) return;
-  for(const campo of CAMPI_IMPOSTAZIONI){const vecchia=schermo.querySelector('[data-setting-row="'+campo.id+'"]');if(!vecchia)continue;const controllo=recupera?.(campo.id);const output=campo.tipo==='range'?recupera?.(campo.chiave+'Output'):null;vecchia.replaceWith(creaSettingRow(campo,valori[campo.chiave],{controllo,output}));}
-  for(const slot of schermo.querySelectorAll('[data-settings-reuse]')){const originale=recupera?.(slot.dataset.settingsReuse);if(!originale)continue;originale.className=slot.className;slot.replaceWith(originale);}
-  const ricerca=schermo.querySelector('[data-settings-query]');ricerca?.addEventListener('input',()=>applicaFiltro(schermo,schermo.dataset.settingsSection || 'appearance'));
-  /*
-   * D2 (06/09) — le voci si distribuiscono nei DUE gruppi dichiarati da
-   * `SEZIONI_IMPOSTAZIONI`, una tablist per gruppo.
-   * ⛔ Prima riempiva `.talos-settings__nav [role=tablist]`, cioè la PRIMA
-   * tablist e basta: col markup a due gruppi ci finivano tutte e dieci, e le
-   * cinque del secondo gruppo restavano quelle scritte nel mockup — duplicate e
-   * mai aggiornate. Trovato dal vivo: la navigazione mostrava 8+5 voci invece
-   * di 5+5, e le sezioni nuove non si aprivano.
-   */
-  const liste=[...schermo.querySelectorAll('.talos-settings__nav [role=tablist]')];
-  const voce=sezione=>{const tab=nodo('button','talos-nav-item');tab.type='button';tab.id='setting-tab-'+sezione.id;tab.dataset.settingsTab=sezione.id;tab.setAttribute('role','tab');tab.setAttribute('aria-controls','setting-panel-'+sezione.id);tab.append(nodo('span','talos-nav-item__label',t(sezione.titolo)));return tab;};
-  if(liste.length<=1)liste[0]?.replaceChildren(...SEZIONI_IMPOSTAZIONI.map(voce));
-  else{
-    const gruppi=[...new Set(SEZIONI_IMPOSTAZIONI.map(s=>s.gruppo||'comportamento'))];
-    liste.forEach((lista,i)=>{const g=lista.dataset.settingsGruppo||gruppi[i];lista.replaceChildren(...SEZIONI_IMPOSTAZIONI.filter(s=>(s.gruppo||'comportamento')===g).map(voce));});
-  }
-  const tabs=[...schermo.querySelectorAll('[data-settings-tab]')];
-  const scegli=id=>{if(ricerca)ricerca.value='';if(cambiaSezione)cambiaSezione(id);else mostraSezioneImpostazioni(schermo,id);};
-  tabs.forEach((tab,i)=>{tab.addEventListener('click',()=>scegli(tab.dataset.settingsTab));tab.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowDown'?1:-1)+tabs.length)%tabs.length;tabs[next].focus();scegli(tabs[next].dataset.settingsTab);});});
-  mostraSezioneImpostazioni(schermo,'appearance');
-}
+import { CAMPI_IMPOSTAZIONI, SEZIONI_IMPOSTAZIONI } from './impostazioni-campi.js';
+import { t, linguaCorrenteDiT } from './lingua.js';
+import { CONTROLLI_MIGRATI, apriStudioTemi } from './theme-studio.js';
+import { FIELD_HELP, localText, normalizeSearch } from '../features/settings/schema.ts';
+import { createSettingsView } from '../features/settings/settings-view.ts';
 
-/**
- * P-i18n (06/09) — ritraduce la schermata già montata quando cambia la lingua: etichette delle
- * righe, opzioni dei select (il testo italiano resta in `data-testo-it`), voci di navigazione delle
- * sezioni. Niente rimontaggio: i controlli e i loro ascoltatori restano quelli.
- */
-export function ritraduciImpostazioni(schermo) {
-  if (!schermo) return 0;
-  let n = 0;
-  for (const label of schermo.querySelectorAll('.talos-setting__label[data-testo-it]')) { label.textContent = t(label.dataset.testoIt); n += 1; }
-  for (const op of schermo.querySelectorAll('.talos-setting select option[data-testo-it]')) { op.textContent = t(op.dataset.testoIt); n += 1; }
-  for (const sezione of SEZIONI_IMPOSTAZIONI) {
-    const voce = schermo.querySelector(`[data-settings-tab="${sezione.id}"] .talos-nav-item__label`);
-    if (voce) { voce.textContent = t(sezione.titolo); n += 1; }
+const views = new WeakMap();
+const rowListeners = new WeakMap();
+/** Retained for consumers that need to search the historical field contract. */
+export function filtraImpostazioni(campi, query) {
+  const terms = normalizeSearch(query).split(/\s+/).filter(Boolean);
+  return campi.filter(field => {
+    const content = normalizeSearch([field.titolo, t(field.titolo), field.gruppo, ...(field.opzioni || []).flat()].join(' '));
+    return terms.every(term => content.includes(term));
+  });
+}
+function node(tag, className = '', text) {
+  const element = document.createElement(tag);
+  element.className = className;
+  if (text != null) element.textContent = text;
+  return element;
+}
+/** Reuses the actual input, including its storage listener. No parallel preference state. */
+export function creaSettingRow(field, value, { controllo, output, prefisso = 'setting-', defaultValues = {} } = {}) {
+  const row = node('div', 'talos-setting'); row.dataset.c = 'SettingRow'; row.dataset.settingRow = field.id;
+  const info = node('div', 'settings-field-info');
+  const label = node('label', 'talos-setting__label', t(field.titolo)); label.dataset.testoIt = field.titolo;
+  const input = controllo || document.createElement(field.tipo === 'select' ? 'select' : 'input');
+  rowListeners.get(input)?.();
+  if (!controllo) {
+    input.id = prefisso + field.id;
+    if (field.tipo === 'select') for (const [key, title] of field.opzioni) {
+      const option = node('option', '', t(title)); option.value = key; option.dataset.testoIt = title; input.append(option);
+    }
+    else { input.type = field.tipo; if (field.tipo === 'range') { input.min = field.min; input.max = field.max; } }
+  } else {
+    for (const previous of [...(input.labels || [])]) previous.removeAttribute('for');
+    if (field.tipo === 'select') for (const option of input.options) {
+      const original = option.dataset.testoIt || option.textContent; option.dataset.testoIt = original; option.textContent = t(original);
+    }
   }
-  return n;
+  label.htmlFor = input.id; info.append(label);
+  if (FIELD_HELP[field.id]) {
+    const help = node('p', 'talos-setting__help', localText(FIELD_HELP[field.id], linguaCorrenteDiT()));
+    help.id = 'settingsHelp-' + field.id; help.dataset.settingHelp = field.id; info.append(help);
+    const previous = (input.getAttribute('aria-describedby') || '').split(/\s+/).filter(id => id && !id.startsWith('settingsHelp-'));
+    input.setAttribute('aria-describedby', [...previous, help.id].join(' '));
+  }
+  const controls = node('div', 'settings-field-control');
+  let updateOutput = () => {};
+  if (field.tipo === 'checkbox') {
+    input.className = 'talos-switch'; input.setAttribute('role', 'switch'); input.dataset.c = 'Switch'; input.checked = Boolean(value); controls.append(input);
+  } else {
+    input.value = String(value ?? '');
+    if (field.tipo === 'select') { input.className = 'talos-select'; controls.append(input); }
+    else {
+      input.className = '';
+      const range = node('div', 'talos-setting__control');
+      const amount = output || node('output'); amount.htmlFor = input.id; amount.className = 'talos-mono'; amount.value = input.value;
+      const measure = node('span', 'talos-measure'); measure.append(amount, field.unita || ''); range.append(input, measure); controls.append(range);
+      updateOutput = () => { amount.value = input.value; };
+    }
+  }
+  const reset = node('button', 'settings-reset', '↶'); reset.type = 'button'; reset.dataset.settingReset = field.id; reset.dataset.resetLabel = field.titolo;
+  const resetLabel = () => { const name = (linguaCorrenteDiT() === 'en' ? 'Reset: ' : 'Ripristina: ') + t(field.titolo); reset.setAttribute('aria-label', name); reset.title = name; };
+  resetLabel();
+  const update = () => {
+    updateOutput(); const current = field.tipo === 'checkbox' ? input.checked : input.value;
+    reset.hidden = !Object.hasOwn(defaultValues, field.chiave) || String(current) === String(defaultValues[field.chiave]);
+  };
+  reset.addEventListener('click', () => {
+    if (!Object.hasOwn(defaultValues, field.chiave)) return;
+    if (field.tipo === 'checkbox') input.checked = Boolean(defaultValues[field.chiave]); else input.value = String(defaultValues[field.chiave]);
+    input.dispatchEvent(new Event(field.tipo === 'range' ? 'input' : 'change', { bubbles: true })); update(); input.focus();
+  });
+  const changed = () => { update(); row.removeAttribute('data-settings-hit'); };
+  input.addEventListener('input', changed); input.addEventListener('change', changed);
+  rowListeners.set(input, () => { input.removeEventListener('input', changed); input.removeEventListener('change', changed); });
+  update(); controls.append(reset); row.append(info, controls); return row;
+}
+export function mostraSezioneImpostazioni(screen, section) {
+  if (!screen) return;
+  const selected = SEZIONI_IMPOSTAZIONI.some(item => item.id === section) ? section : 'appearance';
+  screen.dataset.settingsSection = selected;
+  const view = views.get(screen);
+  if (view) view.select(selected);
+  else for (const panel of screen.querySelectorAll('[data-settings-panel]')) panel.hidden = panel.dataset.settingsPanel !== selected;
+}
+export function montaImpostazioni(screen, values, { recupera, cambiaSezione, defaultValues = {} } = {}) {
+  if (!screen) return;
+  views.get(screen)?.dispose();
+  for (const field of CAMPI_IMPOSTAZIONI) {
+    const previous = screen.querySelector('[data-setting-row="' + field.id + '"]');
+    if (!previous) continue;
+    // Some controls (density/language) never had a legacy ID. Preserve those on import/remount too.
+    const control = recupera?.(field.id) || previous.querySelector('input,select,textarea');
+    const output = field.tipo === 'range' ? (recupera?.(field.chiave + 'Output') || previous.querySelector('output')) : null;
+    previous.replaceWith(creaSettingRow(field, values[field.chiave], { controllo: control, output, defaultValues }));
+  }
+  for (const slot of screen.querySelectorAll('[data-settings-reuse]')) {
+    const original = recupera?.(slot.dataset.settingsReuse); if (!original) continue;
+    original.className = slot.className; slot.replaceWith(original);
+  }
+  const view = createSettingsView(screen, {
+    fields: CAMPI_IMPOSTAZIONI, studioIds: CONTROLLI_MIGRATI, language: linguaCorrenteDiT, translate: t,
+    chooseSection: section => cambiaSezione ? cambiaSezione(section) : mostraSezioneImpostazioni(screen, section),
+    openStudio: fieldId => {
+      apriStudioTemi({ document: screen.ownerDocument });
+      const control = screen.ownerDocument.getElementById('td-studio-' + fieldId);
+      if (control) { control.focus({ preventScroll: true }); control.scrollIntoView({ block: 'center', behavior: 'instant' }); }
+    },
+  });
+  views.set(screen, view);
+}
+/** Retranslate in place; never replace a field containing unsaved text. */
+export function ritraduciImpostazioni(screen) {
+  if (!screen) return 0;
+  let count = 0;
+  for (const label of screen.querySelectorAll('.talos-setting__label[data-testo-it]')) { label.textContent = t(label.dataset.testoIt); count++; }
+  for (const option of screen.querySelectorAll('.talos-setting select option[data-testo-it]')) { option.textContent = t(option.dataset.testoIt); count++; }
+  for (const reset of screen.querySelectorAll('[data-reset-label]')) {
+    const name = (linguaCorrenteDiT() === 'en' ? 'Reset: ' : 'Ripristina: ') + t(reset.dataset.resetLabel); reset.setAttribute('aria-label', name); reset.title = name;
+  }
+  views.get(screen)?.refresh(); return count;
 }

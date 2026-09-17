@@ -66,3 +66,5 @@
 @import '../design-system/workspace.css';
 
 @import '../design-system/command-palette.css'; /* NAV-02: real command registry */
+
+@import '../design-system/settings.css'; /* SET-01: existing controls in searchable settings */

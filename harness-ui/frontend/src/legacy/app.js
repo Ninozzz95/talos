@@ -4190,10 +4190,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const testo = await file.text();
         const letto = JSON.parse(testo);
         if (!letto || typeof letto !== 'object' || Array.isArray(letto)) throw new Error('il file non contiene un documento di preferenze');
-        salvaImpostazioniDesktop(letto); // normalizza: quello che non riconosce non entra
+        if (!salvaImpostazioniDesktop(letto)) throw new Error(t('Salvataggio delle preferenze non riuscito.')); // retain the validated import only after persistence
         const documento = leggiImpostazioniDesktop();
         applicaAspettoDesktop(documento.appearance);
-        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection });
+        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS });
         montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
         sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
         dillo(`Preferenze importate da «${file.name}».`);
@@ -4223,7 +4223,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         window.localStorage.removeItem(DESKTOP_SETTINGS_KEY);
         const documento = leggiImpostazioniDesktop();
         applicaAspettoDesktop(documento.appearance);
-        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection });
+        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS });
         montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
         sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
         dillo('Preferenze riportate ai valori iniziali. Le conversazioni non sono state toccate.');
@@ -4375,7 +4375,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function inizializzaSettingsNavigation() {
-    montaImpostazioni($('#schermoImpostazioni'), leggiImpostazioniDesktop().appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection });
+    montaImpostazioni($('#schermoImpostazioni'), leggiImpostazioniDesktop().appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS });
     montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
     montaTrasferimentoImpostazioni(); // 06/9 D5: esporta · importa · ripristina
     sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(leggiImpostazioniDesktop().appearance)); // 06/9 B8
@@ -13184,8 +13184,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         chat: normalizzaPreferenzeChatDesktop(safe.chat),
         workspaces: normalizzaWorkspaces(safe.workspaces),
       }));
+      document.dispatchEvent(new CustomEvent('talos:settings-persisted', { detail: { saved: true } }));
+      return true;
     } catch {
-      // Le preferenze perse non devono impedire la navigazione del workspace.
+      // Keep navigation available, but never announce an unsuccessful write as saved.
+      document.dispatchEvent(new CustomEvent('talos:settings-persisted', { detail: { saved: false } }));
+      return false;
     }
   }
   function aggiornaAspettoDesktop(patch) {
