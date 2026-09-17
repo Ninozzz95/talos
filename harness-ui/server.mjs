@@ -1,3 +1,4 @@
+import './src/difesa-ricerca-programmi.mjs'; // ⛔ PER PRIMO: su Windows un `git.exe` dentro il workspace non deve battere il git vero (misura e fonti nel file)
 import { writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { createLocalResumeDiagnostics } from './src/local-resume-diagnostics.mjs';
