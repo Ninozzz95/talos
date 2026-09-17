@@ -1,0 +1,205 @@
+name: desktop-harness-demo
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/desktop-harness-demo.yml'
+      - 'harness-ui/**'
+      - 'context-engine/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-harness-demo-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-real-app:
+    if: >-
+      github.repository == 'Ninozzz95/talos' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.pull_request.head.repo.full_name == github.repository &&
+        github.head_ref == 'ui/desktop-interaction-audit-2026-09-17'))
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      TALOS_R02_BUILDER_NETWORK: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - id: source
+        name: Record the exact source commit
+        run: |
+          $sha = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot read HEAD.' }
+          git switch --create ci-desktop-harness-demo HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot create local test branch.' }
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+          "short=$($sha.Substring(0,7))" >> $env:GITHUB_OUTPUT
+          "TALOS_DEMO_SOURCE_SHA=$sha" >> $env:GITHUB_ENV
+          "ELECTRON_BUILDER_CACHE=$env:LOCALAPPDATA/electron-builder/Cache" >> $env:GITHUB_ENV
+          "electron_config_cache=$env:LOCALAPPDATA/electron/Cache" >> $env:GITHUB_ENV
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.18.0'
+          cache: npm
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            harness-ui/frontend/package-lock.json
+            harness-ui/desktop/package-lock.json
+            context-engine/package-lock.json
+
+      - uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8
+        with:
+          path: |
+            ${{ env.electron_config_cache }}
+            ${{ env.ELECTRON_BUILDER_CACHE }}
+            harness-ui/desktop/.cache-r02/npm
+            harness-ui/desktop/.cache-r02/llama-b10517-bin-win-cpu-x64.zip
+            harness-ui/desktop/.cache-r02/llama-b10517-bin-win-vulkan-x64.zip
+          key: desktop-r04-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('harness-ui/package-lock.json', 'harness-ui/desktop/package-lock.json', 'context-engine/package-lock.json', 'harness-ui/desktop/scripts/prepara-pacchetto.mjs') }}
+
+      - name: Install the real project's locked dependencies
+        run: |
+          foreach ($dir in @('harness-ui', 'harness-ui/frontend', 'harness-ui/desktop', 'context-engine')) {
+            npm ci --prefix $dir --no-audit --no-fund
+            if ($LASTEXITCODE -ne 0) { throw "npm ci failed: $dir" }
+          }
+          node harness-ui/frontend/node_modules/playwright/cli.js install chromium
+          if ($LASTEXITCODE -ne 0) { throw 'Chromium installation failed.' }
+
+      - name: Build and deliver the actual frontend, not the showcase
+        run: |
+          npm --prefix harness-ui/frontend run build
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
+          Copy-Item harness-ui/frontend/dist/* harness-ui/public/ -Recurse -Force
+          if ((Get-FileHash harness-ui/frontend/dist/app.js).Hash -cne (Get-FileHash harness-ui/public/app.js).Hash) { throw 'The delivered UI is stale.' }
+
+      - name: Server, kernel, frontend and Electron gates
+        timeout-minutes: 15
+        run: |
+          node --test harness-ui/tests/*.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Server tests failed.' }
+          npm --prefix harness-ui run test:kernel
+          if ($LASTEXITCODE -ne 0) { throw 'Kernel tests failed.' }
+          npm --prefix harness-ui run kernel:controlla
+          if ($LASTEXITCODE -ne 0) { throw 'Kernel check failed.' }
+          npm --prefix harness-ui/frontend run test:unit
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend unit tests failed.' }
+          npm --prefix harness-ui/desktop run test:puri
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop pure tests failed.' }
+          npm --prefix harness-ui/desktop run test:guscio
+          if ($LASTEXITCODE -ne 0) { throw 'Actual Electron shell tests failed.' }
+
+      - name: Build the full Windows application using the existing packager
+        timeout-minutes: 15
+        run: |
+          npm --prefix harness-ui/desktop run dist
+          if ($LASTEXITCODE -ne 0) { throw 'Application packaging failed.' }
+
+      - id: package
+        name: Assemble the runnable demo and its exact source
+        run: |
+          $pkg = Get-Content harness-ui/desktop/package.json -Raw | ConvertFrom-Json
+          $zip = "harness-ui/desktop/dist/TALOS-$($pkg.version)-win.zip"
+          $out = Join-Path $env:GITHUB_WORKSPACE 'demo-output/application'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Expand-Archive -LiteralPath $zip -DestinationPath $out
+          foreach ($relative in @('TALOS.exe', 'resources/harness-ui/server.mjs', 'resources/harness-ui/public/app.js', 'resources/harness-ui/public/index.html', 'resources/harness-ui/src/kernel/talosHarness.mjs', 'resources/context-engine/package.json')) {
+            if (-not (Test-Path (Join-Path $out $relative))) { throw "Missing application file: $relative" }
+          }
+          if ((Get-FileHash harness-ui/frontend/dist/app.js).Hash -cne (Get-FileHash (Join-Path $out 'resources/harness-ui/public/app.js')).Hash) { throw 'Packaged frontend differs from this build.' }
+          $short = '${{ steps.source.outputs.short }}'
+          @"
+          @echo off
+          setlocal
+          set "ELECTRON_RUN_AS_NODE="
+          set "NODE_OPTIONS="
+          set "TALOS_DESKTOP_DATA_DIR=%LOCALAPPDATA%\TALOS-Harness-Demo\$short"
+          start "" "%~dp0TALOS.exe"
+          "@ | Set-Content (Join-Path $out 'AVVIA-TALOS.cmd') -Encoding ascii
+          @"
+          TALOS HARNESS DESKTOP - APPLICAZIONE REALE
+          Commit sorgente: $env:TALOS_DEMO_SOURCE_SHA
+          Versione di base: $($pkg.version). Build di prova della PR #25, non una nuova release.
+
+          Estrai TUTTO l'archivio e apri AVVIA-TALOS.cmd. Non aprire showcase/index.html.
+          Il pacchetto contiene Electron/Node, backend locale, frontend appena compilato,
+          kernel, motore di contesto, dipendenze e runtime llama.cpp del packager originale.
+          Non servono npm, Node installato, un checkout o permessi amministrativi.
+          Windows x64; requisiti e limiti di piattaforma restano quelli del progetto.
+
+          Non ci sono sessioni, risposte o attrezzi simulati. Le operazioni agiscono davvero.
+          Per l'agente configura un tuo provider o scarica un modello compatibile dalla UI.
+          Modelli GGUF e credenziali non sono inclusi. Un provider cloud puo comportare costi.
+
+          Il lanciatore usa %LOCALAPPDATA%\TALOS-Harness-Demo\$short per i dati della demo.
+          ATTENZIONE: il portachiavi dei provider e quello Desktop esistente; non e isolato.
+          Modificare una chiave puo quindi influire anche sull'installazione abituale.
+          Eseguire TALOS.exe direttamente usa invece il profilo standard dell'applicazione.
+          Chiudi l'altra istanza di TALOS prima di avviare questa build di prova.
+
+          Il binario non e firmato. Non disabilitare SmartScreen, Defender o criteri aziendali.
+          Provenienza: workflow desktop-harness-demo, commit sopra; SHA256SUMS.txt incluso.
+          La prova del pacchetto e separata dall'audit complessivo UI/UX, che rimane aperto.
+          "@ | Set-Content (Join-Path $out 'LEGGIMI.txt') -Encoding utf8
+          New-Item -ItemType Directory -Force demo-output/source | Out-Null
+          git archive --format=zip --output=demo-output/source/TALOS-Harness-Desktop-sorgenti.zip HEAD harness-ui context-engine docs README.md LICENSE NOTICE THIRD_PARTY_NOTICES.md .github
+          if ($LASTEXITCODE -ne 0) { throw 'Source archive failed.' }
+          "exe=$out/TALOS.exe" >> $env:GITHUB_OUTPUT
+
+      - name: Open the packaged harness and execute a real terminal command
+        run: |
+          node harness-ui/desktop/scripts/demo-smoke.mjs '${{ steps.package.outputs.exe }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Smoke of the actual packaged application failed.' }
+
+      - name: Hash every application file
+        run: |
+          $out = (Resolve-Path demo-output/application).Path
+          Get-ChildItem $out -File -Recurse | Sort-Object FullName | ForEach-Object {
+            $relative = [IO.Path]::GetRelativePath($out, $_.FullName).Replace('\','/')
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $relative"
+          } | Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding utf8
+          "Source: $env:TALOS_DEMO_SOURCE_SHA" >> $env:GITHUB_STEP_SUMMARY
+          "Runnable entry: AVVIA-TALOS.cmd (actual packaged application). No tag or release published." >> $env:GITHUB_STEP_SUMMARY
+
+      - id: app
+        name: Upload the real runnable application
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: TALOS-Harness-REALE-Windows-x64-${{ steps.source.outputs.short }}
+          path: demo-output/application/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
+
+      - name: Upload the exact desktop source
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: TALOS-Harness-sorgenti-${{ steps.source.outputs.short }}
+          path: demo-output/source/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Keep real application screenshots and smoke results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: TALOS-Harness-prova-reale-${{ steps.source.outputs.short }}
+          path: harness-ui/desktop/.prove/harness-demo/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14

@@ -35,55 +35,6 @@
 const vive = new Set();
 /** Una sola animazione per elemento: la seconda annulla la prima, come `activeTransitions` nel mockup. */
 const perElemento = new WeakMap();
-const dettagli = new Map();
-const osservatori = new WeakMap();
-
-function rimuovi(animazione) {
-  const info = dettagli.get(animazione);
-  if (!info) return;
-  dettagli.delete(animazione);
-  vive.delete(animazione);
-  if (perElemento.get(info.elemento) === animazione) perElemento.delete(info.elemento);
-  const watcher = osservatori.get(info.doc);
-  if (watcher && --watcher.utenti === 0) {
-    watcher.chiudi();
-    osservatori.delete(info.doc);
-  }
-}
-
-function annullaAnimazione(animazione) {
-  if (!animazione) return;
-  try { animazione.cancel(); } catch { /* già conclusa */ }
-  rimuovi(animazione);
-}
-
-// Un osservatore per documento, solo finché esistono animazioni di questo helper.
-// Non tocca animazioni CSS, Canvas o appartenenti ad altri componenti.
-function osserva(doc) {
-  const presente = osservatori.get(doc);
-  if (presente) { presente.utenti += 1; return; }
-  const win = doc.defaultView || globalThis;
-  const controlla = () => {
-    for (const [a, info] of dettagli) {
-      if (info.doc === doc && (movimentoSpento({ document: doc, leva: info.leva })
-        || !(millisecondiDelToken(info.token, 180, doc) > 0))) annullaAnimazione(a);
-    }
-  };
-  let media; let observer;
-  try { media = win.matchMedia?.('(prefers-reduced-motion: reduce)'); } catch { /* API opzionale */ }
-  if (media?.addEventListener) media.addEventListener('change', controlla);
-  else media?.addListener?.(controlla);
-  if (win.MutationObserver && doc.documentElement) {
-    observer = new win.MutationObserver(controlla);
-    observer.observe(doc.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
-    if (doc.body) observer.observe(doc.body, { attributes: true, attributeFilter: ['class', 'style'] });
-  }
-  osservatori.set(doc, { utenti: 1, chiudi() {
-    observer?.disconnect();
-    if (media?.removeEventListener) media.removeEventListener('change', controlla);
-    else media?.removeListener?.(controlla);
-  } });
-}
 
 function radice(doc) {
   return (doc || globalThis.document)?.documentElement || null;
@@ -103,7 +54,7 @@ export function ridottoDalSistema(finestra = globalThis) {
  *   classi fini di `aspetto.css` (`motion-navigation-off`, `motion-surfaces-off`,
  *   `motion-feedback-off`); assente = solo i tre cancelli generali.
  */
-export function movimentoSpento({ document: doc = globalThis.document, leva = '', finestra = doc?.defaultView || globalThis } = {}) {
+export function movimentoSpento({ document: doc = globalThis.document, leva = '', finestra = globalThis } = {}) {
   if (ridottoDalSistema(finestra)) return true;
   const html = radice(doc);
   if (!html) return true;
@@ -151,26 +102,24 @@ export function motion(elemento, fotogrammi, {
   token = 'surface-enter', fattore = 1, leva = '', document: doc = globalThis.document, ease = '',
 } = {}) {
   if (!elemento || typeof elemento.animate !== 'function') return null;
-  annullaAnimazione(perElemento.get(elemento));
   if (movimentoSpento({ document: doc, leva })) return null;
   const ms = millisecondiDelToken(token, 180, doc) * fattore;
-  if (!(ms > 0) || !Number.isFinite(ms)) return null; // una WAAPI da 0 ms sporca `getAnimations()` senza muovere un pixel
+  if (!(ms > 0)) return null; // una WAAPI da 0 ms sporca `getAnimations()` senza muovere un pixel
+  try { perElemento.get(elemento)?.cancel(); } catch { /* già finita: niente da annullare */ }
   let animazione = null;
   try {
     animazione = elemento.animate(fotogrammi, { duration: ms, easing: ease || easeDelTema(doc), fill: 'none' });
   } catch { return null; } // un ambiente senza WAAPI completa non deve far cadere un clic
   perElemento.set(elemento, animazione);
   vive.add(animazione);
-  dettagli.set(animazione, { elemento, doc, leva, token });
-  osserva(doc);
-  const fine = () => rimuovi(animazione);
+  const fine = () => vive.delete(animazione);
   animazione.finished.then(fine, fine);
   return animazione;
 }
 
 /** Lo `stopMotion()` del mockup: la preferenza è cambiata adesso, ciò che è in volo si ferma adesso. */
 export function fermaTutto() {
-  for (const a of [...vive]) annullaAnimazione(a);
+  for (const a of vive) { try { a.cancel(); } catch { /* già conclusa */ } }
   vive.clear();
 }
 
