@@ -726,7 +726,7 @@ Terminale, Browser e Revisione, con lo stesso comportamento di tastiera, chiusur
 `frontend-design`, tema Calm, due temi, 1024 e 1440, confronto affiancato fra le tre viste.
 **Finita quando:** le tre viste montano lo stesso componente (un solo file, zero copie), e le foto affiancate lo mostrano.
 
-## BC-64 | «Visualizza in Esplora file» non apre nessuna finestra di Esplora file (owner 17/09/2026, dal vivo) — ✅ CURATO lo stesso giorno (`0f711a4c`), da confermare dal vivo dall'owner
+## BC-64 | «Visualizza in Esplora file» non apre nessuna finestra di Esplora file (owner 17/09/2026, dal vivo) — ✅ CHIUSO il 17/09 (`0f711a4c`), **confermato dal vivo dall'owner sul 4174: «ok funziona»**
 
 **Cosa hai visto:** la voce non fa niente. **Da misurare:** quale rotta chiama (`/api/v1/…/reveal` o simile), cosa risponde, e
 cosa esegue il server: su Windows la forma giusta è `explorer.exe /select,"<percorso>"` (che esce con codice 1 ANCHE quando
