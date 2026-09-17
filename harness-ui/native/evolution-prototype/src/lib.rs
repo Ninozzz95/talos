@@ -1,4 +1,5 @@
 pub mod authority;
+pub mod lifecycle;
 pub mod engine;
 pub mod wire;
 #[cfg(all(windows, target_arch = "x86_64"))]

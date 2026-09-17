@@ -22,18 +22,18 @@ pub struct Subject {
     pub session: [u8; 16], pub generation: [u8; 32], pub request: [u8; 32], pub epoch: u64,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Denial { InvalidGrant, Unknown, Subject, Target, Expired, Revoked, Exhausted, Poisoned }
+pub enum Denial { InvalidGrant, Unknown, Subject, Target, Expired, Revoked, Exhausted, Cancelled, Poisoned }
 struct Lease {
     subject: Subject, target: u32, snapshot: Arc<[u8]>, expires_ms: u64,
     remaining: u32, revoked: bool,
 }
-struct State { leases: HashMap<LeaseId, Lease>, bytes_left: usize, bytes_released: usize }
+struct State { leases: HashMap<LeaseId, Lease>, bytes_left: usize, bytes_released: usize, cancelled: bool }
 #[derive(Clone)]
 pub struct Broker(Arc<Mutex<State>>);
 impl Broker {
     pub fn new(bytes: usize) -> Result<Self, Denial> {
         if bytes > MAX_SNAPSHOT { return Err(Denial::InvalidGrant); }
-        Ok(Self(Arc::new(Mutex::new(State { leases: HashMap::new(), bytes_left: bytes, bytes_released: 0 }))))
+        Ok(Self(Arc::new(Mutex::new(State { leases: HashMap::new(), bytes_left: bytes, bytes_released: 0, cancelled: false }))))
     }
     // Trusted provisioning only. This is NOT an exposed capability.* operation.
     pub fn issue(&self, id: LeaseId, subject: Subject, target: u32, snapshot: &[u8],
@@ -43,6 +43,7 @@ impl Broker {
             || ttl_ms == 0 || ttl_ms > MAX_TTL_MS || uses == 0 || uses > 4
             || snapshot.len() > MAX_SNAPSHOT { return Err(Denial::InvalidGrant); }
         let mut state = self.0.lock().map_err(|_| Denial::Poisoned)?;
+        if state.cancelled { return Err(Denial::Cancelled); }
         if state.leases.len() >= MAX_LEASES || state.leases.contains_key(&id) {
             return Err(Denial::InvalidGrant);
         }
@@ -52,6 +53,7 @@ impl Broker {
     }
     pub fn read(&self, id: LeaseId, subject: Subject, target: u32, now_ms: u64) -> Result<Arc<[u8]>, Denial> {
         let mut state = self.0.lock().map_err(|_| Denial::Poisoned)?;
+        if state.cancelled { return Err(Denial::Cancelled); }
         let lease = state.leases.get(&id).ok_or(Denial::Unknown)?;
         if lease.subject != subject { return Err(Denial::Subject); }
         if lease.target != target { return Err(Denial::Target); }
@@ -68,6 +70,14 @@ impl Broker {
     pub fn revoke(&self, id: LeaseId) -> Result<(), Denial> {
         let mut state = self.0.lock().map_err(|_| Denial::Poisoned)?;
         state.leases.get_mut(&id).ok_or(Denial::Unknown)?.revoked = true;
+        Ok(())
+    }
+    /// Permanent admission barrier for this broker. A read already admitted
+    /// before this lock was acquired is charged and cannot be recalled.
+    /// Cancellation never waits for an IPC peer or holds a transport lock.
+    pub fn cancel(&self) -> Result<(), Denial> {
+        let mut state = self.0.lock().map_err(|_| Denial::Poisoned)?;
+        state.cancelled = true;
         Ok(())
     }
     pub fn bytes_released(&self) -> Result<usize, Denial> {

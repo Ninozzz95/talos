@@ -36,7 +36,7 @@ jobs:
           git diff --exit-code -- Cargo.lock
           if ($LASTEXITCODE -ne 0) { throw 'Provisioning changed the reviewed dependency inventory' }
           $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
-          $inputs = @(Get-ChildItem src,contracts,fixtures -File -Recurse)
+          $inputs = @(Get-ChildItem src,contracts,fixtures,tests -File -Recurse)
           $inputs += @(Get-Item Cargo.toml,Cargo.lock,rust-toolchain.toml,build.rs)
           $manifest = [ordered]@{
             schema = 'talos.extension-prototype.inputs.v1'
@@ -64,6 +64,12 @@ jobs:
           git rev-parse HEAD | Out-File evidence/checkout.txt
           git diff --exit-code -- Cargo.lock
           if ($LASTEXITCODE -ne 0) { throw 'Verification changed the reviewed lockfile' }
+      - name: explicit lifecycle fault injection (not part of default binaries)
+        run: |
+          cargo test --frozen --features fault-injection --test lifecycle -- --test-threads=1 --nocapture 2>&1 | Tee-Object evidence/lifecycle.log
+          if ($LASTEXITCODE -ne 0) { throw 'Lifecycle fault injection failed' }
+          git diff --exit-code -- Cargo.lock
+          if ($LASTEXITCODE -ne 0) { throw 'Fault verification changed reviewed dependencies' }
       - name: retain failure logs and exact dependency inventory
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

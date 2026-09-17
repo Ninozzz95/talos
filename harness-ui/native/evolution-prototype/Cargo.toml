@@ -26,3 +26,18 @@ path = "src/bin/worker.rs"
 [[bin]]
 name = "talos-supervisor-prototype"
 path = "src/bin/supervisor.rs"
+
+# Deliberately absent from default builds and from both normal binary CLIs.
+[features]
+default = []
+fault-injection = []
+
+[[bin]]
+name = "talos-lifecycle-fixture"
+path = "src/bin/lifecycle_fixture.rs"
+required-features = ["fault-injection"]
+
+[[test]]
+name = "lifecycle"
+path = "tests/lifecycle.rs"
+required-features = ["fault-injection"]

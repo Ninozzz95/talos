@@ -36,6 +36,8 @@ pub type Sid=*mut c_void;
   thread_attributes:*const SecurityAttributes,inherit:i32,flags:u32,environment:*const c_void,
   directory:*const u16,startup:*const StartupInfo,information:*mut ProcessInformation)->i32;
  pub fn ResumeThread(thread:Handle)->u32;
+ pub fn GetExitCodeProcess(process:Handle,code:*mut u32)->i32;
+ pub fn OpenProcess(access:u32,inherit:i32,pid:u32)->Handle;
  pub fn TerminateProcess(process:Handle,code:u32)->i32;
  pub fn WaitForSingleObject(handle:Handle,milliseconds:u32)->u32;
  pub fn CreateNamedPipeW(name:*const u16,open:u32,mode:u32,instances:u32,output:u32,input:u32,timeout:u32,attributes:*const SecurityAttributes)->Handle;
@@ -61,6 +63,7 @@ pub type Sid=*mut c_void;
 #[link(name="userenv")] extern "system" {
  pub fn CreateAppContainerProfile(name:*const u16,display:*const u16,description:*const u16,capabilities:*const c_void,count:u32,sid:*mut Sid)->i32;
  pub fn DeleteAppContainerProfile(name:*const u16)->i32;
+ pub fn DeriveAppContainerSidFromAppContainerName(name:*const u16,sid:*mut Sid)->i32;
 }
 #[cfg(test)] mod tests {
  use super::*;use std::mem::size_of;
