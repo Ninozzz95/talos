@@ -154,6 +154,83 @@ try {
     await page.locator('[data-workspace-restore]').check();
     await navigate('home', 'home');
   });
+  await scenario('command-palette', async () => {
+    const opener = page.locator('[data-workspace-bar] [data-azione="comandi"]');
+    const field = page.locator('#veloComandi [role="combobox"]');
+    await opener.click();
+    await expect(field).toBeFocused();
+    await expect(page.locator('#risultatiComandi [role="option"]')).toHaveCount(30);
+    check('actual command registry is rendered in the application', true);
+    await page.screenshot({ path: join(out, 'commands-dark-1440.png') });
+    await field.fill('attivita');
+    await expect(page.locator('#risultatiComandi [role="option"]')).toHaveCount(1);
+    const active = await field.getAttribute('aria-activedescendant');
+    check('combobox points to the actual filtered option', Boolean(active) && await page.locator(`#${active}`).getAttribute('data-command') === 'tasks');
+    // Exercise the input event's composition guard, without changing the application's state.
+    await field.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', isComposing: true });
+    await expect(page.locator('#veloComandi')).toBeVisible();
+    check('IME confirmation does not execute a command', true);
+    await field.press('Enter');
+    await expect(page.locator('#schermoAttivita')).toBeVisible();
+    await expect(page.locator('#veloComandi')).toBeHidden();
+    check('command executes the existing Tasks navigation', true);
+    await opener.click();
+    await field.fill('esporta');
+    await expect(page.locator('#risultatiComandi [data-command="export"]')).toHaveAttribute('aria-disabled', 'true');
+    let downloads = 0;
+    const downloaded = () => { downloads++; }; page.on('download', downloaded);
+    await field.press('Enter');
+    await expect(page.locator('#veloComandi')).toBeVisible();
+    await expect(page.locator('.command-palette__status')).toHaveText('Apri prima una sessione.');
+    check('unavailable export explains its requirement without fake downloads', downloads === 0);
+    page.off('download', downloaded);
+    await field.fill('not-a-command-743');
+    await expect(page.locator('#risultatiComandi [role="option"]')).toHaveCount(0);
+    await expect(field).not.toHaveAttribute('aria-activedescendant');
+    await expect(page.locator('#veloComandi')).toContainText('Nessun comando trovato.');
+    check('empty command search clears active descendant and explains recovery', true);
+    await field.clear(); await field.press('ArrowDown');
+    await expect(field).toBeFocused();
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expect.poll(() => page.locator('#veloComandi [role="dialog"]').evaluate(el => {
+      const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth + 1 && el.scrollWidth <= el.clientWidth + 1;
+    })).toBe(true);
+    await page.screenshot({ path: join(out, 'commands-dark-390.png') });
+    check('real command palette reflows at 390 CSS pixels', true);
+    await page.setViewportSize({ width: 1440, height: 960 });
+    await page.evaluate(await readFile(join(root, 'harness-ui/frontend/node_modules/axe-core/axe.min.js'), 'utf8'));
+    result.commandAccessibility = await page.evaluate(async () => {
+      const r = await axe.run(document.getElementById('veloComandi'), { runOnly: { type: 'tag', values: ['wcag2a','wcag2aa','wcag21a','wcag21aa','wcag22aa'] } });
+      return r.violations.map(v => ({ id:v.id, impact:v.impact, nodes:v.nodes.map(n => ({target:n.target, summary:n.failureSummary})) }));
+    });
+    check('real command palette has no automatic WCAG A/AA violations', result.commandAccessibility.length === 0);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#veloComandi')).toBeHidden();
+    await expect(opener).toBeFocused();
+    check('command dismissal restores the actual opener', true);
+    await navigate('home', 'home');
+  });
+  await scenario('workspace-english', async () => {
+    await navigate('impostazioni', 'settings');
+    await page.locator('#setting-uiLanguageSelect').selectOption('en');
+    await navigate('home', 'home');
+    await expect(page.locator('#schermoHome h1')).toHaveText('Where shall we pick up?');
+    await expect(page.locator('#schermoHome [data-home-action="project"]')).toHaveText('Open a project');
+    check('new workspace translates through the real language preference', true);
+    await page.locator('[data-workspace-bar] [data-azione="comandi"]').click();
+    const field = page.locator('#veloComandi [role="combobox"]');
+    await expect(field).toHaveAttribute('aria-label', 'Search commands and destinations');
+    await field.fill('Tasks');
+    await expect(page.locator('#risultatiComandi [data-command="tasks"]')).toContainText('Tasks');
+    await page.screenshot({ path: join(out, 'commands-english-1440.png') });
+    await field.press('Enter');
+    await expect(page.locator('#schermoAttivita')).toBeVisible();
+    check('localized command navigates without changing protocol identifiers', true);
+    await navigate('impostazioni', 'settings');
+    await page.locator('#setting-uiLanguageSelect').selectOption('it');
+    await navigate('home', 'home');
+    await expect(page.locator('#schermoHome h1')).toHaveText('Da dove ripartiamo?');
+  });
   for (const [destination, screen] of Object.entries({ chat: 'chat', note: 'note', attivita: 'attivita', libreria: 'libreria',
     memoria: 'memoria', ricerca: 'ricerca', progetti: 'progetti', board: 'dashboard', impostazioni: 'settings',
     modelli: 'settings', capability: 'capability', officina: 'officina', automazioni: 'automations', doctor: 'doctor' })) {
@@ -171,6 +248,9 @@ try {
     await expect(page.locator('#schermoTerminale')).toBeVisible();
     const input = page.locator('#schermoTerminale .xterm-helper-textarea').first();
     await input.waitFor({ state: 'attached' }); await input.focus();
+    await page.keyboard.press('Control+k');
+    await expect(page.locator('#veloComandi')).toBeHidden();
+    check('global command shortcut does not steal the terminal input', true);
     // The shell command itself does not contain the contiguous expected output marker.
     // Thus the echo of the typed command cannot satisfy the assertion.
     await page.keyboard.type(process.platform === 'win32'

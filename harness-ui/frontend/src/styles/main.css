@@ -64,3 +64,5 @@
 @import './mockup-animazioni.css';
 
 @import '../design-system/workspace.css';
+
+@import '../design-system/command-palette.css'; /* NAV-02: real command registry */

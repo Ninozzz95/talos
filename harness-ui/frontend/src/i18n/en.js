@@ -1,3 +1,4 @@
+import WORKSPACE_EN from './workspace-en.js';
 /*
  * Inglese — il dizionario dei menu e delle superfici (P-i18n, 06/09; owner: «sì, approvo»).
  *
@@ -13,6 +14,7 @@
  * conta come tradotto, perché in inglese si scrive così.
  */
 export default Object.freeze({
+  workspaceV2: WORKSPACE_EN,
   workspacePreferencesV2: {
     'Riprendi il workspace all’avvio': 'Restore the workspace at startup',
     'Riapre l’ultima sessione disponibile senza avviare operazioni.': 'Reopens the last available session without starting operations.',

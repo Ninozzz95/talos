@@ -179,7 +179,7 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     if (restore) restore.checked = prefs.restoreWorkspace;
     if (currentPresetKey !== key) { options.setInspectorVisible(LAYOUT_PRESETS[preset].inspector); currentPresetKey = key; }
     doc.documentElement.dataset.workspacePreset = preset;
-    const select = header?.querySelector<HTMLSelectElement>('[data-workspace-preset]'); if (select) select.value = preset;
+    const select = header?.querySelector<HTMLSelectElement>('[data-workspace-preset]'); if (select) { select.value = preset; select.setAttribute('aria-label', t('Disposizione del workspace')); }
     const density = header?.querySelector<HTMLButtonElement>('[data-workspace-density]');
     if (density) { density.setAttribute('aria-pressed', String(prefs.density === 'compact')); density.textContent = t(prefs.density === 'compact' ? 'Compatta' : 'Confortevole'); }
     const location = header?.querySelector('[data-workspace-location]');
@@ -205,7 +205,7 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
       options.setInspectorVisible(LAYOUT_PRESETS[select.value].inspector); syncControls();
     }, { signal: scope.signal });
   }
-  doc.defaultView?.addEventListener('talos:lingua', () => {
+  doc.documentElement.addEventListener('talos:lingua', () => {
     if (select) for (const option of select.options) if (isPreset(option.value)) option.textContent = t(LAYOUT_PRESETS[option.value].label);
     syncControls(); render(); }, { signal: scope.signal });
   const restore = doc.querySelector<HTMLInputElement>('[data-workspace-restore]');
