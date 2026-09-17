@@ -101,10 +101,14 @@ try {
     await expect(page.locator('dialog[open],.overlay-layer:not([hidden])')).not.toHaveCount(0);
     check('project uses real workspace chooser', true);
     await page.keyboard.press('Escape');
+    // Closing is animated. The next scenario must not snapshot its transient inert leases.
     await expect(page.locator('#sheetDialog')).not.toHaveAttribute('open', '');
+    await expect(page.locator('[data-modal-owned="true"]')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Apri un progetto', exact: true })).toBeFocused();
   });
   await scenario('modal-stack', async () => {
+    await expect(page.locator('dialog[open],.overlay-layer:not([hidden])')).toHaveCount(0);
+    await expect(page.locator('[data-modal-owned="true"]')).toHaveCount(0);
     const originalInert = await page.locator('[inert]').count();
     await page.getByRole('button', { name: 'Apri un progetto', exact: true }).click();
     await expect(page.locator('#sheetDialog')).toBeVisible();
