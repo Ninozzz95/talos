@@ -164,6 +164,20 @@ si coordina con chi ha in mano il bug, invece di curare due volte lo stesso stra
 
 # FASE P0-bis · La shell chiede davanti a un segreto — **approvata dall'owner il 16/09** («Sì»)
 
+> **17/09 — scelta dell'owner: «entrambi stretto».** (1) **Lista come innesco**, non come barriera: una classe dichiarata di
+> percorsi segreti (`.env*`, `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.netrc`, `~/.npmrc`, `~/.docker/config.json`, `*.pem`/`*.key`/`*.p12`,
+> `id_rsa*`, il portachiavi di sistema, i nostri `.provider-runtime.json` e le chiavi) applicata al testo del comando `shell` **e**
+> a `leggi`: se li nomina, si CHIEDE anche con «sempre». (2) **Confine stretto**: una lettura/scrittura che esce dal workspace e
+> tocca un percorso nascosto o sotto la home chiede; nessuna euristica sul contenuto del comando (ogni «chiedi» in più addestra a
+> cliccare sì). (3) Mai «nega» di serie. Fonti già lette il 16/09: Docker «AI Coding Agent Horror Stories» (18/05/2026, blocklist
+> spedita), Developers Digest (28/07/2026, deny rules per SSH keys e .env), Pillar (20/07/2026: una lista come CONFINE è debole —
+> qui è un innesco). Misurato il 17/09: `path-policy.mjs` non ha oggi nessuna grammatica dei segreti (0 occorrenze). Corsia **D**
+> della P0-bis, un agente Opus 5 xhigh: `verificaPermessoScrittura` (`talosHarness.mjs:5771`), `path-policy.mjs`, il ramo `leggi`.
+>
+> **Esecuzione della P0-bis, dal 17/09:** corsie **A** (shell WSL: BC-54/55/56, xhigh), **B** (prova ed eventi: BC-57, OSS-1,
+> OSS-2), **C** (frontend: BC-58, lettura del contratto eventi, OSS-3, **BC-59**), **D** (F15) — agenti separati in worktree,
+> revisore avversariale per corsia, fusione mia con la suite intera PRIMA di consegnare.
+
 **Subito dopo la fusione della P0**, come corsia unica con un agente Opus 5 high e il suo
 controllore: una **classe di percorsi segreti** aggiunta alla stessa grammatica dei file di controllo
 (`ePercorsoDiControllo`, realpath risolto, alias e junction coperti), applicata all'**argomento**
@@ -192,6 +206,7 @@ fusione, non in parallelo.
 | **BC-58** | a 1024 la pill del composer tronca «Giri 10» in «Giri 1…» (owner 17/09: «mettile nella P0-bis») | il contatore non si tronca mai: a 1024, con un numero a due cifre, si legge intero nei due temi (foto) |
 | **OSS-1** | nel replay la scheda Processi dice «0 s» per ogni comando: i tempi non sopravvivono al registro | la durata viaggia nell'evento di fine attrezzo (`durataMs`) e al replay si legge da lì; se non è misurata, la riga non dice «0 s» ma niente |
 | **OSS-2** | `prova` non compare fra i processi: la scheda elenca solo `shell` | `npm test` lanciato da `prova` è una riga della scheda come le altre, con uscita e durata |
+| **BC-59** | nella riga attività della chat compare il nome tecnico `file_edit` (owner 17/09); misurato: `file_edit` ha ZERO voci nelle mappe umane (`nomi-attrezzi.js:30/135`, `conversazione.js:484`, `permessi.js:22`) e la mappa è duplicata in `app.js:2560` | ogni nome che il kernel espone ha un nome umano, un'icona e una descrizione in UN posto solo, con un test di contratto che confronta l'elenco degli attrezzi del kernel con la mappa; la copia in `app.js:2560` sparisce |
 | **OSS-3** | due errori JS «Failed to read localStorage… sandboxed» a ogni apertura del Browser su una pagina terza con script (iframe `sandbox`) | misurato da quale frame nascono; se sono della pagina terza, la console della nostra app non li riporta come nostri (o li etichetta); se sono nostri, si curano |
 
 ---
@@ -238,6 +253,25 @@ Sul mobile oggi tre voci di «Crea» dicono testualmente «Precompila il messagg
 testo nel composer e si ferma lì. Una procedura guidata è un piano di lavoro che parte da un modello:
 senza il motore sarebbe una finestrella che incolla testo con più passaggi. ⛔ Cosa esiste dietro il
 «+» sul desktop non è stato misurato: si accerta nel codice quando la riga si apre.
+
+---
+
+# FASE 3-quater · PO-27 — Via la modale «Primo avvio» — **approvata dall'owner il 17/09** («sì confermo rimozione»)
+
+**Cosa succede oggi, misurato:** la modale è viva (`#veloIntro`, si apre da `/api/v1/setup/stato` in `app.js:21546`,
+`apriIntroMockup`), quattro passi (la prima cartella, con quale modello lavori, e due successivi), **18 file di test** la citano
+(la saltano scrivendo `talos.harness.desktop.intro.v1 = {esito:'saltata'}`). Tutto ciò che fa esiste già altrove: la cartella dal
+«+» e da «Apri cartella con TALOS» in Esplora, il modello dalla pill del composer e dalle Impostazioni. L'owner: «abbastanza inutile».
+
+**Cosa cambia:** la modale sparisce per intero (template, `components/intro.js`, `app.js` 18682-18800 e 21546, il flag
+`intro.v1`, la rotta `/api/v1/setup/stato` se non ha altri lettori); al suo posto uno **stato vuoto onesto** della chat — una
+riga e due azioni («Scegli una cartella» · «Collega un modello») — che compare solo quando manca la cartella o il modello e
+sparisce da solo; i 18 test perdono il salto e ne nasce uno sullo stato vuoto (mai a schermo con cartella e modello presenti).
+Skill `frontend-design` caricata, tema Calm rispettato, foto nei due temi a 1024 e 1440.
+
+**Finita quando:** un profilo nuovo apre l'app senza nessuna modale; senza cartella/modello vede la riga con le due azioni e
+ognuna porta dove dice; con cartella e modello non vede niente; `grep -rn "intro.v1\|veloIntro" frontend/` → 0. Una corsia,
+dopo la P0-bis.
 
 ---
 

@@ -677,3 +677,13 @@ spazio, è la tredicesima forma del 13/09.
 - **`prova` non è un processo** — la scheda elenca solo `shell`; `npm test` lanciato da `prova` è un comando come gli altri.
 - **Errori JS dentro l'iframe sandbox** («Failed to read localStorage… lacks the allow-same-origin flag»), 2 per apertura del
   Browser con la pagina IANA: pagine terze con script dentro la cornice `sandbox`; non nostri, ma la console dell'owner li vede.
+
+## BC-59 | Nella riga attività della chat compare `file_edit`, un nome tecnico (owner 17/09) — APERTO, in P0-bis corsia C
+
+**Regola violata:** «niente nomi tecnici nella UI» (owner 04/09): mappa nome-tecnico → nome-umano in UN posto solo, mai a schermo
+`web_search`, `tool_create`… **Misurato il 17/09:** `grep -rn file_edit frontend/src` → **0** occorrenze: l'attrezzo è nato nel
+kernel (l'audit interno del 16/09 lo loda) e nessuno l'ha aggiunto alle mappe del frontend — `nomi-attrezzi.js:30-36` (nomi),
+`:135-141` (descrizioni), `conversazione.js:484-485` (icone), `app.js:5011` (icone), `permessi.js:22` (permessi). ⛔ E la mappa
+dei nomi è DUPLICATA in `app.js:2560-2566`: due posti, contro la regola. **Cura:** `file_edit` → «modifica di un file» (icona,
+descrizione, permesso); una mappa sola; un test di contratto che legge l'elenco degli attrezzi che il kernel espone e pretende che
+ognuno abbia nome umano, icona e descrizione — così il prossimo attrezzo nuovo non può arrivare a schermo col nome tecnico.
