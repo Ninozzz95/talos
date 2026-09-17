@@ -1025,3 +1025,16 @@ immagini, interfacce diverse, «zero provider nuovo» era voluto); tre cure stre
 approvazione e nel foglio dei permessi, letta dalla configurazione; (2) nelle sessioni LOCALI e in quelle di un fornitore ≠
 OpenRouter l'attrezzo CHIEDE SEMPRE, anche con «sempre» (stessa regola di F15); (3) senza chiave OpenRouter nessuna chiamata
 di rete. Più avanti: scelta del fornitore delle immagini in Impostazioni.
+
+## BC-74 | Tre script del repo puntano DI SERIE al 4174 VIVO dell'owner (17/09/2026: l'agente di PO-27 ne ha lanciato uno per errore) — APERTO
+
+Misurato col grep il 17/09: `frontend/scripts/cancello/veli-sani.mjs:44` (`TALOS_VELI_BASE || 'http://127.0.0.1:4174'`),
+`frontend/scripts/diagnose-interaction-lag.mjs:5` (`TALOS_LAG_URL || …4174/`), `scripts/qa-visual-pipeline.mjs:89`
+(`--url=` || `…4174/`). La regola di casa dice «una sonda non tocca MAI il 4174» ed è scritta nella memoria, non negli
+script: l'agente di PO-27 ha lanciato `veli-sani` senza sapere dove puntava, e ha aperto dei veli sul server dell'owner
+(nessuna scrittura, dichiarato da lui). ⇒ Stessa lezione di sempre: il cancello sta nello SCRIPT, non nella memoria.
+**Finita quando:** nessuno script ha il 4174 come ripiego: senza un indirizzo esplicito si RIFIUTA di partire (o avvia un suo
+banco), e puntare al 4174 vuole un'opzione che lo dica per nome; una prova legge i sorgenti di `scripts/` e diventa rossa se
+ricompare un ripiego sul 4174. Visto nello stesso giro da `veli-sani` sul 4174: 5 veli su 12 «non si aprono» (`veloFornitori`,
+`veloRinominaModello`, `veloEliminaModello`, `veloAnnullaDownload`, `veloFileModello`) e 10 senza via dichiarata — non
+verificato da me, da riaccertare su un banco.
