@@ -189,6 +189,23 @@ si coordina con chi ha in mano il bug, invece di curare due volte lo stesso stra
 > BC-59) è committata e sotto revisione avversariale; le resta l'ultimo pezzo di F15 a schermo (la frase come motivo della
 > scheda di approvazione, `leggi` nel blocco codice, niente «Consenti sempre» davanti a un segreto).
 >
+> ✅ **P0-bis CHIUSA il 17/09/2026 — rapporto di chiusura.** Corsia **C** fusa in `891055f0` dopo **tre** bocciature del
+> revisore, più il terzo giro `d6889134` (il motivo della scheda rientrato come le altre righe, le etichette del composer che
+> cedono solo quando manca spazio, il comando negato senza durata); pacchetto servito committato in `fd3bfd0b`.
+> **MISURATO** sullo stato fuso: backend **3146** test, 3141 verdi, **0 rossi**, 5 saltati (suite intera da sola); kernel
+> 598 + 1 skip; unit frontend **1217/1217**; browser **75 + 1 skip** con UN worker; parità **15/15**. **Giri veri** sul 4174 con
+> `glm-5.3-flash`: `d449a3ca` (backend), `768fd4ba` (scheda di approvazione risposta DALLA UI), `36ce60ed` (dopo il terzo giro:
+> due richieste per `cat .env` con la frase in chiaro e i soli bottoni «Consenti una volta / Nega»; scheda Processi: `cat .env`
+> «Non eseguito · negato da te» **senza durata né uscita**, poi «Riuscito · 3 s · uscita 0», `node --version` «0,3 s · uscita
+> 0», `prova` «Non eseguito · uscita 127»; pillole intere a 1440: «glm-5.3-flash · Scrive nel progetto · Giri 6 · Terminale»).
+> Foto guardate nei due temi a 1024 e 1440. ⛔ La sonda segnalava `file_edit` in chat: **non è un difetto** — sta nella MIA
+> consegna del giro e nella prosa del modello (letto nel JSONL della sessione), non in una riga disegnata da noi.
+> **VALUTATO, non misurato:** la scala con cui le etichette cedono a 1024 (si leggono «glm-5.3-fl…», «Scrive nel prog…»,
+> «Termin…»: dichiarata, il contatore «Giri» resta intero — BC-58 tiene). **RESTA APERTO, per nome:** il blocco codice della
+> scheda di approvazione sporge di 2 px e nel tema CHIARO ha un fondo grigio pieno che stona sul crema (entra nella corsia
+> PO-27); `exit 126` e nessun tetto su `durataMs`; causa di BC-57; il 503 di `/context` rosso in console; `baseline-shell`
+> 49/65; i cancelli della P0 vogliono un worker solo.
+>
 > **Esecuzione della P0-bis, dal 17/09:** corsie **A** (shell WSL: BC-54/55/56, xhigh), **B** (prova ed eventi: BC-57, OSS-1,
 > OSS-2), **C** (frontend: BC-58, lettura del contratto eventi, OSS-3, **BC-59**), **D** (F15) — agenti separati in worktree,
 > revisore avversariale per corsia, fusione mia con la suite intera PRIMA di consegnare.
