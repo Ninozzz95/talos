@@ -71,3 +71,18 @@ https://learn.microsoft.com/en-us/windows-server/administration/windows-commands
 
 The production objective remains Design Proposal v1.0 section 57. This file
 records a prerequisite laboratory measurement, not completion of self-extension.
+
+## Windows 11 receiving-side event
+
+The first new run (35222775471, source 4f332eed) collected a matching WFP event
+but rejected it because the Server-derived predicate required OUT. The actual
+Windows 11 event is IN and includes internalFields/processId for the listener.
+The client-only predicate now requires IN AND that exact listener PID, in
+addition to the unchanged tuple, time, full-image, owner and blocking-filter
+checks. OUT, absent PID, the candidate PID and another listener PID are rejected.
+The Server verifier is unchanged. Source hashes are checked against the code
+actually performing replay, so an old selection is not silently reclassified.
+A new Windows execution must measure the revised client-only predicate.
+
+Direction reference:
+https://learn.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_net_event_classify_drop1

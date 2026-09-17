@@ -25,12 +25,13 @@ def fixture():
              "standard_user":True,"accepted":True,"full_containment_verified":False}
     records.insert(0,profile)
     original=next(r for r in records if r.get('diagnostic')=='broker_wfp_localport_events')
-    xml=original.pop('text').encode();original['error']='read-only WFP query failed: exit 1'
+    xml=original.pop('text').replace('MS_FWP_DIRECTION_OUT','MS_FWP_DIRECTION_IN').replace('</internalFields>','<processId>4000</processId></internalFields>').encode()
+    original['error']='read-only WFP query failed: exit 1'
     selection={'schema':'talos.client-network-witness.selection.v1','scope':v.SCOPE,
                'selected_at_ms':TIME-2000,'checkout':'a'*40,'owner_sid':OWNER,
                'listener_image_dos':r'C:\fixture\parent.exe','listener_image_nt':IMAGE,
                'witness_directory':r'C:\evidence\network-observer','binary_sha256':'b'*64,
-               'source_sha256':{name:'c'*64 for name in v.SOURCES},'observer_elevated':True,
+               'source_sha256':{name:v.sha(Path(v.__file__).with_name(name).read_bytes()) for name in v.SOURCES},'observer_elevated':True,
                'measured_runtime_elevated':False,'network_configuration_changed':False,
                'full_containment_verified':False,'release_ready':False}
     collection={'schema':'talos.client-network-witness.collection.v1','status':'COLLECTED_NOT_VERIFIED',
@@ -42,7 +43,7 @@ def fixture():
     ci={'schema':'talos.client-ci-fixture.v1','checkout':'a'*40,'clientNativeExit':1,'binarySha256':'b'*64,
         'cleanupErrors':[],'error':None,**{key:True for key in ('provisionerElevated','accountCreated','accountRemoved',
         'profileRemoved','temporaryTreeRemoved','elevatedControlRejected')}}
-    run={'status':'CLIENT_EXECUTED_NOT_CERTIFIED','nativeExitCode':1,'error':None,'binarySha256':'b'*64,'entrySha256':'c'*64}
+    run={'status':'CLIENT_EXECUTED_NOT_CERTIFIED','nativeExitCode':1,'error':None,'binarySha256':'b'*64,'entrySha256':selection['source_sha256']['run-client.ps1']}
     bundle={'selection':encoded(selection),'collection':encoded(collection),'profile':encoded(profile),
             'fixture':encoded(ci),'run':encoded(run),'probes':b''.join(encoded(r) for r in records),'xml':xml}
     rehash(bundle)
@@ -110,6 +111,10 @@ class WitnessTests(unittest.TestCase):
 
 
 CASES={
+ 'wrong_event_direction':lambda b:b.__setitem__('xml',b['xml'].replace(b'MS_FWP_DIRECTION_IN',b'MS_FWP_DIRECTION_OUT')),
+ 'missing_listener_process':lambda b:b.__setitem__('xml',b['xml'].replace(b'<processId>4000</processId>',b'')),
+ 'candidate_pid_is_not_listener':lambda b:b.__setitem__('xml',b['xml'].replace(b'<processId>4000</processId>',b'<processId>4001</processId>')),
+ 'unrelated_listener_process':lambda b:b.__setitem__('xml',b['xml'].replace(b'<processId>4000</processId>',b'<processId>9999</processId>')),
  'witness_failed':lambda b:update(b,'collection','status','FAIL'),
  'witness_not_elevated':lambda b:update(b,'selection','observer_elevated',False),
  'runtime_elevated':lambda b:update(b,'selection','measured_runtime_elevated',True),

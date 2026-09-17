@@ -173,8 +173,11 @@ def match_flow(records, selection, collection, xml):
         if net.scalar(event,'header/userId')!=selection['owner_sid']: continue
         if any(net.scalar(event,path)!=value for path,value in (
             ("header/packageSid","S-1-0-0"),("type","FWPM_NET_EVENT_TYPE_PUBLIC_CLASSIFY_DROP"),
-            ("classifyDrop/isLoopback","true"),("classifyDrop/msFwpDirection","MS_FWP_DIRECTION_OUT"),
+            ("classifyDrop/isLoopback","true"),("classifyDrop/msFwpDirection","MS_FWP_DIRECTION_IN"),
             ("internalFields/filterOrigin","AppContainer Loopback"))): continue
+        # Windows 11 reports this block on the receiving listener. Its process
+        # identity is additional OS evidence, not the candidate's reported PID.
+        if net.scalar(event, 'internalFields/processId') != str(listener): continue
         filter_id=net.scalar(event,"classifyDrop/filterId")
         require(filter_id.isdecimal() and int(filter_id)>0,"invalid filter ID")
         filters=[f for f in event.findall('internalFields/terminatingFiltersInfo/item') if net.scalar(f,'filterId')==filter_id]
@@ -204,6 +207,9 @@ def evaluate(bundle: dict[str,bytes]) -> dict:
         require(type(sources) is dict and set(sources)==set(SOURCES),'incomplete source selection')
         for value in [*sources.values(),selection.get('binary_sha256')]:
             require(type(value) is str and HEX.fullmatch(value) is not None,'invalid source/binary digest')
+        for name in SOURCES:
+            require(sources[name] == sha(bounded(Path(__file__).with_name(name))),
+                    'selected source differs from replayed source: ' + name)
         for name in ('listener_image_dos','witness_directory'):
             value=selection.get(name)
             require(type(value) is str and re.match(r'^[A-Za-z]:\\',value) and not any(ord(c)<32 for c in value),'unsafe CI-owned path')
