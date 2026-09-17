@@ -1375,7 +1375,7 @@ function datiProcesso(p = {}) {
   const stato = STATI_PROCESSO[p.stato] ? p.stato : p.stato === "ok" ? "riuscito" : p.stato === "errore" ? "fallito" : "in-corso";
   const descrittore = STATI_PROCESSO[stato];
   const durata = Number.isFinite(p.durataMs) && p.durataMs >= 0 ? p.durataMs < 100 ? "<0,1 s" : `${num.format(p.durataMs / 1e3)} s` : null;
-  const misura = [durata, !descrittore.vivo && Number.isFinite(p.uscita) ? `uscita ${p.uscita}` : null].filter(Boolean).join(" · ") || (descrittore.vivo ? "" : "—");
+  const misura = stato === "non-eseguito" && p.rifiutato === true ? "negato da te" : [durata, !descrittore.vivo && Number.isFinite(p.uscita) ? `uscita ${p.uscita}` : null].filter(Boolean).join(" · ") || (descrittore.vivo ? "" : "—");
   const chi = `${p.chi === "tu" ? "tu" : "agente"} · ${p.chi === "tu" ? "terminale" : `giro ${p.giro ?? "—"}`}`;
   const fermo = Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= SOGLIA_ATTESA_MS ? `Nessuna uscita da ${Math.round(p.fermoDaMs / 1e3)} secondi. Il processo è vivo: potrebbe aspettare un input. TALOS non lo ferma da solo.` : null;
   const analisi = analizzaComando(p.comando || "");
@@ -1888,6 +1888,11 @@ function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = 
         if (p.stato === "in-avvio") p.stato = "in-corso";
       }
       if (typeof e.cwd === "string" && e.cwd.trim()) p.cwd = e.cwd.trim();
+      if (e.rifiutato === true) {
+        p.rifiutato = true;
+        p.durataMs = null;
+        p.uscita = null;
+      }
     }
   }
   for (const p of lista) {
