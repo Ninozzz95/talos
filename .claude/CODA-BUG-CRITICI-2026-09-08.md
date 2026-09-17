@@ -1119,3 +1119,14 @@ sessione: da decidere se dare alla persona la scelta del giudice nelle Impostazi
 - **HTML malformato nella `talos-turn-spine` del template** (`index.template.html`): `<button …></span aria-label="Vai al
   giro"></button>` — si vede come un trattino fantasma a sinistra della colonna (x≈303) in tutte le foto con sessione.
 Non verificati da me: letti nel rapporto del revisore.
+
+**CLI-REQ-05, difetto trovato DOPO la fusione dalla corsia della CLI e curato lo stesso 17/09: `3cbecf60`, sul 4174.** La regola
+«pronto» fusa in `ba420a95` usava `hasKey` per ogni fornitore tranne OpenRouter, e `hasKey` conta anche le chiavi in PANCHINA.
+Riprodotto da me con lo store vero prima di toccare una riga (`scratchpad/sonda-panchina.mjs`): una chiave DeepSeek in panchina →
+`hasKey true`, `getKey null` ⇒ la sessione partiva e il giro moriva senza chiave. L'owner l'ha incontrato nella CLI lo stesso
+giorno. Cura: la regola esce da `server.mjs` (era una chiusura che nessuna prova poteva chiamare) in `src/sessione-pronta.mjs`,
+con 8 prove sullo store VERO; una regola sola per tutti — una chiave utilizzabile ADESSO; se le chiavi ci sono ma sono in
+panchina il rifiuto lo DICE (causa in parole umane e fino a quando), non «Manca la chiave». Al contrario: rimessa la regola
+vecchia → 2 rosse. Backend intero da solo: **3277 · 3272 pass · 0 fail · 5 skipped**. ⛔ Lezione: tre revisori avevano
+«misurato» quella funzione ricopiandone i byte, e nessuno aveva provato lo STATO che la rompe — una chiave che c'è e non si può
+usare. Una regola dentro una chiusura non ha prove sue: si estrae PRIMA di fonderla, non dopo che qualcuno ci inciampa.
