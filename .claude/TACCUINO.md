@@ -546,3 +546,16 @@
 - ⛔ Ho fermato con `Stop-Process` due processi il cui command line conteneva `giro-vero.mjs`: erano i MIEI wrapper bash del
   task in background (verificato dalla riga di comando), ma il filtro era per menzione, non per identità — la stessa forma
   dell'errore del 23/8. Nessun danno; la prossima volta si risale dal PID del node, non dalla stringa.
+
+## 2026-09-17 — ho svuotato i node_modules veri attraverso una giunzione (mio errore)
+
+- `robocopy <vuota> <worktree> /MIR` per cancellare `wf_a38b4449-882-*` ha seguito le giunzioni degli agenti verso
+  `harness-ui/{node_modules,frontend/node_modules,desktop/node_modules}`: misurato dopo, **2 / 0 / 0 voci**. Build rossa
+  (`Cannot find package 'esbuild'`), 4174 caduto col crash della sessione e non rialzabile.
+- Rimedio: `npm ci` nei tre posti (exit 0: 74 voci backend, 10 frontend, desktop ok), `npm run aggiorna` → health 200, nessun
+  file tracciato cambiato. `mobile/node_modules` (332 voci, data 27/08) e `context-engine` intatti: il danno era solo nella lane.
+- ⛔ Regola: prima di cancellare un albero si elencano i reparse point e le giunzioni si staccano con `rmdir`; `robocopy` solo con `/XJ`.
+- Giunzione ancora viva, da staccare prima di togliere quel worktree: `agent-ae6f7ae41f302feac\context-engine
+ode_modules`
+  → `AVM-harness-desktop\context-engine
+ode_modules`. `wf_a38b4449-882-1` resta su disco: NON si tocca senza prima guardarci dentro.
