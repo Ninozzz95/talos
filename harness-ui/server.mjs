@@ -1,5 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { createLocalResumeDiagnostics } from './src/local-resume-diagnostics.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createAutomationScheduler } from './src/automation-scheduler.mjs';
@@ -64,6 +65,15 @@ function percorsoDatiDesktop(relativo) {
 
 async function startServer() {
   const config = loadConfig(process.env, import.meta.url);
+  // Opt-in only: observe the real resumed turn without changing prompts or cache flags.
+  const resumeDiagnostics = await createLocalResumeDiagnostics({ sourceFiles: {
+    server: fileURLToPath(import.meta.url),
+    supervisor: new URL('./src/llama-server-supervisor.mjs', import.meta.url),
+    adapter: new URL('./src/local-runtime-llama-server.mjs', import.meta.url),
+    ownerAdapter: new URL('./src/runtime-owner-adapter.mjs', import.meta.url),
+    registry: new URL('./src/session-registry.mjs', import.meta.url),
+    ownerKernel: config.ownerRuntimeModule,
+  } });
   let providerKeyring = null;
   try {
     const { Entry } = await import('@napi-rs/keyring');
@@ -193,7 +203,7 @@ async function startServer() {
      * aggiunge da sé l'`--api-key` generata all'avvio, che non deve essere
      * copiata da nessuna parte — men che meno in una risposta HTTP.
      */
-    chiamaLocale: (percorso, opzioni) => supervisoreLocale.request(percorso, opzioni),
+    chiamaLocale: (percorso, opzioni) => resumeDiagnostics.withRoute('owner-transport', () => supervisoreLocale.request(percorso, opzioni)),
     /*
      * ⭐⭐⭐ 3/9 — owner, dal vivo: "non è così che si deve fare... deve
      * partire tutto in automatico". LM Studio/Ollama caricano il modello
@@ -290,21 +300,21 @@ async function startServer() {
      * R-03, 13/09 — la riserva CPU (`TALOS_LLAMA_SERVER_FALLBACK_PATH`, messa dal guscio
      * quando sceglie Vulkan) e la descrizione del motore entrano nel supervisore: se la
      * scheda manca o si perde durante il caricamento, il modello riparte sul processore
-     * una volta sola e lo stato lo dichiara (`motore.ripiego`).
+     * una volta sola e lo stato dichiara (`motore.ripiego`).
      */
-    const supervisor = createLlamaServerSupervisor({
+    const supervisor = resumeDiagnostics.wrapSupervisor(createLlamaServerSupervisor(resumeDiagnostics.supervisorOptions({
       binaryPath: config.llamaServerPath,
       fallbackBinaryPath: config.llamaServerFallbackPath && config.llamaServerFallbackPath !== config.llamaServerPath ? config.llamaServerFallbackPath : null,
       motore: { variante: gpuLayers > 0 ? 'vulkan' : 'cpu', dispositivi },
       modelStore: localModelStore,
       gpuLayers,
-    });
+    })));
     // ⛔ Registrato SUBITO dopo la creazione: è l'unico punto in cui il
     // legame tardivo di sopra si chiude davvero. Senza questa riga i modelli
     // locali resterebbero irraggiungibili con un messaggio che dice
     // «il motore non è acceso» anche quando lo è.
     supervisoreLocale = supervisor;
-    const llama = createLlamaServerRuntime({ supervisor });
+    const llama = resumeDiagnostics.wrapRuntime(createLlamaServerRuntime({ supervisor }));
     localRuntimes['llama.cpp'] = {
       detect: async () => {
         const s = supervisor.status();
@@ -414,7 +424,7 @@ async function startServer() {
    * parte comunque — avviare una sessione fallisce per-richiesta con
    * CONFIG_INVALID, dichiarato al chiamante, non un rifiuto all'avvio.
    */
-  const sessionRegistry = createSessionRegistry({
+  const sessionRegistry = resumeDiagnostics.wrapRegistry(createSessionRegistry(resumeDiagnostics.registryOptions({
     contextHooksFn: config.contextTrial ? input => contextRuntime.service.createKernelHooks(input) : undefined,
     contextCompactFn: config.contextTrial ? input => contextRuntime.service.compact(input) : undefined,
     avviaSessioneFn: (input) => avviaSessione({
@@ -498,7 +508,7 @@ async function startServer() {
      * elencare zero attrezzi.
      */
     attrezziKernelFn: () => ownerRuntime.attrezziKernel(),
-  });
+  })));
   /*
    * ⭐⭐⭐ FASE L (30/8) — ricostruisce le sessioni persistite PRIMA di
    * accettare richieste: un riavvio del server (non solo un F5 del
@@ -532,7 +542,7 @@ async function startServer() {
       fetchFn: (url, options) => {
         if (String(url).startsWith(`${localCounterBase}/`)) {
           if (!supervisoreLocale) throw Object.assign(new Error('Motore locale non disponibile.'), { code: 'CTX_RUNTIME_PROFILE_MISMATCH' });
-          return supervisoreLocale.request(new URL(url).pathname, options);
+          return resumeDiagnostics.withRoute('context-counter', () => supervisoreLocale.request(new URL(url).pathname, options));
         }
         return fetch(url, options);
       },
@@ -871,6 +881,7 @@ async function startServer() {
       ],
       logger: console,
     });
+    await resumeDiagnostics.flush();
     server.close(() => process.exit(0));
   };
   process.once('SIGINT', shutdown);

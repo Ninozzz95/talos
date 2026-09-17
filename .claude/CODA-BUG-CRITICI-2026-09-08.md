@@ -1272,3 +1272,32 @@ striscia delle linguette (scorre già), il riassunto resta. Skill `frontend-desi
 **Finita quando:** con due file scritti davvero il riassunto si LEGGE a 1024×800 e 1440×900 nei due temi (rettangolo visibile misurato,
 non la presenza nel DOM), si aggiorna al terzo file senza ricarica, sparisce a zero file, e con dodici linguette resta visibile.
 Al contrario: tolto il nodo, la prova cade. Corsia frontend della Fase A, dopo la consegna in corso.
+
+## Dossier dell'owner «Reviewer PR28-31 CP5» (17/09/2026 notte) — valutazione mia, decisioni dell'owner («approvo»)
+
+- **#28 e #30:** già sulla lane (`93650914`, `2a0350a9`); confrontati coi sorgenti del dossier: adapter e supervisore 0 righe diverse,
+  nella sonda solo le mie 7 righe sull'ambiente.
+- **#31 (registratore diagnostico della ripresa, spento di serie): APPLICATA alla lane.** `git apply --reject`, due pezzi di `server.mjs`
+  messi a mano (`scratchpad/pr31-a-mano.mjs`). Revisione MIA: spento = oggetto NOOP (involucri identità, nessuna scrittura); tre rotture
+  mie sulla PRIVACY tutte ROSSE (cattura fuori dalla sessione scelta: 2 · acceso senza cartella: 1 · cartella relativa accettata: 1),
+  ripristino sha256 identico; suite della PR 60/60 sul nostro Windows. ⛔ Debiti dichiarati: niente impedisce di scegliere una cartella
+  DENTRO il repo o sotto OneDrive (il protocollo lo vieta a parole); le prove fallite del dossier e i benchmark NON li ho rieseguiti;
+  nessuna cattura vera fatta. Serve al caso degli 86 secondi: lo accende l'owner, su una sessione scelta.
+- **#29 (percorso locale collegato al kernel): NON applicata.** Stesso obiettivo di BC-76, già fuso per un'altra via (la strada `local:<id>`
+  che esisteva); non si applica su quattro file, rifiuta delega e ricerca (da noi restano sul motore locale), il suo `bindModel` aggira il
+  registratore della #31. Se ne prendono due idee: la capacità letta da `/props` (passata all'agente di BC-79.2 come opzione) e BC-81.
+
+## BC-81 | Una richiesta al motore locale resta LEGATA al processo esatto del modello (idea presa dalla PR bozza #29) — APPROVATA dall'owner il 17/09/2026
+
+**Il rischio, LETTO e non ancora misurato:** `chiamaLocale` parla con «il supervisore», cioè con qualunque processo stia su quella porta
+con quell'alias. Se il modello viene scaricato o riavviato a metà giro (cambio modello, arresto per inattività, crash e ripartenza), la
+richiesta successiva dello STESSO giro può arrivare a un processo nuovo — un altro modello, un'altra finestra di contesto, nessuna cache.
+**La forma della #29:** `bindModel(modelId)` cattura la voce esatta del processo pronto, con un segnale di vita suo; stop, uscita ed errori
+del processo invalidano il legame; riusare alias e porta dopo un riavvio NON lo resuscita; il rilascio è idempotente.
+**Da fare sopra la NOSTRA via** (non i moduli della #29): il legame nasce quando il giro parte e muore col giro; una richiesta su un legame
+invalidato fallisce con un codice suo e una frase umana («Il modello locale è stato riavviato durante la risposta: rimanda il messaggio»),
+mai in silenzio verso il processo nuovo. ⛔ Deve passare DENTRO l'involucro del registratore della #31 (è il blocco che il dossier conserva
+come prova fallita: una richiesta legata che aggira il recorder). ⛔ PRIMA si misura: si riproduce il caso con un motore finto che cambia
+identità a metà giro; se oggi la richiesta arriva al processo nuovo, la riga è vera; se no, si chiude con la misura.
+**Finita quando:** la prova col motore finto è rossa sulla base e verde dopo; stop, scaricamento e riavvio invalidano; il registratore
+vede tutte le richieste; nessun cambio al kernel. Corsia backend, dopo BC-79.2 e prima o dopo BC-73 secondo i file toccati.
