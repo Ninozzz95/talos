@@ -1,6 +1,7 @@
 //! Keep transport outcome separate from Windows capability diagnostics.
 //! A missing capability is NOT proof that a particular packet was blocked.
 //! Nothing here changes a firewall rule, exemption or process capability.
+mod wfp;
 use super::{checks::json_string, ensure, io_result, w, Result};
 use std::{fs::{File, OpenOptions}, io::{self, Read, Write}, net::{SocketAddr, TcpListener, TcpStream},
     path::Path, thread, time::{Duration, Instant}};
@@ -82,6 +83,7 @@ pub(super) fn show_diagnostic(scratch_file: &Path) -> Result<()> {
     ensure(bytes.len() <= 4096, "network diagnostic exceeds limit")?;
     let text = String::from_utf8(bytes).map_err(|_| "network diagnostic is not UTF-8".to_string())?;
     println!("{{\"diagnostic\":\"child_network_report\",\"trusted_for_verdict\":false,\"text\":{}}}", json_string(&text));
+    wfp::record_existing_events(scratch_file);
     Ok(())
 }
 
