@@ -4,6 +4,36 @@
 > Tutto ciò che è detto «misurato» ha il comando o il commit accanto; ciò che è «letto» è dichiarato tale.
 > Se un'affermazione di questo file contraddice il codice, VINCE IL CODICE: riaccertala e correggi il file.
 
+## ⏱️ AGGIORNAMENTO del 18/09/2026, ~01:30 — QUESTA SEZIONE VINCE sulle §3 e §4 qui sotto (che restano come storia)
+
+**Ordini dell'owner arrivati dopo la prima stesura:**
+(a) «completa le fette rimanenti» di PO-30, e poi «vai da solo alla fetta 2 e 3 autonomamente»;
+(b) «la sidebar deve essere IDENTICA, funzionante totalmente come da mockup e realmente legata alla app»; «sidebar, File e il resto identici a livello di STILE al mockup»;
+(c) sulla PR #27: «applichi TUTTO quello che ha fatto la PR 27, cioè nuovo centro impostazioni, stile e sezioni nuove, NIENTE ECCEZIONI tranne per cose ovviamente non finite».
+
+**Che cosa è successo (tutto committato, niente di non salvato nel working tree tranne dove detto):**
+- `973f1e55` PO-30 fetta 1 (scheda File col disegno del laboratorio) + `66e6023b` pacchetto servito — PUBBLICATI (push fino a `66e6023b`).
+- `616220c4` ricerca di un file in TUTTA la cartella: BACKEND (`src/workspace-search.mjs`, `registro.cercaFile`, rotta `GET /api/v1/sessions/:id/tree/search?q=`), 9 prove verdi. ⛔ Il FRONTEND non la usa ancora: `#fileTreeFilter` in `legacy/app.js` chiama solo `filtraAlberoReale` (filtro locale).
+- ⚠️ **SCOPERTA STRUTTURALE.** La PR #27 (repo pubblico `Ninozzz95/talos`, remoto git `public`, ref locale `refs/pr/27` = `47286593`, base `13f65c15` = `refs/pr/public-main`) NON ha antenati in comune con la lane,
+  e il main PUBBLICO contiene lavoro di rilascio desktop che la lane e il main PRIVATO (`origin/main` = `3415c030`, antenato della lane) NON avevano: scope del portachiavi (`src/adattatore-keyring.mjs`),
+  migrazione una tantum delle chiavi (`src/migrazione-chiavi.mjs`), pulizia alla disinstallazione (`src/pulizia-dati.mjs`), hotfix blackbox del kernel, rotte batch della fase 3.
+  ⇒ Integrazione fatta in DUE commit, in un worktree separato (`…/projects/wt-pr27b`, ramo `integra-pr27b`) e poi portata sulla lane in fast-forward:
+  1. `c0388670` — il delta `origin/main → main pubblico`, SOLO `harness-ui/`, come patch a tre vie. Le 48 cancellazioni di quel delta erano il FILTRO dell'esportazione pubblica (benchmark, mockup originale, labs, immagini): NON portate. `AGENTS.md` escluso. 7 conflitti risolti a mano.
+  2. `cdbf51c9` — la PR #27 INTERA (73 commit, 171 file, +13.638 −1.491) come patch a tre vie; 20 conflitti risolti a mano (dettaglio nel messaggio di commit). Include come consegnati: prototipo `frontend/prototypes/calm-lab/`, runner `frontend/tests/qualification/`, `docs/refactor/`, 16 workflow CI, `tools/delivery/`, sorgenti TypeScript nuovi sotto `frontend/src/{app,domain,features,design-system}`.
+  La lane è a **`cdbf51c9`, NON pubblicata, e NON ANCORA VERIFICATA**: al momento di questa riga stavano girando build + unit (`%TEMP%/unit-pr27.log`); vanno poi lanciati backend intero, cartella `tests/browser` intera, `npm run aggiorna`, foto nei due temi.
+  Comandi per rifare o controllare: `git diff --binary origin/main refs/pr/public-main -- harness-ui` e `git diff --binary refs/pr/public-main refs/pr/27` → `git apply --3way`; conflitti visti e risolti con `scratchpad/mostra-conflitti.mjs` e `scratchpad/risolvi-conflitti.mjs`.
+- I due file `harness-ui/tests/research-orchestrator.test.mjs` e `ricerca-deposito-strutturato.test.mjs`, che risultavano «modificati da un'altra sessione», avevano ESATTAMENTE le modifiche del main pubblico: ora sono committati dentro `c0388670` (copia di sicurezza in `scratchpad/copia-due-test-altra-sessione/`). La regola «non toccarli» non serve più.
+- Worktree di servizio rimasti, da togliere con prudenza (elencare prima le giunzioni; mai `rm -rf`): `…/projects/wt-pr27` (primo tentativo, sporco, senza valore) e `…/projects/wt-pr27b` (pulito, già fuso).
+
+**Che cosa fare ADESSO, in ordine (è la coda viva):**
+1. Verificare `cdbf51c9`: `node scripts/build.mjs` e `npm run test:unit` da `harness-ui/frontend/`; backend intero da `harness-ui/`; cartella `tests/browser` intera (le rosse note di BC-72 erano 53 PRIMA della PR #27: la PR riscrive palette comandi, avvio e impostazioni, quindi l'insieme delle rosse CAMBIERÀ — confrontare per FILE, e curare le nuove). Il dossier della PR dichiara rosso lo scenario reale «theme and tab values persist across reload» (la ricerca «API key» nelle Impostazioni non rende visibile `[data-settings-result="provider-openai"]`): va curato, senza sleep né retry.
+2. `npm run aggiorna`, salute, foto dal vivo nei due temi a 1024 e 1440 delle superfici nuove (Impostazioni/Studio temi, palette comandi, home/avvio), committare `harness-ui/public/`, chiedere il push.
+3. PO-30 fetta 1, quel che manca per essere IDENTICA al laboratorio: collegare la ricerca al campo; «chi sta toccando il file» sulla riga (dati degli agenti); selezione multipla con azioni; trascina-e-rilascia; rinomina in riga; poi una PASSATA DI STILE col laboratorio pezzo per pezzo (foto affiancate: token, misure, tipografia).
+4. **PO-30 fetta 2** (dettaglio Agente come nel laboratorio: Panoramica / File / Eventi, «Isola nel diagramma», «Segui», file coinvolti con collegamento al file — tutto dai dati VERI della figlia: `GET /api/v1/sessions/:id/children`, il flusso eventi della figlia, `components/conversazione-figlia.js`, `inspector.js` `disegnaAgenti`).
+5. **PO-30 fetta 3** (la vista «Diagramma agenti»: grafo della sessione con gerarchie/dipendenze/messaggi, pan e zoom, «Adatta», filtro per stato, ricerca agente, mini-mappa, «Segui attivo», «Affianca file», replay con la linea del tempo) — sorgenti del laboratorio: `prototype/src/agent-views.js`, `workspace-views.js`, `events.js`, `controller.js`; foto `evidence/03-diagramma.png`.
+6. Il catalogo modelli della PR #27 (`frontend/prototypes/calm-lab/`: filtri per grandezza + pagina del modello a tutta larghezza) è un PROTOTIPO su dati finti: l'owner lo vuole nel prodotto come il resto («niente eccezioni tranne per cose ovviamente non finite») ⇒ portarlo sui dati veri del Laboratorio modelli è una riga da aprire (PO-31), dopo le fette.
+7. Poi: la TERZA PR dell'owner (non ancora consegnata), i due rami fermi (§5), Fase A-bis righe 1 e 4, BC-81, e il RILASCIO (§7.9). ⚠️ Per il rilascio conta la scoperta qui sopra: le release 0.1.11–0.1.13 sono state tagliate dal repo PUBBLICO; la lane ora ne contiene il lavoro, ma il main privato no — prima di un tag va deciso DA DOVE si rilascia e come si riallineano pubblico e privato (decisione dell'owner).
+
 ## 0 · In trenta secondi
 - **Che cos'è:** TALOS è un harness di coding agentico. Questa lane è il **DESKTOP**: backend Node (`harness-ui/server.mjs`, `harness-ui/src/`)
   + frontend senza framework (`harness-ui/frontend/`), servito su **http://127.0.0.1:4174**, impacchettato anche con Electron (`harness-ui/desktop/`).
