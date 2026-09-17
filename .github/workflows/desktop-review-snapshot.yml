@@ -28,6 +28,18 @@ jobs:
           base='13f65c15cdeaf8986b882993a0773cdeafb867d2'
           tree=subprocess.check_output(['git','ls-tree','-rz',head]).split(b'\0')
           manifest=[]; fonts=[]; gitlinks=[]
+          cat=subprocess.Popen(['git','cat-file','--batch'],stdin=subprocess.PIPE,stdout=subprocess.PIPE)
+          def read_blob(blob):
+            cat.stdin.write(blob.encode()+b'\n'); cat.stdin.flush()
+            sha,kind,size=cat.stdout.readline().split()
+            if sha.decode()!=blob or kind!=b'blob': raise RuntimeError('Unexpected Git object')
+            remaining=int(size); data=bytearray()
+            while remaining:
+              part=cat.stdout.read(remaining)
+              if not part: raise RuntimeError('Truncated Git object')
+              data.extend(part); remaining-=len(part)
+            if cat.stdout.read(1)!=b'\n': raise RuntimeError('Invalid Git framing')
+            return bytes(data)
           with zipfile.ZipFile(out/'source.zip','w',zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
             for raw in tree:
               if not raw: continue
@@ -37,16 +49,11 @@ jobs:
               if kind=='commit':
                 gitlinks.append({'path':rel,'commit':blob,'status':'external-submodule-not-expanded','usedByDesktopLauncher':False})
                 continue
-              path=root/rel
-              if mode=='120000':
-                data=subprocess.check_output(['git','cat-file','blob',blob])
-              else:
-                if not path.is_file(): raise RuntimeError('Tracked file missing: '+rel)
-                data=path.read_bytes()
+              data=read_blob(blob)
               actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
-              if actual!=blob: raise RuntimeError('Checkout differs from exact Git blob: '+rel)
+              if actual!=blob: raise RuntimeError('Invalid Git blob: '+rel)
               entry={'path':rel,'mode':mode,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'gitBlob':blob}
-              if path.suffix.lower() in {'.woff','.woff2','.ttf','.otf','.ttc','.eot'}:
+              if pathlib.PurePosixPath(rel).suffix.lower() in {'.woff','.woff2','.ttf','.otf','.ttc','.eot'}:
                 entry['url']='https://raw.githubusercontent.com/Ninozzz95/talos/'+head+'/'+rel
                 fonts.append(entry)
                 continue
@@ -56,6 +63,8 @@ jobs:
               info.compress_type=zipfile.ZIP_DEFLATED
               archive.writestr(info,data)
               manifest.append(entry)
+          cat.stdin.close()
+          if cat.wait()!=0: raise RuntimeError('Git object reader failed')
           (out/'SOURCE_COMMIT.txt').write_text(head+'\n')
           (out/'source-manifest.json').write_text(json.dumps({'commit':head,'base':base,'files':manifest,'excludedFontAssets':fonts,'externalGitlinks':gitlinks},indent=2))
           (out/'all-changes.patch').write_bytes(subprocess.check_output(['git','diff','--no-ext-diff','--no-renames',base,head]))
