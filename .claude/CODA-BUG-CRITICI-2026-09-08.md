@@ -1130,3 +1130,28 @@ panchina il rifiuto lo DICE (causa in parole umane e fino a quando), non «Manca
 vecchia → 2 rosse. Backend intero da solo: **3277 · 3272 pass · 0 fail · 5 skipped**. ⛔ Lezione: tre revisori avevano
 «misurato» quella funzione ricopiandone i byte, e nessuno aveva provato lo STATO che la rompe — una chiave che c'è e non si può
 usare. Una regola dentro una chiusura non ha prove sue: si estrae PRIMA di fonderla, non dopo che qualcuno ci inciampa.
+
+## PR #30 dell'owner (bozza, `Ninozzz95/talos`, ramo `perf/local-engine-async-preflight`, commit `84d7d265`) — la sonda del motore locale diventa ASINCRONA — VALUTATA da me il 17/09/2026, NON applicata (aspetta il suo sì)
+
+**Cosa fa:** il supervisore del llama-server sondava il binario (fit f16, fit q8, `--help`) con `spawnSync`, che BLOCCA il ciclo
+degli eventi del backend: mentre si carica un modello il server non risponde a niente (SSE delle altre sessioni, terminale,
+battiti). Nuovo `src/llama-binary-probe.mjs` (spawn asincrono, niente shell, tetto di 4 MiB sull'uscita, tempo massimo,
+annullamento che uccide la sonda) e nel supervisore UN solo proprietario dell'avvio: stop durante l'avvio, salute tardiva che
+non pubblica «pronto», lucchetto del modello rilasciato. Due soli file di produzione; nessun tocco a kernel, adattatore della
+PR #28, registro, frontend.
+**Verificato da me sul NOSTRO albero** (copia nello scratchpad `evidenze-preflight/banco-nostro`, mai la lane): il nostro
+`llama-server-supervisor.mjs` è byte per byte la loro base (sha256 `d59cc22a…`); `process-policy.mjs` da noi è DIVERSO (BC-64,
+`finestreVisibili`) ma la patch non lo tocca; la patch si applica pulita; le esportazioni del supervisore restano identiche;
+nessuno usa `creaSondaBinario` fuori dal supervisore. Prove della PR su Windows: **52/52**. Le NOSTRE suite del supervisore, che
+loro non avevano potuto girare (`llama-server-supervisor` + `llama-server-r03`): **25/25 prima e 25/25 dopo** (un mio primo giro
+dava 6 rossi prima E dopo: alla mia copia mancava la fixture `llama-server-r03.cjs`, errore mio). Il loro banco su QUESTA
+macchina (3 sonde da 50 ms, 11 coppie): **buco massimo del ciclo degli eventi 317,2 ms → 12,5 ms**; tempo al «pronto» invariato
+(317,1 → 317,6 ms). ⇒ Compra REATTIVITÀ, non velocità — esattamente ciò che dichiara.
+**Da sapere prima di applicarla:** (1) la sonda nuova EREDITA l'ambiente intero del server (`llama-binary-probe.mjs:98-100`,
+dichiarato «come prima»): sono i punti 5-7 dell'elenco `ELENCO-SPAWN-AMBIENTE` — al momento di applicarla conviene passarle
+l'ambiente ripulito di `src/ambiente-solo-server.mjs`, una riga; (2) cambia due comportamenti apposta: un'uscita diversa da zero
+non vale più come prova anche se lo stdout «sembra buono», e il tetto di 4 MiB è sommato fra stdout e stderr; (3) non misurato da
+nessuno: un `llama-fit-params` VERO (dura secondi, non 50 ms — il guadagno reale è più grande), l'annullamento su Windows di un
+binario vero, Vulkan/CPU; (4) il rapporto CORREGGE una mia lettura di BC-76: le strade locali sono DUE — `eseguiRuntimeLocale`
+(sessione `provider:'local'`, non esegue attrezzi) e la strada del kernel con un modello `local:<id>`, che già avvia il motore
+(`avviaLocale`) ed esegue gli attrezzi. BC-76 resta vera per la prima; il brief lo dice già come ipotesi di cura.
