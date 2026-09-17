@@ -1361,3 +1361,24 @@ rispetta). Prova nei due versi, col genitore lanciato ad ambiente RIPULITO: `tes
 finto gira senza difesa — la prova sa mordere, 03 il server la importa per primo). Fonti, 17/09/2026: nodejs/node #46264, cline/cline
 #14171, ausardcompany/alexi #1752. ⛔ NON verificato: il processo main di Electron (`desktop/main.mjs`) — LETTO: lancia il server con un
 percorso assoluto e la sonda del motore con un percorso, non nomi nudi; la CLI è fuori scope (glielo segnalo).
+
+## BC-84 | Una guardia approvata restava approvata dopo che il suo FILE era stato riscritto — trovato e CURATO da me il 17/09/2026 notte (Fase A-bis, riga 2)
+
+**Misurato prima di curare** (sonda con le funzioni vere di `hook-registry.mjs`): hook `node guardia.mjs` approvato; `guardia.mjs` riscritto;
+al ricaricamento `FIDATO DOPO LA SOSTITUZIONE: true`, impronta `b76e9d114849` identica prima e dopo; `eseguiHook` eseguiva la versione
+sostituita. L'impronta era lo sha256 della sola STRINGA del comando. `guardia.mjs` è un file qualunque del workspace, scrivibile dall'agente:
+riscriverlo bastava a far girare codice proprio alla chiamata dopo — classe CVE-2026-25725.
+⛔ **E la riga 2 del MIO brief era sbagliata nel verso:** chiedeva di vietare `node -e` agli hook standalone. Ma con `node -e "<codice>"` il
+codice STA nella stringa, quindi nell'impronta: era la forma più sicura delle due. Vietarla e spingere verso `node file` avrebbe allargato
+il buco. Trovato leggendo la riga 88 prima di scrivere, poi misurato. ⇒ La riga 2 è SOSTITUITA da questa; `node -e` resta ammesso.
+**Cura** (`src/hook-registry.mjs`): `improntaHook` mette nell'impronta nome relativo e sha256 di ogni argomento che cade su un file regolare
+del progetto; un comando senza file conserva l'impronta di prima byte per byte (nessuno deve riapprovare `echo`/`node -e`; chi aveva
+approvato un `node file` riapprova UNA volta); collegamenti rifiutati; tetto 8 MiB per file. E RICONTROLLO ALL'USO in `eseguiHook`: a
+sessione viva (foto presa all'avvio) una guardia col file cambiato NON gira e NEGA, con una frase umana e il codice
+`HOOK_CHANGED_SINCE_TRUST`. **Prove** `tests/hook-impronta-dei-file.test.mjs` (5; la guardia sostituita lascerebbe un file-spia sul disco:
+«non è girata» si legge dal disco). Tre rotture mie tutte ROSSE (niente ricontrollo → 02 · impronta = sola stringa → 01, 02, 04 · solo il
+primo file → 04), sha256 identico. Suite che caricano hook: 518 · 517 pass · 0 fail · 1 skipped (i collegamenti a file su questa macchina).
+⛔ Debiti DICHIARATI: copre i file NOMINATI, non ciò che importano a loro volta; la frase del rifiuto non ha ancora una carta sua nel
+frontend; gli hook dei PLUGIN hanno l'impronta del pacchetto ma non il ricontrollo all'uso (riga 1 della A-bis, aspetta la fusione di BC-73
+perché tocca `session-registry.mjs`/`agent-service.mjs`). Fonti, 17/09/2026: karanb192/claude-code-hooks; thepromptshelf.dev «Claude Code
+Hooks: Complete Reference 2026».

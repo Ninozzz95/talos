@@ -1,7 +1,7 @@
 # BRIEF — Fase A-bis · sicurezza di secondo livello (solo backend)
 
 > Collocata da me il 17/09/2026 sul mandato dell'owner («decidilo tu per priorità e complessità»). Parte dopo la fusione di BC-73.
-> Un agente Opus 5, sforzo alto. La revisione avversariale la fa l'ORCHESTRATORE, non un agente (owner 17/09, ribadito la notte).
+> ⛔ **Owner, 17/09 notte: nessuna delega a subagenti.** Questo brief NON va a un agente: è la MIA lista di lavoro, inline.
 > Ramo tuo con `git.exe checkout -b fase-a-bis <sha che ti do>`; nessun checkout fra rami dopo; A/B sulla base con `git.exe archive`.
 
 ## Cosa esiste già (letto o misurato il 17/09 — RIACCERTALO sul tuo albero prima di fidarti)
@@ -35,7 +35,9 @@
    (stessa funzione degli attrezzi: una verità sola) e, se è cambiata, l'hook NON gira e la sessione lo dice con una frase umana, una
    volta. ⛔ Misura il costo: l'impronta è a flusso con tetti (32 MiB/file, 128 MiB/pacchetto); se un hook frequente la rende cara,
    proponi una cache invalidata da `mtime`+dimensione DICHIARANDO che cosa non vede, non metterla in silenzio.
-2. **Gli hook standalone passano dalla stessa grammatica.** `.harness-ui-hooks.json`: niente `node -e`/`-p`/`--eval`/`-r`, niente
+2. ✅ **SOSTITUITA e CHIUSA il 17/09 notte da BC-84** (l'impronta copre i file nominati + ricontrollo all'uso). ⛔ La riga qui sotto era
+   SBAGLIATA nel verso: `node -e` porta il codice dentro l'impronta, vietarlo avrebbe allargato il buco. Resta come storia.
+   ~~**Gli hook standalone passano dalla stessa grammatica.**~~ `.harness-ui-hooks.json`: niente `node -e`/`-p`/`--eval`/`-r`, niente
    opzioni dell'interprete; ammesso ciò che la grammatica dei plugin ammette. ⛔ PRIMA misura chi rompi: cerca nel repo, nelle fixture e
    nei documenti gli hook standalone che usano `node -e` (le prove di `eseguiComandoPlugin` lo usano APPOSTA: non sono hook standalone,
    non toccarle). Un hook già FIDATO che diventa inammissibile non sparisce in silenzio: resta elencato come «non più ammesso», col
