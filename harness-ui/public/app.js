@@ -4721,6 +4721,13 @@ var init_en = __esm({
         "Scheda non aperta": "Tab not opened",
         "Shell non chiusa sul server": "Shell not closed on the server"
       },
+      /* le linguette dei file della Revisione (BC-63, 17/09: stesso componente del Terminale) */
+      revisione: {
+        "Azioni sul file": "File actions",
+        "Apri il file": "Open the file",
+        "Copia il percorso": "Copy the path",
+        "Copia il diff di questo file": "Copy this file’s diff"
+      },
       /* il Browser a schede */
       browser: {
         "Letture della sessione": "Session readings",
@@ -15238,6 +15245,325 @@ var init_download_coda = __esm({
   }
 });
 
+// src/components/schede.js
+function accorciaPercorso(percorso, massimo = 46) {
+  const testo3 = String(percorso ?? "");
+  if (testo3.length <= massimo) return testo3;
+  const pezzi = testo3.split(/(?<=[\\/])/);
+  const radice2 = pezzi[0] + (pezzi[1] ?? "");
+  let coda = "";
+  for (let i2 = pezzi.length - 1; i2 > 1; i2 -= 1) {
+    const prova = pezzi[i2] + coda;
+    if (radice2.length + 1 + prova.length > massimo) break;
+    coda = prova;
+  }
+  if (!coda) {
+    const quanti = Math.max(6, massimo - radice2.length - 1);
+    coda = testo3.slice(-quanti);
+  }
+  return `${radice2}…${coda}`;
+}
+function prossimaAttivaDopoChiusura(lista, indice2) {
+  const resto = lista.filter((_, i2) => i2 !== indice2);
+  return resto[indice2] ?? resto[indice2 - 1] ?? null;
+}
+function cicla(lista, attiva, direzione) {
+  if (lista.length < 2) return attiva ?? lista[0] ?? null;
+  const corrente = Math.max(0, lista.indexOf(attiva));
+  return lista[(corrente + direzione + lista.length) % lista.length];
+}
+function nomeSchedaValido(nome) {
+  const pulito = String(nome ?? "").trim();
+  return pulito.length > 0 && pulito.length <= 40;
+}
+function creaMenuContestuale(root, { id = "menuSchedaTerminale", etichetta: etichetta2 = "Azioni sulla scheda" } = {}) {
+  let menu = root.querySelector(`#${id}`);
+  if (menu) return menu;
+  const documento = root.ownerDocument || globalThis.document;
+  menu = documento.createElement("div");
+  menu.id = id;
+  menu.className = "talos-card talos-context-menu";
+  menu.setAttribute("role", "menu");
+  menu.setAttribute("aria-label", t(etichetta2));
+  menu.hidden = true;
+  root.append(menu);
+  return menu;
+}
+function apriMenuContestuale(menu, { titolo: titolo2 = "", voci = [], x = 0, y = 0, chiudi = () => {
+}, finestra = globalThis }) {
+  const documento = menu.ownerDocument || globalThis.document;
+  menu.replaceChildren();
+  if (titolo2) {
+    const intestazione = documento.createElement("div");
+    intestazione.className = "talos-context-menu__title";
+    intestazione.textContent = titolo2;
+    menu.append(intestazione);
+  }
+  for (const [testo3, fai, abilitato = true] of voci) {
+    const b = documento.createElement("button");
+    b.type = "button";
+    b.className = "talos-button talos-button--ghost";
+    b.setAttribute("role", "menuitem");
+    b.textContent = testo3;
+    b.disabled = !abilitato;
+    b.addEventListener("click", () => {
+      chiudi();
+      fai();
+    });
+    menu.append(b);
+  }
+  menu.hidden = false;
+  const larghezza = menu.offsetWidth || 240;
+  const altezza = menu.offsetHeight || 160;
+  menu.style.left = `${Math.max(8, Math.min(x, (finestra.innerWidth ?? 0) - larghezza - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, (finestra.innerHeight ?? 0) - altezza - 8))}px`;
+  menu.querySelector("[role=menuitem]:not([disabled])")?.focus();
+  return menu;
+}
+function attributoDi(chiave) {
+  return `data-${String(chiave).replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
+}
+function creaSchede(striscia, {
+  lista = null,
+  root = globalThis.document?.body,
+  chiave = "schedaId",
+  classe = "talos-schede__tab",
+  idMenu = "menuScheda",
+  etichettaMenu = "Azioni sulla scheda",
+  identifica = (voce) => String(voce?.id ?? ""),
+  etichetta: etichetta2 = (voce) => String(voce?.id ?? ""),
+  suggerimento = () => "",
+  contenuto = null,
+  vociMenu = null,
+  suClick = null,
+  suDoppioClick = null,
+  inerte = null,
+  coda = null,
+  scorre = false,
+  chiudibile = false,
+  rinominabile = false,
+  azioni = {}
+} = {}) {
+  const documento = striscia.ownerDocument || globalThis.document;
+  const contenitore = lista || (striscia.matches?.("[role=tablist]") ? striscia : striscia.querySelector("[role=tablist]")) || striscia;
+  const attributo = attributoDi(chiave);
+  const menu = vociMenu ? creaMenuContestuale(root, { id: idMenu, etichetta: etichettaMenu }) : null;
+  let voci = [];
+  let attiva = null;
+  const chiudiMenu = () => {
+    if (menu) {
+      menu.hidden = true;
+      menu.replaceChildren();
+    }
+  };
+  if (menu) {
+    root.addEventListener("pointerdown", (e) => {
+      if (!menu.hidden && !menu.contains(e.target)) chiudiMenu();
+    });
+    root.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !menu.hidden) {
+        chiudiMenu();
+        e.stopPropagation();
+      }
+    });
+  }
+  function apriMenu(voce, x, y) {
+    if (!menu) return;
+    apriMenuContestuale(menu, {
+      titolo: etichetta2(voce, voci),
+      voci: vociMenu(voce, voci) || [],
+      x,
+      y,
+      chiudi: chiudiMenu,
+      finestra: globalThis
+    });
+    azioni.menuAperto?.(voce);
+  }
+  if (scorre) {
+    contenitore.addEventListener("wheel", (e) => {
+      if (e.ctrlKey || e.deltaY === 0) return;
+      if (contenitore.scrollWidth <= contenitore.clientWidth) return;
+      e.preventDefault();
+      contenitore.scrollLeft += e.deltaY;
+    }, { passive: false });
+  }
+  let inVistaInSospeso = null;
+  function portaInVista(bottone5) {
+    if (!scorre || !bottone5) return;
+    if (contenitore.clientWidth === 0) {
+      inVistaInSospeso = bottone5.dataset[chiave] ?? null;
+      return;
+    }
+    inVistaInSospeso = null;
+    if (contenitore.scrollWidth > contenitore.clientWidth) {
+      const r = bottone5.getBoundingClientRect();
+      const c = contenitore.getBoundingClientRect();
+      if (r.left < c.left) contenitore.scrollLeft -= c.left - r.left + 8;
+      else if (r.right > c.right) contenitore.scrollLeft += r.right - c.right + 8;
+    }
+    segnaBordi();
+  }
+  function segnaBordi() {
+    if (!scorre) return;
+    const massimo = contenitore.scrollWidth - contenitore.clientWidth;
+    if (massimo <= 1) {
+      delete contenitore.dataset.bordi;
+      return;
+    }
+    const aSinistra = contenitore.scrollLeft > 1;
+    const aDestra = contenitore.scrollLeft < massimo - 1;
+    contenitore.dataset.bordi = aSinistra && aDestra ? "entrambi" : aSinistra ? "sinistra" : "destra";
+  }
+  if (scorre) {
+    contenitore.addEventListener("scroll", segnaBordi, { passive: true });
+    if (typeof ResizeObserver === "function") {
+      new ResizeObserver(() => {
+        if (contenitore.clientWidth === 0) return;
+        if (inVistaInSospeso != null) {
+          const b = bottoneDi(inVistaInSospeso);
+          inVistaInSospeso = null;
+          if (b) portaInVista(b);
+        }
+        segnaBordi();
+      }).observe(contenitore);
+    }
+  }
+  function bottoneDi(id) {
+    return contenitore.querySelector(`[role=tab][${attributo}="${CSS.escape(id)}"]`);
+  }
+  function creaLinguetta(voce, indice2) {
+    const b = documento.createElement("button");
+    b.className = classe;
+    b.setAttribute("role", "tab");
+    b.type = "button";
+    const id = identifica(voce);
+    const scelta = id === attiva;
+    b.setAttribute("aria-selected", String(scelta));
+    b.tabIndex = scelta ? 0 : -1;
+    b.dataset[chiave] = id;
+    const suggerisci = suggerimento(voce, indice2, voci);
+    if (suggerisci) b.title = suggerisci;
+    if (contenuto) contenuto(b, voce, indice2, voci);
+    else b.append(documento.createTextNode(etichetta2(voce, voci)));
+    if (inerte?.(voce)) return b;
+    b.addEventListener("click", (e) => {
+      if (suClick?.(voce, e, b)) return;
+      if (chiudibile && (e.ctrlKey || e.metaKey)) azioni.chiudi?.(id);
+      else azioni.seleziona?.(id);
+    });
+    if (chiudibile) b.addEventListener("auxclick", (e) => {
+      if (e.button === 1) {
+        e.preventDefault();
+        azioni.chiudi?.(id);
+      }
+    });
+    if (suDoppioClick) b.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      suDoppioClick(voce, e, b);
+    });
+    if (menu) b.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      apriMenu(voce, e.clientX, e.clientY);
+    });
+    return b;
+  }
+  function suTastiera(e) {
+    const tab = e.target.closest?.(`[role=tab][${attributo}]`);
+    if (!tab || azioni.tastieraSospesa?.()) return;
+    const ids = voci.map((v) => identifica(v));
+    const id = tab.dataset[chiave];
+    const voce = voci.find((v) => identifica(v) === id);
+    let prossima = null;
+    if (e.key === "ArrowRight") prossima = cicla(ids, id, 1);
+    else if (e.key === "ArrowLeft") prossima = cicla(ids, id, -1);
+    else if (e.key === "Home") prossima = ids[0];
+    else if (e.key === "End") prossima = ids[ids.length - 1];
+    else if (e.key === "Delete" && chiudibile) {
+      e.preventDefault();
+      azioni.chiudi?.(id);
+      return;
+    } else if (e.key === "F2" && rinominabile) {
+      e.preventDefault();
+      if (voce) suDoppioClick?.(voce, e, tab);
+      return;
+    } else if (menu && (e.key === "ContextMenu" || e.shiftKey && e.key === "F10")) {
+      e.preventDefault();
+      const r = tab.getBoundingClientRect();
+      if (voce) apriMenu(voce, r.left, r.bottom);
+      return;
+    } else return;
+    e.preventDefault();
+    if (prossima && prossima !== id) {
+      azioni.seleziona?.(prossima);
+      const bersaglio = bottoneDi(prossima);
+      bersaglio?.focus();
+      portaInVista(bersaglio);
+    }
+  }
+  contenitore.addEventListener("keydown", suTastiera);
+  function linguettaColFuoco() {
+    const attivo = (contenitore.ownerDocument || document).activeElement;
+    if (!attivo?.matches?.(`[role=tab][${attributo}]`)) return null;
+    return contenitore.contains(attivo) ? attivo.dataset[chiave] : null;
+  }
+  function fuocoPerduto() {
+    const documento2 = contenitore.ownerDocument || document;
+    const attivo = documento2.activeElement;
+    return !attivo || attivo === documento2.body || attivo === documento2.documentElement;
+  }
+  function renderizza() {
+    const avevaIlFuoco = linguettaColFuoco();
+    contenitore.replaceChildren();
+    voci.forEach((voce, i2) => {
+      contenitore.append("\n", creaLinguetta(voce, i2));
+    });
+    for (const nodo11 of coda?.(voci) || []) contenitore.append("\n", nodo11);
+    contenitore.append("\n");
+    if (avevaIlFuoco != null && fuocoPerduto()) bottoneDi(avevaIlFuoco)?.focus();
+    portaInVista(attiva != null ? bottoneDi(attiva) : null);
+  }
+  return {
+    get lista() {
+      return contenitore;
+    },
+    get voci() {
+      return voci;
+    },
+    get attiva() {
+      return attiva;
+    },
+    menu,
+    chiudiMenu,
+    apriMenu,
+    bottoneDi,
+    portaInVista,
+    /** Ridisegna con l'elenco e la scelta correnti. */
+    aggiorna(nuoveVoci = voci, nuovaAttiva = attiva) {
+      voci = nuoveVoci;
+      attiva = nuovaAttiva;
+      renderizza();
+    },
+    /** Cambia solo la selezione, senza ridisegnare (nessun nodo buttato, nessun fuoco perso). */
+    seleziona(id) {
+      attiva = id;
+      for (const b of contenitore.querySelectorAll(`[role=tab][${attributo}]`)) {
+        const scelta = b.dataset[chiave] === id;
+        b.setAttribute("aria-selected", String(scelta));
+        b.tabIndex = scelta ? 0 : -1;
+      }
+      portaInVista(bottoneDi(id));
+    },
+    fuocoSullaAttiva() {
+      contenitore.querySelector('[role=tab][aria-selected="true"]')?.focus();
+    }
+  };
+}
+var init_schede = __esm({
+  "src/components/schede.js"() {
+    init_lingua();
+  }
+});
+
 // src/components/review.js
 function el21(documentObj, tag2, className, testo3) {
   const nodo11 = documentObj.createElement(tag2);
@@ -15278,20 +15604,48 @@ function sottotitoloFile(voce = {}) {
   if (voce.simboliPersi?.length > 0) pezzi.push(`⚠ ${voce.simboliPersi.length} simbol${voce.simboliPersi.length === 1 ? "o sparito" : "i spariti"}`);
   return pezzi.join(" · ");
 }
-function creaRigaFileReview(voce, { attiva = false, onApri, document: documentObj = globalThis.document } = {}) {
-  const scheda = el21(documentObj, "button", "talos-tabs__tab talos-review__scheda");
-  scheda.type = "button";
-  scheda.setAttribute("role", "tab");
-  scheda.setAttribute("aria-selected", String(Boolean(attiva)));
-  scheda.tabIndex = attiva ? 0 : -1;
-  scheda.dataset.reviewFile = `real:${voce.path}`;
-  scheda.title = sottotitoloFile(voce);
-  scheda.append(el21(documentObj, "span", "talos-mono", voce.path));
+function chiaveFileReview(voce) {
+  return `real:${voce.path}`;
+}
+function suggerimentoFile(voce = {}) {
+  return [voce.path, sottotitoloFile(voce)].filter(Boolean).join(" — ");
+}
+function etichettaFileReview(voce, tutte = [voce]) {
+  const percorso = String(voce?.path ?? "");
+  const pezzi = percorso.split("/").filter(Boolean);
+  const nome = pezzi.at(-1) || percorso;
+  const omonimi = tutte.filter((v) => v !== voce && String(v?.path ?? "").split("/").filter(Boolean).at(-1) === nome);
+  if (omonimi.length === 0) return nome;
+  const conCartella = pezzi.slice(-2).join("/");
+  const ancoraOmonimi = omonimi.filter((v) => String(v?.path ?? "").split("/").filter(Boolean).slice(-2).join("/") === conCartella);
+  return ancoraOmonimi.length === 0 ? conCartella : accorciaPercorso(percorso, PERCORSO_SU_LINGUETTA);
+}
+function riempiLinguettaFile(scheda, voce, tutte = [voce], documentObj = scheda.ownerDocument || globalThis.document) {
+  scheda.append(el21(documentObj, "span", "talos-mono", etichettaFileReview(voce, tutte)));
   const c = contaDiff(voce);
   scheda.append(el21(documentObj, "span", "talos-diff-num talos-diff-num--plus", `+${c.aggiunte}`));
   if (c.rimozioni > 0) scheda.append(el21(documentObj, "span", "talos-diff-num talos-diff-num--minus", `−${c.rimozioni}`));
-  if (typeof onApri === "function") scheda.addEventListener("click", onApri);
   return scheda;
+}
+function creaSchedeReview(striscia, { azioni = {}, root = globalThis.document?.body } = {}) {
+  return creaSchede(striscia, {
+    root,
+    chiave: "reviewFile",
+    classe: "talos-schede__tab talos-review__scheda",
+    idMenu: "menuSchedaReview",
+    etichettaMenu: "Azioni sul file",
+    scorre: true,
+    identifica: chiaveFileReview,
+    etichetta: etichettaFileReview,
+    suggerimento: suggerimentoFile,
+    contenuto: (scheda, voce, indice2, tutte) => riempiLinguettaFile(scheda, voce, tutte),
+    vociMenu: (voce) => [
+      [t(AZIONI_FILE.apri), () => azioni.apri?.(voce), azioni.puoAprire ? Boolean(azioni.puoAprire(voce)) : true],
+      [t(AZIONI_FILE.copiaPercorso), () => azioni.copiaPercorso?.(voce), true],
+      [t(AZIONI_FILE.copiaDiff), () => azioni.copiaDiff?.(voce), (voce.code?.length ?? 0) > 0]
+    ],
+    azioni: { seleziona: (chiave) => azioni.seleziona?.(chiave) }
+  });
 }
 function aggiornaDiffReview(card, voce) {
   if (!card) return;
@@ -15354,8 +15708,17 @@ function aggiornaDiffReview(card, voce) {
 function nascondiAzioniFase3(radice2) {
   for (const b of radice2?.querySelectorAll('[data-richiede="fase3"]') || []) b.hidden = true;
 }
+var PERCORSO_SU_LINGUETTA, AZIONI_FILE;
 var init_review = __esm({
   "src/components/review.js"() {
+    init_lingua();
+    init_schede();
+    PERCORSO_SU_LINGUETTA = 34;
+    AZIONI_FILE = Object.freeze({
+      apri: "Apri il file",
+      copiaPercorso: "Copia il percorso",
+      copiaDiff: "Copia il diff di questo file"
+    });
   }
 });
 
@@ -15894,23 +16257,6 @@ var init_intro = __esm({
 });
 
 // src/components/terminale.js
-function accorciaPercorso(percorso, massimo = 46) {
-  const testo3 = String(percorso ?? "");
-  if (testo3.length <= massimo) return testo3;
-  const pezzi = testo3.split(/(?<=[\\/])/);
-  const radice2 = pezzi[0] + (pezzi[1] ?? "");
-  let coda = "";
-  for (let i2 = pezzi.length - 1; i2 > 1; i2 -= 1) {
-    const prova = pezzi[i2] + coda;
-    if (radice2.length + 1 + prova.length > massimo) break;
-    coda = prova;
-  }
-  if (!coda) {
-    const quanti = Math.max(6, massimo - radice2.length - 1);
-    coda = testo3.slice(-quanti);
-  }
-  return `${radice2}…${coda}`;
-}
 function nomeShell(enforcement, comando = "") {
   if (enforcement === "git-bash") return "Git Bash";
   if (enforcement === "cmd-fallback") return "cmd.exe";
@@ -15928,19 +16274,6 @@ function titoloScheda(voce, tutte = [voce]) {
   const posizione = omonime.indexOf(voce);
   return `${t("tu")} · ${shell}${omonime.length > 1 && posizione > 0 ? ` ${posizione + 1}` : ""}`;
 }
-function prossimaAttivaDopoChiusura(lista, indice2) {
-  const resto = lista.filter((_, i2) => i2 !== indice2);
-  return resto[indice2] ?? resto[indice2 - 1] ?? null;
-}
-function cicla(lista, attiva, direzione) {
-  if (lista.length < 2) return attiva ?? lista[0] ?? null;
-  const corrente = Math.max(0, lista.indexOf(attiva));
-  return lista[(corrente + direzione + lista.length) % lista.length];
-}
-function nomeSchedaValido(nome) {
-  const pulito = String(nome ?? "").trim();
-  return pulito.length > 0 && pulito.length <= 40;
-}
 function svgIcona(nome, classi = "i i--sm") {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", classi);
@@ -15949,84 +16282,45 @@ function svgIcona(nome, classi = "i i--sm") {
   svg.append(use);
   return svg;
 }
-function creaMenuContestuale(root, { id = "menuSchedaTerminale", etichetta: etichetta2 = "Azioni sulla scheda" } = {}) {
-  let menu = root.querySelector(`#${id}`);
-  if (menu) return menu;
-  const documento = root.ownerDocument || globalThis.document;
-  menu = documento.createElement("div");
-  menu.id = id;
-  menu.className = "talos-card talos-context-menu";
-  menu.setAttribute("role", "menu");
-  menu.setAttribute("aria-label", t(etichetta2));
-  menu.hidden = true;
-  root.append(menu);
-  return menu;
-}
-function apriMenuContestuale(menu, { titolo: titolo2 = "", voci = [], x = 0, y = 0, chiudi = () => {
-}, finestra = globalThis }) {
-  const documento = menu.ownerDocument || globalThis.document;
-  menu.replaceChildren();
-  if (titolo2) {
-    const intestazione = documento.createElement("div");
-    intestazione.className = "talos-context-menu__title";
-    intestazione.textContent = titolo2;
-    menu.append(intestazione);
-  }
-  for (const [testo3, fai, abilitato = true] of voci) {
-    const b = documento.createElement("button");
-    b.type = "button";
-    b.className = "talos-button talos-button--ghost";
-    b.setAttribute("role", "menuitem");
-    b.textContent = testo3;
-    b.disabled = !abilitato;
-    b.addEventListener("click", () => {
-      chiudi();
-      fai();
-    });
-    menu.append(b);
-  }
-  menu.hidden = false;
-  const larghezza = menu.offsetWidth || 240;
-  const altezza = menu.offsetHeight || 160;
-  menu.style.left = `${Math.max(8, Math.min(x, (finestra.innerWidth ?? 0) - larghezza - 8))}px`;
-  menu.style.top = `${Math.max(8, Math.min(y, (finestra.innerHeight ?? 0) - altezza - 8))}px`;
-  menu.querySelector("[role=menuitem]:not([disabled])")?.focus();
-  return menu;
-}
 function creaSchedeTerminale(pane, { azioni = {}, root = document.body } = {}) {
   const tabs = pane.querySelector(".talos-terminal__tabs");
   const foot = pane.querySelector(".talos-terminal__foot");
   let stato = { schede: [], attiva: null, puoAprire: true, motivoNoNuova: "", badges: [], piede: null };
   let inRinomina = null;
-  const menu = creaMenuContestuale(root);
-  const chiudiMenu = () => {
-    menu.hidden = true;
-    menu.replaceChildren();
-  };
-  root.addEventListener("pointerdown", (e) => {
-    if (!menu.hidden && !menu.contains(e.target)) chiudiMenu();
-  });
-  root.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !menu.hidden) {
-      chiudiMenu();
-      e.stopPropagation();
+  const schede = creaSchede(tabs, {
+    root,
+    chiave: "terminaleId",
+    classe: "talos-terminal__tab talos-schede__tab",
+    idMenu: "menuSchedaTerminale",
+    chiudibile: true,
+    rinominabile: true,
+    identifica: (voce) => voce.terminalId,
+    etichetta: (voce, tutte) => titoloScheda(voce, tutte),
+    suggerimento: (voce, indice2, tutte) => [`${indice2 + 1}. ${titoloScheda(voce, tutte)}`, voce.cartella].filter(Boolean).join(" — "),
+    inerte: (voce) => inRinomina === voce.terminalId,
+    contenuto: disegnaLinguetta,
+    coda: disegnaCoda,
+    suClick: (voce, e, b) => {
+      const sullaX = e.clientX > 0 && e.clientX >= b.getBoundingClientRect().right - ZONA_CHIUSURA_PX;
+      if (sullaX) {
+        azioni.chiudi?.(voce.terminalId);
+        return true;
+      }
+      return false;
+    },
+    suDoppioClick: (voce) => avviaRinomina(voce),
+    vociMenu: (voce) => [
+      [t(TESTI2.rinomina), () => avviaRinomina(voce), true],
+      [t(TESTI2.chiudi), () => azioni.chiudi?.(voce.terminalId), true],
+      [t(TESTI2.chiudiAltre), () => azioni.chiudiAltre?.(voce.terminalId), stato.schede.length > 1],
+      [t(TESTI2.chiudiTutte), () => azioni.chiudiTutte?.(), stato.schede.length > 0]
+    ],
+    azioni: {
+      seleziona: (id) => azioni.seleziona?.(id),
+      chiudi: (id) => azioni.chiudi?.(id),
+      tastieraSospesa: () => Boolean(inRinomina)
     }
   });
-  function apriMenu(voce, x, y) {
-    apriMenuContestuale(menu, {
-      titolo: titoloScheda(voce, stato.schede),
-      voci: [
-        [t(TESTI2.rinomina), () => avviaRinomina(voce), true],
-        [t(TESTI2.chiudi), () => azioni.chiudi?.(voce.terminalId), true],
-        [t(TESTI2.chiudiAltre), () => azioni.chiudiAltre?.(voce.terminalId), stato.schede.length > 1],
-        [t(TESTI2.chiudiTutte), () => azioni.chiudiTutte?.(), stato.schede.length > 0]
-      ],
-      x,
-      y,
-      chiudi: chiudiMenu,
-      finestra: window
-    });
-  }
   function avviaRinomina(voce) {
     inRinomina = voce.terminalId;
     renderizza();
@@ -16042,19 +16336,10 @@ function creaSchedeTerminale(pane, { azioni = {}, root = document.body } = {}) {
     inRinomina = null;
     if (salva && input && id && nomeSchedaValido(input.value)) azioni.rinomina?.(id, input.value.trim());
     renderizza();
-    if (id) tabs.querySelector(`[role=tab][data-terminale-id="${CSS.escape(id)}"]`)?.focus();
+    if (id) schede.bottoneDi(id)?.focus();
   }
-  function creaTab(voce, indice2) {
-    const b = document.createElement("button");
-    b.className = "talos-terminal__tab";
-    b.setAttribute("role", "tab");
-    b.type = "button";
-    const attiva = voce.terminalId === stato.attiva;
-    b.setAttribute("aria-selected", String(attiva));
-    b.tabIndex = attiva ? 0 : -1;
-    b.dataset.terminaleId = voce.terminalId;
+  function disegnaLinguetta(b, voce) {
     const titolo2 = titoloScheda(voce, stato.schede);
-    b.title = [`${indice2 + 1}. ${titolo2}`, voce.cartella].filter(Boolean).join(" — ");
     const dot = document.createElement("span");
     dot.className = `talos-dot ${PALLINO[voce.stato] ?? ""}`.trim();
     b.append(dot);
@@ -16080,69 +16365,14 @@ function creaSchedeTerminale(pane, { azioni = {}, root = document.body } = {}) {
       });
       input.addEventListener("click", (e) => e.stopPropagation());
       b.append(input);
-      return b;
+      return;
     }
     b.append(document.createTextNode(titolo2));
-    b.addEventListener("click", (e) => {
-      const sullaX = e.clientX > 0 && e.clientX >= b.getBoundingClientRect().right - ZONA_CHIUSURA_PX;
-      if (e.ctrlKey || e.metaKey || sullaX) azioni.chiudi?.(voce.terminalId);
-      else azioni.seleziona?.(voce.terminalId);
-    });
-    b.addEventListener("auxclick", (e) => {
-      if (e.button === 1) {
-        e.preventDefault();
-        azioni.chiudi?.(voce.terminalId);
-      }
-    });
-    b.addEventListener("dblclick", (e) => {
-      e.preventDefault();
-      avviaRinomina(voce);
-    });
-    b.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      apriMenu(voce, e.clientX, e.clientY);
-    });
-    return b;
   }
-  function suTastiera(e) {
-    const tab = e.target.closest?.("[role=tab][data-terminale-id]");
-    if (!tab || inRinomina) return;
-    const lista = stato.schede.map((v) => v.terminalId);
-    const id = tab.dataset.terminaleId;
-    const voce = stato.schede.find((v) => v.terminalId === id);
-    let prossima = null;
-    if (e.key === "ArrowRight") prossima = cicla(lista, id, 1);
-    else if (e.key === "ArrowLeft") prossima = cicla(lista, id, -1);
-    else if (e.key === "Home") prossima = lista[0];
-    else if (e.key === "End") prossima = lista[lista.length - 1];
-    else if (e.key === "Delete") {
-      e.preventDefault();
-      azioni.chiudi?.(id);
-      return;
-    } else if (e.key === "F2") {
-      e.preventDefault();
-      if (voce) avviaRinomina(voce);
-      return;
-    } else if (e.key === "ContextMenu" || e.shiftKey && e.key === "F10") {
-      e.preventDefault();
-      const r = tab.getBoundingClientRect();
-      if (voce) apriMenu(voce, r.left, r.bottom);
-      return;
-    } else return;
-    e.preventDefault();
-    if (prossima && prossima !== id) {
-      azioni.seleziona?.(prossima);
-      tabs.querySelector(`[role=tab][data-terminale-id="${CSS.escape(prossima)}"]`)?.focus();
-    }
-  }
-  tabs.addEventListener("keydown", suTastiera);
-  function renderizza() {
-    tabs.replaceChildren();
-    stato.schede.forEach((voce, i2) => {
-      tabs.append("\n", creaTab(voce, i2));
-    });
+  function disegnaCoda() {
+    const nodi = [];
     const nuovo = document.createElement("button");
-    nuovo.className = "talos-terminal__tab";
+    nuovo.className = "talos-terminal__tab talos-schede__tab";
     nuovo.setAttribute("role", "tab");
     nuovo.setAttribute("aria-selected", "false");
     nuovo.type = "button";
@@ -16152,19 +16382,22 @@ function creaSchedeTerminale(pane, { azioni = {}, root = document.body } = {}) {
     nuovo.title = stato.puoAprire ? `${t(TESTI2.nuovaScheda)} (Ctrl+Shift+\`)` : stato.motivoNoNuova || t(TESTI2.nuovaSchedaSenzaSessione);
     nuovo.setAttribute("aria-label", nuovo.title);
     nuovo.addEventListener("click", () => azioni.nuova?.());
-    tabs.append("\n", nuovo);
+    nodi.push(nuovo);
     const grow = document.createElement("span");
     grow.className = "talos-grow";
-    tabs.append("\n", grow);
+    nodi.push(grow);
     for (const badge5 of stato.badges) {
       const s = document.createElement("span");
       s.className = `talos-badge${badge5.tono ? ` talos-badge--${badge5.tono}` : ""} talos-badge--sm`;
       s.textContent = badge5.testo;
       if (badge5.titolo) s.title = badge5.titolo;
       if (badge5.chiave) s.dataset.badge = badge5.chiave;
-      tabs.append("\n", s);
+      nodi.push(s);
     }
-    tabs.append("\n");
+    return nodi;
+  }
+  function renderizza() {
+    schede.aggiorna(stato.schede, stato.attiva);
     if (foot) {
       foot.replaceChildren();
       const p = stato.piede;
@@ -16197,9 +16430,9 @@ function creaSchedeTerminale(pane, { azioni = {}, root = document.body } = {}) {
       renderizza();
     },
     fuocoSullaAttiva() {
-      tabs.querySelector('[role=tab][aria-selected="true"]')?.focus();
+      schede.fuocoSullaAttiva();
     },
-    chiudiMenu,
+    chiudiMenu: schede.chiudiMenu,
     get stato() {
       return stato;
     }
@@ -16209,6 +16442,7 @@ var ZONA_CHIUSURA_PX, SCHEDE_MASSIME, TESTI2, PALLINO, ETICHETTA_STATO;
 var init_terminale = __esm({
   "src/components/terminale.js"() {
     init_lingua();
+    init_schede();
     ZONA_CHIUSURA_PX = 26;
     SCHEDE_MASSIME = 8;
     TESTI2 = Object.freeze({
@@ -22289,6 +22523,10 @@ var init_app = __esm({
         if (view === "progetti") void caricaPaginaProgetti();
         if (view === "automations") renderAutomationsReali();
         if (view === "browser") renderizzaBrowser();
+        if (view === "review") {
+          renderRealReviewList();
+          aggiornaSommarioReviewReale();
+        }
         if (view === "terminal") apriVistaTerminaleReale();
       }
       let noteCaricate = [];
@@ -28525,11 +28763,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const schermo = $2("#schermoReview");
         if (!file || !schermo) return;
         state.reviewFileCorrente = file.path;
-        for (const scheda of schermo.querySelectorAll('.talos-review__scheda[role="tab"]')) {
-          const attiva = scheda.dataset.reviewFile === key;
-          scheda.setAttribute("aria-selected", String(attiva));
-          scheda.tabIndex = attiva ? 0 : -1;
-        }
+        uiSchedeReview()?.seleziona(key);
         aggiornaDiffReview(schermo.querySelector(".talos-review__diff"), file);
         $$("[data-review-action]").forEach((b) => {
           b.disabled = false;
@@ -29932,6 +30166,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const t2 = statoTerminale();
         const record = t2.schede.get(id);
         if (!record) return;
+        const cambiaScheda = t2.attiva !== id;
+        const eraGiaMontata = Boolean(record.term);
         t2.attiva = id;
         ricordaAttivaTerminale(t2.sessioneId, id);
         for (const altra of t2.schede.values()) {
@@ -29946,7 +30182,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           requestAnimationFrame(() => {
             record.fit?.fit();
             inviaResizeTerminale(record);
-            record.term?.focus();
+            if (cambiaScheda || !eraGiaMontata) record.term?.focus();
           });
         }
         renderizzaSchedeTerminale();
@@ -31077,12 +31313,39 @@ ${f}`;
           });
         }
       }
-      function testoDiffCompleto() {
-        return [...state.realSession.reviewFiles.values()].map((file) => [
+      function testoDiffDiUnFile(file) {
+        return [
           `### ${file.path}${file.nuovo ? " (nuovo)" : ""}`,
-          ...file.code.map(([kind, text]) => text),
+          ...(file.code || []).map(([kind, text]) => text),
           ""
-        ].join("\n")).join("\n");
+        ].join("\n");
+      }
+      function testoDiffCompleto() {
+        return [...state.realSession.reviewFiles.values()].map(testoDiffDiUnFile).join("\n");
+      }
+      let uiReview = null;
+      function uiSchedeReview() {
+        if (uiReview) return uiReview;
+        const striscia = $2("#schermoReview .talos-review__schede");
+        if (!striscia) return null;
+        const radice2 = ROOT();
+        uiReview = creaSchedeReview(striscia, {
+          root: radice2.body || radice2,
+          azioni: {
+            seleziona: (chiave) => renderReviewFile(chiave),
+            puoAprire: () => Boolean(state.realSession.id),
+            apri: (voce) => {
+              void apriFileAlbero(voce.path, voce.path.split("/").pop());
+            },
+            copiaPercorso: (voce) => {
+              void copyText(voce.path, "Percorso copiato");
+            },
+            copiaDiff: (voce) => {
+              void copyText(testoDiffDiUnFile(voce), `Diff di ${voce.path.split("/").pop()} copiato`);
+            }
+          }
+        });
+        return uiReview;
       }
       function preparaCommentoNelComposer(testo3) {
         if (!composerInput) return;
@@ -31097,18 +31360,16 @@ ${testo3}` : testo3;
       }
       function renderRealReviewList() {
         const schermo = $2("#schermoReview");
-        const contenitore = schermo?.querySelector(".talos-review__schede .talos-tabs__list");
-        if (!contenitore) return;
+        const ui = uiSchedeReview();
+        const contenitore = schermo?.querySelector(".talos-review__schede .talos-schede__lista");
+        if (!ui || !contenitore) return;
         const voci = [...state.realSession.reviewFiles.values()];
         aggiornaTestataSessione();
         const ultimoPercorso = state.reviewFileCorrente && state.realSession.reviewFiles.has(state.reviewFileCorrente) ? state.reviewFileCorrente : voci.at(-1)?.path;
-        contenitore.replaceChildren(...voci.map((file) => creaRigaFileReview(file, {
-          attiva: file.path === ultimoPercorso,
-          onApri: () => renderReviewFile(`real:${file.path}`)
-        })));
+        ui.aggiorna(voci, ultimoPercorso ? chiaveFileReview({ path: ultimoPercorso }) : null);
         const vuotoReview = schermo.querySelector("#vuotoReview");
         const cardDiff = schermo.querySelector(".talos-review__diff");
-        const schedeReview = contenitore.closest(".talos-tabs");
+        const schedeReview = contenitore.closest(".talos-schede");
         if (vuotoReview) vuotoReview.hidden = voci.length > 0;
         if (cardDiff) cardDiff.hidden = voci.length === 0;
         if (schedeReview) schedeReview.hidden = voci.length === 0;
@@ -31118,23 +31379,6 @@ ${testo3}` : testo3;
         const titoloTestata = schermo.querySelector(".talos-topbar__title h1");
         if (titoloTestata && state.session) titoloTestata.textContent = state.session;
         nascondiAzioniFase3(schermo);
-        if (!contenitore.dataset.tastiera) {
-          contenitore.dataset.tastiera = "si";
-          contenitore.addEventListener("keydown", (event) => {
-            const schede = [...contenitore.querySelectorAll('[role="tab"]')];
-            const i2 = schede.indexOf(document.activeElement);
-            if (i2 < 0 || schede.length === 0) return;
-            let j = i2;
-            if (event.key === "ArrowRight") j = (i2 + 1) % schede.length;
-            else if (event.key === "ArrowLeft") j = (i2 - 1 + schede.length) % schede.length;
-            else if (event.key === "Home") j = 0;
-            else if (event.key === "End") j = schede.length - 1;
-            else return;
-            event.preventDefault();
-            schede[j].focus();
-            schede[j].click();
-          });
-        }
       }
       function statoFileAlbero(percorsoCompleto) {
         const voce = state.realSession.reviewFiles.get(percorsoCompleto);
@@ -37128,6 +37372,8 @@ ${testo3}`;
       collegaScorciatoieTerminale();
       collegaRidisegnoLingua();
       renderizzaBrowser();
+      renderRealReviewList();
+      aggiornaSommarioReviewReale();
       setInspectorTab($2(".inspector-tabs button.active"));
       renderReviewFile("composer");
       autoGrowTextarea();
