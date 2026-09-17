@@ -1067,3 +1067,19 @@ sul primo). ⛔ Niente «Annulla» finché non esiste un annullamento VERO del g
 disegna. Due azioni per riga al massimo (regola dei menu). Sopravvive a ricarica e riapertura (si ricostruisce dal replay, non da
 uno stato volatile), non compare nei giri senza scritture, e nei giri lunghi non si duplica a ogni scrittura. Skill
 `frontend-design`, tema Calm, nei due temi a 1024 e 1440; nessun componente nuovo: si CABLA quello che c'è.
+
+## BC-76 | Una sessione col modello LOCALE disegna le chiamate agli attrezzi e non ne esegue NESSUNA (trovato dalla PR bozza #28 dell'owner, confermato nel nostro albero il 17/09/2026) — APERTO, è il blocco vero del motore locale sul desktop
+
+`src/session-registry.mjs:2452` `eseguiRuntimeLocale`: una sola `generateStream`, e su `tool_call` (`:2480-2484`) emette
+`ToolCallStart` + `ToolCallArgs` e BASTA — nessun attrezzo eseguito, nessun risultato, nessun messaggio `tool`, nessuna
+continuazione; e non manda al motore né `tools` né `tool_choice`. `:3223` instrada lì OGNI sessione locale (le altre vanno a
+`talosLavora`). ⇒ Sul desktop una sessione locale NON è un agente, e quando il modello «chiama» un attrezzo la chat mostra
+un'attività che non è mai avvenuta. Letto da me riga per riga; non eseguito con un modello vero.
+**Da dove viene:** rapporto della PR bozza #28 (`Ninozzz95/talos`, ramo `perf/desktop-local-llm-engine`, commit `17b05b99`), che
+lo chiama «correctness blocker» e avverte giustamente: NON scrivere un secondo esecutore che scavalchi permessi e hook — la
+sessione locale deve entrare nel giro del kernel (`talosLavora`) come fanno le altre, col motore locale come trasporto.
+**Stessa PR, verificata da me sul NOSTRO albero:** il nostro `local-runtime-llama-server.mjs` è byte per byte la loro base
+(sha256 `b417c2ef…`); il difetto quadratico c'è (`:188`, `JSON.parse(previous.arguments)` a ogni frammento); la patch si
+applica pulita (`git apply --check`); le loro prove: candidata **25/25**, le 20 nuove contro la nostra base **10 rosse / 10
+verdi** come dichiarato; il loro banco su QUESTA macchina Windows, 64 KiB, 11 ripetizioni: mediana **128,2 ms → 4,3 ms**.
+Evidenze custodite nello scratchpad `evidenze-motore/` (zip dell'owner).
