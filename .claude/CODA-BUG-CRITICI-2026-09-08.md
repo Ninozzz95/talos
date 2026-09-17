@@ -1038,3 +1038,12 @@ banco), e puntare al 4174 vuole un'opzione che lo dica per nome; una prova legge
 ricompare un ripiego sul 4174. Visto nello stesso giro da `veli-sani` sul 4174: 5 veli su 12 «non si aprono» (`veloFornitori`,
 `veloRinominaModello`, `veloEliminaModello`, `veloAnnullaDownload`, `veloFileModello`) e 10 senza via dichiarata — non
 verificato da me, da riaccertare su un banco.
+
+**CLI-REQ-06 — ✅ CHIUSA e sul 4174 il 17/09/2026: `95716162`** (rami di lavoro `fecece15`, `8efd5bec`, `49652fb4`; revisore
+avversariale: accettata con riserve, un giro di riparazione). Misurato da me sulla lane fusa: mirate 194/191/0/3; backend intero
+da solo 3167 · 3162 pass · 0 fail · 5 skipped (un primo giro con 2 rossi in `shell-chiede-davanti-a-un-segreto` e le prove WSL
+saltate: l'intermittenza WSL nota, 27/27 da solo). ⛔ NON verificato: nessuna richiesta vera ai quattro fornitori, nessuna chiave
+vera. ⛔ Si discosta dal handoff della CLI su un punto, apposta: `usage.prompt_tokens` è richiesto finito SOLO se presente
+(Novita e Ollama non documentano il corpo della risposta). Il modello di prova di Novita è `meta-llama/llama-3.1-8b-instruct`
+(quello dell'esempio nella loro documentazione non ha più una scheda). Toccato un record di un'altra corsia (`zai-anthropic`:
+una riga additiva, la fonte datata del modello, senza la quale il registro non si carica).
