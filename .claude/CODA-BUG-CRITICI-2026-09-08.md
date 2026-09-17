@@ -1306,6 +1306,12 @@ Al contrario: tolto il nodo, la prova cade. Corsia frontend della Fase A, dopo l
 **Il rischio, LETTO e non ancora misurato:** `chiamaLocale` parla con «il supervisore», cioè con qualunque processo stia su quella porta
 con quell'alias. Se il modello viene scaricato o riavviato a metà giro (cambio modello, arresto per inattività, crash e ripartenza), la
 richiesta successiva dello STESSO giro può arrivare a un processo nuovo — un altro modello, un'altra finestra di contesto, nessuna cache.
+**LETTO nel codice il 17/09 notte (non ancora misurato):** `llama-server-supervisor.mjs:395-403`, `request(path, options)` usa `current` —
+il processo che è pronto ADESSO — per indirizzo e chiave, e controlla solo `current.state === 'ready'`. Non guarda con quale modello il giro
+era partito, e il nome del modello nel corpo non lo ferma (llama-server serve ciò che ha caricato). ⇒ La premessa regge alla lettura: se fra
+due richieste dello stesso giro `current` cambia (un'altra sessione chiede un altro modello locale, arresto e ripartenza), la seconda va al
+processo nuovo. Da MISURARE con la fixture del supervisore (`tests/fixtures/llama-server-r03.cjs`) prima di curare. Caso da mettere in
+scena per primo: DUE sessioni locali su due modelli diversi che si alternano — oggi si scaricano a vicenda a ogni giro?
 **La forma della #29:** `bindModel(modelId)` cattura la voce esatta del processo pronto, con un segnale di vita suo; stop, uscita ed errori
 del processo invalidano il legame; riusare alias e porta dopo un riavvio NON lo resuscita; il rilascio è idempotente.
 **Da fare sopra la NOSTRA via** (non i moduli della #29): il legame nasce quando il giro parte e muore col giro; una richiesta su un legame
