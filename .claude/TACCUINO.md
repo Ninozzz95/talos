@@ -594,3 +594,14 @@ ode_modules`. `wf_a38b4449-882-1` resta su disco: NON si tocca senza prima guard
   albero vecchio di 2016 righe e ha dovuto crearsi il ramo `p0bis-c` su `b929f56a`. Nei brief va detto il commit di partenza.
 - Un ambiente di agente può perdere `git` a metà sessione (guardiano rtk): l'agente lascia le modifiche sul disco e il
   messaggio su file, e committo io.
+
+## 2026-09-17 — `kernel:controlla`: la «fonte» è indietro di 3.765 righe, e il cancello non può fallire
+
+- Misurato dopo la fusione di A, B e D: repo `harness-ui/src/kernel/talosHarness.mjs` **10.025 righe** (sha `51ad62c7…`);
+  «fonte» `AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs` **6.260 righe** (sha `b343ca4d…`), ultimo commit
+  `0b79715d` del **06/09**. La copia che lo script chiama fonte non riceve il lavoro del desktop da undici giorni.
+- `npm run kernel:controlla` stampa «le due copie DIVERGONO» ed **esce 0**: un avviso che non ferma niente è un commento a
+  schermo (decima forma del 13/09). Chi lo legge in `verify:all` vede verde.
+- Conseguenza pratica di oggi: `AVM-harness` (2,3 GB) non l'ho tolta dalla pulizia del disco solo perché lo script legge quel
+  percorso. La decisione vera — quale copia è la fonte, e come il kernel arriva al mobile — è dell'owner e della lane mobile:
+  io non scrivo sotto `mobile/`.
