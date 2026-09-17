@@ -25,7 +25,9 @@ import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { isPathInside } from './path-policy.mjs';
 import { createProcessPolicy } from './process-policy.mjs';
 
-const EXPLORER_PROCESS_POLICY = createProcessPolicy({ allowedExecutables: ['explorer.exe', 'explorer'] });
+/* BC-64 (17/09): Esplora file è l'UNICO programma che lanciamo perché la persona lo VEDA — con la finestra
+   nascosta «Rivela in Esplora file» riusciva e non mostrava niente (misura in `process-policy.mjs`). */
+export const EXPLORER_PROCESS_POLICY = createProcessPolicy({ allowedExecutables: ['explorer.exe', 'explorer'], finestreVisibili: true });
 
 export class WorkspaceFileError extends Error {
   constructor(message, code = 'QUERY_INVALID') {
