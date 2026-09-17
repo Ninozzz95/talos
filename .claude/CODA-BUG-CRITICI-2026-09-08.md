@@ -826,19 +826,27 @@ una sessione lunga vera con guasti iniettati (worker che muore, DB bloccato, mig
 corrompere niente, è acceso dove l'owner lavora, e BC-65 ci gira sopra verde.
 
 
-## BC-67 | `review-browser-notifiche.spec.mjs`: 3 prove rosse su 3, e nessun cancello le lancia (trovato il 17/09/2026 dal controllo di BC-63) — APERTO
+## BC-67 | Senza sessione la REVISIONE mostra DATI FINTI (tre file, un diff, una ricevuta, «Accetta questo file») — e la prova che lo vietava è rossa da giorni in silenzio (17/09/2026) — APERTO, difetto di PRODOTTO
 
-**Misurato il 17/09 sulla lane (`870988d6`), porta di banco 4193, un worker:** `3 failed` — REVIEW-REAL-41, BROWSER-REAL-42,
-NOTIFICHE-REALI-43. Identiche su `e2853725` (A/B dell'agente di BC-63) ⇒ NON vengono da BC-63.
-**Causa della prima, vista nella foto del fallimento:** a schermo c'è ancora il **velo d'avvio** (`#talosAvvio`): la prova fa
-`page.goto('/')` e interroga subito il DOM, cioè legge il markup STATICO del template (il diff finto di `guardiaDiStallo`) prima
-che la app lo svuoti. La spec è del 02/09 (`22a2dd6c`), il velo è dell'11/09: prova invecchiata, non prodotto rotto — per la
-prima. ⛔ Per la seconda (`Cannot read properties of null (reading 'textContent')`, riga 64) e la terza (`#notificationsBadge`
-mai visibile in 5 s) la causa NON è misurata: può essere lo stesso velo o un selettore sparito.
-⛔ Il difetto vero è l'altro: **questa spec non è in nessun cancello che giro prima di consegnare**, quindi è rossa da giorni in
-silenzio. **Finita quando:** le tre aspettano la app pronta come le altre spec (`#talosAvvio` staccato + `__talosHarnessUiRuntime`),
-ogni rosso residuo ha la sua causa nominata e curata, ed entra nell'elenco browser della consegna. Dopo la fusione di BC-63
-(stessa superficie: i selettori della Revisione cambiano lì).
+**Misurato il 17/09 sulla lane (`870988d6`), banco 4193, un worker, 1440x900, profilo nuovo con la modale saltata:** aperta la
+Revisione con «Nessuna sessione», a schermo ci sono tre linguette VISIBILI (`offsetParent` presente, larghezze 253/281/173 px):
+`src/session-registry.mjs +18 −2`, `tests/session-registry.test.mjs +64`, `src/http-app.mjs +30`, sotto un diff finto di
+`guardiaDiStallo`, la pillola «Ricevuta a1f4…9c02», «giro 5», i bottoni «Accetta questo file · Apri nell'editor · Scarta» e
+«Scartare ripristina il file dal checkpoint del giro 4». È il markup STATICO del template che nessuno svuota. L'ordine
+dell'owner del 02/09 («agganciarlo e renderlo veramente funzionale», stato vuoto onesto) è violato. Foto nello scratchpad:
+`bc67-review-vuota-dati-finti.png`.
+⛔ **La mia prima diagnosi era SBAGLIATA e l'avevo scritta come misurata:** avevo attribuito il rosso al velo d'avvio guardando
+UNA foto. La sonda che aspetta la app pronta (`#talosAvvio` staccato + runtime) dà ancora **3 failed**: il velo non c'entra.
+La prova REVIEW-REAL-41 aveva ragione.
+**Le altre due:** BROWSER-REAL-42 cerca `.browser-url` e NOTIFICHE-REALI-43 cerca `#notificationsBadge`: nel DOM di oggi **non
+esistono** (misurato: `badge:false`) ⇒ selettori del monolite, prove invecchiate; resta da accertare che ciò che provavano
+(Browser senza telefono finto, campanella che conta solo chi chiede attenzione) sia ancora vero coi selettori nuovi.
+⛔ **Il difetto di processo:** `review-browser-notifiche.spec.mjs` non è nell'elenco browser che giro prima di consegnare: rossa
+su `e2853725` e su `870988d6`, nessuno la guardava. Visto anche, fuori tema: con locale `en-US` la UI è MISTA («Terminal»,
+«Search chats…», «SESSIONS» accanto a «Spazi di lavoro», «Conversazioni», «Nessuna sessione»).
+**Finita quando:** senza sessione la Revisione mostra SOLO lo stato vuoto (zero linguette, zero diff, azioni spente), provato
+nei due versi (vuota → piena dallo StateDelta → di nuovo vuota cambiando sessione), nei due temi; le tre prove sono verdi coi
+selettori veri ed entrano nell'elenco della consegna. Si cura nel giro di BC-63 (stessa superficie e stesso blocco del template).
 
 ## BC-68 | Le schede del BROWSER restano fuori dal componente condiviso (residuo dichiarato di BC-63, 17/09/2026) — APERTO
 
