@@ -11794,7 +11794,35 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     renderizzaSchedeTerminale();
   }
 
-  async function caricaSchedeTerminale() {
+  /*
+   * ⛔⛔ BC-62 (owner, 17/09/2026, dal vivo): «quando apro scheda terminale si apre una nuova tab terminale senza motivo».
+   *
+   * MISURATO su un banco con una sessione aperta: al PRIMO ingresso nella vista partivano due
+   * `GET …/terminals` nello stesso millisecondo e, 7 ms dopo, due `POST …/terminals`. Questa funzione
+   * è un «controlla poi agisci»: se il registro è vuoto fa una POST per farsi dare la prima scheda —
+   * e quella POST è idempotente SOLO a registro vuoto. Due chiamate insieme (l'ingresso nella vista e
+   * il riallineamento della sessione) vedono entrambe il vuoto: la prima POST restituisce la prima
+   * scheda, la seconda — a registro non più vuoto — ne CREA una vera. Risultato a schermo:
+   * «tu · Git Bash» e «tu · Git Bash 2» senza che nessuno abbia premuto «Nuovo».
+   *
+   * Cura: volo unico per sessione. Chi arriva mentre il caricamento è in corso riceve LA STESSA
+   * promessa, non ne fa partire un secondo (è il «single-flight» di Go, che in JS è condividere la
+   * promessa: nanw1103/dedup-async; «How to Prevent Cache Stampede in Node.js APIs with the
+   * Single-Flight Pattern», dev.to/1xapi — letti il 17/09/2026). ⛔ La chiave è la SESSIONE: un
+   * cambio di sessione a metà volo deve poter partire subito, e il vecchio volo si scarta da sé
+   * (`if (t.sessioneId !== sessioneId) return`, qui sotto).
+   */
+  let caricamentoSchedeInVolo = null;
+  function caricaSchedeTerminale() {
+    const sessioneId = state.realSession.id || null;
+    if (caricamentoSchedeInVolo && caricamentoSchedeInVolo.sessioneId === sessioneId) return caricamentoSchedeInVolo.promessa;
+    const volo = { sessioneId, promessa: null };
+    volo.promessa = caricaSchedeTerminaleUnaVolta().finally(() => { if (caricamentoSchedeInVolo === volo) caricamentoSchedeInVolo = null; });
+    caricamentoSchedeInVolo = volo;
+    return volo.promessa;
+  }
+
+  async function caricaSchedeTerminaleUnaVolta() {
     const t = statoTerminale();
     const sessioneId = state.realSession.id || null;
     t.sessioneId = sessioneId;
