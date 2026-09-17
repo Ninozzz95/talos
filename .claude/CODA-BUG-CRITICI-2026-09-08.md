@@ -953,7 +953,7 @@ silenzio. **Finita quando:** ogni file di `tests/browser` è o verde, o `test.fa
 cancellato perché prova una superficie che non esiste più (con la prova che non esiste); e la consegna gira la CARTELLA, non un
 elenco.
 
-## CLI-REQ-07 | `elenca` su una cartella VUOTA risponde con una stringa vuota, e il modello la legge come attrezzo fallito (17/09/2026, dalla sessione della CLI) — REGISTRATA; l'approvazione dell'owner mi è stata RIFERITA («CLI-REQ-07 si»), non l'ho sentita da lui
+## CLI-REQ-07 | `elenca` su una cartella VUOTA risponde con una stringa vuota, e il modello la legge come attrezzo fallito (17/09/2026, dalla sessione della CLI) — ✅ APPROVATA dall'owner il 17/09, a me direttamente («CLI-REQ-07 si»); in lavorazione nel ramo `cli-req`, punto E del giro di riparazione
 
 Testo intero: `git show 3fb4e9d8:docs/talos-cli/handoffs/2026-09-17-CLI-REQ-07-empty-folder-listing-is-silent.md`.
 **Cosa ha visto l'owner (riferito):** `talos` avviato in una cartella nuova e vuota; il modello chiama `elenca` quattro volte
