@@ -3944,6 +3944,138 @@ export function primoProgramma(comando) {
     return String(comando).trim().split(/\s+/)[0] || ''
 }
 
+/**
+ * ⛔⛔⛔ BC-54, 16/09/2026 — LA RIGA PASSAVA DA DUE SHELL, NON DA UNA.
+ *
+ * Il modello dell'audit aveva imparato a evitare `$` dappertutto per riuscire a finire il
+ * lavoro: `echo '$HOME'` stampava `/root` anche fra apici singoli, `false; echo $?` stampava
+ * `0`, e `X=42 sh -c '…'` arrivava al figlio con `X` vuota. Non era bash che sbagliava: era
+ * `wsl.exe -d <distro> -- bash -lc "<script>"`, dove `--` consegna la riga alla **shell
+ * predefinita della distro**, che la espande UNA VOLTA prima che il nostro `bash -lc` la veda.
+ * Per quella shell esterna gli apici singoli dello script stanno dentro le virgolette doppie
+ * dell'argomento, quindi non proteggono niente.
+ *
+ * Misurato di nuovo il 17/09/2026 sulla distro predefinita (Ubuntu, WSL 2.7.11.0), stesso
+ * script nei due modi:
+ *   `--`      → A:/root   B:/root   C:0   D:X=
+ *   `--exec`  → A:$HOME   B:/root   C:1   D:X=42
+ *
+ * Fonte: Microsoft Learn, «Basic commands for WSL» (pagina aggiornata 02/06/2026, letta il
+ * 17/09/2026) e `wsl.exe --help` di questa macchina (WSL 2.7.11.0, letto il 17/09/2026):
+ *   `--exec, -e <CommandLine>` — «Esegui il comando specificato senza usare la shell Linux
+ *   predefinita»; `--` — «Passa la riga di comando rimanente senza modifiche», cioè proprio
+ *   alla shell predefinita. Un solo token di differenza, uno strato di shell in meno.
+ *
+ * ⇒ L'argv si costruisce QUI, in un posto solo. Il difetto è sopravvissuto perché il
+ *   separatore era ricopiato in ogni chiamata: finché è una costante ripetuta, ricordarsene
+ *   è un compito di memoria, e quelli si perdono.
+ */
+export function argomentiWslPerScript(distro, script) {
+    return ['-d', distro, '--exec', 'bash', '-lc', script]
+}
+
+/**
+ * ⛔⛔⛔ BC-55, 16/09/2026 — IL RIPIEGO AUTOMATICO GUARDAVA IL PRIMO TOKEN NUDO.
+ *
+ * Con `dove: null` (il default finché l'interfaccia non espone la scelta) si decideva comando
+ * per comando chiedendo a WSL se il PRIMO TOKEN esisteva. Ma il primo token di
+ * `X=abc; echo "[$X]"` è `X=abc;`, quello di `(cd a && ls)` è `(cd`: nessuno dei due è un
+ * programma, quindi «non c'è in WSL» ⇒ cmd.exe, che risponde «"X" non è riconosciuto come
+ * comando interno o esterno» e non capisce né `;` né `printf`. Il modello vedeva due sistemi
+ * operativi diversi a seconda di come scriveva la riga, senza che nessuno l'avesse scelto.
+ *
+ * ⛔ Misurato il 17/09/2026, e CORREGGE la scheda: `export Y=7; …` finiva già in WSL —
+ *   `command -v export` risponde `export` (exit 0) perché in bash i builtin si risolvono. Il
+ *   suo `Y=` era BC-54, non l'instradamento. E `dir`, che sembra il controcaso ovvio, esiste
+ *   in Linux (`/usr/bin/dir`, coreutils): i veri assenti misurati sono `tasklist`, `findstr`,
+ *   `ipconfig`, `ver`, `reg`.
+ *
+ * Ricerca 17/09/2026 — la forma giusta è una scelta DICHIARATA, non un indovinello per riga:
+ * Codex CLI su Windows sceglie l'ambiente all'installazione (nativo con sandbox AppContainer
+ * in PowerShell, oppure WSL2) e nell'app lo si cambia dalle Impostazioni, mai comando per
+ * comando (codex.danielvaughan.com, «Codex CLI on Windows: Native Sandbox, WSL Integration»,
+ * 01/04/2026; developers.openai.com/codex/app/windows). È lo stesso commento D-10F qui sotto.
+ * ⇒ Questa euristica NON è la cura definitiva: è ciò che rende onesto il `null` finché la
+ *   scelta non è esposta. Quando `dove` sarà sempre valorizzato, questa funzione non serve più.
+ *
+ * L'euristica è dichiarata, non un parser: i caratteri sono quelli che POSIX chiama da citare
+ * («The application shall quote the following characters if they are to represent themselves:
+ * `| & ; < > ( ) $ ` \ " ' <space> <tab> <newline>`», The Open Group Base Specifications Issue 7,
+ * 2018 edition, §2.2 Quoting, letto il 17/09/2026), meno quelli che cmd.exe condivide e che
+ * comparirebbero in un comando Windows del tutto normale. Esistono parser veri (`mvdan-sh`,
+ * `bash-parser`): qui non entra una dipendenza nuova per una domanda a cui basta un sì/no,
+ * e il prezzo è dichiarato — l'euristica può solo MANDARE IN PIÙ roba a WSL, mai toglierne,
+ * perché resta in OR con la prova del programma vero.
+ *
+ * ⛔ Le tre esclusioni, ognuna con la sua ragione misurata:
+ *   · `"` — le virgolette doppie sono di casa anche su cmd (`findstr /C:"a b"`), e il loro
+ *     CONTENUTO non è sintassi: si toglie prima di guardare, altrimenti
+ *     `mio.exe "C:\Program Files (x86)\x"` verrebbe spedito in Linux.
+ *   · `<` `>` — cmd redirige con gli stessi segni: non distinguono niente.
+ *   · `\` — è il separatore di percorso di Windows, non una fuga.
+ *
+ * ⛔⛔⛔ LA TILDE IN TESTA, aggiunta il 17/09/2026 dopo una BOCCIATURA — ed è la parte che
+ *   spiega perché questa funzione e la sonda `command -v` sono due facce della stessa cosa.
+ *   Citare il token nella sonda (vedi `programmaDisponibileInWsl`) spegne l'espansione della
+ *   tilde: POSIX §2.6.1 vuole «an unquoted <tilde> character at the beginning of a word», e
+ *   §2.2.3 elenca ciò che sopravvive alle virgolette doppie — `$`, l'apice inverso, la barra
+ *   rovescia — e la tilde NON c'è (The Open Group Base Specifications Issue 7, 2018 edition,
+ *   letto il 17/09/2026). Misurato lo stesso giorno con lo script davvero presente in `~`:
+ *     `command -v ~/talos-p0bis-prova.sh`   → `/root/talos-p0bis-prova.sh`, exit 0
+ *     `command -v "~/talos-p0bis-prova.sh"` → niente, exit 1
+ *   ⇒ La sonda rispondeva «non c'è in WSL» e `~/script.sh` finiva su cmd.exe: «"~" non è
+ *     riconosciuto come comando interno o esterno». Regressione VERA, trovata da un revisore.
+ *   ⇒ La cura NON è togliere gli apici (servono davvero: senza, un primo token come `` `id` ``
+ *     lo esegue la sonda). È che una riga che comincia con `~` non è una domanda per la sonda:
+ *     cmd.exe non ha la home con la tilde, quindi `~` in testa è sintassi solo POSIX e decide
+ *     da solo. Vale per il PRIMO token e basta — `C:\~tmp\x.exe` e `dir~1` (il nome corto 8.3)
+ *     hanno la tilde ma non in testa, e restano su Windows.
+ *
+ * ⛔ IL PREZZO, dichiarato e NON curato in questo giro (deciso col coordinatore): un apostrofo
+ *   dentro un percorso Windows NON citato — `mio.exe C:\Users\D'Angelo\x.txt` — viene letto
+ *   come quoting POSIX, e quella riga va in WSL dove fallisce. Citato fra virgolette doppie,
+ *   che è la forma che quel percorso vuole su Windows comunque, sparisce col resto e la riga
+ *   resta su Windows. La strada per chiuderlo c'è — un numero DISPARI di apici non può essere
+ *   quoting, perché in bash sarebbe una citazione non chiusa — e aspetta un suo giro.
+ */
+
+/* ⛔ Un nome POSIX: lettera o `_`, poi lettere/cifre/`_` (§2.9.1, assegnazione come prefisso di comando). */
+const ASSEGNAZIONE_IN_TESTA = /^[A-Za-z_][A-Za-z0-9_]*=/
+
+/* ⛔ La tilde all'INIZIO della riga: `~/…`, `~`, `~utente/…`. Mai in mezzo (§2.6.1: inizio di parola). */
+const TILDE_IN_TESTA = /^~(\/|$|[A-Za-z0-9._-]*\/)/
+
+/* ⛔ I metacaratteri che cmd.exe NON condivide, o che qui significano «è uno script, non un programma». */
+const METACARATTERI_POSIX = /[;|&$`']|\n/
+
+/*
+ * I builtin e le parole chiave che una shell POSIX esegue senza che esista un file nel PATH.
+ * ⛔ In pratica quasi tutti passerebbero comunque (`command -v` risolve i builtin di bash,
+ * misurato), ma qui la risposta arriva SENZA un sottoprocesso e senza dipendere dal fatto che
+ * la prova riesca: una decisione che non ha bisogno di WSL per sapere che vuole WSL.
+ */
+const PRIME_PAROLE_POSIX = new Set([
+    '.', ':', '[[', '{', '!', 'alias', 'bg', 'break', 'case', 'cd', 'command', 'continue',
+    'declare', 'do', 'done', 'elif', 'else', 'esac', 'eval', 'exec', 'export', 'fg', 'fi',
+    'for', 'function', 'getopts', 'hash', 'if', 'jobs', 'local', 'read', 'readonly', 'return',
+    'select', 'set', 'shift', 'source', 'then', 'times', 'trap', 'type', 'typeset', 'ulimit',
+    'umask', 'unalias', 'unset', 'until', 'wait', 'while',
+])
+
+/** ⭐ Vera se la riga è uno SCRIPT di shell POSIX e non l'invocazione di un programma nudo. */
+export function rigaVuoleUnaShellPosix(comando) {
+    const riga = String(comando ?? '').trim()
+    if (riga === '') return false
+    /* Le virgolette doppie e ciò che contengono spariscono PRIMA di cercare la sintassi: dentro
+       sono argomenti, e cmd.exe le scrive uguali. Una virgoletta spaiata resta e vale come tale. */
+    const nuda = riga.replace(/"(?:[^"\\]|\\.)*"/g, '""')
+    if (ASSEGNAZIONE_IN_TESTA.test(nuda)) return true
+    if (TILDE_IN_TESTA.test(nuda)) return true
+    if (nuda.startsWith('(')) return true
+    if (METACARATTERI_POSIX.test(nuda)) return true
+    return PRIME_PAROLE_POSIX.has(primoProgramma(nuda))
+}
+
 export function convertiPercorsoWsl(percorsoWindows) {
     /*
      * ⛔⛔⛔ 11/09 — CONVERTIRE DUE VOLTE PRODUCE `/mnt/nt/c/…`, e l'owner l'ha visto a schermo:
@@ -3974,7 +4106,29 @@ export function percorsoMirrorDevice(cartella) {
 }
 
 async function programmaDisponibileInWsl(distro, programma) {
-    const { codice } = await eseguiComando('wsl.exe', ['-d', distro, '--', 'bash', '-lc', `command -v ${programma}`], { timeoutMs: 5_000 })
+    /*
+     * ⛔ BC-54 anche qui: `--` faceva passare pure QUESTA riga dalla shell predefinita della
+     *   distro. È lo stesso strato di troppo dell'esecuzione vera, in una funzione che nessuno
+     *   guarda perché «risponde solo sì o no» — e una sonda che mente sul sì o sul no decide
+     *   dove gira tutto il resto.
+     * ⛔ E il nome del programma si CITA. `primoProgramma` può tornare qualunque cosa (`(cd`,
+     *   `X=abc;`, un `` `id` `` con gli apici inversi): interpolato nudo dentro `command -v`
+     *   quel testo lo esegue la sonda, PRIMA di ogni controllo. Con gli apici, un token assurdo
+     *   dà semplicemente «no».
+     * ⛔⛔⛔ E QUESTA CITAZIONE HA ROTTO QUALCOSA — la prima stesura di questo commento diceva
+     *   «niente di rotto in produzione»: era FALSO, e un revisore l'ha dimostrato lo stesso
+     *   giorno. Gli apici doppi spengono anche l'espansione della TILDE (POSIX §2.6.1 la vuole
+     *   non citata, §2.2.3 non la elenca fra ciò che sopravvive alle virgolette; letto il
+     *   17/09/2026), quindi `command -v "~/x.sh"` esce 1 dove `command -v ~/x.sh` esce 0, e
+     *   `~/script.sh` finiva su cmd.exe. La cura sta in `rigaVuoleUnaShellPosix` (`~` in testa
+     *   = sintassi POSIX, la sonda non viene nemmeno interpellata), non qui: gli apici restano.
+     * ⇒ La lezione, scritta dove l'errore è stato fatto: un irrobustimento che NESSUNO ha
+     *   chiesto va misurato come una cura vera, e «niente di rotto» è un'affermazione di fatto
+     *   come le altre — o l'hai provata al contrario, o non la puoi scrivere.
+     */
+    const { codice } = await eseguiComando(
+        'wsl.exe', argomentiWslPerScript(distro, `command -v ${JSON.stringify(programma)}`), { timeoutMs: 5_000 },
+    )
     return codice === 0
 }
 
@@ -4204,6 +4358,25 @@ function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false, 
 }
 
 export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo, tracciaCartella = false, dove = null, segnaleStop } = {}) {
+    /*
+     * ⛔⛔ BC-56, 16/09/2026 — IL COMANDO VUOTO AVEVA TRE ESITI, TUTTI SBAGLIATI.
+     *   Misurato il 17/09 sul codice di ieri, prima di scrivere questa riga:
+     *     · `''` con dove='windows' → `TypeError [ERR_INVALID_ARG_VALUE]: The argument 'file'
+     *       cannot be empty`, lanciato DENTRO l'executor della Promise: chi chiama non riceve
+     *       un esito, riceve un'eccezione da un posto che non ne lancia mai;
+     *     · `'   '` con dove='windows' → codice 0 e testo vuoto, cioè un SUCCESSO che non ha
+     *       eseguito niente — la forma peggiore, perché il risultato sbagliato somiglia a
+     *       quello giusto e nessuno lo guarda;
+     *     · qualunque vuoto in WSL → `bash: syntax error near unexpected token ';'` su
+     *       `{  ; }`, onesto ma incomprensibile: parla della nostra impalcatura.
+     *   BC-17 (11/09) aveva curato l'alias `command`/`comando` che PRODUCEVA il vuoto, non il
+     *   vuoto in sé: la sorgente è stata chiusa, la porta no.
+     * ⇒ Prima di tutto il resto, mobile compreso: un comando vuoto non merita né un push adb
+     *   né una shell. Si risponde con una frase che dice cosa fare.
+     */
+    if (String(comando ?? '').trim() === '') {
+        return { codice: -1, testo: 'Il comando è vuoto: scrivi cosa eseguire.', enforcement: 'none' }
+    }
     if (mobile) {
         const seriale = await risolviSerialeAdbAttivo()
         if (!seriale) {
@@ -4273,10 +4446,22 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
             enforcement: 'none',
         }
     }
-    if (distro && (dove === 'wsl2' || (dove === null && await programmaDisponibileInWsl(distro, primoProgramma(comando))))) {
+    /*
+     * ⛔⛔⛔ BC-55 — il ripiego automatico non guarda più il PRIMO TOKEN NUDO (vedi
+     *   `rigaVuoleUnaShellPosix` sopra per la misura, le fonti e il prezzo dichiarato).
+     *   Resta in OR con la prova del programma vero: l'euristica può solo aggiungere righe
+     *   che vanno in WSL, mai toglierne — un programma nudo assente in Linux ripiega su
+     *   Windows esattamente come prima, e l'esito continua a dire dove ha girato
+     *   (`enforcement: 'wsl2'` contro `'none'`).
+     * ⭐ In più risparmia il sottoprocesso della sonda quando la risposta è già certa: una
+     *   riga che contiene `;` non ha bisogno che qualcuno chieda a WSL se `X=abc;` esiste.
+     */
+    const rigaEDaShellPosix = dove === null && rigaVuoleUnaShellPosix(comando)
+    if (distro && (dove === 'wsl2' || rigaEDaShellPosix
+        || (dove === null && await programmaDisponibileInWsl(distro, primoProgramma(comando))))) {
         const percorsoWsl = convertiPercorsoWsl(cartella)
         const { codice, fuori, errori, insieme, fermatoSuRichiesta } = await eseguiComando(
-            'wsl.exe', ['-d', distro, '--', 'bash', '-lc', `cd ${JSON.stringify(percorsoWsl)} && { ${comando} ; }${tracciaCartella ? codaCheStampaLaCartella(false) : ''}`],
+            'wsl.exe', argomentiWslPerScript(distro, `cd ${JSON.stringify(percorsoWsl)} && { ${comando} ; }${tracciaCartella ? codaCheStampaLaCartella(false) : ''}`),
             /* ⛔ Il marcatore non si vede nemmeno nei pezzi che escono mentre escono (D-10B). */
             { timeoutMs: 120_000, segnaleStop, onPezzo: onPezzo && ((pezzo) => onPezzo({ ...pezzo, testo: staccaCartellaFinale(pezzo.testo).testo })) },
         )
