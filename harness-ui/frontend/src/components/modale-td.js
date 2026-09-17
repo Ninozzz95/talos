@@ -1,3 +1,4 @@
+import { registeredOverlayManager } from '../design-system/overlays/manager.ts';
 /*
  * modale-td.js — la modale del mockup (`modalShow`/`modalClose`, righe 6039-6040), lotto G.
  *
@@ -62,6 +63,7 @@ export function modaleAperta() { return aperta; }
 export function apriModale(titolo, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null } = {}) {
   if (!doc?.body) return null;
   chiudiModale({ immediata: true }); // una alla volta: l'uscita della precedente sotto l'entrata della nuova sarebbe rumore
+  const manager = registeredOverlayManager(doc); const opener = doc.activeElement;
   const dialogo = nodo(doc, 'dialog', 'td-modal');
   if (ampia) dialogo.dataset.ampia = 'si';
   const idTitolo = `td-modal-title-${Math.random().toString(36).slice(2, 8)}`;
@@ -86,6 +88,7 @@ export function apriModale(titolo, contenuto, { document: doc = globalThis.docum
   dialogo.addEventListener('click', (e) => { if (e.target === dialogo) chiudiModale(); });
   dialogo.addEventListener('keydown', (e) => { if (e.key === 'Escape') e.stopPropagation(); });
   dialogo.addEventListener('close', () => {
+    manager?.deactivate(dialogo);
     if (aperta?.dialogo === dialogo) aperta = null;
     dialogo.remove();
     suChiusura?.();
@@ -108,7 +111,8 @@ export function apriModale(titolo, contenuto, { document: doc = globalThis.docum
   aperta = { dialogo, contenuto: corpo, suChiusura, chiudi: () => chiudiModale() };
   // Il primo controllo utile, non il contenitore: chi ascolta sente «Elimina» invece del silenzio.
   const primo = corpo.querySelector('input:not([type=hidden]), textarea, select, button') || chiudiBtn;
-  primo.focus?.({ preventScroll: true });
+  if (manager) manager.activate(dialogo, { opener, initialFocus: primo, requestClose: () => chiudiModale() });
+  else primo.focus?.({ preventScroll: true });
   return aperta;
 }
 

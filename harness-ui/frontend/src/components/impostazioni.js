@@ -29,6 +29,13 @@ export function creaSettingRow(campo, valore, {controllo, output, prefisso='sett
 function applicaFiltro(schermo, sezione) {
   const query=schermo.querySelector('[data-settings-query]')?.value || '';
   const trovati=new Set(filtraImpostazioni(CAMPI_IMPOSTAZIONI,query).map(c=>c.id));
+  // Some preferences have a dedicated owner rather than CAMPI_IMPOSTAZIONI.
+  // They participate in the same search without duplicating their value or write path.
+  const termini = testo(query).trim().split(/\s+/).filter(Boolean);
+  for (const row of schermo.querySelectorAll('[data-setting-search]')) {
+    const content = testo(`${row.dataset.settingSearch} ${row.textContent}`);
+    if (termini.every(term => content.includes(term))) trovati.add(row.dataset.settingRow);
+  }
   for(const panel of schermo.querySelectorAll('[data-settings-panel]')) {
     const righe=[...panel.querySelectorAll('[data-setting-row]')];
     for(const riga of righe) riga.hidden=Boolean(query.trim()) && !trovati.has(riga.dataset.settingRow);

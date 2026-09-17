@@ -13,6 +13,11 @@
  * conta come tradotto, perché in inglese si scrive così.
  */
 export default Object.freeze({
+  workspacePreferencesV2: {
+    'Riprendi il workspace all’avvio': 'Restore the workspace at startup',
+    'Riapre l’ultima sessione disponibile senza avviare operazioni.': 'Reopens the last available session without starting operations.',
+    'Preferenze salvate da una versione più recente: le modifiche restano temporanee.': 'Preferences were saved by a newer version: changes remain temporary.',
+  },
   /* i menu: chiavi astratte dal mockup (H21), applicate a [data-t]/[data-ph] */
   menu: {
     nuova: 'New', luoghi: 'Places', altro: 'More', fissate: 'Pinned', sessioni: 'Sessions', cerca: 'Search chats…',

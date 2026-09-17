@@ -1,5 +1,6 @@
 /* DS-01/02. Semantic aliases over all existing themes, not a second colour palette. */
 :root {
+  --ui-z-modal: 200;
   --ui-space-1: 4px; --ui-space-2: 8px; --ui-space-3: 12px; --ui-space-4: 16px;
   --ui-space-5: 20px; --ui-space-6: 24px; --ui-space-8: 32px; --ui-space-10: 40px;
   --ui-font-meta: .8125rem; --ui-font-control: .875rem; --ui-font-body: .9375rem;
@@ -14,7 +15,7 @@
   --talos-touch-target: var(--ui-control); --talos-row: var(--ui-row);
 }
 :root[data-density="compact"] {
-  --ui-control: 34px; --ui-control-small: 30px; --ui-row: 38px;
+  --ui-control: 36px; --ui-control-small: 30px; --ui-row: 38px;
   --ui-page-gutter: clamp(16px, 2.4vw, 36px);
 }
 :root[data-workspace-preset="research"], :root[data-workspace-preset="documents"] { --ui-prose-width: 100ch; }

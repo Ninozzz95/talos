@@ -1,3 +1,4 @@
+import { registeredOverlayManager } from '../design-system/overlays/manager.ts';
 export function urlImmagineValida(url) { return typeof url === 'string' && /^\/api\/v1\/chat-images\/[a-f0-9]{64}$/.test(url); }
 
 export function payloadImmagini(allegati = []) {
@@ -36,8 +37,12 @@ export function creaAnteprimaImmagine(image, { compatta = false, document: doc =
     const large = doc.createElement('img');
     large.src = picture.src; large.alt = image.nome;
     dialog.append(header, large);
-    dialog.addEventListener('close', () => { dialog.remove(); card.focus(); }, { once: true });
-    doc.body.append(dialog); dialog.showModal(); close.focus();
+    const manager = registeredOverlayManager(doc);
+    dialog.addEventListener('keydown', e => { if (e.key === 'Escape') e.stopPropagation(); });
+    dialog.addEventListener('close', () => { manager?.deactivate(dialog); dialog.remove(); if (!manager) card.focus(); }, { once: true });
+    doc.body.append(dialog); dialog.showModal();
+    if (manager) manager.activate(dialog, { opener: card, initialFocus: close, requestClose: () => dialog.close() });
+    else close.focus();
   });
   return card;
 }

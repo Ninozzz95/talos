@@ -1,3 +1,5 @@
+import { createOverlayManager } from '../design-system/overlays/manager.ts';
+import { createApiClient } from '../services/api-client.ts';
 import { createWorkspaceChrome } from '../features/navigation/workspace-chrome.ts';
 import { createWorkspacePreferences } from '../services/workspace-preferences.ts';
 import { createRevision } from '../app/lifecycle.ts';
@@ -98,6 +100,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   const startupNavigation = createRevision();
   const workspacePreferences = createWorkspacePreferences();
   let workspaceUI = null;
+  let modalManager = null;
+  let centralApi = null;
   let workspaceDisposed = false;
 
   'use strict';
@@ -2103,7 +2107,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!dialog.dataset.dialogResizeKey) prepareResizableDialog(dialog, `dialog:${dialog.id}`);
     cancelMotionAnimationsFor(dialog);
     prossimaGenerazione(dialog);
+    const opener = ROOT().activeElement;
     if (!dialog.open) dialog.show();
+    modalManager?.activate(dialog, { opener, backdrop: harnessDialogBackdrop, requestClose: () => closeEmbeddedDialog(dialog) });
     markMotionEnter(dialog);
     harnessDialogBackdrop.style.pointerEvents = ''; // ⛔ vedi closeEmbeddedDialog sotto — un dialog che riapre deve annullare la disattivazione lasciata da una chiusura precedente
     syncEmbeddedDialogBackdrop();
@@ -2138,7 +2144,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       // contenuto nuovo (una prossimaGenerazione() più recente), questa
       // callback tardiva non deve richiuderlo — vedi cancelMotionAnimationsFor
       // sopra per l'altra metà della cura (ferma anche l'animazione visiva).
-      if (dialog.open && motionGenerazione.get(dialog) === generazioneAllaChiusura) dialog.close();
+      if (dialog.open && motionGenerazione.get(dialog) === generazioneAllaChiusura) { dialog.close(); modalManager?.deactivate(dialog); }
       syncEmbeddedDialogBackdrop();
       syncBackgroundDialogPause();
     });
@@ -2224,16 +2230,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   window.addEventListener('online', () => sorveglianza.segnalaBrowser(true));
   barraStatoChat?.querySelector('[data-runtime-riprova]')?.addEventListener('click', () => sorveglianza.riprova());
   /** fetch delle API centrali: ogni esito informa la sorveglianza (T-15). */
-  async function fetchSorvegliata(url, init) {
-    try {
-      const risposta = await fetch(url, init);
-      sorveglianza?.segnalaRete(true);
-      return risposta;
-    } catch (error) {
-      sorveglianza?.segnalaRete(false, 'fetch');
-      throw error;
-    }
+  function apiCentrale() {
+    centralApi ??= createApiClient({ resolvePath: API,
+      network: (connected) => sorveglianza?.segnalaRete(connected, 'fetch'),
+    });
+    return centralApi;
   }
+  function fetchSorvegliata(url, init) { return apiCentrale().observedFetch(url, init); }
 
   // REAL_DATA_RENDER_START
   function textElement(tagName, className, value) {
@@ -2722,27 +2725,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (badge) badge.hidden = true;
   }
 
-  async function apiGet(pathname) {
-    const response = await fetchSorvegliata(API(pathname), {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-    });
-    let envelope;
-    try {
-      envelope = await response.json();
-    } catch {
-      const error = new Error('Risposta locale non valida');
-      error.code = 'INTERNAL_ERROR';
-      throw error;
-    }
-    if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
-      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
-      throw error;
-    }
-    return envelope.data;
-  }
+  function apiGet(pathname, options) { return apiCentrale().get(pathname, options); }
 
   function formattaByteModelLab(bytes) {
     const value = Number(bytes);
@@ -4547,27 +4530,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   /** ⭐ 26/8, riconciliazione desktop→mobile — stesso contratto envelope di apiGet, per POST /api/v1/sessions/*. */
-  async function apiPost(pathname, body) {
-    const response = await fetchSorvegliata(API(pathname), {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    let envelope;
-    try {
-      envelope = await response.json();
-    } catch {
-      const error = new Error('Risposta locale non valida');
-      error.code = 'INTERNAL_ERROR';
-      throw error;
-    }
-    if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
-      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
-      throw error;
-    }
-    return envelope.data;
-  }
+  function apiPost(pathname, body, options) { return apiCentrale().post(pathname, body, options); }
 
   /*
    * ⭐ 12/09 — LE DUE PORTE CHE MANCAVANO. Fino a ieri la app sapeva solo chiedere (`apiGet`) e
@@ -4579,27 +4542,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   sostituisce il messaggio): è su quello che il modulo sceglie cosa dire, quindi qui si
    *   conserva com'è invece di appiattirlo su un testo generico.
    */
-  async function apiScrivi(metodo, pathname, body) {
-    const response = await fetchSorvegliata(API(pathname), {
-      method: metodo,
-      headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    let envelope;
-    try {
-      envelope = await response.json();
-    } catch {
-      const error = new Error('Risposta locale non valida');
-      error.code = 'INTERNAL_ERROR';
-      throw error;
-    }
-    if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
-      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
-      throw error;
-    }
-    return envelope.data;
-  }
+  function apiScrivi(metodo, pathname, body, options) { return apiCentrale().request(metodo, pathname, body, options); }
   function apiPatch(pathname, body) { return apiScrivi('PATCH', pathname, body); }
   function apiDelete(pathname) { return apiScrivi('DELETE', pathname); }
 
@@ -13474,7 +13417,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     host.classList.toggle('chat-full-width', safe.chatFullWidth);
     /* 06/9 B8 — densità: il mockup la esprime con `data-densita="compatta"` sulla radice (token delle righe); lingua: `lang` + i soli elementi marcati. */
     const root = document.documentElement;
-    if (safe.uiDensity === 'compatta') root.setAttribute('data-densita', 'compatta'); else root.removeAttribute('data-densita');
+    if (!host.classList.contains('talos-embedded')) workspacePreferences.adoptLegacyDensity(safe.uiDensity);
+    const density = host.classList.contains('talos-embedded') ? safe.uiDensity : (workspacePreferences.read().density === 'compact' ? 'compatta' : 'comoda');
+    if (density === 'compatta') root.setAttribute('data-densita', 'compatta'); else root.removeAttribute('data-densita');
+    if (!host.classList.contains('talos-embedded')) root.dataset.density = workspacePreferences.read().density;
     const linguaRisolta = risolviLingua(safe.uiLanguage, navigator.languages || [navigator.language]);
     applicaLingua(ROOT(), linguaRisolta);
     sincronizzaSelettoriDensitaLingua(safe);
@@ -13490,7 +13436,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   /** I due selettori nascono con la schermata Impostazioni (dopo il primo `applicaAspettoDesktop`): si allineano qui, e di nuovo dopo il montaggio. */
   function sincronizzaSelettoriDensitaLingua(safe) {
-    const selDensita = $('#setting-uiDensitySelect'); if (selDensita) selDensita.value = safe.uiDensity;
+    const selDensita = $('#setting-uiDensitySelect'); if (selDensita) selDensita.value = HOST().classList.contains('talos-embedded') ? safe.uiDensity : (workspacePreferences.read().density === 'compact' ? 'compatta' : 'comoda');
     const selLingua = $('#setting-uiLanguageSelect');
     if (!selLingua) return;
     selLingua.value = safe.uiLanguage;
@@ -16174,7 +16120,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const sessionId = state.realSession.id;
     const snapshot = contextChatSnapshot?.sessionId === sessionId ? contextChatSnapshot : null;
     if (!contextCompactor) contextCompactor = montaContextCompactor(root, {
-      client: contextClient, sessionId, state: snapshot,
+      client: contextClient, sessionId, state: snapshot, modalManager,
       onState: next => contextMonitor?.update(next),
     });
     else contextCompactor.setSession(sessionId, snapshot);
@@ -19880,7 +19826,7 @@ ${testo}`;
   });
   $('#commandPaletteBtn').addEventListener('click', openCommandPalette);
   $('#closeCommand')?.addEventListener('click', () => closeEmbeddedDialog(commandDialog));
-  harnessDialogBackdrop.addEventListener('click', dismissTransientLayers);
+  harnessDialogBackdrop.addEventListener('click', () => { if (!modalManager?.requestCloseTop()) dismissTransientLayers(); });
   /*
    * ⛔ 07/9 — gli ascoltatori erano legati SOLO al campo del monolite (`#commandSearch`): aprendo il
    *   velo italiano la palette compariva e non faceva niente — non filtrava, le frecce non
@@ -20209,6 +20155,7 @@ ${testo}`;
     const eventName = input.type === 'range' ? 'input' : 'change';
     input.addEventListener(eventName, () => {
       const value = input.type === 'checkbox' ? input.checked : input.value;
+      if (key === 'uiDensity' && !HOST().classList.contains('talos-embedded')) workspacePreferences.update({ density: value === 'compatta' ? 'compact' : 'comfortable' });
       aggiornaAspettoDesktop({ [key]: value });
     });
   }
@@ -20227,6 +20174,9 @@ ${testo}`;
    * col modificatore della piattaforma (⌘ su Apple, Ctrl altrove).
    */
   ROOT().addEventListener('keydown', (event) => {
+    if (modalManager?.handleKey(event)) return;
+    // A native modal owns the interaction until dismissed; global shortcuts must not open underneath it.
+    if (modalManager && ROOT().querySelector('dialog:modal')) return;
     const quale = riconosci(event);
     if (quale === 'comandi') { event.preventDefault(); openCommandPalette(); }
     else if (quale === 'nuova') { event.preventDefault(); createNewSession(); }
@@ -20388,7 +20338,7 @@ ${testo}`;
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {
-    workspaceDisposed = true; startupNavigation.next(); workspaceUI?.dispose();
+    workspaceDisposed = true; startupNavigation.next(); workspaceUI?.dispose(); modalManager?.dispose();
     contextCompactor?.destroy(); contextCompactor = null;
     contextMonitor?.stop(); contextMonitor = null;
     window.clearInterval(notificheTimer);
@@ -20665,6 +20615,7 @@ ${testo}`;
   setRunState(true);
   syncRunComposerState();
   if (!HOST().classList.contains('talos-embedded') && $('#schermoHome')) {
+    modalManager = createOverlayManager(document);
     workspaceUI = createWorkspaceChrome({
       document, translate: tr, apiGet, navigate: setView,
       openProject: () => { startupNavigation.next(); void openRealTaskSheet(); },
@@ -20676,6 +20627,7 @@ ${testo}`;
       },
       describeSession: (row) => statoSessione(row).testo,
       currentSession: () => state.realSession.id,
+      currentWorkspace: () => state.realSession.cartellaAssoluta || state.sessionSelection.available?.get?.(state.realSession.id)?.cartella || null,
       currentModel: () => state.model,
       setInspectorVisible: (visible) => {
         appShell.classList.toggle('inspector-collapsed', !visible);
@@ -20729,7 +20681,8 @@ ${testo}`;
   function apriVeloMockup(id) {
     if (id === 'veloContesto') { void compactSession(); return; }
     const v = $(`#${id}`); if (!v) return;
-    ultimoFuocoVelo = ROOT().activeElement;
+    const opener = ROOT().activeElement;
+    ultimoFuocoVelo = opener;
     v.hidden = false;
     preparaMisuraDialogo(v); // 06/9 B7: la misura ricordata di QUESTO dialogo, se c'è
     aggiornaTutteLeScie(v);   // ⛔ 07/9: un cursore appena montato ha la scia a zero finché non lo tocchi
@@ -20748,15 +20701,18 @@ ${testo}`;
       || (corpo && corpo.querySelector('input, button, select'))
       || v.querySelector('.talos-dialog__footer button, .talos-dialog__footer input, .talos-dialog__footer select')
       || v.querySelector('input, button, select');
-    primo?.focus();
+    if (modalManager) modalManager.activate(v, { content: v.querySelector('.talos-dialog') || v, opener, initialFocus: primo, requestClose: () => chiudiVeloMockup(id) });
+    else primo?.focus();
   }
   function chiudiVeloMockup(id) {
     if (id === 'veloContesto' && contextCompactor) { contextCompactor.close(); return; }
     const v = $(`#${id}`); if (!v || v.hidden) return;
     v.hidden = true;
-    if (ultimoFuocoVelo?.focus) ultimoFuocoVelo.focus();
+    if (modalManager) modalManager.deactivate(v);
+    else if (ultimoFuocoVelo?.focus) ultimoFuocoVelo.focus();
   }
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') $$('.overlay-layer').forEach((v) => chiudiVeloMockup(v.id)); });
+  // Embedded hosts retain their own interaction lifecycle. Standalone uses the modal stack.
+  document.addEventListener('keydown', (event) => { if (!modalManager && event.key === 'Escape' && !event.defaultPrevented) { const open = $$('.overlay-layer').filter(v => !v.hidden).at(-1); if (open) chiudiVeloMockup(open.id); } });
   collegaRidimensionamentoDialoghi(ROOT()); // 06/9 B7: le tre maniglie di ogni velo (trascina, frecce, doppio clic)
   (() => { // 06/9: la striscia compare solo scorrendo in alto — si ridisegna quando la conversazione scorre
     /*

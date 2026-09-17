@@ -1,5 +1,5 @@
 import { createScope, createRevision } from '../../app/lifecycle.ts';
-import { createWorkspacePreferences, isPreset } from '../../services/workspace-preferences.ts';
+import { createWorkspacePreferences, isPreset, workspacePreferenceKey } from '../../services/workspace-preferences.ts';
 import { LAYOUT_PRESETS } from './presets.ts';
 import type { View } from '../../domain/navigation.ts';
 
@@ -11,7 +11,7 @@ export interface SessionSummary {
 export interface WorkspaceChromeOptions {
   document: Document;
   translate(text: string): string;
-  apiGet(path: string): Promise<unknown>;
+  apiGet(path: string, options?: { signal: AbortSignal }): Promise<unknown>;
   navigate(view: View): void;
   openProject(): void;
   openModel(): void;
@@ -19,6 +19,7 @@ export interface WorkspaceChromeOptions {
   openSession(row: SessionSummary): void;
   describeSession(row: SessionSummary): string;
   currentSession(): string | null;
+  currentWorkspace?(): string | null;
   currentModel(): string;
   setInspectorVisible(visible: boolean): void;
   preferences: ReturnType<typeof createWorkspacePreferences>;
@@ -45,6 +46,7 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
   let renderScope = createScope();
   let currentPresetKey = "";
   let currentView: View = 'home';
+  let readController: AbortController | null = null;
 
   function node<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text = ''): HTMLElementTagNameMap[K] {
     const item = doc.createElement(tag); item.className = className; item.textContent = t(text); return item;
@@ -55,7 +57,7 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     const use = doc.createElementNS(svg.namespaceURI, 'use'); use.setAttribute('href', `#${name}`); svg.append(use); return svg;
   }
   function button(text: string, action: () => void, className = 'talos-button talos-button--secondary', symbol?: string): HTMLButtonElement {
-    const b = node('button', className); b.type = 'button';
+    const b = node('button', className); b.type = 'button'; b.dataset.homeAction = text;
     if (symbol) b.append(icon(symbol)); b.append(node('span', '', text));
     b.addEventListener('click', action, { signal: renderScope.signal }); return b;
   }
@@ -149,8 +151,12 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
   async function load(): Promise<void> {
     if (loading || scope.disposed) return;
     const issued = requests.next(); loading = true; failed = false; render();
-    const [rows, readiness] = await Promise.allSettled([options.apiGet('/api/v1/sessions'), options.apiGet('/api/v1/setup/stato')]);
-    if (scope.disposed || !requests.isCurrent(issued)) return;
+    const controller = new AbortController(); readController = controller;
+    const release = scope.own(() => controller.abort());
+    const [rows, readiness] = await Promise.allSettled([options.apiGet('/api/v1/sessions', { signal: controller.signal }), options.apiGet('/api/v1/setup/stato', { signal: controller.signal })]);
+    const cancelled = controller.signal.aborted; release();
+    if (readController === controller) readController = null;
+    if (scope.disposed || cancelled || !requests.isCurrent(issued)) return;
     loading = false; failed = rows.status === 'rejected' || !isObject(rows.value) || !Array.isArray(rows.value.items);
     if (rows.status === 'fulfilled' && !failed) { sessions = normalizeSessions(rows.value); hasLoaded = true; }
     if (readiness.status === 'fulfilled' && isObject(readiness.value)) setup = readiness.value;
@@ -158,9 +164,19 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
   }
   function syncControls(): void {
     const prefs = preferences.read();
+    const restoreLabel = doc.querySelector<HTMLLabelElement>('label[for="setting-workspaceRestore"]');
+    if (restoreLabel) restoreLabel.textContent = t('Riprendi il workspace all’avvio');
+    const restoreHelp = doc.getElementById('workspaceRestoreHelp');
+    if (restoreHelp) restoreHelp.textContent = t('Riapre l’ultima sessione disponibile senza avviare operazioni.');
     doc.documentElement.dataset.density = prefs.density;
-    const key = options.currentSession() || 'global';
-    const preset = preferences.presetFor(key);
+    const sessionId = options.currentSession();
+    const key = workspacePreferenceKey(options.currentWorkspace?.(), sessionId);
+    const preset = preferences.presetFor(key, sessionId ? [sessionId] : []);
+    if (prefs.density === 'compact') doc.documentElement.dataset.densita = 'compatta'; else delete doc.documentElement.dataset.densita;
+    const densitySelect = doc.querySelector<HTMLSelectElement>('#setting-uiDensitySelect');
+    if (densitySelect) densitySelect.value = prefs.density === 'compact' ? 'compatta' : 'comoda';
+    const restore = doc.querySelector<HTMLInputElement>('[data-workspace-restore]');
+    if (restore) restore.checked = prefs.restoreWorkspace;
     if (currentPresetKey !== key) { options.setInspectorVisible(LAYOUT_PRESETS[preset].inspector); currentPresetKey = key; }
     doc.documentElement.dataset.workspacePreset = preset;
     const select = header?.querySelector<HTMLSelectElement>('[data-workspace-preset]'); if (select) select.value = preset;
@@ -170,7 +186,13 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     const labels: Partial<Record<View, string>> = { home: 'Home', chat: 'Conversazione', terminal: 'Terminale', diff: 'Revisione', dashboard: 'Sessioni', settings: 'Impostazioni', doctor: 'Diagnostica', libreria: 'Libreria', ricerca: 'Ricerca', progetti: 'Progetti', note: 'Note', attivita: 'Attività', memoria: 'Memoria', automations: 'Automazioni', browser: 'Browser', officina: 'Officina', capability: 'Capacità' };
     if (location) location.textContent = t(labels[currentView] || currentView);
     doc.title = `TALOS · ${t(labels[currentView] || currentView)}`;
-    const persistent = header?.querySelector<HTMLElement>('[data-workspace-persistence]'); if (persistent) persistent.hidden = preferences.persistent;
+    const persistent = header?.querySelector<HTMLElement>('[data-workspace-persistence]');
+    if (persistent) {
+      persistent.hidden = preferences.persistent;
+      persistent.textContent = t(preferences.persistenceProblem === 'future-version'
+        ? 'Preferenze salvate da una versione più recente: le modifiche restano temporanee.'
+        : 'Preferenze temporanee: memoria locale non disponibile.');
+    }
   }
   const density = header.querySelector('[data-workspace-density]');
   density?.addEventListener('click', () => { preferences.update({ density: preferences.read().density === 'compact' ? 'comfortable' : 'compact' }); syncControls(); }, { signal: scope.signal });
@@ -179,19 +201,24 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     select.replaceChildren(...Object.entries(LAYOUT_PRESETS).map(([value, definition]) => { const option = node('option', '', definition.label); option.value = value; return option; }));
     select.addEventListener('change', () => {
       if (!isPreset(select.value)) return;
-      preferences.setPreset(options.currentSession() || 'global', select.value);
+      preferences.setPreset(workspacePreferenceKey(options.currentWorkspace?.(), options.currentSession()), select.value);
       options.setInspectorVisible(LAYOUT_PRESETS[select.value].inspector); syncControls();
     }, { signal: scope.signal });
   }
   doc.defaultView?.addEventListener('talos:lingua', () => {
     if (select) for (const option of select.options) if (isPreset(option.value)) option.textContent = t(LAYOUT_PRESETS[option.value].label);
     syncControls(); render(); }, { signal: scope.signal });
-  const restore = header.querySelector<HTMLInputElement>('[data-workspace-restore]');
+  const restore = doc.querySelector<HTMLInputElement>('[data-workspace-restore]');
   if (restore) { restore.checked = preferences.read().restoreWorkspace; restore.addEventListener('change', () => { preferences.update({ restoreWorkspace: restore.checked }); }, { signal: scope.signal }); }
+  scope.own(preferences.subscribe(syncControls));
   render(); syncControls();
   return {
     refresh: load,
-    update(view: View): void { const entered = currentView !== view; currentView = view; syncControls(); if (view === 'home') { if (entered || !hasLoaded) void load(); else render(); } },
+    update(view: View): void {
+      const entered = currentView !== view; currentView = view; syncControls();
+      if (entered && view !== 'home' && readController) { requests.next(); readController.abort(); loading = false; }
+      if (view === 'home') { if (entered || !hasLoaded) void load(); else render(); }
+    },
     acceptSessions(items: unknown): void { sessions = normalizeSessions({ items }); hasLoaded = true; if (currentView === 'home' && !loading) render(); },
     showNotice(text: string): void { notice = text; render(); },
     dispose: () => { requests.next(); renderScope.dispose(); scope.dispose(); },

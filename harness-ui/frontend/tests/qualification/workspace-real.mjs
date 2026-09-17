@@ -2,6 +2,7 @@
 import { chromium } from 'playwright';
 import { expect } from '@playwright/test';
 import assert from 'node:assert/strict';
+import { stripVTControlCharacters } from 'node:util';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -19,6 +20,7 @@ const result = { source: process.env.GITHUB_SHA || null, node: process.version, 
   checks: [], screens: [], errors: [], warnings: [], failedCases: [], complete: false };
 const check = (name, condition) => { result.checks.push({ name, passed: Boolean(condition) }); assert.ok(condition, name); };
 let logs = '', browser, page;
+let ptyOutput = ''; const ptyControls = [];
 const server = spawn(process.execPath, [join(root, 'harness-ui/server.mjs')], {
   cwd: root, env: { ...process.env, TALOS_HARNESS_UI_HOST: '127.0.0.1', TALOS_HARNESS_UI_PORT: new URL(base).port,
     TALOS_DESKTOP_DATA_DIR: data, TALOS_HARNESS_UI_SESSIONS_DIR: join(data, 'sessions'),
@@ -57,6 +59,12 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, locale: 'it-IT', colorScheme: 'dark' });
   page = await context.newPage();
   page.setDefaultTimeout(10000);
+  // Listen before navigation: a real terminal may connect before its view is selected.
+  page.on('websocket', ws => ws.on('framereceived', ({ payload }) => {
+    const frame = Buffer.from(payload);
+    if (frame[0] === 0) ptyOutput += frame.subarray(1).toString('utf8');
+    if (frame[0] === 1) { try { ptyControls.push(JSON.parse(frame.subarray(1).toString('utf8'))); } catch { /* Non-control text is not a PTY result. */ } }
+  }));
   page.on('pageerror', e => result.errors.push(e.message));
   page.on('console', m => { if (['warning', 'error'].includes(m.type())) result.warnings.push({ type: m.type(), text: m.text().slice(0, 600) }); });
   await page.goto(base, { waitUntil: 'domcontentloaded' });
@@ -85,10 +93,63 @@ try {
     await expect(page.locator('dialog[open],.overlay-layer:not([hidden])')).not.toHaveCount(0);
     check('home opens existing model sheet', true);
     await page.keyboard.press('Escape');
+    // The first Escape belongs to the expanded inner model picker, not its enclosing sheet.
+    await expect(page.locator('#veloModello')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#veloModello')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Scegli un modello', exact: true })).toBeFocused();
+    check('model picker and parent close in two distinct Escape actions', true);
     await page.getByRole('button', { name: 'Apri un progetto', exact: true }).click();
     await expect(page.locator('dialog[open],.overlay-layer:not([hidden])')).not.toHaveCount(0);
     check('project uses real workspace chooser', true);
     await page.keyboard.press('Escape');
+  });
+  await scenario('modal-stack', async () => {
+    const originalInert = await page.locator('[inert]').count();
+    await page.getByRole('button', { name: 'Apri un progetto', exact: true }).click();
+    await expect(page.locator('#sheetDialog')).toBeVisible();
+    await expect(page.locator('#sheetDialog')).toHaveAttribute('aria-modal', 'true');
+    await page.locator('#sheetDialog').evaluate(dialog => {
+      const controls = [...dialog.querySelectorAll('button,input,select,textarea,[tabindex]')].filter(el => !el.matches(':disabled') && el.tabIndex >= 0 && el.getClientRects().length && !el.closest('[hidden],[inert]'));
+      controls.at(-1).focus();
+    });
+    await page.keyboard.press('Tab');
+    check('Tab stays in the actual project dialog', await page.locator('#sheetDialog').evaluate(dialog => dialog.contains(document.activeElement)));
+    await page.keyboard.press('Control+Shift+M');
+    await expect(page.locator('#veloModello')).toBeVisible();
+    await expect(page.locator('#sheetDialog')).toBeVisible();
+    check('nested sheet leaves the project underneath', true);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#veloModello')).toBeHidden();
+    await expect(page.locator('#sheetDialog')).toBeVisible();
+    check('closing the upper dialog restores the lower focus', await page.locator('#sheetDialog').evaluate(dialog => dialog.contains(document.activeElement)));
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#sheetDialog')).not.toHaveAttribute('open', '');
+    await expect(page.getByRole('button', { name: 'Apri un progetto', exact: true })).toBeFocused();
+    await expect.poll(() => page.locator('[inert]').count()).toBe(originalInert);
+    check('all modal leases are restored after closing the stack', true);
+  });
+  await scenario('canonical-preferences', async () => {
+    await navigate('impostazioni', 'settings');
+    await page.locator('#setting-uiDensitySelect').selectOption('compatta');
+    await expect(page.locator('html')).toHaveAttribute('data-density', 'compact');
+    await expect(page.locator('[data-workspace-density]')).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('[data-workspace-density]').click();
+    await expect(page.locator('#setting-uiDensitySelect')).toHaveValue('comoda');
+    check('settings and workspace density use one canonical preference', true);
+    await page.locator('[data-workspace-restore]').uncheck();
+    await page.reload(); await page.locator('#talosAvvio').waitFor({ state: 'hidden' });
+    await navigate('impostazioni', 'settings');
+    await expect(page.locator('[data-workspace-restore]')).not.toBeChecked();
+    check('startup restoration can be disabled and survives reload', true);
+    const query = page.locator('#schermoImpostazioni [data-settings-query]');
+    await query.fill('riprendi');
+    await expect(page.locator('[data-setting-row="workspaceRestore"]')).toBeVisible();
+    check('new startup preference is discoverable through Settings search', true);
+    await query.clear();
+    await page.locator('[data-workspace-restore]').check();
+    await navigate('home', 'home');
   });
   for (const [destination, screen] of Object.entries({ chat: 'chat', note: 'note', attivita: 'attivita', libreria: 'libreria',
     memoria: 'memoria', ricerca: 'ricerca', progetti: 'progetti', board: 'dashboard', impostazioni: 'settings',
@@ -102,16 +163,18 @@ try {
   }
   await scenario('terminal', async () => {
     await navigate('chat', 'chat');
-    let output = '';
-    page.on('websocket', ws => ws.on('framereceived', ({ payload }) => {
-      const frame = Buffer.from(payload); if (frame[0] === 0) output += frame.subarray(1).toString('utf8');
-    }));
+    const startOutput = ptyOutput.length;
     await page.locator('#schermoChat [data-vaia="terminale"]').click();
     await expect(page.locator('#schermoTerminale')).toBeVisible();
     const input = page.locator('#schermoTerminale .xterm-helper-textarea').first();
     await input.waitFor({ state: 'attached' }); await input.focus();
-    await page.keyboard.type('echo TALOS-LEDGER-REAL'); await page.keyboard.press('Enter');
-    await expect.poll(() => /(^|\n)TALOS-LEDGER-REAL\r?\n/.test(output.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''))).toBe(true);
+    // The shell command itself does not contain the contiguous expected output marker.
+    // Thus the echo of the typed command cannot satisfy the assertion.
+    await page.keyboard.type(process.platform === 'win32'
+      ? 'echo TALOS-LEDGER-REAL'
+      : "printf 'TALOS-LEDGER-%s\\n' REAL");
+    await page.keyboard.press('Enter');
+    await expect.poll(() => stripVTControlCharacters(ptyOutput.slice(startOutput)).replace(/\r/g, '').split('\n').some(line => line.trim() === 'TALOS-LEDGER-REAL'), { timeout: 15000 }).toBe(true);
     check('terminal executes an actual PTY command', true);
     await page.screenshot({ path: join(out, 'terminal-1440.png') });
     await page.keyboard.type('exit'); await page.keyboard.press('Enter');
@@ -155,6 +218,7 @@ finally {
     if (server.exitCode === null) server.kill('SIGKILL');
   }
   await writeFile(join(out, 'server.log'), logs);
+  await writeFile(join(out, 'pty-evidence.json'), JSON.stringify({ output: ptyOutput, controls: ptyControls }, null, 2));
   await writeFile(join(out, 'qualification.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify({ complete: result.complete, assertions: result.checks.length, failedCases: result.failedCases, pageErrors: result.errors }));
 }

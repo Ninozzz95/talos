@@ -20,6 +20,7 @@
     "src/app/**/*.ts",
     "src/domain/**/*.ts",
     "src/services/workspace-preferences.ts",
+    "src/services/api-client.ts",
     "src/features/**/*.ts",
     "src/design-system/**/*.ts"
   ]
