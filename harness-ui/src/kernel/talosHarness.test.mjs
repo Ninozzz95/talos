@@ -1114,6 +1114,14 @@ describe('ambienteSenzaCredenziali — lo scrub delle credenziali passate ai sot
  * limite già accettato per `eseguiProva`, mai testata a unità in questo file,
  * verificata invece dal vivo (vedi il piano, sezione verifica). Non un buco
  * silenzioso: una scelta, la stessa già fatta per `eseguiProva`.
+ *
+ * ⛔ 17/09/2026 — quel limite è costato tre difetti (BC-54/55/56): con `--` al posto
+ * di `--exec` la riga passava da DUE shell, il ripiego automatico spediva su cmd.exe
+ * ogni riga che non cominciava con un programma, e un comando vuoto lanciava un
+ * `TypeError`. Le prove d'integrazione che li coprono — con `wsl.exe` vero, saltate
+ * con un motivo dichiarato quando WSL non risponde — stanno in
+ * `harness-ui/tests/shell-wsl-p0bis.test.mjs`, insieme alle unità di
+ * `argomentiWslPerScript` e `rigaVuoleUnaShellPosix`. Questo file resta puro.
  */
 describe('primoProgramma — il primo token di un comando', () => {
     it('⭐ "npm test" -> "npm"', () => {
