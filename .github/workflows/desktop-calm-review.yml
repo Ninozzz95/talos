@@ -1,0 +1,51 @@
+name: desktop-calm-review
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['harness-ui/frontend/**', '.github/workflows/desktop-calm-review.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: calm-review-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  real-settings:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.18.0'
+      - name: Locked dependencies and actual production build
+        run: |
+          set -euo pipefail
+          for dir in harness-ui harness-ui/frontend context-engine; do npm ci --prefix "$dir" --no-audit --no-fund; done
+          node harness-ui/frontend/node_modules/playwright/cli.js install --with-deps chromium
+          mkdir -p harness-ui/frontend/test-results/calm-controls
+          npm --prefix harness-ui/frontend run build
+          node harness-ui/node_modules/typescript/bin/tsc -p harness-ui/frontend/tsconfig.refactor.json
+      - name: Real backend, all forty fields, fourteen themes and persisted reload
+        id: browser
+        continue-on-error: true
+        run: node harness-ui/frontend/tests/qualification/calm-controls-real.mjs
+      - name: Full frontend regression suite
+        id: unit
+        continue-on-error: true
+        run: npm --prefix harness-ui/frontend run test:unit > harness-ui/frontend/test-results/calm-controls/full-unit.log 2>&1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: calm-review-${{ github.sha }}
+          path: harness-ui/frontend/test-results/calm-controls/
+          retention-days: 14
+          if-no-files-found: error
+      - name: No failure is converted into success
+        if: always()
+        env:
+          BROWSER: ${{ steps.browser.outcome }}
+          UNIT: ${{ steps.unit.outcome }}
+        run: test "$BROWSER" = success && test "$UNIT" = success
