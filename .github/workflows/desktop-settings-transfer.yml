@@ -2,7 +2,7 @@ name: desktop-settings-transfer
 on:
   push:
     branches: ['refactor/desktop-ledger-2026-09-17']
-    paths: ['docs/refactor/settings-v3-slice/**', '.github/workflows/desktop-settings-transfer.yml']
+    paths: ['docs/refactor/settings-polish.mjs', '.github/workflows/desktop-settings-transfer.yml']
 permissions:
   contents: read
 concurrency:
@@ -26,17 +26,17 @@ jobs:
         with:
           node-version: '24.18.0'
       - name: Require exact preimages and verify all applied source bytes
-        run: node docs/refactor/settings-v3-slice/apply.mjs
+        run: node docs/refactor/settings-polish.mjs
       - name: Publish ordinary source changes only as a fast forward
         id: commit
         run: |
           set -euo pipefail
-          git add -- harness-ui/frontend/src/components/impostazioni-campi.js harness-ui/frontend/src/components/impostazioni.js harness-ui/frontend/src/design-system/settings.css harness-ui/frontend/src/features/settings harness-ui/frontend/src/legacy/app.js harness-ui/frontend/src/styles/main.css harness-ui/frontend/tests/refactor/settings-schema.test.mjs
+          git add -- harness-ui/frontend/src/components/impostazioni.js harness-ui/frontend/src/design-system/workspace.css harness-ui/frontend/src/features/settings harness-ui/frontend/tests/refactor/settings-schema.test.mjs
           git diff --cached --check
           if ! git diff --cached --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'feat(settings): searchable settings, focused controls and truthful persistence feedback'
+            git commit -m 'fix(settings): resolve copy and navigation defects found by visual inspection'
             git push origin HEAD:refs/heads/refactor/desktop-ledger-2026-09-17
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
