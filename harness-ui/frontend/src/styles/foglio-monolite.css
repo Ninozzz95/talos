@@ -228,7 +228,7 @@ dialog.sheet-dialog .setting-control select,dialog.command-dialog .setting-contr
 .dialog-user-sized .sheet-body,.sheet-dialog--new-session.dialog-user-sized .sheet-body,.dialog-user-sized .command-results{ flex: 1 1 auto; min-height: 0; height: auto; max-height: none; }
 .dialog-resizing{ user-select: none; }
 .dialog-resize-handle{ display: block; position: absolute; z-index: 8; margin: 0; border: 0; outline: 0; background: transparent; padding: 0; touch-action: none; opacity: .72; }
-.dialog-resize-handle::after{ content: ''; position: absolute; border-radius: 999px; background: var(--line-strong); transition: background var(--motion-hover) var(--motion-ease), opacity var(--motion-hover) var(--motion-ease); opacity: .6; }
+.dialog-resize-handle::after{ content: ""; position: absolute; border-radius: 999px; background: var(--line-strong); transition: background var(--motion-hover) var(--motion-ease), opacity var(--motion-hover) var(--motion-ease); opacity: .6; }
 .dialog-resize-handle:hover::after,.dialog-resize-handle:focus-visible::after,.dialog-resizing .dialog-resize-handle::after{ background: var(--accent-2); opacity: 1; }
 .dialog-resize-handle:focus-visible{ box-shadow: inset 0 0 0 2px var(--focus); }
 .dialog-resize-handle--width{ top: 72px; right: 0; bottom: 22px; width: 9px; cursor: ew-resize; }

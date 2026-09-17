@@ -1,3 +1,4 @@
+import { VIEW_BY_DESTINATION } from '../../src/domain/navigation.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -87,7 +88,7 @@ test('A — nessun conteggio d\'esempio nella barra nuova: il badge lo scrive il
   assert.ok(blocco.length > 0, 'il blocco `.td-sidebar-nav` esiste nel template');
   assert.deepEqual(conteggiScrittiAMano(blocco), [], 'i numeri del mockup (43 · 69 · 18 · 7 · 4…) non entrano nel prodotto');
   const voci = [...blocco.matchAll(/data-vaia="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(voci, ['chat', 'note', 'attivita', 'libreria', 'memoria', 'ricerca', 'progetti', 'board', 'modelli', 'capability', 'officina', 'automazioni', 'doctor']);
+  assert.deepEqual(voci, ['home', 'chat', 'note', 'attivita', 'libreria', 'memoria', 'ricerca', 'progetti', 'board', 'modelli', 'capability', 'officina', 'automazioni', 'doctor']);
 });
 
 test('A, al contrario: un badge con un numero scritto dentro viene TROVATO', () => {
@@ -98,8 +99,8 @@ test('A, al contrario: un badge con un numero scritto dentro viene TROVATO', () 
 test('A — ogni voce della barra ha una porta: o la mappa delle viste, o l\'eccezione dichiarata', () => {
   const blocco = bloccoNavigazione(TEMPLATE);
   const voci = [...blocco.matchAll(/data-vaia="([^"]+)"/g)].map((m) => m[1]);
-  const mappa = /const VISTA_PER_VAIA = \{([^}]*)\}/.exec(APP)?.[1] || '';
-  const conosciute = new Set([...mappa.matchAll(/(\w+):/g)].map((m) => m[1]));
+  assert.match(APP, /const VISTA_PER_VAIA = VIEW_BY_DESTINATION;/, 'la regia consuma il registro condiviso');
+  const conosciute = new Set(Object.keys(VIEW_BY_DESTINATION));
   /* «modelli» non ha una schermata sua (`#schermoModelLab` esiste ma non è in VISTA_PER_SCHERMATA):
      è gestita a parte, e la riga che la gestisce deve esserci davvero. */
   assert.match(APP, /vaia\?\.dataset\.vaia === 'modelli'[\s\S]{0,120}setSettingsSection\('models'\)/u, '«Modelli» apre la sezione vera del Model Lab');

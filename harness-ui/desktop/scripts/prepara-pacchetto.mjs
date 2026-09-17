@@ -155,11 +155,11 @@ export async function preparaPacchetto() {
     if (asset.variante === 'cpu') await esegui(join(staging, 'local-runtime/cpu/llama-server.exe'), ['--version'], root);
   }
   await writeFile(join(staging, 'AVVISI.txt'), [
-    'TALOS 0.1.0 — pacchetto di prova R-02, non firmato.',
+    'TALOS Desktop — pacchetto di prova non firmato. Versione e commit nel manifesto della build.',
     'Electron 44.3.0 (MIT): LICENSE e LICENSES.chromium.html nella radice installata.',
     'llama.cpp b10517 (MIT): https://github.com/ggml-org/llama.cpp/tree/b10517 ; avvisi negli archivi inclusi.',
     'Dipendenze Node: licenze originali conservate nei rispettivi node_modules.',
-    'Il package desktop dichiara AGPL-3.0-only; il repository di base contiene LICENSE Apache-2.0. Riallineamento del rilascio a cura owner (R-05).',
+    'Licenza del repository: vedere LICENZA-REPOSITORY.txt. Le dipendenze mantengono le proprie licenze.',
     'Nessun modello GGUF, aggiornamento automatico o telemetria aggiunto da R-02.',
   ].join('\r\n') + '\r\n');
   await copyFile(join(root, '../..', 'LICENSE'), join(staging, 'LICENZA-REPOSITORY.txt'));

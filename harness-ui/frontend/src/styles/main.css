@@ -1,5 +1,7 @@
 /* Punto d'ingresso dei fogli (06/09): il foglio del mockup generato + il tampone del foglio «Nuova sessione» del monolite. */
 @import './index.css';
+@import '../design-system/foundations.css';
+@import '../design-system/controls.css';
 @import './foglio-monolite.css';
 @import './immagini-chat.css';
 @import './diff-in-chat.css';
@@ -62,3 +64,11 @@
 @import './mockup-animazioni.css';
 @import './scheda-file.css'; /* PO-30 fetta 1: la scheda File col disegno del laboratorio della PR #33 */
 @import './inspector-tab-visibility.css';
+
+@import '../design-system/workspace.css';
+
+@import '../design-system/command-palette.css'; /* NAV-02: real command registry */
+
+@import '../design-system/settings.css'; /* SET-01: existing controls in searchable settings */
+
+@import '../design-system/calm-controls.css'; /* CP14: custom pickers, switches and sliders */

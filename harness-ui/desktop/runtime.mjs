@@ -40,10 +40,11 @@ export function scegliMotoreLocale({ percorsi, env = process.env, sonda = spawnS
 
 function portaValida(port) { return Number.isInteger(port) && port >= 1024 && port <= 65535 && port !== 4174; }
 
-export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, dataDir, motoreLocale, env = process.env }) {
+export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, dataDir, motoreLocale, env = process.env, keyringScope = 'desktop' }) {
   if (!isAbsolute(execPath ?? '')) throw new Error('Percorso eseguibile assoluto richiesto.');
   if (!portaValida(port)) throw new Error('La porta del figlio non è consentita.');
   if (!/^[a-f0-9]{64}$/.test(token ?? '')) throw new Error('Credenziale locale non valida.');
+  if (!['desktop', 'desktop-preview'].includes(keyringScope)) throw new Error('Scope del portachiavi Desktop non valido.');
   const ambiente = Object.fromEntries(Object.entries(env).filter(([k, v]) => v !== undefined && !/^(NODE_OPTIONS|NODE_PATH|TALOS_PACKAGED_NODE|ELECTRON_RUN_AS_NODE|ELECTRON_ENABLE_LOGGING|ELECTRON_LOG_FILE|ELECTRON_NO_ASAR)$/i.test(k)));
   if (motoreLocale) {
     ambiente.TALOS_LLAMA_SERVER_PATH = motoreLocale.percorso;
@@ -71,7 +72,7 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
      *   nasce vuoto, mai condiviso con il server da sorgente) e ignora i semi di chiavi
      *   dall'ambiente: le chiavi arrivano solo dalla UI. Vedi `src/adattatore-keyring.mjs`.
      */
-    TALOS_HARNESS_UI_KEYRING_SCOPE: 'desktop',
+    TALOS_HARNESS_UI_KEYRING_SCOPE: keyringScope,
   });
   return { command: execPath, args: ['--import', pathToFileURL(percorsi.bootstrap).href, percorsi.server], options: {
     cwd: percorsi.root, env: ambiente, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true, shell: false,

@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
+import { previewBuildConfiguration } from '../profile.mjs';
 import { verificaImpronta } from './prepara-pacchetto.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -23,7 +24,9 @@ try {
   }
   const icone = spawnSync(process.execPath, [join(root, 'scripts/genera-icone.mjs')], { cwd: root, stdio: 'inherit', windowsHide: true });
   if (icone.error || icone.status !== 0) throw new Error('Generazione icone fallita.');
-  await build({ projectDir: root, targets: Platform.WINDOWS.createTarget(['nsis', 'zip'], Arch.x64), publish: 'never' });
+  const preview = previewBuildConfiguration(process.env.TALOS_BUILD_PROFILE, process.env.TALOS_BUILD_SOURCE_COMMIT);
+  await build({ projectDir: root, targets: Platform.WINDOWS.createTarget(preview ? ['zip'] : ['nsis', 'zip'], Arch.x64),
+    publish: 'never', ...(preview ? { config: preview } : {}) });
 } catch (e) {
   console.error(`Distribuzione fallita: ${e.message}`);
   // ⛔ Uscita esplicita e immediata (16/09/2026, cura della release 0.1.12 bruciata). Il drain
