@@ -2,10 +2,12 @@
 //! temporary and per-run; no firewall, loopback exemptions, accounts or services.
 mod ffi;
 mod security;
+mod checks;
+mod network;
 use ffi::*;
 use crate::protocol::{peer_matches, Report, FRAME_BYTES};
 use std::{ffi::{c_void, OsStr, OsString}, fs::{self, File, OpenOptions}, io::{self, Read, Write},
-    mem::{size_of, zeroed}, net::{SocketAddr, TcpListener, TcpStream}, os::windows::ffi::OsStrExt,
+    mem::{size_of, zeroed}, net::TcpListener, os::windows::ffi::OsStrExt,
     path::{Path, PathBuf}, ptr::{null, null_mut}, thread, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
 
 type Result<T> = std::result::Result<T, String>;
@@ -322,8 +324,7 @@ fn child_measurements(args: &[OsString]) -> Result<()> {
         report.read_error = raw_error(File::open(private));
         report.write_error = raw_error(OpenOptions::new().write(true).open(private));
         report.immutable_error = raw_error(OpenOptions::new().write(true).open(immutable));
-        let address = SocketAddr::from(([127, 0, 0, 1], port));
-        report.network_error = raw_error(TcpStream::connect_timeout(&address, Duration::from_millis(1000)));
+        report.network_error = network::probe(port, Path::new(scratch))?;
         let mut file = OpenOptions::new().write(true).create_new(true).open(scratch)
             .map_err(|e| format!("scratch open: {e}"))?;
         io_result(file.write_all(CONTENT))?; io_result(file.sync_all())?;
@@ -384,10 +385,14 @@ fn sandbox_case(name: &str, owner: &str, profile: &Profile, expected_sid: Sid, f
         report.read_error, report.write_error, report.immutable_error, report.network_error);
     ensure(report.read_error == 5 && report.write_error == 5 && report.immutable_error == 5,
         "filesystem denial was not ERROR_ACCESS_DENIED")?;
-    ensure(report.network_error == 10013, "loopback denial was not WSAEACCES; timeout/refusal is not evidence")?;
+    // Network acceptance is checked by the caller after this case. A timeout
+    // must keep the final run red without preventing independent tree checks.
+    pass("private_and_immutable_files_denied");
+    network::show_diagnostic(&fixture.scratch.join(format!("{name}.txt")))?;
     ensure(report.env_absent == 1 && report.scratch_written == 1, "environment/scratch contract failed")?;
     ensure(io_result(fs::read(fixture.scratch.join(format!("{name}.txt"))))? == CONTENT, "scratch effect not observed")?;
     ensure(io_result(fs::read(&fixture.private))? == CONTENT && io_result(fs::read(&fixture.immutable))? == CONTENT, "protected fixture changed")?;
+    pass("environment_excluded_and_scratch_effect_observed");
     if tree {
         ensure(report.descendant != 0 && report.descendant != child.pid, "descendant not reported")?;
         let descendant = Owned::new(unsafe { OpenProcess(0x00100000 | 0x1000, 0, report.descendant) }, "observe descendant")?;
@@ -402,7 +407,7 @@ fn sandbox_case(name: &str, owner: &str, profile: &Profile, expected_sid: Sid, f
         ensure(unsafe { WaitForSingleObject(descendant.0, DEADLINE_MS) } == 0, "descendant still alive after Job close")?;
         pass("job_close_terminates_observed_tree");
     }
-    pass(name); Ok(Some(report))
+    pass("contained_filesystem_environment_and_tree_case"); Ok(Some(report))
 }
 /// A read-back of ActiveProcessLimit is not an enforcement test. Prove that
 /// identical fifth launches succeed with a cap of five and are refused with four.
@@ -460,7 +465,8 @@ fn experiment() -> Result<()> {
     let port = io_result(server.local_addr())?.port();
     let original_env = std::env::var_os(SYNTHETIC);
     std::env::set_var(SYNTHETIC, "synthetic-not-a-real-secret");
-    let measured: Result<()> = (|| {
+    let mut checks = checks::Checks::default();
+    let positive: Result<()> = (|| {
         // Same executable and fixtures, no AppContainer. Positive control must
         // actually connect/read/open-for-write, or negative probes prove nothing.
         let control_name = format!("{name}.control");
@@ -475,18 +481,41 @@ fn experiment() -> Result<()> {
             let report = Report::decode(&pipe.read_frame()?).map_err(str::to_owned)?;
             ensure(report.read_error == 0 && report.write_error == 0 && report.immutable_error == 0
                 && report.network_error == 0 && report.env_absent == 1 && report.scratch_written == 1, "positive control unavailable")?;
+            network::show_diagnostic(&fixture.scratch.join(format!("{control_name}.txt")))?;
+            network::observe_control_connection(&server)?;
             pass("unrestricted_positive_control");
         }
-        sandbox_case(&format!("{name}.contained"), &owner, &profile, profile.sid, &fixture, port, "probe", true, true, true)?;
-        sandbox_case(&format!("{name}.uncontained-peer"), &owner, &profile, profile.sid, &fixture, port, "hello", false, false, false)?;
-        sandbox_case(&format!("{name}.foreign-sid"), &owner, &foreign, profile.sid, &fixture, port, "hello", false, true, false)?;
-        sandbox_case(&format!("{name}.bad-frame"), &owner, &profile, profile.sid, &fixture, port, "bad-frame", true, true, false)?;
-        process_cap_probe(&fixture, &profile)?;
         Ok(())
     })();
+    let positive_ok = positive.is_ok();
+    checks.record("positive_control_prerequisite", positive);
+    if positive_ok {
+        // Only independent synthetic cases continue after a failure. Each child
+        // still receives its own mandatory Job; authority/ACLs are unchanged.
+        let contained = sandbox_case(&format!("{name}.contained"), &owner, &profile,
+            profile.sid, &fixture, port, "probe", true, true, true);
+        match contained {
+            Ok(Some(report)) => checks.record("loopback_explicit_denial", network::require_explicit_denial(report.network_error)),
+            Ok(None) => checks.record("contained_case", Err("missing contained report".into())),
+            Err(error) => checks.record("contained_case", Err(error)),
+        }
+        checks.record("uncontained_peer_rejected", sandbox_case(&format!("{name}.uncontained-peer"),
+            &owner, &profile, profile.sid, &fixture, port, "hello", false, false, false).map(|_| ()));
+        checks.record("foreign_container_rejected", sandbox_case(&format!("{name}.foreign-sid"),
+            &owner, &foreign, profile.sid, &fixture, port, "hello", false, true, false).map(|_| ()));
+        checks.record("malformed_frame_rejected", sandbox_case(&format!("{name}.bad-frame"),
+            &owner, &profile, profile.sid, &fixture, port, "bad-frame", true, true, false).map(|_| ()));
+        checks.record("process_limit_enforced", process_cap_probe(&fixture, &profile));
+        // No connection observed is supplementary evidence, not a replacement
+        // for the explicit-denial test above. It cannot override a timeout.
+        checks.record("no_additional_loopback_connection_observed", network::no_extra_connection(&server));
+    }
     match original_env { Some(value) => std::env::set_var(SYNTHETIC, value), None => std::env::remove_var(SYNTHETIC) }
-    measured?;
-    fixture.cleanup()?; foreign.cleanup()?; profile.cleanup()?;
+    // Perform and observe every cleanup even if a previous independent case failed.
+    checks.record("fixture_cleanup", fixture.cleanup());
+    checks.record("foreign_profile_cleanup", foreign.cleanup());
+    checks.record("profile_cleanup", profile.cleanup());
+    checks.finish()?;
     pass("temporary_profiles_and_fixtures_removed");
     println!("{{\"result\":\"PASS\",\"scope\":\"synthetic-containment-probes-only\",\"standard_user_verified\":{}}}", !elevated);
     Ok(())
