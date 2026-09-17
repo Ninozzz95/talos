@@ -12,24 +12,25 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
-      - name: Preserve exact completed job log and extract failures
+      - name: Preserve completed Windows job log and extract failures
         env:
           GH_TOKEN: ${{ github.token }}
+          JOB_ID: '105229574470'
         run: |
           set -euo pipefail
           mkdir evidence
-          gh api repos/Ninozzz95/talos/actions/jobs/105221785658/logs --allow-escape-sequences > evidence/windows-job.log
+          gh api repos/Ninozzz95/talos/actions/jobs/$JOB_ID/logs --allow-escape-sequences > evidence/windows-job.log
           python - <<'PY'
           import re, pathlib
           path = pathlib.Path('evidence/windows-job.log')
           raw = path.read_text(encoding='utf-8-sig')
           clean = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', raw)
           lines = clean.splitlines()
-          starts = [i for i,line in enumerate(lines) if re.search(r'\bnot ok\b', line)]
+          starts = [i for i,line in enumerate(lines) if re.search(r'\bnot ok\b|✖|##\[error\]|Exception:', line)]
           output = []
           for i in starts:
               output.append('\n=== FAILURE LINE %d ===' % (i+1))
-              for line in lines[max(0,i-2):i+35]:
+              for line in lines[max(0,i-2):i+40]:
                   output.append(line[:1200])
           output.append('\nFAILURE OCCURRENCES: %d' % len(starts))
           pathlib.Path('evidence/failures.txt').write_text('\n'.join(output), encoding='utf-8')
@@ -38,7 +39,7 @@ jobs:
           gzip evidence/windows-job.log
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: talos-windows-gate-diagnostic-105221785658
+          name: talos-windows-gate-diagnostic-105229574470
           path: evidence/
           retention-days: 7
           if-no-files-found: error
