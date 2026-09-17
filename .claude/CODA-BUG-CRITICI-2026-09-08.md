@@ -825,3 +825,28 @@ irrobustimento sul disegno attuale — si sceglie coi numeri dell'inventario, no
 una sessione lunga vera con guasti iniettati (worker che muore, DB bloccato, migrazione a metà, disco pieno) senza perdere né
 corrompere niente, è acceso dove l'owner lavora, e BC-65 ci gira sopra verde.
 
+
+## BC-67 | `review-browser-notifiche.spec.mjs`: 3 prove rosse su 3, e nessun cancello le lancia (trovato il 17/09/2026 dal controllo di BC-63) — APERTO
+
+**Misurato il 17/09 sulla lane (`870988d6`), porta di banco 4193, un worker:** `3 failed` — REVIEW-REAL-41, BROWSER-REAL-42,
+NOTIFICHE-REALI-43. Identiche su `e2853725` (A/B dell'agente di BC-63) ⇒ NON vengono da BC-63.
+**Causa della prima, vista nella foto del fallimento:** a schermo c'è ancora il **velo d'avvio** (`#talosAvvio`): la prova fa
+`page.goto('/')` e interroga subito il DOM, cioè legge il markup STATICO del template (il diff finto di `guardiaDiStallo`) prima
+che la app lo svuoti. La spec è del 02/09 (`22a2dd6c`), il velo è dell'11/09: prova invecchiata, non prodotto rotto — per la
+prima. ⛔ Per la seconda (`Cannot read properties of null (reading 'textContent')`, riga 64) e la terza (`#notificationsBadge`
+mai visibile in 5 s) la causa NON è misurata: può essere lo stesso velo o un selettore sparito.
+⛔ Il difetto vero è l'altro: **questa spec non è in nessun cancello che giro prima di consegnare**, quindi è rossa da giorni in
+silenzio. **Finita quando:** le tre aspettano la app pronta come le altre spec (`#talosAvvio` staccato + `__talosHarnessUiRuntime`),
+ogni rosso residuo ha la sua causa nominata e curata, ed entra nell'elenco browser della consegna. Dopo la fusione di BC-63
+(stessa superficie: i selettori della Revisione cambiano lì).
+
+## BC-68 | Le schede del BROWSER restano fuori dal componente condiviso (residuo dichiarato di BC-63, 17/09/2026) — APERTO
+
+BC-63 ha estratto `frontend/src/components/schede.js` e ci ha portato Terminale e Revisione; `browser.js` (`renderizzaSchede`,
+`.talos-tabstrip__scheda`) conserva la sua tastiera e il suo giro di disegno: **due implementazioni, non una**. Motivo dichiarato
+dall'agente: le linguette del Browser hanno forma propria (icona che cambia forma con lo stato, ✕ vera, pillola HTTP,
+`scroll-snap`) e 13 prove verdi. **Finita quando:** `browser.js` usa la meccanica di `schede.js` (roving tabindex, frecce,
+Home/End, Canc, menu) tenendo il SUO aspetto come adattatore, `browser-p0.spec.mjs` resta verde, e `grep` trova una sola
+tastiera delle schede. Nello stesso giro: `aria-controls` → `role="tabpanel"` manca a tutte e tre le superfici; e il piede del
+Terminale mostra insieme il dettaglio della cartella e la frase generica «Ogni scheda dichiara chi l'ha aperta e dove», contro
+il commento del 07/09 (preesistente a BC-63).
