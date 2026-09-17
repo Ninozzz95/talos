@@ -24,6 +24,19 @@
 > (nodejs.org/api/child_process.html, letto il 17/09/2026), quindi «nessun `env`» e
 > «`env: process.env`» sono la stessa cosa.
 
+## 0 · STATO AL 17/09/2026 NOTTE, dopo il censimento RIFATTO (Fase A-bis, riga 3) — questa sezione vince sulla tabella qui sotto
+
+Censimento rifatto con lo stesso comando. In `src/` restavano TRE lanci senza `env`, ora tutti e tre con
+`env: ambienteSenzaVariabiliDelServer()`: `workspace-info.mjs` (`git`, stato del workspace), `scheda-di-lavoro.mjs` (`git log -3`),
+`browser-vivo.mjs` (`taskkill`). Misurato dopo la cura sul repo vero: `statoGit` → `{"ramo":"lane/harness-desktop","nonSalvate":169}`,
+cioè git lavora con l'ambiente filtrato. I punti 5, 6 e 7 della tabella non esistono più in quella forma: le sonde del motore sono
+passate a `llama-binary-probe.mjs` con la PR #30, che ha l'ambiente filtrato. Il punto 4 era anche il dirottamento di `git.exe` (BC-83).
+**Resta aperto, dichiarato:** il punto 8 (`wsl.exe -l -v` nel kernel del proprietario: sola lettura, argomenti fissi, programma di
+sistema). `desktop/main.mjs` è l'origine dei segreti, voluto. Gli script sotto `desktop/scripts/` e `scripts/` sono strumenti di
+sviluppo, non prodotto.
+**Il cancello:** `tests/spawn-senza-ambiente-del-server.test.mjs` — un lancio nuovo in `src/` senza `env` e senza politica è ROSSO, con
+file e riga. È un cancello sul TESTO e lo dichiara: prova che l'`env` c'è, non che sia giusto.
+
 ## 1 · Ereditano tutto `process.env` — e **nessuno** è coperto da D-10E
 
 | # | Punto | Che cosa lancia | Stato |

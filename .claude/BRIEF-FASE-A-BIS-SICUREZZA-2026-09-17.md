@@ -42,7 +42,8 @@
    nei documenti gli hook standalone che usano `node -e` (le prove di `eseguiComandoPlugin` lo usano APPOSTA: non sono hook standalone,
    non toccarle). Un hook già FIDATO che diventa inammissibile non sparisce in silenzio: resta elencato come «non più ammesso», col
    perché. Se la migrazione tocca file dell'owner fuori dal repo, FERMATI e scrivilo.
-3. **I punti dell'inventario che ereditano l'ambiente intero.** Per ognuno ancora aperto dopo il TUO censimento: o passa da
+3. ✅ **CHIUSA il 17/09 notte** (tre lanci curati, cancello sul sorgente, inventario aggiornato: riga 5 compresa).
+   **I punti dell'inventario che ereditano l'ambiente intero.** Per ognuno ancora aperto dopo il TUO censimento: o passa da
    `ambienteSenzaVariabiliDelServer()`, o da una politica `process-policy` con allowlist, oppure resta aperto con una ragione scritta e
    misurata. ⛔ `desktop/main.mjs` è l'ORIGINE dei segreti (voluto): non si tocca. ⛔ `src/kernel/talosHarness.mjs` è dell'owner: il
    punto 8 (`wsl.exe -l -v`) si cura SOLO se sta in una riga, e dillo.
