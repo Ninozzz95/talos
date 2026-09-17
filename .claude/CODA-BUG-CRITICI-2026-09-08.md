@@ -770,3 +770,26 @@ la seconda creava «tu · Git Bash 2». Cura: volo unico per sessione (chi arriv
 `tests/browser/terminale-una-scheda-sola.spec.mjs`: una scheda per sessione su A → B → A e dopo una ricarica, e al più UNA POST per
 sessione; rosso sul pacchetto senza cura («attese 1, trovate 2»), verde dopo; «Nuovo» ne aggiunge esattamente una.
 
+## BC-65 | La COMPATTAZIONE AUTOMATICA va rivista e resa robusta: l'owner non l'ha mai vista funzionare su sessioni lunghe (owner 17/09/2026) — DEBITO, «lo facciamo dopo»
+
+**Parole dell'owner:** «non ho mai visto funzionare la compattazione automatica su sessioni lunghe, onestamente dubito che
+funzioni bene; deve essere una funzionalità SUPER ROBUSTA perché potrebbe compromettere i task a lungo termine».
+
+**Cosa so di misurato oggi (da non ri-dedurre):**
+- Esiste ed è scattata: nel giro vero della P0 (sessione `dc42bc6c`, 16/09) il modello scrive nel ragionamento «The conversation
+  was compacted at turn 8. The summary says: Points 1-4 of the assignment are COMPLETE…» — in una sessione da **10 giri** con la
+  finestra al **9%** (118k su 1.310k). ⇒ Scatta, e scatta PRESTO: la soglia non è la finestra del modello.
+- Sul 4174 il motore del contesto è **spento per costruzione** (`GET …/context` → 503 `CTX_NOT_ENABLED`, BC-07; tabella, Fase 9
+  corsia 2: «la compattazione è fatta e provata, ma sul server di prova è vietata per costruzione»): ciò che l'owner usa ogni
+  giorno non è il posto dove la compattazione del Context Manager gira. Due meccanismi (kernel e Context Manager) da distinguere.
+- Fase 9, corsia 3: mai misurati acceso/spento, latenza (una sola misura: 61,2 s al primo token), riuso della cache (il 40%
+  attuale è finto), costi prima/dopo.
+
+**Cosa va fatto, quando si apre:** (1) inventario misurato — quanti meccanismi di compattazione esistono, chi li accende, con
+quale soglia, su quale server; (2) una prova su sessione LUNGA vera (centinaia di giri, non una fixture) con un compito a
+lungo termine che dipende da un fatto detto all'inizio: dopo ogni compattazione il fatto c'è ancora? il compito prosegue?;
+(3) cosa vede la persona — quando scatta, cosa è stato tenuto e cosa no, e come si torna indietro; (4) i guasti: compattazione
+che fallisce a metà, che scatta durante un attrezzo, che perde l'ultimo messaggio dell'utente, che si ripete in ciclo;
+(5) confronto con Claude Code, Codex e Hermes (auto-compact, soglie, riassunto verificabile). Ricerca web prima di scrivere.
+**Finita quando:** un compito di più ore con tre compattazioni di fila si chiude come senza compattazione, con la prova che i
+fatti dichiarati all'inizio sopravvivono, e la persona vede e capisce ogni compattazione. Da fare DOPO le fasi in corso.
