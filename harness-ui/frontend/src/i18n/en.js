@@ -68,7 +68,7 @@ export default Object.freeze({
     'eliminazione di una nota': 'deleting a note', 'eliminazione di una ricerca': 'deleting a research', 'consegna del rapporto di ricerca': 'delivering the research report', 'eliminazione di un’attività': 'deleting a task',
     'esecuzione dei test': 'running the tests', 'generazione di un’immagine': 'generating an image',
     'lettura del rapporto di ricerca': 'reading the research report', 'lettura di un file': 'reading a file',
-    'lettura di un file di Libreria': 'reading a Library file', 'modifica di una nota': 'editing a note', 'modifica di un’attività': 'editing a task',
+    'lettura di un file di Libreria': 'reading a Library file', 'modifica di un file': 'editing a file', 'modifica di una nota': 'editing a note', 'modifica di un’attività': 'editing a task',
     'origine di un file di Libreria': 'origin of a Library file', 'pausa di una ricerca': 'pausing a research',
     'regole d’uso della Libreria': 'Library usage rules', 'ricerca in Libreria': 'searching the Library', 'ricerca nei file': 'searching in files',
     'ricerca nella memoria': 'searching the memory', 'ricerca sul web': 'web search', 'rinomina di un file di Libreria': 'renaming a Library file',

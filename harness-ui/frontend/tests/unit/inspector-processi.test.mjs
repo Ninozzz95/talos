@@ -144,8 +144,10 @@ const FINE = (id, { uscita = 0, errore = false, a = 2_000 } = {}) => ({ type: 'T
 
 /* ═══════════════════════════════════════════════ Gli otto stati ═══ */
 
-test('PROC-STATI: otto stati, ognuno con etichetta E icona — mai il solo colore', () => {
-  const attesi = ['in-coda', 'in-avvio', 'in-corso', 'in-attesa', 'riuscito', 'fallito', 'annullato', 'ucciso'];
+// ⛔ 17/09, OSS-2: NOVE — è entrato «non eseguito» (uscita 127 = command not found nella shell
+//    POSIX). Dire «Non riuscito» di un comando che non è partito è un'accusa, non un esito.
+test('PROC-STATI: nove stati, ognuno con etichetta E icona — mai il solo colore', () => {
+  const attesi = ['in-coda', 'in-avvio', 'in-corso', 'in-attesa', 'riuscito', 'fallito', 'annullato', 'ucciso', 'non-eseguito'];
   assert.deepEqual(Object.keys(STATI_PROCESSO), attesi);
   for (const s of attesi) {
     assert.ok(STATI_PROCESSO[s].etichetta.length > 2, `${s} ha una parola sua`);

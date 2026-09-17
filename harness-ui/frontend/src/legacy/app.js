@@ -43,6 +43,7 @@ import { montaHf } from '../components/hf-catalogo.js';
 import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
 import { aggiornaInspector, processiDagliEventi, schedaAgentiDaRileggere, titoloMessaggioUtente, titoloRispostaDaTurno, uscitaDaTestoAttrezzo } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento; 16/09 P0-E: il codice di uscita si legge dal risultato dell'attrezzo
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
+import { nomeUmanoAttrezzo as nomeUmanoAttrezzoCondiviso } from '../components/nomi-attrezzi.js'; // BC-59 (17/09): la mappa dei nomi umani vive in UN posto solo — qui c'era una copia, e si era fermata al 12/09
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
@@ -2546,60 +2547,31 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * attrezzi». Questa è LA mappa nome-tecnico → nome-umano, in un posto solo
    * — mai una seconda copia sparsa in un template o in una stringa.
    * ⛔ Ripiego ONESTO: un attrezzo che non conosciamo (ne nascono, vedi
-   * `tool_create`) mostra il suo nome grezzo, mai un'etichetta inventata.
+   * `tool_create`) si dichiara senza nome, mai un'etichetta inventata e mai
+   * — dal 17/09, BC-59 — il suo id tecnico messo a schermo come se fosse un nome.
    * ⛔ I nomi che il MODELLO riceve non cambiano di una lettera: quelli sono
    * il contratto col kernel (ATTREZZI_OPENAI in talosHarness.mjs) e la loro
    * unica fonte resta il server. Qui si traduce solo ciò che si SCRIVE a
    * schermo; il nome tecnico resta come dettaglio secondario nel title.
    */
   function nomeUmanoAttrezzo(nome) {
-    const UMANI = {
-      elenca: 'elenco della cartella',
-      cerca: 'ricerca nei file',
-      leggi: 'lettura di un file',
-      scrivi: 'scrittura di un file',
-      prova: 'esecuzione dei test',
-      shell: 'comando nel terminale',
-      naviga: 'apertura di una pagina web',
-      web_search: 'ricerca sul web',
-      artifact_create: 'creazione di un artefatto',
-      document_create: 'creazione di un documento',
-      generate_image: 'generazione di un’immagine',
-      delega_sottotask: 'delega a un sotto-agente',
-      time_now: 'data e ora',
-      tool_create: 'creazione di un attrezzo nuovo',
-      library_list: 'elenco della Libreria',
-      library_search: 'ricerca in Libreria',
-      library_read: 'lettura di un file di Libreria',
-      library_file_origin: 'origine di un file di Libreria',
-      library_rename: 'rinomina di un file di Libreria',
-      library_delete: 'eliminazione di un file di Libreria',
-      library_export: 'copia di un file di Libreria nel workspace',
-      library_context_policy_update: 'regole d’uso della Libreria',
-      notes_list: 'elenco delle note',
-      notes_create: 'scrittura di una nota',
-      notes_update: 'modifica di una nota',
-      notes_delete: 'eliminazione di una nota',
-      tasks_list: 'elenco delle attività',
-      tasks_create: 'creazione di un’attività',
-      tasks_complete: 'chiusura di un’attività',
-      tasks_update: 'modifica di un’attività',
-      tasks_delete: 'eliminazione di un’attività',
-      memory_search: 'ricerca nella memoria',
-      memory_write: 'scrittura in memoria',
-      memory_update: 'correzione di una memoria',
-      memory_delete: 'eliminazione di una memoria',
-      research_list: 'elenco delle ricerche',
-      research_start: 'avvio di una ricerca approfondita',
-      research_read: 'lettura del rapporto di ricerca',
-      research_rename: 'rinomina di una ricerca',
-      research_pause: 'pausa di una ricerca',
-      research_resume: 'ripresa di una ricerca',
-      research_cancel: 'annullamento di una ricerca',
-      research_delete: 'eliminazione di una ricerca',
-      research_deposit: 'consegna del rapporto di ricerca', // 12/09: L8. ⛔ Copia della mappa di nomi-attrezzi.js: debito, la mappa deve vivere in UN posto solo
-    };
-    return UMANI[nome] || String(nome ?? '');
+    /*
+     * ⛔⛔ BC-59, 17/09/2026 — LA MAPPA ERA DUE, E LA SECONDA ERA VECCHIA.
+     *   Qui viveva una COPIA di NOMI_UMANI_ATTREZZI (45 righe), aggiunta il 12/09 con un commento
+     *   che già la chiamava «debito: la mappa deve vivere in UN posto solo». Il debito si è
+     *   riscosso da solo: `file_edit` è entrato nel kernel il 16/09 (`talosHarness.mjs:2768`), è
+     *   stato aggiunto alla mappa vera e NON a questa — e il ripiego `String(nome)` lo ha stampato
+     *   tale e quale nella riga attività della chat: un nome tecnico a schermo, vietato
+     *   dall’owner il 04/09.
+     * ⇒ La copia sparisce. Una mappa sola, quella di `nomi-attrezzi.js`, che è anche l’unica
+     *   coperta dal test di contratto contro gli attrezzi dichiarati dal kernel
+     *   (`tests/unit/nomi-attrezzi-copertura.test.mjs`).
+     * ⛔ E il ripiego NON è più l’id tecnico: un attrezzo che nessuno ha ancora etichettato (MCP,
+     *   skill, attrezzo costruito a runtime) si annuncia come tale, e il suo id resta dov’era —
+     *   nel `title`, come dettaglio secondario. Restituire l’id era comodo e rompeva la regola
+     *   in silenzio proprio nel caso in cui serviva rispettarla.
+     */
+    return nomeUmanoAttrezzoCondiviso(nome) || 'attrezzo senza nome';
   }
 
   /** Serializzazione stabile (chiavi ordinate, ricorsiva): due argomenti equivalenti scritti diversi devono dare la STESSA chiave. */
@@ -5008,7 +4980,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** ⭐ O-01 — solo estetica: un nome senza icona nota ricade su quella della sua categoria, mai su una sbagliata. */
   const ICONA_ATTREZZO = {
-    elenca: 'i-list', cerca: 'i-search', leggi: 'i-eye', scrivi: 'i-code', prova: 'i-check',
+    // ⛔ BC-59 (17/09): `file_edit` mancava anche qui — stessa icona di `scrivi`.
+    elenca: 'i-list', cerca: 'i-search', leggi: 'i-eye', scrivi: 'i-code', file_edit: 'i-code', prova: 'i-check',
     shell: 'i-terminal', naviga: 'i-web', web_search: 'i-search', artifact_create: 'i-layout',
     document_create: 'i-files', time_now: 'i-history', delega_sottotask: 'i-branch',
     generate_image: 'i-image', tool_create: 'i-settings',
@@ -7773,6 +7746,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           <span class="sheet-label">Permesso per attrezzo · vince su quello della sessione qui sopra</span>
           ${[
             ['scrivi', 'Scrive un file — passa dal cancello semantico'],
+            /* ⛔ BC-59 (17/09) — il SESTO, mancante anche qui: vedi la nota lunga su ATTREZZI_COL_CANCELLO. */
+            ['file_edit', 'Cambia una parte di un file esistente — stesso cancello di «Scrivi un file»'],
             ['prova', 'Esegue la suite di test del progetto'],
             ['shell', 'Comando di shell nella cartella progetto'],
             ['document_create', 'Genera un documento (PDF, foglio, slide, report)'],
@@ -8251,6 +8226,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   const ATTREZZI_COL_CANCELLO = Object.freeze([
     ['scrivi', 'Scrive un file — passa dal cancello semantico', 'i-code'],
+    /*
+     * ⛔⛔ BC-59 (17/09) — IL SESTO. È la stessa forma di O-01, che questa lista aveva già pagato
+     *   il 04/09 col quinto: `ATTREZZI_CON_PERMESSO_PER_ATTREZZO` (config.mjs:307) ne dichiara SEI
+     *   dal 16/09 e qui ne comparivano cinque. Un attrezzo che ha un cancello vero e non ha la sua
+     *   riga nel foglio è un cancello che nessuno può chiudere: peggio di un permesso mancante,
+     *   perché la pagina sembra completa.
+     * ⇒ E perché non succeda una terza volta, la lista non si controlla più a occhio: il test
+     *   `tests/unit/nomi-attrezzi-copertura.test.mjs` la confronta con quella del server.
+     */
+    ['file_edit', 'Cambia una parte di un file esistente — passa dal cancello per-attrezzo come «Scrivi un file»', 'i-code'],
     ['prova', 'Esegue la suite di test del progetto', 'i-check'],
     ['shell', 'Comando di shell nella cartella progetto', 'i-terminal'],
     ['document_create', 'Genera un documento (PDF, foglio, slide, report)', 'i-files'],
@@ -10994,6 +10979,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const a = argomenti || {};
     switch (nome) {
       case 'scrivi': return a.percorso ? `Scrittura di ${a.percorso}…` : 'Scrittura file…';
+      /* ⛔ BC-59 (17/09): senza questo ramo la riga cadeva nel ripiego e diceva «file_edit…». Il
+         percorso c'è già negli argomenti (`talosHarness.mjs:2768`): dirlo costa zero e vale molto. */
+      case 'file_edit': return a.percorso ? `Modifica di ${a.percorso}…` : 'Modifica di un file…';
       case 'leggi': return a.percorso ? `Lettura di ${a.percorso}…` : 'Lettura file…';
       case 'cerca': {
         const criteri = [a.nome, a.testo].filter(Boolean).map((v) => `"${v}"`).join(' · ');
@@ -11015,6 +11003,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const a = argomenti || {};
     switch (nome) {
       case 'scrivi': return a.percorso ? `Scritto ${a.percorso}` : 'Scrittura file…';
+      /* ⛔ BC-59 (17/09): il verbo al passato come per `scrivi` — l'azione tiene lo stesso nome
+         dall'inizio alla fine, «Modifica di x» mentre gira e «Modificato x» quando ha finito. */
+      case 'file_edit': return a.percorso ? `Modificato ${a.percorso}` : 'Modifica di un file…';
       case 'leggi': return a.percorso ? `Letto ${a.percorso}` : 'Lettura file…';
       case 'cerca': {
         const criteri = [a.nome, a.testo].filter(Boolean).map((v) => `"${v}"`).join(' · ');
@@ -11241,6 +11232,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     if (azione?.tipo === 'scrivi' && azione.fileDiControllo) return 'Vuole scrivere un file di controllo di TALOS: una regola dell’agente (hook, MCP, istruzioni, memoria), non un file del progetto.';
     if (azione?.tipo === 'scrivi') return 'Vuole scrivere questo file:';
+    /* ⛔ 17/09, F15 — `leggi` arriva davanti a un percorso segreto: senza questo ramo la carta
+       cadeva nel ripiego generico proprio nel caso in cui la persona deve capire in fretta. */
+    if (azione?.tipo === 'leggi') return 'Vuole leggere questo file:';
     if (azione?.tipo === 'shell') return 'Vuole eseguire questo comando nel terminale:';
     if (azione?.tipo === 'document_create') return `Vuole creare un documento (formato ${azione.formato || '?'})`;
     // ⭐⭐⭐ FASE B (28/8) — `prova` è il quarto attrezzo gated da verificaPermessoScrittura (trovato leggendo talosHarness.mjs): senza questo ramo, un permesso per-attrezzo `prova:'chiedi'` mostrava la card col fallback generico invece del comando VERO.
@@ -11270,7 +11264,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /** Il testo esatto da mettere nel blocco codice della carta: comando o percorso, mai una frase. */
   function codiceAzioneApprovazione(azione) {
     if (azione?.tipo === 'shell' || azione?.tipo === 'prova') return azione.comando || '';
-    if (azione?.tipo === 'scrivi') return azione.percorso || '';
+    /* ⛔ 17/09, F15 — `leggi` MANCAVA, e da oggi arriva: la shell chiede anche davanti a un
+       percorso segreto, e leggere un `.env` è una delle vie. Senza questa riga la carta chiedeva
+       «vuoi che legga?» senza dire CHE COSA. */
+    if (azione?.tipo === 'scrivi' || azione?.tipo === 'leggi') return azione.percorso || '';
     if (azione?.tipo === 'naviga') return azione.url || '';
     return '';
   }
@@ -11281,20 +11278,52 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *  1. un cancello per ATTREZZO su «chiedi» — sopravvive alla scelta della politica, e viene
    *     ereditato dalla sessione che stavi guardando quando hai premuto «Nuova» (misurato in T04);
    *  2. la politica della sessione è «Su richiesta»;
-   *  3. la sessione ha un canale di approvazione aperto per via di un ALTRO attrezzo: il kernel di
-   *     oggi, quando il canale c'è, chiede anche per gli attrezzi senza cancello (clausola
-   *     `vaChiesto` in talosHarness.mjs). È il costo dichiarato della cura del 06/9 al canale.
+   *  3. ⛔⛔ QUESTO PUNTO ERA FALSO, ed è stato falso per undici giorni. Diceva: «quando il canale
+   *     c'è, il kernel chiede anche per gli attrezzi senza cancello (clausola `vaChiesto`)». Quella
+   *     clausola — `(!haOverride && !richiestoDalLivello && Boolean(chiediApprovazioneFn))` — è
+   *     stata TOLTA il 06/09, e il commento del kernel che la rimuove lo dice per esteso
+   *     (`talosHarness.mjs`, sopra `const vaChiesto`): «chi decide è il LIVELLO, non l'esistenza
+   *     del canale». Dal 17/09 il canale esiste sempre, quindi quella frase avrebbe accusato ogni
+   *     sessione di un motivo inesistente. Un commento che invecchia male è una bugia che nessuno
+   *     rilegge.
+   *     ⇒ I motivi VERI per cui un'approvazione arriva senza un cancello per quell'attrezzo e
+   *     senza la politica «Su richiesta» sono, oggi (misurato su `vaChiesto`, riga per riga):
+   *       · un percorso SEGRETO toccato dalla shell o da `leggi` (F15, owner 16/09) — e in quel
+   *         caso l'evento porta `azione.segreto.frase`, che è il primo ramo qui sotto;
+   *       · un attrezzo che chiede SEMPRE per costruzione (`ATTREZZI_SEMPRE_DA_CONFERMARE`);
+   *       · la TRIFECTA che si chiude su questa chiamata.
+   *     ⛔ Il ramo che costruiva la frase falsa NON è stato cancellato a occhio: è REGGIUNGIBILE
+   *     (un'approvazione può arrivare in quello stato), quello che era sbagliato era il TESTO.
+   *     ⛔ E l'evento non porta il motivo: `approvalRequested({requestId, azione})` passa `azione`
+   *     così com'è dal kernel (`agui-events.mjs:236`), e `viaRichiesta` resta dentro il kernel.
+   *     Quindi qui non si indovina: si dice ciò che si sa, e il resto lo dice il kernel quando lo
+   *     manderà.
    * La carta lo dice in italiano invece di lasciarlo indovinare.
    */
   function motivoRichiestaApprovazione(azione) {
     const perAttrezzo = state.permessiPerAttrezzo || {};
     const regola = azione?.tipo ? perAttrezzo[azione.tipo] : null;
     const politica = etichettaPermesso(state.permissions);
+    /*
+     * ⛔⛔⛔ F15, 17/09 — IL MOTIVO VERO ARRIVA DAL KERNEL, E VA PRIMA DI TUTTO. Quando la richiesta
+     *   nasce da un percorso segreto, il kernel manda la frase già scritta per una persona («Il
+     *   comando tocca un file che può contenere chiavi o password (.env): vuoi che lo esegua?»).
+     *   Ogni altro ramo qui sotto parla di POLITICHE, cioè risponde a una domanda diversa e più
+     *   fredda: davanti a una chiave la persona deve sapere COSA sta per essere letto, non da quale
+     *   regola discende la domanda.
+     * ⛔ La frase è del kernel e si mostra com'è: riscriverla qui vorrebbe dire mantenere due
+     *   versioni della stessa spiegazione, e la nostra invecchierebbe per prima (vedi il punto 3).
+     */
+    const frasiVere = [];
+    if (typeof azione?.segreto?.frase === 'string' && azione.segreto.frase.trim()) frasiVere.push(azione.segreto.frase.trim());
+    /* ⛔ Se si chiude anche la trifecta sono DUE fatti, non uno: si mostrano tutti e due — una lista
+       di motivi si giudica da ciò che manca, e tacere il secondo sarebbe rassicurare a metà. */
+    const trifecta = typeof azione?.trifecta === 'string' ? azione.trifecta.trim() : (azione?.trifecta === true ? 'Questa chiamata chiude la trifecta: dati privati, contenuto non attendibile e un modo per farli uscire.' : '');
+    if (trifecta) frasiVere.push(trifecta);
+    if (frasiVere.length) return frasiVere.join(' ');
     if (regola === 'chiedi') return `Chiede perché «${nomeUmanoAttrezzo(azione.tipo)}» ha il cancello «Chiedi conferma», anche con la sessione su «${politica}».`;
     if (state.permissions === 'On request') return `Chiede perché la sessione è su «${politica}»: ogni azione che cambia qualcosa passa da te.`;
-    const altri = Object.entries(perAttrezzo).filter(([, v]) => v === 'chiedi').map(([k]) => nomeUmanoAttrezzo(k));
-    if (altri.length) return `Chiede perché questa sessione ha un canale di approvazione aperto per ${altri.join(' e ')}: finché c'è, il kernel chiede anche per gli altri attrezzi.`;
-    return `Chiede perché questa azione tocca qualcosa fuori dalla sola lettura, e la sessione è su «${politica}».`;
+    return `Chiede perché il kernel considera questa azione da confermare, anche con la sessione su «${politica}».`;
   }
 
   /**
@@ -11322,7 +11351,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * `assistant-copy`: ApprovalResolved li trova come prima.
      */
     const bersaglio = azione?.percorso || azione?.comando || azione?.question || azione?.title || '';
-    const badge = azione?.tipo === 'scrivi' ? 'Chiede di scrivere' : (azione?.tipo === 'shell' || azione?.tipo === 'prova') ? 'Chiede di eseguire' : azione?.tipo === 'research_start' ? 'Chiede di cercare' : 'Chiede il permesso';
+    /* ⛔ 17/09, F15 — `leggi` ha il suo badge: «Chiede il permesso» davanti a un `.env` non dice
+       niente, e la persona deve capire a colpo d'occhio se sta per LEGGERE o per CAMBIARE. */
+    const badge = azione?.tipo === 'scrivi' ? 'Chiede di scrivere' : azione?.tipo === 'leggi' ? 'Chiede di leggere' : (azione?.tipo === 'shell' || azione?.tipo === 'prova') ? 'Chiede di eseguire' : azione?.tipo === 'research_start' ? 'Chiede di cercare' : 'Chiede il permesso';
     const scheda = creaApprovazione({ badge, bersaglio, perche: descriviAzioneApprovazione(azione), codice: codiceAzioneApprovazione(azione), motivo: motivoRichiestaApprovazione(azione), nota: 'Vale solo per questa richiesta' });
     const article = scheda.scheda;
     article.classList.add('real-approval-card');
@@ -11332,6 +11363,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const approvaBtn = scheda.pulsanti.unaVolta;
     negaBtn.dataset.nega = ''; approvaBtn.dataset.approvaUnaVolta = ''; // 06/9 K-I: il Browser risponde alla stessa richiesta con gli stessi pulsanti
     const sessioneBtn = scheda.pulsanti.sessione;
+    /*
+     * ⛔⛔⛔ F15, 17/09 — DAVANTI A UN SEGRETO «Per questa sessione» SPARISCE, e non per prudenza:
+     *   perché sarebbe una PROMESSA FALSA. Quel pulsante scrive `permessiPerAttrezzo[tipo]='sempre'`,
+     *   ma il cancello dei percorsi segreti non guarda il permesso per-attrezzo — chiede lo stesso,
+     *   anche con «sempre», anche in «Accesso completo» (è esattamente la fase P0-bis chiesta
+     *   dall'owner il 16/09). Chi lo premesse vedrebbe la domanda ricomparire identica alla
+     *   chiamata dopo, e crederebbe che TALOS non ubbidisce. Un pulsante che non può fare la sua
+     *   cosa si toglie: è la stessa regola già scritta per «Ferma» col server irraggiungibile.
+     * ⛔ Restano DUE azioni — «Consenti una volta» e «Nega» — quindi la regola di casa «più di due
+     *   azioni ⇒ menu» qui non scatta. E non scatterebbe comunque su questa carta: sono la
+     *   DECISIONE che la carta chiede, non azioni secondarie su un oggetto; nasconderne una dietro
+     *   un «⋯» vorrebbe dire nascondere «Nega». Se l'owner la vede diversamente, si cambia — ma
+     *   questa è una scelta, non una dimenticanza.
+     */
+    const davantiAUnSegreto = Boolean(azione?.segreto);
+    if (davantiAUnSegreto) sessioneBtn.remove();
     let rispostaDataDaQuestaScheda = false;
     const rispondi = async (approvato, perSessione = false) => {
       negaBtn.disabled = true;
@@ -15206,7 +15253,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * ⛔ Del ToolCallResult si copia solo l'id: il `content` può essere
      * enorme e per contare le chiamate non serve.
      */
-    if (evento.type === 'ToolCallStart') state.realSession.eventiAttrezzi.push({ type: 'ToolCallStart', toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), giro: state.realSession.runCount || null }); // 06/9 B2: ora e giro per «Processi»
+    /*
+     * ⛔⛔⛔ 17/09, OSS-1 — QUESTA LISTA È BIANCA, E UNA LISTA BIANCA SCARTA IN SILENZIO.
+     *   Il server (corsia B) manda da oggi `avviatoA` sul `ToolCallStart` e `durataMs`, `comando`,
+     *   `cwd` sul `ToolCallResult`. Qui si copiava un elenco FISSO di campi: i quattro nuovi
+     *   arrivavano al client e morivano su questa riga, senza un errore, senza un avviso, e la
+     *   colonna «Processi» continuava a calcolare la durata come differenza fra due tempi d'ARRIVO
+     *   — cioè zero alla rigiocata. ⇒ Una cura scritta a valle (in `inspector.js`) sarebbe stata
+     *   INERTE, e verde nei suoi test unitari: la lista bianca è il punto in cui il contratto entra
+     *   davvero in casa, ed è qui che va aperta.
+     *   ⛔ Resta bianca di proposito — il `content` può essere enorme e non si conserva (nota qui
+     *   sopra): si aggiungono QUATTRO campi nominati, non si passa l'evento intero.
+     */
+    if (evento.type === 'ToolCallStart') state.realSession.eventiAttrezzi.push({ type: 'ToolCallStart', toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), avviatoA: Number.isFinite(evento.avviatoA) ? evento.avviatoA : null, giro: state.realSession.runCount || null }); // 06/9 B2: ora e giro per «Processi» · 17/09 OSS-1: `avviatoA` è l'orologio del SERVER
     else if (evento.type === 'ToolCallArgs') state.realSession.eventiAttrezzi.push({ type: 'ToolCallArgs', toolCallId: evento.toolCallId, delta: evento.delta });
     /*
      * ⭐ 16/09, P0-E punto 9 — si copia ANCHE il codice di uscita, e solo quello. È l'unico posto in
@@ -15217,7 +15276,28 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   «annullato» (130) e «terminato a forza» (124) da «non riuscito», che prima erano la stessa
      *   cosa: un pallino rosso su un comando che qualcuno aveva semplicemente fermato.
      */
-    else if (evento.type === 'ToolCallResult') state.realSession.eventiAttrezzi.push({ type: 'ToolCallResult', toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error), uscita: uscitaDaTestoAttrezzo(evento.content) });
+    /* ⛔ 17/09, OSS-1/OSS-2 — i tre campi nuovi del risultato (vedi la nota lunga sul `ToolCallStart`).
+       `durataMs` è misurato dove il comando è GIRATO ed è l'unico che sopravvive alla rigiocata;
+       `comando` riempie il buco di `prova`, che non ha argomenti obbligatori; `cwd` è la cartella
+       vera, che fino a ieri la riga del dettaglio dichiarava assente per costruzione.
+       ⛔ Ognuno passa solo se è del tipo giusto: un campo storto non deve diventare un numero a
+       schermo — «non misurato» è un esito, «0» sarebbe una bugia. */
+    else if (evento.type === 'ToolCallResult') state.realSession.eventiAttrezzi.push({
+      type: 'ToolCallResult', toolCallId: evento.toolCallId, ricevutoA: Date.now(),
+      errore: Boolean(evento.isError || evento.error), uscita: uscitaDaTestoAttrezzo(evento.content),
+      durataMs: Number.isFinite(evento.durataMs) ? evento.durataMs : null,
+      comando: typeof evento.comando === 'string' ? evento.comando : null,
+      cwd: typeof evento.cwd === 'string' ? evento.cwd : null,
+      /*
+       * ⛔ 17/09 sera — UN COMANDO RIFIUTATO NON È UN COMANDO FALLITO. Una `shell` negata
+       *   all'approvazione torna con `content: 'REFUSED. …'` e SENZA `comando`, `cwd` e `durataMs`:
+       *   non è mai partita. Senza questa riga la scheda «Processi» le metteva il pallino rosso di
+       *   «Non riuscito», cioè accusava di un guasto una decisione presa dalla persona.
+       *   ⛔ Si porta un BOOLEANO, non il contenuto: il `content` può essere enorme (nota qui sopra)
+       *   e per sapere «è partito o no» basta il fatto.
+       */
+      rifiutato: typeof evento.content === 'string' && /^\s*REFUSED\b/u.test(evento.content),
+    });
     /*
      * ⛔ PO-06 (10/09) — il giro del comando scritto dalla persona finisce qui: da adesso le
      *   righe che arrivano sono di nuovo dell'agente e tornano al comportamento normale (card

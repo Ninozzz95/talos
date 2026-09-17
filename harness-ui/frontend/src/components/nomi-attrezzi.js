@@ -28,6 +28,9 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   cerca: 'ricerca nei file',
   leggi: 'lettura di un file',
   scrivi: 'scrittura di un file',
+  // ⛔ BC-59 (owner 17/09): nella riga attività si leggeva «file_edit…». L'attrezzo esiste nel kernel
+  //    dal 16/09 (`talosHarness.mjs:2768`) e non era mai entrato qui: un nome tecnico a schermo.
+  file_edit: 'modifica di un file',
   prova: 'esecuzione dei test',
   shell: 'comando nel terminale',
   naviga: 'apertura di una pagina web',
@@ -133,6 +136,9 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   cerca: 'Trova file in tutto il progetto, anche in fondo, per nome o per il testo che contengono.',
   leggi: 'Legge un file del progetto.',
   scrivi: 'Riscrive un file del progetto per intero. È una modifica al tuo disco.',
+  // ⛔ BC-59 — la differenza con `scrivi` è la sola cosa che conta per chi legge: questo cambia un
+  //    pezzo e lascia il resto com'è. Se il pezzo non si trova, o si trova due volte, non scrive niente.
+  file_edit: 'Cambia una parte di un file che esiste già e lascia il resto com’è. Se il testo da sostituire non si trova, o compare più di una volta, non scrive niente e lo dice.',
   prova: 'Lancia la suite di test del progetto ed è il giudice: il compito è finito quando passa.',
   shell: 'Esegue un comando nel terminale, dentro la cartella del progetto. È l’attrezzo che può fare qualunque cosa: installare, spostare, cancellare.',
   naviga: 'Apre una pagina web pubblica e ne legge il contenuto. Solo lettura, solo http e https.',

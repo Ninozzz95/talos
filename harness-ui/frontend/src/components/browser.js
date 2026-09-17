@@ -278,6 +278,82 @@ export function localeAnnotabile(url) {
 }
 export const PROXY_BROWSER = '/api/v1/browser/proxy?url=';
 
+/*
+ * ═══════════════════════════════════════════ OSS-3 — GLI ERRORI DI UNA PAGINA CHE NON È NOSTRA ═══
+ *
+ * IL FATTO, dal giro vero del 17/09/2026: aprendo il Browser su una pagina terza con script, la
+ * console riportava DUE `pageerror`
+ *   «Failed to read the 'localStorage' property from 'Window': The document is sandboxed and lacks
+ *    the 'allow-same-origin' flag»
+ *
+ * ⛔ COSA HO MISURATO, prima di scrivere una riga (sonda Playwright, 17/09, poi cancellata; la
+ *   prova che resta è `tests/browser/p0bis-c.spec.mjs` e `tests/unit/browser-errori-terzi.test.mjs`):
+ *   1. La nostra cornice (riga ~811) HA `allow-same-origin`. Il messaggio dice che al documento
+ *      quel permesso MANCA ⇒ il documento che lancia NON è il nostro iframe. Il commento del
+ *      brief («c'è un'altra cornice o un altro percorso») era giusto, e l'altra cornice è dentro
+ *      la pagina terza: `sandbox` NON si eredita al contrario — un `<iframe sandbox="allow-scripts">`
+ *      annidato dentro la pagina ospitata (pubblicità, widget, incorporati: è la forma più comune
+ *      sul web) ha un'origine OPACA per decisione di QUELLA pagina, non della nostra.
+ *   2. Riprodotto in laboratorio con una pagina che annida un widget sandboxato senza
+ *      `allow-same-origin`: DUE `pageerror` identici al millimetro, uno per script.
+ *   3. `page.frames()` li elenca tutti col loro indirizzo; l'oggetto `Error` di Playwright invece
+ *      NON porta la cornice — misurato: `name: 'SecurityError'`, `stack: ''`, chiavi proprie
+ *      `['log','name']`. ⇒ L'attribuzione si fa sull'ELENCO DELLE CORNICI, non sullo stack: lo
+ *      stack è vuoto, e un'attribuzione basata su di esso sarebbe stata sempre «ignoto» senza dirlo.
+ *   4. Con `https://www.iana.org/` la cornice non nasce nemmeno: il sito risponde
+ *      `X-Frame-Options: deny` e Chrome rifiuta di mostrarlo. ⇒ L'esempio del giro vero passava da
+ *      un'altra strada, e vale la pena dirlo invece di lasciarlo credere.
+ *
+ * ⇒ COSA NON SI FA: aggiungere `allow-same-origin` a una cornice per far tacere l'errore. MDN
+ *   («iframe · sandbox», developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe,
+ *   letto il 17/09/2026) è esplicita: `allow-scripts` e `allow-same-origin` INSIEME permettono al
+ *   contenuto di rimuovere l'attributo `sandbox` da sé — «the sandbox attribute can be removed by
+ *   the embedded document», cioè il recinto si apre da dentro. Quel permesso non è nostro da dare:
+ *   è la pagina terza che ha deciso di chiudere il suo widget, e ha ragione lei.
+ *
+ * ⇒ COSA SI FA: si ETICHETTA. Un errore di questa classe, mentre nel documento vive almeno una
+ *   cornice di un'altra origine, è della PAGINA OSPITATA — non della app. Non diventa un
+ *   «TALOS · errore» (e infatti non lo diventava: la app non ha nessun ascoltatore globale su
+ *   `window.onerror`, verificato, quindi da quella parte non c'era niente da riparare) e non conta
+ *   come rosso nostro nel cancello `nessun-errore-a-runtime`.
+ * ⛔ La guardia è STRETTA di proposito: vale solo per i messaggi del sandbox sull'accesso allo
+ *   stato del documento, e solo se una cornice non nostra c'è davvero. Un filtro largo su
+ *   «SecurityError» avrebbe nascosto anche i nostri, che è esattamente il modo in cui un cancello
+ *   smette di essere un cancello.
+ */
+const ERRORE_DI_SANDBOX = /\bdocument is sandboxed and lacks the '(allow-same-origin|allow-scripts)' flag\b/u;
+
+/** L'indirizzo appartiene alla nostra origine? (`origineNostra` = `location.origin`.) */
+function eNostra(indirizzo, origineNostra) {
+  if (!indirizzo || indirizzo === 'about:blank') return true;
+  try { return new URL(indirizzo).origin === origineNostra; } catch { return false; }
+}
+
+/**
+ * L'errore viene da una pagina che ospitiamo e non abbiamo scritto?
+ * @param {string} messaggio il testo dell'errore a runtime
+ * @param {string[]} indirizziCornici gli indirizzi delle cornici vive (da `page.frames()` o dal DOM)
+ * @param {string} origineNostra `location.origin`
+ * @returns {{terzo: boolean, perche: string}} — `perche` si stampa nel rapporto: un filtro che non
+ *   dice PERCHÉ ha scartato qualcosa è indistinguibile da un filtro rotto.
+ */
+export function erroreDiUnaPaginaTerza(messaggio, indirizziCornici = [], origineNostra = '') {
+  /*
+   * ⛔ N2, 17/09 sera — SENZA LA NOSTRA ORIGINE IL CANCELLO È CIECO, non permissivo.
+   *   Con `origineNostra === ''` ogni indirizzo risultava «di un'altra origine», compreso il
+   *   nostro: bastava una cornice qualunque perché un errore NOSTRO passasse per ospite. Un filtro
+   *   che non sa rispetto a cosa sta filtrando non deve decidere — deve NEGARE. È la lezione del
+   *   13/09 sulle guardie: chi non riesce a valutare risponde di no, non lancia e non lascia passare.
+   */
+  if (typeof origineNostra !== 'string' || origineNostra.trim() === '') {
+    return { terzo: false, perche: 'origine della app non dichiarata: non posso attribuire niente a nessuno' };
+  }
+  if (!ERRORE_DI_SANDBOX.test(String(messaggio ?? ''))) return { terzo: false, perche: 'non è un errore del sandbox' };
+  const estranee = (indirizziCornici || []).filter((u) => !eNostra(u, origineNostra));
+  if (estranee.length === 0) return { terzo: false, perche: 'nessuna cornice di un’altra origine: se è sandbox, è nostro' };
+  return { terzo: true, perche: `cornice ospitata: ${estranee[0]}` };
+}
+
 /** L'host e il percorso corto di un indirizzo, per le schede e la cronologia (mockup: «example.org/documentazione»). */
 export function hostDaUrl(url) {
   try {

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { createServer } from 'node:http';
 import { createHttpApp } from '../../../src/http-app.mjs';
+import { erroreDiUnaPaginaTerza } from '../../src/components/browser.js'; // OSS-3 (17/09): chi ha lanciato l'errore, noi o una pagina che ospitiamo
 
 test('RELEASE-018-PROMPT-ENHANCE: composer through real route and session provider', async ({ page }) => {
   const improved = 'Scrivi un resoconto chiaro con obiettivo, vincoli e risultato atteso.';
@@ -117,7 +118,26 @@ test('FASE3-MULTISELECT-UNA-POST — conferma unica ed esito parziale restano vi
  */
 test('RUNTIME-01: aprire la app non produce nessun errore JavaScript', async ({ page }) => {
   const errori = [];
-  page.on('pageerror', (e) => errori.push(`pageerror: ${e.message}`));
+  /*
+   * ⛔⛔ OSS-3, 17/09 — UN ERRORE DI UNA PAGINA OSPITATA NON È UN ROSSO NOSTRO, e non si scarta
+   *   in silenzio: si dichiara CHI l'ha lanciato. Il Browser può tenere aperta una pagina di
+   *   un'altra origine che annida widget sandboxati per conto suo; quei `SecurityError` sono suoi
+   *   e non nostri (la misura e il perché stanno in `components/browser.js`, blocco OSS-3).
+   * ⛔ Il filtro è quello del PRODOTTO, non una seconda regola scritta qui: se un giorno diventa
+   *   sbagliato, diventa sbagliato in un posto solo. E resta STRETTO — solo i messaggi del sandbox,
+   *   e solo con una cornice estranea viva: tutto il resto conta come prima.
+   */
+  const scartati = [];
+  const indirizziCornici = () => page.frames().map((f) => f.url());
+  /* ⛔ Mai lanciare DENTRO un ascoltatore di eventi: un'eccezione qui verrebbe inghiottita e il
+     cancello smetterebbe di contare senza dirlo. Un indirizzo illeggibile diventa stringa vuota, e
+     `erroreDiUnaPaginaTerza` con l'origine vuota NEGA (N2), cioè l'errore resta nostro. */
+  const origine = () => { try { return new URL(page.url()).origin; } catch { return ''; } };
+  page.on('pageerror', (e) => {
+    const verdetto = erroreDiUnaPaginaTerza(e.message, indirizziCornici(), origine());
+    if (verdetto.terzo) { scartati.push(`${e.message} — ${verdetto.perche}`); return; }
+    errori.push(`pageerror: ${e.message}`);
+  });
   page.on('console', (m) => {
     if (m.type() !== 'error') return;
     const testo = m.text();
@@ -175,6 +195,9 @@ test('RUNTIME-01: aprire la app non produce nessun errore JavaScript', async ({ 
     await page.waitForTimeout(600);
   }
 
+  /* ⛔ Ciò che il filtro ha scartato si STAMPA: un cancello che tace su cosa ha lasciato passare
+     non è distinguibile da un cancello rotto (lezione del 13/09). */
+  if (scartati.length) console.log(`RUNTIME-01 · errori attribuiti a una pagina ospitata (non nostri): ${scartati.length}\n  ${scartati.join('\n  ')}`);
   expect(errori, `⛔ la pagina ha lanciato ${errori.length} errori:\n  ${errori.slice(0, 6).join('\n  ')}`).toEqual([]);
 });
 

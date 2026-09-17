@@ -216,6 +216,15 @@ export const STATI_PROCESSO = Object.freeze({
   fallito: { etichetta: 'Non riuscito', tono: 'danger', icona: 'i-x', vivo: false },
   annullato: { etichetta: 'Annullato', tono: '', icona: 'i-stop', vivo: false },
   ucciso: { etichetta: 'Terminato a forza', tono: 'warning', icona: 'i-stop', vivo: false },
+  /*
+   * ⛔ 17/09, OSS-2 — «NON ESEGUITO» non è «NON RIUSCITO», e la differenza si vede in una foto.
+   *   Una `prova` su un progetto senza suite torna `exit 127` con «nessuna suite trovata», e il
+   *   pannello diceva «Non riuscito» col pallino rosso: sembrava che i test fossero FALLITI. Sono
+   *   due fatti opposti — uno dice «il tuo codice è rotto», l'altro «non c'è niente da lanciare».
+   *   ⛔ 127 non è una scelta nostra: nella shell POSIX è «command not found», cioè esattamente
+   *   «non è partito». Tono neutro, non `danger`: non c'è niente di rotto da segnalare.
+   */
+  'non-eseguito': { etichetta: 'Non eseguito', tono: 'warning', icona: 'i-stop', vivo: false },
 });
 
 /**
@@ -260,6 +269,10 @@ export function uscitaDaTestoAttrezzo(testo) {
 function statoDaUscita(uscita, errore) {
   if (uscita === 130 || uscita === 143) return 'annullato';
   if (uscita === 124 || uscita === 137) return 'ucciso';
+  /* ⛔ 17/09 — 127 è «command not found» nella shell POSIX: il comando NON È PARTITO. Chiamarlo
+     «non riuscito» col pallino rosso dice che il lavoro è andato male; qui non è andato affatto.
+     Visto in foto su una `prova` senza suite nel progetto (`exit 127 nessuna suite trovata`). */
+  if (uscita === 127) return 'non-eseguito';
   if (errore === true) return 'fallito';
   if (!Number.isFinite(uscita)) return 'fallito';
   return uscita === 0 ? 'riuscito' : 'fallito';
@@ -278,21 +291,45 @@ function oraConSecondi(ms) {
  * ⛔ È IDEMPOTENTE (`preparato`): `disegnaProcessi` accetta sia i processi grezzi di
  *   `processiDagliEventi` sia quelli già preparati, e senza questa guardia la seconda passata
  *   rileggerebbe `chi` — che a quel punto è già una frase — producendo «agente · giro —».
- * ⛔ Cartella, PID e figlia proprietaria sono «—» PERCHÉ NON CI SONO: lo schema dell'attrezzo
- *   `shell` (`talosHarness.mjs:1678`) dichiara solo `comando` e `descrizione`, e `ToolCallResult`
- *   non porta né cwd né pid. Dichiararli assenti è un fatto; riempirli sarebbe un'invenzione.
+ * ⛔ PID e figlia proprietaria sono «—» PERCHÉ NON CI SONO: lo schema dell'attrezzo `shell`
+ *   (`talosHarness.mjs:1678`) dichiara solo `comando` e `descrizione`. Dichiararli assenti è un
+ *   fatto; riempirli sarebbe un'invenzione.
+ * ⛔ 17/09, OSS-2 — la CARTELLA non è più fra quelli: `ToolCallResult` porta `cwd` (corsia B), e
+ *   quando c'è si mostra. Quando non c'è resta «—», che è la stessa frase di prima con un motivo
+ *   diverso: prima era «non esiste il campo», ora è «quel giro non l'ha mandato».
  */
 export function datiProcesso(p = {}) {
   if (p.preparato === true) return p;
   const stato = STATI_PROCESSO[p.stato] ? p.stato : (p.stato === 'ok' ? 'riuscito' : p.stato === 'errore' ? 'fallito' : 'in-corso');
   const descrittore = STATI_PROCESSO[stato];
-  const durata = Number.isFinite(p.durataMs) ? `${num.format(p.durataMs / 1000)} s` : null; // «0,3 s», «18,1 s», «74 s» come nel mockup
+  /*
+   * ⛔⛔ 17/09, OSS-1 — «0 s» NON ESISTE PIÙ, in nessuno dei due modi in cui nasceva.
+   *   · Una durata non misurata (rigiocata, o evento vecchio senza `durataMs`) è `null`: la riga
+   *     tace invece di dire zero. La guardia sta anche qui, e non solo in `processiDagliEventi`,
+   *     perché `datiProcesso` è pubblica e la chiamano anche con dati che non passano di là.
+   *   · Una durata VERA ma sotto la risoluzione del formato (`maximumFractionDigits: 1` non può
+   *     dire 40 ms) diventa «<0,1 s». Arrotondarla a «0 s» sarebbe un numero letto oltre la sua
+   *     risoluzione — la tredicesima forma del 13/09, e qui la correzione ha un verso solo:
+   *     si dichiara la soglia, non si finge la cifra.
+   */
+  /*
+   * ⛔ 17/09 sera, B2 — `>= 0`, NON `> 0`. La prima stesura scriveva `> 0` qui e `>= 0` in
+   *   `processiDagliEventi`: due soglie diverse sullo stesso campo, e quella stretta buttava uno
+   *   ZERO LEGITTIMO del server. Un comando istantaneo MISURATO (`durataMs: 0`) diventava
+   *   indistinguibile da uno NON misurato — cioè l'esatto contrario di questa cura, che esiste per
+   *   tenere separati «misurato» e «non misurato». `0` è un fatto: si dice «<0,1 s».
+   *   ⛔ Il silenzio resta riservato a `null`, che è l'unica forma di «non lo so».
+   */
+  const durata = Number.isFinite(p.durataMs) && p.durataMs >= 0
+    ? (p.durataMs < 100 ? '<0,1 s' : `${num.format(p.durataMs / 1000)} s`) // «0,3 s», «18,1 s», «74 s» come nel mockup
+    : null;
   const misura = [durata, !descrittore.vivo && Number.isFinite(p.uscita) ? `uscita ${p.uscita}` : null].filter(Boolean).join(' · ') || (descrittore.vivo ? '' : '—');
   const chi = `${p.chi === 'tu' ? 'tu' : 'agente'} · ${p.chi === 'tu' ? 'terminale' : `giro ${p.giro ?? '—'}`}`;
   const fermo = Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= SOGLIA_ATTESA_MS
     ? `Nessuna uscita da ${Math.round(p.fermoDaMs / 1000)} secondi. Il processo è vivo: potrebbe aspettare un input. TALOS non lo ferma da solo.`
     : null;
   const analisi = analizzaComando(p.comando || '');
+  const cartella = typeof p.cwd === 'string' && p.cwd.trim() ? p.cwd.trim() : '—';
   const quando = oraConSecondi(p.avviatoA);
   const dettaglio = [
     ['Comando', p.comando || '—'],
@@ -300,7 +337,9 @@ export function datiProcesso(p = {}) {
     ['Avviato', quando],
     ['Durata', durata || '—'],
     ['Uscita', Number.isFinite(p.uscita) && !descrittore.vivo ? String(p.uscita) : '—'],
-    ['Cartella', '—'],
+    /* ⛔ 17/09, OSS-2 — la cartella NON è più «—» per costruzione: `ToolCallResult` porta `cwd`
+       (corsia B). Resta «—» quando il campo non arriva davvero, che è un fatto, non un ripiego. */
+    ['Cartella', cartella],
     ['PID', '—'],
     ['Chi', chi],
     ['Descrizione', typeof p.descrizione === 'string' && p.descrizione.trim() ? p.descrizione.trim() : '—'],
@@ -311,7 +350,9 @@ export function datiProcesso(p = {}) {
     comando: p.comando || '—',
     descrizione: typeof p.descrizione === 'string' ? p.descrizione.trim() : '',
     analisi,
-    famiglia: analisi.famiglia,
+    /* ⛔ 17/09, OSS-2 — la famiglia DICHIARATA dall'attrezzo vince sull'analisi del testo: `prova`
+       è della famiglia «prove» anche quando non manda nessun comando da analizzare. */
+    famiglia: p.famiglia || analisi.famiglia,
     stato,
     etichetta: descrittore.etichetta,
     tono: descrittore.tono,
@@ -321,7 +362,7 @@ export function datiProcesso(p = {}) {
     misura,
     fermo,
     quando,
-    cartella: '—',
+    cartella,
     pid: '—',
     uscita: Number.isFinite(p.uscita) ? p.uscita : null,
     dettaglio,
@@ -1019,7 +1060,34 @@ export function comandoDagliArgomenti(testo = '') {
 export function descrizioneDagliArgomenti(testo = '') {
   try { const a = JSON.parse(testo); return String(a.descrizione ?? a.description ?? '').trim(); } catch { return ''; }
 }
-export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComando = ['shell', 'bash', 'esegui', 'comando', 'terminal'] } = {}) {
+/*
+ * ⛔⛔ 17/09, OSS-2 — `prova` MANCAVA fra i comandi, ed è il più lungo di una sessione: la suite
+ *   gira per minuti e nella scheda «Processi» non compariva nessuna riga. La sua famiglia è
+ *   dichiarata qui e non dedotta dal testo, perché il comando può non esserci affatto (lo schema di
+ *   `prova` non ha argomenti obbligatori: `talosHarness.mjs:1655`).
+ */
+const FAMIGLIA_DELL_ATTREZZO = Object.freeze({ prova: 'test' });
+
+/*
+ * ⛔⛔⛔ 17/09, OSS-1 — LA RISOLUZIONE DEL RIPIEGO, e come l'ho trovata.
+ *
+ * Il ripiego sulla durata è la differenza fra i due tempi di ARRIVO. Quella differenza non misura
+ * il comando: misura il trasporto. La prova end-to-end me l'ha mostrato dando DUE RISPOSTE DIVERSE
+ * agli stessi eventi — nel tema scuro la riga di una `prova` RIFIUTATA (`exit 127`, nessun
+ * `durataMs` dal server, cioè un comando MAI ESEGUITO) diceva «<0,1 s · uscita 127», nel tema
+ * chiaro diceva solo «uscita 127». Un millisecondo di scarto fra due `Date.now()` dentro lo stesso
+ * giro di eventi, e una riga dichiarava una durata per qualcosa che non è mai partito.
+ *
+ * ⇒ È la forma nuova dello stesso difetto del replay: un numero letto oltre la risoluzione dello
+ *   strumento. Sotto questa soglia il ripiego NON sa niente, e lo dice tacendo.
+ * ⛔ La soglia vale SOLO per il ripiego. Un `durataMs` dichiarato dal server è misurato dove il
+ *   comando è girato davvero: 40 ms sono 40 ms, e si mostrano come «<0,1 s».
+ * ⭐ E l'ho preso solo perché DUE MISURE NON TORNAVANO fra loro — la stessa cosa detta in due modi
+ *   dalla stessa suite nello stesso minuto. Un'esecuzione sola sarebbe stata verde e muta.
+ */
+const RISOLUZIONE_ARRIVI_MS = 100;
+
+export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComando = ['shell', 'bash', 'esegui', 'comando', 'terminal', 'prova'] } = {}) {
   const avviati = new Map();
   const argomenti = new Map();
   const lista = [];
@@ -1032,7 +1100,22 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
        *   `8dde6bff…`, vedi la nota BC-18 sotto). Dire «in corso» di un comando che non si sa
        *   ancora quale sia è la stessa bugia di una riga vuota che sembra piena.
        */
-      const p = { id: e.toolCallId, comando: '', descrizione: '', stato: 'in-avvio', chi: 'agente', giro: e.giro ?? null, avviatoA: e.ricevutoA ?? null, durataMs: null, uscita: null };
+      /*
+       * ⛔⛔⛔ 17/09, OSS-1 — DUE ISTANTI, NON UNO. `ricevutoA` è quando l'evento è arrivato QUI;
+       *   `avviatoA` è quando il comando è partito LÀ, sull'orologio del server (corsia B). Fino a
+       *   oggi esisteva solo il primo, usato per tutte e due le domande — e alla rigiocata di una
+       *   sessione dal disco «quando è arrivato» è ADESSO, per ogni evento, anche per un comando di
+       *   sei ore fa. ⇒ Si tengono separati: `avviatoA` risponde a «a che ora è partito» (e cade
+       *   sul tempo d'arrivo solo quando il server non lo dichiara), `ricevutoA` resta il metro del
+       *   silenzio di un processo ancora aperto, che è una domanda su NOI, non su di lui.
+       */
+      const p = {
+        id: e.toolCallId, comando: '', descrizione: '', stato: 'in-avvio', chi: 'agente', giro: e.giro ?? null,
+        avviatoA: Number.isFinite(e.avviatoA) ? e.avviatoA : (e.ricevutoA ?? null),
+        ricevutoA: Number.isFinite(e.ricevutoA) ? e.ricevutoA : null,
+        famiglia: FAMIGLIA_DELL_ATTREZZO[e.toolCallName] || null,
+        durataMs: null, uscita: null, cwd: null,
+      };
       avviati.set(e.toolCallId, p); argomenti.set(e.toolCallId, ''); lista.push(p);
     } else if (e.type === 'ToolCallArgs' && avviati.has(e.toolCallId)) {
       argomenti.set(e.toolCallId, (argomenti.get(e.toolCallId) || '') + String(e.delta ?? ''));
@@ -1044,13 +1127,36 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
     } else if (e.type === 'ToolCallResult' && avviati.has(e.toolCallId)) {
       const p = avviati.get(e.toolCallId);
       p.uscita = Number.isFinite(e.uscita) ? e.uscita : (e.errore ? 1 : 0);
-      p.stato = statoDaUscita(p.uscita, Boolean(e.errore));
-      if (Number.isFinite(p.avviatoA) && Number.isFinite(e.ricevutoA)) p.durataMs = e.ricevutoA - p.avviatoA;
+      /* ⛔ 17/09 sera — il rifiuto vince sul codice di uscita: un comando negato all'approvazione
+         non è mai partito, e «REFUSED» non porta nessun `exit N` da cui dedurlo. */
+      p.stato = e.rifiutato === true ? 'non-eseguito' : statoDaUscita(p.uscita, Boolean(e.errore));
+      /*
+       * ⛔⛔⛔ 17/09, OSS-1 — LA DURATA HA TRE FONTI, IN QUEST'ORDINE, E LA TERZA È IL SILENZIO.
+       *   (1) `durataMs` dichiarato dal server: è l'unico misurato dove il comando è girato davvero,
+       *       e sopravvive alla rigiocata. Vince sempre.
+       *   (2) Il delta fra i due ARRIVI, ma solo se è maggiore di zero — cioè solo se gli eventi
+       *       sono arrivati in due momenti diversi, che è quanto basta per dire «dal vivo».
+       *   (3) Niente. ⛔ E «niente» non è «0 s»: alla rigiocata i due arrivi COINCIDONO, il delta è
+       *       zero, e fino a oggi quello zero finiva a schermo come una misura. Un comando da
+       *       diciotto secondi dichiarava di essere durato zero e sembrava giusto.
+       */
+      if (Number.isFinite(e.durataMs) && e.durataMs >= 0) p.durataMs = Math.round(e.durataMs);
+      else if (Number.isFinite(p.ricevutoA) && Number.isFinite(e.ricevutoA) && e.ricevutoA - p.ricevutoA >= RISOLUZIONE_ARRIVI_MS) p.durataMs = e.ricevutoA - p.ricevutoA;
+      /* ⛔ Il comando del risultato riempie un BUCO, non sostituisce ciò che il modello ha mandato:
+         `prova` non ha argomenti obbligatori, ma un `shell` con gli argomenti suoi resta quello. */
+      if (!p.comando && typeof e.comando === 'string' && e.comando.trim()) {
+        p.comando = e.comando.trim();
+        if (p.stato === 'in-avvio') p.stato = 'in-corso';
+      }
+      if (typeof e.cwd === 'string' && e.cwd.trim()) p.cwd = e.cwd.trim();
     }
   }
   for (const p of lista) {
-    if (!STATI_PROCESSO[p.stato]?.vivo || !Number.isFinite(p.avviatoA)) continue;
-    p.fermoDaMs = adesso - p.avviatoA;
+    if (!STATI_PROCESSO[p.stato]?.vivo || !Number.isFinite(p.ricevutoA)) continue;
+    /* ⛔ Il silenzio si conta dall'ARRIVO: «da quanto non ci dice niente» è una domanda sul nostro
+       collegamento, non sull'orologio del server — con `avviatoA` una sessione rigiocata avrebbe
+       dichiarato in attesa ogni processo mai chiuso di sei ore prima. */
+    p.fermoDaMs = adesso - p.ricevutoA;
     /*
      * ⛔ Solo chi era già «in corso» passa a «in attesa»: un processo fermo a `in-avvio` non sta
      *   aspettando un input — è la CONSEGNA che sta ancora arrivando a pezzi. Due fatti diversi

@@ -481,7 +481,9 @@ export function aggiornaBloccoCodice(blocco, { testo, linguaggio, chiuso } = {})
 /** Le icone dello sprite per ogni attrezzo del kernel (i nomi che riceve il modello NON cambiano: qui si sceglie solo il simbolo). */
 export const ICONA_ATTREZZO = Object.freeze({
   leggi: 'i-eye', cerca: 'i-search', elenca: 'i-search', shell: 'i-terminal', prova: 'i-terminal',
-  scrivi: 'i-code', naviga: 'i-globe', web_search: 'i-globe', delega_sottotask: 'i-user',
+  // ⛔ BC-59 (17/09): `file_edit` scriveva sul disco e nella riga attività arrivava senza icona
+  //    propria (ripiego `i-bolt`) e senza nome. Stessa icona di `scrivi`: è la stessa cosa al file.
+  scrivi: 'i-code', file_edit: 'i-code', naviga: 'i-globe', web_search: 'i-globe', delega_sottotask: 'i-user',
   memory_write: 'i-brain', artifact_create: 'i-doc', document_create: 'i-doc', generate_image: 'i-doc',
   time_now: 'i-clock', research_start: 'i-globe',
 });
