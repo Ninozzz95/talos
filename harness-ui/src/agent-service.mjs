@@ -900,7 +900,21 @@ export async function avviaSessione({
       if (!streamati) { streamati = new Set(); toolCallIdStreamatiPerGiro.set(evento.giro, streamati); }
       if (evento.tipo === 'tool-inizio') {
         streamati.add(evento.toolCallId);
-        onEvento(toolCallStart({ toolCallId: evento.toolCallId, toolCallName: evento.nome }));
+        /*
+         * ⭐ OSS-1 (17/09/2026) — L'ORA DEL SERVER, TIMBRATA QUI.
+         *
+         * Nella scheda «Processi» ogni riga diceva «0 s» al REPLAY: il client ricavava l'istante
+         * da `ricevutoA`, cioe' da quando l'evento gli ARRIVA, e al replay arrivano tutti insieme.
+         * ⇒ L'istante deve viaggiare DENTRO l'evento.
+         *
+         * ⛔ Timbrato qui e non nel kernel: `tool-inizio` e' il verbale del parser SSE, e due prove
+         *   di `talosHarness.test.mjs` ne confrontano la forma per intero (misurato: un campo in
+         *   piu' le faceva rosse). `onDelta` e' chiamato in modo SINCRONO dal parser, quindi questo
+         *   `Date.now()` cade nello stesso millisecondo — nessuna approssimazione comprata.
+         * ⛔ `evento.avviatoA` ha comunque la precedenza: il giorno in cui un kernel lo misurera'
+         *   piu' vicino alla fonte, quel valore vince senza toccare questa riga.
+         */
+        onEvento(toolCallStart({ toolCallId: evento.toolCallId, toolCallName: evento.nome, avviatoA: evento.avviatoA ?? Date.now() }));
         return;
       }
       onEvento(toolCallArgs({ toolCallId: evento.toolCallId, delta: evento.delta }));
@@ -1000,7 +1014,12 @@ export async function avviaSessione({
       return;
     }
     if (evento.tipo === 'tool-esito') {
-      onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.content }));
+      /* ⭐ OSS-1/OSS-2 — `durataMs`, `comando` e `cwd` arrivano dal kernel solo per gli attrezzi che
+         li misurano (oggi `prova` e `shell`) e passano di qui invariati. */
+      onEvento(eventoPerEsitoTool({
+        messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.content,
+        durataMs: evento.durataMs, comando: evento.comando, cwd: evento.cwd,
+      }));
     }
   };
 

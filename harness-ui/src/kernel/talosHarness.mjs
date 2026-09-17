@@ -52,7 +52,7 @@ import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { request as richiestaHttp } from 'node:http'
 import { request as richiestaHttps } from 'node:https'
-import { basename, dirname, join, resolve, sep } from 'node:path'
+import { basename, delimiter as separatoreDiPath, dirname, join, resolve, sep } from 'node:path'
 /* ⛔ Vedi `dormi` in `chiamaConRitenta`: l'attesa fra un ritenta e l'altro deve poter essere SVEGLIATA dallo stop, e `Promise.race` non basta — il timer perdente resta pendente. */
 import { setTimeout as dormiConSegnale } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
@@ -737,6 +737,15 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
                  * (quando compare per la prima volta), `tool-args` per ogni
                  * frammento di argomenti — stesso schema di 'testo'/'ragionamento'
                  * sopra, zero logica nuova inventata.
+                 */
+                /*
+                 * ⭐ OSS-1 (17/09/2026) — `avviatoA` NON si aggiunge qui, ed e' una scelta misurata,
+                 * non una dimenticanza. Questo evento e' il verbale del PARSER («l'indice i e'
+                 * comparso»), e due prove in `talosHarness.test.mjs` (Fase 4) ne confrontano la
+                 * forma per intero: un campo in piu' le faceva rosse — misurato, 2 rosse su 598.
+                 * L'ora del server si timbra dove l'evento AG-UI nasce (`agent-service.mjs`,
+                 * `tool-inizio` → `toolCallStart`), che e' la stessa riga di esecuzione sincrona:
+                 * stesso millisecondo, contratto del parser intatto.
                  */
                 if (eraNuova) onDelta?.({ tipo: 'tool-inizio', indice: i, toolCallId: toolCalls[i].id, nome: toolCalls[i].function.name })
                 if (pezzo.function?.arguments) onDelta?.({ tipo: 'tool-args', indice: i, toolCallId: toolCalls[i].id, delta: pezzo.function.arguments })
@@ -3786,6 +3795,173 @@ const MOTIVO_FERMATO_CHIEDENDO = 'fermato su richiesta mentre aspettavo la tua a
  * registro QUALE attrezzo stava girando quando la persona ha premuto «Ferma».
  */
 const MARCA_FERMATO_MENTRE_GIRAVA = '⛔ Fermato su richiesta:'
+
+/**
+ * ⛔⛔⛔ BC-57 — «exit 0» E LA FORMA ESATTA DI «I TEST PASSANO».
+ *
+ * Segnalato sul trascritto dell'app installata 0.1.13 (sessione `4c3e1649`, cartella
+ * `C:\Users\Antonino\Desktop`, `comandoProva: 'npm test'`): `prova` ha risposto `exit 0` con
+ * uscita VUOTA su una cartella che non ha nemmeno un `package.json`. Il modello ci costruisce
+ * sopra il resto del task, e il promemoria «scritture senza prova» si azzera: il risultato
+ * sbagliato coincide con quello giusto, quindi nessuno lo guarda.
+ *
+ * ⛔ MISURATO il 17/09/2026 prima di scrivere questa funzione (Node v24.18.0, Windows 11), non
+ *   dedotto: lo stesso `spawn(comando, {cwd, shell:true})` su una cartella senza `package.json`
+ *   esce **4294963238** (`-4058` senza segno, l'ENOENT di libuv) con 436 byte su stderr, e npm
+ *   dichiara di aver cercato il file risalendo fino alla radice del disco (`npm error path
+ *   C:\package.json`). Identico passando dal kernel. ⇒ La forma «exit 0 + vuoto» NON e' stata
+ *   riprodotta su questo codice — l'unica via misurata per ottenerla e' un `comandoProva` che per
+ *   cmd.exe non fa niente (solo spazi, oppure `rem`: entrambi escono 0 muti). Verbale in
+ *   `tests/bc57-prova-senza-suite.test.mjs`.
+ *
+ * ⇒ La cura non aspetta la causa, perche' non dipende da quale sia: un attrezzo DEDICATO ai test
+ *   deve saper distinguere «la suite e' rossa» da «la suite non c'e'», e oggi non lo sapeva.
+ *
+ * ⛔ Ricerca 17/09/2026 su come lo trattano gli altri: ne' Claude Code ne' Codex CLI hanno un
+ *   attrezzo equivalente a `prova` — i test si lanciano con l'attrezzo di shell generico
+ *   (developers.openai.com/codex/cli, letto il 17/09/2026: Codex «can run shell commands
+ *   including build steps, test suites, and linters, and can react to the output»; per Claude
+ *   Code la stessa cosa passa da Bash). Non c'e' niente da copiare: da loro «il comando di test
+ *   non c'e'» e' semplicemente l'errore del comando. La garanzia in piu' e' nostra da scrivere.
+ *
+ * ⛔ CONSERVATIVA PER SCELTA: davanti a un comando che non sa leggere (operatori di shell,
+ *   variabili, sottoshell) questa funzione risponde `null`, cioe' «non blocco». Un falso rifiuto
+ *   costa una prova non lanciata; un falso via libera costa un `exit 0` inventato — e sono i due
+ *   errori che NON si equivalgono.
+ *
+ * ⛔⛔ E IL PREZZO DI QUELLA SCELTA, DETTO PER INTERO (misurato il 17/09, non dedotto):
+ *   `comandoProva: 'rem & rem'` esce **0 con uscita vuota** — cioe' la forma esatta di BC-57 —
+ *   e passa di qui indisturbata, perche' l'`&` fa rispondere «non giudico». ⇒ **BC-57 e' chiuso
+ *   per i comandi SEMPLICI, non per tutti**, e nessun changelog puo' scrivere altro.
+ * ⛔ Seconda falla della stessa famiglia, aperta: `node --test` in una cartella senza test esce
+ *   **0** stampando «tests 0». Qui il programma esiste e il comando e' semplice, quindi il cancello
+ *   lo lascia passare — giustamente, perche' il difetto non e' nel comando: e' che «zero test
+ *   eseguiti» e «tutti i test passano» hanno lo stesso codice di uscita. Curarlo vuole leggere
+ *   l'USCITA dei runner, non i loro argomenti: e' un'altra riga di lavoro, registrata.
+ *
+ * @returns {Promise<string|null>} il motivo, se una suite riconoscibile manca; `null` se c'e'.
+ */
+async function suiteMancante(comando, cartella) {
+    const testo = String(comando ?? '').trim()
+    if (testo === '') return 'il comando di prova e vuoto'
+    /* ⛔ Un comando composto ha piu' programmi dentro: leggerne uno solo direbbe una cosa falsa sugli altri. */
+    if (/[&|<>^%()"`$]/.test(testo)) return null
+    const pezzi = testo.split(/\s+/)
+    const programma = pezzi[0]
+    if (/^(?:npm|pnpm|yarn|bun)(?:\.cmd|\.exe)?$/i.test(programma)) {
+        const gestore = programma.replace(/\.(?:cmd|exe)$/i, '').toLowerCase()
+        const resto = pezzi.slice(1)
+        /*
+         * ⛔ WORKSPACE — lo script vive in un ALTRO manifesto. `npm run test --workspace=x` cerca
+         *   `scripts.test` in `x/package.json`, non nella radice (docs.npmjs.com/cli/v11/using-npm/
+         *   workspaces, letto il 17/09/2026: `-w`, `-ws`, `--workspace`, `--workspaces`). Risolvere
+         *   quale workspace sia vorrebbe leggere i glob della radice e i manifesti di ognuno: fuori
+         *   da cio' che questa funzione deve sapere ⇒ non si giudica, si esegue.
+         */
+        if (resto.some((a) => /^-w(?:=|$)|^-ws$|^--workspaces?(?:=|$)/i.test(a))) return null
+        const script = nomeDelloScript(resto, gestore)
+        if (script === null) {
+            /*
+             * Non nomina uno script: `npm ci`, `yarn --version`, e soprattutto `bun test`, che
+             * invoca il runner INCORPORATO di Bun e IGNORA `scripts.test` (bun.com/docs/test e
+             * oven-sh/bun discussion #26312, letti il 17/09/2026: «bun test» e' un namespace
+             * riservato al runner nativo). Resta l'unica domanda sensata: il programma esiste?
+             */
+            return programmaEseguibileEsiste(programma, cartella)
+                ? null
+                : `il programma "${programma}" non esiste (non e un eseguibile ne in questa cartella ne sul PATH)`
+        }
+        /*
+         * ⛔⛔⛔ B1, bocciatura del controllore avversariale (17/09, stesso giorno della cura).
+         *
+         * La prima versione guardava SOLO `join(cartella, 'package.json')`, e rifiutava cio' che
+         * npm ESEGUE: npm risale l'albero fino alla radice del disco (misurato — `npm error path
+         * C:\package.json` da una cartella in %TEMP%), quindi in un monorepo un `npm test` lanciato
+         * da una sottocartella fa girare la suite del GENITORE. Riprodotto: radice con
+         * `scripts.test`, sottocartella vuota ⇒ npm esce 0, il cancello diceva `exit 127`. Un falso
+         * «non provato» su una suite che gira: l'errore opposto a quello che questa funzione cura.
+         * ⛔ E la strettezza non serviva nemmeno al caso che l'ha fatta nascere: sopra il Desktop
+         *   non c'e' nessun `package.json` fino a `C:\`, quindi quel caso resta rifiutato lo stesso.
+         * ⇒ Si guarda DOVE GUARDA NPM, e la regola si applica a QUEL manifesto.
+         */
+        const manifesto = manifestoPiuVicino(cartella)
+        if (manifesto === null) return `nessun package.json da qui fino alla radice del disco (serve a "${testo}")`
+        let letto
+        try { letto = JSON.parse(await readFile(manifesto, 'utf8')) }
+        catch (e) { return `${manifesto} non e leggibile come JSON (${e.message})` }
+        const riga = letto?.scripts?.[script]
+        if (typeof riga !== 'string' || riga.trim() === '') return `${manifesto} non dichiara scripts.${script}`
+        return null
+    }
+    if (!programmaEseguibileEsiste(programma, cartella)) {
+        return `il programma "${programma}" non esiste (non e un eseguibile ne in questa cartella ne sul PATH)`
+    }
+    return null
+}
+
+/**
+ * Il primo `package.json` risalendo l'albero, come fa npm — e ci si ferma alla radice del disco,
+ * dove `dirname` smette di cambiare. ⛔ `null` quando non ce n'e' nessuno: e' il caso «Desktop» di
+ * BC-57, e resta un rifiuto.
+ */
+function manifestoPiuVicino(cartella) {
+    let corrente = resolve(cartella)
+    for (;;) {
+        const candidato = join(corrente, 'package.json')
+        if (existsSync(candidato)) return candidato
+        const sopra = dirname(corrente)
+        if (sopra === corrente) return null
+        corrente = sopra
+    }
+}
+
+/**
+ * Da `['run','test:kernel']` a `'test:kernel'`, da `['test']` (o `['t']`) a `'test'`.
+ * ⛔ `null` quando non e' un «lancia uno script» (`npm ci`, `npm install`, `yarn --version`…):
+ * in quel caso non c'e' nessun campo da cercare in `package.json`, e inventarne uno sarebbe la
+ * stessa cosa che questo file rifiuta di fare ovunque.
+ * ⛔ E `bun test` NON e' uno script: Bun riserva quel nome al proprio runner incorporato e ignora
+ *   `scripts.test` (bun.com/docs/test, oven-sh/bun #26312, 17/09/2026). `bun run test`, invece,
+ *   e' l'alias di sempre per lo script — la differenza la fa il gestore, non la parola.
+ */
+function nomeDelloScript(argomenti, gestore) {
+    const utili = argomenti.filter((a) => !a.startsWith('-'))
+    if (utili.length === 0) return null
+    if (utili[0] === 'run' || utili[0] === 'run-script') return utili[1] ?? null
+    if (utili[0] === 'test' || utili[0] === 't' || utili[0] === 'tst') return gestore === 'bun' ? null : 'test'
+    return null
+}
+
+/**
+ * ⛔ Il PATH si guarda a mano invece di lanciare `where`/`which`: lanciare un processo per
+ * scoprire se se ne puo' lanciare un altro costa un processo in piu' a ogni `prova`, e su Windows
+ * `where` stampa anche i file NON eseguibili. Qui si applica la stessa regola che applica la
+ * shell: un nome con un separatore e' un percorso, altrimenti si cerca sul PATH, e su Windows si
+ * provano le estensioni di `PATHEXT`.
+ */
+function programmaEseguibileEsiste(programma, cartella) {
+    const nudo = programma.replace(/^["']|["']$/g, '')
+    if (nudo === '') return false
+    const suWindows = process.platform === 'win32'
+    const estensioni = suWindows
+        ? ['', ...(process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)]
+        : ['']
+    const haGiaUnPercorso = nudo.includes('/') || nudo.includes('\\')
+    const cartelle = haGiaUnPercorso
+        ? [cartella]
+        : [...(suWindows ? [cartella] : []), ...(process.env.PATH ?? process.env.Path ?? '').split(separatoreDiPath).filter(Boolean)]
+    for (const dove of cartelle) {
+        for (const estensione of estensioni) {
+            const candidato = resolve(dove, `${nudo}${estensione}`)
+            try { if (existsSync(candidato)) return true }
+            catch { /* un percorso illegale non e' un eseguibile: si prova il prossimo */ }
+        }
+    }
+    return false
+}
+
+/** ⛔ 127 = «command not found», il codice che una shell usa da sempre. Non 0, mai 0: vedi BC-57. */
+const USCITA_NESSUNA_SUITE = 127
 
 function eseguiProva(comando, cartella, { segnaleStop } = {}) {
     return new Promise((risolvi) => {
@@ -7496,6 +7672,16 @@ export async function talosLavora({
             try { argomenti = JSON.parse(c.function?.arguments || '{}') } catch { /* vuoto */ }
             let esito
             /*
+             * ⭐⭐ OSS-1/OSS-2 (17/09/2026) — CIO' CHE SOLO IL RAMO SA, e che l'evento di esito
+             * deve poter dire: quanto e' durata l'esecuzione (`durataMs`, misurata col
+             * `performance.now()` monotono INTORNO al comando) e che cosa e' girato dove
+             * (`comando`, `cwd`). Vive qui e non dentro l'`else` piu' sotto perche' l'unico posto
+             * che emette `tool-esito` sta fuori da quel blocco.
+             * ⛔ Resta `null` per gli attrezzi che non misuriamo, e un `null` non produce nessun
+             *   campo: uno zero sarebbe indistinguibile da «istantaneo» — vedi `agui-events.mjs`.
+             */
+            let processoPerEvento = null
+            /*
              * ⭐⭐⭐ FASE A (hook) — pre_tool_call, chiamato per OGNI attrezzo
              * (Hermes: "universale", vedi la doc su talosLavora sopra) MA il
              * suo rifiuto blocca SOLO le azioni mutanti (`AZIONI_MUTANTI_PER_HOOK`,
@@ -7947,9 +8133,28 @@ export async function talosLavora({
                         esito = `REFUSED. ${permesso.motivo} The test command was not run.`
                     }
                     else {
-                        scrittureSenzaProva = 0
-                        p = await eseguiProva(comandoProva, cartella, { segnaleStop })
-                        esito = `exit ${p.codice}\n${p.testo}`
+                        /*
+                         * ⛔⛔⛔ BC-57 — IL CANCELLO STA PRIMA, non dopo: vedi `suiteMancante`.
+                         * ⛔ E `scrittureSenzaProva` NON si azzera qui: una prova che non e' mai
+                         *   partita non e' una prova. Azzerare il contatore su un rifiuto
+                         *   spegnerebbe il promemoria «scritture senza prova» proprio nel caso in
+                         *   cui serve di piu' — il modello sta scrivendo e non sta provando niente.
+                         */
+                        const manca = await suiteMancante(comandoProva, cartella)
+                        if (manca) {
+                            p = { codice: USCITA_NESSUNA_SUITE, testo: `nessuna suite trovata in ${cartella}: ${manca}` }
+                            esito = `exit ${p.codice}\n${p.testo}`
+                            /* ⭐ OSS-2 — il comando si dichiara anche qui: e' cio' che spiega il rifiuto. Nessuna `durataMs`: non e' girato niente, e uno zero direbbe «istantaneo». */
+                            processoPerEvento = { comando: comandoProva, cwd: cartella }
+                        }
+                        else {
+                            scrittureSenzaProva = 0
+                            /* ⭐ OSS-1 — `performance.now()` e non `Date.now()`: un orologio monotono non torna indietro se l'ora di sistema cambia a meta' comando. */
+                            const primaDiProvare = performance.now()
+                            p = await eseguiProva(comandoProva, cartella, { segnaleStop })
+                            processoPerEvento = { durataMs: Math.round(performance.now() - primaDiProvare), comando: comandoProva, cwd: cartella }
+                            esito = `exit ${p.codice}\n${p.testo}`
+                        }
                     }
                     // ⭐ FASE D — 'prova' non produce un artefatto testuale: hashContenuto resta null, non un valore inventato.
                     ricevutaEmessa = true
@@ -8015,6 +8220,8 @@ export async function talosLavora({
                                 mandati += delta.length
                                 onGiro?.({ giro, tipo: 'tool-uscita', toolCallId: c.id, delta })
                             }
+                            /* ⭐ OSS-1 — stessa misura del ramo `prova`, stesso orologio monotono. */
+                            const primaDelComando = performance.now()
                             p = await eseguiComandoSandboxato(comandoDiShell(argomenti), cartella, {
                                 mobile,
                                 segnaleStop, // ⛔ 11/09 — senza questo, «Ferma» premuto durante un comando lungo lo lasciava girare fino in fondo: misurato 46 s di ritardo
@@ -8026,6 +8233,24 @@ export async function talosLavora({
                                 },
                             })
                             svuota() // ⛔ l'ultimo pezzo non resta in mano: il silenzio finale sarebbe il difetto di prima, in piccolo
+                            /*
+                             * ⭐ OSS-2 — la cartella del processo.
+                             *
+                             * ⛔ B2, correzione dopo la bocciatura del controllore (17/09): il
+                             *   commento che stava qui diceva che su WSL2 questo campo esce come
+                             *   `/mnt/c/…`. NON E' VERO su questa strada, e va detto. `cartellaFinale`
+                             *   la produce `staccaCartellaFinale` leggendo un marcatore che solo
+                             *   `tracciaCartella` fa stampare — e il ciclo degli attrezzi non passa
+                             *   quell'opzione, che vale `false` per difetto. ⇒ Qui `p.cartellaFinale`
+                             *   e' SEMPRE `null` e il valore che esce e' `cartella`, cioe' la cartella
+                             *   RICHIESTA, nella sua forma nativa (su Windows: `C:\…`). Misurato, e la
+                             *   prova lo asserisce per nome invece di accontentarsi di «e' una stringa».
+                             * ⛔ Il `|| cartella` resta perche' e' il verso giusto il giorno in cui
+                             *   qualcuno accendera' `tracciaCartella`; accenderlo ORA aggiungerebbe un
+                             *   marcatore in coda a OGNI comando del modello, e quel costo non e'
+                             *   stato misurato. Non si accende per far tornare un commento.
+                             */
+                            processoPerEvento = { durataMs: Math.round(performance.now() - primaDelComando), comando: comandoDiShell(argomenti), cwd: p.cartellaFinale || cartella }
                             esito = `exit ${p.codice} [sandbox: ${p.enforcement}]\n${p.testo}`
                         }
                     }
@@ -9491,7 +9716,10 @@ export async function talosLavora({
                 content: contenutoTool,
             })
             await contextHooks?.capture?.({ messages: messaggi, reason: 'tool-result' })
-            onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoTool })
+            /* ⭐ OSS-1/OSS-2 — i campi del processo, quando il ramo li ha misurati. Spread e non chiavi
+               fisse: chi non misura non manda `durataMs: undefined`, che in JSON diventerebbe una
+               chiave fantasma e romperebbe i `deepStrictEqual` gia' scritti altrove. */
+            onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoTool, ...(processoPerEvento ?? {}) })
         }
 
         if (fermatoDentroIlGiro) {
