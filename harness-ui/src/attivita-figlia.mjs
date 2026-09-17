@@ -17,12 +17,17 @@
  */
 export const ATTREZZI_CHE_LEGGONO = Object.freeze(['leggi']);
 export const MASSIMO_FILE_PER_FIGLIA = 60;
+export const MASSIMO_PASSI_PER_FIGLIA = 40;
 
 export function riassuntoAttivitaSessione(eventi = [], { massimoFile = MASSIMO_FILE_PER_FIGLIA } = {}) {
   const file = new Map(); // percorso -> { percorso, letto, scritto, creato, ultimoOrdine }
   const chiamate = new Map(); // toolCallId -> { nome, argomenti, chiusa }
   let ordine = 0;
   let attrezzoCorrente = null;
+  /* I PASSI: la linea del tempo della sezione «Eventi» del dettaglio. Compatta — che cosa, su che file, quando — e con un tetto:
+     restano gli ultimi, e `passiTagliati` dice quanti ne mancano. Niente testo del modello, niente argomenti grezzi. */
+  const passi = [];
+  const quando = (evento) => (typeof evento?.at === 'string' ? evento.at : null);
   const tocca = (percorso, campi) => {
     if (typeof percorso !== 'string') return;
     const pulito = percorso.trim().replace(/\\/g, '/').replace(/^\.\//, '');
@@ -42,6 +47,9 @@ export function riassuntoAttivitaSessione(eventi = [], { massimoFile = MASSIMO_F
     } else if (evento.type === 'ToolCallResult' && chiamate.has(evento.toolCallId)) {
       const chiamata = chiamate.get(evento.toolCallId);
       chiamata.chiusa = true;
+      let bersaglio = null;
+      try { const a = JSON.parse(chiamata.argomenti); bersaglio = typeof a?.percorso === 'string' ? a.percorso : (typeof a?.path === 'string' ? a.path : null); } catch { bersaglio = null; }
+      passi.push({ tipo: 'attrezzo', attrezzo: chiamata.nome, percorso: bersaglio ? bersaglio.trim().replace(/\\/g, '/').slice(0, 1024) : null, quando: quando(evento) });
       if (attrezzoCorrente === evento.toolCallId) attrezzoCorrente = null;
       if (ATTREZZI_CHE_LEGGONO.includes(chiamata.nome)) {
         let argomenti = null;
@@ -53,7 +61,10 @@ export function riassuntoAttivitaSessione(eventi = [], { massimoFile = MASSIMO_F
         if (typeof operazione?.path !== 'string' || !operazione.path.startsWith('/file/')) continue;
         tocca(operazione.path.slice('/file/'.length), operazione.op === 'add' ? { scritto: true, creato: true } : { scritto: true });
       }
+    } else if (evento.type === 'RunStarted') {
+      passi.push({ tipo: 'avvio', attrezzo: null, percorso: null, quando: quando(evento) });
     } else if (evento.type === 'RunFinished' || evento.type === 'RunError') {
+      passi.push({ tipo: evento.type === 'RunError' ? 'errore' : 'fine', attrezzo: null, percorso: null, quando: quando(evento) });
       attrezzoCorrente = null; // un giro chiuso non ha un attrezzo «in corso», nemmeno se l'esito non è mai arrivato
     }
   }
@@ -64,5 +75,7 @@ export function riassuntoAttivitaSessione(eventi = [], { massimoFile = MASSIMO_F
     fileTagliati: Math.max(0, tutti.length - tetto),
     attrezzoCorrente: attrezzoCorrente ? (chiamate.get(attrezzoCorrente)?.nome || null) : null,
     chiamate: chiamate.size,
+    passi: passi.slice(-MASSIMO_PASSI_PER_FIGLIA),
+    passiTagliati: Math.max(0, passi.length - MASSIMO_PASSI_PER_FIGLIA),
   };
 }

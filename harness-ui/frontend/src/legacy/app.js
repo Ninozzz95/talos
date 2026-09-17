@@ -38,6 +38,7 @@ import {
   aggiornaPaginaRicerca, aggiornaPaginaLibreria, aggiornaPaginaAttivita,
   aggiornaPaginaMemoria, montaNote, montaProgetti,
 } from '../components/sezioni-adattatori.js';
+import { creaDettaglioAgente } from '../components/dettaglio-agente.js'; // PO-30 fetta 2: il dettaglio di un agente col disegno del laboratorio
 import { renderizzaMarkdown } from '../components/markdown.js'; // BC-29 (12/09): il render Markdown della chat, uno solo per chat, note, libreria e ricerca
 import { confermaModale } from '../components/modale-td.js'; // 11/09 lotto G: al posto di window.confirm()
 import { montaScorciatoiaTemi } from '../components/theme-studio.js'; // 11/09 lotto F
@@ -9168,10 +9169,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /** Torna all'elenco. ⛔ `distruggi()` chiude già il flusso, stacca l'elemento e ridià il fuoco:
       qui si rimette solo l'elenco al suo posto. Rifare quelle tre cose vorrebbe dire, per il
       fuoco, mandarlo su un nodo che non esiste più. */
+  /** PO-30 fetta 2: la sezione del dettaglio che la persona stava guardando, per figlia. Vive quanto la pagina. */
+  const sezioniAgenteRicordate = new Map();
+
   function chiudiConversazioneFiglia() {
     if (!figliaAperta) return;
     const aperta = figliaAperta;
     figliaAperta = null;
+    if (aperta.dettaglio) sezioniAgenteRicordate.set(aperta.sessionId, aperta.dettaglio.sezione());
     try { aperta.maniglia?.distruggi?.(); } catch { /* già smontata */ }
     aperta.contenitore?.remove();
     const elenco = $('#railAgenti');
@@ -9192,14 +9197,43 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     contenitore.dataset.c = 'PannelloFiglia';
     elenco.parentElement.insertBefore(contenitore, elenco.nextSibling);
     elenco.hidden = true;
-    const maniglia = montaConversazioneFiglia(contenitore, {
+    /*
+     * ⛔⛔ PO-30, fetta 2 (18/09/2026) — IL DETTAGLIO DELL'AGENTE, col disegno del laboratorio della PR #33 e i dati veri di
+     *   `GET …/children`. Prima qui si montava SOLO la conversazione della figlia; ora la conversazione è la quarta sezione di
+     *   un dettaglio che si apre sulla Panoramica, come nel laboratorio. Il pannello della conversazione è quello di sempre,
+     *   ospitato dentro: si monta SUBITO (così il flusso parte e la sezione è pronta quando la si apre), ma si vede solo lì.
+     *   La sezione scelta si RICORDA per figlia: tornare su un agente riapre dove lo si era lasciato.
+     */
+    const dettaglio = creaDettaglioAgente(figlia, {
+      document,
+      sezione: sezioniAgenteRicordate.get(figlia.sessionId) || 'panoramica',
+      eta: (iso) => formattaEta(iso),
+      azioni: {
+        indietro: chiudiConversazioneFiglia,
+        apriFile: async (percorso) => {
+          $('#railTabs [data-rail="file"]')?.click();
+          const vista = $('#fileVista');
+          if (vista && vista.dataset.vista !== 'tutti') { vista.dataset.vista = 'tutti'; aggiornaVistaFile(); }
+          /* ⛔ Trovato dalla prova: la PRIMA volta che si apre la scheda File l'albero non è ancora disegnato, e il file non si
+             trovava — il collegamento portava alla scheda e basta. Si aspetta il disegno (se è già in corso, è la stessa promessa). */
+          await renderizzaAlberoReale();
+          await rivelaERivelaRigaAlbero(percorso);
+        },
+      },
+    });
+    /* ⛔ La guardia della PR #33 (`inspector-tab-visibility.css`) nasconde `.talos-figlia-ospite` quando la scheda scelta non è
+       Agenti. Prima quella classe la metteva il pannello della conversazione sul SUO contenitore, che era questo; ora il suo
+       contenitore è la quarta sezione, quindi la classe va messa anche qui — o cambiando scheda il dettaglio resterebbe a schermo. */
+    contenitore.classList.add('talos-figlia-ospite');
+    contenitore.appendChild(dettaglio.elemento);
+    const maniglia = montaConversazioneFiglia(dettaglio.slotConversazione, {
       sessionId: figlia.sessionId,
       nome: figlia.taskCorto || figlia.task || 'Delega senza compito registrato',
       apriFlusso: apriFlussoFiglia,
       onIndietro: chiudiConversazioneFiglia,
       document,
     });
-    figliaAperta = { sessionId: figlia.sessionId, contenitore, maniglia };
+    figliaAperta = { sessionId: figlia.sessionId, contenitore, maniglia, dettaglio };
   }
 
   /**
@@ -9386,6 +9420,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
     aggiornaInspectorDaStato();
     aggiornaPuntiniStatoAlbero(); // PO-30: chi sta toccando quale file cambia insieme alle figlie
+    /* PO-30 fetta 2: il dettaglio APERTO si aggiorna con i dati nuovi della sua figlia (stato, attrezzo in corso, file, passi). */
+    if (figliaAperta?.dettaglio) { const fresca = state.realSession.figli.find((x) => x.sessionId === figliaAperta.sessionId); if (fresca) figliaAperta.dettaglio.aggiorna(fresca); }
   }
   function syncRunComposerState() {
     aggiornaPiedeChatDaStato(); // 05/9 Fase 2: ChatFooter
