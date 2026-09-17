@@ -243,7 +243,31 @@ fusione, non in parallelo.
 
 ---
 
-# FASE 3-bis · MODALITÀ WORKFLOW — i «Piani di lavoro»
+# FASE 3-bis · MODALITÀ WORKFLOW — il modello che LANCIA E COORDINA SOTTO-AGENTI, come fa Claude Code
+
+> ⛔ **Correzione dell'owner, 17/09/2026:** «workflow non è i piani di lavoro, sono gli agenti che lanci tu». Avevo intitolato la
+> fase col nome che volevo dare alla funzione A SCHERMO («Piani di lavoro») e il 17/09 gli ho risposto parlando del titolo invece
+> che della cosa. La COSA è questa: il modello di TALOS che fa ciò che fa l'orchestratore di Claude Code — lancia più sotto-agenti,
+> li lascia lavorare, li coordina, li riprende. Il contenuto della fase qui sotto era già quello; il titolo no.
+>
+> **Stato misurato nel codice il 17/09 (non dalla coda):** NON iniziata. Esiste `delega_sottotask(task, cartella)`
+> (`src/kernel/talosHarness.mjs`): una figlia che parte senza niente oltre la consegna, lavora da sola, riporta solo il riassunto;
+> più deleghe insieme sono possibili — `LIMITE_FIGLI_CONCORRENTI = 10` (`src/session-registry.mjs`), parallelo e sequenza provati
+> l'08/09 (`tests/delega-parallelo-sequenza-cartella.test.mjs`). D3 via A (09/09) ha tolto solo il SILENZIO: due figlie che
+> scrivono lo stesso file vengono SEGNALATE nella scheda Agenti dopo il fatto, non IMPEDITE prima (nessun lucchetto, nessuna
+> prenotazione: `grep -i prenotazion` → zero, confermato leggendo il commento di D3). I file previsti dalla fase
+> (`src/piano-di-lavoro.mjs`, `src/workflow-orchestrator.mjs`) non esistono.
+>
+> **Cosa MANCA rispetto all'orchestratore di Claude Code, e va AGGIUNTO alle cinque corsie qui sotto:**
+> (a) lo SFONDO — oggi la madre si ferma ad aspettare la figlia; serve lanciarla, continuare a lavorare ed essere avvisata alla
+> fine; (b) RIPRENDERE una figlia già lanciata con un messaggio (oggi ogni delega è una sessione usa-e-getta); (c) scegliere
+> MODELLO, SFORZO e TIPO per figlia (esploratore in sola lettura, implementatore, revisore) — oggi la figlia è una copia della
+> madre; (d) l'ISOLAMENTO: una copia di lavoro per figlia (D3 via C, approvata il 09/09 «per più avanti»); (e) uno schema
+> DICHIARATO e ripetibile («queste cinque in parallelo, un revisore per ognuna, poi la sintesi») con uscita strutturata e ripresa.
+> Tetti degli altri, letti nel loro codice il 10/09: Claude Code 20 concorrenti, Codex 4, Hermes con lucchetto per percorso.
+>
+> ⛔ NON ha ancora un posto nel piano a tre fasi del 17/09: decide l'owner (proposta: Fase D, dopo la C).
+
 
 **A cosa serve:** oggi TALOS sa delegare **un** compito a **una** figlia, e il padre si ferma ad
 aspettarla. Non sa dividere un lavoro in cinque lavorazioni parallele, non sa impedire che due figlie
