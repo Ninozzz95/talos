@@ -705,3 +705,34 @@ documenta che il sottotitolo è «Tema <preset> · <chi serve il modello>» per 
 `fornitoreDelModello('z-ai/glm-5.3-flash')` restituisce `z-ai`, un **id tecnico**, e la regola dice che gli id dei fornitori si
 mappano a nomi umani in un posto solo («Z.AI», «OpenRouter», «Anthropic»…). **Cura:** leggere il nome dal registro dei fornitori
 (lo stesso che usa la sezione Fornitori), con test che per ogni fornitore del registro il piede non mostri mai l'id.
+
+## BC-62 | Aprendo la scheda «Terminale» nasce ogni volta una NUOVA tab di terminale, senza motivo (owner 17/09/2026, dal vivo) — APERTO, debito
+
+**Cosa hai visto:** «quando apro scheda terminale si apre una nuova tab terminale senza motivo». Entrare nella vista Terminale
+non deve creare niente: deve mostrare le schede che ci sono; una scheda nuova nasce solo da «+ Nuovo» (o se non ce n'è nessuna).
+**Da misurare prima di curare:** chi chiama la creazione all'ingresso nella vista (`setView('terminal')` / il cablaggio del
+pannello dal composer che SPOSTA il terminale della sezione, `app.js` ~19764-19950 e `montaSchedaTerminale` →
+`components/terminale-xterm.js`), se il doppione nasce dal blocco di cablaggio che gira due volte (rischio già documentato
+in `app.js:19816-19826`, e la P0/A ha messo la guardia sul toggle ma non sulla creazione) o dal ripristino delle schede.
+**Finita quando:** aprire e richiudere la vista dieci volte lascia lo STESSO numero di schede (prova browser che conta le
+linguette), con una sessione PTY sola per scheda; «+ Nuovo» ne aggiunge esattamente una.
+
+## BC-63 | La vista «Revisione» deve avere lo STESSO componente a schede del Terminale (schede stile Chrome) (owner 17/09/2026) — APERTO, debito
+
+**Richiesta:** «la scheda revisione deve avere lo stesso component tab di terminale (schede stile chrome)». Oggi il Terminale ha
+le linguette di `components/terminale.js` (linguetta con titolo, chiusura, «+ Nuovo», menu contestuale) e il Browser le sue;
+la Revisione no. **Cura:** UN componente di schede condiviso (estratto da quello del Terminale, non una terza copia), usato da
+Terminale, Browser e Revisione, con lo stesso comportamento di tastiera, chiusura, trascinamento se c'è, e overflow. Skill
+`frontend-design`, tema Calm, due temi, 1024 e 1440, confronto affiancato fra le tre viste.
+**Finita quando:** le tre viste montano lo stesso componente (un solo file, zero copie), e le foto affiancate lo mostrano.
+
+## BC-64 | «Visualizza in Esplora file» non apre nessuna finestra di Esplora file (owner 17/09/2026, dal vivo) — APERTO, debito
+
+**Cosa hai visto:** la voce non fa niente. **Da misurare:** quale rotta chiama (`/api/v1/…/reveal` o simile), cosa risponde, e
+cosa esegue il server: su Windows la forma giusta è `explorer.exe /select,"<percorso>"` (che esce con codice 1 ANCHE quando
+funziona: un controllo sul codice d'uscita lo scambia per un fallimento), senza `shell: true` e col percorso assoluto
+normalizzato; nel guscio Electron la via è `shell.showItemInFolder`. Da verificare anche nel browser puro (4174), dove il
+server è l'unico che può aprire Esplora.
+**Finita quando:** dalla riga di un file, su Windows, si apre Esplora file con QUEL file selezionato, sia dall'app installata
+sia dal 4174; un percorso che non esiste più dice perché; prova sul percorso vero con lo spawn iniettato (argv asserito) e
+una prova manuale dichiarata.
