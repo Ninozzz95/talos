@@ -7,7 +7,9 @@ test('⛔ T03-D2: chiudere «scrivi» non chiude il terminale, e ora lo diciamo'
   // ⛔ non solo shell: con «Workspace write» anche documenti e immagini scrivono senza chiedere,
   //    quindi vanno nominati tutti e tre. La prima versione di questo test ne aspettava uno solo
   //    ed era l-ATTESO a essere sbagliato: un avviso che ne nomina uno su tre rassicura a torto.
-  assert.deepEqual(r.aperte, ['shell', 'document_create', 'generate_image']);
+  // ⛔ BC-59 (17/09): dal 16/09 le vie sono QUATTRO — `file_edit` cambia i file con un cancello suo.
+  //    Questo atteso è stato aggiornato perché il FATTO è cambiato, non per far tornare il verde.
+  assert.deepEqual(r.aperte, ['file_edit', 'shell', 'document_create', 'generate_image']);
   assert.match(r.avviso, /Hai chiuso «Scrivi un file»/u);
   assert.match(r.avviso, /un comando nel terminale/u);
 });
@@ -31,7 +33,7 @@ test('⛔ AL CONTRARIO — niente avviso quando non c-è niente da avvisare', ()
   assert.equal(porteLateraliAperte({ shell: 'sempre' }, 'Full access').avviso, '');
   assert.equal(porteLateraliAperte({ scrivi: 'sempre', shell: 'sempre' }, 'Full access').avviso, '');
   // tutto chiuso davvero: nessuna porta laterale
-  assert.equal(porteLateraliAperte({ scrivi: 'nega', shell: 'nega', document_create: 'nega', generate_image: 'nega' }, 'Full access').avviso, '');
+  assert.equal(porteLateraliAperte({ scrivi: 'nega', file_edit: 'nega', shell: 'nega', document_create: 'nega', generate_image: 'nega' }, 'Full access').avviso, '');
   assert.equal(porteLateraliAperte({}, '').avviso, '');
 });
 
@@ -39,6 +41,6 @@ test('il testo elenca tutte le vie, con la congiunzione giusta', () => {
   const r = porteLateraliAperte({ scrivi: 'nega' }, 'Full access');
   assert.match(r.avviso, /restano vie/u);
   assert.match(r.avviso, /, .* e /u, 'tre voci: virgola fra le prime e «e» prima dell-ultima');
-  const uno = porteLateraliAperte({ scrivi: 'nega', document_create: 'nega', generate_image: 'nega' }, 'Full access');
+  const uno = porteLateraliAperte({ scrivi: 'nega', file_edit: 'nega', document_create: 'nega', generate_image: 'nega' }, 'Full access');
   assert.match(uno.avviso, /resta una via/u);
 });

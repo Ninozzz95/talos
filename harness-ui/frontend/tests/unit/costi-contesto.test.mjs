@@ -137,10 +137,11 @@ test('CONTESTO-PROMESSA: quello che la sezione promette e non misura lo DICHIARA
 });
 
 // 12/09: 44 — è entrato `research_deposit` (la consegna del rapporto della ricerca approfondita, L1).
-test('C10-DESCRIZIONI: 44 attrezzi, tutte in italiano, senza markdown a schermo', async () => {
+// 17/09, BC-59: 45 — è entrato `file_edit`, che il kernel dichiara dal 16/09 e la UI non nominava.
+test('C10-DESCRIZIONI: 45 attrezzi, tutte in italiano, senza markdown a schermo', async () => {
   const m = await import('../../src/components/nomi-attrezzi.js');
   const ids = Object.keys(m.DESCRIZIONI_ATTREZZI);
-  assert.equal(ids.length, 44);
+  assert.equal(ids.length, 45);
   for (const id of ids) {
     const d = m.descrizioneAttrezzo(id);
     assert.ok(d && d.length > 10, `descrizione troppo corta per ${id}`);
