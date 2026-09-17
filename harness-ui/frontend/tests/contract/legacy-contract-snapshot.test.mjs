@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test, { after } from 'node:test';
@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { extractLegacyContract } from '../../scripts/extract-legacy-contract.mjs';
 import { buildProduction } from '../../scripts/build.mjs';
+import { rimuoviCartellaDiProvaAttesa } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '../../../..');
@@ -15,7 +16,9 @@ const fixturePath = path.join(here, '../fixtures/legacy-contract.snapshot.json')
 // Test the actual current production entry, never a stale public/ checked into Git.
 // Each worker owns its temporary output; parallel tests cannot replace our bundle.
 const outputDir = await mkdtemp(path.join(tmpdir(), 'talos-phase1-contract-'));
-after(() => rm(outputDir, { recursive: true, force: true }));
+// BC09 class A: this directory contains completed build files, no live browser,
+// watcher, server or process with a cwd inside it. Use the existing noisy retry helper.
+after(() => rimuoviCartellaDiProvaAttesa(outputDir));
 await buildProduction({ outputDir });
 const input = Object.freeze({
   appPath: path.join(outputDir, 'app.js'),
