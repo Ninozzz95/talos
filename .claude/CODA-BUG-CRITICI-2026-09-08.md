@@ -1155,3 +1155,24 @@ nessuno: un `llama-fit-params` VERO (dura secondi, non 50 ms — il guadagno rea
 binario vero, Vulkan/CPU; (4) il rapporto CORREGGE una mia lettura di BC-76: le strade locali sono DUE — `eseguiRuntimeLocale`
 (sessione `provider:'local'`, non esegue attrezzi) e la strada del kernel con un modello `local:<id>`, che già avvia il motore
 (`avviaLocale`) ed esegue gli attrezzi. BC-76 resta vera per la prima; il brief lo dice già come ipotesi di cura.
+
+## BC-78 | Cinque residui trovati chiudendo PO-27 (17/09/2026) — APERTI; entrano nella corsia frontend della Fase A, tranne l'ultimo
+
+1. **«Collega un modello» non apre i Fornitori SU QUEL fornitore.** La bolla «Manca la chiave per Z.AI» (CLI-REQ-03) porta il
+   bottone, ma l'id del fornitore non arriva al browser: `runError({message, code})` in `src/agui-events.mjs` porta solo quei due
+   campi. Chiuderlo vuol dire aggiungere un campo FACOLTATIVO al contratto degli eventi (additivo, con la sua prova di contratto).
+2. **La barra laterale taglia una voce a metà riga.** `frontend/src/styles/mockup-sidebar.css:36`: `.td-sidebar-nav { max-height:
+   50%; overflow-y:auto }` — a 900 px sono 450 px, che cadono in mezzo a «Officina attrezzi». Misurato dall'agente: non è una
+   sovrapposizione. Da decidere: tetto a passo di riga, oppure una sfumatura in basso che dica «continua» (come le schede di BC-63).
+3. **A 1024×800 il dettaglio di un plugin esce dalla finestra, e «Fida» con lui**: 899 px su 800 (869 prima di PO-27: 69 px
+   erano già fuori, 30 li ha aggiunti il riquadro d'avviso). Causa: `.talos-detail` è `position:sticky; top:0` senza scorrimento
+   proprio, ed è condiviso dai quattro pannelli di Capability. A 1440×900 non esce (851 su 900).
+4. **Un nome tecnico a schermo**: negli avvisi della scansione dei plugin si legge `tool:check_notes: legge una credenziale…`.
+   E il secondo revisore del ramo CLI-REQ aveva misurato che `scansionaPatternSospetti` oggi rassicura e basta (la grammatica
+   ammessa rifiuta prima 4 forme su 5, e la quinta è un falso positivo): da decidere se toglierla o farle dire cose vere.
+5. ⛔ **La suite backend muore sotto pressione di memoria** (non frontend: riga a sé). Misurato il 17/09 col modello locale
+   dell'owner caricato (llama-server 7 GB, 3,1 GB liberi su 31,6): due giri interi con 17 e poi 7 rossi, insiemi DISGIUNTI, due
+   `FATAL ERROR … JavaScript heap out of memory`; ogni file caduto passa da solo. Sommato all'intermittenza di WSL (tre volte
+   oggi) vuol dire che «suite intera verde» dipende da cosa gira sulla macchina. **Finita quando:** la consegna lancia la suite
+   con una concorrenza scelta in base alla memoria libera (o fissa e bassa), i file che vogliono WSL si dichiarano saltati con un
+   motivo invece di cadere, e un giro sporco si riconosce da solo (conta gli errori di memoria e lo dice).

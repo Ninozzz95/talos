@@ -36,3 +36,14 @@ lasciati vivi chiusi per PID. Foto di ogni superficie toccata, guardate TUTTE an
 Chiusura: `npm run test:unit`, la cartella `tests/browser` INTERA da sola (stato noto prima di te: vedi BC-72 — distingui i tuoi
 rossi con un A/B), `git.exe status --short` vuoto. Rapporto corto: comando esatto accanto a ogni numero, misurato vs letto,
 NON verificato per nome.
+
+## Aggiunta del 17/09 sera — BC-78, punti 1-4 (trovati chiudendo PO-27), in coda a BC-68
+5. **BC-78.2** la barra laterale taglia una voce a metà riga (`styles/mockup-sidebar.css:36`, `max-height:50%`): tetto a passo di
+   riga oppure la sfumatura «continua» già usata dalle schede di BC-63 (`data-bordi`): scegli con la skill `frontend-design`.
+6. **BC-78.3** a 1024×800 il dettaglio di Capability esce dalla finestra con «Fida» (899 px su 800): `.talos-detail` è sticky
+   senza scorrimento proprio, condiviso da quattro pannelli — la cura vale per tutti e quattro, provata su tutti e quattro.
+7. **BC-78.4** `tool:check_notes` a schermo negli avvisi della scansione dei plugin: nessun nome tecnico; e decidi con me se
+   `scansionaPatternSospetti` resta (oggi rassicura e basta: leggi la scheda).
+8. **BC-78.1** «Collega un modello» apre i Fornitori SU QUEL fornitore: serve un campo facoltativo in più su `RunError`
+   (`src/agui-events.mjs`, backend): FERMATI e scrivimi la forma che ti serve, lo aggiungo io o te lo autorizzo.
+⛔ Già curati da PO-27 e da NON rifare: il tondo «torna in fondo» (F2), il menu dentro la colonna (F1), Estensioni (F3).
