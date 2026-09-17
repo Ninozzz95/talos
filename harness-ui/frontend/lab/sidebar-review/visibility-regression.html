@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="it"><meta charset="utf-8"><title>Inspector visibility regression</title>
+<link rel="stylesheet" href="../../src/styles/inspector-tab-visibility.css">
+<style>body{font:14px system-ui;margin:24px}.talos-inspector{max-width:420px;border:1px solid;padding:12px}#railTabs{display:flex;gap:8px}.talos-figlia-ospite{height:180px;overflow:auto}.talos-figlia{min-height:800px}button{padding:8px}pre{white-space:pre-wrap}</style>
+<h1>Contratto DOM dell'inspector</h1>
+<p>Fixture del ponte legacy: il dettaglio è fratello di railAgenti. Non avvia sessioni o agenti reali.</p>
+<aside class="talos-inspector"><div id="railTabs">
+<button data-rail="contesto" aria-selected="false">Context</button>
+<button data-rail="file" aria-selected="false">File</button>
+<button data-rail="agenti" aria-selected="true">Agenti</button>
+<button data-rail="processi" aria-selected="false">Processi</button>
+</div><div id="railAgenti">Elenco agenti</div>
+<div class="talos-figlia-ospite"><section class="talos-figlia"><button id="detailButton">Dettaglio persistente</button><p>Corpo lungo: la posizione di scroll deve sopravvivere al cambio tab.</p></section></div></aside>
+<pre id="report" role="status">In attesa del foglio…</pre>
+<script>
+const tabs=[...document.querySelectorAll('[data-rail]')];
+const host=document.querySelector('.talos-figlia-ospite');
+const child=document.querySelector('.talos-figlia');
+const list=document.querySelector('#railAgenti');
+function select(name){for(const t of tabs)t.setAttribute('aria-selected',String(t.dataset.rail===name));}
+for(const t of tabs)t.addEventListener('click',()=>select(t.dataset.rail));
+window.addEventListener('load',()=>{
+ const results=[];
+ const visible=n=>getComputedStyle(n).display!=='none';
+ const check=(label,value)=>{results.push((value?'PASS ':'FAIL ')+label);};
+ check('Dettaglio visibile nella tab Agenti',visible(host));
+ check('Lista non sovrapposta al dettaglio',!visible(list));
+ host.scrollTop=64;
+ for(const tab of ['file','contesto','processi']){select(tab);check('Dettaglio nascosto su '+tab,!visible(host));}
+ select('agenti');
+ check('Dettaglio ripristinato',visible(host));
+ check('Stesso nodo, nessun remount',document.querySelector('.talos-figlia')===child);
+ check('Scroll conservato',host.scrollTop===64);
+ host.hidden=true;
+ check('Chiusura del dettaglio rispettata',!visible(host));
+ check('Lista ripristinata dopo chiusura',visible(list));
+ host.hidden=false;
+ document.querySelector('#report').textContent=results.join('\n');
+ document.documentElement.dataset.testResult=results.some(x=>x.startsWith('FAIL'))?'fail':'pass';
+});
+</script></html>
