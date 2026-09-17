@@ -321,8 +321,50 @@ export function createLlamaServerSupervisor({
     }
   }
 
+  // Bindings refer to the process entry itself, not its alias or reusable port.
+  // Stop/crash invalidates every in-flight kernel turn before another model can run.
+  function invalidateBindings(entry) {
+    const error = new LlamaServerSupervisorError('Il modello locale associato al giro non è più disponibile.', 'LOCAL_KERNEL_MODEL_CHANGED');
+    for (const controller of entry?.bindings ?? []) controller.abort(error);
+    entry?.bindings?.clear();
+  }
+
+  function bindModel(modelId) {
+    const entry = current;
+    if (!entry || entry.state !== 'ready' || entry.modelId !== modelId) {
+      throw new LlamaServerSupervisorError('Carica il modello selezionato prima di avviare il giro locale.', 'LOCAL_KERNEL_MODEL_MISMATCH');
+    }
+    const controller = new AbortController();
+    entry.bindings.add(controller);
+    let released = false;
+    const assertReady = () => {
+      controller.signal.throwIfAborted();
+      if (released || current !== entry || entry.state !== 'ready') {
+        throw new LlamaServerSupervisorError('Il modello locale associato al giro è cambiato.', 'LOCAL_KERNEL_MODEL_CHANGED');
+      }
+    };
+    return Object.freeze({
+      modelId, signal: controller.signal, assertReady,
+      async request(path, options = {}) {
+        assertReady();
+        const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
+        signal.throwIfAborted();
+        const response = await request(path, { ...options, signal });
+        try { assertReady(); } catch (error) { await response.body?.cancel().catch(() => {}); throw error; }
+        return response;
+      },
+      release() {
+        if (released) return;
+        released = true;
+        entry.bindings.delete(controller);
+        controller.abort(new LlamaServerSupervisorError('Associazione al modello rilasciata.', 'LOCAL_KERNEL_BINDING_RELEASED'));
+      },
+    });
+  }
+
   function attachProcess(entry) {
     const onClose = () => {
+      invalidateBindings(entry);
       // R-03: l'ultima riga senza a-capo (il motore muore a metà frase) si tiene lo stesso.
       if (entry.residuoStderr && entry.residuoStderr.trim() !== '') {
         entry.ultimeRighe.push(entry.residuoStderr.trim());
@@ -336,6 +378,7 @@ export function createLlamaServerSupervisor({
       }
     };
     const onError = (error) => {
+      invalidateBindings(entry);
       entry.failure = error;
       entry.state = 'failed';
       state = 'failed';
@@ -444,6 +487,7 @@ export function createLlamaServerSupervisor({
   async function lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario, ngl, apiKey }) {
     const entry = {
       child: null,
+      bindings: new Set(),
       apiKey,
       modelId: modelId ?? null,
       modelPath,
@@ -610,6 +654,7 @@ export function createLlamaServerSupervisor({
   async function stop() {
     const entry = current;
     if (!entry) { state = 'unavailable'; return status(); }
+    invalidateBindings(entry);
     entry.state = 'stopping';
     state = 'stopping';
     if (entry.child && !entry.closed) entry.child.kill('SIGTERM');
@@ -625,5 +670,5 @@ export function createLlamaServerSupervisor({
     return () => listeners.delete(listener);
   }
 
-  return Object.freeze({ start, health, request, stop, status, subscribeLogs });
+  return Object.freeze({ start, health, request, bindModel, stop, status, subscribeLogs });
 }

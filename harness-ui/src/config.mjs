@@ -564,8 +564,13 @@ export function loadConfig(
     fail('Percorso modulo non valido');
   }
 
+  const localKernelFlag = env.TALOS_LOCAL_AGENT_KERNEL;
+  if (localKernelFlag !== undefined && !['0', '1'].includes(localKernelFlag)) {
+    fail('TALOS_LOCAL_AGENT_KERNEL deve essere 0 oppure 1.');
+  }
   return Object.freeze({
     host,
+    localAgentKernel: localKernelFlag === '1',
     contextTrial: parseContextTrial(env),
     port: parsePort(env.TALOS_HARNESS_UI_PORT),
     // ⭐ 03/9, R-01: true solo se l'owner ha scritto qualcosa in

@@ -1006,7 +1006,14 @@ export function createOwnerRuntimeAdapter({
        * dentro avrebbe fatto ritentare su OpenRouter una chiamata già
        * dirottata altrove.
        */
-      const fetchInstradata = creaFetchMultiProvider(fetchResiliente, {
+      // A bound local kernel turn must not enter cloud routing, autoload or
+      // whole-provider fallback. Tools and the agent loop remain in the same kernel.
+      if (input?.localInference && typeof input.localInference.fetch !== 'function') {
+        throw new OwnerRuntimeUnavailableError('Trasporto locale non valido.', 'LOCAL_KERNEL_TRANSPORT_INVALID');
+      }
+      const fetchInstradata = input?.localInference
+        ? creaFetchConDescrizioneComando(input.localInference.fetch)
+        : creaFetchMultiProvider(fetchResiliente, {
         dipendenze: destinazioneModelloDeps, providerStore, fallbackProviders, modelloSessione: input?.modello,
         onAvviso: input?.onAvviso, onCambioFornitore: input?.onCambioFornitore, onConsumoFornitore: input?.onConsumoFornitore,
       });
@@ -1047,7 +1054,9 @@ export function createOwnerRuntimeAdapter({
         try { body = JSON.parse(init.body); } catch { return successiva(url, init); }
         if (!Array.isArray(body.messages)) return successiva(url, init);
         const hasImages = body.messages.some(m => Array.isArray(m.content) && m.content.some(p => p?.type === 'image_url'));
-        if (hasImages) {
+        // Bound local inference must not query a remote model catalog. The local
+        // server remains authoritative for the selected model's image support.
+        if (hasImages && !input?.localInference) {
           const capability = await Promise.resolve(modelCapabilityFn(body.model)).catch(() => null);
           if (capability?.inputModalities?.length && !capability.inputModalities.includes('image')) {
             throw new OwnerRuntimeUnavailableError('Il modello selezionato non accetta immagini. Scegli un modello con visione.', 'MODEL_IMAGE_NOT_SUPPORTED');
