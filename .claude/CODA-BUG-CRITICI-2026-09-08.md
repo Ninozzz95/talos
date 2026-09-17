@@ -966,7 +966,7 @@ sottocartella senza file compare lo stesso nell'elenco (`sub/`). È la stessa fa
 spiega» (P-13, 10/09): una risposta vuota e una risposta «è vuota» non sono la stessa cosa. Kernel ⇒ va nel ramo `cli-req` o
 in una riga sua, con `npm run test:kernel` intero e ricerca prima di scrivere.
 
-## CLI-REQ-08..11 | Portare gli attrezzi dei FILE del modello (`leggi`, `cerca`, `scrivi`, `file_edit`) al contratto di Hermes, tenendo i miglioramenti di TALOS (17/09/2026, dalla sessione della CLI) — REGISTRATE; l'approvazione dell'owner mi è stata RIFERITA, a me non l'ha ancora detta
+## CLI-REQ-08..11 | Portare gli attrezzi dei FILE del modello (`leggi`, `cerca`, `scrivi`, `file_edit`) al contratto di Hermes, tenendo i miglioramenti di TALOS (17/09/2026, dalla sessione della CLI) — ✅ APPROVATE dall'owner il 17/09, a me direttamente («confermo, approvo tutte le CLI e mi va bene la forma che hai descritto»): fase a sé, additiva con interruttore per il banco, ordine 11 → 10 → 08 → 09, brief in `.claude/BRIEF-ATTREZZI-FILE-CLI-REQ-08-11-2026-09-17.md`; parte dopo la fusione del ramo `cli-req`
 
 Testo: `git show bc17c98f:docs/talos-cli/handoffs/2026-09-17-CLI-REQ-08-11-agent-file-tools-like-hermes.md` (84 righe, una RED per
 richiesta); confronto di origine: `git show b0d32717:docs/talos-cli/research/2026-09-17-hermes-agent-tools-comparison.md`
