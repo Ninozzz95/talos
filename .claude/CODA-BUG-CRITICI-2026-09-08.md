@@ -1331,7 +1331,7 @@ rimesso → BC-71 · piede nascosto contato come ingombro → toast unit), sha25
 ⛔ NON verificato: la cartella `tests/browser` INTERA su questo albero; il riassunto di BC-80 dal vivo con file veri (la sessione aperta
 non ne ha scritti: nodo nascosto, come deve); i «899 px» di BC-78.3 non sono stati riprodotti dall'agente (415 e 456 px misurati:
 sospetta fosse il dettaglio del plugin nel FOGLIO, altra superficie — resta aperto). ⛔ I sette tag malformati restano in
-`mockup/talos-mockup.html`, artefatto dell'owner: vuole il suo sì. Correzioni alla coda portate dall'agente, con la misura: gli id doppi
+`mockup/talos-mockup.html`, artefatto dell'owner: vuole il suo sì. ✅ **Owner, 17/09 notte: «no, lascia stare il mockup».** Non si tocca: riga chiusa. Correzioni alla coda portate dall'agente, con la misura: gli id doppi
 erano QUATTRO; `$()` prendeva il nodo VISIBILE, non l'invisibile; il «trattino a x≈303» è la barra della cronologia, un componente
 voluto; delle tre accuse di BC-70 una sola era vera.
 
