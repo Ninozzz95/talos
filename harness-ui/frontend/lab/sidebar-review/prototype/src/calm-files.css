@@ -1,0 +1,119 @@
+/* Calm refinement, scoped to File;
+   the approved shell, palette and graph stay intact. */
+.tree  {
+   --file-row-height: 36px;
+   }
+
+.compact .tree  {
+   --file-row-height: 32px;
+   }
+
+.files-top  {
+   gap: var(--talos-space-sm);
+   }
+
+.file-browse-row  {
+   display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:var(--talos-space-sm);
+   }
+
+.file-browse-row select  {
+   border-color:transparent;
+  background:transparent;
+  padding:var(--talos-space-xs);
+  font-size:var(--talos-font-size-xs);
+  max-width:75%;
+   }
+
+.file-browse-row select:hover  {
+   border-color:var(--talos-border);
+   }
+
+#railFile .section-label  {
+   padding-top:var(--talos-space-xs);
+  padding-bottom:var(--talos-space-xs);
+  font-size:11px;
+  text-transform:none;
+  letter-spacing:0;
+   }
+
+#railFile .file-row  {
+   block-size:var(--file-row-height);
+  min-height:var(--file-row-height);
+  padding-block:3px;
+   }
+
+#railFile .file-row button  {
+   min-width:24px;
+  min-height:24px;
+   }
+
+#railFile .file-row .agent-indicator  {
+   background:transparent;
+  color:var(--talos-muted);
+   }
+
+#railFile .file-row .agent-indicator:hover  {
+   background:var(--talos-accent-soft);
+  color:var(--talos-accent-text);
+   }
+
+#railFile .file-row .file-more, #railFile .file-row .file-check  {
+   opacity:0;
+   }
+
+#railFile .file-row:hover .file-more, #railFile .file-row:focus-within .file-more,
+#railFile .file-row.selected .file-more, #railFile .file-row:hover .file-check,
+#railFile .file-row:focus-within .file-check, #railFile .file-row.selected .file-check,
+#railFile .selection-mode .file-check  {
+   opacity:1;
+   }
+
+#railFile .file-selection  {
+   display:flex;
+  align-items:center;
+  gap:var(--talos-space-sm);
+  padding:var(--talos-space-sm) var(--talos-space-md);
+   }
+
+#railFile .file-selection .small  {
+   margin:0;
+   }
+
+#railFile #renameInput  {
+   min-height:24px;
+  height:24px;
+  flex:1;
+  width:100%;
+   }
+
+.sr-only  {
+   position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  margin:-1px;
+  overflow:hidden;
+  clip-path:inset(50%);
+  white-space:nowrap;
+  border:0;
+   }
+
+.popover  {
+   max-height:calc(100vh - 16px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+   }
+
+
+.folder-item:focus-visible  {
+   outline:none;
+   }
+
+.folder-item:focus-visible > .folder  {
+   outline:var(--talos-focus-width) solid var(--talos-ring);
+  outline-offset:var(--talos-space-xs);
+   }
+
