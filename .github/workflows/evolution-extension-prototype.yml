@@ -1,0 +1,58 @@
+name: evolution-extension-prototype
+on:
+  pull_request:
+    paths:
+      - 'harness-ui/native/evolution-prototype/**'
+      - '.github/workflows/evolution-extension-prototype.yml'
+permissions:
+  contents: read
+jobs:
+  windows-contained-component:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: harness-ui/native/evolution-prototype
+        shell: pwsh
+    env:
+      RUSTFLAGS: '-C target-feature=+crt-static'
+      CARGO_BUILD_JOBS: '2'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: provision pinned compiler and dependency inventory
+        run: |
+          New-Item -ItemType Directory -Path evidence | Out-Null
+          rustup toolchain install 1.90.0 --profile minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Compiler provisioning failed' }
+          rustc -Vv | Tee-Object evidence/rustc.txt
+          # One-time bootstrap only; generated lock is retained for source review.
+          if (-not (Test-Path Cargo.lock)) {
+            cargo generate-lockfile
+            if ($LASTEXITCODE -ne 0) { throw 'Lockfile bootstrap failed' }
+          }
+          cargo fetch --locked
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency provisioning failed' }
+      - name: unit tests and real contained worker
+        run: |
+          cargo test --frozen -- --test-threads=1 2>&1 | Tee-Object evidence/tests.log
+          if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
+          cargo build --bins --frozen 2>&1 | Tee-Object evidence/build.log
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+          & ./target/debug/talos-supervisor-prototype.exe --self-test | Tee-Object evidence/invocation.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Contained invocation failed' }
+          Get-FileHash target/debug/talos-extension-worker.exe -Algorithm SHA256 | Format-List | Out-File evidence/worker-hash.txt
+          git rev-parse HEAD | Out-File evidence/checkout.txt
+      - name: retain failure logs and exact dependency inventory
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: extension-prototype-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            harness-ui/native/evolution-prototype/evidence/
+            harness-ui/native/evolution-prototype/Cargo.lock
+          if-no-files-found: error
+          retention-days: 14

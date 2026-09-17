@@ -1,0 +1,7 @@
+package talos:extension-prototype@0.1.0;
+// No WASI, directories, environment, credentials or network imports.
+// The list returned by the trusted broker is at most 4096 bytes.
+world read-probe {
+  import read: func(lease-high: u64, lease-low: u64, target: u32) -> list<u8>;
+  export run: func(lease-high: u64, lease-low: u64, target: u32) -> u32;
+}

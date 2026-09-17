@@ -1,0 +1,28 @@
+[package]
+name = "talos-evolution-prototype"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+[workspace]
+resolver = "3"
+
+[dependencies]
+anyhow = "=1.0.99"
+getrandom = "=0.3.3"
+prost = "=0.14.1"
+sha2 = "=0.10.9"
+wasmtime = { version = "=36.0.15", default-features = false, features = ["std", "runtime", "cranelift", "component-model", "wat"] }
+
+[build-dependencies]
+prost-build = "=0.14.1"
+protoc-bin-vendored = "=3.2.0"
+
+[[bin]]
+name = "talos-extension-worker"
+path = "src/bin/worker.rs"
+
+[[bin]]
+name = "talos-supervisor-prototype"
+path = "src/bin/supervisor.rs"
