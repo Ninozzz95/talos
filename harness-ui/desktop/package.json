@@ -1,6 +1,6 @@
 {
   "name": "talos-desktop",
-  "version": "0.1.8",
+  "version": "0.1.13",
   "private": true,
   "description": "Il guscio desktop di TALOS, con il runtime Node incluso in Electron.",
   "license": "AGPL-3.0-only",
@@ -13,7 +13,7 @@
     "test:guscio": "node --test --test-concurrency=1 tests/backend.spec.mjs tests/guscio.spec.mjs",
     "icone": "node scripts/genera-icone.mjs",
     "prova:pty": "node scripts/prova-pty.mjs",
-    "prepara": "node scripts/prepara-pacchetto.mjs",
+    "prepara": "node scripts/prepara-pacchetto.mjs && node scripts/applica-hotfix-critical-tools.mjs",
     "dist": "npm run prepara && node scripts/distribuisci.mjs",
     "test:installer": "node --test --test-concurrency=1 tests/installer.spec.mjs"
   },

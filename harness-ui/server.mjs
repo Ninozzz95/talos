@@ -33,6 +33,8 @@ import { createLlamaServerSupervisor } from './src/llama-server-supervisor.mjs';
 import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
 import { createProviderProbe } from './src/provider-probe.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
+import { leggiScopePortachiavi, avvolgiAdattatoreKeyring, creaAdattatorePortachiaviSistema } from './src/adattatore-keyring.mjs';
+import { migraChiaviLegacySuDesktop } from './src/migrazione-chiavi.mjs';
 import { createGeneratedImageStore } from './src/generated-image-store.mjs';
 import { createOwnerRuntimeAdapter, creaFetchMultiProvider } from './src/runtime-owner-adapter.mjs';
 /* ⛔ CLI-REQ-05: «di CHI è questo modello, e ha una chiave utilizzabile ADESSO» — la regola e le sue prove stanno lì. */
@@ -66,6 +68,14 @@ function percorsoDatiDesktop(relativo) {
 
 async function startServer() {
   const config = loadConfig(process.env, import.meta.url);
+  /*
+   * ⛔ (16/09/2026) — lo scope del portachiavi arriva dal guscio desktop (runtime.mjs). Null in
+   * sviluppo: i nomi servizio restano quelli di sempre. «desktop»: l'app installata legge/scrive
+   * `<servizio>-desktop` (namespace suo, nasce vuoto) e ignora i semi di chiavi dall'ambiente —
+   * l'app prende le chiavi SOLO dalla UI. Vedi `src/adattatore-keyring.mjs`.
+   */
+  const scopePortachiavi = leggiScopePortachiavi(process.env);
+  const ignoraSemiAmbiente = scopePortachiavi === 'desktop';
   // Opt-in only: observe the real resumed turn without changing prompts or cache flags.
   const resumeDiagnostics = await createLocalResumeDiagnostics({ sourceFiles: {
     server: fileURLToPath(import.meta.url),
@@ -77,19 +87,35 @@ async function startServer() {
   } });
   let providerKeyring = null;
   try {
-    const { Entry } = await import('@napi-rs/keyring');
-    providerKeyring = {
-      get: (service, account) => { try { return new Entry(service, account).getPassword() || null; } catch { return null; } },
-      set: (service, account, value) => new Entry(service, account).setPassword(value),
-      remove: (service, account) => { try { new Entry(service, account).deletePassword(); } catch { /* assenza già rimossa */ } },
-    };
+    /* ⛔ (16/09/2026) — l'adattatore arriva dalla fabbrica unica di `src/adattatore-keyring.mjs`,
+       condivisa con la routine di pulizia alla disinstallazione: un contratto, nessuna copia. */
+    providerKeyring = avvolgiAdattatoreKeyring(await creaAdattatorePortachiaviSistema(), scopePortachiavi);
   } catch {
     console.warn('[provider-store] portachiavi del sistema non disponibile; Doctor segnalerà il limite');
+  }
+  /*
+   * ⭐ (16/09/2026, decisione owner) — chi aveva l'app ≤ 0.1.10 non deve reinserire le chiavi:
+   * al primo avvio l'app le COPIA dal namespace vecchio (senza suffisso) al proprio (`-desktop`),
+   * una volta sola (marcatore su disco). I servizi vecchi restano allo sviluppo; vedi
+   * `src/migrazione-chiavi.mjs`.
+   */
+  if (ignoraSemiAmbiente) {
+    try {
+      const migrazione = await migraChiaviLegacySuDesktop({ markerFile: percorsoDatiDesktop('.chiavi-migrate.json') });
+      if (migrazione.migrati.length) {
+        const conteggi = migrazione.migrati.reduce((acc, v) => { acc[v.tipo] = (acc[v.tipo] ?? 0) + v.chiavi; return acc; }, {});
+        console.log(`[chiavi] migrazione namespace vecchio → desktop: ${Object.entries(conteggi).map(([k, n]) => `${n} ${k === 'provider' ? 'chiavi provider' : 'fonti di ricerca'}`).join(', ')}`);
+      }
+      if (migrazione.errori.length) console.warn(`[chiavi] migrazione incompleta: ${migrazione.errori.length} errori — si riprova al prossimo avvio`);
+    } catch (errore) {
+      console.warn(`[chiavi] migrazione non riuscita: ${errore?.message ?? errore}`);
+    }
   }
   const providerStore = createProviderCredentialStore({
     env: process.env,
     keyring: providerKeyring,
     runtimeFile: percorsoDatiDesktop('.provider-runtime.json'),
+    ignoraSemiAmbiente,
   });
   providerStore.loadFromKeyring();
 
@@ -106,6 +132,7 @@ async function startServer() {
     env: process.env,
     keyring: providerKeyring,
     file: percorsoDatiDesktop('.search-source.json'),
+    ignoraSemiAmbiente,
   });
   const trasportoSenzaChiave = creaTrasportoSenzaChiave();
   const ricercaWebFn = () => searchSourceStore.perKernel({ trasportoSenzaChiave, sentinellaDuckDuckGo: ENDPOINT_SENTINELLA_DUCKDUCKGO });
@@ -433,8 +460,16 @@ async function startServer() {
       talosLavoraFn: (runtimeInput) => ownerRuntime.talosLavora(runtimeInput),
     }),
     modello: config.modello,
-    chiave: config.chiaveApi,
-    chiaveFn: () => providerStore.getKey('openrouter') ?? config.chiaveApi,
+    /*
+     * ⛔ (16/09/2026, review — portato dal main pubblico il 18/09) — la riserva `config.chiaveApi` è la OPENROUTER_API_KEY
+     *   dell'AMBIENTE: nello scope desktop NON deve raggiungere le sessioni nemmeno come riserva. Con lo scope desktop la UI
+     *   dice «non collegata», e una chiave che lavora e fattura senza dirlo è peggio di una che manca: le sessioni prendono
+     *   SOLO dal portachiavi dell'app (`-desktop`). Vale anche per `prontoFn`, qui sotto: stessa riserva, stessa regola.
+     */
+    chiave: ignoraSemiAmbiente ? undefined : config.chiaveApi,
+    chiaveFn: ignoraSemiAmbiente
+      ? () => providerStore.getKey('openrouter')
+      : () => providerStore.getKey('openrouter') ?? config.chiaveApi,
     /*
      * ⛔⛔⛔ CLI-REQ-05, punto 1 (17/09/2026) — CHI RISPONDE A «QUESTO MODELLO SI PUÒ USARE».
      *
@@ -450,7 +485,7 @@ async function startServer() {
     /* ⛔ 17/09, dopo la fusione: la regola vive in `src/sessione-pronta.mjs`, dove ha le sue prove. Qui dentro era una
        chiusura che nessuno poteva chiamare, e per i fornitori diversi da OpenRouter contava come «pronta» anche una chiave
        in PANCHINA (`hasKey` invece di `getKey`): la sessione partiva e il giro moriva senza una chiave utilizzabile. */
-    prontoFn: creaProntoFn({ providerStore, chiaveApi: config.chiaveApi }),
+    prontoFn: creaProntoFn({ providerStore, chiaveApi: ignoraSemiAmbiente ? null : config.chiaveApi }),
     /*
      * ⛔⛔⛔ CLI-REQ-05, punto 2 e 3 — LA STESSA DESTINAZIONE CHE USA UN GIRO NORMALE.
      * Senza questa, la compattazione e il giudice della ricerca partivano con una `fetch` nuda, e

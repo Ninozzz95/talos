@@ -283,9 +283,9 @@ function writeRuntimePreferences(runtimeFile, runtimes) {
 }
 
 /**
- * @param {{env?:Record<string,string|undefined>, keyring?:{get:Function,set:Function,remove:Function}|null, runtimeFile?:string|null, logger?:(message:string)=>void}} options
+ * @param {{env?:Record<string,string|undefined>, keyring?:{get:Function,set:Function,remove:Function}|null, runtimeFile?:string|null, logger?:(message:string)=>void, ignoraSemiAmbiente?:boolean}} options
  */
-export function createProviderCredentialStore({ env = process.env, keyring = null, runtimeFile = null, logger = () => {}, ora = Date.now } = {}) {
+export function createProviderCredentialStore({ env = process.env, keyring = null, runtimeFile = null, logger = () => {}, ora = Date.now, ignoraSemiAmbiente = false } = {}) {
   const pools = new Map();
   const conIndice = new Set();
   /* ⛔ PO-01 — i provider la cui chiave viene dal PORTACHIAVI. Senza questo insieme l'origine si
@@ -294,19 +294,28 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
   const runtimes = new Map();
   for (const provider of PROVIDER_IDS) {
     const definition = PROVIDER_DEFINITIONS[provider];
-    const key = readEnvironment(env, definition.keyEnv);
-    try {
-      const rawPool = readEnvironment(env, [`${definition.keyEnv[0]}_POOL`]);
-      const elenco = rawPool ? JSON.parse(rawPool) : [];
-      if (!Array.isArray(elenco) || elenco.length > MAX_POOL_KEYS) throw new Error('schema');
-      const righe = [...(key ? [voceChiave(key, 0, 'ambiente')] : []), ...elenco.map((v, i) => voceChiave(typeof v === 'string' ? v : v?.key, typeof v === 'string' ? i + 1 : v?.priorita ?? i + 1, 'ambiente'))];
-      const viste = new Set();
-      const uniche = righe.filter(v => { if (viste.has(v.impronta)) return false; viste.add(v.impronta); return true; });
-      if (uniche.length > MAX_POOL_KEYS) throw new Error('schema');
-      pools.set(provider, uniche);
-    } catch {
-      noSecretLogger(logger, `Elenco chiavi ${provider} ignorato: formato non valido`);
-      try { if (key) pools.set(provider, [voceChiave(key, 0, 'ambiente')]); } catch { /* nessun segreto in diagnosi */ }
+    /*
+     * ⛔ (16/09/2026) — con lo scope desktop l'app installata NON legge semi di chiavi
+     *   dall'ambiente: le sue chiavi arrivano SOLO dalla UI (o dal portachiavi `-desktop` riletto
+     *   a ogni boot). Il dev continua a seminare da ambiente: default falso. Gli ENDPOINT da
+     *   ambiente restano per entrambi — sono configurazione, non segreti, e non fanno comparire
+     *   schede «collegate» (quella è `keyConfigured`, falso finché nessuno salva una chiave).
+     */
+    if (!ignoraSemiAmbiente) {
+      const key = readEnvironment(env, definition.keyEnv);
+      try {
+        const rawPool = readEnvironment(env, [`${definition.keyEnv[0]}_POOL`]);
+        const elenco = rawPool ? JSON.parse(rawPool) : [];
+        if (!Array.isArray(elenco) || elenco.length > MAX_POOL_KEYS) throw new Error('schema');
+        const righe = [...(key ? [voceChiave(key, 0, 'ambiente')] : []), ...elenco.map((v, i) => voceChiave(typeof v === 'string' ? v : v?.key, typeof v === 'string' ? i + 1 : v?.priorita ?? i + 1, 'ambiente'))];
+        const viste = new Set();
+        const uniche = righe.filter(v => { if (viste.has(v.impronta)) return false; viste.add(v.impronta); return true; });
+        if (uniche.length > MAX_POOL_KEYS) throw new Error('schema');
+        pools.set(provider, uniche);
+      } catch {
+        noSecretLogger(logger, `Elenco chiavi ${provider} ignorato: formato non valido`);
+        try { if (key) pools.set(provider, [voceChiave(key, 0, 'ambiente')]); } catch { /* nessun segreto in diagnosi */ }
+      }
     }
     if (definition.supportsEndpoint) {
       const endpoint = readEnvironment(env, definition.endpointEnv);
@@ -335,6 +344,22 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
   }
   function getKey(provider) { return scegliChiave(provider)?.chiave ?? null; }
   function hasKey(provider) { return righe(provider).length > 0; }
+  /*
+   * ⭐ (16/09/2026) — le due porte della MIGRAZIONE (`src/migrazione-chiavi.mjs`, scope desktop):
+   * copiare una chiave dal namespace senza suffisso a quello `-desktop`. I segreti che esportano
+   * restano DENTRO il server: mai in una risposta HTTP, mai in un log — la migrazione li passa
+   * dritti al portachiavi di destinazione, non li registra.
+   */
+  function esportaPool(provider) {
+    return righe(provider).map((v) => ({ chiave: v.chiave, priorita: v.priorita }));
+  }
+  /* Qualunque traccia nel portachiavi — chiave reale o tombstone dell'indice vuoto lasciato da
+     `clearKey` — vieta la copia: senza, una chiave eliminata dall'utente ripartirebbe dal
+     namespace vecchio al prossimo giro di migrazione. */
+  function tracciaInCustodia(provider) {
+    requireProvider(provider);
+    return daPortachiavi.has(provider);
+  }
   function keyringOperation(operation, provider, value, service = KEYRING_SERVICE) {
     if (!keyring || typeof keyring[operation] !== 'function') throw new ProviderCredentialError('PROVIDER_STORE_UNAVAILABLE');
     try { return operation === 'set' ? keyring.set(service, provider, value) : keyring.remove(service, provider); }
@@ -537,5 +562,5 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
   }
 
   return Object.freeze({ getKey, getKeySync: getKey, hasKey, setKey, clearKey, loadFromKeyring, getRuntime, setRuntime, resetEndpoint, listPublic,
-    aggiungiChiave, rimuoviChiave, elencaPool, scegliChiave, mettiInPanchina });
+    aggiungiChiave, rimuoviChiave, elencaPool, scegliChiave, mettiInPanchina, esportaPool, tracciaInCustodia });
 }

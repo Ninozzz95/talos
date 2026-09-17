@@ -135,6 +135,11 @@ next to the server — plus **DuckDuckGo without a key**, the default when
 nothing is configured (it reads DuckDuckGo's public results page, not an
 official API: under heavy use it may refuse, and the result says so). The
 `TALOS_HARNESS_SEARCH_*` variables remain the seed until you choose in the UI.
+The packaged desktop app reads none of these key seeds: it starts with its own
+`-desktop` keyring namespace (empty on a clean machine) and ignores provider
+and search key variables entirely — keys there come only from the UI
+(`TALOS_HARNESS_UI_KEYRING_SCOPE=desktop`, set by the app shell; see
+`src/adattatore-keyring.mjs`).
 
 ### Recommended startup with the Permission Model
 

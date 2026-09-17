@@ -386,8 +386,11 @@ function collegaBarra(schermo, doc, stato) {
     try {
       const risultato = await stato.config.eliminaInBlocco(ids);
       stato.selezionateInBlocco = selezioneDopoBatch(stato.selezionateInBlocco, risultato);
-      const riusciti = Number(risultato?.riusciti) || 0;
-      const falliti = Number(risultato?.falliti) || 0;
+      /* ⛔ Adattamento alla busta del server pubblico (#9): i conteggi del batch stanno dentro
+         `riepilogo`, non al livello piatto come nella stesura precedente alla raffinatezza #9.
+         La selezione che resta usa `esiti[].ok`, che le due forme hanno in comune. */
+      const riusciti = Number(risultato?.riepilogo?.riusciti) || 0;
+      const falliti = Number(risultato?.riepilogo?.falliti) || 0;
       stato.batchEsito = falliti
         ? `${riusciti} eliminate, ${falliti} non eliminate.`
         : `${riusciti} ${riusciti === 1 ? 'voce eliminata' : 'voci eliminate'}.`;

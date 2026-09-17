@@ -52,11 +52,26 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
       if (motoreLocale.variante === 'vulkan' && percorsi.localRuntime?.cpu) ambiente.TALOS_LLAMA_SERVER_FALLBACK_PATH = percorsi.localRuntime.cpu;
     }
   }
+  /*
+   * Black-box hotfix 15/09/2026: the desktop selects a thin adapter in front
+   * of the benchmarked kernel. An explicitly configured owner runtime still
+   * wins; only the desktop default changes. Mobile and TALOS-BANCO do not pass
+   * through this launcher.
+   */
+  if (!ambiente.TALOS_OWNER_RUNTIME_MODULE?.trim()) {
+    ambiente.TALOS_OWNER_RUNTIME_MODULE = join(percorsi.root, 'src', 'kernel', 'talosHarness.desktop-hotfix.mjs');
+  }
   Object.assign(ambiente, {
     ELECTRON_RUN_AS_NODE: '1', TALOS_HARNESS_UI_HOST: '127.0.0.1', TALOS_HARNESS_UI_PORT: String(port),
     TALOS_HARNESS_UI_TOKEN: token, TALOS_HARNESS_UI_REPORT_FILE: reportFile,
     TALOS_DESKTOP_DATA_DIR: dataDir,
     TALOS_HARNESS_UI_SESSIONS_DIR: join(dataDir, 'sessions'),
+    /*
+     * ⛔ (16/09/2026) — l'app installata ha un namespace SUO nel portachiavi (`<servizio>-desktop`,
+     *   nasce vuoto, mai condiviso con il server da sorgente) e ignora i semi di chiavi
+     *   dall'ambiente: le chiavi arrivano solo dalla UI. Vedi `src/adattatore-keyring.mjs`.
+     */
+    TALOS_HARNESS_UI_KEYRING_SCOPE: 'desktop',
   });
   return { command: execPath, args: ['--import', pathToFileURL(percorsi.bootstrap).href, percorsi.server], options: {
     cwd: percorsi.root, env: ambiente, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true, shell: false,

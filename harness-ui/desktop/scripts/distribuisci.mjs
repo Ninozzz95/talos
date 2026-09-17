@@ -24,4 +24,14 @@ try {
   const icone = spawnSync(process.execPath, [join(root, 'scripts/genera-icone.mjs')], { cwd: root, stdio: 'inherit', windowsHide: true });
   if (icone.error || icone.status !== 0) throw new Error('Generazione icone fallita.');
   await build({ projectDir: root, targets: Platform.WINDOWS.createTarget(['nsis', 'zip'], Arch.x64), publish: 'never' });
-} catch (e) { console.error(`Distribuzione fallita: ${e.message}`); process.exitCode = 1; }
+} catch (e) {
+  console.error(`Distribuzione fallita: ${e.message}`);
+  // ⛔ Uscita esplicita e immediata (16/09/2026, cura della release 0.1.12 bruciata). Il drain
+  // naturale qui è bugiardo: la build crea i lock di proper-lockfile, che carica signal-exit@3.0.7;
+  // quel pacchetto sostituisce process.reallyExit e azzera il codice con «code || 0» quando Node
+  // esce per svuotamento del loop. Misurato in locale con sonda: exitCode=1 al beforeExit, codice
+  // finale 0 — così il passo dist del workflow passava su una build fallita e lo smoke correva
+  // (e falliva) 3 secondi dopo su un installer troncato, mascherando la vera causa.
+  // process.exit(1) non passa da quel percorso: l'esito onesto arriva al workflow.
+  process.exit(1);
+}

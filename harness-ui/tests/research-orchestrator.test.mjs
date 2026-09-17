@@ -125,6 +125,17 @@ function storeFinto() {
     },
     leggiGiornaleFn: async ({ cartella, id }) => ({ eventi: giornali.get(`${cartella}::${id}`) ?? [], righeSaltate: 0, byte: 0 }),
     leggiPianoFn: async ({ cartella, id }) => piani.get(`${cartella}::${id}`) ?? null,
+    /*
+     * ⛔ (16/09/2026, review) — le tre porte di SCRITTURA disco dovevano stare qui dal 12/09,
+     *   come in session-registry.test.mjs: senza, ogni `avvia` di questi test scriveva DAVVERO
+     *   `piano.json` — qui in `C:\p\.harness-ui-research\` e in `C:\progetto\.harness-ui-research\`
+     *   (le cartelle finte risolte alla radice del disco) — e la scrittura gira in try/catch
+     *   silente (research-orchestrator.mjs: «il piano su disco è una prova, non una condizione»),
+     *   quindi nessun test si accorgeva di nulla. Contate sul disco, mtimes freschi a ogni run.
+     */
+    scriviPianoFn: async () => {},
+    scriviFonteFn: async () => {},
+    scriviIndiceFontiFn: async () => {},
     elencaFontiFn: async ({ cartella, id }) => fonti.get(`${cartella}::${id}`) ?? [],
     leggiIstantaneaCacheFn: async ({ cartella, id }) => istantanee.get(`${cartella}::${id}`) ?? null,
     scriviIstantaneaCacheFn: async ({ cartella, id, istantanea }) => { istantanee.set(`${cartella}::${id}`, istantanea); },

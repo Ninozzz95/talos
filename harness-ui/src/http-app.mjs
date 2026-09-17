@@ -1141,8 +1141,8 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/browser/vivo/schermo', metodi: ['GET'] },
   { schema: '/api/v1/browser/vivo/stato', metodi: ['GET'] },
   { schema: '/api/v1/search-source', metodi: ['GET'] },
-  { schema: '/api/v1/assistenza', metodi: ['POST'] },
   { schema: '/api/v1/sessions', metodi: ['GET', 'POST'] },
+  { schema: '/api/v1/assistenza', metodi: ['POST'] },
   { schema: '/api/v1/automations', metodi: ['GET', 'POST'] },
   { schema: '/api/v1/workspace-launches', metodi: ['POST'] },
   { schema: '/api/v1/workspace-browser/folders', metodi: ['POST'] },
@@ -1171,8 +1171,8 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/status$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/branch$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/skills$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/([^/]+)\/batch$/, metodi: ['POST'] }, // FASE 3A: la risorsa viene validata dalla rotta
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library$/, metodi: ['GET'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/(library|notes|tasks|memory|research)\/batch$/, metodi: ['POST'] },
   /*
    * ⭐⭐⭐⭐ 10/9 — il CRUD di UNA voce di Libreria, per la PERSONA. Fino a ieri qui c'era la sola
    * riga sopra, l'elenco: il modello aveva sei attrezzi sulla Libreria e chi guarda lo schermo
@@ -1192,7 +1192,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/anteprima$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/rivela$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/apri$/, metodi: ['POST'] }, // 10/09: l'azione Windows «Apri», gemella di «rivela»
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/(?!batch$)([^/]+)$/, metodi: ['PATCH', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/, metodi: ['PATCH', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/plugins$/, metodi: ['GET'] },
   /*
    * ⭐⭐⭐⭐ 11/9, owner («non negotiable»): «tutte le Note, Attività, Memoria, Libreria devono
@@ -1206,9 +1206,9 @@ const ROTTE_API = Object.freeze([
    *   di dichiarare su tutte l'unione dei metodi di tutte.
    */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/notes$/, metodi: ['GET', 'POST'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/notes\/(?!batch$)([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/notes\/([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks$/, metodi: ['GET', 'POST'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks\/(?!batch$)([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)\/stato$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory$/, metodi: ['GET', 'POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory\/(?!batch$)([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
@@ -1238,7 +1238,7 @@ const ROTTE_API = Object.freeze([
    * ACCETTA una query (`?formato=…&tono=…`): tutte le altre passano da `requireNoQuery`.
    */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)\/esporta$/, metodi: ['GET'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/research\/(?!batch$)([^/]+)$/, metodi: ['GET', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)$/, metodi: ['GET', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tool-forge$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/children$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/terminals$/, metodi: ['GET', 'POST'] },
@@ -1393,6 +1393,7 @@ function leggiCorpoJsonCon(req, limiteByte) {
     let respinto = false;
     const pezzi = [];
     req.on('data', (pezzo) => {
+      if (oltreLimite) return; // con socket vivo si drena il resto senza accumularlo
       totale += pezzo.length;
       if (respinto) {
         if (totale > limiteByte * FATTORE_DRENAGGIO_OLTRE_IL_LIMITE) req.destroy();
@@ -1420,25 +1421,12 @@ function leggiCorpoJsonCon(req, limiteByte) {
       }
     });
     req.on('error', () => {
+      if (oltreLimite) return;
       const errore = new Error('Richiesta interrotta');
       errore.code = 'QUERY_INVALID';
       reject(errore);
     });
   });
-}
-
-export function requireBatchDeleteBody(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)
-    || Object.keys(value).some((chiave) => !['azione', 'ids'].includes(chiave))
-    || value.azione !== 'elimina' || !Array.isArray(value.ids)
-    || value.ids.length === 0 || value.ids.length > MAX_BATCH_ITEMS) {
-    throw Object.assign(new Error(`Il batch richiede azione elimina e da 1 a ${MAX_BATCH_ITEMS} id.`), { code: 'QUERY_INVALID' });
-  }
-  const ids = value.ids.map((id) => (typeof id === 'string' ? id.trim() : ''));
-  if (ids.some((id) => id === '') || new Set(ids).size !== ids.length) {
-    throw Object.assign(new Error('Gli id del batch devono essere stringhe uniche e non vuote.'), { code: 'QUERY_INVALID' });
-  }
-  return ids;
 }
 
 /**
@@ -1972,6 +1960,40 @@ function requireResumeBody(body) {
   return body.messaggio.trim();
 }
 
+const BATCH_ELIMINA_MAX_IDS = 250;
+const BATCH_ELIMINA_MAX_BODY_BYTES = 64 * 1024;
+const BATCH_ELIMINA_RISORSE = new Set(['library', 'notes', 'tasks', 'memory', 'research']);
+
+/**
+ * FASE 3A — il batch distruttivo ha una forma sola. La richiesta viene validata
+ * interamente prima della prima mutazione: un 400 non può arrivare dopo aver già
+ * cancellato una parte degli elementi.
+ */
+function requireBatchEliminaBody(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    const errore = new Error('Corpo batch non valido');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  const chiavi = Object.keys(body);
+  if (chiavi.length !== 2 || !chiavi.includes('azione') || !chiavi.includes('ids') || body.azione !== 'elimina' || !Array.isArray(body.ids)) {
+    const errore = new Error('Corpo batch non valido: atteso {azione:"elimina", ids:[...]}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  if (body.ids.length < 1 || body.ids.length > BATCH_ELIMINA_MAX_IDS) {
+    const errore = new Error(`Il batch richiede da 1 a ${BATCH_ELIMINA_MAX_IDS} id`);
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  if (!body.ids.every((id) => typeof id === 'string' && id.trim().length > 0) || new Set(body.ids).size !== body.ids.length) {
+    const errore = new Error('Gli id del batch devono essere stringhe non vuote e uniche');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return body.ids;
+}
+
 const REDIRECT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 function requireRedirectId(value) {
@@ -2359,26 +2381,6 @@ export function createHttpApp({
       sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
       return null;
     }
-  }
-
-  async function eliminaUnaInBlocco(sessionId, risorsa, id) {
-    if (risorsa === 'library') {
-      const esito = await sessionRegistry.eliminaVoceLibreria(sessionId, id);
-      if (esito && 'erroreAvvio' in esito) throw Object.assign(new Error(esito.erroreAvvio), { code: esito.code });
-      return;
-    }
-    if (risorsa === 'research') {
-      if (!idRicercaValido(id)) throw Object.assign(new Error('id di ricerca non valido'), { code: 'RESEARCH_INVALID' });
-      const esito = await sessionRegistry.eliminaRicerca(sessionId, id);
-      if (esito && 'erroreAvvio' in esito) throw Object.assign(new Error(esito.erroreAvvio), { code: esito.code });
-      if (!esito?.ok) throw Object.assign(new Error(esito?.motivo ?? 'ricerca non eliminabile'), { code: 'RESEARCH_CONFLICT' });
-      if (!esito.eliminata) throw Object.assign(new Error('ricerca assente'), { code: 'RESEARCH_NOT_FOUND' });
-      return;
-    }
-    const magazzino = magazziniDellaPersona[risorsa];
-    const voce = await magazzino.leggi(id);
-    if (!voce) throw Object.assign(new Error('voce assente'), { code: magazzino.codiceAssente });
-    await magazzino.elimina(id);
   }
 
   async function handle(req, res) {
@@ -2889,45 +2891,101 @@ export function createHttpApp({
       return;
     }
 
-    const batchEliminaMatch = method === 'POST' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/(library|notes|tasks|memory|research)\/batch$/.exec(url.pathname)
-      : null;
-    if (batchEliminaMatch) {
-      const nomi = nomiDellaRichiesta(res, method, clock, batchEliminaMatch[1]);
-      if (!nomi) return;
-      const [sessionId] = nomi;
-      const risorsa = batchEliminaMatch[2];
-      try {
-        requireNoQuery(url);
-        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
-          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
-          return;
-        }
-        const ids = requireBatchDeleteBody(await leggiCorpoJson(req, MAX_BATCH_BODY_BYTES));
-        const esiti = [];
-        for (const id of ids) {
-          try {
-            await eliminaUnaInBlocco(sessionId, risorsa, id);
-            esiti.push({ id, ok: true });
-          } catch (error) {
-            esiti.push({ id, ok: false, code: normalizeError(error).code });
-          }
-        }
-        if (req.aborted || res.destroyed) return;
-        const riusciti = esiti.filter((esito) => esito.ok).length;
-        sendJson(res, 200, successEnvelope({
-          azione: 'elimina', risorsa, richiesti: esiti.length, riusciti,
-          falliti: esiti.length - riusciti, esiti,
-        }, clock), method);
-      } catch (error) {
-        const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+    /*
+   * FASE 3A — una richiesta HTTP, molti esiti indipendenti. I cinque rami sotto
+   * riusano esattamente le porte singole già esistenti: nessun secondo store e nessun
+   * rollback globale. L'ordine del `for...of` è anche l'ordine della risposta.
+   */
+  const batchEliminaMatch = method === 'POST' && sessionRegistry
+    ? /^\/api\/v1\/sessions\/([^/]+)\/([^/]+)\/batch$/.exec(url.pathname)
+    : null;
+  if (batchEliminaMatch) {
+    const nomi = nomiDellaRichiesta(res, method, clock, batchEliminaMatch[1], batchEliminaMatch[2]);
+    if (!nomi) return;
+    const [sessionId, risorsa] = nomi;
+    try {
+      requireNoQuery(url);
+      if (!BATCH_ELIMINA_RISORSE.has(risorsa)) {
+        const errore = new Error('Risorsa batch non valida');
+        errore.code = 'QUERY_INVALID';
+        throw errore;
       }
-      return;
+      if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+        sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+        return;
+      }
+      const ids = requireBatchEliminaBody(await leggiCorpoJson(
+        req,
+        BATCH_ELIMINA_MAX_BODY_BYTES,
+        { distruggiSuLimite: false },
+      ));
+      const esiti = [];
+
+      for (const id of ids) {
+        try {
+          if (risorsa === 'library') {
+            const esito = await sessionRegistry.eliminaVoceLibreria(sessionId, id);
+            if ('erroreAvvio' in esito) {
+              const errore = new Error(esito.erroreAvvio);
+              errore.code = esito.code;
+              throw errore;
+            }
+          } else if (risorsa === 'research') {
+            if (!idRicercaValido(id)) {
+              const errore = new Error('id di ricerca non valido');
+              errore.code = 'RESEARCH_INVALID';
+              throw errore;
+            }
+            const esito = await sessionRegistry.eliminaRicerca(sessionId, id);
+            if ('erroreAvvio' in esito) {
+              const errore = new Error(esito.erroreAvvio);
+              errore.code = esito.code;
+              throw errore;
+            }
+            if (!esito.ok) {
+              const errore = new Error(esito.motivo ?? 'ricerca non eliminabile');
+              errore.code = 'RESEARCH_CONFLICT';
+              throw errore;
+            }
+            if (!esito.eliminata) {
+              const errore = new Error('ricerca non trovata');
+              errore.code = 'RESEARCH_NOT_FOUND';
+              throw errore;
+            }
+          } else {
+            const magazzino = magazziniDellaPersona[risorsa];
+            const voce = await magazzino.leggi(id);
+            if (!voce) {
+              const errore = new Error('voce non trovata');
+              errore.code = magazzino.codiceAssente;
+              throw errore;
+            }
+            await magazzino.elimina(id);
+          }
+          esiti.push({ id, ok: true, status: 200 });
+        } catch (error) {
+          const normalized = normalizeError(error);
+          esiti.push({ id, ok: false, status: normalized.statusCode, code: normalized.code });
+        }
+      }
+
+      if (req.aborted || res.destroyed) return;
+      const riusciti = esiti.filter((esito) => esito.ok).length;
+      sendJson(res, 200, successEnvelope({
+        azione: 'elimina',
+        risorsa,
+        esiti,
+        riepilogo: { richiesti: esiti.length, riusciti, falliti: esiti.length - riusciti },
+      }, clock), method);
+    } catch (error) {
+      const normalized = normalizeError(error);
+      sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
     }
+    return;
+  }
 
     const libreriaRinominaMatch = method === 'PATCH' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/(?!batch$)([^/]+)$/.exec(url.pathname)
+      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/.exec(url.pathname)
       : null;
     if (libreriaRinominaMatch) {
       let sessionId;
@@ -2957,7 +3015,7 @@ export function createHttpApp({
     }
 
     const libreriaEliminaMatch = method === 'DELETE' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/(?!batch$)([^/]+)$/.exec(url.pathname)
+      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/.exec(url.pathname)
       : null;
     if (libreriaEliminaMatch) {
       let sessionId;
@@ -3117,7 +3175,7 @@ export function createHttpApp({
     }
 
     const voceLeggiMatch = method === 'GET' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/(?!batch$)([^/]+)$/.exec(url.pathname)
+      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname)
       : null;
     if (voceLeggiMatch) {
       const nomi = nomiDellaRichiesta(res, method, clock, voceLeggiMatch[1], voceLeggiMatch[3]);
@@ -3147,7 +3205,7 @@ export function createHttpApp({
     }
 
     const voceModificaMatch = method === 'PATCH' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/(?!batch$)([^/]+)$/.exec(url.pathname)
+      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname)
       : null;
     if (voceModificaMatch) {
       const nomi = nomiDellaRichiesta(res, method, clock, voceModificaMatch[1], voceModificaMatch[3]);
@@ -3175,7 +3233,7 @@ export function createHttpApp({
     }
 
     const voceEliminaMatch = method === 'DELETE' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/(?!batch$)([^/]+)$/.exec(url.pathname)
+      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname)
       : null;
     if (voceEliminaMatch) {
       const nomi = nomiDellaRichiesta(res, method, clock, voceEliminaMatch[1], voceEliminaMatch[3]);
@@ -3305,7 +3363,7 @@ export function createHttpApp({
      *   qui sarebbe una seconda difesa che diverge dalla prima proprio sul confine che conta.
      */
     const ricercaVoceMatch = sessionRegistry && (method === 'GET' || method === 'DELETE')
-      ? /^\/api\/v1\/sessions\/([^/]+)\/research\/(?!batch$)([^/]+)$/.exec(url.pathname)
+      ? /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)$/.exec(url.pathname)
       : null;
     const ricercaAzioneMatch = sessionRegistry && method === 'POST'
       ? /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)\/(pausa|ripresa|riverifica)$/.exec(url.pathname)
