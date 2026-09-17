@@ -2954,10 +2954,37 @@ export function createSessionRegistry({
      * lane): togliere quella clausola e usare `livelloAccesso: 'su-richiesta'`, che il kernel già
      * riconosce (`talosHarness.mjs`, tipo `LivelloAccessoHarness`).
      */
-    const qualcheAttrezzoChiede = Object.values(voce.permessiPerAttrezzo || {}).some((v) => v === 'chiedi');
-    const chiediApprovazioneFn = voce.permessi === 'On request' || qualcheAttrezzoChiede
-      ? (azione) => richiediApprovazione(voce, azione)
-      : undefined;
+    /*
+     * ⛔⛔⛔⛔ F15, 17/09/2026 — IL CANALE SI COSTRUISCE SEMPRE, e la ragione è che senza di lui
+     * un cancello che deve CHIEDERE finisce per NEGARE.
+     *
+     * Com'era: `'On request' || qualcheAttrezzoChiede`. Il default di una sessione è «Workspace
+     * write» con `permessiPerAttrezzo: null` ⇒ il canale era `undefined` proprio nei tre posti
+     * dove F15 deve agire — «Workspace write», «Accesso pieno» e `shell: 'sempre'` — e il ramo
+     * `!chiediApprovazioneFn` del kernel rispondeva `REFUSED … nessun canale di approvazione
+     * attivo`. Misurato: `cat .env` DENTRO il workspace, che sul codice base girava, diventava
+     * REFUSED in tutte e quattro le configurazioni provate. È il «nega di serie» che la
+     * decisione dell'owner del 17/09 esclude (punto 3: l'esito è «chiedi», il rifiuto lo decide
+     * la persona), e per giunta la frase in lingua naturale non arrivava a nessuno.
+     *
+     * ⛔ Perché ADESSO si può, e nel 2026-08 no: il commento qui sopra spiega che il ripiego
+     *   esisteva perché il kernel trattava «canale presente» come «questa sessione chiede
+     *   sempre» (`vaChiesto` conteneva `!haOverride && Boolean(chiediApprovazioneFn)`). Quella
+     *   clausola è stata TOLTA il 06/09 — oggi `vaChiesto` è
+     *   `sempreDaConfermare || override==='chiedi' || trifectaForzaConferma || richiestoDalLivello
+     *   || segretoForzaConferma`, e NESSUNO dei cinque guarda se il canale esiste. ⇒ La presenza
+     *   del canale non può più far chiedere niente che prima passasse: può solo trasformare in
+     *   una DOMANDA ciò che prima era un RIFIUTO. Verificato leggendo tutti gli usi di
+     *   `chiediApprovazioneFn` nel kernel (sono due: il ramo che rifiuta quando manca, e la
+     *   chiamata vera) e misurato con una prova di parità sul percorso vero del registro —
+     *   `npm test`, `ls -la`, `scrivi` e `leggi` su file normali fanno ZERO domande.
+     *
+     * ⛔ Il fail-closed resta dov'è giusto: chi il canale non ce l'ha DAVVERO — TALOS-BANCO, una
+     *   chiamata diretta a `talosLavora`, un ambiente headless senza nessuno a rispondere — non
+     *   passa di qui e continua a ricevere il rifiuto. «Non c'è nessuno a cui chiedere» non è
+     *   «sì»; ma una sessione con una persona davanti ha sempre qualcuno a cui chiedere.
+     */
+    const chiediApprovazioneFn = (azione) => richiediApprovazione(voce, azione);
     // ⭐⭐⭐ FASE A (hook) — sempre costruito, sincrono: costruisciHookFn
     // rimanda il vero lavoro (I/O) alla prima tool-call, vedi la sua doc.
     const hookFnUtente = costruisciHookFn(voce);
