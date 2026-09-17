@@ -90,6 +90,23 @@ export function nomeUmanoAttrezzo(id, catalogo = null) {
   return t(nomeUmanoAttrezzoItaliano(id, catalogo));
 }
 
+/**
+ * Il ripiego quando un attrezzo non ha ancora un nome nostro (attrezzo creato dalla persona, MCP, skill).
+ *
+ * ⛔ 17/09 — due regole dell'owner del 04/09 si toccano qui: «niente nomi tecnici a schermo» e «ripiego ONESTO:
+ *   mai un'etichetta inventata». Restituire l'id grezzo rompeva la prima; «attrezzo senza nome» rompeva la
+ *   seconda e nascondeva perfino il nome che la PERSONA ha dato a un attrezzo suo. ⇒ Il ripiego è il nome stesso,
+ *   reso leggibile e niente di più: `converti_pdf` → «converti pdf», `mcp__github__create_issue` →
+ *   «create issue (github)». L'id intero resta nel `title`, come dettaglio secondario.
+ */
+export function nomeDiRipiegoAttrezzo(id) {
+  const grezzo = typeof id === 'string' ? id.trim() : '';
+  if (!grezzo) return '';
+  const mcp = /^mcp__([^_](?:.*?[^_])?)__(.+)$/u.exec(grezzo);
+  const leggibile = (testo) => testo.replace(/[_-]+/gu, ' ').replace(/\s+/gu, ' ').trim();
+  return mcp ? `${leggibile(mcp[2])} (${leggibile(mcp[1])})` : leggibile(grezzo);
+}
+
 /** Gli id tecnici per cui non abbiamo ancora un nome: un debito che si misura. */
 export function attrezziSenzaNome(ids, catalogo = null) {
   return [...new Set(ids || [])].filter((id) => nomeUmanoAttrezzo(id, catalogo) === null);
