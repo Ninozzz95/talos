@@ -45,6 +45,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { numeroItaliano, statoGit, istruzioniPresenti } from './workspace-info.mjs';
+import { ambienteSenzaVariabiliDelServer } from './ambiente-solo-server.mjs';
 
 /** Hermes `_MAX_VERIFY_COMMANDS = 8`: oltre, la scheda smette di essere una scheda. */
 export const MASSIMO_COMANDI_VERIFICA = 8;
@@ -230,7 +231,8 @@ export async function ultimiCommit(cartella, { eseguiGit } = {}) {
     return await new Promise((risolvi) => {
       let uscita = '';
       let processo;
-      try { processo = spawn('git', ['log', '-3', '--pretty=%h %s'], { cwd: cartella, windowsHide: true }); }
+      /* ⛔ 17/09/2026 (A-bis): `env` dichiarato — senza, il figlio eredita l'ambiente INTERO del server (token e chiavi compresi). */
+      try { processo = spawn('git', ['log', '-3', '--pretty=%h %s'], { cwd: cartella, windowsHide: true, env: ambienteSenzaVariabiliDelServer() }); }
       catch { risolvi([]); return; }
       const timer = setTimeout(() => { try { processo.kill(); } catch { /* già morto */ } risolvi([]); }, 4000);
       processo.stdout?.on('data', (pezzo) => { uscita += String(pezzo); });

@@ -433,7 +433,7 @@ function terminaAlberoDiSistema(processo) {
   if (!pid) return false;
   if (process.platform === 'win32') {
     return new Promise((r) => {
-      execFile('taskkill', ['/PID', String(pid), '/T', '/F'], () => r(true));
+      execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, env: ambienteSenzaVariabiliDelServer() }, () => r(true));
     });
   }
   try { processo.kill('SIGTERM'); } catch { /* già morto */ }
