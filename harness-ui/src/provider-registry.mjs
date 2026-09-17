@@ -908,7 +908,18 @@ export const REGISTRO_FORNITORI = congela({
     // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
     limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
     sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
-      conta: (c) => c?.data?.length, richiedeCatalogoValido: true, catalogoPubblico: true }),
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true, catalogoPubblico: true,
+      // CLI-REQ-06, 17/09/2026 — il catalogo è PUBBLICO: risponde 200 anche a una chiave sbagliata.
+      // L'unico modo documentato di provare questa chiave è generare. La sonda ordinaria continua a
+      // chiedere l'elenco; questa richiesta parte solo con `consentiGenerazione: true`.
+      // ⛔ Due fonti, non una: `fonte` qui sotto è quella dell'ENDPOINT, quella dentro
+      //   `richiestaMinima` è del MODELLO. Sono due affermazioni diverse e vanno provate separate.
+      // Modello: `openai/gpt-oss-20b` — «Available» e distribuito il 17/09/2026, $0,03 per milione di
+      // token in ingresso: il più economico che la documentazione del fornitore confermi.
+      richiestaMinima: congela({ percorso: '/chat/completions',
+        corpo: congela({ model: 'openai/gpt-oss-20b', max_tokens: 1, stream: false, messages: congela([congela({ role: 'user', content: '.' })]) }),
+        fonte: 'https://deepinfra.com/openai/gpt-oss-20b', data: '2026-09-17' }),
+      fonte: 'https://docs.deepinfra.com/chat/overview', data: '2026-09-17' }),
     destinazioneChat: true,
     credenziale: true,
     esecuzione: 'collegato',
@@ -950,7 +961,22 @@ export const REGISTRO_FORNITORI = congela({
     // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
     limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
     sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
-      conta: (c) => c?.data?.length, richiedeCatalogoValido: true, catalogoPubblico: true }),
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true, catalogoPubblico: true,
+      // CLI-REQ-06, 17/09/2026 — catalogo pubblico: la chiave si prova solo generando.
+      // Endpoint verificato il 17/09/2026 sull'esempio curl del fornitore:
+      // POST https://api.novita.ai/openai/v1/chat/completions con `Authorization: Bearer <chiave>`.
+      // ⛔ Modello: `meta-llama/llama-3.1-8b-instruct`, NON il `deepseek/deepseek-r1` dell'esempio
+      //   curl di quella pagina. Rifatta la ricerca il 17/09: per lo slug nudo di R1 la scheda del
+      //   modello non esiste più (esiste `…-deepseek-r1-0528`), e fonti terze danno il ritiro di R1
+      //   ospitato nel luglio 2026 ⇒ un esempio di documentazione può sopravvivere al suo modello, e
+      //   una prova su un modello ritirato non può MAI riuscire: a schermo sembrerebbe un guasto HTTP.
+      //   Questo invece la sua scheda lo dà «Available Serverless» il 17/09/2026, a $0,02 per milione
+      //   di token in ingresso — il più economico dei quattro — ed è istruito, non di ragionamento.
+      // 401 = «The API key is missing, invalid, or expired» (https://docs.novita.ai/api-reference/basic-error-code).
+      richiestaMinima: congela({ percorso: '/chat/completions',
+        corpo: congela({ model: 'meta-llama/llama-3.1-8b-instruct', max_tokens: 1, stream: false, messages: congela([congela({ role: 'user', content: '.' })]) }),
+        fonte: 'https://novita.ai/models/model-detail/meta-llama-llama-3.1-8b-instruct', data: '2026-09-17' }),
+      fonte: 'https://docs.novita.ai/guides/llm-api', data: '2026-09-17' }),
     destinazioneChat: true,
     credenziale: true,
     esecuzione: 'collegato',
@@ -1086,7 +1112,18 @@ export const REGISTRO_FORNITORI = congela({
     // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
     limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
     sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
-      conta: (c) => c?.data?.length, richiedeCatalogoValido: true, catalogoPubblico: true }),
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true, catalogoPubblico: true,
+      // CLI-REQ-06, 17/09/2026 — catalogo pubblico: la chiave si prova solo generando.
+      // Endpoint verificato il 17/09/2026: base https://ollama.com/v1, e la pagina di compatibilità
+      // OpenAI elenca `max_tokens` e `stream` fra i campi accettati da /v1/chat/completions.
+      // Modello: `gemma4:31b`. ⛔ NON `gpt-oss:20b`: sul cloud i nomi con `-cloud` valgono per l'app
+      // e la CLI, mentre «for API requests to ollama.com, use the name returned by this list, such as
+      // gemma4:31b» (https://docs.ollama.com/cloud, 17/09/2026) — `gemma4:31b` è l'unico nome che la
+      // documentazione scrive per intero come modello cloud chiamabile via API.
+      richiestaMinima: congela({ percorso: '/chat/completions',
+        corpo: congela({ model: 'gemma4:31b', max_tokens: 1, stream: false, messages: congela([congela({ role: 'user', content: '.' })]) }),
+        fonte: 'https://docs.ollama.com/cloud', data: '2026-09-17' }),
+      fonte: 'https://docs.ollama.com/api/openai-compatibility', data: '2026-09-17' }),
     destinazioneChat: true,
     credenziale: true,
     esecuzione: 'collegato',
@@ -1133,7 +1170,20 @@ export const REGISTRO_FORNITORI = congela({
     // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
     limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
     sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
-      conta: (c) => c?.data?.length, richiedeCatalogoValido: true, catalogoPubblico: true }),
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true, catalogoPubblico: true,
+      // CLI-REQ-06, 17/09/2026 — catalogo pubblico: la chiave si prova solo generando.
+      // Endpoint verificato il 17/09/2026 sull'esempio curl del router:
+      // POST https://router.huggingface.co/v1/chat/completions con `Authorization: Bearer $HF_TOKEN`.
+      // Modello: `openai/gpt-oss-120b` — è il modello della guida introduttiva del router, scritto
+      // per intero in tutti e quattro gli esempi (Python, JS, fetch, curl). Senza suffisso di
+      // instradamento il router sceglie da sé il fornitore più veloce, come dice quella pagina.
+      // Con `max_tokens: 1` il costo è di un token di uscita: la taglia del modello non lo cambia.
+      // Endpoint e modello vengono dalla STESSA pagina, quindi le due fonti coincidono: è un fatto,
+      // non una scorciatoia — quella guida scrive entrambi nello stesso esempio curl.
+      richiestaMinima: congela({ percorso: '/chat/completions',
+        corpo: congela({ model: 'openai/gpt-oss-120b', max_tokens: 1, stream: false, messages: congela([congela({ role: 'user', content: '.' })]) }),
+        fonte: 'https://huggingface.co/docs/inference-providers/index', data: '2026-09-17' }),
+      fonte: 'https://huggingface.co/docs/inference-providers/index', data: '2026-09-17' }),
     destinazioneChat: true,
     credenziale: true,
     esecuzione: 'collegato',
@@ -1178,7 +1228,12 @@ export const REGISTRO_FORNITORI = congela({
     sonda: congela({
       attiva: false, auth: 'bearer', percorso: null, urlAssoluto: null, conta: () => null,
       // La sonda ordinaria non genera. La richiesta minima richiede consentiGenerazione: true.
-      richiestaMinima: congela({ percorso: '/messages', corpo: congela({ model: 'glm-5.3-flash', max_tokens: 1, stream: false, messages: congela([congela({ role: 'user', content: '.' })]) }) }),
+      // CLI-REQ-06, 17/09/2026 — aggiunta la fonte del MODELLO: `fonte` qui sotto documenta
+      // l'endpoint, e questa documenta `glm-5.3-flash`. Erano già due affermazioni distinte; solo
+      // che una delle due non era scritta da nessuna parte.
+      richiestaMinima: congela({ percorso: '/messages',
+        corpo: congela({ model: 'glm-5.3-flash', max_tokens: 1, stream: false, messages: congela([congela({ role: 'user', content: '.' })]) }),
+        fonte: 'https://docs.z.ai/devpack/latest-model', data: '2026-09-12' }),
       fonte: 'https://code.claude.com/docs/en/llm-gateway-connect', data: '2026-09-12',
     }),
     destinazioneChat: true, credenziale: true, esecuzione: 'collegato',
@@ -1371,6 +1426,47 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
       || record.sonda.urlAssoluto)) {
       throw new ProviderRegistryError(`${dove}: percorso della sonda relativo all'origine non valido`);
     }
+    /*
+     * CLI-REQ-06, 17/09/2026 — la richiesta minima è l'unica cosa nel registro che COSTA: è una
+     * generazione vera, pagata da chi ha salvato la chiave. Fino a oggi nessuno la controllava —
+     * `zai-anthropic` la dichiarava dal 12/09 e `verificaRegistro` l'avrebbe accettata con
+     * `max_tokens: 4000`, con dieci messaggi o con un modello inventato, senza un rosso.
+     *
+     * ⛔ Quindi si controlla quello che determina il costo (un token, un messaggio, niente flusso)
+     *   e quello che rende la spesa giustificabile (fonte datata da cui viene il modello). Il verso
+     *   contrario è provato: ognuno di questi campi storto deve LANCIARE.
+     */
+    if (record.sonda?.richiestaMinima !== undefined) {
+      const m = record.sonda.richiestaMinima;
+      const c = m?.corpo;
+      if (!m || typeof m.percorso !== 'string' || !/^\/(?!\/)[^\s\\]*$/u.test(m.percorso)
+        || !c || typeof c !== 'object'
+        || typeof c.model !== 'string' || !c.model.trim()
+        || c.max_tokens !== 1 || c.stream !== false
+        || !Array.isArray(c.messages) || c.messages.length !== 1
+        || c.messages[0]?.role !== 'user' || typeof c.messages[0]?.content !== 'string' || !c.messages[0].content.trim()
+        || Object.keys(c).some(k => !['model', 'max_tokens', 'stream', 'messages'].includes(k))) {
+        throw new ProviderRegistryError(`${dove}: la richiesta minima deve essere UNA generazione da un token, senza altri campi`);
+      }
+      // Il wire decide come si convalida la risposta: senza uno dei due la sonda non saprebbe leggerla.
+      if (!['openai-chat', 'anthropic-messages'].includes(record.wire)) {
+        throw new ProviderRegistryError(`${dove}: richiesta minima su un wire che la sonda non sa convalidare`);
+      }
+      /*
+       * ⛔ DUE fonti, e il cancello dice esattamente quali: `sonda.fonte` per l'ENDPOINT,
+       *   `richiestaMinima.fonte` per il MODELLO. Nella prima stesura ce n'era una sola e il
+       *   messaggio prometteva «per l'endpoint e il modello»: per DeepInfra quella fonte
+       *   documentava solo l'endpoint (la pagina usa un altro id negli esempi) ⇒ il cancello
+       *   dichiarava più di ciò che controllava, che è il modo più silenzioso di mentire.
+       */
+      const datata = (f, d) => typeof f === 'string' && f.startsWith('https://') && /^\d{4}-\d{2}-\d{2}$/u.test(d ?? '');
+      if (!datata(record.sonda.fonte, record.sonda.data)) {
+        throw new ProviderRegistryError(`${dove}: richiesta minima senza fonte datata per l'endpoint`);
+      }
+      if (!datata(m.fonte, m.data)) {
+        throw new ProviderRegistryError(`${dove}: richiesta minima senza fonte datata per il modello`);
+      }
+    }
     if (record.richiestaCompatibile !== undefined) {
       const p = record.richiestaCompatibile;
       if (!p || ![null, 'max_completion_tokens'].includes(p.limiteUscita) || ![null, 'effort', 'thinking', 'enable_thinking'].includes(p.ragionamento)
@@ -1438,6 +1534,23 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
   return true;
 }
 
+/*
+ * ⛔ CLI-REQ-06, 17/09/2026 — QUANDO gira questo controllo, misurato e non ricordato.
+ *
+ * La revisione chiedeva di scrivere che «gira solo nei test, protegge la CI e non il runtime».
+ * **Non è così, e l'ho verificato prima di scriverlo.** Questa chiamata sta al livello più alto del
+ * modulo: si esegue a ogni `import` di `provider-registry.mjs`, quindi anche dentro il server vivo,
+ * una volta sola, prima che qualunque altro codice possa leggere un record.
+ *
+ * Prova: mettendo `max_tokens: 2` nella richiesta minima di DeepInfra, il processo è morto
+ * all'IMPORT con `ProviderRegistryError` — nessun test era ancora partito, e il file di prova è
+ * fallito come file, non come test. Un registro rotto non arriva a una sessione viva: rompe il
+ * processo mentre qualcuno sta ancora guardando, che è ciò che il commento della funzione promette.
+ *
+ * ⇒ Il cancello della richiesta minima protegge la CI **e** l'avvio del prodotto. Non protegge
+ *   invece ciò che il registro non può sapere: che un modello sia ancora servito oggi. Quello lo
+ *   dicono solo le fonti datate, e le rilegge una persona.
+ */
 verificaRegistro();
 
 /** Tutti gli id, nell'ordine di dichiarazione. */
