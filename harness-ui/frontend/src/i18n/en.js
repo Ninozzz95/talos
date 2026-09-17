@@ -1,3 +1,4 @@
+import WORKSPACE_EN from './workspace-en.js';
 /*
  * Inglese — il dizionario dei menu e delle superfici (P-i18n, 06/09; owner: «sì, approvo»).
  *
@@ -13,6 +14,12 @@
  * conta come tradotto, perché in inglese si scrive così.
  */
 export default Object.freeze({
+  workspaceV2: WORKSPACE_EN,
+  workspacePreferencesV2: {
+    'Riprendi il workspace all’avvio': 'Restore the workspace at startup',
+    'Riapre l’ultima sessione disponibile senza avviare operazioni.': 'Reopens the last available session without starting operations.',
+    'Preferenze salvate da una versione più recente: le modifiche restano temporanee.': 'Preferences were saved by a newer version: changes remain temporary.',
+  },
   /* i menu: chiavi astratte dal mockup (H21), applicate a [data-t]/[data-ph] */
   menu: {
     nuova: 'New', luoghi: 'Places', altro: 'More', fissate: 'Pinned', sessioni: 'Sessions', cerca: 'Search chats…',

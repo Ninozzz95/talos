@@ -19,22 +19,24 @@
  *   dev.
  */
 
-/** Il solo scope ammesso oltre all'assenza: qualunque altro valore è un errore d'avvio, non un default silenzioso. */
+/** Scope Desktop e Preview isolati; oltre all'assenza: qualunque altro valore è un errore d'avvio, non un default silenzioso. */
 export const SCOPE_DESKTOP = 'desktop';
+export const SCOPE_PREVIEW = 'desktop-preview';
+export const SUFFISSO_PREVIEW = '-desktop-preview';
 /** Il suffisso che separa il namespace dell'app installata da quello dello sviluppo. */
 export const SUFFISSO_DESKTOP = '-desktop';
 
 /**
  * Legge `TALOS_HARNESS_UI_KEYRING_SCOPE` STRICT: assente/vuota → null (sviluppo, nomi di sempre);
- * «desktop» → scope desktop; qualunque altro valore → errore onesto all'avvio (stessa scelta di
+ * «desktop» / «desktop-preview» → namespace distinti; qualunque altro valore → errore onesto all'avvio (stessa scelta di
  * `portaValida` in runtime.mjs: un segnale scritto male non si indovina).
  */
 export function leggiScopePortachiavi(env = process.env) {
   const valore = env.TALOS_HARNESS_UI_KEYRING_SCOPE;
   if (valore === undefined || valore === '') return null;
   const normalizzato = String(valore).trim();
-  if (normalizzato === SCOPE_DESKTOP) return SCOPE_DESKTOP;
-  throw new Error(`TALOS_HARNESS_UI_KEYRING_SCOPE="${valore}" non è valida: la variabile accetta solo il valore "desktop", o nessun valore.`);
+  if (normalizzato === SCOPE_DESKTOP || normalizzato === SCOPE_PREVIEW) return normalizzato;
+  throw new Error(`TALOS_HARNESS_UI_KEYRING_SCOPE="${valore}" non è valida: la variabile accetta "desktop", "desktop-preview", o nessun valore.`);
 }
 
 /**
@@ -43,8 +45,10 @@ export function leggiScopePortachiavi(env = process.env) {
  * adattatore assente passa intatto: chi lo riceve gestisce già quel caso.
  */
 export function avvolgiAdattatoreKeyring(keyring, scope) {
-  if (!keyring || scope !== SCOPE_DESKTOP) return keyring;
-  const conSuffisso = (servizio) => `${servizio}${SUFFISSO_DESKTOP}`;
+  if (scope !== null && scope !== undefined && ![SCOPE_DESKTOP, SCOPE_PREVIEW].includes(scope)) throw new Error('Scope portachiavi non valido.');
+  if (!keyring || !scope) return keyring;
+  const suffix = scope === SCOPE_PREVIEW ? SUFFISSO_PREVIEW : SUFFISSO_DESKTOP;
+  const conSuffisso = (servizio) => `${servizio}${suffix}`;
   return {
     get: (servizio, account) => keyring.get(conSuffisso(servizio), account),
     set: (servizio, account, valore) => keyring.set(conSuffisso(servizio), account, valore),

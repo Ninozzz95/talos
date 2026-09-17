@@ -1,0 +1,39 @@
+name: desktop-source-bootstrap
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['.github/workflows/desktop-source-bootstrap.yml']
+permissions:
+  contents: read
+jobs:
+  runtime:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Pin the portable runtime from the official release
+        run: |
+          python - <<'PY'
+          import urllib.request, hashlib, zipfile, io, pathlib, json, re
+          version = '24.18.0'
+          name = 'node-v' + version + '-win-x64.zip'
+          base = 'https://nodejs.org/dist/v' + version + '/'
+          sums = urllib.request.urlopen(base + 'SHASUMS256.txt', timeout=60).read().decode('ascii')
+          matches = [line.split()[0] for line in sums.splitlines() if line.split()[-1] == name]
+          assert len(matches) == 1 and re.fullmatch('[0-9a-f]{64}', matches[0])
+          raw = urllib.request.urlopen(base + name, timeout=180).read()
+          assert hashlib.sha256(raw).hexdigest() == matches[0]
+          with zipfile.ZipFile(io.BytesIO(raw)) as z:
+              assert z.testzip() is None
+              node = z.read('node-v' + version + '-win-x64/node.exe')
+          data = {'schema': 1, 'version': version, 'platform': 'win32-x64', 'url': base + name,
+                  'archiveSha256': matches[0], 'executableSha256': hashlib.sha256(node).hexdigest(),
+                  'source': base + 'SHASUMS256.txt'}
+          pathlib.Path('runtime-lock.json').write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(data, indent=2))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: talos-portable-node-runtime-lock
+          path: runtime-lock.json
+          retention-days: 14
+          if-no-files-found: error

@@ -70,7 +70,7 @@ async function startServer() {
    * l'app prende le chiavi SOLO dalla UI. Vedi `src/adattatore-keyring.mjs`.
    */
   const scopePortachiavi = leggiScopePortachiavi(process.env);
-  const ignoraSemiAmbiente = scopePortachiavi === 'desktop';
+  const ignoraSemiAmbiente = scopePortachiavi !== null;
   let providerKeyring = null;
   try {
     /* ⛔ (16/09/2026) — l'adattatore arriva dalla fabbrica unica di `src/adattatore-keyring.mjs`,
@@ -85,7 +85,8 @@ async function startServer() {
    * una volta sola (marcatore su disco). I servizi vecchi restano allo sviluppo; vedi
    * `src/migrazione-chiavi.mjs`.
    */
-  if (ignoraSemiAmbiente) {
+  // Preview never imports legacy or production credentials.
+  if (scopePortachiavi === 'desktop') {
     try {
       const migrazione = await migraChiaviLegacySuDesktop({ markerFile: percorsoDatiDesktop('.chiavi-migrate.json') });
       if (migrazione.migrati.length) {

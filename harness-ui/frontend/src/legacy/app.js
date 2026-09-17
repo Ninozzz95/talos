@@ -1,3 +1,13 @@
+import { createCommandPalette } from '../features/navigation/command-palette.ts';
+import { commandById, commandDisabledReason } from '../services/commands/registry.ts';
+import { createOverlayManager } from '../design-system/overlays/manager.ts';
+import { createApiClient } from '../services/api-client.ts';
+import { createWorkspaceChrome } from '../features/navigation/workspace-chrome.ts';
+import { createWorkspacePreferences } from '../services/workspace-preferences.ts';
+import { createRevision } from '../app/lifecycle.ts';
+import { decideStartup, shouldCommitStartup } from '../app/startup-policy.ts';
+import { VIEW_BY_DESTINATION, DESTINATION_BY_VIEW } from '../domain/navigation.ts';
+import { ultimoSegmento as ultimoSegmentoWorkspace } from '../domain/workspace-path.ts';
 import {creaSceltaFallback} from '../components/fonti-modelli.js';
 import { AZIONE_ACCODA, AZIONE_BIVIO, AZIONE_COMANDO, ORIGINE_SCELTA_ESPLICITA, SELETTORE_SCELTA_PREDEFINITA, creaCronologiaComposer, decidiInvio, mostraPulsanteReindirizzo, reindirizzoConsentito } from './invio-durante-il-giro.js'; // Corsia 1 (13/09): il bivio accoda/reindirizza, e la freccia su
 import { colonnaConversazione, scorrevoleConversazione } from '../bridge/conversazione-dom.js';
@@ -44,7 +54,6 @@ import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../com
 import { aggiornaInspector, processiDagliEventi, schedaAgentiDaRileggere, titoloMessaggioUtente, titoloRispostaDaTurno } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
-import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
 import { LINGUE as LINGUE_MENU, risolviLingua, applicaLingua, etichettaLinguaRisolta, t as tr, EVENTO_LINGUA } from '../components/lingua.js'; // 06/9 B8 + P-i18n: la lingua dei menu e delle superfici
 import { ritraduciImpostazioni } from '../components/impostazioni.js'; // P-i18n
@@ -62,7 +71,7 @@ import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la 
 import { creaVistaViva } from '../components/browser-vivo.js'; // 07/9: lo schermo del browser pilotato dal server
 import { montaMiglioraPrompt } from '../components/migliora-prompt.js'; // 11/9 BC-15: «Migliora il prompt», il pannello del composer
 import { gestoPerIlServer } from '../components/browser-gesti.js'; // 07/9: la vista e il server parlano due lingue: qui si traducono
-import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
+import { montaScorciatoie, normalizzaTastiScritti, riconosci, etichettaTasto } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina (il montaggio è in sezioni-adattatori.js)
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
@@ -89,6 +98,14 @@ import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar
 import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
 
 (() => {
+  // BOOT-03/CORE-04: one navigation epoch and additive UI preferences.
+  const startupNavigation = createRevision();
+  const workspacePreferences = createWorkspacePreferences();
+  let workspaceUI = null;
+  let modalManager = null;
+  let centralApi = null;
+  let workspaceDisposed = false;
+
   'use strict';
 
   /*
@@ -448,7 +465,6 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   const commandDialog = $('#commandDialog');
   const commandSearch = $('#commandSearch');
   const sheetDialog = $('#sheetDialog');
-  const introDialog = $('#introDialog'); // ⭐ 04/9, R-02 — intro al primo avvio (modale nativa, vedi costruisciIntroPrimoAvvio)
   const harnessDialogBackdrop = $('#harnessDialogBackdrop');
   const sheetTitle = $('#sheetTitle');
   const sheetEyebrow = $('#sheetEyebrow');
@@ -1536,6 +1552,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function setView(view, options = {}) {
     const target = $(`[data-view="${view}"]`);
     if (!target) return;
+    if (!options.startup) startupNavigation.next();
     const previous = views.find((pane) => pane.classList.contains('active'));
     // Una vista può diventare nuovamente il target mentre la sua precedente
     // animazione di uscita è ancora in corso. In quel caso la callback
@@ -1574,7 +1591,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      * fatto qui perché `setView` è il solo posto da cui si naviga.
      */
     views.forEach((pane) => { pane.hidden = pane !== target; });
-    const SCHERMO_PER_VISTA = { chat: 'chat', vuota: 'vuota', terminal: 'terminale', diff: 'review', capability: 'capability', dashboard: 'board', memoria: 'memoria', attivita: 'attivita', note: 'note', progetti: 'progetti', settings: 'impostazioni', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automations: 'automazioni', browser: 'browser' };
+    const SCHERMO_PER_VISTA = DESTINATION_BY_VIEW;
     const schermo = SCHERMO_PER_VISTA[view] || view;
     document.documentElement.setAttribute('data-vista', ['chat', 'vuota', 'terminale', 'review', 'browser'].includes(schermo) ? 'sessione' : 'pagina');
     document.documentElement.setAttribute('data-schermo', schermo);
@@ -1591,6 +1608,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     // Il cassetto della barra si chiude appena si naviga: è il `closeDrawer()` in coda a `navigate` del mockup (riga 6097).
     chiudiCassettoBarra({ restituisciFuoco: false });
     resetEmbeddedTopbarScroll(view === 'chat' ? chatConversation : target);
+    workspaceUI?.update(view);
     window.__talosHarnessHostViewChange?.(view);
     if (view === 'settings') inizializzaModelLab();
     if (view === 'dashboard') ensureSessionsBoard();
@@ -2091,7 +2109,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!dialog.dataset.dialogResizeKey) prepareResizableDialog(dialog, `dialog:${dialog.id}`);
     cancelMotionAnimationsFor(dialog);
     prossimaGenerazione(dialog);
+    const opener = ROOT().activeElement;
     if (!dialog.open) dialog.show();
+    modalManager?.activate(dialog, { opener, backdrop: harnessDialogBackdrop, requestClose: () => closeEmbeddedDialog(dialog) });
     markMotionEnter(dialog);
     harnessDialogBackdrop.style.pointerEvents = ''; // ⛔ vedi closeEmbeddedDialog sotto — un dialog che riapre deve annullare la disattivazione lasciata da una chiusura precedente
     syncEmbeddedDialogBackdrop();
@@ -2126,7 +2146,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       // contenuto nuovo (una prossimaGenerazione() più recente), questa
       // callback tardiva non deve richiuderlo — vedi cancelMotionAnimationsFor
       // sopra per l'altra metà della cura (ferma anche l'animazione visiva).
-      if (dialog.open && motionGenerazione.get(dialog) === generazioneAllaChiusura) dialog.close();
+      if (dialog.open && motionGenerazione.get(dialog) === generazioneAllaChiusura) { dialog.close(); modalManager?.deactivate(dialog); }
       syncEmbeddedDialogBackdrop();
       syncBackgroundDialogPause();
     });
@@ -2212,16 +2232,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   window.addEventListener('online', () => sorveglianza.segnalaBrowser(true));
   barraStatoChat?.querySelector('[data-runtime-riprova]')?.addEventListener('click', () => sorveglianza.riprova());
   /** fetch delle API centrali: ogni esito informa la sorveglianza (T-15). */
-  async function fetchSorvegliata(url, init) {
-    try {
-      const risposta = await fetch(url, init);
-      sorveglianza?.segnalaRete(true);
-      return risposta;
-    } catch (error) {
-      sorveglianza?.segnalaRete(false, 'fetch');
-      throw error;
-    }
+  function apiCentrale() {
+    centralApi ??= createApiClient({ resolvePath: API,
+      network: (connected) => sorveglianza?.segnalaRete(connected, 'fetch'),
+    });
+    return centralApi;
   }
+  function fetchSorvegliata(url, init) { return apiCentrale().observedFetch(url, init); }
 
   // REAL_DATA_RENDER_START
   function textElement(tagName, className, value) {
@@ -2710,27 +2727,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (badge) badge.hidden = true;
   }
 
-  async function apiGet(pathname) {
-    const response = await fetchSorvegliata(API(pathname), {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-    });
-    let envelope;
-    try {
-      envelope = await response.json();
-    } catch {
-      const error = new Error('Risposta locale non valida');
-      error.code = 'INTERNAL_ERROR';
-      throw error;
-    }
-    if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
-      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
-      throw error;
-    }
-    return envelope.data;
-  }
+  function apiGet(pathname, options) { return apiCentrale().get(pathname, options); }
 
   function formattaByteModelLab(bytes) {
     const value = Number(bytes);
@@ -4193,10 +4190,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const testo = await file.text();
         const letto = JSON.parse(testo);
         if (!letto || typeof letto !== 'object' || Array.isArray(letto)) throw new Error('il file non contiene un documento di preferenze');
-        salvaImpostazioniDesktop(letto); // normalizza: quello che non riconosce non entra
+        if (!salvaImpostazioniDesktop(letto)) throw new Error(t('Salvataggio delle preferenze non riuscito.')); // retain the validated import only after persistence
         const documento = leggiImpostazioniDesktop();
         applicaAspettoDesktop(documento.appearance);
-        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection });
+        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS });
         montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
         sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
         dillo(`Preferenze importate da «${file.name}».`);
@@ -4226,7 +4223,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         window.localStorage.removeItem(DESKTOP_SETTINGS_KEY);
         const documento = leggiImpostazioniDesktop();
         applicaAspettoDesktop(documento.appearance);
-        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection });
+        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS });
         montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
         sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
         dillo('Preferenze riportate ai valori iniziali. Le conversazioni non sono state toccate.');
@@ -4378,7 +4375,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function inizializzaSettingsNavigation() {
-    montaImpostazioni($('#schermoImpostazioni'), leggiImpostazioniDesktop().appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection });
+    montaImpostazioni($('#schermoImpostazioni'), leggiImpostazioniDesktop().appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS });
     montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
     montaTrasferimentoImpostazioni(); // 06/9 D5: esporta · importa · ripristina
     sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(leggiImpostazioniDesktop().appearance)); // 06/9 B8
@@ -4535,27 +4532,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   /** ⭐ 26/8, riconciliazione desktop→mobile — stesso contratto envelope di apiGet, per POST /api/v1/sessions/*. */
-  async function apiPost(pathname, body) {
-    const response = await fetchSorvegliata(API(pathname), {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    let envelope;
-    try {
-      envelope = await response.json();
-    } catch {
-      const error = new Error('Risposta locale non valida');
-      error.code = 'INTERNAL_ERROR';
-      throw error;
-    }
-    if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
-      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
-      throw error;
-    }
-    return envelope.data;
-  }
+  function apiPost(pathname, body, options) { return apiCentrale().post(pathname, body, options); }
 
   /*
    * ⭐ 12/09 — LE DUE PORTE CHE MANCAVANO. Fino a ieri la app sapeva solo chiedere (`apiGet`) e
@@ -4567,27 +4544,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   sostituisce il messaggio): è su quello che il modulo sceglie cosa dire, quindi qui si
    *   conserva com'è invece di appiattirlo su un testo generico.
    */
-  async function apiScrivi(metodo, pathname, body) {
-    const response = await fetchSorvegliata(API(pathname), {
-      method: metodo,
-      headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    let envelope;
-    try {
-      envelope = await response.json();
-    } catch {
-      const error = new Error('Risposta locale non valida');
-      error.code = 'INTERNAL_ERROR';
-      throw error;
-    }
-    if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
-      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
-      throw error;
-    }
-    return envelope.data;
-  }
+  function apiScrivi(metodo, pathname, body, options) { return apiCentrale().request(metodo, pathname, body, options); }
   function apiPatch(pathname, body) { return apiScrivi('PATCH', pathname, body); }
   function apiDelete(pathname) { return apiScrivi('DELETE', pathname); }
 
@@ -6324,7 +6281,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     searchInput.addEventListener('input', renderLista);
     refreshBtn.addEventListener('click', (event) => { event.preventDefault(); carica({ forza: true }); });
     panel.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
+      // In the standalone model sheet this panel IS the surface, and its trigger is hidden.
+      // Escape belongs to the enclosing modal; only a real dropdown consumes it locally.
+      if (event.key === 'Escape' && !apriSubito) {
         event.preventDefault();
         event.stopPropagation();
         chiudi();
@@ -11366,7 +11325,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const conSessione = Boolean(state.realSession.id);
     // la cartella è quella che il server ha DICHIARATO per la scheda; per la scheda senza sessione la sceglie il server e qui non si inventa
     const cartella = attiva?.cartella || (attiva?.origine === 'standalone' ? '' : state.realSession.cartellaAssoluta) || '';
-    const segmento = cartella ? ultimoSegmentoIntro(cartella) : '';
+    const segmento = cartella ? ultimoSegmentoWorkspace(cartella) : '';
     const nomeCartella = segmento ? (/[\/]$/.test(segmento) ? segmento : `${segmento}/`) : '';
     const colori = t.enforcementColore && t.enforcementColore !== 'webgl' ? ` ${tr('Colori limitati ({motivo}).', { motivo: t.enforcementColore })}` : '';
     ui.aggiorna({
@@ -13225,8 +13184,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         chat: normalizzaPreferenzeChatDesktop(safe.chat),
         workspaces: normalizzaWorkspaces(safe.workspaces),
       }));
+      document.dispatchEvent(new CustomEvent('talos:settings-persisted', { detail: { saved: true } }));
+      return true;
     } catch {
-      // Le preferenze perse non devono impedire la navigazione del workspace.
+      // Keep navigation available, but never announce an unsuccessful write as saved.
+      document.dispatchEvent(new CustomEvent('talos:settings-persisted', { detail: { saved: false } }));
+      return false;
     }
   }
   function aggiornaAspettoDesktop(patch) {
@@ -13462,7 +13425,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     host.classList.toggle('chat-full-width', safe.chatFullWidth);
     /* 06/9 B8 — densità: il mockup la esprime con `data-densita="compatta"` sulla radice (token delle righe); lingua: `lang` + i soli elementi marcati. */
     const root = document.documentElement;
-    if (safe.uiDensity === 'compatta') root.setAttribute('data-densita', 'compatta'); else root.removeAttribute('data-densita');
+    if (!host.classList.contains('talos-embedded')) workspacePreferences.adoptLegacyDensity(safe.uiDensity);
+    const density = host.classList.contains('talos-embedded') ? safe.uiDensity : (workspacePreferences.read().density === 'compact' ? 'compatta' : 'comoda');
+    if (density === 'compatta') root.setAttribute('data-densita', 'compatta'); else root.removeAttribute('data-densita');
+    if (!host.classList.contains('talos-embedded')) root.dataset.density = workspacePreferences.read().density;
     const linguaRisolta = risolviLingua(safe.uiLanguage, navigator.languages || [navigator.language]);
     applicaLingua(ROOT(), linguaRisolta);
     sincronizzaSelettoriDensitaLingua(safe);
@@ -13478,7 +13444,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   /** I due selettori nascono con la schermata Impostazioni (dopo il primo `applicaAspettoDesktop`): si allineano qui, e di nuovo dopo il montaggio. */
   function sincronizzaSelettoriDensitaLingua(safe) {
-    const selDensita = $('#setting-uiDensitySelect'); if (selDensita) selDensita.value = safe.uiDensity;
+    const selDensita = $('#setting-uiDensitySelect'); if (selDensita) selDensita.value = HOST().classList.contains('talos-embedded') ? safe.uiDensity : (workspacePreferences.read().density === 'compact' ? 'compatta' : 'comoda');
     const selLingua = $('#setting-uiLanguageSelect');
     if (!selLingua) return;
     selLingua.value = safe.uiLanguage;
@@ -15937,6 +15903,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       ? { sessionId: state.realSession.id, taskId: state.realSession.taskId, nome: state.session }
       : null);
     if (!origine?.sessionId) {
+      if (!embeddedDemoOnly()) { toast('Ramo non creato', tr('Apri prima una sessione.')); return; }
       toast('Fork creato', 'Nuovo ramo di conversazione da questo punto.');
       return;
     }
@@ -16162,7 +16129,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const sessionId = state.realSession.id;
     const snapshot = contextChatSnapshot?.sessionId === sessionId ? contextChatSnapshot : null;
     if (!contextCompactor) contextCompactor = montaContextCompactor(root, {
-      client: contextClient, sessionId, state: snapshot,
+      client: contextClient, sessionId, state: snapshot, modalManager,
       onState: next => contextMonitor?.update(next),
     });
     else contextCompactor.setSession(sessionId, snapshot);
@@ -16524,6 +16491,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * ⇒ Prima di inventare un default si legge l'elenco che il client HA GIÀ in memoria — la stessa
      *   mappa che disegna la barra, e la stessa fonte da cui BC-37 prende il nome.
      */
+    workspacePreferences.update({ lastSession: sessionId });
     const dallElencoSubito = state.sessionSelection.available?.get?.(sessionId) ?? null;
     const contrattoSessione = impostazioniSessione || dallElencoSubito || { modello };
     if (sessionId === state.realSession.id) {
@@ -16869,11 +16837,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * riferimento (non è quello il bug), ma l'etichetta in cima deve
      * smettere di mentire appena ne esiste almeno una vera.
      */
-    if (elenco.length > 0) {
+    if (Array.isArray(elenco) && elenco.length > 0) {
       const demoBadge = $('.demo-surface-badge', $('#sessionsPanel'));
       if (demoBadge) demoBadge.hidden = true;
     }
     elenco = Array.isArray(elenco) ? elenco.map((sessione) => ({ ...sessione, modello: normalizzaModelloSessione(sessione) })) : [];
+    workspaceUI?.acceptSessions(elenco);
     /*
      * ⛔⛔⛔ 07/9, owner con lo screenshot: «Su 4174 ancora quel problema della sessione. Non
      * riesco a riprendere». Nella sua pagina il pulsante era ROSSO («Interrompi al prossimo punto
@@ -18067,11 +18036,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * esporlo. La policy corrente viene conservata e non diventa mai
    * implicitamente Full access.
    */
-  async function apriWorkspaceDaLauncher() {
+  async function apriWorkspaceDaLauncher(isCurrent = () => true) {
     const workspaceLaunchId = leggiWorkspaceLaunchId();
     if (!workspaceLaunchId) return false;
     try {
       const launch = await apiGet(`/api/v1/workspace-launches/${encodeURIComponent(workspaceLaunchId)}`);
+      if (!isCurrent()) return false;
       rimuoviWorkspaceLaunchFragment();
       /*
        * ⛔⛔⛔ 10/09, owner: «il tasto destro su una cartella non fa partire TALOS con la modale
@@ -18085,334 +18055,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       await openRealTaskSheet({ launch: { id: workspaceLaunchId, nome: launch.nome } });
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       rimuoviWorkspaceLaunchFragment();
       toast('Cartella non aperta', messaggioErroreUtente(error, 'Apri di nuovo la cartella dal menu di Windows e riprova.'));
       return false;
     }
-  }
-
-  /*
-   * ⭐⭐⭐ 04/9, R-02 — INTRO AL PRIMO AVVIO, stile mobile.
-   *
-   * Owner 03/09: «abbia un intro stile mobile». Il telefono
-   * (`TalosMobileSetupIntro.vue`, `setupProgress.ts`) ha già deciso come si
-   * fa, e qui si copia il METODO, non solo l'aspetto:
-   *
-   * 1. Un passo è «fatto» quando la cosa che chiede ESISTE — letto dalla
-   *    realtà (portachiavi via `/api/v1/setup/stato`, preferenze chat), mai
-   *    da un cursore salvato che può invecchiare e rimandare qualcuno su un
-   *    passo già finito.
-   * 2. Una decisione per schermata, con accanto la conseguenza.
-   * 3. NIENTE seconda casa per la stessa impostazione: la chiave si salva con
-   *    la STESSA rotta del Laboratorio modelli (`POST /providers/:id/key`),
-   *    il modello con lo STESSO `creaModelPicker`, l'autonomia con lo STESSO
-   *    `impostaPermesso` del foglio Permessi. L'intro presenta, non duplica.
-   * 4. «Scelto» è un GESTO, non un valore (lezione mobile `haDecisoAutonomia`):
-   *    `state.autonomiaScelta` diventa true solo toccando una scheda, mai
-   *    passando oltre con «Avanti» — altrimenti il default del giorno
-   *    dell'installazione resterebbe congelato per sempre come «scelta».
-   *
-   * Passi desktop ↔ mobile: accesso (identity+model) · modello · autonomia
-   * (autonomy) · cartella (al posto di pin/background, che sul desktop non
-   * hanno senso: l'ultimo passo apre il foglio «Nuova sessione» vero).
-   *
-   * ⛔ La chiave non passa MAI da qui a un log, al JSONL o a una risposta
-   * HTTP: viene mandata una volta alla rotta e il campo si svuota.
-   * ⛔ Non si ripresenta: `INTRO_STORAGE_KEY` ricorda «completata» o
-   * «saltata» finché esiste lo store del browser. `TALOS_INTRO=0` sul server
-   * la spegne del tutto (rollback del ledger).
-   */
-  const INTRO_STORAGE_KEY = 'talos.harness.desktop.intro.v1';
-  const INTRO_PASSI = Object.freeze([
-    { id: 'provider', etichetta: 'Accesso' },
-    { id: 'modello', etichetta: 'Modello' },
-    { id: 'autonomia', etichetta: 'Autonomia' },
-    { id: 'cartella', etichetta: 'Cartella' },
-  ]);
-  // ⛔ 07/9 — la stessa tabella viveva in tre posti. Qui resta la FORMA che l'intro usa, ma i
-  //    contenuti vengono dall'unica mappa: cambiarne uno li cambia tutti e tre.
-  const INTRO_POLICY = Object.freeze(POLITICHE.map((p) => Object.freeze([p.valore, p.nome, p.descrizione, p.nota])));
-
-  function leggiIntroLocale() {
-    try {
-      const raw = JSON.parse(window.localStorage.getItem(INTRO_STORAGE_KEY) || 'null');
-      return raw && typeof raw === 'object' && typeof raw.esito === 'string' ? raw : null;
-    } catch { return null; }
-  }
-  function salvaIntroLocale(esito) {
-    try { window.localStorage.setItem(INTRO_STORAGE_KEY, JSON.stringify({ esito, quando: new Date().toISOString() })); } catch { /* senza storage l'intro tornerà: meglio che sparire per sempre */ }
-  }
-
-  /** Come `talosSetupProgress` sul telefono: i passi fatti, il primo non fatto, se è tutto a posto. */
-  function progressoIntro(stato) {
-    const fatti = {
-      provider: Boolean(stato?.provider?.pronto),
-      modello: typeof state.model === 'string' && state.model !== '',
-      autonomia: state.autonomiaScelta === true,
-      cartella: false, // si «fa» aprendo il foglio Nuova sessione: non è un fatto persistito
-    };
-    const passi = INTRO_PASSI.map((passo) => ({ ...passo, fatto: fatti[passo.id] }));
-    const primo = passi.findIndex((passo) => !passo.fatto);
-    return { passi, indiceIniziale: primo === -1 ? passi.length - 1 : primo, tuttoPronto: passi.slice(0, 3).every((passo) => passo.fatto) };
-  }
-
-  /**
-   * Chiamata all'avvio (solo standalone). Apre l'intro SOLO se manca una
-   * delle tre cose senza cui TALOS non parte, e solo se non è già stata
-   * completata o saltata in questo browser. Un server che non espone lo
-   * stato (versione vecchia, non raggiungibile) non produce un intro
-   * fantasma: si tace.
-   */
-  /**
-   * 06/9 B7b — l'Intro è il velo del mockup (`#veloIntro`, components/intro.js): cartella con
-   * l'albero compatto del computer, fornitore e chiave, modello, permessi, riepilogo. I dati
-   * arrivano dalle API del server; le scelte tornano allo stato del monolite. Il dialogo nativo
-   * legacy (`#introDialog`) non si apre più.
-   */
-  let introMockup = null;
-  function apiIntro() {
-    return {
-      cartelle: (path) => apiGet(`/api/v1/workspace-browser${path ? `?path=${encodeURIComponent(path)}` : ''}`),
-      luoghi: async () => {
-        const [radice, frequenti] = await Promise.all([apiGet('/api/v1/workspace-browser'), apiGet('/api/v1/frequent-dirs').catch(() => ({ items: [] }))]);
-        const rec = Array.isArray(radice?.recommended) ? radice.recommended : [];
-        const voce = (x) => ({ nome: x.label || x.etichetta || ultimoSegmentoIntro(x.path || x.percorso), path: normalizzaCartellaIntro(x.path || x.percorso), projectId: x.projectId ?? null });
-        return {
-          radice: radice?.root || null,
-          progetti: rec.filter((r) => r.kind === 'project').map(voce),
-          gruppi: {
-            recenti: (frequenti?.items || []).map(voce),
-            progetti: rec.filter((r) => r.kind === 'project').map(voce),
-            rapide: rec.filter((r) => r.kind === 'known').map(voce),
-          },
-        };
-      },
-      creaCartella: (parentPath, name) => apiPost('/api/v1/workspace-browser/folders', { parentPath, name }),
-      providers: async () => (await apiGet('/api/v1/providers'))?.items ?? [],
-      salvaChiave: (id, key) => apiPost(`/api/v1/providers/${encodeURIComponent(id)}/key`, { key }),
-      provaProvider: (id) => apiPost(`/api/v1/providers/${encodeURIComponent(id)}/test`, {}),
-      modelli: async () => {
-        const [catalogo, locali] = await Promise.all([apiGet('/api/v1/models').catch(() => null), apiGet('/api/v1/local-models').catch(() => null)]);
-        if (catalogo?.modelli) state.modelLab.catalogoModelli = catalogo; // serve anche alla «Finestra del contesto» (B2)
-        return [
-          ...((locali?.items || []).map((m) => ({ id: m.id, nome: m.name || m.id, provider: 'local', locale: true }))),
-          ...((catalogo?.modelli || []).map((m) => ({ id: m.id, nome: m.nome || m.id, provider: m.provider }))),
-        ];
-      },
-    };
-  }
-  function apriIntroMockup(indice = 0, statoSetup = null) {
-    const velo = $('#veloIntro'); if (!velo) return false;
-    if (!introMockup) {
-      introMockup = creaIntro(velo, {
-        api: apiIntro(),
-        iniziale: { cartella: '', modello: state.model || '', politica: state.autonomiaScelta ? state.permissions : null, localeConfigurato: statoSetup?.provider?.localeConfigurato === true },
-        azioni: {
-          impostaPermesso: (valore, nome) => { impostaPermesso(valore, nome); state.autonomiaScelta = true; salvaPreferenzeChatDesktop(); },
-          impostaModello: (id) => { if (!id) return; state.model = id; aggiornaPiedeSidebar(); salvaPreferenzeChatDesktop(); aggiornaPillolaModello(); },
-          concludi: (esito, scelte) => {
-            salvaIntroLocale(esito);
-            chiudiVeloMockup('veloIntro');
-            if (esito !== 'completata' || !scelte.cartella) return;
-            const progetto = (introMockup?.progetti || []).find((p) => normalizzaCartellaIntro(p.path) === normalizzaCartellaIntro(scelte.cartella));
-            avviaSessionePendente({ cartellaId: progetto?.projectId || undefined, cartellaLibera: progetto?.projectId ? undefined : scelte.cartella, nomeCartella: ultimoSegmentoIntro(scelte.cartella), modello: state.model, effort: state.effort, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
-            toast('Prima sessione pronta', `${ultimoSegmentoIntro(scelte.cartella)} · scrivi il primo messaggio`);
-          },
-        },
-      });
-    }
-    apriVeloMockup('veloIntro');
-    void introMockup.apri(indice).then(() => { /* i progetti per riconoscere una cartella-progetto */ });
-    return true;
-  }
-  async function apriIntroSeServe() {
-    if (leggiIntroLocale()) return false;
-    let stato;
-    try { stato = await apiGet('/api/v1/setup/stato'); } catch { return false; }
-    if (!stato || stato.introDisattivato) return false;
-    const progresso = progressoIntro(stato);
-    if (progresso.tuttoPronto) return false;
-    // passi del mockup: 0 cartella · 1 modello (con fornitore e chiave) · 2 permessi · 3 pronto
-    const primo = progresso.passi.find((p) => !p.fatto)?.id;
-    const indice = primo === 'provider' || primo === 'modello' ? 1 : primo === 'autonomia' ? 2 : 0;
-    return apriIntroMockup(indice, stato);
-  }
-
-  function apriIntroPrimoAvvio(statoIniziale, indiceIniziale = 0) {
-    if (!introDialog) return;
-    const intro = { stato: statoIniziale, indice: Math.max(0, Math.min(INTRO_PASSI.length - 1, indiceIniziale)), provider: null, chiaveEsiti: new Map() };
-    const rail = $('#introRail', introDialog);
-    const body = $('#introBody', introDialog);
-    const back = $('#introBack', introDialog);
-    const next = $('#introNext', introDialog);
-    const skip = $('#introSkip', introDialog);
-
-    function chiudi(esito) {
-      salvaIntroLocale(esito);
-      if (introDialog.open) introDialog.close();
-    }
-    async function ricaricaStato() {
-      try { intro.stato = await apiGet('/api/v1/setup/stato'); } catch { /* lo stato resta quello che avevamo: mai inventarne uno */ }
-    }
-    function disegnaRail() {
-      const { passi } = progressoIntro(intro.stato);
-      rail.replaceChildren(...passi.map((passo, posizione) => {
-        const li = document.createElement('li');
-        li.dataset.fatto = String(passo.fatto);
-        if (posizione === intro.indice) li.setAttribute('aria-current', 'step');
-        const linea = document.createElement('span'); linea.className = 'intro-rail-line'; linea.setAttribute('aria-hidden', 'true');
-        li.append(linea, textElement('span', 'intro-rail-label', passo.etichetta));
-        return li;
-      }));
-    }
-    function titolo(testo, sottotitolo) {
-      const h = document.createElement('h2'); h.className = 'intro-title'; h.id = 'introTitle'; h.textContent = testo;
-      const p = document.createElement('p'); p.className = 'intro-copy'; p.textContent = sottotitolo;
-      return [h, p];
-    }
-    function segnaEsito(nodo, esito, testo) { nodo.dataset.esito = esito; nodo.textContent = testo; }
-
-    // ---- passo 1: accesso (provider con chiave, o motore locale) ----
-    async function disegnaProvider() {
-      body.replaceChildren(...titolo('Da dove pensa TALOS', 'Serve un accesso a un modello: la chiave di un provider, salvata nel portachiavi di questo computer e mai nel browser, oppure un motore locale sul disco.'));
-      const lista = document.createElement('ul'); lista.className = 'intro-list';
-      lista.append(textElement('li', 'muted-copy', 'Leggo i provider…'));
-      body.append(lista);
-      let righe = [];
-      try { righe = (await apiGet('/api/v1/providers'))?.items ?? []; } catch (error) { lista.replaceChildren(textElement('li', 'muted-copy', messaggioErroreUtente(error, 'Il server locale non risponde: riprova fra un momento.'))); return; }
-      const locale = intro.stato?.provider?.localeConfigurato === true;
-      lista.replaceChildren(...righe.map((riga) => {
-        const li = document.createElement('li');
-        const scelta = document.createElement('button'); scelta.type = 'button'; scelta.className = 'intro-choice'; scelta.dataset.introProvider = riga.id;
-        const prova = intro.chiaveEsiti.get(riga.id);
-        const statoRiga = prova?.esito ?? (riga.requiresKey ? (riga.keyConfigured ? 'ok' : 'mancante') : 'ok');
-        scelta.dataset.stato = statoRiga === 'collegato' ? 'ok' : statoRiga === 'ok' || statoRiga === 'mancante' ? statoRiga : 'rotto';
-        const mark = textElement('span', 'intro-mark', (riga.label || riga.id).slice(0, 2).toUpperCase()); mark.setAttribute('aria-hidden', 'true');
-        const centro = document.createElement('span');
-        centro.append(textElement('strong', '', riga.label || riga.id), textElement('small', '', riga.requiresKey ? (riga.keyConfigured ? 'Chiave nel portachiavi' : 'Serve una chiave') : 'Nessuna chiave richiesta'));
-        const statoTesto = prova ? (prova.esito === 'collegato' ? (prova.modelli === null ? 'collegato' : `${prova.modelli} modelli`) : prova.esito === 'in-corso' ? 'sto chiedendo…' : prova.esito === 'non-autorizzato' ? 'chiave rifiutata' : 'non raggiungibile')
-          : riga.requiresKey ? (riga.keyConfigured ? 'chiave presente' : 'chiave mancante') : 'pronto';
-        scelta.append(mark, centro, textElement('span', 'intro-state', statoTesto));
-        scelta.addEventListener('click', () => { intro.provider = intro.provider === riga.id ? null : riga.id; disegnaProvider(); });
-        if (intro.provider === riga.id) scelta.classList.add('active');
-        li.append(scelta);
-        if (intro.provider === riga.id && riga.requiresKey) li.append(campoChiave(riga));
-        return li;
-      }));
-      const liLocale = document.createElement('li');
-      const localeBtn = document.createElement('button'); localeBtn.type = 'button'; localeBtn.className = 'intro-choice'; localeBtn.dataset.introProvider = 'local'; localeBtn.dataset.stato = locale ? 'ok' : 'mancante';
-      const markL = textElement('span', 'intro-mark', 'GP'); markL.setAttribute('aria-hidden', 'true');
-      const centroL = document.createElement('span');
-      centroL.append(textElement('strong', '', 'Motore locale (llama.cpp)'), textElement('small', '', locale ? 'Configurato su questo computer: i modelli sul disco si scelgono al passo successivo.' : 'Non configurato: si imposta dal Laboratorio modelli, dopo. Puoi continuare con un provider.'));
-      localeBtn.append(markL, centroL, textElement('span', 'intro-state', locale ? 'pronto' : 'assente'));
-      localeBtn.disabled = true;
-      liLocale.append(localeBtn);
-      lista.append(liLocale);
-      body.append(textElement('p', 'intro-note', 'Tutte le chiavi si possono cambiare dopo, da Impostazioni → Laboratorio modelli → Provider e accessi.'));
-    }
-    function campoChiave(riga) {
-      const wrap = document.createElement('div'); wrap.className = 'intro-key';
-      const label = document.createElement('label'); label.className = 'sheet-label'; label.textContent = `Chiave ${riga.label || riga.id}`; label.htmlFor = `introKey-${riga.id}`;
-      const input = document.createElement('input'); input.type = 'password'; input.id = `introKey-${riga.id}`; input.autocomplete = 'off'; input.spellcheck = false; input.placeholder = riga.keyConfigured ? 'Chiave già salvata: incollane una nuova per sostituirla' : 'Incolla la chiave'; input.dataset.introKeyInput = riga.id;
-      const rowBtn = document.createElement('div'); rowBtn.className = 'intro-key-row';
-      const salva = document.createElement('button'); salva.type = 'button'; salva.className = 'primary-btn'; salva.textContent = 'Salva e prova'; salva.dataset.introKeySave = riga.id;
-      const esito = textElement('span', 'intro-key-esito', riga.keyConfigured ? 'La chiave salvata resta finché non ne incolli un\'altra.' : 'Resta sul server locale, nel portachiavi del sistema.');
-      rowBtn.append(salva, esito);
-      wrap.append(label, input, rowBtn);
-      salva.addEventListener('click', async () => {
-        const valore = input.value;
-        if (!valore.trim()) { segnaEsito(esito, 'rotto', 'Incolla prima una chiave.'); input.focus(); return; }
-        salva.disabled = true; segnaEsito(esito, '', 'Salvo nel portachiavi…');
-        try {
-          await apiPost(`/api/v1/providers/${encodeURIComponent(riga.id)}/key`, { key: valore });
-          input.value = ''; // ⛔ il campo si svuota subito: la chiave è già dove deve stare, non resta nel DOM
-          segnaEsito(esito, '', 'Salvata. Chiedo al provider se la accetta…');
-          intro.chiaveEsiti.set(riga.id, { esito: 'in-corso' });
-          const prova = await apiPost(`/api/v1/providers/${encodeURIComponent(riga.id)}/test`, {});
-          intro.chiaveEsiti.set(riga.id, prova);
-          await ricaricaStato();
-          disegnaRail();
-          disegnaProvider();
-          if (prova?.esito === 'collegato') toast('Accesso pronto', `${riga.label || riga.id} accetta la chiave.`);
-        } catch (error) {
-          segnaEsito(esito, 'rotto', messaggioErroreUtente(error, 'Non sono riuscito a salvare la chiave.'));
-          salva.disabled = false;
-        }
-      });
-      input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); salva.click(); } });
-      queueMicrotask(() => input.focus());
-      return wrap;
-    }
-
-    // ---- passo 2: modello di default ----
-    function disegnaModello() {
-      body.replaceChildren(...titolo('Con quale modello, di solito', 'È il modello con cui parte una sessione nuova. Lo cambi quando vuoi dalla pillola sopra alla chat, anche a metà lavoro.'));
-      const mount = document.createElement('div'); mount.className = 'intro-picker';
-      const picker = creaModelPicker({
-        valoreIniziale: state.model || '',
-        aggiornaModelloPrincipale: true,
-        sincronizzaSessione: false,
-        alSelezionato: () => { salvaPreferenzeChatDesktop(); aggiornaPillolaModello(); disegnaRail(); },
-      });
-      mount.append(picker.elemento);
-      body.append(mount, textElement('p', 'intro-note', state.model ? `Oggi: ${state.model}.` : 'Nessun modello scelto ancora: senza, la prima sessione te lo chiede.'));
-    }
-
-    // ---- passo 3: autonomia (una decisione, la stessa del foglio Permessi) ----
-    function disegnaAutonomia() {
-      body.replaceChildren(...titolo('Cosa può fare da solo', 'Una scelta sola, che vale per ogni sessione nuova. Il permesso per singolo attrezzo si regola dopo, dal foglio Permessi.'));
-      const lista = document.createElement('ul'); lista.className = 'intro-list';
-      lista.append(...INTRO_POLICY.map(([valore, nome, descrizione, nota]) => {
-        const li = document.createElement('li');
-        const scelta = document.createElement('button'); scelta.type = 'button'; scelta.className = 'intro-choice'; scelta.dataset.introPolicy = valore;
-        if (state.permissions === valore && state.autonomiaScelta) scelta.classList.add('active');
-        const mark = document.createElement('span'); mark.className = 'intro-mark'; mark.innerHTML = icon('i-shield'); mark.setAttribute('aria-hidden', 'true');
-        const centro = document.createElement('span'); centro.append(textElement('strong', '', nome), textElement('small', '', descrizione));
-        scelta.append(mark, centro, textElement('span', 'intro-state', nota));
-        scelta.addEventListener('click', () => {
-          impostaPermesso(valore, nome);
-          state.autonomiaScelta = true; // il gesto sulla scheda è la decisione
-          salvaPreferenzeChatDesktop();
-          disegnaRail();
-          disegnaAutonomia();
-        });
-        li.append(scelta);
-        return li;
-      }));
-      const nomeScelto = INTRO_POLICY.find(([valore]) => valore === state.permissions)?.[1] ?? state.permissions;
-      body.append(lista, textElement('p', 'intro-note', state.autonomiaScelta ? `Scelto: ${nomeScelto}. «Chiedi prima» resta una risposta legittima.` : 'Finché non tocchi una scheda vale il valore predefinito di oggi, che può cambiare con gli aggiornamenti: toccarla lo rende una tua scelta.'));
-    }
-
-    // ---- passo 4: la prima cartella (apre il foglio Nuova sessione vero) ----
-    function disegnaCartella() {
-      body.replaceChildren(...titolo('La prima cartella', 'TALOS lavora dentro una cartella per volta: la scegli a ogni sessione nuova, e i permessi di sopra valgono lì dentro. Nient\'altro viene toccato.'));
-      body.append(textElement('p', 'intro-note', 'Puoi anche aprire una cartella con il tasto destro in Esplora file, «Apri cartella con TALOS».'));
-    }
-
-    function disegnaPasso() {
-      const passo = INTRO_PASSI[intro.indice];
-      disegnaRail();
-      back.hidden = intro.indice === 0;
-      const ultimo = intro.indice === INTRO_PASSI.length - 1;
-      next.textContent = ultimo ? 'Scegli la cartella e inizia' : 'Avanti';
-      if (passo.id === 'provider') disegnaProvider();
-      else if (passo.id === 'modello') disegnaModello();
-      else if (passo.id === 'autonomia') disegnaAutonomia();
-      else disegnaCartella();
-      queueMicrotask(() => next.focus());
-    }
-
-    back.onclick = () => { if (intro.indice > 0) { intro.indice -= 1; disegnaPasso(); } };
-    next.onclick = () => {
-      if (intro.indice < INTRO_PASSI.length - 1) { intro.indice += 1; disegnaPasso(); return; }
-      chiudi('completata');
-      openRealTaskSheet();
-    };
-    skip.onclick = () => chiudi('saltata');
-    introDialog.oncancel = (event) => { event.preventDefault(); chiudi('saltata'); }; // Escape = salta, registrato come tale
-
-    disegnaPasso();
-    if (!introDialog.open) introDialog.showModal();
   }
 
   /*
@@ -19338,6 +18985,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function exportSession() {
     if (state.realSession.id) { openSheet('export'); return; }
+    if (!embeddedDemoOnly()) { toast('Esportazione non disponibile', tr('Apri prima una sessione.')); return; }
     const payload = {
       schema: 'talos_mock_session_v1',
       exported_at: new Date().toISOString(),
@@ -19352,16 +19000,6 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     toast('Sessione esportata', 'JSON pronto.');
   }
 
-  async function shareSession() {
-    const text = `TALOS · ${state.session} · feat/mobile-code`;
-    try {
-      if (navigator.share) await navigator.share({ title: state.session, text });
-      else if (navigator.clipboard) { await navigator.clipboard.writeText(text); toast('Snapshot copiato', 'Pronto da condividere.'); }
-      else toast('Snapshot pronto', text);
-    } catch (error) {
-      if (error?.name !== 'AbortError') toast('Condivisione non disponibile', text);
-    }
-  }
 
   /*
    * ⭐⭐⭐ 29/8 — FASE J, piano `elegant-spinning-dongarra.md`, design
@@ -19501,21 +19139,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     window.speechSynthesis.speak(utterance);
   }
 
-  /*
-   * ⛔⛔ 07/9 — LA PALETTE ITALIANA ESISTEVA E NESSUNO LA APRIVA. Nel template c'è `#veloComandi`:
-   * 15 comandi con descrizione e scorciatoia, i gruppi, il campo di ricerca, il piede — tutto in
-   * italiano e con gli STESSI `data-command` del monolite. L'unico riferimento in tutto il JS era
-   * la mappa delle misure dei dialoghi. Quella che si apriva era la palette del monolite, con tre
-   * voci ancora in inglese («Session board», «Skills, MCP, plugin e gateway», «Agents, hooks e
-   * doctor»): la traduzione era già stata fatta, e la persona non la vedeva.
-   * ⇒ Stessa disciplina dei veli: la logica NON si duplica, si punta a una radice diversa. Se il
-   *   velo c'è si usa quello; se non c'è (una pagina vecchia) resta il foglio, senza un ramo morto.
-   *
-   * Ricerca 07/09/2026 — W3C WAI-ARIA APG «Combobox» e MDN `combobox` role: il fuoco DOM resta sul
-   * campo, e l'opzione attiva si dichiara con `aria-activedescendant` che punta al suo `id`; la
-   * lista è `role="listbox"`, le voci `role="option"` con `aria-selected`. Il markup del velo è già
-   * scritto così (`#cercaComando` è `role="combobox"` con `aria-controls="risultatiComandi"`): qui
-   * si aggiunge la parte che mancava, cioè tenere `aria-activedescendant` allineato al movimento.
+  /** NAV-02: the registry owns labels and availability; existing handlers retain capabilities.
+   * The typed palette owns only search, option rendering and keyboard selection.
+   * Modal lifecycle remains with the shared overlay manager, including the embedded host.
    */
   function radiceComandi() {
     const velo = $('#veloComandi');
@@ -19523,91 +19149,38 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return { velo: null, elenco: $('#commandResults'), campo: commandSearch, vuoto: commandEmpty };
   }
 
-  function visibleCommandButtons() {
-    const { elenco } = radiceComandi();
-    return elenco ? $$('button[data-command]', elenco).filter((button) => !button.hidden) : [];
-  }
-
-  function setActiveCommand(button) {
-    const { elenco, campo } = radiceComandi();
-    if (!elenco) return;
-    $$('button[data-command]', elenco).forEach((item) => {
-      const attivo = item === button;
-      item.classList.toggle('command-active', attivo);
-      // ⛔ il velo dichiara le voci come `option`: lo stato si dice anche a chi non vede il colore
-      if (item.getAttribute('role') === 'option') item.setAttribute('aria-selected', String(attivo));
-    });
-    if (campo?.getAttribute('role') === 'combobox') {
-      if (button?.id) campo.setAttribute('aria-activedescendant', button.id);
-      else campo.removeAttribute('aria-activedescendant');
-    }
-    button?.scrollIntoView({ block: 'nearest' });
-  }
-
+  let commandPalette = null;
+  const commandContext = () => ({ sessionId: state.realSession.id || null, running: runRealeAttivo() });
   function openCommandPalette() {
-    const { velo, campo } = radiceComandi();
-    if (velo) {
-      apriVeloMockup('veloComandi');
-      if (campo) campo.value = '';
-      filterCommands('');
-      window.setTimeout(() => campo?.focus(), 20);
-      return;
-    }
-    prepareResizableDialog(commandDialog, 'command:palette');
-    showEmbeddedDialog(commandDialog);
-    commandSearch.value = '';
-    filterCommands('');
-    window.setTimeout(() => commandSearch.focus(), 20);
-  }
-
-  function filterCommands(query) {
-    const q = query.trim().toLowerCase();
-    const { elenco, vuoto } = radiceComandi();
-    if (!elenco) return;
-    for (const button of $$('button[data-command]', elenco)) {
-      // ⛔ anche gli ALIAS del velo entrano nella ricerca: «impostazioni» trova «Apri Doctor» se
-      //    quella voce lo dichiara. Cercare solo il testo visibile fa mancare i sinonimi.
-      const testo = `${button.textContent} ${button.dataset.commandAlias || ''}`.toLowerCase();
-      button.hidden = Boolean(q && !testo.includes(q));
-    }
-    // i gruppi senza nemmeno una voce visibile spariscono, o restano intestazioni sopra il vuoto
-    for (const gruppo of $$('[data-gruppo-comandi]', elenco)) {
-      gruppo.hidden = $$('button[data-command]', gruppo).every((b) => b.hidden);
-    }
-    const visible = visibleCommandButtons();
-    if (vuoto) vuoto.hidden = visible.length > 0;
-    setActiveCommand(visible[0] || null);
-  }
-
-  function moveActiveCommand(delta) {
-    const visible = visibleCommandButtons();
-    if (!visible.length) return;
-    const current = visible.findIndex((button) => button.classList.contains('command-active'));
-    const next = visible[(current + delta + visible.length) % visible.length];
-    setActiveCommand(next);
+    const { velo, campo, elenco, vuoto } = radiceComandi();
+    if (!campo || !elenco) return;
+    commandPalette ||= createCommandPalette({
+      field: campo, list: elenco, empty: vuoto, translate: tr, shortcutLabel: etichettaTasto,
+      context: commandContext, execute: executeCommand,
+      reportError: error => toast('Comando non eseguito', error?.message || String(error)),
+    });
+    commandPalette.prepare();
+    if (velo) apriVeloMockup('veloComandi');
+    else { prepareResizableDialog(commandDialog, 'command:palette'); showEmbeddedDialog(commandDialog); }
+    commandPalette.focus();
   }
 
   function executeCommand(command) {
+    const definition = commandById(command);
+    if (!definition) return;
+    const unavailable = commandDisabledReason(definition, commandContext());
+    if (unavailable) { toast('Comando non disponibile', tr(unavailable)); return; }
     // ⛔ si chiude quella che è aperta: il velo se c'è, il foglio altrimenti (mai tutt'e due)
     if ($('#veloComandi') && !$('#veloComandi').hidden) chiudiVeloMockup('veloComandi');
     else closeEmbeddedDialog(commandDialog);
+    if (definition.view) { setView(definition.view); return; }
     switch (command) {
+      case 'model': openSheet('model'); break;
+      case 'models': setView('settings'); setSettingsSection('models'); break;
+      case 'providers': setView('settings'); setSettingsSection('account'); break;
+      case 'shortcuts': montaScorciatoie($('#veloScorciatoie')); apriVeloMockup('veloScorciatoie'); break;
       case 'new': createNewSession(); break;
-      case 'review': setView('diff'); break;
-      case 'terminal': setView('terminal'); break;
-      case 'browser': setView('browser'); break;
       case 'permissions': openSheet('permissions'); break;
-      case 'dashboard': setView('dashboard'); break;
-      /*
-       * ⛔⛔⛔ Riconciliazione Fase 2 (piano procedi-col-generare-un-snoopy-neumann.md,
-       * 27/8) — trovato dal vivo: fino a qui il palette mostrava sempre lo
-       * stesso toast finto, ANCHE con una sessione reale in corso, invece
-       * di chiamare le funzioni vere già scritte e già cablate altrove
-       * (`forkSession()` sul bottone "Fork questa sessione", `compactSession()`
-       * esposta su `window.__talosHarnessUiRuntime` per i test automatici).
-       * Entrambe già ricadono da sole sullo stesso toast finto quando non
-       * c'è una sessione reale — zero duplicazione necessaria qui.
-       */
       case 'resume': resumeSession(); break;
       case 'fork': forkSession(); break;
       case 'compact': compactSession(); break;
@@ -19619,7 +19192,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       case 'control': eseguiDoctor(); break;
       case 'rename': openSheet('rename'); break;
       case 'export': exportSession(); break;
-      case 'share': shareSession(); break;
+      case 'share': exportSession(); break;
       default: break;
     }
   }
@@ -20166,7 +19739,7 @@ ${testo}`;
    * `data-apre-velo` non serve: e' gia' delegato dalla regia del mockup.
    */
   ROOT().addEventListener('click', (evento) => {
-    const b = evento.target.closest?.('.talos-topbar__actions [data-azione]');
+    const b = evento.target.closest?.('.talos-topbar__actions [data-azione], [data-workspace-bar] [data-azione="comandi"]');
     /*
      * ⛔ 06/9, owner: «non riesco ad aprire la sidebar di destra dopo averla collassata».
      * Strumentato (non supposto): il clic arrivava, il delegato partiva, e la colonna non si muoveva
@@ -20188,54 +19761,13 @@ ${testo}`;
   });
   $('#commandPaletteBtn').addEventListener('click', openCommandPalette);
   $('#closeCommand')?.addEventListener('click', () => closeEmbeddedDialog(commandDialog));
-  harnessDialogBackdrop.addEventListener('click', dismissTransientLayers);
-  /*
-   * ⛔ 07/9 — gli ascoltatori erano legati SOLO al campo del monolite (`#commandSearch`): aprendo il
-   *   velo italiano la palette compariva e non faceva niente — non filtrava, le frecce non
-   *   muovevano, Invio non apriva. Provato dal vivo, ed è così che si è visto.
-   * ⇒ Gli stessi tre gesti si collegano a ENTRAMBI i campi, con una funzione sola. La ricerca
-   *   dell'elemento attivo passa da `radiceComandi()`, così non c'è un `#commandResults` scritto a
-   *   mano che punta alla palette sbagliata.
-   */
-  function collegaCampoComandi(campo) {
-    if (!campo || campo.dataset.comandiCollegati) return;
-    campo.dataset.comandiCollegati = 'si';
-    campo.addEventListener('input', () => filterCommands(campo.value));
-    campo.addEventListener('keydown', (event) => {
-      if (event.key === 'ArrowDown') { event.preventDefault(); moveActiveCommand(1); }
-      else if (event.key === 'ArrowUp') { event.preventDefault(); moveActiveCommand(-1); }
-      else if (event.key === 'Enter') {
-        const { elenco } = radiceComandi();
-        const active = elenco && $('.command-active[data-command]', elenco);
-        if (active) { event.preventDefault(); executeCommand(active.dataset.command); }
-      }
-    });
-  }
+  harnessDialogBackdrop.addEventListener('click', () => { if (!modalManager?.requestCloseTop()) dismissTransientLayers(); });
   /*
    * ⛔ 07/9 — la scia del cursore (la parte percorsa): un ascoltatore solo sulla radice, perché i
    *   cursori nascono e muoiono coi veli. Vedi `components/range-scia.js` per il perché non basta
    *   il CSS: Chrome e Safari non hanno lo pseudo-elemento che ce l'ha Firefox.
    */
   collegaScia(ROOT());
-  collegaCampoComandi(commandSearch);
-  collegaCampoComandi($('#cercaComando'));
-
-  /*
-   * ⛔ Le voci si ascoltano sulla RADICE, non una per una: nel velo sono 15 e nel foglio altre 15,
-   *   e un ascoltatore per bottone si moltiplica a ogni ridisegno.
-   */
-  for (const elenco of [$('#commandResults'), $('#risultatiComandi')]) {
-    if (!elenco || elenco.dataset.comandiCollegati) continue;
-    elenco.dataset.comandiCollegati = 'si';
-    elenco.addEventListener('mouseover', (event) => {
-      const button = event.target?.closest?.('button[data-command]');
-      if (button) setActiveCommand(button);
-    });
-    elenco.addEventListener('click', (event) => {
-      const button = event.target?.closest?.('button[data-command]');
-      if (button) executeCommand(button.dataset.command);
-    });
-  }
 
   composerInput.addEventListener('input', () => {
     autoGrowTextarea();
@@ -20517,6 +20049,7 @@ ${testo}`;
     const eventName = input.type === 'range' ? 'input' : 'change';
     input.addEventListener(eventName, () => {
       const value = input.type === 'checkbox' ? input.checked : input.value;
+      if (key === 'uiDensity' && !HOST().classList.contains('talos-embedded')) workspacePreferences.update({ density: value === 'compatta' ? 'compact' : 'comfortable' });
       aggiornaAspettoDesktop({ [key]: value });
     });
   }
@@ -20535,6 +20068,10 @@ ${testo}`;
    * col modificatore della piattaforma (⌘ su Apple, Ctrl altrove).
    */
   ROOT().addEventListener('keydown', (event) => {
+    if (event.isComposing || event.key === 'Process' || event.keyCode === 229) return;
+    if (modalManager?.handleKey(event)) return;
+    // A native modal owns the interaction until dismissed; global shortcuts must not open underneath it.
+    if (modalManager && ROOT().querySelector('dialog:modal')) return;
     const quale = riconosci(event);
     if (quale === 'comandi') { event.preventDefault(); openCommandPalette(); }
     else if (quale === 'nuova') { event.preventDefault(); createNewSession(); }
@@ -20696,6 +20233,7 @@ ${testo}`;
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {
+    workspaceDisposed = true; startupNavigation.next(); workspaceUI?.dispose(); commandPalette?.dispose(); modalManager?.dispose();
     contextCompactor?.destroy(); contextCompactor = null;
     contextMonitor?.stop(); contextMonitor = null;
     window.clearInterval(notificheTimer);
@@ -20913,19 +20451,48 @@ ${testo}`;
    * qui applicata alla lista sessioni: zero fetch fantasma su un bridge che
    * per costruzione non risponderà mai.
    */
+  // BOOT-03. The host owns embedded navigation. Standalone starts on the real
+  // home, then resolves only an explicit intent or the user's saved workspace.
   window.setTimeout(() => {
-    // ⛔ verificato al MOMENTO del fire, non alla schedulazione: un test (o
-    // un embed reale) può marcare talos-embedded fra i due istanti.
-    if (!HOST().classList.contains('talos-embedded')) {
-      const doctorDalLauncher = apriDoctorDaLauncher();
-      const cartellaDalLauncher = Boolean(leggiWorkspaceLaunchId());
-      apriWorkspaceDaLauncher();
-      // ⭐ 04/9, R-02 — l'intro cede il passo ai flussi del lanciatore (Doctor, «Apri cartella con TALOS»): chi arriva con un'intenzione precisa non deve trovare un modale davanti.
-      if (!doctorDalLauncher && !cartellaDalLauncher) apriIntroSeServe();
-      aggiornaElencoSessioniReali();
-      renderAutomationsReali(); // ⭐ 27/8 — la card automazioni della sidebar è live da subito, non solo dopo aver aperto la vista
-    }
+    if (HOST().classList.contains('talos-embedded') || workspaceDisposed) return;
+    void avviaWorkspaceDesktop();
+    void aggiornaElencoSessioniReali();
+    renderAutomationsReali();
   }, 0);
+
+  async function avviaWorkspaceDesktop() {
+    const issued = startupNavigation.current();
+    const current = () => shouldCommitStartup(issued, startupNavigation.current(), workspaceDisposed);
+    if (issued !== 0 || state.realSession.id) return;
+    if (apriDoctorDaLauncher()) return;
+    if (leggiWorkspaceLaunchId()) {
+      setView('home', { startup: true });
+      const opened = await apriWorkspaceDaLauncher(current);
+      if (current() && !opened) workspaceUI?.showNotice('La destinazione richiesta non è disponibile. Scegli un altro progetto.');
+      return;
+    }
+    const preferences = workspacePreferences.read();
+    const saved = preferences.restoreWorkspace ? preferences.lastSession : null;
+    if (saved) {
+      try {
+        const result = await apiGet('/api/v1/sessions');
+        if (!current()) return;
+        const row = Array.isArray(result.items) ? result.items.find((item) => item.sessionId === saved) : null;
+        const decision = decideStartup({ mode: 'standalone', restoreWorkspace: true,
+          lastWorkspace: row ? { status: 'available', target: { kind: 'workspace', id: row.sessionId } } : { status: 'missing' } });
+        if (decision.action === 'navigate' && decision.target.kind === 'workspace' && row) {
+          // Restore existing conversation only; passaASessione never starts a new run.
+          passaASessione(row.sessionId, row.taskId, row.nome, row.modello, row);
+          return;
+        }
+        workspaceUI?.showNotice('Il workspace precedente non è più disponibile. I tuoi altri lavori restano nella cronologia.');
+      } catch {
+        if (!current()) return;
+        workspaceUI?.showNotice('Non riesco a ripristinare il workspace. Puoi riprovare dalla cronologia.');
+      }
+    }
+    if (current()) setView('home', { startup: true });
+  }
   aggiornaPillolaModello(); // ⭐ 27/8 — sincronizza SUBITO la pillola con lo stato vero (state.model === ''), invece di lasciare "gpt-5.6-sol · high" scritto a mano nell'HTML statico
   aggiornaPillolaPermessi();
   aggiornaPillolaAmbiente();
@@ -20942,6 +20509,29 @@ ${testo}`;
   setQueueMode(false);
   setRunState(true);
   syncRunComposerState();
+  if (!HOST().classList.contains('talos-embedded') && $('#schermoHome')) {
+    modalManager = createOverlayManager(document);
+    workspaceUI = createWorkspaceChrome({
+      document, translate: tr, apiGet, navigate: setView,
+      openProject: () => { startupNavigation.next(); void openRealTaskSheet(); },
+      openModel: () => { startupNavigation.next(); openSheet('model'); },
+      openProviders: () => { setView('settings'); setSettingsSection('account'); },
+      openSession: (row) => {
+        if (state.sessionSelection.active) { state.sessionSelection.active = false; state.sessionSelection.selected.clear(); aggiornaToolbarSelezioneSessioni(); }
+        passaASessione(row.sessionId, row.taskId, row.nome, row.modello, row);
+      },
+      describeSession: (row) => statoSessione(row).testo,
+      currentSession: () => state.realSession.id,
+      currentWorkspace: () => state.realSession.cartellaAssoluta || state.sessionSelection.available?.get?.(state.realSession.id)?.cartella || null,
+      currentModel: () => state.model,
+      setInspectorVisible: (visible) => {
+        appShell.classList.toggle('inspector-collapsed', !visible);
+        syncInspectorToggle(); autoGrowTextarea();
+      },
+      preferences: workspacePreferences,
+    });
+    setView('home', { startup: true });
+  }
   /*
    * ⭐⭐⭐ 05/9, fase 1 del piano «il mockup diventa la app» — la REGIA del
    * mockup portata dentro app.js, tale e quale: i luoghi della sidebar e le
@@ -20951,7 +20541,7 @@ ${testo}`;
    * clic fuori chiudono; i `[aria-expanded][aria-controls]` sono disclosure.
    * Nessuna logica di prodotto: solo il comportamento che il mockup già ha.
    */
-  const VISTA_PER_VAIA = { chat: 'chat', vuota: 'vuota', terminale: 'terminal', review: 'diff', capability: 'capability', board: 'dashboard', memoria: 'memoria', attivita: 'attivita', note: 'note', progetti: 'progetti', impostazioni: 'settings', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automazioni: 'automations', browser: 'browser' };
+  const VISTA_PER_VAIA = VIEW_BY_DESTINATION;
   ROOT().addEventListener('click', (event) => {
     const vaia = event.target.closest?.('[data-vaia]');
     /*
@@ -20986,8 +20576,8 @@ ${testo}`;
   function apriVeloMockup(id) {
     if (id === 'veloContesto') { void compactSession(); return; }
     const v = $(`#${id}`); if (!v) return;
-    if (id === 'veloIntro' && !introMockup) { void apiGet('/api/v1/setup/stato').catch(() => null).then((stato) => apriIntroMockup(0, stato)); return; } // 06/9 B7b: «Ripeti il primo avvio»
-    ultimoFuocoVelo = ROOT().activeElement;
+    const opener = ROOT().activeElement;
+    ultimoFuocoVelo = opener;
     v.hidden = false;
     preparaMisuraDialogo(v); // 06/9 B7: la misura ricordata di QUESTO dialogo, se c'è
     aggiornaTutteLeScie(v);   // ⛔ 07/9: un cursore appena montato ha la scia a zero finché non lo tocchi
@@ -21006,15 +20596,18 @@ ${testo}`;
       || (corpo && corpo.querySelector('input, button, select'))
       || v.querySelector('.talos-dialog__footer button, .talos-dialog__footer input, .talos-dialog__footer select')
       || v.querySelector('input, button, select');
-    primo?.focus();
+    if (modalManager) modalManager.activate(v, { content: v.querySelector('.talos-dialog') || v, opener, initialFocus: primo, requestClose: () => chiudiVeloMockup(id) });
+    else primo?.focus();
   }
   function chiudiVeloMockup(id) {
     if (id === 'veloContesto' && contextCompactor) { contextCompactor.close(); return; }
     const v = $(`#${id}`); if (!v || v.hidden) return;
     v.hidden = true;
-    if (ultimoFuocoVelo?.focus) ultimoFuocoVelo.focus();
+    if (modalManager) modalManager.deactivate(v);
+    else if (ultimoFuocoVelo?.focus) ultimoFuocoVelo.focus();
   }
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') $$('.overlay-layer').forEach((v) => chiudiVeloMockup(v.id)); });
+  // Embedded hosts retain their own interaction lifecycle. Standalone uses the modal stack.
+  document.addEventListener('keydown', (event) => { if (!modalManager && event.key === 'Escape' && !event.defaultPrevented) { const open = $$('.overlay-layer').filter(v => !v.hidden).at(-1); if (open) chiudiVeloMockup(open.id); } });
   collegaRidimensionamentoDialoghi(ROOT()); // 06/9 B7: le tre maniglie di ogni velo (trascina, frecce, doppio clic)
   (() => { // 06/9: la striscia compare solo scorrendo in alto — si ridisegna quando la conversazione scorre
     /*
@@ -21118,32 +20711,4 @@ ${testo}`;
    * la versione attiva ora è quella del ridisegno (card `.hf-repo-card`,
    * stessa logica di download/set-incompleto/hash-mancante inline). */
 
-  /*
-   * ⭐⭐⭐ 02/9 — owner dal vivo: "quando ricarico la pagina bisogna che si
-   * apra automaticamente ultima sessione disponibile". Non una chiamata
-   * sincrona al mount: il commento sopra ensureDownloadQueueBadge()
-   * documenta un vincolo TESTATO ("il boot non fa MAI una chiamata di
-   * rete propria" — CODE-COMPOSER-DEMO-SEND-01, HARNESS-BOARD-MOBILE-
-   * HONESTY-01) e quei test controllano fetchMock in modo SINCRONO
-   * (zero tick) subito dopo il mount — un setTimeout, anche a 0ms, non
-   * ha ancora girato in quel momento preciso, quindi resta compatibile:
-   * verificato leggendo entrambi i test riga per riga, non presunto.
-   * Mai nell'embedded mobile demo (nessun backend reale lì — stesso
-   * principio del vincolo che questo commento cita).
-   */
-  window.setTimeout(() => {
-    if (HOST().classList.contains('talos-embedded')) return;
-    if (state.realSession.id) return; // già una sessione attiva per altra via (es. deep-link)
-    apriUltimaSessioneDisponibileAllAvvio();
-  }, 0);
-
-  async function apriUltimaSessioneDisponibileAllAvvio() {
-    let elenco;
-    try { elenco = (await apiGet('/api/v1/sessions')).items; } catch { return; } // ⛔ un fallimento qui non è un'azione richiesta dall'utente, non merita un toast — resta lo stato vuoto onesto
-    if (state.realSession.id) return; // ri-controllo: potrebbe essere cambiata durante l'attesa della fetch
-    if (!Array.isArray(elenco) || elenco.length === 0) return;
-    const ultima = [...elenco].sort((a, b) => new Date(b.avviataAlle).getTime() - new Date(a.avviataAlle).getTime())[0];
-    if (!ultima) return;
-    passaASessione(ultima.sessionId, ultima.taskId, ultima.nome, ultima.modello, ultima);
-  }
 })();

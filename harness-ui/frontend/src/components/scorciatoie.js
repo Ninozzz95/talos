@@ -68,7 +68,9 @@ export const SCORCIATOIE = Object.freeze([
 
 /** Riconosce quale scorciatoia è stata premuta. Torna l'id, o null. */
 export function riconosci(evento, { apple = suApple() } = {}) {
-  if (!evento) return null;
+  if (!evento || evento.defaultPrevented || evento.isComposing || evento.key === 'Process' || evento.keyCode === 229) return null;
+  // The terminal owns Ctrl+K and its other shell editing shortcuts.
+  if (evento.target?.closest?.('.xterm')) return null;
   const mod = apple ? evento.metaKey : evento.ctrlKey;
   if (!mod || evento.altKey) return null;
   const tasto = String(evento.key || '').toLowerCase();

@@ -1,0 +1,7 @@
+# CP16 — regressioni e driver custom sincronizzati
+
+Il candidato CP15 `f39c0e9` conserva i report negativi: nel run 35273999739 il test delle 40 preferenze ha fallito una scelta font e il conseguente roundtrip, mentre workspace ha ancora due timeout. Il gate finale è correttamente fallito; nessun risultato è verde per convenienza. I 153 test Node, 17 contratti controlli, 58 verifiche appearance, 30 combinazioni responsive e 17 percorsi catalogo del prototipo sono invece tutti passati anche nella CI su CP15. La suite frontend ha 1173 pass e uno skip.
+
+Il driver precedente verificava isVisible senza attendere il mount e ricadeva immediatamente sul select nativo, poi nascosto. Il driver dedicato conosce lo scope e attende la UI custom visibile. Le scelte vengono esercitate con apertura del popup e clic sull'opzione: click attende geometria stabile, mentre focus() e tasti immediati potevano competere con il ripristino focus della sezione. Tutti i valori/scenari/assert restano; nessun force né retry dell'azione che modifichi preferenze alla cieca. La tastiera rimane provata nei 17 contratti componente e nel test reale Escape/slider.
+
+Questo checkpoint cambia soltanto driver/runner di test, non produzione, default o storage. Richiede una nuova esecuzione dei gate. Il prototipo è committato sotto `harness-ui/frontend/prototypes/calm-lab`, NON importato nel prodotto. La migrazione del catalogo alle API reali resta aperta.
