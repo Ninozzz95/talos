@@ -232,12 +232,15 @@ fn invoke_inner(worker:&Path,component:&[u8],snapshot:&[u8],policy:Policy,contro
  })();
  // A Complete frame is only a claim. Require an observed, normal process exit.
  let result=result.and_then(|mut out|{out.worker_exit_code=session.wait_for_normal_exit(&wait)?;Ok(out)});
- let admission_closed=control.cancel().map_err(|e|anyhow::anyhow!("close broker admission: {e:?}"));
+ let admission_closed=control.broker().cancel().map_err(|e|anyhow::anyhow!("close broker admission: {e:?}"));
+ let admission_error=admission_closed.as_ref().err().map(|e|format!("{e:#}"));
+ let result=result.and_then(|out|admission_closed.map(|_|out)).and_then(|out|{wait.complete()?;Ok(out)});
+ if result.is_err(){let _=control.cancel();}
  let mut cleanup=session.cleanup();
- if let Err(ref error)=admission_closed{cleanup.errors.push(format!("{error:#}"));}
+ if let Some(error)=admission_error{cleanup.errors.push(error);}
  let broker_bytes_admitted=control.bytes_released().ok();
  control.set_phase(Phase::Closed);
- match result.and_then(|out|admission_closed.map(|_|out)){
+ match result{
   Err(cause)=>Err(InvocationFailure{cause,cleanup,broker_bytes_admitted}.into()),
   Ok(_) if !cleanup.complete()=>Err(InvocationFailure{cause:anyhow::anyhow!("invocation cleanup incomplete"),cleanup,broker_bytes_admitted}.into()),
   Ok(mut out)=>{out.worker_terminated=true;Ok(out)},

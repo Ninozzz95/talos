@@ -14,7 +14,7 @@ impl std::error::Error for StopReason {}
 pub enum Phase { New, Launching, Connected, WaitingForReply, ReadReceived, CompleteReceived, Closed }
 struct State {
     broker: Broker,
-    cancelled: AtomicBool,
+    terminal: AtomicU8, // 0=running, 1=cancelled, 2=completed, 3=deadline
     claimed: AtomicBool,
     pending_io: AtomicBool,
     phase: AtomicU8,
@@ -30,14 +30,14 @@ impl InvocationControl {
         if timeout.is_zero() || timeout > Duration::from_secs(30) { return Err(StopReason::InvalidTimeout); }
         Ok(Self(Arc::new(State {
             broker: Broker::new(MAX_SNAPSHOT).expect("fixed broker bound"),
-            cancelled: AtomicBool::new(false), claimed: AtomicBool::new(false),
+            terminal: AtomicU8::new(0), claimed: AtomicBool::new(false),
             pending_io: AtomicBool::new(false), phase: AtomicU8::new(Phase::New as u8), timeout,
         })))
     }
     pub fn cancel(&self) -> Result<(), Denial> {
         let result = self.0.broker.cancel();
         // Even a poisoned authority mutex must wake the transport fail-closed.
-        self.0.cancelled.store(true, Ordering::Release);
+        let _ = self.0.terminal.compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire);
         result
     }
     pub fn bytes_released(&self) -> Result<usize, Denial> { self.0.broker.bytes_released() }
@@ -70,12 +70,32 @@ impl Drop for PendingIo<'_> {
 pub(crate) struct WaitContext<'a> { pub control: &'a InvocationControl, pub deadline: Instant }
 impl WaitContext<'_> {
     pub fn checkpoint(&self) -> Result<(), StopReason> {
-        if self.control.0.cancelled.load(Ordering::Acquire) { return Err(StopReason::Cancelled); }
+        match self.control.0.terminal.load(Ordering::Acquire) {
+            1 => return Err(StopReason::Cancelled),
+            2 => return Err(StopReason::AlreadyUsed),
+            3 => return Err(StopReason::Deadline),
+            _ => {},
+        }
         if Instant::now() >= self.deadline {
-            let _ = self.control.cancel();
-            return Err(StopReason::Deadline);
+            let _ = self.control.broker().cancel();
+            return match self.control.0.terminal.compare_exchange(0, 3, Ordering::AcqRel, Ordering::Acquire) {
+                Err(1) => Err(StopReason::Cancelled),
+                _ => Err(StopReason::Deadline),
+            };
         }
         Ok(())
+    }
+    /// One linearization point for cancellation racing with normal completion.
+    /// The caller has already closed admission and observed exit zero. Cleanup
+    /// must still succeed; this decision is not an authority/promotion receipt.
+    pub fn complete(&self) -> Result<(), StopReason> {
+        self.checkpoint()?;
+        match self.control.0.terminal.compare_exchange(0, 2, Ordering::AcqRel, Ordering::Acquire) {
+            Ok(_) => Ok(()),
+            Err(1) => Err(StopReason::Cancelled),
+            Err(3) => Err(StopReason::Deadline),
+            Err(_) => Err(StopReason::AlreadyUsed),
+        }
     }
     pub fn slice_ms(&self) -> u32 {
         self.deadline.saturating_duration_since(Instant::now()).as_millis().clamp(1, 10) as u32
@@ -112,6 +132,10 @@ impl WaitContext<'_> {
     #[test] fn pending_guard_clears_on_error_or_unwind() {
         let c=InvocationControl::new(Duration::from_secs(1)).unwrap();
         { let _p=c.pending(); assert!(c.io_pending()); } assert!(!c.io_pending());
+        let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _p=c.pending(); panic!("synthetic pending-guard unwind");
+        }));
+        assert!(result.is_err()); assert!(!c.io_pending());
     }
     #[test] fn deadline_uses_one_absolute_instant() {
         let c=InvocationControl::new(Duration::from_secs(1)).unwrap();
@@ -126,4 +150,29 @@ impl WaitContext<'_> {
         for thread in threads { assert_eq!(thread.join().unwrap(),Err(Denial::Cancelled)); }
         assert_eq!(c.bytes_released(),Ok(0));
     }
+    #[test] fn cancellation_before_completion_cannot_be_erased() {
+        let c=InvocationControl::new(Duration::from_secs(1)).unwrap();let wait=c.claim().unwrap();
+        c.cancel().unwrap(); assert_eq!(wait.complete(),Err(StopReason::Cancelled));
+    }
+    #[test] fn completed_decision_is_not_rewritten_by_late_cancel() {
+        let c=InvocationControl::new(Duration::from_secs(1)).unwrap();let wait=c.claim().unwrap();
+        c.broker().cancel().unwrap();wait.complete().unwrap();c.cancel().unwrap();
+        assert_eq!(c.0.terminal.load(Ordering::Acquire),2);
+        assert_eq!(wait.complete(),Err(StopReason::AlreadyUsed));
+    }
+    #[test] fn cancellation_and_completion_race_has_one_stable_winner() {
+        for _ in 0..64 {
+            let c=InvocationControl::new(Duration::from_secs(1)).unwrap();let other=c.clone();
+            let gate=Arc::new(std::sync::Barrier::new(2));let other_gate=gate.clone();
+            let task=std::thread::spawn(move||{other_gate.wait();other.cancel().unwrap();});
+            let wait=c.claim().unwrap();c.broker().cancel().unwrap();gate.wait();
+            let outcome=wait.complete();task.join().unwrap();
+            match outcome {
+                Ok(())=>assert_eq!(c.0.terminal.load(Ordering::Acquire),2),
+                Err(StopReason::Cancelled)=>assert_eq!(c.0.terminal.load(Ordering::Acquire),1),
+                _=>panic!("unexpected terminal decision"),
+            }
+        }
+    }
+
 }
