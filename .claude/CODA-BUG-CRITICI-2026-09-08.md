@@ -793,3 +793,21 @@ che fallisce a metà, che scatta durante un attrezzo, che perde l'ultimo messagg
 (5) confronto con Claude Code, Codex e Hermes (auto-compact, soglie, riassunto verificabile). Ricerca web prima di scrivere.
 **Finita quando:** un compito di più ore con tre compattazioni di fila si chiude come senza compattazione, con la prova che i
 fatti dichiarati all'inizio sopravvivono, e la persona vede e capisce ogni compattazione. Da fare DOPO le fasi in corso.
+
+## BC-66 | REFACTOR o IRROBUSTIMENTO del CONTEXT ENGINE (owner 17/09/2026, insieme a BC-65) — DEBITO, «lo facciamo dopo»
+
+**Parole dell'owner:** «un refactor o irrobustimento del context engine anche». È il motore su cui poggia la compattazione
+(BC-65): le due righe si aprono INSIEME, e questa viene prima — non si rende robusta una funzione sopra un motore che non lo è.
+
+**Cosa c'è già scritto e va riletto prima di aprirla (niente da ri-dedurre):** il motore vive in `context-engine/` (store
+SQLite con un worker: `src/node/sqlite-store.mjs`, `sqlite-worker.mjs`, `migrations/`); sul 4174 è **spento per costruzione**
+(`CTX_NOT_ENABLED`, BC-07), quindi l'owner non lo esercita mai dal vivo; la Fase 9 elenca ciò che non è mai stato misurato
+(acceso/spento, latenza — una sola misura, 61,2 s al primo token —, riuso della cache, costi). ⭐ L'**audit indipendente**
+custodito (FASE 12) ha tre task proprio qui, non ancora valutati: **T04.1** backpressure e shutdown del worker SQLite,
+**T04.2** migrazioni, recovery e restore (P1), **T04.3** query, export e limiti delle risorse. Entrano in questa riga.
+
+**Da decidere all'apertura (owner):** refactor (ridisegnare i confini: store, worker, contratti con `harness-ui`) oppure
+irrobustimento sul disegno attuale — si sceglie coi numeri dell'inventario, non a tavolino. **Finita quando:** il motore regge
+una sessione lunga vera con guasti iniettati (worker che muore, DB bloccato, migrazione a metà, disco pieno) senza perdere né
+corrompere niente, è acceso dove l'owner lavora, e BC-65 ci gira sopra verde.
+
