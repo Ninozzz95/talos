@@ -1,0 +1,47 @@
+name: local-engine-kernel
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'harness-ui/src/**'
+      - 'harness-ui/tests/**'
+      - 'harness-ui/scripts/**'
+      - '.github/workflows/local-engine-kernel.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  local-engine-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - name: Source provenance and reproduction snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/local-engine-evidence"
+          node harness-ui/scripts/local-engine-source-baseline.mjs > "$RUNNER_TEMP/local-engine-evidence/source-baseline.json"
+          git archive --format=tar HEAD harness-ui context-engine .github README.md .gitmodules | gzip > "$RUNNER_TEMP/local-engine-evidence/source.tar.gz"
+          sha256sum "$RUNNER_TEMP/local-engine-evidence/source.tar.gz" > "$RUNNER_TEMP/local-engine-evidence/source.sha256"
+      - name: Dependency-free baseline contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test harness-ui/tests/local-engine-source-baseline.test.mjs harness-ui/tests/local-runtime-llama-server.test.mjs | tee "$RUNNER_TEMP/local-engine-evidence/contracts.tap"
+      - name: Preserve source identity and test evidence, never credentials or models
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: local-engine-contract-evidence
+          path: ${{ runner.temp }}/local-engine-evidence/
+          retention-days: 7
+          if-no-files-found: error
