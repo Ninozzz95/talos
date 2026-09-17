@@ -1112,3 +1112,10 @@ posto di `statSync().isDirectory()` lascia tutto verde. ⛔ Residui dichiarati: 
 giudice della ricerca di norma non c'è più quando l'unico candidato è l'autore (prezzo di non uscire dal fornitore della
 sessione: da decidere se dare alla persona la scelta del giudice nelle Impostazioni); gli hook STANDALONE
 (`.harness-ui-hooks.json`) accettano ancora `node -e`; `scansionaPatternSospetti` oggi rassicura e basta.
+
+## BC-77 | Due difetti visti nelle foto di PO-27, fuori da quella corsia (revisore, 17/09/2026) — APERTI
+- **Un toast copre il composer a 1024×800**: «Collegato di nuovo» sopra «Terminale», il microfono e il pulsante di stop; in
+  un'altra foto sopra «Scrive nel progetto». In 4 foto su 20. Un avviso non deve mai coprire un comando, tanto meno lo stop.
+- **HTML malformato nella `talos-turn-spine` del template** (`index.template.html`): `<button …></span aria-label="Vai al
+  giro"></button>` — si vede come un trattino fantasma a sinistra della colonna (x≈303) in tutte le foto con sessione.
+Non verificati da me: letti nel rapporto del revisore.
