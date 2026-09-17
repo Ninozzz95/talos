@@ -4385,7 +4385,8 @@ a.talos-button {
   flex-direction: column;
   overflow: hidden;
 }
-.talos-terminal__tabs {
+.talos-terminal__tabs,
+.talos-schede {
   display: flex;
   align-items: center;
   gap: 2px;
@@ -4393,7 +4394,8 @@ a.talos-button {
   border-bottom: 1px solid var(--talos-border);
   background: var(--talos-panel);
 }
-.talos-terminal__tab {
+.talos-terminal__tab,
+.talos-schede__tab {
   height: 32px;
   padding: 0 12px;
   border-radius: 8px;
@@ -4403,8 +4405,13 @@ a.talos-button {
   align-items: center;
   gap: 8px;
 }
-.talos-terminal__tab[aria-selected=true] {
+.talos-terminal__tab[aria-selected=true],
+.talos-schede__tab[aria-selected=true] {
   background: var(--talos-card);
+  color: var(--talos-text);
+}
+.talos-terminal__tab:hover:not([aria-selected=true]):not(:disabled),
+.talos-schede__tab:hover:not([aria-selected=true]):not(:disabled) {
   color: var(--talos-text);
 }
 .talos-terminal__body {
@@ -4443,11 +4450,15 @@ a.talos-button {
   overflow: hidden;
   min-width: 0;
 }
+.talos-schede {
+  min-width: 0;
+}
 .talos-terminal__tabs .talos-grow {
   flex: 1 1 0;
   min-width: 6px;
 }
-.talos-terminal__tab {
+.talos-terminal__tab,
+.talos-schede__tab {
   position: relative;
   flex: 0 0 auto;
   white-space: nowrap;
@@ -4468,7 +4479,8 @@ a.talos-button {
   margin-right: 8px;
   vertical-align: middle;
 }
-.talos-terminal__tab:disabled {
+.talos-terminal__tab:disabled,
+.talos-schede__tab:disabled {
   opacity: .45;
   cursor: not-allowed;
 }
@@ -4549,32 +4561,72 @@ a.talos-button {
     display: none;
   }
 }
+.talos-schede--scorre {
+  overflow: hidden;
+}
+.talos-schede__lista {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+.talos-schede--scorre .talos-schede__tab {
+  flex: 0 0 auto;
+  max-width: 320px;
+}
+.talos-schede__lista[data-bordi=destra] {
+  mask-image:
+    linear-gradient(
+      to right,
+      #000 calc(100% - 28px),
+      transparent);
+}
+.talos-schede__lista[data-bordi=sinistra] {
+  mask-image:
+    linear-gradient(
+      to right,
+      transparent,
+      #000 28px);
+}
+.talos-schede__lista[data-bordi=entrambi] {
+  mask-image:
+    linear-gradient(
+      to right,
+      transparent,
+      #000 28px,
+      #000 calc(100% - 28px),
+      transparent);
+}
 .talos-review {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
   padding: 12px 18px 14px;
 }
 .talos-review__schede {
   flex: none;
   min-width: 0;
-}
-.talos-review__schede .talos-tabs__list {
-  display: flex;
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  border: 1px solid var(--talos-border);
+  border-bottom: 0;
+  border-radius: var(--talos-radius-card) var(--talos-radius-card) 0 0;
 }
 .talos-review__scheda {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   white-space: nowrap;
+  min-width: 0;
 }
 .talos-review__scheda .talos-mono {
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .talos-review__diff {
   flex: 1 1 auto;
@@ -4584,6 +4636,8 @@ a.talos-button {
   overflow: auto;
   display: flex;
   flex-direction: column;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 .talos-review__diff-head {
   display: flex;
