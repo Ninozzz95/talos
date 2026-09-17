@@ -139,3 +139,24 @@ test('PROVIDER-RUNTIME-RESTART-02 file corrotto o valori non validi sono ignorat
   assert.equal(invalid.getRuntime('openai').endpointConfigured, false);
   assert.equal(invalid.getRuntime('ollama').endpointConfigured, false);
 });
+
+test('PROVIDER-STORE-07 ignoraSemiAmbiente — l\'app installata non eredita chiavi dall\'ambiente: gli endpoint restano, le chiavi arrivano solo dalla UI (16/09/2026)', async () => {
+  const secret = 'sk-env-seed-never-seen';
+  const store = createProviderCredentialStore({
+    env: { OPENROUTER_API_KEY: secret, DEEPSEEK_API_KEY: `${secret}-2`, OPENROUTER_API_KEY_POOL: JSON.stringify([secret, { key: `${secret}-3`, priorita: 2 }]), MOONSHOT_BASE_URL: 'https://moonshot.example.com/v1/' },
+    keyring: fakeKeyring(), ignoraSemiAmbiente: true,
+  });
+  for (const id of PROVIDER_IDS) assert.equal(store.hasKey(id), false, `nessuna chiave d'ambiente per ${id}`);
+  const publicRows = store.listPublic();
+  assert.equal(publicRows.some((row) => row.keyConfigured), false, 'nessuna scheda «collegata» nella modale');
+  assert.doesNotMatch(JSON.stringify(publicRows), /sk-env-seed-never-seen/);
+  const conIndirizzo = publicRows.filter((row) => row.endpointConfigured);
+  assert.ok(conIndirizzo.some((row) => row.endpoint === 'https://moonshot.example.com/v1'), 'gli ENDPOINT da ambiente sono configurazione, non segreti: si seminano anche nello scope desktop');
+  // la UI resta pienamente operativa: una chiave salvata dopo l'avvio c'è
+  const salvata = await store.setKey('openai', 'chiave-dalla-ui');
+  assert.equal(salvata.keyConfigured, true);
+  assert.equal(store.hasKey('openai'), true);
+  // il contrasto: il dev da sorgente, senza il flag, continua a seminare come sempre
+  const sviluppo = createProviderCredentialStore({ env: { OPENROUTER_API_KEY: secret }, keyring: fakeKeyring() });
+  assert.equal(sviluppo.hasKey('openrouter'), true, 'il dev semina da ambiente: default invariato');
+});

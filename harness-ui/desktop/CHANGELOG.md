@@ -6,6 +6,103 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.13 — 2026-09-16
+
+Same product as `desktop-v0.1.12`, which never published: its release job died building the
+installer, and a published tag is never rewritten, so this attempt gets a new number.
+
+### Fixed
+- The installer now builds. The uninstall-page work added an NSIS variable used only by the
+  uninstaller, but the installer build compiles the uninstaller in a separate pass (the template
+  includes it only when `BUILD_UNINSTALLER` is defined); the variable was declared in both passes
+  and used in one, and in this build every NSIS warning is an error — so the declaration now lives
+  only in the pass that uses it. The 0.1.12 run died exactly there: the uninstaller stub compiled
+  clean, then the main compile failed on `warning 6001` treated as an error.
+- A failed build no longer masquerades as success. The build script printed its failure and kept
+  going with a zero exit, so the release job's build step passed and the install smoke failed
+  seconds later against a truncated installer, reporting the smoke's confusion instead of the real
+  cause. Measured locally: the deep build failure loads `signal-exit@3.0.7` (via
+  `proper-lockfile`), which replaces `process.reallyExit` and zeroes the exit code with
+  `code || 0` when the process ends by draining the event loop — an instrumented run showed the
+  code at 1 in `beforeExit` and 0 at process exit. The script now exits non-zero explicitly at
+  the moment of the failure.
+- Running all six release gates locally for the first time — a new rule after 0.1.12 — caught one
+  more test describing the machine it was written on: the icon-fallback mutation check matched a
+  regex against the message Node generates for a failed `assert.equal`, and Node's colored diff
+  interleaves the compared characters, so the dead icon name stopped being contiguous and the
+  check failed wherever colors are forced (this machine's shell) while passing on CI. The check
+  now bites on the error's structured `actual` field, which does not depend on how the message is
+  rendered.
+
+## desktop-v0.1.12 — 2026-09-16
+
+Same product as `desktop-v0.1.11`, which never published: its release job stopped at the
+version-coherence gate (the package version was bumped without the lockfile), and a published
+tag is never rewritten, so this attempt gets a new number.
+
+Cure of the three findings from the engineering review of the keys work — no new features.
+
+### Fixed
+- With the desktop keyring scope, the installed app no longer falls back to the
+  `OPENROUTER_API_KEY` environment seed: a provider without a key in the app's own keyring
+  stays disconnected. Development from source keeps both paths.
+- Two test files wrote scratch folders to real disk paths through the research orchestrator's
+  disk-write ports; they now inject no-op ports.
+- Coming from 0.1.10 or earlier, the first launch copies (never moves) your provider and
+  search keys from the old keyring services into the app's `-desktop` namespace, pool and
+  priorities included. Keys already in the app — or deleted there — are never touched: the
+  copy happens once per machine (a marker file), providers with any trace in the new
+  namespace are skipped, and a deaf keyring retries next boot instead of burning the marker.
+
+## desktop-v0.1.10 — 2026-09-16
+
+Same product as `desktop-v0.1.9`, which never published: its release job stopped at the
+gates, and a published tag is never rewritten, so this attempt gets a new number.
+
+### Fixed
+- The gate that refused `desktop-v0.1.9` was the critical-tools hotfix transformer itself,
+  failing closed exactly as its own guard test demands. Its last patch was anchored to a
+  dispatch-ladder shape the kernel does not have: it sought `if (nome === 'leggi')` as the
+  head of the chain, but the kernel dispatches `elenca` and `cerca` first, so `leggi` has
+  been an `else if` at every commit the transformer ever existed in. That test lives in
+  `test:puri`, which only the release job executes, so this release run was its first CI
+  execution — the mismatch reached the tag undetected. Nothing unsafe shipped.
+- The `prova` refusal now inserts as an intermediate branch of the chain the kernel
+  actually has, still ahead of the legacy `prova` branch it must refuse; `elenca` and
+  `cerca` never capture `prova`, so nothing about the refusal changes.
+
+### Verification
+- Full `test:puri` locally, 60 tests, 0 failures, 4 declared-premise skips, with the
+  desktop dependencies installed the way the runner does; the transformer test applies
+  the four HIGH findings to the real kernel, 2/2.
+
+## desktop-v0.1.9 — 2026-09-15 (tag only, no release published)
+
+### Added
+- **Built-in assistance.** A new `/api/v1/assistenza` route answers questions about the product from
+  the `docs/assistenza` corpus shipped with the repository, returning quoted sources for every claim.
+  A question outside the corpus gets an explicit "I don't know" rather than an invented answer.
+  Requests accept a single bounded `domanda` field (1–500 characters), and the route is listed in the
+  HTTP inventory. The corpus carries its own adversarial verification script (`verifica-ancore.mjs`)
+  that checks every quoted anchor against the page it cites.
+- **Multiselect with one batch delete.** Library, notes, tasks, memory and research lists support
+  selecting several entries and deleting them with a single confirmation. Partial outcomes stay
+  visible — which items were deleted, which failed and why — and the failed ones can be retried.
+
+### Changed
+- Streaming renders smoother: the cursor and the fade reach the DOM on the next frame instead of
+  accumulating, and the `desktop-streaming-red` workflow now also runs the STREAMING-LIVE-SMOOTH-03
+  coverage.
+- The improve-prompt panel gained clipboard copy; the voice module and the detail-list section were
+  adjusted for the batch selection flow.
+
+### Verification
+- Full server suite (3028 tests) green on a fresh install; kernel suite 597/597; the fused parity
+  spec runs the phase-3 flows (assistance against the real corpus, batch selection, smooth streaming)
+  6/6 against a fresh build; the lab suite runs 135/135.
+- The batch response keeps the refined #9 shape: counts live in `riepilogo`, per-item outcomes in
+  `esiti[]`; the frontend reads exactly that shape, not the older flat draft.
+
 ## desktop-v0.1.8 — 2026-09-14
 
 ### Fixed

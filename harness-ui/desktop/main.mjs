@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, dialog, Menu, powerMonitor, screen, shell, Tray } from 'electron';
 import { creaCicloDiVita } from './lifecycle.mjs';
 import { leggiStatoFinestra, salvaStatoFinestra } from './window-state.mjs';
@@ -16,7 +17,29 @@ if (process.env.TALOS_DESKTOP_DATA_DIR) {
 }
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('lang', 'it');
-if (!app.requestSingleInstanceLock()) app.exit(0);
+/*
+ * ⛔ (16/09/2026) — LA PULIZIA ALLA DISINSTALLAZIONE (bug 2, gamba 2b). L'uninstaller lancia
+ * `TALOS.exe --talos-pulizia-dati` con ExecWait PRIMA di cancellare i file, SOLO se l'utente ha
+ * chiesto di eliminare dati e chiavi. Qui si esegue la routine (src/pulizia-dati.mjs, spedita
+ * col pacchetto: vedi staging di prepara-pacchetto.mjs) e si esce col suo codice: 0 = tutto
+ * pulito, non-0 = fallimento onesto che l'uninstaller mostra e che gli impedisce di cancellare
+ * i dati (una pulizia a metà non si nasconde). Il ramo sta PRIMA del lock a istanza singola e
+ * di qualunque finestra: questa non è una sessione, è una pulizia — e deve poter girare anche
+ * se un'altra istanza fosse rimasta appesa.
+ */
+if (process.argv.includes('--talos-pulizia-dati')) {
+  void (async () => {
+    try {
+      const percorsi = risolviPercorsi({ appPath: app.getAppPath(), isPackaged: app.isPackaged, resourcesPath: process.resourcesPath });
+      const { puliziaDatiDesktop } = await import(pathToFileURL(join(percorsi.root, 'src', 'pulizia-dati.mjs')).href);
+      const esito = await puliziaDatiDesktop();
+      app.exit(esito.ok ? 0 : 1);
+    } catch (errore) {
+      console.error('Pulizia dati non riuscita: ' + (errore?.message ?? errore));
+      app.exit(1);
+    }
+  })();
+} else if (!app.requestSingleInstanceLock()) app.exit(0);
 else avviaGuscio();
 
 function avviaGuscio() {

@@ -47,7 +47,7 @@ const COMPONENTI = [
   { nome: 'Inspector', schermata: 'schermoChat', selettore: '#inspectorSessione' }, // 06/9 B2
   { nome: 'Terminale', schermata: 'schermoTerminale', selettore: '#schermoTerminale .talos-terminal' }, // 06/9 B1: schede e piede
   { nome: 'Browser', schermata: 'schermoBrowser', selettore: '#schermoBrowser .talos-browser' }, // 06/9 K-I: letture, schede, cronologia
-  { nome: 'Inspector_processi', schermata: 'schermoChat', selettore: '#inspectorSessione' }, // 06/9 B2: la scheda Processi
+  { nome: 'Inspector_processi', schermata: 'schermoChat', selettore: '#railProcessi' }, // 15/9: il contratto Processi è questo pannello, non l'intero Inspector
   { nome: 'Toast', schermata: 'schermoChat', selettore: '#regioneToast' }, // 05/9 T-16: la pila dei messaggi
   { nome: 'NotificationPanel', schermata: 'schermoChat', selettore: '#pannelloNotifiche' }, // 06/9 T-17: «Aspetta te»
   { nome: 'ChatFooter', schermata: 'schermoChat', selettore: '#schermoChat .talos-chat-foot' },
@@ -175,6 +175,31 @@ test.describe('parità dei componenti ↔ mockup', () => {
        */
       if (comp.nome === 'NotificationPanel') { for (const p of [m.pagina, a.pagina]) await p.evaluate(() => { const n = document.querySelector('#pannelloNotifiche'); n.hidden = false; n.style.position = 'static'; n.style.willChange = 'transform'; }); }
       if (comp.nome === 'Toast') { for (const p of [m.pagina, a.pagina]) await p.evaluate(() => { const r = document.querySelector('#regioneToast'); r.hidden = false; for (const t of r.querySelectorAll('.talos-toast')) t.hidden = false; }); }
+      /*
+       * 15/09 — due sotto-componenti hanno già un contratto autonomo e sono cambiati dopo il
+       * riferimento statico. Il test PADRE non deve bocciare la conversazione/Inspector per il
+       * markup interno di quei figli: prima si prova esplicitamente il comportamento nuovo, poi
+       * si toglie il figlio dal confronto del contenitore. Non si allenta alcuna tolleranza pixel.
+       */
+      if (comp.nome === 'Conversazione') {
+        await expect(a.pagina.locator('#schermoChat .talos-waiting__row .talos-orb'), 'ORB-VIVO').toHaveCount(1);
+        await expect(a.pagina.locator('#schermoChat .talos-waiting__row .talos-line-loader'), 'ORB-NIENTE-SEGNAVIA').toHaveCount(0);
+        for (const p of [m.pagina, a.pagina]) await p.evaluate(() => {
+          const riga = document.querySelector('#schermoChat .talos-waiting__row');
+          if (!riga) return;
+          for (const nodo of [...riga.children]) if (!nodo.matches('.talos-waiting__label, .talos-mono')) nodo.remove();
+        });
+      }
+      if (comp.nome === 'Inspector') {
+        expect(await a.pagina.evaluate(() => {
+          const riga = [...document.querySelectorAll('#railContesto .talos-kv')].find(n => n.querySelector('.talos-kv__k')?.textContent === 'Riusato dalla cache');
+          return riga ? { chiave: riga.querySelector('.talos-kv__k')?.textContent, valore: riga.querySelector('.talos-kv__v')?.textContent } : null;
+        }), 'BC48-CACHE-NON-MISURATA').toEqual({ chiave: 'Riusato dalla cache', valore: 'non misurato' });
+        await a.pagina.evaluate(() => {
+          const riga = [...document.querySelectorAll('#railContesto .talos-kv')].find(n => n.querySelector('.talos-kv__k')?.textContent === 'Riusato dalla cache');
+          riga?.remove();
+        });
+      }
       expect(await struttura(a.pagina, comp.selettore), 'struttura').toEqual(await struttura(m.pagina, comp.selettore));
       expect(await testi(a.pagina, comp.selettore), 'parole').toEqual(await testi(m.pagina, comp.selettore));
       if (comp.nome === 'AutomationRow') {

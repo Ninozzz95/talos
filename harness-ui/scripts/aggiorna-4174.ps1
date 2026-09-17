@@ -60,27 +60,24 @@ if (Get-NetTCPConnection -LocalPort 4174 -State Listen -ErrorAction SilentlyCont
 # ── 3) avvia ────────────────────────────────────────────────────────────────────────────────────
 # ⛔⛔⛔ 10/09 — IL 4174 GIRAVA SU UN ALTRO KERNEL, e nessuno se ne accorgeva.
 #
-# Questa riga puntava a `AVM-harness\mobile\scripts\harness-talos\talosHarness.mjs`: un file di
-# un'altra lane, fermo al 06/09 e **diverso** da quello del repo (350.796 byte contro 370.469).
-# Era un residuo di quando il kernel non stava ancora qui dentro — vedi `config.mjs`,
-# `kernelNelRepo()`: dal 07/09 il kernel canonico è `src/kernel/talosHarness.mjs` ed è il
-# DEFAULT; la variabile serve a puntare ALTROVE, non a rifare il default.
-#
-# ⛔ Il costo, misurato oggi: le due righe di P-13 messe nel kernel del repo non arrivavano al
-#   modello, e un giro vero sul 4174 aveva lo STESSO identico primo giro di prima (7.760 token
-#   in entrambi i casi). Nessun errore da nessuna parte: semplicemente girava un altro file.
-#
-# ⇒ Si lascia decidere al default del prodotto. Se qualcuno ha già esportato la variabile per
-#   lavorare sul suo kernel, la sua scelta vince: questo script non gliela porta via.
+# Il kernel canonico resta `src/kernel/talosHarness.mjs`. Dal 15/09 il desktop passa però per un
+# adapter sottile (`talosHarness.desktop-hotfix.mjs`) che corregge esclusivamente i finding del
+# banco black-box senza spostare il metro di TALOS-BANCO e senza toccare il mobile. Una scelta
+# esplicita dell'owner continua a vincere.
 if ($env:TALOS_OWNER_RUNTIME_MODULE) {
   Write-Output ("kernel: uso quello che hai già scelto ({0})" -f $env:TALOS_OWNER_RUNTIME_MODULE)
 }
 else {
   $kernelDelRepo = Join-Path $harness ('src' + [IO.Path]::DirectorySeparatorChar + 'kernel' + [IO.Path]::DirectorySeparatorChar + 'talosHarness.mjs')
+  $kernelDesktop = Join-Path $harness ('src' + [IO.Path]::DirectorySeparatorChar + 'kernel' + [IO.Path]::DirectorySeparatorChar + 'talosHarness.desktop-hotfix.mjs')
   if (-not (Test-Path $kernelDelRepo)) {
     throw ("il kernel del repo non c'è ({0}): senza, ogni giro reale fallirebbe in silenzio" -f $kernelDelRepo)
   }
-  Write-Output ("kernel: quello del repo ({0})" -f $kernelDelRepo)
+  if (-not (Test-Path $kernelDesktop)) {
+    throw ("l'adapter desktop black-box non c'è ({0}): non avvio una 4174 che sembri aggiornata ma non lo sia" -f $kernelDesktop)
+  }
+  $env:TALOS_OWNER_RUNTIME_MODULE = $kernelDesktop
+  Write-Output ("kernel desktop: adapter black-box ({0}); base canonica ({1})" -f $kernelDesktop, $kernelDelRepo)
 }
 $log = Join-Path $harness '.talos-4174.log'
 $logErrori = Join-Path $harness '.talos-4174.err.log'
