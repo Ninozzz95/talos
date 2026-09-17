@@ -1,0 +1,56 @@
+name: desktop-ledger-command-entry
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['.github/workflows/desktop-ledger-command-entry.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source:
+    if: github.repository == 'Ninozzz95/talos' && github.ref == 'refs/heads/refactor/desktop-ledger-2026-09-17'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.patch.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: true
+      - id: patch
+        name: Apply the reviewed one-line production entry fix, preserving every test
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          path = Path('harness-ui/frontend/src/legacy/app.js')
+          before = path.read_bytes()
+          if hashlib.sha256(before).hexdigest() != 'bbec87573798fd99d8bd3090580e347e5909887ea546aad2a98c2c2f3b817335':
+              raise SystemExit('Source moved since review. Refusing to overwrite.')
+          old = b"const b = evento.target.closest?.('.talos-topbar__actions [data-azione]');"
+          new = b'''const b = evento.target.closest?.('.talos-topbar__actions [data-azione], [data-workspace-bar] [data-azione="comandi"]');'''
+          if before.count(old) != 1:
+              raise SystemExit('Expected one command owner.')
+          after = before.replace(old, new)
+          if hashlib.sha256(after).hexdigest() != '8684ceeba5cc03b9193b889f65768cda9d90896a1d20a711fa77f3a55ac3e346':
+              raise SystemExit('Unexpected patch result.')
+          path.write_bytes(after)
+          PY
+          git diff --check
+          git add -- harness-ui/frontend/src/legacy/app.js
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(desktop): route workspace command button through the real palette controller'
+          git push origin HEAD:refs/heads/refactor/desktop-ledger-2026-09-17
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  qualify:
+    needs: source
+    permissions:
+      contents: read
+    uses: ./.github/workflows/desktop-ledger-preview.yml
+    with:
+      source_sha: ${{ needs.source.outputs.sha }}
