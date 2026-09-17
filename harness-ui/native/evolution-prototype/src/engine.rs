@@ -45,15 +45,20 @@ where F: Fn(u64,u64,u32)->Result<Vec<u8>>+Send+Sync+'static {
     fn start(text:&str)->pb::Start { let component=text.as_bytes().to_vec();pb::Start{generation:digest(&component).to_vec(),
         component,lease_high:1,lease_low:2,target:3,request:vec![4;32]} }
     #[test] fn actual_component_reads_and_computes() { for input in [b"abc".to_vec(),vec![],vec![255;4096]] {
-        let expected=input.iter().map(|v|u32::from(*v)).sum();
+        let expected:u32=input.iter().map(|v|u32::from(*v)).sum();
         assert_eq!(execute(&start(crate::COMPONENT),move|h,l,t|{ensure!((h,l,t)==(1,2,3),"ABI argument mismatch");Ok(input.clone())},500000).unwrap(),expected); } }
     #[test] fn unknown_import_is_not_linked() {let text=crate::COMPONENT.replace("(component","(component (import \"network\" (func))");
-        assert!(execute(&start(&text),|_,_,_|Ok(vec![]),500000).is_err()); }
-    #[test] fn broker_denial_traps_guest() {assert!(execute(&start(crate::COMPONENT),|_,_,_|anyhow::bail!("denied"),500000).is_err());}
-    #[test] fn response_cap() {assert!(execute(&start(crate::COMPONENT),|_,_,_|Ok(vec![0;4097]),500000).is_err());}
+        let mut config=Config::new();config.wasm_component_model(true);
+        Component::new(&Engine::new(&config).unwrap(),&text).unwrap();
+        let error=execute(&start(&text),|_,_,_|Ok(vec![]),500000).unwrap_err();
+        assert!(format!("{error:#}").contains("network")); }
+    #[test] fn broker_denial_traps_guest() {let e=execute(&start(crate::COMPONENT),|_,_,_|anyhow::bail!("EXPECTED_BROKER_DENIAL"),500000).unwrap_err();assert!(format!("{e:#}").contains("EXPECTED_BROKER_DENIAL"));}
+    #[test] fn response_cap() {let e=execute(&start(crate::COMPONENT),|_,_,_|Ok(vec![0;4097]),500000).unwrap_err();assert!(format!("{e:#}").contains("broker response exceeds limit"));}
     #[test] fn fuel_stops_loop() {let text=include_str!("../fixtures/loop.wat");
         let e=execute(&start(text),|_,_,_|Ok(vec![]),1000).unwrap_err();assert!(format!("{e:#}").contains("fuel"));}
-    #[test] fn generation_mismatch_rejected() {let mut s=start(crate::COMPONENT);s.component[0]^=1;assert!(execute(&s,|_,_,_|Ok(vec![]),1000).is_err());}
+    #[test] fn generation_mismatch_rejected() {let mut s=start(crate::COMPONENT);s.component[0]^=1;let e=execute(&s,|_,_,_|Ok(vec![]),1000).unwrap_err();assert!(e.to_string().contains("generation/request"));}
     #[test] fn memory_growth_is_bounded() {let text=crate::COMPONENT.replace(";; RESULT", "i32.const 32 memory.grow drop");
-        assert!(execute(&start(&text),|_,_,_|Ok(vec![]),500000).is_err());}
+        let mut config=Config::new();config.wasm_component_model(true);
+        Component::new(&Engine::new(&config).unwrap(),&text).unwrap();
+        let e=execute(&start(&text),|_,_,_|Ok(vec![]),500000).unwrap_err();assert!(format!("{e:#}").contains("memory"));}
 }

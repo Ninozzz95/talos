@@ -9,8 +9,10 @@
       global.get $next local.tee $old local.get $size i32.add global.set $next
       local.get $old))
   (core instance $mem (instantiate $memory))
+  (alias core export $mem "memory" (core memory $linear))
+  (alias core export $mem "realloc" (core func $allocate))
   (core func $lower (canon lower (func $read)
-    (memory $mem "memory") (realloc (func $mem "realloc"))))
+    (memory $linear) (realloc $allocate)))
   (core module $code
     (import "host" "read" (func $read (param i64 i64 i32 i32)))
     (import "host" "memory" (memory 1))
@@ -32,6 +34,6 @@
       ;; RESULT
       local.get $sum))
   (core instance $code (instantiate $code
-    (with "host" (instance (export "read" (func $lower)) (export "memory" (memory $mem "memory"))))))
+    (with "host" (instance (export "read" (func $lower)) (export "memory" (memory $linear))))))
   (func (export "run") (param "lease-high" u64) (param "lease-low" u64) (param "target" u32)
     (result u32) (canon lift (core func $code "run"))))
