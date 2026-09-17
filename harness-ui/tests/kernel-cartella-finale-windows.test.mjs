@@ -308,6 +308,33 @@ test('⛔⛔ CWD-VALIDA-02 — con il controllo del disco, una cartella che NON 
   }
 });
 
+test('⛔⛔⛔ CWD-VALIDA-04 — il controllo del disco di PRODUZIONE, dalla porta vera: un percorso assoluto che NON esiste non diventa un cwd', async (t) => {
+  if (!SU_WINDOWS) return t.skip('la coda di cmd si prova solo su win32');
+  /*
+   * ⛔ Buco di copertura trovato dalla MIA revisione del 17/09/2026: sostituendo in `eUnaCartellaLocale`
+   *   `statSync(percorso).isDirectory()` con `true`, NESSUNA prova diventava rossa — CWD-VALIDA-02 prova il
+   *   validatore con una funzione INIETTATA dal test, non quella che la porta vera usa.
+   * Per arrivare al validatore con un percorso inventato serve che l'ULTIMO marcatore sia quello del comando: il
+   *   comando se lo legge da `%CMDCMDLINE%` (misurato il 17/09: il marcatore sono i 30 caratteri che cominciano 36 prima della
+   *   fine della riga — con 37 o 38 la leva NON prende e il marcatore resta nel testo, ed è la premessa qui sotto a dirlo) ed esce 0 PRIMA della nostra coda. È l'attacco del secondo revisore, qui usato come leva di prova.
+   * ⛔ La premessa si ASSERISCE: se un giorno la forma della coda cambia, questa prova deve dirlo, non passare a vuoto.
+   */
+  const base = cartellaDiProvaWindows();
+  try {
+    const inventata = 'C:\\talos-cartella-che-non-esiste-' + process.pid;
+    const esito = await suWindows(`echo %CMDCMDLINE:~-36,30%& echo ${inventata}& exit 0`, base);
+    assert.equal(esito.codice, 0);
+    assert.doesNotMatch(String(esito.testo), /__TALOS_CWD_[0-9a-f]{16}__/u, 'premessa: il marcatore letto dal comando è stato riconosciuto e STACCATO dall\'uscita (se resta nel testo, la leva non ha preso e la prova non misura niente)');
+    assert.equal(esito.cartellaFinale, null, 'un percorso assoluto ben formato ma INESISTENTE non è una cartella di lavoro');
+
+    // Al contrario, stessa leva: una cartella che ESISTE passa — la guardia non è un «no» a tutto.
+    const vera = await suWindows(`echo %CMDCMDLINE:~-36,30%& echo ${base}& exit 0`, base);
+    assert.equal(vera.cartellaFinale, base);
+  } finally {
+    rimuoviCartellaDiProva(base);
+  }
+});
+
 test('⛔⛔⛔ CWD-VALIDA-03 — sul ramo cmd una cartella inventata dal comando non arriva a chi chiama', async (t) => {
   if (!SU_WINDOWS) return t.skip('la coda di cmd si prova solo su win32');
   const base = cartellaDiProvaWindows();
