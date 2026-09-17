@@ -1,0 +1,20 @@
+syntax = "proto3";
+package talos.devbridge.v1;
+// Development controller only, NOT the guest wire or production Evolution ABI.
+// Outer framing: little-endian u32 length (1..256), then canonical protobuf.
+// Exactly RUN, CONTINUE, optional CANCEL per dedicated process; same random ID.
+// No source, path, authority, lease issuance, timeout or arbitrary fixture field.
+message Frame {
+  uint32 version = 1;
+  bytes invocation_id = 2;
+  enum Kind { UNSPECIFIED = 0; RUN = 1; CONTINUE = 2; CANCEL = 3; READY = 4; FINISHED = 5; }
+  Kind kind = 3;
+  enum Status { NONE = 0; SUCCEEDED = 1; CANCELLED = 2; FAILED = 3; }
+  Status status = 4;
+  uint32 value = 5;
+  uint32 bytes_released = 6;
+  bool worker_terminated = 7;
+  bool cleanup_complete = 8;
+  uint32 worker_exit_code = 9;
+  bytes worker_digest = 10;
+}

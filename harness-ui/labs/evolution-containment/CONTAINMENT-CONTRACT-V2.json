@@ -1,0 +1,15 @@
+{
+  "contract_id": "talos.containment-lab.server2022-ipv4-loopback.v2",
+  "network_rule": "os-tcp-owner-and-wfp-block-correlation-required",
+  "legacy_contract": "native-wsaeacces-v1-preserved",
+  "max_preselection_age_ms": 600000,
+  "job_counts": [
+    2,
+    5,
+    4
+  ],
+  "scope": "synthetic Windows Server 2022 x64 IPv4 TCP loopback laboratory",
+  "production_authority_changed": false,
+  "full_containment_verified": false,
+  "release_ready": false
+}

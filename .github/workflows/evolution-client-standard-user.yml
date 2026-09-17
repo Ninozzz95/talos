@@ -1,0 +1,54 @@
+name: evolution-client-standard-user
+on:
+  pull_request:
+    paths:
+      - 'harness-ui/labs/evolution-containment/**'
+      - '.github/workflows/evolution-client-standard-user.yml'
+permissions:
+  contents: read
+jobs:
+  windows11-arm64-x64-emulated:
+    runs-on: windows-11-arm
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: harness-ui/labs/evolution-containment
+        shell: pwsh
+    env:
+      RUSTUP_TOOLCHAIN: 1.90.0-x86_64-pc-windows-msvc
+      RUSTFLAGS: '-C target-feature=+crt-static'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: provision pinned x64 compiler for the explicit emulated profile
+        run: |
+          New-Item -ItemType Directory -Path evidence-client-build -Force | Out-Null
+          rustup toolchain install 1.90.0-x86_64-pc-windows-msvc --profile minimal --force-non-host 2>&1 | Tee-Object evidence-client-build/toolchain.log
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned x64 compiler unavailable' }
+      - name: compile and test native preflight
+        run: |
+          rustc -Vv | Tee-Object evidence-client-build/rustc.txt
+          cargo test --frozen 2>&1 | Tee-Object evidence-client-build/unit.log
+          if ($LASTEXITCODE -ne 0) { throw 'Native unit tests failed' }
+          cargo build --release --frozen 2>&1 | Tee-Object evidence-client-build/build.log
+          if ($LASTEXITCODE -ne 0) { throw 'Native build failed' }
+      - name: validate independent network witness before executing it
+        run: |
+          $tokens = $null; $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'ci-observe-client-network.ps1'), [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count -ne 0) { throw ($parseErrors | Out-String) }
+          python -m unittest -v test_client_network.py test_network_correlation.py test_containment_v2.py 2>&1 | Tee-Object evidence-client-build/witness-tests.log
+          if ($LASTEXITCODE -ne 0) { throw 'Client witness tests failed' }
+      - name: reject elevated control, run as a separate temporary standard user
+        run: ./ci-client-standard-user.ps1
+      - name: retain actual client evidence including failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: client-standard-user-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            harness-ui/labs/evolution-containment/evidence-client-build/
+            harness-ui/labs/evolution-containment/evidence-client-ci/
+          if-no-files-found: error
+          retention-days: 14

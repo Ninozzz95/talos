@@ -1,0 +1,36 @@
+name: evolution-containment-v2
+on:
+  pull_request:
+    paths:
+      - 'harness-ui/labs/evolution-containment/**'
+      - '.github/workflows/evolution-containment-v2.yml'
+permissions:
+  contents: read
+jobs:
+  scoped-contract-v2:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: harness-ui/labs/evolution-containment
+        shell: pwsh
+    env:
+      RUSTFLAGS: '-C target-feature=+crt-static'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: provision pinned experiment compiler
+        run: |
+          rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Rust toolchain unavailable' }
+      - name: preselect v2, run unchanged native v1, evaluate scoped v2
+        run: ./run-v2.ps1
+      - name: retain both contracts and failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: containment-contract-v2-${{ github.run_id }}-${{ github.run_attempt }}
+          path: harness-ui/labs/evolution-containment/evidence/
+          if-no-files-found: warn
+          retention-days: 14

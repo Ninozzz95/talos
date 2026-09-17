@@ -1,0 +1,31 @@
+syntax = "proto3";
+package talos.prototype.v1;
+// Experimental subset; not the production Evolution ABI. Tags are never reused.
+// No message can mint/revoke leases, select host paths, or declare a proof PASS.
+message Envelope {
+  uint32 version = 1;
+  oneof body {
+    Start start = 10;
+    Read read = 11;
+    Data data = 12;
+    Complete complete = 13;
+  }
+}
+message Start {
+  bytes component = 1;
+  fixed64 lease_high = 2;
+  fixed64 lease_low = 3;
+  uint32 target = 4;
+  bytes generation = 5;
+  bytes request = 6;
+}
+message Read {
+  fixed64 lease_high = 1;
+  fixed64 lease_low = 2;
+  uint32 target = 3;
+  bytes generation = 4;
+  bytes request = 5;
+}
+message Data { bytes contents = 1; uint32 denied = 2; }
+// Untrusted computation result, never an authorization or proof verdict.
+message Complete { bool ok = 1; uint32 value = 2; string error = 3; }
