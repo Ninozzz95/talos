@@ -1,0 +1,33 @@
+/* Estratto dai token Calm reali di Talos, index.css @13f65c15. Font non redistribuiti. */
+:root {
+color-scheme:dark;
+--talos-background:#1e1f22; --talos-panel:#25262a; --talos-panel-soft:#2b2c30; --talos-card:#313237;
+--talos-window-bg:#17181b; --talos-text:#f3f0e9; --talos-assistant-text:#d6d2ca; --talos-muted:#9c9da2;
+--talos-border:#36373b; --talos-border-strong:#4a4b50;
+--talos-accent:#c08b3c; --talos-accent-hover:#d7a554; --talos-accent-soft:rgba(192,139,60,.14);
+--talos-accent-border:rgba(192,139,60,.34); --talos-accent-text:#f0c783; --talos-secondary:#8daaa2;
+--talos-success:#77a884; --talos-warning:#d4a558; --talos-danger:#d87d72; --talos-info:#7f9fc4;
+--talos-font-ui:"Instrument Sans",Inter,ui-sans-serif,system-ui,sans-serif;
+--talos-font-display:var(--talos-font-ui); --talos-font-mono:"JetBrains Mono","SFMono-Regular",Consolas,monospace;
+--talos-font-size-xs:.75rem; --talos-font-size-sm:.875rem; --talos-font-size-md:1rem; --talos-font-size-lg:1.25rem;
+--talos-space-page:clamp(1.5rem,4vw,4.5rem); --talos-space-section:clamp(1.5rem,3vw,2.5rem);
+--talos-space-card:1.25rem; --talos-space-control:.75rem; --talos-space-inline:.625rem;
+--talos-space-xs:.25rem; --talos-space-sm:.5rem; --talos-space-md:1rem; --talos-space-lg:1.5rem;
+--talos-radius-card:12px; --talos-radius-control:12px; --talos-radius-pill:999px;
+--talos-touch-target:2.25rem; --talos-control-height:2.25rem; --talos-primary-height:2.5rem; --talos-icon-size:1.125rem;
+--talos-motion-duration-control:160ms; --talos-motion-duration-surface-enter:180ms; --talos-motion-duration-surface-exit:150ms; --talos-motion-duration-tab-change:180ms;
+--talos-motion-ease:cubic-bezier(.2,.7,.2,1); --talos-motion-ease-exit:ease-in;
+--talos-ring:#d8a650; --talos-ring-soft:rgba(192,139,60,.09); --talos-focus-width:2px; --talos-focus-offset:3px;
+--talos-z-app-overlay:100; --talos-z-menu:120; --talos-z-tooltip:130;
+--talos-text-on-accent:#151411; --talos-card-subtle:color-mix(in srgb,var(--talos-text) 2%,transparent);
+--talos-card-hover:color-mix(in srgb,var(--talos-text) 5%,transparent); --talos-card-faint:color-mix(in srgb,var(--talos-text) .8%,transparent);
+--talos-border-subtle:color-mix(in srgb,var(--talos-border) 70%,transparent); --talos-overlay:rgba(9,10,12,.62);
+--talos-shadow-card:0 8px 24px rgba(0,0,0,.18); --talos-shadow-floating:0 18px 52px rgba(0,0,0,.28);
+--talos-success-soft:rgba(119,168,132,.13); --talos-success-border:rgba(119,168,132,.25);
+--talos-warning-soft:rgba(212,165,88,.14); --talos-warning-border:rgba(212,165,88,.4);
+--talos-danger-soft:rgba(216,125,114,.13); --talos-danger-border:rgba(216,125,114,.4);
+--talos-info-soft:rgba(127,159,196,.14); --talos-info-border:rgba(127,159,196,.35);
+--talos-measure-measured:var(--talos-text); --talos-measure-estimated:var(--talos-muted);
+--talos-sidebar-w:276px; --talos-inspector-w:340px; --talos-topbar-h:60px; --talos-measure-w:768px;
+--talos-row-session:66px; --talos-row:44px; --talos-row-pad:12px; --talos-gap:10px;
+}

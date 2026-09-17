@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><title>Inspector visibility regression</title>
+<link rel="stylesheet" href="../../src/styles/inspector-tab-visibility.css">
+<style>body{font:14px system-ui;margin:24px}.talos-inspector{max-width:420px;border:1px solid;padding:12px}#railTabs{display:flex;gap:8px}.talos-figlia-ospite{height:180px;overflow:auto}.talos-figlia{min-height:800px}button{padding:8px}pre{white-space:pre-wrap}</style></head>
+<body><h1>Contratto DOM dell'inspector</h1><p>Fixture: non avvia sessioni o agenti reali.</p>
+<aside class="talos-inspector"><div id="railTabs">
+<button data-rail="contesto" aria-selected="false">Context</button>
+<button data-rail="file" aria-selected="false">File</button>
+<button data-rail="agenti" aria-selected="true">Agenti</button>
+<button data-rail="processi" aria-selected="false">Processi</button>
+</div><div id="railAgenti">Elenco agenti</div>
+<div class="talos-figlia-ospite"><section class="talos-figlia"><button id="detailButton">Dettaglio persistente</button><p>Corpo lungo per la prova di scroll.</p></section></div></aside>
+<pre id="report" role="status">In attesa del foglio…</pre>
+<script>
+const tabs=[...document.querySelectorAll('[data-rail]')];
+const host=document.querySelector('.talos-figlia-ospite');
+const child=document.querySelector('.talos-figlia');
+const list=document.querySelector('#railAgenti');
+const select=name=>tabs.forEach(t=>t.setAttribute('aria-selected',String(t.dataset.rail===name)));
+for(const t of tabs)t.addEventListener('click',()=>select(t.dataset.rail));
+window.addEventListener('load',()=>{
+ const results=[];
+ const visible=n=>getComputedStyle(n).display!=='none';
+ const check=(name,passed)=>results.push({name,passed});
+ check('Detail visible on Agents',visible(host));
+ check('List excluded while detail open',!visible(list));
+ host.scrollTop=64;
+ for(const tab of ['file','contesto','processi']){select(tab);check('Detail hidden on '+tab,!visible(host));}
+ select('agenti');
+ check('Detail restored',visible(host));
+ check('Same node, no remount',document.querySelector('.talos-figlia')===child);
+ check('Scroll restored',host.scrollTop===64);
+ host.hidden=true;check('Hidden host respected',!visible(host));check('List restored on close',visible(list));host.hidden=false;
+ select(null);check('No selected tab fails closed',!visible(host));
+ select('agenti');tabs.find(t=>t.dataset.rail==='file').setAttribute('aria-selected','true');check('Conflicting selected tabs fail closed',!visible(host));
+ select('agenti');child.hidden=true;check('Hidden child does not suppress list',visible(list));child.hidden=false;
+ child.remove();check('Empty host does not suppress list',visible(list));host.append(child);
+ list.hidden=true;host.hidden=true;check('Legacy list hidden state is not overridden',!visible(list));list.hidden=false;host.hidden=false;
+ const other=document.createElement('div');other.className='talos-figlia-ospite';other.textContent='Unrelated';document.body.append(other);select('file');check('Unrelated hosts outside inspector are untouched',visible(other));other.remove();
+ select('agenti');
+ window.visibilityResults=results;
+ document.querySelector('#report').textContent=results.map(r=>(r.passed?'PASS ':'FAIL ')+r.name).join('\n');
+ document.documentElement.dataset.testResult=results.every(r=>r.passed)?'pass':'fail';
+});
+</script></body></html>

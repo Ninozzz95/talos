@@ -1,0 +1,5 @@
+talos-sidebar-interattiva.html
+artifacts/*
+!artifacts/.gitkeep
+__pycache__/
+*.pyc

@@ -1,0 +1,23 @@
+{
+  "checkpoint": "CP02-reviewed",
+  "application_commit": "073f661966c1443bf5049b43940529aedad6cb67",
+  "production_guard_commit": "2bc9266b0c569c57399c92d6a603bab73bc77220",
+  "date": "2026-09-17",
+  "scope": "Production visibility guard plus separate offline laboratory, not a runtime integration",
+  "tests": {
+    "node": 35,
+    "browser_checks": 98,
+    "visibility_conditions": 16
+  },
+  "html_sha256": "59b2b6d1ce90f7b29a74f6ba0f9646f3be980776767e6b0930c27882f8ce20f1",
+  "html_bytes": 116112,
+  "source_blob_verification": "15/15 match at application_commit",
+  "remaining_gates": [
+    "full desktop build",
+    "repository lint and typecheck",
+    "real-session routing/E2E",
+    "target WebViews",
+    "screen-reader audit"
+  ],
+  "next_step": "Independent review; no automatic merge"
+}
