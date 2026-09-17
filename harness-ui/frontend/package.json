@@ -13,14 +13,17 @@
     "test": "npm run test:unit && npm run test:componenti",
     "verify": "node scripts/verify.mjs",
     "package": "node scripts/package-frontend.mjs",
-    "test:componenti": "node scripts/run-browser-tests.mjs --config=playwright.componenti.config.mjs"
+    "test:componenti": "node scripts/run-browser-tests.mjs --config=playwright.componenti.config.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:foundation": "node --test tests/contract/foundation.test.mjs tests/contract/new-production-graph.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
     "axe-core": "4.13.0",
     "esbuild": "0.28.2",
     "pixelmatch": "7.2.0",
-    "pngjs": "7.0.0"
+    "pngjs": "7.0.0",
+    "typescript": "5.9.2"
   },
   "dependencies": {
     "@floating-ui/dom": "1.8.0",

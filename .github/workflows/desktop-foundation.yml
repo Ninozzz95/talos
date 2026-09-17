@@ -9,12 +9,10 @@ concurrency:
   group: desktop-foundation-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  candidate:
+  foundation:
     if: github.repository == 'Ninozzz95/talos' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'refactor/desktop-ledger-v1'
     runs-on: windows-latest
     timeout-minutes: 30
-    permissions:
-      contents: write
     defaults:
       run:
         shell: pwsh
@@ -23,24 +21,13 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24.18.0'
-      - name: Install the project's locked AST tooling
+      - name: Install locked dependencies, without transforming source
         run: |
           New-Item -ItemType Directory -Force evidence/foundation | Out-Null
-          npm ci --prefix harness-ui --no-audit --no-fund
-          if ($LASTEXITCODE -ne 0) { throw 'Backend tooling dependencies failed.' }
-      - name: Apply only the reviewed and hash-locked L02 transition
-        run: |
-          node harness-ui/frontend/scripts/ledger/apply-l02.mjs
-          if ($LASTEXITCODE -ne 0) { throw 'Exact source transition failed.' }
-          node harness-ui/frontend/scripts/ledger/qualify-l02.mjs
-          if ($LASTEXITCODE -ne 0) { throw 'Reviewed candidate bytes differ.' }
-      - name: Install locked frontend and shell dependencies
-        run: |
-          foreach ($dir in @('harness-ui/frontend','harness-ui/desktop','context-engine')) {
+          foreach ($dir in @('harness-ui','harness-ui/frontend','harness-ui/desktop','context-engine')) {
             npm ci --prefix $dir --no-audit --no-fund
             if ($LASTEXITCODE -ne 0) { throw "Dependencies failed: $dir" }
           }
@@ -50,16 +37,16 @@ jobs:
         run: |
           npm --prefix harness-ui/frontend run typecheck 2>&1 | Tee-Object evidence/foundation/typecheck.log
           if ($LASTEXITCODE -ne 0) { throw 'Typecheck failed.' }
-      - name: Complete frontend unit and contract suite
-        run: |
-          npm --prefix harness-ui/frontend run test:unit 2>&1 | Tee-Object evidence/foundation/unit.log
-          if ($LASTEXITCODE -ne 0) { throw 'Unit/contract suite failed.' }
-      - name: Build and deliver the actual candidate frontend
+      - name: Build and deliver this checkout's actual frontend
         run: |
           npm --prefix harness-ui/frontend run build 2>&1 | Tee-Object evidence/foundation/build.log
           if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
           Copy-Item harness-ui/frontend/dist/* harness-ui/public/ -Recurse -Force
           if ((Get-FileHash harness-ui/frontend/dist/app.js).Hash -cne (Get-FileHash harness-ui/public/app.js).Hash) { throw 'Stale delivered assets.' }
+      - name: Complete frontend unit and contract suite, with dist present
+        run: |
+          npm --prefix harness-ui/frontend run test:unit 2>&1 | Tee-Object evidence/foundation/unit.log
+          if ($LASTEXITCODE -ne 0) { throw 'Unit/contract suite failed.' }
       - name: Existing real Electron shell and terminal suite
         run: |
           npm --prefix harness-ui/desktop run test:puri 2>&1 | Tee-Object evidence/foundation/desktop-pure.log
@@ -77,17 +64,11 @@ jobs:
           if (-not $r.completed -or $r.errors.Count -ne 0) { throw 'Runtime errors or incomplete observation.' }
           $observed = @($r.surfaces | Where-Object { $_.status -eq 'OBSERVED' })
           if ($observed.Count -lt 20) { throw 'Insufficient real surfaces observed.' }
-      - name: Export verified Git objects only; never a commit or ref update
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          node harness-ui/frontend/scripts/ledger/qualify-l02.mjs --publish-objects
-          if ($LASTEXITCODE -ne 0) { throw 'Qualified Git-object export failed.' }
-      - name: Preserve evidence and exact candidate diff
+      - name: Preserve evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: ledger-L02-${{ github.run_id }}
+          name: ledger-foundation-${{ github.run_id }}
           path: evidence/
           if-no-files-found: error
           retention-days: 14
