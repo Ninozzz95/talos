@@ -1,3 +1,4 @@
+import {selectValue} from './custom-control-driver.mjs';
 /** Actual backend + production bundle. No inference, no model/provider fixtures. */
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright';
@@ -24,12 +25,7 @@ async function section(id){
  else await page.locator('#setting-tab-'+id).click();
  await page.locator('#setting-panel-'+id).waitFor({state:'visible'});
 }
-async function choose(source,value){
- const index=await source.evaluate((s,v)=>[...s.options].findIndex(o=>o.value===v),value);assert.ok(index>=0,'Requested option exists');
- const control=source.locator('xpath=following-sibling::*[1]').getByRole('combobox');await control.focus();await control.press('Home');
- for(let n=0;n<index;n++)await control.press('ArrowDown');await control.press('Enter');
- assert.equal(await source.inputValue(),value);
-}
+const choose = selectValue;
 async function studio(open){const active=await page.locator('.td-theme-studio').count()>0;if(open&&!active){await section('appearance');await page.locator('[data-td-studio-temi] button').click();await page.locator('.td-theme-studio').waitFor();}if(!open&&active){await page.keyboard.press('Escape');await page.locator('.td-theme-studio').waitFor({state:'hidden'});}}
 async function actualValue(f){const source=page.locator('#'+sourceId(f));return f.tipo==='checkbox'?await source.isChecked():await source.inputValue();}
 async function access(f){
