@@ -91,6 +91,30 @@ export default Object.freeze({
     'Serve una sessione': 'A session is needed', 'Troppe schede': 'Too many tabs', 'Scheda non aperta': 'Tab not opened', 'Shell non chiusa sul server': 'Shell not closed on the server',
   },
 
+  /* le azioni su un messaggio della chat e l'invito del primo avvio (PO-27, 17/09) */
+  messaggio: {
+    'Azioni sulla risposta': 'Actions on the answer',
+    'Azioni sul tuo messaggio': 'Actions on your message',
+    'Altre azioni sulla risposta': 'More actions on the answer',
+    'Altre azioni sulla risposta — eliminare si può a giro finito': 'More actions on the answer — deleting is possible once the run is over',
+    'Copia la risposta': 'Copy the answer',
+    'Copia il tuo messaggio': 'Copy your message',
+    'Ascolta la risposta': 'Listen to the answer',
+    'Riusa nel composer': 'Reuse in the composer',
+    'Chiedi di nuovo': 'Ask again',
+    'Elimina la risposta': 'Delete the answer',
+    'Confermi? Elimina la risposta': 'Confirm? Delete the answer',
+    'Elimina il messaggio': 'Delete the message',
+    'Confermi? Elimina anche la risposta': 'Confirm? This deletes the answer too',
+    'Visualizza le modifiche': 'View the changes',
+    '1 file modificato': '1 file changed',
+    '{n} file modificati': '{n} files changed',
+    'Scegli una cartella': 'Choose a folder',
+    'Per iniziare scegli una cartella: TALOS legge e scrive solo lì dentro.': 'To start, choose a folder: TALOS only reads and writes inside it.',
+    'Il modello si sceglie dalla pillola qui sotto.': 'The model is chosen from the pill below.',
+    'Collega un modello': 'Connect a model',
+  },
+
   /* le linguette dei file della Revisione (BC-63, 17/09: stesso componente del Terminale) */
   revisione: {
     'Azioni sul file': 'File actions', 'Apri il file': 'Open the file', 'Copia il percorso': 'Copy the path',

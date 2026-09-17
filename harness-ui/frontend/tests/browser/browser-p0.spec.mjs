@@ -142,9 +142,10 @@ async function apparecchia(page, decidi, { conta = null } = {}) {
 }
 
 /*
- * ⛔ 16/09 — il velo d'avvio e l'intro coprono la pagina e si mangiano i clic (misurato: 56
- *   ritentativi di `page.click` contro `#veloIntro`). Si dichiara l'intro «saltata» PRIMA del
- *   caricamento, come fanno le altre prove di questa cartella, e si aspetta che il velo se ne vada.
+ * ⛔ 16/09 — il velo d'avvio e la modale del primo avvio coprivano la pagina e si mangiavano i
+ *   clic (misurato: 56 ritentativi di `page.click` contro la modale). La modale è uscita il 17/09
+ *   con PO-27 e con lei la riga che la dichiarava «saltata»; resta il velo d'avvio, che va
+ *   aspettato prima di toccare qualunque cosa.
  *   Il tema si sceglie dalla stessa preferenza salvata che usa una persona vera, non forzando
  *   l'attributo sulla radice: una foto presa su uno stato irraggiungibile non varrebbe niente.
  */
@@ -160,7 +161,6 @@ async function apriLaApp(page, { tema = 'dark', lingua = 'it' } = {}) {
    */
   await page.addInitScript(([colorMode, uiLanguage]) => {
     try {
-      localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' }));
       localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode, uiLanguage } }));
     } catch { /* finestra senza storage */ }
   }, [tema, lingua]);

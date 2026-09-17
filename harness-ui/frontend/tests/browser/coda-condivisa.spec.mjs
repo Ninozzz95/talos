@@ -23,7 +23,6 @@ for (const modo of ['dark', 'light']) {
     test.beforeEach(async ({ page }) => {
       await page.addInitScript((colorMode) => {
         try {
-          localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' }));
           localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode } }));
         } catch { /* un frame in sandbox non ha storage */ }
       }, modo);

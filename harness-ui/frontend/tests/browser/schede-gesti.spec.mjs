@@ -51,7 +51,6 @@ async function apriTerminaleConSchede(page, request, baseURL, etichetta, quante 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.addInitScript(() => {
     if (window.top !== window) return; // lo script gira in OGNI cornice, anche sandboxata
-    try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* finestra privata: la app parte lo stesso */ }
   });
   const cartella = mkdtempSync(join(tmpdir(), `bc63-${etichetta}-`));
   const r = await request.post(new URL('/api/v1/sessions/custom', baseURL).href, {

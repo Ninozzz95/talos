@@ -86,8 +86,9 @@ export function montaPonteLegacy(documentObj = document) {
    *
    * ⛔ Trovato misurando, non presunto: con tutto in un solo contenitore
    * `hidden`, la pagina rispondeva a ogni `elementsFromPoint` con il solo
-   * `<html>` — nessun clic arrivava a niente. La causa era `introDialog.showModal()`
-   * al primo avvio: un `<dialog>` modale dentro un antenato `display:none` non
+   * `<html>` — nessun clic arrivava a niente. La causa era un `<dialog>` modale aperto
+   * con `showModal()` al primo avvio (la vecchia intro, tolta il 17/09 con PO-27):
+   * un `<dialog>` modale dentro un antenato `display:none` non
    * si vede, ma il top layer rende comunque INERTE tutto il resto del
    * documento. I dialoghi nativi, i veli e i toast stanno quindi in uno strato
    * VISIBILE (privo di stile finché la Fase 2 non li ridisegna); i pannelli,

@@ -925,7 +925,6 @@ test('long response content owns overflow locally without widening the page', as
  */
 test('RAGIONAMENTO-COMPRESSO — si comprime invece di sparire: riga chiusa di serie, aperta mentre scrive solo se lo chiedi', async ({ page }) => {
   /* ⛔ Il clic sul foglio «Modello» veniva intercettato prima dal velo d'avvio e poi dalla finestra del primo avvio: si salta l'introduzione e si aspetta che il velo sia rimosso. */
-  await page.addInitScript(() => localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })));
   await page.goto('/');
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });

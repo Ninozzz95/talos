@@ -58,7 +58,6 @@ const FOTO = resolve(QUI, '..', '..', 'artifacts', 'p0-C');
 test.use({ channel: 'chrome' });
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })));
   await page.route('**/api/v1/sessions/scroll-p0-*/events', (route) => route.fulfill({ contentType: 'text/event-stream', body: '' }));
   /* ⛔ Solo lo STUB: nessun giro vero parte da qui, e il server di prova non ha queste sessioni. */
   await page.route('**/api/v1/sessions/scroll-p0-*/resume', (route) => route.fulfill({

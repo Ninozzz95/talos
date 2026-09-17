@@ -842,7 +842,21 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     const record = REGISTRO_FORNITORI[fonte];
     const scelta = record.credenziale ? providerStore?.scegliChiave(fonte) : null;
     if (providerStore && !scelta && record.chiaveObbligatoria) {
-      if (!providerStore.hasKey(fonte)) throw new OwnerRuntimeUnavailableError('Manca la chiave del fornitore scelto.', 'PROVIDER_KEY_MISSING');
+      /*
+       * ⛔ CLI-REQ-03 (17/09): il NOME UMANO del fornitore, non il suo id — chi legge deve sapere
+       *   QUALE chiave collegare. «per», non «di»: è la preposizione che il progetto usa già in
+       *   tutti gli altri `PROVIDER_KEY_MISSING` (`model-destination.mjs`, `native-provider-adapter.mjs`,
+       *   `provider-auth-cloud.mjs`), e due frasi diverse per lo stesso guasto sono due guasti
+       *   diversi per chi legge.
+       * ⛔ E l'errore porta anche l'ID: il nome serve a chi legge, l'id serve alla UI per aprire
+       *   «Fornitori e accessi» SU QUEL fornitore invece che sull'elenco.
+       */
+      if (!providerStore.hasKey(fonte)) {
+        throw Object.assign(
+          new OwnerRuntimeUnavailableError(`Manca la chiave per ${record.etichetta}.`, 'PROVIDER_KEY_MISSING'),
+          { fornitore: fonte, etichettaFornitore: record.etichetta },
+        );
+      }
       const panchina = providerStore.elencaPool(fonte).find(v => v.causa);
       const classificazione = classificaErroreDiCorsa({ messaggio: ({traffico:'HTTP 429',credenziale:'HTTP 401',credito:'insufficient credit',rete:'network', 'timeout-fornitore':'timeout', 'guasto-fornitore':'upstream error', 'flusso-interrotto':'unexpected eof'})[panchina?.causa] ?? '' });
       contesto.errore = erroreFornitorePubblico(classificazione, classificazione.classe === 'traffico' ? 429 : classificazione.transitorio ? 503 : 401);
@@ -951,6 +965,25 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
             }
             throw error;
           }
+          /*
+           * ⛔⛔⛔ CLI-REQ-03 (17/09/2026) — LA CHIAVE CHE MANCA NON È UN RIFIUTO DEL FORNITORE.
+           *
+           * Misurato prima della cura, su questa strada (`eseguiConFallback`, store senza chiavi,
+           * modello `zai:glm-5.3-flash`): usciva `PROVIDER_REQUEST_ERROR` «Il fornitore non ha
+           * accettato la richiesta.» (classe `ignoto`) con **0 chiamate di rete** e **1 consumo
+           * scritto** (`esito: 'interrotto'`). Due bugie in una: si accusava il fornitore di aver
+           * rifiutato una richiesta che non gli è mai arrivata, e si depositava la ricevuta di una
+           * chiamata mai partita. Sulla fetch nuda l'errore usciva già giusto: il difetto era
+           * SOLO qui, nel catch del ripiego, che classifica ogni eccezione come un guasto di rete.
+           *
+           * ⇒ `PROVIDER_KEY_MISSING` nasce PRIMA della rete (`invia`, sopra), è una condizione di
+           *   configurazione e non un guasto: si rilancia com'è, senza classificarlo, senza
+           *   metterlo in panchina e senza scrivere consumi. Non è nemmeno transitorio, quindi non
+           *   ha senso cercargli un fornitore di riserva: la riserva vorrebbe la stessa chiave che
+           *   non c'è. È la «pre-validation» che la ricerca del 17/09 indica come cura standard
+           *   (aden-hive/hive #4391, OpenHands/software-agent-sdk #4867, DataQ #1849/#1853).
+           */
+          if (error?.code === 'PROVIDER_KEY_MISSING') throw error;
           const classificazione = contesto.errore ?? classificaGuasto(error, error?.stato ?? error?.statusCode);
           const pulito = erroreFornitorePubblico(classificazione, error?.stato ?? contesto.errore?.stato);
           if (!contesto.errore && contesto.scelta) providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, { classe: classificazione.classe });

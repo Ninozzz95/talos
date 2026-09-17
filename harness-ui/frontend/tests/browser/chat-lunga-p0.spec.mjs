@@ -71,7 +71,6 @@ const mediana = (valori) => {
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' }));
     /*
      * ⛔⛔⛔ 16/09 (giro di riparazione) — QUANDO IL MONTAGGIO È DAVVERO FINITO.
      *   L'attesa di prima guardava solo se il corpo CONTENEVA l'ultima riga. Ma a scheda chiusa il

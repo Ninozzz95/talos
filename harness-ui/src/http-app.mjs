@@ -1211,6 +1211,8 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)\/stato$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory$/, metodi: ['GET', 'POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory\/(?!batch$)([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
+  /* 17/09 — un messaggio si toglie dalla conversazione: una lapide nel registro, non una riscrittura. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/messages\/([^/]+)$/, metodi: ['DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/research$/, metodi: ['GET'] },
   /*
    * ⭐⭐⭐⭐ 12/9, L5 — la Ricerca approfondita smette di essere di sola lettura. Fino a ieri qui
@@ -3203,6 +3205,46 @@ export function createHttpApp({
         await magazzino.elimina(voceId);
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ eliminata: true, id: voce.id, titolo: voce.titolo }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ 17/09/2026 — TOGLIERE UN MESSAGGIO DALLA CONVERSAZIONE.
+     *
+     * Owner 11/09: «non c'è la rotta» non è una risposta. Fino a ieri «Elimina» toglieva la
+     * risposta dalla sola pagina: ricaricando tornava, e il modello continuava a leggerla.
+     *
+     * ⛔ La forma è quella delle altre DELETE di questo file (note, attività, memoria): l'oggetto
+     *   sta nell'indirizzo, nessun corpo da leggere, nessuna query. Un corpo qui sarebbe una
+     *   seconda verità su CHE COSA cancellare.
+     * ⛔ Il 404 sulla sessione arriva prima, come sopra: la persona guarda un elenco, e dirle
+     *   «fatto» su una sessione che non c'è le confermerebbe uno schermo vecchio.
+     */
+    const messaggioEliminaMatch = method === 'DELETE' && sessionRegistry?.rimuoviMessaggio
+      ? /^\/api\/v1\/sessions\/([^/]+)\/messages\/([^/]+)$/.exec(url.pathname)
+      : null;
+    if (messaggioEliminaMatch) {
+      const nomi = nomiDellaRichiesta(res, method, clock, messaggioEliminaMatch[1], messaggioEliminaMatch[2]);
+      if (!nomi) return;
+      const [sessionId, riferimento] = nomi;
+      try {
+        requireNoQuery(url);
+        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const esito = await sessionRegistry.rimuoviMessaggio(sessionId, riferimento);
+        if (req.aborted || res.destroyed) return;
+        if (esito && 'erroreAvvio' in esito) {
+          const stato = esito.code === 'NOT_FOUND' ? 404 : esito.code === 'SESSION_STILL_RUNNING' ? 409 : 400;
+          sendJson(res, stato, errorEnvelope(esito.code, clock, { errore: new Error(esito.erroreAvvio) }), method);
+          return;
+        }
+        sendJson(res, 200, successEnvelope({ rimosso: true, riferimento: esito.riferimento }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);

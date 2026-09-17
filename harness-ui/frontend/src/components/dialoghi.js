@@ -7,7 +7,7 @@
  * muove; con il fuoco sulla maniglia le frecce cambiano di 16 px alla volta; doppio clic
  * torna alla misura normale. La misura si salva per dialogo nella stessa chiave del
  * monolite (`talos-harness-modal-sizes-v1`, contratto congelato fino al cutover) con le
- * chiavi logiche del mockup (`sheet:model`, `dialog:introDialog`, …), così una misura
+ * chiavi logiche del mockup (`sheet:model`, `sheet:permissions`, …), così una misura
  * ricordata prima del ridisegno vale ancora.
  *
  * Ricerca 06/09/2026: le maniglie di ridimensionamento non hanno un ruolo ARIA dedicato
@@ -22,7 +22,10 @@ export const PASSO_TASTIERA = 16;
 export const CHIAVI_MISURA = Object.freeze({
   veloContesto: 'sheet:context',
   veloScorciatoie: 'sheet:shortcuts', veloNuova: 'sheet:new-session', veloComandi: 'command:palette', veloModello: 'sheet:model', veloPermessi: 'sheet:permissions',
-  veloAlbero: 'sheet:sessionTree', veloIntro: 'dialog:introDialog', veloAmbiente: 'sheet:environment', veloRinomina: 'sheet:rename',
+  // ⛔ 17/09, PO-27: la voce del «Primo avvio» è uscita con la sua modale. La chiave del contratto
+  //    non si riusa per altro: una misura ricordata di un dialogo che non esiste più resta nello
+  //    store del browser e non dà fastidio a nessuno.
+  veloAlbero: 'sheet:sessionTree', veloAmbiente: 'sheet:environment', veloRinomina: 'sheet:rename',
   veloRiferimenti: 'sheet:references', veloFile: 'sheet:fileViewer', veloRinominaFile: 'sheet:renameFile', veloEliminaFile: 'sheet:deleteFile',
   veloEliminaSessione: 'sheet:deleteSession', veloCreaFile: 'sheet:createFile', veloEsporta: 'sheet:export', veloFermaGiro: 'dialog:stopRun',
 });

@@ -41,7 +41,20 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const RADICE = fileURLToPath(new URL('../../', import.meta.url));
-const BASE = process.env.TALOS_VELI_BASE || 'http://127.0.0.1:4174';
+/*
+ * ⛔⛔⛔ BC-74 (17/09/2026) — QUI C'ERA UN RIPIEGO SUL 4174, E SE N'È ANDATO.
+ *
+ * Il 4174 è il server VIVO dell'owner, e la regola di casa dice che le sonde non lo toccano. Un
+ * ripiego lo rende il bersaglio di chiunque lanci lo script senza leggerlo — e succede: il 17/09
+ * l'ho lanciato io così, e ha aperto i veli sulle sessioni vere dell'owner.
+ * ⇒ Senza indirizzo esplicito NON SI PARTE. Puntare al 4174 si può, ma bisogna scriverlo per
+ *   nome: una cosa che si sceglie, non una che capita. Stesso precedente di `cancello.mjs`, che
+ *   rifiuta la 4174 quando se la trova davanti invece di usarla in silenzio.
+ * ⛔ Il rifiuto sta nell'AVVIO, non qui in cima: questo file esporta anche le funzioni pure che
+ *   un test unitario importa, e un `process.exit` a livello di modulo ucciderebbe quel test.
+ *   Misurato: la prima stesura l'ha fatto davvero, e la suite è diventata rossa.
+ */
+const BASE = process.env.TALOS_VELI_BASE;
 
 /**
  * Gli id dei veli dichiarati nel template. Puro: si legge il markup, invece di tenere a mano un
@@ -99,7 +112,8 @@ export const VIE_PER_APRIRE = Object.freeze({
   veloScorciatoie: { tasti: 'Control+/' },
   veloRinomina: { comando: 'rename' },
   veloEsporta: { comando: 'export' },
-  veloIntro: { innesco: '[data-apre-velo="veloIntro"]' },
+  // ⛔ 17/09, PO-27: il velo del «Primo avvio» non è più un velo irraggiungibile — non è più un
+  //    velo. Quella modale è stata sostituita da uno stato vuoto dentro la conversazione.
   veloFornitori: { innesco: '[data-apre-velo="veloFornitori"]' },
   veloRinominaModello: { innesco: '[data-apre-velo="veloRinominaModello"]' },
   veloEliminaModello: { innesco: '[data-apre-velo="veloEliminaModello"]' },
@@ -194,8 +208,7 @@ async function principale() {
   const p = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', locale: 'it-IT' });
   await p.goto(`${BASE}/`);
   await p.waitForTimeout(2500);
-  await p.evaluate(() => document.getElementById('introSalta')?.click());
-  await p.waitForTimeout(800);
+  /* 17/09, PO-27: qui si chiudeva la modale del primo avvio. Non esiste più, e con lei il clic. */
   // ⛔ con una sessione aperta: molti veli parlano della sessione corrente, e vuoti direbbero poco
   await p.evaluate(() => document.querySelector('.real-session-item')?.click());
   await p.waitForTimeout(1500);
@@ -238,5 +251,11 @@ async function principale() {
 }
 
 if (process.argv[1]?.endsWith('veli-sani.mjs')) {
+  if (!BASE) {
+    console.error('⛔ TALOS_VELI_BASE non è impostata: questo cancello non sceglie un server da solo.\n'
+      + '   Indica quello che vuoi guardare, per esempio TALOS_VELI_BASE=http://127.0.0.1:4196\n'
+      + '   ⛔ Il 4174 è il server vivo dell\'owner: si può indicare, ma va scritto per nome.');
+    process.exit(2);
+  }
   principale().catch((e) => { console.error('il controllo non ha potuto girare:', e.message); process.exit(2); });
 }

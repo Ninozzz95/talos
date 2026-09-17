@@ -51,7 +51,6 @@ async function apriApp(page, { tema = 'dark', larghezza = 1440, altezza = 900, t
      stessa disciplina di [[non-consegnare-il-lavoro-a-meta-di-un-altro]]: un profilo vergine non
      dice nulla su come sta la app dell'owner. */
   await page.addInitScript(({ colorMode, chatFullWidth }) => {
-    localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' }));
     localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, chatFullWidth } }));
   }, { colorMode: tema === 'light' ? 'light' : 'dark', chatFullWidth: tuttaLarghezza });
   await page.goto('/');

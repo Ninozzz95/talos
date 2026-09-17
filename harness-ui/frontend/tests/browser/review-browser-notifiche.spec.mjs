@@ -34,10 +34,6 @@ test.use({ locale: 'it-IT' });
 test('REVIEW-REAL-41 — la Review parte vuota e onesta, si riempie dallo StateDelta reale e torna vuota', async ({ page }) => {
   await page.route('**/api/v1/sessions/review-real/events*', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
   await page.route('**/api/v1/sessions/review-vuota/events*', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
-  await page.addInitScript(() => {
-    if (window.top !== window) return;
-    try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* finestra privata */ }
-  });
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
@@ -129,10 +125,6 @@ test('REVIEW-REAL-41 — la Review parte vuota e onesta, si riempie dallo StateD
  */
 test('BROWSER-REAL-42 — il Browser parte senza telefono finto, mostra le pagine lette da naviga e si scorre fra le letture', async ({ page }) => {
   await page.route('**/api/v1/sessions/browser-real/events*', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
-  await page.addInitScript(() => {
-    if (window.top !== window) return;
-    try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* finestra privata */ }
-  });
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
@@ -226,10 +218,6 @@ test('NOTIFICHE-REALI-43 — la campanella conta solo le sessioni che chiedono a
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { items: elenco }, meta: { schema: 'talos.harness-ui.api.v1' } }) });
   });
   await page.route('**/api/v1/sessions/*/events*', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
-  await page.addInitScript(() => {
-    if (window.top !== window) return;
-    try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* finestra privata */ }
-  });
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);

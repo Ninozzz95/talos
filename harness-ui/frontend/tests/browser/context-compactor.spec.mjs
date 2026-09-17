@@ -46,7 +46,6 @@ test.afterAll(async () => {
 
 test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async ({ page, context }) => {
   await context.addCookies([{ name: 'talos_token', value: token, url: base, httpOnly: true, sameSite: 'Strict' }]);
-  await page.addInitScript(() => localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })));
   const inference = [];
   // Il percorso vietato e intercettato: la mutazione RED non deve fare inferenza.
   await page.route('**/api/v1/sessions/*/compact', route => route.fulfill({ json: { ok: true, compattato: false } }));
@@ -161,7 +160,6 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
 
 test('CTX-UI-DISABLED-OPEN opens Context Manager without a legacy compaction or inference', async ({ page, context }) => {
   await context.addCookies([{ name: 'talos_token', value: token, url: base, httpOnly: true, sameSite: 'Strict' }]);
-  await page.addInitScript(() => localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })));
   const mutations = [];
   page.on('request', request => { if (/\/compact$|\/context\//.test(request.url()) && request.method() !== 'GET') mutations.push(request.url()); });
   await page.goto(base); await page.waitForFunction(() => window.__talosHarnessUiRuntime);

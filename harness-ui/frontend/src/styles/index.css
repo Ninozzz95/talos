@@ -682,6 +682,17 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 .talos-empty__title{font-size:26px; letter-spacing:-.02em}
 .talos-empty__project{color:var(--talos-accent-hover)}
 .talos-empty__lead{color:var(--talos-muted); margin:10px 0 20px; max-width:58ch; font-size:14.5px}
+/* ⛔ 17/09, PO-27 — l'invito che ha preso il posto della modale «Primo avvio». Nessun colore e
+   nessuna forma nuova: è una `.talos-card--pad` con i token del tema, larga quanto la riga guida
+   (58ch) perché è una frase, non un pannello. `[hidden]` la spegne davvero: `.talos-card` non
+   dichiara `display`, ma il giorno che lo facesse questa riga resterebbe vera. */
+/* ⛔ 17/09, secondo giro — l'invito del primo avvio NON è più una scheda accanto allo stato vuoto:
+   È lo stato vuoto (`.talos-empty`, con marchio, titolo e riga guida). Qui restano solo la
+   geometria della colonna — che non può ereditare da `.talos-conversation__column`, perché quella
+   classe è il gancio con cui il ponte battezza `#conversation` — e il respiro verticale. */
+.talos-empty--avvio[hidden]{display:none}
+.talos-empty--avvio{max-width:calc(92px + var(--talos-measure-w)); margin:0 auto; padding-top:clamp(24px,8vh,96px)}
+.talos-empty--avvio .talos-empty__foot{margin-top:20px; gap:var(--talos-space-md)}
 .talos-empty__foot{margin-top:14px}
 .talos-empty__hint{font-size:12px}
 /* Owner 06/09: «i numeri dei giri devono SPARIRE» e «fondi il componente dei giri nella navigation
@@ -718,6 +729,12 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
    badge d'accento e del lampeggio della cronologia, così la chat resta una cosa sola. Il testo tiene
    il colore normale: su un oro pieno perderebbe contrasto proprio dove si rilegge quello che hai chiesto. */
 .talos-message--user{display:flex; flex-direction:column; align-items:flex-end}
+/* ⛔⛔ 17/09 — TROVATO IN UNA FOTO, e poi MISURATO: la riga d'azioni nuova del messaggio della
+   persona era alta **154 px** (174→328) invece dei ~28 del suo contenuto, perché dentro una colonna
+   flex che avanza spazio l'ultimo figlio se lo prendeva tutto. Non si vedeva — la riga è
+   trasparente finché non ci passi sopra — ma il menu si ancora al suo FONDO, e compariva staccato
+   dal messaggio, in mezzo alla colonna di destra. ⇒ La riga vale il suo contenuto e basta. */
+.talos-message--user > .talos-message__actions{flex:0 0 auto; align-items:center; align-self:flex-end}
 /* 06/9, owner: «la bolla di domanda non deve avere larghezza al massimo, deve essere una bolla di chat
    con la codina e partire da destra». Così la domanda si riconosce dalla FORMA prima che dal colore:
    larghezza sul contenuto (tetto al 72% della colonna), ancorata a destra, e l'angolo in basso a destra
@@ -848,15 +865,37 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 :root.chat-full-width .talos-message,:root.chat-full-width .talos-empty{max-width:none}
 :root.immersive-header .talos-topbar{border-bottom-color:transparent}
 .talos-touched{margin-top:10px; overflow:hidden}
-.talos-touched__head{padding:10px 14px; border-bottom:1px solid var(--talos-border-subtle)}
-.talos-touched__row{display:flex; align-items:center; gap:10px; min-height:var(--talos-row); padding:0 14px}
+/* BC-75, 17/09: la testa porta il conto e la porta per la Revisione; la riga È il bersaglio. */
+.talos-touched__head{display:flex; align-items:center; gap:10px; padding:8px 8px 8px 14px; border-bottom:1px solid var(--talos-border-subtle)}
+.talos-touched__titolo{font-size:13px; font-weight:600; color:var(--talos-text)}
+.talos-touched__row{display:flex; align-items:center; gap:10px; width:100%; min-height:var(--talos-row); padding:0 14px; border:0; background:none; color:inherit; font:inherit; text-align:left; cursor:pointer}
+.talos-touched__row:hover{background:var(--talos-card-subtle)}
+.talos-touched__freccia{flex:0 0 auto; color:var(--talos-muted)}
 .talos-touched__row + .talos-touched__row{border-top:1px solid var(--talos-border-subtle)}
 .talos-touched__name{flex:1; min-width:0; font-family:var(--talos-font-mono); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
 /* ---------- 9. PIEDE DELLA CHAT: striscia (B31), coda (B15), compositore ---------- */
 .talos-chat-foot{flex:none; padding:0 var(--talos-chat-gutter) 12px}   /* ⛔ lo STESSO respiro della conversazione, dallo stesso token: e cosi che le due colonne coincidono */
 .talos-chat-return{position:relative; height:0}
-.talos-chat-return__button{position:absolute; bottom:12px; left:50%; translate:-50% 0; width:36px; height:36px; min-width:36px; padding:0; border-radius:50%; box-shadow:var(--talos-shadow-card); z-index:3}
+/* ⛔⛔⛔ F2, 17/09/2026 — IL TONDO STAVA SOPRA UNA DECISIONE IN ATTESA.
+   Trovato dall'owner nelle foto (`6-menu-utente-piu-dark-1440x900`, `4-menu-risposta-piu-light-1024x800`):
+   con `left:50%` il pulsante sta in mezzo alla colonna, e con `bottom:12px` su un contenitore alto 0
+   galleggia sugli ULTIMI 48 px della conversazione. Misurato dalla prova qui accanto: a 1440 copriva
+   63 px² di «Per questa sessione» e 75 px² di «Nega», a 1024 178 px² di «Per questa sessione».
+   ⛔ Non è un difetto della scheda di approvazione: è la POSIZIONE. In quella striscia ci finisce
+   qualunque cosa — la riga «⋯ copia esegui» di una risposta, «Visualizza le modifiche» della carta
+   dei file — e un comando che ne copre un altro fa cliccare la cosa sbagliata.
+   ⇒ Il tondo si sposta dove il layout ha GIÀ un posto vuoto: la coda del turno, i 46 px che ogni
+   turno riserva a destra (`--talos-turno-coda`, griglia `0 minmax(0,1fr) 46px`) e che nessuna scheda
+   occupa a nessuna larghezza — verificato misurando: le schede finiscono sempre a 46 px esatti dal
+   bordo destro della colonna, a 1024 come a 1440. Non un numero nuovo da tenere aggiornato a mano:
+   la stessa variabile della spina. Il primo addendo riporta il bordo al TESTO quando il composer è
+   stato allargato a mano (`--composer-max-w`), perché il piede è centrato sulla colonna del testo.
+   Fonti 17/09/2026: W3C WAI, «F110» e SC 2.4.11 «Focus Not Obscured» (WCAG 2.2) — contenuto
+   dell'autore che copre un componente a fuoco; SC 2.5.8 «Target Size (Minimum)» — bersagli da 24 px
+   e spaziatura, «sufficient space between targets makes it less likely that a user will accidentally
+   activate the wrong control». Qui il tondo rubava proprio dei pixel al bersaglio «Nega». */
+.talos-chat-return__button{position:absolute; bottom:12px; left:auto; right:calc((var(--talos-larghezza-piede) - var(--talos-testo-chat)) / 2 - var(--talos-turno-coda) + 5px); width:36px; height:36px; min-width:36px; padding:0; border-radius:50%; box-shadow:var(--talos-shadow-card); z-index:3}
 .talos-chat-return__button:is(:hover,:active):not(:disabled){transform:none; background:var(--talos-panel-soft); border-color:var(--talos-border)}
 .talos-status-strip{display:flex; align-items:center; gap:12px; padding:9px 14px; margin-bottom:8px; border-radius:11px; border:1px solid var(--talos-border); background:var(--talos-panel)}
 .talos-status-strip__pulse{width:8px; height:8px; border-radius:50%; background:var(--talos-accent-hover); flex:none; animation:talos-pulse 1.6s var(--talos-motion-ease) infinite}
@@ -885,6 +924,32 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
    dice già che è un errore, e una parete rossa rende meno leggibile proprio ciò che va letto. */
 .talos-system-note__perche{margin:6px 0 0; font-size:13px; color:var(--talos-muted)}
 .talos-system-note__rimedi{margin:8px 0 0; padding-left:18px; font-size:13px; color:var(--talos-assistant-text); display:flex; flex-direction:column; gap:4px}
+/* 17/09, CLI-REQ-03: quando un guasto ha una PORTA, la porta sta sotto i rimedi, non fra le righe. */
+.talos-system-note__azioni{margin-top:12px}
+/* 5-ter, 17/09: la frase della fiducia e i pacchetti guasti, nel pannello dei plugin. */
+/* ⛔ F3, 17/09/2026 — la frase della fiducia è un AVVISO accanto allo stato, non un paragrafo in
+   fondo: riusa `talos-callout`, il blocco d'avviso che il progetto ha già (nove usi), invece di
+   inventare un secondo linguaggio per la stessa cosa. Qui restano solo i margini che servono a
+   incastrarla fra due righe `talos-kv`, e il colore dell'icona. */
+.talos-trust-frase{margin:8px 0; color:var(--talos-assistant-text)}
+.talos-trust-frase .i{flex:none; margin-top:1px; color:var(--talos-warning)}
+/* ⛔ Il callout resta quello del progetto, senza variante stretta: l'avevo scritta per recuperare
+   altezza (a 1024×800 la scheda dei plugin esce sotto il bordo e il pulsante «Fida» con lei), e
+   misurata valeva **2 px** — padding e corpo più piccoli mandano la frase a capo una riga in più e
+   si riprendono da soli quello che tolgono. Una regola che non compra niente si toglie.
+   ⛔ I numeri, per non rifarli: col riquadro d'avviso il pulsante sta a 899 su una finestra di 800,
+   con la frase vestita da paragrafo (com'era prima di F3) a 869 — quindi 69 px erano già fuori e
+   30 li aggiunge l'avviso. La causa vera è `.talos-detail` (`position:sticky; top:0`, senza uno
+   scorrimento suo) e vale per tutti e quattro i pannelli: si segnala, non si cura di nascosto in
+   un giro che parla d'altro. A 1440×900 non esce: 851 su 900. */
+/* ⛔ F3 — i guasti vivono nella colonna dell'elenco, sotto la scheda delle voci vive: stessa
+   ascissa, stesse righe, e nessun bordo per riga (sono righe di una lista, non schedine sparse). */
+.talos-ext-colonna{display:flex; flex-direction:column; gap:14px; min-width:0}
+.talos-falliti{padding:12px 14px 4px}
+.talos-trust-falliti-titolo{margin:0 0 4px}
+.talos-trust-falliti{margin:0; padding:0; list-style:none; display:flex; flex-direction:column}
+.talos-trust-fallito{display:flex; flex-direction:column; gap:2px; padding:8px 0; border-top:1px solid var(--talos-border-subtle); font-size:12.5px; text-align:left}
+.talos-trust-fallito:first-child{border-top:0}
 .talos-system-note__tecnico{margin:10px 0 0}
 .talos-system-note__tecnico > summary{cursor:pointer; font-size:12px; color:var(--talos-muted); list-style:none}
 .talos-system-note__tecnico > summary::-webkit-details-marker{display:none}
@@ -1156,7 +1221,23 @@ a.talos-button{text-decoration:none}
 .talos-browser__testo-pulito{white-space:pre-wrap; overflow-wrap:anywhere}
 .talos-browser__sorgente{margin:12px 0 0}
 .talos-browser__sorgente > summary{cursor:pointer; font-size:12px; color:var(--talos-muted)}
-.talos-approval__codice{margin:8px 0 0; padding:10px 12px; border-radius:10px; border:1px solid var(--talos-border); background:var(--talos-code-bg, var(--talos-surface-sunken, rgba(0,0,0,.18))); color:var(--talos-text); font-family:var(--talos-font-mono); font-size:12.5px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; overflow-x:auto; overflow-y:auto; max-height:14em}
+/* ⛔⛔ 17/09, PO-27 punto 5 — DUE DIFETTI IN UNA RIGA SOLA, tutti e due misurati nel browser vero.
+   1. Il comando cominciava **1 px** più a sinistra delle altre righe della scheda (misurato:
+      `left + bordo + padding` del blocco meno lo stesso conto su `.talos-approval__why`, −1,00 px
+      nei due temi e alle due larghezze). La causa: `padding-inline:12px` + 1 px di bordo contro il
+      gutter della scheda, che è 14. Ora il padding È il gutter, e il bordo verticale se ne va: il
+      blocco diventa una RIGA della scheda come le sorelle, non una scatola appoggiata dentro.
+      ⭐ Il conto si fa sul bordo del TESTO, non su quello della scatola: due scatole con lo stesso
+      `left` mostrano il testo in due punti diversi se hanno bordi e padding diversi.
+   2. Nel tema chiaro il fondo era un grigio pieno sul crema. La causa non era una scelta di
+      colore: `--talos-code-bg` **non è definito in nessun `:root`** (cercato il 17/09: compare
+      solo dentro dei `var(...)` con ripiego, qui e in `.talos-system-note__grezzo`), quindi
+      vinceva sempre il ripiego `rgba(0,0,0,.18)` — che su un fondo scuro passa e su uno chiaro è
+      una macchia. Ora il fondo è `--talos-panel-soft`, che i due temi definiscono davvero
+      (#2b2c30 scuro, #e8e4db chiaro) ed è la superficie «incassata» che il progetto usa già.
+   ⛔ Resta fuori `.talos-system-note__grezzo`, che ha lo stesso identico difetto: non è di questa
+      corsia, ed è segnalato nel rapporto invece di essere corretto di straforo. */
+.talos-approval__codice{margin:8px 0 0; padding:10px var(--talos-approval-gutter); border-block:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-family:var(--talos-font-mono); font-size:12.5px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; overflow-x:auto; overflow-y:auto; max-height:14em}
 /* ⛔ D1 — la riga del motivo prende il rientro della carta, come tutte le altre. È la riga che dice
    PERCHÉ ti si sta chiedendo il permesso: era l'unica a filo del bordo, e con `overflow:hidden`
    la prima lettera spariva. Stesso token, nessun numero a mano. */
@@ -2374,7 +2455,6 @@ a.talos-button{text-decoration:none}
    `flex` in una colonna flex l'elenco prende la sua altezza naturale e sborda invece di
    restringersi: `overflow-y:auto` non serve a niente su un elemento che non si stringe. */
 #risultatiComandi{flex:1 1 auto;overflow-y:auto;min-height:0}
-#veloIntro [data-intro-passo][aria-current="step"],#veloIntro [data-intro-policy][aria-checked="true"]{background:var(--talos-accent-soft);color:var(--talos-accent-text);box-shadow:inset var(--talos-focus-width) 0 var(--talos-accent)}
 .talos-lab__tabs{margin-bottom:var(--talos-space-md)}
 #labTabs{flex-wrap:wrap}
 .talos-lab__space{margin-top:var(--talos-space-md)}
@@ -2477,29 +2557,13 @@ a.talos-button{text-decoration:none}
 .talos-dialog[data-user-sized] .talos-dialog__body{overflow:auto}
 #veloModello .talos-dialog[data-user-sized] .talos-dialog__body{display:block}
 
-.talos-intro-folders{max-height:calc(var(--talos-row)*5);overflow:auto}
-#passoIntroCartella .talos-stack{gap:var(--talos-space-sm)}
-#introCartellaSu .i{transform:rotate(90deg)}
 
-#introCartella{width:auto;min-width:0;flex:1 1 0;padding-inline:var(--talos-space-md)}
-#passoIntroCartella .talos-toolbar{flex-wrap:nowrap;margin-bottom:0}
-#passoIntroCartella .talos-field{min-width:0}
-.talos-intro-folders{max-height:calc(var(--talos-row)*4)}
 
-.talos-intro-folders:empty{display:none}
 /* Misura ricordata (06/09): la misura sta in due custom property, così il foglio decide dove vale. Nel primo avvio l'altezza
    ricordata vale solo sul passo Cartella, dove l'albero cresce per riempirla (è il motivo per cui si allarga); gli altri passi
    restano aderenti al contenuto, come da profilo pulito (PatternFly, wizard: «the modal adjusts to the body of each step»). */
 .talos-dialog[data-user-sized]{width:var(--talos-dialog-w);height:var(--talos-dialog-h)}
-#veloIntro:not([data-intro-passo-attivo="0"]) .talos-dialog[data-user-sized]{height:auto}
-#veloIntro:not([data-intro-passo-attivo="0"]) .talos-resizer--dialog-height,#veloIntro:not([data-intro-passo-attivo="0"]) .talos-resizer--dialog-both{display:none}
-#veloIntro .talos-dialog__body{display:flex;flex-direction:column}
-#veloIntro .talos-picker{flex:1 1 auto;min-height:0}
-#veloIntro .talos-picker>.talos-stack{min-height:0}
-#passoIntroCartella,#passoIntroCartella [data-c="FolderPicker"]{flex:1 1 auto;min-height:0}
-.talos-dialog[data-user-sized] .talos-intro-folders{flex:1 1 auto;min-height:calc(var(--talos-row)*4);max-height:none}
 
-#introMessaggio:empty{display:none}
 [data-c="TaskRow"][data-aperta="true"] .talos-list-row__sub,[data-c="TaskRow"][data-aperta="true"] .talos-list-row__title{white-space:pre-wrap;overflow-wrap:anywhere}
 [data-c="TaskRow"][data-aperta="true"]{opacity:1}
 [data-c="LibraryRow"][data-aperta="true"] .talos-list-row__title,[data-c="LibraryRow"][data-aperta="true"] .talos-list-row__sub{white-space:pre-wrap;overflow-wrap:anywhere}

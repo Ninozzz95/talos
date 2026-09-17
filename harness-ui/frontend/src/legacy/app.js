@@ -45,7 +45,6 @@ import { aggiornaInspector, processiDagliEventi, schedaAgentiDaRileggere, titolo
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
 import { nomeUmanoAttrezzo as nomeUmanoAttrezzoCondiviso, nomeDiRipiegoAttrezzo } from '../components/nomi-attrezzi.js'; // BC-59 (17/09): la mappa dei nomi umani vive in UN posto solo — qui c'era una copia, e si era fermata al 12/09
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
-import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
 import { LINGUE as LINGUE_MENU, risolviLingua, applicaLingua, etichettaLinguaRisolta, t as tr, EVENTO_LINGUA } from '../components/lingua.js'; // 06/9 B8 + P-i18n: la lingua dei menu e delle superfici
 import { ritraduciImpostazioni } from '../components/impostazioni.js'; // P-i18n
@@ -57,7 +56,7 @@ import { montaConversazioneFiglia } from '../components/conversazione-figlia.js'
 import { leggiEsitoComando, rigaDiStatoComando } from '../components/esito-comando.js'; // PO-06 (10/09): l'esito di un comando, detto a una persona
 import { raggruppaInHunk } from '../components/diff-hunk.js'; // PO-11 (10/09): i pezzi del diff
 import { leggiRisultatiRicerca, creaRisultatiRicerca, creaPillolaFonti, apriModaleFonti } from '../components/risultati-ricerca.js'; // 10/09: la ricerca web si legge come una ricerca
-import { creaDiffInChat, aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFileScaricabile, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
+import { creaDiffInChat, aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFileScaricabile, creaFileToccati, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio, TESTI_MESSAGGIO } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
 import { creaVistaViva } from '../components/browser-vivo.js'; // 07/9: lo schermo del browser pilotato dal server
@@ -85,7 +84,7 @@ import { aggiornaSeparatoreContesto } from '../components/context-separator.js';
 import { createContextClient } from '../services/context-client.js';
 import { createContextMonitor } from '../services/context-monitor.js';
 import { aggiornaAvanzamentoContesto } from '../components/context-progress.js';
-import { aggiornaDiffReview, chiaveFileReview, creaSchedeReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
+import { aggiornaDiffReview, chiaveFileReview, creaSchedeReview, etichettaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno; 17/09 BC-75: `etichettaFileReview` è la regola del nome, e non si riscrive qui del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
 import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
@@ -450,7 +449,6 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   const commandDialog = $('#commandDialog');
   const commandSearch = $('#commandSearch');
   const sheetDialog = $('#sheetDialog');
-  const introDialog = $('#introDialog'); // ⭐ 04/9, R-02 — intro al primo avvio (modale nativa, vedi costruisciIntroPrimoAvvio)
   const harnessDialogBackdrop = $('#harnessDialogBackdrop');
   const sheetTitle = $('#sheetTitle');
   const sheetEyebrow = $('#sheetEyebrow');
@@ -5017,7 +5015,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function mostraInventarioEstensioni(tipo) {
     const p = inventariEstensioni.get(tipo), panel = $('#capPanel-' + tipo);
     if (!p || !panel || p.sessionId !== state.realSession.id) return;
-    aggiornaEstensioni(panel, p.voci, { tipo, ambito: p.sessionId, errore: p.errore, erroreAzione: p.erroreAzione, caricamento: p.caricamento, salvataggio: Boolean(scritturaEstensione), onAggiorna: () => caricaEstensioniCapability(tipo), onFida: v => fidaEstensioneCapability(tipo, v, p.sessionId) });
+    /* 5-ter, 17/09: i pacchetti GUASTI arrivano dal server accanto ai plugin, e non si perdono qui. */
+    aggiornaEstensioni(panel, p.voci, { tipo, ambito: p.sessionId, errore: p.errore, erroreAzione: p.erroreAzione, caricamento: p.caricamento, falliti: p.falliti, salvataggio: Boolean(scritturaEstensione), onAggiorna: () => caricaEstensioniCapability(tipo), onFida: v => fidaEstensioneCapability(tipo, v, p.sessionId) });
   }
   async function caricaEstensioniCapability(tipo) {
     if (!['skills', 'mcp', 'plugins', 'hooks'].includes(tipo)) return;
@@ -5035,6 +5034,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const valida = v => v && typeof v.id === 'string' && v.id.length && (tipo === 'skills' ? typeof v.name === 'string' && typeof v.description === 'string' : typeof v.fidato === 'boolean') && (tipo !== 'mcp' || typeof v.comando === 'string' && stringhe(v.argomenti) && stringhe(v.allowlist)) && (tipo !== 'hooks' || stringhe(v.eventi)) && (tipo !== 'plugins' || typeof v.nome === 'string' && typeof v.descrizione === 'string' && Array.isArray(v.tools) && Array.isArray(v.hooks) && v.tools.every(t => t && typeof t.nome === 'string' && typeof t.descrizione === 'string' && typeof t.comando === 'string') && v.hooks.every(h => h && typeof h.id === 'string' && stringhe(h.eventi) && typeof h.comando === 'string') && Array.isArray(v.avvisi) && v.avvisi.every(a => a && typeof a.origine === 'string' && typeof a.avviso === 'string'));
       if (!Array.isArray(voci) || !voci.every(valida) || new Set(voci.map(v => v.id)).size !== voci.length) throw new Error('Inventario con voci non valide');
       p.voci = voci;
+      /* ⛔ 5-ter: solo `frase` (già scritta per una persona), MAI `motivo`/`codice` — è un nome tecnico. */
+      p.falliti = Array.isArray(dati.falliti) ? dati.falliti.filter(f => f && typeof f === 'object').map(f => ({ id: typeof f.pluginId === 'string' ? f.pluginId : null, nome: typeof f.pluginId === 'string' ? f.pluginId : null, frase: typeof f.frase === 'string' ? f.frase : null })) : [];
     } catch (e) { if (!attuale()) return; p.voci = []; p.errore = 'Inventario non disponibile: ' + e.message; }
     finally { if (attuale()) { p.caricamento = false; mostraInventarioEstensioni(tipo); } }
   }
@@ -8156,6 +8157,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (span) span.textContent = label;
     const activeModel = $('#modelLabActiveModel');
     if (activeModel) activeModel.textContent = label;
+    aggiornaInvitoPrimoAvvio(); // 17/09, PO-27: il modello è metà di ciò che l'invito nomina
   }
 
   function aggiornaPillolaAmbiente() {
@@ -9771,7 +9773,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return correnti.length;
   }
 
-  function appendRealTaskStart(task, contesto = null) {
+  function appendRealTaskStart(task, contesto = null, sequenza = null) {
     const conversation = $('#conversation');
     /*
      * ⛔⛔ 27/8, trovato dalla pipeline QA visiva: per un comando diretto
@@ -9814,6 +9816,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     markMotionEnter(article);
     /* ⛔ 28/8, owner: "auto centramento dello scroll dei messaggi appena se ne invia uno nuovo (meta schermo)" — questa era l'UNICA delle sei chiamate scrollIntoView di questo file con block:'center' invece di 'end': ogni messaggio inviato veniva centrato a metà schermo invece di scorrere in fondo come ogni altro elemento appeso alla conversazione. */
     scorriAllaBollaAppesa(article, { azioneDellaPersona: true }); // ⛔ 16/09: è la persona che ha scritto — il suo messaggio la riporta in fondo e riarma il seguito
+    collegaAzioniMessaggioUtente(article, { riferimento: Number.isSafeInteger(sequenza) ? `giro:${sequenza}` : null, testo: testoBolla });
     state.realSession.taskBubbleMostrata = true;
   }
 
@@ -9864,7 +9867,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return riga;
   }
 
-  function appendUserFollowUp(text, contesto = null, immagini = []) {
+  function appendUserFollowUp(text, contesto = null, immagini = [], sequenza = null) {
     /*
      * ⛔ 03/9 — si ricorda QUI, dove il testo passa per davvero, e non
      * rileggendolo dal DOM: una bolla può essere ridisegnata, tradotta o
@@ -9889,6 +9892,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (allegatiVisibili.length) disegnaChipAllegati(article, allegatiVisibili);
     markMotionEnter(article);
     scorriAllaBollaAppesa(article, { azioneDellaPersona: true }); // ⛔ 16/09: è la persona che ha scritto — il suo messaggio la riporta in fondo e riarma il seguito
+    collegaAzioniMessaggioUtente(article, { riferimento: Number.isSafeInteger(sequenza) ? `giro:${sequenza}` : null, testo: testoBolla });
   }
 
   /*
@@ -10259,6 +10263,166 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.realSession.attesaBubble = null;
   }
 
+  /*
+   * ⭐⭐⭐ 17/09, secondo giro — ELIMINARE UN MESSAGGIO PASSA DAL SERVER, SEMPRE.
+   *
+   * Una sola funzione per la risposta del modello e per il messaggio della persona: cambia il
+   * `riferimento` (l'id dello stream, oppure `giro:<sequenza>`), non il modo.
+   *
+   * ⛔ Il DOM si tocca DOPO l'esito, mai prima. L'ordine inverso (togli e poi chiedi) fa vedere
+   *   un successo anche quando il server rifiuta — ed è esattamente la bugia che questo giro
+   *   toglie. Se il server dice di no, la bolla resta dov'è e il toast dice perché.
+   */
+  async function eliminaMessaggioReale({ riferimento, nodo, quale }) {
+    const sessionId = state.realSession.id;
+    if (!sessionId) { toast('Niente da eliminare', 'Questa conversazione non è ancora una sessione sul server.'); return false; }
+    let esito;
+    try {
+      esito = await apiDelete(`/api/v1/sessions/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(riferimento)}`);
+    } catch (errore) {
+      toast('Non l\'ho eliminato', messaggioErroreUtente(errore, 'Riprova fra un momento.'));
+      return false;
+    }
+    /* Un giro della persona porta via anche ciò che gli è seguito: si toglie il TURNO, non la bolla. */
+    const turnoDaTogliere = nodo?.closest('.talos-turn') || nodo?.closest('.talos-message') || nodo;
+    turnoDaTogliere?.remove();
+    if (quale === 'risposta') {
+      for (const [id, elemento] of state.realSession.messageElements) if (elemento === nodo) state.realSession.messageElements.delete(id);
+    }
+    /*
+     * ⛔⛔⛔ 17/09, dalla revisione — QUI SI DICEVA SEMPRE «ELIMINATA», E NON SEMPRE ERA VERO.
+     *
+     * Il server toglie il messaggio da ciò che il modello riceve solo se riesce a ritrovarlo nella
+     * conversazione canonica; dopo una compattazione, o se la posizione non torna, non ci riesce —
+     * e lo DICE (`toltoDalModello:false` + `motivo`). Un toast che annuncia comunque «eliminata»
+     * rimetterebbe in piedi la bugia che questa corsia toglie, spostata di un livello.
+     * ⛔ La frase non nomina il motivo tecnico: dice che cosa vale per chi legge, cioè che il
+     *   modello può ancora ricordarla.
+     */
+    const toltoDalModello = esito?.toltoDalModello !== false;
+    const cosa = quale === 'risposta' ? 'Risposta' : 'Messaggio';
+    if (!toltoDalModello) {
+      toast(`${cosa} tolt${quale === 'risposta' ? 'a' : 'o'} dalla conversazione`,
+        esito?.motivo === 'posizione-assente'
+          ? 'Sparisce da qui, ma il modello potrebbe ricordarla ancora: la conversazione che riceve è stata compattata e non la contiene più nella forma originale.'
+          : 'Sparisce da qui, ma non sono riuscito a toglierla dalla conversazione che il modello riceve: potrebbe ricordarla ancora.');
+      return true;
+    }
+    toast(quale === 'risposta' ? 'Risposta eliminata' : 'Messaggio eliminato',
+      quale === 'risposta'
+        ? 'Non è più nella conversazione, e dal prossimo giro il modello non la legge più.'
+        : 'Se n\'è andato con la risposta che gli era seguita: dal prossimo giro il modello non li legge più.');
+    return true;
+  }
+
+  /*
+   * ⭐⭐⭐ 17/09, secondo giro — L'ALTRA METÀ DI BC-60: IL MESSAGGIO DELLA PERSONA.
+   *
+   * Misurato dal revisore: il messaggio della persona non aveva NESSUNA azione e nessun tasto
+   * destro. La regola dell'owner del 13/09 — «una lista di azioni si giudica da ciò che manca» —
+   * era nata proprio su questa asimmetria, sul mobile.
+   *
+   * ⛔ Stesso menu condiviso, stessa forma: in riga le due azioni che non distruggono niente
+   *   (Copia · Riusa nel composer), nel «⋯» e nel tasto destro quella che distrugge. Intersezione
+   *   vuota, unione completa, come sulla risposta.
+   * ⛔ «Riusa nel composer» RIEMPIE il composer, non invia: è lo stesso gesto dei suggerimenti
+   *   dello stato vuoto, e il progetto non ha un secondo modo di rimettersi in bocca una domanda.
+   * ⛔ La conferma DICE che se ne va anche la risposta: toglierla di nascosto sarebbe la stessa
+   *   bugia di ieri, al contrario. Il server toglie il giro intero (`giro:<sequenza>`), perché una
+   *   risposta a una domanda che non esiste più confonde il modello più del buco.
+   */
+  function collegaAzioniMessaggioUtente(turno, { riferimento = null, testo = '' } = {}) {
+    if (!turno) return;
+    const messaggio = turno.querySelector?.('.talos-message--user');
+    if (!messaggio || messaggio.querySelector(':scope > .talos-message__actions')) return;
+    if (riferimento) messaggio.dataset.riferimentoMessaggio = riferimento;
+    const azioni = creaAzioniMessaggio({ ascolta: false }, {
+      radiceMenu: ROOT().body || ROOT(),
+      ospiteTastoDestro: messaggio,
+      etichetta: TESTI_MESSAGGIO.azioniTuo,
+      vociMenu: () => [
+        {
+          testo: TESTI_MESSAGGIO.eliminaMessaggio,
+          conferma: TESTI_MESSAGGIO.confermaEliminaMessaggio,
+          /* ⛔ Senza `riferimento` il server non sa ancora quale giro è: spenta, non finta. */
+          abilitato: Boolean(messaggio.dataset.riferimentoMessaggio) && !runRealeAttivo(),
+          fai: () => { void eliminaMessaggioReale({ riferimento: messaggio.dataset.riferimentoMessaggio, nodo: messaggio, quale: 'messaggio' }); },
+        },
+      ],
+    });
+    azioni.querySelector('[data-message-action="copy"]').setAttribute('aria-label', TESTI_MESSAGGIO.copiaTuo);
+    azioni.querySelector('[data-message-action="copy"]').title = TESTI_MESSAGGIO.copiaTuo;
+    azioni.querySelector('[data-message-action="copy"]').addEventListener('click', () => copyText(testo || messaggio.querySelector('.message-bubble')?.textContent || '', 'Messaggio copiato'));
+    const riusa = document.createElement('button');
+    riusa.type = 'button';
+    riusa.className = 'talos-button talos-button--ghost talos-icon-button talos-button--sm';
+    riusa.dataset.messageAction = 'riusa';
+    riusa.title = TESTI_MESSAGGIO.riusa;
+    riusa.setAttribute('aria-label', TESTI_MESSAGGIO.riusa);
+    /*
+     * ⛔⛔ 17/09 — TROVATO IN UNA FOTO, poi MISURATO: la riga d'azioni era alta **154 px** invece
+     *   di 30, e il menu — che si ancora al suo FONDO — compariva staccato dal messaggio, in mezzo
+     *   alla colonna di destra. La causa non era il menu: era QUESTA icona. `icon()` restituisce un
+     *   `<svg>` NUDO, senza la classe che gli dà una misura; dentro un flex un SVG senza misura si
+     *   allarga fino a riempire. Gli altri bottoni della riga usano `simbolo(…, 'i i--sm', …)` e
+     *   stanno a 30 px: qui mancava una classe, e il difetto si vedeva a tre elementi di distanza.
+     */
+    riusa.innerHTML = icon('i-edit').replace('<svg ', () => '<svg class="i i--sm" ');
+    riusa.addEventListener('click', () => {
+      composerInput.value = testo || messaggio.querySelector('.message-bubble')?.textContent || '';
+      composerInput.dispatchEvent(new Event('input', { bubbles: true }));
+      composerInput.focus();
+    });
+    azioni.querySelector('[data-message-action="piu"]')?.before(riusa);
+    messaggio.append(azioni);
+  }
+
+  /*
+   * ⭐⭐⭐ BC-75 (17/09/2026, owner con una foto di Claude Code) — A FINE GIRO, I FILE DI QUEL GIRO.
+   *
+   * «Come fa Claude Code a fine turno bisogna riportare lista file modificati in quel turno con
+   * link a review in quella scheda file.»
+   *
+   * ⛔ Non un componente nuovo: `creaFileToccati` esisteva dal 05/09 e non lo chiamava NESSUNO
+   *   (grep del 17/09: zero chiamanti). Qui si cabla.
+   * ⛔ I file di QUESTO giro, non della sessione: `reviewFiles` porta già `giro` su ogni voce, ed
+   *   è l'unica cosa che distingue «tre file, adesso» da «tre file, in mezz'ora di lavoro».
+   * ⛔ Si ricostruisce dal REPLAY e non da uno stato volatile: gli `StateDelta` delle scritture
+   *   arrivano prima del `RunFinished` anche quando la sessione si riapre, quindi riaprendo la
+   *   carta torna da sola. E non si duplica: una carta per giro, cercata nel DOM per numero —
+   *   contare sulle variabili vorrebbe dire ricordarsi di azzerarle, cioè dimenticarsene.
+   * ⛔ Niente carta nei giri senza scritture: una carta «0 file» è rumore che sembra un esito.
+   */
+  function appendCartaFileDelGiro() {
+    const giro = state.realSession.runCount || null;
+    const conversation = $('#conversation');
+    if (!conversation || giro === null) return;
+    if (conversation.querySelector(`[data-c="TouchedFiles"][data-giro="${giro}"]`)) return;
+    const voci = [...(state.realSession.reviewFiles?.values?.() || [])].filter((v) => v?.giro === giro);
+    if (voci.length === 0) return;
+    /* La regola di BC-63: il nome basta, la cartella madre solo se due file si chiamano uguale. */
+    const carta = creaFileToccati(voci.map((voce) => {
+      const conteggio = contaDiff(voce);
+      return {
+        percorso: voce.path,
+        etichetta: etichettaFileReview(voce, voci),
+        aggiunte: conteggio.aggiunte,
+        rimozioni: conteggio.rimozioni,
+        onApri: () => { setView('diff'); renderReviewFile(`real:${voce.path}`); },
+      };
+    }), { onVediTutto: () => { setView('diff'); renderReviewFile(`real:${voci[0].path}`); } });
+    carta.dataset.giro = String(giro);
+    nellaChat(carta);
+  }
+
+  /** Il «⋯» dice PERCHÉ una voce è spenta, invece di lasciarla grigia e muta. */
+  function aggiornaMotivoAzioniRisposta(bottone) {
+    const vivo = runRealeAttivo();
+    bottone.title = vivo
+      ? TESTI_MESSAGGIO.altreAzioniGiroVivo
+      : TESTI_MESSAGGIO.altreAzioni;
+  }
+
   function ensureAssistantMessageElement(messageId) {
     const existing = state.realSession.messageElements.get(messageId);
     if (existing) return existing;
@@ -10279,15 +10443,50 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     copy.className = 'assistant-copy';
     article.append(copy);
     nellaChat(article);
-    const azioni = creaAzioniMessaggio({ ascolta: sintesiVoceDisponibile });
+    /*
+     * ⭐⭐⭐ BC-60 (17/09) — in riga restano Copia e Ascolta; «Chiedi di nuovo» ed «Elimina»
+     *   vivono nel «⋯» e nel tasto destro sul messaggio. Le voci si calcolano A OGNI APERTURA
+     *   (`vociMenu` è una funzione, non un elenco): «Chiedi di nuovo» ha senso solo se questa
+     *   sessione ha registrato una domanda, e quello si sa quando il menu si apre, non quando
+     *   il messaggio nasce.
+     */
+    const azioni = creaAzioniMessaggio({ ascolta: sintesiVoceDisponibile }, {
+      radiceMenu: ROOT().body || ROOT(), // la stessa radice dei menu delle schede e del terminale
+      ospiteTastoDestro: messaggio,
+      vociMenu: () => [
+        {
+          testo: TESTI_MESSAGGIO.chiediDiNuovo,
+          abilitato: Boolean(state.realSession.ultimaDomanda),
+          fai: () => {
+            const domanda = state.realSession.ultimaDomanda;
+            if (!domanda) { toast('Nessuna domanda da rimandare', 'Questa risposta non ha una domanda registrata in questa sessione.'); return; }
+            void resumeSession(domanda);
+          },
+        },
+        {
+          testo: TESTI_MESSAGGIO.eliminaRisposta,
+          conferma: TESTI_MESSAGGIO.confermaEliminaRisposta,
+          /*
+           * ⛔⛔⛔ 17/09, secondo giro — ADESSO ELIMINA DAVVERO, e prima non era vero.
+           *   Ieri toglieva solo dallo schermo: ricaricando tornava, e — peggio — il MODELLO
+           *   continuava a leggerla, perché un follow-up manda solo il testo nuovo e la
+           *   conversazione ce l'ha il server. Owner 11/09: «non c'è la rotta» non è una risposta.
+           *   Ora la rotta c'è (`DELETE …/messages/:riferimento`), scrive una LAPIDE nel registro
+           *   a sola aggiunta e toglie il messaggio anche da `messaggiFinali`.
+           * ⛔ Il DOM si tocca DOPO la risposta del server, mai prima: togliere la bolla e poi
+           *   fallire lascerebbe la persona convinta di aver cancellato qualcosa che c'è ancora.
+           */
+          abilitato: !runRealeAttivo(),
+          fai: () => { void eliminaMessaggioReale({ riferimento: messageId, nodo: article, quale: 'risposta' }); },
+        },
+      ],
+    });
+    /* ⛔ Il motivo di una voce spenta si LEGGE: il `title` sul «⋯» lo dice mentre il giro è vivo. */
+    const bottonePiu = azioni.querySelector('[data-message-action="piu"]');
+    if (bottonePiu) aggiornaMotivoAzioniRisposta(bottonePiu);
     azioni.querySelector('[data-message-action="copy"]').addEventListener('click', () => copyText(copy.textContent || '', 'Risposta copiata'));
     const ascolta = azioni.querySelector('[data-message-action="listen"]');
     if (ascolta) ascolta.addEventListener('click', () => leggiVoceAlta(copy.textContent || '', ascolta));
-    azioni.querySelector('[data-message-action="ask-again"]').addEventListener('click', () => {
-      const domanda = state.realSession.ultimaDomanda;
-      if (!domanda) { toast('Nessuna domanda da rimandare', 'Questa risposta non ha una domanda registrata in questa sessione.'); return; }
-      void resumeSession(domanda);
-    });
     const vecchieAzioni = messaggio.querySelector(':scope > .talos-message__actions');
     if (vecchieAzioni) vecchieAzioni.remove();
     nellaChat(azioni);
@@ -11214,6 +11413,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         badge: vestizione.badge,
         tono: vestizione.tono,
         spiegazione,
+      }, {
+        /*
+         * ⛔ CLI-REQ-03, metà a schermo: davanti a una chiave che manca il rimedio è UN CLIC, non
+         *   quattro passi da leggere. La porta è quella che esiste già — il velo «Fornitori e
+         *   accessi» —, non una schermata nuova.
+         */
+        azioni: spiegazione.famiglia === 'chiave-fornitore'
+          ? [[TESTI_MESSAGGIO.collegaModello, () => { setView('settings'); setSettingsSection('providers'); apriVeloMockup('veloFornitori'); }]]
+          : [],
       })
       : creaNotaSistema({ tipo: isError ? 'danger' : 'info', badge: isError ? 'Errore' : 'Nota', titolo: etichettaMeta || (isError ? 'TALOS · errore' : 'TALOS · concluso'), testo: text });
     article.classList.add('real-session-status');
@@ -11612,7 +11820,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const conSessione = Boolean(state.realSession.id);
     // la cartella è quella che il server ha DICHIARATO per la scheda; per la scheda senza sessione la sceglie il server e qui non si inventa
     const cartella = attiva?.cartella || (attiva?.origine === 'standalone' ? '' : state.realSession.cartellaAssoluta) || '';
-    const segmento = cartella ? ultimoSegmentoIntro(cartella) : '';
+    const segmento = cartella ? ultimoSegmentoPercorso(cartella) : '';
     const nomeCartella = segmento ? (/[\/]$/.test(segmento) ? segmento : `${segmento}/`) : '';
     const colori = t.enforcementColore && t.enforcementColore !== 'webgl' ? ` ${tr('Colori limitati ({motivo}).', { motivo: t.enforcementColore })}` : '';
     ui.aggiorna({
@@ -15463,6 +15671,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          *   quindi i RunStarted storici non lo staccano).
          */
         if (!state.realSession.deferHistoricalRendering) fermaFondoRipristino?.();
+        /*
+         * ⛔ 17/09, revisione — «CHIEDI DI NUOVO» DOPO UNA RICARICA. `ultimaDomanda` si scriveva
+         *   SOLO in `appendUserFollowUp`, cioè solo per una domanda mandata da questa finestra:
+         *   riaperta la sessione restava vuota, la voce del menu spenta, e non c'era niente di
+         *   rotto da vedere — la domanda era lì a schermo. Si ricostruisce dalla storia
+         *   rigiocata, che è la stessa fonte da cui la chat ridisegna le bolle.
+         */
+        const domandaDelGiro = typeof evento.input?.consegna === 'string' ? evento.input.consegna : evento.input?.consegnaCorta;
+        if (typeof domandaDelGiro === 'string' && domandaDelGiro.trim() !== '') state.realSession.ultimaDomanda = domandaDelGiro;
         contextMonitor?.setRunning(true);
         /*
          * ⛔⛔⛔ 06/9, CB-04 — QUI è il confine fra due invii: il consumo
@@ -15567,7 +15784,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          *   «Interactive mode», letto il 10/09/2026).
          */
         if (!state.realSession.taskBubbleMostrata && evento.input) {
-          appendRealTaskStart(evento.input, evento.contesto);
+          appendRealTaskStart(evento.input, evento.contesto, evento._sequenza);
         } else if (state.realSession.taskBubbleMostrata && evento.input?.seguito) {
           if (state.realSession.followUpBubbleInAttesa) {
             const turnoInAttesa = state.realSession.attesaBubble?.closest('[data-turno="talos"]');
@@ -15581,10 +15798,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             const domandaInAttesa = [...($('#conversation')?.querySelectorAll('.talos-message--user') || [])].at(-1);
             const metaDomanda = domandaInAttesa?.querySelector('.talos-message__meta');
             if (metaDomanda && evento.contesto) metaDomanda.textContent = [domandaInAttesa.dataset.oraMessaggio, `Follow-up${etichettaPermessiGiro(evento.contesto)}`].filter(Boolean).join(' · ');
+            /*
+             * ⛔ 17/09: la bolla ottimista è nata PRIMA che il server dicesse quale giro è. Il suo
+             *   riferimento arriva adesso, con `RunStarted`: senza questa riga «Elimina» resterebbe
+             *   spenta per sempre proprio sul messaggio appena scritto.
+             */
+            if (domandaInAttesa && Number.isSafeInteger(evento._sequenza)) {
+              domandaInAttesa.dataset.riferimentoMessaggio = `giro:${evento._sequenza}`;
+            }
             state.realSession.followUpBubbleInAttesa = false; // già mostrato dal vivo, non duplicare
             allineaPilloleAlGiroVivo(evento.contesto);
           } else {
-            appendUserFollowUp(evento.input.consegna, evento.contesto, evento.input.immagini); // replay con allegati persistiti
+            appendUserFollowUp(evento.input.consegna, evento.contesto, evento.input.immagini, evento._sequenza); // replay con allegati persistiti
           }
         }
         /*
@@ -16153,6 +16378,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       case 'RunFinished': {
         segnaGiroVivo(false); // ⭐ il marchio smette di respirare quando il giro finisce DAVVERO
         contextMonitor?.setRunning(false); void contextMonitor?.refresh({ afterPending: true });
+        appendCartaFileDelGiro(); // ⭐ BC-75: i file di QUESTO giro, sotto la risposta
         /*
          * ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col
          * modello" — la causa PRINCIPALE della "risposta duplicata" non era
@@ -17381,6 +17607,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       tema: document.documentElement.dataset.talosTheme, // il preset applicato (applicaThemeDesktop lo scrive sulla radice)
       modello: state.model,
     });
+    aggiornaInvitoPrimoAvvio(); // 17/09, PO-27: qui passa OGNI cambio di cartella e di sessione
   }
 
   /*
@@ -18235,6 +18462,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     submit.type = 'submit';
     submit.id = 'workspaceChooserSubmit';
     submit.className = 'primary-btn compact';
+    /* ⛔ Stessa frase dell'invito del primo avvio, ma NON la stessa voce: questo è il bottone del
+       foglio «Nuova sessione», e legarlo alla tabella dell'invito farebbe cambiare due superfici
+       insieme al primo ritocco di copia. Due frasi uguali non sono una frase sola. */
     submit.textContent = 'Scegli una cartella';
     /*
      * ⛔⛔⛔ BC-14 — LA RAGIONE VERA ERA FUORI DALLO SCHERMO, e il bottone ne diceva una falsa.
@@ -18810,327 +19040,91 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   /*
-   * ⭐⭐⭐ 04/9, R-02 — INTRO AL PRIMO AVVIO, stile mobile.
+   * ⭐⭐⭐ 17/09, PO-27 — LO STATO VUOTO ONESTO, AL POSTO DELLA MODALE «PRIMO AVVIO».
    *
-   * Owner 03/09: «abbia un intro stile mobile». Il telefono
-   * (`TalosMobileSetupIntro.vue`, `setupProgress.ts`) ha già deciso come si
-   * fa, e qui si copia il METODO, non solo l'aspetto:
+   * Qui sopra c'erano 324 righe: il velo del primo avvio a quattro passi (cartella, fornitore +
+   * chiave, modello, permessi, riepilogo), la chiave dello store del browser che lo ricordava
+   * («completata» o «saltata»), il dialogo nativo legacy che non si apriva più da settembre, e la
+   * voce «Ripeti il primo avvio» nelle Impostazioni. Sono andate via tutte insieme.
    *
-   * 1. Un passo è «fatto» quando la cosa che chiede ESISTE — letto dalla
-   *    realtà (portachiavi via `/api/v1/setup/stato`, preferenze chat), mai
-   *    da un cursore salvato che può invecchiare e rimandare qualcuno su un
-   *    passo già finito.
-   * 2. Una decisione per schermata, con accanto la conseguenza.
-   * 3. NIENTE seconda casa per la stessa impostazione: la chiave si salva con
-   *    la STESSA rotta del Laboratorio modelli (`POST /providers/:id/key`),
-   *    il modello con lo STESSO `creaModelPicker`, l'autonomia con lo STESSO
-   *    `impostaPermesso` del foglio Permessi. L'intro presenta, non duplica.
-   * 4. «Scelto» è un GESTO, non un valore (lezione mobile `haDecisoAutonomia`):
-   *    `state.autonomiaScelta` diventa true solo toccando una scheda, mai
-   *    passando oltre con «Avanti» — altrimenti il default del giorno
-   *    dell'installazione resterebbe congelato per sempre come «scelta».
+   * ⛔ Perché: quella modale non insegnava niente che il prodotto non avesse già. La cartella si
+   *   sceglie dal «+» e da Esplora file, il modello dalla pillola del composer e dalle
+   *   Impostazioni, i permessi dalla pillola dei permessi — l'intro non faceva che ripetere tre
+   *   porte esistenti, e per farlo si metteva DAVANTI a chiunque arrivasse.
    *
-   * Passi desktop ↔ mobile: accesso (identity+model) · modello · autonomia
-   * (autonomy) · cartella (al posto di pin/background, che sul desktop non
-   * hanno senso: l'ultimo passo apre il foglio «Nuova sessione» vero).
+   * Ricerca 17/09/2026: UserOnboard «Empty States»
+   * (https://www.useronboard.com/onboarding-ux-patterns/empty-states/) e 72Technologies «Empty
+   * States as Onboarding» (https://www.72technologies.com/blog/empty-states-as-onboarding-surface)
+   * — lo schermo vuoto è l'unica superficie che TUTTI i nuovi vedono (le modali si chiudono, i
+   * suggerimenti si saltano) e il suo lavoro è portare alla prima azione utile, nello spazio di
+   * lavoro; Fluent 2 «Onboarding» (https://fluent2.microsoft.design/onboarding) — rivelazione
+   * progressiva, niente interruzioni al primo avvio. Appcues «Onboarding UX patterns» e
+   * Pencil&Paper «Empty State UX» (letti lo stesso giorno) aggiungono la GERARCHIA: un solo
+   * invito primario, più al massimo una via secondaria — due bottoni pari non sono una scelta.
    *
-   * ⛔ La chiave non passa MAI da qui a un log, al JSONL o a una risposta
-   * HTTP: viene mandata una volta alla rotta e il campo si svuota.
-   * ⛔ Non si ripresenta: `INTRO_STORAGE_KEY` ricorda «completata» o
-   * «saltata» finché esiste lo store del browser. `TALOS_INTRO=0` sul server
-   * la spegne del tutto (rollback del ledger).
+   * ⇒ Cosa resta: una riga che dice **che cosa manca davvero**, e le porte che esistono già.
+   *   Niente passi, niente memoria di «saltata» da ricordare per sempre, niente rotta nuova: la
+   *   riga si spegne da sola appena la cosa che nominava c'è. Non è uno stato salvato — è una
+   *   LETTURA dello stato, e per questo non può invecchiare come faceva la chiave salvata.
+   *
+   * ⛔ `/api/v1/setup/stato` RESTA: `scripts/avvia-talos.mjs:123` la legge per decidere se aprire
+   *   il Doctor al doppio clic. Non era una rotta dell'intro, era una rotta che l'intro usava.
    */
-  const INTRO_STORAGE_KEY = 'talos.harness.desktop.intro.v1';
-  const INTRO_PASSI = Object.freeze([
-    { id: 'provider', etichetta: 'Accesso' },
-    { id: 'modello', etichetta: 'Modello' },
-    { id: 'autonomia', etichetta: 'Autonomia' },
-    { id: 'cartella', etichetta: 'Cartella' },
-  ]);
-  // ⛔ 07/9 — la stessa tabella viveva in tre posti. Qui resta la FORMA che l'intro usa, ma i
-  //    contenuti vengono dall'unica mappa: cambiarne uno li cambia tutti e tre.
-  const INTRO_POLICY = Object.freeze(POLITICHE.map((p) => Object.freeze([p.valore, p.nome, p.descrizione, p.nota])));
+  /*
+   * ⛔ 17/09, PO-27 — questa viveva in `components/intro.js`, che se n'è andato con la modale.
+   *   La usa la striscia delle schede del Terminale per il nome della cartella, e NON è
+   *   `nomeDaPercorso` di `workspace-footer.js`: quella su «C:» risponde «C:», questa «C:\» —
+   *   e chi la chiama controlla proprio la barra finale per non scrivere «C:/» due volte.
+   *   Copiata qui verbatim invece che «riusata da lì»: due comportamenti diversi con lo stesso
+   *   nome sarebbero peggio di due funzioni.
+   */
+  const ultimoSegmentoPercorso = (percorso) => {
+    const normale = String(percorso ?? '').replace(/\//g, '\\').replace(/[\\]+$/, '').replace(/^([a-z]):$/i, (m, d) => `${d.toUpperCase()}:\\`);
+    const pezzi = normale.split('\\').filter(Boolean);
+    const ultimo = pezzi.length ? pezzi[pezzi.length - 1] : normale;
+    return /^[a-z]:$/i.test(ultimo) ? `${ultimo}\\` : ultimo;
+  };
 
-  function leggiIntroLocale() {
-    try {
-      const raw = JSON.parse(window.localStorage.getItem(INTRO_STORAGE_KEY) || 'null');
-      return raw && typeof raw === 'object' && typeof raw.esito === 'string' ? raw : null;
-    } catch { return null; }
+  /** Che cosa manca prima del primo messaggio, letto dallo stato vero e da niente altro. */
+  function cosaMancaPerIniziare() {
+    /*
+     * ⛔⛔ 17/09, secondo giro, dalla revisione — QUESTA FUNZIONE GUARDAVA UNA COSA SOLA, E ERA
+     *   QUELLA SBAGLIATA. Leggeva `cartellaAssoluta`, che resta vuota finché non arriva
+     *   `RunStarted`: l'invito lampeggiava a ogni cambio di sessione, e su una sessione CONCLUSA
+     *   riaperta (che un `RunStarted` nuovo non ce l'ha) restava acceso SOPRA la conversazione.
+     * ⇒ L'invito è uno stato di PRIMO AVVIO, non «manca un dato». Se una sessione è aperta, o se
+     *   in chat c'è anche solo un turno, il primo avvio è passato — punto, senza guardare altro.
+     */
+    const sessioneAperta = Boolean(state.realSession.id) || Boolean(state.pendingCustomSession);
+    const conversazionePiena = ($('#conversation')?.childElementCount ?? 0) > 0;
+    if (sessioneAperta || conversazionePiena) return { primoAvvio: false, cartella: true, modello: true };
+    const modello = typeof state.model === 'string' && state.model !== '';
+    return { primoAvvio: true, cartella: false, modello };
   }
-  function salvaIntroLocale(esito) {
-    try { window.localStorage.setItem(INTRO_STORAGE_KEY, JSON.stringify({ esito, quando: new Date().toISOString() })); } catch { /* senza storage l'intro tornerà: meglio che sparire per sempre */ }
-  }
-
-  /** Come `talosSetupProgress` sul telefono: i passi fatti, il primo non fatto, se è tutto a posto. */
-  function progressoIntro(stato) {
-    const fatti = {
-      provider: Boolean(stato?.provider?.pronto),
-      modello: typeof state.model === 'string' && state.model !== '',
-      autonomia: state.autonomiaScelta === true,
-      cartella: false, // si «fa» aprendo il foglio Nuova sessione: non è un fatto persistito
-    };
-    const passi = INTRO_PASSI.map((passo) => ({ ...passo, fatto: fatti[passo.id] }));
-    const primo = passi.findIndex((passo) => !passo.fatto);
-    return { passi, indiceIniziale: primo === -1 ? passi.length - 1 : primo, tuttoPronto: passi.slice(0, 3).every((passo) => passo.fatto) };
-  }
-
   /**
-   * Chiamata all'avvio (solo standalone). Apre l'intro SOLO se manca una
-   * delle tre cose senza cui TALOS non parte, e solo se non è già stata
-   * completata o saltata in questo browser. Un server che non espone lo
-   * stato (versione vecchia, non raggiungibile) non produce un intro
-   * fantasma: si tace.
+   * Accende, spegne e riscrive l'invito dello schermo vuoto. Si chiama a ogni cambio di modello,
+   * di cartella e di sessione: costa una lettura di due booleani, e il costo di NON chiamarla è
+   * una riga che dice «manca il modello» dopo che il modello è stato scelto.
    */
-  /**
-   * 06/9 B7b — l'Intro è il velo del mockup (`#veloIntro`, components/intro.js): cartella con
-   * l'albero compatto del computer, fornitore e chiave, modello, permessi, riepilogo. I dati
-   * arrivano dalle API del server; le scelte tornano allo stato del monolite. Il dialogo nativo
-   * legacy (`#introDialog`) non si apre più.
-   */
-  let introMockup = null;
-  function apiIntro() {
-    return {
-      cartelle: (path) => apiGet(`/api/v1/workspace-browser${path ? `?path=${encodeURIComponent(path)}` : ''}`),
-      luoghi: async () => {
-        const [radice, frequenti] = await Promise.all([apiGet('/api/v1/workspace-browser'), apiGet('/api/v1/frequent-dirs').catch(() => ({ items: [] }))]);
-        const rec = Array.isArray(radice?.recommended) ? radice.recommended : [];
-        const voce = (x) => ({ nome: x.label || x.etichetta || ultimoSegmentoIntro(x.path || x.percorso), path: normalizzaCartellaIntro(x.path || x.percorso), projectId: x.projectId ?? null });
-        return {
-          radice: radice?.root || null,
-          progetti: rec.filter((r) => r.kind === 'project').map(voce),
-          gruppi: {
-            recenti: (frequenti?.items || []).map(voce),
-            progetti: rec.filter((r) => r.kind === 'project').map(voce),
-            rapide: rec.filter((r) => r.kind === 'known').map(voce),
-          },
-        };
-      },
-      creaCartella: (parentPath, name) => apiPost('/api/v1/workspace-browser/folders', { parentPath, name }),
-      providers: async () => (await apiGet('/api/v1/providers'))?.items ?? [],
-      salvaChiave: (id, key) => apiPost(`/api/v1/providers/${encodeURIComponent(id)}/key`, { key }),
-      provaProvider: (id) => apiPost(`/api/v1/providers/${encodeURIComponent(id)}/test`, {}),
-      modelli: async () => {
-        const [catalogo, locali] = await Promise.all([apiGet('/api/v1/models').catch(() => null), apiGet('/api/v1/local-models').catch(() => null)]);
-        if (catalogo?.modelli) state.modelLab.catalogoModelli = catalogo; // serve anche alla «Finestra del contesto» (B2)
-        return [
-          ...((locali?.items || []).map((m) => ({ id: m.id, nome: m.name || m.id, provider: 'local', locale: true }))),
-          ...((catalogo?.modelli || []).map((m) => ({ id: m.id, nome: m.nome || m.id, provider: m.provider }))),
-        ];
-      },
-    };
-  }
-  function apriIntroMockup(indice = 0, statoSetup = null) {
-    const velo = $('#veloIntro'); if (!velo) return false;
-    if (!introMockup) {
-      introMockup = creaIntro(velo, {
-        api: apiIntro(),
-        iniziale: { cartella: '', modello: state.model || '', politica: state.autonomiaScelta ? state.permissions : null, localeConfigurato: statoSetup?.provider?.localeConfigurato === true },
-        azioni: {
-          impostaPermesso: (valore, nome) => { impostaPermesso(valore, nome); state.autonomiaScelta = true; salvaPreferenzeChatDesktop(); },
-          impostaModello: (id) => { if (!id) return; state.model = id; aggiornaPiedeSidebar(); salvaPreferenzeChatDesktop(); aggiornaPillolaModello(); },
-          concludi: (esito, scelte) => {
-            salvaIntroLocale(esito);
-            chiudiVeloMockup('veloIntro');
-            if (esito !== 'completata' || !scelte.cartella) return;
-            const progetto = (introMockup?.progetti || []).find((p) => normalizzaCartellaIntro(p.path) === normalizzaCartellaIntro(scelte.cartella));
-            avviaSessionePendente({ cartellaId: progetto?.projectId || undefined, cartellaLibera: progetto?.projectId ? undefined : scelte.cartella, nomeCartella: ultimoSegmentoIntro(scelte.cartella), modello: state.model, effort: state.effort, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
-            toast('Prima sessione pronta', `${ultimoSegmentoIntro(scelte.cartella)} · scrivi il primo messaggio`);
-          },
-        },
-      });
+  function aggiornaInvitoPrimoAvvio() {
+    const invito = $('#invitoPrimoAvvio');
+    if (!invito) return;
+    const { primoAvvio, modello } = cosaMancaPerIniziare();
+    invito.hidden = !primoAvvio;
+    if (invito.hidden) return;
+    /*
+     * ⛔ UNA porta per cosa, e il modello ce l'ha già: la pillola del composer, due centimetri più
+     *   in basso, dice «Scegli il modello». Qui si NOMINA, non si disegna un secondo bottone che
+     *   apre esattamente lo stesso foglio nella stessa schermata.
+     */
+    const riga = $('#invitoPrimoAvvioRiga', invito);
+    if (riga) riga.textContent = TESTI_MESSAGGIO.invitoRiga;
+    const nota = $('#invitoPrimoAvvioNota', invito);
+    if (nota) {
+      nota.textContent = modello
+        ? `Il modello è pronto: ${nomeModelloBreve(state.model)}.`
+        : TESTI_MESSAGGIO.invitoNotaSenzaModello;
     }
-    apriVeloMockup('veloIntro');
-    void introMockup.apri(indice).then(() => { /* i progetti per riconoscere una cartella-progetto */ });
-    return true;
-  }
-  async function apriIntroSeServe() {
-    if (leggiIntroLocale()) return false;
-    let stato;
-    try { stato = await apiGet('/api/v1/setup/stato'); } catch { return false; }
-    if (!stato || stato.introDisattivato) return false;
-    const progresso = progressoIntro(stato);
-    if (progresso.tuttoPronto) return false;
-    // passi del mockup: 0 cartella · 1 modello (con fornitore e chiave) · 2 permessi · 3 pronto
-    const primo = progresso.passi.find((p) => !p.fatto)?.id;
-    const indice = primo === 'provider' || primo === 'modello' ? 1 : primo === 'autonomia' ? 2 : 0;
-    return apriIntroMockup(indice, stato);
-  }
-
-  function apriIntroPrimoAvvio(statoIniziale, indiceIniziale = 0) {
-    if (!introDialog) return;
-    const intro = { stato: statoIniziale, indice: Math.max(0, Math.min(INTRO_PASSI.length - 1, indiceIniziale)), provider: null, chiaveEsiti: new Map() };
-    const rail = $('#introRail', introDialog);
-    const body = $('#introBody', introDialog);
-    const back = $('#introBack', introDialog);
-    const next = $('#introNext', introDialog);
-    const skip = $('#introSkip', introDialog);
-
-    function chiudi(esito) {
-      salvaIntroLocale(esito);
-      if (introDialog.open) introDialog.close();
-    }
-    async function ricaricaStato() {
-      try { intro.stato = await apiGet('/api/v1/setup/stato'); } catch { /* lo stato resta quello che avevamo: mai inventarne uno */ }
-    }
-    function disegnaRail() {
-      const { passi } = progressoIntro(intro.stato);
-      rail.replaceChildren(...passi.map((passo, posizione) => {
-        const li = document.createElement('li');
-        li.dataset.fatto = String(passo.fatto);
-        if (posizione === intro.indice) li.setAttribute('aria-current', 'step');
-        const linea = document.createElement('span'); linea.className = 'intro-rail-line'; linea.setAttribute('aria-hidden', 'true');
-        li.append(linea, textElement('span', 'intro-rail-label', passo.etichetta));
-        return li;
-      }));
-    }
-    function titolo(testo, sottotitolo) {
-      const h = document.createElement('h2'); h.className = 'intro-title'; h.id = 'introTitle'; h.textContent = testo;
-      const p = document.createElement('p'); p.className = 'intro-copy'; p.textContent = sottotitolo;
-      return [h, p];
-    }
-    function segnaEsito(nodo, esito, testo) { nodo.dataset.esito = esito; nodo.textContent = testo; }
-
-    // ---- passo 1: accesso (provider con chiave, o motore locale) ----
-    async function disegnaProvider() {
-      body.replaceChildren(...titolo('Da dove pensa TALOS', 'Serve un accesso a un modello: la chiave di un provider, salvata nel portachiavi di questo computer e mai nel browser, oppure un motore locale sul disco.'));
-      const lista = document.createElement('ul'); lista.className = 'intro-list';
-      lista.append(textElement('li', 'muted-copy', 'Leggo i provider…'));
-      body.append(lista);
-      let righe = [];
-      try { righe = (await apiGet('/api/v1/providers'))?.items ?? []; } catch (error) { lista.replaceChildren(textElement('li', 'muted-copy', messaggioErroreUtente(error, 'Il server locale non risponde: riprova fra un momento.'))); return; }
-      const locale = intro.stato?.provider?.localeConfigurato === true;
-      lista.replaceChildren(...righe.map((riga) => {
-        const li = document.createElement('li');
-        const scelta = document.createElement('button'); scelta.type = 'button'; scelta.className = 'intro-choice'; scelta.dataset.introProvider = riga.id;
-        const prova = intro.chiaveEsiti.get(riga.id);
-        const statoRiga = prova?.esito ?? (riga.requiresKey ? (riga.keyConfigured ? 'ok' : 'mancante') : 'ok');
-        scelta.dataset.stato = statoRiga === 'collegato' ? 'ok' : statoRiga === 'ok' || statoRiga === 'mancante' ? statoRiga : 'rotto';
-        const mark = textElement('span', 'intro-mark', (riga.label || riga.id).slice(0, 2).toUpperCase()); mark.setAttribute('aria-hidden', 'true');
-        const centro = document.createElement('span');
-        centro.append(textElement('strong', '', riga.label || riga.id), textElement('small', '', riga.requiresKey ? (riga.keyConfigured ? 'Chiave nel portachiavi' : 'Serve una chiave') : 'Nessuna chiave richiesta'));
-        const statoTesto = prova ? (prova.esito === 'collegato' ? (prova.modelli === null ? 'collegato' : `${prova.modelli} modelli`) : prova.esito === 'in-corso' ? 'sto chiedendo…' : prova.esito === 'non-autorizzato' ? 'chiave rifiutata' : 'non raggiungibile')
-          : riga.requiresKey ? (riga.keyConfigured ? 'chiave presente' : 'chiave mancante') : 'pronto';
-        scelta.append(mark, centro, textElement('span', 'intro-state', statoTesto));
-        scelta.addEventListener('click', () => { intro.provider = intro.provider === riga.id ? null : riga.id; disegnaProvider(); });
-        if (intro.provider === riga.id) scelta.classList.add('active');
-        li.append(scelta);
-        if (intro.provider === riga.id && riga.requiresKey) li.append(campoChiave(riga));
-        return li;
-      }));
-      const liLocale = document.createElement('li');
-      const localeBtn = document.createElement('button'); localeBtn.type = 'button'; localeBtn.className = 'intro-choice'; localeBtn.dataset.introProvider = 'local'; localeBtn.dataset.stato = locale ? 'ok' : 'mancante';
-      const markL = textElement('span', 'intro-mark', 'GP'); markL.setAttribute('aria-hidden', 'true');
-      const centroL = document.createElement('span');
-      centroL.append(textElement('strong', '', 'Motore locale (llama.cpp)'), textElement('small', '', locale ? 'Configurato su questo computer: i modelli sul disco si scelgono al passo successivo.' : 'Non configurato: si imposta dal Laboratorio modelli, dopo. Puoi continuare con un provider.'));
-      localeBtn.append(markL, centroL, textElement('span', 'intro-state', locale ? 'pronto' : 'assente'));
-      localeBtn.disabled = true;
-      liLocale.append(localeBtn);
-      lista.append(liLocale);
-      body.append(textElement('p', 'intro-note', 'Tutte le chiavi si possono cambiare dopo, da Impostazioni → Laboratorio modelli → Provider e accessi.'));
-    }
-    function campoChiave(riga) {
-      const wrap = document.createElement('div'); wrap.className = 'intro-key';
-      const label = document.createElement('label'); label.className = 'sheet-label'; label.textContent = `Chiave ${riga.label || riga.id}`; label.htmlFor = `introKey-${riga.id}`;
-      const input = document.createElement('input'); input.type = 'password'; input.id = `introKey-${riga.id}`; input.autocomplete = 'off'; input.spellcheck = false; input.placeholder = riga.keyConfigured ? 'Chiave già salvata: incollane una nuova per sostituirla' : 'Incolla la chiave'; input.dataset.introKeyInput = riga.id;
-      const rowBtn = document.createElement('div'); rowBtn.className = 'intro-key-row';
-      const salva = document.createElement('button'); salva.type = 'button'; salva.className = 'primary-btn'; salva.textContent = 'Salva e prova'; salva.dataset.introKeySave = riga.id;
-      const esito = textElement('span', 'intro-key-esito', riga.keyConfigured ? 'La chiave salvata resta finché non ne incolli un\'altra.' : 'Resta sul server locale, nel portachiavi del sistema.');
-      rowBtn.append(salva, esito);
-      wrap.append(label, input, rowBtn);
-      salva.addEventListener('click', async () => {
-        const valore = input.value;
-        if (!valore.trim()) { segnaEsito(esito, 'rotto', 'Incolla prima una chiave.'); input.focus(); return; }
-        salva.disabled = true; segnaEsito(esito, '', 'Salvo nel portachiavi…');
-        try {
-          await apiPost(`/api/v1/providers/${encodeURIComponent(riga.id)}/key`, { key: valore });
-          input.value = ''; // ⛔ il campo si svuota subito: la chiave è già dove deve stare, non resta nel DOM
-          segnaEsito(esito, '', 'Salvata. Chiedo al provider se la accetta…');
-          intro.chiaveEsiti.set(riga.id, { esito: 'in-corso' });
-          const prova = await apiPost(`/api/v1/providers/${encodeURIComponent(riga.id)}/test`, {});
-          intro.chiaveEsiti.set(riga.id, prova);
-          await ricaricaStato();
-          disegnaRail();
-          disegnaProvider();
-          if (prova?.esito === 'collegato') toast('Accesso pronto', `${riga.label || riga.id} accetta la chiave.`);
-        } catch (error) {
-          segnaEsito(esito, 'rotto', messaggioErroreUtente(error, 'Non sono riuscito a salvare la chiave.'));
-          salva.disabled = false;
-        }
-      });
-      input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); salva.click(); } });
-      queueMicrotask(() => input.focus());
-      return wrap;
-    }
-
-    // ---- passo 2: modello di default ----
-    function disegnaModello() {
-      body.replaceChildren(...titolo('Con quale modello, di solito', 'È il modello con cui parte una sessione nuova. Lo cambi quando vuoi dalla pillola sopra alla chat, anche a metà lavoro.'));
-      const mount = document.createElement('div'); mount.className = 'intro-picker';
-      const picker = creaModelPicker({
-        valoreIniziale: state.model || '',
-        aggiornaModelloPrincipale: true,
-        sincronizzaSessione: false,
-        alSelezionato: () => { salvaPreferenzeChatDesktop(); aggiornaPillolaModello(); disegnaRail(); },
-      });
-      mount.append(picker.elemento);
-      body.append(mount, textElement('p', 'intro-note', state.model ? `Oggi: ${state.model}.` : 'Nessun modello scelto ancora: senza, la prima sessione te lo chiede.'));
-    }
-
-    // ---- passo 3: autonomia (una decisione, la stessa del foglio Permessi) ----
-    function disegnaAutonomia() {
-      body.replaceChildren(...titolo('Cosa può fare da solo', 'Una scelta sola, che vale per ogni sessione nuova. Il permesso per singolo attrezzo si regola dopo, dal foglio Permessi.'));
-      const lista = document.createElement('ul'); lista.className = 'intro-list';
-      lista.append(...INTRO_POLICY.map(([valore, nome, descrizione, nota]) => {
-        const li = document.createElement('li');
-        const scelta = document.createElement('button'); scelta.type = 'button'; scelta.className = 'intro-choice'; scelta.dataset.introPolicy = valore;
-        if (state.permissions === valore && state.autonomiaScelta) scelta.classList.add('active');
-        const mark = document.createElement('span'); mark.className = 'intro-mark'; mark.innerHTML = icon('i-shield'); mark.setAttribute('aria-hidden', 'true');
-        const centro = document.createElement('span'); centro.append(textElement('strong', '', nome), textElement('small', '', descrizione));
-        scelta.append(mark, centro, textElement('span', 'intro-state', nota));
-        scelta.addEventListener('click', () => {
-          impostaPermesso(valore, nome);
-          state.autonomiaScelta = true; // il gesto sulla scheda è la decisione
-          salvaPreferenzeChatDesktop();
-          disegnaRail();
-          disegnaAutonomia();
-        });
-        li.append(scelta);
-        return li;
-      }));
-      const nomeScelto = INTRO_POLICY.find(([valore]) => valore === state.permissions)?.[1] ?? state.permissions;
-      body.append(lista, textElement('p', 'intro-note', state.autonomiaScelta ? `Scelto: ${nomeScelto}. «Chiedi prima» resta una risposta legittima.` : 'Finché non tocchi una scheda vale il valore predefinito di oggi, che può cambiare con gli aggiornamenti: toccarla lo rende una tua scelta.'));
-    }
-
-    // ---- passo 4: la prima cartella (apre il foglio Nuova sessione vero) ----
-    function disegnaCartella() {
-      body.replaceChildren(...titolo('La prima cartella', 'TALOS lavora dentro una cartella per volta: la scegli a ogni sessione nuova, e i permessi di sopra valgono lì dentro. Nient\'altro viene toccato.'));
-      body.append(textElement('p', 'intro-note', 'Puoi anche aprire una cartella con il tasto destro in Esplora file, «Apri cartella con TALOS».'));
-    }
-
-    function disegnaPasso() {
-      const passo = INTRO_PASSI[intro.indice];
-      disegnaRail();
-      back.hidden = intro.indice === 0;
-      const ultimo = intro.indice === INTRO_PASSI.length - 1;
-      next.textContent = ultimo ? 'Scegli la cartella e inizia' : 'Avanti';
-      if (passo.id === 'provider') disegnaProvider();
-      else if (passo.id === 'modello') disegnaModello();
-      else if (passo.id === 'autonomia') disegnaAutonomia();
-      else disegnaCartella();
-      queueMicrotask(() => next.focus());
-    }
-
-    back.onclick = () => { if (intro.indice > 0) { intro.indice -= 1; disegnaPasso(); } };
-    next.onclick = () => {
-      if (intro.indice < INTRO_PASSI.length - 1) { intro.indice += 1; disegnaPasso(); return; }
-      chiudi('completata');
-      openRealTaskSheet();
-    };
-    skip.onclick = () => chiudi('saltata');
-    introDialog.oncancel = (event) => { event.preventDefault(); chiudi('saltata'); }; // Escape = salta, registrato come tale
-
-    disegnaPasso();
-    if (!introDialog.open) introDialog.showModal();
   }
 
   /*
@@ -19231,6 +19225,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     svuotaSuggerimentoComposer(); // 05/9 Fase 2: un suggerimento della sessione PRECEDENTE non ha senso su una nuova
     syncRunComposerState();
     void montaStatoVuoto({ nomeCartella, cartellaLibera }); // 05/9 Fase 2: EmptyState al posto dell'hero
+    aggiornaInvitoPrimoAvvio(); // 17/09, PO-27: la cartella c'è — se l'invito la chiedeva, qui si spegne o resta il solo modello
     // ⭐ 30/8 — stesso principio di sopra, sul tab Files: nuovaGenerazioneSessione() (dentro resettaSuperficiRealiDedicate) ha già scritto il placeholder GENERICO "nessuna cartella ancora scelta" — ma qui la cartella è già nota, prima ancora del primo messaggio. Nessuna nuova sorgente di verità: nomeCartella è lo stesso valore che finisce nel titolo sessione qui sopra.
     window.setTimeout(() => composerInput.focus(), 0);
   }
@@ -20193,7 +20188,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function impostaStatoBottoneAscolto(bottone, inAscolto) {
     bottone.classList.toggle('speaking', inAscolto);
     bottone.setAttribute('aria-pressed', String(inAscolto));
-    bottone.setAttribute('aria-label', inAscolto ? 'Ferma la lettura' : 'Ascolta la risposta');
+    bottone.setAttribute('aria-label', inAscolto ? 'Ferma la lettura' : TESTI_MESSAGGIO.ascolta);
     const uso = bottone.querySelector('use');
     if (uso) uso.setAttribute('href', inAscolto ? '#i-stop' : '#i-play');
   }
@@ -20377,6 +20372,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   });
 
   $$('[data-open-sheet]').forEach((button) => button.addEventListener('click', () => openSheet(button.dataset.openSheet)));
+  /* ⛔ 17/09, PO-27 — le due azioni dell'invito NON aprono niente di nuovo: passano dalle porte che
+     esistono già. «Scegli una cartella» è lo stesso foglio del «+» (`openRealTaskSheet`, che è
+     anche ciò che apre «Apri cartella con TALOS» dal menu di Windows); «Collega un modello» è la
+     stessa pillola del composer (`openSheet('model')`). Una terza via sarebbe una terza verità. */
+  $$('[data-invito-azione]').forEach((bottone) => bottone.addEventListener('click', () => {
+    void openRealTaskSheet();
+  }));
   $$('[data-session-action]').forEach((button) => button.addEventListener('click', () => {
     toast(button.dataset.sessionAction === 'fork' ? 'Fork creato' : 'Side thread creato', 'Contesto isolato, collegamento mantenuto nel grafo sessione.');
   }));
@@ -21635,11 +21637,14 @@ ${testo}`;
     // ⛔ verificato al MOMENTO del fire, non alla schedulazione: un test (o
     // un embed reale) può marcare talos-embedded fra i due istanti.
     if (!HOST().classList.contains('talos-embedded')) {
-      const doctorDalLauncher = apriDoctorDaLauncher();
-      const cartellaDalLauncher = Boolean(leggiWorkspaceLaunchId());
+      apriDoctorDaLauncher();
       apriWorkspaceDaLauncher();
-      // ⭐ 04/9, R-02 — l'intro cede il passo ai flussi del lanciatore (Doctor, «Apri cartella con TALOS»): chi arriva con un'intenzione precisa non deve trovare un modale davanti.
-      if (!doctorDalLauncher && !cartellaDalLauncher) apriIntroSeServe();
+      /* ⛔ 17/09, PO-27 — qui si apriva la modale «Primo avvio», e cedeva il passo ai flussi del
+         lanciatore (Doctor, «Apri cartella con TALOS») per non mettersi davanti a chi arrivava con
+         un'intenzione precisa. L'invito nello schermo vuoto non ha quel problema — non copre
+         niente e non va chiuso — quindi si aggiorna SEMPRE, anche quando il lanciatore ha già
+         deciso: se quei flussi hanno portato una cartella, la riga se ne accorge e sparisce. */
+      aggiornaInvitoPrimoAvvio();
       aggiornaElencoSessioniReali();
       renderAutomationsReali(); // ⭐ 27/8 — la card automazioni della sidebar è live da subito, non solo dopo aver aperto la vista
     }
@@ -21704,7 +21709,6 @@ ${testo}`;
   function apriVeloMockup(id) {
     if (id === 'veloContesto') { void compactSession(); return; }
     const v = $(`#${id}`); if (!v) return;
-    if (id === 'veloIntro' && !introMockup) { void apiGet('/api/v1/setup/stato').catch(() => null).then((stato) => apriIntroMockup(0, stato)); return; } // 06/9 B7b: «Ripeti il primo avvio»
     ultimoFuocoVelo = ROOT().activeElement;
     v.hidden = false;
     preparaMisuraDialogo(v); // 06/9 B7: la misura ricordata di QUESTO dialogo, se c'è

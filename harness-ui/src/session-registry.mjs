@@ -641,6 +641,176 @@ function esitoDelProcesso(chiamata) {
  *   Non possiamo ancora impedire la collisione; possiamo togliere il SILENZIO, che è il danno vero.
  *   Chi legge la scheda «Agenti» vede che due deleghe hanno scritto lo stesso file, e in che ordine.
  */
+/*
+ * ⭐⭐⭐ 17/09/2026 — ELIMINARE UN MESSAGGIO SUL SERIO, E NON SOLO DALLO SCHERMO.
+ *
+ * Owner 11/09: «non c'è la rotta» non è una risposta. Il giro precedente aveva tolto la risposta
+ * dalla sola pagina: ricaricando tornava, e — peggio — il MODELLO continuava a leggerla, perché un
+ * follow-up manda solo il testo nuovo e la conversazione ce l'ha il server (`messaggiFinali`).
+ *
+ * ⛔ Il registro della sessione è a SOLA AGGIUNTA. Non si riscrive e non si riapre per tagliarci
+ *   dentro: si aggiunge una LAPIDE (`{tipo:'messaggio-rimosso', riferimento}`), e chi legge il
+ *   registro la onora. Così la cronologia di ciò che è successo resta intatta — compreso il fatto
+ *   che qualcuno ha cancellato — e la conversazione che il modello riceve no.
+ *
+ * ⛔ DUE riferimenti, non uno, perché le due cose che si vedono a schermo non hanno lo stesso
+ *   nome nel registro:
+ *   · la risposta del modello è uno STREAM con un id suo (`TextMessageStart.messageId`);
+ *   · il messaggio della persona non ha id: vive dentro `RunStarted.input`, e l'unica cosa stabile
+ *     che lo identifica è il `_sequenza` di quel RunStarted ⇒ `giro:<sequenza>`.
+ *
+ * ⛔ E le due cose si tolgono in modo DIVERSO, perché dipendono in modo diverso:
+ *   · togliere una risposta toglie quella e basta;
+ *   · togliere un messaggio della persona toglie anche ciò che ne è seguito fino al messaggio
+ *     successivo della persona — una risposta a una domanda che non c'è più è peggio del buco.
+ *     La conferma a schermo lo DICE, non lo fa di nascosto.
+ *
+ * ⛔ Le coppie `tool_calls`/`tool` non si spezzano: se il messaggio assistente che si toglie porta
+ *   `tool_calls`, se ne vanno anche i `tool` che rispondono a quelle chiamate. Un `tool` orfano
+ *   fa rifiutare l'intera richiesta dal fornitore (contratto OpenAI: ogni `tool_call_id` vuole il
+ *   suo messaggio `tool`), cioè romperebbe la sessione al primo giro dopo la cancellazione.
+ */
+
+/** Il testo che uno stream assistente ha prodotto, o `null` se quel messageId non c'è. Puro. */
+export function testoDelMessaggioAssistente(eventi, messageId) {
+  let dentro = false;
+  let testo = null;
+  for (const evento of Array.isArray(eventi) ? eventi : []) {
+    if (evento?.type === 'TextMessageStart' && evento.messageId === messageId) { dentro = true; testo = ''; continue; }
+    if (!dentro) continue;
+    if (evento?.type === 'TextMessageContent' && evento.messageId === messageId && typeof evento.delta === 'string') testo += evento.delta;
+    if (evento?.type === 'TextMessageEnd' && evento.messageId === messageId) dentro = false;
+  }
+  return testo;
+}
+
+/** Gli eventi senza quel messaggio (e, per un giro, senza tutto ciò che quel giro ha prodotto). Puro. */
+export function eventiSenzaMessaggio(eventi, riferimento) {
+  const lista = Array.isArray(eventi) ? eventi : [];
+  const giro = /^giro:(\d+)$/u.exec(String(riferimento ?? ''));
+  if (!giro) {
+    const messageId = String(riferimento ?? '');
+    return lista.filter((evento) => !(
+      (evento?.type === 'TextMessageStart' || evento?.type === 'TextMessageContent' || evento?.type === 'TextMessageEnd')
+      && evento.messageId === messageId
+    ));
+  }
+  /*
+   * Un giro della persona: dal suo `RunStarted` fino al `RunStarted` successivo (escluso). Tutto
+   * ciò che sta in mezzo è la risposta a una domanda che non esiste più.
+   */
+  const sequenza = Number(giro[1]);
+  const inizio = lista.findIndex((evento) => evento?.type === 'RunStarted' && evento._sequenza === sequenza);
+  if (inizio < 0) return lista;
+  let fine = lista.length;
+  for (let i = inizio + 1; i < lista.length; i += 1) {
+    if (lista[i]?.type === 'RunStarted') { fine = i; break; }
+  }
+  return [...lista.slice(0, inizio), ...lista.slice(fine)];
+}
+
+/**
+ * ⭐⭐⭐ 17/09/2026, SECONDA STESURA — SI IDENTIFICA PER POSIZIONE, IL TESTO È SOLO LA CONFERMA.
+ *
+ * La prima stesura cercava il messaggio in `messaggiFinali` per UGUAGLIANZA DI TESTO e, quando non
+ * lo trovava, restituiva la lista invariata mentre la porta rispondeva comunque «fatto». Cioè: a
+ * schermo spariva, il modello continuava a leggerlo, e nessuno lo sapeva — esattamente la bugia che
+ * questa cura doveva togliere, rimessa un livello più in basso.
+ *
+ * ⛔ E il testo NON combacia quasi mai, misurato su una sessione VERA del 4174 (giro «p0bis»,
+ *   fixture in `tests/fixtures/sessione-vera-messaggi-finali.json`):
+ *   · `messaggiFinali` comincia con DUE messaggi `system` (il preambolo e l'albero del progetto)
+ *     prima del primo `user`: contare dall'inizio senza filtrare per ruolo sballa di due;
+ *   · fra gli assistenti ce n'è uno con `content: null` e solo `tool_calls` — non è mai stato a
+ *     schermo, e non deve entrare nel conto;
+ *   · QUATTRO dei cinque assistenti VISIBILI portano ANCHE `tool_calls`: l'idea che «il messaggio
+ *     che si vede non chiama attrezzi» è falsa, e togliere quel messaggio senza i suoi `tool`
+ *     romperebbe la richiesta al primo giro dopo;
+ *   · il testo di un flusso può essere troncato, ritagliato o compattato più tardi;
+ *   · e due risposte identiche («Fatto.») sono indistinguibili per testo: si toglieva l'ULTIMA che
+ *     combaciava, non quella scelta.
+ *
+ * ⇒ La chiave è la POSIZIONE, contata nello stesso modo sui due lati: l'n-esimo flusso di testo
+ *   dell'assistente ↔ l'n-esimo messaggio `assistant` con testo; l'n-esimo `RunStarted` ↔
+ *   l'n-esimo messaggio `user`. Il testo resta, ma come CONFERMA: se non combacia si dice, non si
+ *   indovina.
+ *
+ * @returns {{messaggi:Array, tolto:boolean, motivo:string|null}} `motivo` è un nome tecnico: a
+ *   schermo va una frase, e la costruisce chi chiama.
+ */
+export function messaggiSenzaMessaggio(messaggi, { posizione = -1, ruolo = 'assistant', testo = null } = {}) {
+  if (!Array.isArray(messaggi)) return { messaggi, tolto: false, motivo: 'nessuna-conversazione' };
+  if (!Number.isSafeInteger(posizione) || posizione < 0) return { messaggi, tolto: false, motivo: 'posizione-ignota' };
+  const testoDi = (contenuto) => {
+    if (typeof contenuto === 'string') return contenuto;
+    /* Un messaggio con immagini porta un array di parti: il testo è quello che ci sta dentro. */
+    if (Array.isArray(contenuto)) return contenuto.filter((p) => p?.type === 'text').map((p) => p.text).join('');
+    return '';
+  };
+  /* ⛔ I `system` non si contano MAI: non sono messaggi della conversazione, sono il preambolo. */
+  const candidati = messaggi
+    .map((messaggio, indice) => ({ messaggio, indice }))
+    .filter(({ messaggio }) => messaggio?.role === ruolo && (ruolo !== 'assistant' || testoDi(messaggio.content).trim() !== ''));
+  const scelto = candidati[posizione];
+  if (!scelto) return { messaggi, tolto: false, motivo: 'posizione-assente' };
+  /*
+   * ⛔ La conferma è un CONTENIMENTO, non un'uguaglianza: il primo messaggio della persona porta
+   *   spesso un preambolo di progetto attorno alla consegna, e un flusso di testo può essere
+   *   troncato. Un'uguaglianza secca qui direbbe «non combacia» quasi sempre, cioè spegnerebbe la
+   *   cura invece di sorvegliarla.
+   */
+  if (typeof testo === 'string' && testo.trim() !== '') {
+    const dentro = testoDi(scelto.messaggio.content);
+    const ago = testo.trim().slice(0, 80);
+    if (ago !== '' && !dentro.includes(ago) && !testo.includes(dentro.trim().slice(0, 80))) {
+      return { messaggi, tolto: false, motivo: 'testo-non-combacia' };
+    }
+  }
+  if (ruolo === 'user') {
+    /* Il giro della persona: il suo messaggio e tutto ciò che segue, fino al prossimo suo. */
+    let fine = messaggi.length;
+    for (let i = scelto.indice + 1; i < messaggi.length; i += 1) {
+      if (messaggi[i]?.role === 'user') { fine = i; break; }
+    }
+    return { messaggi: [...messaggi.slice(0, scelto.indice), ...messaggi.slice(fine)], tolto: true, motivo: null };
+  }
+  const daTogliere = new Set(
+    (Array.isArray(scelto.messaggio.tool_calls) ? scelto.messaggio.tool_calls : [])
+      .map((chiamata) => chiamata?.id).filter((id) => typeof id === 'string'),
+  );
+  return {
+    messaggi: messaggi.filter((messaggio, i) => i !== scelto.indice && !(messaggio?.role === 'tool' && daTogliere.has(messaggio.tool_call_id))),
+    tolto: true,
+    motivo: null,
+  };
+}
+
+/**
+ * La POSIZIONE di un messaggio fra i suoi pari, contata sugli EVENTI: l'n-esimo flusso di testo
+ * dell'assistente, o l'n-esimo `RunStarted`. `-1` se quel riferimento non c'è. Pura.
+ */
+export function posizioneDelMessaggio(eventi, riferimento) {
+  const lista = Array.isArray(eventi) ? eventi : [];
+  const giro = /^giro:(\d+)$/u.exec(String(riferimento ?? ''));
+  if (giro) {
+    const sequenza = Number(giro[1]);
+    let n = 0;
+    for (const evento of lista) {
+      if (evento?.type !== 'RunStarted') continue;
+      if (evento._sequenza === sequenza) return n;
+      n += 1;
+    }
+    return -1;
+  }
+  let n = 0;
+  for (const evento of lista) {
+    if (evento?.type !== 'TextMessageStart') continue;
+    if (evento.messageId === riferimento) return n;
+    n += 1;
+  }
+  return -1;
+}
+
 const PERCORSO_SCRITTURA = /^\/file\/(.+)$/;
 
 /** Il percorso scritto da un evento, o `null` se l'evento non è una scrittura. Puro. */
@@ -3717,10 +3887,22 @@ export function createSessionRegistry({
           if (contextReplay.has(identity)) return false;
           contextReplay.add(identity); return true;
         });
-        const eventi = eventiFisici.every((evento) => Number.isSafeInteger(evento._sequenza))
+        const eventiOrdinati = eventiFisici.every((evento) => Number.isSafeInteger(evento._sequenza))
           ? [...eventiFisici].sort((a, b) => a._sequenza - b._sequenza)
           : eventiFisici;
-        const ultimaSequenza = eventi.reduce(
+        /*
+         * ⛔ 17/09 — LE LAPIDI SI ONORANO QUI, non a valle. Il registro è a sola aggiunta: un
+         *   messaggio cancellato è ancora scritto su disco, e senza questo passaggio tornerebbe a
+         *   schermo alla prima ricarica — che è esattamente il difetto che questa corsia toglie.
+         *   Si applicano nell'ordine in cui sono state scritte: togliere un giro e poi una singola
+         *   risposta dentro quel giro deve dare lo stesso risultato in entrambe le letture.
+         * ⛔ `ultimaSequenza` si calcola DOPO: è il contatore degli eventi futuri, e non deve
+         *   arretrare perché qualcuno ha cancellato l'ultimo messaggio — due eventi con la stessa
+         *   `_sequenza` romperebbero lo scarto dei doppioni nel frontend.
+         */
+        const rimozioni = record.filter((r) => r.tipo === 'messaggio-rimosso' && typeof r.riferimento === 'string').map((r) => r.riferimento);
+        const eventi = rimozioni.reduce((lista, riferimento) => eventiSenzaMessaggio(lista, riferimento), eventiOrdinati);
+        const ultimaSequenza = eventiOrdinati.reduce(
           (massimo, evento) => Number.isSafeInteger(evento._sequenza) ? Math.max(massimo, evento._sequenza) : massimo,
           0,
         );
@@ -3794,12 +3976,42 @@ export function createSessionRegistry({
          * riavvio — un downgrade silenzioso di un permesso già concesso.
          */
         const cartellaRipristinata = cartellaEffettivaPerPermessi(intestazione.cartella, impostazioni.permessi, intestazione.cartellaGiaScelta);
+        /*
+         * ⛔ 17/09 — la lapide deve togliere il messaggio anche da ciò che il MODELLO riceve, non
+         *   solo da ciò che si vede: `messaggiFinali` è la conversazione che il giro dopo rimanda
+         *   al fornitore. Il testo da cercare si ricava dagli eventi ORIGINALI (`eventiOrdinati`),
+         *   perché in `eventi` quel messaggio è già sparito — cercarlo lì darebbe sempre «non
+         *   trovato» e la cancellazione resterebbe solo a schermo. È lo stesso errore, spostato
+         *   di due righe.
+         */
+        const rimozioniNonRiuscite = [];
+        const messaggiFinaliRipristinati = rimozioni.reduce((lista, riferimento) => {
+          if (!Array.isArray(lista)) return lista;
+          const giro = /^giro:(\d+)$/u.exec(riferimento);
+          const posizione = posizioneDelMessaggio(eventiOrdinati, riferimento);
+          const avvio = giro ? eventiOrdinati.find((evento) => evento?.type === 'RunStarted' && evento._sequenza === Number(giro[1])) : null;
+          const esito = messaggiSenzaMessaggio(lista, giro
+            ? { posizione, ruolo: 'user', testo: typeof avvio?.input?.consegna === 'string' ? avvio.input.consegna : avvio?.input?.consegnaCorta ?? null }
+            : { posizione, ruolo: 'assistant', testo: testoDelMessaggioAssistente(eventiOrdinati, riferimento) });
+          if (!esito.tolto) rimozioniNonRiuscite.push({ riferimento, motivo: esito.motivo });
+          return esito.messaggi;
+        }, messaggiFinaliRecord?.messaggiFinali ?? null);
+        /*
+         * ⛔ 17/09 — se una lapide non è riuscita a togliere il messaggio da ciò che il modello
+         *   riceve, la voce se lo RICORDA. A schermo il messaggio è sparito (gli eventi sì che si
+         *   filtrano); tacere qui vorrebbe dire che dopo un riavvio nessuno può più sapere che la
+         *   cancellazione è a metà — e il posto dove si scopre è quello dove si è già mentito una
+         *   volta.
+         */
+        if (rimozioniNonRiuscite.length > 0) {
+          console.error(`[session-store] ${sessionId}: ${rimozioniNonRiuscite.length} messaggi cancellati NON tolti dalla conversazione del modello (${rimozioniNonRiuscite.map((r) => `${r.riferimento}:${r.motivo}`).join(', ')})`);
+        }
         const voce = {
           eventi, ascoltatori: new Set(), taskId: intestazione.taskId,
           cartella: cartellaRipristinata, cartellaBase: intestazione.cartella, cartellaGiaScelta: intestazione.cartellaGiaScelta,
           task: intestazione.task,
           comandoProva: intestazione.comandoProva, forkDa: intestazione.forkDa,
-          avviataAlle: intestazione.avviataAlle, messaggiFinali: messaggiFinaliRecord?.messaggiFinali ?? null,
+          avviataAlle: intestazione.avviataAlle, messaggiFinali: messaggiFinaliRipristinati,
           messaggiPendente: Array.isArray(checkpointRecord?.messaggi) ? checkpointRecord.messaggi : null,
           modello: impostazioni.modello, modelloPlanner: impostazioni.modelloPlanner, reasoning: impostazioni.reasoning,
           fallbackProviders: validaFallbackProviders(impostazioni.fallbackProviders ?? [], { usaAttrezzi: true }),
@@ -5808,6 +6020,63 @@ export function createSessionRegistry({
       if (cartellaStore) await registraRigaFn({ cartellaStore, sessionId, record: { tipo: 'nome-sessione', nome: pulito } });
       voce.nome = pulito;
       return { ok: true };
+    },
+
+    /**
+     * ⭐⭐⭐ 17/09/2026 — TOGLIE UN MESSAGGIO DALLA CONVERSAZIONE, DAVVERO.
+     *
+     * `riferimento` è l'id dello stream della risposta (`TextMessageStart.messageId`) oppure
+     * `giro:<sequenza>` per il messaggio della persona (vedi il blocco in testa al file).
+     *
+     * ⛔ Rifiuta a sessione VIVA, per la stessa ragione di `elimina()`: togliere è pulizia su
+     *   qualcosa di FINITO, mai un modo indiretto di intralciare un giro in corso. E mentre il
+     *   modello sta scrivendo, il messaggio non è nemmeno finito: il delta successivo lo
+     *   ricostruirebbe un istante dopo averlo tolto.
+     *
+     * @returns {Promise<{ok:true, riferimento:string}|{erroreAvvio:string, code:string}>}
+     */
+    async rimuoviMessaggio(sessionId, riferimento) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const chiave = typeof riferimento === 'string' ? riferimento.trim() : '';
+      if (chiave === '' || chiave.length > 200) return { erroreAvvio: 'Riferimento del messaggio non valido', code: 'QUERY_INVALID' };
+      if (!voce.conclusa && !voce.interrotta) {
+        return { erroreAvvio: 'La sessione sta ancora lavorando: aspetta la fine del giro, o fermalo.', code: 'SESSION_STILL_RUNNING' };
+      }
+      const giro = /^giro:(\d+)$/u.exec(chiave);
+      /*
+       * ⛔ Si cerca PRIMA di scrivere la lapide: una lapide su un riferimento che non esiste
+       *   resterebbe nel registro per sempre e la persona vedrebbe «fatto» su niente.
+       */
+      const testoAssistente = giro ? null : testoDelMessaggioAssistente(voce.eventi ?? [], chiave);
+      const eventoGiro = giro
+        ? (voce.eventi ?? []).find((evento) => evento?.type === 'RunStarted' && evento._sequenza === Number(giro[1]))
+        : null;
+      if (!giro && typeof testoAssistente !== 'string') return { erroreAvvio: 'Messaggio non trovato in questa sessione', code: 'NOT_FOUND' };
+      if (giro && !eventoGiro) return { erroreAvvio: 'Messaggio non trovato in questa sessione', code: 'NOT_FOUND' };
+      const testoUtente = giro
+        ? (typeof eventoGiro.input?.consegna === 'string' ? eventoGiro.input.consegna : eventoGiro.input?.consegnaCorta ?? null)
+        : null;
+      if (giro && typeof testoUtente !== 'string') return { erroreAvvio: 'Messaggio non trovato in questa sessione', code: 'NOT_FOUND' };
+
+      /*
+       * ⛔⛔⛔ 17/09, seconda stesura — QUI NASCEVA UN «ELIMINATA» MUTO.
+       *
+       * La posizione si calcola sugli eventi PRIMA di toglierli: dopo, quel messaggio non c'è più
+       * e il conto darebbe `-1` sempre. Ed è la stessa trappola di `ripristina()`, due file più in
+       * là: cercare una cosa nella lista da cui l'hai appena tolta.
+       * ⛔ Se il messaggio NON si riesce a togliere da ciò che il modello riceve, la risposta lo
+       *   DICE (`toltoDalModello:false` + `motivo`). Rispondere «fatto» e lasciarlo nella
+       *   conversazione del fornitore è la bugia che questa corsia toglie, non una da rifare.
+       */
+      const posizione = posizioneDelMessaggio(voce.eventi ?? [], chiave);
+      if (cartellaStore) await registraRigaFn({ cartellaStore, sessionId, record: { tipo: 'messaggio-rimosso', riferimento: chiave } });
+      voce.eventi = eventiSenzaMessaggio(voce.eventi ?? [], chiave);
+      const esito = messaggiSenzaMessaggio(voce.messaggiFinali, giro
+        ? { posizione, ruolo: 'user', testo: testoUtente }
+        : { posizione, ruolo: 'assistant', testo: testoAssistente });
+      if (Array.isArray(esito.messaggi)) voce.messaggiFinali = esito.messaggi;
+      return { ok: true, riferimento: chiave, toltoDalModello: esito.tolto, motivo: esito.motivo };
     },
 
     /**

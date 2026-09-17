@@ -2,7 +2,18 @@ import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-const BASE_URL = process.env.TALOS_LAG_URL || 'http://127.0.0.1:4174/';
+/*
+ * ⛔⛔⛔ BC-74 (17/09/2026) — QUI C'ERA UN RIPIEGO SUL 4174, E SE N'È ANDATO.
+ * Il 4174 è il server VIVO dell'owner, e questa diagnosi lo guida (clic, scroll, tracce).
+ * ⇒ Senza `TALOS_LAG_URL` non si parte; il 4174 si indica per nome o non si tocca.
+ */
+const BASE_URL = process.env.TALOS_LAG_URL;
+if (!BASE_URL) {
+  console.error('⛔ TALOS_LAG_URL non è impostata: questa diagnosi non sceglie un server da sola.\n'
+    + '   Esempio: TALOS_LAG_URL=http://127.0.0.1:4196/ node scripts/diagnose-interaction-lag.mjs\n'
+    + '   ⛔ Il 4174 è il server vivo dell\'owner: si può indicare, ma va scritto per nome.');
+  process.exit(2);
+}
 const ARTIFACTS = resolve(process.cwd(), 'artifacts', 'lag-interaction-2026-09-02');
 const TRACE_CATEGORIES = [
   'devtools.timeline',
