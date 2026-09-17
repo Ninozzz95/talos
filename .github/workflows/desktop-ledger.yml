@@ -1,0 +1,58 @@
+name: desktop-ledger
+on:
+  pull_request:
+    branches: [main]
+    paths: ['harness-ui/frontend/**', '.github/workflows/desktop-ledger.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-ledger-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  baseline:
+    if: github.repository == 'Ninozzz95/talos' && (github.event_name == 'workflow_dispatch' || github.head_ref == 'refactor/desktop-ledger-v1')
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: work
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 13f65c15cdeaf8986b882993a0773cdeafb867d2
+          path: baseline
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.18.0'
+      - name: Locked baseline dependencies
+        run: |
+          foreach ($dir in @('harness-ui','harness-ui/frontend','harness-ui/desktop','context-engine')) {
+            npm ci --prefix "baseline/$dir" --no-audit --no-fund
+            if ($LASTEXITCODE -ne 0) { throw "Dependencies failed: $dir" }
+          }
+      - name: Build the actual baseline frontend
+        run: |
+          npm --prefix baseline/harness-ui/frontend run build
+          if ($LASTEXITCODE -ne 0) { throw 'Baseline build failed' }
+          Copy-Item baseline/harness-ui/frontend/dist/* baseline/harness-ui/public/ -Recurse -Force
+      - name: Observe real Electron and backend
+        env:
+          TALOS_CAPTURE_ROOT: ${{ github.workspace }}/baseline/harness-ui
+          TALOS_CAPTURE_OUTPUT: ${{ github.workspace }}/evidence/baseline
+          TALOS_CAPTURE_COMMIT: 13f65c15cdeaf8986b882993a0773cdeafb867d2
+        run: node work/harness-ui/frontend/scripts/ledger-capture.mjs
+      - name: Preserve baseline evidence and declared blocks
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ledger-baseline-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 14
