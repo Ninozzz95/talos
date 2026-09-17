@@ -43,14 +43,26 @@ fn fixture_label(path: &Path) -> &'static str {
     }
 }
 
+fn apply_security_parts(mut set: impl FnMut(u32) -> Result<()>) -> Result<()> {
+    set(4)?; // DACL_SECURITY_INFORMATION: WRITE_DAC / object ownership.
+    set(0x10) // LABEL_SECURITY_INFORMATION: WRITE_OWNER under the final DACL.
+}
+
 pub(super) fn apply(path: &Path, descriptor: &Local) -> Result<()> {
     // An executable labelled Low silently lowers even the non-AppContainer
     // control's process token (MIC process-creation rule). Code is immutable
     // input, not writable scratch: keep it Medium, with exactly the same DACL.
     let policy = format!("{}{}", sddl(descriptor.0, 4)?, fixture_label(path));
     let effective = super::descriptor(&policy)?;
-    unsafe { check(SetFileSecurityW(wide(path.as_os_str())?.as_ptr(), 4 | 0x10,
-        effective.0), "set fixture ACL")?; }
+    // A newly created fixture may inherit Modify but not WRITE_OWNER. The
+    // owner can set its DACL, while setting the label requires WRITE_OWNER.
+    // Apply the SAME requested DACL first, then the SAME mandatory label.
+    // Both steps must succeed before any candidate process can be launched.
+    let native_path = wide(path.as_os_str())?;
+    apply_security_parts(|part| unsafe {
+        check(SetFileSecurityW(native_path.as_ptr(), part, effective.0),
+            if part == 4 { "set fixture DACL" } else { "set fixture integrity label" })
+    })?;
     let owner = current_owner()?;
     let expected = sddl(effective.0, 4 | 0x10)?.replace(&owner, "<OWNER>");
     let actual = file_sddl(path)?.replace(&owner, "<OWNER>");
@@ -92,6 +104,26 @@ pub(super) fn parent_control(fixture: &Fixture) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn fixture_security_applies_dacl_before_the_required_label() {
+        let mut parts = Vec::new();
+        assert_eq!(apply_security_parts(|part| { parts.push(part); Ok(()) }), Ok(()));
+        assert_eq!(parts, [4, 0x10]);
+    }
+    #[test]
+    fn failed_dacl_prevents_the_label_step() {
+        let mut parts = Vec::new();
+        let result = apply_security_parts(|part| { parts.push(part); Err("dacl denied".into()) });
+        assert_eq!(result, Err("dacl denied".into())); assert_eq!(parts, [4]);
+    }
+    #[test]
+    fn failed_label_never_authorizes_fixture_use() {
+        let mut parts = Vec::new();
+        let result = apply_security_parts(|part| {
+            parts.push(part); if part == 0x10 { Err("label denied".into()) } else { Ok(()) }
+        });
+        assert_eq!(result, Err("label denied".into())); assert_eq!(parts, [4, 0x10]);
+    }
     #[test]
     fn executable_and_scratch_have_distinct_integrity_roles() {
         assert_eq!(fixture_label(Path::new("bin/probe.exe")), "S:(ML;;NW;;;ME)");
