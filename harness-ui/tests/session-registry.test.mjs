@@ -686,108 +686,124 @@ test('⛔ ferma() su un id inesistente torna false, non lancia', () => {
   assert.equal(registro.ferma('non-esiste'), false);
 });
 
-test('SESSION-LOCAL-START-01/STREAM-01: runtime locale avvia senza chiave e traduce lo stream in AG-UI', async () => {
-  const runtime = {
-    async *generateStream({ signal }) {
-      yield { type: 'text', value: 'ciao' };
-      yield { type: 'reasoning', value: 'motivo' };
-      yield { type: 'tool_call', id: 'tool-1', name: 'noop', arguments: '{}' };
-      if (signal?.aborted) return;
-      yield { type: 'done' };
-    },
-  };
+/*
+ * ⛔⛔⛔ BC-76 (17/09/2026) — LE QUATTRO PROVE QUI SOTTO SONO STATE RISCRITTE, NON INDEBOLITE.
+ *
+ * Provavano `eseguiRuntimeLocale`: una sessione `provider:'local'` che chiamava direttamente
+ * `localRuntimes[runtimeId].generateStream` e traduceva a mano il suo flusso in eventi AG-UI.
+ * Quella funzione non esiste più — faceva UNA chiamata senza `tools` e su una `tool_call` emetteva
+ * `ToolCallStart` + `ToolCallArgs` e si fermava, cioè mostrava un'attività mai avvenuta.
+ *
+ * ⇒ Una sessione locale adesso passa dal giro del kernel come tutte le altre, e il motore locale è
+ *   il TRASPORTO. Ciò che queste prove devono difendere non è più «come si traduce il flusso» (lo
+ *   fa il kernel, una volta sola per tutti i fornitori) ma l'INSTRADAMENTO: che una sessione locale
+ *   parta senza una chiave di rete, che il nome del modello esca col prefisso della sua fonte, che
+ *   stop e correzione la raggiungano, e che il ripiego sul cloud voglia un consenso esplicito.
+ *   Il comportamento di agente vero — attrezzi eseguiti, permessi, disco — sta in
+ *   `tests/bc76-sessione-locale-agente.test.mjs`, dalla strada vera con un motore su 127.0.0.1.
+ */
+test('SESSION-LOCAL-START-01/STREAM-01: una sessione locale parte SENZA chiave e va al kernel col nome prefissato dalla sua fonte', async () => {
+  const finta = sessioneControllabile();
+  const runtime = { async *generateStream() { throw new Error('⛔ nessuno deve più passare di qui'); } };
   const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn,
     preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', localRuntimes: { ollama: runtime },
   });
   const avvio = registro.avvia('task-vero', { provider: 'local', runtimeId: 'ollama', modelId: 'qwen3:8b' });
-  assert.equal(typeof avvio.sessionId, 'string');
+  assert.equal(typeof avvio.sessionId, 'string', '⛔ senza chiave di rete una sessione locale deve partire lo stesso');
   await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(finta.chiamate, 1, '⛔ il giro è quello del kernel, non una seconda strada');
+  assert.equal(finta.ultimoInput.modello, 'ollama:qwen3:8b',
+    '⛔ il prefisso è ciò che manda la richiesta al motore GIUSTO: `ollama:`, non `local:` (che è il ponte di llama-server)');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
   const eventi = registro.esporta(avvio.sessionId).eventi;
-  assert.deepEqual(eventi.map((evento) => evento.type), [
-    'RunStarted', 'TextMessageStart', 'TextMessageContent', 'ReasoningMessageStart',
-    'ReasoningMessageContent', 'ToolCallStart', 'ToolCallArgs', 'TextMessageEnd',
-    'ReasoningMessageEnd', 'RunFinished',
-  ]);
+  assert.deepEqual(eventi.map((evento) => evento.type), ['RunStarted', 'RunFinished']);
   assert.equal(registro.elenca()[0].provider, 'local');
   assert.equal(registro.elenca()[0].runtimeId, 'ollama');
   assert.equal(registro.elenca()[0].modelId, 'qwen3:8b');
-  assert.ok(eventi.every((evento) => evento.provider === 'local' && evento.runtimeId === 'ollama' && evento.modelId === 'qwen3:8b' && evento.backend === 'ollama' && Number.isFinite(Date.parse(evento.at))));
 });
 
-test('SESSION-LOCAL-CANCEL-01: ferma abortisce il runtime locale e chiude il giro', async () => {
-  let signal;
-  const runtime = {
-    async *generateStream(input) {
-      signal = input.signal;
-      yield { type: 'text', value: 'parziale' };
-      await new Promise((resolve) => input.signal.addEventListener('abort', resolve, { once: true }));
-    },
-  };
-  const registro = createSessionRegistry({ preparaEsecuzioneFn: preparaEsecuzioneFinta, localRuntimes: { llama: runtime } });
-  const { sessionId } = registro.avvia('task-vero', { provider: 'local', runtimeId: 'llama', modelId: 'model' });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(signal.aborted, false);
-  assert.equal(registro.ferma(sessionId), true);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  const eventi = registro.esporta(sessionId).eventi;
-  assert.equal(eventi.at(-1).type, 'RunFinished');
-  assert.equal(eventi.at(-1).outcome, 'fermato');
-});
-
-test('SESSION-LOCAL-REDIRECT-02 — il runtime locale conserva richiesta originale, risposta parziale e correzione', async () => {
-  const inputVisti = [];
-  let chiamata = 0;
-  const runtime = {
-    async *generateStream(input) {
-      inputVisti.push(input.messages);
-      chiamata += 1;
-      if (chiamata === 1) {
-        yield { type: 'text', value: 'parziale' };
-        await new Promise((resolve) => input.signal.addEventListener('abort', resolve, { once: true }));
-        return;
-      }
-      yield { type: 'text', value: 'OK' };
-      yield { type: 'done' };
-    },
-  };
+test('SESSION-LOCAL-CANCEL-01: ferma abortisce il giro di una sessione locale', async () => {
+  const finta = sessioneControllabile();
   const registro = createSessionRegistry({
-    preparaEsecuzioneFn: preparaEsecuzioneFinta,
-    localRuntimes: { llama: runtime },
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta, localRuntimes: { llama: {} },
   });
   const { sessionId } = registro.avvia('task-vero', { provider: 'local', runtimeId: 'llama', modelId: 'model' });
   await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(finta.segnaleStop.aborted, false);
+  assert.equal(registro.ferma(sessionId), true);
+  assert.equal(finta.segnaleStop.aborted, true, '⛔ lo stop deve arrivare al kernel, non a un secondo motore');
+  finta.concludi({ type: 'RunError', message: 'fermato', code: 'fermato' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
+
+test('SESSION-LOCAL-REDIRECT-02 — una sessione locale conserva richiesta originale, risposta parziale e correzione', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    localRuntimes: { llama: {} },
+  });
+  const { sessionId } = registro.avvia('task-vero', { provider: 'local', runtimeId: 'llama', modelId: 'model' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const primoInput = finta.ultimoInput.messaggiIniziali;
+
   assert.equal(registro.reindirizza(sessionId, 'correzione').ok, true);
+  finta.concludi({ type: 'RunError', message: 'fermato', code: 'fermato' }, {
+    ok: false,
+    esito: { comeFinita: 'fermato', messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'parziale' }] },
+  });
   await new Promise((resolve) => setTimeout(resolve, 0));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.deepEqual(inputVisti[0], [{ role: 'user', content: 'c' }]);
-  assert.deepEqual(inputVisti[1], [
+  assert.equal(primoInput, undefined, 'il primo giro parte dalla consegna, senza cronologia da ereditare');
+  assert.deepEqual(finta.ultimoInput.messaggiIniziali, [
     { role: 'user', content: 'c' },
     { role: 'assistant', content: 'parziale' },
     { role: 'user', content: 'correzione' },
   ]);
+  /* ⛔ `local:` e non `llama:` — `llama` non è un motore con un indirizzo suo (non è fra i
+     `ID_MOTORI_LOCALI_OPENAI` del registro), quindi passa dal ponte del supervisore. */
+  assert.equal(finta.ultimoInput.modello, 'local:model',
+    '⛔ anche il giro della correzione parte col nome prefissato: un id nudo finirebbe a openrouter.ai');
 });
 
 test('SESSION-LOCAL-FALLBACK-01: fallback cloud solo con consenso esplicito', async () => {
-  let chiamateCloud = 0;
-  const cloud = async ({ onEvento }) => {
-    chiamateCloud += 1;
+  /*
+   * ⛔ BC-76: il guasto del motore locale NON è più un'eccezione che risale — `avviaSessioneFn`
+   *   (cioè `agent-service.avviaSessione`) non lancia mai e torna `{ok:false, esito:null}` dopo
+   *   aver emesso il suo `RunError`. Il ripiego si decide su quel valore, ed è per questo che la
+   *   finta qui sotto lo riproduce alla lettera invece di lanciare.
+   */
+  const modelliVisti = [];
+  const cloud = async ({ onEvento, modello }) => {
+    modelliVisti.push(modello);
+    if (typeof modello === 'string' && modello.startsWith('ollama:')) {
+      onEvento({ type: 'RunError', message: 'motore locale irraggiungibile', code: 'RUNTIME_UNREACHABLE' });
+      return { ok: false, esito: null, erroreInterno: 'motore locale irraggiungibile', codiceErrore: 'RUNTIME_UNREACHABLE' };
+    }
     onEvento({ type: 'RunFinished', threadId: 't', runId: 'r' });
     return { ok: true, esito: { messaggiFinali: [] } };
   };
-  const runtime = { async *generateStream() { throw Object.assign(new Error('runtime down'), { code: 'RUNTIME_UNREACHABLE' }); } };
   const registro = createSessionRegistry({
-    avviaSessioneFn: cloud, preparaEsecuzioneFn: preparaEsecuzioneFinta, chiave: 'k', localRuntimes: { ollama: runtime },
+    avviaSessioneFn: cloud, preparaEsecuzioneFn: preparaEsecuzioneFinta, chiave: 'k', modello: 'vendor/di-serie',
+    localRuntimes: { ollama: {} },
   });
   const senza = registro.avvia('task-vero', { provider: 'local', runtimeId: 'ollama', modelId: 'm' });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(chiamateCloud, 0);
+  assert.deepEqual(modelliVisti, ['ollama:m'], '⛔ senza consenso non si esce di casa: nessun secondo giro');
   assert.equal(registro.esporta(senza.sessionId).eventi.at(-1).type, 'RunError');
   assert.equal(registro.esporta(senza.sessionId).eventi.at(-1).code, 'RUNTIME_UNREACHABLE');
 
   const con = registro.avvia('task-vero', { provider: 'local', runtimeId: 'ollama', modelId: 'm', fallbackConsent: true });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(chiamateCloud, 1);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(modelliVisti, ['ollama:m', 'ollama:m', 'vendor/di-serie'],
+    '⛔ col consenso il secondo giro parte col modello di SERIE del server, mai col nome del GGUF locale');
   assert.ok(registro.esporta(con.sessionId).eventi.some((evento) => evento.type === 'RuntimeFallback'));
 });
 
@@ -6890,24 +6906,28 @@ test('⛔⛔⛔⛔ D3 — una sessione LOCALE non tocca NESSUN host che non sia 
    *   niente. È il punto in cui il revisore si era fermato.
    */
   /*
-   * ⛔ Il `done` non è un dettaglio: senza, `eseguiRuntimeLocale` chiude con
-   *   `LOCAL_RUNTIME_INCOMPLETE`, la sessione finisce in `RunError` e `messaggiFinali` resta
-   *   vuoto — e `compatta()` risponde `SESSION_NOT_READY` prima ancora di arrivare al modello.
-   *   È esattamente il muro contro cui si era fermato il revisore: misurato e superato qui.
+   * ⛔ BC-76 (17/09/2026): il giro della sessione NON passa più da `generateStream` — una sessione
+   *   locale va al kernel come tutte le altre. Qui serviva solo che ARRIVASSE a `messaggiFinali`
+   *   non nulli, perché `compatta()` senza quelli risponde `SESSION_NOT_READY` prima di toccare il
+   *   modello: è il muro contro cui si era fermato il revisore. Con una `avviaSessioneFn`
+   *   controllata il giro conclude subito e la misura — CHI viene toccato dalla compattazione —
+   *   resta esattamente quella di prima.
+   *   ⛔ E la `avviaSessioneFn` finta è anche una guardia: senza, questo test manderebbe una
+   *     richiesta VERA in rete, perché il kernel predefinito usa la `fetch` di sistema.
    */
-  const runtimeLocale = {
-    async *generateStream() {
-      yield { type: 'text', value: 'risposta locale' };
-      yield { type: 'done' };
-    },
-  };
   const { visti, fetchModelloFn } = destinazioniFinte({ chiavi: { openrouter: 'chiave-finta-openrouter' } });
   let modelloVisto = null;
+  let modelloDelGiro = null;
   const registro = createSessionRegistry({
+    avviaSessioneFn: async ({ onEvento, modello }) => {
+      modelloDelGiro = modello;
+      onEvento({ type: 'RunFinished', threadId: 't', runId: 'r' });
+      return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'risposta locale' }] } };
+    },
     preparaEsecuzioneFn: preparaEsecuzioneFinta,
     modello: 'z-ai/glm-5.3-flash', chiaveFn: () => 'chiave-finta-openrouter',
     prontoFn: () => ({ pronto: true }), fetchModelloFn,
-    localRuntimes: { 'llama.cpp': runtimeLocale },
+    localRuntimes: { 'llama.cpp': {} },
     compattaSessioneFn: async (argomenti) => { modelloVisto = argomenti.modello; return compattaConIlTrasportoRicevuto(argomenti); },
   });
   const { sessionId } = registro.avvia('task-vero', {
@@ -6916,6 +6936,8 @@ test('⛔⛔⛔⛔ D3 — una sessione LOCALE non tocca NESSUN host che non sia 
   await new Promise((r) => setTimeout(r, 0));
   await new Promise((r) => setImmediate(r));
 
+  assert.equal(modelloDelGiro, 'local:gemma-3n-e4b-it-Q4_K_M.gguf',
+    '⛔ anche il GIRO, non solo la compattazione, parte col prefisso: un id nudo finirebbe a openrouter.ai');
   const esito = await registro.compatta(sessionId);
   assert.equal(esito.ok, true, `la sessione locale deve arrivare a compattarsi: ${JSON.stringify(esito)}`);
   assert.equal(modelloVisto, 'local:gemma-3n-e4b-it-Q4_K_M.gguf',
