@@ -21,30 +21,42 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: true
       - id: patch
-        name: Apply the reviewed one-line production entry fix, preserving every test
+        name: Apply the reviewed input ownership correction and its real regression
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           import hashlib
-          path = Path('harness-ui/frontend/src/legacy/app.js')
-          before = path.read_bytes()
-          if hashlib.sha256(before).hexdigest() != 'bbec87573798fd99d8bd3090580e347e5909887ea546aad2a98c2c2f3b817335':
-              raise SystemExit('Source moved since review. Refusing to overwrite.')
-          old = b"const b = evento.target.closest?.('.talos-topbar__actions [data-azione]');"
-          new = b'''const b = evento.target.closest?.('.talos-topbar__actions [data-azione], [data-workspace-bar] [data-azione="comandi"]');'''
-          if before.count(old) != 1:
-              raise SystemExit('Expected one command owner.')
-          after = before.replace(old, new)
-          if hashlib.sha256(after).hexdigest() != '8684ceeba5cc03b9193b889f65768cda9d90896a1d20a711fa77f3a55ac3e346':
-              raise SystemExit('Unexpected patch result.')
-          path.write_bytes(after)
+          changes = [
+            ('harness-ui/frontend/src/features/navigation/command-palette.ts',
+             '62e6bf00fd23d1f68fa954cc814e5b30a92c3636ac6cd88c0c0ce536edfc23da',
+             '210c90b440239a41f5d40c429314885812d019f8c6b5df4a32fe5e07768f37ec',
+             "  field.addEventListener('input', () => render(), { signal: scope.signal });",
+             "  // Editing the query is not an accordion toggle. The legacy root delegates\n  // aria-expanded/aria-controls clicks; this field owns its list's visibility.\n  field.addEventListener('click', event => event.stopPropagation(), { signal: scope.signal });\n  field.addEventListener('input', () => render(), { signal: scope.signal });"),
+            ('harness-ui/frontend/tests/qualification/workspace-real.mjs',
+             '6e546703d29454a4b693a46a69833a69148ca52bbd9fa90608de43f9b1f8d262',
+             '98ba22dfa69a073b07608ea2a154873d3a1a3d035e0361427905ddda974a8339',
+             '    await expect(field).toBeFocused();\n    await expect(page.locator(\'#risultatiComandi [role="option"]\')).toHaveCount(30);',
+             '    await expect(field).toBeFocused();\n    await field.click();\n    await expect(field).toHaveAttribute(\'aria-expanded\', \'true\');\n    await expect(page.locator(\'#risultatiComandi\')).toBeVisible();\n    check(\'editing the command query does not toggle the list as an accordion\', true);\n    await expect(page.locator(\'#risultatiComandi [role="option"]\')).toHaveCount(30);')
+          ]
+          outputs = []
+          for name, source_hash, result_hash, old, new in changes:
+              path = Path(name)
+              before = path.read_bytes()
+              if hashlib.sha256(before).hexdigest() != source_hash or before.count(old.encode()) != 1:
+                  raise SystemExit('Source moved since review. Refusing overwrite: ' + name)
+              after = before.replace(old.encode(), new.encode())
+              if hashlib.sha256(after).hexdigest() != result_hash:
+                  raise SystemExit('Unexpected patch result: ' + name)
+              outputs.append((path, after))
+          for path, after in outputs:
+              path.write_bytes(after)
           PY
           git diff --check
-          git add -- harness-ui/frontend/src/legacy/app.js
+          git add -- harness-ui/frontend/src/features/navigation/command-palette.ts harness-ui/frontend/tests/qualification/workspace-real.mjs
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix(desktop): route workspace command button through the real palette controller'
+          git commit -m 'fix(desktop): preserve command query editing and test the real pointer interaction'
           git push origin HEAD:refs/heads/refactor/desktop-ledger-2026-09-17
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
   qualify:
