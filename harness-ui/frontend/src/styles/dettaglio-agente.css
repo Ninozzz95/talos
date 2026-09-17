@@ -1,0 +1,50 @@
+/*
+ * ⛔⛔ PO-30, fetta 2 (18/09/2026) — IL DETTAGLIO DI UN AGENTE nella colonna destra, col disegno del laboratorio della PR #33.
+ *
+ * Dal laboratorio: «← Tutti gli agenti» in cima, icona + nome + stato, le sezioni come pillole, il compito in un riquadro, i
+ * fatti come chiave e valore, i file coinvolti come righe che portano al file. Colori, raggi e caratteri sono i token del tema
+ * Calm: nessun valore nuovo. ⛔ La catena delle altezze conta: la colonna è alta quanto la finestra e a scorrere dev'essere il
+ * CORPO del dettaglio, non la colonna — `min-height:0` a ogni livello, o il figlio flessibile si allunga col contenuto
+ * (è lo stesso difetto misurato il 16/09 sulla conversazione della figlia: 8.688 px dentro una colonna da 900).
+ */
+.talos-agente{display:flex; flex-direction:column; gap:var(--talos-space-sm); flex:1 1 auto; min-height:0; padding:var(--talos-space-md)}
+.talos-agente__cima{display:flex; align-items:center; gap:var(--talos-space-sm)}
+.talos-agente__indietro{gap:6px; padding-inline:var(--talos-space-xs)}
+.talos-agente__chi{display:flex; align-items:center; gap:var(--talos-space-sm); min-width:0}
+.talos-agente__icona{flex:none; display:grid; place-items:center; width:32px; height:32px; border-radius:50%; border:1px solid var(--talos-border); color:var(--talos-muted)}
+.talos-agente__icona .i{width:16px; height:16px}
+.talos-agente__nomi{flex:1; min-width:0; display:flex; flex-direction:column}
+.talos-agente__nome{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.talos-agente__ruolo{font-size:var(--talos-font-size-xs)}
+
+.talos-agente__sezioni{display:flex; flex-wrap:wrap; gap:var(--talos-space-xs)}
+.talos-agente__sezione{border:1px solid transparent; border-radius:999px; background:transparent; color:var(--talos-muted); font:inherit; font-size:var(--talos-font-size-xs); padding:3px 10px; cursor:pointer}
+.talos-agente__sezione:hover{color:var(--talos-text); border-color:var(--talos-border)}
+.talos-agente__sezione[aria-pressed="true"]{color:var(--talos-accent-text, var(--talos-accent)); background:var(--talos-accent-soft); border-color:var(--talos-accent)}
+.talos-agente__sezione:focus-visible{outline:var(--talos-focus-width) solid var(--talos-ring, var(--talos-accent)); outline-offset:2px}
+
+.talos-agente__corpo{flex:1 1 auto; min-height:0; display:flex; flex-direction:column}
+.talos-agente__pannello{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; gap:var(--talos-space-sm); padding-top:var(--talos-space-sm); border-top:1px solid var(--talos-border)}
+.talos-agente__pannello[hidden]{display:none}
+/* La Conversazione ha già il suo scorrimento (e il suo «resta in fondo»): il pannello che la ospita non ne aggiunge un secondo. */
+.talos-agente__pannello[data-pannello="conversazione"]{overflow:hidden; padding-top:0; border-top:0}
+/* Dentro il dettaglio la testata della conversazione ripeterebbe «Indietro», nome e stato: li porta già il dettaglio. */
+.talos-agente .talos-figlia__head{display:none}
+.talos-agente .talos-figlia{border:0; padding:0; background:transparent; box-shadow:none}
+
+.talos-agente__etichetta{margin:0; font-size:11px}
+.talos-agente__compito{border:1px solid var(--talos-border); border-radius:var(--talos-radius-card, 12px); padding:var(--talos-space-sm) var(--talos-space-md); overflow-wrap:anywhere; white-space:pre-wrap}
+.talos-agente__compito p{margin:4px 0 0}
+.talos-agente__fatti{display:flex; flex-direction:column}
+.talos-agente__titoletto{margin-top:var(--talos-space-xs)}
+.talos-agente__vuoto, .talos-agente__nota{margin:0; font-size:var(--talos-font-size-xs)}
+.talos-agente__file{display:flex; align-items:center; gap:var(--talos-space-sm); width:100%; min-height:36px; padding:3px var(--talos-space-xs); border:0; border-radius:var(--talos-radius-control); background:transparent; color:inherit; font:inherit; text-align:start; cursor:pointer}
+.talos-agente__file:hover{background:var(--talos-card)}
+.talos-agente__file:focus-visible{outline:var(--talos-focus-width) solid var(--talos-accent); outline-offset:calc(-1 * var(--talos-focus-width))}
+.talos-agente__file .i{width:14px; height:14px; flex:none; color:var(--talos-muted)}
+.talos-agente__file-nome{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.talos-agente__file-segno{flex:none; font-size:var(--talos-font-size-xs)}
+.talos-agente__passo{display:flex; gap:var(--talos-space-sm); align-items:baseline; min-height:28px}
+.talos-agente__ora{flex:none; font-size:11px; min-width:4.6em}
+.talos-agente__frase{min-width:0; overflow-wrap:anywhere}
+.talos-agente__passo[data-tipo="errore"] .talos-agente__frase{color:var(--talos-danger, var(--talos-accent))}

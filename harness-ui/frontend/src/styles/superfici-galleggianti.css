@@ -1,0 +1,12 @@
+/*
+ * ⛔⛔ 18/09/2026 — UNA SUPERFICIE CHE GALLEGGIA SOPRA IL CONTENUTO HA UNO SFONDO PIENO.
+ *
+ * Trovato guardando la foto del dettaglio dell'agente dopo l'integrazione della PR #27: il toast «Collegato di nuovo» era
+ * TRASPARENTE, e il suo testo si mescolava alle righe della colonna dietro. Misurato: `background-color: rgba(0,0,0,0)`.
+ * Causa: `design-system/controls.css` (PR #27) dà a OGNI `.talos-card` una sfumatura tenue
+ * (`linear-gradient(var(--talos-card-subtle), var(--talos-card-faint))`) — giusta per una scheda dentro una pagina, che poggia
+ * sul fondo della pagina — e la scorciatoia `background` azzera anche il colore. Il toast è una `.talos-card`, ma non poggia su
+ * niente: sta SOPRA la chat e la colonna. La sua regola (`index.css`) viene prima nell'ordine dei fogli, a pari specificità, e perdeva.
+ * ⇒ La regola sta qui, in un foglio importato per ultimo e con un selettore più specifico: non dipende dall'ordine degli import.
+ */
+.talos-toast-region > .talos-toast{background:var(--talos-panel)}

@@ -252,9 +252,13 @@ for (const modo of ['dark', 'light']) {
 
       const t0 = Date.now();
       await card.click();
+      /* PO-30 fetta 2 (18/09/2026): la card apre il DETTAGLIO dell'agente, sulla Panoramica; la conversazione è la sua quarta
+         sezione. Il tempo «clic → pannello» si misura sul dettaglio; il contenuto della conversazione si guarda nella sua sezione. */
+      await expect(page.locator('[data-c="DettaglioAgente"]')).toBeVisible();
+      const msClicPannello = Date.now() - t0;
+      await page.locator('[data-c="DettaglioAgente"] [data-sezione="conversazione"]').click();
       const pannello = page.locator('[data-c="PannelloFiglia"] .talos-figlia');
       await expect(pannello).toBeVisible();
-      const msClicPannello = Date.now() - t0;
 
       /* Il markdown è RESO: titolo, elenco, citazione, tabella, recinto col suo «Copia».
          ⛔ `.assistant-copy` nella figlia sono DUE (la risposta e il ragionamento): si nomina la
@@ -292,7 +296,7 @@ for (const modo of ['dark', 'light']) {
       await expect(ragionamento.locator('.talos-activity__body')).toBeVisible();
 
       /* Si torna indietro: l'elenco riappare, e la madre continua a non muoversi. */
-      await pannello.locator('.talos-figlia__indietro').click();
+      await page.locator('[data-c="DettaglioAgente"] [data-azione="tutti-gli-agenti"]').click();
       await expect(page.locator('#railAgenti')).toBeVisible();
 
       const { mutazioni, dettagli } = await page.evaluate(() => { window.__p0eOsservatore.disconnect(); return { mutazioni: window.__p0eMutazioniMadre, dettagli: window.__p0eDettagli }; });
@@ -324,7 +328,7 @@ for (const modo of ['dark', 'light']) {
       for (const scheda of ['processi', 'agenti', 'file', 'contesto', 'processi']) await apriScheda(page, scheda);
       await apriScheda(page, 'agenti');
       await page.locator('#railAgenti [data-c="AgentRow"]').click();
-      await expect(page.locator('[data-c="PannelloFiglia"] .talos-figlia')).toBeVisible();
+      await expect(page.locator('[data-c="DettaglioAgente"]')).toBeVisible();
       await apriScheda(page, 'file');
       const m = await page.evaluate(() => { const f = document.querySelector('[data-c="PannelloFiglia"]'); const r = f.getBoundingClientRect(); const file = document.querySelector('#railFile')?.getBoundingClientRect(); return { figliaVisibile: r.height > 0 && getComputedStyle(f).display !== 'none', altezzaFiglia: Math.round(r.height), schedaFileAlta: file ? Math.round(file.height) : null, scelta: document.querySelector('#railTabs [aria-selected="true"]')?.dataset.rail }; });
       console.log('MISURA-PR33 ' + JSON.stringify(m));
@@ -333,8 +337,8 @@ for (const modo of ['dark', 'light']) {
       expect(m.scelta).toBe('file');
       expect(m.figliaVisibile, `il dettaglio della figlia resta a schermo (${m.altezzaFiglia} px) con la scheda File scelta`).toBe(false);
       await apriScheda(page, 'agenti');
-      await expect(page.locator('[data-c="PannelloFiglia"] .talos-figlia'), 'tornando ad Agenti il dettaglio c’è ancora: nascosto, non distrutto').toBeVisible();
-      await page.locator('.talos-figlia__indietro').click();
+      await expect(page.locator('[data-c="DettaglioAgente"]'), 'tornando ad Agenti il dettaglio c’è ancora: nascosto, non distrutto').toBeVisible();
+      await page.locator('[data-c="DettaglioAgente"] [data-azione="tutti-gli-agenti"]').click();
       await apriScheda(page, 'processi');
       await expect(page.locator('#railProcessi [data-c="ProcessRow"]').first()).toBeVisible();
 

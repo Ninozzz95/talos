@@ -118,5 +118,6 @@ test('PO30-AGENTI-01 — la riga dice chi sta toccando il file, e il segno apre 
 
   await segno.click();
   await expect(page.locator('#railTabs [data-rail="agenti"]')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('[data-c="PannelloFiglia"] .talos-figlia'), 'il segno deve aprire il dettaglio dell’agente').toBeVisible();
+  await expect(page.locator('[data-c="DettaglioAgente"]'), 'il segno deve aprire il dettaglio dell’agente').toBeVisible();
+  await expect(page.locator('[data-c="DettaglioAgente"] .talos-agente__nome')).toHaveText('sistema il readme');
 });

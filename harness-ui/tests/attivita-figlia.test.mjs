@@ -72,3 +72,20 @@ test('ATTIVITA-06 — dalla porta vera: `elencaFigli` porta modello, permessi e 
   assert.deepEqual(figli[1].attivita.file, [{ percorso: 'README.md', letto: false, scritto: true, creato: true }]);
   assert.ok(!JSON.stringify(figli).includes('segreto.txt'), '⛔ la figlia di un’ALTRA madre non deve comparire');
 });
+
+test('ATTIVITA-07 — i PASSI: avvio, attrezzi col loro file e l’ora, fine; col tetto che dice quanti ne mancano', () => {
+  const eventi = [{ type: 'RunStarted', at: '2026-09-18T01:00:00.000Z' }, ...leggi('a', 'src/uno.mjs').map((e) => ({ ...e, at: '2026-09-18T01:00:05.000Z' })),
+    { type: 'ToolCallStart', toolCallId: 's', toolCallName: 'shell' }, { type: 'ToolCallArgs', toolCallId: 's', delta: '{"comando":"npm test"}' }, { type: 'ToolCallResult', toolCallId: 's' }, { type: 'RunError', code: 'x' }];
+  const r = riassuntoAttivitaSessione(eventi);
+  assert.deepEqual(r.passi, [
+    { tipo: 'avvio', attrezzo: null, percorso: null, quando: '2026-09-18T01:00:00.000Z' },
+    { tipo: 'attrezzo', attrezzo: 'leggi', percorso: 'src/uno.mjs', quando: '2026-09-18T01:00:05.000Z' },
+    { tipo: 'attrezzo', attrezzo: 'shell', percorso: null, quando: null },
+    { tipo: 'errore', attrezzo: null, percorso: null, quando: null },
+  ]);
+  assert.ok(!JSON.stringify(r.passi).includes('npm test'), '⛔ gli argomenti grezzi di un comando non escono nei passi');
+  const tanti = riassuntoAttivitaSessione(Array.from({ length: 50 }, (_, i) => leggi(`t${i}`, `f${i}.mjs`)).flat());
+  assert.equal(tanti.passi.length, 40);
+  assert.equal(tanti.passiTagliati, 10);
+  assert.equal(tanti.passi.at(-1).percorso, 'f49.mjs');
+});
