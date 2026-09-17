@@ -17,9 +17,14 @@ $manifest = [ordered]@{
     inputs = @()
     binarySha256 = $null
     probeExitCode = $null
+    correlationExitCode = $null
     error = $null
 }
 try {
+    & python -c "import sys; assert sys.version_info >= (3, 11); print(sys.version)" 2>&1 | Tee-Object -FilePath (Join-Path $evidence 'python.txt')
+    if ($LASTEXITCODE -ne 0) { throw 'Python 3.11+ required for the offline evidence correlator' }
+    & python -m unittest -v test_network_correlation 2>&1 | Tee-Object -FilePath (Join-Path $evidence 'correlation-tests.log')
+    if ($LASTEXITCODE -ne 0) { throw 'Evidence correlation tests failed' }
     & rustc -Vv 2>&1 | Tee-Object -FilePath (Join-Path $evidence 'rustc.txt')
     if ($LASTEXITCODE -ne 0) { throw 'rustc unavailable' }
     & cargo test --frozen 2>&1 | Tee-Object -FilePath (Join-Path $evidence 'unit.log')
@@ -29,7 +34,7 @@ try {
     foreach ($file in (Get-ChildItem src -File -Recurse | Sort-Object FullName)) {
         $manifest.inputs += @{ path = [IO.Path]::GetRelativePath($PSScriptRoot, $file.FullName); sha256 = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
     }
-    foreach ($file in @('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'run.ps1')) {
+    foreach ($file in @('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'run.ps1', 'review_network_correlation.py', 'test_network_correlation.py')) {
         $manifest.inputs += @{ path = $file; sha256 = (Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant() }
     }
     $exe = Join-Path $PSScriptRoot 'target/release/talos-containment-spike.exe'
@@ -57,6 +62,9 @@ try {
         Write-Host $out
         if ($err) { Write-Host $err }
         $manifest.probeExitCode = $process.ExitCode
+        # Companion evidence only. NEVER replace the native exit status or PASS gate.
+        & python review_network_correlation.py (Join-Path $evidence 'probes.jsonl') --output (Join-Path $evidence 'network-correlation.json')
+        $manifest.correlationExitCode = $LASTEXITCODE
         if ($process.ExitCode -ne 0) { throw "Probe exited $($process.ExitCode); no success inferred from a failed launch" }
         $records = @($out -split '\r?\n' | Where-Object { $_.Trim() } | ForEach-Object { ConvertFrom-Json $_ })
         if ($records.Count -eq 0 -or $records[-1].result -ne 'PASS') { throw 'Missing final PASS record' }

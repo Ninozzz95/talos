@@ -2,6 +2,7 @@
 //! A missing capability is NOT proof that a particular packet was blocked.
 //! Nothing here changes a firewall rule, exemption or process capability.
 mod wfp;
+mod observer;
 use super::{checks::json_string, ensure, io_result, w, Result};
 use std::{fs::{File, OpenOptions}, io::{self, Read, Write}, net::{SocketAddr, TcpListener, TcpStream},
     path::Path, thread, time::{Duration, Instant}};
@@ -75,6 +76,7 @@ pub(super) fn probe(port: u16, scratch_file: &Path) -> Result<u32> {
 }
 
 pub(super) fn show_diagnostic(scratch_file: &Path) -> Result<()> {
+    observer::remember_fixture(scratch_file)?;
     // The sidecar is child-authored, bounded and diagnostic-only. It is never
     // used by the acceptance predicate or by peer authentication.
     let file = io_result(File::open(scratch_file.with_extension("network.json")))?;
@@ -92,7 +94,10 @@ pub(super) fn observe_control_connection(listener: &TcpListener) -> Result<()> {
     let deadline = Instant::now() + Duration::from_secs(1);
     loop {
         match listener.accept() {
-            Ok((stream, address)) => { drop(stream); return ensure(address.ip().is_loopback(), "control peer is not loopback"); }
+            Ok((stream, address)) => {
+                drop(stream); ensure(address.ip().is_loopback(), "control peer is not loopback")?;
+                observer::start(listener)?; return Ok(());
+            }
             Err(error) if error.kind() == io::ErrorKind::WouldBlock && Instant::now() < deadline => thread::sleep(Duration::from_millis(5)),
             Err(error) => return Err(format!("control connection not independently observed: {error}")),
         }
@@ -100,6 +105,7 @@ pub(super) fn observe_control_connection(listener: &TcpListener) -> Result<()> {
 }
 
 pub(super) fn no_extra_connection(listener: &TcpListener) -> Result<()> {
+    observer::finish()?;
     wfp::record_listener_events(io_result(listener.local_addr())?.port())?;
     match listener.accept() {
         Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(()),
