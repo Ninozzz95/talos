@@ -19735,7 +19735,7 @@ ${testo}`;
    * `data-apre-velo` non serve: e' gia' delegato dalla regia del mockup.
    */
   ROOT().addEventListener('click', (evento) => {
-    const b = evento.target.closest?.('.talos-topbar__actions [data-azione]');
+    const b = evento.target.closest?.('.talos-topbar__actions [data-azione], [data-workspace-bar] [data-azione="comandi"]');
     /*
      * ⛔ 06/9, owner: «non riesco ad aprire la sidebar di destra dopo averla collassata».
      * Strumentato (non supposto): il clic arrivava, il delegato partiva, e la colonna non si muoveva
