@@ -1,0 +1,66 @@
+name: desktop-review-snapshot
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['.github/workflows/desktop-review-snapshot.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    if: github.repository == 'Ninozzz95/talos' && github.ref == 'refs/heads/refactor/desktop-ledger-2026-09-17'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export complete tracked source, exact diff and provenance
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, zipfile
+          root=pathlib.Path.cwd()
+          out=root/'review-snapshot'
+          out.mkdir()
+          head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          base='13f65c15cdeaf8986b882993a0773cdeafb867d2'
+          files=subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+          manifest=[]
+          fonts=[]
+          with zipfile.ZipFile(out/'source.zip','w',zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
+            for rel in sorted(x for x in files if x):
+              path=root/rel
+              if path.is_symlink():
+                raise RuntimeError('Symbolic link needs explicit packaging: '+rel)
+              if not path.is_file():
+                raise RuntimeError('Tracked file missing: '+rel)
+              data=path.read_bytes()
+              sha=hashlib.sha256(data).hexdigest()
+              entry={'path':rel,'bytes':len(data),'sha256':sha,'gitBlob':hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()}
+              if path.suffix.lower() in {'.woff','.woff2','.ttf','.otf','.ttc','.eot'}:
+                entry['url']='https://raw.githubusercontent.com/Ninozzz95/talos/'+head+'/'+rel
+                fonts.append(entry)
+                continue
+              archive.writestr(rel,data)
+              manifest.append(entry)
+          (out/'SOURCE_COMMIT.txt').write_text(head+'\n')
+          (out/'source-manifest.json').write_text(json.dumps({'commit':head,'base':base,'files':manifest,'excludedFontAssets':fonts},indent=2))
+          (out/'all-changes.patch').write_bytes(subprocess.check_output(['git','diff','--no-ext-diff','--no-renames',base,head]))
+          (out/'commits.txt').write_bytes(subprocess.check_output(['git','log','--format=%H%x09%aI%x09%s',base+'..'+head]))
+          (out/'tree.json').write_bytes(subprocess.check_output(['git','ls-tree','-r',head]))
+          (out/'changed-files.txt').write_bytes(subprocess.check_output(['git','diff','--stat',base,head]))
+          sums=[]
+          for path in sorted(out.iterdir()):
+            sums.append(hashlib.sha256(path.read_bytes()).hexdigest()+'  '+path.name)
+          (out/'SHA256SUMS.txt').write_text('\n'.join(sums)+'\n')
+          print('Exported commit',head,'source files',len(manifest),'font assets restored separately',len(fonts))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: talos-complete-review-snapshot-${{ github.sha }}
+          path: review-snapshot/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
