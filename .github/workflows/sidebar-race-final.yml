@@ -1,0 +1,91 @@
+name: sidebar-race-final
+
+on:
+  pull_request:
+    paths: ['.github/workflows/sidebar-race-final.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.event.pull_request.number == 32 && github.event.pull_request.head.ref == 'refactor/desktop-left-sidebar-2026-09-17'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Reconstruct previously verified candidate and apply composer reconciliation fix
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import base64, hashlib, json, pathlib, subprocess
+          text=pathlib.Path('.github/workflows/sidebar-finalize.yml').read_text()
+          block=text.split('      - name: Verify prior evidence and apply exact sources\n',1)[1].split('        run: |\n',1)[1].split('      - uses:',1)[0]
+          assert all(not line.strip() or line.startswith('          ') for line in block.splitlines())
+          script='\n'.join(line[10:] for line in block.splitlines())+'\n'
+          subprocess.run(['bash','-e','-o','pipefail','-c',script],check=True)
+          sha='ea38acdd07b584f743a2230812174d2a0c74d522'
+          data=json.loads(subprocess.check_output(['gh','api',f'repos/Ninozzz95/talos/git/blobs/{sha}']))
+          patch=base64.b64decode(data['content'])
+          assert hashlib.sha1(b'blob '+str(len(patch)).encode()+b'\0'+patch).hexdigest()==sha
+          pathlib.Path('candidate-5.patch').write_bytes(patch)
+          subprocess.run(['git','apply','--check','--index','candidate-5.patch'],check=True)
+          subprocess.run(['git','apply','--index','candidate-5.patch'],check=True)
+          manifest_path=pathlib.Path('evidence/candidate-manifest.json')
+          manifest=json.loads(manifest_path.read_text())
+          manifest['harness-ui/frontend/src/legacy/app.js']='83b4e8f6955cf6982ecf5efe0ba9e68876d92f4b'
+          for path,expected in manifest.items():
+            assert subprocess.check_output(['git','rev-parse',':'+path],text=True).strip()==expected,path
+          manifest_path.write_text(json.dumps(manifest,indent=2))
+          PY
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            harness-ui/frontend/package-lock.json
+            context-engine/package-lock.json
+      - name: Locked dependencies and Chromium
+        run: |
+          npm ci --prefix harness-ui
+          npm ci --prefix harness-ui/frontend
+          npm ci --prefix context-engine
+          cd harness-ui/frontend
+          npx playwright install --with-deps chromium
+      - name: Build and full frontend unit suite
+        run: |
+          set -o pipefail
+          npm --prefix harness-ui/frontend run build 2>&1 | tee evidence/build-race-final.log
+          npm --prefix harness-ui/frontend run test:unit 2>&1 | tee evidence/unit-race-final.log
+      - name: Stress cross-window resume forty executions across both themes
+        working-directory: harness-ui/frontend
+        run: |
+          set -o pipefail
+          npx playwright test -c playwright.sidebar.config.mjs --grep 'ELENCO-STOP-03' --repeat-each=20 --reporter=line 2>&1 | tee ../../evidence/replay-race-final.log
+      - name: Full sidebar browser and accessibility suite
+        working-directory: harness-ui/frontend
+        run: |
+          set -o pipefail
+          npx playwright test -c playwright.sidebar.config.mjs --reporter=line 2>&1 | tee ../../evidence/sidebar-race-final.log
+      - name: Full existing laboratory suite
+        working-directory: harness-ui/frontend
+        run: |
+          set -o pipefail
+          npx playwright test -c playwright.lab.config.mjs --reporter=line 2>&1 | tee ../../evidence/lab-race-final.log
+      - name: Evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sidebar-race-final-evidence
+          path: |
+            evidence/
+            harness-ui/frontend/artifacts/
+            harness-ui/frontend/test-results/
+          retention-days: 7
+          if-no-files-found: warn
