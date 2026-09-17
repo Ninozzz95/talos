@@ -45,6 +45,8 @@ test('entry neither weakens Windows policies nor installs global packages', asyn
   const js = await readFile(new URL('./start.mjs', import.meta.url), 'utf8');
   assert.doesNotMatch(cmd, /ExecutionPolicy\s+Bypass|Set-ExecutionPolicy|Invoke-Expression|Unblock-File/i);
   assert.doesNotMatch(js, /npm.{0,30}(?:install\s+-g|--global)/i);
-  assert.match(cmd, /Get-FileHash/);
+  assert.match(cmd, /Security\.Cryptography\.SHA256/);
+  assert.match(cmd, /ComputeHash/);
+  assert.doesNotMatch(cmd, /Get-FileHash|Expand-Archive/);
   assert.match(js, /tsconfig\.refactor\.json/);
 });
