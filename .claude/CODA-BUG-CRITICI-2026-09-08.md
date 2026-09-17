@@ -1202,7 +1202,9 @@ modale, e `ragionamento-compresso` SCHERMO-10 (×2) qui è VERDE — era instabi
    dovrebbe capitare (`--jinja` + formato «Generic»); il caso vero è Ollama / LM Studio con un modello senza template per gli
    attrezzi. **Cura onesta:** ritentare UNA volta senza `tools` quando il motore rifiuta proprio quel parametro, e dire «questo
    modello non usa gli attrezzi: resta una chat», con un codice suo. ⛔ Tocca `runtime-owner-adapter.mjs` o il kernel: vuole il sì
-   dell'owner. Mai riconoscere il testo dell'errore con una regex (un filtro che riconosce la MENZIONE invece della cosa).
+   dell'owner. ✅ **APPROVATA dall'owner il 17/09/2026 («si ovviamente»).** Brief: `.claude/BRIEF-BC-79-2-MOTORE-CHE-RIFIUTA-GLI-ATTREZZI-2026-09-17.md`
+   (ricerca del 17/09: un 400 con `tools` ha anche ALTRE cause — regex PCRE negli schemi, template che lanciano — quindi il caso si
+   riconosce dal comportamento, la stessa richiesta senza `tools` riesce, mai dal testo). Parte dopo la fusione di BC-76. Mai riconoscere il testo dell'errore con una regex (un filtro che riconosce la MENZIONE invece della cosa).
 3. ⛔ **Il pannello «prova» del Laboratorio modelli non disegna l'esito degli attrezzi** (`frontend/src/legacy/app.js`
    ~3845-3850: gestisce `TextMessageContent`, `ReasoningMessageContent`, `ToolCallStart`, `ToolCallArgs`, `RunError`, non
    `ToolCallResult`). Dopo BC-76 quel pannello fa girare un agente vero e ne mostra metà. Frontend: entra nella corsia frontend
