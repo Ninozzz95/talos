@@ -2214,6 +2214,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   const ancoraggioToast = ancoraToastSopraIComandi($('#schermoChat .talos-chat-foot'), {
     radice: HOST(),
+    comandiSopra: [$('#chatTornaInFondo')],
     regione: toastRegion,
     /*
      * ⛔ La zona intoccabile è la TESTATA della schermata che si sta guardando: sotto ci sta il
