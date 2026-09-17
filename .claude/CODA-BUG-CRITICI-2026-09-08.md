@@ -952,3 +952,16 @@ verde della P0-bis: da riaccertare quando e perché è diventato rosso).
 silenzio. **Finita quando:** ogni file di `tests/browser` è o verde, o `test.fail()` dichiarato con la sua riga di coda, o
 cancellato perché prova una superficie che non esiste più (con la prova che non esiste); e la consegna gira la CARTELLA, non un
 elenco.
+
+## CLI-REQ-07 | `elenca` su una cartella VUOTA risponde con una stringa vuota, e il modello la legge come attrezzo fallito (17/09/2026, dalla sessione della CLI) — REGISTRATA; l'approvazione dell'owner mi è stata RIFERITA («CLI-REQ-07 si»), non l'ho sentita da lui
+
+Testo intero: `git show 3fb4e9d8:docs/talos-cli/handoffs/2026-09-17-CLI-REQ-07-empty-folder-listing-is-silent.md`.
+**Cosa ha visto l'owner (riferito):** `talos` avviato in una cartella nuova e vuota; il modello chiama `elenca` quattro volte
+(`""` e `"."`), non riceve niente, e gli dice che l'elenco «non è arrivato»; poi `scrivi`/`leggi` funzionano.
+**Riprodotto da me il 17/09 a `0bad1459`** (`%TEMP%/s7.mjs`, sola lettura): `elencaDaCartella({elenca: async () => []}, '')`
+→ `{"tipo":"string","valore":""}`. Il secondo caso (una sottocartella senza file non viene nominata, `talosHarness.mjs:3487`)
+l'hanno misurato loro; io no.
+**Chiedono:** (1) una cartella vuota risponde con una frase che il modello non può scambiare per un guasto; (2) una
+sottocartella senza file compare lo stesso nell'elenco (`sub/`). È la stessa famiglia di «un modello che non vede non tace:
+spiega» (P-13, 10/09): una risposta vuota e una risposta «è vuota» non sono la stessa cosa. Kernel ⇒ va nel ramo `cli-req` o
+in una riga sua, con `npm run test:kernel` intero e ricerca prima di scrivere.
