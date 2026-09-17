@@ -1083,3 +1083,13 @@ sessione locale deve entrare nel giro del kernel (`talosLavora`) come fanno le a
 applica pulita (`git apply --check`); le loro prove: candidata **25/25**, le 20 nuove contro la nostra base **10 rosse / 10
 verdi** come dichiarato; il loro banco su QUESTA macchina Windows, 64 KiB, 11 ripetizioni: mediana **128,2 ms → 4,3 ms**.
 Evidenze custodite nello scratchpad `evidenze-motore/` (zip dell'owner).
+
+✅ **Patch della PR #28 APPLICATA alla lane su ordine dell'owner («sì, applica») il 17/09: `93650914`, sul 4174.** Revisione
+fatta da ME (regola nuova: niente revisori delegati): diff di produzione letto riga per riga; sha256 del file risultante uguale a
+quello dichiarato (`615ee4af…`); 25/25; tre rotture mie, tutte rosse dove devono (stop fra le emissioni: 1 · indice ignorato: 5 ·
+emissione a ogni frammento: 7), ripristino per copia a sha256 identico; backend intero da solo **3187 · 3182 pass · 0 fail · 5
+skipped**. ⛔ NON verificato: nessun modello vero è girato, nessuna misura sul tempo al primo token.
+✅ **ORDINE approvato dall'owner il 17/09 («approvo il tuo consiglio»): BC-76 viene PRIMA del lavoro sulla velocità del motore
+locale** — una sessione locale che non esegue gli attrezzi non è un agente, e misurarne la velocità ha poco senso. Forma: la
+sessione locale entra nel giro del kernel (`talosLavora`) col motore locale come TRASPORTO; mai un secondo esecutore che scavalchi
+permessi e hook. Tocca `session-registry.mjs` e il kernel ⇒ dopo la fusione di `cli-req`, prima della fase degli attrezzi dei file.
