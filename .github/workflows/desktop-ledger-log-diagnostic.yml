@@ -1,0 +1,42 @@
+name: desktop-ledger-log-diagnostic
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['.github/workflows/desktop-ledger-log-diagnostic.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  evidence:
+    if: github.repository == 'Ninozzz95/talos'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Preserve exact completed job log and extract failures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir evidence
+          gh api repos/Ninozzz95/talos/actions/jobs/105221785658/logs > evidence/windows-job.log
+          python - <<'PY'
+          import re, pathlib
+          path = pathlib.Path('evidence/windows-job.log')
+          lines = path.read_text(encoding='utf-8-sig').splitlines()
+          starts = [i for i,line in enumerate(lines) if re.search(r'\bnot ok\b', line)]
+          output = []
+          for i in starts:
+              output.append('\n=== FAILURE LINE %d ===' % (i+1))
+              for line in lines[max(0,i-2):i+35]:
+                  output.append(line[:1200])
+          output.append('\nFAILURE OCCURRENCES: %d' % len(starts))
+          pathlib.Path('evidence/failures.txt').write_text('\n'.join(output), encoding='utf-8')
+          print('\n'.join(output))
+          PY
+          gzip evidence/windows-job.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: talos-windows-gate-diagnostic-105221785658
+          path: evidence/
+          retention-days: 7
+          if-no-files-found: error
