@@ -9,42 +9,14 @@ concurrency:
   group: desktop-ledger-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  materialize-source:
-    if: github.repository == 'Ninozzz95/talos' && github.ref == 'refs/heads/refactor/desktop-ledger-2026-09-17'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    outputs:
-      sha: ${{ steps.source.outputs.sha }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: refactor/desktop-ledger-2026-09-17
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: '24.18.0'
-      - id: source
-        name: Materialize only hash-bound approved frontend edits
-        run: |
-          set -euo pipefail
-          node docs/refactor/workspace-slice/apply.mjs
-          git add -- harness-ui/frontend
-          if ! git diff --cached --quiet; then
-            git config user.name 'Talos Ledger Build'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'feat(desktop): real workspace home, controlled layout and complete first-run removal [ledger-applied]'
-            git push origin HEAD:refs/heads/refactor/desktop-ledger-2026-09-17
-          fi
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
   linux-verification:
-    needs: materialize-source
+    if: github.repository == 'Ninozzz95/talos' && github.ref == 'refs/heads/refactor/desktop-ledger-2026-09-17'
     runs-on: ubuntu-22.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ needs.materialize-source.outputs.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -54,14 +26,14 @@ jobs:
             harness-ui/package-lock.json
             harness-ui/frontend/package-lock.json
             context-engine/package-lock.json
-      - name: Install the locked project and browsers
+      - name: Install locked dependencies and real browsers
         run: |
           set -euo pipefail
           npm ci --prefix harness-ui --no-audit --no-fund
           npm ci --prefix harness-ui/frontend --no-audit --no-fund
           npm ci --prefix context-engine --no-audit --no-fund
           node harness-ui/frontend/node_modules/playwright/cli.js install --with-deps chromium chrome
-      - name: Build and typecheck production frontend
+      - name: Build and typecheck actual frontend
         run: |
           set -euo pipefail
           npm --prefix harness-ui/frontend run build
@@ -72,21 +44,19 @@ jobs:
         id: unit
         continue-on-error: true
         run: npm --prefix harness-ui/frontend run test:unit
-      - name: Real server UI journeys, narrow viewports and accessibility evidence
+      - name: Real server journeys, terminal, viewport and accessibility
         id: journeys
         continue-on-error: true
-        env:
-          GITHUB_SHA: ${{ needs.materialize-source.outputs.sha }}
         run: node harness-ui/frontend/tests/qualification/workspace-real.mjs
-      - name: Preserve evidence of the real product
+      - name: Preserve product evidence even on failure
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: talos-workspace-verification-${{ needs.materialize-source.outputs.sha }}
+          name: talos-workspace-verification-${{ github.sha }}
           path: harness-ui/frontend/test-results/
           retention-days: 14
           if-no-files-found: warn
-      - name: Fail the gate on any failed suite
+      - name: All checks are required
         if: always()
         env:
           UNIT: ${{ steps.unit.outcome }}
