@@ -20,42 +20,53 @@ jobs:
       - name: Export complete tracked source, exact diff and provenance
         run: |
           python3 - <<'PY'
-          import hashlib, json, os, pathlib, subprocess, zipfile
+          import hashlib, json, pathlib, subprocess, zipfile
           root=pathlib.Path.cwd()
           out=root/'review-snapshot'
           out.mkdir()
           head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
           base='13f65c15cdeaf8986b882993a0773cdeafb867d2'
-          files=subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
-          manifest=[]
-          fonts=[]
+          tree=subprocess.check_output(['git','ls-tree','-rz',head]).split(b'\0')
+          manifest=[]; fonts=[]; gitlinks=[]
           with zipfile.ZipFile(out/'source.zip','w',zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
-            for rel in sorted(x for x in files if x):
+            for raw in tree:
+              if not raw: continue
+              meta,name=raw.split(b'\t',1)
+              mode,kind,blob=meta.decode().split()
+              rel=name.decode()
+              if kind=='commit':
+                gitlinks.append({'path':rel,'commit':blob,'status':'external-submodule-not-expanded','usedByDesktopLauncher':False})
+                continue
               path=root/rel
-              if path.is_symlink():
-                raise RuntimeError('Symbolic link needs explicit packaging: '+rel)
-              if not path.is_file():
-                raise RuntimeError('Tracked file missing: '+rel)
-              data=path.read_bytes()
-              sha=hashlib.sha256(data).hexdigest()
-              entry={'path':rel,'bytes':len(data),'sha256':sha,'gitBlob':hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()}
+              if mode=='120000':
+                data=subprocess.check_output(['git','cat-file','blob',blob])
+              else:
+                if not path.is_file(): raise RuntimeError('Tracked file missing: '+rel)
+                data=path.read_bytes()
+              actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+              if actual!=blob: raise RuntimeError('Checkout differs from exact Git blob: '+rel)
+              entry={'path':rel,'mode':mode,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'gitBlob':blob}
               if path.suffix.lower() in {'.woff','.woff2','.ttf','.otf','.ttc','.eot'}:
                 entry['url']='https://raw.githubusercontent.com/Ninozzz95/talos/'+head+'/'+rel
                 fonts.append(entry)
                 continue
-              archive.writestr(rel,data)
+              info=zipfile.ZipInfo(rel)
+              info.create_system=3
+              info.external_attr=int(mode,8)<<16
+              info.compress_type=zipfile.ZIP_DEFLATED
+              archive.writestr(info,data)
               manifest.append(entry)
           (out/'SOURCE_COMMIT.txt').write_text(head+'\n')
-          (out/'source-manifest.json').write_text(json.dumps({'commit':head,'base':base,'files':manifest,'excludedFontAssets':fonts},indent=2))
+          (out/'source-manifest.json').write_text(json.dumps({'commit':head,'base':base,'files':manifest,'excludedFontAssets':fonts,'externalGitlinks':gitlinks},indent=2))
           (out/'all-changes.patch').write_bytes(subprocess.check_output(['git','diff','--no-ext-diff','--no-renames',base,head]))
           (out/'commits.txt').write_bytes(subprocess.check_output(['git','log','--format=%H%x09%aI%x09%s',base+'..'+head]))
-          (out/'tree.json').write_bytes(subprocess.check_output(['git','ls-tree','-r',head]))
+          (out/'source-tree.txt').write_bytes(subprocess.check_output(['git','ls-tree','-r',head]))
           (out/'changed-files.txt').write_bytes(subprocess.check_output(['git','diff','--stat',base,head]))
           sums=[]
           for path in sorted(out.iterdir()):
             sums.append(hashlib.sha256(path.read_bytes()).hexdigest()+'  '+path.name)
           (out/'SHA256SUMS.txt').write_text('\n'.join(sums)+'\n')
-          print('Exported commit',head,'source files',len(manifest),'font assets restored separately',len(fonts))
+          print('Exported commit',head,'source files',len(manifest),'separate font assets',len(fonts),'external gitlinks',len(gitlinks))
           PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
