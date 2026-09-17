@@ -48,6 +48,9 @@ fn image(process: Handle, native: bool) -> Result<String> {
     String::from_utf16(&name[..count as usize]).map_err(|e| e.to_string())
 }
 fn normalized(path: &str) -> String { path.strip_prefix("\\\\?\\").unwrap_or(path).replace('/', "\\").to_lowercase() }
+fn canonical_image(path: &str) -> Result<String> {
+    Ok(normalized(&io_result(std::fs::canonicalize(path))?.to_string_lossy()))
+}
 fn created_ms(process: Handle) -> Result<u64> {
     let mut c = FileTime::default(); let mut e = FileTime::default();
     let mut k = FileTime::default(); let mut u = FileTime::default();
@@ -154,7 +157,14 @@ fn collect(root: PathBuf, target: u16, stop: Arc<AtomicBool>, ready: mpsc::SyncS
             }
             let process = Owned::new(unsafe { OpenProcess(0x00101000, 0, row.pid) }, "TCP subject handle")?;
             // Examine only owners of the exact synthetic loopback endpoint.
-            ensure(normalized(&image(process.0, false)?) == expected_image, "unexpected image connected to synthetic listener")?;
+            let reported_image = image(process.0, false)?;
+            // QueryFullProcessImageName may preserve an 8.3 ancestor whereas
+            // canonicalize(expected) expands it. Compare resolved full paths,
+            // never basename, and keep both spellings in the diagnostic.
+            let resolved_image = canonical_image(&reported_image)?;
+            println!("{{\"diagnostic\":\"tcp_image_identity\",\"pid\":{},\"reported\":{},\"resolved\":{},\"expected\":{}}}",
+                row.pid, json_string(&reported_image), json_string(&resolved_image), json_string(&expected_image));
+            ensure(resolved_image == expected_image, "unexpected image connected to synthetic listener")?;
             ensure(same_container(process.0, package.0)?, "TCP subject package does not match per-run profile")?;
             let user = token(process.0)?; let info = token_info(user.0, 1)?;
             ensure(sid_string(info[0] as Sid)? == owner, "TCP subject owner mismatch")?;
@@ -187,6 +197,11 @@ mod tests {
         assert_eq!(rows_from_words(&[0], 4).unwrap().len(), 0);
         let row = [1, 3, 0x0100007f, 0x5000, 0x0100007f, 0x5000, 42];
         assert_eq!(rows_from_words(&row, 28).unwrap()[0].pid, 42);
+    }
+    #[test] fn actual_process_image_resolves_to_current_executable() {
+        let reported = image(unsafe { GetCurrentProcess() }, false).unwrap();
+        let expected = std::fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
+        assert_eq!(canonical_image(&reported).unwrap(), normalized(&expected.to_string_lossy()));
     }
     #[test] fn image_normalization_preserves_the_full_identity() {
         assert_eq!(normalized("\\\\?\\C:\\Fixture\\probe.exe"), "c:\\fixture\\probe.exe");
