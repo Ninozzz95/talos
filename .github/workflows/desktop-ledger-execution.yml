@@ -1,0 +1,66 @@
+name: desktop-ledger-execution
+
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-ledger-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-verification:
+    if: github.repository == 'Ninozzz95/talos'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.18.0'
+          cache: npm
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            harness-ui/frontend/package-lock.json
+            context-engine/package-lock.json
+      - name: Install the locked project toolchain
+        run: |
+          set -euo pipefail
+          npm ci --prefix harness-ui --no-audit --no-fund
+          npm ci --prefix harness-ui/frontend --no-audit --no-fund
+          npm ci --prefix context-engine --no-audit --no-fund
+      - name: Build the production frontend
+        run: npm --prefix harness-ui/frontend run build
+      - name: Run ledger regressions when present
+        run: |
+          set -euo pipefail
+          if [ -f harness-ui/frontend/tsconfig.refactor.json ]; then
+            node harness-ui/node_modules/typescript/bin/tsc -p harness-ui/frontend/tsconfig.refactor.json
+          fi
+          if [ -d harness-ui/frontend/tests/refactor ]; then
+            node --test harness-ui/frontend/tests/refactor/*.test.mjs
+          fi
+      - name: Preserve the exact Linux toolchain for isolated verification
+        run: |
+          set -euo pipefail
+          mkdir -p ledger-tools/bin
+          cp "$(command -v node)" ledger-tools/bin/node
+          node --version > ledger-tools/NODE_VERSION.txt
+          git rev-parse HEAD > ledger-tools/SOURCE_COMMIT.txt
+          tar -czf ledger-tools-linux.tgz ledger-tools harness-ui/node_modules harness-ui/frontend/node_modules context-engine/node_modules
+          sha256sum ledger-tools-linux.tgz > ledger-tools-linux.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: talos-ledger-linux-tools-${{ github.sha }}
+          path: |
+            ledger-tools-linux.tgz
+            ledger-tools-linux.sha256
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
