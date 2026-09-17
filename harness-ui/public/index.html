@@ -539,9 +539,18 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
             <button type="button" class="talos-composer__attach" id="miglioraPromptBtn" aria-label="Migliora il prompt" aria-expanded="false" aria-controls="miglioraPromptPannello" title="Riscrivi il tuo messaggio col modello di questa chat"><svg class="i"><use href="#i-sparkles"/></svg></button>
             <button type="button" class="talos-badge talos-badge--lg" data-c="Chip" data-open-sheet="model" title="Cambia modello"><svg class="i i--sm"><use href="#i-bolt"/></svg><span class="talos-chip__label">claude-opus-5</span> <span class="talos-kbd">Ctrl ⇧ M</span></button>
             <button type="button" class="talos-badge talos-badge--lg talos-badge--warning" data-c="Chip" data-open-sheet="permissions" title="Cambia il permesso"><svg class="i i--sm"><use href="#i-shield"/></svg><span class="talos-chip__label">Scrive nel progetto</span></button>
-            <span class="talos-badge talos-badge--lg" data-c="Chip" data-runtime-giri>Giri <span class="talos-mono talos-measure">7</span></span>
+            <!-- ⛔ BC-58 (17/09): l'etichetta è un ELEMENTO, non un nodo di testo nudo. Un nodo di
+                 testo non può ricevere `text-overflow`, quindi l'unico figlio ellissabile della
+                 pillola era il NUMERO — ed era il numero a diventare «1…». Ora, se mai lo spazio
+                 finisse, a cedere è la parola; la misura resta intera. Vedi styles/index.css. -->
+            <span class="talos-badge talos-badge--lg" data-c="Chip" data-runtime-giri><span class="talos-chip__label">Giri</span> <span class="talos-mono talos-measure">7</span></span>
             <button type="button" class="talos-badge talos-badge--lg" data-c="Chip" id="pillTerminale" aria-expanded="false" aria-controls="pannelloTerminale" title="Apri il terminale qui sotto"><svg class="i i--sm"><use href="#i-terminal"/></svg><span class="talos-chip__label">Terminale</span></button>
-            <span class="talos-badge talos-badge--lg" data-c="Chip" data-runtime-costo>Sessione <span class="talos-mono talos-measure--estimate">$0,08</span></span>
+            <!-- ⛔ BC-58, stesso difetto e stessa cura: la spesa è l'altra MISURA di questa barra.
+                 ⛔ 17/09 sera: il `title` è NATO QUI. Quando la barra si stringe la parola «Sessione»
+                 cede (vedi la scala in styles/index.css) e resta il solo numero: senza questa riga
+                 sarebbe una cifra senza nome, e il suggerimento era l'unica cosa che la pillola non
+                 aveva. Trovato guardando la mia stessa modifica, non da una prova. -->
+            <span class="talos-badge talos-badge--lg" data-c="Chip" data-runtime-costo title="Quanto è costata finora questa sessione, stimato sui token contati" aria-label="Spesa della sessione"><span class="talos-chip__label">Sessione</span> <span class="talos-mono talos-measure--estimate">$0,08</span></span>
             <button type="button" class="talos-button talos-button--secondary talos-button--sm" id="redirectRunButton" hidden title="Interrompi al prossimo punto sicuro e applica questa correzione">Reindirizza</button>
             <button type="button" class="talos-composer__attach talos-composer__mic" data-c="IconButton" title="Voce" aria-label="Voce"><svg class="i"><use href="#i-mic"/></svg></button>
             <button class="talos-send" data-c="SendButton" title="Invia" aria-label="Invia"><svg class="i"><use href="#i-send"/></svg></button>
