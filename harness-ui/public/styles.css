@@ -4156,6 +4156,9 @@ a.talos-button {
   padding: 16px;
   position: sticky;
   top: 0;
+  max-height: calc(100dvh - var(--talos-topbar-h) - var(--talos-space-lg));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .talos-detail h3 {
   font-size: 15px;
@@ -4696,6 +4699,18 @@ a.talos-button {
   border: 1px solid var(--talos-border);
   border-bottom: 0;
   border-radius: var(--talos-radius-card) var(--talos-radius-card) 0 0;
+}
+.talos-review__sommario {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: var(--talos-space-sm);
+  font-size: 11.5px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  border-left: 1px solid var(--talos-border);
+  margin-inline-start: var(--talos-space-sm);
 }
 .talos-review__scheda {
   display: inline-flex;
@@ -5310,6 +5325,8 @@ a.talos-button {
   }
   .talos-detail {
     position: static;
+    max-height: none;
+    overflow-y: visible;
   }
 }
 @media (max-width: 980px) {
@@ -6021,7 +6038,7 @@ a.talos-button {
 .talos-toast-region {
   position: fixed;
   right: var(--talos-space-md);
-  bottom: var(--talos-space-lg);
+  bottom: calc(var(--talos-space-lg) + var(--talos-toast-fondo, 0px));
   width: min(var(--talos-inspector-w), calc(100% - var(--talos-space-lg) - var(--talos-space-lg)));
   display: grid;
   gap: var(--talos-space-sm);
@@ -6126,8 +6143,9 @@ a.talos-button {
 .talos-context-menu {
   position: fixed;
   z-index: var(--talos-z-menu);
-  width: var(--talos-inspector-w);
-  max-width: calc(100vw - var(--talos-space-lg));
+  width: max-content;
+  min-width: 13rem;
+  max-width: min(var(--talos-inspector-w), calc(100vw - var(--talos-space-lg)));
   padding: var(--talos-space-sm);
   background: var(--talos-panel);
   box-shadow: var(--talos-shadow-floating);
@@ -6453,6 +6471,8 @@ input[type=range]:focus-visible {
   }
   [data-catalog-panel] .talos-detail {
     position: static;
+    max-height: none;
+    overflow-y: visible;
   }
 }
 .talos-model-lab > .talos-page__head {
@@ -11976,6 +11996,11 @@ body.background-motion-paused #schermoChat::after {
   max-height: 50%;
   overflow-y: auto;
   padding: 0 10px 8px;
+  background:
+    linear-gradient(var(--talos-background) 30%, transparent) top / 100% 18px no-repeat local,
+    linear-gradient(transparent, var(--talos-background) 70%) bottom / 100% 18px no-repeat local,
+    linear-gradient(var(--talos-border), transparent) top / 100% 8px no-repeat scroll,
+    linear-gradient(transparent, var(--talos-border)) bottom / 100% 8px no-repeat scroll;
 }
 .td-sidebar-nav .talos-nav-item {
   height: auto;
