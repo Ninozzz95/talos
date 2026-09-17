@@ -1,0 +1,11 @@
+{
+  "checkpoint": "CP00-approved",
+  "repository": "Ninozzz95/talos",
+  "pr": 33,
+  "branch": "fix/desktop-inspector-tabs-calm-lab",
+  "head_before_review": "51cbc6d8307b7b49fdfc37c48f77b652ecf82183",
+  "approved_html_sha256": "82b7e6942acf28f36c0b9c286d4bdb4779c22053cc75d10c6cde2a4ec9ba9fb3",
+  "source_zip_sha256": "db7d960a21eb62a5e949dbe09ac09d2161df430069a814e3336ad45e510ef0a1",
+  "baseline_verification": {"state_tests": 8, "browser_checks": 55, "status": "passed_again_before_changes"},
+  "scope": "Approved offline laboratory; not a full desktop build. The reviewer package retains the exact approved HTML and original source archive."
+}
