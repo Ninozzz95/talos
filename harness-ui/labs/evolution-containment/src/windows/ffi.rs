@@ -46,6 +46,7 @@ extern "system" {
     pub fn GetProcessId(process: Handle) -> u32;
     pub fn GetExitCodeProcess(process: Handle, code: *mut u32) -> i32;
     pub fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
+    fn QueryFullProcessImageNameW(process: Handle, flags: u32, name: *mut u16, size: *mut u32) -> i32;
     pub fn CreateJobObjectW(attributes: *const SecurityAttributes, name: *const u16) -> Handle;
     pub fn SetInformationJobObject(job: Handle, class: i32, data: *const c_void, length: u32) -> i32;
     #[link_name = "QueryInformationJobObject"]
@@ -91,8 +92,35 @@ pub unsafe fn QueryInformationJobObject(job: Handle, class: i32, data: *mut c_vo
         let count = (ids.count as usize).min(ids.ids.len());
         println!("{{\"diagnostic\":\"job_accounting\",\"returned_bytes\":{actual_length},\"total\":{},\"active\":{},\"terminated\":{},\"pid_list_status\":{ids_error},\"assigned\":{},\"listed\":{},\"pid_list\":{:?}}}",
             info.total, info.active, info.terminated, ids.assigned, ids.count, &ids.ids[..count]);
+        if ids_ok != 0 { for pid in &ids.ids[..count] { describe_job_member(job, *pid); } }
     }
     result
+}
+
+fn describe_job_member(job: Handle, pid: usize) {
+    let Ok(pid) = u32::try_from(pid) else { return; };
+    let handle = unsafe { OpenProcess(0x00101000, 0, pid) };
+    if handle.is_null() {
+        println!("{{\"diagnostic\":\"job_member\",\"pid\":{pid},\"open_error\":{}}}", unsafe { GetLastError() });
+        return;
+    }
+    let process = super::Owned(handle);
+    let mut inside = 0;
+    if unsafe { IsProcessInJob(process.0, job, &mut inside) } == 0 || inside == 0 {
+        println!("{{\"diagnostic\":\"job_member\",\"pid\":{pid},\"identity_changed\":true}}");
+        return;
+    }
+    let mut buffer = [0u16; 32768];
+    let mut size = buffer.len() as u32;
+    let image_ok = unsafe { QueryFullProcessImageNameW(process.0, 0, buffer.as_mut_ptr(), &mut size) };
+    let image_error = if image_ok != 0 { 0 } else { unsafe { GetLastError() } };
+    let image = if image_ok != 0 && size as usize <= buffer.len() {
+        let path = String::from_utf16_lossy(&buffer[..size as usize]);
+        super::checks::json_string(path.rsplit(['\\', '/']).next().unwrap_or_default())
+    } else { "null".into() };
+    let container = match super::is_container(process.0) { Ok(value) => value.to_string(), Err(_) => "null".into() };
+    let wait = unsafe { WaitForSingleObject(process.0, 0) };
+    println!("{{\"diagnostic\":\"job_member\",\"pid\":{pid},\"image_basename\":{image},\"image_error\":{image_error},\"appcontainer\":{container},\"wait_status\":{wait}}}");
 }
 
 #[link(name = "advapi32")]
