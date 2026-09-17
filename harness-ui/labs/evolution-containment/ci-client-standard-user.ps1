@@ -23,6 +23,7 @@ $name = 'tlab' + [Guid]::NewGuid().ToString('N').Substring(0,12)
 $user = $null
 $child = $null
 $nativeExit = 1
+. (Join-Path $PSScriptRoot 'ci-observe-client-network.ps1')
 function Set-FixtureAcl([string]$Path, [string]$Sddl) {
     $acl = Get-Acl -LiteralPath $Path
     $acl.SetSecurityDescriptorSddlForm($Sddl)
@@ -62,11 +63,14 @@ try {
     $out = Join-Path $work 'standard-user'
     $credential = [PSCredential]::new("$env:COMPUTERNAME\$name", $secret)
     $arguments = "-NoLogo -NoProfile -NonInteractive -File `"$entry`" -Executable `"$exe`" -EvidenceDirectory `"$out`""
+    $witnessDirectory = Join-Path $evidence 'network-observer'
+    $witnessSelection = Start-ClientNetworkWitness -Executable $exe -UserSid $sid -Directory $witnessDirectory
     $child = Start-Process -FilePath $pwsh -ArgumentList $arguments -Credential $credential -LoadUserProfile -WorkingDirectory $work -PassThru
     if (-not $child.WaitForExit(120000)) { $child.Kill($true); [void]$child.WaitForExit(10000); throw 'Standard-user entry exceeded deadline' }
     $receipt.clientNativeExit = $child.ExitCode
     $nativeExit = $child.ExitCode
     Copy-Item -LiteralPath $out -Destination (Join-Path $evidence 'standard-user') -Recurse
+    Complete-ClientNetworkWitness -Selection $witnessSelection -ProbeLog (Join-Path $evidence 'standard-user/probes.jsonl') -Directory $witnessDirectory
     $profile = Get-Content -LiteralPath (Join-Path $out 'host-profile.json') -Raw | ConvertFrom-Json
     if ($profile.accepted -ne $true -or $profile.standard_user -ne $true -or $profile.scope -ne 'windows11-arm64-x64-emulated') {
         throw 'Measured client profile does not match this CI experiment'
@@ -100,5 +104,9 @@ try {
     $receipt | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $evidence 'ci-fixture.json') -Encoding utf8
 }
 if ($receipt.cleanupErrors.Count -ne 0) { throw 'Disposable fixture cleanup incomplete; see ci-fixture.json' }
+# Review after cleanup so leaked accounts/profiles cannot accompany a success.
+& python (Join-Path $PSScriptRoot 'review_client_network.py') $evidence
+$networkReviewExit = $LASTEXITCODE
+if ($networkReviewExit -ne 0) { Write-Host 'Independent client network evidence rejected; original native result retained' }
 # Native FAIL remains FAIL. Collection is not an OS containment certificate.
 exit $nativeExit
