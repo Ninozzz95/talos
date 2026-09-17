@@ -60,3 +60,5 @@
  *   ordering»): spostarlo più in alto lo disattiverebbe in silenzio.
  */
 @import './mockup-animazioni.css';
+
+@import './sidebar-desktop.css'; /* standalone left sidebar; no shared theme overrides */

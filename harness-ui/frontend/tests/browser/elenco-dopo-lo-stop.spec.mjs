@@ -1,4 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { installSidebarFixture } from '../fixtures/sidebar-fixture.mjs';
+
+// The aggregate stream is now authoritative; chat replay must not trigger a list poll.
+const aggiornaSidebar = (page, riga) => page.evaluate(row => window.__sidebarTest.delta([row]), riga);
 
 /*
  * ⛔ LA BARRA LATERALE E IL PULSANTE, QUANDO UN GIRO SI FERMA O RIPARTE — provato sul pacchetto SERVITO, nei DUE temi. 14/09/2026.
@@ -34,6 +38,7 @@ for (const modo of ['dark', 'light']) {
       const base = { taskId: 'workspace', modello: MODELLO, avviataAlle: '2026-09-14T08:00:00.000Z', interrotta: false, usage: null, inAttesaApprovazione: false };
       const riga = { ...base, sessionId: id, nome: 'Prova della barra', conclusa: fermata, ...(fermata ? { ultimoEsito: 'errore', motivoChiusura: 'fermata' } : {}) };
       const letture = [];
+      await installSidebarFixture(page, { rows: [riga], mode: modo });
       await page.addInitScript((colorMode) => {
         try {
           localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' }));
@@ -47,9 +52,19 @@ for (const modo of ['dark', 'light']) {
       await page.route(`**/api/v1/sessions/${id}/events`, (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
       await page.goto('/');
       await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+      await page.locator('[data-sidebar-connection="live"]').waitFor();
       await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
-      await page.evaluate(([id, modello, conclusa]) => {
-        window.__talosHarnessUiRuntime.passaASessione(id, 'workspace', 'Prova della barra', modello, { conclusa, modello });
+      await page.evaluate(async ([id, modello, conclusa]) => {
+        const runtime = window.__talosHarnessUiRuntime;
+        runtime.passaASessione(id, 'workspace', 'Prova della barra', modello, { conclusa, modello });
+        // This fixture injects replay manually, so consume the transport-open boundary once
+        // and then close the intercepted static SSE. Otherwise the browser can enter its
+        // one-hour reconnect state after the fulfilled body closes and fire a late onopen,
+        // resetting inRigiocata after our synthetic end-of-replay.
+        const source = runtime.realSessionState.eventSource;
+        source.onopen?.();
+        source.onopen = null;
+        source.close();
       }, [id, MODELLO, fermata]);
       /* La storia arriva prima del confine: una sessione fermata porta il suo giro e il suo stop. */
       await eventi(page, fermata
@@ -68,9 +83,10 @@ for (const modo of ['dark', 'light']) {
       const primaDelloStop = letture.length;
       const t = Date.now();
       await eventi(page, [{ type: 'RunError', code: 'fermato', message: INTERROTTO, _sequenza: 2 }]);
+      await aggiornaSidebar(page, riga);
       await expect(voce).toContainText('fermata', { timeout: 2000 });
-      expect(letture.length, 'lo stop fa rileggere l’elenco').toBeGreaterThan(primaDelloStop);
-      expect(letture[primaDelloStop] - t, 'la rilettura parte dallo stop, non da un timer lontano').toBeLessThan(1000);
+      expect(letture.length, 'il flusso aggiorna la barra senza una seconda lettura HTTP').toBe(primaDelloStop);
+      expect(Date.now() - t, 'lo stato arriva dallo stream, non dal timer dei 15 secondi').toBeLessThan(2000);
       await page.mouse.move(700, 450);
       await page.screenshot({ path: testInfo.outputPath(`elenco-fermata-${modo}.png`) });
     });
@@ -79,7 +95,8 @@ for (const modo of ['dark', 'light']) {
       const { letture, voce } = await prepara(page, `lista-contrario-${modo}`);
       const primaDelloStop = letture.length;
       await eventi(page, [{ type: 'RunError', code: 'fermato', message: INTERROTTO, _sequenza: 2 }]);
-      await expect.poll(() => letture.length, { timeout: 2000 }).toBeGreaterThan(primaDelloStop);
+      await page.waitForTimeout(200);
+      expect(letture.length, 'l’evento della chat non sostituisce lo stato del feed').toBe(primaDelloStop);
       await expect(voce).toContainText('in corso');
       await expect(voce).not.toContainText('fermata');
     });
@@ -92,9 +109,10 @@ for (const modo of ['dark', 'light']) {
       Object.assign(riga, { conclusa: false, ultimoEsito: undefined, motivoChiusura: undefined });
       const prima = letture.length;
       await eventi(page, [{ type: 'RunStarted', input: { consegna: 'Quando hai finito, aggiungi una riga col conteggio.', seguito: true }, _sequenza: 3 }]);
+      await aggiornaSidebar(page, riga);
       await expect(stop(page), 'il giro ripreso altrove si interrompe anche da qui').toHaveCount(1);
       await expect(voce).toContainText('in corso', { timeout: 2000 });
-      expect(letture.length, 'l’inizio di un giro in diretta fa rileggere l’elenco').toBeGreaterThan(prima);
+      expect(letture.length, 'il giro ripreso arriva dal feed senza polling della lista').toBe(prima);
       await page.mouse.move(700, 450);
       await page.screenshot({ path: testInfo.outputPath(`elenco-ripreso-altrove-${modo}.png`) });
     });
@@ -113,12 +131,12 @@ for (const modo of ['dark', 'light']) {
       /* ⛔ 14/09, giro vero della coda: 7 invii, 6 fermati, e la riga diceva «1 giro» (registro del banco 5475, contato a mano). */
       const { riga, voce } = await prepara(page, `lista-giri-${modo}`, { fermata: true });
       Object.assign(riga, { usageSessione: { prompt_tokens: 9488, completion_tokens: 8008, cached_tokens: 0, giri: 1, esecuzioni: 1 }, giriFermati: 6 });
-      await page.evaluate(() => window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali());
+      await aggiornaSidebar(page, riga);
       const conto = voce.locator('.talos-session-item__aside span', { hasText: /\bgir[oi]$/ });
       await expect(conto).toHaveText('7 giri');
       await expect(conto).toHaveAttribute('title', /6 giri fermati prima che il fornitore dichiarasse il consumo/);
       Object.assign(riga, { giriFermati: 0 });
-      await page.evaluate(() => window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali());
+      await aggiornaSidebar(page, riga);
       await expect(conto, 'AL CONTRARIO: senza fermati la riga è quella di prima').toHaveText('1 giro');
       await expect(conto).not.toHaveAttribute('title', /.+/);
     });
