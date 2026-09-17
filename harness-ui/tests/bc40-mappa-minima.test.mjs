@@ -268,3 +268,90 @@ test('BC-40, AL CONTRARIO: `elenca` non è un modo per uscire dal workspace', as
     assert.ok(!risalita.test(buono), `⛔ "${buono}" è un percorso legittimo e non va rifiutato`);
   }
 });
+
+/*
+ * ⛔⛔⛔ CLI-REQ-07 (17/09/2026, approvata dall'owner) — UNA CARTELLA VUOTA RISPONDEVA IL VUOTO.
+ *
+ * L'owner ha avviato TALOS in una cartella nuova e vuota e ha chiesto al modello cosa vedeva. Il
+ * modello ha chiamato `elenca` QUATTRO volte — `percorso` `""` e `"."` — ognuna senza una riga di
+ * uscita, e poi gli ha detto che l'elenco «non è arrivato», offrendosi di riprovare. Un `scrivi` e
+ * un `leggi` subito dopo sono andati: gli attrezzi avevano accesso da sempre.
+ *
+ * ⇒ La stringa vuota è indistinguibile da «l'attrezzo non ha risposto». È la forma di difetto in
+ *   cui il risultato GIUSTO ha lo stesso aspetto di quello SBAGLIATO, e per questo nessuno la
+ *   guarda finché non arriva sullo schermo di qualcuno.
+ *
+ * ⛔ Questo testo lo legge il MODELLO: la forma segue quella che il kernel usa già per un esito
+ *   vuoto (`cerca` → `no file matches. Scanned N files. Try a shorter or different "testo".`),
+ *   cioè inglese minuscolo, il fatto negativo per primo, e poi cosa farne.
+ */
+test('⛔⛔⛔ CLI-REQ-07: una cartella VUOTA risponde una frase, non il vuoto — e nomina la cartella', async () => {
+  const vuoto = { elenca: async () => [] };
+
+  const radice = await elencaDaCartella(vuoto, '');
+  assert.notEqual(radice, '', '⛔ il difetto: una stringa vuota non si distingue da un attrezzo che non ha risposto');
+  assert.match(radice, /^no files and no folders\./, 'stessa forma di `cerca`: il fatto negativo per primo');
+  assert.match(radice, /the workspace root is empty/, 'con `percorso` vuoto la cartella si nomina «radice», non `""`');
+  assert.match(radice, /not a failure/, '⛔ è la riga che impedisce al modello di leggerlo come un guasto e riprovare');
+
+  const conNome = await elencaDaCartella(vuoto, 'src');
+  assert.match(conNome, /"src" is empty/, 'una cartella aperta per nome si nomina per nome');
+  assert.ok(!/[A-Za-z]:[\\/]/.test(conNome),
+    '⛔ [[cancello-4-non-guardava-tutto-mobile]]: nessun percorso assoluto nel testo che va al modello');
+});
+
+test('⛔⛔ CLI-REQ-07: una cartella vuota NON si confonde con una cartella che non esiste', async () => {
+  /*
+   * ⛔ Sono due fatti diversi e il modello deve poterli distinguere: «ho guardato e non c'è
+   * niente» contro «non sono riuscito a guardare». Se le due frasi si somigliassero, la cura
+   * avrebbe solo spostato l'ambiguità.
+   */
+  const vuota = await elencaDaCartella({ elenca: async () => [] }, 'src');
+  const assente = await elencaDaCartella(discoFinto(PROGETTO), 'inventata');
+  assert.match(vuota, /is empty/);
+  assert.match(assente, /not a readable folder/);
+  assert.ok(!vuota.includes('not a readable folder'));
+  assert.ok(!assente.includes('is empty'));
+});
+
+test('⛔⛔⛔ CLI-REQ-07: una SOTTOCARTELLA senza file compare lo stesso, con la barra', async () => {
+  /*
+   * ⛔ Una cartella qui si vede solo ATTRAVERSO i suoi figli: una che non ne ha non compariva
+   * affatto, e il modello non poteva sapere che esiste. Misurato prima della cura: una radice che
+   * contiene solo `sub/` vuota rispondeva `""`.
+   */
+  const soloSub = { elenca: async (dentro = '') => (dentro === '' ? [{ nome: 'sub', cartella: true }] : []) };
+  assert.equal(await elencaDaCartella(soloSub, ''), 'sub/');
+
+  // E una radice con un file PIÙ una sottocartella vuota li mostra tutti e due.
+  const misto = {
+    elenca: async (dentro = '') => (dentro === ''
+      ? [{ nome: 'a.txt', cartella: false }, { nome: 'sub', cartella: true }]
+      : []),
+  };
+  assert.equal(await elencaDaCartella(misto, ''), ['a.txt', 'sub/'].join('\n'));
+});
+
+test('⛔⛔ CLI-REQ-07 AL CONTRARIO: una sottocartella ILLEGGIBILE continua a sparire, e non diventa «vuota»', async () => {
+  /*
+   * ⛔ «So che è vuota» e «non sono riuscito a guardarci dentro» sono due fatti diversi, e la
+   * seconda ha già la sua regola provata qui sopra («la sottocartella cieca sparisce, il resto
+   * resta»). Nominarla `src/kernel/` direbbe al modello che è vuota — una cosa che non sappiamo.
+   */
+  const disco = discoFinto(PROGETTO, { illeggibili: ['src/kernel'] });
+  const esito = await elencaDaCartella(disco, 'src');
+  assert.equal(esito, 'src/uno.mjs');
+  assert.ok(!esito.includes('src/kernel/'), 'illeggibile ≠ vuota');
+});
+
+test('⭐ CLI-REQ-07: il verso in cui la cura NON deve mordere — una cartella con qualcosa dentro è invariata', async () => {
+  /*
+   * ⛔ Il banco confronta le uscite degli attrezzi BYTE PER BYTE fra le campagne: una riga in più
+   * su una cartella che aveva già un contenuto renderebbe incomparabili le righe già pagate. La
+   * prova «IDENTICO a com'era» qui sopra lo fissa per la radice; questa lo fissa per una cartella
+   * aperta per nome, che è la strada che BC-40 ha aggiunto.
+   */
+  const disco = discoFinto(PROGETTO);
+  assert.equal(await elencaDaCartella(disco, 'src'), ['src/uno.mjs', 'src/kernel/due.mjs', 'src/kernel/motore'].join('\n'));
+  assert.ok(!(await elencaDaCartella(disco, 'src')).includes('is empty'));
+});

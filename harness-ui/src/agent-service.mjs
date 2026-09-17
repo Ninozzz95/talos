@@ -90,6 +90,20 @@ import {
   ricordaRicevutaPolitica as ricordaRicevutaPoliticaLibreria,
   scriviPolitica as scriviPoliticaReale,
 } from './library-policy-store.mjs';
+import { improntaPacchettoPlugin, statoTrustPlugin } from './plugin-registry.mjs';
+
+/*
+ * ⛔ A-6(b): le frasi del RIPIEGO della riverifica all'uso. `statoTrustPlugin` porta già la sua
+ *   `frase` per ogni motivo; queste servono solo se un motivo nuovo nascesse senza frase, e ci
+ *   sono perché il ripiego precedente ne diceva UNA SOLA — «non è più quello che hai approvato» —
+ *   anche quando il motivo era `mai-approvato`, cioè raccontava una manomissione dove c'era
+ *   soltanto una fiducia mai data.
+ */
+const FRASI_RIVERIFICA = Object.freeze({
+  'mai-approvato': 'Questo plugin non è approvato: aprilo dal pannello e approvalo se lo vuoi usare.',
+  'regola-precedente': 'Questo plugin era stato approvato con la regola precedente: approvalo di nuovo.',
+  'contenuto-cambiato': 'Il contenuto di questo plugin è cambiato da quando l\'hai approvato.',
+});
 import { preparaToolPluginPerSessione as preparaToolPluginPerSessioneReale } from './plugin-session.mjs';
 import { eseguiHook as eseguiHookReale } from './hook-registry.mjs';
 import {
@@ -702,6 +716,73 @@ export async function avviaSessione({
     toolPlugin = preparato.toolPlugin;
     eseguiToolPluginFn = preparato.eseguiToolPluginFn;
     hookPlugin = preparato.hookPlugin;
+
+    /*
+     * ⛔⛔⛔ A2 (17/09/2026) — LA FIDUCIA SI RIVERIFICA AL MOMENTO DELL'USO, non solo all'avvio.
+     *
+     * Il cancello sopra gira UNA volta, quando la sessione parte. Fra quel momento e la chiamata
+     * di un attrezzo passa tutto il tempo che il modello impiega a ragionare, e in quella
+     * finestra il pacchetto può cambiare sotto: il revisore l'ha misurato riscrivendo `run.js`
+     * dopo la verifica — e il codice scambiato girava.
+     * ⛔ È la forma classica del TOCTOU: «verifico lo stato → [buco] → uso lo stato»
+     *   (en.wikipedia.org/wiki/Time-of-check_to_time-of-use, e la stessa raccomandazione nelle
+     *   fonti sul contenimento dei punti d'ingresso dei plugin — OpenHands/software-agent-sdk
+     *   #5101, WindWang2/exp-rs #756: il controllo va fatto alla validazione **e** all'uso.
+     *   Letti il 17/09/2026.)
+     *
+     * ⛔ IL COSTO, rimisurato il 17/09/2026 e CORRETTO: la prima stesura di questo commento
+     *   riportava 0,8 / 2,3 / 16,2 ms misurando la sola impronta, non ciò che gira davvero qui.
+     *   Il numero onesto è quello di TUTTO il wrapper (impronta + lettura dell'archivio di
+     *   fiducia), mediana su 20 giri a cache calda, insieme al termine di paragone che decide:
+     *     · pacchetto minuscolo (3 file, 2 KB)   wrapper **1,3 ms**  · UN attrezzo **71 ms**
+     *     · normale (40 file, 200 KB)            wrapper **2,9 ms**  · UN attrezzo **56 ms**
+     *     · grosso (400 file, 4 MB)              wrapper **19,3 ms** · UN attrezzo **61 ms**
+     *   ⛔ Il revisore, sulla stessa macchina ma sotto carico, ha misurato 1,5 / 6,5 / 48,2 ms
+     *   (massimo 62): due-tre volte i miei. Non lo si sceglie il numero comodo — si dice che
+     *   BALLANO con il carico, e che nel suo caso peggiore il wrapper resta comunque sotto il
+     *   costo di un solo avvio di processo.
+     *   ⇒ La conclusione regge con i numeri di tutti e due: NESSUNA cache per mtime+size. Sarebbe
+     *   una seconda verità da tenere allineata per un guadagno che sta sotto il rumore di ciò che
+     *   la riverifica protegge. Se un giorno un pacchetto la rendesse visibile, la cache va
+     *   aggiunta QUI e dichiarata, non dedotta.
+     *
+     * ⛔ Copre gli ATTREZZI, non gli HOOK: quelli li arma `talosLavora` e passano da
+     *   `costruisciHookFn`, fuori da questa funzione. Per loro la verifica resta quella d'avvio.
+     *   È un buco più stretto ma è un buco, ed è scritto qui invece che taciuto.
+     */
+    if (eseguiToolPluginFn) {
+      const eseguiSenzaRiverifica = eseguiToolPluginFn;
+      eseguiToolPluginFn = async (nomeEsposto, argomenti) => {
+        /*
+         * ⛔⛔⛔ A-3, SECONDA STESURA (17/09/2026): l'id si CHIEDE a chi ha armato la sessione, non
+         *   si ricava tagliando il nome esposto.
+         *   La prima stesura lo estraeva con una espressione, e il terzo controllo ha misurato che
+         *   quella espressione e il cancello del caricamento NON dicevano la stessa cosa: un id
+         *   `_sano` si caricava e poi non veniva mai riconosciuto qui — l'attrezzo c'era e non
+         *   funzionava, per sempre, senza che nessuno lo dicesse.
+         * ⇒ Una verità sola: `pluginIdDiTool` viene dalla mappa dell'instradamento, dove l'id è
+         *   quello VERO. Se l'attrezzo non è in quella mappa non è di questa sessione, e non si
+         *   esegue.
+         */
+        const pluginId = preparato.pluginIdDiTool?.(nomeEsposto) ?? null;
+        if (!pluginId) return '⛔ Non riconosco a quale plugin appartiene questo strumento, quindi non lo eseguo.';
+        let stato;
+        try {
+          const hash = await improntaPacchettoPlugin({ cartella, pluginId });
+          stato = await statoTrustPlugin({ cartellaTrust: cartellaTrustPlugin, pluginId, hash });
+        } catch (errore) {
+          /* Un pacchetto che non si legge più non autorizza: si dice, non si esegue. */
+          return `⛔ Non riesco più a controllare i file di questo plugin, quindi non lo eseguo. (${errore?.message ?? 'lettura fallita'})`;
+        }
+        /*
+         * ⛔ A-6(b): la frase è quella del MOTIVO vero. Prima il ripiego diceva sempre «non è più
+         *   quello che hai approvato» anche quando il motivo era `mai-approvato`, cioè raccontava
+         *   una manomissione dove c'era una fiducia mai data.
+         */
+        if (!stato.fidato) return `⛔ ${stato.frase ?? FRASI_RIVERIFICA[stato.motivo] ?? FRASI_RIVERIFICA['mai-approvato']}`;
+        return eseguiSenzaRiverifica(nomeEsposto, argomenti);
+      };
+    }
   }
 
   /*

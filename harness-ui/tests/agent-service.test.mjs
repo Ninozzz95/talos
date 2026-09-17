@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { caricaPlugin, fidaPlugin } from '../src/plugin-registry.mjs';
 
 import { avviaSessione, compattaSessione, eseguiComandoDiretto } from '../src/agent-service.mjs';
 import { TALOS_SOURCE_TEXT_FORMATS } from '../src/document-generator.mjs';
@@ -1604,7 +1610,18 @@ test('⭐⭐⭐ cartellaTrustPlugin presente: preparaToolPluginPerSessioneFn chi
 
   assert.deepEqual(argomentiPrepara, { cartella: '/tmp/workspace-vero', cartellaTrust: '/tmp/plugin-trust' });
   assert.equal(catturato.toolPlugin, toolPluginFinto, 'STESSO array, non una copia');
-  assert.equal(catturato.eseguiToolPluginFn, eseguiToolPluginFnFinta, 'STESSA funzione, non un wrapper');
+  /*
+   * ⛔⛔ CAMBIATO il 17/09/2026 (A2), e il motivo va scritto perché questa riga diceva l'opposto:
+   *   «STESSA funzione, non un wrapper». Esisteva per impedire un wrapper ACCIDENTALE — uno strato
+   *   messo senza pensarci, che avrebbe potuto cambiare argomenti o esito. Adesso il wrapper c'è
+   *   ed è VOLUTO: riverifica l'impronta del pacchetto PRIMA di ogni esecuzione, perché fra il
+   *   cancello d'avvio e la chiamata dell'attrezzo passa tutto il tempo in cui il modello ragiona,
+   *   e in quella finestra il codice del plugin può essere scambiato (TOCTOU, misurato).
+   * ⇒ Quello che resta da difendere non è l'identità della funzione, ma il fatto che il wrapper
+   *   NON cambi ciò che passa e ciò che torna quando la fiducia regge. È quello che si asserisce.
+   */
+  assert.notEqual(catturato.eseguiToolPluginFn, eseguiToolPluginFnFinta, 'ora c\'è un wrapper, ed è voluto: riverifica la fiducia');
+  assert.equal(typeof catturato.eseguiToolPluginFn, 'function');
 });
 
 test('⛔⛔ AL CONTRARIO — RunStarted arriva PRIMA di preparaToolPluginPerSessioneFn, mai dopo', async () => {
@@ -3238,4 +3255,96 @@ test('⛔⛔ BC-11 un pezzo ACCODATO non diventa una voce nuova di Libreria: la 
   });
 
   assert.equal(salvataggiLibreria, 1, 'una sola voce per un file, non una per pezzo');
+});
+
+/*
+ * ⛔⛔⛔ A2 (17/09/2026) — UNO SCAMBIO A SESSIONE VIVA VIENE FERMATO.
+ *
+ * Il cancello dei plugin gira UNA volta, all'avvio della sessione. Fra quel momento e la chiamata
+ * di un attrezzo passa tutto il tempo in cui il modello ragiona, e in quella finestra il pacchetto
+ * può cambiare sotto: il revisore l'ha misurato riscrivendo `run.js` dopo la verifica, e il codice
+ * scambiato girava. È la forma classica del TOCTOU.
+ *
+ * ⛔ Questa prova non finge il filesystem: workspace vero, cartella di fiducia vera, e lo scambio
+ * fatto DOPO che la sessione è partita e ha già in mano la funzione di esecuzione.
+ */
+test('⛔⛔⛔ A2 — un plugin scambiato DOPO l\'avvio della sessione viene fermato al momento dell\'uso, con la frase giusta', async () => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-a2-'));
+  const cartellaTrust = mkdtempSync(join(tmpdir(), 'talos-a2-trust-'));
+  const pacchetto = join(cartella, '.harness-ui-plugins', 'demo');
+  try {
+    mkdirSync(pacchetto, { recursive: true });
+    writeFileSync(join(pacchetto, 'plugin.json'), JSON.stringify({
+      nome: 'demo', descrizione: 'd',
+      tools: [{ nome: 'saluta', descrizione: 'd', comando: 'node run.js' }],
+    }), 'utf8');
+    writeFileSync(join(pacchetto, 'run.js'), 'console.log("v1 approvato");\n', 'utf8');
+
+    const { plugin } = await caricaPlugin({ cartella });
+    await fidaPlugin({ cartellaTrust, pluginId: 'demo', hash: plugin[0].hash });
+
+    let catturato;
+    const talosLavoraFn = talosLavoraFinto({
+      script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+      cattura: (input) => { catturato = input; },
+    });
+    await avviaSessione({
+      cartella, task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+      cartellaTrustPlugin: cartellaTrust,
+    });
+
+    const esegui = catturato.eseguiToolPluginFn;
+    assert.equal(typeof esegui, 'function', 'la sessione ha in mano la funzione di esecuzione');
+
+    // ⛔ Prima dello scambio: la fiducia regge e l'attrezzo ESEGUE davvero.
+    const prima = await esegui('plugin__demo__saluta', {});
+    assert.match(prima, /v1 approvato/, 'con la fiducia intatta l\'attrezzo gira: la riverifica non è un blocco travestito');
+
+    // LO SCAMBIO, a sessione VIVA. Il manifesto non si tocca.
+    writeFileSync(join(pacchetto, 'run.js'), 'console.log("v2 mai approvato");\n', 'utf8');
+
+    const dopo = await esegui('plugin__demo__saluta', {});
+    assert.doesNotMatch(dopo, /v2 mai approvato/, 'il codice scambiato NON deve girare');
+    assert.match(dopo, /contenuto di questo plugin è cambiato da quando l'hai approvato/i, 'e la persona legge una frase, non un codice');
+    assert.doesNotMatch(dopo, /sha256|PLUGIN_[A-Z_]+|contenuto-cambiato/, 'niente nomi tecnici nel messaggio');
+  } finally {
+    rimuoviCartellaDiProva(cartella);
+    rimuoviCartellaDiProva(cartellaTrust);
+  }
+});
+
+test('⛔⛔ A2 — se il pacchetto non si legge più, l\'attrezzo NON gira e lo dice', async () => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-a2b-'));
+  const cartellaTrust = mkdtempSync(join(tmpdir(), 'talos-a2b-trust-'));
+  const pacchetto = join(cartella, '.harness-ui-plugins', 'demo');
+  try {
+    mkdirSync(pacchetto, { recursive: true });
+    writeFileSync(join(pacchetto, 'plugin.json'), JSON.stringify({
+      nome: 'demo', descrizione: 'd', tools: [{ nome: 'saluta', descrizione: 'd', comando: 'node run.js' }],
+    }), 'utf8');
+    writeFileSync(join(pacchetto, 'run.js'), 'console.log("v1");\n', 'utf8');
+    const { plugin } = await caricaPlugin({ cartella });
+    await fidaPlugin({ cartellaTrust, pluginId: 'demo', hash: plugin[0].hash });
+
+    let catturato;
+    await avviaSessione({
+      cartella, task: TASK, modello: 'm', chiave: 'k', onEvento: () => {},
+      talosLavoraFn: talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (i) => { catturato = i; } }),
+      cartellaTrustPlugin: cartellaTrust,
+    });
+
+    // Il pacchetto sparisce mentre la sessione è viva.
+    rimuoviCartellaDiProva(pacchetto);
+    const esito = await catturato.eseguiToolPluginFn('plugin__demo__saluta', {});
+    /*
+     * ⛔ Una cartella sparita dà una camminata VUOTA, non un errore: l'impronta esiste ancora ed è
+     * diversa da quella approvata ⇒ si finisce sul «contenuto cambiato», che è l'esito giusto.
+     * Ciò che conta, e che si asserisce, è che NON esegua e che lo dica con una frase.
+     */
+    assert.match(esito, /^⛔ /, 'un rifiuto si vede');
+    assert.doesNotMatch(esito, /PLUGIN_[A-Z_]+/, 'niente codici tecnici a schermo');
+  } finally {
+    rimuoviCartellaDiProva(cartella);
+    rimuoviCartellaDiProva(cartellaTrust);
+  }
 });

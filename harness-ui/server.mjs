@@ -23,7 +23,7 @@ import { creaGestoreTerminaleWs } from './src/terminal-ws.mjs';
 import { misuraCapacitaMacchina } from './src/machine-capacity.mjs';
 import { createLocalModelStore } from './src/local-model-store.mjs';
 import { createOpenAiCompatibleRuntime } from './src/openai-compatible-runtime.mjs';
-import { ID_MOTORI_LOCALI_OPENAI } from './src/provider-registry.mjs'; // 12/09, P-C: i motori locali li nomina il registro, non due letterali
+import { ID_MOTORI_LOCALI_OPENAI, REGISTRO_FORNITORI } from './src/provider-registry.mjs'; // 12/09, P-C: i motori locali li nomina il registro, non due letterali
 import { createHfHubClient } from './src/hf-hub-client.mjs';
 import { createHfDirectTransfer } from './src/hf-direct-transfer.mjs';
 import { fetchAllowedHfImage } from './src/hf-image-proxy.mjs';
@@ -32,7 +32,9 @@ import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
 import { createProviderProbe } from './src/provider-probe.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
 import { createGeneratedImageStore } from './src/generated-image-store.mjs';
-import { createOwnerRuntimeAdapter } from './src/runtime-owner-adapter.mjs';
+import { createOwnerRuntimeAdapter, creaFetchMultiProvider } from './src/runtime-owner-adapter.mjs';
+/* ⛔ CLI-REQ-05: per rispondere «di CHI è questo modello» senza inventarsi un secondo registro. */
+import { separaFonteModello } from './src/model-destination.mjs';
 import { createDesktopContextRuntime, resolveDesktopContextProfile } from './src/context-runtime.mjs';
 import { createContextTokenCounter, buildPreparedDesktopContextRequest } from './src/context-token-counters.mjs';
 import { createChatImageStore } from './src/chat-image-attachments.mjs';
@@ -170,49 +172,55 @@ async function startServer() {
       return modelli.find(modello => modello.id === modelId) ?? null;
     } catch { return null; }
   };
+  /*
+   * ⭐⭐⭐ 03/9 — da qui passano i modelli che NON sono di OpenRouter.
+   * La chiave viene dal portachiavi del computer e non tocca mai il
+   * browser; l'indirizzo è quello che la persona ha impostato nella scheda
+   * Provider, cioè lo stesso con cui il pulsante «Prova» l'ha verificato:
+   * instradare con parametri diversi da quelli provati renderebbe la prova
+   * una bugia.
+   *
+   * ⛔ 17/09 (CLI-REQ-05): estratto in una costante perché adesso serve DUE volte — all'adattatore
+   *   del runtime e alla destinazione che il registro delle sessioni usa per compattazione e
+   *   giudice. Una copia per cliente sarebbe due instradamenti che divergono.
+   */
+  const destinazioneModelloDeps = {
+    leggiChiave: (fonte) => { try { return providerStore.getKey(fonte); } catch { return null; } },
+    leggiRuntime: (fonte) => { try { return providerStore.getRuntime(fonte); } catch { return {}; } },
+    localePronto: () => supervisoreLocale?.status?.()?.state === 'ready',
+    /*
+     * ⛔ Si passa il PONTE, non la chiave: `request()` del supervisore
+     * aggiunge da sé l'`--api-key` generata all'avvio, che non deve essere
+     * copiata da nessuna parte — men che meno in una risposta HTTP.
+     */
+    chiamaLocale: (percorso, opzioni) => supervisoreLocale.request(percorso, opzioni),
+    /*
+     * ⭐⭐⭐ 3/9 — owner, dal vivo: "non è così che si deve fare... deve
+     * partire tutto in automatico". LM Studio/Ollama caricano il modello
+     * alla prima richiesta, nessun passo manuale — stesso principio qui:
+     * chi risolve la destinazione, se trova il motore spento, chiama
+     * QUESTA funzione invece di arrendersi. `localRuntimes['llama.cpp']`
+     * non esiste ancora in questo punto del file (viene costruito più
+     * sotto): la freccia qui sotto lo referenzia per closure, non lo usa
+     * subito — `avviaLocale` viene CHIAMATA solo durante una richiesta
+     * vera, ben dopo che il server ha finito di avviarsi. Se il runtime
+     * llama.cpp non è configurato affatto (nessun `TALOS_LLAMA_SERVER_PATH`),
+     * `localRuntimes['llama.cpp']` è `undefined` e l'errore che risale è
+     * quello vero — "non configurato", non un silenzio.
+     */
+    avviaLocale: (modelId) => {
+      const runtime = localRuntimes['llama.cpp'];
+      if (!runtime) { const errore = new Error('Il motore locale non è configurato su questo server.'); errore.code = 'LOCAL_RUNTIME_NOT_CONFIGURED'; throw errore; }
+      return runtime.load(modelId);
+    },
+  };
+
   const ownerRuntime = createOwnerRuntimeAdapter({
     providerStore,
     resolveImagesFn: messages => chatImageStore.resolveMessages(messages),
     modulePath: config.ownerRuntimeModule,
     openRouterRuntimeFn: () => providerStore.getRuntime('openrouter'),
-    /*
-     * ⭐⭐⭐ 03/9 — da qui passano i modelli che NON sono di OpenRouter.
-     * La chiave viene dal portachiavi del computer e non tocca mai il
-     * browser; l'indirizzo è quello che la persona ha impostato nella scheda
-     * Provider, cioè lo stesso con cui il pulsante «Prova» l'ha verificato:
-     * instradare con parametri diversi da quelli provati renderebbe la prova
-     * una bugia.
-     */
-    destinazioneModelloDeps: {
-      leggiChiave: (fonte) => { try { return providerStore.getKey(fonte); } catch { return null; } },
-      leggiRuntime: (fonte) => { try { return providerStore.getRuntime(fonte); } catch { return {}; } },
-      localePronto: () => supervisoreLocale?.status?.()?.state === 'ready',
-      /*
-       * ⛔ Si passa il PONTE, non la chiave: `request()` del supervisore
-       * aggiunge da sé l'`--api-key` generata all'avvio, che non deve essere
-       * copiata da nessuna parte — men che meno in una risposta HTTP.
-       */
-      chiamaLocale: (percorso, opzioni) => supervisoreLocale.request(percorso, opzioni),
-      /*
-       * ⭐⭐⭐ 3/9 — owner, dal vivo: "non è così che si deve fare... deve
-       * partire tutto in automatico". LM Studio/Ollama caricano il modello
-       * alla prima richiesta, nessun passo manuale — stesso principio qui:
-       * chi risolve la destinazione, se trova il motore spento, chiama
-       * QUESTA funzione invece di arrendersi. `localRuntimes['llama.cpp']`
-       * non esiste ancora in questo punto del file (viene costruito più
-       * sotto): la freccia qui sotto lo referenzia per closure, non lo usa
-       * subito — `avviaLocale` viene CHIAMATA solo durante una richiesta
-       * vera, ben dopo che il server ha finito di avviarsi. Se il runtime
-       * llama.cpp non è configurato affatto (nessun `TALOS_LLAMA_SERVER_PATH`),
-       * `localRuntimes['llama.cpp']` è `undefined` e l'errore che risale è
-       * quello vero — "non configurato", non un silenzio.
-       */
-      avviaLocale: (modelId) => {
-        const runtime = localRuntimes['llama.cpp'];
-        if (!runtime) { const errore = new Error('Il motore locale non è configurato su questo server.'); errore.code = 'LOCAL_RUNTIME_NOT_CONFIGURED'; throw errore; }
-        return runtime.load(modelId);
-      },
-    },
+    destinazioneModelloDeps,
     modelCapabilityFn: readModelCapabilities,
   });
   let taskCatalogProvider = null;
@@ -416,6 +424,56 @@ async function startServer() {
     modello: config.modello,
     chiave: config.chiaveApi,
     chiaveFn: () => providerStore.getKey('openrouter') ?? config.chiaveApi,
+    /*
+     * ⛔⛔⛔ CLI-REQ-05, punto 1 (17/09/2026) — CHI RISPONDE A «QUESTO MODELLO SI PUÒ USARE».
+     *
+     * Il registro non conosce i fornitori: conosceva solo `chiaveFn`, che è la chiave di
+     * OpenRouter, e rifiutava QUALUNQUE sessione non locale senza di essa — anche una sessione
+     * DeepSeek con la chiave DeepSeek già salvata, con un messaggio che nomina
+     * `OPENROUTER_API_KEY`, una variabile che quella persona non ha mai impostato.
+     * ⇒ La domanda la risponde l'host, che ha il portachiavi, e la risposta parla del fornitore
+     *   DEL MODELLO col suo nome umano. Sincrona: non serve rete, e `avviaESegui` non è `async`.
+     * ⛔ Un fornitore che non richiede credenziale (`chiaveObbligatoria: false`) è pronto per
+     *   costruzione: non gli si chiede una chiave che non esiste.
+     */
+    prontoFn: (modello) => {
+      /*
+       * ⛔⛔⛔ D2 del terzo giro (17/09/2026) — FALLIVA APERTO, ed è il verso peggiore.
+       *
+       * Con `modello` vuoto, `null` o `undefined` questa funzione rispondeva `{pronto: true}` e la
+       * sessione partiva: PRIMA della cura un modello assente veniva rifiutato dal controllo sulla
+       * chiave, dopo passava. Una cura che apre una porta che era chiusa è peggio del difetto che
+       * chiude. ⇒ Un modello che non si sa leggere NON è pronto, e lo dice.
+       */
+      if (typeof modello !== 'string' || modello.trim() === '') {
+        return { pronto: false, codice: 'CONFIG_INVALID', messaggio: 'Scegli un modello prima di avviare la sessione.' };
+      }
+      let fonte;
+      try { ({ fonte } = separaFonteModello(modello)); }
+      catch { return { pronto: false, codice: 'CONFIG_INVALID', messaggio: 'Questo modello non è riconosciuto: scegline uno dall\'elenco.' }; }
+      const record = REGISTRO_FORNITORI[fonte];
+      /* ⛔ `codice` e `messaggio` solo quando c'è qualcosa da dire: un «pronto» non porta un codice d'errore. */
+      if (!record || record.chiaveObbligatoria !== true) return { pronto: true, fornitore: record?.etichetta ?? fonte };
+      const pronto = fonte === 'openrouter'
+        ? Boolean(providerStore.getKey('openrouter') ?? config.chiaveApi)
+        : providerStore.hasKey(fonte);
+      return pronto
+        ? { pronto: true, fornitore: record.etichetta }
+        : {
+          pronto: false,
+          fornitore: record.etichetta,
+          codice: 'CONFIG_INVALID',
+          messaggio: `Manca la chiave di ${record.etichetta}: collegala da Fornitori e accessi.`,
+        };
+    },
+    /*
+     * ⛔⛔⛔ CLI-REQ-05, punto 2 e 3 — LA STESSA DESTINAZIONE CHE USA UN GIRO NORMALE.
+     * Senza questa, la compattazione e il giudice della ricerca partivano con una `fetch` nuda, e
+     * il kernel spedisce a un indirizzo FISSO di OpenRouter: la conversazione intera di una
+     * sessione DeepSeek se ne andava lì. `destinazioneModelloDeps` è la stessa che sceglie
+     * fornitore, indirizzo e chiave per ogni turno — una fonte sola, non una seconda copia.
+     */
+    fetchModelloFn: () => creaFetchMultiProvider(fetch, { dipendenze: destinazioneModelloDeps }),
     cartelleProgetto: config.cartelleProgetto,
     taskCatalogProvider,
     ricercaWeb: config.ricercaWeb, // seme dell'ambiente: resta per compatibilità, ma è ricercaWebFn a valere a ogni giro

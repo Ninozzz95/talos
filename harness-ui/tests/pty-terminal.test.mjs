@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+  ambienteDelTerminale,
   BACKLOG_MASSIMO_BYTE,
   codificaFrame,
   creaRegistroTerminali,
@@ -10,6 +12,8 @@ import {
   sceltaShell,
   TIPO_FRAME_CONTROLLO,
   TIPO_FRAME_DATI,
+  VARIABILI_DEL_SERVER_DICHIARATE_INNOCUE,
+  VARIABILI_SOLO_DEL_SERVER,
 } from '../src/pty-terminal.mjs';
 
 /**
@@ -191,6 +195,264 @@ test('⭐⭐⭐ codificaFrame/decodificaFrame: round-trip per entrambi i tipi', 
 test('⛔⛔⛔ AL CONTRARIO — decodificaFrame su input vuoto o tipo ignoto torna null, mai un crash', () => {
   assert.equal(decodificaFrame(Buffer.alloc(0)), null);
   assert.equal(decodificaFrame(Buffer.from([99, 1, 2, 3])), null);
+});
+
+/*
+ * ⛔⛔⛔ CLI-REQ-04 (17/09/2026) — IL TERMINALE NON EREDITA I SEGRETI DEL SERVER.
+ *
+ * Fino a oggi `apri` passava `env: process.env`, cioè l'ambiente INTERO del server: dentro ci
+ * sono il token di loopback che protegge tutta la nostra API, la chiave privata delle ricevute e
+ * la chiave della fonte di ricerca web. Un `npm install` con i suoi script di installazione,
+ * lanciato dalla persona in questa scheda, poteva leggerli.
+ *
+ * ⛔ Il verso opposto conta quanto questo, ed è il motivo per cui l'elenco è CHIUSO e non a forma:
+ * il terminale è della PERSONA («un terminale vero e proprio [...] che non ha limiti», intestazione
+ * di `pty-terminal.mjs`). `GH_TOKEN`, `NPM_TOKEN`, `PATH`, `HOME` sono suoi e devono restare — un
+ * filtro «tutto ciò che sembra una credenziale» farebbe fallire `gh` e `npm publish` dentro TALOS
+ * e funzionare nella Git Bash della stessa macchina.
+ *
+ * ⛔⛔ SECONDO GIRO (B4): i nomi sono scritti QUI PER ESTESO, non presi iterando l'elenco del
+ * prodotto. La versione precedente scorreva `VARIABILI_SOLO_DEL_SERVER` nei due versi, quindi con
+ * un elenco VUOTO non asseriva niente e passava per costruzione — una misura che non può
+ * smentirti non sta misurando. Adesso togliere un nome dal prodotto fa diventare rossa questa
+ * riga, ed è quello che deve succedere.
+ */
+const SEGRETI_DEL_SERVER_ATTESI = [
+  'TALOS_HARNESS_UI_TOKEN',
+  'TALOS_HARNESS_RECEIPT_KEY_ID',
+  'TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64',
+  'TALOS_HARNESS_SEARCH_API_KEY',
+  'ELECTRON_RUN_AS_NODE',
+];
+
+test('⛔⛔⛔ CLI-REQ-04 — il terminale NON eredita i segreti del server, asseriti UNO PER UNO per nome', () => {
+  // ⛔ Valori FINTI: un segreto vero non entra mai in una prova né in un log.
+  const finti = {
+    TALOS_HARNESS_UI_TOKEN: 'a'.repeat(64),
+    TALOS_HARNESS_RECEIPT_KEY_ID: 'chiave-finta-di-prova',
+    TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64: 'b'.repeat(64),
+    TALOS_HARNESS_SEARCH_API_KEY: 'tvly-' + 'd'.repeat(32),
+    ELECTRON_RUN_AS_NODE: '1',
+    GH_TOKEN: 'ghp_' + 'c'.repeat(36),
+    HOME: '/casa/di-prova',
+  };
+  const precedenti = Object.fromEntries(Object.keys(finti).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, finti);
+  try {
+    const { registro, ptyCreate } = registroPerTest();
+    registro.apri({ id: 'a', cartella: 'C:/x' });
+    const ambiente = ptyCreate[0].opzioni.env;
+
+    // Uno per uno, scritti a mano: nessuna iterazione su una lista che potrebbe essere vuota.
+    assert.equal(ambiente.TALOS_HARNESS_UI_TOKEN, undefined, 'il token di loopback non deve arrivare alla shell');
+    assert.equal(ambiente.TALOS_HARNESS_RECEIPT_KEY_ID, undefined, 'l\'id della chiave ricevute nemmeno');
+    assert.equal(ambiente.TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64, undefined, 'la chiave privata delle ricevute nemmeno');
+    assert.equal(ambiente.TALOS_HARNESS_SEARCH_API_KEY, undefined, 'la chiave della ricerca web nemmeno');
+    assert.equal(ambiente.ELECTRON_RUN_AS_NODE, undefined, 'e nemmeno il commutatore che fa partire Electron come Node');
+
+    // ⛔ «Zero» confermato al contrario: quelle variabili ci sono DAVVERO nell'ambiente del server.
+    for (const nome of SEGRETI_DEL_SERVER_ATTESI) {
+      assert.equal(process.env[nome], finti[nome], `${nome} doveva essere addosso al processo, o la prova sopra è vuota`);
+    }
+
+    // La metà «senza limiti»: la roba della persona resta, per nome.
+    assert.equal(ambiente.GH_TOKEN, finti.GH_TOKEN);
+    assert.equal(ambiente.HOME, finti.HOME);
+    const percorso = ambiente.PATH ?? ambiente.Path;
+    assert.ok(typeof percorso === 'string' && percorso.length > 0, 'PATH/Path deve arrivare alla shell');
+  } finally {
+    for (const [k, v] of Object.entries(precedenti)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+});
+
+test('⛔⛔ CLI-REQ-04 — l\'elenco del prodotto contiene esattamente i nomi decisi, né uno in più né uno in meno', () => {
+  /*
+   * ⛔ Il confronto è sugli INSIEMI: un nome tolto dal prodotto e uno aggiunto senza decisione
+   * fanno rossa questa riga allo stesso modo. È il contrappeso alla prova qui sopra, che guarda
+   * il comportamento; questa guarda la DICHIARAZIONE.
+   */
+  assert.deepEqual([...VARIABILI_SOLO_DEL_SERVER].sort(), [...SEGRETI_DEL_SERVER_ATTESI].sort());
+});
+
+test('⛔⛔ CLI-REQ-04 — la riconnessione resta invariata: un secondo apri sullo stesso id vivo non rispawna', () => {
+  const { registro, ptyCreate } = registroPerTest();
+  registro.apri({ id: 'a', cartella: 'C:/x' });
+  registro.apri({ id: 'a', cartella: 'C:/x' });
+  assert.equal(ptyCreate.length, 1);
+});
+
+test('⛔ CLI-REQ-04 AL CONTRARIO — ambienteDelTerminale lascia passare tutto il resto e scarta gli undefined', () => {
+  const dentro = ambienteDelTerminale({
+    TALOS_HARNESS_UI_TOKEN: 'a'.repeat(64),
+    MIA_VARIABILE: 'resta',
+    SENZA_VALORE: undefined,
+  });
+  assert.deepEqual(dentro, { MIA_VARIABILE: 'resta' });
+});
+
+/*
+ * ⛔⛔⛔ CLI-REQ-04, punto (a) — L'ELENCO NON DEVE INVECCHIARE IN SILENZIO.
+ *
+ * Un elenco chiuso è giusto oggi e sbagliato il giorno in cui qualcuno mette nell'ambiente del
+ * figlio una variabile nuova: nessuno se ne accorgerebbe, perché il risultato sbagliato (una
+ * variabile che passa) ha lo stesso aspetto di quello giusto.
+ *
+ * ⛔⛔ SECONDO GIRO (B4) — LA GUARDIA SI AGGIRAVA, E ADESSO FALLISCE CHIUSA. La prima versione
+ * cercava `ambiente.NOME =` e le chiavi dentro `Object.assign(ambiente, { ... })`: bastava
+ * scrivere `ambiente['X'] = …`, uno spread `...altro`, un secondo `Object.assign` o un nome
+ * minuscolo per passarle davanti senza che protestasse. Una guardia che non sa leggere una forma
+ * deve NEGARE, non tacere (è la lezione «una guardia che esplode è assente», al contrario).
+ * ⇒ Adesso ogni occorrenza della parola `ambiente` nel corpo di `creaAvvioFiglio` va classificata:
+ * se non è una delle forme che questa prova sa leggere, la prova è ROSSA e stampa il testo che
+ * non ha saputo leggere.
+ */
+function corpoDiCreaAvvioFiglio(sorgente) {
+  const inizio = sorgente.indexOf('export function creaAvvioFiglio');
+  assert.notEqual(inizio, -1, 'creaAvvioFiglio non trovata in runtime.mjs: il filtro è rotto');
+  const fine = sorgente.indexOf('\n}', inizio);
+  assert.notEqual(fine, -1, 'fine di creaAvvioFiglio non trovata');
+  return sorgente.slice(inizio, fine);
+}
+
+/** Le forme note, in ordine: ognuna consuma il testo che ha letto, e ciò che avanza è un rifiuto. */
+function nomiMessiNellAmbiente(corpo) {
+  const nomi = new Set();
+  let resto = corpo;
+  const consuma = (regexp, raccogli) => {
+    resto = resto.replace(regexp, (...args) => { raccogli?.(...args); return ' \u0000 '; });
+  };
+  // 1 · `Object.assign(ambiente, { CHIAVE: ..., ... })` — un oggetto letterale, senza spread.
+  consuma(/Object\.assign\(ambiente,\s*\{([^{}]*)\}\s*\)/g, (_tutto, dentro) => {
+    assert.ok(!dentro.includes('...'), `spread dentro Object.assign(ambiente, …): la guardia non sa leggerlo → ${dentro.trim()}`);
+    for (const m of dentro.matchAll(/(?:^|,)\s*([A-Za-z_$][\w$]*)\s*:/g)) nomi.add(m[1]);
+  });
+  // 2 · `ambiente.NOME = ...` e `delete ambiente.NOME` (il delete non AGGIUNGE, ma è una forma nota).
+  consuma(/delete\s+ambiente\.([A-Za-z_$][\w$]*)/g);
+  consuma(/\bambiente\.([A-Za-z_$][\w$]*)\s*=/g, (_tutto, nome) => nomi.add(nome));
+  // 3 · Letture innocue: la dichiarazione e il passaggio a `spawn`.
+  consuma(/const\s+ambiente\s*=/g);
+  consuma(/env:\s*ambiente\b/g);
+  // ⛔ Tutto ciò che nomina ancora `ambiente` è una forma che questa guardia NON sa leggere.
+  const avanzi = [...resto.matchAll(/.{0,60}\bambiente\b.{0,60}/g)].map((m) => m[0].trim());
+  assert.deepEqual(avanzi, [], `forme di scrittura su \`ambiente\` che la guardia non sa leggere:\n  ${avanzi.join('\n  ')}`);
+  return nomi;
+}
+
+test('⛔⛔⛔ CLI-REQ-04 (a) — ogni variabile che runtime.mjs mette nel figlio è tolta o dichiarata innocua per nome', () => {
+  const sorgente = readFileSync(new URL('../desktop/runtime.mjs', import.meta.url), 'utf8');
+  const nomi = nomiMessiNellAmbiente(corpoDiCreaAvvioFiglio(sorgente));
+
+  /*
+   * ⛔ Il filtro che produce `nomi` può rompersi e restituire un insieme VUOTO: allora ogni
+   * asserzione sotto passerebbe per costruzione. Si conferma al contrario, pretendendo di
+   * ritrovare la variabile che questa richiesta esiste per togliere.
+   */
+  assert.ok(nomi.size >= 9, `estratti solo ${nomi.size} nomi da runtime.mjs: il filtro è rotto`);
+  assert.ok(nomi.has('TALOS_HARNESS_UI_TOKEN'), 'il token deve comparire fra i nomi estratti');
+
+  const tolte = new Set(VARIABILI_SOLO_DEL_SERVER.map((n) => n.toUpperCase()));
+  const innocue = new Set(VARIABILI_DEL_SERVER_DICHIARATE_INNOCUE.map((n) => n.toUpperCase()));
+  const nonDecise = [...nomi].filter((n) => !tolte.has(n.toUpperCase()) && !innocue.has(n.toUpperCase()));
+  assert.deepEqual(nonDecise, [], `variabili nuove in runtime.mjs senza una decisione: ${nonDecise.join(', ')}`);
+});
+
+test('⛔⛔ CLI-REQ-04 (a) AL CONTRARIO — la guardia RIFIUTA le forme che non sa leggere', () => {
+  /*
+   * ⛔ Provata nel verso che deve fallire, su quattro forme vere. Senza questa prova la guardia
+   * sarebbe «verde perché non ha guardato», che è esattamente il difetto che deve impedire.
+   */
+  const testa = 'export function creaAvvioFiglio({ env = process.env }) {\n  const ambiente = { ...env };\n';
+  const coda = '\n  return { options: { env: ambiente } };\n}\n';
+  const forme = [
+    ["  ambiente['TALOS_NUOVA'] = 'x';", /non sa leggere/],
+    ['  Object.assign(ambiente, { ...altroOggetto });', /spread/],
+    ['  Object.assign(ambiente, altroOggetto);', /non sa leggere/],
+    ['  const secondo = ambiente;', /non sa leggere/],
+  ];
+  for (const [riga, atteso] of forme) {
+    assert.throws(
+      () => nomiMessiNellAmbiente(corpoDiCreaAvvioFiglio(testa + riga + coda)),
+      atteso,
+      `la guardia deve RIFIUTARE questa forma: ${riga.trim()}`,
+    );
+  }
+  // E nel verso giusto la stessa guardia legge senza protestare.
+  const sana = testa + "  ambiente.TALOS_UNA = 'x';\n  Object.assign(ambiente, { TALOS_DUE: 'y' });" + coda;
+  assert.deepEqual([...nomiMessiNellAmbiente(corpoDiCreaAvvioFiglio(sana))].sort(), ['TALOS_DUE', 'TALOS_UNA']);
+});
+
+/*
+ * ⛔⛔⛔ CLI-REQ-04, B3 del secondo giro — E I SEGRETI CHE IL SERVER LEGGE DA `config.mjs`.
+ *
+ * `runtime.mjs` dice cosa il desktop METTE nell'ambiente del figlio, ma non tutto ciò che è nostro
+ * passa di lì: `config.mjs` legge variabili `TALOS_*` che possono arrivare dall'ambiente della
+ * macchina. `TALOS_HARNESS_SEARCH_API_KEY` (`config.mjs:685`) è il caso che il primo giro non
+ * aveva deciso per nome: è la chiave della fonte di ricerca web, sta nel NOSTRO spazio di nomi,
+ * e quindi va tolta — criterio dell'owner, «si toglie ciò che esiste perché TALOS lo usa, non le
+ * credenziali della persona».
+ *
+ * ⛔ La forma di credenziale qui è deliberatamente PIÙ LARGA di `eUnaCredenziale()` del kernel, e
+ * la differenza è essa stessa una misura: `eUnaCredenziale('TALOS_HARNESS_RECEIPT_KEY_ID')` è
+ * `false` (misurato il 17/09/2026) perché la sua regexp ha `_KEY$` e `^KEY_` ma non `_KEY_`.
+ * Usare la regexp del kernel qui vorrebbe dire non accorgersi proprio del nome che conta.
+ */
+const FORMA_DI_SEGRETO = /TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE|AUTH|_KEY_|_KEY$|API_KEY/;
+
+test('⛔⛔⛔ CLI-REQ-04 (B-1) — OGNI segreto letto da config.mjs è deciso per nome, anche quelli NON `TALOS_*`', () => {
+  /*
+   * ⛔ Il primo giro guardava solo i nomi `TALOS_*`, e `OPENROUTER_API_KEY`/`HF_TOKEN` passavano
+   *   senza che nessuno avesse deciso niente. Passare per distrazione e passare per decisione si
+   *   somigliano: è esattamente la cosa che questa guardia esiste per separare.
+   * ⇒ Adesso legge TUTTI i nomi con forma di credenziale che `config.mjs` prende dall'ambiente, e
+   *   pretende che ognuno stia in uno dei due elenchi — tolto, oppure lasciato APPOSTA.
+   */
+  const sorgente = readFileSync(new URL('../src/config.mjs', import.meta.url), 'utf8');
+  const tutti = new Set([...sorgente.matchAll(/\benv\.([A-Z][A-Z0-9_]+)/g)].map((m) => m[1]));
+  assert.ok(tutti.size >= 20, `estratti solo ${tutti.size} nomi da config.mjs: il filtro è rotto`);
+
+  const segreti = [...tutti].filter((n) => FORMA_DI_SEGRETO.test(n)).sort();
+  /*
+   * ⛔ «Zero» si conferma al contrario: si pretende di ritrovare per nome i sei che oggi sappiamo
+   *   esserci — i quattro nostri e i due della persona. Se il filtro si rompesse, questa riga lo
+   *   direbbe invece di lasciar passare una lista vuota.
+   */
+  assert.deepEqual(segreti, [
+    'HF_TOKEN',
+    'OPENROUTER_API_KEY',
+    'TALOS_HARNESS_RECEIPT_KEY_ID',
+    'TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64',
+    'TALOS_HARNESS_SEARCH_API_KEY',
+    'TALOS_HARNESS_UI_TOKEN',
+  ]);
+
+  const decisi = new Set([...VARIABILI_SOLO_DEL_SERVER, ...VARIABILI_DEL_SERVER_DICHIARATE_INNOCUE]
+    .map((n) => n.toUpperCase()));
+  const indecisi = segreti.filter((n) => !decisi.has(n.toUpperCase()));
+  assert.deepEqual(indecisi, [], `segreti letti da config.mjs e mai decisi: ${indecisi.join(', ')}`);
+
+  // ⛔ E la decisione è quella dell'owner, non una a caso: le due della PERSONA restano.
+  assert.ok(VARIABILI_DEL_SERVER_DICHIARATE_INNOCUE.includes('OPENROUTER_API_KEY'));
+  assert.ok(VARIABILI_DEL_SERVER_DICHIARATE_INNOCUE.includes('HF_TOKEN'));
+  const ambiente = ambienteDelTerminale({ OPENROUTER_API_KEY: 'sk-finta', HF_TOKEN: 'hf_finta', TALOS_HARNESS_UI_TOKEN: 'a'.repeat(64) });
+  assert.deepEqual(ambiente, { OPENROUTER_API_KEY: 'sk-finta', HF_TOKEN: 'hf_finta' });
+});
+
+test('⛔⛔ CLI-REQ-04 — il confronto dei nomi è SENZA maiuscole, e romperlo deve farsi sentire', () => {
+  /*
+   * ⛔ Su Windows i nomi delle variabili d'ambiente non distinguono maiuscole e minuscole, e
+   *   `runtime.mjs:47` filtra già i suoi con una regexp `/i`. Il confronto qui lo faceva anche
+   *   prima, ma NESSUNA prova lo copriva: toglierlo non faceva cadere niente — cioè era una cura
+   *   senza cancello.
+   */
+  const dentro = ambienteDelTerminale({
+    talos_harness_ui_token: 'a'.repeat(64),
+    Talos_Harness_Receipt_Key_Id: 'finta',
+    electron_run_as_node: '1',
+    MIA: 'resta',
+  });
+  assert.deepEqual(dentro, { MIA: 'resta' }, 'gli stessi nomi in minuscolo devono essere tolti uguale');
 });
 
 /*
