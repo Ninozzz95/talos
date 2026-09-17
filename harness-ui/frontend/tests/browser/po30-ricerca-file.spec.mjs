@@ -89,3 +89,34 @@ test('PO30-CERCA-04 — una risposta IN RITARDO non sovrascrive quella della ric
   await expect(page.locator('#fileRisultati [data-percorso="VECCHIA.md"]'), '⛔ la risposta vecchia ha sovrascritto la nuova').toHaveCount(0);
   await expect(page.locator('#fileRisultati [data-percorso="src/profondo/bersaglio.mjs"]')).toBeVisible();
 });
+
+/*
+ * ⛔⛔ PO-30 (18/09/2026) — «CHI STA TOCCANDO QUESTO FILE». Il dato è quello vero di `GET …/children` (`attivita.file`,
+ * provato nel backend in `tests/attivita-figlia.test.mjs`); qui si misura che la riga lo MOSTRI, che distingua chi è ancora al
+ * lavoro da chi ha finito, e che il segno porti al dettaglio di QUELL'agente.
+ */
+test('PO30-AGENTI-01 — la riga dice chi sta toccando il file, e il segno apre il dettaglio di quell’agente', async ({ page }) => {
+  await page.route('**/api/v1/sessions/po30r-uno/children', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { figli: [
+    { sessionId: 'po30r-figlia-a', task: 'Compito: sistema il readme', taskCorto: 'sistema il readme', conclusa: false, interrotta: false, collisioni: [], attivita: { file: [{ percorso: 'README.md', letto: true, scritto: true, creato: false }], fileTagliati: 0, attrezzoCorrente: null, chiamate: 2 } },
+    { sessionId: 'po30r-figlia-b', task: 'Compito: guarda src', taskCorto: 'guarda src', conclusa: true, interrotta: false, collisioni: [], attivita: { file: [{ percorso: 'src/profondo/bersaglio.mjs', letto: true, scritto: false, creato: false }], fileTagliati: 0, attrezzoCorrente: null, chiamate: 1 } },
+  ] } }) }));
+  await page.route('**/api/v1/sessions/po30r-figlia-*/events*', (r) => r.fulfill({ contentType: 'text/event-stream', body: '' }));
+  await scena(page, { risposta: UNO });
+  await page.evaluate(() => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'd1', toolCallName: 'delega_sottotask', _sequenza: 9200 }, r.realSessionState.generation); r.handleRealEvent({ type: 'ToolCallResult', toolCallId: 'd1', content: 'ok', _sequenza: 9201 }, r.realSessionState.generation); });
+
+  const segno = page.locator('#alberoFile .ft-row', { hasText: 'README.md' }).locator('.talos-file-row__agente');
+  await expect(segno, 'la scena non si è formata: le figlie non sono arrivate alla scheda File').toBeVisible({ timeout: 10_000 });
+  await expect(segno).toHaveAttribute('aria-label', /Lo sta modificando: «sistema il readme»/);
+  await expect(segno).toHaveClass(/is-al-lavoro/);
+  await expect(page.locator('#alberoFile .ft-row', { hasText: 'src' }).first().locator('.talos-file-row__agente'), 'una CARTELLA non porta il segno').toHaveCount(0);
+
+  await page.locator('#alberoFile .ft-row-folder', { hasText: 'src' }).click();
+  await page.locator('#alberoFile .ft-row-folder', { hasText: 'profondo' }).click();
+  const finito = page.locator('#alberoFile .ft-row', { hasText: 'bersaglio.mjs' }).locator('.talos-file-row__agente');
+  await expect(finito).toHaveAttribute('aria-label', /Lo ha toccato: «guarda src»/);
+  await expect(finito, 'chi ha FINITO non tiene acceso il segno').not.toHaveClass(/is-al-lavoro/);
+
+  await segno.click();
+  await expect(page.locator('#railTabs [data-rail="agenti"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('[data-c="PannelloFiglia"] .talos-figlia'), 'il segno deve aprire il dettaglio dell’agente').toBeVisible();
+});
