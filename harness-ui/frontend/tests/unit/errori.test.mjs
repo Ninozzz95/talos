@@ -381,3 +381,38 @@ test('FERMATO-SENZA-PAROLE: il fermo del runtime locale, che arriva col solo cod
   // e con la provenienza resta il cambio di direzione, parole o non parole
   assert.equal(spiegaErrore('', 'fermato', { origine: ORIGINI.REINDIRIZZAMENTO }).id, 'reindirizzato');
 });
+
+/*
+ * ⭐⭐⭐ CLI-REQ-03, metà A SCHERMO (17/09/2026) — LA CHIAVE CHE MANCA NON È UN GUASTO.
+ *
+ * Il server è stato curato nel primo giro; a schermo non cambiava niente, e il revisore l'ha
+ * misurato con un grep: `PROVIDER_KEY_MISSING` compariva zero volte in `frontend/src`. Chi lo
+ * incontrava leggeva la frase dello sconosciuto — «questa forma di errore non è ancora tradotta» —
+ * davanti a una cosa che si risolve in dieci secondi.
+ */
+test('ERRORI-CHIAVE: il codice diventa una frase con il NOME del fornitore, e la famiglia porta la porta', () => {
+  const s = spiegaErrore('Manca la chiave per DeepSeek.', 'PROVIDER_KEY_MISSING');
+  assert.equal(s.id, 'chiave-fornitore-mancante');
+  assert.equal(s.famiglia, 'chiave-fornitore', 'la famiglia è il gancio con cui la chat attacca il bottone');
+  assert.equal(s.riconosciuto, true);
+  assert.equal(s.cosa, 'Manca la chiave per DeepSeek.');
+  assert.match(s.perche, /non è nemmeno partita/);
+  assert.match(s.rimedi[0], /Collega la chiave per DeepSeek/);
+});
+
+test('ERRORI-CHIAVE: un nome COL PUNTO dentro non si tronca', () => {
+  /*
+   * ⛔ Trovato in una FOTO, non rileggendo: la carta diceva «Manca la chiave per Z.». Il nome era
+   *   «Z.AI», e la prima regex si fermava al primo punto — cioè dentro il nome del fornitore che
+   *   questa regola esiste per mostrare.
+   */
+  assert.equal(spiegaErrore('Manca la chiave per Z.AI.', 'PROVIDER_KEY_MISSING').cosa, 'Manca la chiave per Z.AI.');
+  assert.equal(spiegaErrore('Manca la chiave per Z.AI (porta Anthropic).', 'PROVIDER_KEY_MISSING').cosa, 'Manca la chiave per Z.AI (porta Anthropic).');
+});
+
+test('ERRORI-CHIAVE, al contrario: senza nome non se ne inventa uno, e un altro guasto non finisce qui', () => {
+  const senzaNome = spiegaErrore('PROVIDER_KEY_MISSING', 'PROVIDER_KEY_MISSING');
+  assert.equal(senzaNome.cosa, 'Manca la chiave del fornitore scelto.', 'la frase resta vera anche senza nome');
+  /* ⛔ E la regola non si prende errori che non sono suoi: un rifiuto del fornitore resta tale. */
+  assert.notEqual(spiegaErrore('Il fornitore non ha accettato la richiesta.', 'PROVIDER_REQUEST_ERROR').famiglia, 'chiave-fornitore');
+});

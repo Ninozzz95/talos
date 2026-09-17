@@ -153,6 +153,52 @@ export function senzaChiave(fonte) {
   return PROVIDER_DIRETTI.some((p) => p.id === fonte && p.senzaChiave === true);
 }
 
+/*
+ * ⭐⭐⭐ BC-61, secondo giro (17/09/2026) — IL NOME UMANO DI UN FORNITORE, IN UN POSTO SOLO.
+ *
+ * Il primo giro leggeva il nome da `PROVIDER_DIRETTI` e teneva il ponte fra le grafie dentro
+ * `workspace-footer.js`. Il revisore ha misurato due buchi:
+ *  · D13 — `openrouter`, `ollama` e `local` NON stanno in `PROVIDER_DIRETTI` (è l'elenco dei
+ *    fornitori DIRETTI, e quei tre non lo sono) ⇒ il piede restava muto proprio per i fornitori
+ *    che la app elenca per primi: chi lavora via OpenRouter non leggeva niente;
+ *  · D14 — la cassa: `Z-AI/glm-…` non è `z-ai/glm-…`, e un id scritto in maiuscolo tornava ignoto.
+ * ⇒ Il ponte vive QUI, accanto alla mappa che completa, e non in casa di chi la consuma.
+ *
+ * ⛔ Le tre voci nuove non sono nomi inventati: sono gli stessi che la striscia delle fonti già
+ *   scrive due funzioni più in basso («OpenRouter», «Locali») e che il registro del backend usa.
+ *   Un quarto nome scritto a mano sarebbe la terza mappa che questa corsia sta togliendo.
+ */
+const NOMI_FUORI_DAI_DIRETTI = Object.freeze({
+  openrouter: 'OpenRouter',
+  ollama: 'Ollama',
+  /* ⛔ «locale» resta «locale», la parola che il piede scrive dal 05/09 ed è documentata in testa a
+     `workspace-footer.js`. Non è un fornitore: è «gira su questo computer». Cambiarla qui sarebbe
+     un ritocco di copia che nessuno ha chiesto, dentro un giro che cura tutt'altro. */
+  local: 'locale',
+  locale: 'locale',
+  locali: 'locale',
+});
+
+/* Le due grafie dello stesso fornitore: API diretta ↔ prefisso del catalogo OpenRouter. */
+const PONTE_CATALOGO = Object.freeze({
+  'z-ai': 'zai', 'x-ai': 'xai', google: 'gemini', moonshotai: 'kimi', mistralai: 'mistral',
+});
+
+/**
+ * Il nome umano di un fornitore, o `null` se nessuna mappa lo conosce.
+ * ⛔ Di un fornitore che non si sa nominare non si scrive l'ID: chi chiama tace la sua metà. Le
+ *   tre strade erano inventare un nome (bugia), stampare l'id (il difetto) o lasciare un buco
+ *   visibile — e la lezione del 10/09 sul tema «Violet» dice che un ripiego che trasforma un buco
+ *   in una bugia è peggio del buco.
+ */
+export function nomeFornitore(id) {
+  const chiave = String(id ?? '').trim().toLowerCase(); // D14: `Z-AI` e `z-ai` sono lo stesso fornitore
+  if (chiave === '') return null;
+  if (Object.hasOwn(NOMI_FUORI_DAI_DIRETTI, chiave)) return NOMI_FUORI_DAI_DIRETTI[chiave];
+  const cercato = PONTE_CATALOGO[chiave] || chiave;
+  return PROVIDER_DIRETTI.find((p) => p.id === cercato)?.etichetta ?? null;
+}
+
 const ID_DIRETTI = new Set(PROVIDER_DIRETTI.map((p) => p.id));
 
 /** Vero se la scheda è uno dei tre fornitori diretti (e non OpenRouter o i locali). */

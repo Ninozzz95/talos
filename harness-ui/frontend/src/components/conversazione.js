@@ -27,6 +27,13 @@
  */
 
 import { scorrevoleConversazione } from '../bridge/conversazione-dom.js';
+/*
+ * ⛔ BC-60, 17/09 — il menu è QUELLO DEL PROGETTO, non un secondo menu scritto qui. `schede.js`
+ *   lo espone da quando il Terminale e la Revisione lo condividono (BC-63, 17/09): stessa
+ *   grammatica visiva, stessa tastiera, stessa chiusura. Un menu nuovo a una settimana di
+ *   distanza sarebbe stato la terza implementazione di una cosa che il progetto ha già.
+ */
+import { apriMenuContestuale, creaMenuContestuale } from './schede.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -176,12 +183,74 @@ export function creaMessaggioTalos({ modello = '', ora = '', paragrafi = [] } = 
   return messaggio;
 }
 
-/** Le azioni sulla risposta (copia · ascolta · chiedi di nuovo), come nel mockup: si vedono al passaggio del mouse. */
+/** L'id del menu della risposta: UNO per tutta la conversazione, come il menu delle schede. */
+const ID_MENU_RISPOSTA = 'menuRispostaMessaggio';
+
+/*
+ * ⭐ 17/09, D4 della revisione — LE FRASI NUOVE STANNO IN UNA TABELLA, non sparse inline.
+ *
+ * Il cancello `i18n-copertura` misura la copertura dell'inglese sulle TABELLE dichiarate
+ * (`TESTI_TERMINALE`, `TESTI_BROWSER`, `NOMI_UMANI_ATTREZZI`…): una frase scritta a mano dentro una
+ * funzione non è nemmeno misurabile, quindi «non tradotta» e «non vista dal cancello» hanno lo
+ * stesso aspetto. Qui stanno tutte insieme, e il cancello le legge.
+ */
+export const TESTI_MESSAGGIO = Object.freeze({
+  azioniRisposta: 'Azioni sulla risposta',
+  azioniTuo: 'Azioni sul tuo messaggio',
+  altreAzioni: 'Altre azioni sulla risposta',
+  altreAzioniGiroVivo: 'Altre azioni sulla risposta — eliminare si può a giro finito',
+  copiaRisposta: 'Copia la risposta',
+  copiaTuo: 'Copia il tuo messaggio',
+  ascolta: 'Ascolta la risposta',
+  riusa: 'Riusa nel composer',
+  chiediDiNuovo: 'Chiedi di nuovo',
+  eliminaRisposta: 'Elimina la risposta',
+  confermaEliminaRisposta: 'Confermi? Elimina la risposta',
+  eliminaMessaggio: 'Elimina il messaggio',
+  confermaEliminaMessaggio: 'Confermi? Elimina anche la risposta',
+  vediModifiche: 'Visualizza le modifiche',
+  unFileModificato: '1 file modificato',
+  fileModificati: '{n} file modificati',
+  invitoCartella: 'Scegli una cartella',
+  invitoRiga: 'Per iniziare scegli una cartella: TALOS legge e scrive solo lì dentro.',
+  invitoNotaSenzaModello: 'Il modello si sceglie dalla pillola qui sotto.',
+  collegaModello: 'Collega un modello',
+});
+
+/**
+ * ⭐⭐⭐ BC-60 (17/09/2026) — LE AZIONI SULLA RISPOSTA: DUE IN RIGA, IL RESTO NEL «⋯».
+ *
+ * Prima di oggi qui c'erano TRE icone affiancate — Copia, Ascolta, Chiedi di nuovo — e
+ * nient'altro: nessun «⋯», nessun tasto destro, e soprattutto nessun Elimina. Tre regole
+ * dell'owner violate in una riga sola: 10/09 «più di due azioni su un oggetto ⇒ un menu "⋯" più
+ * il tasto destro»; 13/09 «riga e menu: intersezione vuota, unione completa — e una lista di
+ * azioni si giudica da ciò che MANCA»; 11/09 CRUD completo su ogni entità che la persona vede.
+ *
+ * ⛔ La spartizione, e perché è questa: in riga restano le due azioni che si fanno senza pensarci
+ *   e che non cambiano niente — copiare e ascoltare. Nel menu va ciò che costa (un altro giro col
+ *   modello) e ciò che distrugge (Elimina). Nessuna azione sta in tutti e due i posti, e nessuna
+ *   azione esiste fuori da questi due posti: intersezione vuota, unione completa.
+ * ⛔ Il «⋯» NON è una terza azione: è il modo di raggiungere le altre. Se l'ascolto non c'è
+ *   (sintesi vocale assente) la riga scende a un'azione sola, non ne promuove una dal menu —
+ *   promuoverla romperebbe l'intersezione vuota a ogni macchina diversa.
+ *
+ * Ricerca 17/09/2026 (W3C APG «Menu Button Pattern»): il pulsante che apre un menu dichiara
+ * `aria-haspopup="menu"` e tiene `aria-expanded` aggiornato; il menu si àncora al pulsante.
+ *
+ * @param {{ascolta?:boolean}} forma
+ * @param {{document?:Document, finestra?:object, radiceMenu?:ParentNode, ospiteTastoDestro?:HTMLElement,
+ *          vociMenu?:() => Array<{testo:string, fai:Function, conferma?:string, abilitato?:boolean}>}} opzioni
+ */
 export function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
+  const finestra = opzioni.finestra || globalThis;
+  const radiceMenu = opzioni.radiceMenu || documentObj.body;
+  const vociMenu = typeof opzioni.vociMenu === 'function' ? opzioni.vociMenu : null;
   const gruppo = el(documentObj, 'div', 'talos-message__actions message-actions');
   gruppo.setAttribute('role', 'group');
-  gruppo.setAttribute('aria-label', 'Azioni sulla risposta');
+  /* 17/09: lo stesso blocco serve la risposta E il messaggio della persona — il nome lo dice chi lo monta. */
+  const etichettaGruppo = typeof opzioni.etichetta === 'string' && opzioni.etichetta.trim() ? opzioni.etichetta.trim() : TESTI_MESSAGGIO.azioniRisposta;
+  gruppo.setAttribute('aria-label', etichettaGruppo);
   const bottone = (nome, titolo, icona) => {
     const b = el(documentObj, 'button', 'talos-button talos-button--ghost talos-icon-button talos-button--sm');
     b.type = 'button';
@@ -191,14 +260,145 @@ export function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
     b.append(simbolo(documentObj, 'i i--sm', icona));
     return b;
   };
-  gruppo.append(bottone('copy', 'Copia la risposta', 'i-copy'));
+  gruppo.append(bottone('copy', TESTI_MESSAGGIO.copiaRisposta, 'i-copy'));
   if (ascolta) {
-    const b = bottone('listen', 'Ascolta la risposta', 'i-play');
+    const b = bottone('listen', TESTI_MESSAGGIO.ascolta, 'i-play');
     b.setAttribute('aria-pressed', 'false');
     b.classList.add('assistant-listen-btn');
     gruppo.append(b);
   }
-  gruppo.append(bottone('ask-again', 'Chiedi di nuovo', 'i-history'));
+  if (!vociMenu) return gruppo; // chi non dà voci non ha un menu: meglio niente «⋯» che un «⋯» vuoto
+
+  const piu = bottone('piu', TESTI_MESSAGGIO.altreAzioni, 'i-more');
+  piu.setAttribute('aria-haspopup', 'menu');
+  piu.setAttribute('aria-expanded', 'false');
+  gruppo.append(piu);
+
+  const menu = creaMenuContestuale(radiceMenu, { id: ID_MENU_RISPOSTA, etichetta: TESTI_MESSAGGIO.altreAzioni });
+  function chiudi() {
+    menu.hidden = true;
+    menu.replaceChildren();
+    /* ⛔ Il menu è uno solo per tutta la conversazione: si spegne `aria-expanded` su TUTTI i «⋯»,
+       non sul nostro — altrimenti aprire il menu di una risposta lascerebbe l'altro che mente. */
+    for (const altro of radiceMenu.querySelectorAll?.('[data-message-action="piu"][aria-expanded="true"]') || []) altro.setAttribute('aria-expanded', 'false');
+  }
+  /*
+   * ⛔ La conferma VIAGGIA nell'argomento, non in una variabile del modulo. Prima era una
+   *   variabile, e non funzionava: `apriMenuContestuale` chiama `chiudi()` PRIMA dell'azione, e
+   *   `chiudi()` azzerava la variabile un istante prima che l'azione la scrivesse — il menu si
+   *   riapriva sempre identico e la conferma non compariva mai. Misurato con la prova BC60-05
+   *   rossa. Passandola come parametro, chi riapre dice esplicitamente in quale stato riaprire.
+   * ⛔ La forma della conferma è quella che il progetto usa già per le azioni distruttive
+   *   (`#settingsSvuotaLocali`, 02/09): il comando si riscrive e chiede di toccarlo di nuovo.
+   *   Niente `confirm()` nativo — è un controllo di sistema, e qui non se ne disegnano.
+   */
+  function apri({ x, y, sorgente, conferma = null }) {
+    chiudi();
+    const voci = vociMenu().map((voce) => {
+      if (!voce.conferma) return [voce.testo, voce.fai, voce.abilitato !== false];
+      if (conferma === voce.testo) return [voce.conferma, voce.fai, voce.abilitato !== false];
+      return [voce.testo, () => apri({ x, y, sorgente, conferma: voce.testo }), voce.abilitato !== false];
+    });
+    apriMenuContestuale(menu, { voci, x, y, chiudi, finestra });
+    if (sorgente) sorgente.setAttribute('aria-expanded', 'true');
+    /* ⛔ DOPO: il fuoco che `apriMenuContestuale` dà alla prima voce può aver fatto scorrere la
+       pagina, e la misura di un istante fa non vale più. Si rilegge il pulsante e ci si riallinea. */
+    riallinea();
+  }
+  /*
+   * ⛔⛔ 17/09, revisione — IL MENU SI ÀNCORA AL «⋯» ANCHE DAL TASTO DESTRO.
+   *
+   * Il giro precedente apriva al PUNTATORE come fa il Terminale, e il revisore l'ha misurato: in
+   * quattro foto su quattro il menu copriva il testo della risposta o la scheda di approvazione
+   * sotto. Un menu del terminale si apre dove punti perché lì il puntatore è la selezione; qui
+   * l'oggetto è il MESSAGGIO, e il posto che non copre niente è sotto la sua riga di azioni —
+   * che sta già sotto il testo. ⇒ Un solo punto d'ancoraggio per tutti e due i percorsi.
+   */
+  /*
+   * ⛔⛔ 17/09, TROVATO IN UNA FOTO del giro di riparazione, non rileggendo: il menu del messaggio
+   *   della persona compariva staccato dal suo pulsante, in mezzo alla colonna di destra.
+   *   Due cause, tutte e due invisibili al codice:
+   *    1. il rettangolo si misurava PRIMA di aprire, e l'apertura sposta il fuoco sulla prima voce:
+   *       il browser scorre, e il menu resta dov'era la misura vecchia ⇒ si RIMISURA dopo;
+   *    2. un pulsante nella metà destra dello schermo, con un menu largo 340 px, sfora: si allinea
+   *       al bordo DESTRO del pulsante, come fa qualunque menu di overflow. Non si stringe il menu
+   *       (è quello condiviso col Terminale e non è di questa corsia).
+   */
+  const ancora = () => {
+    const misura = piu.getBoundingClientRect();
+    return { x: misura.left, y: misura.bottom + 6, sorgente: piu };
+  };
+  /*
+   * ⛔⛔⛔ F1 (17/09, dalle FOTO del coordinatore) — IL MENU NON ESCE DALLA CONVERSAZIONE.
+   *
+   * Qui c'era una regola che il commento dichiarava («si allinea a destra quando il pulsante sta
+   * nella metà destra») e che nella foto non succedeva: il menu della persona galleggiava da
+   * x≈975 a x≈1313, sopra l'Ispettore, coprendo «Worktree» e «Non salvate».
+   * La causa è il CONTENITORE sbagliato: il confronto era con `innerWidth` (1440). Il «⋯» della
+   * persona sta a 974, il menu è largo 340 ⇒ 1314 < 1432, quindi la condizione era falsa e il
+   * menu cresceva verso destra, fuori dalla colonna. Una regola misurata sul contenitore sbagliato
+   * è una regola che non c'è — e il commento la faceva sembrare presente.
+   *
+   * ⇒ Il bordo DESTRO del menu si allinea a quello del pulsante: il menu cresce SEMPRE verso
+   *   sinistra, come qualunque menu di overflow. E il limite non è la finestra: è la COLONNA della
+   *   conversazione, l'unico spazio che appartiene al messaggio.
+   * ⛔ Se la colonna è più stretta del menu vince la colonna, non il pulsante: meglio un menu
+   *   spostato che un menu sopra una superficie di un'altra parte della app.
+   */
+  function riallinea() {
+    const misura = piu.getBoundingClientRect();
+    const larghezza = menu.offsetWidth || 240;
+    const altezza = menu.offsetHeight || 160;
+    const colonna = piu.closest?.('.talos-conversation')?.getBoundingClientRect() ?? null;
+    const sinistra = (colonna ? colonna.left : 0) + 8;
+    const destra = (colonna ? colonna.right : (finestra.innerWidth ?? 0)) - 8;
+    /* Cresce a sinistra dal bordo destro del pulsante, poi si lascia tagliare dalla colonna. */
+    const x = Math.min(Math.max(misura.right - larghezza, sinistra), Math.max(sinistra, destra - larghezza));
+    menu.style.left = `${x}px`;
+    menu.style.top = `${Math.max(8, Math.min(misura.bottom + 6, (finestra.innerHeight ?? 0) - altezza - 8))}px`;
+  }
+  piu.addEventListener('click', (evento) => {
+    evento.preventDefault();
+    if (piu.getAttribute('aria-expanded') === 'true') { chiudi(); return; }
+    apri(ancora());
+  });
+  const ospite = opzioni.ospiteTastoDestro;
+  if (ospite) {
+    ospite.addEventListener('contextmenu', (evento) => {
+      evento.preventDefault();
+      apri(ancora());
+    });
+  }
+  /* Un clic fuori e Esc chiudono, registrati UNA VOLTA per radice: stessa disciplina del Terminale. */
+  if (!radiceMenu.__talosMenuRispostaCollegato && typeof radiceMenu.addEventListener === 'function') {
+    radiceMenu.__talosMenuRispostaCollegato = true;
+    const spegniTutti = () => {
+      for (const altro of radiceMenu.querySelectorAll('[data-message-action="piu"][aria-expanded="true"]')) altro.setAttribute('aria-expanded', 'false');
+    };
+    radiceMenu.addEventListener('pointerdown', (evento) => {
+      const vivo = radiceMenu.querySelector?.(`#${ID_MENU_RISPOSTA}`);
+      if (vivo && !vivo.hidden && !vivo.contains(evento.target) && !evento.target?.closest?.('[data-message-action="piu"]')) {
+        vivo.hidden = true; vivo.replaceChildren();
+        spegniTutti();
+      }
+    });
+    radiceMenu.addEventListener('keydown', (evento) => {
+      const vivo = radiceMenu.querySelector?.(`#${ID_MENU_RISPOSTA}`);
+      if (evento.key === 'Escape' && vivo && !vivo.hidden) {
+        /*
+         * ⛔ 17/09, revisione — ESC RESTITUISCE IL FUOCO AL PULSANTE, e non è un dettaglio: il
+         *   fuoco stava sulla voce del menu, il menu spariva, e chi naviga da tastiera restava
+         *   senza posto. È scritto nel «Menu Button Pattern» del W3C APG che il commento sopra
+         *   cita da ieri — citarlo e non applicarlo è peggio che non citarlo.
+         */
+        const aperto = radiceMenu.querySelector('[data-message-action="piu"][aria-expanded="true"]');
+        vivo.hidden = true; vivo.replaceChildren();
+        spegniTutti();
+        aperto?.focus?.();
+        evento.stopPropagation?.();
+      }
+    });
+  }
   return gruppo;
 }
 
@@ -635,6 +835,25 @@ export function creaNotaErrore({ badge = 'Errore', titolo = 'TALOS · errore', s
     for (const r of spiegazione.rimedi) lista.append(el(documentObj, 'li', '', r));
     corpo.append(lista);
   }
+  /*
+   * ⛔ 17/09 — UNA nota può portare una PORTA, non solo dei consigli da leggere. Nata per la
+   *   chiave che manca: «apri Impostazioni → Laboratorio modelli → Fornitori e accessi» è una
+   *   istruzione corretta e lunga, e il rimedio vero è un clic. Restano parole anche i rimedi,
+   *   perché non ogni guasto ha una porta — ma quando c'è, si apre.
+   * ⛔ Al massimo due, e mai due che aprono la stessa cosa: è la regola dei menu, applicata qui.
+   */
+  const azioni = Array.isArray(opzioni.azioni) ? opzioni.azioni.slice(0, 2) : [];
+  if (azioni.length > 0) {
+    const riga = el(documentObj, 'div', 'talos-cluster talos-system-note__azioni');
+    for (const [i, [testoAzione, fai]] of azioni.entries()) {
+      const b = el(documentObj, 'button', `talos-button talos-button--${i === 0 ? 'primary' : 'secondary'} talos-button--sm`, testoAzione);
+      b.type = 'button';
+      b.dataset.notaAzione = String(i);
+      if (typeof fai === 'function') b.addEventListener('click', fai);
+      riga.append(b);
+    }
+    corpo.append(riga);
+  }
   if (spiegazione?.tecnico) {
     const dettaglio = documentObj.createElement('details');
     dettaglio.className = 'talos-system-note__tecnico';
@@ -740,30 +959,60 @@ export function creaRicevuta({ testo = '', hash = '' } = {}, opzioni = {}) {
 }
 
 /** I file toccati in un giro: [{ percorso, aggiunte, rimozioni, onApri, onDiff }]. */
+/*
+ * ⭐⭐⭐ BC-75 (17/09/2026, owner con una foto di Claude Code) — A FINE GIRO, I FILE DI QUEL GIRO.
+ *
+ * «Come fa Claude Code a fine turno bisogna riportare lista file modificati in quel turno con link
+ * a review in quella scheda file.»
+ *
+ * ⛔ Il componente c'era già e NON LO CHIAMAVA NESSUNO (grep del 17/09: zero chiamanti in
+ *   `legacy/app.js`) — la forma vista il 20/08, «una funzione coi test e nessun chiamante». Qui si
+ *   CABLA, e si cambia solo ciò che la scheda dell'owner chiede:
+ *   · la riga diventa UN bersaglio solo, cliccabile, invece di due bottoni «Apri»/«Differenza»
+ *     che portavano tutti e due nella Revisione: due porte per la stessa cosa nella stessa riga;
+ *   · in testa «Visualizza le modifiche», che apre la Revisione sul primo file;
+ *   · ⛔ niente «Annulla», che pure c'è nella foto: un annullamento VERO del giro non esiste, e un
+ *     bottone che non fa niente non si disegna.
+ * ⛔ Il nome è quello che si legge, il percorso intero sta nel `title`: la regola di BC-63 — la
+ *   cartella madre si aggiunge SOLO quando due file si chiamano uguale — la applica chi chiama,
+ *   che è l'unico a sapere quali sono gli altri file del giro.
+ */
 export function creaFileToccati(file = [], opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const card = el(documentObj, 'div', 'talos-card talos-touched');
   card.setAttribute('data-c', 'TouchedFiles');
   const testa = el(documentObj, 'div', 'talos-touched__head');
-  testa.append(el(documentObj, 'span', 'talos-eyebrow', 'File toccati in questo giro'));
+  const quanti = file.length === 1 ? TESTI_MESSAGGIO.unFileModificato : TESTI_MESSAGGIO.fileModificati.replace('{n}', () => String(file.length));
+  testa.append(el(documentObj, 'span', 'talos-touched__titolo', quanti), el(documentObj, 'span', 'talos-grow'));
+  if (typeof opzioni.onVediTutto === 'function') {
+    const vedi = el(documentObj, 'button', 'talos-button talos-button--ghost talos-button--sm', TESTI_MESSAGGIO.vediModifiche);
+    vedi.type = 'button';
+    vedi.dataset.touchedAction = 'vedi-tutto';
+    vedi.addEventListener('click', opzioni.onVediTutto);
+    testa.append(vedi);
+  }
   card.append(testa);
   for (const f of file) card.append(rigaFileToccato(f, opzioni));
   return card;
 }
 
-export function rigaFileToccato({ percorso = '', aggiunte = 0, rimozioni = 0, onApri, onDiff } = {}, opzioni = {}) {
+/**
+ * Una riga: nome, `+N −M`, e la riga INTERA apre la Revisione su quel file.
+ * @param {{percorso:string, etichetta?:string, aggiunte?:number, rimozioni?:number, onApri?:Function}} voce
+ */
+export function rigaFileToccato({ percorso = '', etichetta = '', aggiunte = 0, rimozioni = 0, onApri } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const riga = el(documentObj, 'div', 'talos-touched__row');
+  const riga = el(documentObj, 'button', 'talos-touched__row');
+  riga.type = 'button';
   riga.dataset.percorso = percorso;
-  riga.append(el(documentObj, 'span', 'talos-touched__name', percorso), el(documentObj, 'span', 'talos-diff-num talos-diff-num--plus', `+${aggiunte}`), el(documentObj, 'span', 'talos-diff-num talos-diff-num--minus', `−${rimozioni}`));
-  const apri = el(documentObj, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Apri');
-  apri.type = 'button';
-  if (typeof onApri === 'function') apri.addEventListener('click', onApri);
-  const diff = el(documentObj, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Differenza');
-  diff.type = 'button';
-  diff.dataset.vaia = 'review'; // come nel mockup: porta alla Review (la regia portata in app.js instrada data-vaia)
-  if (typeof onDiff === 'function') diff.addEventListener('click', onDiff);
-  riga.append(apri, diff);
+  riga.title = percorso; // il percorso INTERO si legge qui, sempre: la riga mostra il nome
+  riga.append(
+    el(documentObj, 'span', 'talos-touched__name talos-truncate', etichetta || percorso),
+    el(documentObj, 'span', 'talos-diff-num talos-diff-num--plus', `+${aggiunte}`),
+    el(documentObj, 'span', 'talos-diff-num talos-diff-num--minus', `−${rimozioni}`),
+    simbolo(documentObj, 'i i--sm talos-touched__freccia', 'i-chevron-right'),
+  );
+  if (typeof onApri === 'function') riga.addEventListener('click', onApri);
   return riga;
 }
 

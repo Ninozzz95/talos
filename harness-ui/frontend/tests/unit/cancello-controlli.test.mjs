@@ -25,7 +25,8 @@ const DELEGHE = [
   },
   {
     nome: 'apri velo', su: '#root', evento: 'click', attributo: 'data-apre-velo',
-    valoriRiconosciuti: ['veloIntro', 'veloNuovaSessione'],
+    // 17/09, PO-27: la voce del «Primo avvio» è uscita con la sua modale; resta il velo che c'è.
+    valoriRiconosciuti: ['veloNuovaSessione'],
     // `if (apre) { …; return; }`: risponde alla sola presenza dell'attributo e consuma il clic
     interrompeAncheSeIgnoto: true, esaustiva: true,
   },

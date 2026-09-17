@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, parse as parsePath } from 'node:path';
 import test from 'node:test';
 
-import { percorsoScrittoDaEvento, registraScritturaDiFiglia } from '../src/session-registry.mjs';
+import { eventiSenzaMessaggio, messaggiSenzaMessaggio, posizioneDelMessaggio, testoDelMessaggioAssistente, percorsoScrittoDaEvento, registraScritturaDiFiglia } from '../src/session-registry.mjs';
 import { creaFetchMultiProvider } from '../src/runtime-owner-adapter.mjs';
 import {
   candidatiGiudice,
@@ -7147,4 +7147,241 @@ test('⛔⛔⛔ G4-D3b — la guardia SESSION_MODEL_UNKNOWN morde DAVVERO, e pri
   assert.match(esito.erroreAvvio, /non so quale modello/i);
   assert.equal(compattaChiamata, false, '⛔ si rifiuta PRIMA di chiamare');
   assert.equal(trasportoChiesto, false, '⛔ e senza nemmeno costruire il trasporto: zero rete');
+});
+
+/*
+ * ⭐⭐⭐ 17/09/2026 — ELIMINARE UN MESSAGGIO: LA LAPIDE, E CIO CHE IL MODELLO RICEVE.
+ *
+ * Owner 11/09: «non c'è la rotta» non è una risposta. Il giro precedente toglieva la risposta
+ * dalla sola pagina: ricaricando tornava, e il modello continuava a leggerla.
+ *
+ * ⛔ Le tre domande che queste prove fanno, e che una prova sul solo DOM non poteva fare:
+ *  1. il registro su disco conserva la storia E porta la lapide (a sola aggiunta, non riscritto);
+ *  2. dopo un RIPRISTINO il messaggio non torna, né negli eventi né in ciò che si rimanda al
+ *     fornitore — e il ripristino è l'unico modo di provarlo, perché è lì che il difetto viveva;
+ *  3. una coppia `tool_calls`/`tool` non resta mai spezzata.
+ */
+test('MSG-RIMOSSO-01 — la risposta se ne va dagli eventi e da `messaggiFinali`, e la lapide è sul disco', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const finta = sessioneControllabile();
+  try {
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    const { sessionId } = registro.avvia('task-vero');
+    finta.emetti({ type: 'TextMessageStart', messageId: 'm1', role: 'assistant' });
+    finta.emetti({ type: 'TextMessageContent', messageId: 'm1', delta: 'Ho letto il file.' });
+    finta.emetti({ type: 'TextMessageEnd', messageId: 'm1' });
+    finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: [
+      { role: 'user', content: 'Leggi il file' },
+      { role: 'assistant', content: 'Ho letto il file.' },
+    ] } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'messaggi-finali'));
+
+    const esito = await registro.rimuoviMessaggio(sessionId, 'm1');
+    assert.equal(esito.ok, true);
+    const esportata = registro.esporta(sessionId);
+    assert.equal(esportata.eventi.filter((e) => e.messageId === 'm1').length, 0, 'gli eventi di quel messaggio non si rimandano piu a nessuno');
+
+    const suDisco = await leggiRegistroPerAttesa({ cartellaStore, sessionId });
+    assert.ok(suDisco.some((r) => r.tipo === 'messaggio-rimosso' && r.riferimento === 'm1'), 'la lapide c e');
+    assert.ok(suDisco.some((r) => r.type === 'TextMessageContent' && r.messageId === 'm1'), 'e la storia NON e stata riscritta: il registro resta a sola aggiunta');
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('MSG-RIMOSSO-02 — dopo un RIPRISTINO il messaggio non torna, e il modello non lo riceve piu', async () => {
+  const cartellaStore = cartellaStoreVera(), sessionId = 'sess-msg-rimosso';
+  try {
+    for (const record of [
+      { tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: 'Ciao' }, modello: 'm', avviataAlle: new Date().toISOString() },
+      { type: 'RunStarted', _sequenza: 1, input: { consegna: 'Leggi il file' } },
+      { type: 'TextMessageStart', messageId: 'm1', role: 'assistant', _sequenza: 2 },
+      { type: 'TextMessageContent', messageId: 'm1', delta: 'Ho letto il file.', _sequenza: 3 },
+      { type: 'TextMessageEnd', messageId: 'm1', _sequenza: 4 },
+      { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: [
+        { role: 'user', content: 'Leggi il file' },
+        { role: 'assistant', content: 'Ho letto il file.' },
+      ] },
+      { type: 'RunFinished', _sequenza: 5 },
+      { tipo: 'messaggio-rimosso', riferimento: 'm1' },
+    ]) registraRigaSync({ cartellaStore, sessionId, record });
+
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+    const esportata = registro.esporta(sessionId);
+    assert.equal(esportata.eventi.filter((e) => e.messageId === 'm1').length, 0, 'ricaricando NON torna a schermo');
+
+    /* E soprattutto: il giro dopo non lo rimanda al fornitore. E la meta che il DOM non vede. */
+    registro.resume(sessionId, 'Continua');
+    const inviati = finta.ultimoInput.messaggiIniziali;
+    assert.equal(inviati.filter((m) => m.role === 'assistant' && m.content === 'Ho letto il file.').length, 0, 'il modello non legge piu il messaggio cancellato');
+    assert.ok(inviati.some((m) => m.role === 'user' && m.content === 'Leggi il file'), 'il resto della conversazione resta');
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('MSG-RIMOSSO-03 — un messaggio con `tool_calls` porta via i suoi `tool`: mai una coppia spezzata', () => {
+  const messaggi = [
+    { role: 'user', content: 'Leggi' },
+    { role: 'assistant', content: 'Leggo il README.', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'leggi', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 'c1', content: 'README' },
+    { role: 'assistant', content: 'Fatto.' },
+  ];
+  const senza = messaggiSenzaMessaggio(messaggi, { posizione: 0, ruolo: 'assistant', testo: 'Leggo il README.' });
+  assert.deepEqual(senza.messaggi, [{ role: 'user', content: 'Leggi' }, { role: 'assistant', content: 'Fatto.' }]);
+  assert.equal(senza.tolto, true);
+  /* AL CONTRARIO: un `tool` di UN ALTRA chiamata non si porta via per simpatia. */
+  const altri = messaggiSenzaMessaggio([...messaggi, { role: 'tool', tool_call_id: 'c2', content: 'altro' }], { posizione: 0, ruolo: 'assistant', testo: 'Leggo il README.' });
+  assert.ok(altri.messaggi.some((m) => m.tool_call_id === 'c2'), 'il risultato di un altra chiamata resta');
+});
+
+test('MSG-RIMOSSO-04 — il messaggio della PERSONA porta via il suo giro, e non si tocca una sessione VIVA', async () => {
+  const giro = [
+    { role: 'user', content: 'Prima domanda' },
+    { role: 'assistant', content: 'Prima risposta' },
+    { role: 'user', content: 'Seconda domanda' },
+    { role: 'assistant', content: 'Seconda risposta' },
+  ];
+  assert.deepEqual(messaggiSenzaMessaggio(giro, { posizione: 0, ruolo: 'user', testo: 'Prima domanda' }).messaggi, [
+    { role: 'user', content: 'Seconda domanda' },
+    { role: 'assistant', content: 'Seconda risposta' },
+  ], 'togliere una domanda toglie la risposta che ne dipende: una risposta senza domanda e peggio del buco');
+
+  const eventi = [
+    { type: 'RunStarted', _sequenza: 1, input: { consegna: 'Prima domanda' } },
+    { type: 'TextMessageStart', messageId: 'a1', role: 'assistant', _sequenza: 2 },
+    { type: 'RunStarted', _sequenza: 3, input: { consegna: 'Seconda domanda' } },
+    { type: 'TextMessageStart', messageId: 'a2', role: 'assistant', _sequenza: 4 },
+  ];
+  assert.deepEqual(eventiSenzaMessaggio(eventi, 'giro:1').map((e) => e._sequenza), [3, 4]);
+  assert.deepEqual(eventiSenzaMessaggio(eventi, 'giro:99').map((e) => e._sequenza), [1, 2, 3, 4], 'un giro che non c e non tocca niente');
+
+  /* Una sessione ancora al lavoro si RIFIUTA: mentre il modello scrive, il messaggio non e finito. */
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  const rifiuto = await registro.rimuoviMessaggio(sessionId, 'm1');
+  assert.equal(rifiuto.code, 'SESSION_STILL_RUNNING');
+  assert.match(rifiuto.erroreAvvio, /sta ancora lavorando/i);
+  finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: [] } });
+  const assente = await registro.rimuoviMessaggio(sessionId, 'mai-esistito');
+  assert.equal(assente.code, 'NOT_FOUND', 'e non si scrive una lapide su un messaggio che non c e');
+});
+
+/*
+ * ⭐⭐⭐ 17/09/2026, dalla revisione — SI IDENTIFICA PER POSIZIONE, E QUANDO NON RIESCE LO DICE.
+ *
+ * La prima stesura cercava il messaggio in `messaggiFinali` per uguaglianza di TESTO e, quando non
+ * lo trovava, tornava la lista invariata mentre la porta rispondeva «fatto»: a schermo spariva, il
+ * modello continuava a leggerlo, e nessuno lo sapeva. Queste prove coprono i quattro casi in cui
+ * il testo NON combacia, e la prima di tutte gira su `messaggiFinali` VERI.
+ */
+const SESSIONE_VERA = JSON.parse(readFileSync(new URL('./fixtures/sessione-vera-messaggi-finali.json', import.meta.url), 'utf8'));
+
+test('MSG-POSIZIONE-01 — su una sessione VERA: i due conti combaciano, e il messaggio che si vede porta via i suoi attrezzi', () => {
+  /*
+   * Presa da un giro vero del 4174 (p0bis, 17/09). La forma che smentisce le tre ipotesi comode:
+   *  · `messaggiFinali` comincia con DUE `system` prima del primo `user`;
+   *  · un assistente ha `content: null` e solo `tool_calls` — non e mai stato a schermo;
+   *  · QUATTRO dei cinque assistenti VISIBILI portano anche `tool_calls`.
+   */
+  const { eventi, messaggiFinali } = SESSIONE_VERA;
+  const flussi = eventi.filter((e) => e.type === 'TextMessageStart');
+  const visibili = messaggiFinali.filter((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim() !== '');
+  assert.equal(flussi.length, visibili.length, 'i due conti devono combaciare: e la premessa di tutto il metodo');
+  assert.ok(messaggiFinali.filter((m) => m.role === 'system').length >= 2, 'la fixture porta davvero il preambolo di sistema');
+  assert.ok(visibili.filter((m) => Array.isArray(m.tool_calls) && m.tool_calls.length).length >= 3, 'e davvero assistenti VISIBILI che chiamano attrezzi');
+
+  const secondo = flussi[1].messageId;
+  assert.equal(posizioneDelMessaggio(eventi, secondo), 1);
+  const esito = messaggiSenzaMessaggio(messaggiFinali, {
+    posizione: 1, ruolo: 'assistant', testo: testoDelMessaggioAssistente(eventi, secondo),
+  });
+  assert.equal(esito.tolto, true);
+  assert.equal(esito.messaggi.length, messaggiFinali.length - 2, 'il messaggio e il risultato del suo attrezzo: due in meno');
+  const idAttrezzo = visibili[1].tool_calls[0].id;
+  assert.equal(esito.messaggi.some((m) => m.role === 'tool' && m.tool_call_id === idAttrezzo), false, 'nessun `tool` orfano');
+  assert.equal(esito.messaggi.filter((m) => m.role === 'system').length, 2, 'il preambolo non si tocca');
+});
+
+test('MSG-POSIZIONE-02 — DUPLICATI: due risposte identiche si distinguono per posizione, non per testo', () => {
+  const eventi = [
+    { type: 'TextMessageStart', messageId: 'a1', role: 'assistant', _sequenza: 1 },
+    { type: 'TextMessageContent', messageId: 'a1', delta: 'Fatto.', _sequenza: 2 },
+    { type: 'TextMessageEnd', messageId: 'a1', _sequenza: 3 },
+    { type: 'TextMessageStart', messageId: 'a2', role: 'assistant', _sequenza: 4 },
+    { type: 'TextMessageContent', messageId: 'a2', delta: 'Fatto.', _sequenza: 5 },
+    { type: 'TextMessageEnd', messageId: 'a2', _sequenza: 6 },
+  ];
+  const messaggi = [
+    { role: 'user', content: 'uno' }, { role: 'assistant', content: 'Fatto.', marca: 'primo' },
+    { role: 'user', content: 'due' }, { role: 'assistant', content: 'Fatto.', marca: 'secondo' },
+  ];
+  assert.equal(posizioneDelMessaggio(eventi, 'a1'), 0);
+  const esito = messaggiSenzaMessaggio(messaggi, { posizione: 0, ruolo: 'assistant', testo: 'Fatto.' });
+  assert.equal(esito.tolto, true);
+  assert.deepEqual(esito.messaggi.filter((m) => m.role === 'assistant').map((m) => m.marca), ['secondo'],
+    'si toglie QUELLA scelta: per testo se ne sarebbe andata l ultima');
+});
+
+test('MSG-POSIZIONE-03 — il preambolo del progetto nel primo messaggio della persona non fa fallire il conto', () => {
+  /* Il primo `user` porta spesso la consegna DENTRO un preambolo: un uguale secco direbbe «non e lui». */
+  const messaggi = [
+    { role: 'system', content: 'Sei un agente.' },
+    { role: 'user', content: 'Contesto del progetto: …\n\nLeggi il file e dimmi cosa c e' },
+    { role: 'assistant', content: 'Letto.' },
+    { role: 'user', content: 'Grazie' },
+  ];
+  const esito = messaggiSenzaMessaggio(messaggi, { posizione: 0, ruolo: 'user', testo: 'Leggi il file e dimmi cosa c e' });
+  assert.equal(esito.tolto, true);
+  assert.deepEqual(esito.messaggi, [{ role: 'system', content: 'Sei un agente.' }, { role: 'user', content: 'Grazie' }],
+    'via la domanda e la risposta che ne dipendeva; il preambolo di sistema resta');
+});
+
+test('MSG-POSIZIONE-04 — dopo una COMPATTAZIONE non si mente: il risultato dice che il modello puo ricordarla ancora', () => {
+  /* Compattata, la conversazione non contiene piu il testo letterale ne abbastanza messaggi. */
+  const compattata = [{ role: 'system', content: 'Riassunto della conversazione precedente.' }, { role: 'user', content: 'Continua' }];
+  const esito = messaggiSenzaMessaggio(compattata, { posizione: 2, ruolo: 'assistant', testo: 'Ho letto il file.' });
+  assert.equal(esito.tolto, false);
+  assert.equal(esito.motivo, 'posizione-assente');
+  assert.deepEqual(esito.messaggi, compattata, 'e la conversazione non si tocca a caso');
+
+  /* E quando la posizione c e ma il testo e un altro, non si toglie il messaggio sbagliato. */
+  const altro = messaggiSenzaMessaggio(
+    [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'Una risposta del tutto diversa e lunga abbastanza da non contenersi' }],
+    { posizione: 0, ruolo: 'assistant', testo: 'Ho letto il file e non ho cambiato niente, come avevi chiesto' },
+  );
+  assert.equal(altro.tolto, false);
+  assert.equal(altro.motivo, 'testo-non-combacia');
+  assert.equal(altro.messaggi.length, 2, 'meglio non togliere niente che togliere il messaggio di un altro');
+
+  /* Senza conversazione canonica (giro finito in errore) si dice anche quello. */
+  assert.deepEqual(messaggiSenzaMessaggio(null, { posizione: 0 }), { messaggi: null, tolto: false, motivo: 'nessuna-conversazione' });
+});
+
+test('MSG-POSIZIONE-05 — la porta riporta `toltoDalModello`, e non dice «fatto» quando non lo e', async () => {
+  const cartellaStore = cartellaStoreVera(), sessionId = 'sess-msg-meta';
+  try {
+    for (const record of [
+      { tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: 'Ciao' }, modello: 'm', avviataAlle: new Date().toISOString() },
+      { type: 'RunStarted', _sequenza: 1, input: { consegna: 'Leggi il file' } },
+      { type: 'TextMessageStart', messageId: 'm1', role: 'assistant', _sequenza: 2 },
+      { type: 'TextMessageContent', messageId: 'm1', delta: 'Ho letto il file.', _sequenza: 3 },
+      { type: 'TextMessageEnd', messageId: 'm1', _sequenza: 4 },
+      /* ⛔ Una conversazione COMPATTATA: il testo non c e piu, e nemmeno la posizione. */
+      { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: [{ role: 'system', content: 'Riassunto.' }, { role: 'user', content: 'Continua' }] },
+      { type: 'RunFinished', _sequenza: 5 },
+    ]) registraRigaSync({ cartellaStore, sessionId, record });
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+    const esito = await registro.rimuoviMessaggio(sessionId, 'm1');
+    assert.equal(esito.ok, true, 'dallo schermo se n e andata davvero');
+    assert.equal(esito.toltoDalModello, false, 'ma dalla conversazione del modello NO, e si dice');
+    assert.equal(esito.motivo, 'posizione-assente');
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
 });

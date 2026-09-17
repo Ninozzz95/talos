@@ -87,8 +87,7 @@ for (const [nome, larghezza] of [['desktop', 1440], ['laptop', 1024]]) {
       }));
       await pagina.goto(BASE, { waitUntil: 'domcontentloaded' });
       await pagina.waitForTimeout(3000);
-      await pagina.evaluate(() => document.getElementById('introSalta')?.click());
-      await pagina.waitForTimeout(600);
+      /* 17/09, PO-27: qui si chiudeva la modale del primo avvio. Non esiste più. */
 
       /* Si apre il selettore dalla pill del composer, com'è il gesto vero. */
       await pagina.evaluate(() => document.querySelector('[data-open-sheet="model"]')?.click());

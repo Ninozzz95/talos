@@ -14,7 +14,6 @@ async function registra(nome, valore) {
 async function apri(page, tema = 'light') {
   await page.addInitScript(tema => {
     if (window !== window.top) return; // Le anteprime isolate non ricevono le preferenze del banco.
-    localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' }));
     localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode: tema, reducedMotion: false } }));
   }, tema);
   await page.goto('/');

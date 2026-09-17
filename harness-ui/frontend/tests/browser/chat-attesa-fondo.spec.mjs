@@ -3,7 +3,6 @@ import { test, expect } from '@playwright/test';
 // Frontend di produzione, trasporto controllato: non è una prova di inferenza.
 test.use({ channel: 'chrome' });
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })));
   await page.route('**/api/v1/sessions/chat-proof-*/events', route => route.fulfill({ contentType: 'text/event-stream', body: '' }));
   await page.goto('/');
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);

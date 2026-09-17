@@ -23,7 +23,6 @@ const linguette = (page) => page.evaluate(() => [...document.querySelectorAll('.
 test('BC62-01 — entrare nella vista Terminale non crea schede: una per sessione, anche passando da A a B e ritorno, anche dopo una ricarica', async ({ page, request, baseURL }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.addInitScript(() => { if (window.top === window) { try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* cornice sandbox: lì non serve */ } } });
   const crea = async (nome) => {
     const cartella = mkdtempSync(join(tmpdir(), `bc62-${nome}-`));
     const r = await request.post(new URL('/api/v1/sessions/custom', baseURL).href, { data: { cartellaLibera: cartella, consegna: `sessione ${nome} della prova BC-62: non fare nulla`, modello: 'z-ai/glm-5.3-flash' } });
@@ -57,7 +56,6 @@ test('BC62-01 — entrare nella vista Terminale non crea schede: una per session
 test('BC62-02 — al contrario: «Nuovo» crea ESATTAMENTE una scheda in più', async ({ page, request, baseURL }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.addInitScript(() => { if (window.top === window) { try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* cornice sandbox */ } } });
   const cartella = mkdtempSync(join(tmpdir(), 'bc62-nuovo-'));
   const r = await request.post(new URL('/api/v1/sessions/custom', baseURL).href, { data: { cartellaLibera: cartella, consegna: 'prova BC-62 del pulsante Nuovo: non fare nulla', modello: 'z-ai/glm-5.3-flash' } });
   const id = (await r.json()).data.sessionId;

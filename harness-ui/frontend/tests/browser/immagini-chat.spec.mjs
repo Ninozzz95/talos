@@ -16,7 +16,6 @@ async function attach(page) {
   await (await chooser).setFiles({ name: 'prova.png', mimeType: 'image/png', buffer: bytes });
 }
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })));
   await page.route('**/api/v1/sessions/image-proof-*/events', r => r.fulfill({ contentType: 'text/event-stream', body: '' }));
   await page.route('**/api/v1/chat-images', r => r.fulfill({ json: envelope(image) }));
   await page.route('**/api/v1/chat-images/' + image.id, r => r.fulfill({ contentType: 'image/png', body: bytes }));

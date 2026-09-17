@@ -21,7 +21,6 @@ test('RELEASE-018-PROMPT-ENHANCE: composer through real route and session provid
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
     await page.addInitScript(() => {
-      localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' }));
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
         value: { writeText: async (testo) => { window.__talosTestClipboard = testo; } },
@@ -69,7 +68,6 @@ test('FASE3-MULTISELECT-UNA-POST — conferma unica ed esito parziale restano vi
     { id: 'lib-3', nome: 'Terzo.md', fileType: 'text/markdown', origine: 'uploaded', aggiornatoIl: null },
   ];
   const richieste = [];
-  await page.addInitScript(() => localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })));
   await page.route('**/api/v1/sessions/fase-3-ui/library', (route) => route.fulfill({
     json: { ok: true, data: { voci, errore: null }, meta: {} },
   }));
@@ -147,9 +145,6 @@ test('RUNTIME-01: aprire la app non produce nessun errore JavaScript', async ({ 
     errori.push(`console: ${testo}`);
   });
 
-  await page.addInitScript(() => {
-    try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* contesto senza storage: l'intro comparirà, e va bene lo stesso */ }
-  });
   /*
    * ⛔ URL intero: questa config non fissa un `baseURL`, e un percorso relativo non naviga.
    * ⛔ 11/09 — la porta si puo' scegliere da fuori (`TALOS_URL_CANCELLO`). Prima era scritta a mano
@@ -215,9 +210,6 @@ test('RUNTIME-01: aprire la app non produce nessun errore JavaScript', async ({ 
  * è espresso in frame, così una macchina CI lenta non trasforma un backlog intenzionale in rumore.
  */
 test('STREAMING-LIVE-SMOOTH-03 — cursore e dissolvenza raggiungono il DOM al frame successivo senza backlog', async ({ page }) => {
-  await page.addInitScript(() => {
-    try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* niente storage */ }
-  });
   await page.goto(process.env.TALOS_URL_CANCELLO || 'http://127.0.0.1:4174/');
   await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
 
@@ -295,7 +287,6 @@ test('STREAMING-LIVE-SMOOTH-02 scope — un host embedded conserva la propria an
         return host;
       },
     });
-    try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* niente storage */ }
   });
 
   await page.goto(process.env.TALOS_URL_CANCELLO || 'http://127.0.0.1:4174/');

@@ -7,6 +7,7 @@ import { TESTI as TESTI_TERMINALE, ETICHETTA_STATO } from '../../src/components/
 import { TESTI as TESTI_BROWSER } from '../../src/components/browser.js';
 import { TESTI as TESTI_CONNESSIONE } from '../../src/components/connessione.js';
 import { AZIONI_FILE } from '../../src/components/review.js'; // BC-63, 17/09: le voci del menu delle linguette della Revisione
+import { TESTI_MESSAGGIO } from '../../src/components/conversazione.js'; // PO-27, 17/09: azioni sul messaggio e invito del primo avvio
 
 // P-i18n (06/09) — la copertura dell'inglese si MISURA sulle frasi vere del codice, categoria per categoria.
 
@@ -24,6 +25,9 @@ const frasiComponenti = [
   ...Object.values(TESTI_CONNESSIONE).filter((v) => typeof v === 'string' && v),
   ...Object.values(AZIONI_FILE),
   'Azioni sul file', // l'etichetta del menu, che `creaMenuContestuale` passa a t()
+  /* ⛔ PO-27, 17/09 (D4): le frasi nuove entrano nel cancello. Una frase scritta a mano dentro una
+     funzione non è nemmeno misurabile, e «non tradotta» avrebbe lo stesso aspetto di «non vista». */
+  ...Object.values(TESTI_MESSAGGIO),
 ];
 
 test('I18N-COPERTURA: ogni frase di Impostazioni, attrezzi e componenti ha l’inglese', () => {

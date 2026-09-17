@@ -52,7 +52,6 @@ async function apriApp(page, { tema = 'dark', larghezza = 1440, altezza = 900 } 
   await page.addInitScript(({ colorMode }) => {
     if (window.top !== window) return;
     try {
-      localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' }));
       localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode } }));
     } catch { /* finestra privata o quota: la app parte lo stesso col tema predefinito */ }
   }, { colorMode: tema === 'light' ? 'light' : 'dark' });
