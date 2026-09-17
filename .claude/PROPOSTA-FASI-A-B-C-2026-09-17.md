@@ -15,6 +15,7 @@
 |---|---|---|---|
 | kernel | **CLI-REQ-11 → 10 → 08 → 09** | `src/kernel/talosHarness.mjs` | un agente, una richiesta per commit, interruttore per il banco; brief `BRIEF-ATTREZZI-FILE-…` |
 | prove | **BC-72** | solo `frontend/tests/browser/*` | DOPO la Fase A frontend; alla fine la consegna gira la CARTELLA |
+| kernel + frontend | **PO-28** — l'attrezzo «chiedi» (come AskUserQuestion) | kernel in coda a CLI-REQ-09; scheda a schermo dopo BC-72 | owner 17/09; riga completa nella tabella di marcia; riusa il canale delle approvazioni |
 
 ## Fase C — «Dove stanno i dati, e sessioni lunghe che reggono»
 | corsia | righe, nell'ordine | note |

@@ -296,11 +296,67 @@ senza il motore sarebbe una finestrella che incolla testo con più passaggi. ⛔
 > | fase | corsia backend | corsia frontend |
 > |---|---|---|
 > | **A · l'agente locale, e ciò che esce dalla macchina** | BC-76 → BC-73 | BC-77 → BC-71 → BC-70 → BC-68 |
-> | **B · attrezzi dei file come Hermes** | CLI-REQ-11 → 10 → 08 → 09 (kernel, con interruttore per il banco) | BC-72 (la cartella `tests/browser` a zero rossi non dichiarati) |
+> | **B · attrezzi dei file come Hermes, e il modello che sa CHIEDERE** | CLI-REQ-11 → 10 → 08 → 09 → **PO-28** (kernel, con interruttore per il banco) | BC-72, poi la scheda «TALOS ti chiede» di **PO-28** |
 > | **C · dove stanno i dati, e sessioni lunghe che reggono** | PO-26 → BC-66 → BC-65 | l'interfaccia del compattamento: barra di avanzamento e separatore |
 >
 > In coda, con l'owner: sorgente del kernel · FASE 12 · pre-release. Da collocare (nessuna risposta ancora): i residui di
 > sicurezza dei plugin e degli spawn. Brief pronti: `BRIEF-BC-76-…`, `BRIEF-BC-73-…`, `BRIEF-FASE-A-FRONTEND-…`, `BRIEF-ATTREZZI-FILE-…`.
+
+---
+
+# PO-28 · Il modello può FARE UNA DOMANDA alla persona (attrezzo «chiedi», come AskUserQuestion di Claude Code) — owner 17/09/2026
+
+> **Parole dell'owner:** «metti nella tabella di marcia un tool ask question come Claude, ricerca web poi inseriscilo». Collocata
+> nella **Fase B**: kernel in coda a CLI-REQ-09 (stesso file, stesso agente), scheda a schermo nella corsia frontend della stessa fase.
+
+**Cosa succede oggi (misurato col grep il 17/09):** fra gli attrezzi del kernel (`ATTREZZI_OPENAI`/`ATTREZZI_ESTESI_OPENAI`) NON c'è
+nessun attrezzo per chiedere — `grep "name: '" src/kernel/talosHarness.mjs | grep -i "ask|chiedi|domand|question|clarif"` → zero (le
+quattro occorrenze di «AskUserQuestion» nel repo sono commenti su domande fatte ALL'owner, non un attrezzo). Quando un compito è
+ambiguo il modello o TIRA A INDOVINARE o chiude il giro con una domanda in prosa: la persona risponde con un messaggio nuovo e si
+paga un giro intero. Dentro una lavorazione lunga non esiste un modo di fermarsi, chiedere, e RIPRENDERE dallo stesso punto.
+**Cosa esiste già e si RIUSA:** il canale delle approvazioni — `richiediApprovazione` in `src/session-registry.mjs`
+(`ApprovalRequested`/`ApprovalResolved` con `requestId`, richiesta che resta onestamente IN SOSPESO se nessuno risponde, risposta
+possibile da un'altra finestra, replay, stato «aspetta te» nella barra laterale, campanella) e la scheda di approvazione nella chat
+(`components/conversazione.js`). Una domanda è la stessa meccanica con un'altra forma di risposta: NON si scrive un secondo canale.
+
+**Ricerca (17/09/2026):**
+- **Claude Code `AskUserQuestion`** — code.claude.com/docs/en/agent-sdk/user-input e claudelog.com: da 1 a 4 domande per chiamata;
+  per ognuna `question`, `header` (etichetta ≤ 12 caratteri), da 2 a 4 `options` `{label, description}`, `multiSelect`; «Altro» con
+  testo libero lo aggiunge SEMPRE lo strumento, mai il modello; l'opzione consigliata va per prima con «(Recommended)»; anteprime
+  facoltative per confrontare opzioni; ⛔ nell'SDK c'è un tempo massimo di 60 secondi per la risposta. Uso tipico: chiarire prima
+  di pianificare.
+- **Hermes `clarify`** (hermes-agent.nousresearch.com/docs/reference/tools-reference, `tools/clarify_tool.py`): tre modi — scelta
+  singola fino a 4, scelta multipla, risposta APERTA; accetta un array di 2-5 domande per non chiederle una alla volta; sui canali
+  di messaggistica diventa un elenco numerato o bottoni nativi. ⇒ È il concorrente da battere, e ce l'ha.
+- **Codex `request_user_input`** (openai/codex #9926, #11536, #12694): schede, una per domanda più «Invia», tutto da tastiera
+  (←/→); ⛔ funziona SOLO in Plan mode e la comunità chiede da mesi di averlo anche nel modo normale, e una variante non bloccante.
+- Spring AI `AskUserQuestionTool` (spring.io, 16/01/2026) e Netlify Agent Runners (19/08/2026): «l'agente si ferma e chiede invece
+  di indovinare» è ormai il comportamento atteso.
+
+**Cosa cambia — parità, e il +1 misurabile:**
+1. Attrezzo nuovo nel kernel (nome per il modello da decidere alla fonte, es. `chiedi`; ⛔ entra dietro lo STESSO interruttore degli
+   attrezzi dei file, così il banco resta confrontabile byte per byte): da 1 a 4 domande, ognuna con etichetta corta, 2-4 opzioni
+   con descrizione, scelta singola o multipla, e SEMPRE la risposta libera aggiunta da noi. La risposta torna al modello come
+   risultato dell'attrezzo, e il giro RIPRENDE dallo stesso punto: niente giro nuovo, niente contesto rispedito.
+2. **Il +1 su Claude e Codex: nessun tempo massimo.** Da noi una richiesta può restare in sospeso per ore (il canale lo fa già):
+   la sessione va in «aspetta te», la campanella si accende, si risponde anche da un'altra finestra o dopo un riavvio. Su Codex
+   vale solo in Plan mode; qui vale SEMPRE, anche dentro una delega (la figlia chiede → la domanda risale alla persona con il nome
+   di chi la fa).
+3. **Onestà:** se nessuno può rispondere (sessione non interattiva, banco, automazione) l'attrezzo NON resta appeso e non inventa
+   una risposta: dice al modello «nessuno può rispondere adesso: procedi con l'ipotesi più prudente e DICHIARALA» — e l'ipotesi
+   finisce nel resoconto. Nel banco la colonna nuova: quante domande ha fatto e quante ipotesi ha dichiarato.
+4. **A schermo:** una scheda nella chat con lo stesso linguaggio della scheda di approvazione (skill `frontend-design`, tema Calm,
+   due temi, 1024 e 1440): una domanda per volta con l'avanzamento se sono più di una, opzioni come scelte tematizzate (⛔ niente
+   controlli nativi), la consigliata per prima e marcata, campo «Altro», tutto da tastiera; la risposta data resta nella
+   cronologia come riga leggibile («Hai scelto: …») e sopravvive a ricarica e riapertura. ⛔ Nessun nome tecnico: a schermo è
+   «TALOS ti chiede», mai il nome dell'attrezzo.
+5. Il preambolo dice QUANDO chiedere: solo se la risposta cambia ciò che farà e non si ricava dal codice o da un default sensato.
+   ⛔ Costo in token del preambolo MISURATO prima/dopo.
+
+**Finita quando:** in un giro vero con `glm-5.3-flash` un compito ambiguo produce UNA scheda con opzioni, la risposta dalla UI fa
+proseguire lo STESSO giro (un solo `RunStarted`), la risposta «Altro» arriva al modello parola per parola; chiusa la finestra e
+riaperta la sessione la domanda è ancora lì e si può rispondere; senza nessuno in ascolto il modello dichiara l'ipotesi invece di
+restare appeso; a interruttore spento definizioni e uscite degli attrezzi sono identiche a oggi. Foto nei due temi.
 
 ---
 
