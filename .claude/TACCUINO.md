@@ -559,3 +559,21 @@
 ode_modules`
   → `AVM-harness-desktop\context-engine
 ode_modules`. `wf_a38b4449-882-1` resta su disco: NON si tocca senza prima guardarci dentro.
+
+## 2026-09-17 — pulizia di Desktop/projects (ordine dell'owner): +25,4 GB, zero danni
+
+- Misurato prima: **100,3 GB** in 60 cartelle; quasi tutte le `AVM-*` sono WORKTREE di `AVM` (togliere il worktree non toglie i
+  commit: il ramo resta in `AVM/.git`; si perde solo il non committato).
+- ⛔ Il controllo preliminare ha trovato giunzioni verso bersagli VIVI: `AVM-harness-caccia` → i miei `node_modules` **e
+  `.local-models` (17 GB di modelli dell'owner)**, `wt-prova` → `node_modules` della sessione CLI, `AVM-astra-e2e` e `AVM-miniera` →
+  `AVM/mobile/node_modules`, `AVM-harness-prove` e `AVM-context-*` → i miei. Procedura: `dir /AL /S /B` per elencarle, `rmdir`
+  su ognuna (toglie il collegamento), riscansione a zero, POI `git worktree remove` / `rmdir /s /q \?\`; dieci guardie
+  contate prima e dopo ogni cartella, stop al primo scarto. Risultato: **38 cartelle rimosse, guardie identiche, 4174 sempre 200**.
+- Gruppo A (rischio zero) **+7,6 GB**; gruppo B (con patch salvate) **+17,3 GB**; due copie identiche di Qwen3-0.6B
+  (sha256 `4af45218…`, 0,65 GB): tolte entrambe — `gguf-header.test.mjs:168` salta con garbo se manca (backend: 4 → 5 skip).
+- ⛔ **`AVM-harness` NON si può togliere**: `scripts/kernel-controlla.mjs:29` la legge come fonte del kernel
+  (`AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs`). Debito: un cancello che dipende da una cartella fuori dal repo.
+- Custodia di ciò che non era committato: `TALOS-RICERCHE/pulizia-2026-09-17/` (patch binaria + stato + archivio dei non
+  tracciati per ogni cartella del gruppo B; `AVM-motion-art` era un checkout orfano: diff fatto con un indice usa-e-getta).
+- PowerShell 5 legge i `.ps1` senza BOM come ANSI: un'emoji nel sorgente rompe il parser. Script di sistema solo ASCII.
+- `-File script.ps1 -Nomi a,b,c` passa UNA stringa: si spezza dentro lo script.
