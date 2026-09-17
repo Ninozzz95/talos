@@ -1,0 +1,64 @@
+TAP version 13
+# Subtest: 100 explicitly gated writes reserve bytes before enqueue and hold flush until completion
+ok 1 - 100 explicitly gated writes reserve bytes before enqueue and hold flush until completion
+  ---
+  duration_ms: 12.294395
+  type: 'test'
+  ...
+# Subtest: queued writers are serialized and total disk reservation survives completed writes
+ok 2 - queued writers are serialized and total disk reservation survives completed writes
+  ---
+  duration_ms: 0.464098
+  type: 'test'
+  ...
+# Subtest: a gated write failure releases queue bytes and prevents accepting later writes
+ok 3 - a gated write failure releases queue bytes and prevents accepting later writes
+  ---
+  duration_ms: 0.434253
+  type: 'test'
+  ...
+# Subtest: real filesystem flush writes exact private bytes and metadata to distinct files
+ok 4 - real filesystem flush writes exact private bytes and metadata to distinct files
+  ---
+  duration_ms: 12.398492
+  type: 'test'
+  ...
+# Subtest: lists models and probes llama-server properties through the supervisor endpoint
+ok 5 - lists models and probes llama-server properties through the supervisor endpoint
+  ---
+  duration_ms: 2.235281
+  type: 'test'
+  ...
+# Subtest: converts SSE chunks into separate text, reasoning, tool_call and done events
+ok 6 - converts SSE chunks into separate text, reasoning, tool_call and done events
+  ---
+  duration_ms: 6.999805
+  type: 'test'
+  ...
+# Subtest: does not emit raw think/tool markup as normal text
+ok 7 - does not emit raw think/tool markup as normal text
+  ---
+  duration_ms: 0.899783
+  type: 'test'
+  ...
+# Subtest: turns a non-2xx response into a typed runtime error
+ok 8 - turns a non-2xx response into a typed runtime error
+  ---
+  duration_ms: 0.884279
+  type: 'test'
+  ...
+# Subtest: load/unload delegate to the supervisor and abort is propagated
+ok 9 - load/unload delegate to the supervisor and abort is propagated
+  ---
+  duration_ms: 0.967314
+  type: 'test'
+  ...
+1..9
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 95.343669

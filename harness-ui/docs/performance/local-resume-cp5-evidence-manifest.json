@@ -1,0 +1,42 @@
+{
+  "encoding": "base64(gzip(UTF8 JSON))",
+  "decodedBytes": 47944,
+  "decodedSha256": "d39b26762a3d3045e6aca62838756bbe30148c9b5841388b80548ce87995ef1e",
+  "encodedBytes": 12933,
+  "encodedSha256": "bb0b53c9b9f882d09a5015d530794619cfff0dae5a23ad93f8a0cdb501a9ec8c",
+  "runs": [
+    {
+      "name": "cp4-complete-source.tap",
+      "command": "node --test tests/local-resume-*.test.mjs tests/local-runtime-llama-server.test.mjs tests/bc09-classificazione-rimozioni.test.mjs",
+      "counts": {
+        "pass": 60,
+        "fail": 0,
+        "skip": 0
+      },
+      "sha256": "9f87673baddadf86c3a28e9440247f4519b4bd8b131b15b6067543d004c390be"
+    },
+    {
+      "name": "compatibility-28-30-31.tap",
+      "command": "node --test tests/local-resume-*.test.mjs tests/local-runtime-llama-server.test.mjs tests/local-runtime-stream-fragments.test.mjs tests/llama-binary-probe.test.mjs tests/llama-server-preflight.test.mjs tests/bc09-classificazione-rimozioni.test.mjs",
+      "counts": {
+        "pass": 127,
+        "fail": 0,
+        "skip": 0
+      },
+      "sha256": "3ca4718f5d025b6850f51b821af0746c5ce3b4f8fffea35185948ab8778aa87c"
+    },
+    {
+      "name": "pr29-diagnostic-boundary.tap",
+      "command": "node check-pr29-boundary.mjs PR31_DIAGNOSTICS_MODULE PR29_SUPERVISOR_MODULE",
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "skip": 0
+      },
+      "sha256": "4299760e2c27c58fffa0ed34ba9a296c45021bc31d9a071a89c6d36e689792bd"
+    }
+  ],
+  "storage": "conversation reviewer ZIP, not repository payload",
+  "decodedFile": "cp5-evidence.json",
+  "probeSha256": "2a3ca6ff46e6f001eee0bf581a6f17b6d3172163c9a902a5b49f094ab3402fac"
+}
