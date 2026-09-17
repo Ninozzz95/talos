@@ -174,6 +174,19 @@ si coordina con chi ha in mano il bug, invece di curare due volte lo stesso stra
 > qui è un innesco). Misurato il 17/09: `path-policy.mjs` non ha oggi nessuna grammatica dei segreti (0 occorrenze). Corsia **D**
 > della P0-bis, un agente Opus 5 xhigh: `verificaPermessoScrittura` (`talosHarness.mjs:5771`), `path-policy.mjs`, il ramo `leggi`.
 >
+> **Stato della P0-bis, 17/09 (misurato):** A, B e D **fuse** dopo bocciatura del revisore avversariale e riparazione
+> (A `c936f3a8`: il tilde in testa; B `f32673ef`: il cancello di `prova` più stretto di npm nel monorepo; D `6c3db56d`: nella
+> sessione PREDEFINITA negava invece di chiedere perché il registro non costruiva il canale di approvazione). Suite backend
+> intera da sola: 3146 test, 1 rosso che nessuna corsia vedeva (BC09: rimozioni nude nei test nuovi) curato in `32b6ec6a`;
+> kernel 598 + 1 skip. Consegnate sul 4174 e provate con un **giro vero** (`glm-5.3-flash`, sessione `d449a3ca`, PREDEFINITA,
+> spazio usa-e-getta con un `.env` finto): `echo '$HOME'; false; echo rc=$?; X=42 sh -c …` → **`$HOME` · `rc=1` · `X=42`** in
+> `[sandbox: wsl2]` (BC-54/55); `cat .env` → **due** richieste con la frase «Il comando tocca un file che può contenere chiavi o
+> password (.env): vuoi che lo esegua?»: al NO `REFUSED… The command was not run`, al SÌ il file letto (F15); `prova` senza
+> `scripts.test` → **`exit 127 · nessuna suite trovata`** (BC-57); ogni risultato porta `avviatoA`, `durataMs` (123 e 156 ms),
+> `comando`, `cwd` (OSS-1/2 lato server). **C** (`95f51ed7` sul ramo `p0bis-c`: BC-58, lettura del contratto eventi, OSS-3,
+> BC-59) è committata e sotto revisione avversariale; le resta l'ultimo pezzo di F15 a schermo (la frase come motivo della
+> scheda di approvazione, `leggi` nel blocco codice, niente «Consenti sempre» davanti a un segreto).
+>
 > **Esecuzione della P0-bis, dal 17/09:** corsie **A** (shell WSL: BC-54/55/56, xhigh), **B** (prova ed eventi: BC-57, OSS-1,
 > OSS-2), **C** (frontend: BC-58, lettura del contratto eventi, OSS-3, **BC-59**), **D** (F15) — agenti separati in worktree,
 > revisore avversariale per corsia, fusione mia con la suite intera PRIMA di consegnare.

@@ -577,3 +577,20 @@ ode_modules`. `wf_a38b4449-882-1` resta su disco: NON si tocca senza prima guard
   tracciati per ogni cartella del gruppo B; `AVM-motion-art` era un checkout orfano: diff fatto con un indice usa-e-getta).
 - PowerShell 5 legge i `.ps1` senza BOM come ANSI: un'emoji nel sorgente rompe il parser. Script di sistema solo ASCII.
 - `-File script.ps1 -Nomi a,b,c` passa UNA stringa: si spezza dentro lo script.
+
+## 2026-09-17 — P0-bis: tre corsie fuse, tutte e tre bocciate una volta, e il giro vero che le conferma
+
+- Ogni corsia (A, B, D) è stata **bocciata dal suo revisore per un difetto vero** e riparata: A la citazione della sonda
+  `command -v "~/x"` spegneva il tilde (regressione da un irrobustimento non richiesto); B `suiteMancante` non risaliva l'albero
+  come npm (falso «nessuna suite» nei monorepo); D il canale di approvazione non esisteva nella sessione predefinita
+  (`session-registry.mjs:2957`) ⇒ la cura NEGAVA invece di chiedere, perfino `cat .env` nel proprio progetto.
+- ⛔ Terza volta in due giorni: la **suite backend intera** trova ciò che i cancelli delle corsie non vedono (BC09, quattro
+  file con `rmSync(..., {recursive:true})` nudo). Si lancia PRIMA di consegnare, sempre.
+- Giro vero `d449a3ca` sul 4174, sessione PREDEFINITA, 37 s, 745 eventi, 2 approvazioni: `$HOME` / `rc=1` / `X=42` in wsl2;
+  `.env`: NO → non eseguito, SÌ → letto; `prova` → `exit 127 nessuna suite trovata`; `avviatoA`/`durataMs` 123-156 ms/`comando`/`cwd`.
+- Osservazione: una `shell` RIFIUTATA dall'approvazione non porta `comando`/`cwd` nel risultato (la `prova` rifiutata sì):
+  la riga dei Processi deve prendere il comando dagli argomenti.
+- Gli agenti in worktree nascono dall'HEAD di `AVM` (`3415c030`), non dalla punta della lane: la corsia C si è trovata su un
+  albero vecchio di 2016 righe e ha dovuto crearsi il ramo `p0bis-c` su `b929f56a`. Nei brief va detto il commit di partenza.
+- Un ambiente di agente può perdere `git` a metà sessione (guardiano rtk): l'agente lascia le modifiche sul disco e il
+  messaggio su file, e committo io.
