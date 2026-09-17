@@ -23,7 +23,7 @@ import { creaGestoreTerminaleWs } from './src/terminal-ws.mjs';
 import { misuraCapacitaMacchina } from './src/machine-capacity.mjs';
 import { createLocalModelStore } from './src/local-model-store.mjs';
 import { createOpenAiCompatibleRuntime } from './src/openai-compatible-runtime.mjs';
-import { ID_MOTORI_LOCALI_OPENAI, REGISTRO_FORNITORI } from './src/provider-registry.mjs'; // 12/09, P-C: i motori locali li nomina il registro, non due letterali
+import { ID_MOTORI_LOCALI_OPENAI } from './src/provider-registry.mjs'; // 12/09, P-C: i motori locali li nomina il registro, non due letterali
 import { createHfHubClient } from './src/hf-hub-client.mjs';
 import { createHfDirectTransfer } from './src/hf-direct-transfer.mjs';
 import { fetchAllowedHfImage } from './src/hf-image-proxy.mjs';
@@ -33,8 +33,8 @@ import { createProviderProbe } from './src/provider-probe.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
 import { createGeneratedImageStore } from './src/generated-image-store.mjs';
 import { createOwnerRuntimeAdapter, creaFetchMultiProvider } from './src/runtime-owner-adapter.mjs';
-/* ⛔ CLI-REQ-05: per rispondere «di CHI è questo modello» senza inventarsi un secondo registro. */
-import { separaFonteModello } from './src/model-destination.mjs';
+/* ⛔ CLI-REQ-05: «di CHI è questo modello, e ha una chiave utilizzabile ADESSO» — la regola e le sue prove stanno lì. */
+import { creaProntoFn } from './src/sessione-pronta.mjs';
 import { createDesktopContextRuntime, resolveDesktopContextProfile } from './src/context-runtime.mjs';
 import { createContextTokenCounter, buildPreparedDesktopContextRequest } from './src/context-token-counters.mjs';
 import { createChatImageStore } from './src/chat-image-attachments.mjs';
@@ -436,36 +436,10 @@ async function startServer() {
      * ⛔ Un fornitore che non richiede credenziale (`chiaveObbligatoria: false`) è pronto per
      *   costruzione: non gli si chiede una chiave che non esiste.
      */
-    prontoFn: (modello) => {
-      /*
-       * ⛔⛔⛔ D2 del terzo giro (17/09/2026) — FALLIVA APERTO, ed è il verso peggiore.
-       *
-       * Con `modello` vuoto, `null` o `undefined` questa funzione rispondeva `{pronto: true}` e la
-       * sessione partiva: PRIMA della cura un modello assente veniva rifiutato dal controllo sulla
-       * chiave, dopo passava. Una cura che apre una porta che era chiusa è peggio del difetto che
-       * chiude. ⇒ Un modello che non si sa leggere NON è pronto, e lo dice.
-       */
-      if (typeof modello !== 'string' || modello.trim() === '') {
-        return { pronto: false, codice: 'CONFIG_INVALID', messaggio: 'Scegli un modello prima di avviare la sessione.' };
-      }
-      let fonte;
-      try { ({ fonte } = separaFonteModello(modello)); }
-      catch { return { pronto: false, codice: 'CONFIG_INVALID', messaggio: 'Questo modello non è riconosciuto: scegline uno dall\'elenco.' }; }
-      const record = REGISTRO_FORNITORI[fonte];
-      /* ⛔ `codice` e `messaggio` solo quando c'è qualcosa da dire: un «pronto» non porta un codice d'errore. */
-      if (!record || record.chiaveObbligatoria !== true) return { pronto: true, fornitore: record?.etichetta ?? fonte };
-      const pronto = fonte === 'openrouter'
-        ? Boolean(providerStore.getKey('openrouter') ?? config.chiaveApi)
-        : providerStore.hasKey(fonte);
-      return pronto
-        ? { pronto: true, fornitore: record.etichetta }
-        : {
-          pronto: false,
-          fornitore: record.etichetta,
-          codice: 'CONFIG_INVALID',
-          messaggio: `Manca la chiave di ${record.etichetta}: collegala da Fornitori e accessi.`,
-        };
-    },
+    /* ⛔ 17/09, dopo la fusione: la regola vive in `src/sessione-pronta.mjs`, dove ha le sue prove. Qui dentro era una
+       chiusura che nessuno poteva chiamare, e per i fornitori diversi da OpenRouter contava come «pronta» anche una chiave
+       in PANCHINA (`hasKey` invece di `getKey`): la sessione partiva e il giro moriva senza una chiave utilizzabile. */
+    prontoFn: creaProntoFn({ providerStore, chiaveApi: config.chiaveApi }),
     /*
      * ⛔⛔⛔ CLI-REQ-05, punto 2 e 3 — LA STESSA DESTINAZIONE CHE USA UN GIRO NORMALE.
      * Senza questa, la compattazione e il giudice della ricerca partivano con una `fetch` nuda, e
