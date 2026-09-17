@@ -83,6 +83,10 @@ export const VARIABILI_DEL_SERVER_DICHIARATE_INNOCUE = Object.freeze([
   'TALOS_HARNESS_UI_SESSIONS_DIR',
   'TALOS_LLAMA_SERVER_PATH',
   'TALOS_LLAMA_SERVER_FALLBACK_PATH',
+  /* 18/09/2026 — entrata col lavoro di rilascio portato dal repo pubblico: il guscio installato indica al server QUALE file
+     del kernel caricare (l'hotfix spedito col pacchetto) quando nessuno l'ha scelto. È un percorso dentro l'installazione,
+     non una credenziale e non un indirizzo: un programma lanciato dal terminale che lo legga non ci fa niente. */
+  'TALOS_OWNER_RUNTIME_MODULE',
   /*
    * ⛔⛔⛔ B-1 del terzo giro (17/09/2026) — DUE CREDENZIALI CHE RESTANO, DECISE PER NOME.
    *

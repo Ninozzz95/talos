@@ -1393,7 +1393,6 @@ function leggiCorpoJsonCon(req, limiteByte) {
     let respinto = false;
     const pezzi = [];
     req.on('data', (pezzo) => {
-      if (oltreLimite) return; // con socket vivo si drena il resto senza accumularlo
       totale += pezzo.length;
       if (respinto) {
         if (totale > limiteByte * FATTORE_DRENAGGIO_OLTRE_IL_LIMITE) req.destroy();
@@ -1421,7 +1420,7 @@ function leggiCorpoJsonCon(req, limiteByte) {
       }
     });
     req.on('error', () => {
-      if (oltreLimite) return;
+      if (respinto) return; // già respinta col suo 413: un errore del socket durante il drenaggio non la rifiuta una seconda volta
       const errore = new Error('Richiesta interrotta');
       errore.code = 'QUERY_INVALID';
       reject(errore);
