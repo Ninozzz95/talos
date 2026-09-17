@@ -9385,6 +9385,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.realSession.figli = []; // una delega non leggibile non inventa righe
     }
     aggiornaInspectorDaStato();
+    aggiornaPuntiniStatoAlbero(); // PO-30: chi sta toccando quale file cambia insieme alle figlie
   }
   function syncRunComposerState() {
     aggiornaPiedeChatDaStato(); // 05/9 Fase 2: ChatFooter
@@ -13669,6 +13670,53 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     segno.setAttribute('role', 'img');
   }
 
+  /*
+   * ⛔⛔ PO-30, fetta 1 (18/09/2026) — «CHI STA TOCCANDO QUESTO FILE», come nel laboratorio della PR #33, dai dati VERI.
+   *   Il dato esce da `GET …/children`: ogni figlia porta `attivita.file` (che cosa ha letto e scritto, ricavato dai suoi
+   *   eventi — `src/attivita-figlia.mjs`). Qui si legge e basta: nessuna fixture, nessuno stato «demo».
+   *   Il segno è un PULSANTE: porta alla scheda Agenti, sul dettaglio di quell'agente (il collegamento file → agente del
+   *   laboratorio). Con più agenti sullo stesso file apre il più recente ancora al lavoro, e il titolo li nomina tutti.
+   *   ⛔ Una figlia ferma resta elencata («lo ha toccato»), ma il segno si accende solo per chi è ANCORA al lavoro: un
+   *   indicatore sempre acceso non indica niente.
+   */
+  function agentiSulFile(percorsoCompleto) {
+    const figli = Array.isArray(state.realSession.figli) ? state.realSession.figli : [];
+    return figli
+      .map((figlia) => ({ figlia, voce: (figlia?.attivita?.file || []).find((x) => x.percorso === percorsoCompleto) }))
+      .filter((x) => x.voce)
+      .map(({ figlia, voce }) => ({ figlia, scritto: voce.scritto === true, alLavoro: figlia.conclusa !== true && figlia.interrotta !== true, nome: figlia.taskCorto || figlia.task || 'Agente' }));
+  }
+  function scriviSegnoAgentiRiga(row, percorsoCompleto) {
+    const agenti = agentiSulFile(percorsoCompleto);
+    let segno = $('.talos-file-row__agente', row);
+    if (agenti.length === 0) { segno?.remove(); return; }
+    if (!segno) {
+      segno = document.createElement('button');
+      segno.type = 'button';
+      segno.className = 'talos-file-row__agente talos-button talos-button--ghost talos-button--sm talos-icon-button';
+      segno.tabIndex = -1;
+      segno.appendChild(iconaSvgAlbero('i-robot'));
+      segno.addEventListener('click', (evento) => {
+        evento.stopPropagation(); // non selezionare né aprire il file sotto
+        const scelti = agentiSulFile(segno.dataset.percorso);
+        const scelto = scelti.find((x) => x.alLavoro) || scelti[0];
+        if (!scelto) return;
+        $('#railTabs [data-rail="agenti"]')?.click();
+        apriConversazioneFiglia(scelto.figlia);
+      });
+      row.insertBefore(segno, $('.ft-actions-btn', row));
+    }
+    segno.dataset.percorso = percorsoCompleto;
+    const alLavoro = agenti.filter((x) => x.alLavoro);
+    segno.classList.toggle('is-al-lavoro', alLavoro.length > 0);
+    const chi = (elenco) => elenco.map((x) => `«${String(x.nome).slice(0, 60)}»`).join(', ');
+    const frase = alLavoro.length > 0
+      ? `${alLavoro.some((x) => x.scritto) ? 'Lo sta modificando' : 'Lo sta leggendo'}: ${chi(alLavoro)}. Apri l'agente.`
+      : `Lo ha toccato: ${chi(agenti)}. Apri l'agente.`;
+    segno.title = frase;
+    segno.setAttribute('aria-label', frase);
+  }
+
   function alberoInAnteprima() {
     return !state.realSession.id && Boolean(state.realSession.previewProjectId);
   }
@@ -14687,6 +14735,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       scriviStatoRigaAlbero(dot, stato);
       row.appendChild(dot);
     }
+    const percorsoPerAgenti = cartella ? null : percorsoCompleto;
 
     /*
      * ⭐⭐⭐ 27/8, owner: "non ha nessun'opzione per rinominare i file, per
@@ -14714,6 +14763,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       });
       row.appendChild(azioniBtn);
     }
+    if (percorsoPerAgenti) scriviSegnoAgentiRiga(row, percorsoPerAgenti); // dopo il «⋯», così il segno gli si mette DAVANTI
     /*
      * ⭐⭐⭐ 28/8, owner: "voglio abilitare il tasto destro del mouse a
      * livello globale dato che siamo nel desktop, per esempio tasto
@@ -15389,6 +15439,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       } else if (dot) {
         dot.remove();
       }
+      scriviSegnoAgentiRiga(row, li.dataset.percorso);
     }
   }
 
