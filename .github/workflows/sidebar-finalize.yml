@@ -50,8 +50,17 @@ jobs:
           pathlib.Path('candidate-3.patch').write_bytes(patch)
           subprocess.run(['git','apply','--check','--index','candidate-3.patch'],check=True)
           subprocess.run(['git','apply','--index','candidate-3.patch'],check=True)
+          # The first replay stress attempt exposed a fixture-only EventSource race. Apply the
+          # deterministic fixture correction: consume onopen once, then close the intercepted SSE.
+          sha4='8715b3287b1dea80fc63f6e3bd60d2d0fba6fb0c'
+          data4=json.loads(subprocess.check_output(['gh','api',f'repos/Ninozzz95/talos/git/blobs/{sha4}']))
+          patch4=base64.b64decode(data4['content'])
+          assert hashlib.sha1(b'blob '+str(len(patch4)).encode()+b'\0'+patch4).hexdigest()==sha4
+          pathlib.Path('candidate-4.patch').write_bytes(patch4)
+          subprocess.run(['git','apply','--check','--index','candidate-4.patch'],check=True)
+          subprocess.run(['git','apply','--index','candidate-4.patch'],check=True)
           file=pathlib.Path('evidence/candidate-manifest.json'); manifest=json.loads(file.read_text())
-          manifest.update({'harness-ui/frontend/tests/browser/sidebar-desktop.spec.mjs':'56266f5915aa8ff971791f1c3fc98af2e76066ff','harness-ui/frontend/tests/browser/elenco-dopo-lo-stop.spec.mjs':'33d0dc5ff8203c3da3a4ebccbe3742d371a6f354'})
+          manifest.update({'harness-ui/frontend/tests/browser/sidebar-desktop.spec.mjs':'56266f5915aa8ff971791f1c3fc98af2e76066ff','harness-ui/frontend/tests/browser/elenco-dopo-lo-stop.spec.mjs':'b426b4b807abe3f3e50a85f6c3910038ceefd48d'})
           for path,sha in manifest.items():
             assert subprocess.check_output(['git','rev-parse',':'+path],text=True).strip()==sha,path
           file.write_text(json.dumps(manifest,indent=2))
