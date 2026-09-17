@@ -14337,4 +14337,18 @@ body.reduce-motion {
   animation: none;
 }
 
+/* src/styles/inspector-tab-visibility.css */
+.talos-inspector .talos-figlia-ospite[hidden] {
+  display: none !important;
+}
+@supports selector(:has(*)) {
+  .talos-inspector:not(:has(#railTabs [data-rail=agenti][aria-selected=true])) .talos-figlia-ospite,
+  .talos-inspector:has(#railTabs [data-rail]:not([data-rail=agenti])[aria-selected=true]) .talos-figlia-ospite {
+    display: none !important;
+  }
+  .talos-inspector:has(#railTabs [data-rail=agenti][aria-selected=true]):has(.talos-figlia-ospite:not([hidden]) .talos-figlia:not([hidden])) #railAgenti {
+    display: none !important;
+  }
+}
+
 /* src/styles/main.css */
