@@ -8,7 +8,8 @@ measurement, not a v3 containment verdict or an installer integration.
 
 `run-client.ps1` selects `TALOS_LAB_CLIENT_PROFILE=1` before a new invocation
 of the fixed synthetic laboratory. `src/client_profile.rs` reads the OS
-product type/build with RtlGetVersion, architecture with IsWow64Process2,
+product type/build with RtlGetVersion, architecture with IsWow64Process2
+and (from build 22000) GetProcessInformation(ProcessMachineTypeInfo),
 and elevation, elevation type, mandatory integrity level, Administrators
 SID presence, AppContainer state and restricted SID count from the current
 token. The marker requests a test; it supplies none of these facts.
@@ -79,7 +80,7 @@ such, not as a sandbox denial. A retry is a new measured execution.
 
 ## Tests and evidence
 
-Seven Rust tests cover structure layout, supported/disallowed host scopes,
+Eight Rust tests cover structure layout, supported/disallowed host scopes,
 each token precondition, filtered-admin rejection and actual OS query success.
 Windows compilation, PowerShell execution, cleanup and probe behavior must be
 reported from real CI; the authoring Linux container has neither Rust nor
@@ -96,3 +97,20 @@ Primary API and platform references:
 - https://learn.microsoft.com/en-us/windows/win32/api/wow64apiset/nf-wow64apiset-iswow64process2
 - https://learn.microsoft.com/en-us/windows/win32/api/winnt/ne-winnt-token_information_class
 - https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-process
+
+## First actual client observations
+
+Run 35217591803 (a13d8c1e...) compiled the x64 binary on Windows 11 build
+26200 ARM64 and passed 36 native tests. The elevated control was rejected;
+a genuine standard user was observed (Medium, not elevated, no administrator
+SID), but the initial architecture mapping rejected it before the probes.
+Both account/profile and the fixture tree were successfully removed.
+
+IsWow64Process2 returned process_machine=0 and native_machine=0xaa64 for the
+x64 binary. Treating UNKNOWN as proof of native ARM64 execution was incorrect.
+The correction preserves both raw fields and independently reads machine_type
+from GetProcessInformation(ProcessMachineTypeInfo). Only AMD64 is accepted;
+API failure or an ARM64/unknown process type remains a rejection. A regression
+test covers the observed combination; the live query test requires AMD64.
+
+https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/ns-processthreadsapi-process_machine_information

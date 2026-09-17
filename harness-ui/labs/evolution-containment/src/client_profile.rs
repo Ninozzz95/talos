@@ -16,6 +16,8 @@ struct Version {
 }
 #[repr(C)]
 struct SidAttributes { sid: *mut c_void, attributes: u32 }
+#[repr(C)]
+struct MachineInformation { machine: u16, reserved: u16, attributes: u32 }
 #[link(name = "ntdll")]
 extern "system" { fn RtlGetVersion(version: *mut Version) -> i32; }
 #[link(name = "kernel32")]
@@ -25,6 +27,7 @@ extern "system" {
     fn CloseHandle(handle: Handle) -> i32;
     fn LocalFree(memory: *mut c_void) -> *mut c_void;
     fn IsWow64Process2(process: Handle, process_machine: *mut u16, native_machine: *mut u16) -> i32;
+    fn GetProcessInformation(process: Handle, class: i32, information: *mut c_void, size: u32) -> i32;
 }
 #[link(name = "advapi32")]
 extern "system" {
@@ -90,15 +93,16 @@ fn integrity_rid(token: Handle) -> Result<u32> {
 #[derive(Clone, Copy, Debug)]
 struct Profile {
     major: u32, minor: u32, build: u32, product_type: u8,
-    process_machine: u16, native_machine: u16,
+    process_machine: u16, native_machine: u16, machine_type: u16,
     elevated: bool, elevation_type: u32, integrity: u32,
     administrators_present: bool, appcontainer: bool, restricted_sids: u32,
 }
 impl Profile {
     fn scope(&self) -> Option<&'static str> {
         if self.major != 10 || self.minor != 0 || self.product_type != 1 || self.build < 19041 { return None; }
-        let process = if self.process_machine == 0 { self.native_machine } else { self.process_machine };
-        if process != AMD64 { return None; }
+        // IsWow64Process2 can report UNKNOWN for x64 emulation on ARM64.
+        // Keep its raw result; use the independent process-machine query.
+        if self.machine_type != AMD64 || ![0, AMD64].contains(&self.process_machine) { return None; }
         match (self.build >= 22000, self.native_machine) {
             (true, AMD64) => Some("windows11-x64-native"),
             (false, AMD64) => Some("windows10-x64-native"),
@@ -112,9 +116,9 @@ impl Profile {
     }
     fn accepted(&self) -> bool { self.scope().is_some() && self.standard_user() }
     fn emit(&self) {
-        println!("{{\"schema\":\"talos.client-host-profile.v1\",\"os_major\":{},\"os_minor\":{},\"build\":{},\"product_type\":{},\"process_machine\":{},\"native_machine\":{},\"elevated\":{},\"elevation_type\":{},\"integrity_rid\":{},\"administrators_sid_present\":{},\"appcontainer\":{},\"restricted_sid_count\":{},\"scope\":\"{}\",\"standard_user\":{},\"accepted\":{},\"full_containment_verified\":false}}",
+        println!("{{\"schema\":\"talos.client-host-profile.v1\",\"os_major\":{},\"os_minor\":{},\"build\":{},\"product_type\":{},\"process_machine\":{},\"native_machine\":{},\"machine_type\":{},\"elevated\":{},\"elevation_type\":{},\"integrity_rid\":{},\"administrators_sid_present\":{},\"appcontainer\":{},\"restricted_sid_count\":{},\"scope\":\"{}\",\"standard_user\":{},\"accepted\":{},\"full_containment_verified\":false}}",
             self.major, self.minor, self.build, self.product_type, self.process_machine,
-            self.native_machine, self.elevated, self.elevation_type, self.integrity,
+            self.native_machine, self.machine_type, self.elevated, self.elevation_type, self.integrity,
             self.administrators_present, self.appcontainer, self.restricted_sids,
             self.scope().unwrap_or("unsupported"), self.standard_user(), self.accepted());
     }
@@ -130,9 +134,19 @@ fn observe() -> Result<Profile> {
     let mut process_machine = 0;
     let mut native_machine = 0;
     unsafe { checked(IsWow64Process2(GetCurrentProcess(), &mut process_machine, &mut native_machine), "architecture")?; }
+    // ProcessMachineTypeInfo is documented starting at build 22000. On older
+    // native x64 Windows use the original WOW64 mapping; ARM64 client <22000
+    // is not an accepted scope. Failure of the new API is never a fallback.
+    let machine_type = if version.build >= 22000 {
+        let mut machine: MachineInformation = unsafe { zeroed() };
+        unsafe { checked(GetProcessInformation(GetCurrentProcess(), 9,
+            (&mut machine as *mut MachineInformation).cast(), size_of::<MachineInformation>() as u32),
+            "GetProcessInformation(ProcessMachineTypeInfo)")?; }
+        machine.machine
+    } else if process_machine == 0 { native_machine } else { process_machine };
     Ok(Profile {
         major: version.major, minor: version.minor, build: version.build, product_type: version.product_type,
-        process_machine, native_machine, elevated: scalar(token.0, 20)? != 0,
+        process_machine, native_machine, machine_type, elevated: scalar(token.0, 20)? != 0,
         elevation_type: scalar(token.0, 18)?, integrity: integrity_rid(token.0)?,
         administrators_present: administrators_present(token.0)?, appcontainer: scalar(token.0, 29)? != 0,
         restricted_sids: scalar(token.0, 11)?,
@@ -156,10 +170,11 @@ pub(crate) fn before_run() -> Result<()> {
 mod tests {
     use super::*;
     fn good() -> Profile { Profile { major: 10, minor: 0, build: 22631, product_type: 1,
-        process_machine: 0, native_machine: AMD64, elevated: false, elevation_type: 1,
+        process_machine: 0, native_machine: AMD64, machine_type: AMD64, elevated: false, elevation_type: 1,
         integrity: 8192, administrators_present: false, appcontainer: false, restricted_sids: 0 } }
     #[test] fn native_layouts_match_sdk() {
         assert_eq!(size_of::<Version>(), 284); assert_eq!(size_of::<SidAttributes>(), 16);
+        assert_eq!(size_of::<MachineInformation>(), 8);
     }
     #[test] fn supported_client_scopes_are_not_interchangeable() {
         let mut p = good(); assert_eq!(p.scope(), Some("windows11-x64-native"));
@@ -174,7 +189,13 @@ mod tests {
     }
     #[test] fn unsupported_process_architectures_are_rejected() {
         for machine in [0x014c, ARM64, 0xffff] { let mut p=good(); p.process_machine=machine; assert!(!p.accepted()); }
-        let mut p=good(); p.native_machine=ARM64; assert!(!p.accepted());
+        let mut p=good(); p.native_machine=ARM64; p.machine_type=ARM64; assert!(!p.accepted());
+    }
+    #[test] fn wow64_unknown_does_not_mean_native_arm64_execution() {
+        let mut p=good(); p.process_machine=0; p.native_machine=ARM64; p.machine_type=AMD64;
+        assert_eq!(p.scope(), Some("windows11-arm64-x64-emulated"));
+        p.machine_type=ARM64; assert_eq!(p.scope(), None);
+        p.machine_type=0; assert_eq!(p.scope(), None);
     }
     #[test] fn every_privilege_factor_is_required() {
         for mask in 0..64 {
@@ -189,6 +210,6 @@ mod tests {
         for rid in [0, 4096, 8448, 12288, 16384] { let mut p=good(); p.integrity=rid; assert!(!p.accepted()); }
     }
     #[test] fn live_host_is_observed_not_assumed_from_runner_name() {
-        let p=observe().unwrap(); assert!(p.build>0); assert!(p.native_machine != 0);
+        let p=observe().unwrap(); assert!(p.build>0); assert!(p.native_machine != 0); assert_eq!(p.machine_type, AMD64);
     }
 }
