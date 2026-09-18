@@ -57,6 +57,18 @@
  *  - si togliesse `caricaRepo()` da `ricarica()` ⇒ SCHEDA-07 rossa: il README non torna;
  *  - si togliesse il «Riprova» dal ramo d'errore della scheda ⇒ SCHEDA-07 rossa;
  *  - si togliesse il `role=alert` dagli errori ⇒ SCHEDA-07 rossa;
+ *  - si appendesse il badge della provenienza DOPO il valore invece che prima ⇒ SCHEDA-06 rossa: la
+ *    colonna dei numeri si spezza (misurato: 0 px di scarto col valore per ultimo, ~630 px col badge
+ *    appeso, 77 px raggruppandoli);
+ *  - si appendesse il pulsante «Copia» come TERZO figlio della riga dell'impronta (invece di
+ *    raggrupparlo con l'etichetta) ⇒ SCHEDA-04 rossa: il pulsante resta sospeso a meta' riga
+ *    (misurato in foto: etichetta a x≈36, «Copia» a x≈730, valore a x≈1300);
+ *  - si rimettesse la dimensione del file come etichetta (`Dimensione 4,4 GB` tutto dentro) ⇒
+ *    SCHEDA-04 rossa: quel numero esce dalla cella di valore e nessun elenco lo vede piu';
+ *  - si lasciasse il velo d'avvio a schermo durante le foto ⇒ SCHEDA-08 rossa (misurato: e' cosi' che
+ *    e' uscita la prima foto, il logo TALOS su fondo vuoto — e il PESO del PNG non lo vedeva);
+ *  - la cornice dipingesse `--talos-tema-fondo` invece di `--talos-background` ⇒ SCHEDA-08 rossa in
+ *    chiaro (misurato: rgb(30,31,34) = 0,01 di luminanza, testo scuro su fondo scuro);
  *  - restasse un errore a runtime ⇒ SCHEDA-08 rossa (la console si legge).
  *
  * LIMITI DICHIARATI (misurati, non supposti):
@@ -240,7 +252,19 @@ const AIUTI = () => {
     if (!t) {
       t = document.createElement('div');
       t.id = 'c4-tela';
-      t.style.cssText = 'position:fixed; inset:0; z-index:99990; overflow:auto; background:var(--talos-tema-fondo, #10141c)';
+      /*
+       * ⛔ IL FONDO DELLA CORNICE E' `--talos-background`, NON `--talos-tema-fondo`. Misurato il
+       *   18/09/2026: con `calm` in modo CHIARO le due variabili DIVERGONO — `--talos-tema-fondo`
+       *   resta `#1e1f22` (e' il seme scritto a mano in `styles/temi.css:83`, e la formula chiara di
+       *   `temi.css:121` esclude `calm` di proposito: «`calm` e' ESCLUSO: il suo chiaro sta in
+       *   `index.css`» — `temi.css:205`), mentre `--talos-background` diventa `#ece9e2`
+       *   (`index.css:129`) con il testo `#232427` (`index.css:130`).
+       *   ⇒ Col fondo sbagliato la foto CHIARA usciva nero-su-nero: `chiaro-1440x900-card.png`
+       *   mostrava testo scuro su fondo scuro, illeggibile. `--talos-background` e' la superficie
+       *   che usa la app, quindi e' anche quella giusta per la cornice, e nei due modi da'
+       *   `#1e1f22` (scuro) e `#ece9e2` (chiaro).
+       */
+      t.style.cssText = 'position:fixed; inset:0; z-index:99990; overflow:auto; background:var(--talos-background, #10141c)';
       const pagina = document.createElement('div');
       pagina.className = 'talos-page';
       pagina.dataset.c4Pagina = '';
@@ -300,6 +324,23 @@ async function apriIlBanco(page) {
   await serviLeSorgenti(page);
   await page.addInitScript(AIUTI);
   await page.goto('/');
+  /*
+   * ⛔ IL VELO D'AVVIO VA ASPETTATO CHE SIA VIA, o la prima foto e' il velo — e l'ho visto solo
+   *   guardando la foto: `scuro-1440x900-card.png` era il logo TALOS su fondo vuoto, con la pagina
+   *   sotto che non si vedeva. Il velo e' `#talosAvvio` (`src/avvio.js:98`) e vive:
+   *     · `MINIMO = 650` ms dopo che la sua animazione e' partita (`avvio.js:95` e `118`),
+   *     · l'animazione parte su `requestIdleCallback` con `timeout: 400` (`avvio.js:121`),
+   *     · poi `USCITA = 320` ms di uscita prima di staccarlo dal DOM (`avvio.js:97` e `113`),
+   *     · con un tetto di `MASSIMO = 4000` ms (`avvio.js:96` e `128`).
+   *   Contro il mio `waitForTimeout(220)` — MISURATO 220 < 650 — il primo scatto cade sempre dentro.
+   *   ⛔ Non basta «aspettare di piu'»: si aspetta che NON ci sia, cosi' la guardia e' vera per
+   *   costruzione. Il tetto del test sta sopra il tetto vero del velo (4000 + 320).
+   *   ⭐ E la seconda foto lo diceva in un altro modo: `scuro-1440x900-files.png` aveva la pagina
+   *   giusta con un logo TALOS IN TRASPARENZA dietro — era lo stesso velo a meta' uscita.
+   *   ⛔ Il peso del PNG NON prende questo difetto: quella foto vuota pesa 250,3K, la piu' pesante
+   *   delle dodici (un fondo sfumato non comprime). Una guardia sul peso non vede un velo.
+   */
+  await page.waitForSelector('#talosAvvio', { state: 'detached', timeout: 9000 });
   const esportate = await page.evaluate(async () => {
     window.__c4.moduli['scheda-modello'] = await import('/__c4/components/scheda-modello.js');
     return Object.keys(window.__c4.moduli['scheda-modello']).sort();
@@ -325,6 +366,21 @@ async function attesaDelBanco(page) {
     return [...r.querySelectorAll('.talos-kv__k')].some((k) => k.textContent === 'RAM totale');
   }, null, { timeout: 10000 });
   await page.waitForTimeout(80);
+}
+
+/**
+ * La luminanza relativa di un `rgb(r,g,b)` letto da `getComputedStyle`: 0 = nero, 1 = bianco.
+ * Serve a dire in modo MISURABILE se la cornice e' chiara o scura, invece di fidarsi del nome del
+ * tema o dell'attributo che ho appena scritto io (che e' appunto cio' che va verificato).
+ * Formula WCAG 2.2 sulla luminanza relativa, canali linearizzati (W3C WAI, letto il 18/09/2026).
+ * Ritorna -1 se la stringa non e' un colore: cosi' un `transparent` fa fallire la guardia invece di
+ * passare per «scuro» — un fondo trasparente era proprio uno dei modi in cui la foto usciva sbagliata.
+ */
+function luminanza(rgb) {
+  const c = String(rgb).match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [];
+  if (c.length < 3) return -1;
+  const lin = c.map((v) => { const s = v / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
 }
 
 /** Le misure che il test legge dalla pagina dopo un montaggio nella cornice visibile. */
@@ -561,13 +617,20 @@ test('SCHEDA-04 — i file: il confronto delle impronte, il troncamento onesto, 
     etichettaEsito: f.querySelector('[data-modello-esito]')?.textContent ?? null,
     impronta: f.querySelector('[data-modello-impronta]')?.textContent ?? null,
     improntaIntera: f.querySelector('[data-modello-impronta]')?.title ?? null,
-    dimensione: f.querySelector('.talos-label')?.textContent ?? null,
+    /*
+     * ⛔ La dimensione si legge dalla CELLA del valore, non dall'etichetta: era `.talos-label` con
+     *   «Dimensione 4,4 GB» tutto dentro, cioe' l'unico numero della card fuori dalle celle — e
+     *   l'unico che nessun elenco di valori vedeva. Ora e' una riga come le sue compagne, ed e'
+     *   anche la ragione per cui si legge `data-modello-valore`: se tornasse un'etichetta, questa
+     *   lettura torna `null` e l'assert qui sotto diventa ROSSO.
+     */
+    dimensione: f.querySelector('[data-modello-valore="dimensione"]')?.textContent ?? null,
     avviso: f.querySelector('[role=alert]')?.textContent ?? null,
     copie: f.querySelectorAll('[data-modello-copia]').length,
   })));
   expect(file).toHaveLength(1);
   expect(file[0].percorso).toBe('Qwen2.5-7B-Instruct-Q4_K_M.gguf');
-  expect(file[0].dimensione, 'la dimensione del file, in GB').toContain('4,4 GB');
+  expect(file[0].dimensione, 'la dimensione del file, in GB, come CELLA di valore e non dentro l\'etichetta').toBe('4,4 GB');
   expect(file[0].esito, 'l\'impronta combacia col repository').toBe('coincide');
   expect(file[0].etichettaEsito).toContain('Coincide');
   expect(file[0].impronta, 'a schermo l\'impronta e\' accorciata a testa e coda').toBe('3f4b1c9d…9a2f5317');
@@ -606,6 +669,49 @@ test('SCHEDA-04 — i file: il confronto delle impronte, il troncamento onesto, 
   });
   expect(diverso.esito, '⛔ due impronte diverse non devono piu\' sembrare uguali').toBe('diverso');
   expect(diverso.avviso, 'e l\'avviso lo dice a chi ascolta').toContain('non coincidono');
+
+  /*
+   * ⛔ LA COLONNA DEI VALORI NELLA CARD DEL FILE — stessa malattia e stessa misura della guardia in
+   *   SCHEDA-06: `.talos-kv` e' `justify-content:space-between` (`index.css:1563`), e il pulsante
+   *   «Copia» appeso DOPO il valore lo spingeva a meta' riga. Misurato in foto il 18/09/2026: la
+   *   riga dell'impronta finiva a x≈620 mentre «Revisione del repository» e «Impronta nel repository»
+   *   — che mostrano lo STESSO numero — finivano a x≈937.
+   *   ⛔ Si misura nella cornice VISIBILE: nel banco (che e' `hidden`) qualunque bordo e' zero e la
+   *   guardia sarebbe verde per costruzione.
+   */
+  const colonnaFile = await page.evaluate(() => {
+    const card = document.querySelector('#c4-tela [data-modello-file]');
+    return [...card.querySelectorAll('.talos-kv')].map((r) => {
+      const chiave = r.querySelector('.talos-kv__k');
+      const pulsante = r.querySelector('[data-modello-copia]');
+      return {
+        etichetta: chiave.textContent,
+        destra: Math.round(r.querySelector('.talos-kv__v').getBoundingClientRect().right),
+        conPulsante: !!pulsante,
+        // ⛔ E IL PULSANTE STA ATTACCATO ALL'ETICHETTA, non sospeso al centro della riga: con TRE
+        //    figli il `space-between` di `.talos-kv` (`index.css:1563`) divide lo spazio libero e il
+        //    «Copia» finisce a meta' riga — misurato in foto il 18/09/2026 nell'immagine chiara a
+        //    1440: etichetta a x≈36, «Copia» a x≈730, valore a x≈1300, cioe' ~500 px di vuoto da una
+        //    parte e ~570 dall'altra. Etichetta e pulsante in un `.talos-cluster` (`index.css:252`)
+        //    riportano i figli a due: misurato dopo la cura, il distacco e' la spaziatura del
+        //    cluster. La soglia di 40 sta fra i due valori e non diventa rossa da sola.
+        distaccoPulsante: pulsante
+          ? Math.round(pulsante.getBoundingClientRect().left - chiave.getBoundingClientRect().right)
+          : null,
+      };
+    });
+  });
+  expect(colonnaFile.length, 'le righe della card del file').toBeGreaterThanOrEqual(4);
+  expect(colonnaFile.some((r) => r.conPulsante), 'l\'impronta porta il pulsante, o la guardia non prova niente').toBe(true);
+  expect(colonnaFile.some((r) => !r.conPulsante), 'e le altre no: e\' il confronto fra le due che ha senso').toBe(true);
+  const conPulsante = colonnaFile.filter((r) => r.conPulsante);
+  for (const r of conPulsante) {
+    expect(r.distaccoPulsante,
+      `il pulsante «Copia» di «${r.etichetta}» non sta attaccato alla sua etichetta: ${r.distaccoPulsante} px`).toBeLessThan(40);
+  }
+  const destreFile = colonnaFile.map((r) => r.destra);
+  expect(Math.max(...destreFile) - Math.min(...destreFile),
+    `la colonna dei valori della card del file si spezza (${JSON.stringify(colonnaFile)})`).toBeLessThan(5);
 });
 
 test('SCHEDA-05 — importato dal computer: non si inventa una scheda, e la rotta del repository NON si chiama', async ({ page }) => {
@@ -706,6 +812,38 @@ test('SCHEDA-06 — il verdetto di memoria: i nove casi, i due numeri diversi, e
   for (const r of rapporti) expect(r.etichetta, `${r.nome}: la parola a schermo`).toBe(r.atteso);
   const per = Object.fromEntries(rapporti.map((r) => [r.nome, r]));
   expect(new Set(rapporti.map((r) => r.verdetto)).size, 'i casi coprono cinque verdetti diversi').toBe(5);
+
+  /*
+   * ⛔ LA COLONNA DEI NUMERI NON SI SPEZZA. Si misura l'OGGETTO (il bordo destro delle celle di
+   *   valore), non l'intenzione: `.talos-kv` e' `justify-content:space-between` (`index.css:1563`),
+   *   quindi con tre figli — etichetta, valore, badge della provenienza — il valore finisce a meta'
+   *   riga. Misurato in foto il 18/09/2026 nella card «Contesto e capacita'»: «32k token» a x≈730
+   *   contro «64k token» a x≈1360, nella stessa card.
+   *   ⭐ E i tre numeri dello scarto, misurati uno per uno: **~630 px** col badge appeso dopo il
+   *   valore, **77 px** raggruppando valore+badge (le righe con la provenienza si allineavano fra
+   *   loro ma quella senza finiva 77 px piu' a destra), **0 px** col valore per ULTIMO figlio.
+   *   La soglia di 5 sta fra 0 e 77: non diventa rossa da sola e prende la rottura.
+   *   ⛔ Si monta nella cornice VISIBILE e non nel banco: il banco e' `hidden`, e un elemento dentro
+   *   un `display:none` misura zero — la guardia sarebbe verde per costruzione.
+   */
+  await page.evaluate((risposte) => { window.__c4.prepara(risposte); window.__c4.monta({ id: 'qwen2.5-7b-q4km', scheda: 'compatibility' }); }, RISPOSTE_BASE);
+  await page.waitForFunction(() => document.querySelector('#c4-tela [data-modello-compatibilita] .talos-kv__v'), null, { timeout: 10000 });
+  const colonna = await page.evaluate(() => {
+    const radice = document.querySelector('#c4-tela [data-scheda-modello]');
+    return [...radice.querySelectorAll('.talos-kv')]
+      .filter((r) => /Contesto|Template di chat|Attrezzi|Chiamate di attrezzo|Ruolo di sistema/.test(r.querySelector('.talos-kv__k')?.textContent ?? ''))
+      .map((r) => ({
+        etichetta: r.querySelector('.talos-kv__k').textContent,
+        destra: Math.round(r.querySelector('.talos-kv__v').getBoundingClientRect().right),
+        conBadge: !!r.querySelector('.talos-badge'),
+      }));
+  });
+  expect(colonna.length, 'le righe della card «Contesto e capacita\'» si leggono').toBeGreaterThanOrEqual(6);
+  expect(colonna.some((r) => r.conBadge), 'e almeno una porta la provenienza, o la guardia non prova niente').toBe(true);
+  expect(colonna.some((r) => !r.conBadge), 'e almeno una no: e\' il confronto fra le due che ha senso').toBe(true);
+  const destre = colonna.map((r) => r.destra);
+  const scarto = Math.max(...destre) - Math.min(...destre);
+  expect(scarto, `la colonna dei valori si spezza fra righe con e senza provenienza (${JSON.stringify(colonna)})`).toBeLessThan(5);
 
   // le ragioni, con le due cifre che le spiegano
   expect(per['solo-chat-contesto'].dettaglio, 'la ragione «contesto» dice le due cifre').toContain('8k token');
@@ -896,6 +1034,15 @@ test('SCHEDA-08 — le foto: i due temi, le due larghezze, e zero errori in cons
     for (const quale of ['card', 'files', 'compatibility']) {
       await page.evaluate((q) => window.__c4.montaggi[0].vaiA(q), quale);
       await page.waitForTimeout(220);
+      /*
+       * ⛔ LA GUARDIA STA DOVE VIVE IL DIFETTO: subito PRIMA dello scatto. Il velo d'avvio copre
+       *   tutto e ha la precedenza su qualunque cosa ci sia sotto, quindi una foto scattata col velo
+       *   a schermo e' una foto di NIENTE — ed e' esattamente quello che e' successo al primo giro
+       *   (`scuro-1440x900-card.png` = il logo TALOS su fondo vuoto). Un controllo fatto in fondo al
+       *   ciclo arriverebbe quando il velo se n'e' gia' andato da solo, e sarebbe verde per
+       *   costruzione: la prova va fatta NELLE CONDIZIONI IN CUI IL DIFETTO VIVE.
+       */
+      expect(await page.locator('#talosAvvio').count(), `${nome}-${quale}: si sta fotografando il velo d'avvio, non la pagina`).toBe(0);
       await page.screenshot({ path: resolve(FOTO, `${nome}-${quale}.png`) });
       /*
        * ⛔ La larghezza della prosa si misura NELLA SUA passata: dopo l'ultimo `vaiA` nella cornice
@@ -925,11 +1072,26 @@ test('SCHEDA-08 — le foto: i due temi, le due larghezze, e zero errori in cons
     expect(forma.scorrimentoOrizzontale, `${nome}: la pagina non deve scorrere in orizzontale`).toBe(false);
     expect(forma.larghezzaRadice).toBeLessThanOrEqual(forma.larghezzaTela + 1);
     expect(forma.schedeVisibili).toBe(3);
+    /*
+     * ⛔ LA CORNICE DIPINGE LA SUPERFICIE DELLA APP, e questo si MISURA — non si deduce dal nome del
+     *   tema. Con la variabile sbagliata (`--talos-tema-fondo`) la riga chiara diventa ROSSA:
+     *   misurato il 18/09/2026, in chiaro la cornice dava `rgb(30,31,34)` = **0,01** di luminanza
+     *   mentre il fondo vero della app e' `#ece9e2` = **0,82**. Le due soglie stanno a meta' strada
+     *   fra quei due numeri, lontane da entrambi, cosi' non diventano rosse da sole.
+     *   ⛔ E si controlla ANCHE che il velo d'avvio non sia tornato: un velo che copre tutto ha la
+     *   precedenza su qualunque misura presa sotto di lui.
+     */
+    const lum = luminanza(forma.sfondo);
+    if (c.chiaro) expect(lum, `${nome}: la cornice chiara non e' chiara (${forma.sfondo})`).toBeGreaterThan(0.6);
+    else expect(lum, `${nome}: la cornice scura non e' scura (${forma.sfondo})`).toBeLessThan(0.3);
+    expect(await page.locator('#talosAvvio').count(), `${nome}: il velo d'avvio e' ancora sopra la pagina`).toBe(0);
   }
   expect(errori, '⛔ nessun errore a runtime: build verde e suite verde non guardano il runtime').toEqual([]);
   // le foto devono avere sostanza: una pagina vuota pesa pochissimo. La soglia NON e' inventata:
-  // misurate il 18/09/2026, le dodici foto stanno fra **74,2K** e **250,3K** byte, quindi 40K
-  // separa una pagina viva da una vuota senza rischiare di diventare rossa da sola.
+  // misurate il 18/09/2026 dopo la cura del velo, le dodici foto stanno fra **89,1K** e **124,0K**
+  // byte, quindi 40K separa una pagina viva da una vuota senza rischiare di diventare rossa da sola.
+  // ⛔ E il peso da solo NON vede un velo: prima della cura la foto del velo pesava **250,3K**, la
+  //   piu' pesante delle dodici (un fondo sfumato non comprime). Lo vede `#talosAvvio` a zero.
   for (const m of misure) {
     for (const quale of ['card', 'files', 'compatibility']) {
       const peso = (await readFile(resolve(FOTO, `${m.nome}-${quale}.png`))).length;

@@ -391,7 +391,23 @@ function riga(doc, etichetta, valore, { chiave = '', tono = '' } = {}) {
 function rigaFatto(doc, etichetta, fatto, opzioni) {
   const r = riga(doc, etichetta, testoFatto(fatto, opzioni));
   const daDove = provenienzaFatto(fatto);
-  if (daDove) r.append(badge(doc, daDove, ''));
+  if (daDove) {
+    /*
+     * ⛔ IL VALORE RESTA L'ULTIMO FIGLIO DELLA RIGA, e il badge va PRIMA di lui.
+     *   `.talos-kv` e' `display:flex; justify-content:space-between` (`index.css:1563`): lo spazio
+     *   libero si divide fra i figli, quindi conta CHI sta per ultimo. Appendendo il badge dopo il
+     *   valore, il valore finiva a META' riga — misurato in foto il 18/09/2026 nella card «Contesto e
+     *   capacita'»: «32k token» a x≈730 contro «64k token» a x≈1360, nella stessa card.
+     *   ⛔ E raggruppare valore+badge NON basta, misurato con la guardia di SCHEDA-06: le righe con
+     *   la provenienza si allineavano fra loro (bordo destro 1160/1161 su sei righe) ma quella SENZA
+     *   finiva a 1237 — **77 px** di scarto, cioe' la larghezza del badge. La colonna si tiene solo
+     *   col valore per ultimo: cosi' il suo bordo destro e' il bordo destro della riga, sempre.
+     *   ⇒ Non c'era un precedente da seguire, ed e' misurato: i tre costruttori `kv()` del prodotto
+     *   (`automazioni.js:21`, `catalogo-modelli.js:38`, `inspector.js:696`) fanno tutti e tre DUE
+     *   figli, e nessun componente appende un badge a una riga `talos-kv`.
+     */
+    r.insertBefore(badge(doc, daDove, ''), r.querySelector('.talos-kv__v'));
+  }
   return r;
 }
 
@@ -837,15 +853,41 @@ export function montaSchedaModello(contenitore, {
     valoreImpronta.dataset.modelloImpronta = '';
     if (impronta) {
       valoreImpronta.title = impronta;
-      rigaImpronta.append(nodo(doc, 'span', 'talos-kv__k', 'Checksum SHA-256 sul disco'), valoreImpronta,
+      /*
+       * ⛔ Il valore per ULTIMO, e il pulsante PRIMA di lui — la stessa forma della provenienza in
+       *   `rigaFatto`, e per la stessa ragione misurata: `.talos-kv` e' `justify-content:space-between`
+       *   (`index.css:1563`), quindi un terzo figlio dopo il valore lo spinge a META' riga. In foto
+       *   il 18/09/2026 il valore di questa riga finiva a x≈620 mentre «Revisione del repository» e
+       *   «Impronta nel repository» — che mostrano lo STESSO numero — finivano a x≈937: due righe
+       *   con la stessa impronta e la colonna spezzata.
+       * ⛔ E il pulsante sta ATTACCATO all'etichetta, non sospeso a meta' riga: con tre figli il
+       *   `space-between` divide lo spazio libero e il «Copia» finisce al centro (stessa foto:
+       *   etichetta a x≈36, «Copia» a x≈730, valore a x≈1300). Etichetta e pulsante in un
+       *   `.talos-cluster` (`index.css:252`, 32 usi nel prodotto) riportano i figli a DUE: primo a
+       *   sinistra, valore a destra, e niente in mezzo.
+       */
+      const testaImpronta = nodo(doc, 'div', 'talos-cluster');
+      testaImpronta.append(nodo(doc, 'span', 'talos-kv__k', 'Checksum SHA-256 sul disco'),
         copia(doc, impronta, { etichetta: 'Copia', suggerimento: 'Copia l’impronta SHA-256 intera' }));
+      rigaImpronta.append(testaImpronta, valoreImpronta);
     } else {
       rigaImpronta.append(nodo(doc, 'span', 'talos-kv__k', 'Checksum SHA-256 sul disco'), valoreImpronta);
     }
 
     file.append(
       identita,
-      paragrafo(doc, 'talos-label', `Dimensione ${byte(voce.locale?.bytes)}`),
+      /*
+       * ⛔ La dimensione e' una RIGA come le sue compagne, non un'etichetta col valore incollato
+       *   dentro. Prima era `paragrafo(doc,'talos-label','Dimensione 4,4 GB')` — misurato nella foto
+       *   del 18/09/2026: nella stessa card tre righe avevano il valore a DESTRA (`riga()`) e questa
+       *   ce l'aveva attaccato all'etichetta, perche' il valore non stava in una cella `.talos-kv__v`.
+       *   ⇒ Oltre a disallinearsi, quel numero era invisibile a ogni lettura che passa dalle celle
+       *   (il test leggeva `.talos-label`, cioe' un'etichetta): era l'unico numero della card fuori
+       *   da ogni elenco di valori. Il prodotto la dimensione la dice cosi' — `kv('File sul disco',
+       *   dati.dimensione, 'modelloDimensione')`, `modelli-installati.js:147` — quindi la forma giusta
+       *   era gia' in casa e non una nuova.
+       */
+      riga(doc, 'Dimensione', byte(voce.locale?.bytes), { chiave: 'dimensione' }),
       rigaImpronta,
       riga(doc, 'Revisione del repository', voce.remoto?.revision || String(stato.repo?.revision || '').slice(0, 12) || (voce.remoto ? 'non dichiarata' : '—'), { chiave: 'revisione' }),
       riga(doc, 'Impronta nel repository', voce.remoto?.sha256 ? improntaBreve(voce.remoto.sha256) : (voce.remoto ? 'non dichiarata' : 'il file non è elencato'), { chiave: 'impronta-repository' }),
