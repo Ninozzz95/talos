@@ -57,13 +57,24 @@ test('NATIVE-UI-01 la testata del giro atteso segue il modello attestato dal ser
   await expect(headers.first()).toHaveText(old);
 });
 
-test('NATIVE-UI-02 Diretti cerca e salva il modello scelto senza esporre la chiave', async ({page}) => {
+test('NATIVE-UI-02 la scheda del fornitore diretto cerca e salva il modello scelto senza esporre la chiave', async ({page}) => {
   let saved;
   await page.route('**/api/v1/providers', r=>r.fulfill({json:envelope({items:[{id:'gemini',label:'Gemini',keyConfigured:true}]})}));
   await page.route('**/api/v1/providers/gemini/models', r=>r.fulfill({json:envelope({provider:'gemini',modelli:[{id:'gemini:gemini-3.8-flash',nome:'Gemini Flash',provider:'gemini',contextLength:1000000}]})}));
   await page.route('**/api/v1/sessions/image-proof-prima/settings',r=>{saved=r.request().postDataJSON();return r.fulfill({json:envelope({ok:true,...saved})});});
   await page.getByRole('button',{name:'gemini-3.8-flash',exact:true}).click();
-  await page.getByRole('tab',{name:/Diretti/}).click();
+  // ⛔ AGGIORNATA il 18/09/2026 — il difetto era della PROVA, non del prodotto.
+  // «Diretti» non è più una scheda: l'owner l'11/09/2026 ha chiesto una tab PER FORNITORE
+  // («diretti deve diventare per provider, quindi una tab dedicata per gemini openai e
+  // anthropic»). Fonte nel prodotto: `src/components/fonti-modelli.js:5-8` e
+  // `src/legacy/app.js:5779` («Diretti NON È PIÙ UNA SCHEDA: sono tre»).
+  // Ricerca 18/09/2026 — playwright.dev/docs/api/class-locator: con `getByRole` il `name`
+  // accetta una RegExp «to match the accessible name» e `exact` è IGNORATO quando la regex
+  // c'è; la regex è la forma giusta quando il nome varia «following a predictable pattern»,
+  // cioè qui, dove il conteggio fa parte del nome. Mai `.first()`/`.nth()`.
+  // ⛔ Il nome accessibile della tab porta il CONTEGGIO («Gemini 1»): serve un prefisso,
+  // non `exact` — che qui fallirebbe come falliva `/Diretti/`.
+  await page.getByRole('tab',{name:/^Gemini/}).click();
   await page.getByRole('searchbox').fill('gemini');
   await page.getByRole('option',{name:/Gemini Flash gemini:gemini-3.8-flash/}).click();
   await expect.poll(()=>saved?.modello).toBe('gemini:gemini-3.8-flash');

@@ -258,4 +258,28 @@ export function aggiornaProviderList(lista,rows,{aperte=new Set(),prove=new Map(
  const feedback=precedente?.querySelector('[data-provider-feedback]'),target=card.querySelector('[data-provider-feedback]');if(feedback&&target)target.replaceWith(feedback);return card;});lista.replaceChildren(...cards);
  if(focusId){if(focus.isConnected&&!focus.disabled)focus.focus({preventScroll:true});else cards.find(n=>n.dataset.providerId===focusId)?.querySelector('[data-provider-toggle]')?.focus({preventScroll:true});}
 }
-export function montaProviderPanel(panel){if(!panel)return;panel.classList.add('talos-provider-panel');const head=panel.querySelector('.model-lab-panel-heading');head?.classList.add('talos-page__head');const title=head?.querySelector('h4');if(title)title.textContent='Fornitori e accessi';const note=head?.querySelector('p');if(note){note.className='talos-muted';note.textContent='Le chiavi restano sul computer. Presenza della chiave, collegamento ed esecuzione sono verifiche distinte.';}const test=panel.querySelector('#providerTestAll');if(test){test.className='talos-button talos-button--secondary talos-button--sm';test.dataset.c='Button';const refresh=button('refresh','Aggiorna');refresh.id='providerRefresh';delete refresh.dataset.providerAction;test.before(refresh);}}
+/*
+ * ⛔ 18/09/2026 — IL PANNELLO SI MONTA UNA VOLTA SOLA, E REGGE ENTRAMBE LE DIREZIONI (corsia 3).
+ * Fino a oggi: una riga sola, tollerante su tutto (`head?.`, `if(title)`, `if(test)`) tranne che
+ * sull'IDEMPOTENZA — una seconda chiamata creava un SECONDO `#providerRefresh`, cioè due nodi con
+ * lo stesso id nel documento. ⛔ Non è un difetto estetico: `getElementById`/`querySelector('#x')`
+ * tornano il PRIMO in ordine d'albero, quindi il listener del monolite può finire sul nodo sbagliato
+ * in silenzio (ricerca 18/09/2026: HTML, `id` «must be unique amongst all the IDs in the element's
+ * tree»; WHATWG DOM issue #1361, feb 2025 — proposta di far tornare `null` invece del primo).
+ * ⇒ Qui: (1) timbro `data-*` controllato PRIMA di scrivere, così il montaggio non combatte più con
+ * chi ridisegna il pannello dopo di lui; (2) i nodi si cercano nell'una O nell'altra forma
+ * (canonica `[data-provider-test-all]` / legacy `#providerTestAll`), così il pannello del mockup
+ * sulla schermata e quello legacy in Impostazioni si montano con la stessa funzione; (3) niente
+ * esplode se un nodo non c'è.
+ */
+export function montaProviderPanel(panel){
+ if(!panel||panel.dataset.providerMontato)return;
+ panel.dataset.providerMontato='true';
+ panel.classList.add('talos-provider-panel');
+ const head=panel.querySelector('.model-lab-panel-heading')||panel.querySelector('[data-provider-heading]');
+ head?.classList.add('talos-page__head');
+ const title=head?.querySelector('h4')||head?.querySelector('h2');if(title)title.textContent='Fornitori e accessi';
+ const note=head?.querySelector('p');if(note){note.className='talos-muted';note.textContent='Le chiavi restano sul computer. Presenza della chiave, collegamento ed esecuzione sono verifiche distinte.';}
+ const test=panel.querySelector('#providerTestAll')||panel.querySelector('[data-provider-test-all]');
+ if(test&&!panel.querySelector('#providerRefresh')){test.className='talos-button talos-button--secondary talos-button--sm';test.dataset.c='Button';const refresh=button('refresh','Aggiorna');refresh.id='providerRefresh';delete refresh.dataset.providerAction;test.before(refresh);}
+}

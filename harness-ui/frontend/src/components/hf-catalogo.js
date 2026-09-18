@@ -491,18 +491,37 @@ export function aggiornaHf(panel, risultati = [], { selezionato = null, detail =
   return scelto ? (scelto.repo || scelto.id) : null;
 }
 
-/** Sposta il pannello del mockup in `#modelLabHfPanel` con gli id che il monolite ascolta. */
+/**
+ * Sposta il pannello del mockup in `#modelLabHfPanel` con gli id che il monolite ascolta.
+ *
+ * ⛔ 18/09/2026 — IL TRAVASO REGGE ENTRAMBE LE DIREZIONI (corsia 3, il travaso neutro). Chi arriva
+ * in `originale` può essere il markup CANONICO (oggi: il mockup scende in Impostazioni) oppure
+ * quello LEGACY (destinazione invertita: il laboratorio sale sulla schermata), che porta GIÀ gli id
+ * del monolite: `#modelLabHfSearch`, `#modelLabHfResults`, `#modelLabHfDetail`. ⇒ Gli id si
+ * rinominano solo se sono ancora canonici, i nodi si cercano nell'una O nell'altra forma, e ciò che
+ * manca si salta invece di far esplodere il montaggio (senza il ramo `#modelLabHfDetail`, nella
+ * direzione invertita il dettaglio resterebbe APERTO e con dentro i risultati vecchi).
+ * ⛔ Il timbro va su ENTRAMBE le radici: `ensureModelLabControls` (app.js) guarda
+ * `dataset.hfMontato` sul pannello SVUOTATO, e senza il timbro la sua `insertBefore(controls,
+ * hfPanel.querySelector('.model-lab-catalog-layout'))` crea un secondo giro di controlli con gli
+ * stessi id — cioè id doppi, e `querySelector('#x')` tornerebbe il primo in ordine d'albero.
+ * Fonti consultate il 18/09/2026: MDN `Node.insertBefore` (`NotFoundError` quando il nodo di
+ * riferimento non è figlio di quel genitore); HTML, `id` «must be unique amongst all the IDs in the
+ * element's tree» (WHATWG DOM issue #1361, feb 2025).
+ */
 export function montaHf(originale, canonico) {
   if (!originale || !canonico || originale.dataset.hfMontato) return;
   originale.replaceChildren(...canonico.children);
   originale.dataset.hfMontato = 'true';
+  canonico.dataset.hfMontato = 'true';
   const ids = { cercaHf: 'modelLabHfSearch', autoreHf: 'modelLabHfAuthorControl', ordineHf: 'modelLabHfSortControl', tagHf: 'modelLabHfFiltersControl', listaHf: 'modelLabHfResults', altriHf: 'modelLabHfNextButtonControl' };
   for (const [prima, dopo] of Object.entries(ids)) {
-    const n = originale.querySelector(`#${prima}`); if (!n) continue;
+    const n = originale.querySelector(`#${prima}`) || originale.querySelector(`#${dopo}`); if (!n) continue;
+    if (n.id !== prima) continue; // id già quello che il monolite ascolta: non c'è niente da rinominare
     for (const label of originale.querySelectorAll(`label[for="${prima}"]`)) label.htmlFor = dopo;
     n.id = dopo;
   }
-  const lista = originale.querySelector('#modelLabHfResults'); if (lista) { lista.dataset.hfLista = ''; lista.replaceChildren(); }
-  const aside = originale.querySelector('[data-c="DetailPanel"]'); if (aside) { aside.id = 'modelLabHfDetail'; aside.replaceChildren(); aside.hidden = true; }
-  const altri = originale.querySelector('#modelLabHfNextButtonControl'); if (altri) altri.hidden = true;
+  const lista = originale.querySelector('#modelLabHfResults') || originale.querySelector('#listaHf'); if (lista) { lista.dataset.hfLista = ''; lista.replaceChildren(); }
+  const aside = originale.querySelector('[data-c="DetailPanel"]') || originale.querySelector('#modelLabHfDetail'); if (aside) { aside.id = 'modelLabHfDetail'; aside.replaceChildren(); aside.hidden = true; }
+  const altri = originale.querySelector('#modelLabHfNextButtonControl') || originale.querySelector('#altriHf'); if (altri) altri.hidden = true;
 }
