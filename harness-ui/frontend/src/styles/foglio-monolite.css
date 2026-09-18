@@ -182,7 +182,19 @@ dialog.sheet-dialog .ft-icon-code svg,dialog.command-dialog .ft-icon-code svg,.f
 .file-tree .ft-chevron{ display: inline-grid; place-items: center; flex: none; transition: transform var(--talos-motion-duration-disclosure, 180ms) var(--talos-motion-ease, cubic-bezier(.2,.7,.2,1)); }
 .file-tree .ft-node.ft-open > .ft-row > .ft-chevron{ transform: rotate(90deg); }
 .ft-actions-btn svg{ width: 17px; height: 17px; }
-.ft-actions-menu{ position: fixed; z-index: 40; min-width: 200px; display: flex; flex-direction: column; padding: 6px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-elevated); box-shadow: var(--shadow); }
+/* ⛔ 18/09/2026 — QUESTO MENU ERA SOTTO LE MANIGLIE DEL DIALOGO.
+   `z-index: 40` era un valore NUDO, l'unico del progetto, e le maniglie di
+   ridimensionamento dei dialoghi stanno a `--talos-z-menu` (120, `index.css:2486`):
+   aperto da dentro un velo — come fa il Laboratorio modelli col menu «⋯» di una card
+   fornitore — il menu finiva DIETRO la maniglia, che si prendeva il clic. Il comando
+   si vedeva e non si poteva premere: nessun errore, il clic andava alla maniglia.
+   Si usa il token che il progetto ha già per i menu (`.talos-context-menu`,
+   `index.css:2421`), +1 per stare sopra le maniglie che condividono lo stesso valore.
+   Ricerca 18/09/2026: la regola «nessuno z-index batte il top layer» vale per
+   `<dialog>`/`popover` NATIVI — questo velo è un `div` con `position:fixed`, cioè
+   DOM normale, dove l'ordine di impilamento è ancora lo z-index (MDN, «Stacking
+   context»; Chrome for Developers, «Popover API»). */
+.ft-actions-menu{ position: fixed; z-index: calc(var(--talos-z-menu) + 1); min-width: 200px; display: flex; flex-direction: column; padding: 6px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-elevated); box-shadow: var(--shadow); }
 .ft-actions-menu-item{ display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); font-size: calc(13px * var(--talos-ui-font-scale)); text-align: left; cursor: pointer; }
 .ft-actions-menu-item:hover{ background: var(--surface-2); color: var(--text); }
 .ft-actions-menu-item svg{ width: 15px; height: 15px; flex-shrink: 0; color: var(--muted); }

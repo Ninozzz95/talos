@@ -37,6 +37,8 @@ export function createOverlayManager(doc: Document): OverlayManager {
   const shown = (el: HTMLElement) => el.isConnected && !el.hidden && (el.tagName !== 'DIALOG' || el.hasAttribute('open'));
   const visible = (el: HTMLElement) => shown(el) && !el.closest('[hidden],[inert]') && el.getClientRects().length > 0 && doc.defaultView?.getComputedStyle(el).visibility !== 'hidden';
   const top = () => stack.at(-1);
+  /* La base della scala dei modali: `--ui-z-modal` (200 se non dichiarata), +10 per livello. */
+  const modalBaseZ = () => Number.parseInt(doc.defaultView?.getComputedStyle(doc.documentElement).getPropertyValue('--ui-z-modal') || '200', 10) || 200;
   function focusable(entry: Entry): HTMLElement[] {
     return [...entry.content.querySelectorAll<HTMLElement>(candidates)].filter(el => el.tabIndex >= 0 && !el.matches(':disabled') && visible(el));
   }
@@ -113,7 +115,7 @@ export function createOverlayManager(doc: Document): OverlayManager {
       backdrop: options.backdrop ? { node: options.backdrop, tab: options.backdrop.getAttribute('tabindex'), hidden: options.backdrop.getAttribute('aria-hidden'), z: options.backdrop.style.zIndex } : null };
     stack.push(entry);
     layer.dataset.modalOwned = 'true';
-    const baseZ = Number.parseInt(doc.defaultView?.getComputedStyle(doc.documentElement).getPropertyValue('--ui-z-modal') || '200', 10) || 200;
+    const baseZ = modalBaseZ();
     layer.style.zIndex = String(baseZ + stack.length * 10);
     if (entry.backdrop) { entry.backdrop.node.tabIndex = -1; entry.backdrop.node.setAttribute('aria-hidden', 'true'); entry.backdrop.node.style.zIndex = String(baseZ + stack.length * 10 - 1); }
     content.setAttribute('aria-modal', 'true');
