@@ -1,0 +1,260 @@
+name: sidebar-finalize
+
+# Final exact-source gate for PR #32. Reconstructs the hash-locked candidate,
+# applies the verified race fixes, tests the exact result on Linux and Windows,
+# then publishes only that tested source to the existing PR branch.
+on:
+  pull_request:
+    paths: ['.github/workflows/sidebar-finalize.yml']
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.event.pull_request.number == 32 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'refactor/desktop-left-sidebar-2026-09-17'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Reconstruct exact sidebar source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import base64, hashlib, json, pathlib, subprocess
+
+          text = pathlib.Path('.github/workflows/sidebar-apply.yml').read_text()
+          marker = '      - name: Apply hash-locked sidebar candidate\n'
+          start = text.index(marker) + len(marker)
+          run_marker = '        run: |\n'
+          start = text.index(run_marker, start) + len(run_marker)
+          end = text.index('\n      - uses:', start)
+          block = text[start:end]
+          assert all(not line.strip() or line.startswith('          ') for line in block.splitlines())
+          script = '\n'.join(line[10:] for line in block.splitlines()) + '\n'
+          lines = script.splitlines()
+          assert lines[0] == "python - <<'PY'" and lines[-1] == 'PY'
+          constructor = '\n'.join(lines[1:-1]) + '\n'
+          exec(compile(constructor, 'sidebar-apply.yml', 'exec'), {})
+
+          patches = [
+              '0ac0fb72f40ffceee64dceb09c572e8b91891037',
+              '8715b3287b1dea80fc63f6e3bd60d2d0fba6fb0c',
+              'ea38acdd07b584f743a2230812174d2a0c74d522',
+          ]
+          for index, sha in enumerate(patches, start=3):
+              data = json.loads(subprocess.check_output(['gh', 'api', f'repos/Ninozzz95/talos/git/blobs/{sha}']))
+              patch = base64.b64decode(data['content'])
+              actual = hashlib.sha1(b'blob ' + str(len(patch)).encode() + b'\0' + patch).hexdigest()
+              assert actual == sha, (sha, actual)
+              path = pathlib.Path(f'candidate-{index}.patch')
+              path.write_bytes(patch)
+              subprocess.run(['git', 'apply', '--check', '--index', str(path)], check=True)
+              subprocess.run(['git', 'apply', '--index', str(path)], check=True)
+
+          manifest_path = pathlib.Path('evidence/candidate-manifest.json')
+          manifest = json.loads(manifest_path.read_text())
+          changed = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines()
+          assert set(changed) == set(manifest), (set(changed) - set(manifest), set(manifest) - set(changed))
+          for path in manifest:
+              manifest[path] = subprocess.check_output(['git', 'rev-parse', ':' + path], text=True).strip()
+          manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+          print(f'Exact final candidate reconstructed: {len(manifest)} files')
+          PY
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            harness-ui/frontend/package-lock.json
+            context-engine/package-lock.json
+
+      - name: Locked dependencies
+        run: |
+          npm ci --prefix harness-ui
+          npm ci --prefix harness-ui/frontend
+          npm ci --prefix context-engine
+          node --version | tee evidence/node-final-${{ runner.os }}.txt
+
+      - name: Chromium
+        if: runner.os == 'Linux'
+        working-directory: harness-ui/frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Focused sidebar regressions
+        run: |
+          set -o pipefail
+          node --test harness-ui/tests/sidebar-feed.test.mjs harness-ui/frontend/tests/unit/sidebar-state.test.mjs harness-ui/tests/bc09-classificazione-rimozioni.test.mjs 2>&1 | tee evidence/focused-final-${{ runner.os }}.log
+
+      - name: Frontend build
+        run: |
+          set -o pipefail
+          npm --prefix harness-ui/frontend run build 2>&1 | tee evidence/build-final-${{ runner.os }}.log
+
+      - name: Full frontend unit suite
+        if: runner.os == 'Linux'
+        run: |
+          set -o pipefail
+          npm --prefix harness-ui/frontend run test:unit 2>&1 | tee evidence/unit-final.log
+
+      - name: Stress cross-window resume forty executions
+        if: runner.os == 'Linux'
+        working-directory: harness-ui/frontend
+        run: |
+          set -o pipefail
+          npx playwright test -c playwright.sidebar.config.mjs --grep 'ELENCO-STOP-03' --repeat-each=20 --reporter=line 2>&1 | tee ../../evidence/replay-stress-final.log
+
+      - name: Full sidebar browser and accessibility suite
+        if: runner.os == 'Linux'
+        working-directory: harness-ui/frontend
+        run: |
+          set -o pipefail
+          npx playwright test -c playwright.sidebar.config.mjs --reporter=line 2>&1 | tee ../../evidence/sidebar-final.log
+
+      - name: Component parity
+        if: runner.os == 'Linux'
+        run: |
+          set -o pipefail
+          npm --prefix harness-ui/frontend run test:componenti 2>&1 | tee evidence/component-final.log
+
+      - name: Full existing laboratory suite
+        if: runner.os == 'Linux'
+        working-directory: harness-ui/frontend
+        run: |
+          set -o pipefail
+          npx playwright test -c playwright.lab.config.mjs --reporter=line 2>&1 | tee ../../evidence/lab-final.log
+
+      - name: Full Windows server suite
+        if: runner.os == 'Windows'
+        working-directory: harness-ui
+        run: |
+          set -o pipefail
+          node --test tests/*.test.mjs 2>&1 | tee ../evidence/server-final-windows.log
+
+      - name: Windows Electron dependencies
+        if: runner.os == 'Windows'
+        run: |
+          npm ci --prefix harness-ui/desktop
+          cp -R harness-ui/frontend/dist/. harness-ui/public/
+
+      - name: Windows Electron and desktop tests
+        if: runner.os == 'Windows'
+        run: |
+          set -o pipefail
+          npm --prefix harness-ui/desktop test 2>&1 | tee evidence/desktop-final-windows.log
+
+      - name: Package hash-verified tested source
+        if: runner.os == 'Linux'
+        run: |
+          python - <<'PY'
+          import hashlib, json, pathlib, tarfile
+          manifest = json.loads(pathlib.Path('evidence/candidate-manifest.json').read_text())
+          assert len(manifest) == 20
+          with tarfile.open('sidebar-tested-source.tar.gz', 'w:gz') as tar:
+              tar.add('evidence/candidate-manifest.json', arcname='manifest.json')
+              for path, sha in manifest.items():
+                  raw = pathlib.Path(path).read_bytes()
+                  actual = hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest()
+                  assert actual == sha, path
+                  tar.add(path, arcname=path)
+          PY
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: runner.os == 'Linux'
+        with:
+          name: sidebar-tested-source
+          path: sidebar-tested-source.tar.gz
+          retention-days: 2
+          if-no-files-found: error
+
+      - name: Verification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sidebar-final-${{ runner.os }}
+          path: |
+            evidence/
+            harness-ui/frontend/artifacts/
+            harness-ui/frontend/test-results/
+          retention-days: 7
+          if-no-files-found: warn
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Publish only tested source to PR branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          gh run download "$GITHUB_RUN_ID" -n sidebar-tested-source -D "$RUNNER_TEMP/tested-source"
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, tarfile
+          branch = 'refactor/desktop-left-sidebar-2026-09-17'
+          remote = subprocess.check_output(['gh','api',f'repos/Ninozzz95/talos/git/ref/heads/{branch}','--jq','.object.sha'], text=True).strip()
+          assert remote == os.environ['EXPECTED_HEAD'], (remote, os.environ['EXPECTED_HEAD'])
+          archive = pathlib.Path(os.environ['RUNNER_TEMP']) / 'tested-source/sidebar-tested-source.tar.gz'
+          with tarfile.open(archive) as tar:
+              manifest = json.load(tar.extractfile('manifest.json'))
+              assert len(manifest) == 20
+              assert set(tar.getnames()) == set(manifest) | {'manifest.json'}
+              for path, sha in manifest.items():
+                  raw = tar.extractfile(tar.getmember(path)).read()
+                  actual = hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest()
+                  assert actual == sha, path
+                  dst = pathlib.Path(path)
+                  dst.parent.mkdir(parents=True, exist_ok=True)
+                  dst.write_bytes(raw)
+
+          subprocess.run(['git','config','user.name','github-actions[bot]'], check=True)
+          subprocess.run(['git','config','user.email','41898282+github-actions[bot]@users.noreply.github.com'], check=True)
+          groups = [
+              ('docs(sidebar): document reviewer-ready desktop design', [p for p in manifest if '/docs/' in p]),
+              ('feat(sidebar): stream aggregate session activity with bounded lifecycle', [p for p in manifest if p.startswith(('harness-ui/src/','harness-ui/tests/'))]),
+              ('refactor(sidebar): reconcile realtime desktop rows and composer state', [p for p in manifest if p.startswith('harness-ui/frontend/')]),
+          ]
+          assert set(p for _, paths in groups for p in paths) == set(manifest)
+          for message, paths in groups:
+              subprocess.run(['git','add','--',*paths], check=True)
+              subprocess.run(['git','diff','--cached','--check'], check=True)
+              changed = subprocess.check_output(['git','diff','--cached','--name-only'], text=True).splitlines()
+              assert set(changed) == set(paths), (message, changed, paths)
+              subprocess.run(['git','commit','-m',message], check=True)
+          subprocess.run(['gh','auth','setup-git'], check=True)
+          subprocess.run(['git','push','origin',f'HEAD:refs/heads/{branch}'], check=True)
+          pathlib.Path('published-head.txt').write_text(subprocess.check_output(['git','rev-parse','HEAD'], text=True))
+          PY
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sidebar-published-head
+          path: published-head.txt
+          retention-days: 7
+          if-no-files-found: error
