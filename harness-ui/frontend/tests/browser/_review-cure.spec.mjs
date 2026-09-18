@@ -417,10 +417,14 @@ test('R19 · mentre si cerca, cosa resta disegnato nella colonna', async ({ page
 
 /*
  * ==========================================================================
- * R18 — LA CURA PROPOSTA, MISURATA: 220 px (il numero del mockup) invece di 150.
- *   `.catalog-sorting .calm-control{max-width:220px}` è la misura del mockup per
- *   questo stesso controllo. Qui si prova a 220 px, in pagina, sulle DUE cose che
- *   contano insieme: l'etichetta più lunga E il segnaposto del campo di ricerca.
+ * R18 — LA CURA, MISURATA: 220 px invece di 150. Qui si prova a 220 px, in pagina,
+ *   sulle DUE cose che contano insieme: l'etichetta più lunga E il segnaposto del
+ *   campo di ricerca.
+ * ⛔ E IL 220 **NON È DEL MOCKUP** — questa intestazione lo diceva, ed era FALSO: il
+ *   terzo revisore l'ha misurato alla fonte. Nel mockup `.catalog-sorting .calm-control`
+ *   non matcha NESSUN elemento; il suo controllo dell'ordine è `.catalog-sort
+ *   select{max-width:245px}` ed è largo 158 px nella scena viva. Il 220 si tiene perché
+ *   è giusto **per noi**: 135 px di etichetta su 135 disponibili, e il campo resta largo.
  * ==========================================================================
  */
 test('R18 · a 220 px entrano sia l’etichetta lunga sia il segnaposto', async ({ page }) => {

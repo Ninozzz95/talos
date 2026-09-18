@@ -1656,18 +1656,28 @@ a.talos-button{text-decoration:none}
    nessuna regola di questa riga e quindi cresceva con lo spazio che avanza.
    ⇒ Stessa misura del nativo: l'intenzione c'era, mancava il selettore. Così il campo di ricerca
    riprende lo spazio (è quello in cui si scrive) e l'ordine torna un controllo largo 150. */
-/* ⛔ 220, NON 150 — e il 220 è DEL MOCKUP, non un numero aggiustato per far passare una prova.
-   La prima stesura diceva 150 (la misura scritta sopra per il select NATIVO) e **tagliava
-   l'etichetta**: con «Aggiornati di recente» scelto il testo chiede **135 px** e ne aveva **97**
-   (misurato dalla review avversaria del 18/09/2026, che l'ha riprodotto con A/B: prima della
-   regola il controllo cresceva e l'etichetta entrava sempre). Il mockup dà a quel controllo
-   `max-width: 220px` (`.catalog-sorting .calm-control`, `prototypes/calm-lab/TALOS-Calm-Lab.html`):
-   a 220 l'etichetta ha 135 su 135 e il campo di ricerca scende a 648 con **596 utili contro i 171
-   del suo segnaposto**, quindi il difetto originale (il campo schiacciato) NON si riapre.
-   ⛔ `min-width: 0` resta: senza, un contenuto più largo del dovuto sfonderebbe la riga invece di
+/* ⛔ 220 È UN NUMERO NOSTRO, NON DEL MOCKUP — e questa nota corregge una attribuzione FALSA che
+   avevo scritto qui e nel messaggio di `a253687a`. Il terzo revisore l'ha misurata alla fonte: nel
+   mockup `.catalog-sorting .calm-control{max-width:220px}` **matcha ZERO elementi**; il suo
+   controllo dell'ordine è `.catalog-sort select{max-width:245px}`, e nella scena viva è largo
+   **158 px**. ⇒ Il 220 si tiene perché è **misurato giusto per noi** — con «Aggiornati di recente»
+   l'etichetta chiede **135 px** e a 220 ne ha 135 su 135, intera — non perché sia del mockup.
+ * ⛔ E la prima stesura diceva **150** (la misura scritta sopra per il select NATIVO) e **tagliava
+   l'etichetta**: 135 richiesti, 97 disponibili, cioè «Aggiornati di …».
+ * ⛔ `min-width: 0` resta: senza, un contenuto più largo del dovuto sfonderebbe la riga invece di
    accorciarsi, e in `flex-wrap: nowrap` è la riga intera a pagare. */
 .talos-toolbar--hf .calm-control--select{flex:0 0 220px; min-width:0}
-@media (max-width:1100px){
+/* ⛔ LA SOGLIA ERA 1100 E LASCIAVA UNA FASCIA SCOPERTA, 1101→1490 — misurata dal terzo revisore
+   con bisezione (`ultimaRotta 1490`, `primaSana 1491`). Sopra la soglia la riga è `nowrap` e i
+   quattro controlli non si comprimono: il minimo è **220 + 200 + 180 + 220 + 24 di gap = 844 px**.
+   Fra 1101 e 1490 la riga è più stretta di così e il controllo dell'ordine **usciva dal pannello**:
+   a 1440 di **52 px**, a 1280 (la viewport predefinita della suite) di **209 px**, con `.talos-page`
+   che diventava scorribile in orizzontale (`scrollWidth 1149` contro `client 1004`) e il campo di
+   ricerca schiacciato tanto da rimettere il segnaposto tagliato (171 in 168) — cioè il difetto
+   originale, riaperto dalla cura del difetto originale.
+   ⇒ La soglia si alza a **1500**: da lì in su la riga ci sta su una linea, sotto va a capo come già
+   faceva (misurato dal revisore da 1100 a 390: nessun trabocco, etichetta mai tagliata). */
+@media (max-width:1500px){
   .talos-toolbar--hf{flex-wrap:wrap}
   .talos-toolbar--hf .talos-field{flex:1 1 100%}
   .talos-toolbar--hf .talos-toolbar__autore,
