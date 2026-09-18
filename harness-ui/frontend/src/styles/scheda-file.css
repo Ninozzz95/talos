@@ -77,6 +77,9 @@
  * a ogni passaggio del mouse; ed è raggiungibile dai lettori di schermo anche quando è trasparente
  * (sparisce alla vista, non all'accessibilità — diverso da `visibility`, che la toglierebbe a tutti).
  */
+/* ⛔ Il laboratorio dà 24x24 a TUTTI i bottoni della riga (`.file-row button`, `calm-files.css`),
+   non solo al segno dell'agente: senza, il «⋯» e la casella non hanno la stessa area di tocco. */
+#railFile .talos-file-row button{min-width:24px; min-height:24px}
 .talos-file-row__check{
   flex:none; width:14px; height:14px; margin:0 2px 0 0; accent-color:var(--talos-accent);
   opacity:0; transition:opacity var(--talos-motion-duration-control, 160ms) var(--talos-motion-ease, ease);
@@ -91,8 +94,8 @@
 
 /* Il piede: compare solo con una selezione attiva, in fondo alla scheda. */
 .talos-file-selezione{
-  display:flex; align-items:center; gap:var(--talos-space-xs); flex:none;
-  padding:var(--talos-space-xs) 0 0; margin-top:auto;
+  display:flex; align-items:center; gap:var(--talos-space-sm); flex:none;
+  padding:var(--talos-space-sm) var(--talos-space-md); margin-top:auto;
   border-top:1px solid var(--talos-border);
 }
 /*
@@ -109,7 +112,7 @@
  * saltare di lato «⋯» e la lettera di stato quando compare.
  */
 .ft-rename{
-  flex:1; min-width:0; height:calc(var(--talos-control-height) - 10px); padding:0 var(--talos-space-xs);
+  flex:1; min-width:0; height:24px; min-height:24px; padding:0 var(--talos-space-xs);
   font:inherit; font-size:var(--talos-font-size-sm, inherit); color:inherit; background:var(--talos-background);
   border:1px solid var(--talos-accent); border-radius:var(--talos-radius-control);
 }
