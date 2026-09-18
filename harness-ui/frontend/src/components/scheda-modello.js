@@ -1012,9 +1012,19 @@ export function montaSchedaModello(contenitore, {
      *   `testoFatto`, la stessa funzione che usano le righe sorelle qui sopra (`:988-991`), che
      *   passano i fatti a `rigaFatto` e li sanno leggere. Solo questa riga li concatenava a mano.
      */
+    /*
+     * ⛔ E DUE VOLTE LA STESSA PAROLA NON È UNA MISURA — visto nella foto
+     *   `pagina-modello-compatibility_1440p_real.png` del 18/09/2026: la riga diceva
+     *   «Sconosciuto · Sconosciuto». `backend` e `build` sono DUE fatti, e quando il runtime non è
+     *   raggiungibile sono ignoti TUTTI E DUE: ripetere la parola non aggiunge niente e sembra un
+     *   guasto del rendering. ⇒ Si tiene la prima occorrenza di ogni testo, in ordine: due valori
+     *   diversi restano due (`Vulkan · b6421`), due valori uguali diventano uno.
+     * ⛔ Il `filter` è per INDICE, non per valore: `filter(v => Set.has(v))` toglierebbe anche i
+     *   doppioni legittimi in mezzo, e comunque qui l'ordine è quello dei fatti.
+     */
     const backend = [ispezione.backend, ispezione.build]
       .map((fatto) => testoFatto(fatto))
-      .filter((testo) => testo && testo !== '—')
+      .filter((testo, indice, tutti) => testo && testo !== '—' && tutti.indexOf(testo) === indice)
       .join(' · ');
     contesto.append(paragrafo(doc, 'talos-muted talos-mono talos-lab__space', backend || 'Backend non dichiarato dal runtime.'));
     if (ispezione.observedAt) {
