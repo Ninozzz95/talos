@@ -274,8 +274,25 @@ use[href="#glifo"],.talos-brand__mark .glyph,.talos-empty__mark .glyph,.talos-av
    mark SOLO NELLA SIDEBAR A SINISTRA … quello in alto a sinistra». Restretto a `.talos-brand`
    apposta: la stessa classe la porta anche il marchio dello stato vuoto (`.talos-empty__mark`,
    stato-vuoto.js), che ha misure sue e non c'entra con questa richiesta. */
-.talos-brand > .talos-brand__mark{width:42px; height:42px}
+.talos-brand > .talos-brand__mark{width:42px; height:42px; color:var(--talos-accent-text)}
 .talos-brand > .talos-brand__mark .glyph{width:40px; height:40px}
+/*
+ * ⛔⛔ 18/09/2026 — IL MARCHIO È QUELLO DEL MOCKUP, E IL COLORE ERA QUELLO SBAGLIATO.
+ * Owner: «il brand logo della sidebar di sinistra, quello accanto alla scritta TALOS, voglio quello
+ * identico esatto del mockup delle impostazioni, non negoziabile».
+ * Il DISEGNO ora è identico: nel simbolo `#glifo` l'esagono porta `opacity="0.18"` e i **cinque**
+ * pallini `fill="currentColor"` — prima l'esagono era a piena opacità e i pallini erano **anelli
+ * vuoti** (il simbolo dichiara `fill:none` per non farsi cancellare da `currentColor`).
+ * Il COLORE: il mockup usa `--talos-accent-text` (#704814 in tema chiaro, misurato `rgb(112,72,20)`,
+ * cioè il NOSTRO token), la sidebar usava `--talos-accent-hover` (#82551a) — l'accento dell'hover
+ * come tinta di base. Allineato al mockup; nei temi scuri i due token restano `color-mix` adattivi,
+ * quindi il marchio resta leggibile.
+ * ⛔ LA MISURA: 42×42, E L'HA DECISA L'OWNER. Il mockup disegna il marchio 32×38; la sidebar lo ha
+ * a 42×42 da un ordine precedente del 10/09 («aumenta la grandezza del logo TALOS brand mark SOLO
+ * NELLA SIDEBAR A SINISTRA», scritto due volte in maiuscolo). Le due ordinazioni si contraddicono, e
+ * il 18/09 l'owner ha sciolto la contraddizione: **«facciamo 42 x 42»** ⇒ «identico» significa il
+ * DISEGNO e il COLORE, non la misura. La misura resta la sua, e chi la ritocca lo dice nel commit.
+ */
 .talos-brand__copy{display:flex; flex-direction:column; line-height:1; margin-right:auto}
 .talos-brand__copy strong{font-size:18px; letter-spacing:.02em; font-weight:600}
 .talos-brand__copy span{font-size:10px; color:var(--talos-muted); margin-top:4px; text-transform:uppercase; letter-spacing:.16em}
