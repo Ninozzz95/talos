@@ -1,3 +1,4 @@
+import { montaSidebarDesktop } from '../components/sidebar-desktop.js';
 import {creaSceltaFallback} from '../components/fonti-modelli.js';
 import { AZIONE_ACCODA, AZIONE_BIVIO, AZIONE_COMANDO, ORIGINE_SCELTA_ESPLICITA, SELETTORE_SCELTA_PREDEFINITA, creaCronologiaComposer, decidiInvio, mostraPulsanteReindirizzo, reindirizzoConsentito } from './invio-durante-il-giro.js'; // Corsia 1 (13/09): il bivio accoda/reindirizza, e la freccia su
 import { colonnaConversazione, scorrevoleConversazione } from '../bridge/conversazione-dom.js';
@@ -90,6 +91,10 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
 (() => {
   'use strict';
+
+  // Only the standalone desktop mounts this controller; the embedded host keeps its contract.
+  let sidebarDesktop = null;
+  let terminaTrascinamentoSidebar = null;
 
   /*
    * Owner 24/8: montato dentro uno shadow root da `HarnessSessionScreen.vue`
@@ -1689,7 +1694,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       onMenu: apriMenuAzioniLibreria,
       onCambiata: () => {
         void caricaPaginaNote();
-        void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+        void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0, { forza: Boolean(sidebarDesktop) });
       },
       copia: (testo) => copyText(testo, 'Nota copiata'),
       rendiMarkdown: renderizzaMarkdownSemplice,
@@ -1751,6 +1756,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     sessionsCollapseBtn?.setAttribute('aria-expanded', String(expanded));
     // 05/9 Fase 2 (owner: «le due sidebar devono essere collassabili»): la barra compressa e' la modalita' a icone del mockup
     if (expanded) document.documentElement.removeAttribute('data-sidebar'); else document.documentElement.setAttribute('data-sidebar', 'icone');
+    if (sidebarDesktop) {
+      // In icon mode every destination remains reachable. Disclosure preferences are unchanged.
+      for (const head of sessionsPanel.querySelectorAll('.td-nav-head[aria-controls]')) {
+        const group = document.getElementById(head.getAttribute('aria-controls'));
+        if (group) group.hidden = expanded && head.getAttribute('aria-expanded') !== 'true';
+      }
+      sessionsCollapseBtn?.setAttribute('aria-label', expanded ? 'Comprimi la barra laterale' : 'Espandi la barra laterale');
+      sessionsCollapseBtn?.setAttribute('data-tip', expanded ? 'Comprimi la barra laterale' : 'Espandi la barra laterale');
+    }
   }
 
   /** 05/9 Fase 2 — i collassi delle due colonne si ricordano nella chiave del contratto delle larghezze (talos-harness-panel-widths). */
@@ -2218,7 +2232,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       sorveglianza?.segnalaRete(true);
       return risposta;
     } catch (error) {
-      sorveglianza?.segnalaRete(false, 'fetch');
+      if (!init?.signal?.aborted) sorveglianza?.segnalaRete(false, 'fetch');
       throw error;
     }
   }
@@ -2710,9 +2724,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (badge) badge.hidden = true;
   }
 
-  async function apiGet(pathname) {
+  async function apiGet(pathname, { signal } = {}) {
     const response = await fetchSorvegliata(API(pathname), {
-      method: 'GET',
+      method: 'GET', signal,
       headers: { Accept: 'application/json' },
       cache: 'no-store',
     });
@@ -2919,6 +2933,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   let rigaVivaProgrammata = null;
 
   function scriviRigaSessioneViva() {
+    if (sidebarDesktop) return; // The aggregate stream is the desktop row's only source of facts.
     rigaVivaProgrammata = null;
     ultimaRigaViva = Date.now();
     const id = state.realSession.id;
@@ -2952,6 +2967,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** Chiede un aggiornamento della riga viva, non più spesso del ritmo dichiarato. */
   function segnalaRigaSessioneViva() {
+    if (sidebarDesktop) return; // The aggregate stream is the desktop row's only source of facts.
     if (rigaVivaProgrammata) return;
     const passato = Date.now() - ultimaRigaViva;
     if (passato >= RITMO_RIGA_VIVA_MS) { scriviRigaSessioneViva(); return; }
@@ -5134,7 +5150,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            */
           onCambiata: () => {
             caricaPannelloLibreria({ pagina: true });
-            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0, { forza: Boolean(sidebarDesktop) });
           },
           onMenu: apriMenuAzioniLibreria,
           /* ⭐ BC-38 (12/09) — «da quale sessione»: il nome VIVO, non quello congelato nel meta.
@@ -5251,7 +5267,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           onMenu: apriMenuAzioniLibreria,
           onCambiata: () => {
             caricaPannelloAttivita({ pagina: true });
-            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0, { forza: Boolean(sidebarDesktop) });
           },
           copia: (testo) => copyText(testo, 'Attività copiata'),
         });
@@ -5302,7 +5318,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           onMenu: apriMenuAzioniLibreria,
           onCambiata: () => {
             caricaPannelloMemoria({ pagina: true });
-            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0, { forza: Boolean(sidebarDesktop) });
           },
           copia: (testo) => copyText(testo, 'Ricordo copiato'),
         });
@@ -6726,7 +6742,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * @param {{voci:Array, etichetta:string, classe?:string, posizionamento?:object}} opzioni
    */
   function apriMenuAzioni({ voci, etichetta, classe = '', posizionamento = {} }) {
-    document.querySelector('.ft-actions-menu.talos-menu-azioni')?.remove();
+    const previousMenu = document.querySelector('.ft-actions-menu.talos-menu-azioni');
+    if (previousMenu?.chiudiTalosMenu) previousMenu.chiudiTalosMenu(); else previousMenu?.remove();
     const menu = document.createElement('div');
     menu.className = `ft-actions-menu talos-menu-azioni${classe ? ` ${classe}` : ''}`;
     menu.setAttribute('role', 'menu');
@@ -6739,11 +6756,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       button.setAttribute('role', 'menuitem');
       button.tabIndex = -1; // roving: una sola fermata di Tab, le frecce fanno il resto
       button.append(iconaSvgAlbero(voce.icona), textElement('span', '', voce.etichetta));
-      button.addEventListener('click', () => { chiudiMenu({ restituisciFuoco: false }); voce.azione(); });
+      button.addEventListener('click', () => { chiudiMenu({ restituisciFuoco: posizionamento?.sidebar === true }); voce.azione(); });
       menu.appendChild(button);
     }
     document.body.appendChild(menu);
     const pos = posizionamento || {};
+    if (pos.sidebar) menu.classList.add('td-sidebar-menu');
     if (pos.ancoraEl) {
       const rect = pos.ancoraEl.getBoundingClientRect();
       menu.style.top = `${rect.bottom + 4}px`;
@@ -6755,16 +6773,26 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       menu.style.left = `${Math.max(8, left)}px`;
       menu.style.top = `${Math.max(8, top)}px`;
     }
+    if (pos.sidebar) {
+      const gap = parseFloat(getComputedStyle(menu).paddingTop) || 8;
+      const box = menu.getBoundingClientRect();
+      menu.style.top = `${Math.max(gap, Math.min(box.top, window.innerHeight - box.height - gap))}px`;
+    }
     const focusElement = pos.focusElement || null;
+    let closed = false, listenerTimer = null;
+    menu.chiudiTalosMenu = () => chiudiMenu();
     const grilletto = pos.ancoraEl || null;
     grilletto?.setAttribute?.('aria-expanded', 'true');
     const items = () => [...menu.querySelectorAll('[role="menuitem"]')];
     function chiudiMenu({ restituisciFuoco = false } = {}) {
+      if (closed) return; closed = true;
+      if (listenerTimer !== null) window.clearTimeout(listenerTimer);
       menu.remove();
       grilletto?.setAttribute?.('aria-expanded', 'false');
       document.removeEventListener('click', onDocumentClick);
       document.removeEventListener('keydown', onKeydown, true); // stesso `true` della registrazione, o non si stacca
-      if (restituisciFuoco) (focusElement || grilletto)?.focus?.();
+      if (restituisciFuoco && (focusElement || grilletto)?.isConnected) (focusElement || grilletto).focus();
+      pos.onClose?.();
     }
     function onDocumentClick(event) { if (!menu.contains(event.target)) chiudiMenu(); }
     function onKeydown(event) {
@@ -6793,7 +6821,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       tutte[j].focus();
     }
     if (pos.fuoco) items()[0]?.focus();
-    window.setTimeout(() => {
+    listenerTimer = window.setTimeout(() => {
+      listenerTimer = null;
+      if (closed) return;
       document.addEventListener('click', onDocumentClick);
       document.addEventListener('keydown', onKeydown, true);
     }, 0);
@@ -6822,6 +6852,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     const voci = [
       { etichetta: 'Apri', icona: 'i-eye', azione: () => passaASessione(target.sessionId, target.taskId, target.nome, target.modello, target) },
+      ...(posizionamento?.sidebarVoci || []),
       { etichetta: 'Rinomina', icona: 'i-edit', azione: () => openSheet('rename') },
       { etichetta: 'Duplica come ramo', icona: 'i-branch', azione: () => forkSession(target) },
       { etichetta: 'Esporta la trascrizione', icona: 'i-download', azione: () => { void esportaTrascrizioneSessione('markdown', target); } },
@@ -16274,6 +16305,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function aggiornaStatoRigheSelezione() {
+    sidebarDesktop?.sync();
     for (const input of $$('[data-session-select]')) {
       const checked = state.sessionSelection.selected.has(input.dataset.sessionSelect);
       input.checked = checked;
@@ -16776,8 +16808,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * finto. Le liste per sessione si rileggono solo se la sessione è cambiata
    * o sono passati 15 s: la sidebar si ridisegna spesso, sei fetch a giro no.
    */
-  const contatoriLuoghi = { sessione: undefined, quando: 0 };
-  async function aggiornaContatoriLuoghi(numeroSessioni) {
+  const contatoriLuoghi = { sessione: undefined, quando: 0, inVolo: false, ripeti: false, versione: 0 };
+  async function aggiornaContatoriLuoghi(numeroSessioni, { forza = false } = {}) {
     const radice = $('#sessionsPanel');
     if (!radice) return;
     aggiornaConteggiNav(radice, { board: numeroSessioni });
@@ -16790,28 +16822,46 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
     };
     const id = state.realSession.id || null;
-    const stessa = id === contatoriLuoghi.sessione && Date.now() - contatoriLuoghi.quando < 15_000;
-    if (stessa) return;
-    contatoriLuoghi.sessione = id;
-    contatoriLuoghi.quando = Date.now();
-    /*
-     * ⛔ LOTTO A (11/09) — «Progetti» è entrata nel gruppo «Spazi di lavoro» e il suo badge non
-     *   esisteva: la rotta `/api/v1/projects` c'era già (la legge `caricaPaginaProgetti`), mancava
-     *   solo di contarla qui. I progetti sono GLOBALI come gli attrezzi e le automazioni, quindi
-     *   stanno in questo gruppo di tre e non in quello che dipende dalla sessione aperta.
-     */
-    const [capability, automazioni, progetti] = await Promise.all([conta('/api/v1/tools', 'attrezzi'), conta('/api/v1/automations', 'items'), conta('/api/v1/projects', 'items')]);
-    aggiornaConteggiNav(radice, { capability, automazioni, progetti });
-    if (!id) {
-      aggiornaConteggiNav(radice, { libreria: null, memoria: null, attivita: null, note: null, ricerca: null, officina: null });
+    if (forza) contatoriLuoghi.versione++;
+    // A tool result or a confirmed user edit invalidates the counts immediately.
+    // Serialize refreshes; a newer invalidation must not be lost behind an older GET.
+    if (sidebarDesktop && contatoriLuoghi.inVolo) {
+      if (forza || id !== contatoriLuoghi.sessione) contatoriLuoghi.ripeti = true;
       return;
     }
-    const liste = [['libreria', 'library', 'voci'], ['memoria', 'memory', 'memorie'], ['attivita', 'tasks', 'attivita'], ['note', 'notes', 'note'], ['ricerca', 'research', 'ricerche'], ['officina', 'tool-forge', 'strumenti']];
-    const valori = await Promise.all(liste.map(([, rotta, campo]) => conta(`/api/v1/sessions/${encodeURIComponent(id)}/${rotta}`, campo)));
-    if (state.realSession.id !== id) return; // la sessione è cambiata mentre le fetch erano in volo
-    const conteggi = {};
-    liste.forEach(([chiave], i) => { conteggi[chiave] = valori[i]; });
-    aggiornaConteggiNav(radice, conteggi);
+    const stessa = id === contatoriLuoghi.sessione && Date.now() - contatoriLuoghi.quando < 15_000;
+    if (stessa && !forza) return;
+    const versione = contatoriLuoghi.versione;
+    if (sidebarDesktop) contatoriLuoghi.inVolo = true;
+    try {
+      contatoriLuoghi.sessione = id;
+      contatoriLuoghi.quando = Date.now();
+      /*
+       * ⛔ LOTTO A (11/09) — «Progetti» è entrata nel gruppo «Spazi di lavoro» e il suo badge non
+       *   esisteva: la rotta `/api/v1/projects` c'era già (la legge `caricaPaginaProgetti`), mancava
+       *   solo di contarla qui. I progetti sono GLOBALI come gli attrezzi e le automazioni, quindi
+       *   stanno in questo gruppo di tre e non in quello che dipende dalla sessione aperta.
+       */
+      const [capability, automazioni, progetti] = await Promise.all([conta('/api/v1/tools', 'attrezzi'), conta('/api/v1/automations', 'items'), conta('/api/v1/projects', 'items')]);
+      if (sidebarDesktop && versione !== contatoriLuoghi.versione) return;
+      aggiornaConteggiNav(radice, { capability, automazioni, progetti });
+      if (!id) {
+        aggiornaConteggiNav(radice, { libreria: null, memoria: null, attivita: null, note: null, ricerca: null, officina: null });
+        return;
+      }
+      const liste = [['libreria', 'library', 'voci'], ['memoria', 'memory', 'memorie'], ['attivita', 'tasks', 'attivita'], ['note', 'notes', 'note'], ['ricerca', 'research', 'ricerche'], ['officina', 'tool-forge', 'strumenti']];
+      const valori = await Promise.all(liste.map(([, rotta, campo]) => conta(`/api/v1/sessions/${encodeURIComponent(id)}/${rotta}`, campo)));
+      if (state.realSession.id !== id || (sidebarDesktop && versione !== contatoriLuoghi.versione)) return; // la sessione è cambiata mentre le fetch erano in volo
+      const conteggi = {};
+      liste.forEach(([chiave], i) => { conteggi[chiave] = valori[i]; });
+      aggiornaConteggiNav(radice, conteggi);
+    } finally {
+      contatoriLuoghi.inVolo = false;
+      if (sidebarDesktop && contatoriLuoghi.ripeti) {
+        contatoriLuoghi.ripeti = false;
+        void aggiornaContatoriLuoghi(state.sessionSelection.available.size, { forza: true });
+      }
+    }
   }
 
   function contenitoreSessioniReali() {
@@ -16849,16 +16899,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   // 05/9 Fase 2: statoSessione vive in components/session-item.js (stesso ordine degli stati, parole del mockup)
 
-  async function aggiornaElencoSessioniReali() {
+  async function aggiornaElencoSessioniReali(snapshot = null, cambioSidebar = {}) {
+    if (sidebarDesktop && !Array.isArray(snapshot)) return sidebarDesktop.refresh();
     const contenitore = contenitoreSessioniReali();
     let elenco;
     try {
-      elenco = (await apiGet('/api/v1/sessions')).items;
+      elenco = Array.isArray(snapshot) ? snapshot : (await apiGet('/api/v1/sessions')).items;
     } catch {
       return; // ⛔ un aggiornamento sidebar fallito non è un'azione richiesta, non merita un toast
     }
     aggiornaNotifiche(elenco);
-    const pendente = rigaSessionePendente(); // W1-12
+    const pendente = sidebarDesktop ? [] : rigaSessionePendente(); // W1-12
     $('#noSessionsPlaceholder')?.toggleAttribute('hidden', (Array.isArray(elenco) && elenco.length > 0) || pendente.length > 0); // 02/09 — il riquadro "Nessuna sessione ancora" stava sotto quattro sessioni reali
     /*
      * ⭐ 27/8, trovato analizzando quali badge non si spengono MAI: questa
@@ -16873,7 +16924,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const demoBadge = $('.demo-surface-badge', $('#sessionsPanel'));
       if (demoBadge) demoBadge.hidden = true;
     }
-    elenco = Array.isArray(elenco) ? elenco.map((sessione) => ({ ...sessione, modello: normalizzaModelloSessione(sessione) })) : [];
+    elenco = Array.isArray(elenco) ? (sidebarDesktop ? elenco : elenco.map((sessione) => ({ ...sessione, modello: normalizzaModelloSessione(sessione) }))) : [];
     /*
      * ⛔⛔⛔ 07/9, owner con lo screenshot: «Su 4174 ancora quel problema della sessione. Non
      * riesco a riprendere». Nella sua pagina il pulsante era ROSSO («Interrompi al prossimo punto
@@ -16889,12 +16940,35 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   passa di qui ogni pochi secondi. Se la sessione aperta risulta conclusa o interrotta, il
      *   giro e finito: si dichiara, e il composer si ridisegna da solo.
      */
-    if (state.realSession.id && !state.realSession.chiusaDalServer) {
+    if (state.realSession.id) {
       const corrente = elenco.find((sessione) => sessione.sessionId === state.realSession.id);
-      if (corrente && (corrente.conclusa === true || corrente.interrotta === true)) {
-        state.realSession.chiusaDalServer = true;
-        state.realSession.eventoTerminaleVisto = true;
-        syncRunComposerState();
+      const fattoSidebarAutorevole = sidebarDesktop && (cambioSidebar.snapshot === true || cambioSidebar.changed?.has?.(state.realSession.id));
+      /*
+       * ⛔ 17/09 — la sidebar aggregata e il composer avevano ancora due verità.
+       * `RunStarted` riapre correttamente il giro nella finestra B, ma programma anche una
+       * sincronizzazione della sidebar. Se quella sincronizzazione consumava lo snapshot
+       * precedente (ancora `conclusa:true`), questo blocco richiudeva il composer; il delta
+       * SSE successivo rendeva la RIGA «in corso» ma non riapriva più «Interrompi».
+       *
+       * Con la sidebar desktop il solo fatto autorizzato a cambiare lo stato del composer è
+       * quindi uno snapshot/delta REVISIONATO che riguarda davvero questa sessione. Un refresh
+       * di contesto non può chiudere un giro con una fotografia vecchia. E la riconciliazione
+       * è bidirezionale: se un'altra finestra riprende la sessione, il delta autorevole riapre
+       * anche il composer locale. L'host embedded conserva invece la riconciliazione legacy.
+       */
+      if (corrente && (fattoSidebarAutorevole || !sidebarDesktop)) {
+        const chiusa = corrente.conclusa === true || corrente.interrotta === true;
+        const vivaEsplicita = corrente.conclusa === false && corrente.interrotta !== true;
+        if (chiusa && !state.realSession.chiusaDalServer) {
+          state.realSession.chiusaDalServer = true;
+          state.realSession.eventoTerminaleVisto = true;
+          syncRunComposerState();
+        } else if (fattoSidebarAutorevole && vivaEsplicita
+          && (state.realSession.chiusaDalServer || state.realSession.eventoTerminaleVisto)) {
+          state.realSession.chiusaDalServer = false;
+          state.realSession.eventoTerminaleVisto = false;
+          syncRunComposerState();
+        }
       }
     }
     /*
@@ -16913,10 +16987,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (schedaAgentiDaRileggere({ elenco, sessioneCorrente: state.realSession.id, figli: state.realSession.figli })) {
       void caricaFigliSessione();
     }
-    state.sessionSelection.available = new Map(elenco.map((sessione) => [sessione.sessionId, sessione]));
-    void aggiornaContatoriLuoghi(elenco.length); // 05/9 Fase 2: NavItem
+    state.sessionSelection.available = new Map(elenco.map((sessione) => [sessione.sessionId, sidebarDesktop ? { ...sessione } : sessione]));
+    void aggiornaContatoriLuoghi(elenco.length, { forza: Boolean(cambioSidebar.resources || cambioSidebar.snapshot) }); // 05/9 Fase 2: NavItem
     for (const id of [...state.sessionSelection.selected]) {
       if (!state.sessionSelection.available.has(id)) state.sessionSelection.selected.delete(id);
+    }
+    if (sidebarDesktop) {
+      $('#noSessionsPlaceholder')?.setAttribute('hidden', '');
+      if (!elenco.length) { state.sessionSelection.active = false; state.sessionSelection.selected.clear(); }
+      aggiornaToolbarSelezioneSessioni();
+      aggiornaSottotitoloSessione();
+      return;
     }
     if (elenco.length === 0) {
       state.sessionSelection.active = false;
@@ -20054,7 +20135,7 @@ ${testo}`;
     toast(...(demoActionCopy[button.dataset.demoAction] || ['Demo UI · non collegato', 'Nessuna azione reale eseguita.']));
   }));
 
-  // ⭐⭐⭐ 02/09 — campanella REALE (vedi aggiornaNotifiche). Il badge si allinea a ogni refresh dell'elenco sessioni; un refresh leggero ogni 15 s, solo a scheda visibile, coglie le sessioni che finiscono mentre se ne guarda un'altra (nessuna SSE le porta qui).
+  // La campanella legge gli stessi snapshot della sidebar: realtime standalone, refresh sull'host embedded.
   // ⭐ 02/09 — azioni reali delle sezioni Settings: svuotare le preferenze locali (due clic, mai un dialogo nativo) e aprire il chooser per una nuova sessione altrove.
   $('#settingsSvuotaLocali')?.addEventListener('click', (event) => {
     const bottone = event.currentTarget;
@@ -20078,7 +20159,28 @@ ${testo}`;
     event.stopPropagation(); // il campanello ha aria-controls: senza questo la regia dei disclosure lo richiudeva nello stesso clic (doppio toggle)
     apriPopoverNotifiche(event.currentTarget);
   });
-  const notificheTimer = window.setInterval(() => { if (document.visibilityState === 'visible') void aggiornaElencoSessioniReali(); }, 15_000);
+  if (!window.__talosHarnessHost && !HOST().classList.contains('talos-embedded')) {
+    sidebarDesktop = montaSidebarDesktop({
+      root: contenitoreSessioniReali(), section: $('#sessionList'), search: $('#sessionSearch'),
+      apiUrl: API, apiGet,
+      normalize: row => ({ ...row, modello: normalizzaModelloSessione(row) }),
+      getContext: () => ({ current: state.realSession.id, selection: state.sessionSelection.active,
+        selected: state.sessionSelection.selected,
+        pendingName: state.pendingCustomSession && !state.realSession.id ? state.pendingCustomSession.nomeCartella || '' : null }),
+      onFacts: (items, change) => { void aggiornaElencoSessioniReali(items, change); },
+      onOpen: row => passaASessione(row.sessionId, row.taskId, row.nome, row.modello, row),
+      onToggle: toggleSessionSelection,
+      onPending: () => { setView('chat'); composerInput.focus(); },
+      onMenu: (row, options) => apriMenuAzioniSessione({ ...row, nome: row.nome || row.taskDelega || nomeLeggibileSessione(row.taskId) }, {
+        sidebar: true, ancoraEl: options.anchor, focusElement: options.anchor, fuoco: options.keyboard,
+        onClose: options.onClose,
+        sidebarVoci: [{ etichetta: options.pin.pinned ? 'Non fissare più qui' : 'Fissa in questa sidebar',
+          icona: 'i-list', azione: options.pin.toggle }],
+      }),
+    });
+  }
+  // The embedded host retains its existing snapshot refresh; desktop uses one aggregate SSE.
+  const notificheTimer = sidebarDesktop ? null : window.setInterval(() => { if (document.visibilityState === 'visible') void aggiornaElencoSessioniReali(); }, 15_000);
 
   /*
    * ⛔⛔ Trovato dalla QA visiva di O-01, secondo giro: con lo store VUOTO le
@@ -20134,6 +20236,7 @@ ${testo}`;
   runStateToggle?.addEventListener('click', () => setQueueMode(!state.queueMode, true));
 
   $('#sessionSearch').addEventListener('input', (event) => {
+    if (sidebarDesktop) return; // The desktop renderer filters whole rows, including their menus.
     const q = event.target.value.toLowerCase().trim();
     // 06/09 (gruppo navigazione): la casella filtrava SOLO le righe demo
     // `.session-item`; le sessioni vere (`.real-session-item`) restavano tutte a schermo — 74 su 74.
@@ -20698,7 +20801,9 @@ ${testo}`;
   window.__talosHarnessDestroy = () => {
     contextCompactor?.destroy(); contextCompactor = null;
     contextMonitor?.stop(); contextMonitor = null;
-    window.clearInterval(notificheTimer);
+    if (notificheTimer !== null) window.clearInterval(notificheTimer);
+    terminaTrascinamentoSidebar?.(); terminaTrascinamentoSidebar = null;
+    sidebarDesktop?.destroy(); sidebarDesktop = null;
     document.querySelector('.notifications-menu')?.remove();
     cancelMotionAnimations();
     nascondiAttesaRisposta();
@@ -20845,11 +20950,23 @@ ${testo}`;
       const which = grezzo === 'sidebar' ? 'sessions' : grezzo;
       if (!PANEL_RESIZE_LIMITS[which]) return;
       const panel = which === 'sessions' ? sessionsPanel : inspectorPanel;
+      if (which === 'sessions' && sidebarDesktop) {
+        const reset = () => { const width = applyPanelWidth(which, PANEL_RESIZE_DEFAULT[which]); savePanelWidth(which, width); };
+        handle.setAttribute('aria-label', 'Larghezza barra laterale: frecce per ridimensionare, Invio per ripristinare');
+        handle.setAttribute('data-tip', 'Trascina o usa le frecce. Doppio clic o Invio ripristina la larghezza.');
+        handle.addEventListener('dblclick', reset);
+        handle.addEventListener('keydown', event => {
+          if (event.key === 'Enter') { event.preventDefault(); reset(); }
+        });
+      }
 
       handle.addEventListener('pointerdown', (event) => {
         /* ⛔ La soglia e' quella DEL PANNELLO che questa maniglia ridimensiona: una colonna
            flottante non si trascina, una colonna ancora in griglia si'. */
         if (pannelloFlottante(which)) return;
+        const desktopSidebar = which === 'sessions' && Boolean(sidebarDesktop);
+        if (desktopSidebar && event.button !== 0) return;
+        if (desktopSidebar) terminaTrascinamentoSidebar?.();
         event.preventDefault();
         handle.setPointerCapture(event.pointerId);
         handle.classList.add('dragging');
@@ -20862,13 +20979,15 @@ ${testo}`;
         }
         function onUp() {
           handle.classList.remove('dragging');
-          handle.releasePointerCapture(event.pointerId);
+          if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
           savePanelWidth(which, panel.getBoundingClientRect().width);
           window.removeEventListener('pointermove', onMove);
           window.removeEventListener('pointerup', onUp);
+          if (desktopSidebar) { window.removeEventListener('pointercancel', onUp); terminaTrascinamentoSidebar = null; }
         }
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
+        if (desktopSidebar) { window.addEventListener('pointercancel', onUp); terminaTrascinamentoSidebar = onUp; }
       });
 
       handle.addEventListener('keydown', (event) => {
@@ -20982,6 +21101,7 @@ ${testo}`;
      ascoltatori sullo stesso nodo vengono chiamati nell'ordine in cui sono stati registrati (DOM
      Standard): messo più in alto salverebbe sempre l'opposto di quello che si vede. */
   montaGruppiBarra();
+  if (sidebarDesktop) syncSessionsToggle();
   let ultimoFuocoVelo = null;
   function apriVeloMockup(id) {
     if (id === 'veloContesto') { void compactSession(); return; }

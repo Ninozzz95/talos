@@ -1,3 +1,5 @@
+import { creaFlussoSidebar, interessaSidebar } from './sidebar-feed.mjs';
+import { creaProiezioneAttivitaSidebar } from './sidebar-activity.mjs';
 import { validaFallbackProviders } from './model-destination.mjs';
 import { cacheSessioneDaEventi, giriFermatiDaEventi } from './usage-cache.mjs';
 import { contextUsageFromEvents } from '../../context-engine/src/usage.mjs';
@@ -1683,6 +1685,144 @@ export function createSessionRegistry({
 } = {}) {
   const preparaTask = preparaEsecuzioneFn ?? ((taskId) => preparaEsecuzioneReale(taskId, taskCatalogProvider));
   const sessioni = new Map();
+
+  // The API list and aggregate stream share one public serializer. History metrics
+  // are recomputed only after relevant appended events, never for every token/tool phase.
+  const riepiloghiStorici = new WeakMap();
+  function storicoDelRiepilogo(voce) {
+    let memo = riepiloghiStorici.get(voce);
+    const eventi = voce.eventi;
+    if (!memo || memo.eventi !== eventi || memo.offset > eventi.length) {
+      memo = { eventi, offset: 0, value: null };
+      riepiloghiStorici.set(voce, memo);
+    }
+    let changed = !memo.value;
+    while (memo.offset < eventi.length) {
+      const event = eventi[memo.offset++];
+      if (['RunStarted', 'RunFinished', 'RunError'].includes(event?.type)
+        || (event?.type === 'StateDelta' && event.delta?.some?.(d => d?.path === '/usage'))
+        || (event?.type === 'CUSTOM' && ['talos.context', 'consumo-fornitore'].includes(event.name))) changed = true;
+    }
+    if (changed) memo.value = {
+      ultimoEsito: ultimoEsitoDaEventi(eventi),
+      motivoChiusura: motivoChiusuraDaEventi(eventi),
+      usage: usageDaEventi(eventi),
+      usageSessione: usageSessioneDaEventi(eventi),
+      cacheSessione: cacheSessioneDaEventi(eventi),
+      giriFermati: giriFermatiDaEventi(eventi),
+    };
+    return memo.value;
+  }
+  function riepilogoSessione(sessionId, voce) {
+    const storico = storicoDelRiepilogo(voce);
+    return {
+    sessionId,
+    taskId: voce.taskId,
+    nome: voce.nome ?? null,
+    avviataAlle: voce.avviataAlle,
+    /* ⭐ 11/09 — l'ultima volta che il modello ha parlato in questa sessione: è ciò che
+       decide chi sta in cima fra le sessioni vive. `null` finché non ha mai risposto. */
+    ultimaRispostaAlle: voce.ultimaRispostaAlle ?? null,
+    conclusa: voce.conclusa,
+    forkDa: voce.forkDa,
+    modello: voce.modello ?? null,
+    modelloPlanner: voce.modelloPlanner ?? null,
+    reasoning: voce.reasoning ?? null,
+    permessi: voce.permessi ?? 'Workspace write',
+    permessiPerAttrezzo: voce.permessiPerAttrezzo ?? null,
+    provider: voce.provider ?? 'cloud', runtimeId: voce.runtimeId ?? null, modelId: voce.modelId ?? voce.modello ?? null,
+    fallbackProvider: voce.fallbackProvider ?? null,
+    fallbackProviders: voce.fallbackProviders ?? [], // P-H (12/09): le riserve ancora da usare; i consumi per fornitore stanno negli eventi CUSTOM della sessione, non qui (l'elenco si legge a ogni giro)
+    /*
+     * ⛔⛔⛔ 08/09/2026 — senza questi due campi la barra a sinistra NON PUÒ sapere che una
+     * sessione è una figlia: mostra le deleghe sciolte accanto alla madre, come tre lavori
+     * indipendenti (visto dal vivo dall'owner). Non era un difetto di disegno del frontend —
+     * lì la parola `padreId` non compariva nemmeno una volta: il dato non usciva di qui.
+     * `forkDa` c'era già e non basta: un fork è una sessione PARI, una figlia è subordinata.
+     *
+     * ⭐ È anche la causa vera di quello che sembrava un difetto della scheda «Agenti»: quella
+     *   dipende dalla sessione attiva, e con le figlie in mezzo alle madri è facilissimo
+     *   trovarsi su quella sbagliata.
+     *
+     * Ricerca 08/09/2026 — lo stato dell'arte dice cosa farne, e cosa NON fare:
+     * `nesquena/hermes-webui` #1004 (le figlie «should be displayed as a delegation tree
+     * rather than collapsed… should remain visible as a tree» ⇒ non si nascondono), OpenClaw
+     * Control UI (riga madre espandibile, figlie annidate con stato e durata, e aprirne una
+     * «preserva la gerarchia»), Zed #57481 (l'unica domanda aperta è quanto indentare prima di
+     * appiattire, «for MAX_SUBAGENT_DEPTH > 2» — da noi non si pone, il limite è 2).
+     * ⛔ E il modo di sbagliare, documentato tre volte: OpenClaw #89249 (il selettore diventa
+     * inusabile, «1 / 177», tutto il resto sono figlie), opencode #14053 (la Web UI mostra le
+     * figlie che la TUI filtra) e la segnalazione su Codex («flood the desktop app sidebar with
+     * no way to scope them»). È esattamente dove eravamo.
+     *
+     * ⇒ Qui esce il DATO, e nient'altro: `null`/`0` per ogni sessione avviata da una persona,
+     *   mai un legame inventato. Come presentarlo lo decide la barra.
+     */
+    padreId: voce.padreId ?? null,
+    profonditaDelega: voce.profonditaDelega ?? 0,
+    /*
+     * ⛔ 08/09, visto nella foto della barra dopo aver annidato le figlie: si chiamavano
+     *   entrambe «Delega · e02f5d85-b610-4e3b-…» — l'id della MADRE, identico per tutte, e per
+     *   giunta un identificatore grezzo a schermo (vietato dalla regola sui nomi tecnici).
+     *   Due righe indistinguibili: per sapere quale è quale bisognava aprirle. È lo stesso
+     *   difetto trovato oggi sulle schede del browser, in un altro punto dello schermo.
+     * ⇒ La figlia porta il SUO compito. `elencaFigli` lo esponeva già (per il foglio «Albero
+     *   sessione»): qui esce anche nell'elenco, che è ciò che la barra legge.
+     *   `null` per una sessione che un compito non ce l'ha: mai una stringa inventata.
+     */
+    /*
+     * ⛔ La forma CORTA, e non è un dettaglio: la prima versione passava la consegna intera e
+     *   la colonna destra la stampava per venti righe, spingendo le schede
+     *   «Contesto/File/Agenti/Processi» fuori dalla vista. Visto nella foto della pagina
+     *   intera, non dai numeri — la barra e la testata tagliano da sole con l'ellissi, il
+     *   pannello destro no. Un nome si accorcia dove NASCE, o ogni superficie deve ricordarsi
+     *   di farlo. 80 caratteri e la prima riga: la stessa regola già usata dal ripristino per
+     *   il `nome` di un compito libero.
+     */
+    /* ⛔ 09/09: anche qui, non solo nell'orchestratore. Una figlia RIPRISTINATA dal disco non ha
+       `consegnaCorta` (le sessioni nate prima di questa cura), e senza il taglio tornerebbe a
+       chiamarsi col preambolo di sistema del kernel: la storia si legge bene senza riscriverla. */
+    taskDelega: voce.padreId ? nomeCortoDaConsegna(voce.task?.consegnaCorta || compitoDaPromptDiDelega(voce.task?.consegna)) : null,
+    // ⭐⭐⭐ FASE L (30/8) — true SOLO per una voce ricostruita dopo un riavvio il cui ultimo evento non era RunFinished/RunError: il processo che la eseguiva è sparito, mai un turno "ancora in corso" travestito da tale.
+    interrotta: voce.interrotta ?? false,
+    // ⭐⭐⭐ 02/09 — la campanella del desktop: una sessione ferma su un'approvazione è la notifica più urgente, e solo l'elenco la può dire a chi guarda un'ALTRA sessione.
+    inAttesaApprovazione: Boolean(voce.approvazionePendente),
+    // ⭐ 02/09 — la Board diceva "Conclusa" anche a una sessione morta su RunError: l'ultimo evento del ciclo agente decide.
+    ultimoEsito: storico.ultimoEsito,
+    // ⛔ 07/9 — il TERZO esito: «fermata» non e ne un errore ne una fine pulita (vedi
+    //    `motivoChiusuraDaEventi`). `null` finche il giro e in corso: mai un motivo inventato.
+    motivoChiusura: storico.motivoChiusura,
+    // ⭐⭐⭐ 30/8 — piano "Board — da campagne TALOS-BANCO a cruscotto
+    // sessioni": il costo/consumo per la nuova Board, MAI un numero
+    // inventato. Nessuna scrittura nuova sul disco (vedi usageDaEventi
+    // sotto sul perché) — una sessione registrata PRIMA di questo
+    // cambiamento (o senza mai un giro con `usage`, es. un errore
+    // immediato) torna onestamente `null`, mai uno zero fabbricato.
+    usage: storico.usage,
+    /*
+     * ⛔⛔⛔ 06/9 — CB-04. `usage` qui sopra è il consumo dell'ULTIMO
+     * INVIO (il kernel azzera `conto` a ogni esecuzione): resta perché
+     * il tetto dei giri («9 su 24») parla di quello e di nient'altro.
+     * `usageSessione` è il totale della CONVERSAZIONE — la somma dei
+     * totali di ogni invio — ed è il numero che la Board e il piede
+     * della chat promettono. Due fatti diversi, due campi diversi:
+     * misurato su tre invii veri, 23.060 token contro i 7.716 che si
+     * vedevano. Vedi il blocco di testa di `usageSessioneDaEventi`.
+     */
+    usageSessione: storico.usageSessione,
+    cacheSessione: storico.cacheSessione,
+    giriFermati: storico.giriFermati, // ⛔ 14/09: chiamate partite e fermate — giri senza consumo dichiarato
+    };
+  }
+
+  const attivitaSidebar = creaProiezioneAttivitaSidebar();
+  const flussoSidebar = creaFlussoSidebar({
+    ids: () => sessioni.keys(),
+    leggi: (id) => {
+      const voce = sessioni.get(id);
+      return voce ? { ...riepilogoSessione(id, voce), attivitaSidebar: attivitaSidebar(voce) } : null;
+    },
+  });
   const contextDeliveries = new WeakMap();
   let ultimoRipristino = { ripristinate: 0, totali: 0 };
   let sessioniCorrotte = [];
@@ -2255,6 +2395,10 @@ export function createSessionRegistry({
      * appena creata senza passare da qui: mai vero in pratica, ma un
      * guard esplicito costa una riga.
      */
+    if (interessaSidebar(evento)) flussoSidebar.changed(voce.sessionId);
+    // Tool completion may have changed shared notes/tasks/library. No raw result
+    // is sent; consumers reread their existing authorized aggregate endpoints.
+    if (evento.type === 'ToolCallResult') flussoSidebar.resourcesChanged();
     if (!effimero && cartellaStore && voce.sessionId) {
       if (durable) return registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: evento, durable: true });
       registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: evento })
@@ -2864,6 +3008,7 @@ export function createSessionRegistry({
      */
     attivaWatcherSessione(voce, voce.cartella);
     sessioni.set(sessionId, voce);
+    flussoSidebar.changed(sessionId);
 
     /*
      * ⛔ NON await: avviaSessione emette RunStarted come sua PRIMA riga,
@@ -3575,6 +3720,7 @@ export function createSessionRegistry({
         // la cronologia resta leggibile e il primo vero resume lo attiverà.
         voce.fermaWatcher = null;
         sessioni.set(sessionId, voce);
+        flussoSidebar.changed(sessionId);
         const redirectOrfano = redirectOrfanoDaEventi(eventi);
         if (redirectOrfano) {
           broadcast(voce, runRedirectFailed({
@@ -4169,6 +4315,7 @@ export function createSessionRegistry({
       }
       voce.modelId = modelId;
       voce.cartella = cartellaProssima;
+      flussoSidebar.changed(sessionId); // Settings are facts even when no agent run is active.
       return { ok: true };
     },
 
@@ -5472,6 +5619,7 @@ export function createSessionRegistry({
       }
       if (cartellaStore) await registraRigaFn({ cartellaStore, sessionId, record: { tipo: 'nome-sessione', nome: pulito } });
       voce.nome = pulito;
+      flussoSidebar.changed(sessionId);
       return { ok: true };
     },
 
@@ -5495,6 +5643,7 @@ export function createSessionRegistry({
       }
       fermaWatcherSessione(voce);
       sessioni.delete(sessionId);
+      flussoSidebar.changed(sessionId);
       if (cartellaStore) await eliminaSessionePersistitaFn({ cartellaStore, sessionId });
       return { ok: true };
     },
@@ -5506,107 +5655,14 @@ export function createSessionRegistry({
      * reale è mai partita: niente da mostrare, non un errore.
      */
     elenca() {
-      return [...sessioni.entries()]
-        .map(([sessionId, voce]) => ({
-          sessionId,
-          taskId: voce.taskId,
-          nome: voce.nome ?? null,
-          avviataAlle: voce.avviataAlle,
-          /* ⭐ 11/09 — l'ultima volta che il modello ha parlato in questa sessione: è ciò che
-             decide chi sta in cima fra le sessioni vive. `null` finché non ha mai risposto. */
-          ultimaRispostaAlle: voce.ultimaRispostaAlle ?? null,
-          conclusa: voce.conclusa,
-          forkDa: voce.forkDa,
-          modello: voce.modello ?? null,
-          modelloPlanner: voce.modelloPlanner ?? null,
-          reasoning: voce.reasoning ?? null,
-          permessi: voce.permessi ?? 'Workspace write',
-          permessiPerAttrezzo: voce.permessiPerAttrezzo ?? null,
-          provider: voce.provider ?? 'cloud', runtimeId: voce.runtimeId ?? null, modelId: voce.modelId ?? voce.modello ?? null,
-          fallbackProvider: voce.fallbackProvider ?? null,
-          fallbackProviders: voce.fallbackProviders ?? [], // P-H (12/09): le riserve ancora da usare; i consumi per fornitore stanno negli eventi CUSTOM della sessione, non qui (l'elenco si legge a ogni giro)
-          /*
-           * ⛔⛔⛔ 08/09/2026 — senza questi due campi la barra a sinistra NON PUÒ sapere che una
-           * sessione è una figlia: mostra le deleghe sciolte accanto alla madre, come tre lavori
-           * indipendenti (visto dal vivo dall'owner). Non era un difetto di disegno del frontend —
-           * lì la parola `padreId` non compariva nemmeno una volta: il dato non usciva di qui.
-           * `forkDa` c'era già e non basta: un fork è una sessione PARI, una figlia è subordinata.
-           *
-           * ⭐ È anche la causa vera di quello che sembrava un difetto della scheda «Agenti»: quella
-           *   dipende dalla sessione attiva, e con le figlie in mezzo alle madri è facilissimo
-           *   trovarsi su quella sbagliata.
-           *
-           * Ricerca 08/09/2026 — lo stato dell'arte dice cosa farne, e cosa NON fare:
-           * `nesquena/hermes-webui` #1004 (le figlie «should be displayed as a delegation tree
-           * rather than collapsed… should remain visible as a tree» ⇒ non si nascondono), OpenClaw
-           * Control UI (riga madre espandibile, figlie annidate con stato e durata, e aprirne una
-           * «preserva la gerarchia»), Zed #57481 (l'unica domanda aperta è quanto indentare prima di
-           * appiattire, «for MAX_SUBAGENT_DEPTH > 2» — da noi non si pone, il limite è 2).
-           * ⛔ E il modo di sbagliare, documentato tre volte: OpenClaw #89249 (il selettore diventa
-           * inusabile, «1 / 177», tutto il resto sono figlie), opencode #14053 (la Web UI mostra le
-           * figlie che la TUI filtra) e la segnalazione su Codex («flood the desktop app sidebar with
-           * no way to scope them»). È esattamente dove eravamo.
-           *
-           * ⇒ Qui esce il DATO, e nient'altro: `null`/`0` per ogni sessione avviata da una persona,
-           *   mai un legame inventato. Come presentarlo lo decide la barra.
-           */
-          padreId: voce.padreId ?? null,
-          profonditaDelega: voce.profonditaDelega ?? 0,
-          /*
-           * ⛔ 08/09, visto nella foto della barra dopo aver annidato le figlie: si chiamavano
-           *   entrambe «Delega · e02f5d85-b610-4e3b-…» — l'id della MADRE, identico per tutte, e per
-           *   giunta un identificatore grezzo a schermo (vietato dalla regola sui nomi tecnici).
-           *   Due righe indistinguibili: per sapere quale è quale bisognava aprirle. È lo stesso
-           *   difetto trovato oggi sulle schede del browser, in un altro punto dello schermo.
-           * ⇒ La figlia porta il SUO compito. `elencaFigli` lo esponeva già (per il foglio «Albero
-           *   sessione»): qui esce anche nell'elenco, che è ciò che la barra legge.
-           *   `null` per una sessione che un compito non ce l'ha: mai una stringa inventata.
-           */
-          /*
-           * ⛔ La forma CORTA, e non è un dettaglio: la prima versione passava la consegna intera e
-           *   la colonna destra la stampava per venti righe, spingendo le schede
-           *   «Contesto/File/Agenti/Processi» fuori dalla vista. Visto nella foto della pagina
-           *   intera, non dai numeri — la barra e la testata tagliano da sole con l'ellissi, il
-           *   pannello destro no. Un nome si accorcia dove NASCE, o ogni superficie deve ricordarsi
-           *   di farlo. 80 caratteri e la prima riga: la stessa regola già usata dal ripristino per
-           *   il `nome` di un compito libero.
-           */
-          /* ⛔ 09/09: anche qui, non solo nell'orchestratore. Una figlia RIPRISTINATA dal disco non ha
-             `consegnaCorta` (le sessioni nate prima di questa cura), e senza il taglio tornerebbe a
-             chiamarsi col preambolo di sistema del kernel: la storia si legge bene senza riscriverla. */
-          taskDelega: voce.padreId ? nomeCortoDaConsegna(voce.task?.consegnaCorta || compitoDaPromptDiDelega(voce.task?.consegna)) : null,
-          // ⭐⭐⭐ FASE L (30/8) — true SOLO per una voce ricostruita dopo un riavvio il cui ultimo evento non era RunFinished/RunError: il processo che la eseguiva è sparito, mai un turno "ancora in corso" travestito da tale.
-          interrotta: voce.interrotta ?? false,
-          // ⭐⭐⭐ 02/09 — la campanella del desktop: una sessione ferma su un'approvazione è la notifica più urgente, e solo l'elenco la può dire a chi guarda un'ALTRA sessione.
-          inAttesaApprovazione: Boolean(voce.approvazionePendente),
-          // ⭐ 02/09 — la Board diceva "Conclusa" anche a una sessione morta su RunError: l'ultimo evento del ciclo agente decide.
-          ultimoEsito: ultimoEsitoDaEventi(voce.eventi),
-          // ⛔ 07/9 — il TERZO esito: «fermata» non e ne un errore ne una fine pulita (vedi
-          //    `motivoChiusuraDaEventi`). `null` finche il giro e in corso: mai un motivo inventato.
-          motivoChiusura: motivoChiusuraDaEventi(voce.eventi),
-          // ⭐⭐⭐ 30/8 — piano "Board — da campagne TALOS-BANCO a cruscotto
-          // sessioni": il costo/consumo per la nuova Board, MAI un numero
-          // inventato. Nessuna scrittura nuova sul disco (vedi usageDaEventi
-          // sotto sul perché) — una sessione registrata PRIMA di questo
-          // cambiamento (o senza mai un giro con `usage`, es. un errore
-          // immediato) torna onestamente `null`, mai uno zero fabbricato.
-          usage: usageDaEventi(voce.eventi),
-          /*
-           * ⛔⛔⛔ 06/9 — CB-04. `usage` qui sopra è il consumo dell'ULTIMO
-           * INVIO (il kernel azzera `conto` a ogni esecuzione): resta perché
-           * il tetto dei giri («9 su 24») parla di quello e di nient'altro.
-           * `usageSessione` è il totale della CONVERSAZIONE — la somma dei
-           * totali di ogni invio — ed è il numero che la Board e il piede
-           * della chat promettono. Due fatti diversi, due campi diversi:
-           * misurato su tre invii veri, 23.060 token contro i 7.716 che si
-           * vedevano. Vedi il blocco di testa di `usageSessioneDaEventi`.
-           */
-          usageSessione: usageSessioneDaEventi(voce.eventi),
-          cacheSessione: cacheSessioneDaEventi(voce.eventi),
-          giriFermati: giriFermatiDaEventi(voce.eventi), // ⛔ 14/09: chiamate partite e fermate — giri senza consumo dichiarato
-        }))
+      return [...sessioni.entries()].map(([id, voce]) => riepilogoSessione(id, voce))
         .sort((a, b) => b.avviataAlle.localeCompare(a.avviataAlle));
     },
+
+    /** Metadata only: no transcript replay and no per-session filesystem subscription. */
+    iscrivitiSidebar(ascoltatore) { return flussoSidebar.subscribe(ascoltatore); },
+    battitoSidebar() { return flussoSidebar.heartbeat(); },
+    notificaRisorseSidebar() { flussoSidebar.resourcesChanged(); },
 
     /**
      * ⭐⭐⭐ 30/8 — owner dal vivo: "come mai non ho le cartelle più

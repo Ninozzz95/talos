@@ -406,11 +406,20 @@ export function ordinaSessioniAdAlbero(elenco) {
   for (const s of ordinate) scendi(s, 0);
   // ⛔ AL CONTRARIO: nessuna riga si perde per strada, nemmeno dentro un ciclo di padri
   for (const s of righe) if (!fatte.has(s.sessionId)) fuori.push({ sessione: s, profondita: 0 });
-  return fuori.map((v, i) => {
-    // la prima riga successiva che non è una sua discendente: se manca, o è più in alto, è l'ultima
-    const dopo = fuori.slice(i + 1).find((altra) => altra.profondita <= v.profondita);
-    return { ...v, ultima: !dopo || dopo.profondita < v.profondita, nomeDistintivo: distintivoPer.get(v.sessione.sessionId) ?? null };
-  });
+  // La prima riga successiva non discendente chiude quelle ancora aperte.
+  // Ogni riga entra ed esce dallo stack al massimo una volta, senza copiare i suffissi dell'elenco.
+  const aperte = [];
+  const risultato = [];
+  for (const v of fuori) {
+    while (aperte.length > 0 && aperte.at(-1).profondita >= v.profondita) {
+      const precedente = aperte.pop();
+      precedente.ultima = precedente.profondita > v.profondita;
+    }
+    const riga = { ...v, ultima: true, nomeDistintivo: distintivoPer.get(v.sessione.sessionId) ?? null };
+    risultato.push(riga);
+    aperte.push(riga);
+  }
+  return risultato;
 }
 
 /**
@@ -490,7 +499,9 @@ export function creaSessionItem(sessione, opzioni = {}) {
    */
   const quando = Date.parse(sessione.ultimaRispostaAlle ?? '');
   const adessoMs = (opzioni.adesso instanceof Date ? opzioni.adesso : new Date()).getTime();
-  if (Number.isFinite(quando) && !opzioni.corrente && adessoMs - quando <= SEGNALE_NOVITA_MS) {
+  const trascorsi = adessoMs - quando;
+  // Un timestamp futuro non descrive una risposta appena conclusa.
+  if (Number.isFinite(quando) && !opzioni.corrente && trascorsi >= 0 && trascorsi <= SEGNALE_NOVITA_MS) {
     riga.dataset.novita = 'si';
   }
 

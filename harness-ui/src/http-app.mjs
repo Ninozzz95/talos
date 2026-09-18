@@ -1,3 +1,4 @@
+import { collegaFlussoSidebar } from './sidebar-feed.mjs';
 import { validaFallbackProviders } from './model-destination.mjs';
 import { chiediMiglioramentoAlProvider } from './prompt-enhancer-provider.mjs';
 import { CARTELLA_ASSISTENZA_PREDEFINITA, MAX_DOMANDA_ASSISTENZA, cercaAssistenza } from './assistenza.mjs';
@@ -1111,6 +1112,7 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/browser/vivo/stato', metodi: ['GET'] },
   { schema: '/api/v1/search-source', metodi: ['GET'] },
   { schema: '/api/v1/sessions', metodi: ['GET', 'POST'] },
+  { schema: '/api/v1/sidebar/events', metodi: ['GET'] },
   { schema: '/api/v1/assistenza', metodi: ['POST'] },
   { schema: '/api/v1/automations', metodi: ['GET', 'POST'] },
   { schema: '/api/v1/workspace-launches', metodi: ['POST'] },
@@ -2341,6 +2343,16 @@ export function createHttpApp({
   async function handle(req, res) {
     if (req.aborted || res.destroyed) return;
     const method = req.method || 'GET';
+    // Successful resource writes invalidate sidebar navigation badges in every
+    // connected window. This observes the existing response; it grants no access
+    // and does not alter routing, persistence, status codes or payloads.
+    if (['POST', 'PATCH', 'DELETE'].includes(method)
+      && /^\/api\/v1\/(?:sessions\/[^/?]+\/(?:notes|tasks|memory|library|research|tool-forge)|automations|projects|tools)(?:[/?]|$)/u.test(req.url || '')) {
+      res.once?.('finish', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) sessionRegistry?.notificaRisorseSidebar?.();
+      });
+    }
+
 
     /*
      * ⛔ CORS — piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3.
@@ -5506,6 +5518,19 @@ export function createHttpApp({
          * peggio di nessun riferimento: manda la persona a cercare una risposta che non c'e.
          */
         data = { reference, code: detail.code, operation: detail.operation, requestId: detail.requestId, detail: detail.detail || '' };
+      } else if (url.pathname === '/api/v1/sidebar/events') {
+        requireNoQuery(url);
+        if (typeof sessionRegistry?.iscrivitiSidebar !== 'function') {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        if (req.aborted || res.destroyed) return;
+        collegaFlussoSidebar({ response: res, headers: SECURITY_HEADERS,
+          subscribe: listener => sessionRegistry.iscrivitiSidebar(listener),
+          heartbeat: () => sessionRegistry.battitoSidebar(),
+          setIntervalFn: impostaIntervalloFn, clearIntervalFn: cancellaIntervalloFn,
+          head: method === 'HEAD' });
+        return;
       } else if (url.pathname === '/api/v1/sessions') {
         requireNoQuery(url);
         /* ⛔ Elenco vuoto, non un errore, se sessionRegistry non è configurato — stesso principio già seguito per le altre rotte di sessione. */

@@ -68,7 +68,7 @@ test('FASE3-MULTISELECT-UNA-POST — conferma unica ed esito parziale restano vi
     { id: 'lib-3', nome: 'Terzo.md', fileType: 'text/markdown', origine: 'uploaded', aggiornatoIl: null },
   ];
   const richieste = [];
-  await page.addInitScript(() => localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })));
+  await page.addInitScript(() => { if (window === window.top) localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); });
   await page.route('**/api/v1/sessions/fase-3-ui/library', (route) => route.fulfill({
     json: { ok: true, data: { voci, errore: null }, meta: {} },
   }));
@@ -86,7 +86,11 @@ test('FASE3-MULTISELECT-UNA-POST — conferma unica ed esito parziale restano vi
 
   await page.goto(process.env.TALOS_URL_CANCELLO);
   await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
-  await page.evaluate(() => { window.__talosHarnessUiRuntime.realSessionState.id = 'fase-3-ui'; });
+  await page.evaluate(async () => {
+    window.__talosHarnessUiRuntime.realSessionState.id = 'fase-3-ui';
+    // The fixture changes context directly: publish that change, not a 15-second poll.
+    await window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali();
+  });
   await page.getByRole('button', { name: /^Libreria \d+$/ }).click();
   await expect(page.locator('#schermoLibreria .td-card-select')).toHaveCount(3);
   await page.getByLabel('Seleziona visibili', { exact: true }).check();
