@@ -229,14 +229,28 @@ test('NOTIFICHE-REALI-43 — la campanella conta solo le sessioni che chiedono a
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { items: elenco }, meta: { schema: 'talos.harness-ui.api.v1' } }) });
   });
   await page.route('**/api/v1/sessions/*/events*', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
+  /*
+   * ⛔⛔ 18/09/2026 — SI RIAPRE L'ULTIMA SESSIONE **DELLE PREFERENZE**, NON «LA PIÙ RECENTE».
+   * Letto nel codice (`services/workspace-preferences.ts`, chiave `talos.desktop.workspace.v2`;
+   * `app.js` → `avviaWorkspaceDesktop`: `const saved = preferences.restoreWorkspace ?
+   * preferences.lastSession : null` e, senza `saved`, `setView('home')`). Con un profilo VERGINE
+   * `lastSession` è null ⇒ la app atterra sulla Home e la premessa di questa prova non si forma
+   * («received: null», 5000 ms). Da qui il seme esplicito: la preferenza dice QUALE sessione
+   * riaprire, ed è la stessa cosa che fa il profilo dell'owner sul 4174.
+   */
+  await page.addInitScript(() => {
+    localStorage.setItem('talos.desktop.workspace.v2', JSON.stringify({
+      version: 2, density: 'comfortable', restoreWorkspace: true, lastSession: 'n-aperta', presets: {},
+    }));
+  });
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
 
   const etichetta = () => page.locator('#notificationsBtn').getAttribute('aria-label');
-  /* La PREMESSA, dichiarata e non sperata: la app ha aperto da sola la sessione più recente. */
+  /* La PREMESSA, dichiarata e non sperata: la app ha riaperto la sessione scelta DALLE PREFERENZE. */
   await expect.poll(() => page.evaluate(() => window.__talosHarnessUiRuntime.realSessionState.id), {
-    message: 'la scena non si è formata: la app non ha aperto la sessione più recente',
+    message: 'la scena non si è formata: la app non ha riaperto la sessione indicata dalle preferenze',
   }).toBe('n-aperta');
 
   // prima lettura: le sessioni concluse esistenti sono già viste; un'approvazione in attesa notifica sempre

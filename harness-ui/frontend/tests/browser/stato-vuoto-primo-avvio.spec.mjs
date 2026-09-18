@@ -49,6 +49,17 @@ async function apriApp(page, { tema = 'dark', larghezza = 1440, altezza = 900, m
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  /*
+   * ⛔⛔ 18/09/2026 — L'INVITO VIVE NELLA CHAT, E LA v2 ATTERRA SULLA HOME.
+   * Misurato: `#invitoPrimoAvvio` esiste nel DOM ma è **hidden** per 14 letture di fila
+   * («expected visible, received hidden»); il gesto d'ingresso — la voce «Conversazioni»,
+   * `.talos-nav-item[data-vaia="chat"]` — lo rende visibile anche senza sessione e senza cartella
+   * (foto del 18/09: «TALOS · Da dove cominciamo? … Scegli una cartella»). Ricerca 18/09/2026:
+   * si aspetta il CONTENUTO vero o un gesto esplicito, mai la sparizione del velo né `networkidle`
+   * (Playwright «Best practices»; BrowserStack «Playwright waits»; tayyabakmal.com, aprile 2026).
+   */
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+  await expect(page.locator('#schermoChat')).toBeVisible();
 }
 
 const invito = (page) => page.locator('#invitoPrimoAvvio');

@@ -5,6 +5,30 @@ import { mkdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
+/*
+ * ⛔⛔ 18/09/2026 — LA v2 ATTERRA SULLA HOME: LA CHAT SI APRE CON UN GESTO.
+ *
+ * Misurato con la sonda del 18/09 (store vuoto della suite, 1440×900) e con le foto dei rossi:
+ * dopo `goto('/')` la app mostra la **Home** (`#schermoHome` visibile, composer e conversazione
+ * presenti ma NASCOSTI, `realSessionState.id` null). Con un clic sulla voce «Conversazioni»
+ * (`.talos-nav-item[data-vaia="chat"]`) la chat si apre anche senza sessione: composer e invio
+ * visibili, `#schermoChat` attivo. ⇒ I test che misuravano subito dopo il `goto` misuravano il
+ * velo d'avvio: misure a zero (`width: 0`, `treeNodes: 0`) e timeout su clic e `fill`, non difetti
+ * di prodotto.
+ *
+ * Ricerca 18/09/2026 — la pratica corrente è aspettare il CONTENUTO VERO (o un segnale di
+ * prontezza esplicito), mai la sparizione del velo, mai `networkidle` (che con polling e
+ * websocket non arriva mai): Playwright «Best practices» e «Auto-waiting»; BrowserStack
+ * «Playwright waits: auto-waiting, assertions»; tayyabakmal.com, «Test SPAs without race
+ * conditions: 5 Playwright patterns» (aprile 2026), che nomina la corsa di idratazione come la
+ * prima delle cinque.
+ */
+async function apriChat(page) {
+  await page.goto('/');
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+  await expect(page.locator('#schermoChat')).toBeVisible();
+}
+
 test('baseline desktop shell is served by the real harness server', async ({ page }) => {
   const response = await page.goto('/');
   expect(response?.ok()).toBe(true);
@@ -82,7 +106,7 @@ test('BACKGROUND-MOTION-COMPOSITOR-02 — lo sfondo si muove senza mutare lo sty
       appearance: { backgroundMotion: true, motionMode: 'adaptive', reducedMotion: false, pauseWhenHidden: true },
     }));
   });
-  await page.goto('/');
+  await apriChat(page);
   await page.waitForTimeout(250);
   const prima = await page.evaluate(() => ({
     rootStyle: document.documentElement.getAttribute('style') ?? '',
@@ -147,7 +171,7 @@ test('LAG-INTERACTION-DIALOG-38 — una modale pausa lo sfondo e la chiusura lo 
       appearance: { backgroundMotion: true, motionMode: 'adaptive', reducedMotion: false },
     }));
   });
-  await page.goto('/');
+  await apriChat(page);
   const root = page.locator('html');
   await expect(root).toHaveClass(/background-motion-active/);
   await expect(root).not.toHaveClass(/background-motion-paused/);
@@ -170,7 +194,7 @@ test('LAG-INTERACTION-SCROLL-39 — lo scroll pausa lo sfondo solo durante il ge
       appearance: { backgroundMotion: true, motionMode: 'adaptive', reducedMotion: false },
     }));
   });
-  await page.goto('/');
+  await apriChat(page);
   const root = page.locator('html');
   const conversation = page.locator('#conversation');
   await conversation.evaluate((element) => {
@@ -193,7 +217,7 @@ test('LAG-INTERACTION-SCROLL-39 — lo scroll pausa lo sfondo solo durante il ge
 });
 
 test('FILE-EXPLORER-TOOLBAR-05 — la sidebar Files espone i quattro comandi e li disabilita senza sessione', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   await page.locator('[data-inspector-tab="files"]').click();
   for (const label of ['Nuovo file', 'Nuova cartella', 'Aggiorna file', 'Comprimi cartelle']) {
     const button = page.locator('#inspector-files').getByRole('button', { name: label });
@@ -225,7 +249,7 @@ test('FILE-EXPLORER-REFRESH-06 — sessione reale abilita crea, aggiorna e compr
     }) });
   });
 
-  await page.goto('/');
+  await apriChat(page);
   await page.locator('[data-real-session-id="session-tree-tools"]').click();
   await page.locator('[data-inspector-tab="files"]').click();
   const toolbar = page.locator('#inspector-files');
@@ -254,7 +278,7 @@ test('LAG-REPLAY-TREE-31 — una raffica storica invalida il tree una volta senz
       meta: { schema: 'talos.harness-ui.api.v1' },
     }) });
   });
-  await page.goto('/');
+  await apriChat(page);
   const result = await page.evaluate(async () => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -279,7 +303,7 @@ test('LAG-REPLAY-TREE-31 — una raffica storica invalida il tree una volta senz
 });
 
 test('LAG-REPLAY-TEXT-32 — molti delta storici fanno un solo commit visuale finale', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   const result = await page.evaluate(async () => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -412,7 +436,7 @@ test('LAG-LIVE-WORKSPACE-33 — un cambiamento live isolato aggiorna ancora il t
       meta: { schema: 'talos.harness-ui.api.v1' },
     }) });
   });
-  await page.goto('/');
+  await apriChat(page);
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -438,7 +462,7 @@ test('LAG-GENERATION-CANCEL-34 — il cambio sessione annulla il tree differito 
       meta: { schema: 'talos.harness-ui.api.v1' },
     }) });
   });
-  await page.goto('/');
+  await apriChat(page);
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -456,7 +480,7 @@ test('LAG-GENERATION-CANCEL-34 — il cambio sessione annulla il tree differito 
 });
 
 test('cold start does not expose invented runtime telemetry', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   const text = await page.locator('body').innerText();
   for (const value of ['wt/auth', 'feat/mobile', '18.7k / 128k', '142 tok/s', 'cache 78%', 'Attrezzi\n7', 'Browser\nScoped']) {
     expect(text).not.toContain(value);
@@ -466,7 +490,7 @@ test('cold start does not expose invented runtime telemetry', async ({ page }) =
 });
 
 test('model chip never exposes the server-default label', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   const chip = page.locator('[data-open-sheet="model"] span').first();
   await expect(chip).toBeVisible();
   await expect(chip).not.toHaveText('Predefinito del server');
@@ -556,7 +580,7 @@ test('selezionare una sessione sincronizza la pillola con il suo modello reale',
     contentType: 'text/event-stream',
     body: '',
   }));
-  await page.goto('/');
+  await apriChat(page);
   const session = page.locator('[data-real-session-id="session-model-sync"]');
   await expect(session).toBeVisible();
   await session.click();
@@ -578,7 +602,7 @@ test('il modello della sessione resta identico dopo un reload', async ({ page })
   await page.route('**/api/v1/sessions/session-gemini-reload/events', async (route) => route.fulfill({
     status: 200, contentType: 'text/event-stream', body: '',
   }));
-  await page.goto('/');
+  await apriChat(page);
   await page.locator('[data-real-session-id="session-gemini-reload"]').click();
   await expect(page.locator('[data-open-sheet="model"] span')).toHaveText('google/gemini-3.7-flash');
   await page.reload();
@@ -618,7 +642,7 @@ test('SESSION-MODEL-CHANGE-RELOAD-02 — la pillola cambia solo dopo il salvatag
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { updated: true } }) });
   });
 
-  await page.goto('/');
+  await apriChat(page);
   await page.locator('[data-real-session-id="session-model-change"]').click();
   const pillola = page.locator('[data-open-sheet="model"] span').first();
   await expect(pillola).toHaveText('z-ai/glm-4.7-flash');
@@ -667,7 +691,7 @@ test('SESSION-MODEL-UPDATE-FAIL-01 — un server incompatibile non produce una p
     body: JSON.stringify({ ok: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'Questa installazione deve essere aggiornata' } }),
   }));
 
-  await page.goto('/');
+  await apriChat(page);
   await page.locator('[data-real-session-id="session-model-failure"]').click();
   const pillola = page.locator('[data-open-sheet="model"] span').first();
   await page.locator('[data-open-sheet="model"]').click();
@@ -704,7 +728,7 @@ test('RUN-MODEL-RESUME-RACE-10 — il RunStarted visto durante la POST conserva 
     contentType: 'text/event-stream',
     body: '',
   }));
-  await page.goto('/');
+  await apriChat(page);
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.realSessionState.id = 'model-resume-race';
@@ -725,7 +749,7 @@ test('RUN-MODEL-RESUME-RACE-10 — il RunStarted visto durante la POST conserva 
 });
 
 test('RUN-MODEL-TRACE-UI-07 — ogni risposta e l’export conservano il modello del proprio giro', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   const prova = await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -793,7 +817,7 @@ test('la sidebar consente selezione massiva e cancellazione esplicita delle sess
     sessioni = sessioni.filter((sessione) => sessione.sessionId !== id);
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: {} }) });
   });
-  await page.goto('/');
+  await apriChat(page);
   await expect(page.locator('#sessionSelectionToolbar')).toBeVisible();
   await page.locator('#sessionSelectionToggle').click();
   await page.locator('[data-session-select="bulk-a"]').check();
@@ -809,7 +833,7 @@ test('la sidebar consente selezione massiva e cancellazione esplicita delle sess
 });
 
 test('Doctor mostra la prontezza reale del runtime agente', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   await page.locator('[data-open-view="settings"]').click();
   await page.locator('[data-settings-tab="account"]').click();
   await page.getByRole('button', { name: 'Agents', exact: true }).click();
@@ -823,7 +847,7 @@ test('Nuova automazione comunica in linguaggio naturale quando non ci sono attiv
     contentType: 'application/json',
     body: JSON.stringify({ ok: true, data: { items: [] }, meta: { schema: 'talos.harness-ui.api.v1' } }),
   }));
-  await page.goto('/');
+  await apriChat(page);
   await page.locator('[data-open-view="automations"]').evaluate((element) => element.click());
   await page.locator('[data-automation-action="new"]').evaluate((element) => element.click());
   await expect(page.locator('#sheetBody')).toContainText('Non ci sono ancora attività pronte');
@@ -831,7 +855,7 @@ test('Nuova automazione comunica in linguaggio naturale quando non ci sono attiv
 });
 
 test('desktop primary controls meet the 36 px hit-area gate', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   const sizes = await page.locator('.topbar-right .icon-btn, #redirectRunButton:not([hidden])').evaluateAll((elements) => elements.map((element) => {
     const rect = element.getBoundingClientRect();
     return { width: rect.width, height: rect.height };
@@ -844,7 +868,7 @@ test('desktop primary controls meet the 36 px hit-area gate', async ({ page }) =
 });
 
 test('settings controls meet the same desktop hit-area gate', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   await page.locator('[data-open-view="settings"]').click();
   const sizes = await page.locator('.settings-card button, .settings-card input, .settings-card select').evaluateAll((elements) => elements.map((element) => {
     const rect = element.getBoundingClientRect();
@@ -858,7 +882,7 @@ test('settings controls meet the same desktop hit-area gate', async ({ page }) =
 });
 
 test('Model Lab filters have explicit names and hit areas', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   await page.locator('button[data-open-view="settings"]').click();
   await page.locator('[data-settings-tab="models"]').click();
   await page.locator('#modelLabHfTab').click();
@@ -881,7 +905,7 @@ test('laboratory opt-in keeps demo labels available for visual scenarios', async
 });
 
 test('long response content owns overflow locally without widening the page', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   await page.evaluate(() => {
     const conversation = document.querySelector('#conversation');
     conversation.replaceChildren();
@@ -925,7 +949,7 @@ test('long response content owns overflow locally without widening the page', as
  */
 test('RAGIONAMENTO-COMPRESSO — si comprime invece di sparire: riga chiusa di serie, aperta mentre scrive solo se lo chiedi', async ({ page }) => {
   /* ⛔ Il clic sul foglio «Modello» veniva intercettato prima dal velo d'avvio e poi dalla finestra del primo avvio: si salta l'introduzione e si aspetta che il velo sia rimosso. */
-  await page.goto('/');
+  await apriChat(page);
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   const pulisci = () => page.evaluate(() => {
@@ -973,7 +997,7 @@ test('RAGIONAMENTO-COMPRESSO — si comprime invece di sparire: riga chiusa di s
 
 test('REASONING-INDICATOR-01 — il ragionamento nascosto mantiene un indicatore visibile e annunciato', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/');
+  await apriChat(page);
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -1006,7 +1030,7 @@ test('REDUCED-MOTION-02 — l’indicatore resta leggibile e CALMO con movimento
    * indicatore di stato essenziale si CALMA, non si congela.
    */
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
+  await apriChat(page);
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.handleRealEvent({ type: 'ReasoningMessageStart', messageId: 'reasoning-reduced', _sequenza: 90021 }, runtime.realSessionState.generation);
@@ -1044,7 +1068,7 @@ test('RUN-PRIMARY-STOP-03/RUN-QUEUE-04 — durante il run il primario ferma, Ent
     queued = route.request().postDataJSON();
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { ok: true, posizione: 1 } }) });
   });
-  await page.goto('/');
+  await apriChat(page);
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -1090,7 +1114,7 @@ test('RUN-REDIRECT-05 — Reindirizza usa la rotta prioritaria e non la coda', a
     queueCalls += 1;
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { ok: true, posizione: 1 } }) });
   });
-  await page.goto('/');
+  await apriChat(page);
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.realSessionState.id = 'run-redirect';
@@ -1113,7 +1137,7 @@ test('RUN-REDIRECT-FAILURE-06 — un rifiuto del server conserva il testo e riab
       body: JSON.stringify({ ok: false, error: { code: 'SESSION_NOT_READY' } }),
     });
   });
-  await page.goto('/');
+  await apriChat(page);
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.realSessionState.id = 'run-redirect-failure';
@@ -1143,7 +1167,7 @@ test('RUN-REDIRECT-STOP-RACE-16 — una cancellazione autoritativa prevale sul 2
       body: JSON.stringify({ ok: true, data: { ok: true, redirectId: 'd-race' } }),
     });
   });
-  await page.goto('/');
+  await apriChat(page);
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.realSessionState.id = 'run-redirect-race';
@@ -1180,7 +1204,7 @@ test('RUN-STOP-BEFORE-REDIRECT-20 — Stop invalida anche una richiesta redirect
     stopBody = route.request().postDataJSON();
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { stopped: true } }) });
   });
-  await page.goto('/');
+  await apriChat(page);
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.realSessionState.id = 'run-stop-before-redirect';
@@ -1201,7 +1225,7 @@ test('RUN-STOP-BEFORE-REDIRECT-20 — Stop invalida anche una richiesta redirect
 });
 
 test('RUN-REDIRECT-PENDING-17 — un redirect pendente non offre una seconda azione destinata al 409', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.realSessionState.id = 'run-redirect-pending';
@@ -1304,7 +1328,7 @@ test('TOOL-BATCH-REASONING-VISIBILE-02 — un ragionamento CON testo fra due com
 });
 
 test('TOOL-LIFECYCLE-SAME-ROW-01 — start, argomenti ed esito aggiornano la stessa riga', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   const result = await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -1346,7 +1370,7 @@ test('TOOL-LIFECYCLE-SAME-ROW-01 — start, argomenti ed esito aggiornano la ste
 
 test('TOOL-DESCRIPTION-LIFECYCLE-04 — la descrizione del modello resta nella stessa riga dopo la conclusione', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/');
+  await apriChat(page);
   const result = await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -1389,7 +1413,7 @@ test('TOOL-DESCRIPTION-LIFECYCLE-04 — la descrizione del modello resta nella s
 });
 
 test('TOOL-BATCH-AGGREGATION-01 — cinque letture diventano un solo totale grammaticalmente corretto', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   const summaries = await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -1424,7 +1448,7 @@ test('TOOL-BATCH-AGGREGATION-01 — cinque letture diventano un solo totale gram
 });
 
 test('TOOL-LIFECYCLE-ERROR-01 — l’errore conclude la riga e aggiorna il batch correlato', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   const result = await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -1473,7 +1497,7 @@ async function triggerWaitingLoader(page) {
       body: JSON.stringify({ ok: true, data: { sessionId: 'waiting-loader-session' }, meta: { schema: 'talos.harness-ui.api.v1' } }),
     });
   });
-  await page.goto('/');
+  await apriChat(page); // ⛔ 18/09/2026 — il loader vive NELLA chat: senza il gesto d'ingresso resta nascosto (vedi apriChat)
   await page.evaluate(() => {
     void window.__talosHarnessUiRuntime.startRealSession({
       id: 'waiting-loader-task',
@@ -1576,7 +1600,7 @@ test('WAITING-LOADER-REDUCED-MOTION-01 — ridurre il movimento CALMA il loader,
 });
 
 test('lo streaming porta l’ultimo output verso il centro della conversazione', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   const metrics = await page.evaluate(async () => {
     const conversation = document.querySelector('#conversation');
     conversation.replaceChildren();
@@ -1629,7 +1653,7 @@ test('SESSION-SETTINGS-RELOAD-01 — permessi e override della sessione restano 
     Object.assign(sessione, patch);
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { updated: true } }) });
   });
-  await page.goto('/');
+  await apriChat(page);
   await page.locator('[data-real-session-id="session-settings-reload"]').click();
   await expect(page.locator('[data-open-sheet="model"] span')).toHaveText('google/gemini-3.7-flash');
   await page.locator('.selector-pill[data-open-sheet="permissions"]').click();
@@ -1645,7 +1669,7 @@ test('SESSION-SETTINGS-RELOAD-01 — permessi e override della sessione restano 
 });
 
 test('VIEW-TRANSITION-RACE-01 — una navigazione rapida non lascia la colonna centrale vuota', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
 
   for (let tentativo = 0; tentativo < 2; tentativo += 1) {
     await page.locator('[data-open-view="settings"]').dispatchEvent('click');
@@ -1661,7 +1685,7 @@ test('VIEW-TRANSITION-RACE-01 — una navigazione rapida non lascia la colonna c
 });
 
 test('SETTINGS-VIEW-ISOLATION-01 — impostazioni non lasciano trasparire chat e composer', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   await page.locator('[data-open-view="settings"]').dispatchEvent('click');
   await page.waitForTimeout(400);
 
@@ -1675,7 +1699,7 @@ test('SETTINGS-VIEW-ISOLATION-01 — impostazioni non lasciano trasparire chat e
 
 test('CHAT-FULL-WIDTH-01 — allarga solo messaggi e bolle, mai il composer', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.goto('/');
+  await apriChat(page);
 
   const preparaMessaggi = async () => {
     await page.locator('#conversation').evaluate((conversation) => {
@@ -1749,7 +1773,7 @@ test('CHAT-FULL-WIDTH-01 — allarga solo messaggi e bolle, mai il composer', as
 
 test('COMPOSER-SHAPE-FULL-WIDTH-01 — il toggle full width preserva ogni forma del composer', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/');
+  await apriChat(page);
   const misuraComposer = () => page.locator('.composer').evaluate((composer) => {
     const style = getComputedStyle(composer);
     const rect = composer.getBoundingClientRect();
@@ -1791,7 +1815,7 @@ test('COMPOSER-MOCKUP-HEIGHT-01 — ogni forma desktop conserva l’altezza cano
 
   for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 800 }]) {
     await page.setViewportSize(viewport);
-    await page.goto('/');
+    await apriChat(page);
     for (const forma of ['standard', 'classic', 'compact']) {
       await page.locator('[data-open-view="settings"]').click();
       await page.locator('[data-settings-tab="appearance"]').click();
@@ -1829,7 +1853,7 @@ test('COMPOSER-MOCKUP-HEIGHT-01 — ogni forma desktop conserva l’altezza cano
 
 test('CHAT-FULL-WIDTH-SHORT-BUBBLE-01 — una domanda breve non viene stirata', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.goto('/');
+  await apriChat(page);
 
   const preparaDomandaBreve = async () => {
     await page.locator('#conversation').evaluate((conversation) => {
@@ -1866,7 +1890,7 @@ test('CHAT-FULL-WIDTH-SHORT-BUBBLE-01 — una domanda breve non viene stirata', 
 });
 
 test('CHAT-FULL-WIDTH-COPY-01 — le impostazioni descrivono il perimetro reale', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   await page.locator('[data-open-view="settings"]').click();
   await page.locator('[data-settings-tab="chat"]').click();
   const panel = page.locator('#settingsChatPanel');
@@ -1877,7 +1901,7 @@ test('CHAT-FULL-WIDTH-COPY-01 — le impostazioni descrivono il perimetro reale'
 
 test('INSPECTOR-WIDTH-01 — il pannello destro cresce senza schiacciare la chat e si adatta al viewport', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.goto('/');
+  await apriChat(page);
   const handle = page.locator('#inspectorResizeHandle');
   const box = await handle.boundingBox();
   expect(box).not.toBeNull();
@@ -1899,7 +1923,7 @@ test('INSPECTOR-WIDTH-01 — il pannello destro cresce senza schiacciare la chat
 });
 
 test('DESKTOP-SETTINGS-PERSISTENCE-01 — i controlli di aspetto producono stato reale e persistono', async ({ page }) => {
-  await page.goto('/');
+  await apriChat(page);
   await page.locator('[data-open-view="settings"]').click();
   await page.locator('#composerShapeSelect').selectOption('compact');
   await page.locator('#messageStyleSelect').selectOption('bubbles');
@@ -1931,7 +1955,7 @@ test('DESKTOP-SETTINGS-PERSISTENCE-01 — i controlli di aspetto producono stato
  */
 test('LAG-LIVE-INCREMENTAL-40 — i blocchi già chiusi non vengono ricreati a ogni delta, la coda sì e il testo finale è completo', async ({ page }) => {
   await page.route('**/api/v1/sessions/lag-live-incremental/events', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
-  await page.goto('/');
+  await apriChat(page);
   const result = await page.evaluate(async () => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.passaASessione('lag-live-incremental', 'workspace', 'Live', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
