@@ -598,7 +598,7 @@ test('GUSCIO-09 — il guscio è VIVO nell’app: si monta entrando nel Laborato
       negato: document.querySelectorAll('[data-lab-guscio-negato]').length,
     };
   });
-  expect(esito.schede, 'le quattro schede del guscio esistono nell’app vera').toEqual(['Modelli', 'Provider', 'Download', 'Sistema']);
+  expect(esito.schede, 'le quattro schede del guscio esistono nell’app vera').toEqual(['Hugging Face', 'Provider', 'Download', 'Sistema']);
   expect(esito.guscio, 'la carta è timbrata dal guscio').toBe('v3');
   expect(esito.pannelli, 'quattro pannelli, uno per scheda').toBe(4);
   expect(esito.vecchieNascoste, 'le sei linguette legacy sono spostate, non perse').toBe(6);

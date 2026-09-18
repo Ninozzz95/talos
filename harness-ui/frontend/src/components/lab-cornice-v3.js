@@ -157,7 +157,26 @@ export const SCHEDE_LAB = Object.freeze([
    * esplorare. I due lati restano separati: il catalogo dei modelli da una parte, i fornitori
    * dall'altra, come i runtime locali trattati da «provider» intercambiabili.
    */
-  Object.freeze({ id: 'models', etichetta: 'Modelli', icona: 'i-brain', sezioni: Object.freeze(['huggingface', 'installed']) }),
+  /*
+   * ⛔⛔ OWNER, 18/09/2026 — LA DIREZIONE, testuale: «la riproduzione vista per vista del mockup
+   *   rimane e quella è incambiabile nel laboratorio modelli. Adesso nel mockup ci sono quattro
+   *   tab: modelli, provider, download, sistema. La tab "modelli" si deve chiamare Hugging Face,
+   *   che è la tab dedicata ai modelli locali, collegata alla tab attuale Hugging Face
+   *   dell'applicazione. La tab "provider" del mockup deve essere collegata ai provider delle
+   *   chiavi API, esattamente con lo stesso stile, layout, card, il bottone "Configura" che apre
+   *   le modali».
+   * ⇒ QUATTRO schede, coi nomi e i contenuti del mockup: la quinta che avevo inventato
+   *   («Chiavi API») NON esiste, e va tolta.
+   *   · «Hugging Face» (id `models`, il vocabolario interno non cambia a ogni parola a schermo)
+   *     = i MODELLI LOCALI: il pannello Hugging Face dell'app (`huggingface`, che è la sua porta
+   *     vera) e gli installati (`installed`).
+   *   · «Provider» = i fornitori e le loro chiavi API (`providers`), col catalogo dei loro
+   *     modelli (`catalog`) — che così NON si perde (owner: «non dobbiamo nascondere o perdere
+   *     nessuna funzione attuale della app»).
+   *   · «Download» e «Sistema» come il mockup.
+   * ⛔ L'ORDINE conta: aprendo una scheda l'app accende la sua PRIMA sezione.
+   */
+  Object.freeze({ id: 'models', etichetta: 'Hugging Face', icona: 'i-brain', sezioni: Object.freeze(['huggingface', 'installed']) }),
   Object.freeze({ id: 'providers', etichetta: 'Provider', icona: 'i-link', sezioni: Object.freeze(['providers', 'catalog']),
     frase: Object.freeze({ titolo: 'Collegamenti, non scatole nere.', nota: 'Credenziale, configurazione e raggiungibilità sono tre fatti diversi.' }) }),
   Object.freeze({ id: 'downloads', etichetta: 'Download', icona: 'i-download', sezioni: Object.freeze(['downloads']),
