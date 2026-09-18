@@ -112,6 +112,39 @@
 .talos-sidebar__actions { position: sticky; top: 0; z-index: 3; background: var(--talos-panel); }
 /* Il piede appiccicato in fondo ha bisogno di uno sfondo SUO, o le righe gli passano sotto. */
 .talos-sidebar__foot { position: sticky; bottom: 0; z-index: 3; background: var(--talos-panel); }
+/*
+ * ⛔⛔ 18/09/2026 — IL TAGLIO SOTTO IL PIEDE DEVE DIRE «CONTINUA», NON SEMBRARE UN GUASTO.
+ *
+ * Una riga che scorre sotto il piede appiccicato resta tagliata a metà: è il bordo di una lista che
+ * scorre, e il progetto ha già deciso che questa classe è un difetto (BC-78.2 curò la sfumatura,
+ * BC-82.1 la reclama per l'elenco SESSIONI, BC-82.6 è la riga su cui l'owner ha detto «la sidebar
+ * è rotta»: «il taglio non dice "continua", si legge come un guasto»).
+ * ⛔ E la sfumatura di BC-78.2 qui NON basta, per lo stesso motivo per cui non bastava sul nav: la
+ *   maschera `local` sta al fondo del CONTENUTO e il piede copre proprio quel bordo.
+ *
+ * Ricerca 18/09/2026 — la cura è quella di una PR che ripara ESATTAMENTE questo difetto
+ * («Fix sidebar bottom fade cutting off the last row mid-glyph», unslothai/unsloth #7902):
+ *  · una rampa 0→100% è opaca **solo all'ultimo pixel**, quindi la riga resta leggibile dove il
+ *    contenitore taglia → **plateau opaco di ~16 px** attaccato al bordo del piede, che assorbe il
+ *    taglio netto;
+ *  · sopra il plateau una **rampa più lunga** (~24 px) che dissolve una riga intera invece di
+ *    lasciarla leggibile;
+ *  · e lo spazio in coda (`padding-bottom`) fa sì che **a fine corsa l'ultima riga si veda intera**
+ *    sopra il plateau — così la sfumatura non smorza l'ultima voce «senza motivo», che era la
+ *    lezione di BC-78.2.
+ * Nordhealth documenta lo stesso pattern come proprietà di prima classe per le navigazioni con
+ * piede appiccicato (`--n-navigation-scroll-mask`, `stickyFooter`), con la stessa geometria
+ * (24 px di dissolvenza per lato).
+ */
+/* ⛔ Lo spazio in coda va DENTRO la lista, non sul contenitore: misurato il 18/09 dalla foto —
+   con `padding-bottom` sulla barra, il piede appiccicato si ferma al bordo del content box e
+   **si stacca** di 40 px dal fondo, lasciando scorrere le righe nella fessura (una riga compariva
+   sotto il piede). Sulla lista, lo spazio è contenuto e l'appiccicatura resta al fondo vero. */
+.talos-sidebar__block.talos-sidebar__sessions { padding-bottom: 40px; }
+.talos-sidebar__foot::before {
+  content: ''; position: absolute; left: 0; right: 0; top: -40px; height: 40px; pointer-events: none;
+  background: linear-gradient(to bottom, transparent 0, var(--talos-panel) 24px, var(--talos-panel) 100%);
+}
 /* Le sessioni non hanno più uno scorrimento proprio: sono righe nel flusso della regione unica.
    Nessuna altezza allocata ⇒ non possono più restare più basse di una riga. */
 .talos-sidebar__block.talos-sidebar__sessions { flex: 0 0 auto; min-height: 0; overflow: visible; }
