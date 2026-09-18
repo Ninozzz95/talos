@@ -136,6 +136,8 @@ modello. **Mai** le sette sezioni attenuate.
 | `3d0fda30` | il documento: il **terzo giro** |
 | `d8229fdb` | il documento: **cosa manca, per nome** |
 | `771201c1` | il **quarto giro**: la riga segue la **scala dell'interfaccia** (container query) e la metrica non vede più lo **scorrimento** |
+| `ca05114e` | la prova del quarto giro diventa **guardia della sua cura** (C4-C, da rossa a verde) |
+| `13e4ae52` | il campo del catalogo **tiene il suo nome**: il cancello che ne chiedeva un altro è della **FASE 4** |
 
 ⛔ **Tutti marcati «NON DEPLOYABILE — in attesa di review avversaria».**
 ⛔ Il push **non è stato chiesto**: si chiede a blocchi, col sì dell'owner.
@@ -666,7 +668,18 @@ causa**. È il modo giusto.
 Niente è stato buttato e niente è stato dichiarato chiuso per stanchezza. Per ogni riga: **cosa**,
 **perché è lì**, e **chi la chiude**.
 
-### 1 · Le QUATTRO DECISIONI che aspettano l'owner (le uniche cose che mi bloccano)
+### 1 · ✅ LE TRE DECISIONI — APPROVATE DALL'OWNER IL 18/09/2026 (tarda sera)
+
+1. **Due porte di ricerca o una?** → ✅ **tenerle tutte e due.** Unirle significherebbe cancellare
+   un comportamento (il campo filtra in pagina, il bottone apre la modale coi percorsi).
+2. **Il nome del campo del catalogo** → ✅ **allineare il codice al cancello**… ⛔ **e poi MISURATO
+   E ANNULLATO**: il cancello chiede tre controlli di un'altra riga (vedi § 3), quindi il campo
+   **tiene il suo nome** («Cerca repository Hugging Face», `13e4ae52`). La premessa della mia
+   raccomandazione era sbagliata e l'ho corretta con la misura, non con un'opinione.
+3. **Il ciclo di review** → ✅ **chiuso dopo il quarto giro**; le review tornano a coprire le FASI.
+   Prezzo dichiarato: le cure di `771201c1` e le tre nate dalle foto restano **non riviste**.
+
+### 1-bis · LE DECISIONI GIÀ CHIUSE (per memoria)
 
 1. **Due porte di ricerca o una?** In colonna ci sono il **cercatore del mockup** (bottone + Ctrl K,
    apre la **modale** coi percorsi) e il **campo vero** (filtra in pagina). Il mockup ne ha **una**
@@ -700,7 +713,14 @@ Niente è stato buttato e niente è stato dichiarato chiuso per stanchezza. Per 
   `#modelLabCatalogPanel`, un pannello che il guscio nuovo **non raggiunge** (premendo «Hugging
   Face» si accendono `setting-panel-models`, `labPannelloModels`, `modelLabHfPanel`). ⇒ **Non è una
   prova da rinominare: è una superficie da portare**, ed è la **FASE 4**.
-- **`baseline-shell` «Model Lab filters…»**: pretende un nome accessibile diverso (decisione 2).
+- **`baseline-shell` «Model Lab filters…»** ⛔ **È UN CANCELLO DELLA FASE 4, non una divergenza di nome.**
+  Misurato sul 4174 il 18/09/2026: pretende **tre** controlli — `searchbox` «Cerca nel catalogo»,
+  `combobox` «Fornitore», `combobox` «Ordina i modelli» — e i conteggi sono **1 · 0 · 0**, dove l'1
+  c'era solo perché avevo rinominato il campo di oggi (poi **annullato**: `13e4ae52`). I controlli
+  veri della riga sono «Cerca repository Hugging Face», «Autore Hugging Face», «Filtri e tag»,
+  «**Ordina repository**». ⇒ Il cancello descrive la **barra a faccette del mockup** (ricerca +
+  fornitore + ordinamento), che vive nel pannello del catalogo non raggiunto: **diventa verde col
+  port della FASE 4**, insieme a `lab-faccette.spec.mjs`.
 - ⛔ **UNA PROVA CHE ESISTE E NON GUARDA** (trovata dal terzo revisore): `visual-matrix.spec.mjs` ha
   uno scenario **`model-lab-1440x900`** — esattamente **dentro la fascia 1101→1490** dove il
   selettore dell'ordine usciva dal pannello — e il suo artefatto mostra **il velo d'avvio**, non il
