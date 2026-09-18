@@ -22,7 +22,20 @@ test('SETTINGS-FATTI-44 — le sezioni Settings mostrano provider dal server, pr
   await page.goto('/');
   const esito = await page.evaluate(async () => {
     const runtime = window.__talosHarnessUiRuntime;
-    document.querySelector('[data-open-view="settings"]').click();
+    /*
+     * ⛔⛔ 18/09/2026 — QUESTA RIGA ERA `document.querySelector('[data-open-view="settings"]').click()`.
+     * Quell'attributo **non esiste più nel DOM** (era del mockup: 0 occorrenze nel template), quindi
+     * la prova era rossa da giorni con «Cannot read properties of null» e contava fra le 53 note.
+     * Si naviga come si naviga davvero: la voce «Impostazioni» della barra laterale — e se il gruppo
+     * STRUMENTI è chiuso (è il default) prima lo si apre, come fa una persona.
+     */
+    const voceImpostazioni = document.querySelector('.talos-sidebar [data-vaia="impostazioni"]');
+    if (voceImpostazioni && !voceImpostazioni.offsetParent) {
+      const gruppo = voceImpostazioni.closest('.td-nav-group');
+      const testata = gruppo?.id ? document.querySelector(`.talos-sidebar [aria-controls="${gruppo.id}"]`) : null;
+      if (testata?.getAttribute('aria-expanded') === 'false') testata.click();
+    }
+    voceImpostazioni.click();
     runtime.setSettingsSection('providers');
     await runtime.renderSettingsRiepiloghi();
     const provider = [...document.querySelectorAll('#settingsProvidersList li')].map((li) => li.textContent.replace(/\s+/g, ' ').trim());
