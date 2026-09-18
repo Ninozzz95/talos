@@ -55,6 +55,16 @@ const words = {
   currentSession: { it: 'Sessione corrente', en: 'Current session' },
   currentSessionHelp: { it: 'Modello e preferenze operative della conversazione attiva.', en: 'Model and operational preferences of the active conversation.' },
   appearanceLink: { it: 'Temi e movimento', en: 'Themes and motion' },
+  /* ⭐ 18/09/2026 — IL CERCATORE DEL MOCKUP (FASE 1b). Il mockup lo ha in SIDEBAR, con la
+     scorciatoia e i risultati in una modale; l'app lo aveva solo come campo in alto. */
+  openSearch: { it: 'Cerca impostazioni', en: 'Search settings' },
+  paletteTitle: { it: 'Trova un’impostazione', en: 'Find a setting' },
+  palettePlaceholder: { it: 'Tema, API key, memoria, animazioni…', en: 'Theme, API key, memory, animations…' },
+  paletteClose: { it: 'Chiudi la ricerca', en: 'Close search' },
+  shortcut: { it: 'Ctrl K', en: 'Ctrl K' },
+  /* Il glifo della scorciatoia non si annuncia: «Ctrl K» letto da uno screen reader è
+     «Control K», e va detto a parole invece che lasciato al caso. */
+  shortcutSpoken: { it: 'Scorciatoia Control K', en: 'Control K shortcut' },
 };
 
 /** Composes existing controls; never copies their values into a second settings store. */
@@ -148,6 +158,127 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   const resultList = node('ul', 'settings-result-list'); const noResults = node('div', 'settings-empty');
   const emptyTitle = node('h3'); const emptyHelp = node('p'); noResults.append(emptyTitle, emptyHelp); results.append(resultTitle, status, resultList, noResults);
   content.prepend(breadcrumb, heading, results);
+  /*
+   * ⭐⭐ 18/09/2026 — IL CERCATORE DEL MOCKUP (FASE 1b), e il salto alla riga in un posto solo.
+   * Il mockup ha il cercatore in SIDEBAR (`#open-settings-search` + `kbd` «Ctrl K») e i
+   * risultati in una modale; l'app lo aveva solo come campo in alto. Qui il gesto del mockup
+   * si aggiunge, e il campo in alto RESTA: due porte, nessuna funzione persa.
+   *
+   * ⛔ PERCHÉ `<dialog>` NATIVO E NON UNA MODALE NOSTRA. `showModal()` dà gratis quello che
+   *   altrimenti si riscrive a mano e si sbaglia: il fuoco entra ed è contenuto, lo sfondo
+   *   diventa inerte per gli screen reader, Esc chiude, e il fuoco TORNA a chi l'ha aperto.
+   *   Fonte: W3C WCAG Technique H102 e CSS-Tricks "There is No Need to Trap Focus on a Dialog
+   *   Element", letti il 18/09/2026 — e il progetto lo prevede già: il suo gestore dei veli
+   *   tratta i `<dialog>` aperti da altri come ospiti legittimi (`manager.ts:46-48`).
+   * ⛔ NON si aggiunge un trap di fuoco in JS (`over-trapping` impedisce di raggiungere la
+   *   barra del browser) e NON si aggiunge `inert` a mano: lotterebbe col ritorno del fuoco.
+   * ⛔ NIENTE `tabindex` sul `<dialog>`: il browser lo gestisce.
+   * ⛔ IL TITOLO STA PRIMA DEL BOTTONE DI CHIUSURA, o `showModal()` dà il fuoco al primo
+   *   focusabile e il dialogo si apre SCORRATO IN FONDO (W3C H102).
+   * ⛔ Il click sullo sfondo NON è nativo: si ascolta `event.target === dialog`. E `closedby`
+   *   non è Baseline (Safari non ce l'ha): per questo c'è un bottone di chiusura VISIBILE.
+   */
+  function vaiAllaRiga(entry: { id: string; section: SettingsSection; studio: boolean }) {
+    choose(entry.section);
+    if (entry.studio) { options.openStudio(entry.id); return; }
+    const row = q<HTMLElement>('[data-setting-row="' + entry.id + '"]');
+    for (let ancestor: HTMLElement | null = row; ancestor; ancestor = ancestor.parentElement) if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
+    const control = row?.querySelector<HTMLElement>('input,select,textarea,button') || h2;
+    screen.querySelector('[data-settings-hit]')?.removeAttribute('data-settings-hit');
+    if (row) row.dataset.settingsHit = '';
+    control.focus({ preventScroll: true }); control.scrollIntoView({ block: 'center', behavior: 'instant' });
+  }
+
+  const palette = node('dialog', 'settings-palette'); palette.dataset.settingsChrome = '';
+  const paletteBox = node('div', 'settings-palette__box');
+  const paletteHead = node('div', 'settings-palette__head');
+  const paletteTitle = node('h2', 'settings-palette__title'); paletteTitle.id = 'settingsPaletteTitle';
+  const paletteClose = node('button', 'talos-button talos-button--ghost settings-palette__close'); paletteClose.type = 'button';
+  paletteHead.append(paletteTitle, paletteClose);
+  const paletteField = node('div', 'settings-palette__field');
+  const paletteQuery = node('input', 'settings-palette__input'); paletteQuery.type = 'search'; paletteQuery.id = 'settingsPaletteQuery';
+  paletteQuery.setAttribute('aria-controls', 'settingsPaletteResults');
+  const paletteStatus = node('p', 'settings-palette__count'); paletteStatus.setAttribute('role', 'status'); paletteStatus.setAttribute('aria-live', 'polite');
+  const paletteList = node('ul', 'settings-palette__results'); paletteList.id = 'settingsPaletteResults';
+  const paletteEmpty = node('p', 'settings-palette__empty');
+  const paletteIcona = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  paletteIcona.setAttribute('class', 'i settings-palette__icon'); paletteIcona.setAttribute('aria-hidden', 'true');
+  const paletteUse = document.createElementNS('http://www.w3.org/2000/svg', 'use'); paletteUse.setAttribute('href', '#i-search');
+  paletteIcona.append(paletteUse);
+  paletteField.append(paletteIcona, paletteQuery);
+  paletteBox.append(paletteHead, paletteField, paletteStatus, paletteList, paletteEmpty);
+  palette.append(paletteBox);
+  palette.setAttribute('aria-labelledby', paletteTitle.id);
+  screen.append(palette);
+
+  /** Un risultato, uguale in pagina e nella palette: nessuna copia della logica di salto. */
+  function bottoneRisultato(entry: { id: string; section: SettingsSection; label: string; description: string; studio: boolean }, dentroPalette: boolean) {
+    const button = node('button', 'settings-result'); button.type = 'button'; button.dataset.settingsResult = entry.id;
+    const trail = node('span', 'settings-result__path', localText(SETTINGS_SECTIONS[entry.section].title, options.language()));
+    button.append(trail, node('strong', '', entry.label), node('span', 'settings-result__help', entry.description));
+    if (entry.studio) button.append(node('span', 'settings-result__destination', tx('studio')));
+    button.addEventListener('click', () => { if (dentroPalette) palette.close(); vaiAllaRiga(entry); });
+    return button;
+  }
+  /** L'indice è lo stesso della ricerca in pagina: una sola fonte, due porte. */
+  const risultati = (termine: string) => searchSettings(buildSettingsIndex(options.fields, options.studioIds, options.language(), options.translate), termine);
+
+  function disegnaPalette() {
+    const matches = risultati(paletteQuery.value);
+    paletteStatus.textContent = options.language() === 'en' ? `${matches.length} ${matches.length === 1 ? 'result' : 'results'}` : `${matches.length} ${matches.length === 1 ? 'risultato' : 'risultati'}`;
+    paletteEmpty.hidden = matches.length > 0;
+    paletteList.replaceChildren(...matches.map(entry => { const li = node('li'); li.append(bottoneRisultato(entry, true)); return li; }));
+  }
+  function apriPalette() {
+    if (palette.open) return;
+    disegnaPalette();
+    palette.showModal();
+    // ⛔ Il fuoco si mette a mano: `autofocus` non è affidabile su tutti i browser desktop.
+    paletteQuery.select(); paletteQuery.focus({ preventScroll: true });
+  }
+  paletteClose.addEventListener('click', () => palette.close(), { signal });
+  paletteQuery.addEventListener('input', disegnaPalette, { signal });
+  palette.addEventListener('click', event => { if (event.target === palette) palette.close(); }, { signal });
+  palette.addEventListener('close', () => { paletteQuery.value = ''; }, { signal });
+
+  const cercaBottone = node('button', 'settings-nav__search talos-nav-item'); cercaBottone.type = 'button'; cercaBottone.dataset.settingsOpenSearch = '';
+  const cercaEtichetta = node('span', 'talos-nav-item__label');
+  const cercaTasto = node('kbd', 'settings-nav__kbd'); cercaTasto.setAttribute('aria-hidden', 'true');
+  const cercaDetto = node('span', 'workspace-sr');
+  const cercaIcona = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  cercaIcona.setAttribute('class', 'i talos-nav-item__icon'); cercaIcona.setAttribute('aria-hidden', 'true');
+  const cercaUse = document.createElementNS('http://www.w3.org/2000/svg', 'use'); cercaUse.setAttribute('href', '#i-search');
+  cercaIcona.append(cercaUse);
+  cercaBottone.append(cercaIcona, cercaEtichetta, cercaDetto, cercaTasto);
+  cercaBottone.addEventListener('click', () => apriPalette(), { signal });
+  nav.insertBefore(cercaBottone, list);
+  /*
+   * ⛔ LA SCORCIATOIA È GLOBALE MA GUARDATA: Ctrl K non deve rubare il tasto a chi sta SCRIVENDO —
+   *   il composer della chat è a un passo da qui. Fonte: le linee guida sulla command palette
+   *   lette il 18/09/2026 («guard the global hotkey so it doesn't fire while the user is typing
+   *   in an input/textarea/contenteditable»). Ctrl K resta raggiungibile dal bottone in sidebar.
+   */
+  const scrive = (target: EventTarget | null) => {
+    const el = target as HTMLElement | null; if (!el || !el.tagName) return false;
+    return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable;
+  };
+  doc.addEventListener('keydown', event => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'k') return;
+    /*
+     * ⛔ CTRL K È GIÀ PRESO, e l'ho scoperto misurando: l'app ha una sua palette dei COMANDI
+     *   (`#veloComandi`, con `#cercaComando` e `#risultatiComandi`) e il suo piè di pagina
+     *   dichiara proprio «Ctrl K». Un secondo Ctrl K globale non apre due cose: ne ruba una.
+     * ⛔ La cura non è togliere la scorciatoia a chi ce l'ha: è DARLE UN AMBITO. Dentro lo
+     *   schermo Impostazioni vince il cercatore delle impostazioni — è quello che il mockup
+     *   mette lì, ed è il contesto in cui l'utente sta lavorando; fuori, Ctrl K resta ai
+     *   comandi, esattamente come prima. Nessuna funzione persa in nessuno dei due posti.
+     *   Fonte: le linee guida sulla command palette lette il 18/09/2026 — «treat it as global,
+     *   don't reuse the binding for any in-page filter input».
+     */
+    if (!screen.classList.contains('active')) return;
+    if (scrive(event.target)) return;
+    event.preventDefault(); apriPalette();
+  }, { signal });
 
   const restore = q<HTMLInputElement>('[data-workspace-restore]');
   if (restore && !restore.closest('.settings-field-control')) {
@@ -192,27 +323,12 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     if (metadata.eyebrow) { eyebrow.textContent = localText(metadata.eyebrow, options.language()); eyebrow.hidden = false; }
     else { eyebrow.textContent = ''; eyebrow.hidden = true; }
     if (!searching) { resultList.replaceChildren(); status.textContent = ''; return; }
-    const matches = searchSettings(buildSettingsIndex(options.fields, options.studioIds, options.language(), options.translate), search!.value);
+    const matches = risultati(search!.value);
     status.hidden = false; status.textContent = options.language() === 'en' ? `${matches.length} ${matches.length === 1 ? 'result' : 'results'}` : `${matches.length} ${matches.length === 1 ? 'risultato' : 'risultati'}`;
     noResults.hidden = matches.length > 0;
-    resultList.replaceChildren(...matches.map(entry => {
-      const li = node('li'); const button = node('button', 'settings-result'); button.type = 'button'; button.dataset.settingsResult = entry.id;
-      const trail = node('span', 'settings-result__path', localText(SETTINGS_SECTIONS[entry.section].title, options.language()));
-      const label = node('strong', '', entry.label); const help = node('span', 'settings-result__help', entry.description);
-      button.append(trail, label, help);
-      if (entry.studio) button.append(node('span', 'settings-result__destination', tx('studio')));
-      button.addEventListener('click', () => {
-        choose(entry.section);
-        if (entry.studio) { options.openStudio(entry.id); return; }
-        const row = q<HTMLElement>('[data-setting-row="' + entry.id + '"]');
-        for (let ancestor: HTMLElement | null = row; ancestor; ancestor = ancestor.parentElement) if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
-        const control = row?.querySelector<HTMLElement>('input,select,textarea,button') || h2;
-        screen.querySelector('[data-settings-hit]')?.removeAttribute('data-settings-hit');
-        if (row) row.dataset.settingsHit = '';
-        control.focus({ preventScroll: true }); control.scrollIntoView({ block: 'center', behavior: 'instant' });
-      });
-      li.append(button); return li;
-    }));
+    /* Una sola fabbrica di risultati per la pagina e per la palette: la logica di salto sta in
+       `vaiAllaRiga`, non duplicata in due gestori. */
+    resultList.replaceChildren(...matches.map(entry => { const li = node('li'); li.append(bottoneRisultato(entry, false)); return li; }));
   }
   function refresh() {
     title.textContent = tx('title'); subtitle.textContent = tx('subtitle'); searchName.textContent = tx('search'); search!.setAttribute('aria-label', tx('search')); search!.placeholder = tx('placeholder');
@@ -221,6 +337,12 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     for (const [id, button] of buttons) { button.querySelector('span')!.textContent = localText(SETTINGS_SECTIONS[id].title, options.language()); const option = mobile.querySelector('option[value="' + id + '"]'); if (option) option.textContent = button.textContent; }
     for (const field of options.fields) { const help = q<HTMLElement>('[data-setting-help="' + field.id + '"]'); if (help && FIELD_HELP[field.id]) help.textContent = localText(FIELD_HELP[field.id]!, options.language()); }
     resultTitle.textContent = tx('results'); results.setAttribute('aria-label', tx('results')); emptyTitle.textContent = tx('empty'); emptyHelp.textContent = tx('emptyHelp');
+    // Il cercatore del mockup (FASE 1b): bottone in sidebar, palette, e il glifo della scorciatoia.
+    cercaEtichetta.textContent = tx('openSearch'); cercaBottone.setAttribute('aria-label', tx('openSearch'));
+    cercaTasto.textContent = tx('shortcut'); cercaDetto.textContent = tx('shortcutSpoken');
+    paletteTitle.textContent = tx('paletteTitle'); paletteQuery.placeholder = tx('palettePlaceholder');
+    paletteQuery.setAttribute('aria-label', tx('paletteTitle')); paletteClose.textContent = tx('paletteClose');
+    paletteEmpty.textContent = tx('empty'); paletteList.setAttribute('aria-label', tx('results'));
     if (!save.dataset.state) save.textContent = tx('appearanceAuto'); else save.textContent = tx(save.dataset.state === 'saved' ? 'saved' : 'unsaved');
     const chatGroup = q<HTMLElement>('[data-settings-chat-controls]'); if (chatGroup) { chatGroup.querySelector('h3')!.textContent = tx('chatGroup'); chatGroup.querySelector('p')!.textContent = tx('chatHelp'); }
     const sessionFacts = q<HTMLElement>('#settingsChatFacts'); const sessionCard = sessionFacts?.closest<HTMLElement>('.talos-settings__section');
