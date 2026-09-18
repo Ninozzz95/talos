@@ -211,9 +211,19 @@ test('INTELAIATURA-10 · cercando, la colonna non salta', async ({ page }) => {
    *        cresce di quanto la barra si alza.
    */
   const stato = () => page.evaluate(() => {
-    const barra = document.querySelector('#schermoImpostazioni .settings-toolbar').getBoundingClientRect();
+    const b = document.querySelector('#schermoImpostazioni .settings-toolbar');
+    const barra = b.getBoundingClientRect();
     const voce = document.querySelector('#schermoImpostazioni .settings-nav__list [role="tab"]').getBoundingClientRect();
-    return { altezzaBarra: Math.round(barra.height), barraTop: Math.round(barra.top), relativa: Math.round(voce.top - barra.top), voceVisibile: voce.height > 0 };
+    /* ⛔ `offsetTop` E NON `getBoundingClientRect().top` — correzione del quarto revisore, 18/09/2026.
+       `top` è una coordinata del VIEWPORT e contiene lo SCORRIMENTO della pagina: su codice SANO,
+       con la pagina scorsa prima di cercare, la barra «si sposta» di **212-265 px** (5,5 volte il
+       segnale da 48 che questa prova deve prendere) perché Chrome riscrive da solo lo `scrollTop`
+       quando la ricerca accorcia il contenuto — è lo *scroll anchoring*. `offsetTop` è la posizione
+       della barra DENTRO il suo contenuto: **0 su codice sano anche con la pagina scorsa**, e
+       **48 px** sulla regressione iniettata. Stesso mordente, zero rumore.
+       Fonte: Chrome for Developers, «Scroll anchoring» + la documentazione Playwright sui
+       rettangoli relativi al viewport, letti il 18/09/2026. */
+    return { altezzaBarra: Math.round(barra.height), barraOffset: b.offsetTop, relativa: Math.round(voce.top - barra.top), voceVisibile: voce.height > 0 };
   });
   const prima = await stato();
   await page.locator('#settingsSearch').fill('tema');
@@ -226,11 +236,14 @@ test('INTELAIATURA-10 · cercando, la colonna non salta', async ({ page }) => {
    *   (`settings-view.ts:582/586`). Il terzo revisore l'ha dimostrato con una regressione iniettata
    *   («mentre si cerca, il bottone del mockup sparisce»): la colonna saliva di **48 px** —
    *   la stessa taglia del difetto originale — e `altezzaBarra` e `relativa` restavano **verdi**.
-   *   ⇒ Si misura anche la posizione ASSOLUTA della barra: è quella che vede tutto ciò che le sta
-   *   sopra, e sotto i 660 px (dove l'elenco è nascosto e `voceVisibile` è falso) resta l'unica
-   *   misura oltre all'altezza.
+   *   ⇒ Si misura anche la posizione della barra, che è ciò che vede il contenuto sopra di lei.
+   * ⛔ MA COPRE LA COLONNA, NON LA PAGINA — precisazione del quarto revisore, 18/09/2026, che l'ha
+   *   misurata: la barra vive dentro `.settings-nav`, che è `position: sticky`, quindi resta
+   *   appiccicata quando il breadcrumb e la testata di sezione (127 px sopra) spariscono durante la
+   *   ricerca: `offsetTop` non si muove di un pixel, ed è giusto così. Per ciò che sta sopra la
+   *   COLONNA la guardia resta `INTELAIATURA-05`. Qui si dice cosa questa misura copre, non di più.
    */
-  expect(Math.abs(durante.barraTop - prima.barraTop), `la colonna salta di ${durante.barraTop - prima.barraTop} px mentre si cerca`).toBeLessThanOrEqual(8);
+  expect(Math.abs(durante.barraOffset - prima.barraOffset), `la colonna salta di ${durante.barraOffset - prima.barraOffset} px mentre si cerca`).toBeLessThanOrEqual(8);
   expect(Math.abs(durante.altezzaBarra - prima.altezzaBarra), `la barra cambia altezza cercando: ${prima.altezzaBarra} → ${durante.altezzaBarra}`).toBeLessThanOrEqual(2);
   if (prima.voceVisibile) {
     expect(Math.abs(durante.relativa - prima.relativa), `la colonna salta di ${durante.relativa - prima.relativa} px mentre si cerca`).toBeLessThanOrEqual(8);
@@ -250,7 +263,7 @@ test('INTELAIATURA-10 · cercando, la colonna non salta', async ({ page }) => {
    *   ±8 sulla posizione, ±2 sull'altezza — e dice la stessa cosa: la colonna torna dov'era.
    */
   const dopo = await stato();
-  expect(Math.abs(dopo.barraTop - prima.barraTop), `la colonna non torna dov'era: ${prima.barraTop} → ${dopo.barraTop}`).toBeLessThanOrEqual(8);
+  expect(Math.abs(dopo.barraOffset - prima.barraOffset), `la colonna non torna dov'era: ${prima.barraOffset} → ${dopo.barraOffset}`).toBeLessThanOrEqual(8);
   expect(Math.abs(dopo.altezzaBarra - prima.altezzaBarra), `la barra non torna com'era: ${prima.altezzaBarra} → ${dopo.altezzaBarra}`).toBeLessThanOrEqual(2);
 });
 
