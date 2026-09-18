@@ -462,11 +462,17 @@ causa**. È il modo giusto.
   colonna non salta», e morde — col codice di `4b4c753b` rimesso è **rossa**).
 - `tests/browser/_review-barra.spec.mjs` (la prova indipendente del revisore): **8/8** col codice
   curato — le sue R-C e R-G passano, cioè il suo stesso difetto è chiuso e verificato da lui.
-- ⛔ **`tests/browser/lab-faccette.spec.mjs`: 7 rossi su 7, e NON è una regressione.** Si fermano
-  tutti **prima** di toccare le faccette, su `getByRole('tab', { name: 'Modelli', exact: true })`:
-  la prova è scritta per il guscio di `513b8bed`, e il port nuovo ha rinominato la scheda in
-  **«Hugging Face»** (la si vede nella foto `lab-huggingface_1440p_real.png`). Un CSS non può far
-  sparire una scheda: **la prova è stantia**, e va rimisurata dalla corsia del laboratorio.
+- ⛔ **`tests/browser/lab-faccette.spec.mjs`: 7 rossi su 7 — e la causa vera è stata MISURATA, non
+  dedotta.** La prova si ferma su `getByRole('tab', { name: 'Modelli', exact: true })` (il guscio
+  nuovo l'ha rinominata **«Hugging Face»**), ma **rinominare la linguetta NON basta**: la barra a
+  faccette vive in `#modelLabCatalogPanel` — il pannello legacy «Catalogo API», montato da
+  `app.js:4715` con `montaCatalogoModelli($('#modelLabCatalogPanel'), $('#panel-catalogo'))`. Sonda
+  di sola lettura sul 4174 (`artifacts/zoom-bar/sonde-lab.mjs`): premendo «Hugging Face» i pannelli
+  visibili sono **`setting-panel-models`, `labPannelloModels`, `modelLabHfPanel`** — il pannello del
+  catalogo **non c'è**. ⇒ La barra a faccette e la sua prova aspettano il **port nella tab Hugging
+  Face**, che è la **FASE 4** del piano: non è una prova da aggiustare a mano, è una superficie da
+  portare. ⛔ **E la cura `be736bc9` NON è su quella riga**: è la riga della tab Hugging Face
+  (`.talos-toolbar--hf`), che si vede viva nella foto `lab-huggingface_1440p_real.png`.
 - ⛔ **`baseline-shell -g "hit"`: 2 verdi, 1 rosso** — «Model Lab filters have explicit names and hit
   areas» cerca un `searchbox` di nome **«Cerca nel catalogo»** e ne trova **0** (il campo vero si
   chiama «Cerca Hugging Face»). **Preesistente** (rosso anche prima di questa modifica) e non
