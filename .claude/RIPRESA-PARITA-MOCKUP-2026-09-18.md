@@ -123,6 +123,9 @@ modello. **Mai** le sette sezioni attenuate.
 | `719565f2` | **una sola × di cancellazione**: si spegne quella del browser, che non ha nome |
 | `bb148037` | la **× entra nel campo** — la colonna non salta più di 48 px cercando (D1 della review) |
 | `be736bc9` | **Laboratorio**: il selettore dell'ordine non si mangia più la riga delle faccette |
+| `1f22bb32` | le carte del runtime **parlano, non stampano codici** (`RUNTIME_UNREACHABLE` → frase) |
+| `a59aa16a` | la scheda del modello: «Sconosciuto · Sconosciuto» diventa **una parola sola** |
+| `47ee6c69` | la tab **Download** tiene **un titolo, non tre** |
 
 ⛔ **Tutti marcati «NON DEPLOYABILE — in attesa di review avversaria».**
 ⛔ Il push **non è stato chiesto**: si chiede a blocchi, col sì dell'owner.
@@ -223,6 +226,40 @@ confronto col mockup a 185 px, la modalità `data-sidebar="icone"` e l'avvio a f
 sotto l'altra** — il cercatore del mockup (che apre la modale) e, pochi px sotto, il campo che
 filtra in pagina. **Il mockup ne ha una.** È la direzione che l'owner ha chiesto, quindi non si
 cambia da soli: è una sua decisione (tenere due porte o fonderle in una).
+
+## ⛔⛔ L'ISPEZIONE VISIVA DELLE OTTO VISTE (18/09/2026, sera) — tre difetti trovati guardando
+
+Il proprietario della prova non è il codice: è la **foto**. Guardate tutte e otto le viste del
+confronto alle due risoluzioni (aspetto, i quattro tab del laboratorio, i tre lati della pagina del
+modello), confrontate coi rispettivi lati del mockup. Tre difetti, tutti **veri**, tutti curati:
+
+1. **`RUNTIME_UNREACHABLE` a schermo** — nelle carte di Ollama e LM Studio (`lab-sistema`). È un
+   **codice di contratto** del server arrivato fino alla persona. Cura `1f22bb32`: la mappa
+   codice→frase sta in `runtime-modelli.js` (un posto solo), le frasi sono **quelle del server**
+   (`public-problem.mjs`), e il grezzo resta nel `title`. ⛔ Un **codice nudo** si traduce, un
+   **messaggio** no: `failureReason` porta anche guasti veri («connect ECONNREFUSED»), e sostituirli
+   con una frase generica sarebbe **perdere** l'informazione. Fonte: euristica 9 di Nielsen
+   («nessun codice d'errore») + la regola 2026 «tieni i codici nei log, non nella interfaccia»
+   (Security Boulevard, luglio 2026), lette il 18/09/2026.
+2. **«Sconosciuto · Sconosciuto»** nella scheda Compatibilità: `backend` e `build` sono due fatti e,
+   col runtime irraggiungibile, sono ignoti **tutti e due**. Cura `a59aa16a`: si tiene la prima
+   occorrenza di ogni testo, in ordine — due valori diversi restano due, due uguali diventano uno.
+3. **Tre nomi per la stessa cosa nella tab Download**: la linguetta, il motto del mockup («Ogni
+   download, al suo posto.») e un `talos-page__head` che ripeteva «Download» + «Una coda per tutti i
+   modelli…». ⛔ Il **mockup ha solo il motto** (misurato su `lab-download_1440p_mockup.png`), e
+   l'owner aveva già detto: «*ogni sezione ha due titoli e sottotitoli, devi lev… tutti i titoli e
+   sottotitoli introduttivi dentro la sezione*». Cura `47ee6c69`.
+
+⛔ **E un difetto che NON c'era**: nella foto della scheda del modello il link «and efficiency.»
+   sembrava inventato dal nostro rendering. Alla fonte (README grezzo di Hugging Face, revisione
+   `0d32489ecb9d`) quella frase è **prosa senza link**, e il **DOM vivo** lo conferma: nessun `<a>`,
+   testo identico alla fonte. ⇒ Era un mio sospetto sbagliato guardando un'immagine a bassa
+   risoluzione. **Non si riporta come difetto.**
+
+⛔ **Delta di parità dichiarati, non curati** (sono di fase): la **banda** del mockup («MODELLO PER
+LE NUOVE CHAT» · budget RAM · «Nessun passaggio automatico al cloud») è la FASE 3; il bottone
+**«Configura»** dei fornitori è la FASE 4; la tab del mockup si chiama «Modelli» e la nostra
+«Hugging Face» — **decisione dell'owner**, non una divergenza.
 
 ## ⛔ L'ALTRO DIFETTO VERO, nel Laboratorio — curato in `be736bc9`
 
