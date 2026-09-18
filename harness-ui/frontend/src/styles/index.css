@@ -2369,6 +2369,13 @@ a.talos-button{text-decoration:none}
 .talos-lab__tabs{margin-bottom:var(--talos-space-md)}
 #labTabs{flex-wrap:wrap}
 .talos-lab__space{margin-top:var(--talos-space-md)}
+/* ⭐ 18/09/2026 — LA FRASE DI APERTURA DI UNA SCHEDA del Laboratorio modelli, dal mockup
+   (`prototypes/calm-lab`, foto in `artifacts/parita-mockup-2026-09-18/`): ogni scheda si apre con
+   un titolo-frase e una riga che dice a cosa serve. Misure del mockup: titolo piu' grande del
+   corpo e in grassetto, nota in tono smorzato, due righe attaccate. */
+.talos-lab__frase{display:flex;flex-direction:column;gap:2px;margin-bottom:var(--talos-space-sm)}
+.talos-lab__frase > h3{font-size:var(--talos-font-size-lg, 1.125rem);font-weight:600;margin:0}
+.talos-lab__frase > p{margin:0;font-size:var(--talos-font-size-sm)}
 .talos-lab__heading{font-size:var(--talos-font-size-md)}
 .talos-lab__rule{border:0;border-top:var(--talos-focus-width) solid var(--talos-border);margin-block:var(--talos-space-md)}
 .talos-lab__download{padding:var(--talos-space-md);border-bottom:var(--talos-focus-width) solid var(--talos-border)}
