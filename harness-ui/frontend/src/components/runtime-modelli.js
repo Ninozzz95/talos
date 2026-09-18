@@ -1,5 +1,39 @@
 // RuntimeCard: stato del servizio separato dalla disponibilità e dalla RAM.
 const nomi={ollama:'Ollama',lmstudio:'LM Studio','llama.cpp':'llama.cpp'};
+/*
+ * ⛔ NIENTE CODICI A SCHERMO — owner 04/09/2026: «mai `web_search`, `tool_create`… a schermo», e
+ *   la mappa nome-tecnico → nome-umano sta in UN POSTO SOLO. Il posto è questo file, che è già il
+ *   vocabolario del runtime (i nomi dei motori, le fasi dello stato, l'indirizzo).
+ * ⛔ MISURATO, NON SUPPOSTO: la foto `lab-sistema_1440p_real.png` del 18/09/2026 mostrava
+ *   «Dettaglio: RUNTIME_UNREACHABLE» sotto le carte di Ollama e LM Studio — il codice che il
+ *   server usa come CONTRATTO, arrivato intatto fino allo schermo.
+ * ⭐ LA RICERCA DICE LA STESSA COSA (18/09/2026): l'euristica 9 di Nielsen è «messaggi in lingua
+ *   piana, NESSUN codice d'errore, che indichino il problema e suggeriscano una soluzione»
+ *   (Heuristic Evaluation Workbook, `trepo.tuni.fi/…/JahnukainenOtto.pdf`); le linee guida SBMI
+ *   dicono di evitare «obscure codes e.g. system crashed, error code 147»; e la regola pratica
+ *   del 2026 è «tieni i codici nei LOG, non nella interfaccia; se un codice deve comparire —
+ *   per il supporto — mettilo via come dettaglio secondario in piccolo» (Security Boulevard,
+ *   luglio 2026).
+ * ⛔ Le frasi sono QUELLE DEL SERVER (`src/public-problem.mjs`, campi `explanation` e `action`),
+ *   non inventate: è lo stesso vocabolario letto di qua del muro. Se là cambiano, qui si riallinea.
+ * ⛔ E il codice grezzo NON si butta: resta nel `title`, che è «il dettaglio secondario» ammesso.
+ */
+const DETTAGLI_RUNTIME={
+ RUNTIME_UNREACHABLE:'Il servizio non ha risposto. Controlla che sia avviato in Doctor e riprova.',
+ RUNTIME_NOT_AVAILABLE:'Nessun servizio locale pronto. Apri Doctor per vedere cosa manca, oppure scegli un servizio online.',
+};
+/** ⛔ Un CODICE NUDO si traduce; un MESSAGGIO si lascia com'è.
+ *  `failureReason` non porta solo codici: il runtime compatibile con OpenAI ci scrive dentro il
+ *  guasto vero («runtime ollama unreachable: connect ECONNREFUSED»). Sostituire quello con una
+ *  frase generica sarebbe PERDERE l'informazione — cioè una regressione travestita da traduzione.
+ *  Perciò si traduce solo ciò che ha la forma di un codice, e solo se è nella mappa. */
+const codiceNudo=/^[A-Z][A-Z0-9_]{3,}$/;
+export function dettaglioRuntime(grezzo){
+ const tradotto=DETTAGLI_RUNTIME[grezzo];
+ if(tradotto)return tradotto;
+ if(codiceNudo.test(grezzo))return 'Il servizio non ha risposto come previsto.';
+ return grezzo;
+}
 export function datiRuntimeModello(r={}){
  const raggiunto=r.state==='observed',models=Array.isArray(r.models)?r.models:[];
  const errore=r.modelsError||r.failureReason||'';
@@ -26,7 +60,7 @@ export function creaRuntimeModello(runtime){
  if(d.motore){const row=el('div','talos-kv'),v=el('span','talos-kv__v',d.motore.replace(/^Motore locale: /,''));v.dataset.runtimeValue='engine';row.append(el('span','talos-kv__k','Motore locale'),v);card.append(row);}
  if(d.avvisoMotore){const avviso=el('p','talos-muted talos-runtime-card__avviso',d.avvisoMotore);avviso.setAttribute('role','status');avviso.dataset.runtimeEngineNotice='';card.append(avviso);}
  if(d.riprovaGrafica){const riprova=el('button','talos-button talos-button--secondary talos-button--sm','Riprova sulla scheda grafica');riprova.type='button';riprova.dataset.c='Button';riprova.dataset.runtimeRetryGpu='';riprova.addEventListener('click',()=>{riprova.disabled=true;card.dispatchEvent(new CustomEvent('talos:riprova-motore',{bubbles:true,detail:{runtimeId:runtime.runtimeId,modelId:runtime.modelId||null}}));});card.append(riprova);}
- if(d.errore){const error=el('p','talos-muted talos-runtime-card__error','Dettaglio: '+d.errore);card.append(error);}return card;
+ if(d.errore){const error=el('p','talos-muted talos-runtime-card__error','Dettaglio: '+dettaglioRuntime(d.errore));error.dataset.runtimeError='';error.title=d.errore;card.append(error);}return card;
 }
 export function aggiornaElencoRuntime(list,runtimes=[],{caricamento=false,errore=null}={}){
  if(!list)return;list.className='talos-runtime-list';list.setAttribute('aria-busy',String(caricamento));
