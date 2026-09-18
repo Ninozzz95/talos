@@ -561,3 +561,40 @@ test('GUSCIO-06 — le foto: due temi per due larghezze, e il guscio in ogni sch
     }
   }
 });
+
+/*
+ * ⭐⭐ 18/09/2026 — LA PROVA CHE MANCAVA, aggiunta dalla REVIEW dell'orchestratore.
+ * La corsia 2 lo aveva DICHIARATO nelle sue stesse parole: «il guscio NON è vivo nell'app:
+ * dipende dalla riga del punto 5». Le sue otto prove montano il modulo A MANO su una pagina
+ * banco (`/__lab/`), quindi restano verdi anche se nessuno lo monta mai nel prodotto — ed è
+ * esattamente quello che succedeva: `grep -c montaGuscioLaboratorio dist/app.js` = 0.
+ * La riga ora c'è, in `inizializzaModelLab` (`app.js`), e questa prova la tiene onesta:
+ * se qualcuno la toglie, qui si diventa rossi. È la differenza fra provare il pezzo e
+ * provare che il pezzo è ACCESO.
+ */
+test('GUSCIO-09 — il guscio è VIVO nell’app: si monta entrando nel Laboratorio, non da un banco', async ({ page }) => {
+  await page.addInitScript(() => { window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { uiLanguage: 'it' }, chat: {}, workspaces: {} })); });
+  await page.goto('/');
+  const esito = await page.evaluate(async () => {
+    const voce = document.querySelector('.talos-sidebar [data-vaia="impostazioni"]');
+    const gruppo = voce?.closest('.td-nav-group');
+    const testata = gruppo?.id ? document.querySelector(`.talos-sidebar [aria-controls="${gruppo.id}"]`) : null;
+    if (testata?.getAttribute('aria-expanded') === 'false') testata.click();
+    voce?.click();
+    window.__talosHarnessUiRuntime?.setSettingsSection?.('models');
+    await new Promise((s) => setTimeout(s, 400));
+    const carta = document.querySelector('#modelLabCardSettings') || document.querySelector('#modelLabCard');
+    return {
+      schede: [...document.querySelectorAll('[data-lab-scheda]')].map((n) => n.textContent.trim()),
+      guscio: carta?.dataset?.labGuscio ?? null,
+      pannelli: document.querySelectorAll('[data-lab-pannello]').length,
+      vecchieNascoste: [...document.querySelectorAll('[data-model-lab-tab]')].filter((n) => n.closest('[hidden]')).length,
+      negato: document.querySelectorAll('[data-lab-guscio-negato]').length,
+    };
+  });
+  expect(esito.schede, 'le quattro schede del guscio esistono nell’app vera').toEqual(['Modelli', 'Provider', 'Download', 'Sistema']);
+  expect(esito.guscio, 'la carta è timbrata dal guscio').toBe('v3');
+  expect(esito.pannelli, 'quattro pannelli, uno per scheda').toBe(4);
+  expect(esito.vecchieNascoste, 'le sei linguette legacy sono spostate, non perse').toBe(6);
+  expect(esito.negato, 'nessun montaggio negato: la mappa copre tutte le sezioni').toBe(0);
+});
