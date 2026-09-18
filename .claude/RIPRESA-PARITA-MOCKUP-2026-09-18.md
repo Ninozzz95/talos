@@ -134,6 +134,8 @@ modello. **Mai** le sette sezioni attenuate.
 | `fb32582d` | il documento: la **seconda review** e le sue quattro cure |
 | `a07bced8` | il **terzo giro**: la soglia della riga (1100 → **1500**), la metrica **assoluta**, e la **citazione falsa** corretta |
 | `3d0fda30` | il documento: il **terzo giro** |
+| `d8229fdb` | il documento: **cosa manca, per nome** |
+| `771201c1` | il **quarto giro**: la riga segue la **scala dell'interfaccia** (container query) e la metrica non vede più lo **scorrimento** |
 
 ⛔ **Tutti marcati «NON DEPLOYABILE — in attesa di review avversaria».**
 ⛔ Il push **non è stato chiesto**: si chiede a blocchi, col sì dell'owner.
@@ -367,6 +369,61 @@ che **l'intera barra HF non è tradotta** · la guardia di `INTELAIATURA-06` **n
 laboratorio; e registra solo lo `scrollWidth` della radice (1440 = 1440), non lo scroller interno
 `.talos-page`. ⇒ Una prova che esiste e non guarda.
 
+## ⛔⛔ IL QUARTO GIRO — la soglia in px di FINESTRA e la metrica che vede lo SCORRIMENTO (cure in `771201c1`)
+
+Il quarto revisore ha misurato **quattro difetti**, e il primo è il più grave di tutta la serie:
+**la cura riparava un difetto che si ripresentava per un'altra strada.**
+
+**D1 — [ALTA] la soglia è in px di FINESTRA, la riga è in px di CONTENITORE SCALATO.**
+`.talos-shell{zoom:var(--talos-ui-font-scale,1)}` (`index.css:651`) scala tutto il contenuto, e la
+scala la scrive la persona da **Impostazioni › Aspetto › «Dimensione interfaccia»**
+(`.8/.9/1/1.15/1.3`): con scala > 1 il contenuto si stringe **senza che `window.innerWidth`
+cambi**, la media query **non scatta**, la riga resta `nowrap` coi suoi 844 px di minimo e il
+controllo dell'ordine **esce dal pannello** — a scala 1.3 e finestra 1501 di **377 px**, a 1920 di
+19, col segnaposto tagliato di nuovo.
+⛔ **A/B del revisore**: la fascia **sopra i 1500 esisteva identica PRIMA della cura** ⇒ la frase del
+mio messaggio «*above 1500, where the row genuinely fits on one line*» era **falsa per quattro
+delle cinque dimensioni d'interfaccia**. E a scala 1 il margine è **9 px** (853 disponibili contro
+844 di minimo).
+**Cura**: le stesse regole di ritorno a capo in una **container query** sul contenitore `settings`
+(che il progetto usa già: `settings.css` ha `@container settings (max-width: 660px)`). ⭐ La ricerca
+del 18/09/2026 dice perché è lo strumento giusto: la media query risponde «quanto è grande la
+**finestra**», la container query «quanto è grande **questo elemento**» (fonti:
+`opendoordigital.dev/blog/responsive-web-design-2026`, `dev.to/raxxostudios/css-container-queries-…`).
+⛔ **1250 è MISURATO**: sonda `artifacts/zoom-bar/scala.mjs` su 3 scale × 9 larghezze — col
+contenitore sopra ~1290 di layout non c'è trabocco, sotto sì. Le due cure «il controllo cede» sono
+state provate **in pagina** e **non bastano** (`min-width:159px` lascia 8 combinazioni rotte,
+`min-width:0` ne lascia 3; la container query a 1250 **le chiude tutte e 27**).
+⛔ E la rete del **terzo** revisore non l'aveva preso: la sua prova P1 è verde **perché nessuna prova
+varia la scala**, non perché la fascia sia chiusa.
+
+**D2 — [MEDIA] la terza misura vede lo SCORRIMENTO DELLA PAGINA.** `getBoundingClientRect().top` è
+una coordinata del viewport, e Chrome riscrive da solo lo `scrollTop` quando la ricerca accorcia il
+contenuto (*scroll anchoring*): su codice **sano**, con la pagina scorsa, la barra «si sposta» di
+**212-265 px**, cioè **5,5 volte** il segnale da 48 che la prova deve prendere. Cura: **`offsetTop`**
+— **0** su codice sano anche scorso, **48** sulla regressione iniettata (misurato dal revisore).
+
+**D3 — [BASSA] una ragione falsa nel codice.** La mia nota diceva che la misura assoluta «vede tutto
+ciò che le sta sopra»: **no** — la barra vive in una colonna `sticky`, quindi breadcrumb e testata
+(127 px sopra) possono sparire senza che lei si muova. Copre la **colonna**, non la pagina.
+
+**D4 — [BASSA] una contraddizione a schermo in silenzio.** La bisezione del terzo revisore, dopo la
+cura, collassava e stampava `{"ultimaRotta":1101,"primaSana":1101}`. Ora si esegue **solo se una
+fascia esiste**, e allora deve essere coerente — ⛔ senza pretendere che esista, perché a codice sano
+**non deve** esistere.
+
+⛔⛔ **E UN DIFETTO DEL NOSTRO CANCELLO, riportato dal revisore e da non dimenticare**: il cancello
+della **ricerca web** ha **negato 4 scritture consecutive** a un agente che aveva appena fatto **tre
+`WebSearch` e due chiamate `ctx7`**, citando «non risulta NESSUNA ricerca» — e aveva lasciato passare
+la **PRIMA** scrittura, quando non aveva ancora cercato nulla. È la classe già nota
+([[un-cancello-che-nega-a-chi-ha-obbedito]]): **nega a chi ha obbedito e non a chi non l'ha fatto**.
+Il revisore **non ha aggirato**: ha messo le sue due prove della cura **fuori dal repo**
+(`%TEMP%/review4/`) e le ha dichiarate.
+
+⛔ **E il ciclo di review è CHIUSO qui**, per mia raccomandazione all'owner: tre giri, **~700k token**,
+e gli ultimi due giri trovavano difetti **nelle cure**, non nella funzione. ⇒ **Le quattro cure di
+questo giro NON hanno una review avversaria loro**: sono dichiarate non riviste, non usabili.
+
 ## ⛔ L'ALTRO DIFETTO VERO, nel Laboratorio — curato in `be736bc9`
 
 Misurato sul 4174 con una sonda di sola lettura: la riga delle faccette è **1912 px**, il campo di
@@ -397,8 +454,14 @@ vera ha scoperto rossi che nessuno aveva misurato. **Non attribuirli alla barra.
   (`a253687a` + `f856e853`), sul terzo (`a07bced8`). Ogni giro ha consegnato una **prova
   indipendente** committata: `_review-barra.spec.mjs` (8), `_review-cure.spec.mjs` (16),
   `_review-cure3.spec.mjs`.
-- ⛔ **Il QUARTO giro è IN CORSO** sulle cure di `a07bced8` (soglia 1500, metrica assoluta): referto
-  **non ancora arrivato**. Finché non consegna, quelle cure restano **non usabili**.
+- ✅ **Il QUARTO giro HA CONSEGNATO** (§ sopra): quattro difetti, **tutti curati** in `771201c1`.
+- ⛔ **IL CICLO DI REVIEW È CHIUSO** (raccomandazione mia, accettata dall'owner): le review tornano a
+  coprire le **FASI**. ⇒ Le cure di `771201c1` — e le tre nate dalle foto (`1f22bb32`, `a59aa16a`,
+  `47ee6c69`) — **non hanno una review loro**: sono dichiarate non riviste, non usabili.
+- ✅ **Solo il 4174 è in ascolto**: nove server di prova rimasti appesi (4179, 4180, 4189, 4193,
+  4210, 4213, 4217, 4219, 4241 — fra cui due `python -m http.server`, uno che esponeva `Downloads`)
+  sono stati **nominati uno per uno** (pid, avvio, riga di comando) e **spenti** su ordine
+  dell'owner («spegni tutti tranne 4174»).
 - Il 4174 è **aggiornato all'ultima build** e verificato a ogni giro; le **32 foto** in
   `Downloads/confronto-fase1/` sono del build finale.
 
@@ -650,8 +713,9 @@ Niente è stato buttato e niente è stato dichiarato chiuso per stanchezza. Per 
 |---|---|
 | `4b4c753b` (barra in sidebar) + `719565f2` + `bb148037` | review avversaria **fatta** (1ª e 2ª tornata) |
 | `be736bc9`, `a253687a`, `f856e853` | review **fatta** (2ª e 3ª tornata) e difetti **curati** |
-| **`a07bced8`** (soglia 1500 + metrica assoluta + citazione corretta) | ⛔ **review IN CORSO** — non usabile |
+| `a07bced8` (soglia 1500 + metrica assoluta + citazione corretta) | review **fatta** (4º giro) e difetti **curati** in `771201c1` |
 | `1f22bb32`, `a59aa16a`, `47ee6c69` (codici del runtime, «Sconosciuto», titolo doppio) | ⛔ **mai rivisti**: curano difetti visti in foto, con la prova nei due versi, ma senza review |
+| **`771201c1`** (container query, `offsetTop`, le due note) | ⛔ **review chiusa per decisione**: non rivisto |
 
 ⛔ **Il push non è stato chiesto**: si chiede a blocchi, col sì dell'owner.
 
