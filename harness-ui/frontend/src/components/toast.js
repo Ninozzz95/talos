@@ -24,115 +24,15 @@ export const TONI = Object.freeze({
 
 export const MASSIMO_IN_PILA = 3;
 
-/**
- * ⭐⭐⭐ BC-77 (a), 17/09/2026 — LA REGIONE DEI TOAST STA SOPRA LA ZONA DEI COMANDI.
- *
- * Il difetto, misurato prima di toccare una riga (`tests/browser/toast-non-copre-i-comandi.spec.mjs`,
- * pacchetto di `d4ca608e`): a **1024×800**, con un giro in corso, il toast «Collegato di nuovo»
- * copriva **cinque** comandi del piede della chat — «Messaggio» 4.204 px², «Terminale» 3.410 px²,
- * «Il server non risponde» (la riga che FERMA) 1.764 px², «Voce» 1.444 px², «Scrive nel progetto»
- * 1.176 px². Fondo del toast 776, cima del piede 586. A 1440×900 non capitava, ma solo perché la
- * colonna della chat è più stretta: verticalmente i due rettangoli si sovrappongono lì come qui.
- *
- * ⛔ La cura NON è la durata. Un avviso che se ne va da solo copre comunque, per tutto il tempo in
- *   cui si vede, il pulsante con cui si interrompe il lavoro — ed è esattamente il caso che WCAG 2.2
- *   SC 2.4.11 «Focus Not Obscured (Minimum)» nomina («A notification implemented as sticky content …
- *   will fail this success criterion if it entirely obscures a component receiving focus»,
- *   w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html, letto il 17/09/2026).
- *
- * ⛔ E non è nemmeno un numero da scrivere a mano: il piede della chat **cambia altezza** da solo —
- *   la striscia con «Ferma» compare solo durante un giro, la coda dei messaggi compare e sparisce,
- *   il composer si può ridimensionare col suo angolo, il terminale in basso si apre dentro lo stesso
- *   piede. Un `bottom` fisso indovinerebbe una sola di queste altezze. ⇒ Si MISURA l'ingombro vero
- *   della zona dei comandi dal fondo della finestra e lo si scrive in una variabile CSS.
- *
- * ⭐ Ricerca del 17/09/2026 — Carbon Design System «Notification / usage» e Adobe Spectrum «Toast»:
- *   il toast non ostruisce mai la navigazione primaria né i comandi, e il POSTO non si cambia da una
- *   schermata all'altra. ⇒ Qui il posto resta quello approvato dall'owner il 05/09 (in basso a
- *   destra): cambia solo il pavimento su cui poggia.
- *
- * Quando la zona dei comandi non si vede (un'altra vista aperta, la chat nascosta) la misura è `0` e
- * la regione torna da sola al fondo della finestra: nessun ramo da ricordare.
- *
- * ⛔⛔ IL TETTO, 17/09/2026 — chiesto dal revisore e MISURATO prima di scriverlo. Il pavimento da
- *   solo non basta: il piede della chat non ha un'altezza massima piccola — il terminale in basso
- *   vive DENTRO di lui, e il composer si allarga col testo. Misurato a 1024×800 col terminale
- *   aperto e quaranta righe nel composer: piede alto **448 px**, e una pila di **tre** toast
- *   (`MASSIMO_IN_PILA`) arrivava con la cima a **y=32**, cioè **28 px sopra** il bordo inferiore
- *   della testata (che finisce a 60) — sopra il titolo della sessione, le quattro viste e le azioni.
- *   ⇒ Un avviso che smette di coprire i comandi in basso e comincia a coprire quelli in alto non è
- *   una cura: è lo stesso difetto traslocato.
- *
- * ⛔ E il tetto NON è un numero: si misura il rettangolo VERO della pila dopo averla posata, e se
- *   sconfina nella zona intoccabile si abbassa il pavimento esattamente dell'eccesso. Così non c'è
- *   niente da indovinare — né l'altezza di un toast, né quanti ce ne sono, né il respiro del CSS.
- *
- * @param {HTMLElement|null} zonaComandi il piede della chat (`.talos-chat-foot`)
- * @param {{radice?:HTMLElement, finestra?:Window, variabile?:string,
- *          regione?:HTMLElement|null, zonaIntoccabile?:(() => number|null)}} [opzioni]
- * @returns {{ misura:() => number, ferma:() => void }}
+/*
+ * 18/09/2026 - QUI C'ERA `ancoraToastSopraIComandi`, USCITA CON L'ORDINE DELL'OWNER.
+ * Era la cura BC-77 del 17/09: misurava il piede della chat e pubblicava `--talos-toast-fondo` per
+ * alzare la pila dei toast sopra i comandi. L'owner l'ha revocata - «un toast si comporta come un
+ * toast, sempre in fondo allo schermo, e se sono piu di uno si stackano uno sopra l'altro» - e la
+ * misura non ha piu un chiamante: `app.js` ha `ancoraggioToast = null` e la regione e la tornata a
+ * `bottom: var(--talos-space-lg)`. In questo progetto una funzione senza chiamante e un difetto:
+ * esce, con la sua prova.
  */
-export function ancoraToastSopraIComandi(zonaComandi, {
-  radice = null, finestra = globalThis, variabile = '--talos-toast-fondo',
-  regione = null, zonaIntoccabile = null, comandiSopra = [],
-} = {}) {
-  const host = radice || zonaComandi?.ownerDocument?.documentElement || null;
-  const misura = () => {
-    if (!host) return 0;
-    const rettangolo = zonaComandi?.getBoundingClientRect?.();
-    const altezzaFinestra = finestra.innerHeight || 0;
-    /* `offsetParent === null` copre il caso «vista chiusa»: il piede esiste nel DOM ma non si vede,
-       e un piede che non si vede non copre niente. `height > 0` copre il resto. */
-    const visibile = Boolean(rettangolo) && rettangolo.height > 0 && zonaComandi.offsetParent !== null;
-    let ingombro = visibile ? Math.max(0, Math.round(altezzaFinestra - rettangolo.top)) : 0;
-    /*
-     * ⛔⛔ 17/09/2026 notte — REGRESSIONE MIA, trovata dal giro intero delle prove browser (CHAT-FONDO-01) dopo
-     *   la fusione: alzato sopra il piede, il toast finiva ESATTAMENTE sul pulsante «Torna in fondo alla
-     *   conversazione», che vive appena sopra il piede, a destra — cioè un comando coperto, il difetto che
-     *   questa funzione esiste per togliere. La prova di BC-77 misurava i soli comandi DENTRO il piede.
-     * ⇒ I comandi che galleggiano SOPRA il piede si dichiarano (`comandiSopra`) e, quando si vedono,
-     *   alzano il pavimento fino alla loro cima. Stessa misura, stesso metro: il rettangolo vero.
-     */
-    for (const comando of comandiSopra) {
-      const r = comando?.getBoundingClientRect?.();
-      if (!r || r.height <= 0 || comando.offsetParent === null) continue;
-      ingombro = Math.max(ingombro, Math.max(0, Math.round(altezzaFinestra - r.top)));
-    }
-    host.style.setProperty(variabile, `${ingombro}px`);
-    /*
-     * Il tetto, misurato e non stimato: posata la pila, si guarda dove è finita la sua CIMA. Se sta
-     * dentro la zona intoccabile, si restituisce al pavimento esattamente l'eccesso — una volta
-     * sola, perché l'altezza della pila non dipende dal pavimento e il conto non si rincorre.
-     */
-    const cima = zonaIntoccabile?.();
-    const pila = regione?.getBoundingClientRect?.();
-    if (Number.isFinite(cima) && pila && pila.height > 0) {
-      const eccesso = Math.round(cima - pila.top);
-      if (eccesso > 0) {
-        ingombro = Math.max(0, ingombro - eccesso);
-        host.style.setProperty(variabile, `${ingombro}px`);
-      }
-    }
-    return ingombro;
-  };
-  misura();
-  let osservatore = null;
-  if (typeof finestra.ResizeObserver === 'function') {
-    osservatore = new finestra.ResizeObserver(() => misura());
-    if (zonaComandi) osservatore.observe(zonaComandi);
-    /* ⛔ Anche la REGIONE: un toast che arriva o se ne va cambia l'altezza della pila, e con essa
-       il tetto. Senza questa riga il tetto varrebbe per la pila che c'era, non per quella che c'è. */
-    if (regione) osservatore.observe(regione);
-    /* Un comando che compare o sparisce (il «torna in fondo» nasce scorrendo in su) cambia il pavimento. */
-    for (const comando of comandiSopra) if (comando) osservatore.observe(comando);
-  }
-  const suRidimensiona = () => misura();
-  finestra.addEventListener?.('resize', suRidimensiona);
-  return {
-    misura,
-    ferma() { osservatore?.disconnect(); finestra.removeEventListener?.('resize', suRidimensiona); },
-  };
-}
 
 /**
  * Il tono lo dice il titolo che il monolite passa già oggi («… non riuscito»,

@@ -43,7 +43,7 @@ import { renderizzaMarkdown } from '../components/markdown.js'; // BC-29 (12/09)
 import { confermaModale } from '../components/modale-td.js'; // 11/09 lotto G: al posto di window.confirm()
 import { montaScorciatoiaTemi } from '../components/theme-studio.js'; // 11/09 lotto F
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
-import { ancoraToastSopraIComandi, creaPilaToast } from '../components/toast.js';
+import { creaPilaToast } from '../components/toast.js';
 import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione
 import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella, deveAvvisareFuoriDallaFinestra, testoNotificaSistema, statoConsensoNotifiche } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup; 06/9 G29: notifica di sistema
 import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab
@@ -2235,27 +2235,29 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   copriva cinque comandi, fra cui quello che ferma il giro. Dettaglio e ricerca in
    *   `components/toast.js`; la prova è `tests/browser/toast-non-copre-i-comandi.spec.mjs`.
    */
-  const ancoraggioToast = ancoraToastSopraIComandi($('#schermoChat .talos-chat-foot'), {
-    radice: HOST(),
-    comandiSopra: [$('#chatTornaInFondo')],
-    regione: toastRegion,
-    /*
-     * ⛔ La zona intoccabile è la TESTATA della schermata che si sta guardando: sotto ci sta il
-     *   contenuto, sopra ci sono il nome della sessione, le quattro viste e le azioni. Si legge il
-     *   suo bordo inferiore VERO, schermata per schermata, invece di scrivere un numero: le testate
-     *   cambiano altezza con la scala dell'interfaccia scelta nelle Impostazioni.
-     */
-    zonaIntoccabile: () => {
-      const testata = $('.talos-screen:not([hidden]) .talos-topbar') || $('.talos-topbar');
-      const r = testata?.getBoundingClientRect?.();
-      return r && r.height > 0 ? r.bottom : null;
-    },
-  });
+  /*
+   * ⛔⛔⛔ 18/09/2026 — IL TETTO DEI TOAST È STATO TOLTO. ORDINE DELL'OWNER, ED È LA CONVENZIONE.
+   *
+   * Qui c'era `ancoraToastSopraIComandi($('#schermoChat .talos-chat-foot'), …)`, la cura BC-77 del
+   * 17/09: alzava la pila sopra tutto il piede della chat perché a 1024 copriva cinque comandi.
+   * Misurato il 18/09 sul 4174: con la chat viva i toast finivano a **324 px dal fondo**, col
+   * terminale aperto a **543**. Owner: «un toast si comporta come un toast, rendilo esattamente come
+   * prima sempre in fondo allo schermo e se ci sono più toast si stackano uno sopra l'altro».
+   * ⇒ La pila torna in fondo (`styles/index.css`: `bottom: var(--talos-space-lg)`) e impila verso
+   *   l'alto — che è anche la convenzione: in una pila ancorata in basso **il più recente sta in
+   *   fondo** e i precedenti salgono (Halstack «the newest toast will appear at the bottom of the
+   *   stack»; Salt «when you stack them from the bottom, the newest toast should be at the bottom»;
+   *   snora, «Bottom: new toasts appear above older ones»). Il nostro `creaPilaToast` fa esattamente
+   *   questo: accoda la scheda nuova, la griglia la disegna per ultima, cioè in basso.
+   * ⛔ Conseguenza dichiarata: a finestre strette il toast può coprire il tondo «torna in fondo» —
+   *   è il comportamento che l'owner vuole.
+   */
+  const ancoraggioToast = null;
   function toast(title, message = '', opzioni = {}) {
     /* Si rimisura ANCHE qui: il `ResizeObserver` vede il piede cambiare misura, non la vista che si
        apre o si chiude — e un toast che arriva mentre si torna in chat deve trovare il pavimento
        giusto già al primo disegno, non dopo il primo sussulto. */
-    ancoraggioToast.misura();
+    ancoraggioToast?.misura(); // ⛔ 18/09/2026: ora è `null` — il tetto è stato tolto (vedi sopra)
     return mostraToast(String(title), message == null ? '' : String(message?.message ?? message), opzioni);
   }
 

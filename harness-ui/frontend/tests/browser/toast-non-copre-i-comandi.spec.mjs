@@ -171,23 +171,39 @@ async function pilaAlMassimo(page, { tema }) {
         .map((n) => ({ px2: rects.reduce((s, r) => s + area(r, n.getBoundingClientRect()), 0), comando: (n.getAttribute('aria-label') || n.textContent || n.id || '').trim().slice(0, 40) }))
         .filter((x) => x.px2 > 0),
       altezzaFinestra: window.innerHeight,
+      tops: rects.map((r) => Math.round(r.top)),
       varFondo: getComputedStyle(document.documentElement).getPropertyValue('--talos-toast-fondo').trim(),
     };
   });
 }
 
 for (const tema of ['dark', 'light']) {
-  test(`BC77-A-TETTO (1024x800, ${tema}) — col terminale aperto e il composer pieno, tre toast non salgono sulla testata`, async ({ page }) => {
+  /*
+   * 18/09/2026 - QUESTA PROVA SOSTITUISCE `BC77-A-TETTO`, E LA REGOLA E CAMBIATA PER ORDINE
+   * DELL'OWNER: «un toast si comporta come un toast, rendilo esattamente come prima sempre in fondo
+   * allo schermo e se ci sono piu toast si stackano uno sopra l'altro».
+   * La cura BC-77 del 17/09 alzava la pila sopra il piede della chat (misurato il 18/09: 324 px dal
+   * fondo con la chat viva, 543 col terminale aperto) ed e stata REVOCATA: `app.js` ha
+   * `ancoraggioToast = null` e la funzione `ancoraToastSopraIComandi` e uscita con l'ordine.
+   * => Le premesse restano quelle che rendono la scena difficile (terminale aperto, piede alto,
+   *    pila piena): la regola nuova si prova dove il vecchio tetto mordeva, non in una scena comoda.
+   * Convenzione confermata il 18/09/2026 (Halstack, Salt, snora): in una pila ancorata in basso il
+   * piu recente sta in fondo e i precedenti salgono.
+   */
+  test(`TOAST-IN-FONDO (1024x800, ${tema}) - la pila sta in fondo allo schermo e il piu recente e il piu basso`, async ({ page }) => {
     const m = await pilaAlMassimo(page, { tema });
-    console.log(`MISURA-BC77-TETTO ${tema} = ${JSON.stringify(m)}`);
-    /* Le PREMESSE: senza il terminale aperto, senza un piede davvero alto e senza la pila piena
-       questa prova misurerebbe una scena comoda e passerebbe per il motivo sbagliato. */
-    expect(m.terminaleAperto, 'la scena non si è formata: il terminale in basso non si è aperto').toBe(true);
-    expect(m.altezzaPiede, 'la scena non si è formata: il piede non è alto').toBeGreaterThan(300);
-    expect(m.quantiToast, 'la scena non si è formata: la pila non è piena').toBe(3);
-    expect(m.sullaTestata, `la pila copre la testata di ${m.sullaTestata} px² (cima ${m.cimaPila}, testata fino a ${m.fondoTestata})`).toBe(0);
-    expect(m.cimaPila, 'e non esce dalla finestra dall’alto').toBeGreaterThanOrEqual(0);
-    expect(m.suiComandi, `il tetto ha ributtato la pila sui comandi: ${JSON.stringify(m.suiComandi)}`).toEqual([]);
+    console.log(`MISURA-TOAST-FONDO ${tema} = ${JSON.stringify(m)}`);
+    expect(m.terminaleAperto, 'la scena non si e formata: il terminale in basso non si e aperto').toBe(true);
+    expect(m.altezzaPiede, 'la scena non si e formata: il piede non e alto').toBeGreaterThan(300);
+    expect(m.quantiToast, 'la scena non si e formata: la pila non e piena').toBe(3);
+    /* LA REGOLA: in fondo allo schermo (il respiro del CSS e 1.5rem = 24 px, piu il bordo del toast). */
+    const distanzaDalFondo = m.altezzaFinestra - m.fondoPila;
+    expect(distanzaDalFondo, `la pila non e in fondo: fondo a ${m.fondoPila} su una finestra di ${m.altezzaFinestra}`).toBeLessThanOrEqual(40);
+    /* E IMPILATA: senza il tetto che la alzava, i tre toast hanno coordinate distinte e il piu
+       recente (l'ultimo nel DOM) e il piu basso - cioe i `top` crescono nell'ordine del DOM. */
+    expect(m.tops.length, 'la scena non si e formata: nessun toast da misurare').toBe(3);
+    const crescente = m.tops.every((t, i) => i === 0 || t > m.tops[i - 1]);
+    expect(crescente, `la pila non impila come deve: tops ${JSON.stringify(m.tops)}`).toBe(true);
   });
 }
 
@@ -202,7 +218,18 @@ for (const [larghezza, altezza] of [[1024, 800], [1440, 900]]) {
          passerebbe a vuoto, e un verde così non direbbe niente. */
       expect(m.toasts, 'la scena non si è formata: nessun toast acceso').toBeGreaterThan(0);
       expect(m.comandi, 'la scena non si è formata: il piede della chat non ha comandi toccabili').toBeGreaterThan(3);
-      expect(m.colpiti, `il toast copriva dei comandi: ${JSON.stringify(m.colpiti)} (fondo del toast ${m.fondoToast}, cima del piede ${m.cimaPiede})`).toEqual([]);
+      /*
+       * ⛔⛔ 18/09/2026 - LA REGOLA E CAMBIATA, E QUESTA E LA CONSEGUENZA ACCETTATA.
+       * L'owner ha revocato la cura BC-77: «un toast si comporta come un toast, sempre in fondo allo
+       * schermo, e se sono piu di uno si stackano uno sopra l'altro». Il toast PUO quindi coprire i
+       * comandi del piede - e li copre: misurato il 18/09 a 1024x800 col terminale aperto e la pila
+       * piena, cinque comandi sotto la pila (il pulsante d'invio, «Interrompi risposta», i chip
+       * «Messaggio»/«Terminale» e «Reindirizza con il testo scritto»). Non si pretende piu il vuoto:
+       * si stampa la copertura (perche resti la traccia) e si pretende la regola nuova - la pila in
+       * fondo allo schermo. Chi volesse tornare indietro trova qui il numero che aveva accettato.
+       */
+      const distanzaDalFondo = altezza - m.fondoToast;
+      expect(distanzaDalFondo, `la pila non e in fondo: fondo del toast a ${m.fondoToast} su una finestra di ${altezza}`).toBeLessThanOrEqual(40);
     });
   }
 }
@@ -235,7 +262,11 @@ for (const tema of ['dark', 'light']) {
     });
     console.log(`MISURA-BC77-FONDO ${tema} = ${JSON.stringify(m)}`);
     expect(m.toasts, 'la scena non si è formata: nessun toast').toBeGreaterThan(0);
-    expect(m.coperto, `il toast copre il pulsante di ${m.coperto} px² (fondo toast ${m.fondoToast}, cima pulsante ${m.cimaPulsante})`).toBe(0);
-    expect(m.centroSulPulsante, 'al centro del pulsante deve esserci il pulsante').toBe(true);
+    /*
+     * ⛔ 18/09/2026 - stessa revoca della famiglia qui sopra: con la pila in fondo allo schermo il
+     * toast PUO coprire il tondo «torna in fondo», che sta appena sopra il piede. La copertura si
+     * stampa - `m.coperto` - e non si pretende piu zero: si pretende che la pila sia in fondo.
+     */
+    expect(800 - m.fondoToast, `la pila non e in fondo: fondo del toast a ${m.fondoToast}`).toBeLessThanOrEqual(40);
   });
 }
