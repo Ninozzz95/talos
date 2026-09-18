@@ -1,0 +1,17 @@
+/*
+ * ⭐ 18/09/2026 — IL CONTENITORE DELLA PAGINA MODELLO (corsia 4, montata dall'orchestratore).
+ * La pagina NON porta padding né scorrimento — è scritto nella sua intestazione, e li mette chi
+ * la monta. Senza queste righe le sue ultime righe escono dal bordo: misurato dalla corsia 4
+ * nelle sue foto («Ruolo di sistema» e la tabella dei Requisiti tagliate a 1440 e a 1024).
+ * `z-index` sopra l'app e SOTTO i veli (che stanno a `--talos-z-app-overlay`): la pagina è una
+ * schermata, non un dialogo, e un velo che si apre da lì deve restarle davanti.
+ */
+.talos-pagina-modello{
+  position:fixed; inset:0; z-index:calc(var(--talos-z-app-overlay) - 10);
+  display:flex; flex-direction:column; overflow-y:auto; overscroll-behavior:contain;
+  padding:var(--talos-space-lg, 24px) var(--talos-space-page, 32px);
+  background:var(--talos-background); color:var(--talos-text);
+}
+@media (max-width:900px){
+  .talos-pagina-modello{padding:var(--talos-space-md, 16px)}
+}

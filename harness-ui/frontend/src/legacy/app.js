@@ -98,6 +98,7 @@ import { aggiornaAvanzamentoContesto } from '../components/context-progress.js';
 import { aggiornaDiffReview, aggiornaSommarioSchedeReview, chiaveFileReview, creaSchedeReview, etichettaFileReview, nascondiAzioniFase3, riassuntoReviewTestata as riassuntoReviewPerTestata } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno; 17/09 BC-75: `etichettaFileReview` è la regola del nome, e non si riscrive qui del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { montaGuscioLaboratorio } from '../components/lab-cornice-v3.js'; // 18/09 corsia 2: il guscio a quattro schede del Laboratorio modelli — monta i comandi legacy in una scheda sola
+import { montaSchedaModello } from '../components/scheda-modello.js'; // 18/09 corsia 4: la pagina del modello (scheda HF, file, compatibilità) — la monta `apriPaginaModello`
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
 import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
 
@@ -3471,6 +3472,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         copia: async (id) => { const m = state.modelLab.installed.find((x) => x.id === id); try { await navigator.clipboard?.writeText(m?.path || ''); toast('Percorso copiato', m?.path || ''); } catch { toast('Percorso non copiato', 'Il browser non ha dato accesso agli appunti.'); } },
         rinomina: (id) => apriRinominaModelloLocale(id),
         elimina: (id) => apriEliminaModelloLocale(id),
+        pagina: (id) => apriPaginaModello(id, 'card'), // 18/09: la pagina del modello, con la rotta del mockup
       },
     });
   }
@@ -4124,6 +4126,84 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       errore: state.modelLab.capacityError?.message || '', erroreRuntime: state.modelLab.runtimeError?.message || '',
     });
   }
+
+  /*
+   * ⭐⭐ 18/09/2026 — LA PAGINA MODELLO, E LA SUA ROTTA (PO-30/PO-31, corsia 4).
+   *   Il componente esiste (`components/scheda-modello.js`, 9 prove verdi) ma NON lo montava
+   *   nessuno: la corsia 4 non poteva, perché la rotta vive in `app.js` e non era suo file.
+   *   Qui si monta, con la rotta del prototipo — `#/impostazioni/modelli/scheda/<id>/<card|files|compatibility>`
+   *   (`prototypes/calm-lab/src/model-navigation.mjs`).
+   * ⛔ Il contenitore porta le DUE cose che il componente dichiara di non avere: il padding e lo
+   *   scorrimento. Senza, le ultime righe finiscono fuori dal bordo — misurato dalla corsia 4
+   *   nelle sue foto («Ruolo di sistema» e la tabella dei Requisiti tagliate).
+   * ⛔ La rotta CONVIVE con l'hash che c'è già in questa app (`#open-workspace=…`, `#ui-lab`):
+   *   si riconosce solo il proprio prefisso e tutto il resto resta di chi era.
+   */
+  const ROTTA_PAGINA_MODELLO = /^#\/impostazioni\/modelli\/scheda\/([^/]+)\/(card|files|compatibility)$/;
+  function leggiRottaPaginaModello() {
+    const trovato = ROTTA_PAGINA_MODELLO.exec(window.location.hash || '');
+    return trovato ? { id: decodeURIComponent(trovato[1]), scheda: trovato[2] } : null;
+  }
+  function contenitorePaginaModello() {
+    let pagina = $('#paginaModello');
+    if (!pagina) {
+      pagina = document.createElement('section');
+      pagina.id = 'paginaModello';
+      pagina.className = 'talos-pagina-modello';
+      pagina.dataset.c = 'ModelPage';
+      pagina.hidden = true;
+      pagina.setAttribute('aria-label', 'Pagina del modello');
+      /*
+       * ⛔ NON `ROOT()`: quello è il `document`, e un documento accetta UN solo elemento figlio.
+       *   Misurato: `HierarchyRequestError: Only one element on document allowed` — la pagina non
+       *   nasceva e l'errore restava in console, invisibile a chi guardava lo schermo. Si appende
+       *   al corpo (o all'host, quando la app gira dentro una cornice), dove stanno le schermate.
+       */
+      const ospite = HOST() === document.documentElement ? document.body : HOST();
+      ospite?.appendChild(pagina);
+    }
+    return pagina;
+  }
+  let montaggioPaginaModello = null;
+  function apriPaginaModello(id, scheda = 'card', { daRotta = false } = {}) {
+    if (!id) return;
+    const pagina = contenitorePaginaModello();
+    montaggioPaginaModello?.distruggi?.();
+    montaggioPaginaModello = montaSchedaModello(pagina, {
+      apiGet: (percorso) => apiGet(percorso),
+      id,
+      scheda,
+      indietro: () => chiudiPaginaModello(),
+      onScheda: (nuova) => scriviRottaPaginaModello(id, nuova),
+    });
+    pagina.hidden = false;
+    if (!daRotta) scriviRottaPaginaModello(id, scheda);
+  }
+  function chiudiPaginaModello({ daRotta = false } = {}) {
+    const pagina = $('#paginaModello');
+    if (pagina) pagina.hidden = true;
+    montaggioPaginaModello?.distruggi?.();
+    montaggioPaginaModello = null;
+    /* Uscendo dalla pagina la rotta non deve restare appesa: il prossimo «indietro» del
+       browser riaprirebbe una pagina che l'utente ha appena chiuso. */
+    if (!daRotta && leggiRottaPaginaModello()) window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`);
+  }
+  function scriviRottaPaginaModello(id, scheda) {
+    const nuova = `#/impostazioni/modelli/scheda/${encodeURIComponent(id)}/${scheda}`;
+    if (window.location.hash !== nuova) window.location.hash = nuova;
+  }
+  window.addEventListener('hashchange', () => {
+    const rotta = leggiRottaPaginaModello();
+    if (rotta) apriPaginaModello(rotta.id, rotta.scheda, { daRotta: true });
+    else chiudiPaginaModello({ daRotta: true });
+  });
+  /* ⭐ E se la app si apre CON la rotta già nell'indirizzo — un collegamento incollato, una
+     ricarica — la pagina si apre da sola. Il rinvio non è pigrizia: qui siamo ancora durante la
+     lettura del modulo, e il resto dell'app non ha finito di legarsi. */
+  window.setTimeout(() => {
+    const rottaIniziale = leggiRottaPaginaModello();
+    if (rottaIniziale) apriPaginaModello(rottaIniziale.id, rottaIniziale.scheda, { daRotta: true });
+  }, 0);
 
   async function liberaMemoriaModello() {
     const bottone = $('#memoriaScarica');

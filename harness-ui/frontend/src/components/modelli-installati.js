@@ -171,6 +171,10 @@ export function aggiornaDettaglioInstallato(aside, dati, { runtime = {}, azioni 
   const cluster = el(documentObj, 'div', 'talos-cluster talos-lab__space');
   const pulsante = (testo, classe, nome, fn) => { const b = el(documentObj, 'button', classe, testo); b.type = 'button'; b.dataset.c = 'Button'; b.dataset.azione = nome; if (fn) b.addEventListener('click', () => fn(dati.id)); return b; };
   cluster.append(
+    /* ⭐ 18/09/2026 — «Apri la pagina» in TESTA: è l'azione principale su un modello (la pagina
+       con la scheda Hugging Face, i file e la compatibilità), e la rotta è quella del mockup.
+       Prima dell'elenco c'erano solo azioni di manutenzione: rinominare, copiare, cancellare. */
+    pulsante('Apri la pagina', 'talos-button talos-button--ghost talos-button--sm', 'pagina', azioni.pagina),
     pulsante('Rinomina', 'talos-button talos-button--ghost talos-button--sm', 'rinomina', azioni.rinomina),
     pulsante('Copia percorso', 'talos-button talos-button--ghost talos-button--sm', 'copia', azioni.copia),
     pulsante('Elimina dal disco', 'talos-button talos-button--danger talos-button--sm', 'elimina', azioni.elimina),
