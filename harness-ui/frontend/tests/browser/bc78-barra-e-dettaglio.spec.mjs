@@ -43,23 +43,64 @@ for (const [larghezza, altezza] of [[1024, 800], [1440, 900]]) {
          persona che fa nascere il difetto. */
       await page.locator('#testataGruppoStrumenti').click();
       await page.waitForTimeout(250);
+      /*
+       * ⛔⛔ 18/09/2026 — QUESTA PROVA HA CAMBIATO SOGGETTO, E NON SI È ALLENTATA.
+       * Fino a oggi misurava il NAV (`.td-sidebar-nav`) con il suo tetto del 50%: era lì che
+       * l'elenco sbordava e il taglio doveva dire «continua». Quel tetto è stato TOLTO su ordine
+       * dell'owner (la barra è UNA regione di scorrimento: `.talos-sidebar`), quindi il nav non
+       * scorre più e la premessa di prima non può formarsi — misurato: `scorrevole: false`,
+       * `quantoResta: 0`.
+       * ⇒ Il soggetto adesso è la REGIONE VERA, e la sfumatura da provare è quella nuova: il
+       *   plateau opaco + rampa sopra il piede appiccicato (`.talos-sidebar__foot::before`).
+       *   La striscia da fotografare non è più a ridosso del bordo (lì il plateau è opaco per
+       *   costruzione, quindi sarebbe identica nei due stati) ma DENTRO LA RAMPA: è lì che si vede
+       *   se sotto c'è ancora una riga o il vuoto.
+       */
       const misura = await page.evaluate(() => {
-        const nav = document.querySelector('.td-sidebar-nav');
-        const r = nav.getBoundingClientRect();
+        const barra = document.querySelector('.talos-sidebar');
+        const piede = barra.querySelector('.talos-sidebar__foot');
+        const r = barra.getBoundingClientRect();
+        const pr = piede?.getBoundingClientRect();
+        const primaDelPiede = getComputedStyle(piede, '::before');
         return {
-          scorrevole: nav.scrollHeight > nav.clientHeight + 1,
-          quantoResta: Math.round(nav.scrollHeight - nav.clientHeight),
+          scorrevole: barra.scrollHeight > barra.clientHeight + 1,
+          quantoResta: Math.round(barra.scrollHeight - barra.clientHeight),
           rett: { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) },
-          strati: getComputedStyle(nav).backgroundAttachment,
+          strati: getComputedStyle(barra).backgroundAttachment,
+          bordoPiede: pr ? Math.round(pr.top) : null,
+          sfumatura: { altezza: primaDelPiede.height, top: primaDelPiede.top, immagine: primaDelPiede.backgroundImage.slice(0, 60) },
         };
       });
       console.log(`MISURA-BC78-2 ${larghezza}x${altezza} ${tema} = ${JSON.stringify(misura)}`);
-      /* La PREMESSA: senza un elenco che sborda questa prova non misura niente. */
-      expect(misura.scorrevole, `la scena non si è formata: l’elenco dei luoghi non sborda (restano ${misura.quantoResta} px)`).toBe(true);
+      /*
+       * ⛔ LA PREMESSA, NEI DUE VERSI. Con la barra a UNA regione ci sono due esiti possibili, e
+       * pretendere sempre lo scorrimento condannerebbe una scena in cui non c'è niente da annunciare:
+       *  · la regione SBORDA (1024×800: 65 px) → il taglio deve dire «continua» (le due foto
+       *    differiscono);
+       *  · la regione NON sborda (1440×900: 0 px nascosti) → non c'è nessun taglio, e ciò che si
+       *    pretende è l'altra metà della promessa: l'ultima riga è INTERA sopra il piede.
+       * ⛔ E il verso opposto si prova da sé: se a 1440 la barra tornasse a tagliare una riga a metà,
+       *   l'asserzione «intera» diventerebbe rossa.
+       */
+      if (!misura.scorrevole) {
+        const ultima = await page.evaluate(() => {
+          const barra = document.querySelector('.talos-sidebar');
+          const piede = barra.querySelector('.talos-sidebar__foot');
+          const righe = [...document.querySelectorAll('#sessionList .talos-session-item, #sessionList .td-session-row')];
+          const r = righe[righe.length - 1]?.getBoundingClientRect();
+          const pr = piede?.getBoundingClientRect();
+          return r && pr ? { intera: r.bottom <= pr.top + 0.5, sotto: Math.round(r.bottom), piede: Math.round(pr.top) } : null;
+        });
+        expect(ultima, 'la scena non si è formata: nessuna riga di sessione da misurare').not.toBeNull();
+        expect(ultima.intera, `la barra non sborda ma l'ultima riga non è intera: finisce a ${ultima.sotto}, il piede inizia a ${ultima.piede}`).toBe(true);
+        return;
+      }
 
-      const striscia = { x: misura.rett.x, y: misura.rett.y + misura.rett.h - 10, width: misura.rett.w, height: 10 };
+      /* La striscia sta DENTRO LA RAMPA sopra il piede (a 30 px dalla sua cima): lì il velo lascia
+         ancora vedere cosa sta scorrendo sotto. */
+      const striscia = { x: misura.rett.x, y: misura.bordoPiede - 34, width: misura.rett.w, height: 10 };
       const inCima = await page.screenshot({ clip: striscia });
-      await page.evaluate(() => { const n = document.querySelector('.td-sidebar-nav'); n.scrollTop = n.scrollHeight; });
+      await page.evaluate(() => { const b = document.querySelector('.talos-sidebar'); b.scrollTop = b.scrollHeight; });
       await page.waitForTimeout(150);
       const inFondo = await page.screenshot({ clip: striscia });
       /* ⛔ Il verdetto: la striscia bassa CAMBIA quando non c'è più niente sotto. Se l'ombra non ci
