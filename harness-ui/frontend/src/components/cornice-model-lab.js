@@ -48,10 +48,19 @@ export function montaCorniceModelLab(card) {
    *   se l'owner lo vuole, si aggiunge — non si sostituisce l'unica frase che dice da dove
    *   vengono i numeri.
    */
-  const eyebrow = heading?.querySelector('.eyebrow');
-  if (eyebrow) { eyebrow.removeAttribute('hidden'); eyebrow.textContent = 'Intelligenza, sotto controllo'; }
-  const title = heading?.querySelector('h3'); if (title) title.setAttribute('hidden', '');
-  const note = heading?.querySelector('p'); if (note) note.textContent = 'Modelli sul computer, cataloghi e accessi ai fornitori. Lo stato viene letto dal server.';
+  /*
+   * ⛔⛔ OWNER, 18/09/2026, testuale: «ogni sezione dell'impostazione ha due titoli e sottotitoli,
+   *   devi levare tutti i titoli e sottotitoli introduttivi dentro la sezione e mantenere solo
+   *   quelli fuori». ⇒ QUI L'INTESTAZIONE DELLA CARTA SPARISCE INTERA — eyebrow compreso.
+   *   Restano quelli che stanno FUORI, cioè il titolo e il sottotitolo della sezione
+   *   (`features/settings/schema.ts:21`: «Laboratorio modelli» / «Scegli dove eseguire i modelli.
+   *   Accessi, cataloghi e runtime hanno stati distinti.»), che è anche quello che il lettore di
+   *   schermo annuncia aprendo il pannello (`aria-labelledby`).
+   *   ⛔ Il giro precedente aveva fatto il CONTRARIO — mostrato l'eyebrow e nascosto il titolo:
+   *     era una lettura sbagliata della stessa fotografia. Nascondere `heading` li copre tutti e
+   *     tre in una riga, e non lascia in giro un eyebrow orfano senza il suo titolo.
+   */
+  if (heading) heading.setAttribute('hidden', '');
   const ledger = card.querySelector('.model-lab-ledger');
   const badge = card.querySelector('#modelLabRuntimeBadge');
   const rows = [...(ledger?.children || [])];
