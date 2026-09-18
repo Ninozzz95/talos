@@ -1651,7 +1651,13 @@ a.talos-button{text-decoration:none}
    ⛔ Il tetto vale SOLO finché il pannello è appiccicato: sotto i 1100 px la colonna si impila e
    torna `static`, e lì un tetto lo farebbe scorrere dentro una pagina che già scorre — due
    scorrimenti annidati per lo stesso contenuto. Vedi il ripristino nelle due regole più in basso. */
-.talos-detail{padding:16px; position:sticky; top:0; max-height:calc(100dvh - var(--talos-topbar-h) - var(--talos-space-lg)); overflow-y:auto; overscroll-behavior:contain}
+/* ⛔⛔ 18/09/2026 — BC-78.3, seconda misura: la formula sottraeva la TESTATA ma non la BARRA DELLA
+   WORKSPACE, che dal 18/09 (PR #27) sta sopra ogni schermo. Misurato a 1200×420 con una sonda: la
+   finestra è 420, lo scorrimento del pannello parte a 119 (barra 59 + testata 60) e ha 301 px di
+   spazio, mentre la formula ne dichiarava 336 ⇒ il piede del pannello (i pulsanti) restava fuori.
+   ⛔ Il numero non si scrive qui: `--talos-workspace-bar-h` lo MISURA `workspace-chrome.ts` dalla
+   barra vera (ResizeObserver) e il fallback `0px` copre le superfici dove la barra non c'è. */
+.talos-detail{padding:16px; position:sticky; top:0; max-height:calc(100dvh - var(--talos-workspace-bar-h, 0px) - var(--talos-topbar-h) - var(--talos-space-lg)); overflow-y:auto; overscroll-behavior:contain}
 .talos-detail h3{font-size:15px}
 .talos-detail__desc{color:var(--talos-muted); font-size:13px; margin:4px 0 12px}
 .talos-detail .talos-eyebrow{display:block; margin:14px 0 4px}
