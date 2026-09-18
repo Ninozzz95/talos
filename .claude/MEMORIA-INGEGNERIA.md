@@ -49,6 +49,19 @@
 > **6819 byte** e **6352 byte** ci stavano senza avvicinarsi al tetto. Nessuna
 > riga accorciata, nessuna riga persa.
 
+> ⛔⛔⛔ **RENDERE CEDEVO UN CONTENITORE PERDE TUTTO CIÒ CHE CI STA DENTRO** — 18/09/2026, trovato
+> dall'owner dal vivo, furioso («IL CHAT COMPOSER SI È ROTTO REGRESSIONE»).
+> Per far accorciare il pannello del terminale a finestra bassa ho reso flessibile **il piede della
+> chat** (`flex: 0 1 auto; min-height: 0`, colonna flex). Il riparto del restringimento va **per
+> base**, e la conversazione ha una base enorme: il piede cedeva **insieme** a lei e il composer
+> finiva **sotto il bordo della finestra**, tagliato.
+> ⇒ **La lezione:** se un figlio deve cedere, si mette il vincolo **su quel figlio**, non si rende
+> cedevole il contenitore — o cedono anche gli altri, e tu guardavi l'altro. La cura giusta è stata
+> `height: min(var(--talos-terminale-h), 45dvh)` **sul pannello**, con il piede tornato `flex:none`.
+> ⛔ E la rete che NON ha preso il difetto: `terminale-p0` era **12/12 verde** — perché nessuno dei
+> suoi casi è una finestra alta abbastanza da far cedere il piede. L'ha preso l'owner guardando la
+> sua schermata: la prova va fatta **nelle condizioni in cui il difetto vive**, non in quelle comode.
+
 > ⛔⛔⛔⛔ **DURANTE LA VERIFICA È OBBLIGATORIO IL CONTROLLO VISIVO SU SCREENSHOT DEL 4174** —
 > owner, 18/09/2026: «ultima regola durante il processo di verifica è OBBLIGATORIO verificare
 > VISIVAMENTE usando screenshot dell'ambiente 4174 e verificare automaticamente e autonomamente
