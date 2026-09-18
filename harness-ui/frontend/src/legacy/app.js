@@ -4108,7 +4108,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * pulsante che libera quella — l'unica memoria di cui siamo padroni.
    */
   function aggiornaPannelloMemoria() {
-    aggiornaMisuraMemoria($('#modelLabOverviewPanel [data-memory-meter]'), {
+    /*
+     * ⛔ 18/09/2026 — IL NODO SI CERCA IN ENTRAMBE LE DESTINAZIONI, come le cinque funzioni di
+     *   montaggio (corsia 3). Segnalato dalla corsia 3 stessa come «una riga da cambiare, non è
+     *   mio file»: con la sola radice legacy, il giorno in cui il travaso verrà invertito questa
+     *   riga tornerebbe a mani vuote — e in SILENZIO, perché `aggiornaMisuraMemoria` con un nodo
+     *   nullo non lancia: la banda smetterebbe di aggiornarsi senza dirlo a nessuno.
+     *   Oggi la card è nel pannello legacy e la banda si aggiorna (misurato: «RAM libera … su …»
+     *   è a schermo nella foto del guscio); questa riga tiene anche domani.
+     */
+    aggiornaMisuraMemoria($('#modelLabOverviewPanel [data-memory-meter]') || $('#modelLabCard [data-memory-meter]') || $('[data-memory-meter]'), {
       capacita: state.modelLab.capacity, runtimes: state.modelLab.runtimes,
       caricamento: state.modelLab.loadingCapacity, caricamentoRuntime: state.modelLab.loadingRuntime,
       runtimeVerificato: Boolean(state.modelLab.runtimeMeasured), scaricamento: Boolean(state.modelLab.unloading),
