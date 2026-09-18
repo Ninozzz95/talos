@@ -49,6 +49,37 @@
 > **6819 byte** e **6352 byte** ci stavano senza avvicinarsi al tetto. Nessuna
 > riga accorciata, nessuna riga persa.
 
+> ⛔⛔⛔⛔ **DURANTE LA VERIFICA È OBBLIGATORIO IL CONTROLLO VISIVO SU SCREENSHOT DEL 4174** —
+> owner, 18/09/2026: «ultima regola durante il processo di verifica è OBBLIGATORIO verificare
+> VISIVAMENTE usando screenshot dell'ambiente 4174 e verificare automaticamente e autonomamente
+> errori visivi, glitch, disallineamenti etc».
+> ⇒ La verifica di una cura non finisce con la suite verde: si **fotografa l'ambiente VERO**
+> (il 4174, che è il server dell'owner, sempre aggiornato) e si **guardano** le foto cercando
+> difetti **anche fuori** da ciò che si è corretto — errori visivi, glitch, disallineamenti,
+> elementi coperti, righe tagliate, colori fuori palette, testo illeggibile.
+> ⛔ «Automaticamente e autonomamente»: non si aspetta che l'owner li trovi, e non si dichiara
+> «tutto a posto» perché le prove passano. Si guarda, si elenca ciò che si vede, e ciò che si
+> trova si corregge o si registra — con la foto a lato come prova ([[taccuino-ispettore-sempre-acceso]],
+> [[ispeziona-la-foto-per-tutti-i-difetti]], [[verifica-visiva-sul-4174-sempre]]).
+> ⛔ Sul 4174 valgono i limiti di sempre: si legge e si fotografa, mai una scrittura — la sonda
+> ferma ogni richiesta non-GET.
+
+> ⛔⛔⛔⛔ **SEMPRE REVIEW AVVERSARIALI SU TUTTO IL CODICE CHE SCRIVO** — owner, 18/09/2026:
+> «d'ora in poi ricorda SEMPRE review avversariali per mettere alla prova tutto il codice scritto
+> da te». ⛔ È **permanente** e vale per **ogni** cosa scritta da me — non solo le fasi grandi, non
+> solo la UI: CSS, test, script, una riga di template.
+> ⇒ **La regola, in pratica:** il codice che scrivo non si dichiara finito con la mia verifica.
+> Un revisore **avversario** lo mette alla prova: cerca il difetto, prova a **romperlo** e mostra
+> che la prova diventa rossa; si chiede se il difetto **esisteva davvero**; e **dichiara** se ha
+> verificato o no (le tre condizioni di [[ogni-corsia-ha-il-suo-controllore]]).
+> ⛔ Nasce da un costo vero, lo stesso giorno: sostituendo l'header ho scritto **due** `#schermoHome`
+> e a trovarlo è stato **l'owner**, non una revisione — con la Home che galleggiava sopra la chat
+> sul server vivo. Nessuno dei miei controlli lo guardava: la suite c'era (`BC71-A`, id doppi) e
+> **non l'avevo lanciata**.
+> ⇒ Fanno parte della regola anche le due discipline che l'hanno resa necessaria: **la cartella
+> intera si lancia prima di dire «fatto»** (una prova ristretta è una misura ristretta), e il
+> revisore si dà **prima** della consegna, non dopo che l'owner l'ha vista rotta.
+
 > ⛔⛔⛔ **SE NON VERIFICHI ESATTAMENTE COME CHIESTO, FERMATI E DILLO** —
 > owner 2/9: una verifica APPROSSIMATA (surrogato automatico al posto
 > del tocco reale richiesto, scenario "simile" invece di quello
