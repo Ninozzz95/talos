@@ -1647,6 +1647,16 @@ a.talos-button{text-decoration:none}
 .talos-toolbar--hf .talos-toolbar__autore{flex:0 0 200px; width:200px}
 .talos-toolbar--hf .talos-toolbar__tag{flex:0 0 180px; width:180px}
 .talos-toolbar--hf .talos-select{flex:0 0 150px}
+/* ⛔ IL SELETTORE DELL'ORDINE NON ERA COPERTO — misurato il 18/09/2026 sul 4174: la riga è
+   1912 px, il campo di ricerca sta schiacciato a 220 (il suo `min-width`) e il suo segnaposto
+   **non ci sta di 1 px** (171 px di testo in 170 utili), mentre il selettore dell'ordine si
+   prende **1288 px**, cioè due terzi della riga.
+   La causa è un selettore mancante: `.talos-select` sopra è il select NATIVO — che in pagina
+   resta largo 0 — e chi si vede è il componente `calm-control--select`, che non compariva in
+   nessuna regola di questa riga e quindi cresceva con lo spazio che avanza.
+   ⇒ Stessa misura del nativo: l'intenzione c'era, mancava il selettore. Così il campo di ricerca
+   riprende lo spazio (è quello in cui si scrive) e l'ordine torna un controllo largo 150. */
+.talos-toolbar--hf .calm-control--select{flex:0 0 150px; min-width:0}
 @media (max-width:1100px){
   .talos-toolbar--hf{flex-wrap:wrap}
   .talos-toolbar--hf .talos-field{flex:1 1 100%}
