@@ -21,7 +21,14 @@
 | 5 | **Famiglia CHAT-FONDO** (tondo + hover + soglia del seguito + rotta SSE del banco) | `chat-attesa-fondo` **15/15**; commit `49cce620` | ✅ chiusa |
 | 6 | **P0A 9/9 · PO27-VUOTO 5/5 · NOTIFICHE 1/1** (la v2 atterra sulla Home: i test entrano nella chat; NOTIFICHE semina le preferenze v2) | tre spec insieme **17/17**; commit `727b2ce8` | ✅ chiuso |
 | 7 | Unità frontend | `npm run test:unit` → **1362/1362** | ✅ |
-| 8 | Suite browser intera | in corso su porta 4180, sonde escluse | ⏳ |
+| 8 | Suite browser intera | fermata a metà (avevo ricostruito `dist` durante il giro: i numeri da lì in poi erano contaminati) — da rifare pulita | ⏳ |
+| 9 | **Sidebar a UNA regione di scorrimento** (tetto del 50% via, testata e piede appiccicati, sfumature sulla regione vera) | `regioni: []` e `scorre: true` sul 4174 a 1024×800 / 1440×900 / 1200×500; «STRUMENTI» interno; **23/23** sugli spec della superficie; commit `e62905e8` | ✅ |
+| 10 | **La riga sotto il piede si dissolve** invece di essere tagliata (plateau opaco 16 px + rampa, spazio in coda dentro la lista) | a fine corsa l'ultima riga è **intera** (633-699 contro un piede a 739), `righeSottoIlPiede: []` a metà corsa e a fine corsa, foto ispezionate; commit `e646f7f8` | ✅ |
+| 11 | **Testata della colonna destra rimossa** (ordine owner: sopracciglio «Sessione», nome, X) — e con lei il difetto T1 (la X su una riga sua ≥1241 px) | sul 4174 `testata: false, x: false` a 1440×900 e 1024×800, linguette prime del contenuto; unità **1362/1362**; `colonna-destra-p0` **6/6**; commit `5df3fecd` | ✅ |
+| 12 | **Impostazioni a tutta larghezza** (ordine owner) | pagina 1440→**1644**, contenuto 1118→**1322** a 1920 CSS; foto ispezionata a 1920 e 1440; commit `229bda58` | ✅ |
+| 13 | La prova `settings-fatti-reali` **non clicca più un elemento inesistente** (`[data-open-view="settings"]`, 0 occorrenze nel DOM): naviga come una persona | arriva alla sua asserzione vera; commit `229bda58` | ✅ (ma vedi sotto) |
+
+**⛔ DECISIONE APERTA sulle Impostazioni** — la prova `SETTINGS-FATTI-44`, ora che arriva in fondo, morde su un'altra cosa e **non l'ho curata**: la riga Ollama dice «accesso pubblico, chiave non richiesta» mentre la prova pretende l'indirizzo (`127.0.0.1:11434`). La riga non porta più l'endpoint (`app.js:4162` compone una frase di stato), quindi la prova ha perso la sua dimostrazione che la riga mostri dati **del server**. Due vie, decide l'owner: rimettere l'indirizzo nella riga («collegate realmente»), o spostare l'asserzione dove il dato vive adesso (il campo endpoint della scheda provider).
 
 **Difetti APERTI, misurati sul 4174 vivo (BC-82.6 — «la sidebar di sinistra è rotta»):**
 - 1024×800: la testata **«Strumenti»** è disegnata **509-543** contro un contenitore che chiude a **528** (tagliata a metà); una riga di sessione **693-759** e una riga vuota **712-740** contro un fondo a **739**.
@@ -90,7 +97,33 @@
 
 **Accuse cadute, misurate nel verso opposto** (non vanno riportate come difetti): il tondo **è** centrato (scarto 0 a 1024/1200/1440); il piede **non** copre la conversazione (`convFinisceSottoIlPiede = 0` in 6 combinazioni); nessun comando sborda (8 figli, gap minimo 6 px); il segnaposto non è tagliato; «+» e bacchetta sono due gesti diversi; «Giri» e «Sessione» sono nascoste per progetto.
 
-### §2.3 ⛔ DIFETTO D'INFRASTRUTTURA — il cancello della ricerca nega l'Edit ai subagenti per costruzione
+### §2.3 Colonna destra (rapporto consegnato) — e la testata RIMOSSA su ordine dell'owner
+
+| # | Difetto | Prova | Stato |
+|---|---|---|---|
+| T1 | **La «X» cade su una riga sua**, sotto il titolo, a ogni larghezza ≥1241 px (testata alta 100 invece di 60). Causa misurata: `.talos-inspector-close{display:none}` (`index.css:2378`) **perde** contro `.talos-button{display:inline-flex}` (`primitives.css:5-7`) a pari specificità; la regola che la riaccende, e il `display:flex` della testata, vivono **dentro `@media(max-width:1240px)`** | foto `light-1440x900-contesto.png`; misure a 1440, 1241 (rotte) e 1200 (giusta) | ✅ **curato per rimozione**: owner 18/09 «leva completamente header, la sezione con scritto sessione, il nome della sessione e il pulsante x» — via testata, X, e le regole CSS morte |
+| T3 | **Righe tagliate a metà** nelle quattro linguette, con **barra di scorrimento invisibile** e nessun segno che sotto ci sia altro (`barraVisibile: 0`, `diceAltroSotto: false`): peggiore a 1024×800, linguetta File, riga «Intel» **50% esatto**; a 1440 la linguetta File nasconde il **63%** del contenuto | `light-1024x800-file.png` | 🔜 **da curare** (stessa classe di BC-78.2/82.6: la tecnica plateau+rampa vale anche qui; la causa della barra invisibile **non è confermata con grep**) |
+| T2 | Tre righe su dodici dell'«Indice dei giri» hanno per etichetta la parola «Risposta» (ripiego `\|\| "Risposta"`), nessuna con `title` | `Z10-indice.png` | 🔜 |
+| T7 | Due superfici «Ambiente» **piene di dati finti**, irraggiungibili da qualunque apertore, con un percorso che su questa macchina **non esiste** (`C:/progetti/…`) | `Z12-ambiente-sessione.png` | 🔜 zavorra + percorso falso |
+| T4 | Due formati numerici nella stessa scheda: `13,9k · 1,0%` accanto a `0 % · su 1 giro` | `consumo-sessione.js` | 🔜 |
+| T5 | Testo troncato **dalla JS** (`slice(0,31)`), non dal CSS: allargare il pannello non lo restituisce | `Z10-indice.png` | 🔜 |
+| T6 | «16 a vista» quando di file a vista ce ne sono zero: l'aritmetica è giusta, **la parola no** | `light-1440x900-file.png` | 🔜 |
+
+### §2.4 Home e altre schermate (rapporto consegnato)
+
+| # | Difetto | Prova | Gravità |
+|---|---|---|---|
+| H1 | **La voce «Impostazioni» della barra laterale NON porta a Impostazioni**: da «Modelli» ci si torna e resta «Laboratorio modelli». Causa: `app.js:21952` — solo `data-vaia === 'modelli'` chiama `setSettingsSection('models')`, e la sezione è **persistita** (`:4452`) | due foto identiche: `impostazioni-light-1200x500.png` = `modelli-light-1200x500.png` | **ALTA** — due voci, due nomi, stesso posto |
+| H2 | La stessa frase **due volte** in Libreria e Attività (una come **errore con `role="alert"`**): «Apri una sessione per leggere la Libreria del progetto.» a (366,175) e (586,543) | `app.js:5172,5276` + `sezione-elenco-dettaglio.js:618-621` | MEDIA |
+| H3 | «1 progetto» **due volte** su Progetti (testata + nota) | `sezioni-adattatori.js:1541` (manca `sommarioStato`) | MEDIA |
+| H4 | Le quattro schede della Home **non allineate** a 1200×500: «Documenti» ha titolo e sottotitolo 9 px più in basso (sottotitolo corto, `align-content:center`) | `PROVA-schede-home-1200x500.png`; `workspace.css:18` | MEDIA (viewport ufficiale) |
+| H5 | Tre distintivi del Doctor **sotto il minimo WCAG AA**: «3 ok» 4,08 · «6 note» 4,00 · «2 avvisi» 4,08 contro 4,5. E «0 guasti» vestito con la palette di **pericolo** | `PROVA-distintivi-doctor-1440x900.png`; `controls.css` | MEDIA (accessibilità) |
+| H6 | «Laboratorio modelli» **tre volte** sulla stessa schermata (nav, h2 di sezione, h3 della scheda a 99 px di distanza) | `modelli-dark-1024x800.png` | BASSA |
+| H7 | La scheda «Download» del Laboratorio **esce dalla striscia** a 1024×800 senza che nulla lo dica (raggiungibile da tastiera: difetto di **segnalazione**) | `PROVA-striscia-schede-1024x800.png` | BASSA |
+
+**Accuse cadute del quinto revisore** (verso opposto, da non riportare): la striscia è raggiungibile da tastiera; il select di ordinamento **è** disegnato da noi (`appearance:base-select`); «Apri un progetto» fa davvero la scelta della cartella; il segnaposto «Apro il tuo workspace…» **non compare** in nessuna schermata (la mia regressione è chiusa); la barra rimossa **non ha lasciato vuoti**; e ⭐ **la «STRUMENTI» tagliata che vedeva era un artefatto della sua sonda**: la barra è **una regione che scorre** — conferma indipendente della cura.
+
+### §2.5 ⛔ DIFETTO D'INFRASTRUTTURA — il cancello della ricerca nega l'Edit ai subagenti per costruzione
 
 `.claude/hooks/ricerca-prima-di-scrivere.mjs` legge `input.transcript_path`: per un agente delegato è il transcript **del padre**, dove la sua ricerca non appare come `tool_use`. Il revisore del piede ha preso **tre `Edit` negati dopo aver cercato davvero**, e si è salvato con script in `%TEMP%` (cartella esente per disegno). ⇒ Finché non si cura, **la regola «sempre review avversariali» non è eseguibile dai revisori** (che devono scrivere sonde).
 ⛔ **Cura che avevo proposto, e perché NON si fa così:** un registro di sessione letto dal cancello. L'ho scritta e il **classificatore me l'ha negata** con la motivazione giusta: *«a user-configured guard loosened without the user asking»* — allargava una guardia **dell'owner** di mia iniziativa. Non si aggira: si cambia strada.
@@ -150,7 +183,20 @@
 4. **Non si importa il DOM del laboratorio della #33** — spegnerebbe l'avvio (il ponte lancia sugli id mancanti).
 5. **Non si applica la parity spec della sidebar** — rimetterebbe indietro una cura nostra.
 
-## §5 — LE DECISIONI CHE SPETTANO ALL'OWNER
+## §5 — LE DECISIONI, VALUTATE CON L'OWNER (18/09/2026)
+
+| # | La domanda | La sua risposta | La ricerca (fonte + data) | Esito |
+|---|---|---|---|---|
+| D1 | La riga del fornitore: indirizzo o stato? | «come nel mockup del refactor» | bolt.diy mostra badge Configured/Not-configured nell'elenco; Open WebUI e Hermes espongono il Base URL **come campo** con prova di collegamento (lette il 18/09) | ✅ **d'accordo col mockup in produzione** (PR #27): stato in riga, indirizzo nel campo della scheda. Prova corretta, `SETTINGS-FATTI-44` **verde** (`7c9c3e5d`) |
+| D2 | La voce «Impostazioni» riapre l'ultima sezione | «sistemalo» | La convenzione è il **deep link**: ogni porta atterra dove dice il suo nome, senza ancora si apre la predefinita; «ricordare l'ultima» non è documentato (ZURB Foundation, letta il 18/09) | ✅ **fatto** (`f5216a3c`): Impostazioni → *Aspetto e movimento*, Modelli → *Laboratorio modelli*, e tornando indietro non si resta più su Modelli |
+| D3 | «Disposizione del workspace» senza comando | «eliminalo» | Cloudscape (AWS) dice di tenere densità e disposizione **dentro le Impostazioni** (Firefox ha fatto così) | 🔜 **da confermare la portata**: eliminare il COMANDO non basta — la preferenza guida anche `data-workspace-preset` (larghezza di lettura del testo) e `setInspectorVisible` (la colonna destra). Se si elimina, si elimina **la funzione** (preferenza + preset + agganci CSS), o resta una preferenza che nessuno può cambiare |
+| D4 | BC77-A-TETTO (i tre toast sulla testata) | «cosa è?» — spiegato | I toast stanno **in basso** proprio per non coprire testata e navigazione, e la pila va **limitata a 3-5 visibili**, scartando il più vecchio (SSW; ai-design-components; Genesys) | 🔜 **consiglio: pila a 3 visibili**; se a 1024×800 tre non ci stanno con il terminale aperto, si compattano solo quando il tetto stringe |
+
+**Altre due decisioni emerse oggi, non ancora tue:**
+- **La lingua predefinita è l'inglese**: con un profilo vergine la barra laterale resta italiana e il contenuto è in inglese — metà traduzione (misurato da una sonda). Su un prodotto italiano è una scelta da fare, non un dettaglio da nascondere in una prova.
+- **Due stati vuoti nella barra laterale**: `#noSessionsPlaceholder` (oggi un no-op silenzioso) e `.td-sidebar-empty` del pacchetto PR #32: quale resta quando si applica.
+
+## §6 — LE DECISIONI CHE SPETTAVANO ALL'OWNER (storico)
 
 1. **La disposizione del workspace** (Sviluppo/Ricerca/Documenti/Concentrazione) ha perso il suo **unico** comando a schermo con la rimozione della barra: la riporto in Impostazioni o resta una preferenza senza comando?
 2. **Due stati vuoti nella barra**: `#noSessionsPlaceholder` (oggi un no-op silenzioso) e `.td-sidebar-empty` del pacchetto: quale resta?
