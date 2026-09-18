@@ -20,21 +20,24 @@
    Era un blocco di pagina (`page.insertBefore(toolbar, layout)`) e si prendeva tutta la larghezza
    del contenuto; ora è dentro la colonna, sopra l'elenco delle sezioni.
    ⛔ Le tre righe che contano, e perché ognuna è una misura e non un gusto:
-   1. `flex-wrap: wrap` + `flex: 1 1 150px` sull'etichetta — nei **204 px utili** (220 meno i 16 di
-      `padding-inline-end` della colonna) un campo e un bottone non stanno sulla stessa riga:
-      senza il permesso di andare a capo è il CAMPO a comprimersi, e un campo di ricerca stretto
-      non si legge. Il bottone «Cancella ricerca» compare **solo mentre si cerca**, quindi a capo
-      ci va di rado (W3C WCAG 2.5.8: la dimensione minima non si ottiene comprimendo).
+   1. **UN FIGLIO SOLO**: la × di cancellazione sta DENTRO il campo (`.settings-search__clear`,
+      posizione assoluta). Prima era un bottone accanto e nei **203 px** della colonna non ci
+      stava: andava a capo e faceva **scendere di 48 px** tutto quello che sta sotto, a ogni
+      ricerca — misurato dalla review avversaria del 18/09/2026 con A/B (3 px con lo stesso nodo
+      rimesso nella pagina). Con un figlio solo la riga non può andare a capo: niente salto da
+      nascondere, e non serve più nemmeno `flex-wrap`.
    2. `min-height: 36px` — sotto i 44 del campo di pagina, perché non è più l'azione principale
       della schermata, ma sopra la soglia di tocco che il cancello delle impostazioni misura (24).
    3. `font-size: .8125rem` — 13 px, la misura delle voci della colonna accanto. */
-.settings-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
-.settings-search { display: block; flex: 1 1 150px; min-width: 0; }
+.settings-toolbar { display: flex; align-items: center; margin: 0 0 10px; }
+/* Il posto della ×: il campo prende tutto, la × ci sta SOPRA, e la riga resta alta uguale. */
+.settings-search-field { position: relative; display: flex; flex: 1 1 auto; min-width: 0; }
+.settings-search { display: block; flex: 1 1 auto; min-width: 0; }
 /* ⛔ `text-overflow: ellipsis` è una RETE, non la cura: nei 203 px della colonna il segnaposto
    italiano sta in 136 px su 181 utili (misurato il 18/09/2026 con `misura-testi.mjs`), ma una
    traduzione più lunga o una lingua diversa non devono più uscire TAGLIATE A METÀ PAROLA come
    nella foto di quel giorno. */
-.settings-search__input { width: 100%; min-height: 36px; padding: 8px 11px; border: 1px solid var(--talos-border-strong); border-radius: var(--ui-radius-control); background: var(--talos-panel); color: var(--talos-text); font: inherit; font-size: .8125rem; text-overflow: ellipsis; }
+.settings-search__input { width: 100%; min-height: 36px; padding: 8px 11px; padding-inline-end: 34px; border: 1px solid var(--talos-border-strong); border-radius: var(--ui-radius-control); background: var(--talos-panel); color: var(--talos-text); font: inherit; font-size: .8125rem; text-overflow: ellipsis; }
 /*
  * ⛔ DUE COMANDI PER LA STESSA AZIONE, UNO DEI DUE SENZA NOME — visto nella foto del 4174 a
  *   larghezza stretta il 18/09/2026 (`artifacts/zoom-bar/nav-stretta.png`): il campo è
@@ -45,6 +48,16 @@
  *   La × resta raggiungibile da tastiera col nostro bottone, che è nel tab order.
  */
 .settings-search__input::-webkit-search-cancel-button { display: none; }
+/*
+ * ⛔ LA × DENTRO IL CAMPO — 28×28, sopra la soglia di tocco di 24×24 di WCAG 2.5.8 che il
+ *   cancello misura. Compare solo mentre si cerca (`clear.hidden = !searching`), e siccome è in
+ *   posizione assoluta **non sposta niente** quando appare: è questo che toglie il salto di 48 px.
+ *   Il nome accessibile arriva da `aria-label` (in `refresh()`), perché dentro c'è solo l'icona.
+ */
+.settings-search__clear { position: absolute; inset-inline-end: 4px; top: 50%; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--talos-muted); cursor: pointer; transform: translateY(-50%); }
+.settings-search__clear:hover { color: var(--talos-text); background: var(--talos-card-hover); }
+.settings-search__clear:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 1px; }
+.settings-search__clear-icon { width: 14px; height: 14px; }
 .settings-search__input::placeholder { color: var(--talos-muted); opacity: 1; }
 .settings-search__input:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-settings { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: start; gap: 28px; }
@@ -369,7 +382,6 @@
   /* Sotto i 660 px la colonna diventa un blocco a tutta larghezza: la barra torna larga tutta,
      ed è il caso normale — non c'è più una sidebar accanto a cui star dentro. */
   .settings-toolbar { margin-block-end: 8px; }
-  .settings-toolbar > button { min-height: 36px; }
   .settings-section-heading { gap: 10px; margin-block-end: 16px; }
   .settings-section-heading h2 { font-size: 1.125rem; }
   #schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section { padding: 16px; border-radius: 10px; }

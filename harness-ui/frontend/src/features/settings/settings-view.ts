@@ -231,12 +231,27 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
    *   erano — a spostarli è la sola riga `nav.insertBefore(toolbar, list)`, in fondo alla colonna.
    */
   const toolbar = node('search', 'settings-toolbar'); toolbar.dataset.settingsChrome = '';
+  /*
+   * ⛔ LA × DI CANCELLAZIONE STA DENTRO IL CAMPO, NON ACCANTO — trovato dalla review avversaria
+   *   del 18/09/2026, che l'ha misurato: nei **203 px** della colonna il bottone «Cancella
+   *   ricerca» (141×40) non sta sulla stessa riga del campo e va **a capo**, la barra passa da
+   *   38 a **86 px** e tutto quello che sta sotto — l'elenco delle sezioni compreso — **scende di
+   *   48 px a ogni ricerca**, dentro una colonna `position: sticky`. Con lo stesso nodo rimesso
+   *   nella pagina il salto è di **3 px**: era la colonna a causarlo.
+   * ⇒ È la forma che il campo di ricerca ha da sempre (la × di `type="search"` è dentro il campo):
+   *   posizione assoluta sull'orlo destro, con il posto riservato dal `padding-inline-end`.
+   *   Così la riga è **una sola, sempre alta uguale**, e non c'è nessun salto da nascondere.
+   * ⛔ Il bottone resta NOSTRO e con un nome accessibile (`aria-label`, dato in `refresh()`):
+   *   quello nativo del browser non ha nome e non si può etichettare.
+   */
+  const campoRicerca = node('div', 'settings-search-field');
   const searchWrap = node('label', 'settings-search'); searchWrap.htmlFor = 'settingsSearch';
   const searchName = node('span', 'workspace-sr');
   search.id = 'settingsSearch'; search.type = 'search'; search.className = 'settings-search__input';
   search.setAttribute('aria-controls', 'settingsSearchResults');
-  const clear = node('button', 'talos-button talos-button--secondary'); clear.type = 'button'; clear.dataset.settingsClear = '';
-  searchWrap.append(searchName, search); toolbar.append(searchWrap, clear);
+  const clear = node('button', 'settings-search__clear'); clear.type = 'button'; clear.dataset.settingsClear = '';
+  clear.append(iconaSprite('x', 'settings-search__clear-icon'));
+  searchWrap.append(searchName, search); campoRicerca.append(searchWrap, clear); toolbar.append(campoRicerca);
   page.insertBefore(header, layout);
   nav.replaceChildren(); nav.className = 'talos-settings__nav settings-nav';
   const list = node('div', 'settings-nav__list'); list.setAttribute('role', 'tablist'); list.setAttribute('aria-orientation', 'vertical');
@@ -673,7 +688,10 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     title.textContent = tx('title'); subtitle.textContent = tx('subtitle'); searchName.textContent = tx('search'); search!.setAttribute('aria-label', tx('search')); search!.placeholder = tx('placeholder');
     // La regione di ricerca porta il suo nome: è quella che si sente nell'elenco dei landmark.
     toolbar.setAttribute('aria-label', tx('search'));
-    clear.textContent = tx('clear'); crumbWhere.textContent = tx('title'); mobileLabel.textContent = tx('mobile'); mobile.setAttribute('aria-label', tx('mobile')); list.setAttribute('aria-label', tx('sections')); nav!.setAttribute('aria-label', tx('sections'));
+    // ⛔ `aria-label` e NON `textContent`: il bottone ora è una × dentro il campo, e scrivergli
+    //    dentro il testo cancellerebbe l'icona (oltre a lasciarlo senza nome accessibile).
+    clear.setAttribute('aria-label', tx('clear')); clear.title = tx('clear');
+    crumbWhere.textContent = tx('title'); mobileLabel.textContent = tx('mobile'); mobile.setAttribute('aria-label', tx('mobile')); list.setAttribute('aria-label', tx('sections')); nav!.setAttribute('aria-label', tx('sections'));
     groups.forEach((g, i) => { g.textContent = tx(i === 0 ? 'behaviour' : 'infrastructure'); });
     for (const [id, button] of buttons) { button.querySelector('span')!.textContent = localText(SETTINGS_SECTIONS[id].title, options.language()); const option = mobile.querySelector('option[value="' + id + '"]'); if (option) option.textContent = button.textContent; }
     for (const field of options.fields) { const help = q<HTMLElement>('[data-setting-help="' + field.id + '"]'); if (help && FIELD_HELP[field.id]) help.textContent = localText(FIELD_HELP[field.id]!, options.language()); }
