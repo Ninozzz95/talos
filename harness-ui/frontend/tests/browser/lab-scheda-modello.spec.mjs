@@ -1099,3 +1099,30 @@ test('SCHEDA-08 — le foto: i due temi, le due larghezze, e zero errori in cons
     }
   }
 });
+
+/*
+ * ⭐⭐ 18/09/2026 — IL MONTAGGIO, aggiunto dalla REVIEW dell'orchestratore.
+ * La corsia 4 lo aveva DICHIARATO: «NON VERIFICATO: il montaggio dentro Impostazioni ... Il
+ * montaggio è tuo». Le sue nove prove montano il componente a mano in una cornice; nessuna
+ * prova che qualcuno lo monti DAVVERO partendo dalla rotta — e infatti non lo montava nessuno.
+ * Questa prova tiene oneste le tre cose che il componente dichiara di non avere e che mette
+ * chi lo monta: il CONTENITORE che scorre, il padding, e la rotta che lo riapre.
+ */
+test('SCHEDA-09 — il montaggio: la pagina si apre dalla ROTTA dentro un contenitore che scorre', async ({ page }) => {
+  await page.route('**/api/v1/local-models**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { items: [] }, meta: {} }) }));
+  await page.goto('/#/impostazioni/modelli/scheda/prova-1/card');
+  const pagina = page.locator('#paginaModello');
+  await expect(pagina, 'la rotta nell’indirizzo apre la pagina da sola').toBeVisible();
+
+  /* ⛔ Le tre cose che il componente NON porta e che chi monta deve dare. Misurate, non sperate. */
+  const misure = await pagina.evaluate((n) => { const s = getComputedStyle(n); return { overflow: s.overflowY, paddingX: s.paddingLeft, paddingY: s.paddingTop, z: Number(s.zIndex) }; });
+  expect(misure.overflow, 'la pagina scorre: senza, le ultime righe escono dal bordo').toBe('auto');
+  expect(parseFloat(misure.paddingX), 'e ha il padding che il componente non porta').toBeGreaterThan(0);
+  expect(parseFloat(misure.paddingY)).toBeGreaterThan(0);
+
+  /* «Tutti i modelli» è la via d'uscita: il fuoco non resta in una pagina che non c'è più. */
+  await expect(pagina.getByRole('button', { name: /tutti i modelli/i })).toBeVisible();
+  await pagina.getByRole('button', { name: /tutti i modelli/i }).click();
+  await expect(pagina).toBeHidden();
+  expect(await page.evaluate(() => window.location.hash), 'la rotta non resta appesa dopo la chiusura').not.toContain('/scheda/');
+});
