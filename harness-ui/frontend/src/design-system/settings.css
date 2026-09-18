@@ -58,6 +58,47 @@
 .settings-breadcrumb ol { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; color: var(--talos-muted); font-size: .75rem; line-height: 1.4; }
 .settings-breadcrumb li + li::before { content: '›'; margin-inline-end: 8px; opacity: .65; }
 .settings-breadcrumb [aria-current="page"] { color: var(--talos-text); }
+
+/*
+ * ⭐⭐ 18/09/2026 — IL CERCATORE DEL MOCKUP (FASE 1b): il bottone in sidebar e la sua palette.
+ * ⛔ LE MISURE SONO DEL MOCKUP, prese dal suo DOM vivo il 18/09/2026 e non stimate:
+ *   dialog 600×852 a `y:24`, `border-radius:16px`, ombra `0 32px 90px rgba(0,0,0,.3)`,
+ *   fondo `rgb(247,244,238)`; campo 546×48, `font-size:16px`, `padding:9px 12px 9px 38px`
+ *   (il posto dell'icona), `border-radius:9px`, fondo trasparente, bordo del testo;
+ *   risultato 546×64, `font-size:14px`, `padding:12px 4px`, `border-radius:5px`, `gap:12px`;
+ *   scrim `rgba(31,29,25,.45)`.
+ * ⛔ `padding:0` sul dialog e 27px per lato dentro: 600 − 54 = 546, che è la larghezza misurata
+ *   del campo e dei risultati. Non è un numero scelto a occhio, è la differenza che avanza.
+ * ⛔ LO SCROLL DELLA PAGINA NON SI BLOCCA DA SOLO quando un `<dialog>` modale è aperto:
+ *   `:has(dialog[open]:modal)` è il modo che non richiede JavaScript (fonte: linee guida sui
+ *   dialog nativi lette il 18/09/2026). `scrollbar-gutter:stable` evita il salto di 15px.
+ */
+.settings-palette { width: 600px; max-width: calc(100vw - 32px); max-height: min(852px, calc(100dvh - 48px)); margin: 24px auto; padding: 0; border: 1px solid var(--talos-border); border-radius: 16px; background: var(--talos-card, #f7f4ee); color: var(--talos-text); box-shadow: 0 32px 90px rgba(0, 0, 0, .3); overflow: hidden; }
+.settings-palette::backdrop { background: rgba(31, 29, 25, .45); }
+.settings-palette__box { display: flex; flex-direction: column; gap: 12px; max-height: inherit; padding: 24px 27px; overflow: auto; }
+.settings-palette__head { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.settings-palette__title { margin: 0; font-size: 1.125rem; font-weight: 600; letter-spacing: -.01em; }
+.settings-palette__field { position: relative; display: flex; align-items: center; }
+/* L'icona dentro il campo è decorativa: il campo ha il suo nome accessibile.
+   ⛔ Un `<svg><use>` vero e non una maschera CSS: lo sprite del progetto è fatto di `<symbol>`,
+   e un `<symbol>` non è una `<mask>` valida — la maschera non avrebbe reso niente. */
+.settings-palette__icon { position: absolute; inset-inline-start: 12px; width: 17px; height: 17px; color: var(--talos-muted); pointer-events: none; }
+.settings-palette__input { width: 100%; min-height: 48px; padding: 9px 12px 9px 38px; border: 1px solid var(--talos-border-strong, var(--talos-border)); border-radius: 9px; background: transparent; color: inherit; font-size: 16px; font-family: inherit; }
+.settings-palette__input::placeholder { color: var(--talos-muted); }
+.settings-palette__count { margin: 0; color: var(--talos-muted); font-size: .75rem; }
+.settings-palette__results { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.settings-palette__results .settings-result { display: flex; flex-direction: column; gap: 2px; width: 100%; min-height: 64px; padding: 12px 4px; border: 0; border-radius: 5px; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.settings-palette__results .settings-result:hover { background: var(--talos-card-hover, rgba(255, 255, 255, .06)); }
+.settings-palette__results .settings-result__path { color: var(--talos-muted); font-size: .6875rem; }
+.settings-palette__results .settings-result strong { font-size: .875rem; font-weight: 550; }
+.settings-palette__results .settings-result__help { color: var(--talos-muted); font-size: .75rem; }
+.settings-palette__empty { margin: 0; padding: 12px 4px; color: var(--talos-muted); font-size: .8125rem; }
+:root:has(dialog.settings-palette[open]:modal) { overflow: hidden; scrollbar-gutter: stable; }
+
+/* Il bottone in sidebar: la voce del mockup (`#open-settings-search`) con la sua scorciatoia. */
+.settings-nav__search { justify-content: flex-start; }
+.settings-nav__kbd { margin-inline-start: auto; padding: 2px 6px; border: 1px solid var(--talos-border); border-radius: 5px; color: var(--talos-muted); font-family: inherit; font-size: .6875rem; }
+:root[data-sidebar="icone"] .settings-nav__search .settings-nav__kbd { display: none; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section { padding: 20px 24px; margin-block-end: 18px; border: 1px solid var(--talos-border); border-radius: var(--ui-radius-surface); background: var(--talos-panel); box-shadow: none; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section > h3 { margin: 0 0 6px; font-size: .9375rem; font-weight: 600; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section > p { font-size: .8125rem; color: var(--talos-muted); line-height: 1.65; margin-block: 0 14px; }
