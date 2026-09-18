@@ -18,7 +18,21 @@ export const COMMANDS: readonly CommandDefinition[] = Object.freeze([
   { id: 'home', label: 'Home', description: 'Riprendi il lavoro e apri un progetto.', group: 'Navigazione', icon: 'i-grid', keywords: 'inizio workspace start', view: 'home' },
   { id: 'chat', label: 'Conversazione', description: 'Torna ai messaggi della sessione.', group: 'Navigazione', icon: 'i-list', keywords: 'chat conversation messaggi', view: 'chat' },
   { id: 'review', label: 'Revisione delle modifiche', description: 'Esamina i file e le differenze.', group: 'Navigazione', icon: 'i-diff', keywords: 'review diff changes codice', view: 'diff' },
-  { id: 'terminal', label: 'Apri terminale', description: 'Usa la shell reale del computer.', group: 'Navigazione', icon: 'i-terminal', keywords: 'terminal shell console', view: 'terminal' },
+  /*
+   * ⛔ 18/09/2026 — `shortcut: 'mod \`'` DICHIARATO, perché il tasto ESISTE E FUNZIONA da sempre:
+   *   la gestione sta in `app.js` (Ctrl + `Backquote` → mostra o nascondi il terminale) e la scheda
+   *   «Scorciatoie da tastiera» lo elenca (`components/scorciatoie.js`, `{ id: 'terminale', combo:
+   *   'mod \`' }`). Solo la TAVOLOZZA non lo annunciava, e questa riga non l'ha mai avuto: è
+   *   arrivata così con la PR #27 (unico commit del file, `cdbf51c9`). Il campo è di SOLA
+   *   VISUALIZZAZIONE (`features/navigation/command-palette.ts:80` disegna il `<kbd>` quando
+   *   c'è): nessun cambio di comportamento, nessun tasto nuovo.
+   *   Ricerca 18/09/2026 — «display keyboard shortcuts next to commands» è la pratica corrente
+   *   (Linear e Raycast le mostrano a destra, in pill; il project switcher di VS Code è citato
+   *   come il contro-esempio: «no persistent hint about available keyboard shortcuts»):
+   *   techinterview.org «Build a Command Palette: Cmd+K like Linear and Vercel»; synthetic-skills
+   *   «power-user patterns» (suggerimenti in tre superfici: tavolozza, tooltip, pannello dedicato).
+   */
+  { id: 'terminal', label: 'Apri terminale', description: 'Usa la shell reale del computer.', group: 'Navigazione', icon: 'i-terminal', keywords: 'terminal shell console', view: 'terminal', shortcut: 'mod `' },
   { id: 'browser', label: 'Apri browser', description: 'Consulta pagine e annotazioni.', group: 'Navigazione', icon: 'i-globe', keywords: 'web page navigation', view: 'browser' },
   { id: 'dashboard', label: 'Tutte le sessioni', description: 'Apri la cronologia e lo stato delle sessioni.', group: 'Navigazione', icon: 'i-grid', keywords: 'board dashboard session history cronologia', view: 'dashboard' },
   { id: 'projects', label: 'Progetti', description: 'Trova i workspace e le sessioni collegate.', group: 'Navigazione', icon: 'i-folder', keywords: 'projects workspace cartelle', view: 'progetti' },

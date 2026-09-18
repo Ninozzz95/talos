@@ -55,6 +55,18 @@ async function apriApp(page, { tema = 'dark', larghezza = 1440, altezza = 900, t
   }, { colorMode: tema === 'light' ? 'light' : 'dark', chatFullWidth: tuttaLarghezza });
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
+  /*
+   * ⛔⛔ 18/09/2026 — LA v2 ATTERRA SULLA HOME: LA CHAT SI APRE CON UN GESTO.
+   * Misurato (sonda del 18/09 + le foto dei rossi): dopo lo stacco del velo la app mostra la Home;
+   * `#pillTerminale` esiste nel DOM ma è **hidden** per 14 letture di fila («expected visible,
+   * received hidden»), perché vive nel piede della CHAT. Con un clic su «Conversazioni»
+   * (`.talos-nav-item[data-vaia="chat"]`) la chat si apre anche senza sessione e la pillola è
+   * visibile. Ricerca 18/09/2026: si aspetta il CONTENUTO vero, mai la sparizione del velo né
+   * `networkidle` — Playwright «Best practices», BrowserStack «Playwright waits»,
+   * tayyabakmal.com «Test SPAs without race conditions» (aprile 2026).
+   */
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+  await expect(page.locator('#schermoChat')).toBeVisible();
   await expect(page.locator('#pillTerminale')).toBeVisible();
 }
 
