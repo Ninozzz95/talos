@@ -196,7 +196,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   * ⛔ Una sola azione a vista: salvare la chiave appena incollata. Le altre sono azioni su
   *   qualcosa di GIÀ configurato — si fanno una volta ogni tanto, non mentre stai configurando —
   *   e vivono nel menu «⋯», nascoste ma presenti nel DOM: la regia delegata su
-  *   `[data-provider-action]` (app.js:4068) le trova al `.click()` senza sapere del menu.
+  *   `[data-provider-action]` (app.js:3197, 4700) le trova al `.click()` senza sapere del menu.
   */
  const actions=el('div','talos-cluster');
  const salva=button('save-key',poolCollegato?'Aggiungi chiave':'Salva chiave','primary');
