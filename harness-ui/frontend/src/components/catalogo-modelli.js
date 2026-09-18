@@ -49,6 +49,26 @@ export function montaCatalogoModelli(originale,canonico){
  originale.replaceChildren(...canonico.children);originale.dataset.catalogMounted='true';originale.dataset.catalogPanel='';
  const ids={cercaCatalogo:'modelLabSearch',filtroFornitore:'modelLabProviderFilter',listaCatalogo:'modelLabCatalogList'};
  for(const [prima,dopo] of Object.entries(ids)){const n=originale.querySelector('#'+prima);if(!n)continue;for(const label of originale.querySelectorAll('label[for="'+prima+'"]'))label.htmlFor=dopo;n.id=dopo;}
- originale.querySelector('[data-catalog-detail]').id='modelLabModelDetail';originale.querySelector('[data-catalog-count]').id='modelLabCatalogCount';originale.querySelector('[data-catalog-refresh]').id='modelLabRefreshButton';originale.querySelector('#modelLabProviderFilter').replaceChildren(new Option('Tutti i fornitori','all'));
- originale.querySelector('[data-catalog-list]').replaceChildren();aggiornaDettaglioCatalogo(originale.querySelector('[data-catalog-detail]'),null);
+ /* ⛔⛔ 18/09/2026 — QUESTE TRE RIGHE ERANO IN GUARDIE, E CON LA DIREZIONE INVERTITA DEL TRAVASO
+    FACEVANO CROLLARE IL MONTAGGIO: `Cannot set properties of null`. Il rinomino degli id presuppone
+    che in `originale` ci siano i figli CANONICI (`[data-catalog-detail]`, `[data-catalog-count]`,
+    `[data-catalog-refresh]`); quando la destinazione è il pannello canonico — cioè ora, vedi
+    `app.js`, `inizializzaModelLab` — i figli che arrivano sono i LEGACY, che portano già gli id
+    giusti (`#modelLabModelDetail`, `#modelLabCatalogCount`, `#modelLabRefreshButton`). ⇒ Le query
+    tornano `null` e il rinomino non serve: si salta invece di esplodere. Le due funzioni sorelle
+    (`hf-catalogo.js`, `download-coda.js`) erano già guardate con `if (…)`; questa no, e la
+    differenza si è vista solo perché la verifica ha esercitato il travaso — la prima foto della
+    schermata era un falso positivo, scattata prima che il montaggio girasse. */
+ const dettaglio = originale.querySelector('[data-catalog-detail]'); if (dettaglio) dettaglio.id = 'modelLabModelDetail';
+ const conteggio = originale.querySelector('[data-catalog-count]'); if (conteggio) conteggio.id = 'modelLabCatalogCount';
+ const aggiorna = originale.querySelector('[data-catalog-refresh]'); if (aggiorna) aggiorna.id = 'modelLabRefreshButton';
+ originale.querySelector('#modelLabProviderFilter')?.replaceChildren(new Option('Tutti i fornitori','all'));
+ /* ⛔ 18/09/2026 — stesso motivo delle tre righe qui sopra: dopo l'inversione del travaso la
+    destinazione è il pannello canonico e i figli che arrivano sono i LEGACY, che portano gli id
+    (`#modelLabCatalogList`, `#modelLabModelDetail`) e NON gli attributi canonici. Si cerca l'uno o
+    l'altro, e se non c'è nessuno dei due non si esplode: si salta. */
+ const listaCatalogo = originale.querySelector('[data-catalog-list]') || originale.querySelector('#modelLabCatalogList');
+ if (listaCatalogo) listaCatalogo.replaceChildren();
+ const dettaglioCatalogo = originale.querySelector('[data-catalog-detail]') || originale.querySelector('#modelLabModelDetail');
+ if (dettaglioCatalogo) aggiornaDettaglioCatalogo(dettaglioCatalogo, null);
 }
