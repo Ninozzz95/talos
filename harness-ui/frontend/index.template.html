@@ -151,6 +151,13 @@
        il simbolo dichiara da sé `fill:none` e `stroke:currentColor`. -->
   <symbol id="glifo" viewBox="0 0 500 500" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path stroke-width="12" d="M 218 123.5 L 121.9 179 A 21 21 0 0 0 111.5 197 L 111.5 333 A 21 21 0 0 0 121.9 351 L 239.6 419 A 21 21 0 0 0 260.4 419 L 378.1 351 A 21 21 0 0 0 388.5 333 L 388.5 197 A 21 21 0 0 0 378.1 179 L 282 123.5" opacity="0.18"/><g stroke-width="9"><circle cx="250" cy="105" r="22" fill="currentColor"/><circle cx="250" cy="225" r="18" fill="currentColor"/><circle cx="250" cy="338" r="14" fill="currentColor"/><path d="M 250 140 L 250 195"/><path d="M 250 255 L 250 315"/><g transform="translate(250, 225) rotate(45)"><path d="M 0 32 L 0 95"/><circle cx="0" cy="118" r="14" fill="currentColor"/></g><g transform="translate(250, 225) rotate(-45)"><path d="M 0 32 L 0 95"/><circle cx="0" cy="118" r="14" fill="currentColor"/></g></g></symbol>
     <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m5 18 5-5 3 3 2-2 4 4"/></symbol>
+    <!-- ⭐ 18/09/2026 — l'icona della banda dell'Aspetto. NON è inventata: è quella del mockup,
+         `TALOS-Calm-Lab-04.html:2013` (`sun:'<circle cx="12" cy="12" r="4"/>…'`), usata dal suo
+         bottone «Temi e atmosfere» a `:2046` (`{kind:'primary',ic:'sun'}`) — copiata senza cambiarne
+         un numero. Stessa griglia 24 e stesso tratto delle sorelle, e NESSUN `fill` proprio: un
+         `fill` cablato nel sorgente batte il CSS che lo dipinge (svgicons.com, «Build an SVG Sprite
+         for Modern Vite, React, and Vue Apps», letto 18/09/2026), quindi lo dipinge `.i`. -->
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol>
   <!-- ⛔ 06/9 — SETTE simboli erano CHIAMATI dal codice e non esistevano nello sprite: `icon()` non
        valida, quindi ogni uso disegnava un buco. Trovati incrociando le 36 definizioni con i 41 usi
        (`i-folder-open` sta nella modale «Nuova sessione», sotto gli occhi a ogni avvio). Stesso
@@ -1088,6 +1095,37 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
 <div role="tabpanel" tabindex="0" id="setting-panel-memoria" aria-labelledby="setting-tab-memoria" data-settings-panel="memoria" hidden><div class="talos-card talos-settings__section" data-c="SettingsSection"><p>Quanto della finestra del modello è già occupato <b>prima che tu scriva</b>: la descrizione degli attrezzi, le istruzioni di sistema e i ricordi. Il resto è lo spazio che resta alla conversazione.</p><div class="talos-contesto" id="contestoRipartizione" role="img" aria-labelledby="contestoEtichetta"><span class="talos-contesto__fetta talos-contesto__fetta--attrezzi talos-contesto__fetta--p14" data-fetta="attrezzi"></span><span class="talos-contesto__fetta talos-contesto__fetta--istruzioni talos-contesto__fetta--p4" data-fetta="istruzioni"></span><span class="talos-contesto__fetta talos-contesto__fetta--memoria talos-contesto__fetta--p2" data-fetta="memoria"></span></div><p class="talos-muted" id="contestoEtichetta">Misura non ancora eseguita.</p><div id="contestoVoci" class="talos-settings__section"></div><p class="talos-muted">Il conto degli attrezzi è una <b>stima</b>: si pesa il testo dello schema che il modello riceve, non i token che conterà il fornitore.</p></div></div><div role="tabpanel" tabindex="0" id="setting-panel-costi" aria-labelledby="setting-tab-costi" data-settings-panel="costi" hidden><div class="talos-card talos-settings__section" data-c="SettingsSection"><p>Quanto hanno consumato le tue sessioni, <b>per giorno</b> e <b>per modello</b>. I numeri vengono dalle sessioni registrate su questo computer: nessuna chiamata a un fornitore.</p><div class="talos-count" id="costiRiepilogo"></div><h4 class="talos-lab__heading">Per giorno</h4><div class="talos-card talos-table-wrap"><table class="talos-table" id="costiPerGiorno"><thead><tr><th scope="col">Giorno</th><th scope="col">Sessioni</th><th scope="col">Giri</th><th scope="col">Token</th><th scope="col">In cache</th></tr></thead><tbody></tbody></table></div><h4 class="talos-lab__heading">Per modello</h4><div class="talos-card talos-table-wrap"><table class="talos-table" id="costiPerModello"><thead><tr><th scope="col">Modello</th><th scope="col">Sessioni</th><th scope="col">Giri</th><th scope="col">Token</th><th scope="col">In cache</th></tr></thead><tbody></tbody></table></div><p class="talos-muted" id="costiNota">La cifra in denaro non si calcola qui: la dice il <b>credito del fornitore</b>, non la nostra aritmetica sui token. Qui si contano i token, che sono un dato nostro e verificabile.</p></div></div><div role="tabpanel" tabindex="0" id="setting-panel-privacy" aria-labelledby="setting-tab-privacy" data-settings-panel="privacy" hidden><div class="talos-card talos-settings__section" data-c="SettingsSection"><p>Quello che vale <b>sempre</b>, non solo per una sessione: cosa resta su questo computer e cosa se ne va. I permessi di una singola sessione stanno invece in «Strumenti agente e permessi».</p><ul data-settings-reuse="settingsPrivacyList"></ul><button data-settings-reuse="settingsSvuotaLocali" class="talos-button talos-button--secondary"></button></div><div class="talos-card talos-settings__section" data-c="SettingsSection" id="settingsTrasferimento"><h3>Porta via le preferenze</h3><p>Le preferenze vivono in questo browser. Puoi portarle su un altro computer, rileggerle da un file, o rimettere tutto com’era appena installato. Le conversazioni non si toccano.</p><div class="talos-settings__actions"><button class="talos-button talos-button--secondary" id="settingsEsporta" type="button">Esporta in un file</button><button class="talos-button talos-button--secondary" id="settingsImporta" type="button">Importa da un file</button><button class="talos-button talos-button--danger" id="settingsRipristina" type="button">Ripristina i valori iniziali</button></div><input type="file" id="settingsImportaFile" accept="application/json,.json" hidden><p class="talos-muted" id="settingsTrasferimentoEsito" role="status"></p></div></div>
 <div role="tabpanel" tabindex="0" id="setting-panel-workspace" aria-labelledby="setting-tab-workspace" data-settings-panel="workspace" hidden><div class="talos-card talos-settings__section" data-c="SettingsSection"><dl data-settings-reuse="settingsWorkspaceFacts"></dl><div class="talos-settings__actions"><button class="talos-button talos-button--secondary" data-open-panel="inspector">Apri l’albero dei file</button><button data-settings-reuse="settingsNuovaSessioneAltrove" class="talos-button talos-button--secondary"></button></div></div></div>
 <div role="tabpanel" tabindex="0" id="setting-panel-account" aria-labelledby="setting-tab-account" data-settings-panel="account" hidden><div class="talos-card talos-settings__section" data-c="SettingsSection"><h3>Account, Doctor e backup</h3><p>Controlli e configurazione dell’agente. Il backup non è disponibile da questa pagina.</p><div class="talos-settings__actions"><button class="talos-button talos-button--secondary" data-open-sheet="control">Agents</button><button class="talos-button talos-button--secondary" data-open-sheet="control">Hooks</button><button class="talos-button talos-button--secondary" data-open-sheet="capabilities">Skills</button><button class="talos-button talos-button--secondary" data-open-sheet="capabilities">Plugins</button><button class="talos-button talos-button--secondary" data-open-sheet="capabilities">MCP</button><button class="talos-button talos-button--secondary" data-control-action="doctor">Doctor</button></div></div></div></div></div></div>
+<!-- ---------- AGGIUNGI MODELLO — le due strade vere (18/09/2026) ----------
+     ⛔ MARKUP STATICO, E NON PER COMODITA': `app.js` lega le porte `[data-settings-go]` UNA VOLTA
+     SOLA all'avvio (`src/legacy/app.js:4670-4673`), quindi i due bottoni che portano al
+     laboratorio devono esistere nel documento PRIMA di quella legatura. Costruiti dopo, non
+     navigherebbero — e la navigazione andrebbe riscritta qui, cioè duplicata.
+     ⛔ La geometria è quella della modale del mockup (misurata il 18/09/2026: 600px, raggio 16px,
+     padding 0, testata 25px 26px 17px, corpo 2px 26px 24px, riga `catalog-add-row` con gap 14px e
+     padding 17px 0), ma il CONTENUTO no: nel mockup le righe sono modelli finti con «Già
+     installato» — una simulazione, dichiarata dal suo stesso occhiello «TALOS · ANTEPRIMA
+     INTERATTIVA». Qui le righe sono le due porte vere. Nessun testo nel markup: le parole stanno
+     in `settings-view.ts`, in un posto solo. -->
+<dialog class="settings-add-dialog" id="settingsAddModel" aria-labelledby="settingsAddModelTitle">
+  <header class="settings-add-dialog__head">
+    <div>
+      <span class="talos-eyebrow" data-settings-add-eyebrow></span>
+      <h2 id="settingsAddModelTitle" data-settings-add-title></h2>
+    </div>
+    <button type="button" class="settings-add-dialog__close" data-settings-add-close><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+  </header>
+  <div class="settings-add-dialog__body">
+    <p data-settings-add-intro></p>
+    <div class="settings-add-dialog__row">
+      <div><h3 data-settings-add-file></h3><p data-settings-add-file-help></p></div>
+      <button type="button" class="talos-button talos-button--primary" data-settings-road="file" data-settings-go="models" data-model-lab-go="installed"><span data-settings-add-file-go></span></button>
+    </div>
+    <div class="settings-add-dialog__row">
+      <div><h3 data-settings-add-hf></h3><p data-settings-add-hf-help></p></div>
+      <button type="button" class="talos-button talos-button--secondary" data-settings-road="hf" data-settings-go="models" data-model-lab-go="huggingface"><span data-settings-add-hf-go></span></button>
+    </div>
+  </div>
+</dialog>
 </section>
 
     <!-- ---------- DOCTOR (H1-H10) ---------- -->

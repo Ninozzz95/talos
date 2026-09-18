@@ -109,7 +109,15 @@
 
 /* Il bottone in sidebar: la voce del mockup (`#open-settings-search`) con la sua scorciatoia. */
 .settings-nav__search { justify-content: flex-start; }
-.settings-nav__kbd { margin-inline-start: auto; padding: 2px 6px; border: 1px solid var(--talos-border); border-radius: 5px; color: var(--talos-muted); font-family: inherit; font-size: .6875rem; }
+/*
+ * ⛔ `white-space:nowrap` NON È UN DETTAGLIO: senza, il chip della scorciatoia va A CAPO su due
+ *   righe — «Ctrl» sopra «K», dentro un quadratino — e non assomiglia più a un tasto.
+ *   Trovato dalla corsia B il 18/09/2026 **guardando una foto** del 4174, non leggendo il CSS:
+ *   foto `artifacts/anteprima-tema/4174-zoom-chip.png`.
+ *   Misure del mockup, prese dal suo DOM vivo: **40×20, una riga sola, font 9px, riga 13,5px**.
+ *   ⇒ 13,5 + 2 di bordo + 4 di padding = 19,5 ≈ 20 di altezza, che è quello che si vede.
+ */
+.settings-nav__kbd { margin-inline-start: auto; padding: 2px 6px; border: 1px solid var(--talos-border); border-radius: 5px; color: var(--talos-muted); font-family: inherit; font-size: 9px; line-height: 13.5px; white-space: nowrap; }
 :root[data-sidebar="icone"] .settings-nav__search .settings-nav__kbd { display: none; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section { padding: 20px 24px; margin-block-end: 18px; border: 1px solid var(--talos-border); border-radius: var(--ui-radius-surface); background: var(--talos-panel); box-shadow: none; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section > h3 { margin: 0 0 6px; font-size: .9375rem; font-weight: 600; }
@@ -148,6 +156,140 @@
 #schermoImpostazioni[data-settings-ui="v3"] .talos-kv__v { min-width: 0; overflow-wrap: anywhere; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-setting[data-td-migrata="si"] { display: none; }
 :root[data-density="compact"] #schermoImpostazioni[data-settings-ui="v3"] .talos-setting { padding-block: 12px; }
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ * ⭐⭐ 18/09/2026 — LA STRUTTURA DELLA SEZIONE ASPETTO, dal mockup `TALOS-Calm-Lab-04.html`
+ * (letto e misurato il 18/09/2026). Tutte le misure qui sotto sono STATE PRESE dal suo DOM vivo,
+ * non stimate: dove un numero del brief non tornava, ha vinto la misura (vedi la nota sulla card).
+ * ⛔ I COLORI SONO SOLO TOKEN (`var(--talos-…)`), mai valori fissi: il tema chiaro e quello scuro
+ *   passano da qui, e un colore scritto a mano si romperebbe su uno dei due.
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ */
+
+/* ── IL TELAIO A DUE COLONNE, E LA COLONNA CHE NON È MIA ───────────────────────────────────────
+   Mockup: `.settings-layout { grid-template-columns: minmax(0,1fr) 300px; gap: 36px }` — la
+   griglia calcolata è `786px 300px` a 1440 (1122 − 300 − 36), quindi la sorgente è quella.
+   ⛔ La `.settings-aside` è VUOTA e non si disegna: finché è vuota la griglia torna a una colonna.
+   `:empty` non guarda gli spazi bianchi perché il nodo è costruito in JS, senza figli di testo. */
+.settings-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; align-items: start; gap: 36px; }
+.settings-main { min-width: 0; }
+.settings-aside { min-width: 0; }
+.settings-aside:empty { display: none; }
+.settings-layout:has(> .settings-aside:empty) { grid-template-columns: minmax(0, 1fr); }
+
+/* ── LA CARD DEI GRUPPI: PIATTA, COME IL MOCKUP ─────────────────────────────────────────────────
+   Misurato sul mockup: `padding: 2px 0px 0px`, fondo `rgba(0,0,0,0)`, `border-top: 0`, raggio 0px,
+   margine 0 sulla prima — e `26px` fra un gruppo e il successivo (`.appearance-group +
+   .appearance-group { margin-top: 26px }`).
+   ⛔ La riga del brief diceva `border-radius:14px; padding:20px 24px`: MISURATA FALSA due volte —
+     `indexOf('20px 24px')` sul mockup dà −1, e il raggio 14px è della BANDA (`.theme-launcher`),
+     che ha `padding: 23px`. Il conto giusto è: la banda si prende il 14px e i 23px, la card resta
+     piatta. Ed è anche quello che le altre sezioni già fanno (Memoria, Costi, Strumenti).
+   ⛔ SCOPE STRETTO: solo le card dei gruppi dentro il pannello Aspetto. Le altre nove sezioni
+     tengono la loro card com'è oggi, e questa fase non le tocca. */
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-appearance > .talos-settings__section[data-settings-group] { padding: 2px 0 0; margin-block-end: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-appearance > .talos-settings__section[data-settings-group] + .talos-settings__section[data-settings-group] { margin-block-start: 26px; }
+
+/* ── LA TESTATA DEL GRUPPO: TITOLO E CONTEGGIO ──────────────────────────────────────────────────
+   Mockup: `.section-heading { display:flex; align-items:center; justify-content:space-between;
+   gap:10px; margin-bottom:8px }`, titolo 18px/600/27px con `letter-spacing: -.45px` ( = -.025em ),
+   conteggio 11px/400/16.5px con `letter-spacing: .77px` ( = .07em ) e nessun `text-transform`
+   (il maiuscolo è nel testo: «9 CONTROLLI»).
+   ⛔ Le misure in `rem` sono le STESSE del mockup, che ha radice 16px come noi (misurata). */
+.settings-group__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-block-end: 8px; }
+/* ⛔ LA MISURA NON BASTAVA, E SI È VISTO SOLO MISURANDO: con `.settings-group__title` (0,1,0) il
+   titolo usciva a **16px**, non a 18px. A vincere era `src/styles/index.css:1748`
+   `.talos-settings__section h3 { font-size:16px; margin:4px 0 4px }` — peso (0,1,1), in un ALTRO
+   foglio. Il mio `font-size` perdeva e il margine 4px entrava al posto dello zero. ⇒ La regola
+   prende il peso che le serve con il selettore del gruppo, e riporta il margine a zero. */
+#schermoImpostazioni[data-settings-ui="v3"] .settings-group__title { margin: 0; font-size: 1.125rem; font-weight: 600; line-height: 1.5; letter-spacing: -.025em; }
+.settings-group__count { color: var(--talos-muted); font-size: .6875rem; font-weight: 400; line-height: 1.5; letter-spacing: .07em; }
+
+/* ── LA BANDA DEL TEMA ──────────────────────────────────────────────────────────────────────────
+   Mockup `.theme-launcher`: `display:flex; align-items:center; gap:22px; padding:23px;
+   border:1px solid var(--line); border-radius:14px; background:var(--panel); margin:28px 0`;
+   titolo 23.2px (= 1.45rem) con margine `3px 0`; spiegazione 13px muta, `max-width:480px`;
+   bottone spinto a destra (`>.button { margin-left:auto; white-space:nowrap }`).
+   La miniatura: 86×64, raggio 9px, `padding:14px 10px 8px 30px`, la barra laterale di 20px a
+   sinistra, due righe da 5px (la seconda accorciata al 50% e in accento) — `span` + due `i`. */
+.settings-band { display: flex; align-items: center; gap: 22px; margin: 28px 0; padding: 23px; border: 1px solid var(--talos-border); border-radius: 14px; background: var(--talos-panel); }
+.settings-band__swatch { position: relative; flex-shrink: 0; width: 86px; height: 64px; padding: 14px 10px 8px 30px; border: 1px solid var(--talos-border); border-radius: 9px; background: var(--talos-background); }
+.settings-band__swatch span { position: absolute; inset: 0 auto 0 0; width: 20px; background: var(--talos-panel-soft); border-inline-end: 1px solid var(--talos-border); }
+.settings-band__swatch i { display: block; height: 5px; margin: 5px 0; border-radius: 3px; background: var(--talos-border); }
+.settings-band__swatch i:last-child { width: 50%; background: var(--talos-accent); }
+.settings-band__copy { flex: 1; min-width: 0; }
+.settings-band__eyebrow { letter-spacing: .17em; }
+.settings-band__name { margin: 3px 0; font-size: 1.45rem; font-weight: 600; line-height: 1.5; letter-spacing: -.02em; }
+.settings-band__help { margin: 0; max-width: 480px; color: var(--talos-muted); font-size: .8125rem; line-height: 1.5; }
+.settings-band__button { margin-inline-start: auto; white-space: nowrap; }
+
+/* ── LA PASTIGLIA CONTATA E «AGGIUNGI MODELLO» ───────────────────────────────────────────────────
+   Mockup `.badge`: `display:inline-flex; align-items:center; gap:5px; padding:4px 7px;
+   border-radius:5px; background:var(--soft); color:var(--muted); font-weight:500;
+   font-size .625rem NELLA SUA RADICE — misurata RESA: 11px, 126×23. Qui la radice è la stessa
+   (16px), quindi la misura si porta a `.6875rem` invece di copiare il numero sbagliato.
+   Il puntino è 5×5, `border-radius:50%`, colore del testo. */
+.settings-section-heading__aside { display: flex; flex: 0 0 auto; align-items: center; gap: 12px; }
+.settings-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 5px; background: var(--talos-panel-soft); color: var(--talos-muted); font-size: .6875rem; font-weight: 500; line-height: 1.4; letter-spacing: 0; white-space: nowrap; }
+.settings-badge__dot { display: inline-block; flex: none; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+/* ── IL GRUPPO CHE NON HA UNA CARD ──────────────────────────────────────────────────────────────
+   «Spazio di lettura» nomina il suo controllo e apre la sua porta: stessa anatomia di una riga
+   (`padding: 17px 0`, separatore in alto), così non sembra un'altra specie di cosa. */
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-appearance > [data-settings-group="chat"] .talos-setting { grid-template-columns: minmax(0, 1fr) auto; padding-block: 17px; }
+
+/* ── LA MODALE DELLE DUE STRADE ─────────────────────────────────────────────────────────────────
+   Misure del mockup (`.dialog`): 600px, `padding:0`, raggio 16px, ombra `0 32px 90px rgba(0,0,0,.3)`,
+   testata `25px 26px 17px`, titolo `1.375rem`, occhiello con `margin-bottom:7px`, corpo
+   `2px 26px 24px`, riga `catalog-add-row` `display:flex; gap:14px; padding:17px 0;
+   border-top:1px solid var(--line)` con `h3` a `.8125rem`, `p` a `.6875rem`, bottone
+   `.6875rem`; chiudi `.icon-button` 36×36 con raggio 7px.
+   ⛔ Sotto i 660px il mockup stringe: `calc(100vw - 24px)`, raggio 13px, testata `22px 20px 15px`,
+   corpo `0 20px 20px`, e la riga manda il bottone a capo con `margin-left:47px` (la larghezza
+   dell'icona + il suo spazio).
+   ⛔ Lo scroll della pagina si blocca come per la palette (`:has(dialog[open]:modal)`), senza JS. */
+.settings-add-dialog { width: 600px; max-width: calc(100vw - 36px); max-height: calc(100dvh - 48px); margin: auto; padding: 0; border: 1px solid var(--talos-border); border-radius: 16px; background: var(--talos-panel); color: var(--talos-text); box-shadow: 0 32px 90px rgba(0, 0, 0, .3); overflow: hidden; }
+.settings-add-dialog::backdrop { background: var(--talos-overlay); }
+.settings-add-dialog__head { display: flex; align-items: start; justify-content: space-between; gap: 16px; padding: 25px 26px 17px; }
+.settings-add-dialog__head h2 { margin: 0; font-size: 1.375rem; font-weight: 600; line-height: 1.25; letter-spacing: -.02em; }
+.settings-add-dialog__head .talos-eyebrow { margin-block-end: 7px; }
+.settings-add-dialog__close { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border: 0; border-radius: 7px; background: transparent; color: var(--talos-muted); cursor: pointer; }
+.settings-add-dialog__close:hover { color: var(--talos-text); background: var(--talos-card-hover); }
+.settings-add-dialog__close:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+.settings-add-dialog__body { max-height: inherit; padding: 2px 26px 24px; overflow: auto; }
+.settings-add-dialog__body > p { margin: 0 0 18px; color: var(--talos-muted); font-size: .8125rem; line-height: 1.85; }
+.settings-add-dialog__row { display: flex; align-items: center; gap: 14px; padding: 17px 0; border-block-start: 1px solid var(--talos-border); }
+.settings-add-dialog__row > div { flex: 1; min-width: 0; }
+.settings-add-dialog__row h3 { margin: 0; font-size: .8125rem; font-weight: 600; line-height: 1.4; }
+.settings-add-dialog__row p { margin: 4px 0 0; color: var(--talos-muted); font-size: .6875rem; line-height: 1.6; }
+/* ⛔ I BOTTONI RESTANO QUELLI DELLA CASA, e la deviazione è DICHIARATA: nel mockup i bottoni
+   sono più piccoli del nostro sistema (12px nella banda, 11px nella modale, contro i 14px di
+   `.talos-button`), ma la scala dei controlli qui non si tocca — la riga del mockup è alta 111px
+   e la nostra 54, e il brief ha già accettato quella differenza. Un bottone a 12px dentro una
+   schermata a 14px sarebbe l'unica cosa fuori posto, e non è questa la corsia che rifà i bottoni. */
+.settings-add-dialog__row > .talos-button { flex: none; }
+:root:has(dialog.settings-add-dialog[open]:modal) { overflow: hidden; scrollbar-gutter: stable; }
+
+@container settings (max-width: 950px) {
+  /* Mockup `@media (max-width: 1250px)`: `.settings-layout { grid-template-columns: 250px 24px }`.
+     La traduzione è quella che questo foglio usa già altrove (1250 di viewport ≈ 950 di
+     contenitore, cioè la larghezza della schermata senza la barra laterale dell'app). */
+  .settings-layout { grid-template-columns: minmax(0, 1fr) 250px; gap: 24px; }
+}
+@container settings (max-width: 820px) {
+  /* Mockup `@media (max-width: 1080px)`: una colonna sola — la stessa sottrazione di prima. */
+  .settings-layout { grid-template-columns: minmax(0, 1fr); }
+  /* ⛔ LA METÀ CHE MANCAVA, e sta nello STESSO blocco del mockup: a finestra stretta l'anteprima non
+     si impila sotto il contenuto, SPARISCE —
+     `@media (max-width:1080px){.settings-layout{grid-template-columns:1fr}.appearance-preview{display:none}}`
+     (`TALOS-Calm-Lab-04.html`, misurato il 18/09/2026). Senza questa riga, quando l'altra corsia
+     monterà l'anteprima, a finestra stretta comparirebbe una colonna sotto il contenuto che il
+     mockup non ha. Copre le DUE forme che questo posto può avere: `.settings-aside` (nostra) e
+     `[data-settings-preview-mount]` (il posto che l'altra corsia cerca nel guscio). */
+  .settings-layout > .settings-aside,
+  .settings-layout > [data-settings-preview-mount] { display: none; }
+}
 @container settings (max-width: 950px) {
   #schermoImpostazioni[data-settings-ui="v3"] .talos-settings { grid-template-columns: 185px minmax(0, 1fr); gap: 18px; }
   .settings-section-heading { flex-wrap: wrap; }

@@ -1,3 +1,4 @@
+import { montaAnteprimaTema } from '../../components/anteprima-tema.js';
 import { localizeSettingsCopy } from './static-copy.ts';
 import { SETTINGS_SECTIONS, CHAT_FIELDS, FIELD_HELP, buildSettingsIndex, searchSettings, localText } from './schema.ts';
 import type { LegacySettingField, SettingsLanguage, SettingsSection } from './schema.ts';
@@ -20,15 +21,19 @@ interface SettingsViewOptions {
 const SPRITE_SEZIONE: Record<string, string> = {
   chat: 'send', sliders: 'settings', cpu: 'command', key: 'link', chart: 'bolt', activity: 'user',
 };
-function iconaSezione(id: SettingsSection): SVGElement {
+/** Un segno del progetto, per nome di sprite: nessun disegno nuovo, una sola fabbrica. */
+function iconaSprite(sprite: string, className: string): SVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('class', 'i talos-nav-item__icon');
+  svg.setAttribute('class', 'i ' + className);
   svg.setAttribute('aria-hidden', 'true');
   const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-  const sprite = SETTINGS_SECTIONS[id]?.icon ?? 'settings';
-  use.setAttribute('href', '#i-' + (SPRITE_SEZIONE[sprite] ?? sprite));
+  use.setAttribute('href', '#i-' + sprite);
   svg.append(use);
   return svg;
+}
+function iconaSezione(id: SettingsSection): SVGElement {
+  const sprite = SETTINGS_SECTIONS[id]?.icon ?? 'settings';
+  return iconaSprite(SPRITE_SEZIONE[sprite] ?? sprite, 'talos-nav-item__icon');
 }
 
 const words = {
@@ -65,7 +70,56 @@ const words = {
   /* Il glifo della scorciatoia non si annuncia: «Ctrl K» letto da uno screen reader è
      «Control K», e va detto a parole invece che lasciato al caso. */
   shortcutSpoken: { it: 'Scorciatoia Control K', en: 'Control K shortcut' },
+  /* ⭐⭐ 18/09/2026 — LA STRUTTURA DEL MOCKUP NELLA SEZIONE ASPETTO (i cinque gruppi, la banda
+     del tema, la pastiglia contata, «Aggiungi modello»). */
+  bandEyebrow: { it: 'Il tuo tema', en: 'Your theme' },
+  bandHelp: { it: 'Palette, modalità colore, scene e tutte le regolazioni dello sfondo.', en: 'Palette, colour mode, scenes and every background adjustment.' },
+  bandOpen: { it: 'Temi e atmosfere', en: 'Themes and atmospheres' },
+  /* ⛔ IL MAIUSCOLO È NEL TESTO, NON IN CSS: nel mockup la didascalia del gruppo è la stringa
+     «9 CONTROLLI» scritta così (`${list.length} CONTROLLI` in `settings.mjs`), e il suo stile
+     misura `text-transform: none`. Il numero è contato, la parola è questa. */
+  groupCount: { it: 'CONTROLLI', en: 'CONTROLS' },
+  /* ⛔ E IL SINGOLARE È UNA MIA CORREZIONE DICHIARATA: il mockup scriverebbe «1 CONTROLLI», che in
+     italiano è sbagliato. Il numero resta identico; cambia la desinenza. */
+  groupCountOne: { it: 'CONTROLLO', en: 'CONTROL' },
+  badgeControls: { it: 'controlli', en: 'controls' },
+  badgeThemes: { it: 'temi', en: 'themes' },
+  addModel: { it: 'Aggiungi modello', en: 'Add model' },
+  /* ⛔ IL TITOLO È QUELLO DEL MOCKUP, preso dal suo `<h2 id="dialog-title">` (misurato il
+     18/09/2026), non un mio riassunto: «Aggiungi al tuo laboratorio». */
+  addModelTitle: { it: 'Aggiungi al tuo laboratorio', en: 'Add to your laboratory' },
+  /* ⛔ L'INTRODUZIONE INVECE NON SI PUÒ COPIARE: il mockup dice «In questa anteprima ogni
+     operazione è simulata», e qui sarebbe FALSO — le due strade sono vere e toccano il disco.
+     Deviazione dichiarata, con le sue parole vere al posto di quelle finte. */
+  addModelIntro: { it: 'Un catalogo, due destinazioni. Qui però non c’è nessuna simulazione: un file che hai già su questo computer, o la ricerca vera nel catalogo Hugging Face.', en: 'One catalogue, two destinations. Here nothing is simulated: a file you already have on this computer, or a real search in the Hugging Face catalogue.' },
+  addModelFile: { it: 'Importa un file .gguf', en: 'Import a .gguf file' },
+  addModelFileHelp: { it: 'Scegli un file dal disco: TALOS lo copia nel catalogo locale e lo rende caricabile.', en: 'Pick a file from disk: TALOS copies it into the local catalogue and makes it loadable.' },
+  addModelFileGo: { it: 'Scegli il file', en: 'Choose the file' },
+  addModelHf: { it: 'Cerca nel catalogo Hugging Face', en: 'Search the Hugging Face catalogue' },
+  addModelHfHelp: { it: 'Apre la scheda Hugging Face del laboratorio, dove la ricerca è vera e i modelli si scaricano.', en: 'Opens the lab’s Hugging Face tab, where the search is real and models can be downloaded.' },
+  addModelHfGo: { it: 'Cerca modelli', en: 'Search models' },
+  addModelClose: { it: 'Chiudi finestra', en: 'Close window' },
+  /* ⛔ Qui NON c'è il nome del controllo di «Spazio di lettura»: quello arriva dal CONTRATTO
+     (`chatFullWidthToggle`, titolo e aiuto), così com'è, invece di essere riscritto. Resta solo
+     la parola della porta. */
+  readSpaceGo: { it: 'Apri Chat e composer', en: 'Open Chat and composer' },
 };
+
+/*
+ * ⭐⭐ 18/09/2026 — I CINQUE GRUPPI DELLA SEZIONE ASPETTO, con i titoli del mockup.
+ * Fonte: `prototypes/calm-lab/src/settings.mjs`, l'array `groups` di `renderSettings` —
+ * `['design','Interfaccia e conversazione'] ['sfondo','Accessibilità e risorse']
+ * ['animazioni','Movimento dell'interfaccia'] ['desktop','Desktop'] ['chat','Spazio di lettura']` —
+ * letto il 18/09/2026. L'ORDINE È QUELLO, e la chiave è la stessa `gruppo` che il contratto
+ * `CAMPI_IMPOSTAZIONI` dà a ogni campo: nessuna mappa inventata, nessun raggruppamento nuovo.
+ */
+const GRUPPI: ReadonlyArray<readonly [string, { it: string; en: string }]> = [
+  ['design', { it: 'Interfaccia e conversazione', en: 'Interface and conversation' }],
+  ['sfondo', { it: 'Accessibilità e risorse', en: 'Accessibility and resources' }],
+  ['animazioni', { it: 'Movimento dell’interfaccia', en: 'Interface motion' }],
+  ['desktop', { it: 'Desktop', en: 'Desktop' }],
+  ['chat', { it: 'Spazio di lettura', en: 'Reading space' }],
+];
 
 /** Composes existing controls; never copies their values into a second settings store. */
 export function createSettingsView(screen: HTMLElement, options: SettingsViewOptions) {
@@ -84,7 +138,58 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   if (!page || !layout || !nav || !firstPanel?.parentElement) throw Error('Settings structure is incomplete.');
   const content = firstPanel.parentElement;
   content.classList.add('settings-content'); screen.dataset.settingsUi = 'v3';
-  const panels = () => [...content.children].filter((e): e is HTMLElement => e instanceof HTMLElement && e.hasAttribute('data-settings-panel'));
+  /*
+   * ⭐⭐ 18/09/2026 — IL TELAIO A DUE COLONNE DEL MOCKUP, e la colonna riservata.
+   * Il mockup divide la pagina in `.settings-layout` = `minmax(0,1fr) 300px` con gap 36px:
+   * misurato il 18/09/2026 su `TALOS-Calm-Lab-04.html` a 1440 di viewport, la griglia
+   * calcolata è `786px 300px` — cioè 1122 − 300 − 36 ⇒ la sorgente è `minmax(0,1fr) 300px`,
+   * `gap: 36px` (il brief la scriveva come `786px | 300px`, che è il RISULTATO, non la regola).
+   * ⛔ LA COLONNA DA 300px NON È DI QUESTA CORSIA: la disegna l'anteprima. Qui si PRENOTA il
+   *   posto con un `div.settings-aside` VUOTO — non si disegna niente e non si riempie, perché
+   *   due corsie che scrivono nello stesso riquadro si cancellano a vicenda. Finché è vuota,
+   *   la regola `:has(> .settings-aside:empty)` la toglie dal calcolo e la pagina resta a una
+   *   colonna come è oggi; il giorno che l'anteprima ci mette qualcosa, il posto c'è già.
+   * ⛔ `panels()` GUARDAVA `content.children`, e con il telaio in mezzo i pannelli diventano
+   *   NIPOTI: quella riga, non aggiornata, mostrerebbe tutte e dieci le sezioni insieme —
+   *   cioè la sezione scelta più nove. Ora legge da `main`, che è il loro genitore vero.
+   * ⛔ La riga di stato dei risultati (`[data-settings-results]`) RESTA figlia diretta di
+   *   `content`: è l'annuncio della ricerca in pagina e non appartiene a nessuna delle due
+   *   colonne. È per attrezzo, non per anno: `status` più sotto è `q('[data-settings-results]')`.
+   * ⛔ Al RIMONTAGGIO non si incastra un secondo telaio dentro il primo (sarebbe la forma del
+   *   doppio `#schermoHome`): se esiste già, si riusa — `montaImpostazioni` chiama `dispose()`
+   *   e ricrea la vista, ma i nodi del pannello sono gli stessi.
+   */
+  const telaioPrecedente = q<HTMLElement>(':scope > .settings-layout[data-settings-layout]');
+  const shell = telaioPrecedente ?? node('div', 'settings-layout');
+  const main = shell.querySelector<HTMLElement>(':scope > [data-settings-main]') ?? node('div', 'settings-main');
+  const aside = shell.querySelector<HTMLElement>(':scope > [data-settings-preview-mount]') ?? node('div', 'settings-aside');
+  shell.dataset.settingsLayout = ''; main.dataset.settingsMain = ''; aside.dataset.settingsPreviewMount = '';
+  if (!telaioPrecedente) {
+    for (const child of [...content.children]) if (!child.hasAttribute('data-settings-results')) main.append(child);
+    shell.append(main, aside);
+    content.append(shell);
+  }
+  const panels = () => [...main.children].filter((e): e is HTMLElement => e instanceof HTMLElement && e.hasAttribute('data-settings-panel'));
+  /*
+   * ⭐⭐ 18/09/2026 — IL MONTAGGIO DELLA COLONNA DELL'ANTEPRIMA (corsia B → qui).
+   * La corsia A ha prenotato lo slot (`[data-settings-preview-mount]`, 300px) e il foglio lo
+   * collassa da solo quando è vuoto (`:has(> .settings-aside:empty)`), quindi basta decidere
+   * QUANDO montarla: **solo nella sezione Aspetto**, come nel mockup, che la colonna ce l'ha lì.
+   * ⛔ E si SMONTA uscendo, non si nasconde: lasciandola montata e vuota, `:empty` non varrebbe
+   *   più e resterebbe una colonna da 300px di niente nelle altre nove sezioni.
+   * ⛔ `ferma()` del modulo fa esattamente questo — ferma il giro del canvas, spegne gli
+   *   osservatori e rimuove la colonna — ed è il motivo per cui è una funzione del modulo e non
+   *   una rimozione fatta a mano da qui.
+   */
+  let anteprimaTema: { ferma(): void; aggiorna(): void } | null = null;
+  const sincronizzaAnteprima = (sezione: SettingsSection | null) => {
+    if (sezione === 'appearance') {
+      if (!anteprimaTema) anteprimaTema = montaAnteprimaTema(aside, { document: doc, lingua: options.language() }) as typeof anteprimaTema;
+      else anteprimaTema.aggiorna();
+      return;
+    }
+    if (anteprimaTema) { anteprimaTema.ferma(); anteprimaTema = null; }
+  };
   const search = q<HTMLInputElement>('[data-settings-query]');
   if (!search) throw Error('Settings search is missing.');
   const previousQuery = search.value;
@@ -134,7 +239,15 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   }
   const heading = node('header', 'settings-section-heading'); heading.dataset.settingsChrome = '';
   const headingCopy = node('div'); const eyebrow = node('span', 'talos-eyebrow'); const h2 = node('h2'); const description = node('p'); const scope = node('span', 'settings-scope');
-  h2.tabIndex = -1; h2.dataset.settingsHeading = ''; eyebrow.dataset.settingsEyebrow = ''; headingCopy.append(eyebrow, h2, description); heading.append(headingCopy, scope);
+  /*
+   * ⭐ 18/09/2026 — LA CODA DELLA TESTATA. Il mockup tiene i distintivi a DESTRA del titolo
+   *   (`.section-heading` con `justify-content: space-between`), nella stessa riga: la pastiglia
+   *   dei conteggi in Aspetto e «Aggiungi modello» nel Laboratorio. Qui c'è il posto dove
+   *   metterli — un contenitore solo, così l'intestazione continua a essere due blocchi e non
+   *   una fila di figli che si spostano a seconda di cosa è visibile.
+   */
+  const coda = node('div', 'settings-section-heading__aside');
+  h2.tabIndex = -1; h2.dataset.settingsHeading = ''; eyebrow.dataset.settingsEyebrow = ''; headingCopy.append(eyebrow, h2, description); coda.append(scope); heading.append(headingCopy, coda);
   /*
    * ⭐⭐ 18/09/2026 — IL BREADCRUMB. Il mockup ce l'ha («Impostazioni › Laboratorio modelli»), qui
    *   non esisteva (misurato: 0 elementi con `[class*=breadcrumb]` nello schermo).
@@ -166,6 +279,177 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   const resultList = node('ul', 'settings-result-list'); const noResults = node('div', 'settings-empty');
   const emptyTitle = node('h3'); const emptyHelp = node('p'); noResults.append(emptyTitle, emptyHelp); results.append(resultTitle, status, resultList, noResults);
   content.prepend(breadcrumb, heading, results);
+  /* ══════════════════════════════════════════════════════════════════════════════
+   * ⭐⭐ 18/09/2026 — LA STRUTTURA DELLA SEZIONE ASPETTO come la disegna il mockup
+   * (`TALOS-Calm-Lab-04.html`, letto e misurato il 18/09/2026): la BANDA del tema in cima,
+   * i CINQUE GRUPPI con titolo e conteggio, la PASTIGLIA contata, e «Aggiungi modello»
+   * nella testata del Laboratorio modelli.
+   *
+   * ⛔ I NUMERI SONO CONTATI, MAI SCRITTI. I conteggi dei gruppi e la pastiglia escono dal
+   *    contratto vero — `options.fields` (= `CAMPI_IMPOSTAZIONI`, 40 campi), le `opzioni` di
+   *    `themePresetSelect` (14 temi) — e dalla lista dei controlli che vivono nello studio
+   *    temi (`options.studioIds` = `CONTROLLI_MIGRATI`, 14): quelli NON si contano due volte,
+   *    perché il gruppo è la loro porta, non la loro casa.
+   *    Partizioni misurate alla fonte il 18/09/2026 (`src/components/impostazioni-campi.js`,
+   *    campo `gruppo`): design 12 − 3 = 9 · sfondo 15 − 11 = 4 · animazioni 11 · desktop 1 ·
+   *    chat 1 — esattamente i numeri del mockup: 9 · 4 · 11 · 1 · 1.
+   * ⛔ E la pastiglia si spiega: 40 controlli sono i campi del contratto; le righe in pagina
+   *    sono 41 perché `workspaceRestore` è un controllo che il contratto non elenca. Si conta
+   *    il contratto, ed è la prova a dire quale riga lo eccede.
+   * ══════════════════════════════════════════════════════════════════════════════ */
+  const campoDi = (id: string) => options.fields.find(field => field.id === id);
+  /** I controlli che il gruppo mostra: i suoi campi, meno quelli che vivono nello studio temi. */
+  const contaGruppo = (gruppo: string) => options.fields.filter(field => field.gruppo === gruppo && !options.studioIds.includes(field.id)).length;
+  const etichetteTema = campoDi('themePresetSelect')?.opzioni ?? [];
+
+  /*
+   * ── LA BANDA DEL TEMA ────────────────────────────────────────────────────────
+   * Il mockup: `<section class="theme-launcher">` con la miniatura (`span` + due `i`), un
+   * occhiello «IL TUO TEMA», il NOME del tema, la spiegazione, e a destra il bottone che apre
+   * lo studio (`.theme-launcher > .button { margin-left: auto }`). Misure applicate in
+   * `settings.css`: raggio 14px, padding 23px, margine `28px 0`, miniatura 86×64.
+   * ⛔ IL NOME NON SI SCRIVE: si LEGGE. Il mockup lo stampa dal suo stato (`${theme}`) e in
+   *   pagina c'è scritto «Calm» solo perché il tema è Calm. Qui la verità sta sulla radice —
+   *   `documentElement.dataset.talosTheme`, scritto da `applicaThemeDesktop`
+   *   (`src/legacy/app.js:14744-14749`), misurato vivo il 18/09/2026: `calm` — e l'etichetta
+   *   si prende dal contratto (`themePresetSelect.opzioni`), non da una parola scritta qui.
+   * ⛔ Se la radice tace e il contratto non ha quell'etichetta, il nome RESTA VUOTO: un tema
+   *   inventato a schermo è peggio di un nome mancante.
+   */
+  function nomeTema() {
+    const chiave = doc.documentElement.dataset.talosTheme;
+    if (!chiave) return '';
+    const etichetta = etichetteTema.find(opzione => opzione[0] === chiave)?.[1];
+    return etichetta ? options.translate(etichetta) : '';
+  }
+  const banda = node('section', 'settings-band'); banda.dataset.settingsBand = ''; banda.dataset.settingsChrome = '';
+  const bandaSwatch = node('div', 'settings-band__swatch'); bandaSwatch.setAttribute('aria-hidden', 'true');
+  bandaSwatch.append(node('span'), node('i'), node('i'));
+  const bandaCopia = node('div', 'settings-band__copy');
+  const bandaOcchiello = node('span', 'talos-eyebrow settings-band__eyebrow');
+  const bandaNome = node('h3', 'settings-band__name'); bandaNome.dataset.settingsBandName = '';
+  const bandaAiuto = node('p', 'settings-band__help');
+  const bandaApri = node('button', 'talos-button talos-button--primary settings-band__button'); bandaApri.type = 'button';
+  const bandaEtichetta = node('span', 'settings-band__button-label');
+  /* ⭐ 18/09/2026 — l'icona del mockup, portata VERA invece che sostituita. Il mockup disegna il
+     suo bottone «Temi e atmosfere» con `ic:'sun'` (`TALOS-Calm-Lab-04.html:2046`) e il path di quel
+     sole sta nel suo dizionario a `:2013`: il simbolo `i-sun` è stato aggiunto allo sprite con
+     QUELLE coordinate, senza cambiarne un numero (`index.template.html`, sotto `i-image`).
+     ⛔ Prima qui c'era `image`, il segno che l'app mette sulla porta dello studio temi
+     (`src/components/theme-studio.js:1054`): era la scelta prudente di ieri, ma il mockup è legge e
+     il suo disegno esisteva. Lo studio temi NON si tocca: la sua icona resta dov'è. */
+  bandaApri.append(iconaSprite('sun', 'settings-band__icon'), bandaEtichetta);
+  bandaApri.addEventListener('click', () => options.openStudio('themePresetSelect'), { signal });
+  bandaCopia.append(bandaOcchiello, bandaNome, bandaAiuto);
+  banda.append(bandaSwatch, bandaCopia, bandaApri);
+  content.insertBefore(banda, shell);
+  /* Il tema può cambiare mentre questa schermata è aperta (lo studio è a un clic): il nome
+     segue la radice invece di restare quello di quando si è aperta la pagina. */
+  const osservaTema = new MutationObserver(() => { bandaNome.textContent = nomeTema(); });
+  osservaTema.observe(doc.documentElement, { attributes: true, attributeFilter: ['data-talos-theme'] });
+
+  /*
+   * ── LA PASTIGLIA CONTATA E «AGGIUNGI MODELLO», NELLA CODA DELLA TESTATA ──────
+   * Il mockup: `<span class="badge muted"><span class="status-dot"></span>40 controlli · 14 temi</span>`
+   * (`padding: 4px 7px`, raggio 5px, 11px, `.625rem` nel mockup) e, nella testata del
+   * laboratorio, il bottone «Aggiungi modello» con l'icona `plus` (che ESISTE, `#i-plus`).
+   */
+  const pastiglia = node('span', 'settings-badge'); pastiglia.dataset.settingsBadge = '';
+  const pastigliaPunto = node('span', 'settings-badge__dot'); pastigliaPunto.setAttribute('aria-hidden', 'true');
+  const pastigliaTesto = node('span', 'settings-badge__label');
+  pastiglia.append(pastigliaPunto, pastigliaTesto);
+  const aggiungi = node('button', 'talos-button talos-button--primary settings-add-model'); aggiungi.type = 'button'; aggiungi.dataset.settingsAddModel = '';
+  const aggiungiEtichetta = node('span', 'settings-add-model__label');
+  aggiungi.append(iconaSprite('plus', 'settings-add-model__icon'), aggiungiEtichetta);
+  coda.append(pastiglia, aggiungi);
+
+  /*
+   * ── LE DUE STRADE VERE DI «AGGIUNGI MODELLO» ────────────────────────────────
+   * ⛔ La modale è MARKUP STATICO nel template, non costruita qui: `app.js` lega le porte
+   *   `[data-settings-go]` UNA VOLTA SOLA all'avvio (`src/legacy/app.js:4670-4673`), quindi un
+   *   bottone creato dopo non eredita quella navigazione — bisognerebbe riscriverla, cioè
+   *   duplicarla. Qui si COLLEGA soltanto: la modale si apre e si chiude, e le due strade
+   *   portano dove portano le porte che l'app già conosce.
+   * ⛔ LA PRIMA STRADA NON IMPORTA NIENTE: chiude la modale e preme il BOTTONE VERO che esiste
+   *   da sempre (`#modelLabImportButton`, `src/legacy/app.js`) — stesso gesto, stessa logica,
+   *   nessuna copia. Se quel bottone non c'è, non si finge un import: resta la navigazione.
+   * ⛔ La seconda porta alla scheda Hugging Face del laboratorio, dove la ricerca è vera.
+   */
+  const modale = q<HTMLDialogElement>('#settingsAddModel');
+  if (modale) {
+    aggiungi.addEventListener('click', () => { if (!modale.open) modale.showModal(); }, { signal });
+    modale.querySelector('[data-settings-add-close]')?.addEventListener('click', () => modale.close(), { signal });
+    modale.addEventListener('click', event => { if (event.target === modale) modale.close(); }, { signal });
+    for (const strada of modale.querySelectorAll<HTMLElement>('[data-settings-road]')) {
+      strada.addEventListener('click', () => {
+        modale.close();
+        if (strada.dataset.settingsRoad === 'file') q<HTMLElement>('#modelLabImportButton')?.click();
+      }, { signal });
+    }
+  }
+
+  /*
+   * ── I CINQUE GRUPPI: TITOLO E CONTEGGIO ─────────────────────────────────────
+   * Il mockup: `<div class="section-heading"><h2 id="group-…">Titolo</h2><span class="text-caption">9 CONTROLLI</span></div>`
+   * con le righe SUBITO dopo — nessun occhiello, nessun paragrafo (misurato: i figli del primo
+   * gruppo sono `.section-heading` + `.setting-row` × N).
+   * ⛔ L'occhiello e il titolo VECCHI RESTANO NEL DOM e si nascondono con `hidden`: togliere
+   *   dalla pagina i nodi su cui `static-copy.ts` localizza (`[data-settings-group="design"] >
+   *   .talos-eyebrow`, `> h3`) spegnerebbe la traduzione di quelle stringhe — e il DOM è la
+   *   memoria delle righe che queste card hanno oggi.
+   * ⛔ Il PARAGRAFO INVECE RESTA VISIBILE: il mockup non ce l'ha, ma dice il vero («Preferenze di
+   *   questo browser…», «Regola il movimento e quando sospenderlo…») ed è una cosa che il mockup
+   *   non ha perché non ha i vincoli che abbiamo noi. Deviazione dichiarata, non dimenticata.
+   * ⛔ `role="group"` + `aria-labelledby`: il mockup usa `<section>`, che qui sarebbe un'altra
+   *   landmark dentro la pagina; il gruppo con un nome è la traduzione onesta.
+   */
+  const TITOLI = new Map(GRUPPI);
+  function intesta(card: HTMLElement, gruppo: string) {
+    const titolo = TITOLI.get(gruppo); if (!titolo) return;
+    let testa = card.querySelector<HTMLElement>(':scope > [data-settings-group-head]');
+    if (!testa) {
+      testa = node('div', 'settings-group__head'); testa.dataset.settingsGroupHead = '';
+      const nome = node('h3', 'settings-group__title'); nome.id = 'settings-group-' + gruppo; nome.dataset.settingsGroupTitle = '';
+      const conteggio = node('span', 'settings-group__count'); conteggio.dataset.settingsGroupCount = '';
+      testa.append(nome, conteggio); card.prepend(testa);
+      for (const figlio of [...card.children]) {
+        if (figlio === testa) continue;
+        if (figlio.classList.contains('talos-eyebrow') || /^H[1-6]$/.test(figlio.tagName)) (figlio as HTMLElement).hidden = true;
+      }
+    }
+    card.setAttribute('role', 'group'); card.setAttribute('aria-labelledby', 'settings-group-' + gruppo);
+  }
+  for (const [gruppo] of GRUPPI) {
+    const card = main.querySelector<HTMLElement>('#setting-panel-appearance > [data-settings-group="' + gruppo + '"]');
+    if (card) intesta(card, gruppo);
+  }
+  /*
+   * ── IL QUINTO GRUPPO NON HA UNA CARD, E SE NE ACCORGE ──────────────────────
+   * «Spazio di lettura» esiste nel contratto (`chat`: 1 campo, `chatFullWidthToggle`) ma la sua
+   * preferenza vive nel pannello Chat, dove la corsia della chat l'ha portata. Il mockup, che
+   * ha una lista sola, non conosce il problema.
+   * ⛔ Non si duplica il controllo (sarebbe due posti che scrivono lo stesso dato) e non si
+   *   cancella il gruppo (sarebbe un controllo che sparisce dal conteggio): la card DICE IL
+   *   VERO — nomina il controllo con il titolo e l'aiuto DEL CONTRATTO e apre la sua porta.
+   * ⛔ La porta è `data-settings-group-go`, non `data-settings-go`: quell'altro lo lega `app.js`
+   *   una volta sola all'avvio, e un attributo che promette un comportamento che non c'è è
+   *   peggio di un attributo che non c'è.
+   */
+  let cardChat = main.querySelector<HTMLElement>('#setting-panel-appearance > [data-settings-group="chat"]');
+  if (!cardChat) {
+    cardChat = node('div', 'talos-card talos-settings__section'); cardChat.dataset.settingsGroup = 'chat';
+    const riga = node('div', 'talos-setting'); riga.dataset.settingsGroupField = 'chatFullWidthToggle';
+    const info = node('div');
+    const nomeCampo = node('p', 'talos-setting__label'); nomeCampo.dataset.settingsGroupFieldName = '';
+    const aiutoCampo = node('p', 'talos-setting__help'); aiutoCampo.dataset.settingsGroupFieldHelp = '';
+    info.append(nomeCampo, aiutoCampo);
+    const vai = node('button', 'talos-button talos-button--secondary'); vai.type = 'button'; vai.dataset.settingsGroupGo = 'chat';
+    vai.addEventListener('click', () => choose('chat'), { signal });
+    riga.append(info, vai); cardChat.append(riga);
+    main.querySelector<HTMLElement>('#setting-panel-appearance')?.append(cardChat);
+  }
+  intesta(cardChat, 'chat');
+
   /*
    * ⭐⭐ 18/09/2026 — IL CERCATORE DEL MOCKUP (FASE 1b), e il salto alla riga in un posto solo.
    * Il mockup ha il cercatore in SIDEBAR (`#open-settings-search` + `kbd` «Ctrl K») e i
@@ -209,10 +493,7 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   const paletteStatus = node('p', 'settings-palette__count'); paletteStatus.setAttribute('role', 'status'); paletteStatus.setAttribute('aria-live', 'polite');
   const paletteList = node('ul', 'settings-palette__results'); paletteList.id = 'settingsPaletteResults';
   const paletteEmpty = node('p', 'settings-palette__empty');
-  const paletteIcona = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  paletteIcona.setAttribute('class', 'i settings-palette__icon'); paletteIcona.setAttribute('aria-hidden', 'true');
-  const paletteUse = document.createElementNS('http://www.w3.org/2000/svg', 'use'); paletteUse.setAttribute('href', '#i-search');
-  paletteIcona.append(paletteUse);
+  const paletteIcona = iconaSprite('search', 'settings-palette__icon');
   paletteField.append(paletteIcona, paletteQuery);
   paletteBox.append(paletteHead, paletteField, paletteStatus, paletteList, paletteEmpty);
   palette.append(paletteBox);
@@ -253,10 +534,7 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   const cercaEtichetta = node('span', 'talos-nav-item__label');
   const cercaTasto = node('kbd', 'settings-nav__kbd'); cercaTasto.setAttribute('aria-hidden', 'true');
   const cercaDetto = node('span', 'workspace-sr');
-  const cercaIcona = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  cercaIcona.setAttribute('class', 'i talos-nav-item__icon'); cercaIcona.setAttribute('aria-hidden', 'true');
-  const cercaUse = document.createElementNS('http://www.w3.org/2000/svg', 'use'); cercaUse.setAttribute('href', '#i-search');
-  cercaIcona.append(cercaUse);
+  const cercaIcona = iconaSprite('search', 'talos-nav-item__icon');
   cercaBottone.append(cercaIcona, cercaEtichetta, cercaDetto, cercaTasto);
   cercaBottone.addEventListener('click', () => apriPalette(), { signal });
   nav.insertBefore(cercaBottone, list);
@@ -322,9 +600,28 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     }
     mobile.value = selected; clear.hidden = !searching;
     for (const panel of panels()) panel.hidden = searching || panel.dataset.settingsPanel !== selected;
+    // La colonna dell'anteprima esiste solo dove il mockup la mette, e sparisce altrove —
+    // anche durante una ricerca, che sostituisce la vista.
+    sincronizzaAnteprima(searching ? null : selected);
     heading.hidden = searching; results.hidden = !searching; breadcrumb.hidden = searching;
+    /* ⭐ 18/09/2026 — CHI SI VEDE, PER SEZIONE. La banda e la pastiglia sono dell'Aspetto,
+       «Aggiungi modello» è del Laboratorio: ognuna sparisce dove non è la sua sezione, invece
+       di restare appesa in tutte e nove le altre. */
+    banda.hidden = searching || selected !== 'appearance';
+    pastiglia.hidden = selected !== 'appearance';
+    aggiungi.hidden = selected !== 'models';
     const metadata = SETTINGS_SECTIONS[selected];
     h2.textContent = localText(metadata.title, options.language()); description.textContent = localText(metadata.description, options.language()); scope.textContent = localText(metadata.scope, options.language());
+    /*
+     * ⛔ UNA PASTIGLIA SOLA IN ASPETTO — owner, 18/09/2026: «una sola, quella del mockup».
+     *   La pastiglia dei due numeri si vede solo qui (`pastiglia.hidden = selected !== 'appearance'`,
+     *   riga 611), quindi lo **scope** — «Questo profilo», che dice a cosa si applica la
+     *   preferenza — si nasconde **solo qui**, simmetricamente.
+     * ⛔ E NON SI PERDE NIENTE: nelle altre **nove** sezioni lo scope resta dov'è, perché lì il
+     *   mockup non ha niente da mostrare e non c'è nessuna pastiglia con cui litigare. Nella
+     *   stessa testata le due pastiglie erano l'una accanto all'altra, e il mockup ne ha una.
+     */
+    scope.hidden = selected === 'appearance';
     crumbNow.textContent = localText(metadata.title, options.language());
     /* L'eyebrow c'e' solo dove il mockup ce l'ha (Aspetto, Laboratorio): per le altre otto
        sezioni resta nascosto, invece di mostrare una parola inventata per simmetria. */
@@ -356,6 +653,44 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     const sessionFacts = q<HTMLElement>('#settingsChatFacts'); const sessionCard = sessionFacts?.closest<HTMLElement>('.talos-settings__section');
     if (sessionCard) { const name = sessionCard.querySelector('h3'); const note = sessionCard.querySelector(':scope > p'); const link = sessionCard.querySelector('[data-settings-go="appearance"]'); if (name) name.textContent = tx('currentSession'); if (note) note.textContent = tx('currentSessionHelp'); if (link) link.textContent = tx('appearanceLink'); }
     const summary = q<HTMLElement>('[data-settings-advanced] > summary'); if (summary) { summary.querySelector('span')!.textContent = tx('advanced'); summary.querySelector('small')!.textContent = tx('advancedHelp'); }
+    /* ⭐⭐ 18/09/2026 — LA STRUTTURA DELL'ASPETTO: banda, pastiglia, gruppi, e la modale.
+       ⛔ I nodi si cercano NEL DOM e non si tengono in una variabile: al rimontaggio le card e i
+         gruppi sono gli stessi nodi di prima, e `createSettingsView` non li ricrea — un
+         riferimento catturato al primo montaggio punterebbe a elementi staccati. */
+    bandaOcchiello.textContent = tx('bandEyebrow'); bandaAiuto.textContent = tx('bandHelp');
+    bandaEtichetta.textContent = tx('bandOpen'); bandaNome.textContent = nomeTema();
+    const temi = etichetteTema.length;
+    pastigliaTesto.textContent = temi
+      ? `${options.fields.length} ${tx('badgeControls')} · ${temi} ${tx('badgeThemes')}`
+      : `${options.fields.length} ${tx('badgeControls')}`;
+    aggiungiEtichetta.textContent = tx('addModel');
+    for (const [gruppo, titolo] of GRUPPI) {
+      const card = main.querySelector<HTMLElement>('#setting-panel-appearance > [data-settings-group="' + gruppo + '"]');
+      const nome = card?.querySelector<HTMLElement>('[data-settings-group-title]');
+      if (nome) nome.textContent = localText(titolo, options.language());
+      const conteggio = card?.querySelector<HTMLElement>('[data-settings-group-count]');
+      if (conteggio) { const quanti = contaGruppo(gruppo); conteggio.textContent = `${quanti} ${quanti === 1 ? tx('groupCountOne') : tx('groupCount')}`; }
+    }
+    /* Il gruppo che non ha una card nomina il SUO controllo con le parole del contratto. */
+    const campoChat = campoDi('chatFullWidthToggle');
+    const nomeCampo = q<HTMLElement>('[data-settings-group-field-name]');
+    if (nomeCampo && campoChat) nomeCampo.textContent = options.translate(campoChat.titolo);
+    const aiutoCampo = q<HTMLElement>('[data-settings-group-field-help]');
+    const aiutoChat = campoChat ? FIELD_HELP[campoChat.id] : undefined;
+    if (aiutoCampo && aiutoChat) aiutoCampo.textContent = localText(aiutoChat, options.language());
+    const vaiChat = q<HTMLElement>('[data-settings-group-go="chat"]'); if (vaiChat) vaiChat.textContent = tx('readSpaceGo');
+    /* Le parole della modale: una volta sola, qui — il markup è statico e non porta testo. */
+    const occhielloModale = SETTINGS_SECTIONS.models.eyebrow;
+    const modaleOcchiello = modale?.querySelector<HTMLElement>('[data-settings-add-eyebrow]');
+    if (modaleOcchiello && occhielloModale) modaleOcchiello.textContent = localText(occhielloModale, options.language());
+    const testiModale: ReadonlyArray<readonly [string, keyof typeof words]> = [
+      ['[data-settings-add-title]', 'addModelTitle'], ['[data-settings-add-intro]', 'addModelIntro'],
+      ['[data-settings-add-file]', 'addModelFile'], ['[data-settings-add-file-help]', 'addModelFileHelp'], ['[data-settings-add-file-go]', 'addModelFileGo'],
+      ['[data-settings-add-hf]', 'addModelHf'], ['[data-settings-add-hf-help]', 'addModelHfHelp'], ['[data-settings-add-hf-go]', 'addModelHfGo'],
+    ];
+    for (const [selettore, chiave] of testiModale) { const nodo = q<HTMLElement>(selettore); if (nodo) nodo.textContent = tx(chiave); }
+    const chiudiModale = modale?.querySelector<HTMLElement>('[data-settings-add-close]');
+    if (chiudiModale) { chiudiModale.setAttribute('aria-label', tx('addModelClose')); chiudiModale.title = tx('addModelClose'); }
     localizeSettingsCopy(screen, options.language());
     render();
   }
@@ -374,5 +709,5 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     save.dataset.state = saved ? 'saved' : 'unsaved'; save.setAttribute('role', saved ? 'status' : 'alert'); save.textContent = tx(saved ? 'saved' : 'unsaved');
   }, { signal });
   search.value = previousQuery; refresh();
-  return { select, refresh, dispose: () => controller.abort() };
+  return { select, refresh, dispose: () => { osservaTema.disconnect(); controller.abort(); } };
 }
