@@ -147,7 +147,50 @@ test('INTELAIATURA-06 · il cercatore del mockup è in sidebar, con la sua scorc
     return { campo: Math.round(r.width), colonna: Math.round(colonna.width), intelaiatura: Math.round(intelaiatura.width) };
   });
   expect(misure.campo, 'il campo non può sfondare la colonna: ' + JSON.stringify(misure)).toBeLessThanOrEqual(misure.colonna);
-  expect(misure.campo, 'la barra è tornata a tutta larghezza: ' + JSON.stringify(misure)).toBeLessThan(misure.intelaiatura / 2);
+  /*
+   * ⛔ QUESTA ASSERZIONE VALE SOLO DOVE LA COLONNA È DAVVERO UNA SIDEBAR — correzione della review
+   *   avversaria, 18/09/2026, che l'ha misurata: sotto i **660 px** di contenitore il prodotto
+   *   rende la colonna un blocco a tutta larghezza (`@container settings (max-width: 660px)
+   *   .talos-settings { display: block }`), quindi `campo == colonna == intelaiatura` e chiedere
+   *   «meno di metà intelaiatura» diventa rosso SU CODICE CORRETTO (misurato: 528 < 264 falso a
+   *   finestra 560). Era verde solo perché la viewport predefinita di Playwright è 1280.
+   *   La condizione qui sopra invece vale in **entrambi** i layout.
+   */
+  if (misure.colonna < misure.intelaiatura - 1) {
+    expect(misure.campo, 'la barra è tornata a tutta larghezza: ' + JSON.stringify(misure)).toBeLessThan(misure.intelaiatura / 2);
+  }
+});
+
+test('INTELAIATURA-10 · cercando, la colonna non salta', async ({ page }) => {
+  await apriImpostazioni(page, 'appearance');
+  /*
+   * ⛔ IL DIFETTO CHE QUESTA PROVA GUARDA, trovato dalla review avversaria il 18/09/2026 e che
+   *   nessuna prova copriva: con la × di cancellazione **accanto** al campo, nei 203 px della
+   *   colonna non ci stava sulla stessa riga — andava a capo, la barra passava da 38 a 86 px e
+   *   tutto quello che sta sotto (elenco delle sezioni e «COMPORTAMENTO» compresi) **scendeva di
+   *   48 px a ogni ricerca**, dentro una colonna `position: sticky`. Con lo stesso nodo rimesso
+   *   nella pagina il salto era di 3 px: era la colonna a causarlo.
+   *   Ora la × sta DENTRO il campo, in posizione assoluta, e la riga è alta uguale. Qui si misura
+   *   la distanza fra la barra e la prima voce della colonna, prima e durante la ricerca.
+   */
+  const distanza = () => page.evaluate(() => {
+    const barra = document.querySelector('#schermoImpostazioni .settings-toolbar').getBoundingClientRect();
+    const voce = document.querySelector('#schermoImpostazioni .settings-nav__list [role="tab"]').getBoundingClientRect();
+    return Math.round(voce.top - barra.bottom);
+  });
+  const prima = await distanza();
+  await page.locator('#settingsSearch').fill('tema');
+  const durante = await distanza();
+  expect(Math.abs(durante - prima), `la colonna salta di ${durante - prima} px mentre si cerca`).toBeLessThanOrEqual(8);
+  // E la × di cancellazione c'è, sta DENTRO il campo e non lo copre: è quello che evita il salto.
+  const pulisci = page.locator('#schermoImpostazioni [data-settings-clear]');
+  await expect(pulisci).toBeVisible();
+  const dentro = await pulisci.evaluate((el) => ({ dentro: Boolean(el.closest('.settings-search-field')), sovrapposta: el.getBoundingClientRect().right <= el.closest('.settings-search-field').getBoundingClientRect().right + 1 }));
+  expect(dentro.dentro, 'la × deve stare dentro il campo, non accanto').toBe(true);
+  expect(dentro.sovrapposta, 'la × deve restare dentro il bordo del campo').toBe(true);
+  await expect(pulisci).toHaveAttribute('aria-label', /.+/);
+  await page.locator('#settingsSearch').fill('');
+  expect(await distanza(), 'la colonna deve tornare dov\'era').toBe(prima);
 });
 
 test('INTELAIATURA-07 · Ctrl K apre la palette, Esc la chiude, e il fuoco torna al bottone', async ({ page }) => {
