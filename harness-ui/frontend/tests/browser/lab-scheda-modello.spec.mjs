@@ -496,11 +496,28 @@ test('SCHEDA-01 — le tre schede: ruoli, `aria-controls`, pannello unico, e la 
   expect(letto.striscia, '⛔ le parole delle caselle sono quelle del prodotto, non due volte la stessa').toContain('File sul disco');
   expect(letto.striscia).toContain('GGUF · Q4_K_M');
   expect(letto.striscia, '⛔ i byte con `gb`, non con un secondo formattatore').toContain('4,4 GB');
-  // il solo collegamento esterno: il repository, aperto in una scheda nuova e senza ritorno
-  expect(letto.fonti).toHaveLength(1);
-  expect(letto.fonti[0].href).toBe('https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF');
-  expect(letto.fonti[0].target).toBe('_blank');
-  expect(letto.fonti[0].rel).toContain('noopener');
+  /*
+   * ⛔ QUESTA ASSERZIONE È STATA AGGIORNATA — e la ragione è misurata, non «si è rotto il test».
+   *   Diceva «il solo collegamento esterno: il repository» e pretendeva **1** collegamento.
+   *   Il README del fixture (riga 149) contiene un link markdown che **prima** restava testo e
+   *   **adesso** è un `<a>` vero, perché la scheda rende il README in HTML (`c42d909f`, richiesta
+   *   dell'owner: «la scheda del modello di Hugging Face deve essere formattata in HTML»).
+   *   Misurato sul 4174 il 18/09/2026: la scheda ha **più** collegamenti esterni, tutti con
+   *   `target="_blank"` e `rel="noopener noreferrer"`.
+   * ⇒ L'asserzione non si indebolisce: si dice la cosa PIÙ FORTE. Il repository resta (cercato per
+   *   indirizzo, non per posizione), e si pretende che **ogni** collegamento esterno della scheda
+   *   sia aperto in sicurezza — è la regola per i link dentro un markdown non fidato (fonte:
+   *   OpenHands PR #17156, che ha corretto proprio `rel`/`target` presi dall'esterno, e
+   *   `rehype-harden-urls`; letti il 18/09/2026).
+   */
+  const repo = letto.fonti.find((f) => f.href === 'https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF');
+  expect(repo, 'il repository in testata deve restare un collegamento esterno').toBeTruthy();
+  expect(repo.target, 'il repository si apre in una scheda nuova').toBe('_blank');
+  expect(repo.rel, 'e senza ritorno: `noopener`').toContain('noopener');
+  expect(
+    letto.fonti.filter((f) => f.target !== '_blank' || !(f.rel || '').includes('noopener')).map((f) => f.href),
+    'nessun collegamento esterno della scheda senza `target="_blank"` e `noopener`',
+  ).toEqual([]);
 
   // la prima riga di README e' resa: la testata YAML NON si vede, il titolo si'
   const card = await page.evaluate(() => {
@@ -595,15 +612,37 @@ test('SCHEDA-03 — l\'indice del README: ogni voce porta al suo titolo, col fuo
   expect(dopo.margine, 'l\'ancora lascia il respiro dal bordo').toBeTruthy();
   expect(dopo.inVista, 'e il titolo e\' davvero finito in vista').toBe(true);
 
-  // ⛔ LIMITE DICHIARATO: il lettore condiviso non rende immagini ne' collegamenti.
+  /*
+   * ⛔ IL LIMITE DICHIARATO È CAMBIATO, E LA PROVA LO DICE ADESSO — aggiornata il 18/09/2026 con la
+   *   misura in mano. Prima qui si asseriva «il lettore condiviso non rende immagini NE'
+   *   collegamenti»: era vero, ed è il limite che l'owner ha chiesto di **togliere** per la scheda
+   *   («la scheda del modello di Hugging Face deve essere formattata in HTML», `c42d909f`).
+   * ⇒ Restano dichiarati i due limiti che valgono ANCORA, e si aggiunge la condizione che li rende
+   *   accettabili: i collegamenti si rendono **solo in sicurezza**.
+   *   ⛔ Le immagini restano **zero**: il README del fixture le scrive in sintassi markdown
+   *   (`![licenza](…)`), e il lettore quella sintassi **non** la rende — il testo si vede. Se un
+   *   giorno le rendesse, questa riga diventa rossa e la decisione si prende di nuovo, non si
+   *   scopre per caso.
+   */
   const limite = await page.evaluate(() => {
     const p = document.querySelector('[data-modello-card]');
-    return { immagini: p.querySelectorAll('img').length, collegamenti: p.querySelectorAll('a').length, testo: p.textContent };
+    return {
+      immagini: p.querySelectorAll('img').length,
+      collegamenti: [...p.querySelectorAll('a')].map((a) => ({ href: a.getAttribute('href'), target: a.getAttribute('target'), rel: a.getAttribute('rel') })),
+      testo: p.textContent,
+    };
   });
-  expect(limite.immagini, 'il lettore condiviso non rende immagini: la prova lo registra').toBe(0);
-  expect(limite.collegamenti, 'ne\' i collegamenti').toBe(0);
-  expect(limite.testo, 'il Markdown resta visibile come testo, non sparisce').toContain('![licenza]');
-  expect(limite.testo, 'compreso l\'indirizzo, che almeno resta leggibile').toContain('huggingface.co/Qwen/Qwen2.5-7B-Instruct');
+  expect(limite.immagini, 'il lettore non rende immagini: la sintassi markdown resta testo').toBe(0);
+  expect(limite.testo, 'e il Markdown resta visibile come testo, non sparisce').toContain('![licenza]');
+  expect(limite.collegamenti.length, 'i collegamenti ora SI rendono (HTML nella scheda)').toBeGreaterThan(0);
+  expect(
+    limite.collegamenti.filter((l) => l.target !== '_blank' || !(l.rel || '').includes('noopener')).map((l) => l.href),
+    'ogni collegamento reso porta `target="_blank"` e `noopener`',
+  ).toEqual([]);
+  expect(
+    limite.collegamenti.map((l) => l.href),
+    'e l\'indirizzo del README è quello vero, non un surrogato',
+  ).toContain('https://huggingface.co/Qwen/Qwen2.5-7B-Instruct');
 });
 
 test('SCHEDA-04 — i file: il confronto delle impronte, il troncamento onesto, la copia INTERA', async ({ page }) => {
