@@ -21,7 +21,9 @@
 | 5 | **Famiglia CHAT-FONDO** (tondo + hover + soglia del seguito + rotta SSE del banco) | `chat-attesa-fondo` **15/15**; commit `49cce620` | ✅ chiusa |
 | 6 | **P0A 9/9 · PO27-VUOTO 5/5 · NOTIFICHE 1/1** (la v2 atterra sulla Home: i test entrano nella chat; NOTIFICHE semina le preferenze v2) | tre spec insieme **17/17**; commit `727b2ce8` | ✅ chiuso |
 | 7 | Unità frontend | `npm run test:unit` → **1362/1362** | ✅ |
-| 8 | Suite browser intera | fermata a metà (avevo ricostruito `dist` durante il giro: i numeri da lì in poi erano contaminati) — da rifare pulita | ⏳ |
+| 8 | **Suite browser intera** (sonde escluse, 408 prove) | girata pulita: **344 passed · 61 failed · 3 skipped**. Di quei 61, **8 sono già curati dopo il via del giro** (4 `torna-in-fondo-non-copre` = il ritiro della centratura, verificato 19/19; 4 `bc78` = l'adattamento di BC78-2, verificato 5/5). ⇒ **~53 rossi residui, tutti della baseline storica nota** (43 `baseline-shell` · 5 `workspace-chooser` · 2 `context-compactor` · 1 `visual-matrix` · 1 `immagini-chat` · 1 `chat-lunga-p0`), **zero nuovi** | ✅ |
+| 9 | **Ritiro della centratura del tondo** (bocciata dalla review avversaria: copriva 247 px² di un bersaglio toccabile e rendeva rosso il guardiano committato) | `torna-in-fondo-non-copre` 4/4 + `chat-attesa-fondo` 15/15 = **19/19**; commento datato con la prova e la ricerca (WCAG 2.4.11: la cura è riservare lo spazio o rifluire, non spostare di lato) | ✅ verificato, in attesa di review |
+| 10 | **BC78-2 adattato** (la mia cura della barra aveva reso impossibile la sua premessa) | 5/5 verde, nei due versi (regione che sborda → le due foto differiscono; regione che non sborda → l'ultima riga è INTERA) | ✅ verificato, in attesa di review |
 | 9 | **Sidebar a UNA regione di scorrimento** (tetto del 50% via, testata e piede appiccicati, sfumature sulla regione vera) | `regioni: []` e `scorre: true` sul 4174 a 1024×800 / 1440×900 / 1200×500; «STRUMENTI» interno; **23/23** sugli spec della superficie; commit `e62905e8` | ✅ |
 | 10 | **La riga sotto il piede si dissolve** invece di essere tagliata (plateau opaco 16 px + rampa, spazio in coda dentro la lista) | a fine corsa l'ultima riga è **intera** (633-699 contro un piede a 739), `righeSottoIlPiede: []` a metà corsa e a fine corsa, foto ispezionate; commit `e646f7f8` | ✅ |
 | 11 | **Testata della colonna destra rimossa** (ordine owner: sopracciglio «Sessione», nome, X) — e con lei il difetto T1 (la X su una riga sua ≥1241 px) | sul 4174 `testata: false, x: false` a 1440×900 e 1024×800, linguette prime del contenuto; unità **1362/1362**; `colonna-destra-p0` **6/6**; commit `5df3fecd` | ✅ |
@@ -182,6 +184,18 @@
 3. **Non si applica la patch della #33** — creerebbe un import duplicato.
 4. **Non si importa il DOM del laboratorio della #33** — spegnerebbe l'avvio (il ponte lancia sugli id mancanti).
 5. **Non si applica la parity spec della sidebar** — rimetterebbe indietro una cura nostra.
+
+## §5-bis — IL SERA DEL 18/09: COSA È CAMBIATO DOPO LE DECISIONI
+
+| # | Cosa | Esito | Prova |
+|---|---|---|---|
+| T1 | **Il marchio della sidebar** identico al mockup | ✅ disegno (esagono `opacity="0.18"`, **5 pallini su 5** `fill="currentColor"`) e colore (`rgb(112,72,20)` in entrambi, il nostro `--talos-accent-text`); misura **42×42** per ordine dell'owner | `ab744f88`; misurato app vs mockup |
+| T2 | **L'accensione della schermata del Laboratorio — RITIRATA** | ❌ tre crolli misurati in tre funzioni che presuppongono la destinazione legacy (`montaCatalogoModelli` ×2, `ensureModelLabControls`); la prima foto era un **falso positivo** (scattata prima del montaggio) | `157a87d2`; il laboratorio resta in Impostazioni, funzionante e verificato (unità 1355/1355, componenti 77/77) |
+| T3 | **Le tre guardie** in `catalogo-modelli.js` | ✅ tenute (le sorelle erano già guardate; servono al port) | dentro `157a87d2` |
+| T4 | **I toast tornano in fondo**, impilati | ✅ `bottom: var(--talos-space-lg)`, pila `[480, 581, 683]`, fondo a **776 su 800** (24 px dal fondo); funzione senza chiamanti cancellata | `1b727d82`; già sul 4174 |
+| T5 | ⛔ **Conseguenza misurata e accettata da T4** | la pila copre **cinque comandi del piede** (invio, «Interrompi risposta», i chip «Messaggio»/«Terminale», «Reindirizza…»; 1.444-2.949 px² ciascuno). La vecchia regola BC-77 è revocata per ordine dell'owner; il numero resta scritto nella prova | `toast-non-copre-i-comandi.spec.mjs` |
+| T6 | **«18,6 GB allocabili» NON è un difetto** | ✅ verificato alla fonte: `local-runtime-probe.mjs:251` — `memory.availableBytes = machine.memory.freeBytes` = **RAM**. Il disco (`storage.allocatableBytes`) serve al verdetto di **spazio**. Era un **conflitto di nomi** nella ricognizione, non un errore di misura | `machine-capacity.mjs:53`, `modelli-installati.js:45` |
+| T7 | **Il velo «Fornitori e accessi» si collega ai provider veri** | 🔜 approvato dall'owner («sì»), da fare dopo la review in corso | — |
 
 ## §5 — LE DECISIONI, VALUTATE CON L'OWNER (18/09/2026)
 
