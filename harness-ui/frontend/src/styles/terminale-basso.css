@@ -169,6 +169,26 @@
   .talos-terminale-basso { --talos-terminale-h: 220px; }
 }
 
+/*
+ * ⛔⛔⛔ 18/09/2026 — A FINESTRA BASSA IL PANNELLO USCIVA DALLA FINESTRA, E LA PARTE TAGLIATA NON SI
+ * RAGGIUNGEVA IN NESSUN MODO.
+ *
+ * Misurato dalla revisione avversaria a 1200×500 (terminale aperto): pannello `{t:284, b:604}`
+ * dentro un piede `{t:80, b:604, h:524}` in una finestra alta **500** ⇒ **104 px sotto il bordo**,
+ * e nessun antenato scorre (`body{overflow:hidden}`, piede e schermo non scorrono). La media query
+ * qui sopra guarda **solo la larghezza**: a 1200 px di larghezza l'altezza resta 320 anche in una
+ * finestra da 500. E a 1024×800 il pannello scende a 220 e ci sta — quindi non era «non si adatta»,
+ * era «si adatta alla grandezza sbagliata».
+ *
+ * ⇒ La cura non è un altro numero: è lasciare che il piede CEDA. `flex:none` sul piede lo rendeva
+ * insensibile alla finestra; con `flex: 0 1 auto` e `min-height: 0` il pannello si accorcia quando
+ * lo spazio non basta e si ferma al suo minimo di 120 px, mentre la conversazione (`flex: 1 1 auto`,
+ * base molto più grande) assorbe per prima la riduzione. Nessun valore scritto a mano, nessun
+ * confronto con la finestra: vale a qualunque altezza e con qualunque contenuto nel piede.
+ */
+.talos-chat-foot { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.talos-terminale-basso { flex: 0 1 auto; }
+
 @media (prefers-reduced-motion: reduce) {
   .talos-terminale-basso__maniglia::after { transition: none; }
 }
