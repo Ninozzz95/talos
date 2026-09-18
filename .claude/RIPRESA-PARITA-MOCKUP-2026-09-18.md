@@ -473,8 +473,9 @@ vera ha scoperto rossi che nessuno aveva misurato. **Non attribuirli alla barra.
    il ciclo di review** (proposta all'owner: dopo il quarto, le review tornano a coprire le **fasi
    nuove**, non le singole cure — altrimenti ogni cura ne genera una che trova qualcosa nella cura).
 2. **Le quattro decisioni che aspettano l'owner** (§ «COSA MANCA, PER NOME», in fondo).
-3. **Riprendere il piano dalla FASE 2** (le dieci sezioni): è la strada per la parità. Impostazioni
-   e Laboratorio sono in uno stato che si può solo rifinire.
+3. ✅ **FASE 2 APERTA il 18/09/2026 (tarda sera)** — § «FASE 2, LE DUE CORSIE» qui sotto. ⛔ Corsia 1
+   e corsia 2 lavorano su **file disgiunti**; il laboratorio (`models`) e la chat **non sono di
+   questa fase**.
 4. **L'ispezione visiva è già stata fatta** su tutte e otto le viste (§ qui sopra) e le foto sono
    rigenerate: alla ripresa si rifanno **dopo** ogni modifica di `src/`, mai prima.
 5. Le fasi successive: **2** (le dieci sezioni) · **3** (la banda del laboratorio) · **4** (le
@@ -747,3 +748,32 @@ Niente è stato buttato e niente è stato dichiarato chiuso per stanchezza. Per 
 - **L'inglese reso** della barra del laboratorio: il terzo revisore ha misurato che le quattro
   opzioni dell'ordine **non cambiano** in `en`, e ha segnalato — **preesistente** — che l'intera
   barra HF **non è tradotta** (in EN il segnaposto resta italiano).
+
+
+---
+
+## ⛔⛔ FASE 2 — LE DUE CORSIE (aperte il 18/09/2026, tarda sera)
+
+**Il tuo via**: «*approvo tutto*». Le tre decisioni sono eseguite: due porte di ricerca (restano),
+ciclo di review chiuso, e il nome del campo del catalogo **tenuto** (la mia raccomandazione era
+sbagliata e l'ho annullata con la misura: § «il cancello è della FASE 4»).
+
+**L'inventario delle forme, MISURATO** (sonda `artifacts/zoom-bar/inventario-fase2.mjs`):
+- **righe** `.talos-setting` esistono solo in `appearance` (**36**, in 5 carte coi gruppi) e
+  `chat` (**6** + 6 kv in 2 carte); le altre **otto** no;
+- le otto sono fatte di **carte** con dentro liste chiave/valore, righe-fornitore, azioni:
+  `models` 45 carte/24 kv/3 liste · `providers` 1 carta + **28** righe-fornitore · `tools` 2+3+1 ·
+  `memoria` 2 carte · `costi` 3 · `privacy` 2+azioni · `workspace` 1+3+azioni · `account` 1+azioni;
+- **la riga dell'app non ha ancora il vestito del mockup**: noi `grid · gap 20 · padding 17px 0 ·
+  etichetta 14/500`, il mockup `flex · gap 24 · padding 21px 0 · etichetta 14/550`.
+
+| corsia | file (proprietà **esclusiva**) | dichiarata finita quando |
+|---|---|---|
+| **1 · il vestito** | `src/design-system/settings.css` · `src/styles/index.css` | riga, carta e testata hanno le misure del mockup, **misurate** su tutte e dieci e **nei due temi**; prova `_fase2-vestito.spec.mjs` che **morde** |
+| **2 · le forme delle otto** | `src/features/settings/settings-view.ts` · `index.template.html` | ogni sezione usa il **vocabolario** del mockup (carta · riga · chiave/valore · azioni) **senza perdere un id**; prova `_fase2-forme.spec.mjs` che morde su un id tolto |
+
+⛔ **Il mockup NON ha il disegno delle otto** (sono attenuate): lì si porta il suo **vocabolario** sul
+contenuto vero, e **ciò che non entra in nessuna forma si riporta all'owner**, non si inventa.
+⛔ **Vincolo assoluto**: nessun id perso, la chat non si tocca, il 4174 resta in sola lettura.
+⛔ Prossimo passo quando le due corsie consegnano: **la mia review avversaria** di ognuna, poi build,
+consegna, **32 foto** rifatte e il confronto testa a testa.
