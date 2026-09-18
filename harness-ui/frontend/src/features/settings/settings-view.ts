@@ -125,12 +125,29 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   const heading = node('header', 'settings-section-heading'); heading.dataset.settingsChrome = '';
   const headingCopy = node('div'); const eyebrow = node('span', 'talos-eyebrow'); const h2 = node('h2'); const description = node('p'); const scope = node('span', 'settings-scope');
   h2.tabIndex = -1; h2.dataset.settingsHeading = ''; eyebrow.dataset.settingsEyebrow = ''; headingCopy.append(eyebrow, h2, description); heading.append(headingCopy, scope);
+  /*
+   * ⭐⭐ 18/09/2026 — IL BREADCRUMB. Il mockup ce l'ha («Impostazioni › Laboratorio modelli»), qui
+   *   non esisteva (misurato: 0 elementi con `[class*=breadcrumb]` nello schermo).
+   * ⛔ La forma è quella che chiede WAI-ARIA, non una inventata: `<nav aria-label="Breadcrumb">`
+   *   (obbligatorio il nome, perché in pagina ci sono PIÙ `<nav>` — questa è l'unica cosa che
+   *   distingue le due landmark), `<ol>` perché l'ordine è significativo, `aria-current="page"`
+   *   sull'ultima voce, e i **separatori in CSS** (`li + li::before`) perché uno screen reader non
+   *   deve annunciarli.
+   *   Fonte: W3C WAI-ARIA APG, pattern Breadcrumb (`w3.org/WAI/ARIA/apg/patterns/breadcrumb/`),
+   *   letto il 18/09/2026; conferma da W3C Design System e VA Design System (ADR 002).
+   * ⛔ L'ultima voce è **testo, non un link**: è la pagina in cui sei già, e un link che non naviga
+   *   è un link morto (VA ADR 002, dicembre 2024, che ha superato l'ADR 001).
+   */
+  const breadcrumb = node('nav', 'settings-breadcrumb'); breadcrumb.setAttribute('aria-label', 'Breadcrumb');
+  const crumbList = node('ol'); crumbList.setAttribute('role', 'list'); const crumbWhere = node('li'); const crumbHere = node('li'); const crumbNow = node('span');
+  crumbNow.dataset.settingsCrumb = ''; crumbNow.setAttribute('aria-current', 'page'); crumbHere.append(crumbNow);
+  crumbList.append(crumbWhere, crumbHere); breadcrumb.append(crumbList);
   const results = node('section', 'settings-search-results'); results.dataset.settingsChrome = ''; results.id = 'settingsSearchResults'; results.setAttribute('role', 'region');
   const resultTitle = node('h2'); const status = q<HTMLElement>('[data-settings-results]') || node('p');
   status.dataset.settingsResults = ''; status.className = 'settings-result-count'; status.setAttribute('role', 'status'); status.setAttribute('aria-atomic', 'true');
   const resultList = node('ul', 'settings-result-list'); const noResults = node('div', 'settings-empty');
   const emptyTitle = node('h3'); const emptyHelp = node('p'); noResults.append(emptyTitle, emptyHelp); results.append(resultTitle, status, resultList, noResults);
-  content.prepend(heading, results);
+  content.prepend(breadcrumb, heading, results);
 
   const restore = q<HTMLInputElement>('[data-workspace-restore]');
   if (restore && !restore.closest('.settings-field-control')) {
@@ -166,9 +183,10 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     }
     mobile.value = selected; clear.hidden = !searching;
     for (const panel of panels()) panel.hidden = searching || panel.dataset.settingsPanel !== selected;
-    heading.hidden = searching; results.hidden = !searching;
+    heading.hidden = searching; results.hidden = !searching; breadcrumb.hidden = searching;
     const metadata = SETTINGS_SECTIONS[selected];
     h2.textContent = localText(metadata.title, options.language()); description.textContent = localText(metadata.description, options.language()); scope.textContent = localText(metadata.scope, options.language());
+    crumbNow.textContent = localText(metadata.title, options.language());
     /* L'eyebrow c'e' solo dove il mockup ce l'ha (Aspetto, Laboratorio): per le altre otto
        sezioni resta nascosto, invece di mostrare una parola inventata per simmetria. */
     if (metadata.eyebrow) { eyebrow.textContent = localText(metadata.eyebrow, options.language()); eyebrow.hidden = false; }
@@ -198,7 +216,7 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   }
   function refresh() {
     title.textContent = tx('title'); subtitle.textContent = tx('subtitle'); searchName.textContent = tx('search'); search!.setAttribute('aria-label', tx('search')); search!.placeholder = tx('placeholder');
-    clear.textContent = tx('clear'); mobileLabel.textContent = tx('mobile'); mobile.setAttribute('aria-label', tx('mobile')); list.setAttribute('aria-label', tx('sections')); nav!.setAttribute('aria-label', tx('sections'));
+    clear.textContent = tx('clear'); crumbWhere.textContent = tx('title'); mobileLabel.textContent = tx('mobile'); mobile.setAttribute('aria-label', tx('mobile')); list.setAttribute('aria-label', tx('sections')); nav!.setAttribute('aria-label', tx('sections'));
     groups.forEach((g, i) => { g.textContent = tx(i === 0 ? 'behaviour' : 'infrastructure'); });
     for (const [id, button] of buttons) { button.querySelector('span')!.textContent = localText(SETTINGS_SECTIONS[id].title, options.language()); const option = mobile.querySelector('option[value="' + id + '"]'); if (option) option.textContent = button.textContent; }
     for (const field of options.fields) { const help = q<HTMLElement>('[data-setting-help="' + field.id + '"]'); if (help && FIELD_HELP[field.id]) help.textContent = localText(FIELD_HELP[field.id]!, options.language()); }
