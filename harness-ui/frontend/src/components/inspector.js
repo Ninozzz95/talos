@@ -1024,8 +1024,12 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
   if (!inspector) return;
   inspector.__ultimiDati = dati;
   collegaRidisegnoSchede(inspector, d);
-  const h2 = inspector.querySelector('.talos-inspector__head h2');
-  if (h2) h2.textContent = dati.titolo || 'Nessuna sessione aperta';
+  /*
+   * ⛔ 18/09/2026 — QUI C'ERA il riempimento del titolo nella testata della colonna
+   * (`inspector.querySelector('.talos-inspector__head h2')`). La testata è stata rimossa su ordine
+   * dell'owner: la query rendeva `null` e il ramo non si accendeva più — codice morto che sembrava
+   * vivo. Il titolo della sessione vive dove serve: nella testata della CHAT e nella riga scelta.
+   */
   if (!schedaDaSaltare(inspector, inspector.querySelector('#railContesto'), 'contesto')) {
     const cards = inspector.querySelectorAll('#railContesto [data-c="InspectorCard"], #railContesto [data-c="TurnIndex"]');
     const [ambiente, finestra, indice] = cards;

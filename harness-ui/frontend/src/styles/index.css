@@ -726,15 +726,26 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
    dell'autore che copre un componente a fuoco; SC 2.5.8 «Target Size (Minimum)» — bersagli da 24 px
    e spaziatura, «sufficient space between targets makes it less likely that a user will accidentally
    activate the wrong control». Qui il tondo rubava proprio dei pixel al bersaglio «Nega». */
-/* ⛔⛔ 18/09/2026 — AL CENTRO, NON A DESTRA. Owner dal vivo: «sistema il pulsante torna in basso che
-   non è al centro ma a destra». Prima stava con un `right: calc(...)` — una formula lunga, tarata
-   per allinearlo al bordo del composer, che a ogni larghezza lo spostava di lato.
-   ⇒ Centratura senza `transform`: `left:0; right:0; margin-inline:auto` su una larghezza fissa.
-   ⛔ Non con `translateX(-50%)`: l'hover del pulsante dichiara `transform:none` (qui sotto e in
-   `superfici-galleggianti.css`, per la stabilità fotogramma-per-fotogramma pretesa da
-   CHAT-FONDO-HOVER-02) e azzererebbe la traslazione proprio al passaggio del puntatore — il tondo
-   salterebbe di 18 px sotto il mouse. */
-.talos-chat-return__button{position:absolute; bottom:12px; left:0; right:0; margin-inline:auto; width:36px; height:36px; min-width:36px; padding:0; border-radius:50%; box-shadow:var(--talos-shadow-card); z-index:3}
+/*
+ * ⛔⛔⛔ 18/09/2026 — LA CENTRATURA È STATA RITIRATA, E QUESTA È LA PROVA (review avversaria).
+ *
+ * L'avevo messa su ordine dell'owner («sistema il pulsante torna in fondo che non è al centro ma a
+ * destra»). La review avversaria di QUELLA modifica l'ha bocciata, con la misura e nei due versi
+ * sullo stesso build:
+ *  · `tests/browser/torna-in-fondo-non-copre.spec.mjs` — il guardiano committato il 17/09 proprio
+ *    per questo — passa da **4 passed** (formula vecchia) a **4 failed / 0 passed** (centrata);
+ *  · a 1440 dark il tondo copre **247 px²** dell'elemento «Per questa sessione», che è un bersaglio
+ *    toccabile della scheda di approvazione: è il difetto F2 che quello spec esiste per impedire;
+ *  · e non è nemmeno «centrato» dove si credeva: è al centro del PIEDE (665), non della
+ *    conversazione (688) né della finestra (720).
+ * ⇒ Torna la formula del 17/09. ⛔ Resta aperta la domanda vera, che non decido io: «centrato» e
+ *   «non coprire» oggi non convivono. La ricerca del 18/09/2026 dice che la cura di un galleggiante
+ *   che copre contenuto interattivo è **riservargli lo spazio** (`scroll-padding`/`scroll-margin`
+ *   pari alla sua altezza) o **rifluirlo** perché non possa mai coprire — non spostarlo di lato:
+ *   WCAG 2.4.11 «Focus Not Obscured (Minimum)», accessibility.build e EqualWeb, letti il 18/09/2026.
+ *   La via che soddisfa TUTTI E DUE (centrato + non copre) è dargli una RIGA SUA nel piede.
+ */
+.talos-chat-return__button{position:absolute; bottom:12px; left:auto; right:calc((var(--talos-larghezza-piede) - var(--talos-testo-chat)) / 2 - var(--talos-turno-coda) + 5px); width:36px; height:36px; min-width:36px; padding:0; border-radius:50%; box-shadow:var(--talos-shadow-card); z-index:3}
 .talos-chat-return__button:is(:hover,:active):not(:disabled){transform:none; background:var(--talos-panel-soft); border-color:var(--talos-border)}
 .talos-status-strip{display:flex; align-items:center; gap:12px; padding:9px 14px; margin-bottom:8px; border-radius:11px; border:1px solid var(--talos-border); background:var(--talos-panel)}
 .talos-status-strip__pulse{width:8px; height:8px; border-radius:50%; background:var(--talos-accent-hover); flex:none; animation:talos-pulse 1.6s var(--talos-motion-ease) infinite}
@@ -1447,8 +1458,10 @@ a.talos-button{text-decoration:none}
 
 /* ---------- 10. COLONNA DI DESTRA (G11) ---------- */
 .talos-inspector{position:relative; background:var(--talos-background); border-left:1px solid var(--talos-border); display:flex; flex-direction:column; min-height:0}
-.talos-inspector__head{padding:16px 16px 0}
-.talos-inspector__head h2{font-size:14px; margin-top:2px}
+/* ⛔ 18/09/2026 — QUI STAVANO LE DUE REGOLE DI `.talos-inspector__head` (padding e h2). La testata
+   della colonna destra è stata rimossa su ordine dell'owner (`5df3fecd`: via il sopracciglio
+   «Sessione», il nome della sessione e la X): nel template non esiste più nessun nodo con quella
+   classe, quindi le regole erano orfane. Trovate dalla review avversaria del mio diff. */
 .talos-inspector__tabs{padding:12px 12px 0; border-bottom:1px solid var(--talos-border)}
 .talos-inspector__body{flex:1 1 auto; min-height:0; overflow-y:auto; padding:12px}
 .talos-inspector-card{padding:12px 14px; margin-bottom:10px}
@@ -1663,8 +1676,17 @@ a.talos-button{text-decoration:none}
    WORKSPACE, che dal 18/09 (PR #27) sta sopra ogni schermo. Misurato a 1200×420 con una sonda: la
    finestra è 420, lo scorrimento del pannello parte a 119 (barra 59 + testata 60) e ha 301 px di
    spazio, mentre la formula ne dichiarava 336 ⇒ il piede del pannello (i pulsanti) restava fuori.
-   ⛔ Il numero non si scrive qui: `--talos-workspace-bar-h` lo MISURA `workspace-chrome.ts` dalla
-   barra vera (ResizeObserver) e il fallback `0px` copre le superfici dove la barra non c'è. */
+   ⛔ Il numero non si scrive qui: `--talos-workspace-bar-h` lo MISURAVA `workspace-chrome.ts` dalla
+   barra vera (ResizeObserver) e il fallback `0px` copre le superfici dove la barra non c'è.
+   ⛔⛔ 18/09/2026, CORREZIONE DI QUESTO COMMENTO (review avversaria): la frase sopra è **falsa da
+   oggi**. La barra della workspace è stata RIMOSSA su ordine dell'owner, e con lei il
+   ResizeObserver che pubblicava il token: misurato, nel DOM `[data-workspace-bar]` = **0 nodi** e
+   `--talos-workspace-bar-h` = **(non impostato)** ⇒ la formula è corretta **per caso**, non per
+   costruzione. Se un giorno una barra tornasse, BC-78.3 tornerebbe in silenzio.
+   ⇒ Il termine resta perché è innocuo (`var(…, 0px)`) e perché è la traccia di cosa manca: chi
+   reintroduce una barra in cima deve reintrodurre anche la sua misura. */
+
+
 .talos-detail{padding:16px; position:sticky; top:0; max-height:calc(100dvh - var(--talos-workspace-bar-h, 0px) - var(--talos-topbar-h) - var(--talos-space-lg)); overflow-y:auto; overscroll-behavior:contain}
 .talos-detail h3{font-size:15px}
 .talos-detail__desc{color:var(--talos-muted); font-size:13px; margin:4px 0 12px}
