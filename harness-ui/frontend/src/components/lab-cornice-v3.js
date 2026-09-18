@@ -141,8 +141,24 @@ const NS_SVG = 'http://www.w3.org/2000/svg';
  *   Inventarne una per simmetria sarebbe aggiungere una parola che il mockup non ha.
  */
 export const SCHEDE_LAB = Object.freeze([
-  Object.freeze({ id: 'models', etichetta: 'Modelli', icona: 'i-brain', sezioni: Object.freeze(['catalog', 'installed', 'huggingface']) }),
-  Object.freeze({ id: 'providers', etichetta: 'Provider', icona: 'i-link', sezioni: Object.freeze(['providers']),
+  /*
+   * ⛔⛔ OWNER, 18/09/2026, testuale: «DEVI COLLEGARE NELLA SEZIONE MODELLI IL CATALOGO HUGGING
+   *   FACE, NON QUELLO DEI PROVIDER». La scheda «Modelli» apriva sul pannello `catalog`, che è
+   *   il catalogo dei FORNITORI («Catalogo dei fornitori — Modelli osservati su OpenRouter»):
+   *   i modelli di un servizio, non i modelli che si possono avere.
+   *   ⇒ «Modelli» porta Hugging Face (i modelli da scaricare) e gli Installati; il catalogo dei
+   *     fornitori va dove i fornitori si configurano, cioè in «Provider».
+   * ⛔ L'ORDINE conta: aprendo una scheda l'app accende la sua PRIMA sezione, quindi `huggingface`
+   *   sta davanti a `installed`.
+   * Ricerca 18/09/2026 (vucense.com «Ollama vs LM Studio 2026»; thepromptbench.com; dev.to
+   * nishilbhave): il tab «Discover» di LM Studio — il prodotto a cui questo laboratorio si
+   * ispira — si collega DIRETTAMENTE a Hugging Face ed è «la ragione principale per cui la
+   * gente parte da lì»; Ollama, che ha un registro suo, è descritto come più povero da
+   * esplorare. I due lati restano separati: il catalogo dei modelli da una parte, i fornitori
+   * dall'altra, come i runtime locali trattati da «provider» intercambiabili.
+   */
+  Object.freeze({ id: 'models', etichetta: 'Modelli', icona: 'i-brain', sezioni: Object.freeze(['huggingface', 'installed']) }),
+  Object.freeze({ id: 'providers', etichetta: 'Provider', icona: 'i-link', sezioni: Object.freeze(['providers', 'catalog']),
     frase: Object.freeze({ titolo: 'Collegamenti, non scatole nere.', nota: 'Credenziale, configurazione e raggiungibilità sono tre fatti diversi.' }) }),
   Object.freeze({ id: 'downloads', etichetta: 'Download', icona: 'i-download', sezioni: Object.freeze(['downloads']),
     frase: Object.freeze({ titolo: 'Ogni download, al suo posto.', nota: 'Avanzamento, pause e recupero senza perdere il contesto.' }) }),

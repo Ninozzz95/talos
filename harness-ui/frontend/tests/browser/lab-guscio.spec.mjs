@@ -178,8 +178,11 @@ test('GUSCIO-01 — le sei linguette diventano quattro schede, e nessun pannello
   expect(stato.visibili).toHaveLength(1);
   expect(stato.sezioni).toEqual(['catalog', 'downloads', 'huggingface', 'installed', 'overview', 'providers']);
   expect(stato.sezioniSenzaGruppo).toBe(0);
+  /* ⛔ 18/09/2026 — `catalog` sta in «Provider», non in «Modelli»: ordine dell'owner («nella
+     sezione Modelli il catalogo Hugging Face, NON quello dei provider»). Il catalogo dei
+     fornitori NON si perde: si apre da «Provider», dove i fornitori si configurano. */
   expect(stato.gruppoDiOgnuna).toEqual({
-    overview: 'system', catalog: 'models', installed: 'models', huggingface: 'models',
+    overview: 'system', catalog: 'providers', installed: 'models', huggingface: 'models',
     providers: 'providers', downloads: 'downloads',
   });
   expect(stato.pannelliVisibili).toEqual(['overview']);
@@ -221,12 +224,15 @@ test('GUSCIO-02 — la tastiera: frecce con avvolgimento, Home, End, e Invio che
   await expect(card.locator('[data-lab-pannello="models"]')).toBeVisible();
   await expect(card.locator('[data-lab-pannello="system"]')).toBeHidden();
   await expect(card).toHaveAttribute('data-lab-scheda-attiva', 'models');
-  // ⭐ Ad accendere il catalogo è `setModelLabSection` (`app.js:4192`), chiamata
+  // ⭐ Ad accendere la sezione è `setModelLabSection` (`app.js:4192`), chiamata
   // dal clic sul BOTTONE LEGACY che il guscio preme al posto dell'utente: la sua
   // firma sono `aria-selected` e `.active` scritti sui bottoni veri, che il
   // guscio non tocca mai. Se il clic non passasse di lì, resterebbero spenti.
-  await expect(card.locator('[data-lab-comandi] [data-model-lab-tab="catalog"]')).toHaveAttribute('aria-selected', 'true');
-  await expect(card.locator('[data-model-lab-panel="catalog"]')).toBeVisible();
+  // ⛔ La PRIMA sezione della scheda «Modelli» è `huggingface`, non `catalog`:
+  //   ordine dell'owner del 18/09 (il catalogo dei modelli è quello di Hugging
+  //   Face; quello dei fornitori si apre da «Provider»).
+  await expect(card.locator('[data-lab-comandi] [data-model-lab-tab="huggingface"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(card.locator('[data-model-lab-panel="huggingface"]')).toBeVisible();
 
   // End e Home.
   await page.keyboard.press('End');
