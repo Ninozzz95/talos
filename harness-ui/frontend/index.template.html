@@ -386,15 +386,25 @@
 
   <!-- ===================== CENTRO ===================== -->
   <main class="talos-screen" id="centro">
-    <header class="workspace-bar" data-workspace-bar>
-      <div class="workspace-bar__location"><span class="workspace-bar__brand">TALOS</span><span aria-hidden="true">/</span><span data-workspace-location>Home</span></div>
-      <div class="workspace-bar__controls">
-        <label class="workspace-preset"><svg class="i" aria-hidden="true"><use href="#i-layout"/></svg><span class="workspace-sr">Disposizione del workspace</span><select data-workspace-preset aria-label="Disposizione del workspace"><option value="development">Sviluppo</option><option value="research">Ricerca</option><option value="documents">Documenti</option><option value="focus">Concentrazione</option></select></label>
-        <button type="button" class="workspace-density" data-workspace-density aria-pressed="false" title="Alterna densità compatta e confortevole">Confortevole</button>
-        <button type="button" class="workspace-command" data-azione="comandi" title="Cerca un comando" aria-label="Cerca un comando"><svg class="i" aria-hidden="true"><use href="#i-command"/></svg><span>Comandi</span><kbd>Ctrl K</kbd></button>
-      </div>
-      <span class="workspace-persistence" data-workspace-persistence role="status" hidden>Preferenze temporanee: memoria locale non disponibile.</span>
-    </header>
+    <!-- ⛔⛔ 18/09/2026 — LA BARRA DELLA WORKSPACE NON C'È PIÙ. ORDINE DELL'OWNER.
+         «puoi rimuovere header con scritte TALOS / Conversazione, Disposizione del workspace, Compatta,
+         Comandi Ctrl K, definitivamente»: `TALOS / <vista>` (la posizione), il selettore della
+         disposizione, il pulsante della densità e il pulsante «Comandi Ctrl K».
+         ⛔ Cosa NON sparisce con lei: il tasto **Ctrl K** apre la tavolozza come prima (la gestione è in
+         `app.js`, e la stessa icona «Comandi» resta nella testata della CHAT); la **densità** ha il suo
+         comando in Impostazioni («Densità delle liste», `#setting-uiDensitySelect`); i preset della
+         disposizione restano una preferenza salvata (`talos.desktop.workspace.v2`) ma il loro UNICO
+         comando a schermo era qui: chi vuole risceglierli da fuori passa dalle preferenze.
+         Ricerca 18/09/2026 — rimuovere la barra è la direzione descritta per le tavolozze di comandi
+         («Cmd+K Is the New Hamburger Menu», dev.to; «How to Design a Command Palette Users Will Reach
+         For», 137foundry), che però chiede di tenere un ingresso visibile dove il tasto non si scopre
+         da sé: qui resta la ricerca della barra laterale e l'icona nella testata della chat. -->
+    <!-- ⛔ 18/09/2026 — UNA SOLA `#schermoHome`. Sostituendo il blocco dell'header ne avevo scritta una
+         seconda, identica: la prima la benedice il ponte (`view-pane active`) e `setView` la nasconde;
+         la seconda, senza quella classe, RESTAVA VISIBILE per sempre sotto la chat col suo segnaposto
+         «Apro il tuo workspace…» — il difetto visto dall'owner sul 4174 vivo alle 11:51. Misurato con
+         una sonda: due `SECTION#schermoHome` figlie di `#centro`, la prima `.workspace-home view-pane
+         active`, la seconda `.workspace-home` e basta. -->
     <section id="schermoHome" class="workspace-home" data-c="WorkspaceHome" tabindex="-1" aria-label="Home del workspace"><p role="status">Apro il tuo workspace…</p></section>
 
 
@@ -1183,12 +1193,18 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
   <!-- ===================== COLONNA DI DESTRA ===================== -->
   <aside id="inspectorSessione" class="talos-inspector" data-c="Inspector" aria-label="Dettagli della sessione">
     <button class="talos-resizer talos-resizer--inspector" data-ridimensiona="inspector" aria-label="Ridimensiona la colonna dei dettagli" title="Trascina per ridimensionare, doppio click per il valore normale"></button>
-    <div class="talos-inspector__head"><div class="talos-grow"><span class="talos-eyebrow">Sessione</span><h2>W1-02 registro processi</h2></div><!-- ⛔ 11/9 — `data-close-panel` NON e' decorazione: senza, questo pulsante non aveva NESSUN
-         ascoltatore in tutto il repo (cercato: `chiudiDettagli` compariva solo qui). Sotto i 1240 px
-         la colonna si apre come strato sopra la app e la si chiudeva col velo o con Esc; la X, che
-         e' il gesto che si prova per primo, non faceva niente. Un pulsante di chiusura che non
-         chiude e' peggio di un pulsante assente. `$$('[data-close-panel]')` e' gia' cablato a
-         `closePanels` in `src/legacy/app.js`. --><button id="chiudiDettagli" data-close-panel="inspector" class="talos-button talos-button--ghost talos-icon-button talos-inspector-close" aria-label="Chiudi dettagli"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+    <!-- ⛔⛔⛔ 18/09/2026 — L'INTESTAZIONE DELLA COLONNA DESTRA NON C'È PIÙ. ORDINE DELL'OWNER.
+         «dalla sidebar di destra devi levare completamente header, quindi la sezione con scritto
+         sessione, il nome della sessione e il pulsante x»: erano tre cose in una — il sopracciglio
+         «Sessione», il titolo della sessione e la X di chiusura. Tutte e tre via.
+         ⛔ E la X era anche un difetto misurato: sopra i 1240 px la testata NON era un flex (quella
+         riga vive dentro `@media(max-width:1240px)`) mentre la X veniva riaccesa da
+         `.talos-button{display:inline-flex}`, che a pari specificità batte
+         `.talos-inspector-close{display:none}` per ordine di sorgente. Risultato, misurato dal
+         revisore a 1440×900 e 1241×900: la X **su una riga sua**, sotto il titolo, con la testata
+         alta 100 px invece di 60. Togliendo la testata, quel difetto sparisce per costruzione.
+         ⛔ Come si chiude la colonna, adesso: il pulsante «Dettagli» della testata della chat
+         (`data-azione="dettagli"`), il velo e Esc — le vie che c'erano già, tutte intatte. -->
     <div class="talos-tabs talos-tabs--underline talos-inspector__tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" id="railTabs" aria-label="Sezioni della colonna">
       <button class="talos-tabs__tab" role="tab" aria-selected="true" data-rail="contesto" aria-controls="railContesto">Contesto</button>
       <!-- ⛔ 09/09 — i due `title` sono stati TOLTI. Nella foto del giro con delega il fumetto nativo
