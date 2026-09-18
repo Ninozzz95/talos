@@ -40,7 +40,12 @@ const words = {
   title: { it: 'Impostazioni', en: 'Settings' },
   subtitle: { it: 'Un posto per configurare il tuo modo di lavorare.', en: 'One place to configure the way you work.' },
   search: { it: 'Cerca un’impostazione', en: 'Search settings' },
-  placeholder: { it: 'Cerca per nome, funzione o parola chiave…', en: 'Search by name, function or keyword…' },
+  /* ⛔ 18/09/2026 — MISURATO, NON SCELTO A OCCHIO. Con la barra dentro la colonna il campo ha
+     **181 px utili**: il segnaposto di prima ne voleva **252** e usciva tagliato a metà parola
+     («Cerca per nome, funzione o», visto nella foto del 4174). Questi due ne misurano **136** e
+     **113** (misurati nella font vera del campo, non stimati). Il significato pieno resta
+     nell'etichetta accessibile `search` — «Cerca un'impostazione» — che non ha limiti di riga. */
+  placeholder: { it: 'Nome o parola chiave…', en: 'Name or keyword…' },
   clear: { it: 'Cancella ricerca', en: 'Clear search' },
   sections: { it: 'Sezioni delle impostazioni', en: 'Settings sections' },
   mobile: { it: 'Sezione impostazioni', en: 'Settings section' },
@@ -203,14 +208,36 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   const title = node('h1'); const subtitle = node('p'); copy.append(title, subtitle);
   const save = node('p', 'settings-save'); save.dataset.settingsSave = ''; save.setAttribute('role', 'status');
   header.append(copy, save);
-  const toolbar = node('div', 'settings-toolbar'); toolbar.dataset.settingsChrome = '';
+  /*
+   * ⛔ 18/09/2026 — LA BARRA STA IN SIDEBAR, NON A TUTTA LARGHEZZA. Owner, dalla sua schermata
+   *   viva: «attento alla barra di ricerca io la vedo ancora full width e no sopra sidebar».
+   *   Il blocco era inserito nella PAGINA (`page.insertBefore(toolbar, layout)`) e si prendeva
+   *   tutta la larghezza del contenuto; da qui in giù è la prima cosa della colonna da 220 px,
+   *   sopra l'elenco delle sezioni — dove il mockup tiene il suo cercatore
+   *   (`#open-settings-search`, in `TALOS-Calm-Lab-04.html`, subito sotto il titolo della colonna).
+   * ⛔ IL `<search>` NON È DECORAZIONE. Un `<input type="search">` da solo NON è una landmark: la
+   *   ricerca va collocata dentro una regione sua, altrimenti chi naviga per landmark non ha dove
+   *   saltare — è il difetto «Search functionality must be placed within a landmark region».
+   *   L'elemento nativo `<search>` crea quella regione senza `role` ridondante, che è la forma
+   *   raccomandata. Fonte: MDN, «ARIA: search role» — `<input type="search">` non definisce una
+   *   landmark di ricerca, e `<search>` è l'alternativa nativa a `<form role="search">`; letta il
+   *   18/09/2026. ⛔ NON `<form role="search">`: un form con un solo campo e nessun gestore di
+   *   submit fa RICARICARE la pagina al primo Invio.
+   * ⭐ E la collocazione è quella giusta per il gesto: Apple, WWDC26 sessione 292 «Design
+   *   intuitive search experiences» (letta il 18/09/2026), mette la ricerca in sidebar proprio
+   *   quando filtra contenuti che vivono lì, e cita le app di Impostazioni come esempio.
+   * ⛔ Il campo è lo STESSO nodo di prima (`search`), non una copia: cambia il genitore, non la
+   *   funzione. Filtro in pagina, «Cancella ricerca», Ctrl K e la palette restano quelli che
+   *   erano — a spostarli è la sola riga `nav.insertBefore(toolbar, list)`, in fondo alla colonna.
+   */
+  const toolbar = node('search', 'settings-toolbar'); toolbar.dataset.settingsChrome = '';
   const searchWrap = node('label', 'settings-search'); searchWrap.htmlFor = 'settingsSearch';
   const searchName = node('span', 'workspace-sr');
   search.id = 'settingsSearch'; search.type = 'search'; search.className = 'settings-search__input';
   search.setAttribute('aria-controls', 'settingsSearchResults');
   const clear = node('button', 'talos-button talos-button--secondary'); clear.type = 'button'; clear.dataset.settingsClear = '';
   searchWrap.append(searchName, search); toolbar.append(searchWrap, clear);
-  page.insertBefore(header, layout); page.insertBefore(toolbar, layout);
+  page.insertBefore(header, layout);
   nav.replaceChildren(); nav.className = 'talos-settings__nav settings-nav';
   const list = node('div', 'settings-nav__list'); list.setAttribute('role', 'tablist'); list.setAttribute('aria-orientation', 'vertical');
   const mobileWrap = node('label', 'settings-mobile-nav');
@@ -539,6 +566,13 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   cercaBottone.addEventListener('click', () => apriPalette(), { signal });
   nav.insertBefore(cercaBottone, list);
   /*
+   * ⛔ E QUI LA BARRA SCENDE IN SIDEBAR (owner, 18/09/2026: «sposta la barra»). Sta sotto il
+   *   bottone del mockup e sopra l'elenco delle sezioni — `insertBefore(list)` la mette come
+   *   ULTIMA prima della lista, quindi dopo `cercaBottone`, che è già stato inserito lì sopra.
+   *   Nessun altro posto del file la inserisce: questo è l'unico punto che decide dove vive.
+   */
+  nav.insertBefore(toolbar, list);
+  /*
    * ⛔ LA SCORCIATOIA È GLOBALE MA GUARDATA: Ctrl K non deve rubare il tasto a chi sta SCRIVENDO —
    *   il composer della chat è a un passo da qui. Fonte: le linee guida sulla command palette
    *   lette il 18/09/2026 («guard the global hotkey so it doesn't fire while the user is typing
@@ -637,6 +671,8 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   }
   function refresh() {
     title.textContent = tx('title'); subtitle.textContent = tx('subtitle'); searchName.textContent = tx('search'); search!.setAttribute('aria-label', tx('search')); search!.placeholder = tx('placeholder');
+    // La regione di ricerca porta il suo nome: è quella che si sente nell'elenco dei landmark.
+    toolbar.setAttribute('aria-label', tx('search'));
     clear.textContent = tx('clear'); crumbWhere.textContent = tx('title'); mobileLabel.textContent = tx('mobile'); mobile.setAttribute('aria-label', tx('mobile')); list.setAttribute('aria-label', tx('sections')); nav!.setAttribute('aria-label', tx('sections'));
     groups.forEach((g, i) => { g.textContent = tx(i === 0 ? 'behaviour' : 'infrastructure'); });
     for (const [id, button] of buttons) { button.querySelector('span')!.textContent = localText(SETTINGS_SECTIONS[id].title, options.language()); const option = mobile.querySelector('option[value="' + id + '"]'); if (option) option.textContent = button.textContent; }

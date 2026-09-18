@@ -126,8 +126,28 @@ test('INTELAIATURA-06 · il cercatore del mockup è in sidebar, con la sua scorc
   const tasto = bottone.locator('kbd');
   await expect(tasto).toHaveAttribute('aria-hidden', 'true');
   await expect(tasto).toHaveText('Ctrl K');
-  // E il campo in alto RESTA: due porte, nessuna funzione persa.
-  await expect(page.locator('#settingsSearch')).toBeVisible();
+  /*
+   * ⛔ E IL CAMPO STA NELLA COLONNA, non più a tutta larghezza. Owner, 18/09/2026: «attento alla
+   *   barra di ricerca io la vedo ancora full width e no sopra sidebar», e poi «sposta la barra».
+   *   Prima era un blocco di pagina (`page.insertBefore(toolbar, layout)`) e si prendeva la
+   *   larghezza del contenuto. La prova morde su DUE fatti misurati, non su una classe:
+   *   (a) il campo è DENTRO la colonna delle sezioni; (b) la sua larghezza è quella della
+   *   colonna, non quella dell'intelaiatura — se qualcuno lo rimette nella pagina, (a) e (b)
+   *   diventano rossi. La funzione resta: filtro in pagina, «Cancella ricerca» e Ctrl K sono
+   *   provati da INTELAIATURA-05 e INTELAIATURA-07.
+   */
+  const campo = page.locator('#settingsSearch');
+  await expect(campo).toBeVisible();
+  const dentroLaColonna = await campo.evaluate((el) => Boolean(el.closest('.settings-nav')));
+  expect(dentroLaColonna, 'il campo di ricerca deve stare nella colonna delle sezioni').toBe(true);
+  const misure = await campo.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const colonna = el.closest('.settings-nav').getBoundingClientRect();
+    const intelaiatura = el.closest('.talos-settings').getBoundingClientRect();
+    return { campo: Math.round(r.width), colonna: Math.round(colonna.width), intelaiatura: Math.round(intelaiatura.width) };
+  });
+  expect(misure.campo, 'il campo non può sfondare la colonna: ' + JSON.stringify(misure)).toBeLessThanOrEqual(misure.colonna);
+  expect(misure.campo, 'la barra è tornata a tutta larghezza: ' + JSON.stringify(misure)).toBeLessThan(misure.intelaiatura / 2);
 });
 
 test('INTELAIATURA-07 · Ctrl K apre la palette, Esc la chiude, e il fuoco torna al bottone', async ({ page }) => {
