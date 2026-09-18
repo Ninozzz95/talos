@@ -39,6 +39,31 @@
  *     FUORI dall'elemento (qui non ce n'è: il testo è quello che ha scritto il modello).
  */
 
+import { nodiDaHtml, urlAmmesso } from './html-fidato.js';
+
+/*
+ * ⛔ QUANTO HTML VIENE DA UNA RIGA. Serve a sapere dove un blocco HTML FINISCE: nel README di un
+ *   modello le righe non sono tutte tag — in mezzo c'è testo che non comincia per `<`
+ *   («achieves superior accuracy & outperforms other leading quants.»). Un criterio tipo «finché
+ *   la riga comincia per `<`» si fermerebbe a metà blocco e lascerebbe il resto a schermo come
+ *   sorgente. Si conta invece il **bilancio dei tag aperti e chiusi**, e il blocco finisce quando
+ *   torna a zero.
+ *   I tag vuoti dell'HTML (`<br>`, `<img>`, `<hr>`) non aprono niente: contarli manderebbe il
+ *   bilancio sotto zero e il blocco si chiuderebbe troppo presto.
+ */
+const TAG_VUOTI = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+export function bilancioHtml(riga) {
+  const re = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*?(\/?)>/g;
+  let bilancio = 0;
+  let m;
+  while ((m = re.exec(String(riga)))) {
+    const nome = m[2].toLowerCase();
+    if (TAG_VUOTI.has(nome) || m[3] === '/') continue;
+    bilancio += m[1] === '/' ? -1 : 1;
+  }
+  return bilancio;
+}
+
 /** Un elemento con del testo dentro, senza passare da innerHTML. */
 function elementoTesto(doc, tag, classe, valore) {
   const elemento = doc.createElement(tag);
@@ -85,17 +110,44 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
   const testo = String(testoGrezzo ?? '');
   const righe = testo.split('\n');
 
+  /*
+   * ⛔ I LINK MARKDOWN — `[testo](url)` — SONO OPT-IN, e non entrano in chat.
+   *   Owner, 18/09/2026: «la scheda del modello di Hugging Face deve essere formattata in HTML».
+   *   Nel README di un modello i link sono ovunque, e a schermo restavano `[Unsloth Dynamic
+   *   2.0](https://…)`: la sintassi, non il link. Si accende con `opzioni.linkMarkdown`, e la
+   *   scheda del modello è l'unica che la accende — **la chat e le note non cambiano di una riga**.
+   * ⛔ E l'indirizzo passa da `urlAmmesso`: un `[clicca](javascript:alert(1))` è un link che
+   *   esegue codice al tocco e non si distingue dagli altri. Se lo schema non è fra i tre ammessi,
+   *   il link si disegna **senza `href`**: resta il testo, sparisce il pericolo.
+   */
+  const htmlFidato = opzioni.htmlFidato === true;
+  const conLink = opzioni.linkMarkdown === true;
+  const PATTERN_INLINE = conLink
+    ? /\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g
+    : /\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g;
+  // Con i link accesi il primo gruppo è il link e gli altri slittano di due: la mappa dice dove
+  // sta cosa, invece di lasciare gli indici sparsi nel corpo.
+  const GRUPPI = conLink
+    ? { link: 1, linkUrl: 2, forte: 3, codice: 4, corsivoA: 5, corsivoB: 6 }
+    : { link: -1, linkUrl: -1, forte: 1, codice: 2, corsivoA: 3, corsivoB: 4 };
   function applicaInline(contenitore, segmento) {
-    // grassetto **x**, corsivo *x*/_x_, codice inline `x` — un solo giro,
-    // nessuna combinazione annidata (le "basi", non un parser a stati).
-    const pattern = /\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g;
+    // grassetto **x**, corsivo *x*/_x_, codice inline `x`, ed eventualmente link [x](y) — un solo
+    // giro, nessuna combinazione annidata (le "basi", non un parser a stati).
+    const pattern = new RegExp(PATTERN_INLINE.source, 'g');
     let ultimo = 0;
     let match;
     while ((match = pattern.exec(segmento))) {
       if (match.index > ultimo) contenitore.appendChild(doc.createTextNode(segmento.slice(ultimo, match.index)));
-      if (match[1] !== undefined) contenitore.appendChild(elementoTesto(doc, 'strong', '', match[1]));
-      else if (match[2] !== undefined) contenitore.appendChild(elementoTesto(doc, 'code', '', match[2]));
-      else contenitore.appendChild(elementoTesto(doc, 'em', '', match[3] !== undefined ? match[3] : match[4]));
+      const link = GRUPPI.link >= 0 ? match[GRUPPI.link] : undefined;
+      if (link !== undefined) {
+        const a = doc.createElement('a');
+        const indirizzo = match[GRUPPI.linkUrl];
+        if (urlAmmesso(indirizzo)) { a.setAttribute('href', indirizzo); a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); }
+        a.textContent = link;
+        contenitore.appendChild(a);
+      } else if (match[GRUPPI.forte] !== undefined) contenitore.appendChild(elementoTesto(doc, 'strong', '', match[GRUPPI.forte]));
+      else if (match[GRUPPI.codice] !== undefined) contenitore.appendChild(elementoTesto(doc, 'code', '', match[GRUPPI.codice]));
+      else contenitore.appendChild(elementoTesto(doc, 'em', '', match[GRUPPI.corsivoA] !== undefined ? match[GRUPPI.corsivoA] : match[GRUPPI.corsivoB]));
       ultimo = pattern.lastIndex;
     }
     if (ultimo < segmento.length) contenitore.appendChild(doc.createTextNode(segmento.slice(ultimo)));
@@ -124,6 +176,31 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
     const titoloMatch = /^(#{1,6})\s+(.*)$/.exec(riga);
     const citazioneMatch = /^ {0,3}>/.test(riga);
 
+    /*
+     * ⛔ IL BLOCCO HTML — OPT-IN, e solo la scheda del modello lo accende.
+     *   Owner, 18/09/2026: «la scheda del modello di Hugging Face deve essere formattata in HTML».
+     *   Misurato in foto (`pagina-modello-card_1080p_real.png`): il README di `unsloth/GLM-4.7-
+     *   Flash-GGUF` porta HTML dentro il Markdown, e a schermo usciva il SORGENTE — `<div>`,
+     *   `<p style="margin-top:0…">`, `<em><a href="…">` — in mezzo al testo.
+     * ⛔ NON si usa `innerHTML` e non si rompe la regola di questo file: la stringa viene LETTA in
+     *   un documento inerte e da lì si COSTRUISCONO nodi nuovi, con una lista di ammessi
+     *   (`html-fidato.js`). Uno `<script>` non arriva al DOM vivo in nessuna forma.
+     * ⛔ La chat e le note non cambiano: senza `opzioni.htmlFidato` questo ramo non esiste.
+     */
+    if (htmlFidato && /^\s*<[a-zA-Z]/.test(riga)) {
+      chiudiParagrafo();
+      const raccolte = [];
+      let bilancio = 0;
+      while (i < righe.length) {
+        const corrente = righe[i];
+        raccolte.push(corrente);
+        bilancio += bilancioHtml(corrente);
+        i += 1;
+        if (bilancio <= 0) break;
+      }
+      frammento.appendChild(nodiDaHtml(doc, raccolte.join('\n')));
+      continue;
+    }
     if (fenceMatch) {
       chiudiParagrafo();
       // ⭐ 02/9 — l'identificatore di linguaggio dopo i backtick di apertura
