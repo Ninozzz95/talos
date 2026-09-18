@@ -166,8 +166,22 @@ test('INTELAIATURA-06 · il cercatore del mockup è in sidebar, con la sua scorc
    *   disposizione è accesa» (causa): in `grid` c'è una sidebar e il campo deve starci dentro; in
    *   `block`, sotto i 660 px, il campo È la larghezza della colonna e non c'è niente da pretendere.
    */
-  const disposizione = await page.evaluate(() => getComputedStyle(document.querySelector('#schermoImpostazioni .talos-settings')).display);
-  if (disposizione === 'grid') {
+  const ambiente = await page.evaluate(() => {
+    const schermo = document.querySelector('#schermoImpostazioni');
+    const griglia = schermo.querySelector('.talos-settings');
+    return { contenitore: Math.round(schermo.getBoundingClientRect().width), disposizione: getComputedStyle(griglia).display };
+  });
+  /*
+   * ⛔ E LA PROVA DICE ANCHE QUALE DISPOSIZIONE DEVE ESSERE ACCESA, non solo cosa fare quando lo è.
+   *   Guardare il solo esito non basta: la seconda forma della guardia (sopra i 660 px il campo sta
+   *   sotto metà intelaiatura) è vera quando la colonna è una sidebar e **non guarda** il caso in
+   *   cui la colonna NON lo è più. La review l'ha dimostrato iniettando
+   *   `.talos-settings{display:block !important}` a 1280 px: il contenitore resta 928 e diventa
+   *   `block` — che sotto i 660 px è legittimo e sopra è una regressione. ⇒ Si guarda il
+   *   CONTENITORE: sopra i 660 px la disposizione **deve** essere `grid`.
+   */
+  if (ambiente.contenitore > 660) {
+    expect(ambiente.disposizione, `sopra i 660 px di contenitore la colonna deve essere una sidebar, non un blocco: ${JSON.stringify(ambiente)}`).toBe('grid');
     expect(misure.campo, 'la barra è tornata a tutta larghezza: ' + JSON.stringify(misure)).toBeLessThan(misure.intelaiatura / 2);
   }
 });
