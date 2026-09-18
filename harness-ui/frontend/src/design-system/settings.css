@@ -15,9 +15,26 @@
 .settings-save { max-width: 31ch; margin: 2px 0 0; font-size: .75rem; line-height: 1.6; color: var(--talos-muted); }
 .settings-save[data-state="saved"] { color: var(--talos-success); }
 .settings-save[data-state="unsaved"] { color: var(--talos-danger); max-width: 46ch; }
-.settings-toolbar { display: flex; align-items: center; gap: 12px; margin-block-end: 24px; }
-.settings-search { display: block; flex: 1; min-width: 0; }
-.settings-search__input { width: 100%; min-height: 44px; padding: 10px 14px; border: 1px solid var(--talos-border-strong); border-radius: var(--ui-radius-control); background: var(--talos-panel); color: var(--talos-text); font: inherit; font-size: .875rem; }
+/* ⛔ 18/09/2026 — LA BARRA VIVE IN SIDEBAR, larga quanto la colonna da 220 px. Owner, dalla sua
+   schermata viva: «attento alla barra di ricerca io la vedo ancora full width e no sopra sidebar».
+   Era un blocco di pagina (`page.insertBefore(toolbar, layout)`) e si prendeva tutta la larghezza
+   del contenuto; ora è dentro la colonna, sopra l'elenco delle sezioni.
+   ⛔ Le tre righe che contano, e perché ognuna è una misura e non un gusto:
+   1. `flex-wrap: wrap` + `flex: 1 1 150px` sull'etichetta — nei **204 px utili** (220 meno i 16 di
+      `padding-inline-end` della colonna) un campo e un bottone non stanno sulla stessa riga:
+      senza il permesso di andare a capo è il CAMPO a comprimersi, e un campo di ricerca stretto
+      non si legge. Il bottone «Cancella ricerca» compare **solo mentre si cerca**, quindi a capo
+      ci va di rado (W3C WCAG 2.5.8: la dimensione minima non si ottiene comprimendo).
+   2. `min-height: 36px` — sotto i 44 del campo di pagina, perché non è più l'azione principale
+      della schermata, ma sopra la soglia di tocco che il cancello delle impostazioni misura (24).
+   3. `font-size: .8125rem` — 13 px, la misura delle voci della colonna accanto. */
+.settings-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
+.settings-search { display: block; flex: 1 1 150px; min-width: 0; }
+/* ⛔ `text-overflow: ellipsis` è una RETE, non la cura: nei 203 px della colonna il segnaposto
+   italiano sta in 136 px su 181 utili (misurato il 18/09/2026 con `misura-testi.mjs`), ma una
+   traduzione più lunga o una lingua diversa non devono più uscire TAGLIATE A METÀ PAROLA come
+   nella foto di quel giorno. */
+.settings-search__input { width: 100%; min-height: 36px; padding: 8px 11px; border: 1px solid var(--talos-border-strong); border-radius: var(--ui-radius-control); background: var(--talos-panel); color: var(--talos-text); font: inherit; font-size: .8125rem; text-overflow: ellipsis; }
 .settings-search__input::placeholder { color: var(--talos-muted); opacity: 1; }
 .settings-search__input:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-settings { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: start; gap: 28px; }
@@ -118,6 +135,36 @@
  *   ⇒ 13,5 + 2 di bordo + 4 di padding = 19,5 ≈ 20 di altezza, che è quello che si vede.
  */
 .settings-nav__kbd { margin-inline-start: auto; padding: 2px 6px; border: 1px solid var(--talos-border); border-radius: 5px; color: var(--talos-muted); font-family: inherit; font-size: 9px; line-height: 13.5px; white-space: nowrap; }
+/*
+ * ⛔ LA RIGA DEL CERCATORE STA SU UNA RIGA SOLA — trovato dalla foto del 4174 del 18/09/2026,
+ *   non leggendo il CSS: l'etichetta andava a capo e la colonna mostrava «Cerca / impostazioni»
+ *   con il chip «Ctrl K» appeso a metà altezza. Il mockup la tiene su UNA riga e lo dichiara nel
+ *   suo stesso CSS: `.settings-search > span, .settings-search > kbd { white-space: nowrap }`.
+ * ⛔ Solo per QUESTA riga: le voci delle sezioni DEVONO poter andare a capo («Strumenti agente e
+ *   permessi», «Account, Doctor e backup») e infatti la regola generale lo permette
+ *   (`settings.css:29`). Qui il capo è un difetto, lì è la norma.
+ * ⛔ Misurato: icona 17 + gap 11 + etichetta 104 + chip ~38 + padding 24 = 194 nei 204 utili.
+ */
+/* ⛔ L'`#id` NON È UN GUSTO: senza, questa regola PERDE contro
+   `#schermoImpostazioni .settings-nav__item .talos-nav-item__label { white-space: normal }`
+   (riga 29 di questo stesso file), che ha un id di specificità in più. Provata: la prima
+   stesura, senza id, è arrivata INERTE — la foto mostrava ancora «Cerca / impostazioni».
+ * ⛔ E LE MISURE SONO QUELLE DEL MOCKUP PER QUESTA RIGA, non un aggiustamento per farla stare:
+   nel mockup il cercatore NON è una voce di navigazione e ha un blocco suo —
+   `.settings-search{...gap:8px;padding:10px 11px;font-size:.75rem}` e
+   `.settings-search kbd{font-size:.5625rem;padding:2px 4px}` (`TALOS-Calm-Lab-04.html`).
+   Noi gli diamo la classe delle voci, quindi ereditava gap 11, padding 12, 13 px e un chip più
+   largo: **212 px di contenuto in 204 disponibili**, cioè l'etichetta si troncava a
+   «Cerca impostazi…» (visto in foto). Con le misure del mockup ne servono ~194 e ci sta intera. */
+/* ⛔ `.talos-nav-item` IN FONDO AL SELETTORE, e non per stile: è ciò che fa VINCERE la regola.
+   Il `gap` era rimasto 11 px con la prima stesura, perché `#schermoImpostazioni
+   .talos-settings__nav .talos-nav-item { gap: 11px }` (in `index.css`) ha un id e due classi
+   contro l'id e una classe della stesura precedente. Misurato col DOM vivo, non dedotto.
+ * ⛔ E `min-height: 42px` NON è cosmetico: senza, questa riga è alta **22 px** — sotto la soglia
+   di tocco di 24×24 di WCAG 2.5.8, che il cancello `baseline-shell` misura. Il mockup le dà 42. */
+#schermoImpostazioni .talos-settings__nav .settings-nav__search.talos-nav-item { gap: 8px; min-height: 42px; padding: 10px 11px; }
+#schermoImpostazioni .talos-settings__nav .settings-nav__search .talos-nav-item__label { white-space: nowrap; font-size: .75rem; }
+#schermoImpostazioni .talos-settings__nav .settings-nav__search .settings-nav__kbd { padding: 2px 4px; }
 :root[data-sidebar="icone"] .settings-nav__search .settings-nav__kbd { display: none; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section { padding: 20px 24px; margin-block-end: 18px; border: 1px solid var(--talos-border); border-radius: var(--ui-radius-surface); background: var(--talos-panel); box-shadow: none; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section > h3 { margin: 0 0 6px; font-size: .9375rem; font-weight: 600; }
@@ -309,7 +356,9 @@
   .settings-mobile-nav .talos-select { width: 100%; max-width: 100%; font-size: .875rem; }
   .settings-header { display: block; margin-block-end: 18px; }
   .settings-save { margin-block-start: 10px; max-width: none; }
-  .settings-toolbar { flex-wrap: wrap; margin-block-end: 18px; }
+  /* Sotto i 660 px la colonna diventa un blocco a tutta larghezza: la barra torna larga tutta,
+     ed è il caso normale — non c'è più una sidebar accanto a cui star dentro. */
+  .settings-toolbar { margin-block-end: 8px; }
   .settings-toolbar > button { min-height: 36px; }
   .settings-section-heading { gap: 10px; margin-block-end: 16px; }
   .settings-section-heading h2 { font-size: 1.125rem; }
