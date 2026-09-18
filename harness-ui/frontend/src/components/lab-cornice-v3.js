@@ -130,11 +130,24 @@ const NS_SVG = 'http://www.w3.org/2000/svg';
  * è la mappa completa, e `schedaDiSezione` la usa in questo verso. Aggiungere
  * una sezione senza metterla qui NON la nasconde: fa negare il montaggio.
  */
+/*
+ * ⭐⭐ 18/09/2026 — LA FRASE DI OGNI SCHEDA, presa dal mockup e non inventata.
+ * Il confronto testa a testa (`artifacts/parita-mockup-2026-09-18/`) mostra che ogni scheda del
+ * mockup si apre con un TITOLO-FRASE e una riga che dice a cosa serve: «Il dispositivo, senza
+ * supposizioni.», «Collegamenti, non scatole nere.», «Ogni download, al suo posto.». Da noi non
+ * c'erano, e le schede cominciavano direttamente dai controlli.
+ * ⛔ La scheda «Modelli» NON ha frase, e non è una dimenticanza: nel mockup non ce l'ha — lì la
+ *   scheda va dritta al catalogo, che porta già la propria testata («Catalogo dei fornitori»).
+ *   Inventarne una per simmetria sarebbe aggiungere una parola che il mockup non ha.
+ */
 export const SCHEDE_LAB = Object.freeze([
   Object.freeze({ id: 'models', etichetta: 'Modelli', icona: 'i-brain', sezioni: Object.freeze(['catalog', 'installed', 'huggingface']) }),
-  Object.freeze({ id: 'providers', etichetta: 'Provider', icona: 'i-link', sezioni: Object.freeze(['providers']) }),
-  Object.freeze({ id: 'downloads', etichetta: 'Download', icona: 'i-download', sezioni: Object.freeze(['downloads']) }),
-  Object.freeze({ id: 'system', etichetta: 'Sistema', icona: 'i-command', sezioni: Object.freeze(['overview']) }),
+  Object.freeze({ id: 'providers', etichetta: 'Provider', icona: 'i-link', sezioni: Object.freeze(['providers']),
+    frase: Object.freeze({ titolo: 'Collegamenti, non scatole nere.', nota: 'Credenziale, configurazione e raggiungibilità sono tre fatti diversi.' }) }),
+  Object.freeze({ id: 'downloads', etichetta: 'Download', icona: 'i-download', sezioni: Object.freeze(['downloads']),
+    frase: Object.freeze({ titolo: 'Ogni download, al suo posto.', nota: 'Avanzamento, pause e recupero senza perdere il contesto.' }) }),
+  Object.freeze({ id: 'system', etichetta: 'Sistema', icona: 'i-command', sezioni: Object.freeze(['overview']),
+    frase: Object.freeze({ titolo: 'Il dispositivo, senza supposizioni.', nota: 'Distinguì ciò che è misurato, stimato o ancora sconosciuto.' }) }),
 ]);
 
 const SCHEDA_DI_SEZIONE = new Map();
@@ -576,6 +589,21 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
       // ⛔ `data-model-lab-panel`, `hidden` e `.active` NON si toccano: sono
       // di `app.js` (`app.js:4195`), e il guscio li legge invece di riscriverli.
       gruppo.append(pannello);
+    }
+
+    /* La frase della scheda, in TESTA al gruppo e PRIMA dei pannelli legacy:
+       `prepend` la mette sopra anche se i pannelli sono già dentro. */
+    if (scheda.frase) {
+      const testa = doc.createElement('header');
+      testa.className = 'talos-lab__frase';
+      testa.dataset.labFrase = scheda.id;
+      const titolo = doc.createElement('h3');
+      titolo.textContent = scheda.frase.titolo;
+      const nota = doc.createElement('p');
+      nota.className = 'talos-muted';
+      nota.textContent = scheda.frase.nota;
+      testa.append(titolo, nota);
+      gruppo.prepend(testa);
     }
   }
 
