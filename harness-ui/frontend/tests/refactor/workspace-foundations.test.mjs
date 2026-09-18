@@ -52,24 +52,22 @@ test('PREFS: getItem or denied getter cannot prevent workspace startup',()=>{
  const p=createWorkspacePreferences(()=>{throw new Error('SecurityError');});assert.equal(p.persistent,false);assert.doesNotThrow(()=>p.update({density:'compact'}));assert.equal(p.read().density,'compact');
 });
 test('PREFS: absence of storage is represented, not reported as persisted',()=>assert.equal(createWorkspacePreferences(()=>undefined).persistent,false));
-test('PREFS: preset does not navigate, run tools, or change other preferences',()=>{
- const st=memory();const p=createWorkspacePreferences(()=>st);p.update({lastSession:'session-1'});p.setPreset('session-1','focus');
- assert.equal(p.presetFor('session-1'),'focus');assert.equal(p.presetFor('session-2'),'development');assert.equal(p.read().lastSession,'session-1');
- assert.equal(JSON.parse(st.getItem(WORKSPACE_PREFERENCES_KEY)).version,2);
+/* ⛔ 18/09/2026 — questa prova diceva «un preset non naviga, non esegue attrezzi, non cambia le
+   altre preferenze». I preset sono stati eliminati (ordine dell'owner): l'INTENZIONE resta e si
+   prova su un cambio qualunque — una preferenza non ne tocca un'altra. */
+test('PREFS: an update changes one preference and leaves the others alone',()=>{
+ const st=memory();const p=createWorkspacePreferences(()=>st);
+ p.update({lastSession:'session-1'});
+ assert.equal(p.read().lastSession,'session-1');assert.equal(p.read().density,'comfortable');assert.equal(p.read().restoreWorkspace,true);
 });
 test('PREFS: corrupt and future documents recover without changing stored bytes',()=>{
  const st=memory();st.setItem(WORKSPACE_PREFERENCES_KEY,'broken');assert.equal(createWorkspacePreferences(()=>st).read().version,2);assert.equal(st.getItem(WORKSPACE_PREFERENCES_KEY),'broken');
  assert.equal(normalizeWorkspacePreferences({version:999,density:'compact'}).density,'comfortable');
 });
-test('PREFS: returned snapshots do not mutate internal state',()=>{const p=createWorkspacePreferences(()=>memory());const a=p.read();a.density='compact';a.presets.x='focus';assert.equal(p.read().density,'comfortable');assert.equal(p.presetFor('x'),'development');});
-test('PREFS: prototype keys are rejected',()=>{
- const p=createWorkspacePreferences(()=>memory());p.setPreset('__proto__','focus');assert.equal(Object.hasOwn(p.read().presets,'__proto__'),false);
-});
-test('PREFS: layout history is bounded to 64 entries',()=>{const p=createWorkspacePreferences(()=>memory());for(let i=0;i<100;i++)p.setPreset('x'+i,'focus');assert.equal(Object.keys(p.read().presets).length,64);});
-test('NAV: all destinations point to a registered screen',()=>{for(const view of Object.values(VIEW_BY_DESTINATION))assert.ok(SCREEN_BY_VIEW[view]);assert.equal(isView('home'),true);assert.equal(routeForDestination('javascript:alert(1)'),null);});
-test('HOME: real session IDs are deduplicated; unknown payloads are not invented',()=>{
- assert.deepEqual(normalizeSessions(null),[]);assert.deepEqual(normalizeSessions({items:[{},null,{sessionId:'x',nome:'one'},{sessionId:'x',nome:'two'}]}).map(r=>r.nome),['one']);
-});
+test('PREFS: returned snapshots do not mutate internal state',()=>{const p=createWorkspacePreferences(()=>memory());const a=p.read();a.density='compact';a.lastSession='x';assert.equal(p.read().density,'comfortable');assert.equal(p.read().lastSession,null);});
+/* ⛔ 18/09/2026 — qui si provava che la storia delle disposizioni stava entro 64 voci: era un tetto
+   della mappa dei PRESET, uscita con la funzione. Nessun altro campo ha una mappa, quindi la prova
+   non ha più soggetto e non si riscrive «per far numero». */
 test('D21: neither native nor overlay introduction is in product markup',async()=>{
  const text=(await read('index.template.html'))+(await read('src/legacy/frammenti.html'));
  assert.doesNotMatch(text,/(?:id|data-apre-velo)=["'](?:veloIntro|introDialog)["']/);

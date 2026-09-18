@@ -1,6 +1,5 @@
 import { createScope, createRevision } from '../../app/lifecycle.ts';
-import { createWorkspacePreferences, isPreset, workspacePreferenceKey } from '../../services/workspace-preferences.ts';
-import { LAYOUT_PRESETS } from './presets.ts';
+import { createWorkspacePreferences } from '../../services/workspace-preferences.ts';
 import type { View } from '../../domain/navigation.ts';
 
 export interface SessionSummary {
@@ -36,16 +35,19 @@ export function normalizeSessions(raw: unknown): SessionSummary[] {
 export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
   const { document: doc, preferences } = options;
   const scope = createScope(); const requests = createRevision();
+  /*
+   * ⛔ 18/09/2026 — LA BARRA DELLA WORKSPACE NON ESISTE PIÙ (ordine dell'owner: via l'header con
+   * «TALOS / <vista>», la disposizione, la densità e «Comandi Ctrl K»). Questo modulo non la cerca
+   * più e non dipende da lei: prima la sua assenza lo faceva uscire con `null` e la HOME non si
+   * disegnava affatto — cioè togliere una barra avrebbe spento una schermata.
+   */
   const root = doc.getElementById('schermoHome');
-  const header = doc.querySelector<HTMLElement>('[data-workspace-bar]');
-  if (!root || !header) return null;
-  const barra = header; // ⛔ non-null DOPO la guardia: il tipo si porta dentro i closure (il compilatore non lo deduce da sé)
+  if (!root) return null;
   const t = options.translate;
   let sessions: SessionSummary[] = [];
   let setup: Record<string, unknown> | null = null;
   let loading = false; let failed = false; let notice = ''; let hasLoaded = false;
   let renderScope = createScope();
-  let currentPresetKey = "";
   let currentView: View = 'home';
   let readController: AbortController | null = null;
 
@@ -170,84 +172,44 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     const restoreHelp = doc.getElementById('workspaceRestoreHelp');
     if (restoreHelp) restoreHelp.textContent = t('Riapre l’ultima sessione disponibile senza avviare operazioni.');
     doc.documentElement.dataset.density = prefs.density;
-    const sessionId = options.currentSession();
-    const key = workspacePreferenceKey(options.currentWorkspace?.(), sessionId);
-    const preset = preferences.presetFor(key, sessionId ? [sessionId] : []);
+    /* ⛔⛔ 18/09/2026 — LA «DISPOSIZIONE DEL WORKSPACE» È STATA ELIMINATA, non solo il suo comando.
+       Owner: «eliminalo» — e non si poteva togliere solo il pulsante, perché quella preferenza
+       guidava anche `data-workspace-preset` (larghezza di lettura del testo) e l'apertura della
+       colonna destra per preset. Qui c'erano: la chiave del workspace, il preset scelto, il
+       `data-workspace-preset` sulla radice e il `setInspectorVisible` per preset.
+       ⇒ Con la funzione spariscono la preferenza `presets`, il tipo e gli elenchi (`presets.ts` è
+       stato cancellato), e le due regole CSS che leggevano l'attributo. La colonna destra non viene
+       più aperta o chiusa da sola: resta come l'ha lasciata la persona.
+       ⛔ Il `presets` già SALVATO nei profili esistenti non si legge più e sparisce da solo alla
+       prima scrittura (il record viene ricomposto senza) — nessun bump di versione, che avrebbe
+       fatto leggere il profilo come «di una versione futura» alle build precedenti. */
     if (prefs.density === 'compact') doc.documentElement.dataset.densita = 'compatta'; else delete doc.documentElement.dataset.densita;
     const densitySelect = doc.querySelector<HTMLSelectElement>('#setting-uiDensitySelect');
     if (densitySelect) densitySelect.value = prefs.density === 'compact' ? 'compatta' : 'comoda';
     const restore = doc.querySelector<HTMLInputElement>('[data-workspace-restore]');
     if (restore) restore.checked = prefs.restoreWorkspace;
-    if (currentPresetKey !== key) { options.setInspectorVisible(LAYOUT_PRESETS[preset].inspector); currentPresetKey = key; }
-    doc.documentElement.dataset.workspacePreset = preset;
-    const select = header?.querySelector<HTMLSelectElement>('[data-workspace-preset]'); if (select) { select.value = preset; select.setAttribute('aria-label', t('Disposizione del workspace')); }
-    const density = header?.querySelector<HTMLButtonElement>('[data-workspace-density]');
-    if (density) { density.setAttribute('aria-pressed', String(prefs.density === 'compact')); density.textContent = t(prefs.density === 'compact' ? 'Compatta' : 'Confortevole'); }
-    const commands = header?.querySelector<HTMLElement>('[data-azione="comandi"]');
-    if (commands) {
-      commands.setAttribute('aria-label', t('Cerca un comando'));
-      commands.setAttribute('title', t('Cerca un comando'));
-      const label = commands.querySelector('span'); if (label) label.textContent = t('Comandi');
-    }
-    const location = header?.querySelector('[data-workspace-location]');
+    /*
+     * ⛔ 18/09/2026 — QUI C'ERANO I COMANDI DELLA BARRA (disposizione, densità, «Comandi Ctrl K»,
+     * posizione, avviso sulle preferenze temporanee): sono usciti con la barra, su ordine dell'owner.
+     * Restano vivi e sincronizzati ciò che NON stava nella barra: la densità in Impostazioni
+     * (`#setting-uiDensitySelect`), «Riprendi il workspace all'avvio» e il titolo della finestra.
+     * (Il preset è stato eliminato il 18/09/2026: vedi il blocco qui sopra.)
+     */
     const labels: Partial<Record<View, string>> = { home: 'Home', chat: 'Conversazione', terminal: 'Terminale', diff: 'Revisione', dashboard: 'Sessioni', settings: 'Impostazioni', doctor: 'Diagnostica', libreria: 'Libreria', ricerca: 'Ricerca', progetti: 'Progetti', note: 'Note', attivita: 'Attività', memoria: 'Memoria', automations: 'Automazioni', browser: 'Browser', officina: 'Officina', capability: 'Capacità' };
-    if (location) location.textContent = t(labels[currentView] || currentView);
     doc.title = `TALOS · ${t(labels[currentView] || currentView)}`;
-    const persistent = header?.querySelector<HTMLElement>('[data-workspace-persistence]');
-    if (persistent) {
-      persistent.hidden = preferences.persistent;
-      persistent.textContent = t(preferences.persistenceProblem === 'future-version'
-        ? 'Preferenze salvate da una versione più recente: le modifiche restano temporanee.'
-        : 'Preferenze temporanee: memoria locale non disponibile.');
-    }
-  }
-  const density = header.querySelector('[data-workspace-density]');
-  density?.addEventListener('click', () => { preferences.update({ density: preferences.read().density === 'compact' ? 'comfortable' : 'compact' }); syncControls(); }, { signal: scope.signal });
-  const select = header.querySelector<HTMLSelectElement>('[data-workspace-preset]');
-  if (select) {
-    select.replaceChildren(...Object.entries(LAYOUT_PRESETS).map(([value, definition]) => { const option = node('option', '', definition.label); option.value = value; return option; }));
-    select.addEventListener('change', () => {
-      if (!isPreset(select.value)) return;
-      preferences.setPreset(workspacePreferenceKey(options.currentWorkspace?.(), options.currentSession()), select.value);
-      options.setInspectorVisible(LAYOUT_PRESETS[select.value].inspector); syncControls();
-    }, { signal: scope.signal });
   }
   doc.documentElement.addEventListener('talos:lingua', () => {
-    if (select) for (const option of select.options) if (isPreset(option.value)) option.textContent = t(LAYOUT_PRESETS[option.value].label);
     syncControls(); render(); }, { signal: scope.signal });
   const restore = doc.querySelector<HTMLInputElement>('[data-workspace-restore]');
   if (restore) { restore.checked = preferences.read().restoreWorkspace; restore.addEventListener('change', () => { preferences.update({ restoreWorkspace: restore.checked }); }, { signal: scope.signal }); }
   /*
-   * ⛔⛔ 18/09/2026 — BC-78.3: L'ALTEZZA VERA DELLA BARRA SI MISURA E SI DICE AL CSS.
-   *
-   * Un pannello `position:sticky` con `max-height:calc(100dvh - var(--talos-topbar-h) - …)` era più
-   * alto dello spazio che ha e il suo piede — i pulsanti — non si raggiungeva più. Misurato a
-   * 1200×420 (probe del 18/09): finestra 420 · scorrimento del pannello che parte a 119 (barra 59 +
-   * testata 60) e clientHeight 301 · pannello sticky 336 (la formula sottraeva solo la testata).
-   * ⇒ La barra della workspace v2 sta SOPRA ogni schermo e la sua altezza non è una costante:
-   *   `min-height:56px` e 52 px sotto la soglia stretta (workspace.css:2,88). Un numero scritto a
-   *   mano sbaglierebbe una delle due. Si misura qui e si pubblica come token sulla radice; la
-   *   formula in `styles/index.css` lo sottrae con fallback `0px` (assente = nessuna barra).
-   * ⛔ Guardia contro l'autoalimentazione (MDN, «ResizeObserver», letto il 18/09/2026: «Resize events
-   *   that don't meet that condition are deferred to the next paint, and an error event is fired …
-   *   ResizeObserver loop completed with undelivered notifications»): si scrive SOLO quando il
-   *   valore cambia, così una riscrittura identica non rientra nell'osservatore.
+   * ⛔ 18/09/2026 — LA MISURA DELL'ALTEZZA DELLA BARRA È USCITA CON LA BARRA.
+   * Era nata per BC-78.3 (il pannello `sticky` era più alto dello spazio che aveva, 336 contro 301 a
+   * 1200×420, e il suo piede restava fuori): si misurava `.workspace-bar` e si pubblicava
+   * `--talos-workspace-bar-h`. Senza la barra non c'è niente da misurare e il token in
+   * `styles/index.css` vale il suo fallback `0px` — la formula resta corretta, e resta corretta
+   * anche se un giorno la barra tornasse.
    */
-  let altezzaBarraPubblicata = -1;
-  function pubblicaAltezzaBarra(): void {
-    const altezza = Math.round(barra.getBoundingClientRect().height);
-    if (altezza === altezzaBarraPubblicata) return;
-    altezzaBarraPubblicata = altezza;
-    doc.documentElement.style.setProperty('--talos-workspace-bar-h', `${altezza}px`);
-  }
-  if (typeof ResizeObserver === 'function') {
-    const osservatoreBarra = new ResizeObserver(pubblicaAltezzaBarra);
-    osservatoreBarra.observe(barra);
-    scope.own(() => osservatoreBarra.disconnect());
-  } else {
-    doc.defaultView?.addEventListener('resize', pubblicaAltezzaBarra, { signal: scope.signal });
-  }
-  pubblicaAltezzaBarra();
   scope.own(preferences.subscribe(syncControls));
   render(); syncControls();
   return {

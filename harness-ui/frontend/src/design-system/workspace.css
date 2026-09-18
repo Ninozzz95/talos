@@ -1,19 +1,12 @@
-/* NAV-01/03 + BOOT-03. Actual application shell and home; no showcase styles. */
-.workspace-bar { flex:0 0 auto; min-height:56px; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:10px 24px; border-bottom:1px solid var(--ui-border); background:var(--talos-background); position:relative; }
-.workspace-bar__location { display:flex; align-items:center; gap:10px; font-size:var(--ui-font-control); min-width:0; }
-.workspace-bar__location > span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.workspace-bar__brand { font-weight:600; font-size:11px; letter-spacing:.14em; color:var(--ui-secondary); }
-.workspace-bar__location > span[aria-hidden] { color:var(--ui-border); }
-.workspace-bar__controls { display:flex; align-items:center; gap:8px; flex:none; }
-.workspace-preset { display:flex; align-items:center; gap:8px; border:1px solid var(--ui-border); border-radius:var(--ui-radius-control); padding:0 10px; background:var(--ui-surface); min-height:34px; }
-.workspace-preset > .i { width:16px; height:16px; color:var(--ui-secondary); }
-.workspace-preset select { max-width:148px; min-width:0; min-height:32px; padding:0 4px; border:0; border-radius:6px; background:transparent; color:var(--ui-text); font:500 .8125rem/1.3 var(--talos-font-ui); }
-.workspace-preset select option { background:var(--ui-elevated); color:var(--ui-text); }
-.workspace-density, .workspace-command { min-height:34px; border-radius:var(--ui-radius-control); border:1px solid transparent; padding:6px 10px; display:flex; align-items:center; gap:8px; color:var(--ui-secondary); font-size:.8125rem; }
-.workspace-density:hover, .workspace-command:hover { background:var(--talos-card-hover); color:var(--ui-text); }
-.workspace-density[aria-pressed="true"] { border-color:var(--talos-accent-border); color:var(--talos-accent-text); background:var(--talos-accent-soft); }
-.workspace-command kbd { font:10px var(--talos-font-mono); border:1px solid var(--ui-border); padding:2px 4px; border-radius:4px; }
-.workspace-persistence { position:absolute; right:12px; top:100%; z-index:var(--talos-z-tooltip); padding:8px 12px; background:var(--ui-surface); color:var(--talos-warning); border:1px solid var(--talos-warning); border-radius:8px; font-size:.8125rem; }
+/*
+ * NAV-01/03 + BOOT-03. Actual application shell and home; no showcase styles.
+ *
+ * ⛔ 18/09/2026 — LE REGOLE DELLA BARRA DELLA WORKSPACE SONO USCITE CON LEI (`.workspace-bar`,
+ * `__location`, `__brand`, `__controls`, `.workspace-preset`, `.workspace-density`,
+ * `.workspace-command`, `.workspace-persistence`): la barra e i suoi quattro comandi sono stati
+ * rimossi dal template su ordine dell'owner. Erano le uniche regole di questo foglio a parlare
+ * della barra: da qui in giù il foglio descrive soltanto la HOME.
+ */
 .workspace-home { flex:1 1 auto; min-height:0; min-width:0; overflow:auto; overscroll-behavior:contain; padding:var(--ui-page-gutter); container-type:inline-size; }
 .workspace-home > * { max-width:1140px; margin-inline:auto; }
 .workspace-home__hero { display:flex; align-items:center; justify-content:space-between; gap:28px; padding:20px 0 34px; }
@@ -80,27 +73,17 @@
   .workspace-card { padding:18px; }
   .workspace-empty { padding:26px 0; min-height:220px; }
 }
-@media (max-width: 960px) {
-  .workspace-bar { padding:10px 16px; }
-  .workspace-command span,.workspace-command kbd,.workspace-bar__brand { display:none; }
-}
+/*
+ * ⛔ 18/09/2026 — anche le regole della barra DENTRO le media query sono uscite con lei (erano
+ * rimaste qui, ed erano le uniche che il bundle continuava a servire: la barra non esiste più, e
+ * il pulsante «Comandi» della testata della chat non ha bisogno di nessuna di queste). Restano le
+ * regole della HOME, che è ciò che questo foglio descrive.
+ */
 @media (max-width: 580px) {
-  .workspace-bar { gap:8px; padding:8px 12px; min-height:52px; }
-  .workspace-bar__controls { gap:4px; }
-  .workspace-preset { padding-inline:6px; gap:2px; }
-  .workspace-preset > .i { display:none; }
-  .workspace-preset select { max-width:112px; font-size:.75rem; }
-  .workspace-density { padding:6px; font-size:.75rem; }
-  .workspace-command { padding:6px; }
   .workspace-home { padding:20px 16px 72px; }
 }
 @media (max-width: 370px) {
-  .workspace-bar { flex-wrap:wrap; }
-  .workspace-bar__controls { margin-left:auto; }
   .workspace-home__actions { gap:8px; }
-}
-@media (pointer: coarse) {
-  .workspace-preset,.workspace-preset select,.workspace-command,.workspace-density { min-height:44px; }
 }
 @media (forced-colors: active) {
   .workspace-action,.workspace-card,.workspace-preset,.workspace-density,.workspace-command { border:1px solid CanvasText; }
