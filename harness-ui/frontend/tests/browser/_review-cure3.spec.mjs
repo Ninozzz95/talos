@@ -137,16 +137,30 @@ test('P1 · la riga HF a sedici larghezze: chi si comprime, chi sfonda, chi rest
     esito.push({ w, fuoriDi: m.fuoriDiQuanto, dentro: m.controlloVisibile, campo: m.campo.w, segnapostoTagliato: m.campo.segnapostoTagliato, riga: m.riga, scroll: m.rigaScroll });
   }
   console.log('P1-morso ' + breve(esito));
-  // Dove comincia e dove finisce la fascia: la riga è `nowrap` sopra i 1100 px di FINESTRA.
-  let basso = 1101, alto = 1700; // basso = rotto, alto = sano
-  for (let i = 0; i < 12; i += 1) {
-    const mezzo = Math.floor((basso + alto) / 2);
-    await page.setViewportSize({ width: mezzo, height: 900 });
-    await page.waitForTimeout(150);
-    const m = await page.evaluate(MISURA);
-    if (m.controlloVisibile) alto = mezzo; else basso = mezzo;
+  /*
+   * ⛔ LA BISEZIONE SI FA SOLO SE UNA FASCIA ESISTE, E ALLORA DEVE ESSERE COERENTE — correzione del
+   *   quarto revisore, 18/09/2026. La stesura precedente la eseguiva sempre, dichiarando
+   *   `basso = rotto, alto = sano`: dopo la cura, a scala predefinita **1101 è sana**, la bisezione
+   *   collassa e stampa `{"ultimaRotta":1101,"primaSana":1101}` — una contraddizione a schermo che
+   *   nessuno vedeva, perché era solo un `console.log`.
+   * ⛔ E NON si asserisce «la fascia deve esistere»: a codice sano **non deve esistere**. Si asserisce
+   *   la coerenza: se qualche larghezza è rotta, allora la prima sana viene DOPO l'ultima rotta.
+   */
+  const rotte = esito.filter((e) => !e.dentro).map((e) => e.w);
+  if (rotte.length) {
+    let basso = 1101, alto = 1700; // basso = rotto, alto = sano
+    for (let i = 0; i < 12; i += 1) {
+      const mezzo = Math.floor((basso + alto) / 2);
+      await page.setViewportSize({ width: mezzo, height: 900 });
+      await page.waitForTimeout(150);
+      const m = await page.evaluate(MISURA);
+      if (m.controlloVisibile) alto = mezzo; else basso = mezzo;
+    }
+    console.log('P1-fascia ' + breve({ ultimaRotta: basso, primaSana: alto }));
+    expect(alto, `la bisezione perde la sua premessa: ultimaRotta ${basso}, primaSana ${alto}`).toBeGreaterThan(basso);
+  } else {
+    console.log('P1-fascia: nessuna larghezza rotta fra quelle misurate — non c\'è fascia da bisecare');
   }
-  console.log('P1-fascia ' + breve({ ultimaRotta: basso, primaSana: alto }));
   expect(esito[0].dentro, 'a 1920 il controllo è dentro la riga (il verso che deve restare verde)').toBe(true);
   expect(esito.filter((e) => !e.dentro).map((e) => e.w), `il selettore dell’ordine esce dalla riga a queste larghezze: ${breve(esito.filter((e) => !e.dentro))}`).toEqual([]);
 });
