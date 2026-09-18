@@ -49,6 +49,30 @@
 > **6819 byte** e **6352 byte** ci stavano senza avvicinarsi al tetto. Nessuna
 > riga accorciata, nessuna riga persa.
 
+> ⛔⛔⛔ **ACCENDERE UNA SCHERMATA NON È UNA RIGA DI ROTTA: IL MONTAGGIO PRESUPPONE LA SUA DESTINAZIONE** —
+> 18/09/2026. Per far vivere il Laboratorio modelli nella sua schermata (che esisteva, completa, e
+> non aveva porta) ho invertito la destinazione del travaso in `app.js` — i figli dei pannelli legacy
+> sarebbero andati nei pannelli canonici. **Tre crolli in tre funzioni diverse**, uno dopo l'altro
+> (`montaCatalogoModelli` ×2: `Cannot set properties of null`, poi `replaceChildren` su null;
+> `ensureModelLabControls`: `insertBefore`, il nodo di riferimento non è più figlio di quel
+> genitore): ognuna **presupponeva** che in `originale` ci fossero i figli canonici, con gli id/attributi
+> canonici. Il travaso non è un trapianto: è un cambio di proprietario, e chi lo riceve deve saperlo.
+> ⛔ **E la prima foto della schermata era un FALSO POSITIVO**: scattata quando il montaggio non era
+> ancora girato, mostrava i pannelli canonici pieni e i modelli veri. Una foto di una superficie non
+> prova niente finché il **percorso di codice dietro** non è passato: è la stessa forma del
+> «BUILD SUCCESSFUL che non è una prova» e del «pulsante che promette un'altra cosa».
+> ⇒ L'accensione è stata RITIRATA (`157a87d2`); il laboratorio resta dove funziona, e i passi per
+> portarlo sono quelli del port vero (memoria/fornitori di là, guscio a 4 schede, catalogo a faccette).
+
+> ⛔⛔ **UNA CONCLUSIONE TRATTA DA UN NOME, NON DA UNA MISURA** — 18/09/2026. La ricognizione delle
+> sorgenti dati aveva concluso che «il 18,6 GB allocabili» del verdetto «Entra / Entra stretto / Non
+> entra» fosse **spazio su disco** usato in un verdetto di **memoria**, e io l'ho portato all'owner
+> come difetto da curare. Alla fonte era il contrario: `local-runtime-probe.mjs:251` —
+> `memory.availableBytes = machine.memory.freeBytes` = **RAM**; il disco (`storage.allocatableBytes`,
+> `machine-capacity.mjs:53`) serve al verdetto di **spazio**. Il sospetto nasceva da un **conflitto di
+> nomi**: due grandezze diverse chiamate «allocabili». ⇒ Prima di chiamare difetto una grandezza, si
+> legge **da dove viene il numero** (`file:riga`), non come si chiama.
+
 > ⛔⛔⛔⛔ **OGNI MIO FINALE HA QUESTA FORMA, SEMPRE** — owner, 18/09/2026: «d'ora in poi tutti i tuoi
 > output finali saranno strutturati così: **cosa hai fatto · cosa devo fare io · cosa devi fare tu ·
 > cosa manca** — essenziale conciso ma senza tralasciare nulla».
