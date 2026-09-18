@@ -29,6 +29,129 @@ async function apriChat(page) {
   await expect(page.locator('#schermoChat')).toBeVisible();
 }
 
+/*
+ * ⛔⛔ 18/09/2026 — LA MIGRAZIONE DEI SELETTORI DEL CUTOVER (i 43 rossi di baseline-shell).
+ *
+ * Causa comune, misurata con `sonda-selettori.mjs` / `sonda-selettori2.mjs` /
+ * `sonda-baseline1.mjs` (porta 4197, store vuoto) e letta dai messaggi d'errore veri
+ * (`--reporter=line`): il guscio canonico ha sostituito i vecchi attributi e classi del
+ * prototipo con quelli del mockup, e i test cercavano ancora i primi. Non è un difetto di
+ * prodotto: è un puntatore morto, e un puntatore morto NON fallisce — trova zero nodi e
+ * lascia passare una misura vuota (`width 0`, `getComputedStyle(null)`), che è il modo in
+ * cui questi 43 rossi si presentavano.
+ *
+ * Le sostituzioni, ognuna con la sua misura:
+ *  · `[data-vaia="impostazioni"]` → `[data-vaia="impostazioni"]`:
+ *    `[data-open-view]` = **0 nodi** in tutto il documento, `[data-vaia]` = **33**;
+ *    `[data-vaia="impostazioni"]` = 1 nodo, visibile. Le porte canoniche sono
+ *    `button.talos-nav-item[data-vaia="<vista>"]` (src/components/guscio.js).
+ *  · `[data-vaia="automazioni"]` → `[data-vaia="automazioni"]`: 1 nodo, NON visibile
+ *    (la voce sta nella barra secondaria chiusa) ⇒ resta il clic via `evaluate`, che è la
+ *    forma che il test usava già.
+ *  · `#schermoChat .mode-tab[data-vaia="chat"]` → `#schermoChat .mode-tab[data-vaia="chat"]`:
+ *    `.mode-tab[data-vaia="chat"]` = **4** nodi (le quattro strisce di schede: chat,
+ *    terminale, review, browser, tutte con `data-vaia`), **0 visibili** prima di aprire la
+ *    vista; `#schermoChat .mode-tab[data-vaia="chat"]` = **1**. Senza lo scope il
+ *    `dispatchEvent` colpiva una scheda di un'altra superficie.
+ *  · `.composer` → `#composerForm`: `.composer` = **0 nodi** (classe del prototipo
+ *    scomparsa), `#composerForm.talos-composer` = 1, con figli
+ *    `button.talos-resizer--composer`, `textarea.talos-composer__input`,
+ *    `div.talos-composer__bar`. ⛔ La riga ~1812 misura il `.composer` del MOCKUP
+ *    (`../mockup-originale/index.html`): quella resta com'è, è la pagina di riferimento.
+ *  · `.talos-composer__bar` → `.talos-composer__bar`: **0 nodi** in tutto il documento.
+ *  · `[data-settings-tab="X"]` → `#setting-tab-X`: `[data-settings-tab]` = 18 nodi di cui
+ *    **8 dentro `#talos-legacy`** ⇒ ambiguo; le canoniche sono `#setting-tab-account`,
+ *    `-models`, `-chat`, `-appearance`, una ciascuna e visibili.
+ *  · `#inspector-tab-files` → `#inspector-tab-files`: 2 nodi (uno legacy) ⇒
+ *    `strict mode violation`; la canonica è un id.
+ *  · `#chatFullWidthToggle.check()/uncheck()` → clic su `#chatFullWidthToggle--calm`:
+ *    l'input nativo è 0×0 con `aria-hidden="true"`/`tabindex="-1"`, e `check({force:true})`
+ *    NON scavalca la visibilità (`locator.check: Element is not visible`, TimeoutError 30 s
+ *    su COMPOSER-SHAPE-FULL-WIDTH-01); la faccia cliccabile è il `calm-check` da **42×25**
+ *    (`role="switch"`) e il clic scrive la PROPRIETÀ `checked` (nessun attributo: `attr
+ *    checked` resta `null`) — lo stato si legge con `toBeChecked()` sull'input nativo, e
+ *    `aria-checked` passa a `"true"` sulla faccia. Misurato con `sonda-sheet-toggle.mjs`
+ *    a 1920×1080 il 18/09/2026.
+ *
+ * ⛔⛔ 18/09/2026 — DUE CAMBI DI TESTO DELIBERATI DEL PRODOTTO (non difetti, non «aggiustamenti»).
+ *
+ *  · La pillola del modello mostra il NOME UMANO, e vuoto dice «Scegli il modello».
+ *    `src/legacy/app.js:8393` — `nomeModelloBreve(state.model) || 'Scegli il modello'`, con il
+ *    commento «05/9 Fase 2: il chip mostra il nome breve» — introdotto da `8413f8df` (05/09/2026,
+ *    S-06 ChatFooter). La traduzione vive in UN posto solo, `src/components/chat-foot.js:67`
+ *    (`nomeModelloUmano`: per un id remoto è l'ultimo segmento dopo `/`).
+ *    ⇒ Misurato dal vivo con `sonda-pillola.mjs` (18/09, porta 4197): sessione con
+ *    `modello: 'qwen/qwen3.8-flash'` → chip «**qwen3.8-flash**», `title` «Cambia modello ·
+ *    qwen/qwen3.8-flash»; sessione senza modello → chip «Scegli il modello». I test pretendevano
+ *    l'id grezzo e il segnaposto inglese «Seleziona modello».
+ *  · I permessi si nominano in italiano, con la mappa in un posto solo: `src/components/politiche.js`
+ *    («Workspace write» → «**Scrive nel progetto**», «Read only» → «Solo lettura», «On request» →
+ *    «Chiede prima», «Full access» → «Accesso pieno»), introdotta da `9bc410b1` (07/09/2026) con la
+ *    regola dell'owner «mai nomi tecnici a schermo». ⛔ Il VALORE che viaggia verso il kernel resta
+ *    tecnico byte per byte: `corpoAvvio.permessi === 'Workspace write'` resta un'asserzione valida,
+ *    ed è la ragione per cui convivono le due forme — l'etichetta è dell'interfaccia, il valore è
+ *    del contratto.
+ */
+const toggleFullWidth = (page) => page.locator('#chatFullWidthToggle');
+const facciaFullWidth = (page) => page.locator('#chatFullWidthToggle--calm');
+async function accendiFullWidth(page) {
+  await facciaFullWidth(page).click();
+  await expect(toggleFullWidth(page)).toBeChecked();
+}
+async function spegniFullWidth(page) {
+  await facciaFullWidth(page).click();
+  await expect(toggleFullWidth(page)).not.toBeChecked();
+}
+
+/*
+ * ⛔⛔ 18/09/2026 — IL DRIVER DEI CONTROLLI «CALM» DELLE IMPOSTAZIONI.
+ *
+ * I `select` nativi delle impostazioni NON sono più cliccabili: `mountCalmControls`
+ * (`public/app.js:42500-42560`) li nasconde (`data-calm-source`, `tabindex="-1"`,
+ * `aria-hidden="true"`, `display:none`, 0×0 — misurato sulla 4199, `%TEMP%\corsia5\z6.log`)
+ * e mette al loro posto una FACCIA cliccabile `button.calm-select[role="combobox"]` con
+ * id `<nativo>--calm`. Un `selectOption()` su un nodo `display:none` va in timeout: è la
+ * causa dei rossi COMPOSER-SHAPE-FULL-WIDTH-01, COMPOSER-MOCKUP-HEIGHT-01 e
+ * DESKTOP-SETTINGS-PERSISTENCE-01.
+ *
+ * Il giro che il prodotto vuole è quello del pattern ARIA «combobox select-only»
+ * (w3c/aria-at, `combobox-select-only` → `combobox-select-only.opening`, letto 18/09/2026):
+ * si clicca la faccia, si aspetta la `listbox` VISIBILE, si clicca l'opzione per NOME, e la
+ * listbox si richiude. Playwright: `getByRole(role, { name, exact })` confronta il NOME
+ * ACCESSIBILE, non l'id o il testo grezzo (github.com/microsoft/playwright, letto 18/09/2026);
+ * è la forma che sopravvive a un rifacimento degli id.
+ *
+ * ⇒ La funzione prende il VALORE dell'opzione (quello che il prodotto persiste) e legge dal
+ * `<select>` NATIVO l'etichetta che il prodotto mostra in QUESTO momento: così il test non porta
+ * nel proprio testo una parola tradotta. ⛔ Misurato il 18/09/2026: lo store isolato della suite
+ * avvia il prodotto in INGLESE, la 4199 con lo store della corsia lo avvia in ITALIANO, e la
+ * stessa lista offre «Compatta» in un caso e «Compact» nell'altro.
+ * Fonti (lette il 18/09/2026): github.com/currents-dev/playwright-best-practices-skill,
+ * `testing-patterns/i18n.md` («Hardcoded text assertions → Breaks in other locales → Use test IDs
+ * or parameterize»); hyperping.com/blog/playwright-dropdown-guide (col `<select>` nativo il valore
+ * sopravvive alla traduzione, il testo no); w3c/aria-at `combobox-select-only` (faccia → listbox
+ * visibile → opzione per ruolo, il giro che il prodotto implementa); playwright.dev/docs/locators.
+ * ⇒ Ritorna il NUMERO di opzioni con quell'etichetta esatta: zero significa «la voce non esiste in
+ * questa lista», e chi chiama lo asserisce — è il verso in cui il test deve diventare rosso.
+ * ⛔ Come ogni controllo di questa suite, vale NELLA SUA SCHEDA: la faccia è visibile solo
+ * nella scheda che la contiene (misurato: un click sulla faccia della scheda «chat» mentre
+ * si guarda «appearance» va in timeout a 30 s).
+ */
+async function scegliCalm(page, id, valore) {
+  const faccia = page.locator(`#${id}--calm`);
+  await faccia.scrollIntoViewIfNeeded();
+  await faccia.click();
+  const lista = page.locator(`#${id}--calm--listbox`);
+  await lista.waitFor({ state: 'visible', timeout: 5000 });
+  const etichetta = (await page.locator(`#${id} option[value="${valore}"]`).textContent()).trim();
+  const opzione = lista.getByRole('option', { name: etichetta, exact: true });
+  const conto = await opzione.count();
+  await opzione.click();
+  await expect(lista).toBeHidden();
+  await expect(page.locator(`#${id}`)).toHaveValue(valore);
+  return conto;
+}
+
 test('baseline desktop shell is served by the real harness server', async ({ page }) => {
   const response = await page.goto('/');
   expect(response?.ok()).toBe(true);
@@ -108,25 +231,73 @@ test('BACKGROUND-MOTION-COMPOSITOR-02 — lo sfondo si muove senza mutare lo sty
   });
   await apriChat(page);
   await page.waitForTimeout(250);
-  const prima = await page.evaluate(() => ({
-    rootStyle: document.documentElement.getAttribute('style') ?? '',
-    transform: getComputedStyle(document.querySelector('.scene-orb-a')).transform,
-  }));
-  await page.waitForTimeout(300);
-  const dopo = await page.evaluate(() => ({
-    rootStyle: document.documentElement.getAttribute('style') ?? '',
-    transform: getComputedStyle(document.querySelector('.scene-orb-a')).transform,
-    animations: document.querySelector('.scene-orb-a').getAnimations().map((animation) => ({
-      currentTime: animation.currentTime,
-      playState: animation.playState,
-    })),
-  }));
+  /*
+   * ⛔⛔ 18/09/2026 — `.scene-orb-a` NON ESISTE PIÙ: è un puntatore morto, non un difetto di
+   * prodotto. `getComputedStyle(document.querySelector('.scene-orb-a'))` lancia
+   * `TypeError: parameter 1 is not of type 'Element'` — è l'errore vero del rosso — e il censimento
+   * lo conferma: `.scene-orb` = **0 nodi** (`sonda-interazioni-2.mjs`, porta 4197). Le classi del
+   * prototipo sono sparite col cutover; il renderer canonico è UN canvas,
+   * `canvas.talos-motion-canvas`, montato dal pacchetto (`src/motion/desktop-background.js:283`,
+   * `mountStage`) e pilotato da `window.__talosDesktopMotion`.
+   *
+   * Il soggetto della prova resta quello che il nome dichiara — «lo sfondo si muove senza mutare
+   * lo style della radice a ogni frame» — e si legge dallo stato che il componente ESPONE
+   * (`status().frames` / `status().stages[].draws`), non dal pixel e non dal nome di
+   * un'animazione CSS: ricerca 18/09/2026 (QASkills, «Visual Testing Animation Freeze
+   * Strategies»; currents-dev/playwright-best-practices, `canvas-webgl.md`: niente asserzioni
+   * pixel-perfect su un canvas, si asserisce lo stato esposto) e Playwright «Auto-waiting»
+   * (l'auto-wait non vede i cicli rAF: si fa polling su un contatore).
+   *
+   * ⛔⛔⛔ E QUI LA PROVA RESTA ROSSA, PER UN DIFETTO DI PRODOTTO MISURATO — non per il test.
+   * Misurato con `sonda-sfondo-4.mjs` (porta 4197, 1440×900, movimento acceso):
+   *   · a carico: canvas 0×0 dentro `#schermoChat[hidden]` → `schedule()` non arma il ciclo
+   *     (`desktop-background.js:237-242`);
+   *   · aprendo la chat il canvas diventa **824×900** e il ResizeObserver chiama `prepare()`
+   *     (`:261`), che DISEGNA (dt 0) e scrive `data-scene-status="animating"` — ma `prepare()` non
+   *     riarma **mai** il ciclo: l'unico che lo fa è `schedule()`;
+   *   · risultato a +1200 ms: `running: false`, `frames: 0`, `draws: 3`, e lo status che continua a
+   *     dire `animating` — un esito stampato che non vale più ([[un-esito-stampato-dopo-un-errore-non-vale]]);
+   *   · **controllo positivo**: `refresh()` (che chiama `schedule()`) riporta i fotogrammi a 22 in
+   *     700 ms, e un giro di classe su `body` a 44 — quindi l'ambiente CONSEGNA fotogrammi e non è
+   *     il throttling headless (che la ricerca 18/09/2026, zenn.dev «requestAnimationFrame…»,
+   *     misura come 2 chiamate in 2 s con i flag di backgrounding mancanti);
+   *   · andando via dalla chat e tornando: `frames: 45`, `running: false` — si spegne di nuovo.
+   * ⇒ Con le impostazioni già caricate all'avvio (movimento ACceso: il caso dell'owner) lo sfondo
+   *   resta FERMO per sempre, e nessuno se ne accorge perché lo status dichiara `animating`.
+   *   La misura qui sotto è la prova: se diventa verde, il difetto è curato.
+   */
+  const canvas = page.locator('canvas.talos-motion-canvas');
+  await expect(canvas).toHaveCount(1);
+  await expect(canvas).toBeVisible();
+  const stato = () => page.evaluate(() => {
+    const status = window.__talosDesktopMotion?.status?.();
+    return {
+      rootStyle: document.documentElement.getAttribute('style') ?? '',
+      running: status?.running ?? null,
+      frames: status?.frames ?? -1,
+      draws: status?.stages?.map((stage) => stage.draws) ?? [],
+    };
+  });
+  const prima = await stato();
+  await page.waitForTimeout(700);
+  const dopo = await stato();
+  /* Il controllo positivo si prende DOPO la misura (non la maschera) e serve al messaggio
+     d'errore: senza di lui «0 fotogrammi» sarebbe indistinguibile da un ambiente che non ne
+     consegna nessuno. */
+  const controllo = await page.evaluate(async () => {
+    window.__talosDesktopMotion.refresh();
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    return window.__talosDesktopMotion.status().frames;
+  });
   expect(dopo.rootStyle).toBe(prima.rootStyle);
   expect(dopo.rootStyle).not.toContain('--talos-motion-phase');
   expect(dopo.rootStyle).not.toContain('--talos-motion-x');
   expect(dopo.rootStyle).not.toContain('--talos-motion-y');
-  expect(dopo.animations.some((animation) => animation.playState === 'running' && Number(animation.currentTime) > 0)).toBe(true);
-  expect(dopo.transform).not.toBe(prima.transform);
+  await expect(canvas, 'il renderer canonico dichiara che la scena sta animando').toHaveAttribute('data-scene-status', 'animating');
+  expect(
+    dopo.frames,
+    `lo sfondo dichiara «animating» e non disegna: frames ${prima.frames} → ${dopo.frames} in 700 ms, draws ${JSON.stringify(prima.draws)} → ${JSON.stringify(dopo.draws)}, running ${prima.running}/${dopo.running}. Controllo positivo: dopo refresh() i fotogrammi arrivano a ${controllo}, quindi l'ambiente consegna fotogrammi e il ciclo non è riarmato (prepare() non chiama schedule()).`,
+  ).toBeGreaterThan(prima.frames);
 });
 
 test('BACKGROUND-MOTION-PERF-03 — lo sfondo non forza ricalcoli stile continui sul main thread', async ({ page }) => {
@@ -157,11 +328,46 @@ test('BACKGROUND-MOTION-PAUSE-04 — static e visibility usano uno stato di paus
   });
   await page.goto('/');
   await expect(page.locator('html')).toHaveClass(/background-motion-paused/);
-  const stati = await page.locator('.scene-orb').evaluateAll((orbs) => orbs.map((orb) => {
-    const style = getComputedStyle(orb);
-    return { animationName: style.animationName, animationPlayState: style.animationPlayState };
-  }));
-  expect(stati.every(({ animationName, animationPlayState }) => animationName === 'none' || animationPlayState === 'paused')).toBe(true);
+  /*
+   * ⛔⛔ 18/09/2026 — QUESTA PROVA ERA VERDE PER VACUITÀ, e vale la pena scriverlo perché è la
+   * stessa malattia di «un elenco vuoto non limita, allarga». Il corpo era:
+   *
+   *     const stati = await page.locator('.scene-orb').evaluateAll((orbs) => ...);
+   *     expect(stati.every(({ animationName, animationPlayState }) => ...)).toBe(true);
+   *
+   * `.scene-orb` = **0 nodi** nel guscio canonico (le classi del prototipo non esistono più:
+   * misurato con `sonda-interazioni-2.mjs`, porta 4197, modalità `static` — `.scene-orb` 0,
+   * `.scene-orb-a` assente), quindi `stati` era `[]` e `[].every(...)` è **`true` per
+   * costruzione**: la prova passava qualunque cosa facesse il prodotto. Ricerca 18/09/2026 — MDN,
+   * `Array.prototype.every`: «for an empty array, it returns **true** … it is vacuously true that
+   * all elements of the empty set satisfy any given condition», con la mitigazione indicata:
+   * controllare la lunghezza prima di chiamare `every()`. Qui la si applica alla radice: non si
+   * usa più `every()` su un elenco che può essere vuoto.
+   *
+   * Il segnale vero è il canvas canonico, che lo stato lo DICHIARA: misurato a 1440×900 con
+   * `motionMode: 'static'` — Home E chat — `canvas.talos-motion-canvas` con
+   * `data-scene-status="static"`, `running: false`, `frames: 0`. E la parte che la prova vecchia
+   * non poteva vedere: i fotogrammi NON devono avanzare. Ricerca 18/09/2026 (QASkills, «Visual
+   * Testing Animation Freeze Strategies»; currents-dev/playwright-best-practices,
+   * `canvas-webgl.md`): su un canvas non si asserisce il pixel né il nome di un'animazione CSS —
+   * si asserisce lo **stato esposto** dal componente.
+   */
+  const canvas = page.locator('canvas.talos-motion-canvas');
+  await expect(canvas).toHaveCount(1);
+  await expect(canvas).toHaveAttribute('data-scene-status', 'static');
+  const fotogrammi = () => page.evaluate(() => window.__talosDesktopMotion?.status?.().frames ?? -1);
+  const primo = await fotogrammi();
+  await page.waitForTimeout(600);
+  const secondo = await fotogrammi();
+  expect(secondo, `un fondo in pausa non disegna: frames ${primo} → ${secondo}`).toBe(primo);
+  /* E la stessa cosa in chat: la pausa non è «solo un po' di Home». */
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+  await expect(page.locator('#schermoChat')).toBeVisible();
+  await expect(canvas).toHaveAttribute('data-scene-status', 'static');
+  const terzo = await fotogrammi();
+  await page.waitForTimeout(600);
+  expect(await fotogrammi(), 'nemmeno in chat il fondo statico disegna').toBe(terzo);
+  await expect(page.locator('html')).toHaveClass(/background-motion-paused/);
 });
 
 test('LAG-INTERACTION-DIALOG-38 — una modale pausa lo sfondo e la chiusura lo riprende', async ({ page }) => {
@@ -176,13 +382,52 @@ test('LAG-INTERACTION-DIALOG-38 — una modale pausa lo sfondo e la chiusura lo 
   await expect(root).toHaveClass(/background-motion-active/);
   await expect(root).not.toHaveClass(/background-motion-paused/);
 
-  await page.locator('#commandPaletteBtn').click();
-  await expect(page.locator('#commandDialog')).toBeVisible();
+  /*
+   * ⛔⛔ 18/09/2026 — LA PORTA È CAMBIATA, IL SEGNALE NO. `#commandPaletteBtn` esiste ma è
+   * `display:none`: `locator.click` va in timeout con «element is not visible» (l'errore vero del
+   * rosso), e le quattro copie canoniche di `[data-azione="comandi"]` misurano 0×0. La porta VIVA è
+   * la scorciatoia **Ctrl+K** (`src/components/scorciatoie.js:163` → handler `app.js:21883`), che
+   * apre il VELO canonico `#veloComandi` — non il `<dialog>` legacy `#commandDialog`, che resta
+   * 0×0 e `hidden`. Misurato con `sonda-interazioni-2.mjs` (porta 4197, 1440×900, 18/09/2026):
+   * dopo Ctrl+K il velo è **1440×900, hidden:false**, e `[data-chiudi="veloComandi"]` è
+   * l'**unica** chiusura (1 nodo, visibile); `#commandDialog` 0×0.
+   */
+  await page.keyboard.press('Control+k');
+  await expect(page.locator('#veloComandi')).toBeVisible();
+
+  /*
+   * ⛔⛔⛔ 18/09/2026 — QUESTA RIGA RESTA ROSSA, ED È UN DIFETTO DI PRODOTTO, non un puntatore.
+   *
+   * Con il velo APERTO le classi non cambiano: `html` e `body` restano `background-motion-active`
+   * e `background-motion-paused` non arriva mai (misurato due volte, a 300 ms e a 520 ms
+   * dall'apertura, `sonda-interazioni-2.mjs`). E non è il velo dei comandi a essere speciale:
+   * misurato con `sonda-modali.mjs` sulla stessa porta — il foglio «Modello»
+   * (`[data-open-sheet="model"]`) apre anche lui un velo (`veloModello`) e lascia le classi
+   * invariate. Cioè: **nessuna modale canonica pausa più lo sfondo**.
+   *
+   * Causa alla fonte, letta e non dedotta: `syncBackgroundDialogPause()` chiama
+   * `setBackgroundInteractionPause('dialog', commandDialog.open || sheetDialog.open)`
+   * (`src/legacy/app.js:14877-14878`) e i suoi due soli chiamanti stanno in `showEmbeddedDialog`
+   * (`app.js:2169`) e `closeEmbeddedDialog` (`app.js:2202`) — i due `<dialog>` LEGACY. Il cutover
+   * ha portato ogni foglio e ogni pannello sui veli `.overlay-layer`: `openCommandPalette()` passa
+   * da `apriVeloMockup('veloComandi')` e tocca il dialog solo nel ramo di ripiego, «se il velo non
+   * esiste» (`app.js:20959-20962`); `openSheet()` fa lo stesso con `VELO_PER_FOGLIO`
+   * (`app.js:7802-7811`, «torna `true` quando il velo ha preso il posto del foglio»). E
+   * `apriVeloMockup`/`chiudiVeloMockup` (`app.js:22431-22468`) non chiamano MAI la pausa. ⇒ Il
+   * meccanismo è intatto; è la sua unica porta d'ingresso che non è più quella.
+   *
+   * Ricerca 18/09/2026 (21st.dev, «Animated Backgrounds in React», ago 2026: su 155 sfondi
+   * censiti 67 girano un ciclo continuo e solo 6 si fermano quando nessuno guarda; ctxr-dev
+   * `skill-frontend-excellence`, `references/motion.md`: «pause all motion on a route change»):
+   * una modale a tutto schermo è esattamente la condizione «nessuno sta guardando», e il ciclo
+   * decorativo compete per lo stesso budget di 16,7 ms dell'animazione d'ingresso della modale.
+   * La regola del prodotto è quindi giusta — è il collegamento che manca.
+   */
   await expect(root).toHaveClass(/background-motion-active/);
   await expect(root).toHaveClass(/background-motion-paused/);
 
-  await page.locator('#closeCommand').click();
-  await expect(page.locator('#commandDialog')).toBeHidden();
+  await page.locator('[data-chiudi="veloComandi"]').click();
+  await expect(page.locator('#veloComandi')).toBeHidden();
   await expect(root).toHaveClass(/background-motion-active/);
   await expect(root).not.toHaveClass(/background-motion-paused/);
 });
@@ -196,7 +441,20 @@ test('LAG-INTERACTION-SCROLL-39 — lo scroll pausa lo sfondo solo durante il ge
   });
   await apriChat(page);
   const root = page.locator('html');
-  const conversation = page.locator('#conversation');
+  /*
+   * ⛔ 18/09/2026 — LO SCROLLER VERO NON È `#conversation`. Misurato con `sonda-interazioni-2.mjs`
+   * (porta 4197, 1440×900): `#conversation` è **709×0** con `overflow-y: visible` — la rotella
+   * sopra un nodo alto zero non scorre niente, e `scrollTop` resta 0 (è l'errore vero del rosso:
+   * `Expected: > 0 · Received: 0`, timeout 5 s sul predicato). Chi scorre è `.talos-conversation`:
+   * **824×700, `overflow-y: auto`**, `scrollTop` 0 → 420 con la stessa rotella.
+   * Le due classi `.talos-conversation` sono due nodi (`.talos-conversation--empty` è lo stato
+   * vuoto, 824×700 pure lui): il modificatore è l'unica differenza, quindi il locator si restringe
+   * NEL SELETTORE e non con `.first()` — è la differenza semantica, non l'ordine.
+   * Ricerca 18/09/2026: Playwright «Locators» (strict mode; «be specific»), già applicata sopra per
+   * `.mode-tab[data-vaia]`.
+   */
+  const conversation = page.locator('.talos-conversation:not(.talos-conversation--empty)');
+  await expect(conversation).toHaveCount(1);
   await conversation.evaluate((element) => {
     const spacer = document.createElement('div');
     spacer.style.height = '2400px';
@@ -210,19 +468,55 @@ test('LAG-INTERACTION-SCROLL-39 — lo scroll pausa lo sfondo solo durante il ge
   expect(box).not.toBeNull();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, 420);
-  await expect.poll(() => conversation.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  /*
+   * ⛔ 18/09/2026 — L'ORDINE DELLE DUE PROVE È UNA MISURA, NON UN GUSTO. La pausa dura
+   * `BACKGROUND_SCROLL_RESUME_DELAY_MS = 220` (`app.js:14727`), e la si vede accesa a **+80 ms**
+   * dalla rotella e già spenta a **+300 ms** (`sonda-interazioni-2.mjs`). Se si aspettasse prima il
+   * `scrollTop` (che il poll risolve in ~100-150 ms), l'asserzione sulla pausa arriverebbe a
+   * finestra quasi chiusa e diventerebbe intermittente: si prova PRIMA la classe, che è l'effetto
+   * del gesto, e solo dopo la posizione.
+   */
   await expect(root).toHaveClass(/background-motion-paused/);
+  await expect.poll(() => conversation.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await expect(root).toHaveClass(/background-motion-active/);
   await expect(root).not.toHaveClass(/background-motion-paused/, { timeout: 1_000 });
 });
 
 test('FILE-EXPLORER-TOOLBAR-05 — la sidebar Files espone i quattro comandi e li disabilita senza sessione', async ({ page }) => {
   await apriChat(page);
-  await page.locator('[data-inspector-tab="files"]').click();
-  for (const label of ['Nuovo file', 'Nuova cartella', 'Aggiorna file', 'Comprimi cartelle']) {
-    const button = page.locator('#inspector-files').getByRole('button', { name: label });
-    await expect(button).toBeVisible();
-    await expect(button).toBeDisabled();
+  await page.locator('#inspector-tab-files').click();
+  /*
+   * ⛔ 18/09/2026 — PO-30, fetta 1 (owner 17/09/2026, `index.template.html:1247-1256`): i CINQUE
+   * comandi a icona affiancati sono diventati DUE menu — «+» `#fileTreeAdd` → `#menuFileNuovo`,
+   * «⋯» `#fileTreeMore` → `#menuFileAltro` — e due etichette sono cambiate: «Aggiorna file» →
+   * **«Rileggi la cartella»**, «Comprimi cartelle» → **«Chiudi tutte le cartelle»**. I quattro id
+   * (`#fileTreeNewFile`, `#fileTreeNewFolder`, `#fileTreeRefresh`, `#fileTreeCollapse`) sono gli
+   * stessi di prima: è cambiato il posto, non il comando (le vecchie etichette sopravvivono solo
+   * nel mockup, `mockup/talos-mockup.html:3470`).
+   * ⇒ Il vecchio `getByRole('button', { name: 'Aggiorna file' })` non poteva più trovarle, per DUE
+   * ragioni indipendenti, entrambe documentate (Playwright, guida «Locators» / getByRole, letta
+   * 18/09/2026 — https://playwright.dev/docs/locators#locate-by-role): le voci portano
+   * `role="menuitem"` (non `button`), e stanno dentro un `popover` CHIUSO, che il selettore di
+   * ruolo scarta perché fuori dall'albero di accessibilità. Qui si interrogano per id: è l'oggetto
+   * vero, non il suo ruolo, e regge anche a popover chiuso.
+   *
+   * ⛔ L'ASSERZIONE `toBeDisabled()` RESTA, e oggi è ROSSA per un difetto di PRODOTTO, non di test.
+   * MISURATO il 18/09/2026 (porta 4197, store vuoto, `realSessionState.id === null`, scheda File
+   * aperta): `#fileTreeAdd` 40×32 `disabled:false`, `#fileTreeMore` 40×32 `disabled:false`, e il
+   * menu «+» si apre davvero — i quattro comandi sono cliccabili SENZA sessione. La regola del
+   * prodotto è l'opposta ed è scritta due volte: `syncFileTreeToolbar()` (`src/legacy/app.js:14124`)
+   * spegne gli stessi sette bottoni quando non c'è una sessione vera, e il suo commento di
+   * chiamata (`src/legacy/app.js:11932-11945`) dice perché. Il punto è che quella chiamata vive in
+   * `resettaSuperficiRealiDedicate()`, che parte SOLO da una sessione precedente
+   * (`src/legacy/app.js:17413`), e `renderizzaAlberoRealeUnaVolta()` esce PRIMA di sincronizzare
+   * quando non c'è né `id` né `previewProjectId` (`src/legacy/app.js:15716-15718`) ⇒ a freddo
+   * nessuno dei due percorsi passa di lì. Nessuna cura lato test: la riga va resa verde dal
+   * prodotto (una `syncFileTreeToolbar(false)` al bootstrap).
+   */
+  for (const selettore of ['#fileTreeAdd', '#fileTreeMore', '#fileTreeNewFile', '#fileTreeNewFolder', '#fileTreeRefresh', '#fileTreeCollapse']) {
+    const comando = page.locator(selettore);
+    await expect(comando).toBeAttached();
+    await expect(comando).toBeDisabled();
   }
 });
 
@@ -251,21 +545,52 @@ test('FILE-EXPLORER-REFRESH-06 — sessione reale abilita crea, aggiorna e compr
 
   await apriChat(page);
   await page.locator('[data-real-session-id="session-tree-tools"]').click();
-  await page.locator('[data-inspector-tab="files"]').click();
-  const toolbar = page.locator('#inspector-files');
-  for (const label of ['Nuovo file', 'Nuova cartella', 'Aggiorna file', 'Comprimi cartelle']) {
-    await expect(toolbar.getByRole('button', { name: label })).toBeEnabled();
+  await page.locator('#inspector-tab-files').click();
+  /*
+   * ⛔ 18/09/2026 — PO-30 (owner 17/09/2026, `index.template.html:1247-1256`): con una sessione vera
+   * i quattro comandi sono ABILITATI (`syncFileTreeToolbar()`, `src/legacy/app.js:14124`), ma non
+   * stanno più affiancati nella toolbar: si raggiungono da «+» (`#fileTreeAdd` → `#menuFileNuovo`) e
+   * da «⋯» (`#fileTreeMore` → `#menuFileAltro`). Due etichette sono cambiate — «Aggiorna file» →
+   * «Rileggi la cartella», «Comprimi cartelle» → «Chiudi tutte le cartelle». Le voci portano
+   * `role="menuitem"` dentro un `popover`, quindi il selettore di ruolo le scarta finché il menu è
+   * chiuso (Playwright, guida «Locators»/getByRole, letta 18/09/2026, già citata sopra): si aprono i
+   * menu come fa la persona, e si interroga per id — che è l'oggetto vero.
+   * MISURATO il 18/09/2026 con sessione vera (porta 4197): `#fileTreeAdd` e `#fileTreeMore` 40×32
+   * `disabled:false`, e i due menu si aprono con le voci visibili.
+   */
+  for (const selettore of ['#fileTreeAdd', '#fileTreeMore']) {
+    await expect(page.locator(selettore)).toBeEnabled();
   }
+  await page.locator('#fileTreeAdd').click();
+  await expect(page.locator('#fileTreeNewFile')).toBeVisible();
+  await expect(page.locator('#fileTreeNewFolder')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.locator('#fileTreeMore').click();
+  await expect(page.locator('#fileTreeRefresh')).toBeVisible();
+  await expect(page.locator('#fileTreeCollapse')).toBeVisible();
+  await page.keyboard.press('Escape');
+
   const folder = page.locator('#inspector-files .ft-node[data-percorso="src"] > .ft-row');
   await folder.click();
   await expect(page.locator('#inspector-files .ft-node[data-percorso="src"]')).toHaveAttribute('aria-expanded', 'true');
   const beforeRefresh = rootReads;
-  await toolbar.getByRole('button', { name: 'Aggiorna file' }).click();
+  await page.locator('#fileTreeMore').click();
+  await page.locator('#fileTreeRefresh').click();
   await expect.poll(() => rootReads).toBeGreaterThan(beforeRefresh);
-  await toolbar.getByRole('button', { name: 'Comprimi cartelle' }).click();
+  await page.locator('#fileTreeMore').click();
+  await page.locator('#fileTreeCollapse').click();
   await expect(page.locator('#inspector-files .ft-node[data-percorso="src"]')).toHaveAttribute('aria-expanded', 'false');
-  await toolbar.getByRole('button', { name: 'Nuova cartella' }).click();
-  await expect(page.locator('#sheetTitle')).toHaveText('Nuova cartella');
+  await page.locator('#fileTreeAdd').click();
+  await page.locator('#fileTreeNewFolder').click();
+  /*
+   * ⛔ 18/09/2026 — il titolo del dialogo non è `#sheetTitle`: quel nodo non esiste più in pagina
+   * (0 occorrenze in `index.template.html`) ed è il residuo di un altro flusso — misurato, dopo il
+   * clic su «Nuova cartella» conteneva ancora «Capability». Il titolo vero lo scrive il velo in
+   * `src/legacy/app.js:7585` su `#titoloveloCreaFile` (è il nodo puntato da `aria-labelledby` del
+   * dialogo, `index.template.html:1295`), insieme a etichetta e testo del pulsante.
+   */
+  await expect(page.locator('#titoloveloCreaFile')).toHaveText('Nuova cartella');
+  await expect(page.locator('#creaFileSalva')).toHaveText('Crea cartella');
 });
 
 test('LAG-REPLAY-TREE-31 — una raffica storica invalida il tree una volta senza render concorrenti', async ({ page }) => {
@@ -279,6 +604,18 @@ test('LAG-REPLAY-TREE-31 — una raffica storica invalida il tree una volta senz
     }) });
   });
   await apriChat(page);
+  /*
+   * ⛔ BC-42 (12/09, `src/legacy/app.js:1085-1117`): il fetch dell'albero è DIFFERITO finché la
+   * scheda File non è a vista — `schedaFileAVista()` legge `[data-inspector-section="files"]`
+   * (il pannello `#railFile`, marcato dal ponte a `src/bridge/legacy-dom.js:200` e nato `hidden`).
+   * Il test contava le letture di un albero che nessuno aveva aperto: 0, misurato il 18/09/2026
+   * sulla porta 4197 (`Expected: 1 / Received: 0`). Il gesto giusto è quello della persona —
+   * aprire la scheda — e si verifica che il tab l'abbia ACCETTATO (`aria-selected`) prima di
+   * contare: un'attesa generica da sola passerebbe contro un pannello che non si è mai mosso
+   * (Playwright, guida «Locators» / auto-waiting, letta 18/09/2026).
+   */
+  await page.locator('#inspector-tab-files').click();
+  await expect(page.locator('#inspector-tab-files')).toHaveAttribute('aria-selected', 'true');
   const result = await page.evaluate(async () => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -437,6 +774,10 @@ test('LAG-LIVE-WORKSPACE-33 — un cambiamento live isolato aggiorna ancora il t
     }) });
   });
   await apriChat(page);
+  // ⛔ BC-42 (12/09, `src/legacy/app.js:1085-1117`, vedi LAG-REPLAY-TREE-31): senza la scheda File a
+  // vista il fetch del tree è differito — 0 letture misurate il 18/09/2026 (`Expected: 1 / Received: 0`).
+  await page.locator('#inspector-tab-files').click();
+  await expect(page.locator('#inspector-tab-files')).toHaveAttribute('aria-selected', 'true');
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -463,6 +804,12 @@ test('LAG-GENERATION-CANCEL-34 — il cambio sessione annulla il tree differito 
     }) });
   });
   await apriChat(page);
+  // ⛔ BC-42 (12/09, `src/legacy/app.js:1085-1117`, vedi LAG-REPLAY-TREE-31): con la scheda File
+  // chiusa ogni `WorkspaceChanged` finisce in `alberoDaRidisegnare` e NESSUNA lettura parte — il
+  // test misurava «0 letture» come se fosse una cancellazione di generazione. Misurato il
+  // 18/09/2026 sulla porta 4197 (`reads.current: Expected 1 / Received 0`).
+  await page.locator('#inspector-tab-files').click();
+  await expect(page.locator('#inspector-tab-files')).toHaveAttribute('aria-selected', 'true');
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
@@ -491,7 +838,7 @@ test('cold start does not expose invented runtime telemetry', async ({ page }) =
 
 test('model chip never exposes the server-default label', async ({ page }) => {
   await apriChat(page);
-  const chip = page.locator('[data-open-sheet="model"] span').first();
+  const chip = page.locator('[data-open-sheet="model"] .talos-chip__label').first();
   await expect(chip).toBeVisible();
   await expect(chip).not.toHaveText('Predefinito del server');
   await expect(page.locator('body')).not.toContainText('Predefinito del server');
@@ -540,7 +887,7 @@ test('OPEN-WITH-TALOS-BROWSER-01 — il fragment prepara il workspace senza inve
   await expect(page.locator('#inspector-files .file-tree')).toContainText('Progetto Ω');
   await expect(page.locator('#inspector-files .file-tree')).toContainText('I file appariranno appena inizi la sessione.');
   await expect(page.locator('#inspector-files .file-tree')).not.toContainText('Nessuna cartella ancora scelta');
-  await expect(page.locator('[data-open-sheet="permissions"] span')).toHaveText('Workspace write');
+  await expect(page.locator('[data-open-sheet="permissions"] span')).toHaveText('Scrive nel progetto');
   await expect.poll(() => new URL(page.url()).hash).toBe('');
   const visualDir = resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01');
   await mkdir(visualDir, { recursive: true });
@@ -584,9 +931,9 @@ test('selezionare una sessione sincronizza la pillola con il suo modello reale',
   const session = page.locator('[data-real-session-id="session-model-sync"]');
   await expect(session).toBeVisible();
   await session.click();
-  await expect(page.locator('[data-open-sheet="model"] span')).toHaveText('qwen/qwen3.8-flash');
+  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('qwen3.8-flash');
   await page.locator('[data-real-session-id="session-without-model"]').click();
-  await expect(page.locator('[data-open-sheet="model"] span')).toHaveText('Seleziona modello');
+  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('Scegli il modello');
 });
 
 test('il modello della sessione resta identico dopo un reload', async ({ page }) => {
@@ -604,11 +951,11 @@ test('il modello della sessione resta identico dopo un reload', async ({ page })
   }));
   await apriChat(page);
   await page.locator('[data-real-session-id="session-gemini-reload"]').click();
-  await expect(page.locator('[data-open-sheet="model"] span')).toHaveText('google/gemini-3.7-flash');
+  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('gemini-3.7-flash');
   await page.reload();
   await page.locator('[data-real-session-id="session-gemini-reload"]').click({ button: 'right' });
   await page.locator('.session-actions-menu').getByRole('menuitem', { name: 'Apri' }).click();
-  await expect(page.locator('[data-open-sheet="model"] span')).toHaveText('google/gemini-3.7-flash');
+  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('gemini-3.7-flash');
 });
 
 test('SESSION-MODEL-CHANGE-RELOAD-02 — la pillola cambia solo dopo il salvataggio e resta corretta al reload', async ({ page }) => {
@@ -644,23 +991,34 @@ test('SESSION-MODEL-CHANGE-RELOAD-02 — la pillola cambia solo dopo il salvatag
 
   await apriChat(page);
   await page.locator('[data-real-session-id="session-model-change"]').click();
-  const pillola = page.locator('[data-open-sheet="model"] span').first();
-  await expect(pillola).toHaveText('z-ai/glm-4.7-flash');
+  const pillola = page.locator('[data-open-sheet="model"] .talos-chip__label').first();
+  await expect(pillola).toHaveText('glm-4.7-flash');
   await page.locator('[data-open-sheet="model"]').click();
-  await page.locator('.model-picker-search input').fill('gemini-3.7-flash');
+  await page.locator('.talos-dialog input.sheet-input').fill('gemini-3.7-flash');
   await page.getByRole('option').filter({ hasText: 'google/gemini-3.7-flash' }).click();
-  await expect(page.locator('#sheetDialog')).toBeVisible();
-  await expect(pillola).toHaveText('z-ai/glm-4.7-flash');
+  /*
+   * ⛔ 18/09/2026 — qui c'era `#sheetDialog`, che è il `<dialog class="sheet-dialog">` del
+   * PROTOTIPO: esiste ancora ma con `open:false` («Contesto · Capability»), quindi l'asserzione
+   * «il foglio resta aperto mentre salva» guardava un nodo chiuso. Il foglio vero del mockup è
+   * `div.talos-dialog[role="dialog"][aria-modal="true"]`, con `h2.talos-dialog__title` «Modello e
+   * ragionamento» e `aria-labelledby="titoloveloModello"`; la ricerca è `input.sheet-input`
+   * (`.model-picker-search` = **0 nodi**: era il markup del prototipo). Misurato con
+   * `sonda-cambio-modello.mjs` (18/09, porta 4197): il foglio resta visibile subito dopo il clic
+   * (e la pillola NO: ancora «glm-4.7-flash»), e sparisce dopo il salvataggio (~900 ms), quando la
+   * pillola diventa «gemini-3.7-flash». `getByRole('dialog', { name: … })` risolve a **1**.
+   */
+  await expect(page.getByRole('dialog', { name: 'Modello e ragionamento' })).toBeVisible();
+  await expect(pillola).toHaveText('glm-4.7-flash');
   await expect.poll(() => aggiornamenti).toEqual([{
     modello: 'google/gemini-3.7-flash',
     reasoning: { effort: 'medium' },
   }]);
   await expect(page.locator('#sheetDialog')).not.toBeVisible();
-  await expect(pillola).toHaveText('google/gemini-3.7-flash');
+  await expect(pillola).toHaveText('gemini-3.7-flash');
 
   await page.reload();
   await page.locator('[data-real-session-id="session-model-change"]').click();
-  await expect(page.locator('[data-open-sheet="model"] span').first()).toHaveText('google/gemini-3.7-flash');
+  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label').first()).toHaveText('gemini-3.7-flash');
   await page.locator('[data-open-sheet="model"]').click();
   await expect(page.locator('.effort-picker-selected')).toHaveText('Medio');
   const visualDir = resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01');
@@ -693,17 +1051,26 @@ test('SESSION-MODEL-UPDATE-FAIL-01 — un server incompatibile non produce una p
 
   await apriChat(page);
   await page.locator('[data-real-session-id="session-model-failure"]').click();
-  const pillola = page.locator('[data-open-sheet="model"] span').first();
+  const pillola = page.locator('[data-open-sheet="model"] .talos-chip__label').first();
   await page.locator('[data-open-sheet="model"]').click();
-  await page.locator('.model-picker-search input').fill('gemini-3.7-flash');
+  await page.locator('.talos-dialog input.sheet-input').fill('gemini-3.7-flash');
   await page.getByRole('option').filter({ hasText: 'google/gemini-3.7-flash' }).click();
-  await expect(page.locator('#sheetDialog')).toBeVisible();
-  await expect(pillola).toHaveText('z-ai/glm-4.7-flash');
+  // Stessa migrazione del test precedente: `#sheetDialog` era il foglio del prototipo (0 nodi aperti).
+  await expect(page.getByRole('dialog', { name: 'Modello e ragionamento' })).toBeVisible();
+  await expect(pillola).toHaveText('glm-4.7-flash');
   await expect(page.locator('.effort-picker-selected')).toHaveText('Off');
-  await expect(page.locator('#toastRegion')).toContainText('Preferenza non salvata');
+  /*
+   * ⛔ 18/09/2026 — `#toastRegion` è il contenitore del PROTOTIPO (`src/legacy/frammenti.html:263`,
+   * `data-legacy-id="toastRegion"`, dentro `#talos-legacy`): resta vuoto. La pila vera nasce su
+   * `#regioneToast` — `src/legacy/app.js:484` (`$('#regioneToast') || $('#toastRegion')`) e
+   * `:2229` — che è l'id del mockup, come tutte le altre prove di toast della suite
+   * (`azioni-risposta.spec.mjs:196`, `toast-non-copre-i-comandi.spec.mjs:104`).
+   * Il toast lo accende app.js:17842, sul rifiuto 405 della PATCH delle impostazioni.
+   */
+  await expect(page.locator('#regioneToast')).toContainText('Preferenza non salvata');
   await page.reload();
   await page.locator('[data-real-session-id="session-model-failure"]').click();
-  await expect(page.locator('[data-open-sheet="model"] span').first()).toHaveText('z-ai/glm-4.7-flash');
+  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label').first()).toHaveText('glm-4.7-flash');
 });
 
 test('RUN-MODEL-RESUME-RACE-10 — il RunStarted visto durante la POST conserva il modello nel bubble del follow-up', async ({ page }) => {
@@ -745,7 +1112,16 @@ test('RUN-MODEL-RESUME-RACE-10 — il RunStarted visto durante la POST conserva 
     runtime.handleRealEvent({ type: 'TextMessageEnd', messageId: 'race-answer', _sequenza: 92003 }, runtime.realSessionState.generation);
   });
 
-  await expect(page.locator('.assistant-meta').last()).toContainText('qwen/qwen3.8-flash');
+  /*
+   * ⛔ 18/09/2026 — `.assistant-meta` è la classe del PROTOTIPO: **0 nodi**. Nel mockup la testata
+   * del messaggio è `span.talos-message__who` («Tu» / «TALOS») + `span.talos-message__meta`
+   * (modello · ora), costruiti in `src/components/conversazione.js:158/180`; il modello lo scrive
+   * `src/legacy/app.js:10712` con `nomeModelloBreve(...)` — cioè il **nome umano**, non l'id.
+   * Misurato con `sonda-meta.mjs` (18/09, porta 4197): dopo il resume l'ultima meta è
+   * «**qwen3.8-flash** · 16:08» (la bolla del giro nuovo) e quella precedente resta
+   * «modello-precedente».
+   */
+  await expect(page.locator('.talos-message__meta').last()).toContainText('qwen3.8-flash');
 });
 
 test('RUN-MODEL-TRACE-UI-07 — ogni risposta e l’export conservano il modello del proprio giro', async ({ page }) => {
@@ -774,7 +1150,18 @@ test('RUN-MODEL-TRACE-UI-07 — ogni risposta e l’export conservano il modello
     ];
     for (const evento of eventi) runtime.handleRealEvent(evento, session.generation);
 
-    const meta = [...document.querySelectorAll('.assistant-meta')].map((elemento) => elemento.textContent.trim());
+    /*
+     * ⛔ 18/09/2026 — `.assistant-meta` è la classe del PROTOTIPO: **0 nodi** (misurato con
+     * `sonda-meta.mjs`, 18/09, porta 4197). Nel mockup la testata si compone in due span
+     * (`src/components/conversazione.js:158` per la persona, `:180` per TALOS): il modello sta
+     * nella `.talos-message__meta` del messaggio di TALOS, in **nome umano** (app.js:10712), e
+     * l'ora viene DOPO (`[modello, ora].filter(Boolean).join(' · ')`). La stessa sonda ha misurato
+     * che il messaggio della persona porta una meta tutta sua (`ora · consegna`), quindi si
+     * filtrano le testate di TALOS invece di prendere tutti i nodi in ordine.
+     */
+    const meta = [...document.querySelectorAll('.talos-message__head')]
+      .filter((testata) => testata.querySelector('.talos-message__who--talos'))
+      .map((testata) => (testata.querySelector('.talos-message__meta')?.textContent || '').trim());
     const tool = document.querySelector('[data-tool-state="complete"]')?.textContent || '';
     const exportMd = runtime.costruisciTrascrizioneMarkdown({
       sessionId: 'switch-trace',
@@ -786,14 +1173,25 @@ test('RUN-MODEL-TRACE-UI-07 — ogni risposta e l’export conservano il modello
     return { meta, tool, exportMd };
   });
 
-  expect(prova.meta).toEqual([
-    'TALOS · qwen/qwen3.8-flash',
-    'TALOS · google/gemini-3.7-flash',
+  /* Il modello è la PRIMA parte della meta; l'ora che segue è quella del giro e non si asserisce. */
+  expect(prova.meta.map((testo) => testo.split(' · ')[0])).toEqual([
+    'qwen3.8-flash',
+    'gemini-3.7-flash',
   ]);
   expect(prova.tool).toContain('README.md');
   expect(prova.exportMd).toContain('**Modello del giro:** qwen/qwen3.8-flash');
   expect(prova.exportMd).toContain('**Modello del giro:** google/gemini-3.7-flash');
-  expect(prova.exportMd).toContain('**🔧 leggi**');
+  /*
+   * ⛔ 18/09/2026 — `**🔧 leggi**` non è più la forma dell'export: dal 04/09 (owner: «niente nomi
+   * TECNICI a schermo, la mappa nome-tecnico → nome-umano vive in UN posto solo», BC-59 il 17/09) la
+   * riga è `**🔧 <nome umano>** · \`leggi\`` — `src/legacy/app.js:13519`, col nome umano preso da
+   * `src/components/nomi-attrezzi.js:29` e passato per `t()` (`:90`), e l'id tecnico che resta come
+   * DETTAGLIO secondario. Il nome umano è tradotto nella lingua dell'interfaccia, quindi non si
+   * asserisce la parola: si asserisce il contratto — l'id in backtick c'è, e l'etichetta in evidenza
+   * NON è l'id.
+   */
+  expect(prova.exportMd).toContain('`leggi`');
+  expect(prova.exportMd).not.toContain('**🔧 leggi**');
   const visualDir = resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01');
   await mkdir(visualDir, { recursive: true });
   await page.screenshot({ path: resolve(visualDir, 'model-switch-turn-attribution-1440x900.png'), fullPage: true });
@@ -818,14 +1216,48 @@ test('la sidebar consente selezione massiva e cancellazione esplicita delle sess
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: {} }) });
   });
   await apriChat(page);
-  await expect(page.locator('#sessionSelectionToolbar')).toBeVisible();
+  /*
+   * ⛔ 18/09/2026 — l'ordine era rovesciato: si pretendeva VISIBILE la barra della selezione
+   * PRIMA di accendere la selezione. Misurato sulla 4199 (`%TEMP%\corsia5\z4.log`, Z10):
+   * `#sessionSelectionToolbar` è `hidden` e 0×0 al primo disegno del guscio, e 275×52 dopo il
+   * toggle. La barra nasce spenta per costruzione, e ad accenderla è `#sessionSelectionToggle`.
+   * Playwright, `toBeVisible`/`toBeHidden` (github.com/microsoft/playwright, letto 18/09/2026):
+   * un elemento `[hidden]` non è visibile ⇒ l'asserzione chiedeva al prodotto l'opposto del suo
+   * contratto. Ora si prova il PRIMA e il DOPO: se la barra restasse sempre accesa, o non si
+   * accendesse più, il test diventa rosso in uno dei due versi.
+   */
+  await expect(page.locator('#sessionSelectionToolbar')).toBeHidden();
   await page.locator('#sessionSelectionToggle').click();
+  await expect(page.locator('#sessionSelectionToolbar')).toBeVisible();
   await page.locator('[data-session-select="bulk-a"]').check();
   await page.locator('[data-session-select="bulk-b"]').check();
   await expect(page.locator('#sessionSelectionCount')).toHaveText('2 selezionate');
-  await expect(page.locator('#sessionSelectionDelete')).toBeEnabled();
-  await page.evaluate(() => { window.confirm = () => true; });
-  await page.locator('#sessionSelectionDelete').click();
+  /*
+   * ⛔ 18/09/2026 — `#sessionSelectionDelete` NON ESISTE PIÙ, e non è una regressione: è un cambio
+   * di prodotto DELIBERATO e datato — `src/legacy/app.js:464-466`: «11/09 (lotto D) —
+   * `#sessionSelectionDelete` non è più un bottone affiancato: «Elimina» è una voce del menu
+   * overflow della selezione (`apriMenuSelezioneSessioni`), insieme a «Esporta» e «Copia gli
+   * identificativi». Owner 10/09: più di due azioni non si affiancano.»
+   * Misurato sulla 4199 col negozio isolato dei test (`%TEMP%\corsia5\diagnosi-1.log`): dentro
+   * `#sessionSelectionToolbar` restano DUE bottoni, `#sessionSelectionSelectAll` («Seleziona
+   * tutto») e `#sessionSelectionMore` (l'overflow, `aria-haspopup="menu"`, aria-label «Azioni su 2
+   * sessioni selezionate») — il terzo non c'è.
+   *
+   * ⛔ E la conferma non è più `window.confirm` (il test lo sostituiva con una finta): è la modale
+   * del mockup, un `<dialog class="td-modal">` VERO (`src/components/modale-td.js:63-85`), con la
+   * conseguenza scritta in chiaro. Il titolo e l'etichetta del bottone portano il NUMERO
+   * (`app.js:18006-18012`: «Eliminare 2 sessioni selezionate?», «Non si annulla da TALOS.»), e
+   * misurato sulla 4199 il bottone di conferma si chiama esattamente «Elimina 2 sessioni», non
+   * «Elimina»: `getByRole('button', { name: 'Elimina', exact: true })` dà `0`
+   * (`%TEMP%\corsia5\diagnosi-4.log`). Playwright: `getByRole(role, { name, exact })` confronta il
+   * nome accessibile (github.com/microsoft/playwright, letto 18/09/2026).
+   * ⇒ Il giro è quello vero: overflow → «Elimina 2 sessioni» → modale → conferma.
+   */
+  await page.locator('#sessionSelectionMore').click();
+  await page.getByRole('menuitem', { name: 'Elimina 2 sessioni', exact: true }).click();
+  const conferma = page.getByRole('dialog');
+  await expect(conferma).toBeVisible();
+  await conferma.getByRole('button', { name: 'Elimina 2 sessioni', exact: true }).click();
   await expect.poll(() => eliminati.sort()).toEqual(['bulk-a', 'bulk-b']);
   await expect(page.locator('[data-real-session-id="bulk-a"]')).toHaveCount(0);
   await expect(page.locator('[data-real-session-id="bulk-b"]')).toHaveCount(0);
@@ -834,8 +1266,8 @@ test('la sidebar consente selezione massiva e cancellazione esplicita delle sess
 
 test('Doctor mostra la prontezza reale del runtime agente', async ({ page }) => {
   await apriChat(page);
-  await page.locator('[data-open-view="settings"]').click();
-  await page.locator('[data-settings-tab="account"]').click();
+  await page.locator('[data-vaia="impostazioni"]').click();
+  await page.locator('#setting-tab-account').click();
   await page.getByRole('button', { name: 'Agents', exact: true }).click();
   await page.locator('#sheetBody [data-control-action="doctor"]').click();
   await expect(page.locator('#sheetBody [data-doctor-status]')).not.toHaveText('Healthy');
@@ -848,7 +1280,7 @@ test('Nuova automazione comunica in linguaggio naturale quando non ci sono attiv
     body: JSON.stringify({ ok: true, data: { items: [] }, meta: { schema: 'talos.harness-ui.api.v1' } }),
   }));
   await apriChat(page);
-  await page.locator('[data-open-view="automations"]').evaluate((element) => element.click());
+  await page.locator('[data-vaia="automazioni"]').evaluate((element) => element.click());
   await page.locator('[data-automation-action="new"]').evaluate((element) => element.click());
   await expect(page.locator('#sheetBody')).toContainText('Non ci sono ancora attività pronte');
   await expect(page.locator('#sheetBody')).not.toContainText('TASK_NOT_AVAILABLE');
@@ -856,46 +1288,119 @@ test('Nuova automazione comunica in linguaggio naturale quando non ci sono attiv
 
 test('desktop primary controls meet the 36 px hit-area gate', async ({ page }) => {
   await apriChat(page);
-  const sizes = await page.locator('.topbar-right .icon-btn, #redirectRunButton:not([hidden])').evaluateAll((elements) => elements.map((element) => {
+  /*
+   * ⛔ 18/09/2026 — `.icon-btn` è morto: nel guscio canonico NON esiste più un solo bottone
+   * visibile con quella classe. Misurato sulla 4199 (`%TEMP%\corsia5\z5.log`, Z13): il selettore
+   * del test (`'.topbar-right .icon-btn, #redirectRunButton:not([hidden])'`) trova 4 nodi, tutti
+   * del guscio legacy, tutti 0×0 e `visibile:false` (`offsetParent` nullo) ⇒ il cancello cadeva
+   * su `size.width < 36` con `0`, cioè accusava della misura sbagliata il posto sbagliato: non
+   * «un controllo troppo piccolo», ma «un contenitore che non esiste più».
+   *
+   * Il contenitore vivo è UNO: un solo nodo che porta sia `.talos-topbar__actions` sia
+   * `.topbar-right` (178×40), e i suoi bottoni canonici visibili sono 5, TUTTI 40×40:
+   * «Albero dei rami» · «Comandi (Ctrl K)» · «Context Manager» (`#compactSessionBtn`) ·
+   * «Mostra o nascondi i dettagli» · «Riprendi» (`#resumeSessionBtn`). `#redirectRunButton`
+   * esiste ancora ma vive nella barra della review, che qui è chiusa (0×0): resta nel selettore
+   * col suo `:not([hidden])`, come prima.
+   *
+   * ⇒ Il filtro «solo i visibili» (`width > 0 && height > 0`) è lo STESSO che usa il cancello
+   * delle impostazioni: la classe canonica è riusata anche dagli esemplari nascosti delle altre
+   * schermate, e senza filtro si misurerebbero i cloni. La soglia resta 36, non si tocca.
+   */
+  const sizes = await page.locator('.talos-topbar__actions .talos-button, #redirectRunButton:not([hidden])').evaluateAll((elements) => elements.map((element) => {
     const rect = element.getBoundingClientRect();
-    return { width: rect.width, height: rect.height };
-  }));
+    return { id: element.id, aria: element.getAttribute('aria-label'), width: rect.width, height: rect.height };
+  }).filter(({ width, height }) => width > 0 && height > 0));
   expect(sizes.length).toBeGreaterThan(0);
   for (const size of sizes) {
-    expect(size.width).toBeGreaterThanOrEqual(36);
-    expect(size.height).toBeGreaterThanOrEqual(36);
+    expect(size.width, `${size.id || size.aria} width`).toBeGreaterThanOrEqual(36);
+    expect(size.height, `${size.id || size.aria} height`).toBeGreaterThanOrEqual(36);
   }
 });
 
 test('settings controls meet the same desktop hit-area gate', async ({ page }) => {
   await apriChat(page);
-  await page.locator('[data-open-view="settings"]').click();
-  const sizes = await page.locator('.settings-card button, .settings-card input, .settings-card select').evaluateAll((elements) => elements.map((element) => {
+  await page.locator('[data-vaia="impostazioni"]').click();
+  /*
+   * ⛔ 18/09/2026 — `.settings-card` è morto: misurato sulla 4199 (`%TEMP%\corsia5\z5.log`, Z14),
+   * `.settings-card` esiste ancora in 8 nodi ma è il guscio legacy, `visibility` spenta, e i suoi
+   * 11 bottoni sono tutti a 0×0 ⇒ il test cadeva su `expect(sizes.length).toBeGreaterThan(0)`
+   * misurando ZERO controlli. Non era un cancello rosso: era un cancello che non guardava niente.
+   * ⛔ E questa è la forma pericolosa, non quella comoda: un contenitore morto che un giorno
+   * tornasse a dare un solo nodo a 36 px farebbe PASSARE il cancello su tutta la superficie.
+   *
+   * Il contenitore canonico è `.talos-settings` (1 nodo, 1084×1667). Il cancello, riportato lì
+   * sopra, è ROSSO e i numeri sono veri: 19 controlli vivi sotto i 36 px — 13 interruttori
+   * `button.calm-check[role="switch"]` a 42×25 (12 nella scheda «Aspetto», 1 in «Chat») e 6
+   * bottoni `talos-button--sm` a 32 px di altezza nella scheda «Modelli». ⛔ Non si adatta la
+   * misura per farla passare (sarebbe «adattare finché è verde»): la collisione è fra il
+   * mockup — che disegna l'interruttore 42×25 — e la soglia di 36 di questo cancello, e la
+   * decide l'owner. Qui la misura è dichiarata, non piegata.
+   *
+   * ⛔⛔ L'OWNER HA DECISO IL 18/09/2026: «come il mockup, sotto i 36px». E il numero non è
+   *   scelto per far passare il test: **24 è il minimo di WCAG 2.5.8 «Target Size (Minimum)»,
+   *   livello AA** — «the size of the target for pointer inputs is at least 24 by 24 CSS pixels».
+   *   Fonte: W3C, `understanding/22/target-size-minimum` e la norma citata in ETSI EN 301 549,
+   *   letti il 18/09/2026. Il mockup disegna l'interruttore alto **25** e i bottoni **32**: la
+   *   soglia di 36 era **più stretta dello standard**, non più larga — e questa è la ragione per
+   *   cui abbassarla non è un peggioramento.
+   * ⛔ E il cancello NON smette di mordere: un controllo che scendesse sotto 24 lo trova rosso,
+   *   col nome di chi è. Ciò che non fa più è pretendere da queste superfici una misura che il
+   *   mockup non ha.
+   * ⛔ DUE COSE CHE QUESTO CANCELLO CONTINUA A NON GUARDARE, dichiarate perché nessuno le creda
+   *   coperte:
+   *   1. **l'eccezione di spaziatura** della 2.5.8: un controllo sotto i 24 px PASSA se un
+   *      cerchio di 24 px centrato su di lui non tocca nessun altro comando. Qui si misura solo
+   *      la dimensione, quindi un bersaglio piccolo e isolato verrebbe bocciato a torto — e uno
+   *      piccolo e appiccicato a un altro passerebbe se fosse grande. Serve l'occhio;
+   *   2. **il tocco**: 44×44 è la misura sicura per il dito (WCAG 2.5.5, livello AAA). Queste
+   *      superfici sono desktop col mouse, ma se un giorno arrivano su un tablet, 24 non basta.
+   * ⛔ La soglia dell'ALTRO cancello (la barra della topbar, sopra) **resta 36**: quei bottoni
+   *   sono 40×40 e non hanno niente a che vedere col mockup delle impostazioni.
+   */
+  const SOGLIA_IMPOSTAZIONI = 24;
+  const sizes = await page.locator('.talos-settings button, .talos-settings input, .talos-settings select').evaluateAll((elements) => elements.map((element) => {
     const rect = element.getBoundingClientRect();
     return { id: element.id, tag: element.tagName, width: rect.width, height: rect.height };
   }).filter(({ width, height }) => width > 0 && height > 0));
   expect(sizes.length).toBeGreaterThan(0);
   for (const size of sizes) {
-    expect(size.width, `${size.tag}#${size.id} width`).toBeGreaterThanOrEqual(36);
-    expect(size.height, `${size.tag}#${size.id} height`).toBeGreaterThanOrEqual(36);
+    expect(size.width, `${size.tag}#${size.id} width`).toBeGreaterThanOrEqual(SOGLIA_IMPOSTAZIONI);
+    expect(size.height, `${size.tag}#${size.id} height`).toBeGreaterThanOrEqual(SOGLIA_IMPOSTAZIONI);
   }
 });
 
 test('Model Lab filters have explicit names and hit areas', async ({ page }) => {
   await apriChat(page);
-  await page.locator('button[data-open-view="settings"]').click();
-  await page.locator('[data-settings-tab="models"]').click();
-  await page.locator('#modelLabHfTab').click();
-  await expect(page.locator('#modelLabHfAuthorControl')).toHaveAttribute('aria-label', 'Filtra per autore Hugging Face');
-  await expect(page.locator('#modelLabHfFiltersControl')).toHaveAttribute('aria-label', 'Filtra modelli Hugging Face');
-  await expect(page.locator('#modelLabHfSortControl')).toHaveAttribute('aria-label', 'Ordina risultati Hugging Face');
-  const sizes = await page.locator('#modelLabHfSearch, #modelLabHfAuthorControl, #modelLabHfFiltersControl, #modelLabHfSortControl').evaluateAll((elements) => elements.map((element) => {
-    const rect = element.getBoundingClientRect();
-    return { width: rect.width, height: rect.height };
-  }));
-  for (const size of sizes) {
-    expect(size.width).toBeGreaterThanOrEqual(36);
-    expect(size.height).toBeGreaterThanOrEqual(36);
+  await page.locator('button[data-vaia="impostazioni"]').click();
+  await page.locator('#setting-tab-models').click();
+  /*
+   * ⛔ 18/09/2026 — `#modelLabHfTab` non è più una porta: il click andava in timeout a 30 s
+   * perché quella scheda del laboratorio legacy non è visibile. Misurato sulla 4199
+   * (`%TEMP%\corsia5\z5.log`, Z16): la scheda viva è `#labSchedaModels` (90×38) e il suo
+   * pannello `#labPannelloModels` è alto 1028 px.
+   *
+   * I tre filtri, misurati uno per uno con `count()` sul RUOLO e sul NOME ACCESSIBILE:
+   * `searchbox` «Cerca nel catalogo» = 1 · `combobox` «Fornitore» = 1 ·
+   * `combobox` «Ordina i modelli» = 1 (e «Contesto minimo in token» = 0: quel controllo non è
+   * in questa scheda). Playwright `getByRole(role, { name })` confronta il nome accessibile, non
+   * l'id né il testo grezzo (github.com/microsoft/playwright, letto 18/09/2026), ed è la forma
+   * che regge anche se il laboratorio cambia gli id un'altra volta.
+   * ⛔ `toHaveCount(1)` è il verso contrario dentro il test: un nome accessibile che sparisce, o
+   * che si sdoppia, rende rosso qui invece di far passare una misura su un nodo qualsiasi.
+   */
+  await page.locator('#labSchedaModels').click();
+  const cerca = page.getByRole('searchbox', { name: 'Cerca nel catalogo' });
+  const fornitore = page.getByRole('combobox', { name: 'Fornitore' });
+  const ordina = page.getByRole('combobox', { name: 'Ordina i modelli' });
+  await expect(cerca).toHaveCount(1);
+  await expect(fornitore).toHaveCount(1);
+  await expect(ordina).toHaveCount(1);
+  for (const [nome, controllo] of [['Cerca nel catalogo', cerca], ['Fornitore', fornitore], ['Ordina i modelli', ordina]]) {
+    const box = await controllo.boundingBox();
+    expect(box, `${nome} box`).not.toBeNull();
+    expect(box.width, `${nome} width`).toBeGreaterThanOrEqual(36);
+    expect(box.height, `${nome} height`).toBeGreaterThanOrEqual(36);
   }
 });
 
@@ -1655,16 +2160,31 @@ test('SESSION-SETTINGS-RELOAD-01 — permessi e override della sessione restano 
   });
   await apriChat(page);
   await page.locator('[data-real-session-id="session-settings-reload"]').click();
-  await expect(page.locator('[data-open-sheet="model"] span')).toHaveText('google/gemini-3.7-flash');
-  await page.locator('.selector-pill[data-open-sheet="permissions"]').click();
-  await expect(page.locator('[data-permission-choice="Read only"]')).toHaveClass(/active/);
+  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('gemini-3.7-flash');
+  await page.locator('[data-open-sheet="permissions"]').first().click();
+  /*
+   * ⛔ 18/09/2026 — il foglio dei permessi del mockup NON usa la classe `active` del prototipo
+   * (`src/legacy/app.js:7968` costruiva `sheet-option active`): le scelte sono `button.talos-choice`
+   * (`index.template.html:1383-1386`), e lo stato attivo lo scrive il prodotto in due posti —
+   * `is-attiva` e `aria-checked` — da `src/legacy/app.js:8520-8523` (D-10F, 11/09: «la scelta attiva
+   * si vede»). Misurato con `sonda-permessi.mjs` (18/09, porta 4197) sul velo aperto, sessione con
+   * `permessi: 'Read only'`: `[data-permission-choice]` = **4 nodi, uno per valore**,
+   * `Read only` → classe `«talos-choice is-attiva»` e `aria-checked="true"`, gli altri tre
+   * `«talos-choice»` e `aria-checked="false"`; `role="radio"` = 4.
+   */
+  await expect(page.locator('[data-permission-choice="Read only"]')).toHaveClass(/is-attiva/);
+  await expect(page.locator('[data-permission-choice="Read only"]')).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('[data-tool-permission-select="shell"]')).toHaveValue('nega');
   await page.locator('[data-permission-choice="On request"]').click();
   await expect.poll(() => aggiornamenti.some((patch) => patch.permessi === 'On request')).toBe(true);
   await page.reload();
   await page.locator('[data-real-session-id="session-settings-reload"]').click();
-  await page.locator('.selector-pill[data-open-sheet="permissions"]').click();
-  await expect(page.locator('[data-permission-choice="On request"]')).toHaveClass(/active/);
+  await page.locator('[data-open-sheet="permissions"]').first().click();
+  await expect(page.locator('[data-permission-choice="On request"]')).toHaveClass(/is-attiva/);
+  await expect(page.locator('[data-permission-choice="On request"]')).toHaveAttribute('aria-checked', 'true');
+  /* Il verso opposto: chi era attivo PRIMA non lo è più — altrimenti la prova passerebbe anche
+     con un `is-attiva` appiccicato a tutte e quattro. */
+  await expect(page.locator('[data-permission-choice="Read only"]')).not.toHaveClass(/is-attiva/);
   await expect(page.locator('[data-tool-permission-select="shell"]')).toHaveValue('nega');
 });
 
@@ -1672,29 +2192,46 @@ test('VIEW-TRANSITION-RACE-01 — una navigazione rapida non lascia la colonna c
   await apriChat(page);
 
   for (let tentativo = 0; tentativo < 2; tentativo += 1) {
-    await page.locator('[data-open-view="settings"]').dispatchEvent('click');
-    await page.locator('.mode-tab[data-mode="chat"]').dispatchEvent('click');
+    await page.locator('[data-vaia="impostazioni"]').dispatchEvent('click');
+    await page.locator('#schermoChat .mode-tab[data-vaia="chat"]').dispatchEvent('click');
     await page.waitForTimeout(400);
 
     const activeViews = page.locator('.view-pane.active');
     await expect(activeViews).toHaveCount(1);
     await expect(activeViews).toHaveAttribute('data-view', 'chat');
-    await expect(page.locator('#conversation')).toBeVisible();
-    await expect(page.locator('.composer')).toBeVisible();
+    /*
+     * ⛔ 18/09/2026 — qui c'era `#conversation`, e il rosso era vero ma non un difetto di prodotto:
+     * `#conversation` è la LISTA dei messaggi, e con la conversazione vuota misura **709×0** —
+     * Playwright considera «hidden» un elemento con riquadro vuoto, quindi l'asserzione chiedeva
+     * «c'è almeno un messaggio» mentre il test intende «la colonna centrale non è rimasta vuota».
+     * Misurato con `sonda-baseline6.mjs` (18/09, porta 4197): la colonna `.talos-conversation` è
+     * 824×700 e dentro c'è `#invitoPrimoAvvio` 736×324 («Da dove cominciamo?»).
+     * ⇒ La colonna è la misura giusta per questo intento; la lista dei messaggi no.
+     */
+    await expect(page.locator('#schermoChat .talos-conversation')).toBeVisible();
+    await expect(page.locator('#composerForm')).toBeVisible();
   }
 });
 
 test('SETTINGS-VIEW-ISOLATION-01 — impostazioni non lasciano trasparire chat e composer', async ({ page }) => {
   await apriChat(page);
-  await page.locator('[data-open-view="settings"]').dispatchEvent('click');
+  await page.locator('[data-vaia="impostazioni"]').dispatchEvent('click');
   await page.waitForTimeout(400);
 
   const activeViews = page.locator('.view-pane.active');
   await expect(activeViews).toHaveCount(1);
   await expect(activeViews).toHaveAttribute('data-view', 'settings');
-  await expect(page.locator('.view-pane[data-view="settings"] .settings-layout')).toBeVisible();
+  /*
+   * ⛔ 18/09/2026 — `.settings-layout` esiste ancora ma vive DENTRO `#talos-legacy`, la scocca del
+   * prototipo spenta: misura **0×0** anche a 1,5 s dall'apertura, e il selettore composto
+   * `.view-pane[data-view="settings"] .settings-layout` non trova niente (la catena di quel nodo è
+   * `#talos-legacy`, non una `.view-pane`). Misurato con `sonda-baseline4.mjs` (18/09, porta 4197):
+   * la superficie canonica è `#schermoImpostazioni .talos-settings` (l'ha portata il cutover del
+   * guscio) alta 1701 px, con le schede `#setting-tab-*`.
+   */
+  await expect(page.locator('#schermoImpostazioni .talos-settings')).toBeVisible();
   await expect(page.locator('#conversation')).not.toBeVisible();
-  await expect(page.locator('.composer')).not.toBeVisible();
+  await expect(page.locator('#composerForm')).not.toBeVisible();
 });
 
 test('CHAT-FULL-WIDTH-01 — allarga solo messaggi e bolle, mai il composer', async ({ page }) => {
@@ -1716,7 +2253,7 @@ test('CHAT-FULL-WIDTH-01 — allarga solo messaggi e bolle, mai il composer', as
   const misura = () => page.evaluate(() => {
     const conversation = document.querySelector('#conversation');
     const padding = getComputedStyle(conversation);
-    const composer = document.querySelector('.composer');
+    const composer = document.querySelector('#composerForm');
     const composerStyle = getComputedStyle(composer);
     return {
       composer: composer.getBoundingClientRect().width,
@@ -1737,12 +2274,12 @@ test('CHAT-FULL-WIDTH-01 — allarga solo messaggi e bolle, mai il composer', as
   expect(prima.utente).toBeLessThanOrEqual(681);
   expect(prima.assistente).toBeLessThanOrEqual(761);
 
-  await page.locator('[data-open-view="settings"]').click();
-  await page.locator('[data-settings-tab="chat"]').click();
-  const toggle = page.locator('#chatFullWidthToggle');
+  await page.locator('[data-vaia="impostazioni"]').click();
+  await page.locator('#setting-tab-chat').click();
+  const toggle = toggleFullWidth(page);
   await expect(toggle).not.toBeChecked();
-  await toggle.check();
-  await page.locator('.mode-tab[data-mode="chat"]').click();
+  await accendiFullWidth(page);
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
   const estesa = await misura();
   expect.soft(Math.abs(estesa.composer - prima.composer), 'il composer non deve cambiare larghezza').toBeLessThanOrEqual(1);
   expect.soft(estesa.composerGeometry, 'il composer non deve cambiare forma').toEqual(prima.composerGeometry);
@@ -1760,10 +2297,10 @@ test('CHAT-FULL-WIDTH-01 — allarga solo messaggi e bolle, mai il composer', as
   expect(Math.abs(ricaricata.utente - ricaricata.disponibile)).toBeLessThanOrEqual(1);
   expect(Math.abs(ricaricata.assistente - ricaricata.disponibile)).toBeLessThanOrEqual(1);
 
-  await page.locator('[data-open-view="settings"]').click();
-  await page.locator('[data-settings-tab="chat"]').click();
-  await page.locator('#chatFullWidthToggle').uncheck();
-  await page.locator('.mode-tab[data-mode="chat"]').click();
+  await page.locator('[data-vaia="impostazioni"]').click();
+  await page.locator('#setting-tab-chat').click();
+  await spegniFullWidth(page);
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
   const ripristinata = await misura();
   expect(Math.abs(ripristinata.composer - prima.composer)).toBeLessThanOrEqual(1);
   expect(ripristinata.composerGeometry).toEqual(prima.composerGeometry);
@@ -1774,34 +2311,47 @@ test('CHAT-FULL-WIDTH-01 — allarga solo messaggi e bolle, mai il composer', as
 test('COMPOSER-SHAPE-FULL-WIDTH-01 — il toggle full width preserva ogni forma del composer', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await apriChat(page);
-  const misuraComposer = () => page.locator('.composer').evaluate((composer) => {
+  const misuraComposer = () => page.locator('#composerForm').evaluate((composer) => {
     const style = getComputedStyle(composer);
     const rect = composer.getBoundingClientRect();
     return { width: rect.width, height: rect.height, minHeight: style.minHeight, borderRadius: style.borderRadius, padding: style.padding };
   });
 
   for (const forma of ['standard', 'classic', 'compact']) {
-    await page.locator('[data-open-view="settings"]').click();
-    await page.locator('[data-settings-tab="appearance"]').click();
-    await page.locator('#composerShapeSelect').selectOption(forma);
-    await page.locator('.mode-tab[data-mode="chat"]').click();
+    await page.locator('[data-vaia="impostazioni"]').click();
+    await page.locator('#setting-tab-chat').click();
+    /*
+     * ⛔ 18/09/2026 — `selectOption('#composerShapeSelect')` non poteva riuscire: il `select`
+     * nativo è nascosto (`data-calm-source`, `display:none`, 0×0) e il vivo è la faccia
+     * `#composerShapeSelect--calm`. Due difetti in una riga: la scheda era «appearance» mentre
+     * la forma del composer vive in «chat» (contratto `impostazioni-campi.js:262`, `sezione:
+     * "chat"`), e il nodo da guidare è la faccia, non il nativo.
+     * L'etichetta è quella vera dell'opzione («Standard»/«Classica»/«Compatta»,
+     * `impostazioni-campi.js:264-272`), presa dal contratto e non inventata.
+     */
+    expect(await scegliCalm(page, 'composerShapeSelect', forma), `forma ${forma}`).toBe(1);
+    /* ⛔ 18/09/2026 — il ritorno alla chat non passa più dalla striscia delle schede: dalle
+     * impostazioni è `visibile:false` e il clic su un nodo nascosto va in timeout a 30 s. La porta
+     * viva è la voce di navigazione (misurato: 1 nodo visibile anche dalle impostazioni, e il clic
+     * riporta la vista «chat» col composer visibile). */
+    await page.locator('.talos-nav-item[data-vaia="chat"]').click();
     const prima = await misuraComposer();
 
-    await page.locator('[data-open-view="settings"]').click();
-    await page.locator('[data-settings-tab="chat"]').click();
-    const fullWidth = page.locator('#chatFullWidthToggle');
-    if (await fullWidth.isChecked()) await fullWidth.uncheck();
-    await fullWidth.check();
-    await page.locator('.mode-tab[data-mode="chat"]').click();
+    await page.locator('[data-vaia="impostazioni"]').click();
+    await page.locator('#setting-tab-chat').click();
+    const fullWidth = toggleFullWidth(page);
+    if (await fullWidth.isChecked()) await spegniFullWidth(page);
+    await accendiFullWidth(page);
+    await page.locator('#schermoChat .mode-tab[data-vaia="chat"]').click();
     const dopo = await misuraComposer();
     expect(dopo, `forma ${forma}`).toEqual(prima);
 
     await page.reload();
     expect(await misuraComposer(), `forma ${forma} dopo reload`).toEqual(prima);
-    await page.locator('[data-open-view="settings"]').click();
-    await page.locator('[data-settings-tab="chat"]').click();
-    await page.locator('#chatFullWidthToggle').uncheck();
-    await page.locator('.mode-tab[data-mode="chat"]').click();
+    await page.locator('[data-vaia="impostazioni"]').click();
+    await page.locator('#setting-tab-chat').click();
+    await spegniFullWidth(page);
+    await page.locator('#schermoChat .mode-tab[data-vaia="chat"]').click();
   }
 });
 
@@ -1817,14 +2367,18 @@ test('COMPOSER-MOCKUP-HEIGHT-01 — ogni forma desktop conserva l’altezza cano
     await page.setViewportSize(viewport);
     await apriChat(page);
     for (const forma of ['standard', 'classic', 'compact']) {
-      await page.locator('[data-open-view="settings"]').click();
-      await page.locator('[data-settings-tab="appearance"]').click();
-      await page.locator('#composerShapeSelect').selectOption(forma);
-      await page.locator('.mode-tab[data-mode="chat"]').click();
+      await page.locator('[data-vaia="impostazioni"]').click();
+      /* ⛔ 18/09/2026 — stessa cura di COMPOSER-SHAPE-FULL-WIDTH-01, per la stessa misura
+       * (misurato sulla 4199, `%TEMP%\corsia5\z6.log`): il `select` nativo è nascosto e la
+       * forma vive nella scheda «chat» (`impostazioni-campi.js:262`), quindi si guida la
+       * faccia `#composerShapeSelect--calm` con l'etichetta vera dell'opzione. */
+      await page.locator('#setting-tab-chat').click();
+      expect(await scegliCalm(page, 'composerShapeSelect', forma), `forma ${forma}`).toBe(1);
+      await page.locator('.talos-nav-item[data-vaia="chat"]').click();
 
-      const misura = await page.locator('.composer').evaluate((composer) => {
+      const misura = await page.locator('#composerForm').evaluate((composer) => {
         const input = composer.querySelector('textarea');
-        const toolbar = composer.querySelector('.composer-toolbar');
+        const toolbar = composer.querySelector('.talos-composer__bar');
         const rect = composer.getBoundingClientRect();
         return {
           height: rect.height,
@@ -1836,16 +2390,16 @@ test('COMPOSER-MOCKUP-HEIGHT-01 — ogni forma desktop conserva l’altezza cano
       expect(misura.inputBottom, `${viewport.width}px · ${forma} · input`).toBeLessThanOrEqual(misura.toolbarTop + 1);
 
       await page.locator('#composerInput').fill('Prima riga\nSeconda riga');
-      const multilinea = await page.locator('.composer').evaluate((composer) => ({
+      const multilinea = await page.locator('#composerForm').evaluate((composer) => ({
         height: composer.getBoundingClientRect().height,
         inputBottom: composer.querySelector('textarea').getBoundingClientRect().bottom,
-        toolbarTop: composer.querySelector('.composer-toolbar').getBoundingClientRect().top,
+        toolbarTop: composer.querySelector('.talos-composer__bar').getBoundingClientRect().top,
       }));
       expect(multilinea.height).toBeGreaterThanOrEqual(altezzaMockup);
       expect(multilinea.inputBottom).toBeLessThanOrEqual(multilinea.toolbarTop + 1);
 
       await page.reload();
-      const dopoReload = await page.locator('.composer').evaluate((composer) => composer.getBoundingClientRect().height);
+      const dopoReload = await page.locator('#composerForm').evaluate((composer) => composer.getBoundingClientRect().height);
       expect(Math.abs(dopoReload - altezzaMockup), `${viewport.width}px · ${forma} · reload`).toBeLessThanOrEqual(1);
     }
   }
@@ -1865,7 +2419,7 @@ test('CHAT-FULL-WIDTH-SHORT-BUBBLE-01 — una domanda breve non viene stirata', 
     });
   };
   const misura = () => page.evaluate(() => ({
-    composer: document.querySelector('.composer').getBoundingClientRect().width,
+    composer: document.querySelector('#composerForm').getBoundingClientRect().width,
     bolla: document.querySelector('.message-bubble').getBoundingClientRect().width,
   }));
 
@@ -1873,10 +2427,10 @@ test('CHAT-FULL-WIDTH-SHORT-BUBBLE-01 — una domanda breve non viene stirata', 
   const prima = await misura();
   expect(prima.bolla).toBeLessThan(180);
 
-  await page.locator('[data-open-view="settings"]').click();
-  await page.locator('[data-settings-tab="chat"]').click();
-  await page.locator('#chatFullWidthToggle').check();
-  await page.locator('.mode-tab[data-mode="chat"]').click();
+  await page.locator('[data-vaia="impostazioni"]').click();
+  await page.locator('#setting-tab-chat').click();
+  await accendiFullWidth(page);
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
   const estesa = await misura();
   expect(Math.abs(estesa.composer - prima.composer)).toBeLessThanOrEqual(1);
   expect(Math.abs(estesa.bolla - prima.bolla)).toBeLessThanOrEqual(1);
@@ -1891,8 +2445,8 @@ test('CHAT-FULL-WIDTH-SHORT-BUBBLE-01 — una domanda breve non viene stirata', 
 
 test('CHAT-FULL-WIDTH-COPY-01 — le impostazioni descrivono il perimetro reale', async ({ page }) => {
   await apriChat(page);
-  await page.locator('[data-open-view="settings"]').click();
-  await page.locator('[data-settings-tab="chat"]').click();
+  await page.locator('[data-vaia="impostazioni"]').click();
+  await page.locator('#setting-tab-chat').click();
   const panel = page.locator('#settingsChatPanel');
   await expect(panel).toContainText('Risposte e domande lunghe');
   await expect(panel).toContainText('Le domande brevi, il composer e le sidebar non cambiano');
@@ -1902,7 +2456,22 @@ test('CHAT-FULL-WIDTH-COPY-01 — le impostazioni descrivono il perimetro reale'
 test('INSPECTOR-WIDTH-01 — il pannello destro cresce senza schiacciare la chat e si adatta al viewport', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await apriChat(page);
-  const handle = page.locator('#inspectorResizeHandle');
+  /*
+   * ⛔ 18/09/2026 — `#inspectorResizeHandle` non esiste in nessun punto del prodotto: il
+   * selettore era un puntatore morto e `boundingBox()` tornava `null` alla prima riga.
+   * La maniglia viva è `button.talos-resizer.talos-resizer--inspector` con
+   * `data-ridimensiona="inspector"` (`public/index.html:1195`), e il pannello che muove è
+   * `#inspectorPanel`, battezzato A RUNTIME da `battezza(inspector, { id: 'inspectorPanel' })`
+   * (`public/app.js:42838`) ⇒ si aspetta che sia visibile prima di trascinare, altrimenti il
+   * trascinamento parte su un nodo che non c'è e il test misura il nulla.
+   * Il verso non cambia: la maniglia sta sul bordo SINISTRO dell'inspector e il prodotto calcola
+   * `delta = startX - clientX` (`public/app.js:41363-41400`) ⇒ trascinare a sinistra ALLARGA, e
+   * le due attese del test (620-720, poi ≤420 a 1200 px) sono il `clamp` del prodotto
+   * (`PANEL_RESIZE_LIMITS.inspector = [280, 720]`, `public/app.js:41323`).
+   */
+  const handle = page.locator('.talos-resizer[data-ridimensiona="inspector"]');
+  await handle.waitFor({ state: 'visible' });
+  await page.locator('#inspectorPanel').waitFor({ state: 'visible' });
   const box = await handle.boundingBox();
   expect(box).not.toBeNull();
   await page.mouse.move(box.x + 2, box.y + 120);
@@ -1913,36 +2482,92 @@ test('INSPECTOR-WIDTH-01 — il pannello destro cresce senza schiacciare la chat
   expect(larga).toBeGreaterThanOrEqual(620);
   expect(larga).toBeLessThanOrEqual(720);
   await page.reload();
+  /* ⛔ 18/09/2026 — dopo il ricaricamento la app atterra sulla HOME: `#inspectorPanel` non è
+   * disegnato, e la seconda attesa che seguiva passava PER COSTRUZIONE (larghezza 0 ≤ 420: una
+   * misura vuota, non una prova). Si rientra in chat dalla porta vera e poi si asserisce il vero.
+   * MISURATO il 18/09/2026 (`%TEMP%\corsia5\sonda-6-inspector.mjs`, porta 4199): subito dopo il
+   * reload vista `home`, `#schermoChat` visibile **false**, pannello **0**, maniglia nascosta;
+   * dopo il rientro dalla voce di navigazione vista `chat`, pannello **702** (≥620 SOPRAVVIVE al
+   * reload) — ed è il motivo per cui questa riga si può pretendere. */
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+  await expect(page.locator('#inspectorPanel')).toBeVisible();
   await expect.poll(() => page.locator('#inspectorPanel').evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(620);
   await page.setViewportSize({ width: 1200, height: 900 });
-  await expect.poll(() => page.locator('#inspectorPanel').evaluate((element) => element.getBoundingClientRect().width)).toBeLessThanOrEqual(420);
+  /* sotto il punto di rottura il prodotto dichiara il pannello FLOTTANTE e non lo disegna:
+   * misurato 1200 → bandierina "1", pannello **0**, maniglia nascosta, overflow **false**. */
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--talos-inspector-flottante').trim())).toBe('1');
   const ridotta = await page.locator('#inspectorPanel').evaluate((element) => element.getBoundingClientRect().width);
+  expect(ridotta).toBe(0);
+  await expect(page.locator('.talos-resizer[data-ridimensiona="inspector"]')).toBeHidden();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
-  expect(ridotta).toBeLessThanOrEqual(420);
   expect(overflow).toBe(false);
+  /* e risalendo sopra il punto di rottura il pannello torna: misurato a 1440 → bandierina "0",
+   * pannello **644** (≥620). Il `poll` è l'asserzione che morde se il pannello non risale. */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--talos-inspector-flottante').trim())).toBe('0');
+  await expect.poll(() => page.locator('#inspectorPanel').evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(620);
 });
 
 test('DESKTOP-SETTINGS-PERSISTENCE-01 — i controlli di aspetto producono stato reale e persistono', async ({ page }) => {
   await apriChat(page);
-  await page.locator('[data-open-view="settings"]').click();
-  await page.locator('#composerShapeSelect').selectOption('compact');
-  await page.locator('#messageStyleSelect').selectOption('bubbles');
-  await page.locator('#streamingAnimationSelect').selectOption('fade');
-  await page.locator('#windowPresentationSelect').selectOption('fullscreen');
-  await page.locator('#motionQualitySelect').selectOption('high');
-  await page.locator('#motionEasingSelect').selectOption('soft');
-  await page.locator('#immersiveHeaderToggle').check();
+  await page.locator('[data-vaia="impostazioni"]').click();
+  /*
+   * ⛔ 18/09/2026 — sette `selectOption`/`check()` su nodi che il prodotto NASCONDE. Misurato
+   * sulla 4199 (`%TEMP%\corsia5\z6.log`, Z17): i sei `select` hanno `data-calm-source`,
+   * `aria-hidden="true"`, `display:none` e 0×0, e la loro faccia viva è `#<id>--calm`; la
+   * casella `#immersiveHeaderToggle` è un `input` nascosto con la faccia
+   * `#immersiveHeaderToggle--calm` a 42×25. Il giro giusto è quello del pattern ARIA
+   * «combobox select-only» — faccia, listbox visibile, opzione per nome — ed è quello che fa
+   * `scegliCalm` (vedi l'helper in cima al file).
+   *
+   * ⛔ E I CONTROLLI VIVONO NELLE LORO SCHEDE, che non sono la stessa: `composerShape`,
+   * `messageStyle` e `streamingAnimation` stanno in «chat» (`impostazioni-campi.js:262, 302,
+   * 320`), `windowPresentation`, `motionEasing` e `immersiveHeader` in «appearance»
+   * (`:338, 570, 681`). Prima si passava solo per «appearance» e si pretendeva di scrivere
+   * controlli della scheda «chat»: un altro pezzo dello stesso difetto.
+   *
+   * ⛔ `#motionQualitySelect` NON si guida più da qui, e non è una resa: quella preferenza è
+   * stata MIGRATA nel Theme Studio — `theme-studio.js:203` (`CONTROLLI_MIGRATI`) e
+   * `:1013` (`migraRigheImpostazioni`, righe marcate `data-td-migrata="si"`) — quindi in
+   * Impostazioni non c'è più un controllo vivo da cliccare, e la sua asserzione
+   * (`data-talos-motion-quality`) è stata tolta con essa. Resta un DEBITO DICHIARATO: la ricerca
+   * dentro Impostazioni conta ancora quelle righe. Segnalato, non nascosto.
+   */
+  await page.locator('#setting-tab-chat').click();
+  for (const [id, valore] of [['composerShapeSelect', 'compact'], ['messageStyleSelect', 'bubbles'], ['streamingAnimationSelect', 'fade']]) {
+    expect(await scegliCalm(page, id, valore), `${id} · ${valore}`).toBe(1);
+  }
+  await page.locator('#setting-tab-appearance').click();
+  expect(await scegliCalm(page, 'windowPresentationSelect', 'fullscreen')).toBe(1);
+  /* la curva sta dentro i dettagli chiusi: si apre la maniglia PRIMA di cercarla */
+  const dettagliCurva = page.locator('#setting-panel-appearance details.settings-advanced').filter({ has: page.locator('#motionEasingSelect') });
+  if (!(await dettagliCurva.evaluate((elemento) => elemento.open))) await dettagliCurva.locator('summary').first().click();
+  expect(await scegliCalm(page, 'motionEasingSelect', 'soft')).toBe(1);
+  await page.locator('#immersiveHeaderToggle--calm').click();
+  await expect(page.locator('#immersiveHeaderToggle--calm')).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('html')).toHaveAttribute('data-talos-composer-shape', 'compact');
   await expect(page.locator('html')).toHaveAttribute('data-talos-message-style', 'bubbles');
+  /*
+   * ⛔ L'animazione della risposta vale QUI e non dopo un ricaricamento: la scelta scrive
+   * `fade` sulla radice, ma all'avvio `frontend/src/main.js:37-39` forza
+   * `data-talosStreamingAnimation = 'none'` quando la pagina NON è ospitata
+   * (`window.__talosHarnessHost` assente) — hotfix Desktop standalone del 14/09/2026, scritta
+   * nel commento sopra quella riga: il monolite teneva il testo 300-350 ms e il live stream
+   * deve dipingere ogni frame. Quindi qui si asserisce lo stato della PREFERENZA (che è reale,
+   * misurata: `#streamingAnimationSelect.value === 'fade'`), non un attributo che il prodotto
+   * riscrive di proposito al caricamento.
+   */
   await expect(page.locator('html')).toHaveAttribute('data-talos-streaming-animation', 'fade');
   await expect(page.locator('html')).toHaveAttribute('data-talos-window-presentation', 'fullscreen');
-  await expect(page.locator('html')).toHaveAttribute('data-talos-motion-quality', 'high');
   await expect(page.locator('html')).toHaveAttribute('data-talos-motion-easing', 'soft');
   await expect(page.locator('html')).toHaveClass(/immersive-header/);
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-talos-composer-shape', 'compact');
   await expect(page.locator('html')).toHaveAttribute('data-talos-message-style', 'bubbles');
+  await expect(page.locator('html')).toHaveAttribute('data-talos-window-presentation', 'fullscreen');
+  await expect(page.locator('html')).toHaveAttribute('data-talos-motion-easing', 'soft');
   await expect(page.locator('html')).toHaveClass(/immersive-header/);
+  await expect(page.locator('#streamingAnimationSelect')).toHaveValue('fade');
 });
 
 /*
