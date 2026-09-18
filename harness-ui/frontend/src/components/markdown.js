@@ -122,8 +122,19 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
    */
   const htmlFidato = opzioni.htmlFidato === true;
   const conLink = opzioni.linkMarkdown === true;
+  /*
+   * ⛔ `(?<!!)` NON È UN DETTAGLIO: SENZA, IL LINK MANGIA LE IMMAGINI. Trovato il 18/09/2026 da
+   *   questa stessa review, sulla prova della scheda del modello: il README scrive
+   *   `![licenza](https://example.invalid/licenza.png)`, e il pattern del link ci trovava dentro
+   *   `[licenza](https://example.invalid/licenza.png)` — cioè consumava parentesi e indirizzo e
+   *   lasciava a schermo il solo `!licenza`. L'immagine non si disegna (non è fra i tag che
+   *   rendiamo) **e l'indirizzo spariva**: il peggio dei due mondi.
+   * ⇒ La sintassi dell'immagine in Markdown è `![alt](url)`: quel `!` davanti è l'unica cosa che la
+   *   distingue da un link, quindi è lì che si guarda. Così `![…](…)` resta **testo intero**, come
+   *   deve essere finché non decidiamo di rendere le immagini.
+   */
   const PATTERN_INLINE = conLink
-    ? /\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g
+    ? /(?<!!)\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g
     : /\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g;
   // Con i link accesi il primo gruppo è il link e gli altri slittano di due: la mappa dice dove
   // sta cosa, invece di lasciare gli indici sparsi nel corpo.
