@@ -10,3 +10,35 @@
  * ⇒ La regola sta qui, in un foglio importato per ultimo e con un selettore più specifico: non dipende dall'ordine degli import.
  */
 .talos-toast-region > .talos-toast{background:var(--talos-panel)}
+
+/*
+ * 18/09/2026 — «Torna in fondo alla conversazione» è un TONDO, e dopo la PR #27 era un ovale 40 × 36 (misurato da
+ * CHAT-FONDO-01 alle sei larghezze). Causa a catena: il template porta #schermoHome, legacy-dom.js accende
+ * `data-workspace-ui="v2"` su :root, foundations.css rimappa `--talos-control-height` a `--ui-control` = 40px e il
+ * design-system la impone a ogni `.talos-button` come min-height (foglio successivo a index.css, pari specificità):
+ * il min-height clampa l'altezza 36 di index.css. Nello stesso foglio il design-system dà a ogni pulsante anche
+ * `padding: 0 var(--talos-space-md)` e `border-radius: var(--ui-radius-control)` = 9px, che battono per ordine di fogli
+ * il `padding:0` e il `border-radius:50%` di index.css — cioè il tondo era anche un quadrato a 9px con l'icona
+ * schiacciata (difetto di foto: la prova non guarda il raggio). Il tondo galleggia sopra la chat: la sua misura sta qui,
+ * dove non dipende dall'ordine degli import.
+ */
+.talos-chat-return > .talos-chat-return__button{inline-size:36px; min-inline-size:36px; block-size:36px; min-block-size:36px; padding-inline:0; border-radius:50%}
+
+/*
+ * 18/09/2026 — lo stesso tondo, ALL'HOVER: la prova CHAT-FONDO-HOVER-02 parcheggia il puntatore al bordo e pretende che
+ * l'aspetto non cambi, fotogramma per fotogramma. La prima cura (fondo `--talos-card-subtle`) NON BASTAVA: la misura è
+ * tornata `rgba(227,223,214,0.49)` COSTANTE su 45 campioni — che non è un token né un lampeggio: è il MEZZO
+ * PREMOLTIPLICATO della transizione da `#e8e4db` (riposo) verso `rgba(0,0,0,0.02)`, ferma a t≈0,52 (alfa
+ * 0,48+0,52·0,02 = 0,49; canali 232·0,48/0,49 = 227 — l'aritmetica ricalcola i valori misurati al campione). Due errori
+ * in uno: (1) il riposo del tondo NON è `--talos-card-subtle` ma `--talos-panel-soft` (#e8e4db, opaco), che il
+ * design-system dà a `.talos-button--secondary`; la mia prima cura abbassava il fondo a una tinta traslucida al 2%.
+ * (2) La transizione resta GELATA a metà: valore costante su tutti i campioni, a reduced-motion on E off — stesso
+ * sintomo del throttling delle pagine occluse misurato il 02/09. ⇒ Cura definitiva: l'hover dichiara LO STESSO token
+ * del riposo (`--talos-panel-soft`, opaco in OGNI tema: tokens.css e temi.css non lo legano mai a un alfa) e lo stesso
+ * bordo: nessuna proprietà cambia, nessuna transizione parte, nessun campione può discostarsi. A (0,4,0): `:is()` vale
+ * l'argomento più specifico (MDN, «:is() — Specificity», letta il 18/09/2026), quindi batte l'hover del design-system a
+ * (0,3,0) qualunque sia l'ordine dei fogli, né in tema chiaro né in tema scuro.
+ * Fonti 18/09/2026: W3C CSS Color Module Level 4 §13.4 «Interpolating with alpha» (premoltiplicazione; l'aritmetica
+ * della spec ricalcola esattamente i valori misurati); MDN «:is() — Specificity».
+ */
+.talos-chat-return > .talos-chat-return__button:is(:hover, :active):not(:disabled){transform:none; background:var(--talos-panel-soft); border-color:var(--talos-border)}
