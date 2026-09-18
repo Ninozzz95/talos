@@ -312,6 +312,52 @@ screenshot di un elemento `sticky` (10 voci visibili in entrambi gli stati).
 faccette **sotto i 1100 px**, la persistenza della scelta dell'ordine, la suite browser intera, e i
 percorsi che scrivono sulle API.
 
+## ⛔⛔ IL TERZO GIRO — la cura che riapre il difetto che cura, e una citazione FALSA (cure in `a07bced8`)
+
+**D1 — [ALTA] il 220 apriva una FASCIA SCOPERTA, 1101→1490 px.** Sopra la soglia di allora la riga
+è `nowrap` e i quattro controlli non si comprimono: il minimo è **844 px** (220+200+180+220+24 di
+gap) contro una riga di **792 a 1440** e **635 a 1280** — che è la **viewport predefinita della
+suite**. Il controllo dell'ordine **usciva dal pannello**: 52 px a 1440, **209 px a 1280**, con
+`.talos-page` scorribile in orizzontale (`scrollWidth 1149` contro `client 1004`) e il campo
+schiacciato fino a **rimettere il segnaposto tagliato (171 in 168)**. ⇒ **La cura del difetto
+originale aveva riaperto il difetto originale**, e a 1440 il trabocco era **nuovo di questa cura**
+(A/B del revisore: con 150 dentro; senza regola dentro, ma col controllo a 11 px).
+Cura: la soglia della media query passa da **1100 a 1500** — dove la riga ci sta davvero su una
+linea. Verificato dopo la cura con la sonda del revisore: `fuoriDi: 0`, `sfonda: false` a 1440 e
+1280. ⛔ La soglia **non** era il numero: era la **forma** (la media query spegneva il select
+*nativo*, largo 0, e non il componente che si vede).
+
+**D2 — [MEDIA] la citazione era FALSA, e l'avevo scritta io.** Il commento e il messaggio di
+`a253687a` dicevano che il 220 «è del mockup». **Non è vero**: nel mockup
+`.catalog-sorting .calm-control` **matcha ZERO elementi**; il suo controllo dell'ordine è
+`.catalog-sort select{max-width:245px}` ed è largo **158 px** nella scena viva. Il 220 resta perché
+è **misurato giusto per noi** (135 px di etichetta su 135), e ora commento, prova e messaggio lo
+dicono così. ⛔ È la lezione di sempre: **un numero in un commento è un'affermazione di fatto** — o
+l'hai contato, o non lo puoi scrivere.
+
+**D3 — [MEDIA] la metrica nuova era ancora cieca, a un difetto di distanza.** `altezzaBarra` e
+`voce.top - barra.top` sono ancorate **alla barra** e non vedono niente che le stia **sopra** — e
+sopra ci sono il selettore mobile e il bottone del mockup. Regressione iniettata dal revisore
+(«mentre si cerca il bottone sparisce»): la colonna sale di **48 px**, la stessa taglia del difetto
+originale, e **le due asserzioni restano verdi**. Cura: si misura anche la **posizione assoluta**
+della barra, che tutto ciò che sta sopra lo vede — ed è l'unica misura che resta sotto i 660 px,
+dove l'elenco è nascosto.
+
+**D4 — [BASSA] un mio overclaim**: `f856e853` diceva che R12 sarebbe diventata rossa rimettendo la
+metrica del gap; R12 ricalcola da sé e non legge `INTELAIATURA-10` ⇒ resterebbe verde. ⛔ Non si
+riscrive la storia: si corregge qui.
+
+**Le quattro ipotesi sfondate dal revisore** (provare e non trovare): sotto i 1100 px la riga va a
+capo e il controllo **resta 220 senza trabocco da 1100 a 390** ✓ · in **inglese le quattro opzioni
+restano identiche** (135 px anche lì: niente etichetta più lunga) ✓ — ⚠️ e osserva, preesistente,
+che **l'intera barra HF non è tradotta** · la guardia di `INTELAIATURA-06` **non ha falsi rossi**:
+`display` passa `block`→`grid` esattamente fra contenitore **660** e **661** ✓ · R17 è **viva**.
+
+⛔ **La rete che non l'ha preso, guardata dal revisore**: `visual-matrix.spec.mjs` ha uno scenario
+`model-lab-1440x900` — **dentro la fascia** — e il suo artefatto mostra **il velo d'avvio**, non il
+laboratorio; e registra solo lo `scrollWidth` della radice (1440 = 1440), non lo scroller interno
+`.talos-page`. ⇒ Una prova che esiste e non guarda.
+
 ## ⛔ L'ALTRO DIFETTO VERO, nel Laboratorio — curato in `be736bc9`
 
 Misurato sul 4174 con una sonda di sola lettura: la riga delle faccette è **1912 px**, il campo di
