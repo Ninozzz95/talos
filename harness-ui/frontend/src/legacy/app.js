@@ -2892,6 +2892,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          `posizionamento` arriva come {ancora} dal clic sui «⋯» e come {x,y} dal tasto destro. */
       onMenu:(voci,dove)=>apriMenuAzioniLibreria(voci,Number.isFinite(dove?.x)&&Number.isFinite(dove?.y)?{x:dove.x,y:dove.y}:{ancoraEl:dove?.ancora??null})});
     const refresh=$('#providerRefresh');if(refresh)refresh.disabled=state.modelLab.loadingProviders;
+    /* Il velo «Fornitori e accessi», quando è aperto, è una seconda vista sullo STESSO
+       stato: si ridisegna qui, dove lo stato diventa DOM, e non da un punto suo. */
+    const velo=$('#veloFornitori');if(velo&&!velo.hidden)popolaVeloFornitori();
   }
 
   /**
@@ -3078,14 +3081,143 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     feedback.scrollIntoView({ block: 'nearest' });
   }
 
-  async function gestisciAzioneProvider(button) {
-    const card=button.closest('[data-provider-id]'),provider=card?.dataset.providerId,action=button.dataset.providerAction;
+  /*
+   * ⭐ 18/09 — IL VELO «FORNITORI E ACCESSI» AVEVA I PULSANTI MUTI.
+   * Il dialogo arriva dal mockup del Model Lab (`c66e2109`, 05/09) con una card
+   * d'esempio scritta a mano: OpenRouter, tre badge inventati («Chiave salvata»,
+   * «Indirizzo predefinito», «Mai provato») e cinque pulsanti che portano i nomi
+   * d'azione DEL MOCKUP (`salva`, `rimuovi`, `tutti`) invece di quelli che il
+   * gestore riconosce (`save-key`, `remove-key`). E l'ascolto era delegato solo su
+   * `#providerList`, che è un ALTRO nodo: il clic partiva, non arrivava a nessuno e
+   * non lasciava traccia — nessun errore, nessun messaggio.
+   *
+   * Qui il velo prende le card VERE dallo stesso renderer del pannello
+   * (`aggiornaProviderList`, che è anche quello che sa conservare fuoco e valore
+   * degli input attraverso i ridisegni) e delega i clic allo stesso gestore,
+   * traducendo i nomi in UN punto solo.
+   *
+   * Ricerca 18/09/2026 — vincoli, non conferme:
+   * · MDN «Event delegation»: l'ascolto si delega a un antenato che SOPRAVVIVE ai
+   *   ridisegni, perché i nodi ricreati perdono gli ascoltatori legati a mano.
+   * · W3C WAI-ARIA APG, «Dialog (Modal) Pattern»: si scambia il CORPO del dialogo, la
+   *   shell no — fuoco, Esc e ritorno al pulsante d'apertura restano quelli che
+   *   `apriVeloMockup` già gestisce.
+   * · «Non ri-renderizzare con un input attivo»: è il motivo per cui al renderer si
+   *   passa la riga del SOLO fornitore scelto e non l'elenco intero.
+   */
+  function popolaVeloFornitori() {
+    const velo = $('#veloFornitori'); if (!velo) return;
+    /* ⛔ 18/09 — la lista si cerca PRIMA dell'articolo d'esempio, e non il contrario:
+       l'articolo esiste solo la prima volta (poi è sostituito dalla lista), quindi
+       cercarlo per primo faceva uscire qui a ogni ridisegno successivo — la card
+       sparita dopo il primo caricamento, senza un errore. L'ha trovato la prova. */
+    let lista = velo.querySelector('[data-velo-lista]');
+    if (!lista) {
+      const statica = velo.querySelector('article[data-provider-id]');
+      if (!statica) return;
+      lista = document.createElement('div'); lista.dataset.veloLista = ''; statica.replaceWith(lista);
+    }
+    const stato = $('#providerStato');
+    const rows = Array.isArray(state.modelLab.providers) ? state.modelLab.providers : [];
+    const scelto = $('#providerLab')?.value || '';
+    const riga = rows.find((r) => r.id === scelto) || null;
+    if (!riga) {
+      /* Anche senza riga si passa dal renderer: sa dire «sto leggendo» e «nessun
+         fornitore dichiarato» — un vuoto, lì, sembra un guasto. */
+      aggiornaProviderList(lista, [], { caricamento: state.modelLab.loadingProviders, errore: state.modelLab.providerError });
+      if (stato) stato.textContent = state.modelLab.providerError ? 'Stato provider non disponibile' : (state.modelLab.loadingProviders ? 'Leggo gli accessi…' : 'Nessun accesso da mostrare per questo fornitore.');
+      return;
+    }
+    /* ⛔ `onMenu` NON è un optional: senza, il renderer non crea il «⋯» (`provider-card.js:234`)
+       e le azioni che vivono lì — fra cui «Rimuovi chiave» — restano `hidden` e
+       IRRAGGIUNGIBILI. Il velo avrebbe mostrato le card giuste con dei comandi morti dentro.
+       L'ha trovato la prova, cercando di cliccarne uno. */
+    aggiornaProviderList(lista, [riga], { aperte: state.modelLab.providerAperti, prove: state.modelLab.provePr, occupati: state.modelLab.providerOccupati, caricamento: state.modelLab.loadingProviders, errore: state.modelLab.providerError,
+      onMenu: (voci, dove) => apriMenuAzioniLibreria(voci, Number.isFinite(dove?.x) && Number.isFinite(dove?.y) ? { x: dove.x, y: dove.y } : { ancoraEl: dove?.ancora ?? null }) });
+    if (stato) {
+      const prova = state.modelLab.provePr?.get(riga.id);
+      const conChiave = riga.keyConfigured ? 'una chiave salvata' : 'nessuna chiave';
+      const ultima = !prova ? 'mai provato' : (prova.esito === 'in-corso' ? 'prova in corso' : prova.esito === 'collegato' ? 'collegato' : 'non collegato');
+      stato.textContent = `Questo fornitore ha ${conChiave} · ${ultima}.`;
+    }
+  }
+
+  /* Il fornitore che il velo mostra si apre da solo: il mockup lo disegna aperto
+     (`aria-expanded="true"`) e un fornitore appena scelto che resta chiuso sarebbe un
+     clic in più per vedere ciò che si è appena chiesto. La testata resta cliccabile
+     per richiuderlo, e lo stato è lo STESSO del pannello (`providerAperti`). */
+  function apriFornitoreDelVelo() {
+    const id = $('#providerLab')?.value; if (!id) return;
+    (state.modelLab.providerAperti ??= new Set()).add(id);
+  }
+
+  /*
+   * «Prova tutti»: una richiesta per provider, in parallelo — la macchina e la rete
+   * sono le stesse per tutti in questo istante. Sta a livello di file, e non dentro
+   * `inizializzaModelLab`, perché la chiama anche il velo: e il velo si apre SENZA
+   * passare dal Model Lab.
+   */
+  async function provaTuttiProvider(bottone) {
+    const prima = bottone?.textContent;
+    if (bottone) { bottone.disabled = true; bottone.textContent = 'Provo tutti…'; }
+    try {
+      await Promise.all((state.modelLab.providers || []).map((row) => provaProviderModelLab(row.id)));
+    } finally {
+      if (bottone) { bottone.disabled = false; bottone.textContent = prima; }
+    }
+  }
+
+  /*
+   * ⭐⭐ 18/09 — IL VELO «FORNITORI E ACCESSI», e i suoi due ascoltatori.
+   * ⛔ STANNO QUI, FUORI da `inizializzaModelLab`, e non è un dettaglio di stile: quel
+   * blocco viene eseguito quando si entra nel Model Lab, e la schermata del Model Lab
+   * oggi è RITIRATA (`157a87d2`) — quindi gli ascoltatori registrati là dentro non
+   * esistevano, e i clic del velo cadevano nel vuoto un'altra volta, per una ragione
+   * diversa da quella che li aveva già resi muti. L'ha trovato la prova: la card
+   * arrivava (la popola `apriVeloMockup`), il cambio della tendina no.
+   * Il gestore è lo STESSO del pannello — e le azioni arrivano già coi nomi canonici,
+   * perché la card che si vede è quella generata dal renderer, non quella d'esempio
+   * del mockup. (Avevo scritto una mappa `salva`→`save-key` e `rimuovi`→`remove-key`:
+   * era codice MORTO, perché la card statica viene sostituita alla prima apertura.
+   * L'ha mostrato la prova, cercando un pulsante che non esisteva più.) L'unica
+   * azione che il mockup porta FUORI dalla card è `tutti`, che non è un'azione di
+   * fornitore ma il «Prova tutti» del piede.
+   */
+  $('#veloFornitori')?.addEventListener('click', (event) => {
+    const toggle = event.target.closest('[data-provider-toggle]');
+    if (toggle) {
+      state.modelLab.providerAperti ??= new Set();
+      const id = toggle.dataset.providerToggle;
+      if (state.modelLab.providerAperti.has(id)) state.modelLab.providerAperti.delete(id);
+      else state.modelLab.providerAperti.add(id);
+      popolaVeloFornitori();
+      return;
+    }
+    const azione = event.target.closest('[data-provider-action]');
+    if (!azione) return;
+    const nome = azione.dataset.providerAction;
+    if (nome === 'tutti') { void provaTuttiProvider(azione); return; }
+    gestisciAzioneProvider(azione);
+  });
+  /*
+   * La tendina sceglie QUALE fornitore la card mostra: è la ragione per cui esiste.
+   * E lo mostra APERTO — il mockup lo disegna così (`aria-expanded="true"`), e un
+   * fornitore appena scelto che resta chiuso sarebbe un clic in più per vedere ciò che
+   * si è appena chiesto. La testata resta cliccabile per richiuderlo.
+   */
+  $('#providerLab')?.addEventListener('change', () => { apriFornitoreDelVelo(); popolaVeloFornitori(); });
+
+  async function gestisciAzioneProvider(button, azioneTradotta) {
+    const card=button.closest('[data-provider-id]'),provider=card?.dataset.providerId,action=azioneTradotta||button.dataset.providerAction;
     if(!provider||!action||state.modelLab.provePr?.get(provider)?.esito==='in-corso')return;
     state.modelLab.providerOccupati??=new Set();if(state.modelLab.providerOccupati.has(provider))return;
     if(action==='test'){await provaProviderModelLab(provider);return;}
     if(action==='oauth-start'){await avviaAccessoProvider(provider);return;}
     const key=card.querySelector('[data-provider-key]')?.value||'',endpoint=card.querySelector('[data-provider-endpoint]')?.value||'',timeoutSeconds=Number(card.querySelector('[data-provider-timeout]')?.value||60);
-    const corrente=()=>$('#providerList')?.querySelector('[data-provider-id="'+provider+'"]');
+    /* ⛔ 18/09 — la card da aggiornare non è per forza quella del pannello: il velo
+       «Fornitori e accessi» ha la sua. Se è ancora nel documento si usa quella (è la
+       stessa su cui l'owner ha appena cliccato), altrimenti si ricade sul pannello. */
+    const corrente=()=>card?.isConnected?card:$('#providerList')?.querySelector('[data-provider-id="'+provider+'"]');
     state.modelLab.providerOccupati.add(provider);renderizzaProviderModelLab();
     try {
       const base='/api/v1/providers/'+encodeURIComponent(provider);let messaggio;
@@ -4561,19 +4693,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (azione) gestisciAzioneProvider(azione);
     });
     /* «Prova tutti»: una richiesta per provider, in parallelo — la macchina e
-       la rete sono le stesse per tutti in questo istante. */
-    $('#providerTestAll')?.addEventListener('click', async (event) => {
-      const bottone = event.currentTarget;
-      bottone.disabled = true;
-      const prima = bottone.textContent;
-      bottone.textContent = 'Provo tutti…';
-      try {
-        await Promise.all((state.modelLab.providers || []).map((row) => provaProviderModelLab(row.id)));
-      } finally {
-        bottone.disabled = false;
-        bottone.textContent = prima;
-      }
-    });
+       la rete sono le stesse per tutti in questo istante. La funzione sta FUORI di
+       qui (vedi `provaTuttiProvider` più sopra) perché la usa anche il velo, che
+       si apre senza passare dal Model Lab. */
+    $('#providerTestAll')?.addEventListener('click', (event) => provaTuttiProvider(event.currentTarget));
     caricaCapacitaMacchina();
     caricaRuntimeModelLab();
     caricaModelliLocaliModelLab();
@@ -14945,7 +15068,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       btn.addEventListener('click', () => { chiudiMenuLibreria(); voce.aziona(); });
       menu.appendChild(btn);
     }
-    document.body.appendChild(menu);
+    /*
+     * ⛔⛔ 18/09/2026 — DENTRO IL VELO APERTO, NON SU `<body>`.
+     * Il gestore dei modali rende `inert` tutto ciò che sta FUORI dal dialogo aperto
+     * (`manager.ts:69-76`, `wanted` = i fratelli del layer): un menu appeso a `body`
+     * finisce in quell'insieme, e da lì i suoi comandi non si possono più cliccare —
+     * si vedono, e il clic lo prende l'elemento che sta sotto. Fuori dal dialogo non
+     * c'è nessun `inert`, ed è per questo che il menu funzionava nel pannello e non
+     * dentro il velo. Il layer (`.overlay-layer`) non ha `transform`, quindi il menu
+     * resta `position: fixed` rispetto alla finestra e le coordinate non cambiano.
+     * Ricerca 18/09/2026: è la stessa cura del caso Kendo UI / Angular Material
+     * (`appendTo: 'component'`) e di Chris’ Corner, «Layers of Layers» — quando un
+     * dialogo è aperto la pagina sotto è inerte, quindi un overlay appeso a `body`
+     * resta visibile ma inaccessibile.
+     */
+    const veloAperto = [...document.querySelectorAll('.overlay-layer')].filter((v) => !v.hidden).at(-1) || null;
+    (veloAperto || document.body).appendChild(menu);
 
     if (posizionamento.ancoraEl) {
       const rect = posizionamento.ancoraEl.getBoundingClientRect();
@@ -21575,6 +21713,10 @@ ${testo}`;
     // ⭐ 02/9 — funzione PURA dello stato riga: esposta per provare i cinque stati senza dover avere in casa una sessione per ciascuno.
     statoSessione,
     renderSettingsRiepiloghi,
+    /* ⭐ 18/09 — il velo «Fornitori e accessi» non ha una porta VISIBILE oggi: le due
+       che il mockup porta stanno nella schermata Model Lab, che è stata ritirata. Senza
+       esporre l'apertura, la sua unica prova possibile sarebbe guardarlo a mano. */
+    apriVeloMockup,
     // ⭐ 02/9, Fase 5 punto 4 — la funzione PURA che traduce la risposta di
     // /fit nel verdetto mostrato: esposta per provarla su tutti gli stati
     // senza dover avere in casa un modello per ciascuno (stesso schema già
@@ -21989,6 +22131,11 @@ ${testo}`;
     const opener = ROOT().activeElement;
     ultimoFuocoVelo = opener;
     v.hidden = false;
+    /* ⭐ 18/09 — il velo Fornitori mostra dati VERI: si popola all'apertura (e poi da
+       `renderizzaProviderModelLab`, che è dove lo stato diventa DOM). Se gli accessi non
+       sono ancora stati letti si chiedono adesso: la prima apertura non deve mostrare un
+       vuoto che sembra «nessun fornitore». */
+    if (id === 'veloFornitori') { apriFornitoreDelVelo(); popolaVeloFornitori(); if (!state.modelLab.providers?.length) void caricaProviderModelLab(); }
     preparaMisuraDialogo(v); // 06/9 B7: la misura ricordata di QUESTO dialogo, se c'è
     aggiornaTutteLeScie(v);   // ⛔ 07/9: un cursore appena montato ha la scia a zero finché non lo tocchi
     const corpo = v.querySelector('.talos-dialog__body');
