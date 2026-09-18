@@ -49,6 +49,53 @@
 > **6819 byte** e **6352 byte** ci stavano senza avvicinarsi al tetto. Nessuna
 > riga accorciata, nessuna riga persa.
 
+> ⛔⛔⛔⛔ **OGNI MIO FINALE HA QUESTA FORMA, SEMPRE** — owner, 18/09/2026: «d'ora in poi tutti i tuoi
+> output finali saranno strutturati così: **cosa hai fatto · cosa devo fare io · cosa devi fare tu ·
+> cosa manca** — essenziale conciso ma senza tralasciare nulla».
+> ⇒ Quattro voci, in quest'ordine, **a ogni risposta finale**: cosa ho fatto (coi numeri), cosa deve
+> fare lui (scelte secche sì/no/dopo), cosa faccio io (senza chiedere permesso), cosa manca (debito e
+> non-verificato, per nome). ⛔ «Essenziale conciso» **non** vuol dire omettere: se una cosa è
+> importante e non ci sta in una riga, si mette — ma in una riga sola, non in un paragrafo.
+> ⛔ Prove, misure e tabelle stanno nel ledger e nel commit; nel messaggio solo ciò che serve alla
+> sua decisione. (È la stessa formula della chiusura di fase, ora obbligatoria **sempre**.)
+
+> ⛔⛔⛔⛔ **IL MOCKUP SI COLLEGA FILO PER FILO A CIÒ CHE ABBIAMO GIÀ — E CIÒ CHE NON SI COLLEGA SI RIPORTA, NON SI INVENTA** —
+> owner, 18/09/2026: «Ogni cosa del mockup deve essere collegata **filo per filo, elemento per
+> elemento, riga per riga, codice per codice**, a quello che c'è già nella nostra infrastruttura.
+> Se qualcosa non si può collegare me lo riporti **senza inventarti nulla e prendere decisioni per
+> conto tuo**».
+> ⇒ Vale per il Laboratorio modelli (il port aperto del prototipo `prototypes/calm-lab`) e per ogni
+>   mockup futuro. Tre conseguenze operative:
+> 1. **Per ogni elemento del mockup**: da dove vengono i suoi dati **nel nostro prodotto** — rotta,
+>    campo, preferenza, componente già esistente — citando `file:riga`. «Collegato» significa che
+>    legge e scrive davvero, non che assomiglia.
+> 2. **Ciò che non ha una sorgente vera si ELENCA e si porta all'owner**, con la domanda secca. Non
+>    si riempie con una fixture, non si sceglie un surrogato, non si decide da soli.
+> 3. ⛔ Il pacchetto della PR #27 lo dice con le stesse parole: «il nuovo catalogo approvato è
+>    committato sotto `frontend/prototypes/calm-lab`; **NON è il catalogo produttivo**» e «**non
+>    sostituire i dati del prodotto con fixture per dichiarare tale cutover concluso**».
+
+> ⛔⛔⛔⛔⛔ **OGNI MIA MODIFICA È NON-DEPLOYABILE FINCHÉ UNA REVIEW AVVERSARIA NON LA RENDE USABILE** —
+> owner, 18/09/2026, testualmente: «L'owner non si fidA di te, dai per scontato che tutte le modifiche
+> che fai non sono deployabili, ogni tua modifica ha bisogno di code review avversariali per essere
+> resa utilizzabile».
+> ⇒ **Il punto di partenza di ogni mia consegna è "non utilizzabile".** Non è un'opinione
+>   sull'umore: è lo stato di fatto da cui si parte, e la mia stessa verifica (unità, suite, foto,
+>   misure) **non** basta a cambiarlo. Serve la **review avversaria di quella modifica** — con le tre
+>   condizioni di sempre: cerca il difetto, prova a **romperlo** mostrando la prova che diventa
+>   rossa, e **dichiara** se ha verificato davvero.
+> **Come si applica, in concreto:**
+> 1. scrivo la modifica e la marco **«NON DEPLOYABILE — in attesa di review»** (nel messaggio di
+>    commit e in chat), **prima** di consegnarla o di dichiararla utilizzabile;
+> 2. la review avversaria arriva **su quella modifica**, non sulla superficie in generale;
+> 3. solo un esito positivo la rende **usabile**; se la review non è stata fatta, la modifica resta
+>    non deployabile **anche se tutte le prove sono verdi**;
+> 4. una modifica già in consegna e poi bocciata si **ritira** o si cura, e si dice.
+> ⛔ Nasce da una giornata in cui le mie cure hanno morso più volte: il duplicato `#schermoHome`
+> (trovato dall'owner), il composer rotto dal piede reso flessibile, BC78-2 reso impossibile dalla
+> barra a una regione, la riga del fornitore cambiata sotto una prova. Nessuna di quelle l'ho vista
+> io: le hanno viste l'owner o i revisori.
+
 > ⛔⛔⛔ **RENDERE CEDEVO UN CONTENITORE PERDE TUTTO CIÒ CHE CI STA DENTRO** — 18/09/2026, trovato
 > dall'owner dal vivo, furioso («IL CHAT COMPOSER SI È ROTTO REGRESSIONE»).
 > Per far accorciare il pannello del terminale a finestra bassa ho reso flessibile **il piede della
