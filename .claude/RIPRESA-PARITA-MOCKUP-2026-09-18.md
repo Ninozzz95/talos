@@ -126,11 +126,20 @@ modello. **Mai** le sette sezioni attenuate.
 | `1f22bb32` | le carte del runtime **parlano, non stampano codici** (`RUNTIME_UNREACHABLE` → frase) |
 | `a59aa16a` | la scheda del modello: «Sconosciuto · Sconosciuto» diventa **una parola sola** |
 | `47ee6c69` | la tab **Download** tiene **un titolo, non tre** |
-| `a253687a` | la **seconda review**: l'etichetta dell'ordine (150 → **220**, il numero del mockup) e **due prove che non mordevano** |
+| `a253687a` | la **seconda review**: l'etichetta dell'ordine (150 → 220) e **due prove che non mordevano** |
 | `f856e853` | le due meta-prove del revisore diventano **guardie della cura**, e la guardia guarda la **disposizione** |
+| `53052e23` | il documento: i sette rossi del laboratorio **aspettano un port, non una rinomina** |
+| `e504e73b` | il documento: l'**ispezione visiva delle otto viste** |
+| `3e73e59b` | il documento: il referto della **prima review** e le sue cure |
+| `fb32582d` | il documento: la **seconda review** e le sue quattro cure |
+| `a07bced8` | il **terzo giro**: la soglia della riga (1100 → **1500**), la metrica **assoluta**, e la **citazione falsa** corretta |
+| `3d0fda30` | il documento: il **terzo giro** |
 
 ⛔ **Tutti marcati «NON DEPLOYABILE — in attesa di review avversaria».**
 ⛔ Il push **non è stato chiesto**: si chiede a blocchi, col sì dell'owner.
+⛔ `a253687a` **corregge anche sé stesso**: diceva che il 220 era «il numero del mockup», ed era
+**falso** (§ terzo giro, D2). La correzione è in `a07bced8`, ma il messaggio di `a253687a` resta
+com'era: **un commit non si riscrive**.
 
 ## ⛔ LA BARRA DI RICERCA — spostata in sidebar il 18/09/2026 (commit `4b4c753b`)
 
@@ -380,30 +389,32 @@ la corsia del laboratorio.
 `public/` è stato ricostruito**: il pacchetto consegnato era **stale**, e ricostruirlo dalla fonte
 vera ha scoperto rossi che nessuno aveva misurato. **Non attribuirli alla barra.**
 
-## COSA GIRA ADESSO (18/09/2026, sera)
+## COSA GIRA ADESSO (18/09/2026, tarda sera)
 
-Quattro agenti, su **file disgiunti** (le intersezioni devono restare vuote):
-- **A** — il vestito delle sezioni: `settings-view.ts` · `settings.css` · `index.template.html`
-- **B** — la colonna dell'anteprima: `components/anteprima-tema.js` (nuovo) · `styles/anteprima-tema.css` (nuovo)
-- **C** — i tre componenti di sezione: `contesto.js` · `costi-consumo.js` · `fonte-ricerca.js`
-- ⛔ **la review avversaria della FASE 1** ha consegnato il suo referto (dieci difetti, otto
-  confermati: § qui sotto) ed è stata **fermata dall'owner** il 18/09 sera.
-- ⛔ **la review avversaria sulla barra HA CONSEGNATO** (§ «LA REVIEW AVVERSARIA DELLA BARRA»): due
-  difetti, entrambi **curati** (`bb148037`), e nove ipotesi che non hanno prodotto un rosso.
-  Ha lasciato la sua prova indipendente, `tests/browser/_review-barra.spec.mjs` (**8/8** col codice
-  curato), ed è **committata**: è il controllo di questa superficie. ⛔ Le cure **non** hanno ancora
-  avuto una review avversaria **loro**: `bb148037` e `be736bc9` restano **NON DEPLOYABILI**.
+- ⛔ **Le corsie A, B e C NON sono più vive** (verificato: l'elenco degli agenti mostra solo i
+  revisori). Nessuno sta scrivendo in `src/`: le build non si sovrascrivono più.
+- **Tre giri di review avversaria consegnati e curati** — sulla barra (`bb148037`), sulle due cure
+  (`a253687a` + `f856e853`), sul terzo (`a07bced8`). Ogni giro ha consegnato una **prova
+  indipendente** committata: `_review-barra.spec.mjs` (8), `_review-cure.spec.mjs` (16),
+  `_review-cure3.spec.mjs`.
+- ⛔ **Il QUARTO giro è IN CORSO** sulle cure di `a07bced8` (soglia 1500, metrica assoluta): referto
+  **non ancora arrivato**. Finché non consegna, quelle cure restano **non usabili**.
+- Il 4174 è **aggiornato all'ultima build** e verificato a ogni giro; le **32 foto** in
+  `Downloads/confronto-fase1/` sono del build finale.
 
 ## COSA FARE ALLA RIPRESA, IN ORDINE
 
-1. **Raccogliere i referti** dei quattro agenti.
-2. **Unire i loro findings col mio inventario** (l'owner l'ha chiesto: «*poi unite i findings*»).
-3. **One build sola**, quando nessuno sta più scrivendo in `src/` — cioè `cd harness-ui && npm run aggiorna`
-   (fa build + copia in `public/` + riavvio del 4174). ⛔ **Mai build mentre le corsie scrivono**: cinque
-   build insieme si sovrascrivono.
-4. **L'ispezione visiva obbligatoria** (§ seconda cosa, qui sopra) e il rifacimento delle foto.
-5. Le fasi successive: **2** (le dieci sezioni) · **3** (la banda del laboratorio) · **4** (le quattro
-   schede) · **5** (la pagina del modello) · **6** (il confronto finale).
+1. **Raccogliere il quarto referto.** Se trova un difetto **di prodotto**, curarlo e poi **chiudere
+   il ciclo di review** (proposta all'owner: dopo il quarto, le review tornano a coprire le **fasi
+   nuove**, non le singole cure — altrimenti ogni cura ne genera una che trova qualcosa nella cura).
+2. **Le quattro decisioni che aspettano l'owner** (§ «COSA MANCA, PER NOME», in fondo).
+3. **Riprendere il piano dalla FASE 2** (le dieci sezioni): è la strada per la parità. Impostazioni
+   e Laboratorio sono in uno stato che si può solo rifinire.
+4. **L'ispezione visiva è già stata fatta** su tutte e otto le viste (§ qui sopra) e le foto sono
+   rigenerate: alla ripresa si rifanno **dopo** ogni modifica di `src/`, mai prima.
+5. Le fasi successive: **2** (le dieci sezioni) · **3** (la banda del laboratorio) · **4** (le
+   quattro schede, **e il port della barra a faccette**) · **5** (la pagina del modello) · **6** (il
+   confronto finale).
 6. ⭐ **Dopo il piano** (owner 18/09): lo **stesso metodo sulla sidebar di DESTRA** — il **grafo
    agenti** e lo stile generale rifattorizzato. ⛔ Prima di riaprire: verificare se la «tab file» è
    davvero già fatta.
@@ -535,8 +546,15 @@ causa**. È il modo giusto.
 
 ## I NUMERI DI RIFERIMENTO (18/09/2026)
 
-- suite unit: **1419 passati / 0 falliti**
-- `tests/browser/intelaiatura-impostazioni.spec.mjs`: **9/9**
+- suite unit: **1420 passati / 0 falliti** (la 1420ª è `DETTAGLIO-RUNTIME`, la traduzione dei codici)
+- `tests/browser/_review-cure.spec.mjs` **16/16** · `_review-cure3.spec.mjs` **8/8** ·
+  `_review-barra.spec.mjs` **8/8** — le tre prove indipendenti dei revisori, tutte verdi col codice
+  curato. ⛔ Sono **committate**: sono il controllo di questa superficie.
+- insieme, le sei prove di questa superficie: **51 verdi / 2 rossi**, e i due sono i preesistenti
+  (`PARITA-08` e la colonna dell'anteprima, A/B già fatto).
+- `tests/browser/intelaiatura-impostazioni.spec.mjs`: **10/10** (la decima è «cercando, la colonna
+  non salta»: misura **posizione assoluta della barra**, altezza della barra e posizione relativa
+  della prima voce — tre misure, perché le prime due insieme erano ancora cieche)
 - `tests/browser/html-fidato.spec.mjs`: **5/5** · `tests/unit/html-fidato.test.mjs`: **6/6**
 - `tests/browser/lab-guscio.spec.mjs` + `velo-fornitori` + `po30-scheda-file`: **21/21**
 - cancello dei componenti: **exit 0**
@@ -577,3 +595,71 @@ causa**. È il modo giusto.
 - **`npm run aggiorna` si blocca sul riavvio del 4174**: la build e la copia in `public/`
   avvengono **prima**, e il codice nuovo si vede dal vivo. Si aspetta che `public/app.js` sia più
   recente della sorgente, non che il comando esca.
+
+---
+
+## ⛔⛔ COSA MANCA, PER NOME (18/09/2026, tarda sera)
+
+Niente è stato buttato e niente è stato dichiarato chiuso per stanchezza. Per ogni riga: **cosa**,
+**perché è lì**, e **chi la chiude**.
+
+### 1 · Le QUATTRO DECISIONI che aspettano l'owner (le uniche cose che mi bloccano)
+
+1. **Due porte di ricerca o una?** In colonna ci sono il **cercatore del mockup** (bottone + Ctrl K,
+   apre la **modale** coi percorsi) e il **campo vero** (filtra in pagina). Il mockup ne ha **una**
+   perché ha **un solo comportamento**: unirle vuol dire cancellarne uno. ⇒ **Consiglio: tenerle
+   tutte e due.** Decide l'owner.
+2. **Il nome accessibile del campo del catalogo.** Il cancello `baseline-shell` pretende
+   «**Cerca nel catalogo**» e sul campo c'è «Cerca Hugging Face». ⇒ **Consiglio: allineare il
+   CODICE al cancello** (una riga), non il cancello al codice: il segnaposto dice già
+   «Cerca un repository GGUF…». Decide l'owner.
+3. **Il 220 della riga delle faccette è un numero NOSTRO**, non del mockup (che usa un altro
+   controllo: `max-width:245px`, reso 158). ⇒ **Consiglio: tenere 220 adesso**, e adottare la
+   **forma a gradini** del mockup alla prossima modifica di quella riga. Decide l'owner.
+4. **Il ciclo di review.** Tre giri, **~700k token**, ogni giro con difetti veri — il terzo, uno
+   **introdotto dalla cura precedente**. ⇒ **Consiglio: chiudere dopo il QUARTO giro** (in corso) e
+   far tornare le review a coprire le **FASI**, non le singole cure: com'è ora il ciclo non ha fine.
+   Decide l'owner.
+
+### 2 · I ROSSI PREESISTENTI — misurati, non miei, e con la prova
+
+- **`baseline-shell`: 22 rossi su 65** (43 verdi). A/B **nello stesso giorno**: **42/23** sul codice
+  committato, **43/22** con le mie modifiche — un test balla fra i due giri, **non è una cura mia**.
+  Sono prove di **chat, composer, loader, movimento**: superficie non mia (§ «non toccare la chat»).
+- **`PARITA-08`** e la prova della **colonna dell'anteprima**: rossi **identici** sul committato
+  (A/B fatto due volte, in due momenti diversi).
+- ⛔ **Perché si sono visti tutti insieme oggi**: `public/` era **stantio**. Ricostruirlo dalla fonte
+  vera ha scoperto rossi che nessuno aveva misurato. **Non attribuirli alla barra.**
+
+### 3 · LE PROVE STANTIE — e la differenza fra «da aggiustare» e «da portare»
+
+- **`lab-faccette.spec.mjs`: 7 rossi su 7.** Causa **misurata**: la barra a faccette vive in
+  `#modelLabCatalogPanel`, un pannello che il guscio nuovo **non raggiunge** (premendo «Hugging
+  Face» si accendono `setting-panel-models`, `labPannelloModels`, `modelLabHfPanel`). ⇒ **Non è una
+  prova da rinominare: è una superficie da portare**, ed è la **FASE 4**.
+- **`baseline-shell` «Model Lab filters…»**: pretende un nome accessibile diverso (decisione 2).
+- ⛔ **UNA PROVA CHE ESISTE E NON GUARDA** (trovata dal terzo revisore): `visual-matrix.spec.mjs` ha
+  uno scenario **`model-lab-1440x900`** — esattamente **dentro la fascia 1101→1490** dove il
+  selettore dell'ordine usciva dal pannello — e il suo artefatto mostra **il velo d'avvio**, non il
+  laboratorio; la sua misura è lo `scrollWidth` della **radice** (1440 = 1440), non dello scroller
+  interno `.talos-page`. ⇒ Vale **una riga di cura**, non una fase: è il prossimo lavoro di prova.
+
+### 4 · LO STATO DI DEPLOYABILITÀ (regola owner 18/09: nessuna mia modifica è usabile da sola)
+
+| cosa | stato |
+|---|---|
+| `4b4c753b` (barra in sidebar) + `719565f2` + `bb148037` | review avversaria **fatta** (1ª e 2ª tornata) |
+| `be736bc9`, `a253687a`, `f856e853` | review **fatta** (2ª e 3ª tornata) e difetti **curati** |
+| **`a07bced8`** (soglia 1500 + metrica assoluta + citazione corretta) | ⛔ **review IN CORSO** — non usabile |
+| `1f22bb32`, `a59aa16a`, `47ee6c69` (codici del runtime, «Sconosciuto», titolo doppio) | ⛔ **mai rivisti**: curano difetti visti in foto, con la prova nei due versi, ma senza review |
+
+⛔ **Il push non è stato chiesto**: si chiede a blocchi, col sì dell'owner.
+
+### 5 · QUELLO CHE NON HO VERIFICATO (dichiarato, non nascosto)
+
+- **La suite browser intera** (56 file) non è stata lanciata: solo le prove di questa superficie.
+- **I percorsi che scrivono** sulle API non sono stati esercitati.
+- **La persistenza della scelta dell'ordine** fra sessioni: non misurata.
+- **L'inglese reso** della barra del laboratorio: il terzo revisore ha misurato che le quattro
+  opzioni dell'ordine **non cambiano** in `en`, e ha segnalato — **preesistente** — che l'intera
+  barra HF **non è tradotta** (in EN il segnaposto resta italiano).
