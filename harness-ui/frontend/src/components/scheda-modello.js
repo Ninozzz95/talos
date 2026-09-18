@@ -750,6 +750,18 @@ export function montaSchedaModello(contenitore, {
       // ⛔ Il recinto di codice è quello della chat: barra del linguaggio, «Copia», evidenziazione.
       //   La firma del renderer è `(testo, linguaggio, chiuso)` (`markdown.js:137`).
       bloccoCodice: (testo, linguaggio, chiuso) => creaBloccoCodice({ testo, linguaggio, chiuso }, { document: doc }),
+      /*
+       * ⛔ QUESTE DUE RIGHE SONO LA CURA, e si accendono SOLO QUI — owner, 18/09/2026: «la scheda
+       *   del modello di Hugging Face deve essere formattata in HTML».
+       *   Misurato in foto (`pagina-modello-card_1080p_real.png`, 18/09): il README di
+       *   `unsloth/GLM-4.7-Flash-GGUF` usciva col SORGENTE a schermo — `<div>`, `<p style=…>`,
+       *   `<em><a href=…>` — e i link restavano `[Unsloth Dynamic 2.0](https://…)`, cioè sintassi.
+       * ⛔ Il renderer resta quello di sempre e la CHAT NON CAMBIA: sono due opzioni spente per
+       *   default, e questa scheda è l'unica che le accende. La lista di ciò che è ammesso, e il
+       *   perché, stanno in `html-fidato.js`.
+       */
+      htmlFidato: true,
+      linkMarkdown: true,
     });
     const indice = indiceDelReadme(frammento, doc, { prefisso: `${suffisso}-readme` });
     if (indice.length) {
