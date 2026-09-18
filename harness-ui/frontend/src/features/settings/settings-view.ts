@@ -123,8 +123,8 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     button.addEventListener('click', () => choose(id), { signal });
   }
   const heading = node('header', 'settings-section-heading'); heading.dataset.settingsChrome = '';
-  const headingCopy = node('div'); const h2 = node('h2'); const description = node('p'); const scope = node('span', 'settings-scope');
-  h2.tabIndex = -1; h2.dataset.settingsHeading = ''; headingCopy.append(h2, description); heading.append(headingCopy, scope);
+  const headingCopy = node('div'); const eyebrow = node('span', 'talos-eyebrow'); const h2 = node('h2'); const description = node('p'); const scope = node('span', 'settings-scope');
+  h2.tabIndex = -1; h2.dataset.settingsHeading = ''; eyebrow.dataset.settingsEyebrow = ''; headingCopy.append(eyebrow, h2, description); heading.append(headingCopy, scope);
   const results = node('section', 'settings-search-results'); results.dataset.settingsChrome = ''; results.id = 'settingsSearchResults'; results.setAttribute('role', 'region');
   const resultTitle = node('h2'); const status = q<HTMLElement>('[data-settings-results]') || node('p');
   status.dataset.settingsResults = ''; status.className = 'settings-result-count'; status.setAttribute('role', 'status'); status.setAttribute('aria-atomic', 'true');
@@ -169,6 +169,10 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     heading.hidden = searching; results.hidden = !searching;
     const metadata = SETTINGS_SECTIONS[selected];
     h2.textContent = localText(metadata.title, options.language()); description.textContent = localText(metadata.description, options.language()); scope.textContent = localText(metadata.scope, options.language());
+    /* L'eyebrow c'e' solo dove il mockup ce l'ha (Aspetto, Laboratorio): per le altre otto
+       sezioni resta nascosto, invece di mostrare una parola inventata per simmetria. */
+    if (metadata.eyebrow) { eyebrow.textContent = localText(metadata.eyebrow, options.language()); eyebrow.hidden = false; }
+    else { eyebrow.textContent = ''; eyebrow.hidden = true; }
     if (!searching) { resultList.replaceChildren(); status.textContent = ''; return; }
     const matches = searchSettings(buildSettingsIndex(options.fields, options.studioIds, options.language(), options.translate), search!.value);
     status.hidden = false; status.textContent = options.language() === 'en' ? `${matches.length} ${matches.length === 1 ? 'result' : 'results'}` : `${matches.length} ${matches.length === 1 ? 'risultato' : 'risultati'}`;
