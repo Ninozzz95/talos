@@ -24,14 +24,17 @@ non un import**: non pesa sul contesto finché non serve.
 
 @.claude/MEMORIA-INGEGNERIA-2026-08.md
 
+@.claude/MEMORIA-VERIFICA.md
+
 ⛔ Perché esistono: `MEMORY.md` ha due tetti **compilati dentro claude.exe** —
 **200 righe** e **25 KB** — e oltre quelli il contenuto viene tagliato **in
 silenzio**, senza avviso in sessione. Nessuna impostazione li alza (verificato
 il 2026-08-16 sulle costanti del binario e il 2026-08-19 sulla documentazione
 ufficiale). Owner 2026-08-19: «dobbiamo trovare il modo per aumentare il tetto».
 
-⇒ Il tetto non si alza: **l'indice si divide**. Oggi sono **tre file**, e si
-caricano tutti a ogni sessione:
+⇒ Il tetto non si alza: **l'indice si divide**. Oggi sono **sette file**, e si
+caricano tutti a ogni sessione (l'ultimo, `MEMORIA-VERIFICA.md`, aperto il 18/09 quando
+`MEMORIA-INGEGNERIA.md` era a **901 byte** dal taglio silenzioso):
 
 ```
 MEMORY.md               le regole VINCOLANTI, gli aperti, chi è l'owner
