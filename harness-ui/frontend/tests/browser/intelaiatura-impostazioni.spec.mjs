@@ -213,12 +213,24 @@ test('INTELAIATURA-10 · cercando, la colonna non salta', async ({ page }) => {
   const stato = () => page.evaluate(() => {
     const barra = document.querySelector('#schermoImpostazioni .settings-toolbar').getBoundingClientRect();
     const voce = document.querySelector('#schermoImpostazioni .settings-nav__list [role="tab"]').getBoundingClientRect();
-    return { altezzaBarra: Math.round(barra.height), relativa: Math.round(voce.top - barra.top), voceVisibile: voce.height > 0 };
+    return { altezzaBarra: Math.round(barra.height), barraTop: Math.round(barra.top), relativa: Math.round(voce.top - barra.top), voceVisibile: voce.height > 0 };
   });
   const prima = await stato();
   await page.locator('#settingsSearch').fill('tema');
   await expect(page.locator('#schermoImpostazioni [data-settings-clear]')).toBeVisible();
   const durante = await stato();
+  /*
+   * ⛔ LA TERZA MISURA — e senza di questa le altre due erano ancora cieche, a un difetto di
+   *   distanza. Anch'esse sono ancorate ALLA BARRA e non vedono niente che stia **sopra** di lei;
+   *   nella colonna, sopra la barra, ci sono il selettore mobile e il bottone «Cerca impostazioni»
+   *   (`settings-view.ts:582/586`). Il terzo revisore l'ha dimostrato con una regressione iniettata
+   *   («mentre si cerca, il bottone del mockup sparisce»): la colonna saliva di **48 px** —
+   *   la stessa taglia del difetto originale — e `altezzaBarra` e `relativa` restavano **verdi**.
+   *   ⇒ Si misura anche la posizione ASSOLUTA della barra: è quella che vede tutto ciò che le sta
+   *   sopra, e sotto i 660 px (dove l'elenco è nascosto e `voceVisibile` è falso) resta l'unica
+   *   misura oltre all'altezza.
+   */
+  expect(Math.abs(durante.barraTop - prima.barraTop), `la colonna salta di ${durante.barraTop - prima.barraTop} px mentre si cerca`).toBeLessThanOrEqual(8);
   expect(Math.abs(durante.altezzaBarra - prima.altezzaBarra), `la barra cambia altezza cercando: ${prima.altezzaBarra} → ${durante.altezzaBarra}`).toBeLessThanOrEqual(2);
   if (prima.voceVisibile) {
     expect(Math.abs(durante.relativa - prima.relativa), `la colonna salta di ${durante.relativa - prima.relativa} px mentre si cerca`).toBeLessThanOrEqual(8);
@@ -231,7 +243,15 @@ test('INTELAIATURA-10 · cercando, la colonna non salta', async ({ page }) => {
   expect(dentro.sovrapposta, 'la × deve restare dentro il bordo del campo').toBe(true);
   await expect(pulisci).toHaveAttribute('aria-label', /.+/);
   await page.locator('#settingsSearch').fill('');
-  expect(await stato(), 'la colonna deve tornare dov\'era').toEqual(prima);
+  /*
+   * ⛔ E AL RITORNO SI CONFRONTA CON TOLLERANZA, non con l'uguaglianza profonda dell'oggetto:
+   *   `toEqual` è diventato rosso appena la stato ha incluso `barraTop`, perché un pixel di
+   *   arrotondamento del browser basta a farne un oggetto diverso. La regola è la stessa di sopra —
+   *   ±8 sulla posizione, ±2 sull'altezza — e dice la stessa cosa: la colonna torna dov'era.
+   */
+  const dopo = await stato();
+  expect(Math.abs(dopo.barraTop - prima.barraTop), `la colonna non torna dov'era: ${prima.barraTop} → ${dopo.barraTop}`).toBeLessThanOrEqual(8);
+  expect(Math.abs(dopo.altezzaBarra - prima.altezzaBarra), `la barra non torna com'era: ${prima.altezzaBarra} → ${dopo.altezzaBarra}`).toBeLessThanOrEqual(2);
 });
 
 test('INTELAIATURA-07 · Ctrl K apre la palette, Esc la chiude, e il fuoco torna al bottone', async ({ page }) => {
