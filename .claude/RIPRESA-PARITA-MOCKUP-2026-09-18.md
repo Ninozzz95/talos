@@ -119,6 +119,10 @@ modello. **Mai** le sette sezioni attenuate.
 | `485947fd` | la **struttura del mockup in Aspetto**: i cinque gruppi, la banda, la pastiglia, la colonna dell'anteprima |
 | `df148e19` | il **documento di ripresa** (questo file), con le tre PR e i difetti della review |
 | `4b4c753b` | la **barra di ricerca scende in sidebar** (§ «LA BARRA DI RICERCA» qui sotto) |
+| `51986627` | il **documento di ripresa** aggiornato con la barra, i due difetti e l'A/B |
+| `719565f2` | **una sola × di cancellazione**: si spegne quella del browser, che non ha nome |
+| `bb148037` | la **× entra nel campo** — la colonna non salta più di 48 px cercando (D1 della review) |
+| `be736bc9` | **Laboratorio**: il selettore dell'ordine non si mangia più la riga delle faccette |
 
 ⛔ **Tutti marcati «NON DEPLOYABILE — in attesa di review avversaria».**
 ⛔ Il push **non è stato chiesto**: si chiede a blocchi, col sì dell'owner.
@@ -157,10 +161,83 @@ prova va **rossa** con «il campo di ricerca deve stare nella colonna delle sezi
 le inserzioni, e vince l'ultima — quindi il test restava verde e sembrava che la prova non
 mordesse. **Si toglie la riga vera, non se ne aggiunge una seconda.**
 
-⛔ **UN TERZO DIFETTO, VISTO E NON ANCORA CURATO** (a larghezza stretta): il campo è `type="search"`
-e Chromium gli mette dentro la sua **×** di cancellazione — che compare **esattamente quando
-compare** il nostro bottone «Cancella ricerca». Due comandi per la stessa azione, uno dei due senza
-nome. Cura: `::-webkit-search-cancel-button { display: none }` sul campo. **Da fare**, non fatto.
+⛔ **UN TERZO DIFETTO, VISTO E CURATO** (a larghezza stretta): il campo è `type="search"` e Chromium
+gli mette dentro la sua **×** di cancellazione — che compare **esattamente quando** compare il
+nostro bottone «Cancella ricerca». Due comandi per la stessa azione, uno dei due senza nome.
+Cura in `719565f2`: si spegne quello del **browser** (`::-webkit-search-cancel-button`), non il
+nostro, che ha un nome e sta nel tab order.
+
+## ⛔⛔ LA REVIEW AVVERSARIA DELLA BARRA — referto del 18/09/2026 sera
+
+Un revisore avversario (Opus, effort high) su `4b4c753b`, con l'obbligo di **rompere** il codice e
+di **chiedersi se il difetto esisteva prima**. Ha consegnato due difetti e nove ipotesi che NON
+hanno prodotto un rosso.
+
+**D1 — [MEDIA] la colonna saltava di 48 px a ogni ricerca. MIO, curato in `bb148037`.**
+Nei 203 px della colonna il bottone «Cancella ricerca» (141×40) non stava sulla stessa riga del
+campo: andava **a capo**, la barra passava da 38 a **86 px** e tutto quello che sta sotto — l'elenco
+delle sezioni e «COMPORTAMENTO» compresi — **scendeva di 48 px**, dentro una colonna `sticky`.
+⛔ A/B **nello stesso build**: con lo stesso nodo rimesso nella pagina il salto è di **3 px** ⇒ era
+la colonna a causarlo, non il nodo. ⛔ E la mia nota in `settings.css` («il bottone compare solo
+mentre si cerca, quindi a capo ci va **di rado**») era **falsa**: misurato, ci va **ogni volta**
+(203 + 8 + 141 = 352 > 203).
+⇒ Cura: la × sta **dentro** il campo (posizione assoluta, posto riservato dal `padding-inline-end`),
+la riga è una sola e alta uguale. Verificato sul 4174: distanza barra↔prima voce **40 px prima e
+40 px durante**, cioè **salto 0**.
+
+**D2 — [BASSA, qualità della prova] l'asserzione (b) di `INTELAIATURA-06` era falsa sul layout
+stretto. MIA, curata in `bb148037`.**
+Sotto i 660 px di contenitore il prodotto rende la colonna un blocco a tutta larghezza, quindi
+`campo == colonna == intelaiatura` e «meno di metà intelaiatura» diventa **rosso su codice
+corretto** (misurato: `{528, 528, 528}` contro `< 264`). Era verde **solo perché la viewport
+predefinita di Playwright è 1280**. Ora l'asserzione vale solo dove la colonna è davvero una
+sidebar; `campo <= colonna` resta incondizionata, e vale nei due layout.
+
+**D3 — [BASSA, NON attribuibile a questo commit]** fra 660 e 950 px di contenitore la colonna è
+185 px e l'etichetta «Cerca impostazioni» si tronca (105 richiesti, 77 disponibili). A/B dichiarato
+dal revisore: **prima** andava a capo su 2 righe, la seconda **anch'essa troncata**; adesso sta su
+1 riga troncata. Il commit ha cambiato il sintomo, non creato il difetto. ⛔ E la mia frase «ne
+servono ~194 e ci sta intera» è **vera nei 220 px della colonna e falsa nei 185** che l'app stessa
+usa: era una misura presa a **una sola larghezza**.
+
+**LE NOVE IPOTESI CHE NON HANNO PRODOTTO UN ROSSO** (provare e non trovare è il valore del referto):
+1. **nessun doppione al rimontaggio** — dalla porta vera (Ripristina i valori iniziali), dopo 1 e 3
+   rimontaggi: 1 barra, 1 `<search>`, 1 campo, ancora dentro la colonna, e il campo resta **vivo**;
+2. **`<search>` è una landmark vera** nell'albero di accessibilità (via CDP): `role=search`, nome,
+   `ignored=false`, una sola, senza `role` ridondante; annidata in `<nav>` è legittima;
+3. **le regole nuove vincono davvero** (computed style, non testo del CSS);
+4. **`INTELAIATURA-06` morde per la ragione giusta** (ricopiata su una pagina col campo rimesso);
+5. **soglia di tocco**: i due cancelli dell'area di tocco **non** sono fra i rossi; il mio «22 su 65»
+   è **verificato esatto**;
+6. **larghezza stretta**: il campo vive e si usa a **11 larghezze**, da 1920 a 390;
+7. **segnaposto**: entra in entrambe le lingue alle larghezze vere (136 px su 179 e 144 disponibili);
+8. **ordine di tabulazione**: bottone → campo → le 10 tab, e il campo **non** sta dentro il `tablist`;
+9. **Ctrl K** col fuoco nel campo: la palette delle **impostazioni** non si apre (la guardia regge).
+
+⛔ **Cosa il revisore NON ha potuto verificare** (dichiarato, ed è la parte onesta del referto):
+la metà «23 su 65» del mio A/B (l'ha misurata solo io), un lettore di schermo **reale** (ha guardato
+l'albero AX via CDP), la × nativa di `type="search"` (non cliccabile in modo affidabile), il
+confronto col mockup a 185 px, la modalità `data-sidebar="icone"` e l'avvio a freddo.
+
+⭐⭐ **E una osservazione, non un difetto**: nella colonna ci sono ora **due porte di ricerca una
+sotto l'altra** — il cercatore del mockup (che apre la modale) e, pochi px sotto, il campo che
+filtra in pagina. **Il mockup ne ha una.** È la direzione che l'owner ha chiesto, quindi non si
+cambia da soli: è una sua decisione (tenere due porte o fonderle in una).
+
+## ⛔ L'ALTRO DIFETTO VERO, nel Laboratorio — curato in `be736bc9`
+
+Misurato sul 4174 con una sonda di sola lettura: la riga delle faccette è **1912 px**, il campo di
+ricerca del catalogo sta **appeso al suo minimo di 220** e il suo segnaposto **non ci sta per 1 px**
+(171 di testo in 170 utili — è il «Cerca un repository GGU» tagliato che si vede in foto), mentre il
+selettore dell'ordine si prende **1288 px**, due terzi della riga.
+⛔ **La causa è un selettore mancante, non una scelta**: `.talos-toolbar--hf .talos-select{flex:0 0
+150px}` colpisce il select **nativo** (che in pagina è largo 0), e chi si vede è il componente
+`calm-control--select`, che non compariva in **nessuna** regola di quella riga. L'intenzione era
+scritta; mancava il selettore. Dopo la cura: campo **1358 px** col segnaposto intero, ordine a 150.
+⛔ **Resta aperto e NON è mio**: il cancello `baseline-shell` «Model Lab filters have explicit names
+and hit areas» pretende un campo nome `Cerca nel catalogo` e non lo trova (0). È **preesistente**
+(rosso anche prima di questa modifica) ed è una divergenza di **nome accessibile**, da decidere con
+la corsia del laboratorio.
 
 ⛔ **I ROSSI CHE NON SONO MIEI — misurati con A/B sulla base committata, nello stesso momento:**
 `baseline-shell` fa **23 rossi su 65** sul codice committato e **22 su 65** con questa modifica;
@@ -177,10 +254,11 @@ Quattro agenti, su **file disgiunti** (le intersezioni devono restare vuote):
 - **C** — i tre componenti di sezione: `contesto.js` · `costi-consumo.js` · `fonte-ricerca.js`
 - ⛔ **la review avversaria della FASE 1** ha consegnato il suo referto (dieci difetti, otto
   confermati: § qui sotto) ed è stata **fermata dall'owner** il 18/09 sera.
-- ⛔ **una review avversaria NUOVA è in corsa sulla barra in sidebar** (`4b4c753b`): le sue ipotesi
-  sono il doppione al rimontaggio, la landmark `<search>` dentro `<nav>`, la specificità del CSS,
-  la soglia di tocco e la larghezza stretta. ⛔ Finché non consegna, la barra resta
-  **NON DEPLOYABILE** (regola owner 18/09).
+- ⛔ **la review avversaria sulla barra HA CONSEGNATO** (§ «LA REVIEW AVVERSARIA DELLA BARRA»): due
+  difetti, entrambi **curati** (`bb148037`), e nove ipotesi che non hanno prodotto un rosso.
+  Ha lasciato la sua prova indipendente, `tests/browser/_review-barra.spec.mjs` (**8/8** col codice
+  curato), ed è **committata**: è il controllo di questa superficie. ⛔ Le cure **non** hanno ancora
+  avuto una review avversaria **loro**: `bb148037` e `be736bc9` restano **NON DEPLOYABILI**.
 
 ## COSA FARE ALLA RIPRESA, IN ORDINE
 
@@ -343,6 +421,19 @@ causa**. È il modo giusto.
   foto `nav.png` (colonna a 1440p), `nav-stretta.png` e `pagina-stretta.png` (a container 624 px).
 - a larghezza stretta (container **624 px** ≤ 660): campo **592×38**, dentro la colonna,
   segnaposto intero, filtro funzionante (**6 risultati** su «tema»), **zero non-GET** sul 4174.
+- `tests/browser/intelaiatura-impostazioni.spec.mjs`: **10/10** (la decima è nuova: «cercando, la
+  colonna non salta», e morde — col codice di `4b4c753b` rimesso è **rossa**).
+- `tests/browser/_review-barra.spec.mjs` (la prova indipendente del revisore): **8/8** col codice
+  curato — le sue R-C e R-G passano, cioè il suo stesso difetto è chiuso e verificato da lui.
+- ⛔ **`tests/browser/lab-faccette.spec.mjs`: 7 rossi su 7, e NON è una regressione.** Si fermano
+  tutti **prima** di toccare le faccette, su `getByRole('tab', { name: 'Modelli', exact: true })`:
+  la prova è scritta per il guscio di `513b8bed`, e il port nuovo ha rinominato la scheda in
+  **«Hugging Face»** (la si vede nella foto `lab-huggingface_1440p_real.png`). Un CSS non può far
+  sparire una scheda: **la prova è stantia**, e va rimisurata dalla corsia del laboratorio.
+- ⛔ **`baseline-shell -g "hit"`: 2 verdi, 1 rosso** — «Model Lab filters have explicit names and hit
+  areas» cerca un `searchbox` di nome **«Cerca nel catalogo»** e ne trova **0** (il campo vero si
+  chiama «Cerca Hugging Face»). **Preesistente** (rosso anche prima di questa modifica) e non
+  riguarda le misure: è una divergenza di **nome accessibile**, da decidere col laboratorio.
 - **`npm run aggiorna` si blocca sul riavvio del 4174**: la build e la copia in `public/`
   avvengono **prima**, e il codice nuovo si vede dal vivo. Si aspetta che `public/app.js` sia più
   recente della sorgente, non che il comando esca.
