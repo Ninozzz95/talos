@@ -1,35 +1,42 @@
 /** CORE-04: additive, observable preferences. Content and credentials are never migrated here. */
 export const WORKSPACE_PREFERENCES_KEY = 'talos.desktop.workspace.v2';
-export const PRESETS = ['development', 'research', 'documents', 'focus'] as const;
-export type Preset = typeof PRESETS[number];
+/*
+ * ⛔ 18/09/2026 — LA «DISPOSIZIONE DEL WORKSPACE» (i preset) È STATA ELIMINATA. Ordine dell'owner
+ * («eliminalo»), dopo che il suo unico comando a schermo era uscito con la barra della workspace.
+ * Via: `PRESETS`, il tipo `Preset`, il campo `presets` del record, `isPreset`, `presetFor`,
+ * `setPreset`, gli elenchi in `features/navigation/presets.ts` (file cancellato) e le due regole
+ * CSS che leggevano `data-workspace-preset`.
+ * ⛔ Un `presets` già salvato nei profili esistenti non si legge più e **sparisce da solo alla prima
+ * scrittura** (il record viene ricomposto senza quel campo): nessun bump di versione, che avrebbe
+ * fatto leggere il profilo come «di una versione futura» alle build precedenti e bloccato le
+ * modifiche (ricerca 18/09/2026: «migrare prima, cancellare dopo», e «una chiave mancante non deve
+ * sembrare un ritorno ai valori di serie» — preferences.live «Migrating Legacy User Preferences»;
+ * Mozilla XULStore D248884, che scarta gli attributi non più usati).
+ */
 export type Density = 'comfortable' | 'compact';
 export type PersistenceProblem = 'unavailable' | 'recovery-required' | 'future-version' | 'recovery-full' | 'write-failed' | null;
 export interface WorkspacePreferences {
-  version: 2; density: Density; restoreWorkspace: boolean; lastSession: string | null; presets: Record<string, Preset>;
+  version: 2; density: Density; restoreWorkspace: boolean; lastSession: string | null;
 }
 export interface PreferenceStorage { getItem(key: string): string | null; setItem(key: string, value: string): void; }
 const record = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
-export const isPreset = (v: unknown): v is Preset => typeof v === 'string' && (PRESETS as readonly string[]).includes(v);
 const validId = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0 && v.length <= 2048
   && !v.includes('\0') && !['__proto__', 'constructor', 'prototype'].includes(v);
 export function normalizeWorkspacePreferences(raw: unknown): WorkspacePreferences {
-  const defaults: WorkspacePreferences = { version: 2, density: 'comfortable', restoreWorkspace: true, lastSession: null, presets: {} };
+  /* ⛔ 18/09/2026 — il record non porta più `presets`: un profilo che lo ha ancora viene letto senza
+     quel campo e riscritto senza alla prima modifica (vedi il blocco in testa al file). */
+  const defaults: WorkspacePreferences = { version: 2, density: 'comfortable', restoreWorkspace: true, lastSession: null };
   if (!record(raw) || raw.version !== 2) return defaults;
-  const presets: Record<string, Preset> = {};
-  if (record(raw.presets)) for (const [key, value] of Object.entries(raw.presets).slice(-64))
-    if (validId(key) && isPreset(value)) presets[key] = value;
   return { ...defaults, density: raw.density === 'compact' ? 'compact' : 'comfortable', restoreWorkspace: raw.restoreWorkspace !== false,
-    lastSession: validId(raw.lastSession) ? raw.lastSession : null, presets };
+    lastSession: validId(raw.lastSession) ? raw.lastSession : null };
 }
-/** Use the real workspace path when known. Unknown paths do not conflate distinct sessions. */
-export function workspacePreferenceKey(path: unknown, sessionId: unknown): string {
-  if (validId(path)) {
-    const normalized = /^[a-z]:[\\/]/i.test(path) || path.startsWith('\\\\')
-      ? path.replace(/\//g, '\\').replace(/^([a-z]):/i, (_, drive: string) => `${drive.toUpperCase()}:`).replace(/\\+$/, '') : path.replace(/\/+$/, '') || '/';
-    return `workspace:${normalized}`;
-  }
-  return validId(sessionId) ? `session:${sessionId}` : 'global';
-}
+/*
+ * ⛔ 18/09/2026 — E QUI C'ERA `workspacePreferenceKey`, USCITA CON I PRESET.
+ * Serviva a una cosa sola: dare ai preset una chiave per workspace o per sessione. Con la funzione
+ * dei preset eliminata, nessuno la chiama più — e in questo progetto «una funzione coi test e
+ * nessun chiamante» è un difetto già trovato e curato una volta (la voce omonima in memoria), non
+ * una cosa da lasciare in piedi «per sicurezza». La sua prova è uscita con lei.
+ */
 function inspect(raw: string | null): { kind: 'missing' | 'supported' | 'future' | 'corrupt'; value?: unknown } {
   if (raw === null) return { kind: 'missing' };
   try {
@@ -103,15 +110,6 @@ export function createWorkspacePreferences(getStorage: () => PreferenceStorage |
       if (!mayAdoptLegacyDensity || !['comoda', 'compatta'].includes(String(value))) return;
       state.density = value === 'compatta' ? 'compact' : 'comfortable'; mayAdoptLegacyDensity = false;
       // Only visual preference in memory; no writes or synthetic migration-complete marker at startup.
-    },
-    presetFor(key: string, fallbackKeys: readonly string[] = []): Preset {
-      for (const candidate of [key, ...fallbackKeys, 'global'])
-        if (Object.hasOwn(state.presets, candidate) && isPreset(state.presets[candidate])) return state.presets[candidate];
-      return 'development';
-    },
-    setPreset(key: string, preset: Preset): void {
-      if (!validId(key) || !isPreset(preset)) return;
-      update(latest => ({ presets: Object.fromEntries([...Object.entries(latest.presets).filter(([k]) => k !== key).slice(-63), [key, preset]]) }));
     },
   };
 }

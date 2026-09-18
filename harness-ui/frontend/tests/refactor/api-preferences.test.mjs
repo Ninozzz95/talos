@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApiClient, ApiError, publicProblem } from '../../src/services/api-client.ts';
-import { createWorkspacePreferences, WORKSPACE_PREFERENCES_KEY as KEY, workspacePreferenceKey } from '../../src/services/workspace-preferences.ts';
+import { createWorkspacePreferences, WORKSPACE_PREFERENCES_KEY as KEY } from '../../src/services/workspace-preferences.ts';
 const memory = initial => { const data = new Map(initial ?? []); return { data, getItem:k=>data.get(k) ?? null, setItem:(k,v)=>data.set(k,v) }; };
 const envelope = (data, init) => Response.json({ok:true, data}, init);
 
@@ -73,7 +73,7 @@ test('API: public problem normalizer does not spread arbitrary properties', () =
 
 test('PREFS: future data is never overwritten, even after explicit local edits', () => {
   const raw='{"version":9,"density":"future-value","custom":"keep exact"}';const storage=memory([[KEY,raw]]), prefs=createWorkspacePreferences(()=>storage);
-  prefs.update({density:'compact'});prefs.setPreset('global','research');
+  prefs.update({density:'compact'});prefs.update({restoreWorkspace:false});
   assert.equal(storage.data.get(KEY),raw);assert.equal(prefs.persistenceProblem,'future-version');assert.equal(prefs.read().density,'compact');assert.equal(prefs.persistent,false);
 });
 
@@ -100,9 +100,12 @@ test('PREFS: a quota error reports temporary state and keeps stored preferences'
 
 test('PREFS: explicit writes preserve newer unrelated values from another instance', () => {
   const storage=memory(), a=createWorkspacePreferences(()=>storage), b=createWorkspacePreferences(()=>storage);
-  a.update({density:'compact'});b.setPreset('global','focus');
-  assert.equal(b.read().density,'compact');assert.equal(JSON.parse(storage.data.get(KEY)).presets.global,'focus');
-  a.update({restoreWorkspace:false});assert.equal(a.presetFor('global'),'focus');
+  a.update({density:'compact'});b.update({restoreWorkspace:false});
+  assert.equal(b.read().density,'compact');assert.equal(JSON.parse(storage.data.get(KEY)).restoreWorkspace,false);
+  /* ⛔ L'ordine conta, ed è quello dell'originale: una istanza rilegge il disco QUANDO SCRIVE, quindi
+   il valore dell'altra si vede dopo la sua scrittura, non prima. */
+a.update({lastSession:'session-9'});
+assert.equal(a.read().restoreWorkspace,false);assert.equal(b.read().density,'compact');
 });
 
 test('PREFS: density adoption is visual only, one time, and never overrides a v2 choice', () => {
@@ -119,11 +122,12 @@ test('PREFS: consumers receive the same change and can unsubscribe independently
   prefs.update({density:'compact'});assert.equal(a,1);assert.equal(b,1);stop();prefs.update({density:'comfortable'});assert.equal(a,1);assert.equal(b,2);
 });
 
-test('PREFS: workspace keys share layouts across sessions while missing paths remain distinct', () => {
-  assert.equal(workspacePreferenceKey('C:/Work/Talos/','a'),workspacePreferenceKey('c:\\Work\\Talos','b'));
-  assert.notEqual(workspacePreferenceKey(null,'a'),workspacePreferenceKey(null,'b'));
-  assert.notEqual(workspacePreferenceKey('/Case','a'),workspacePreferenceKey('/case','a'));
-  assert.equal(workspacePreferenceKey(null,null),'global');
-  const prefs=createWorkspacePreferences(()=>memory());prefs.setPreset('global','research');prefs.setPreset('session:a','focus');
-  assert.equal(prefs.presetFor('unknown'),'research');assert.equal(prefs.presetFor('session:a'),'focus');assert.equal(prefs.presetFor('__proto__'),'research');
-});
+/*
+ * ⛔ 18/09/2026 — QUI C'ERA la prova di `workspacePreferenceKey` («le chiavi per workspace
+ * condividono le disposizioni fra sessioni, i percorsi mancanti restano distinti»). Il suo soggetto
+ * era la chiave dei PRESET: con la disposizione del workspace eliminata su ordine dell'owner, la
+ * funzione non ha più chiamanti ed è uscita col file — e la prova con lei. Il resto delle prove di
+ * questo file (preferenze future mai sovrascritte, dati danneggiati preservati, densità adottata una
+ * volta sola, ascoltatori indipendenti) è INTATTO.
+ */
+

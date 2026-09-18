@@ -79,15 +79,32 @@ try {
     await page.screenshot({ path: join(out, 'home-dark-1440.png') });
   });
   await scenario('preferences', async () => {
-    await page.locator('[data-workspace-density]').click();
+    /*
+     * ⛔ 18/09/2026 — I DUE COMANDI DELLA BARRA (densità, «Disposizione del workspace») SONO USCITI
+     * CON LA BARRA, su ordine dell'owner. La densità ha il suo comando in Impostazioni; la
+     * disposizione resta una PREFERENZA senza comando a schermo, quindi si prova dal verso vero:
+     * si scrive la preferenza e si guarda che l'avvio la applichi. Se un giorno le si ridà un
+     * comando, questa scena va riportata al gesto.
+     */
+    await navigate('impostazioni', 'settings');
+    await page.locator('#setting-tab-appearance').click();
+    await selectValue(page.locator('#setting-uiDensitySelect'), 'compatta');
     check('density updates actual root', await page.locator('html').getAttribute('data-density') === 'compact');
-    await page.getByRole('combobox', { name: 'Disposizione del workspace' }).selectOption('focus');
-    check('preset applies', await page.locator('html').getAttribute('data-workspace-preset') === 'focus');
+    /*
+     * ⛔ 18/09/2026 — qui si scriveva anche il PRESET della disposizione e si pretendeva che
+     * sopravvivesse al reload. La disposizione del workspace è stata eliminata su ordine dell'owner:
+     * la preferenza non esiste più, `data-workspace-preset` non si scrive più e con lei sono uscite
+     * le due regole CSS che lo leggevano. Resta la DENSITÀ, che si prova qui sotto nel verso vero:
+     * si scrive la preferenza e si guarda che l'avvio la applichi.
+     */
     await page.reload(); await page.locator('#talosAvvio').waitFor({ state: 'hidden' });
     check('density survives real storage reload', await page.locator('html').getAttribute('data-density') === 'compact');
-    check('preset survives real storage reload', await page.locator('html').getAttribute('data-workspace-preset') === 'focus');
-    await page.locator('[data-workspace-density]').click();
-    await page.getByRole('combobox', { name: 'Disposizione del workspace' }).selectOption('development');
+    await page.evaluate(() => {
+      const key = 'talos.desktop.workspace.v2';
+      const raw = JSON.parse(localStorage.getItem(key) || 'null') || { version: 2 };
+      localStorage.setItem(key, JSON.stringify({ version: 2, density: 'comfortable', restoreWorkspace: true, lastSession: null, ...raw, density: 'comfortable' }));
+    });
+    await page.reload(); await page.locator('#talosAvvio').waitFor({ state: 'hidden' });
   });
   await scenario('configuration', async () => {
     await page.getByRole('button', { name: 'Scegli un modello', exact: true }).click();
@@ -139,10 +156,12 @@ try {
     await page.locator('#setting-tab-appearance').click();
     await selectValue(page.locator('#setting-uiDensitySelect'),'compatta');
     await expect(page.locator('html')).toHaveAttribute('data-density', 'compact');
-    await expect(page.locator('[data-workspace-density]')).toHaveAttribute('aria-pressed', 'true');
-    await page.locator('[data-workspace-density]').click();
-    await expect(page.locator('#setting-uiDensitySelect')).toHaveValue('comoda');
-    check('settings and workspace density use one canonical preference', true);
+    /* ⛔ 18/09/2026 — qui si confrontavano DUE comandi della stessa preferenza (Impostazioni e la
+       barra della workspace). La barra non c'è più: resta UN comando solo, e ciò che va provato è
+       che scriva la preferenza canonica e che la radice la segua — nei due versi. */
+    await selectValue(page.locator('#setting-uiDensitySelect'),'comoda');
+    await expect(page.locator('html')).toHaveAttribute('data-density', 'comfortable');
+    check('the density command writes the canonical preference, both ways', true);
     await checkValue(page.locator('[data-workspace-restore]'),false);
     await page.reload(); await page.locator('#talosAvvio').waitFor({ state: 'hidden' });
     await navigate('impostazioni', 'settings');
@@ -162,9 +181,15 @@ try {
     await navigate('home', 'home');
   });
   await scenario('command-palette', async () => {
-    const opener = page.locator('[data-workspace-bar] [data-azione="comandi"]');
+    /*
+     * ⛔ 18/09/2026 — il pulsante «Comandi Ctrl K» della barra della workspace non esiste più (ordine
+     * dell'owner), ma il TASTO sì: è dichiarato «Ovunque» nella scheda delle scorciatoie
+     * (`components/scorciatoie.js`, `{ id: 'comandi', combo: 'mod K' }`). Qui si apre come lo apre
+     * una persona che non ha più il pulsante davanti: con Ctrl K.
+     */
+    const apriComandi = () => page.keyboard.press('Control+k');
     const field = page.locator('#veloComandi [role="combobox"]');
-    await opener.click();
+    await apriComandi();
     await expect(field).toBeFocused();
     await field.click();
     await expect(field).toHaveAttribute('aria-expanded', 'true');
@@ -186,7 +211,7 @@ try {
     await expect(page.locator('#schermoAttivita')).toBeVisible();
     await expect(page.locator('#veloComandi')).toBeHidden();
     check('command executes the existing Tasks navigation', true);
-    await opener.click();
+    await apriComandi();
     await field.fill('esporta');
     await expect(page.locator('#risultatiComandi [data-command="export"]')).toHaveAttribute('aria-disabled', 'true');
     let downloads = 0;
@@ -218,8 +243,11 @@ try {
     check('real command palette has no automatic WCAG A/AA violations', result.commandAccessibility.length === 0);
     await page.keyboard.press('Escape');
     await expect(page.locator('#veloComandi')).toBeHidden();
-    await expect(opener).toBeFocused();
-    check('command dismissal restores the actual opener', true);
+    /* ⛔ 18/09/2026 — non c'è più un pulsante «apritore» da riportare a fuoco: la tavolozza si apre
+       col tasto (Ctrl K). Ciò che resta da pretendere è che il fuoco NON resti dentro una finestra
+       chiusa — altrimenti la tastiera scriverebbe in un dialogo che non si vede. */
+    check('command dismissal leaves no focus trapped in the closed palette',
+      await page.evaluate(() => !document.querySelector('#veloComandi')?.contains(document.activeElement)));
     await navigate('home', 'home');
   });
   await scenario('workspace-english', async () => {
@@ -230,12 +258,13 @@ try {
     await expect(page.locator('#schermoHome h1')).toHaveText('Where shall we pick up?');
     await expect(page.locator('#schermoHome [data-home-action="project"]')).toHaveText('Open a project');
     check('new workspace translates through the real language preference', true);
-    await page.locator('[data-workspace-bar] [data-azione="comandi"]').click();
+    /* ⛔ 18/09/2026 — col tasto, non col pulsante: quello della barra è uscito con la barra (e la
+       sua `aria-label` tradotta non c'è più da controllare). */
+    await page.keyboard.press('Control+k');
     const field = page.locator('#veloComandi [role="combobox"]');
     await expect(field).toHaveAttribute('aria-label', 'Search commands and destinations');
     await expect(page.locator('#titoloveloComandi')).toHaveText('Commands');
     await expect(page.locator('#veloComandi [data-chiudi]')).toHaveAttribute('aria-label', 'Close commands');
-    await expect(page.locator('[data-workspace-bar] [data-azione="comandi"]')).toHaveAttribute('aria-label', 'Search commands');
     await expect(page.locator('#veloComandi .talos-dialog__footer-note')).toContainText('choose');
     await field.fill('Tasks');
     await expect(page.locator('#risultatiComandi [data-command="tasks"]')).toContainText('Tasks');

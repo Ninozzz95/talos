@@ -78,7 +78,9 @@ export function createOverlayManager(doc: Document): OverlayManager {
     const current = top();
     if (current && (!target || !current.content.contains(target))) { focusFirst(current); return; }
     if (target && visible(target)) target.focus({ preventScroll: true });
-    else if (!current) doc.querySelector<HTMLButtonElement>('[data-workspace-bar] button')?.focus({ preventScroll: true });
+    /* ⛔ 18/09/2026 — il ripiego era il primo pulsante della barra della workspace, che non esiste
+       più (rimossa su ordine dell'owner): ora è la prima voce della barra laterale, che c'è sempre. */
+    else if (!current) doc.querySelector<HTMLElement>('.talos-sidebar .talos-nav-item, .talos-sidebar button')?.focus({ preventScroll: true });
   }
   function deactivate(layer: HTMLElement, restore = true) {
     const index = stack.findIndex(e => e.layer === layer); if (index < 0) return;
