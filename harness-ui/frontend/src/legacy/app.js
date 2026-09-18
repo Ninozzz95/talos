@@ -97,6 +97,7 @@ import { createContextMonitor } from '../services/context-monitor.js';
 import { aggiornaAvanzamentoContesto } from '../components/context-progress.js';
 import { aggiornaDiffReview, aggiornaSommarioSchedeReview, chiaveFileReview, creaSchedeReview, etichettaFileReview, nascondiAzioniFase3, riassuntoReviewTestata as riassuntoReviewPerTestata } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno; 17/09 BC-75: `etichettaFileReview` è la regola del nome, e non si riscrive qui del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
+import { montaGuscioLaboratorio } from '../components/lab-cornice-v3.js'; // 18/09 corsia 2: il guscio a quattro schede del Laboratorio modelli — monta i comandi legacy in una scheda sola
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
 import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
 
@@ -4615,6 +4616,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (state.modelLab.initialized) return;
     state.modelLab.initialized = true;
     montaCorniceModelLab($('#modelLabCardSettings') || $('#modelLabCard'));
+    /* ⭐⭐ 18/09 — IL GUSCIO A QUATTRO SCHEDE (corsia 2). Va DOPO la cornice: il guscio legge
+       l'interno del laboratorio, non lo possiede — le sei linguette legacy restano la verità, e
+       lui le sposta in un contenitore nascosto e le preme per conto suo. Stesso bersaglio della
+       riga qui sopra, e per la stessa ragione: `#modelLabCardSettings` non esiste, il vivo è
+       `#modelLabCard`. Senza questa riga il modulo non è montato da nessuno (misurato dalla
+       corsia: `grep -c montaGuscioLaboratorio dist/app.js` = 0). */
+    montaGuscioLaboratorio($('#modelLabCardSettings') || $('#modelLabCard'));
     montaCatalogoModelli($('#modelLabCatalogPanel'), $('#panel-catalogo'));
     montaInstallati($('#modelLabInstalledPanel'), $('#panel-installati')); // 06/9 B6.8
     montaHf($('#modelLabHfPanel'), $('#panel-hf')); // 06/9 B6.9
@@ -13878,6 +13886,94 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     segno.setAttribute('aria-label', frase);
   }
 
+  /*
+   * ⭐⭐ PO-30, fetta 1 (18/09/2026) — LA SELEZIONE MULTIPLA DELLA SCHEDA FILE, come nel laboratorio
+   *   della PR #33 (`explorer-view.js:81` e `:96`).
+   * Lo stato vive in un Set di percorsi COMPLETI (`state.realSession.fileSelezionati`) e non in una
+   * classe del DOM: il primo ridisegno dell'albero — che arriva a ogni scrittura di un file — se la
+   * porterebbe via, e la selezione sparirebbe da sola senza un errore.
+   * Il piede esiste SOLO con almeno una selezione, come nel mockup (`selectedFiles.length ? … : ''`).
+   */
+  function fileSelezionati() {
+    return (state.realSession.fileSelezionati ??= new Set());
+  }
+  function commutaSelezioneFile(percorsoCompleto, acceso, li, row) {
+    const scelti = fileSelezionati();
+    if (acceso) scelti.add(percorsoCompleto); else scelti.delete(percorsoCompleto);
+    if (li) li.setAttribute('aria-selected', String(acceso));
+    row?.classList.toggle('is-selezionato', acceso);
+    aggiornaPiedeSelezioneFile();
+  }
+  function aggiornaPiedeSelezioneFile() {
+    /* ⛔ Il contenitore è la scheda File VIVA (`#alberoCartella`, dentro `#railFile`), non la
+       sezione legacy `#inspector-files`: quella è la superficie d'esempio del frammento, e il
+       piede ci sarebbe finito invisibile. */
+    const sezione = $('#alberoCartella') || $('#inspector-files'); if (!sezione) return;
+    const scelti = [...fileSelezionati()];
+    let piede = $('.talos-file-selezione', sezione);
+    if (scelti.length === 0) { piede?.remove(); return; }
+    if (!piede) {
+      piede = document.createElement('div');
+      piede.className = 'talos-file-selezione';
+      piede.dataset.c = 'SelectionBar';
+      const conteggio = textElement('span', 'talos-file-selezione__conteggio talos-muted', '');
+      conteggio.setAttribute('role', 'status');
+      const allega = document.createElement('button');
+      allega.type = 'button';
+      allega.className = 'talos-button talos-button--primary talos-button--sm';
+      allega.dataset.c = 'Button';
+      allega.dataset.azioneSelezione = 'allega';
+      allega.textContent = 'Allega alla chat';
+      const menu = document.createElement('button');
+      menu.type = 'button';
+      menu.className = 'talos-button talos-button--ghost talos-button--sm talos-icon-button';
+      menu.dataset.c = 'Button';
+      menu.dataset.azioneSelezione = 'menu';
+      menu.setAttribute('aria-haspopup', 'menu');
+      menu.setAttribute('aria-label', 'Azioni sulla selezione');
+      menu.title = 'Azioni sulla selezione';
+      menu.appendChild(iconaSvgAlbero('i-more'));
+      allega.addEventListener('click', () => azioniSelezioneFile('allega'));
+      menu.addEventListener('click', () => apriMenuSelezioneFile(menu));
+      piede.append(conteggio, allega, menu);
+      sezione.appendChild(piede);
+    }
+    const n = scelti.length;
+    $('.talos-file-selezione__conteggio', piede).textContent = `${n} ${n === 1 ? 'selezionato' : 'selezionati'}`;
+  }
+  /** Le azioni della selezione: ognuna su TUTTI i file scelti. */
+  function azioniSelezioneFile(azione) {
+    const scelti = [...fileSelezionati()];
+    if (scelti.length === 0) return;
+    if (azione === 'allega') {
+      for (const percorso of scelti) allegaFileAllaChat(percorso);
+      return;
+    }
+    if (azione === 'copia') {
+      void navigator.clipboard?.writeText(scelti.join('\n'));
+      toast('Percorsi copiati', `${scelti.length} file`);
+      return;
+    }
+    if (azione === 'deseleziona') {
+      for (const percorso of scelti) {
+        fileSelezionati().delete(percorso);
+        const li = $(`.ft-node[data-percorso="${CSS.escape(percorso)}"]`);
+        if (li) { li.setAttribute('aria-selected', 'false'); $(':scope > .ft-row', li)?.classList.remove('is-selezionato'); $('.ft-check', li) && ($('.ft-check', li).checked = false); }
+      }
+      aggiornaPiedeSelezioneFile();
+      return;
+    }
+  }
+  function apriMenuSelezioneFile(ancoraEl) {
+    const scelti = [...fileSelezionati()];
+    if (scelti.length === 0) return;
+    apriMenuAzioniLibreria([
+      { chiave: 'allega', etichetta: 'Allega alla chat', icona: 'i-link', aziona: () => azioniSelezioneFile('allega') },
+      { chiave: 'copia', etichetta: 'Copia i percorsi', icona: 'i-code', aziona: () => azioniSelezioneFile('copia') },
+      { chiave: 'deseleziona', etichetta: 'Deseleziona tutto', icona: 'i-x', separaPrima: true, aziona: () => azioniSelezioneFile('deseleziona') },
+    ], { ancoraEl });
+  }
+
   function alberoInAnteprima() {
     return !state.realSession.id && Boolean(state.realSession.previewProjectId);
   }
@@ -14882,6 +14978,35 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     chev.hidden = !cartella; // un file non si apre: niente freccia (il mockup la mette solo sulle cartelle)
     row.appendChild(chev);
 
+    /*
+     * ⭐⭐ PO-30, fetta 1 (18/09/2026) — LA CASELLA DI SELEZIONE, come nel laboratorio della PR #33.
+     *   Nel mockup (`explorer-view.js:81`) ogni riga di file porta un `<input type="checkbox">` con
+     *   `tabindex="-1"`, e il CSS lo tiene a `opacity:0` finché la riga non è sotto il mouse, non ha
+     *   il fuoco, non è selezionata, o l'albero non è in `.selection-mode` (`calm-files.css:63-72`):
+     *   la casella non sporca l'elenco, ma è lì quando serve.
+     *   ⛔ `tabindex="-1"` NON è una dimenticanza: il fuoco resta sull'albero (roving tabindex), e la
+     *   casella non è un secondo tab stop. La selezione si comanda da tastiera con la BARRA sulla riga
+     *   focalizzata (W3C ARIA APG, «Tree View Pattern», multi-select: «Space toggles selection»).
+     *   Ricerca 18/09/2026 (MDN `tree` role, `aria-multiselectable`): in un albero multi-selezione lo
+     *   stato sta in `aria-selected` sugli item, e una casella NATIVA non ha bisogno di `aria-checked`.
+     *   Le cartelle non si selezionano: si aprono.
+     */
+    if (!cartella) {
+      const selezionato = fileSelezionati().has(percorsoCompleto);
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.className = 'ft-check talos-file-row__check';
+      check.tabIndex = -1;
+      check.checked = selezionato;
+      check.dataset.selezionaFile = percorsoCompleto;
+      check.setAttribute('aria-label', `Seleziona ${nome}`);
+      check.addEventListener('click', (evento) => evento.stopPropagation()); // la casella non apre il file
+      check.addEventListener('change', () => { commutaSelezioneFile(percorsoCompleto, check.checked, li, row); });
+      row.appendChild(check);
+      li.setAttribute('aria-selected', String(selezionato));
+      row.classList.toggle('is-selezionato', selezionato);
+    }
+
     const icon = document.createElement('span');
     const categoria = cartella ? 'folder' : categoriaFileAlbero(nome);
     icon.className = `ft-icon ft-icon-${categoria}`;
@@ -15510,7 +15635,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const ul = document.createElement('ul');
     ul.className = 'ft-tree';
     ul.setAttribute('role', 'group'); // 06/9 B2: il rientro del mockup vale per [role=group]
-    ul.setAttribute('role', 'tree');
+    /*
+     * ⛔⛔ 18/09/2026 — QUI C'ERA `ul.setAttribute('role', 'tree')`, e il `div#alberoFile` che la
+     *   contiene è GIÀ `role="tree"` (dal markup): due alberi annidati, con l'attributo che conta
+     *   — `aria-multiselectable` — messo su quello INTERNO, cioè invisibile a chi legge il ruolo
+     *   vero. Trovato perché la prova della selezione multipla leggeva `aria-multiselectable` sul
+     *   `div` e trovava `null`. Il contenitore dichiara il ruolo, la `ul` è il suo gruppo.
+     *   Ricerca 18/09/2026 (MDN `tree` role): «do not nest trees inside trees — all structure
+     *   should be `treeitem` elements within a single `tree`».
+     */
+    contenitore.setAttribute('aria-multiselectable', 'true');
     ul.setAttribute('aria-label', 'File del workspace');
     ul.addEventListener('keydown', (e) => {
       const righe = righeVisibiliAlbero(ul);
@@ -15519,6 +15653,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const row = righe[i];
       const li = row.closest('.ft-node');
       const eCartella = li.hasAttribute('aria-expanded');
+      /*
+       * ⭐ 18/09 — LA BARRA COMMUTA LA SELEZIONE della riga con il fuoco, come vuole il pattern
+       *   multi-selezione dell'APG («Tree View», Keyboard Interaction: «Space toggles selection of
+       *   the focused node»; W3C WAI-ARIA APG, letto il 18/09/2026). Le cartelle non si selezionano:
+       *   si aprono, e la barra su una cartella non fa niente invece di fare qualcosa di strano.
+       */
+      if (e.key === ' ' && !eCartella) {
+        e.preventDefault();
+        const casella = $(':scope > .ft-check', row);
+        const acceso = !fileSelezionati().has(li.dataset.percorso);
+        if (casella) casella.checked = acceso;
+        commutaSelezioneFile(li.dataset.percorso, acceso, li, row);
+        return;
+      }
       if (e.key === 'ArrowDown') { e.preventDefault(); if (righe[i + 1]) impostaFocusRigaAlbero(ul, righe[i + 1]); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); if (righe[i - 1]) impostaFocusRigaAlbero(ul, righe[i - 1]); }
       else if (e.key === 'ArrowRight') {
@@ -17071,6 +17219,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.realSession.reviewFiles = new Map();
       state.realSession.treeCache = new Map();
       state.realSession.treeOpen = new Set();
+      /* ⭐ 18/09 — la selezione dei file muore con la sessione: i percorsi di un'altra cartella
+         non vogliono dire niente qui, e un piede «3 selezionati» su file che non esistono più
+         sarebbe una bugia che resta a schermo. */
+      state.realSession.fileSelezionati = new Set();
+      $('.talos-file-selezione')?.remove();
       state.realSession.treeWorkspaceKey = null;
       state.realSession.treeUiRestored = false;
       state.realSession.previewProjectId = null;

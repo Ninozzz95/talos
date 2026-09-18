@@ -10,6 +10,24 @@ export function aggiornaStatoCorniceModelLab(card, runtimes, opzioni) {
   const badge = card?.querySelector('#modelLabRuntimeBadge');
   if (badge) badge.textContent = etichettaRuntimeLaboratorio(runtimes, opzioni);
 }
+/*
+ * 18/09/2026, corsia 2 — la striscia delle schede si avvolge UNA volta sola.
+ * Era dentro `montaCorniceModelLab`; il guscio a quattro schede
+ * (`lab-cornice-v3.js`) ha bisogno dello stesso avvolgimento, e due copie
+ * della stessa riga sono due posti da tenere allineati. Il wrapper è
+ * `.talos-tabs--underline`, il blocco del design system (`controls.css:42`):
+ * il guscio non porta classi sue.
+ * @returns {Element|null} il wrapper `.talos-tabs`.
+ */
+export function avvolgiStrisciaSchede(card, list) {
+  if (!list) return null;
+  const esistente = list.closest('.talos-tabs');
+  if (esistente) { list.classList.add('talos-tabs__list'); return esistente; }
+  const wrapper = list.ownerDocument.createElement('div');
+  wrapper.className = 'talos-tabs talos-tabs--underline'; wrapper.dataset.c = 'Tabs';
+  list.before(wrapper); wrapper.append(list); list.classList.add('talos-tabs__list');
+  return wrapper;
+}
 export function montaCorniceModelLab(card) {
   if (!card || card.dataset.corniceMontata) return;
   card.dataset.corniceMontata = 'true'; card.classList.add('talos-model-lab');
@@ -29,8 +47,10 @@ export function montaCorniceModelLab(card) {
     if (value) value.className = 'talos-kv__v talos-badge talos-badge--sm';
   }
   const list = card.querySelector('[role=tablist]'); if (!list) return;
-  const wrapper = document.createElement('div'); wrapper.className = 'talos-tabs talos-tabs--underline'; wrapper.dataset.c = 'Tabs';
-  list.before(wrapper); wrapper.append(list); list.classList.add('talos-tabs__list');
+  // ⛔ Se il guscio a quattro schede è già montato, la tastiera e le classi
+  // delle schede sono sue (`lab-cornice-v3.js`): qui non si rimette mano.
+  if (card.dataset.labGuscio === 'v3') return;
+  avvolgiStrisciaSchede(card, list);
   const tabs = [...list.querySelectorAll('[data-model-lab-tab]')];
   for (const tab of tabs) { tab.classList.add('talos-tabs__tab'); tab.tabIndex = tab.getAttribute('aria-selected') === 'true' ? 0 : -1; }
   list.addEventListener('keydown', event => {

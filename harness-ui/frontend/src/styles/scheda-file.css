@@ -67,3 +67,38 @@
 #railFile .talos-file-row__agente .i, #railFile .talos-file-row__agente svg{width:14px; height:14px}
 #railFile .talos-file-row__agente:hover{background:var(--talos-accent-soft); color:var(--talos-accent-text, var(--talos-accent))}
 #railFile .talos-file-row__agente.is-al-lavoro{color:var(--talos-accent)}
+
+/*
+ * ⭐⭐ PO-30, fetta 1 (18/09/2026) — LA CASELLA DI SELEZIONE E IL PIEDE DELLA SELEZIONE.
+ * Le regole di visibilità sono quelle del laboratorio (`calm-files.css:63-72`): la casella sta a
+ * opacità zero e compare quando la riga è sotto il mouse, ha il fuoco dentro, è selezionata, o
+ * l'albero è in modalità selezione. Così l'elenco resta pulito ma il comando è dove serve.
+ * ⛔ `opacity` e non `display`: la casella resta NEL flusso e il nome del file non salta di lato
+ * a ogni passaggio del mouse; ed è raggiungibile dai lettori di schermo anche quando è trasparente
+ * (sparisce alla vista, non all'accessibilità — diverso da `visibility`, che la toglierebbe a tutti).
+ */
+.talos-file-row__check{
+  flex:none; width:14px; height:14px; margin:0 2px 0 0; accent-color:var(--talos-accent);
+  opacity:0; transition:opacity var(--talos-motion-duration-control, 160ms) var(--talos-motion-ease, ease);
+}
+.ft-row:hover > .talos-file-row__check,
+.ft-row:focus-within > .talos-file-row__check,
+.ft-row.is-selezionato > .talos-file-row__check{opacity:1}
+.talos-file-row__check:focus-visible{opacity:1; outline:2px solid var(--talos-ring); outline-offset:2px}
+
+/* Una riga selezionata si vede senza il mouse addosso: tinta d'accento, non un bordo. */
+.ft-row.is-selezionato{background:var(--talos-accent-soft, color-mix(in srgb, var(--talos-accent) 14%, transparent))}
+
+/* Il piede: compare solo con una selezione attiva, in fondo alla scheda. */
+.talos-file-selezione{
+  display:flex; align-items:center; gap:var(--talos-space-xs); flex:none;
+  padding:var(--talos-space-xs) 0 0; margin-top:auto;
+  border-top:1px solid var(--talos-border);
+}
+/*
+ * ⛔ Il conteggio spinge i pulsanti a destra con `margin-inline-end:auto`, che è lo SPAZIATORE che
+ *   il laboratorio mette fra i due (`explorer-view.js:96`: `<span class="grow">`). Senza, i comandi
+ *   si appoggiavano al testo e «2 selezionati» finiva schiacciato contro «Allega alla chat» — visto
+ *   nella foto a 1440, non da un test: il testo c'era tutto, ma mozzato dal pulsante accanto.
+ */
+.talos-file-selezione__conteggio{font-size:var(--talos-font-size-xs); white-space:nowrap; margin-inline-end:auto}
