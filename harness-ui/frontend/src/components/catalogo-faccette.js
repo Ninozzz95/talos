@@ -138,9 +138,24 @@ function gruppoValori(chiave, titolo, nota) {
   if (nota) g.append(el('p', 'talos-muted', nota));
   const righe = el('div', 'talos-card talos-card--pad');
   righe.dataset.facetRows = '';
+  /* ⛔ 18/09/2026 — un disclosure si annuncia: `aria-expanded` sullo stato e `aria-controls` che
+     punta al contenitore che si apre. `aria-controls` vuole un id, e il contenitore non ne aveva:
+     senza, un lettore di schermo sente «Vedi altri 18 parametri» e non sa cosa si apre.
+     Fonti (ricerca 18/09/2026): W3C WAI-ARIA Authoring Practices, «Disclosure (Show/Hide)» —
+     un `<button>` vero con `aria-expanded` (false = contenuto nascosto) e `aria-controls` verso
+     l'id del contenitore, con l'etichetta che dice lo STATO (MDN, `aria-expanded`); per le
+     faccette in particolare Shopify Dawn issue #107 «Faceted Filters» (WCAG 1.3.1 e 4.1.2), che
+     raccomanda proprio `aria-expanded` + `aria-controls` sul contenitore; Vercel Geist «Show more»
+     per le due metà che qui sono rispettate: il trigger porta il NUMERO delle voci nascoste
+     («Vedi altri 18 parametri») e si taglia fra 5 e 10 righe (`VOCI_VISIBILI = 8`).
+     ⛔ DUE DIVERGENZE DICHIARATE, non provate qui: Geist sposta il fuoco sulla prima riga appena
+     rivelata e l'APG riporta il fuoco sul trigger con Esc — questa barra non fa né l'una né
+     l'altra. Sono annotate nel referto, non silenziose. */
+  righe.id = 'modelLabFacetsRows-' + chiave;
   g.append(righe);
   const altri = el('button', 'talos-button talos-button--ghost talos-button--sm', 'Vedi altri');
   altri.type = 'button'; altri.dataset.facetMore = chiave; altri.hidden = true;
+  altri.setAttribute('aria-expanded', 'false'); altri.setAttribute('aria-controls', righe.id);
   g.append(altri);
   return g;
 }
@@ -243,7 +258,22 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
 
   const cambia = (nuovi) => { filtri = nuovi; onCambia?.(nuovi); };
 
-  apri.addEventListener('click', () => {
+  /*
+   * ⛔⛔ 18/09/2026 — MISURATO: un `[aria-expanded][aria-controls]` NON è nostro. In
+   *   `src/legacy/app.js:22339` vive la regia del mockup — un ascoltatore sul documento che
+   *   tratta OGNI elemento con quella coppia come una «disclosure» e la inverte da sé:
+   *   `disclosure.setAttribute('aria-expanded', String(!aperto)); c.hidden = aperto`.
+   *   Con l'ascoltatore qui sotto i due si ANNULLAVANO: la sonda che registra CHI scrive
+   *   (`%TEMP%/corsia1-probe/toggle3.mjs`, 18/09/2026, pile comprese) ha misurato la sequenza
+   *   `aria-expanded: false → true` a 22 ms (noi) e `true → false` a 25 ms (la regia), col
+   *   pannello che restava chiuso e l'etichetta che invece cambiava: un interruttore INERTE,
+   *   cioè il peggior esito possibile — non un errore, un comando che non fa niente.
+   *   ⇒ Il clic non arriva alla regia. È la via di casa per chi possiede la propria disclosure
+   *   con un'etichetta che dice lo stato: `src/components/inspector.js` (`bottoneApri`) fa lo
+   *   stesso `stopPropagation` sul proprio pulsante, per la stessa ragione.
+   */
+  apri.addEventListener('click', (evento) => {
+    evento.stopPropagation();
     const aperto = apri.getAttribute('aria-expanded') === 'true';
     apri.setAttribute('aria-expanded', String(!aperto));
     avanzati.hidden = aperto;
@@ -256,8 +286,15 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
     const b = evento.target.closest('[data-facet-chip]'); if (!b || b.disabled) return;
     cambia({ ...filtri, destination: b.dataset.facetChip === 'all' ? [] : [b.dataset.facetChip] });
   });
+  /* ⛔ Stessa regia, stesso rimedio dell'interruttore qui sopra: «Vedi altri» porta anche lui
+     `aria-expanded` + `aria-controls`, quindi la regia lo prende — e il contenitore che
+     promette è `#modelLabFacetsRows-capabilities`, cioè proprio quello che stiamo aprendo:
+     senza questo `stopPropagation` la regia scriverebbe `c.hidden = aperto` subito dopo di
+     noi, lasciando a schermo l'etichetta «Vedi meno parametri» e nessuna riga in più (è il
+     difetto dell'interruttore, misurato il 18/09/2026 con `toggle3.mjs`: `aria-expanded`
+     invertito da noi a 22 ms e riportato indietro dalla regia a 25 ms). */
   gParametri.addEventListener('click', (evento) => {
-    if (evento.target.closest('[data-facet-more]')) { aperti.has('capabilities') ? aperti.delete('capabilities') : aperti.add('capabilities'); aggiorna(); }
+    if (evento.target.closest('[data-facet-more]')) { evento.stopPropagation(); aperti.has('capabilities') ? aperti.delete('capabilities') : aperti.add('capabilities'); aggiorna(); }
   });
   /* ⛔ 18/09/2026 — si ascolta `change` e non `click`: cliccare il TESTO di una riga attiva la
      casella per via nativa (`<label>`), e quel percorso NON produce nessun clic sull'input — un
@@ -333,6 +370,7 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
       const resto = capacita.parametri.length - daMostrare.length;
       const apertoOra = aperti.has('capabilities');
       altri.hidden = !resto && !apertoOra;
+      altri.setAttribute('aria-expanded', String(apertoOra));
       if (!altri.hidden) {
         altri.textContent = apertoOra ? 'Vedi meno parametri' : `Vedi altri ${numero(resto)} parametri`;
         altri.setAttribute('aria-label', apertoOra ? 'Chiudi l’elenco dei parametri' : `Mostra altri ${numero(resto)} parametri accettati`);

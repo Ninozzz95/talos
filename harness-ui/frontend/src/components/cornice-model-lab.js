@@ -33,8 +33,24 @@ export function montaCorniceModelLab(card) {
   card.dataset.corniceMontata = 'true'; card.classList.add('talos-model-lab');
   const heading = card.querySelector('.settings-card-heading');
   heading?.classList.add('talos-page__head');
-  heading?.querySelector('.eyebrow')?.setAttribute('hidden', '');
-  const title = heading?.querySelector('h3'); if (title) title.textContent = 'Laboratorio modelli';
+  /*
+   * ⛔⛔ 18/09/2026 — QUI L'EYEBROW VENIVA NASCOSTO, e il titolo della sezione veniva RISCRITTO.
+   *   Il confronto testa a testa col mockup (`prototypes/calm-lab`, foto in
+   *   `artifacts/parita-mockup-2026-09-18/`) mostra che il mockup ha UNA sola intestazione —
+   *   eyebrow «INTELLIGENZA, SOTTO CONTROLLO» + titolo «Laboratorio modelli» + sottotitolo — e
+   *   la carta sotto NON ha un titolo proprio. Da noi le intestazioni erano DUE e dicevano la
+   *   stessa cosa a 100 px di distanza: quella della sezione (`features/settings/schema.ts:21`,
+   *   scritta per esteso) e questa, riscritta qui. ⇒ l'eyebrow si mostra col suo testo, e il
+   *   titolo della carta si nasconde: il titolo buono è quello della sezione, che è anche quello
+   *   che il lettore di schermo annuncia aprendo il pannello (`aria-labelledby`).
+   *   La NOTA resta la nostra: dice che lo stato viene letto dal server, e il mockup al suo posto
+   *   ha uno slogan («Il modello giusto. La scelta resta tua.»). Uno slogan non è un'informazione:
+   *   se l'owner lo vuole, si aggiunge — non si sostituisce l'unica frase che dice da dove
+   *   vengono i numeri.
+   */
+  const eyebrow = heading?.querySelector('.eyebrow');
+  if (eyebrow) { eyebrow.removeAttribute('hidden'); eyebrow.textContent = 'Intelligenza, sotto controllo'; }
+  const title = heading?.querySelector('h3'); if (title) title.setAttribute('hidden', '');
   const note = heading?.querySelector('p'); if (note) note.textContent = 'Modelli sul computer, cataloghi e accessi ai fornitori. Lo stato viene letto dal server.';
   const ledger = card.querySelector('.model-lab-ledger');
   const badge = card.querySelector('#modelLabRuntimeBadge');
