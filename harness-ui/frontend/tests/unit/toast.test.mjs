@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tonoDaTitolo, messaggioUmano, TONI, MASSIMO_IN_PILA, ancoraToastSopraIComandi } from '../../src/components/toast.js';
+import { tonoDaTitolo, messaggioUmano, TONI, MASSIMO_IN_PILA } from '../../src/components/toast.js';
 
 // 05/9 T-16 — il toast del mockup: tono dal titolo, testo umano (H22), durate.
 
@@ -47,22 +47,12 @@ function radiceFinta() {
   return { scritte, style: { setProperty(k, v) { scritte[k] = v; } } };
 }
 
-test('TOAST-BC77: il fondo è l’ingombro del piede misurato dal basso della finestra', () => {
-  const radice = radiceFinta();
-  const piede = { getBoundingClientRect: () => ({ top: 586, height: 190 }), offsetParent: {} };
-  const a = ancoraToastSopraIComandi(piede, { radice, finestra: finestraFinta(800) });
-  assert.equal(a.misura(), 214); // 800 - 586, gli stessi numeri misurati nel browser
-  assert.equal(radice.scritte['--talos-toast-fondo'], '214px');
-});
-
-test('TOAST-BC77 al contrario: piede invisibile o assente ⇒ zero, e la regione torna in fondo', () => {
-  const radice = radiceFinta();
-  /* Vista chiusa: il nodo esiste, la misura c'e', ma non e' disegnato. */
-  const chiuso = { getBoundingClientRect: () => ({ top: 586, height: 190 }), offsetParent: null };
-  assert.equal(ancoraToastSopraIComandi(chiuso, { radice, finestra: finestraFinta(800) }).misura(), 0);
-  assert.equal(radice.scritte['--talos-toast-fondo'], '0px');
-  /* Piede alto zero (chat senza composer) e piede che non c'e' proprio. */
-  const piatto = { getBoundingClientRect: () => ({ top: 800, height: 0 }), offsetParent: {} };
-  assert.equal(ancoraToastSopraIComandi(piatto, { radice, finestra: finestraFinta(800) }).misura(), 0);
-  assert.equal(ancoraToastSopraIComandi(null, { radice, finestra: finestraFinta(800) }).misura(), 0);
-});
+/*
+ * 18/09/2026 - QUI C'ERANO LE DUE PROVE DI `ancoraToastSopraIComandi` (BC-77: il fondo della pila
+ * dei toast era l'ingombro del piede, misurato; e il suo verso contrario, piede piatto o assente).
+ * L'owner ha revocato quella cura - «un toast si comporta come un toast, sempre in fondo allo
+ * schermo, e se sono piu di uno si stackano uno sopra l'altro» - e la funzione e uscita con l'ordine
+ * (nessun chiamante). Le prove escono con lei: non si riscrivono per far numero. La prova della
+ * REGOLA NUOVA sta dove si vede: `tests/browser/toast-non-copre-i-comandi.spec.mjs`, che ora misura
+ * che la pila sta in fondo e impila.
+ */
