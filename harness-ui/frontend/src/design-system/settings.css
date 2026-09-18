@@ -35,6 +35,16 @@
    traduzione più lunga o una lingua diversa non devono più uscire TAGLIATE A METÀ PAROLA come
    nella foto di quel giorno. */
 .settings-search__input { width: 100%; min-height: 36px; padding: 8px 11px; border: 1px solid var(--talos-border-strong); border-radius: var(--ui-radius-control); background: var(--talos-panel); color: var(--talos-text); font: inherit; font-size: .8125rem; text-overflow: ellipsis; }
+/*
+ * ⛔ DUE COMANDI PER LA STESSA AZIONE, UNO DEI DUE SENZA NOME — visto nella foto del 4174 a
+ *   larghezza stretta il 18/09/2026 (`artifacts/zoom-bar/nav-stretta.png`): il campo è
+ *   `type="search"` e Chromium gli disegna DENTRO la sua × di cancellazione, che compare
+ *   **esattamente quando** compare il nostro bottone «Cancella ricerca» (entrambi legati al testo
+ *   presente). Il nostro ha un nome accessibile e una scorciatoia; quello del browser no.
+ *   ⇒ Si spegne quello del browser, non il nostro: si toglie il doppione, non la funzione.
+ *   La × resta raggiungibile da tastiera col nostro bottone, che è nel tab order.
+ */
+.settings-search__input::-webkit-search-cancel-button { display: none; }
 .settings-search__input::placeholder { color: var(--talos-muted); opacity: 1; }
 .settings-search__input:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-settings { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: start; gap: 28px; }
