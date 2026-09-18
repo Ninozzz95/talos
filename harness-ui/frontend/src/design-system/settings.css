@@ -1,7 +1,14 @@
 /* SET-01: settings composition. Scoped to the real mounted screen, all colours from theme tokens. */
 #schermoImpostazioni[data-settings-ui="v3"] { container: settings / inline-size; }
 #schermoImpostazioni[data-settings-ui="v3"] > .talos-topbar { display: none; }
-#schermoImpostazioni[data-settings-ui="v3"] > .talos-page { padding: 28px clamp(18px, 3vw, 40px) 56px; max-width: 1440px; margin-inline: auto; width: 100%; }
+/* ⛔⛔ 18/09/2026 — A TUTTA LARGHEZZA. Owner, dalla sua schermata viva: «le impostazioni devono
+   essere uguali al mockup ma collegate realmente e a tutta larghezza».
+   Il tetto era `max-width: 1440px; margin-inline: auto`: misurato a 1920 CSS la pagina stava in
+   1440 e la colonna del contenuto in 1118, con ~100 px di margine per lato — e su uno schermo da
+   3840 quei margini diventano ~1000 px per lato, cioè la schermata sembra stretta e persa in mezzo.
+   ⇒ Il tetto esce: la pagina prende la larghezza che ha. Il resto della griglia non cambia
+   (nav 220 + contenuto `minmax(0,1fr)`), quindi è il contenuto a guadagnare lo spazio. */
+#schermoImpostazioni[data-settings-ui="v3"] > .talos-page { padding: 28px clamp(18px, 3vw, 40px) 56px; max-width: none; margin-inline: 0; width: 100%; }
 .settings-header { display: flex; align-items: start; justify-content: space-between; gap: 24px; margin-block-end: 22px; }
 .settings-header h1 { margin: 0 0 6px; font-size: clamp(1.5rem, 2vw, 1.875rem); font-weight: 600; letter-spacing: -.025em; line-height: 1.25; }
 .settings-header__copy > p { margin: 0; color: var(--talos-muted); font-size: .875rem; line-height: 1.6; }
