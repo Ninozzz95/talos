@@ -102,3 +102,15 @@
  *   nella foto a 1440, non da un test: il testo c'era tutto, ma mozzato dal pulsante accanto.
  */
 .talos-file-selezione__conteggio{font-size:var(--talos-font-size-xs); white-space:nowrap; margin-inline-end:auto}
+
+/*
+ * ⭐ 18/09 — LA RINOMINA IN RIGA: il campo prende il POSTO del nome, non apre un dialogo.
+ * `flex:1; min-width:0` perché sta dove stava il nome (che è flessibile) e non deve far
+ * saltare di lato «⋯» e la lettera di stato quando compare.
+ */
+.ft-rename{
+  flex:1; min-width:0; height:calc(var(--talos-control-height) - 10px); padding:0 var(--talos-space-xs);
+  font:inherit; font-size:var(--talos-font-size-sm, inherit); color:inherit; background:var(--talos-background);
+  border:1px solid var(--talos-accent); border-radius:var(--talos-radius-control);
+}
+.ft-rename:focus-visible{outline:2px solid var(--talos-ring); outline-offset:1px}
