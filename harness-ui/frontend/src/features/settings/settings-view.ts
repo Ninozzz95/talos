@@ -10,6 +10,27 @@ interface SettingsViewOptions {
   chooseSection: (section: string) => void;
   openStudio: (fieldId: string) => void;
 }
+/*
+ * ⭐ 18/09/2026 — LA MAPPA DELLE ICONE DELLE SEZIONI, in un posto solo.
+ * Lo schema porta il nome dello sprite che il mockup disegna (`SETTINGS_SECTIONS[].icon`); sei
+ * di quelli non esistono fra gli sprite del progetto, e al loro posto si usa il segno PIU'
+ * VICINO fra i 49 che ci sono — mai un disegno nuovo, che sarebbe l'unica icona di un
+ * vocabolario inventato.
+ */
+const SPRITE_SEZIONE: Record<string, string> = {
+  chat: 'send', sliders: 'settings', cpu: 'command', key: 'link', chart: 'bolt', activity: 'user',
+};
+function iconaSezione(id: SettingsSection): SVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'i talos-nav-item__icon');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  const sprite = SETTINGS_SECTIONS[id]?.icon ?? 'settings';
+  use.setAttribute('href', '#i-' + (SPRITE_SEZIONE[sprite] ?? sprite));
+  svg.append(use);
+  return svg;
+}
+
 const words = {
   title: { it: 'Impostazioni', en: 'Settings' },
   subtitle: { it: 'Un posto per configurare il tuo modo di lavorare.', en: 'One place to configure the way you work.' },
@@ -88,7 +109,16 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     if (i === 0 || i === 5) { const heading = node('span', 'settings-nav__group'); heading.setAttribute('aria-hidden', 'true'); groups.push(heading); list.append(heading); }
     const button = node('button', 'talos-nav-item settings-nav__item'); button.type = 'button'; button.id = 'setting-tab-' + id; button.dataset.settingsTab = id;
     button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', 'setting-panel-' + id);
-    button.append(node('span', 'talos-nav-item__label')); buttons.set(id, button); list.append(button);
+    /*
+     * ⭐⭐ 18/09/2026 — L'ICONA DELLA VOCE. Il mockup ne ha una per ognuna delle dieci
+     *   (`TALOS-Calm-Lab-04.html`, foto dell'owner in `Downloads/exa/`): la colonna si legge
+     *   a colpo d'occhio, e senza icone è un elenco di parole. Lo schema la porta già
+     *   (`SETTINGS_SECTIONS[].icon`) e nessuno la disegnava.
+     * ⛔ Sei degli sprite dello schema (`chat`, `sliders`, `cpu`, `key`, `chart`, `activity`)
+     *   NON esistono fra i 49 del progetto: si mappano sul segno più vicino fra quelli che ci
+     *   sono, invece di inventare un disegno nuovo. La mappa sta qui, in un posto solo.
+     */
+    button.append(iconaSezione(id), node('span', 'talos-nav-item__label')); buttons.set(id, button); list.append(button);
     const item = node('option'); item.value = id; mobile.append(item);
     button.addEventListener('click', () => choose(id), { signal });
   }
