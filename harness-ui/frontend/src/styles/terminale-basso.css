@@ -186,8 +186,21 @@
  * base molto più grande) assorbe per prima la riduzione. Nessun valore scritto a mano, nessun
  * confronto con la finestra: vale a qualunque altezza e con qualunque contenuto nel piede.
  */
-.talos-chat-foot { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.talos-terminale-basso { flex: 0 1 auto; }
+/*
+ * ⛔⛔⛔ 18/09/2026, SECONDO GIRO — LA PRIMA CURA HA ROTTO IL COMPOSER, E L'HA TROVATA L'OWNER.
+ *
+ * Il primo tentativo rendeva il PIEDE flessibile (`flex: 0 1 auto; min-height: 0`) e colonna flex.
+ * Misurato sul 4174 dell'owner: con una conversazione lunga il piede **cedeva insieme** alla
+ * conversazione (il riparto del restringimento va per base, e la conversazione ha una base enorme),
+ * quindi il composer finiva **sotto il bordo della finestra** — «IL CHAT COMPOSER SI È ROTTO».
+ * ⛔ La lezione, in una riga: rendere cedevole un contenitore per far cedere un suo figlio cede
+ *   anche TUTTO IL RESTO che ci sta dentro.
+ * ⇒ Il piede torna com'era (`flex:none`, blocco) e il tetto si mette **solo sul pannello**, contro
+ *   l'altezza della finestra: `min(var(--talos-terminale-h), 45dvh)`. A 900 px di finestra 45dvh =
+ *   405 > 320, quindi **non cambia niente**; a 500 px scende a 225 e il pannello ci sta, con la
+ *   conversazione che resta visibile. Nessun valore legato alla larghezza: è l'altezza che manca.
+ */
+.talos-terminale-basso { height: min(var(--talos-terminale-h), 45dvh); }
 
 @media (prefers-reduced-motion: reduce) {
   .talos-terminale-basso__maniglia::after { transition: none; }
