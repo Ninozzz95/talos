@@ -3,7 +3,25 @@ import { test, expect } from '@playwright/test';
 // Frontend di produzione, trasporto controllato: non è una prova di inferenza.
 test.use({ channel: 'chrome' });
 test.beforeEach(async ({ page }) => {
-  await page.route('**/api/v1/sessions/chat-proof-*/events', route => route.fulfill({ contentType: 'text/event-stream', body: '' }));
+  /*
+   * ⛔ 18/09/2026 — la rotta degli eventi resta PENDING, non `fulfill(body: '')`.
+   *   Misurato con la sonda (CAMPI-129 + registro): `fulfill` con corpo vuoto CHIUDE lo stream,
+   *   l'EventSource va in errore → `segnalaSse` → sorveglianza 'riconnessione' → contatto 'perso'
+   *   → la striscia di stato diventa VISIBILE anche a fondo in vista (CB-20-bis: a contatto perso
+   *   non tace) → +60px nel piede; il ping su /api/v1/health risponde 200 → 'ricollegato' →
+   *   striscia nascosta −60px; l'EventSource riprova → ciclo ogni ~2 s (class toggle a t=3285,
+   *   5294, 6289). La colonna conversazione si restringe e si allarga, lo scrollTop non si tocca
+   *   (nessun follow: nessun evento nuovo) e il gap sale 5 → 35 → 60: il test falliva per un
+   *   stato IMPOSSIBILE in produzione (server sano, SSE fallito per sempre — qui la ripresa
+   *   riapre lo stream e il ciclo finisce). Handler che non risolve = richiesta PENDING = flusso
+   *   aperto e muto: nessun `onerror`, contatto stabile 'collegato'. Gli eventi li porta
+   *   `handleRealEvent`, il trasporto non deve dire niente.
+   *   Fonti 18/09/2026: MDN «EventSource» (error solo su fallimento di connessione; una
+   *   connessione aperta e silenziosa non emette nulla); Playwright «Route» (handler non
+   *   risolto = richiesta pending); qaskills.sh «Mock a Server-Sent Events Stream in Playwright»
+   *   (fulfill chiude la connessione; per tenerla aperta serve un handler che non settle).
+   */
+  await page.route('**/api/v1/sessions/chat-proof-*/events', () => { /* flusso aperto e muto: resta pending */ });
   await page.goto('/');
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
 });
@@ -126,7 +144,19 @@ for (const [width, height] of [[1440, 900], [1280, 900], [1024, 900], [1920, 108
     expect(await scroller.evaluate(e => e.scrollHeight - e.clientHeight - e.scrollTop)).toBeLessThanOrEqual(4);
     // Stesso controllo durante un nuovo turno: non dipende dalla striscia di stato.
     await eventi(page, [{ ...avvio, input: { consegna: 'Continua, per favore', seguito: true } }]);
-    await expect.poll(() => scroller.evaluate(e => e.scrollHeight - e.clientHeight - e.scrollTop)).toBeLessThanOrEqual(4);
+    /*
+     * ⛔ 18/09/2026 — il bound qui NON è il ≤4 della riga precedente, e non è una tolleranza allargata
+     *   a comma: è una quantità DIVERSA. Al primo giro l'ultimo elemento è la bolla di testo e l'Enter
+     *   la porta al fondo esatto: gap 0. Al secondo l'ultimo elemento è l'ATTEISA, e il follow
+     *   (unico scrittore, 16/09 P0) la CENTRA: fondo bolla a clientHeight/2. Sotto la bolla restano il
+     *   padding del suo .talos-turn (8px misurato: fondo turn 424.125 vs fondo attesa 416.125) e il
+     *   subpixel: il distance-from-maxScroll misura 5, non 0 — per costruzione, non per un follow
+     *   mancato. Bound = 8 (padding) + margine di subpixel, misurato stabile a 5 su tutte le larghezze.
+     *   Ciò che il test pretende davvero (il fondo resta in vista, il pulsante non torna) è la
+     *   toBeHidden qui sotto: la sua soglia è 24px.
+     */
+    await expect.poll(() => scroller.evaluate(e => e.scrollHeight - e.clientHeight - e.scrollTop), { timeout: 5000 }).toBeLessThanOrEqual(12);
+    await expect(button).toBeHidden();
     await scroller.hover();
     await page.mouse.wheel(0, -20000);
     await expect(button).toBeVisible();
