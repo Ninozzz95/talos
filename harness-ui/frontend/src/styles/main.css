@@ -73,5 +73,33 @@
 
 @import '../design-system/settings.css'; /* SET-01: existing controls in searchable settings */
 
+/*
+ * 18/09/2026 — le sezioni Memoria, Costi e Strumenti con lo stile del mockup Calm Lab.
+ * ⛔ SUBITO DOPO `settings.css` E NON ALTROVE: questo foglio annulla la decorazione che
+ *   `settings.css` dà a `#contestoVoci.talos-settings__section` (una card dentro una card) e
+ *   vince per SPECIFICITÀ, non con `!important` — ma l'ordine qui lo mette al riparo anche dai
+ *   fogli che vengono dopo e che parlano delle stesse superfici. Non ha nessuna ragione per
+ *   stare dopo `superfici-galleggianti.css`, che è «per ULTIMO» perché una superficie che
+ *   GALLEGGIA ha bisogno di un fondo pieno: qui non si fa galleggiare niente.
+ */
+@import './sezioni-stile.css';
+
 @import '../design-system/calm-controls.css'; /* CP14: custom pickers, switches and sliders */
 @import './superfici-galleggianti.css'; /* 18/09: per ULTIMO — una superficie che galleggia ha uno sfondo pieno, qualunque cosa dicano i fogli prima */
+
+/*
+ * 18/09/2026 — LA COLONNA DELL'ANTEPRIMA VIVA (il port di `aside.appearance-preview` del mockup
+ * `TALOS-Calm-Lab-04.html`). Le misure sono state lette dal vivo dal mockup il 18/09/2026 e stanno
+ * una per una nel foglio, col numero accanto.
+ * ⛔ IN FONDO, e non a meta': legge i token di `temi.css`/`aspetto.css` (gia' valutati qui sopra) e
+ *   non ne ridefinisce nessuno; le sue classi — `appearance-preview`, `appearance-canvas`,
+ *   `preview-*`, `scene-caption` — sono usate SOLO da lei in tutto `src/` (verificato con una
+ *   ricerca il 18/09/2026), mentre gli altri fogli della stessa famiglia di mockup
+ *   (`mockup-td.css`, `mockup-animazioni.css`, `mockup-sidebar.css`) parlano lo stesso vocabolario
+ *   e potrebbero aggiungere domani una regola omonima. Stando in fondo, una regola di questa
+ *   colonna non viene spenta in silenzio da un cugino. L'unico nome condiviso con il prodotto e'
+ *   `.eyebrow`, che la regola di qui ancora all'aside (0-2-1) e lascia intatte le 14 dentro i
+ *   dialoghi. Con esbuild un `@import` relativo viene incollato sul posto nell'ordine scritto
+ *   (esbuild CHANGELOG «CSS import ordering»): spostarla piu' in alto cambia chi vince.
+ */
+@import './anteprima-tema.css';

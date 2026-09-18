@@ -1774,10 +1774,16 @@ a.talos-button{text-decoration:none}
  * ⛔ IL PUNTO DELLA VOCE ATTIVA — nel mockup c'è (`.nav-item.active:after`), qui non c'era:
  *   misurato `::after` → `content: none`. Si aggancia ad `aria-current="page"`, che la voce
  *   attiva porta già (settings-view.ts:165), quindi non serve toccare il TypeScript.
- *   `currentColor` invece di un colore fisso: segue la voce, chiara o scura, senza una seconda
- *   regola da tenere allineata.
+ * ⛔ IL COLORE È QUELLO DEL MOCKUP, non `currentColor`. Avevo scelto `currentColor` per non dover
+ *   tenere allineata una seconda regola — ma il mockup ha
+ *   `.nav-item.active:after{…background:var(--accent-text)}` (`TALOS-Calm-Lab-04.html:240`), cioè
+ *   **#704814**, e la review avversaria del 18/09 l'ha misurata come deviazione: punto dell'app
+ *   `rgb(35,36,39)` contro `#704814`. Owner, 18/09/2026: **il colore del mockup**.
+ *   ⛔ Effetto da conoscere: su **tema scuro** un oro scuro come #704814 ha poco contrasto sul
+ *   fondo `rgb(30,31,34)`. È la scelta del mockup e si tiene; se in foto risulta illeggibile, si
+ *   dice all'owner invece di cambiarla di nascosto.
  */
-#schermoImpostazioni .talos-settings__nav .talos-nav-item[aria-current="page"]::after{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;margin-left:auto;flex:none}
+#schermoImpostazioni .talos-settings__nav .talos-nav-item[aria-current="page"]::after{content:'';width:5px;height:5px;border-radius:50%;background:var(--talos-accent-text,#704814);margin-left:auto;flex:none}
 #schermoImpostazioni .talos-nav-item__label{white-space:normal}
 /*
  * ⛔ `flex:0 1 auto` E NON `flex:1` — trovato dalla prova, non da un'occhiata.
