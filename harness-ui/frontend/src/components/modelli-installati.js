@@ -222,24 +222,40 @@ export function aggiornaInstallati(panel, modelli = [], opzioni = {}) {
  * Sposta il pannello del mockup dentro quello del monolite (stesso schema di
  * `montaCatalogoModelli`), rinominando i controlli con gli id che il monolite ascolta
  * (ricerca, importazione, lista) e aggiungendo progresso e annulla dell'importazione.
+ *
+ * ⛔ 18/09/2026 — IL TRAVASO REGGE ENTRAMBE LE DIREZIONI (corsia 3, il travaso neutro). Chi arriva
+ * in `originale` può essere il markup CANONICO (come oggi: il mockup scende in Impostazioni) oppure
+ * quello LEGACY (destinazione invertita: il laboratorio sale sulla schermata), e il secondo porta
+ * GIÀ gli id che il monolite ascolta. ⇒ Gli id si rinominano solo se sono ancora quelli canonici, e
+ * ogni nodo che manca si salta invece di far esplodere il montaggio.
+ * ⛔ E il timbro di montaggio va su ENTRAMBE le radici: `ensureModelLabControls` (app.js) guarda
+ * `dataset.installatiMontato` sul pannello che è stato SVUOTATO, e senza il timbro la sua
+ * `insertBefore(controls, $('#modelLabInstalledList'))` esplode con `NotFoundError` — il nodo di
+ * riferimento ora vive nell'altro pannello. È il crollo n. 3 del 18/09, riprodotto nella prova
+ * `tests/browser/lab-montaggio-neutro.spec.mjs`.
+ * Fonti consultate il 18/09/2026: MDN `Node.insertBefore` (`NotFoundError`: «the node before which
+ * the new node is to be inserted is not a child of this node»); prassi del timbro `data-*`
+ * controllato prima di scrivere, con l'elemento come perimetro.
  */
 export function montaInstallati(originale, canonico, { document: documentObj = globalThis.document } = {}) {
   if (!originale || !canonico || originale.dataset.installatiMontato) return;
   originale.replaceChildren(...canonico.children);
   originale.dataset.installatiMontato = 'true';
+  canonico.dataset.installatiMontato = 'true';
   const ids = { cercaInstallati: 'modelLabInstalledSearchControl', importaGguf: 'modelLabImportButton', fileGguf: 'modelLabImportInput', esitoImportazione: 'modelLabImportStatus', listaInstallati: 'modelLabInstalledList', filtroInstallati: 'modelLabInstalledStateFilter' };
   for (const [prima, dopo] of Object.entries(ids)) {
-    const n = originale.querySelector(`#${prima}`); if (!n) continue;
+    const n = originale.querySelector(`#${prima}`) || originale.querySelector(`#${dopo}`); if (!n) continue;
+    if (n.id !== prima) continue; // id già quello che il monolite ascolta: non c'è niente da rinominare
     for (const label of originale.querySelectorAll(`label[for="${prima}"]`)) label.htmlFor = dopo;
     n.id = dopo;
   }
-  const lista = originale.querySelector('#modelLabInstalledList'); if (lista) { lista.dataset.installatiLista = ''; lista.replaceChildren(); }
+  const lista = originale.querySelector('#modelLabInstalledList') || originale.querySelector('#listaInstallati'); if (lista) { lista.dataset.installatiLista = ''; lista.replaceChildren(); }
   const memoria = originale.querySelector('.talos-toolbar strong')?.parentElement; if (memoria) memoria.dataset.installatiMemoria = '';
-  const esito = originale.querySelector('#modelLabImportStatus');
+  const esito = originale.querySelector('#modelLabImportStatus') || originale.querySelector('#esitoImportazione');
   if (esito && !originale.querySelector('#modelLabImportProgress')) {
     const progress = documentObj.createElement('progress'); progress.id = 'modelLabImportProgress'; progress.max = 100; progress.value = 0; progress.hidden = true; progress.className = 'talos-lab__meter';
     const annulla = el(documentObj, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Annulla'); annulla.type = 'button'; annulla.id = 'modelLabImportCancelButton'; annulla.hidden = true;
     esito.after(progress, annulla);
   }
-  aggiornaDettaglioInstallato(originale.querySelector('[data-c="DetailPanel"]'), null, { document: documentObj });
+  aggiornaDettaglioInstallato(originale.querySelector('[data-c="DetailPanel"]') || originale.querySelector('#dettaglioInstallato'), null, { document: documentObj });
 }

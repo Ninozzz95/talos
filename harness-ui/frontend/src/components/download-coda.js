@@ -164,12 +164,26 @@ export function aggiornaCodaDownload(panel, items = [], { soloAttivi = false, st
   coda.replaceChildren(...visibili.flatMap((i) => [d.createTextNode('\n'), creaRigaDownload(datiDownload(i, { stima: stime.get?.(i.id) || null }), { azioni, document: d })]), d.createTextNode('\n'));
 }
 
-/** Sposta il pannello del mockup in `#modelLabDownloadsPanel`; la lista del monolite diventa la coda. */
+/**
+ * Sposta il pannello del mockup in `#modelLabDownloadsPanel`; la lista del monolite diventa la coda.
+ *
+ * ⛔ 18/09/2026 — IL TRAVASO REGGE ENTRAMBE LE DIREZIONI (corsia 3, il travaso neutro). Chi arriva in
+ * `originale` può essere il markup CANONICO (oggi: il mockup scende in Impostazioni, e la coda si
+ * riconosce da `data-c="DownloadQueue"`) oppure quello LEGACY (destinazione invertita: il
+ * laboratorio sale sulla schermata, e la coda è già `#modelLabDownloadsList`). ⇒ Si cerca l'una O
+ * l'altra forma: senza il secondo ramo, nella direzione invertita la coda non verrebbe né svuotata
+ * né marcata, e le righe vecchie resterebbero a schermo sotto quelle nuove.
+ * ⛔ Il timbro va su ENTRAMBE le radici (vedi `montaInstallati` e `montaHf`: è il timbro sul
+ * pannello SVUOTATO che protegge `ensureModelLabControls` in app.js).
+ * Fonte consultata il 18/09/2026: prassi del timbro `data-*` controllato prima di scrivere (un
+ * `data-*` esprime proprietà del nodo, una classe esprime stile).
+ */
 export function montaCodaDownload(originale, canonico) {
   if (!originale || !canonico || originale.dataset.downloadMontato) return;
   originale.replaceChildren(...canonico.children);
   originale.dataset.downloadMontato = 'true';
-  const coda = originale.querySelector('[data-c="DownloadQueue"]'); if (coda) { coda.id = 'modelLabDownloadsList'; coda.replaceChildren(); }
+  canonico.dataset.downloadMontato = 'true';
+  const coda = originale.querySelector('[data-c="DownloadQueue"]') || originale.querySelector('#modelLabDownloadsList'); if (coda) { coda.id = 'modelLabDownloadsList'; coda.replaceChildren(); }
 }
 
 /** Velocità e rimanente fra due letture: null se non c'è ancora una seconda lettura. */

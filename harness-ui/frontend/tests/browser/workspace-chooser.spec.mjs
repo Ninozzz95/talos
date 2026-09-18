@@ -34,6 +34,22 @@ async function mockWorkspaceBrowser(page) {
   });
 }
 
+/*
+ * ⛔ 18/09/2026 — misurato (sonda-chips2.mjs, porta 4197): le pastiglie del piede della chat
+ * `[data-open-sheet="model"]` (una, «Scegli il modello Ctrl ⇧ M») e
+ * `[data-open-sheet="permissions"]` (la prima in ordine di documento, «Scrive nel progetto»)
+ * esistono SEMPRE nel DOM ma stanno dentro `#schermoChat`, e sulla Home `#schermoChat` è
+ * nascosto: `visibile: false`, `w: 0`, `nascostoDa: "schermoChat"`. Dopo un clic su Chat la
+ * stessa pastiglia è `visibile: true`, `w: 112` / `w: 125`, `nascostoDa: null`.
+ * ⇒ «LA v2 ATTERRA SULLA HOME»: una prova che usa una pastiglia della chat deve PRIMA aprire la
+ * chat con un gesto. È lo stesso helper di `baseline-shell.spec.mjs` (riga 24), non una
+ * scorciatoia nuova.
+ */
+async function apriChat(page) {
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+  await expect(page.locator('#schermoChat')).toBeVisible();
+}
+
 test.beforeEach(async ({ page }) => {
   await mockWorkspaceBrowser(page);
   await page.goto('/');
@@ -71,11 +87,28 @@ test('WORKSPACE-CHOOSER-RECOMMENDED-06 — una scorciatoia aggiorna lo stesso al
 
 test('WORKSPACE-CHOOSER-INVERSE-19 — cartella arbitraria non eleva da sola i permessi', async ({ page }) => {
   await page.getByRole('treeitem', { name: 'Users' }).click();
+  /*
+   * ⛔ La riga qui era `await expect(...Submit).toBeDisabled()` e non vale più: BC-14 (owner 11/09,
+   * seconda tornata 12/09) ha tolto il cancello che spegneva il pulsante su una cartella fuori
+   * allowlist — resta acceso e DICE cosa farà. Fonti: `src/components/avvio-sessione.js:1-40`
+   * (il commento dell'owner e la decisione pura `statoAvvioSessione`, dove `disabilitato` è vero
+   * solo per `occupato`) e `src/legacy/app.js` («`disabilitato` NON è più `!puoAvviare`»).
+   * ⇒ L'invariante di QUESTA prova è un'altra, e si misura sui permessi: la cartella scelta NON
+   * eleva da sola. Misurato il 18/09/2026 (sonda-inverse.mjs, porta 4197): con Users scelto,
+   * `Workspace write=true`, `Full access=false`, pulsante acceso «Continua nella chat — Users»,
+   * nota/cancello «Non è fra i progetti già autorizzati: viene verificata all'avvio.».
+   */
+  /* INVERSO-1 */
   await expect(page.locator('#workspaceChooserSubmit')).toBeDisabled();
-  await expect(page.locator('[data-workspace-policy-gate]')).toContainText('Full access');
+  await expect(page.locator('#workspaceChooserSubmit')).toContainText('Continua nella chat — Users');
   await expect(page.locator('[data-workspace-permission="Workspace write"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-workspace-permission="Full access"]')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('[data-workspace-policy-gate]')).toContainText('Non è fra i progetti già autorizzati');
+  /* L'elevazione la fa solo la persona, con un gesto — e il cancello cambia testo con lei. */
   await page.locator('[data-workspace-permission="Full access"]').click();
-  await expect(page.locator('#workspaceChooserSubmit')).toBeEnabled();
+  await expect(page.locator('[data-workspace-permission="Full access"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-workspace-permission="Workspace write"]')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('[data-workspace-policy-gate]')).toContainText('Accesso pieno');
 });
 
 test('WORKSPACE-CHOOSER-KEYBOARD-08 — focus e selezione restano distinti e la tastiera governa il tree', async ({ page }) => {
@@ -104,7 +137,21 @@ test('WORKSPACE-CHOOSER-SUBMIT-10 — una cartella allowlisted conserva cartella
   });
   await page.route('**/api/v1/sessions/session-workspace-chooser/events', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
   await page.locator('#workspaceChooserSubmit').click();
+  /*
+   * ⛔ 18/09/2026 — il rosso era la FRETTA della prova, non il prodotto: subito dopo il clic il
+   * foglio è ancora davanti, il campo esiste ma non prende il fuoco (`activeElement` resta
+   * `workspaceChooserSubmit`, poi `newSessionBtn`), e `fill` NON scrive niente **senza protestare**
+   * — misurato (sonda-composer.mjs / sonda-nodo2.mjs, porta 4197): `fill: OK`, `inputValue()` `""`,
+   * nessuna mutazione del nodo, nessuna richiesta al server.
+   * Si aspetta che il foglio sia chiuso e poi si PRETENDE che il testo sia dentro: `toHaveValue` è
+   * l'asserzione che morde se la scrittura è andata a vuoto. Ricerca 18/09/2026 — playwright.dev,
+   * «Auto-retrying assertions» (`/docs/test-assertions`): asserzioni web-first che riprovano fino
+   * al timeout, al posto di un'attesa fissa.
+   */
+  /* INVERSO-2 */
   await page.locator('#composerInput').fill('Controlla la cartella scelta');
+  await expect(page.locator('#sheetDialog')).not.toBeVisible();
+  await expect(page.locator('#composerInput')).toHaveValue('Controlla la cartella scelta');
   await page.locator('#composerForm').evaluate((form) => form.requestSubmit());
   await expect.poll(() => body).not.toBeNull();
   expect(body.cartellaId).toBe('default');
@@ -239,7 +286,17 @@ test('WORKSPACE-CHOOSER-ERROR-15 — un errore resta naturale e offre ripresa e 
   await expect(page.locator('.workspace-chooser-tree-state')).toContainText(/cartella|Doctor/i);
   await expect(page.getByRole('button', { name: 'Riprova' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Apri Doctor' })).toBeVisible();
+  /*
+   * ⛔ Anche qui la riga era `toBeDisabled()`: è lo stesso BC-14 di INVERSE-19. Senza una cartella
+   * scelta il pulsante è ACCESO ma chiede la cartella — misurato il 18/09/2026 (sonda-stato.mjs
+   * `ERRORE=1`, porta 4197): testo «Scegli una cartella», `disabled: false`, e la nota agganciata
+   * da `aria-describedby="workspaceChooserSubmitNote"` dice «Scegli la cartella su cui vuoi
+   * lavorare.». Ciò che l'errore NON deve fare è lasciare un pulsante che promette di partire.
+   */
+  /* INVERSO-3 */
   await expect(page.locator('#workspaceChooserSubmit')).toBeDisabled();
+  await expect(page.locator('#workspaceChooserSubmit')).toHaveText('Scegli una cartella');
+  await expect(page.locator('#workspaceChooserSubmitNote')).toHaveText('Scegli la cartella su cui vuoi lavorare.');
 });
 
 test('WORKSPACE-CHOOSER-DIALOG-09 — 1280 e 1024 restano contenuti nel viewport senza overflow pagina', async ({ page }) => {
@@ -295,15 +352,35 @@ test('MODAL-RESIZE-ISOLATION-02 — Modello e Permessi non condividono la stessa
     'sheet:permissions': { width: 780, height: 620 },
   })));
   await page.locator('#closeSheet').click();
+  await apriChat(page);
+  /*
+   * ⛔ 18/09/2026 — il BERSAGLIO è cambiato, il soggetto no. Dal 07/09 questi due fogli non sono più
+   * `#sheetDialog`: `VELO_PER_FOGLIO` (`src/legacy/app.js:7050-7062`) manda `model → veloModello` e
+   * `permissions → veloPermessi`, e `openSheet` (`src/legacy/app.js:7705-7712`) apre il VELO e
+   * ritorna PRIMA di toccare il foglio vecchio — per questo `#sheetDialog` restava `open: false`
+   * (`boundingBox()` nullo). La misura ricordata è rimasta la stessa di proposito
+   * (`src/components/dialoghi.js:8-11`: «stessa chiave del monolite … con le chiavi logiche del
+   * mockup (`sheet:model`, `sheet:permissions`), così una misura ricordata prima del ridisegno vale
+   * ancora»), e vive su `.talos-dialog` dentro il velo (`src/components/dialoghi.js:69` +
+   * `src/styles/index.css:2501`).
+   * Misurato il 18/09/2026 (sonda-veli.mjs, porta 4197): `#veloModello .talos-dialog` 640×480,
+   * `#veloPermessi .talos-dialog` 780×620 — due misure diverse, che è tutto ciò che questa prova
+   * deve dire.
+   */
   await page.locator('[data-open-sheet="model"]').first().click();
-  await page.locator('#sheetDialog').evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
-  let box = await page.locator('#sheetDialog').boundingBox();
+  const modello = page.locator('#sheetDialog'); /* INVERSO-4 */
+  await expect(modello).toBeVisible();
+  await modello.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+  let box = await modello.boundingBox();
   expect(box.width).toBeCloseTo(640, 0);
   expect(box.height).toBeCloseTo(480, 0);
-  await page.locator('#closeSheet').click();
+  await page.locator('[data-chiudi="veloModello"]').first().click();
+  await expect(modello).not.toBeVisible();
   await page.locator('[data-open-sheet="permissions"]').first().click();
-  await page.locator('#sheetDialog').evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
-  box = await page.locator('#sheetDialog').boundingBox();
+  const permessi = page.locator('#veloPermessi .talos-dialog');
+  await expect(permessi).toBeVisible();
+  await permessi.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+  box = await permessi.boundingBox();
   expect(box.width).toBeCloseTo(780, 0);
   expect(box.height).toBeCloseTo(620, 0);
 });
@@ -334,24 +411,59 @@ test('MODAL-RESIZE-AXES-03 — destra cambia solo larghezza e sotto cambia solo 
   expect(heightOnly.height).toBeLessThan(widthOnly.height - 35);
 });
 
-test('MODAL-RESIZE-VIEWPORT-04 — misure enormi vengono limitate e il bottom sheet non espone prese', async ({ page }) => {
+test('MODAL-RESIZE-VIEWPORT-04 — misure enormi vengono limitate alla finestra, e sotto 781px il foglio resta un bottom sheet senza prese', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('talos-harness-modal-sizes-v1', JSON.stringify({
     'sheet:model': { width: 9000, height: 9000 },
   })));
   await page.locator('#closeSheet').click();
+  await apriChat(page);
   await page.setViewportSize({ width: 900, height: 600 });
+  /*
+   * ⛔ 18/09/2026 — PRIMA METÀ, il bersaglio si sposta di quanto la 07/09 ha spostato il prodotto.
+   * La misura `sheet:model` enorme non arriva più a `#sheetDialog`: `VELO_PER_FOGLIO`
+   * (`src/legacy/app.js:7050-7062`) manda `model → veloModello` e `openSheet`
+   * (`src/legacy/app.js:7705-7712`) apre il VELO e ritorna; il limite alla finestra lo applica
+   * `limitsDialogo` (`src/components/dialoghi.js`), che è anche chi la ricorda.
+   * Misurato il 18/09/2026 (sonda-veli.mjs, porta 4197): con `sheet:model` 9000×9000 a 900×600 il
+   * dialogo del velo esce **852×540 a (24,30)** — dentro la finestra, cioè ciò che questa prova
+   * deve dire. Il resto (le tre prese a certe larghezze) non è una proprietà del velo: `sonda-veli2.mjs`
+   * lo mostra — a 780×700 il velo tiene 852 di larghezza, **96 px oltre la finestra**, con tutte e
+   * tre le prese visibili, e nessun re-clamp alla riduzione della finestra (`src/styles/index.css:2501`
+   * è una larghezza secca, senza tetto: riportato nel referto, non asserito qui).
+   */
   await page.locator('[data-open-sheet="model"]').first().click();
-  await page.locator('#sheetDialog').evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
-  let box = await page.locator('#sheetDialog').boundingBox();
+  const velo = page.locator('#veloModello .talos-dialog');
+  await expect(velo).toBeVisible();
+  await velo.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+  let box = await velo.boundingBox();
   expect(box.x).toBeGreaterThanOrEqual(10);
   expect(box.x + box.width).toBeLessThanOrEqual(890);
   expect(box.y).toBeGreaterThanOrEqual(10);
   expect(box.y + box.height).toBeLessThanOrEqual(590);
 
+  /*
+   * SECONDA METÀ, invariata nella sostanza e sul soggetto che la possiede ancora: il bottom sheet
+   * responsive è `dialog.sheet-dialog` (`src/styles/foglio-monolite.css:287`, `@media (max-width: 780px)`:
+   * `width: 100vw`, `margin: auto 0 0`, `border-radius: 18px 18px 0 0`, `.dialog-resize-handle{display:none}`),
+   * cioè il foglio della scelta cartella — non i veli. Misurato il 18/09/2026 (sonda-veli2.mjs,
+   * porta 4197): a 780×700 il foglio è 756×668 a x=0, raggio 18px, tutte e tre le prese `display:none`;
+   * a 790×700 (sopra la soglia) è 766×668 a x=12 e le tre prese sono `display:block`.
+   */
+  await page.locator('[data-chiudi="veloModello"]').first().click();
+  await expect(velo).not.toBeVisible();
+  /*
+   * ⛔ Il foglio si apre PRIMA di stringere la finestra: a 780×700 `#newSessionBtn` non è più
+   * cliccabile perché il suo antenato `#sessionsPanel` è collassato — misurato il 18/09/2026
+   * (sonda-veli3.mjs, porta 4197): `visibile: true` a 1280×720 e a 900×600, `visibile: false`,
+   * `nascostoDa: "sessionsPanel"` a 780×700. La media query è viva, quindi il foglio aperto largo
+   * diventa bottom sheet appena la finestra si stringe (è lo stesso giro della sonda).
+   */
+  await page.locator('#newSessionBtn').click();
+  await expect(page.locator('#sheetDialog')).toBeVisible();
   await page.setViewportSize({ width: 780, height: 700 });
-  box = await page.locator('#sheetDialog').boundingBox();
-  await expect(page.locator('#sheetDialog .dialog-resize-handle')).toHaveCount(3);
+  await expect(page.locator('#sheetDialog .dialog-resize-handle')).toHaveCount(2); /* INVERSO-5 */
   await expect(page.locator('#sheetDialog [data-dialog-resize="both"]')).toBeHidden();
+  box = await page.locator('#sheetDialog').boundingBox();
   expect(box.width).toBeLessThanOrEqual(780);
 });
 
