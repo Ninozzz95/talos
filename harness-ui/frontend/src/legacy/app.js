@@ -4481,25 +4481,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (state.modelLab.initialized) return;
     state.modelLab.initialized = true;
     montaCorniceModelLab($('#modelLabCardSettings') || $('#modelLabCard'));
-    /*
-     * ⛔⛔ 18/09/2026 — LA DIREZIONE DEL TRAVASO È INVERTITA: LA DESTINAZIONE È LA SCHERMATA.
-     * `montaX(originale, canonico)` fa `originale.replaceChildren(...canonico.children)`: **sposta**
-     * i figli dal canonico all'originale e poi rinumera gli id (`catalogo-modelli.js:49`, e gli
-     * omologhi). Finora l'`originale` era il pannello LEGACY dentro Impostazioni, quindi il
-     * laboratorio viveva lì e i pannelli canonici restavano vuoti — e la schermata `#schermoModelLab`
-     * non aveva porta (ora ce l'ha: `domain/navigation.ts`).
-     * ⇒ Adesso l'`originale` è il pannello CANONICO della schermata: gli id vengono rinumerati lì
-     *   (`#cercaCatalogo` → `#modelLabSearch`, ecc.), che è esattamente ciò che il resto di `app.js`
-     *   cerca. ⛔ La review avversaria ha misurato il rischio del verso sbagliato: aprire la
-     *   schermata **senza** questa inversione la lascia **vuota in silenzio**, perché i figli sono
-     *   già stati spostati altrove e nessun errore lo dice.
-     * ⛔ Memoria e fornitori NON si invertono: `montaMisuraMemoria` riusa i bottoni legacy e infila
-     *   il canonico dentro la colonna legacy, `montaProviderPanel` tocca solo il pannello legacy.
-     */
-    montaCatalogoModelli($('#panel-catalogo'), $('#modelLabCatalogPanel'));
-    montaInstallati($('#panel-installati'), $('#modelLabInstalledPanel')); // 06/9 B6.8
-    montaHf($('#panel-hf'), $('#modelLabHfPanel')); // 06/9 B6.9
-    montaCodaDownload($('#panel-download'), $('#modelLabDownloadsPanel')); // 06/9 B6.10
+    montaCatalogoModelli($('#modelLabCatalogPanel'), $('#panel-catalogo'));
+    montaInstallati($('#modelLabInstalledPanel'), $('#panel-installati')); // 06/9 B6.8
+    montaHf($('#modelLabHfPanel'), $('#panel-hf')); // 06/9 B6.9
+    montaCodaDownload($('#modelLabDownloadsPanel'), $('#panel-download')); // 06/9 B6.10
     montaMisuraMemoria($('#modelLabOverviewPanel'), $('#panel-runtime [data-c=MemoryMeter]'));
     montaPannelloRuntime($('#modelLabRuntimeGate'));
     montaProviderPanel($('#modelLabProvidersPanel'));
@@ -21964,18 +21949,7 @@ ${testo}`;
      *   invece di aprire una schermata che nessuno disegna.
      *   🔜 Quando la schermata avrà la sua riga nel ponte, questa eccezione sparisce.
      */
-    /*
-     * ⛔⛔ 18/09/2026 — IL DIROTTAMENTO È SPARITO: LA SCHERMATA ESISTE, E ADESSO LA SUA ROTTA C'È.
-     * Fino a ieri questa riga portava `data-vaia="modelli"` dentro Impostazioni → sezione modelli,
-     * perché `#schermoModelLab` non era in nessuna mappa di navigazione: una schermata completa e
-     * senza porta. Ora la riga sta in `domain/navigation.ts` (`models: 'schermoModelLab'` e
-     * `modelli: 'models'`), quindi la voce apre la schermata sua — come prometteva il commento che
-     * qui sopra si era auto-assegnato la scadenza.
-     * ⛔ La sezione «Laboratorio modelli» dentro Impostazioni resta: i suoi pannelli legacy sono il
-     *   posto da cui i figli vengono SPOSTATI verso la schermata (vedi `inizializzaModelLab`), quindi
-     *   da lì il laboratorio non si vede più. È la conseguenza diretta del travaso a direzione unica,
-     *   ed è dichiarata, non nascosta.
-     */
+    if (vaia?.dataset.vaia === 'modelli') { setView('settings'); setSettingsSection('models'); return; }
     /*
      * ⛔⛔ 18/09/2026 — «IMPOSTAZIONI» DEVE PORTARE A IMPOSTAZIONI, NON ALL'ULTIMA SEZIONE GUARDATA.
      * Misurato dalla revisione avversaria: da Impostazioni → «Modelli» → «Impostazioni», si RESTAVA

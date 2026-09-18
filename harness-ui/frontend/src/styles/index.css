@@ -2549,6 +2549,11 @@ a.talos-button{text-decoration:none}
  */
 .talos-model-lab>.talos-tabs .talos-tabs__list{display:flex; max-width:100%; overflow-x:auto; scrollbar-width:thin}
 .talos-model-lab>.talos-tabs .talos-tabs__tab{white-space:nowrap; flex:none}
+/* ⛔⛔ 18/09/2026 — QUI C'ERANO LE REGOLE DEL RIMANDO ALLA SCHERMATA DEL LABORATORIO, E SONO USCITE
+   col rimando (vedi `frammenti.html`): il laboratorio non vive ancora di là, quindi nascondere
+   linguette e pannelli qui darebbe una sezione vuota al posto di una che funziona. Le linguette
+   restano visibili e i pannelli restano la destinazione vera. */
+
 .talos-model-lab .talos-tabs__list{display:flex;max-width:100%;overflow-x:auto;scrollbar-width:thin}
 [data-memory-level="critico"] [data-memory-label]{color:var(--talos-danger)}
 [data-memory-level="alto"] [data-memory-label]{color:var(--talos-warning)}
