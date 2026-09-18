@@ -991,7 +991,19 @@ export function montaSchedaModello(contenitore, {
       ['Modello servito dal runtime', { value: ispezione.runtime?.servingModelId || (ispezione.runtime?.reachable ? 'nessuno' : 'runtime non raggiungibile') }],
     ];
     for (const [etichetta, fatto, opzioni] of fatti) contesto.append(rigaFatto(doc, etichetta, fatto, opzioni));
-    const backend = [ispezione.backend, ispezione.build].filter(Boolean).join(' · ');
+    /*
+     * ⛔ `backend` e `build` sono FATTI TIPIZZATI (`{ state, value }` — `local-runtime-probe.mjs:21`),
+     *   non stringhe. `filter(Boolean)` non li scarta (un oggetto e' *truthy*) e `join(' · ')` su
+     *   due oggetti stampa **`[object Object] · [object Object]`**: e' quello che si leggeva nella
+     *   scheda Compatibilita', misurato il 18/09/2026 sul 4174 (referto della ricognizione).
+     * ⛔ La cura NON e' a monte: il server manda la forma giusta. Si legge il **valore** con
+     *   `testoFatto`, la stessa funzione che usano le righe sorelle qui sopra (`:988-991`), che
+     *   passano i fatti a `rigaFatto` e li sanno leggere. Solo questa riga li concatenava a mano.
+     */
+    const backend = [ispezione.backend, ispezione.build]
+      .map((fatto) => testoFatto(fatto))
+      .filter((testo) => testo && testo !== '—')
+      .join(' · ');
     contesto.append(paragrafo(doc, 'talos-muted talos-mono talos-lab__space', backend || 'Backend non dichiarato dal runtime.'));
     if (ispezione.observedAt) {
       const quando = new Date(ispezione.observedAt);
