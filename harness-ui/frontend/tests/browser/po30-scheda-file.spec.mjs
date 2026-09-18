@@ -116,12 +116,60 @@ test('PO30-FILE-03 — le viste: «Modificati in questa sessione» elenca i file
   await expect(page.locator('#fileTreeFilter')).toBeVisible();
 });
 
+test('PO30-FILE-05 — la selezione multipla: casella sulla riga, piede col conteggio, e le azioni su TUTTI i file scelti', async ({ page }) => {
+  await scena(page);
+  await page.locator('#alberoFile .ft-row-folder', { hasText: 'src' }).click();
+  const nodo = (percorso) => page.locator(`#alberoFile .ft-node[data-percorso="${percorso}"]`);
+
+  /* Le cartelle non si selezionano: si aprono. */
+  await expect(page.locator('#alberoFile .ft-row-folder .ft-check'), 'una cartella non porta la casella').toHaveCount(0);
+  await expect(page.locator('.talos-file-selezione'), 'senza selezione il piede non esiste').toHaveCount(0);
+  await expect(page.locator('#alberoFile'), 'l’albero dichiara di essere multi-selezione').toHaveAttribute('aria-multiselectable', 'true');
+
+  /* La casella sta a opacità zero finché la riga non è sotto il mouse: si passa sopra, come una persona. */
+  await nodo('src/registro.mjs').hover();
+  await nodo('src/registro.mjs').locator('.ft-check').check();
+  await expect(page.locator('.talos-file-selezione__conteggio')).toHaveText('1 selezionato');
+  await expect(nodo('src/registro.mjs'), 'la riga selezionata lo DICE, non solo si colora').toHaveAttribute('aria-selected', 'true');
+
+  await nodo('src/rotte.mjs').hover();
+  await nodo('src/rotte.mjs').locator('.ft-check').check();
+  await expect(page.locator('.talos-file-selezione__conteggio')).toHaveText('2 selezionati');
+
+  /* L'azione agisce su TUTTI i file scelti, e si vede dove: nel composer. */
+  await page.locator('[data-azione-selezione="allega"]').click();
+  const testo = await page.locator('#composerInput').inputValue();
+  expect(testo).toContain('@src/registro.mjs');
+  expect(testo).toContain('@src/rotte.mjs');
+
+  /* La BARRA commuta la selezione della riga col fuoco (W3C ARIA APG, «Tree View», multi-select). */
+  await nodo('src/registro.mjs').locator(':scope > .ft-row').focus();
+  await page.keyboard.press(' ');
+  await expect(page.locator('.talos-file-selezione__conteggio')).toHaveText('1 selezionato');
+  await expect(nodo('src/registro.mjs')).toHaveAttribute('aria-selected', 'false');
+  await expect(nodo('src/rotte.mjs'), 'la barra ne commuta UNA, non svuota le altre').toHaveAttribute('aria-selected', 'true');
+
+  /* «Deseleziona tutto» svuota e toglie il piede. */
+  await page.locator('[data-azione-selezione="menu"]').click();
+  await page.getByRole('menuitem', { name: 'Deseleziona tutto' }).click();
+  await expect(page.locator('.talos-file-selezione'), 'senza selezione il piede sparisce').toHaveCount(0);
+  await expect(nodo('src/rotte.mjs')).toHaveAttribute('aria-selected', 'false');
+});
+
 for (const [larghezza, altezza] of [[1440, 900], [1024, 800]]) {
   for (const tema of ['dark', 'light']) {
     test(`PO30-FILE-FOTO ${larghezza}x${altezza} ${tema}`, async ({ page }) => {
       await scena(page, { larghezza, altezza, tema });
       await page.locator('#alberoFile .ft-row-folder', { hasText: 'src' }).click();
       await page.locator('#alberoFile .ft-row-folder', { hasText: 'tests' }).click();
+      /* La foto porta anche la selezione accesa: senza, il piede e la casella non si ispezionano. */
+      const uno = page.locator('#alberoFile .ft-node[data-percorso="src/registro.mjs"]');
+      await uno.hover();
+      await uno.locator('.ft-check').check();
+      const due = page.locator('#alberoFile .ft-node[data-percorso="src/rotte.mjs"]');
+      await due.hover();
+      await due.locator('.ft-check').check();
+      await page.locator('#railFile').hover(); // il mouse via dalla riga: la casella resta per la riga selezionata
       await page.waitForTimeout(300);
       mkdirSync(FOTO, { recursive: true });
       await page.screenshot({ path: join(FOTO, `file-${larghezza}x${altezza}-${tema}.png`) });
