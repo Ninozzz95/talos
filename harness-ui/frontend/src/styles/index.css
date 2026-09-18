@@ -726,7 +726,15 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
    dell'autore che copre un componente a fuoco; SC 2.5.8 «Target Size (Minimum)» — bersagli da 24 px
    e spaziatura, «sufficient space between targets makes it less likely that a user will accidentally
    activate the wrong control». Qui il tondo rubava proprio dei pixel al bersaglio «Nega». */
-.talos-chat-return__button{position:absolute; bottom:12px; left:auto; right:calc((var(--talos-larghezza-piede) - var(--talos-testo-chat)) / 2 - var(--talos-turno-coda) + 5px); width:36px; height:36px; min-width:36px; padding:0; border-radius:50%; box-shadow:var(--talos-shadow-card); z-index:3}
+/* ⛔⛔ 18/09/2026 — AL CENTRO, NON A DESTRA. Owner dal vivo: «sistema il pulsante torna in basso che
+   non è al centro ma a destra». Prima stava con un `right: calc(...)` — una formula lunga, tarata
+   per allinearlo al bordo del composer, che a ogni larghezza lo spostava di lato.
+   ⇒ Centratura senza `transform`: `left:0; right:0; margin-inline:auto` su una larghezza fissa.
+   ⛔ Non con `translateX(-50%)`: l'hover del pulsante dichiara `transform:none` (qui sotto e in
+   `superfici-galleggianti.css`, per la stabilità fotogramma-per-fotogramma pretesa da
+   CHAT-FONDO-HOVER-02) e azzererebbe la traslazione proprio al passaggio del puntatore — il tondo
+   salterebbe di 18 px sotto il mouse. */
+.talos-chat-return__button{position:absolute; bottom:12px; left:0; right:0; margin-inline:auto; width:36px; height:36px; min-width:36px; padding:0; border-radius:50%; box-shadow:var(--talos-shadow-card); z-index:3}
 .talos-chat-return__button:is(:hover,:active):not(:disabled){transform:none; background:var(--talos-panel-soft); border-color:var(--talos-border)}
 .talos-status-strip{display:flex; align-items:center; gap:12px; padding:9px 14px; margin-bottom:8px; border-radius:11px; border:1px solid var(--talos-border); background:var(--talos-panel)}
 .talos-status-strip__pulse{width:8px; height:8px; border-radius:50%; background:var(--talos-accent-hover); flex:none; animation:talos-pulse 1.6s var(--talos-motion-ease) infinite}
@@ -2367,7 +2375,10 @@ a.talos-button{text-decoration:none}
 .talos-context-menu{position:fixed;z-index:var(--talos-z-menu);width:max-content;min-width:13rem;max-width:min(var(--talos-inspector-w),calc(100vw - var(--talos-space-lg)));padding:var(--talos-space-sm);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
 .talos-context-menu [role=menuitem]{justify-content:flex-start;width:100%;font-size:var(--talos-font-size-sm)}
 .talos-context-menu__title{padding:var(--talos-space-sm);overflow-wrap:anywhere;font-size:var(--talos-font-size-xs);color:var(--talos-muted)}
-.talos-inspector-close{display:none}
+/* ⛔ 18/09/2026 — `.talos-inspector-close{display:none}` viveva qui, e perdeva contro
+   `.talos-button{display:inline-flex}` a pari specificità: è la ragione per cui la X restava accesa
+   e, sopra i 1240 px (dove la testata non è un flex), cadeva su una riga sua. Con la testata
+   rimossa su ordine dell'owner, la classe non esiste più nel template e le sue regole sono uscite. */
 /* ⛔⛔ 11/9 — QUESTO BLOCCO NON SI E' MAI ACCESO. Era agganciato a `.talos-shell.details-open`, e
  * `details-open` non la scrive NESSUNA riga di JavaScript: cercata in tutto il repo, compariva solo
  * in queste quattro righe di CSS. Quello che il JavaScript scrive davvero e' `open` sul PANNELLO
@@ -2386,8 +2397,9 @@ a.talos-button{text-decoration:none}
  *   accende (vedi il blocco delle due bandierine alla sezione 14). Il numero resta uno solo, qui. */
 @media(max-width:1240px){
  :root:not([data-vista="pagina"]) .talos-inspector.open{display:flex;position:fixed;inset:0 0 0 auto;width:min(var(--talos-inspector-w),100vw);z-index:calc(var(--talos-z-app-overlay) - 1);box-shadow:var(--talos-shadow-floating)}
- :root:not([data-vista="pagina"]) .talos-inspector.open .talos-inspector-close{display:inline-flex}
- :root:not([data-vista="pagina"]) .talos-inspector.open .talos-inspector__head{display:flex;align-items:center;gap:var(--talos-space-sm)}
+ /* ⛔ 18/09/2026 — qui stavano l'accensione della X e il flex della testata: sono uscite con la
+    testata stessa (ordine dell'owner: via il sopracciglio «Sessione», il titolo e la X). La colonna
+    si chiude dal pulsante «Dettagli» della testata della chat, dal velo e da Esc. */
  :root:not([data-vista="pagina"]) .talos-inspector.open .talos-resizer--inspector{display:none}
 }
 

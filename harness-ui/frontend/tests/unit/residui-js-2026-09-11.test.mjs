@@ -57,21 +57,27 @@ test('1 · le due bandierine esistono nel foglio, spente fuori e accese dentro l
   dentro(860, 'talos-sidebar-flottante');
 });
 
-test('2 · il pulsante X dei dettagli ha un ascoltatore', () => {
+test('2 · la colonna destra non ha più intestazione, e le vie di chiusura restano cablate', () => {
   /*
-   * `#chiudiDettagli` esisteva solo nel template e non compariva in NESSUN file di codice: velo ed
-   * Esc chiudevano, la X no. La delega `$$('[data-close-panel]')` era già cablata a `closePanels`.
+   * ⛔⛔ 18/09/2026 — QUESTA PROVA HA CAMBIATO SOGGETTO, NON SI È ALLENTATA.
+   * Fino a ieri pretendeva il CONTRARIO: che `#chiudiDettagli` esistesse nel template con
+   * `data-close-panel`, perché era l'unico pulsante di chiusura e senza quell'attributo non faceva
+   * niente (11/09). L'owner ha tolto l'intestazione intera della colonna destra — sopracciglio
+   * «Sessione», titolo della sessione e X — e con lei il pulsante. Il verso che conta adesso è che
+   * quell'intestazione **non torni** per sbaglio, e che le vie di chiusura rimaste siano davvero
+   * cablate: il pulsante «Dettagli» della testata della chat (la delega su
+   * `.talos-topbar__actions [data-azione]`), il velo ed Esc.
    */
   const html = leggi('index.template.html');
-  const bottone = html.match(/<button[^>]*id="chiudiDettagli"[^>]*>/);
-  assert.ok(bottone, 'il pulsante di chiusura dei dettagli non esiste più nel template');
-  assert.match(bottone[0], /data-close-panel/);
-  assert.match(leggi('src/legacy/app.js'), /\$\$\('\[data-close-panel\]'\)/);
+  assert.ok(!/talos-inspector__head/.test(html), "l'intestazione della colonna destra è tornata nel template");
+  assert.ok(!/id="chiudiDettagli"/.test(html), 'la X della colonna destra è tornata nel template');
+  assert.match(html, /data-azione="dettagli"/, 'manca il pulsante «Dettagli» della testata della chat: la colonna non si chiuderebbe più da lì');
+  assert.match(leggi('src/legacy/app.js'), /\.talos-topbar__actions \[data-azione\]/, 'la delega che fa funzionare il pulsante «Dettagli» non c\'è più');
 });
 
-test('2 · AL CONTRARIO — un pulsante di chiusura senza l\'attributo viene riconosciuto', () => {
-  const finto = '<button id="chiudiDettagli" class="talos-inspector-close" aria-label="Chiudi dettagli">';
-  assert.ok(!/data-close-panel/.test(finto), 'la fixture col difetto deve risultare senza ascoltatore');
+test('2 · AL CONTRARIO — un template con l\'intestazione viene riconosciuto', () => {
+  const finto = '<div class="talos-inspector__head"><span class="talos-eyebrow">Sessione</span></div>';
+  assert.ok(/talos-inspector__head/.test(finto), 'la fixture con la testata deve risultare con la testata');
 });
 
 test('3 · in app.js non restano stili in linea che il foglio dice già', () => {
