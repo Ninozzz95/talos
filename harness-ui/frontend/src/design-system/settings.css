@@ -49,10 +49,19 @@
  */
 .settings-search__input::-webkit-search-cancel-button { display: none; }
 /*
- * ⛔ LA × DENTRO IL CAMPO — 28×28, sopra la soglia di tocco di 24×24 di WCAG 2.5.8 che il
- *   cancello misura. Compare solo mentre si cerca (`clear.hidden = !searching`), e siccome è in
- *   posizione assoluta **non sposta niente** quando appare: è questo che toglie il salto di 48 px.
- *   Il nome accessibile arriva da `aria-label` (in `refresh()`), perché dentro c'è solo l'icona.
+ * ⛔ LA × DENTRO IL CAMPO — 28×28. Compare solo mentre si cerca (`clear.hidden = !searching`) e,
+ *   essendo in posizione assoluta, **non sposta niente** quando appare: è questo che toglie il
+ *   salto di 48 px. Il nome accessibile arriva da `aria-label` (in `refresh()`): dentro c'è solo
+ *   l'icona.
+ * ⛔ E SULLA SOGLIA DI TOCCO QUESTO COMMENTO DICEVA IL FALSO — corretto dalla review avversaria
+ *   del 18/09/2026, che l'ha misurato: il cancello `baseline-shell` misura i controlli con
+ *   `width>0 && height>0` e non riempie mai `#settingsSearch`, quindi a campo vuoto la × è
+ *   `display:none` ed **è esclusa** dalla misura. La soglia esiste come numero (24, WCAG 2.5.8
+ *   AA) ma **non misura questo bottone**: scriverlo era una comodità, non un fatto.
+ *   ⛔ La × passa la soglia AA (28 > 24) e **non** passa la AAA, che è 44 (WCAG 2.5.5): 44 non ci
+ *   stanno in un campo alto 38. Prima era 141×40 col testo «Cancella ricerca» accanto — più
+ *   grande, ma faceva saltare la colonna di 48 px: fra le due si sceglie quella che non rompe il
+ *   layout, e la si dichiara.
  */
 .settings-search__clear { position: absolute; inset-inline-end: 4px; top: 50%; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--talos-muted); cursor: pointer; transform: translateY(-50%); }
 .settings-search__clear:hover { color: var(--talos-text); background: var(--talos-card-hover); }

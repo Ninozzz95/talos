@@ -156,7 +156,18 @@ test('INTELAIATURA-06 · il cercatore del mockup è in sidebar, con la sua scorc
    *   finestra 560). Era verde solo perché la viewport predefinita di Playwright è 1280.
    *   La condizione qui sopra invece vale in **entrambi** i layout.
    */
-  if (misure.colonna < misure.intelaiatura - 1) {
+  /*
+   * ⛔ E LA GUARDIA GUARDA LA DISPOSIZIONE, NON L'ESITO — seconda correzione della stessa review,
+   *   e la più insidiosa. La stesura precedente era `if (colonna < intelaiatura - 1)`: una guardia
+   *   **CIRCOLARE**, perché la condizione che la spegne è esattamente la regressione che questa
+   *   prova esiste per prendere. Misurato dalla review iniettando `.talos-settings{display:block}`
+   *   a 1280 px: forma vecchia `910 < 463,5` → **rossa, morde**; forma nuova → guardia falsa →
+   *   **verde**. La domanda giusta non è «quanto è larga la colonna» (esito) ma «quale
+   *   disposizione è accesa» (causa): in `grid` c'è una sidebar e il campo deve starci dentro; in
+   *   `block`, sotto i 660 px, il campo È la larghezza della colonna e non c'è niente da pretendere.
+   */
+  const disposizione = await page.evaluate(() => getComputedStyle(document.querySelector('#schermoImpostazioni .talos-settings')).display);
+  if (disposizione === 'grid') {
     expect(misure.campo, 'la barra è tornata a tutta larghezza: ' + JSON.stringify(misure)).toBeLessThan(misure.intelaiatura / 2);
   }
 });
@@ -170,18 +181,34 @@ test('INTELAIATURA-10 · cercando, la colonna non salta', async ({ page }) => {
    *   tutto quello che sta sotto (elenco delle sezioni e «COMPORTAMENTO» compresi) **scendeva di
    *   48 px a ogni ricerca**, dentro una colonna `position: sticky`. Con lo stesso nodo rimesso
    *   nella pagina il salto era di 3 px: era la colonna a causarlo.
-   *   Ora la × sta DENTRO il campo, in posizione assoluta, e la riga è alta uguale. Qui si misura
-   *   la distanza fra la barra e la prima voce della colonna, prima e durante la ricerca.
+   *   Ora la × sta DENTRO il campo, in posizione assoluta, e la riga è alta uguale.
+   * ⛔⛔ E LA PRIMA STESURA DI QUESTA PROVA ERA CIECA — trovato dalla review avversaria del
+   *   18/09/2026, che l'ha dimostrato: misurava il **gap** (`voce.top - barra.bottom`), e quando la
+   *   barra va a capo il gap **resta identico** — si spostano le posizioni ASSOLUTE, non la
+   *   distanza fra i due. Misure della review, sullo stesso pacchetto vecchio: salto assoluto
+   *   **48 px** (barra 38→86, voce 235→283) e metrica del gap **0 → verde lo stesso**. La prova
+   *   andava rossa solo per l'ALTRA asserzione (`.settings-search-field`, che nel markup vecchio
+   *   non esiste): dichiarava di mordere e non mordeva.
+   *   ⇒ Si misurano DUE cose, e la prima vale in ogni disposizione:
+   *     1. l'ALTEZZA DELLA BARRA non cambia — è la causa diretta del salto, e non dipende dal
+   *        layout (sotto i 660 px l'elenco è `display:none` e la voce ha rettangolo 0×0: lì il
+   *        gap sarebbe 0−0=0, verde per costruzione — il buco segnalato come D4);
+   *     2. la posizione della prima voce **relativa alla barra** (`voce.top - barra.top`), che
+   *        cresce di quanto la barra si alza.
    */
-  const distanza = () => page.evaluate(() => {
+  const stato = () => page.evaluate(() => {
     const barra = document.querySelector('#schermoImpostazioni .settings-toolbar').getBoundingClientRect();
     const voce = document.querySelector('#schermoImpostazioni .settings-nav__list [role="tab"]').getBoundingClientRect();
-    return Math.round(voce.top - barra.bottom);
+    return { altezzaBarra: Math.round(barra.height), relativa: Math.round(voce.top - barra.top), voceVisibile: voce.height > 0 };
   });
-  const prima = await distanza();
+  const prima = await stato();
   await page.locator('#settingsSearch').fill('tema');
-  const durante = await distanza();
-  expect(Math.abs(durante - prima), `la colonna salta di ${durante - prima} px mentre si cerca`).toBeLessThanOrEqual(8);
+  await expect(page.locator('#schermoImpostazioni [data-settings-clear]')).toBeVisible();
+  const durante = await stato();
+  expect(Math.abs(durante.altezzaBarra - prima.altezzaBarra), `la barra cambia altezza cercando: ${prima.altezzaBarra} → ${durante.altezzaBarra}`).toBeLessThanOrEqual(2);
+  if (prima.voceVisibile) {
+    expect(Math.abs(durante.relativa - prima.relativa), `la colonna salta di ${durante.relativa - prima.relativa} px mentre si cerca`).toBeLessThanOrEqual(8);
+  }
   // E la × di cancellazione c'è, sta DENTRO il campo e non lo copre: è quello che evita il salto.
   const pulisci = page.locator('#schermoImpostazioni [data-settings-clear]');
   await expect(pulisci).toBeVisible();
@@ -190,7 +217,7 @@ test('INTELAIATURA-10 · cercando, la colonna non salta', async ({ page }) => {
   expect(dentro.sovrapposta, 'la × deve restare dentro il bordo del campo').toBe(true);
   await expect(pulisci).toHaveAttribute('aria-label', /.+/);
   await page.locator('#settingsSearch').fill('');
-  expect(await distanza(), 'la colonna deve tornare dov\'era').toBe(prima);
+  expect(await stato(), 'la colonna deve tornare dov\'era').toEqual(prima);
 });
 
 test('INTELAIATURA-07 · Ctrl K apre la palette, Esc la chiude, e il fuoco torna al bottone', async ({ page }) => {

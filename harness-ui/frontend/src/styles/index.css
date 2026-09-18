@@ -1656,7 +1656,17 @@ a.talos-button{text-decoration:none}
    nessuna regola di questa riga e quindi cresceva con lo spazio che avanza.
    ⇒ Stessa misura del nativo: l'intenzione c'era, mancava il selettore. Così il campo di ricerca
    riprende lo spazio (è quello in cui si scrive) e l'ordine torna un controllo largo 150. */
-.talos-toolbar--hf .calm-control--select{flex:0 0 150px; min-width:0}
+/* ⛔ 220, NON 150 — e il 220 è DEL MOCKUP, non un numero aggiustato per far passare una prova.
+   La prima stesura diceva 150 (la misura scritta sopra per il select NATIVO) e **tagliava
+   l'etichetta**: con «Aggiornati di recente» scelto il testo chiede **135 px** e ne aveva **97**
+   (misurato dalla review avversaria del 18/09/2026, che l'ha riprodotto con A/B: prima della
+   regola il controllo cresceva e l'etichetta entrava sempre). Il mockup dà a quel controllo
+   `max-width: 220px` (`.catalog-sorting .calm-control`, `prototypes/calm-lab/TALOS-Calm-Lab.html`):
+   a 220 l'etichetta ha 135 su 135 e il campo di ricerca scende a 648 con **596 utili contro i 171
+   del suo segnaposto**, quindi il difetto originale (il campo schiacciato) NON si riapre.
+   ⛔ `min-width: 0` resta: senza, un contenuto più largo del dovuto sfonderebbe la riga invece di
+   accorciarsi, e in `flex-wrap: nowrap` è la riga intera a pagare. */
+.talos-toolbar--hf .calm-control--select{flex:0 0 220px; min-width:0}
 @media (max-width:1100px){
   .talos-toolbar--hf{flex-wrap:wrap}
   .talos-toolbar--hf .talos-field{flex:1 1 100%}
