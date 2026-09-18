@@ -13904,6 +13904,60 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     row?.classList.toggle('is-selezionato', acceso);
     aggiornaPiedeSelezioneFile();
   }
+  /*
+   * ⭐⭐ PO-30, fetta 1 (18/09/2026) — LA RINOMINA IN RIGA, come nel laboratorio della PR #33
+   *   (`explorer-view.js:81`: `renaming === f.id ? <input id="renameInput"> : <span class="fname">`,
+   *   poi `focus()` e `select()`).
+   * I tasti vengono dalle convenzioni dei prodotti veri (ricerca 18/09/2026: Visual Studio UX
+   * guidelines «renaming should be done in place»; VS Code; React Complex Tree; headless-tree):
+   * **F2** avvia sulla riga col fuoco, **Invio** conferma, **Esc** annulla, e il fuoco entra nel
+   * campo col nome GIÀ selezionato — il solo nome, senza estensione, che è la parte che quasi mai
+   * si vuole cambiare.
+   * ⛔ La guardia `risolto` chiude la strada al DOPPIO commit: senza, un Invio seguito dalla perdita
+   *   del fuoco (che il ridisegno provoca da solo) farebbe partire due rinomine sullo stesso file.
+   * ⛔ E le frecce non escono dal campo: `stopPropagation` sul keydown, o mentre scrivi il nome la
+   *   selezione si sposterebbe nell'albero (la «navigazione soppressa durante la modifica» che i
+   *   prodotti citati fanno tutti).
+   */
+  function avviaRinominaInRiga(li, row, percorso, nome) {
+    if (!li || li.dataset.rinominaInCorso === 'si') return;
+    const etichetta = $(':scope > .ft-name', row);
+    if (!etichetta) return;
+    li.dataset.rinominaInCorso = 'si';
+    const campo = document.createElement('input');
+    campo.type = 'text';
+    campo.className = 'ft-rename talos-field__input';
+    campo.value = nome;
+    campo.setAttribute('aria-label', `Nuovo nome per ${nome}`);
+    let risolto = false;
+    const ripristina = () => { delete li.dataset.rinominaInCorso; campo.replaceWith(etichetta); row.focus({ preventScroll: true }); };
+    const conferma = async () => {
+      if (risolto) return;
+      const nuovo = campo.value.trim();
+      if (!nuovo || nuovo === nome) { risolto = true; ripristina(); return; }
+      risolto = true;
+      const precedente = state.alberoFileTarget;
+      state.alberoFileTarget = { percorso, nome };
+      const esito = await rinominaFileBersaglio(nuovo);
+      if (!esito.ok) { // l'errore l'ha già detto `rinominaFileBersaglio`; qui si torna indietro
+        state.alberoFileTarget = precedente;
+        risolto = false;
+        ripristina();
+      }
+      /* Riuscita: `rinominaFileBersaglio` invalida il livello e l'albero si ridisegna da solo. */
+    };
+    campo.addEventListener('keydown', (evento) => {
+      evento.stopPropagation();
+      if (evento.key === 'Enter') { evento.preventDefault(); void conferma(); }
+      else if (evento.key === 'Escape') { evento.preventDefault(); risolto = true; ripristina(); }
+    });
+    campo.addEventListener('blur', () => { void conferma(); }); // come VS Code: uscire dal campo conferma
+    etichetta.replaceWith(campo);
+    campo.focus();
+    const punto = nome.lastIndexOf('.');
+    if (punto > 0) campo.setSelectionRange(0, punto); else campo.select();
+  }
+
   function aggiornaPiedeSelezioneFile() {
     /* ⛔ Il contenitore è la scheda File VIVA (`#alberoCartella`, dentro `#railFile`), non la
        sezione legacy `#inspector-files`: quella è la superficie d'esempio del frammento, e il
@@ -15665,6 +15719,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const acceso = !fileSelezionati().has(li.dataset.percorso);
         if (casella) casella.checked = acceso;
         commutaSelezioneFile(li.dataset.percorso, acceso, li, row);
+        return;
+      }
+      /* ⭐ 18/09 — F2 rinomina in riga la riga col fuoco (convenzione di VS Code e di Visual Studio;
+         vedi `avviaRinominaInRiga`). Sulle cartelle non si rinomina: si aprono. */
+      if (e.key === 'F2' && !eCartella) {
+        e.preventDefault();
+        avviaRinominaInRiga(li, row, li.dataset.percorso, $(':scope > .ft-name', row)?.textContent || '');
         return;
       }
       if (e.key === 'ArrowDown') { e.preventDefault(); if (righe[i + 1]) impostaFocusRigaAlbero(ul, righe[i + 1]); }

@@ -156,6 +156,44 @@ test('PO30-FILE-05 — la selezione multipla: casella sulla riga, piede col cont
   await expect(nodo('src/rotte.mjs')).toHaveAttribute('aria-selected', 'false');
 });
 
+test('PO30-FILE-06 — la rinomina IN RIGA: F2 apre il campo sul nome, Esc annulla, Invio manda la richiesta', async ({ page }) => {
+  const richieste = [];
+  await page.route('**/tree/rename', (route) => {
+    richieste.push(route.request().postDataJSON());
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: {} }) });
+  });
+  await scena(page);
+  await page.locator('#alberoFile .ft-row-folder', { hasText: 'src' }).click();
+  const nodo = (percorso) => page.locator(`#alberoFile .ft-node[data-percorso="${percorso}"]`);
+
+  await nodo('src/rotte.mjs').locator(':scope > .ft-row').focus();
+  await page.keyboard.press('F2');
+  const campo = nodo('src/rotte.mjs').locator('.ft-rename');
+  await expect(campo, 'il campo prende il posto del nome, non apre un dialogo').toBeVisible();
+  await expect(campo).toHaveValue('rotte.mjs');
+  /* Il nome è selezionato SENZA l'estensione: è la parte che quasi mai si vuole cambiare. */
+  const selezionato = await campo.evaluate((n) => n.value.slice(n.selectionStart ?? 0, n.selectionEnd ?? 0));
+  expect(selezionato, 'la selezione copre il nome, non l’estensione').toBe('rotte');
+
+  /* Esc annulla: il nome torna com'era e NESSUNA richiesta parte. */
+  await page.keyboard.press('Escape');
+  await expect(campo).toHaveCount(0);
+  await expect(nodo('src/rotte.mjs').locator('.ft-name')).toHaveText('rotte.mjs');
+  expect(richieste.length, 'Esc non rinomina niente').toBe(0);
+
+  /* Invio conferma: la richiesta parte con il nome NUOVO, e una sola volta. */
+  await nodo('src/rotte.mjs').locator(':scope > .ft-row').focus();
+  await page.keyboard.press('F2');
+  await nodo('src/rotte.mjs').locator('.ft-rename').fill('rotte-nuovo.mjs');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => richieste.length).toBe(1);
+  expect(richieste[0]).toEqual({ percorso: 'src/rotte.mjs', nuovoNome: 'rotte-nuovo.mjs' });
+  /* ⛔ E la perdita del fuoco NON deve produrre una seconda richiesta (la guardia `risolto`). */
+  await page.locator('#alberoFile').click({ position: { x: 5, y: 5 } }).catch(() => {});
+  await page.waitForTimeout(150);
+  expect(richieste.length, 'il doppio commit è la trappola della rinomina in riga').toBe(1);
+});
+
 for (const [larghezza, altezza] of [[1440, 900], [1024, 800]]) {
   for (const tema of ['dark', 'light']) {
     test(`PO30-FILE-FOTO ${larghezza}x${altezza} ${tema}`, async ({ page }) => {
