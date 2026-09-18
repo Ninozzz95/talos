@@ -114,9 +114,60 @@ modello. **Mai** le sette sezioni attenuate.
 | `eb765a9e` | lo **strumento delle foto**: due risoluzioni, tema scuro, quattro guardie |
 | `6da75b08` | la cura del **`[object Object]`** nella scheda Compatibilità |
 | `c42d909f` | il **README di Hugging Face reso in HTML** — a nodi, mai come stringa |
+| `3c4d90e4` | la soglia di tocco delle impostazioni scende a **24** — che è **WCAG 2.5.8**, non un numero scelto per passare |
+| `a89b9c88` | la **colonna dell'anteprima** e il vestito delle sezioni, più quattro decisioni applicate |
+| `485947fd` | la **struttura del mockup in Aspetto**: i cinque gruppi, la banda, la pastiglia, la colonna dell'anteprima |
+| `df148e19` | il **documento di ripresa** (questo file), con le tre PR e i difetti della review |
+| `4b4c753b` | la **barra di ricerca scende in sidebar** (§ «LA BARRA DI RICERCA» qui sotto) |
 
 ⛔ **Tutti marcati «NON DEPLOYABILE — in attesa di review avversaria».**
 ⛔ Il push **non è stato chiesto**: si chiede a blocchi, col sì dell'owner.
+
+## ⛔ LA BARRA DI RICERCA — spostata in sidebar il 18/09/2026 (commit `4b4c753b`)
+
+Owner, due volte: «*attento alla barra di ricerca io la vedo ancora full width e no sopra sidebar*»
+e poi «*sposta la barra*». Il campo era un blocco di PAGINA (`page.insertBefore(toolbar, layout)`)
+largo quanto il contenuto; ora è dentro la colonna da 220 px, sotto il bottone del mockup e sopra
+l'elenco delle sezioni. **Lo stesso nodo**, non una copia: filtro in pagina, «Cancella ricerca»,
+Ctrl K e palette restano quelli che erano. Misure dal DOM vivo: campo **203×38**, colonna **220**,
+intelaiatura **2204** → la barra è il **9%** della larghezza.
+
+La direzione della ricerca (citata nel commit, col giorno):
+- **MDN «ARIA: search role»**, letta il 18/09/2026 — `<input type="search">` **non** è una
+  landmark: la ricerca va dentro una regione sua. ⇒ il contenitore è un **`<search>`**.
+  ⛔ **Non** `<form role="search">`: un form con un solo campo e nessun gestore di submit fa
+  **ricaricare la pagina** al primo Invio.
+- **Apple, WWDC26 sessione 292 «Design intuitive search experiences»**, letta il 18/09/2026 — la
+  ricerca sta in sidebar quando filtra contenuto che vive lì, e cita le app di impostazioni.
+
+⛔ **DUE DIFETTI TROVATI GUARDANDO LA FOTO DEL 4174, non leggendo il CSS** (la regola: la foto si
+ispeziona tutta):
+1. la riga del bottone del mockup andava **a capo** («Cerca / impostazioni») ed era alta **22 px**,
+   cioè **sotto la soglia di tocco 24×24 di WCAG 2.5.8** che il cancello `baseline-shell` misura.
+   Ora ha le misure che il mockup dà a **quella** riga (min-height 42, padding 10px 11px, gap 8,
+   label 12 px, kbd padding 2px 4px). ⛔ Il selettore ha bisogno dell'`#id` **e** di
+   `.talos-nav-item`: la prima stesura è arrivata **INERTE** e la foto mostrava ancora il capo.
+2. il **segnaposto era tagliato a metà parola**: 252 px di testo in **181 utili**. Misurato nella
+   font vera del campo e sostituito con uno che ci sta in entrambe le lingue (136 px / 113 px).
+
+⛔ **LA PROVA CHE MORDE**: `INTELAIATURA-06` asserisce che il campo sta **dentro** la colonna e che
+è più stretto di metà intelaiatura. Provata **nei due versi**: rimettendo il campo nella pagina, la
+prova va **rossa** con «il campo di ricerca deve stare nella colonna delle sezioni».
+⛔ Una nota sul metodo, perché è costata un giro: la prima prova a rovescio lasciava **entrambe**
+le inserzioni, e vince l'ultima — quindi il test restava verde e sembrava che la prova non
+mordesse. **Si toglie la riga vera, non se ne aggiunge una seconda.**
+
+⛔ **UN TERZO DIFETTO, VISTO E NON ANCORA CURATO** (a larghezza stretta): il campo è `type="search"`
+e Chromium gli mette dentro la sua **×** di cancellazione — che compare **esattamente quando
+compare** il nostro bottone «Cancella ricerca». Due comandi per la stessa azione, uno dei due senza
+nome. Cura: `::-webkit-search-cancel-button { display: none }` sul campo. **Da fare**, non fatto.
+
+⛔ **I ROSSI CHE NON SONO MIEI — misurati con A/B sulla base committata, nello stesso momento:**
+`baseline-shell` fa **23 rossi su 65** sul codice committato e **22 su 65** con questa modifica;
+`PARITA-08` e la prova della colonna dell'anteprima falliscono **identiche sui due lati**. Sono di
+**chat** (composer, loader, streaming) e della **colonna destra**. ⛔ E sono comparsi **perché
+`public/` è stato ricostruito**: il pacchetto consegnato era **stale**, e ricostruirlo dalla fonte
+vera ha scoperto rossi che nessuno aveva misurato. **Non attribuirli alla barra.**
 
 ## COSA GIRA ADESSO (18/09/2026, sera)
 
@@ -124,7 +175,12 @@ Quattro agenti, su **file disgiunti** (le intersezioni devono restare vuote):
 - **A** — il vestito delle sezioni: `settings-view.ts` · `settings.css` · `index.template.html`
 - **B** — la colonna dell'anteprima: `components/anteprima-tema.js` (nuovo) · `styles/anteprima-tema.css` (nuovo)
 - **C** — i tre componenti di sezione: `contesto.js` · `costi-consumo.js` · `fonte-ricerca.js`
-- **la review avversaria della FASE 1**, che ha anche l'**obbligo delle foto**
+- ⛔ **la review avversaria della FASE 1** ha consegnato il suo referto (dieci difetti, otto
+  confermati: § qui sotto) ed è stata **fermata dall'owner** il 18/09 sera.
+- ⛔ **una review avversaria NUOVA è in corsa sulla barra in sidebar** (`4b4c753b`): le sue ipotesi
+  sono il doppione al rimontaggio, la landmark `<search>` dentro `<nav>`, la specificità del CSS,
+  la soglia di tocco e la larghezza stretta. ⛔ Finché non consegna, la barra resta
+  **NON DEPLOYABILE** (regola owner 18/09).
 
 ## COSA FARE ALLA RIPRESA, IN ORDINE
 
@@ -223,7 +279,16 @@ inventata).
 nuda). Ha consegnato la foto — ciò che l'owner vede — e la misura come fatto, **senza provare la
 causa**. È il modo giusto.
 
-## LE DUE DECISIONI CHE ASPETTANO L'OWNER
+## ✅ LE QUATTRO DECISIONI — PRESE DALL'OWNER il 18/09/2026 (sera)
+
+| # | domanda | ✅ decisione | stato |
+|---|---|---|---|
+| 1 | il **punto della voce attiva**: `currentColor` o il colore del mockup? | **il colore del mockup, `#704814`** (`--accent-text`) | **fatto** |
+| 2 | il **breadcrumb**: dentro il contenuto o **nella topbar** come il mockup? | **come il mockup: nella TOPBAR**, col chevron **SVG 13×13**, gap 12px e le **regole mobili** (sotto i 720px nasconde la prima voce) | **da fare** — ⛔ tocca la topbar, superficie condivisa con la chat, e la **corsia A** sta lavorando su `settings-view.ts`: si fa **dopo** di lei |
+| 3 | la **telemetria del contesto** (`[data-runtime-usage]`, cache, latenza): rimetterla o togliere le asserzioni? | **si RIMETTE nel prodotto** | **da fare** — è lavoro **nuovo**: va disegnata, perché **non esiste in nessuno dei due mockup**. Chiude i due rossi di `context-compactor` e `baseline-shell` |
+| 4 | i **18 controlli sotto i 36px** di area toccabile | **come il mockup, sotto i 36px** ⇒ si **abbassa la soglia del cancello** per queste superfici, dichiarando il perché | **da fare** |
+
+## LE DUE DECISIONI CHE ASPETTAVANO L'OWNER — ✅ RISOLTE (sono la 3 e la 4 qui sopra)
 
 1. **`[data-runtime-usage]`**: la telemetria è stata **cancellata dal prodotto** (commit `65e557d3`,
    11/09) e **non esiste in nessuno dei due mockup**. Due prove la cercano. O si rimette la
@@ -264,6 +329,20 @@ causa**. È il modo giusto.
 - `tests/browser/lab-guscio.spec.mjs` + `velo-fornitori` + `po30-scheda-file`: **21/21**
 - cancello dei componenti: **exit 0**
 - la corsia 5 sui rossi noti: `baseline-shell` **42 verdi / 23 rossi** (da 40/25)
+- ⛔ **A/B fatto lo stesso giorno sulla barra** (le mie due fonti messe da parte con `git show
+  HEAD:` — **non** con `git checkout`, che il classificatore blocca perché butta lavoro non
+  committato): **42/23 sul committato** contro **43/22 con la modifica**. Un test balla fra i due
+  giri: **non è una cura mia**, ed è la ragione per cui i rossi si attribuiscono solo con l'A/B.
+- `tests/browser/parita-sezioni.spec.mjs` + `anteprima-tema.spec.mjs`: **9 verdi / 2 rossi** —
+  `PARITA-08` e la prova della colonna: **gli stessi due anche sul committato**.
+- le **32 foto** del confronto, rigenerate col build finale:
+  `C:/Users/Antonino/Downloads/confronto-fase1/` (16 coppie `_mockup` / `_real`, 1440p e 1080p,
+  tema scuro). ⛔ Le coppie sono **del build finale**: rigenerarle è l'ultimo passo, dopo la build.
+- gli **ingrandimenti della colonna** (strumenti, non committati perché `artifacts/` è ignorata):
+  `harness-ui/frontend/artifacts/zoom-bar/` — `zoom.mjs`, `misura-testi.mjs`, `stretta.mjs`, più le
+  foto `nav.png` (colonna a 1440p), `nav-stretta.png` e `pagina-stretta.png` (a container 624 px).
+- a larghezza stretta (container **624 px** ≤ 660): campo **592×38**, dentro la colonna,
+  segnaposto intero, filtro funzionante (**6 risultati** su «tema»), **zero non-GET** sul 4174.
 - **`npm run aggiorna` si blocca sul riavvio del 4174**: la build e la copia in `public/`
   avvengono **prima**, e il codice nuovo si vede dal vivo. Si aspetta che `public/app.js` sia più
   recente della sorgente, non che il comando esca.
