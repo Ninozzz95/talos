@@ -149,6 +149,14 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
    *   è un link morto (VA ADR 002, dicembre 2024, che ha superato l'ADR 001).
    */
   const breadcrumb = node('nav', 'settings-breadcrumb'); breadcrumb.setAttribute('aria-label', 'Breadcrumb');
+  /*
+   * ⛔ `data-settings-chrome` NON È DECORATIVO: è l'unica cosa che la rimozione cerca
+   *   (`for (const element of screen.querySelectorAll('[data-settings-chrome]')) element.remove()`).
+   *   Senza, il breadcrumb **si duplica a ogni rimontaggio** — trovato dalla review avversaria del
+   *   18/09 con un percorso vero (Sicurezza e privacy ▸ Ripristina i valori iniziali ▸ conferma):
+   *   i breadcrumb diventavano **1 → 2**, entrambi visibili, a y=182 e y=338.
+   */
+  breadcrumb.dataset.settingsChrome = '';
   const crumbList = node('ol'); crumbList.setAttribute('role', 'list'); const crumbWhere = node('li'); const crumbHere = node('li'); const crumbNow = node('span');
   crumbNow.dataset.settingsCrumb = ''; crumbNow.setAttribute('aria-current', 'page'); crumbHere.append(crumbNow);
   crumbList.append(crumbWhere, crumbHere); breadcrumb.append(crumbList);

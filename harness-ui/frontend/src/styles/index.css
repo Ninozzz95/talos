@@ -1761,7 +1761,15 @@ a.talos-button{text-decoration:none}
  *   Mockup, regola `.nav-item`: `gap:11px`, `min-height:42px`, `margin:3px 0`,
  *   `.nav-item .icon{17px}`, `.nav-item.active:after{5×5, margin-left:auto}`.
  */
-#schermoImpostazioni .talos-settings__nav .talos-nav-item{height:auto;min-height:42px;gap:11px;margin:3px 0}
+/*
+ * ⛔ QUI SOLO CIÒ CHE NON C'È GIÀ ALTROVE. `min-height:42px`, `padding:10px 12px`, il raggio di
+ *   8px e i 13px dell'etichetta sono in `src/design-system/settings.css:28-29`, su
+ *   `#schermoImpostazioni .settings-nav__item` — e quella è la regola che VINCE. Ripeterli qui era
+ *   una **copia che ombreggiava la misura**: la review avversaria del 18/09 l'ha provato togliendo
+ *   la riga, e la prova restava verde — cioè non distingueva chi delle due comanda. Cancellata.
+ *   Restano il `gap` e il `margin`, che in `settings.css` non ci sono.
+ */
+#schermoImpostazioni .talos-settings__nav .talos-nav-item{height:auto;gap:11px;margin:3px 0}
 /*
  * ⛔ IL PUNTO DELLA VOCE ATTIVA — nel mockup c'è (`.nav-item.active:after`), qui non c'era:
  *   misurato `::after` → `content: none`. Si aggancia ad `aria-current="page"`, che la voce

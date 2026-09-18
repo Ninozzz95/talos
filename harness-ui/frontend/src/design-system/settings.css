@@ -39,8 +39,11 @@
 /*
  * ⭐ 18/09/2026 — `letter-spacing` del titolo di sezione: il mockup ha `-1.76px` su un titolo da
  *   32px, cioè `-.055em`. Il valore era `-.02em`: il titolo era più largo di quello del mockup.
- *   In `em` e non in `px` perché sotto i 720px il titolo scende a 1.125rem (riga 101) e la
- *   spaziatura deve scendere con lui, invece di restare tarata su una misura che non c'è più.
+ *   In `em` e non in `px` perché quando il contenitore si stringe il titolo scende a 1.125rem e
+ *   la spaziatura deve scendere con lui, invece di restare tarata su una misura che non c'è più.
+ * ⛔ LA SOGLIA VERA, misurata dalla review avversaria il 18/09/2026: è un **`@container settings
+ *   (max-width: 660px)`** (righe 149-166 di questo foglio), **non** «sotto i 720px» come diceva
+ *   questa nota. Il comportamento era giusto; era la nota a portare fuori strada.
  */
 .settings-section-heading h2 { margin: 0 0 7px; font-size: 2rem; letter-spacing: -.055em; font-weight: 600; line-height: 1.2; }
 .settings-section-heading p { margin: 0; color: var(--talos-muted); font-size: .8125rem; line-height: 1.65; max-width: 65ch; }
@@ -54,7 +57,16 @@
  * ⛔ `list-style:none` toglie il marker della lista e con esso, su alcuni motori, il RUOLO di lista:
  *   per questo l'`<ol>` porta `role="list"` nel markup — così resta annunciata come lista ordinata.
  */
+/*
+ * ⛔ I `li` DEL BREADCRUMB NON SONO QUELLI DELLE LISTE CHIAVE/VALORE.
+ *   `src/styles/index.css:1802` ha `#schermoImpostazioni li{padding:10px 0;border-top:1px solid …;font-size:13px}`
+ *   — scritta per le liste di fatti, e colpisce ANCHE questi, che vivono dentro `#schermoImpostazioni`.
+ *   Trovato dalla review avversaria del 18/09 misurando il DOM: li con `padding 10px 0`, un
+ *   `border-top` che nessuno voleva, `font-size 13px` e altezza **39px**, mentre nel mockup i
+ *   crumb non hanno né bordo né padding interno.
+ */
 .settings-breadcrumb { margin: 0 0 8px; }
+.settings-breadcrumb li { padding: 0; border-top: 0; font-size: inherit; }
 .settings-breadcrumb ol { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; color: var(--talos-muted); font-size: .75rem; line-height: 1.4; }
 .settings-breadcrumb li + li::before { content: '›'; margin-inline-end: 8px; opacity: .65; }
 .settings-breadcrumb [aria-current="page"] { color: var(--talos-text); }
