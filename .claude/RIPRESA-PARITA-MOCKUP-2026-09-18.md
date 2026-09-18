@@ -126,6 +126,8 @@ modello. **Mai** le sette sezioni attenuate.
 | `1f22bb32` | le carte del runtime **parlano, non stampano codici** (`RUNTIME_UNREACHABLE` → frase) |
 | `a59aa16a` | la scheda del modello: «Sconosciuto · Sconosciuto» diventa **una parola sola** |
 | `47ee6c69` | la tab **Download** tiene **un titolo, non tre** |
+| `a253687a` | la **seconda review**: l'etichetta dell'ordine (150 → **220**, il numero del mockup) e **due prove che non mordevano** |
+| `f856e853` | le due meta-prove del revisore diventano **guardie della cura**, e la guardia guarda la **disposizione** |
 
 ⛔ **Tutti marcati «NON DEPLOYABILE — in attesa di review avversaria».**
 ⛔ Il push **non è stato chiesto**: si chiede a blocchi, col sì dell'owner.
@@ -260,6 +262,55 @@ modello), confrontate coi rispettivi lati del mockup. Tre difetti, tutti **veri*
 LE NUOVE CHAT» · budget RAM · «Nessun passaggio automatico al cloud») è la FASE 3; il bottone
 **«Configura»** dei fornitori è la FASE 4; la tab del mockup si chiama «Modelli» e la nostra
 «Hugging Face» — **decisione dell'owner**, non una divergenza.
+
+## ⛔⛔ LA SECONDA REVIEW — sulle due CURE: cinque difetti, quattro curati in `a253687a`/`f856e853`
+
+⛔ **Ogni mia modifica vuole la sua review avversaria, non solo la superficie in generale.** Il
+revisore ha costruito un **secondo pacchetto** col codice di `bb148037~1` e l'ha servito con
+`TALOS_HARNESS_UI_PUBLIC_DIR`: gli A/B sono fatti lì, il 4174 non l'ha mai navigato.
+
+**D1 — [ALTA] la MIA cura delle faccette tagliava l'etichetta dell'ordine.**
+`flex: 0 0 150px` — la misura scritta per il select **nativo** — inchiodava il controllo: con
+«Aggiornati di recente» il testo chiede **135 px** e ne aveva **97**, cioè «Aggiornati di …». A/B
+dichiarato: prima della regola il controllo cresceva e l'etichetta entrava sempre ⇒ **introdotto da
+me**. Cura: **220 px, che è il numero del MOCKUP** (`.catalog-sorting .calm-control{max-width:220px}`
+in `prototypes/calm-lab/TALOS-Calm-Lab.html`). Verificato sul 4174: controllo 220, etichetta
+**135/135 non tagliata**, campo di ricerca 1288 con **1238 utili contro i 171 del segnaposto** — il
+difetto originale non si riapre.
+
+**D2 — [ALTA, la PROVA] `INTELAIATURA-10` era CIECA.** Misurava il **gap** (`voce.top - barra.bottom`)
+e quando la barra va a capo il gap **resta identico**: si spostano le posizioni assolute. Tabella del
+revisore: salto **48 px** (barra 38→86, voce 235→283) e metrica del gap **0 → verde**. La prova
+andava rossa solo per l'ALTRA asserzione (`.settings-search-field`, assente nel markup vecchio):
+⛔ **la mia frase «fallisce col codice di `4b4c753b`» era vera per la ragione sbagliata.**
+Cura: altezza della barra (vale in ogni disposizione) + posizione della prima voce **relativa alla
+barra**. Provata nei due versi: sul pacchetto vecchio è rossa con
+«*la barra cambia altezza cercando: 38 → 86*».
+
+**D3 — [MEDIA, la GUARDIA] era CIRCOLARE.** `if (colonna < intelaiatura - 1)` si spegneva **proprio
+nella regressione** che doveva prendere (misurato: iniettando `.talos-settings{display:block}` a
+1280 px la forma vecchia è rossa e quella nuova verde). Cura: si guarda la **disposizione** e il
+**contenitore** — sopra i 660 px la colonna **deve** essere `grid`. Ora morde l'iniezione.
+
+**D4 — [BASSA]** sotto i 660 px la voce ha rettangolo **0×0** e `0 − 0 = 0` ⇒ verde per costruzione.
+Coperta dall'asserzione sull'altezza, che non dipende dal layout.
+
+**D5 — [BASSA, dichiarata]** il mio commento diceva che il cancello dei 24 px misura quella ×:
+**falso**, il cancello salta i controlli a dimensione zero e la × è `display:none` a campo vuoto.
+La × è **28×28**: passa la AA (24), **non** la AAA (44, che non entra in un campo alto 38). Il
+commento ora dice il vero.
+
+**Le 13 verdi** (provare e non trovare vale quanto trovare): `hidden` contro `display:grid` regge; la
+× **non copre il testo** né a 1280/1024/660/390 px né col **font al 200%**; tastiera e nome
+accessibile; `forced-colors`; contrasto **6,09:1** (scuro) e **4,88:1** (chiaro); la regola delle
+faccette **non** è troppo larga (nella riga c'è un solo `calm-control--select`); il difetto del
+campo schiacciato **esisteva davvero** (cancellando la regola: 168 utili contro 171). E un loro
+**falso allarme dichiarato**: una foto della colonna sembrava vuota — è un artefatto dello
+screenshot di un elemento `sticky` (10 voci visibili in entrambi gli stati).
+
+⛔ **Cosa il revisore NON ha potuto verificare** (dichiarato): il 4174 (mai navigato), la riga delle
+faccette **sotto i 1100 px**, la persistenza della scelta dell'ordine, la suite browser intera, e i
+percorsi che scrivono sulle API.
 
 ## ⛔ L'ALTRO DIFETTO VERO, nel Laboratorio — curato in `be736bc9`
 
