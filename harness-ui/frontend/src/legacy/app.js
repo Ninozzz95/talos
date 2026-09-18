@@ -21100,7 +21100,10 @@ ${testo}`;
    * `data-apre-velo` non serve: e' gia' delegato dalla regia del mockup.
    */
   ROOT().addEventListener('click', (evento) => {
-    const b = evento.target.closest?.('.talos-topbar__actions [data-azione], [data-workspace-bar] [data-azione="comandi"]');
+    /* ⛔ 18/09/2026 — via la seconda metà del selettore: `[data-workspace-bar] [data-azione="comandi"]`
+       non esiste più, la barra della workspace è stata rimossa su ordine dell'owner. Resta il
+       pulsante «Comandi» della testata della CHAT, che è quello che l'owner continua a usare. */
+    const b = evento.target.closest?.('.talos-topbar__actions [data-azione]');
     /*
      * ⛔ 06/9, owner: «non riesco ad aprire la sidebar di destra dopo averla collassata».
      * Strumentato (non supposto): il clic arrivava, il delegato partiva, e la colonna non si muoveva
@@ -21947,6 +21950,18 @@ ${testo}`;
      *   🔜 Quando la schermata avrà la sua riga nel ponte, questa eccezione sparisce.
      */
     if (vaia?.dataset.vaia === 'modelli') { setView('settings'); setSettingsSection('models'); return; }
+    /*
+     * ⛔⛔ 18/09/2026 — «IMPOSTAZIONI» DEVE PORTARE A IMPOSTAZIONI, NON ALL'ULTIMA SEZIONE GUARDATA.
+     * Misurato dalla revisione avversaria: da Impostazioni → «Modelli» → «Impostazioni», si RESTAVA
+     * sul Laboratorio modelli (`data-settings-section` = `models`) — due voci, due nomi, stesso posto,
+     * e la destinazione dipendeva dalla storia di chi cliccava. La sezione è una preferenza salvata
+     * (`setSettingsSection(saved || 'appearance')`), e questa voce non la toccava.
+     * ⇒ La porta generica atterra sulla PRIMA sezione, come il nome promette; «Modelli» continua ad
+     *   andare al Laboratorio modelli (la sua porta vera, vedi sopra). Ricerca 18/09/2026: la
+     *   convenzione è il deep link — «ogni porta atterra dove dice il suo nome», e senza ancora si
+     *   apre la scheda predefinita (ZURB Foundation, «Deep linking», letto il 18/09/2026).
+     */
+    if (vaia?.dataset.vaia === 'impostazioni') { setView('settings'); setSettingsSection('appearance'); return; }
     if (vaia && VISTA_PER_VAIA[vaia.dataset.vaia]) { setView(VISTA_PER_VAIA[vaia.dataset.vaia]); return; }
     const apre = event.target.closest?.('[data-apre-velo]');
     if (apre) { apriVeloMockup(apre.dataset.apreVelo); return; }
