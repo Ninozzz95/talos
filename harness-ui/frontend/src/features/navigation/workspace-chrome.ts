@@ -39,6 +39,7 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
   const root = doc.getElementById('schermoHome');
   const header = doc.querySelector<HTMLElement>('[data-workspace-bar]');
   if (!root || !header) return null;
+  const barra = header; // ⛔ non-null DOPO la guardia: il tipo si porta dentro i closure (il compilatore non lo deduce da sé)
   const t = options.translate;
   let sessions: SessionSummary[] = [];
   let setup: Record<string, unknown> | null = null;
@@ -216,6 +217,37 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     syncControls(); render(); }, { signal: scope.signal });
   const restore = doc.querySelector<HTMLInputElement>('[data-workspace-restore]');
   if (restore) { restore.checked = preferences.read().restoreWorkspace; restore.addEventListener('change', () => { preferences.update({ restoreWorkspace: restore.checked }); }, { signal: scope.signal }); }
+  /*
+   * ⛔⛔ 18/09/2026 — BC-78.3: L'ALTEZZA VERA DELLA BARRA SI MISURA E SI DICE AL CSS.
+   *
+   * Un pannello `position:sticky` con `max-height:calc(100dvh - var(--talos-topbar-h) - …)` era più
+   * alto dello spazio che ha e il suo piede — i pulsanti — non si raggiungeva più. Misurato a
+   * 1200×420 (probe del 18/09): finestra 420 · scorrimento del pannello che parte a 119 (barra 59 +
+   * testata 60) e clientHeight 301 · pannello sticky 336 (la formula sottraeva solo la testata).
+   * ⇒ La barra della workspace v2 sta SOPRA ogni schermo e la sua altezza non è una costante:
+   *   `min-height:56px` e 52 px sotto la soglia stretta (workspace.css:2,88). Un numero scritto a
+   *   mano sbaglierebbe una delle due. Si misura qui e si pubblica come token sulla radice; la
+   *   formula in `styles/index.css` lo sottrae con fallback `0px` (assente = nessuna barra).
+   * ⛔ Guardia contro l'autoalimentazione (MDN, «ResizeObserver», letto il 18/09/2026: «Resize events
+   *   that don't meet that condition are deferred to the next paint, and an error event is fired …
+   *   ResizeObserver loop completed with undelivered notifications»): si scrive SOLO quando il
+   *   valore cambia, così una riscrittura identica non rientra nell'osservatore.
+   */
+  let altezzaBarraPubblicata = -1;
+  function pubblicaAltezzaBarra(): void {
+    const altezza = Math.round(barra.getBoundingClientRect().height);
+    if (altezza === altezzaBarraPubblicata) return;
+    altezzaBarraPubblicata = altezza;
+    doc.documentElement.style.setProperty('--talos-workspace-bar-h', `${altezza}px`);
+  }
+  if (typeof ResizeObserver === 'function') {
+    const osservatoreBarra = new ResizeObserver(pubblicaAltezzaBarra);
+    osservatoreBarra.observe(barra);
+    scope.own(() => osservatoreBarra.disconnect());
+  } else {
+    doc.defaultView?.addEventListener('resize', pubblicaAltezzaBarra, { signal: scope.signal });
+  }
+  pubblicaAltezzaBarra();
   scope.own(preferences.subscribe(syncControls));
   render(); syncControls();
   return {

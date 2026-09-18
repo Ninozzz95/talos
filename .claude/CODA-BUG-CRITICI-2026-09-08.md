@@ -1359,6 +1359,18 @@ che SPOSTA qualcosa a schermo, la cartella browser intera si lancia, anche se du
 3. **Il piede del pannello notifiche apre con «Negate nelle impostazioni del browser…» senza un soggetto**: non dice CHE COSA è negato.
 4. **«Capability» resta una parola tecnica a schermo** (barra laterale e testata): regola «niente nomi tecnici nella UI».
 5. **Lo stato vuoto della Revisione porta un «+» come icona**, che si legge come un comando per aggiungere.
+6. ⛔⛔ **LA BARRA LATERALE SINISTRA TAGLIA LE RIGHE A METÀ — owner 18/09/2026 due volte: «guarda la sidebar di
+   sinistra, tienilo a mente», poi «la sidebar di sinistra è ROTTA». MISURATO da me sul 4174 vivo lo stesso giorno**
+   (sonda in sola lettura, 0 richieste non-GET fermate; foto `test-results/__sonda-4174-*/4174-{light,dark}-1440.png`
+   e `4174-light-1024.png`):
+   · **1024×800** — due contenitori scorrevoli nella barra. Il primo (nav) chiude a **528** e la testata **«STRUMENTI»
+     è disegnata da 509 a 543: tagliata a metà glifo**; il secondo (SESSIONI, 528-739) taglia una voce di sessione
+     (693-759) e una riga vuota (712-740) contro il piede.
+   · **1440×900** — un contenitore; una voce («ciao · conclusa · gemma 4 · 26B») va da 782 a 848 contro un fondo di 839.
+   ⇒ Nessuna **sfumatura di scorrimento** su nessuno dei due confini: il taglio non dice «continua», si legge come un
+   guasto — la stessa classe di BC-78.2 (dove la sfumatura esiste) ma su **due contenitori** e contro il piede.
+   **Finita quando:** nessuna riga è disegnata a metà alle due larghezze e nei due temi, e ogni confine che taglia
+   DICE che c'è altro (stessa cura di BC-78.2), con la foto del 4174 come prova.
 
 ## BC-83 | Aprire in TALOS una cartella che contiene un `git.exe` lo ESEGUIVA (Windows) — trovato e CURATO da me il 17/09/2026 notte, preparando la Fase A-bis
 
