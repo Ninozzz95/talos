@@ -24,9 +24,13 @@
  * Community Design System «Side navigation»). Il chevron RUOTA invece di cambiare glifo: un solo
  * nodo, nessun salto di layout, e la rotazione dice da sola in che verso si apre.
  */
-/* ⛔ `max-height:50%` + scorrimento proprio è la regola del mockup (riga 4109), e serve: la barra
-   ha UN solo spazio verticale e le sessioni non devono sparire perché i luoghi sono tanti. Con
-   «Strumenti» chiuso — il default — il tetto non viene nemmeno toccato.
+/* ⛔ `max-height:50%` + scorrimento proprio ERA la regola del mockup (riga 4109), e serviva: la
+   barra ha UN solo spazio verticale e le sessioni non devono sparire perché i luoghi sono tanti.
+   ⛔⛔ 18/09/2026 — LA SECONDA FRASE ERA FALSA, E MISURATA FALSA: «con Strumenti chiuso il tetto non
+   viene nemmeno toccato» non regge — a 1024×800 il nav ha 423 px di contenuto in 400 di spazio, e
+   la testata «Strumenti» resta tagliata a metà per qualunque finestra sotto gli 846 px (misure del
+   revisore, due temi). Il tetto è uscito con la cura qui sotto: la difesa delle sessioni ora la fa
+   il piede appiccicato, non un tetto che taglia.
    ⛔ Le voci qui sono più basse che altrove (36 px invece di `--talos-row`, 44): è l'altezza del
    mockup per questa colonna (riga 4110), e su 13 voci sono 104 px restituiti alle sessioni. */
 /* ⛔ `flex: 0 0 auto` e NON `0 1 auto`: misurato sul banco a 1440×900 con la prima foto — col
@@ -63,16 +67,54 @@
  * I colori sono token: la maschera è lo sfondo della barra (`--talos-background`), l'ombra il suo
  * bordo (`--talos-border`). Nessun valore scritto a mano, e i due temi si comportano uguale.
  */
-.td-sidebar-nav {
-  flex: 0 0 auto; min-height: 0; max-height: 50%; overflow-y: auto; padding: 0 10px 8px;
-  background:
-    linear-gradient(var(--talos-background) 30%, transparent) top / 100% 18px no-repeat local,
-    linear-gradient(transparent, var(--talos-background) 70%) bottom / 100% 18px no-repeat local,
-    linear-gradient(var(--talos-border), transparent) top / 100% 8px no-repeat scroll,
-    linear-gradient(transparent, var(--talos-border)) bottom / 100% 8px no-repeat scroll;
-}
+/* ⛔⛔⛔ 18/09/2026 — UNA REGIONE DI SCORRIMENTO SOLA. IL TETTO DEL 50% NON C'È PIÙ.
+ *
+ * Owner, dal vivo: «la sidebar di sinistra è rotta», «ma anche nelle due sidebar, devi vedere tutto».
+ * Revisione avversaria del 18/09/2026 (misure sul 4174 con 18 sessioni vere, due temi, tre finestre):
+ *  · a **1024×800** il nav misurava **400 px visibili su 423 di contenuto** (23 nascosti): la testata
+ *    di gruppo **«Strumenti» è disegnata 508,5-543 contro un contenitore che chiude a 528** — 15 px
+ *    di 34,5 tagliati via (43%), in ENTRAMBI i temi, senza che l'utente tocchi niente;
+ *  · il taglio cade sulla testata per **qualunque altezza fra 762 e 830** e sotto gli 846 px c'è
+ *    sempre; a **1200×500** le voci tagliate sono **cinque**;
+ *  · ⛔ **il commento qui sopra era FALSO**: diceva che con «Strumenti» chiuso il tetto non viene
+ *    nemmeno toccato. Misurato: non toccato solo da 846 px in su;
+ *  · ⛔ e la cura di BC-78.2 non copriva proprio questo caso: la maschera `local` sta al fondo del
+ *    CONTENUTO (551) e non del riquadro (528), quindi **a scorrimento zero non può mascherare
+ *    niente** — funzionava solo ai limiti dello scorrimento, cioè quando non serve;
+ *  · a **1200×500** la lista sessioni era **61 px** contro una riga da **66**: nessuna posizione di
+ *    scorrimento poteva mostrarne una intera, e il «⋯» (28×28) aveva **8,7 px su 28** dentro la
+ *    lista — mirandolo un po' basso si aprivano le Impostazioni (l'ingranaggio del piede).
+ * ⇒ **Due regioni annidate diventano una.** Con una sola regione non esiste alcun confine interno
+ * che possa tagliare una riga: l'unico bordo è quello della barra, e l'applicazione ha sempre la
+ * sua testata e il suo piede a portata. Ricerca 18/09/2026 — è la pratica corrente: **un solo
+ * contenitore di scorrimento con `position: sticky` per testata e piede**, mai scorrimenti annidati
+ * («CSS position: sticky — How It Really Works», W3Tweaks; «CSS Sticky Sidebar: A Modern
+ * Implementation Guide», makeautomation; fwdtools «Sticky Split-Pane»: «a sidebar column that clips
+ * its own overflow avoids becoming a second, competing scroll container»).
+ */
+.td-sidebar-nav { flex: 0 0 auto; min-height: 0; overflow: visible; padding: 0 10px 8px; }
 .td-sidebar-nav .talos-nav-item { height: auto; min-height: 36px; font-size: 13px; }
 .td-sidebar-nav .talos-nav-item .i { width: 16px; height: 16px; }
+
+/* La regione UNICA: la barra scorre, e le quattro sfumature di BC-78.2 salgono qui — dove possono
+   davvero dire «c'è altro», perché ora sono ancorate al riquadro che scorre. */
+.talos-sidebar {
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  background:
+    linear-gradient(var(--talos-panel) 30%, transparent) top / 100% 18px no-repeat local,
+    linear-gradient(transparent, var(--talos-panel) 70%) bottom / 100% 18px no-repeat local,
+    linear-gradient(var(--talos-border), transparent) top / 100% 8px no-repeat scroll,
+    linear-gradient(transparent, var(--talos-border)) bottom / 100% 8px no-repeat scroll,
+    var(--talos-panel);
+}
+/* La testata funzionale (ricerca, «Nuova», comprimi) resta appiccicata in cima; il marchio no:
+   scorre via con il contenuto, perché è l'unica parte che non serve mentre si cerca una sessione. */
+.talos-sidebar__actions { position: sticky; top: 0; z-index: 3; background: var(--talos-panel); }
+/* Il piede appiccicato in fondo ha bisogno di uno sfondo SUO, o le righe gli passano sotto. */
+.talos-sidebar__foot { position: sticky; bottom: 0; z-index: 3; background: var(--talos-panel); }
+/* Le sessioni non hanno più uno scorrimento proprio: sono righe nel flusso della regione unica.
+   Nessuna altezza allocata ⇒ non possono più restare più basse di una riga. */
+.talos-sidebar__block.talos-sidebar__sessions { flex: 0 0 auto; min-height: 0; overflow: visible; }
 
 .td-nav-head {
   display: flex;
