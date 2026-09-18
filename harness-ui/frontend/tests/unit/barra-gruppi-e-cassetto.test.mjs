@@ -96,15 +96,25 @@ test('A, al contrario: un badge con un numero scritto dentro viene TROVATO', () 
   assert.deepEqual(conteggiScrittiAMano('<span class="talos-nav-item__count"></span>'), []);
 });
 
-test('A — ogni voce della barra ha una porta: o la mappa delle viste, o l\'eccezione dichiarata', () => {
+test('A — ogni voce della barra ha una porta: la mappa delle viste', () => {
   const blocco = bloccoNavigazione(TEMPLATE);
   const voci = [...blocco.matchAll(/data-vaia="([^"]+)"/g)].map((m) => m[1]);
   assert.match(APP, /const VISTA_PER_VAIA = VIEW_BY_DESTINATION;/, 'la regia consuma il registro condiviso');
   const conosciute = new Set(Object.keys(VIEW_BY_DESTINATION));
-  /* «modelli» non ha una schermata sua (`#schermoModelLab` esiste ma non è in VISTA_PER_SCHERMATA):
-     è gestita a parte, e la riga che la gestisce deve esserci davvero. */
-  assert.match(APP, /vaia\?\.dataset\.vaia === 'modelli'[\s\S]{0,120}setSettingsSection\('models'\)/u, '«Modelli» apre la sezione vera del Model Lab');
-  const senzaPorta = voci.filter((v) => !conosciute.has(v) && v !== 'modelli');
+  /*
+   * ⛔⛔ 18/09/2026 — QUESTA PROVA HA PERSO LA SUA ECCEZIONE, E NON SI È ALLENTATA.
+   * Prima diceva: «ogni voce ha una porta — o la mappa, o l'eccezione dichiarata», e pretendeva la
+   * riga che dirottava «Modelli» dentro Impostazioni → sezione modelli, perché `#schermoModelLab`
+   * esisteva ma non stava in nessuna mappa. Quella riga è uscita: la schermata ha la **sua** voce
+   * nella mappa (`models: 'schermoModelLab'` in `domain/navigation.ts`, e `modelli: 'models'` per la
+   * barra), quindi l'eccezione non serve più.
+   * ⇒ Il verso che conta adesso è **il contrario**: che il dirottamento NON torni, perché una voce
+   *   che finge di aprire una schermata e ne apre un'altra è di nuovo una porta finta.
+   */
+  assert.ok(conosciute.has('modelli'), '«Modelli» deve avere la sua voce nella mappa delle viste');
+  assert.doesNotMatch(APP, /dataset\.vaia === 'modelli'[\s\S]{0,120}setSettingsSection\('models'\)/u,
+    'il dirottamento di «Modelli» dentro Impostazioni non deve tornare: la schermata ha la sua rotta');
+  const senzaPorta = voci.filter((v) => !conosciute.has(v));
   assert.deepEqual(senzaPorta, [], 'una voce che non naviga da nessuna parte è una porta finta');
 });
 
