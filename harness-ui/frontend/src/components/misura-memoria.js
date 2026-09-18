@@ -77,7 +77,7 @@ export function montaMisuraMemoria(originale,canonico){
  /* ⛔ 18/09/2026 — SOLO LE DUE RADICI, nessun ripiego su `document`. Un `getElementById` di
     ripiego sembra prudente e invece RUBA: misurato il 18/09 con `MONTAGGIO-06` — due radici
     vuote bastavano a far svuotare il blocco della memoria del documento VIVO (1455 byte → 0) e a
-    portar via i due bottoni che il monolite ascolta (app.js:4634, 4635). Se un nodo non e' in
+    portar via i due bottoni che il monolite ascolta (app.js:4642, 4643). Se un nodo non e' in
     nessuna delle due radici, si SALTA: la card resta com'e', il documento vivo non si tocca. */
  const colonna=primo([originale,canonico],'#memoriaLibera')?.parentElement||null;
  // i due bottoni LEGACY entrano nelle sedi del mockup: gli id che il monolite ascolta restano vivi

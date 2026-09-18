@@ -134,7 +134,7 @@ async function apriIlBanco(page) {
   return esportate;
 }
 
-/** Un «pannello legacy gia' potenziato»: gli id che `ensureModelLabControls` crea (app.js:3618-3630). */
+/** Un «pannello legacy gia' potenziato»: gli id che `ensureModelLabControls` crea (app.js:3617-3631). */
 const CONTROLLI_INSTALLATI = ['modelLabInstalledSearchControl', 'modelLabImportInput', 'modelLabImportButton', 'modelLabImportCancelButton', 'modelLabImportProgress', 'modelLabImportStatus'];
 const CONTROLLI_HF = ['modelLabHfSortControl', 'modelLabHfAuthorControl', 'modelLabHfFiltersControl', 'modelLabHfNextButtonControl'];
 
@@ -360,7 +360,7 @@ test('MONTAGGIO-02 — il crollo n. 3: la guardia di app.js e il NotFoundError, 
     const dest = clona('#panel-installati'); const sorg = clona('#modelLabInstalledPanel');
     b.append(dest, sorg);
     inst(dest, sorg);
-    /* La guardia di app.js:3623 e' `installedPanel && !installedPanel.dataset.installatiMontato &&
+    /* La guardia di app.js:3624 e' `installedPanel && !installedPanel.dataset.installatiMontato &&
        !installedPanel.querySelector('[data-model-lab-enhanced="installed"]')`. Il pannello VUOTATO
        e' `sorg` (in direzione B la destinazione e' la schermata): e' il timbro su di LUI che la
        spegne. Il testo della guardia e' verificato in Node, non solo qui. */
@@ -387,15 +387,15 @@ test('MONTAGGIO-02 — il crollo n. 3: la guardia di app.js e il NotFoundError, 
   expect(misure.riferimentoFiglioDelPannello, "ecco perche la insertBefore esplode: il nodo e in un altro albero").toBe(false);
   expect(misure.crollo, '⛔ la prova deve mostrare il CROLLO: senza il timbro, insertBefore esplode').toContain('NotFoundError');
   expect(misure.pannelloAncoraVuoto).toBe(true);
-  // e la guardia, trascritta da app.js:3618 e 3623, e' davvero quella nel file su disco
+  // e la guardia, trascritta da app.js:3619 e 3624, e' davvero quella nel file su disco
   const app = await readFile(SORGENTE_APP, 'utf8');
-  expect(app, "app.js:3623 — la guardia dell'iniezione").toContain("installedPanel.insertBefore(controls, $('#modelLabInstalledList'))");
-  expect(app, 'app.js:3623 — la condizione').toContain('!installedPanel.dataset.installatiMontato');
-  expect(app, 'app.js:3623 — la seconda condizione').toContain('!installedPanel.querySelector(\'[data-model-lab-enhanced="installed"]\')');
-  expect(app, 'app.js:3618 — la guardia hf').toContain('!hfPanel.dataset.hfMontato');
-  expect(app, 'app.js:3456 — chi disegna i modelli installati pretende il timbro').toContain('!panel.dataset.installatiMontato');
-  expect(app, 'app.js:22236 — chi disegna la coda pretende il timbro').toContain('panel?.dataset.downloadMontato');
-  expect(app, 'app.js:3776 — chi disegna Hugging Face pretende il timbro').toContain('panel?.dataset.hfMontato');
+  expect(app, "app.js:3627 — la guardia dell'iniezione").toContain("installedPanel.insertBefore(controls, $('#modelLabInstalledList'))");
+  expect(app, 'app.js:3624 — la condizione').toContain('!installedPanel.dataset.installatiMontato');
+  expect(app, 'app.js:3624 — la seconda condizione').toContain('!installedPanel.querySelector(\'[data-model-lab-enhanced="installed"]\')');
+  expect(app, 'app.js:3619 — la guardia hf').toContain('!hfPanel.dataset.hfMontato');
+  expect(app, 'app.js:3457 — chi disegna i modelli installati pretende il timbro').toContain('!panel.dataset.installatiMontato');
+  expect(app, 'app.js:22465 — chi disegna la coda pretende il timbro').toContain('panel?.dataset.downloadMontato');
+  expect(app, 'app.js:3777 — chi disegna Hugging Face pretende il timbro').toContain('panel?.dataset.hfMontato');
 });
 
 test('MONTAGGIO-03 — la memoria nei suoi tre versi, e la card che non esplode', async ({ page }) => {
@@ -449,8 +449,8 @@ test('MONTAGGIO-03 — la memoria nei suoi tre versi, e la card che non esplode'
     expect(r.duplicati, `${nome}: nessun id doppio fra i due alberi`).toEqual([]);
     expect(r.extra.cardDentroDest, `${nome}: la card deve finire nella destinazione`).toBe(true);
     expect(r.extra.cardNelBanco, `${nome}: una card sola in tutto il banco — si sposta, non si clona`).toBe(1);
-    expect(r.extra.rimisura, `${nome}: il bottone che il monolite ascolta (app.js:4634) deve esserci`).toBe(true);
-    expect(r.extra.scarica, `${nome}: il bottone che il monolite legge (app.js:4119) deve esserci`).toBe(true);
+    expect(r.extra.rimisura, `${nome}: il bottone che il monolite ascolta (app.js:4642) deve esserci`).toBe(true);
+    expect(r.extra.scarica, `${nome}: il bottone che il monolite legge (app.js:4120) deve esserci`).toBe(true);
     expect(r.extra.campi, `${nome}: gli id del monolite devono stare tutti sulla card`).toEqual(['machineMemoryMetric', 'machineFreeMemoryMetric', 'machineStorageMetric', 'machineAllocatableMetric', 'machineCapacityDetail', 'memoriaBarraEtichetta', 'memoriaTenuta']);
     expect(r.extra.tenuta, `${nome}: il montaggio si chiude con la verifica in corso`).toContain('Verifica del modello in corso');
     for (const timbro of ['memoryMontato']) expect(r.timbri[timbro], `${nome}/${timbro}: il timbro va su ENTRAMBE le radici`).toEqual(['true', 'true']);
@@ -540,7 +540,7 @@ test('MONTAGGIO-04 — la memoria coi DATI VERI del server (capacity) e i fornit
     const items = Array.isArray(dati?.items) ? dati.items : null;
     // velo vero del mockup: la funzione non deve esplodere nemmeno li'
     const velo = await (async () => { const v = clona('#veloFornitori .talos-dialog__body'); banco().append(v); const e = esito(() => montaProviderPanel(v)).esito; return { esito: e, timbro: v.dataset.providerMontato ?? null, refresh: !!v.querySelector('#providerRefresh') }; })();
-    // pannello legacy: e' la casa del monolite (app.js:2894, 4625 leggono #providerRefresh)
+    // pannello legacy: e' la casa del monolite (app.js:2895, 4633 leggono #providerRefresh)
     const b = svuota();
     const panel = clona('#modelLabProvidersPanel');
     b.append(panel);
