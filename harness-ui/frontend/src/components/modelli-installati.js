@@ -130,6 +130,251 @@ export function creaRigaInstallata(dati, { selezionato = false, seleziona, docum
   return b;
 }
 
+/*
+ * ⭐⭐⭐⭐ 19/09/2026 — FASE 4-bis, corsia D. LE DUE AZIONI DISTRUTTIVE SU UN MODELLO INSTALLATO.
+ *
+ * Owner, guardando il suo schermo: «Download non ha tutte le opzioni: non posso eliminare i modelli
+ * installati, non posso rinominarli. È tutto previsto dal backend su 4174». Le rotte ci sono
+ * (`http-app.mjs:1251`: `POST /api/v1/local-models/<id>/{rename,copy-path,delete}`); qui si porta a
+ * schermo il PEZZO CHE MANCA — la riga della coda non offriva né l'una né l'altra.
+ *
+ * ⛔ COSA TOCCA DAVVERO OGNI ROTTA — MISURATO il 19/09/2026 su un server ISOLATO (porta 4218,
+ *   store suo: `.tmp-corsia-d/`, sonda `sonda-rotte.mjs`), albero del disco fotografato prima e
+ *   dopo ogni chiamata. Non dedotto leggendo il codice:
+ *
+ *   · `rename` scrive **SOLO** `manifests/<id>.name.json` (26 byte: il nome e un a-capo).
+ *     Il manifest `<id>.json` resta **byte per byte lo stesso**, la cartella del modello non si
+ *     sposta, il file dei pesi non si tocca, e l'`id` non cambia. ⇒ **Cambia il nome MOSTRATO**, e
+ *     nient'altro. Per questo il campo si chiama «Nome mostrato» e la riga di aiuto lo DICE.
+ *   · `delete` porta via **la cartella del modello** (i pesi), il manifest `<id>.json` e il
+ *     `<id>.name.json`. La radice `.local-models/` sopravvive: non si tocca mai se stessa, e niente
+ *     fuori da sé (`local-model-store.mjs:296-319`, il controllo `dentro()` prima di ogni `rm`).
+ *   · ⛔ `delete` su un id che NON esiste risponde **200 `{"deleted":true}`** e sul disco non cambia
+ *     niente. La rotta da sola non è una prova: chi la chiama deve RILEGGERE l'elenco. È la ragione
+ *     per cui l'esito di queste azioni viaggia come **verdetto** (vedi `verdettoAzioneModello`) e non
+ *     si deduce dal codice HTTP.
+ *
+ * Ricerca fatta PRIMA di scrivere, 19/09/2026 — le fonti della fase coprono la MODALE, non il
+ * pannello dentro la riga:
+ *  · il primo clic TRASFORMA il comando sul posto in conferma/annulla, invece di aprire un dialogo:
+ *    si resta nel contesto e il fuoco non si sposta lontano (dioxus-nox-inline-confirm 0.13.2
+ *    «Inline Confirm: Idle shows the trigger, Confirming shows confirm/cancel»; ember-safe-button,
+ *    «stay in context, keep focus… lighter weight than a full dialog»; fredwu/jquery-inline-
+ *    confirmation, nato proprio contro `confirm()`).
+ *  · ⛔ E LA CONFERMA NON È UN ESITO: risponde a «sei sicuro?», non a «è andata?» — il flusso vuole
+ *    comunque uno stato di riuscita e uno d'errore propri (docs.wappler.io «Delete with
+ *    Confirmation»). Da qui `verdettoAzioneModello` e la riga `role="status"` in fondo al pannello.
+ *  · l'annullamento resta sempre raggiungibile e mai nascosto, e nessun default è distruttivo
+ *    (Deibler, universal-design-principles, «forgiveness-confirmation-and-prevention»).
+ *  · per la RINOMINA in linea: il campo prende il fuoco con il testo selezionato (Chakra `Editable`,
+ *    `selectAllOnFocus` default `true`; manaflow-ai/cmux#7395), invio conferma ed ESC annulla
+ *    (Chakra `onSubmit`/`onCancel`; luketmoss/hive#182 «AC4: cancelling or pressing Escape reverts to
+ *    the display state»), l'etichetta è visibile e l'errore sta su `aria-describedby` +
+ *    `aria-invalid` (hive#182; WCAG 2.5.3 «Label in Name»), e il comando NON resta raggiungibile da
+ *    tastiera mentre si modifica (jira.xwiki.org XWIKI-19145, 2.4.3).
+ *  · ⛔ NIENTE SALVATAGGIO AL PERDERE IL FUOCO, di proposito: la pratica lo indica come la più grande
+ *    incoerenza possibile («click-away saving in one place and discarding in another… pick one model
+ *    and keep it consistent», saasui.design «SaaS Inline Editing & Edit-in-Place UX Patterns 2026»)
+ *    — e qui salvare da soli mentre la persona guarda altrove sarebbe una scrittura senza consenso.
+ *  · il fuoco TORNA al comando che ha aperto il pannello quando il pannello si chiude
+ *    (vercel.com/geist Menu; Chakra `finalFocusRef`).
+ *  · ⛔ DIVERGENZA DICHIARATA dalla riga della ricerca della fase («il pulsante finale è disabilitato
+ *    finché non è armato»): qui il pulsante finale **non esiste** finché il pannello non è aperto — e
+ *    il pannello È l'armamento — quindi non c'è nessun momento in cui è visibile e premibile senza
+ *    essere armato. Resta `disabled` **durante la chiamata**, che è l'unico stato in cui premerlo di
+ *    nuovo sarebbe un secondo invio.
+ */
+
+/** Quanti caratteri accetta un nome: la stessa misura che rifiuta il deposito (`local-model-store.mjs:322`, `> 160`). */
+export const NOME_MODELLO_MAX = 160;
+
+/**
+ * L'esito di un'azione ridotto a ciò che si può MOSTRARE.
+ *
+ * ⛔ Il contratto con chi fornisce l'azione — è la sola cosa che rende onesto il verso che fallisce:
+ *   · risolve `{ ok: true }`            → è andata: chi ha chiamato l'ha VERIFICATO (vedi sotto);
+ *   · risolve `{ ok: false, motivo }`   → non è andata, e il perché;
+ *   · lancia un errore                  → non è andata, col suo messaggio e il suo codice;
+ *   · risolve qualunque altra cosa      → **non vale come «fatto»**. Un esito che non dichiara
+ *     niente non è una riuscita: la riga dice che l'esito non è confermato, invece di scrivere una
+ *     vittoria che nessuno ha misurato.
+ * Perché serve: MISURATO il 19/09/2026, `POST …/delete` su un id inesistente risponde 200
+ * `{"deleted":true}` senza toccare il disco. Una UI che legge il 200 scriverebbe «eliminato» sopra
+ * un modello che è ancora là. ⇒ Chi fornisce `elimina` deve rileggere l'elenco e rispondere
+ * `{ ok: false }` se l'id c'è ancora.
+ *
+ * @returns {{tono: 'success'|'danger'|'warning', etichetta: string, testo: string}}
+ */
+export function verdettoAzioneModello(esito, { azione = 'elimina', nome = '' } = {}) {
+  const chi = nome ? `«${nome}»` : 'Il modello';
+  const rinominato = azione === 'rinomina';
+  if (esito && esito.ok === true) {
+    return rinominato
+      ? { tono: 'success', etichetta: 'Nome salvato', testo: `${chi} ora si chiama ${esito.nome ? `«${esito.nome}»` : 'come hai scritto'}.` }
+      : { tono: 'success', etichetta: 'Eliminato dal disco', testo: `${chi} non è più su questo computer.` };
+  }
+  if (esito && esito.ok === false) {
+    const motivo = esito.motivo || esito.messaggio || esito.message || 'il comando non è andato a buon fine';
+    return {
+      tono: 'danger',
+      etichetta: rinominato ? 'Nome non salvato' : 'Non eliminato',
+      testo: `${chi} è ancora come prima: ${motivo}.`,
+    };
+  }
+  /* Un esito senza verdetto: si dice quel che si sa e quel che NON si sa. */
+  return {
+    tono: 'warning',
+    etichetta: 'Esito non confermato',
+    testo: `Il comando è partito, ma non ho potuto controllare se ${chi} è cambiato davvero: rileggi l'elenco per esserne sicuro.`,
+  };
+}
+
+/**
+ * Il pannello di conferma dell'eliminazione — DENTRO la riga a cui appartiene, non in fondo alla
+ * sezione e non in un velo: il primo clic ARMA (non cancella niente), il secondo esegue.
+ *
+ * ⛔ La frase dice ciò che sparisce DAVVERO, ed è la misura qui sopra a dettarla: i file del modello,
+ *   non «un manifest»; e il modello non è tolto dal sito d'origine — da lì resta scaricabile.
+ * ⛔ Il fuoco va su «Annulla» (chi apre il pannello con la tastiera non deve trovarsi la punta delle
+ *   dita sul pulsante che cancella), e il comando d'annullamento non si nasconde mai.
+ *
+ * @param {{id: string, nome: string, dimensione?: string}} dati
+ * @param {{inCorso?: boolean, verdetto?: object|null, onAnnulla?: Function, onEsegui?: Function,
+ *          document?: Document}} [opzioni] Il FUOCO non si mette qui: lo decide chi monta il
+ *   pannello (una sola volta, non a ogni ridisegno) — vedi `applicaFuoco` in `download-coda.js`.
+ */
+export function creaConfermaEliminazione(dati, { inCorso = false, verdetto = null, onAnnulla, onEsegui, document: d = globalThis.document } = {}) {
+  const card = el(d, 'div', 'talos-check-card talos-check-card--danger talos-lab__space');
+  card.dataset.c = 'ConfermaEliminazione';
+  card.dataset.modello = dati.id;
+  card.appendChild(el(d, 'span', 'talos-check-card__stripe'));
+  const corpo = el(d, 'div', 'talos-check-card__body');
+  corpo.append(
+    el(d, 'b', 'talos-check-card__title', `Eliminare «${dati.nome}»?`),
+    el(d, 'p', '', `Spariscono i file del modello${dati.dimensione ? ` (${dati.dimensione})` : ''} e la sua scheda: fra i modelli installati non ci sarà più. Dal sito d'origine resta scaricabile, ma qui va scaricato o importato da capo.`),
+  );
+  const az = el(d, 'div', 'talos-check-card__actions');
+  const annulla = el(d, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Annulla');
+  annulla.type = 'button'; annulla.dataset.c = 'Button'; annulla.dataset.action = 'annullaEliminaModello';
+  annulla.disabled = inCorso;
+  if (onAnnulla) annulla.addEventListener('click', () => onAnnulla(dati.id));
+  /* ⛔ STESSA PAROLA PER LA STESSA AZIONE: il comando che apre il pannello dice «Elimina dal disco»
+     e il comando che esegue dice «Elimina dal disco» — è la lezione di «Riprendi» della FASE 4, due
+     nomi per un'azione sola mandano a cercare un pulsante che non esiste. La differenza fra i due
+     passi la porta il TITOLO del pannello, che nomina l'oggetto e fa la domanda. */
+  const esegui = el(d, 'button', 'talos-button talos-button--danger talos-button--sm', inCorso ? 'Elimino…' : 'Elimina dal disco');
+  esegui.type = 'button'; esegui.dataset.c = 'Button'; esegui.dataset.action = 'eseguiEliminaModello';
+  esegui.disabled = inCorso;
+  if (onEsegui) esegui.addEventListener('click', () => onEsegui(dati.id));
+  az.append(annulla, esegui);
+  corpo.appendChild(az);
+  if (verdetto) corpo.appendChild(creaRigaEsitoModello(verdetto, { document: d }));
+  card.appendChild(corpo);
+  return card;
+}
+
+/**
+ * Il campo della rinomina, dentro la riga. Il fuoco entra NEL CAMPO col testo selezionato (si
+ * scrive sopra, non si cancella a mano), invio salva, ESC annulla.
+ *
+ * ⛔ Cosa cambia lo dice la riga di aiuto, ed è la misura del 19/09: **solo il nome mostrato**. Il
+ *   campo si chiama «Nome mostrato» per la stessa ragione — «Nome» da solo lascerebbe credere che si
+ *   rinomini il file o la cartella, che è esattamente ciò che la rotta NON fa.
+ * ⛔ Il tetto dei caratteri è quello del deposito (160): scritto qui, la persona non arriva mai a
+ *   ricevere l'«Errore interno» che il deposito risponde a un nome vuoto o troppo lungo
+ *   (misurato: 500 `INTERNAL_ERROR`, la classe sbagliata per un campo che è dell'utente).
+ */
+export function creaCampoRinomina(dati, { bozza = '', inCorso = false, errore = null, verdetto = null, onAnnulla, onSalva, onBozza, document: d = globalThis.document } = {}) {
+  const card = el(d, 'div', 'talos-check-card talos-check-card--info talos-lab__space');
+  card.dataset.c = 'CampoRinomina';
+  card.dataset.modello = dati.id;
+  card.appendChild(el(d, 'span', 'talos-check-card__stripe'));
+  const corpo = el(d, 'div', 'talos-check-card__body');
+  const idCampo = `nomeModello-${String(dati.id).replace(/[^a-z0-9_-]/giu, '-')}`;
+  const etichetta = el(d, 'label', 'talos-stack', 'Nome mostrato');
+  etichetta.htmlFor = idCampo;
+  const campo = el(d, 'input', 'talos-field__input');
+  campo.type = 'text'; campo.id = idCampo; campo.value = bozza; campo.autocomplete = 'off';
+  campo.maxLength = NOME_MODELLO_MAX;
+  campo.dataset.campo = 'nomeModello';
+  campo.disabled = inCorso;
+  etichetta.appendChild(campo);
+  const aiuto = el(d, 'p', 'talos-muted', `Cambia solo il nome con cui il modello compare qui e nella sua pagina: il file e la cartella sul disco non si toccano. Al massimo ${NOME_MODELLO_MAX} caratteri.`);
+  aiuto.id = `${idCampo}-aiuto`;
+  corpo.append(etichetta, aiuto);
+  if (errore) {
+    const allarme = el(d, 'p', 'talos-muted', errore);
+    allarme.dataset.campoErrore = '';
+    allarme.setAttribute('role', 'alert');
+    allarme.id = `${idCampo}-errore`;
+    campo.setAttribute('aria-invalid', 'true');
+    campo.setAttribute('aria-describedby', `${aiuto.id} ${allarme.id}`);
+    corpo.appendChild(allarme);
+  } else campo.setAttribute('aria-describedby', aiuto.id);
+  const az = el(d, 'div', 'talos-check-card__actions');
+  const annulla = el(d, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Annulla');
+  annulla.type = 'button'; annulla.dataset.c = 'Button'; annulla.dataset.action = 'annullaRinominaModello';
+  annulla.disabled = inCorso;
+  if (onAnnulla) annulla.addEventListener('click', () => onAnnulla(dati.id));
+  const salva = el(d, 'button', 'talos-button talos-button--primary talos-button--sm', inCorso ? 'Salvo…' : 'Salva nome');
+  salva.type = 'button'; salva.dataset.c = 'Button'; salva.dataset.action = 'salvaNomeModello';
+  /* ⛔ IL COMANDO NON SI SPEGNE SUL NOME VUOTO, e la ragione è una lezione di casa: «un bottone che
+     non porta da nessuna parte lo DICE, invece di inghiottire il clic». Spento, il comando non
+     spiega niente — chi preme Invio a campo vuoto non vede succedere NIENTE e non sa perché.
+     Acceso, il clic arriva a chi esegue, che RISPONDE: il nome vuoto non chiama la rete (il
+     deposito lo rifiuterebbe con un 500 «Errore interno», misurato) e scrive il perché nel campo.
+     Resta spento solo mentre la chiamata è in volo, che è l'unico stato in cui premerlo di nuovo
+     sarebbe un secondo invio. */
+  salva.disabled = inCorso;
+  if (onSalva) salva.addEventListener('click', () => onSalva(dati.id, campo.value));
+  az.append(annulla, salva);
+  /* ⛔ OGNI TASTA PORTA SU LA BOZZA, e NON ridisegna il campo: ridisegnarlo a ogni carattere
+     toglierebbe il cursore a chi sta scrivendo. La bozza sale a chi ha montato il pannello perché
+     la coda si ridisegna da sola ogni 800 ms mentre qualcosa scarica, e senza di lei il nome
+     appena scritto andrebbe perso sotto le dita.
+     ⛔ NIENTE SALVATAGGIO AL PERDERE IL FUOCO (scelta dichiarata nella testata del blocco): qui si
+     salva solo con «Salva nome» o con Invio, mai da soli mentre la persona guarda altrove. */
+  campo.addEventListener('input', () => onBozza?.(campo.value));
+  /* Invio salva, ESC annulla. Invio passa dalla STESSA strada del clic, nome vuoto compreso: un
+     tasto che non fa niente e non lo dice è la stessa bugia di un comando spento senza motivo. */
+  campo.addEventListener('keydown', (evento) => {
+    if (evento.key === 'Enter') { evento.preventDefault(); onSalva?.(dati.id, campo.value); }
+    else if (evento.key === 'Escape') { evento.preventDefault(); onAnnulla?.(dati.id); }
+  });
+  corpo.appendChild(az);
+  /* ⛔ L'ESITO STA DENTRO IL PANNELLO finché il pannello è aperto: se la rinomina fallisce il campo
+     resta lì per correggere, e il perché deve stare accanto al comando che l'ha chiesta — non in
+     fondo alla riga, dove chi ha appena premuto non sta guardando. */
+  if (verdetto) corpo.appendChild(creaRigaEsitoModello(verdetto, { document: d }));
+  card.appendChild(corpo);
+  return card;
+}
+
+/* Nessuna riga di CSS nuova: `talos-check-card`, `talos-stack`, `talos-field__input`,
+   `talos-cluster`, `talos-badge--*` sono le classi che il prodotto ha già. */
+
+/**
+ * La riga d'esito di un'azione su un modello. ⛔ Il tono NON è decorazione: senza di lui
+ * «Eliminato dal disco» e «Non eliminato» sarebbero due frasi dello stesso colore, e un esito
+ * rosso letto come verde è la forma di bugia che questa corsia esiste per impedire. Il tono
+ * viaggia su un `Badge`, che le classi del prodotto colorano già (`talos-badge--danger` ·
+ * `--success` · `--warning`): `src/styles/` non è di questa corsia, e il CSS nuovo si CHIEDE.
+ *
+ * `role="status"` + `aria-atomic`: è un messaggio di stato e si annuncia intero (WCAG 4.1.3,
+ * come la riga dei conteggi della coda). `tabindex="-1"` perché è anche il posto in cui il fuoco
+ * atterra quando il comando che ha aperto il pannello non esiste più.
+ */
+export function creaRigaEsitoModello(verdetto, { document: d = globalThis.document } = {}) {
+  const riga = el(d, 'p', 'talos-lab__space');
+  riga.dataset.c = 'EsitoModello';
+  riga.dataset.tono = verdetto.tono;
+  riga.setAttribute('role', 'status');
+  riga.setAttribute('aria-atomic', 'true');
+  riga.tabIndex = -1;
+  riga.append(badge(d, verdetto.etichetta, verdetto.tono), d.createTextNode(` ${verdetto.testo}`));
+  return riga;
+}
+
 /**
  * Il dettaglio (`DetailPanel` del mockup). `azioni` = { libera, verifica, rinomina, copia, elimina };
  * `nodoFit` (facoltativo) è il verdetto esteso del monolite, appeso sotto l'azione principale.

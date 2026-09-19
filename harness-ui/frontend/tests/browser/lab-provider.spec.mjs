@@ -42,6 +42,31 @@ import { resolve } from 'node:path';
  *   verde prima, ripristino **byte-identico** dopo (sha256 `c375ffee…b342`, verificato
  *   col `diff`: identico, sha256 `8a241fcc…4e6e`). Tredici mutazioni, **tredici rossi**:
  *
+ * ⛔⛔ E IL 19/09/2026 SERA, FASE 4-bis — SEI MUTAZIONI NUOVE, e UNA HA BOCCIATO LA PROVA.
+ *   Baseline verde su tutte e sette le spec prima di rompere; una rottura per volta;
+ *   ripristino dal file originale e sha256 confrontato. Le nuove:
+ *
+ *     | mutazione                                              | prova   | esito |
+ *     |--------------------------------------------------------|---------|-------|
+ *     | «Configura» perde `stopPropagation` (la card si ridisegna sotto la modale) | PROV-03 | rosso |
+ *     | la modale si apre con `open` invece di `showModal()`   | PROV-03 | rosso |
+ *     | il corpo della modale perde `flex`/`overflow:auto`     | PROV-09 | rosso |
+ *     | l'icona di «Configura» torna in CODA                   | PROV-01 | **VERDE al primo giro** |
+ *     | la modale non si riapre dopo il ridisegno              | PROV-03 | rosso |
+ *     | il velo torna a chiudere la modale                     | PROV-03 | rosso |
+ *
+ *   ⛔ E LA QUARTA È LA LEZIONE DEL GIRO: la riga che doveva mordere sull'ordine dell'icona
+ *     leggeva `firstElementChild`, e la parola «Configura» è un NODO DI TESTO — `firstElementChild`
+ *     salta i nodi di testo, quindi trovava l'`<svg>` sia prima sia dopo. **La prova era cieca e
+ *     diceva verde.** Si legge `childNodes[0]`, e allora morde. È la stessa famiglia della
+ *     mutazione che nel giro precedente aveva prodotto un falso rosso per una prova che non
+ *     esisteva: una prova si giudica da cosa succede QUANDO IL PRODOTTO È ROTTO, mai dal verde.
+ *   ⛔ E una nota sul banco, perché è costata un giro: il primo lanciatore usava
+ *     `execFileSync('npx', …)`, che su Windows non trova `npx.cmd` senza shell — OGNI esecuzione
+ *     falliva e il riepilogo scriveva «ROSSO» anche per la BASELINE. Dodici «prove che mordono»
+ *     che non provavano niente, e il numero era bello proprio perché era rotto. Si lancia il CLI
+ *     per percorso (`node node_modules/@playwright/test/cli.js`), come `run-browser-tests.mjs`.
+ *
  *     | mutazione                                            | prova   |
  *     |------------------------------------------------------|---------|
  *     | la carta perde il padding 22px                       | PROV-01 |
@@ -136,6 +161,7 @@ function scostamenti(misura, atteso) {
 async function apriProvider(page, { colorMode = 'dark', test = false } = {}) {
   const tentate = [];
   const prove = [];
+  const salvataggi = [];
   /* ⛔ PRIMA il blocco, POI l'eccezione — e l'ordine NON è indifferente: Playwright prova i
      gestori in ordine INVERSO a quello di registrazione, quindi un `page.route('**\/*')` messo
      per ultimo vince su tutto e la sonda verrebbe ABORTITA dal blocco stesso. Misurato: con
@@ -152,6 +178,13 @@ async function apriProvider(page, { colorMode = 'dark', test = false } = {}) {
     await page.route('**/api/v1/providers/*/test', (route) => {
       prove.push(new URL(route.request().url()).pathname);
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { provider: 'x', esito: 'collegato', motivo: 'Servizio raggiunto.', modelli: 4, millisecondi: 12 } }) });
+    });
+    /* Il salvataggio della configurazione — quello che preme la PRIMARIA della modale. Si conta
+       come la sonda, e per la stessa ragione: una primaria che non salva niente è un pulsante
+       che promette un'altra cosa, e senza questa riga la prova non se ne accorgerebbe. */
+    await page.route('**/api/v1/providers/*/runtime', (route) => {
+      salvataggi.push({ percorso: new URL(route.request().url()).pathname, corpo: route.request().postDataJSON() });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: {} }) });
     });
   }
   await page.addInitScript((modo) => {
@@ -194,7 +227,7 @@ async function apriProvider(page, { colorMode = 'dark', test = false } = {}) {
     const dopoRefresh = pannello.querySelectorAll('#providerRefresh').length;
     return { n: window.__righe.length, prima: window.__righe[0]?.id ?? null, lista: Boolean(lista), primaRefresh, dopoRefresh };
   });
-  return { tentate, prove, esito };
+  return { tentate, prove, salvataggi, esito };
 }
 
 /** Ridisegna le card con la sorgente di OGGI (dopo che l'app ha ridisegnato le sue). */
@@ -284,6 +317,42 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
     const piedi = await stili(page, '.talos-provider__azioni', Object.keys(MOCKUP.azioni));
     expect(piedi.n).toBe(esito.n);
     piedi.misure.forEach((m, i) => expect(scostamenti(m, MOCKUP.azioni), `piede ${i + 1}`).toEqual({}));
+    /*
+     * ── I DUE COMANDI DEL PIEDE HANNO LA FORMA DEL MOCKUP ──────────────────────────────────
+     * ⛔ `.button` misurato dal DOM vivo: min-height 38 · padding 9px 13px · raggio 8 · bordo 1 ·
+     *   12px/550 · gap 8 · icona 16×16 IN TESTA alla parola. Il primo giro aveva l'altezza 32,
+     *   il bordo 2, il peso 600, nessuna icona — e poi l'icona in CODA (vista nella foto:
+     *   «Configura» a destra, «Verifica accesso» a sinistra, due pulsanti uguali e diversi).
+     */
+    const comandi = await page.evaluate(() => [...document.querySelectorAll('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id] .talos-provider__azioni button')].map((b) => {
+      const cs = getComputedStyle(b);
+      /*
+       * ⛔ `childNodes[0]`, NON `firstElementChild`: la parola «Configura» è un NODO DI TESTO, e
+       *   `firstElementChild` salta i nodi di testo — quindi trovava l'`<svg>` sia quando stava
+       *   PRIMA sia quando stava DOPO. La prima stesura di questa riga era cieca all'ordine, e
+       *   l'ha detto la prova che morde: rimettendo l'icona in coda, questa prova restava VERDE.
+       */
+      const primo = b.childNodes[0];
+      const eIcona = primo?.nodeName?.toLowerCase() === 'svg';
+      return {
+        testo: b.textContent.trim(),
+        altezza: Math.round(b.getBoundingClientRect().height),
+        raggio: cs.borderTopLeftRadius, bordo: cs.borderTopWidth, peso: cs.fontWeight, misura: cs.fontSize, gap: cs.columnGap,
+        iconaPrima: eIcona,
+        icona: eIcona ? `${Math.round(primo.getBoundingClientRect().width)}x${Math.round(primo.getBoundingClientRect().height)}` : null,
+      };
+    }));
+    /* ⛔ Due comandi per card TRANNE UNA: l'agente esterno tiene la sua sonda nel CORPO
+       («Prova collegamento», ed è il gesto principale di quella card), quindi nel piede ha solo
+       «Configura». È una differenza dichiarata da `provider-card.js`, non una card a cui manca
+       un comando — e va contata, o la riga direbbe «56» e accuserebbe il prodotto. */
+    expect(comandi.length, 'due comandi per card, meno la sonda dell\'agente esterno che vive nel corpo').toBe(esito.n * 2 - 1);
+    for (const c of comandi) {
+      expect(scostamenti({ altezza: `${c.altezza}px`, raggio: c.raggio, bordo: c.bordo, peso: c.peso, misura: c.misura, gap: c.gap },
+        { altezza: '38px', raggio: '8px', bordo: '1px', peso: '550', misura: '12px', gap: '8px' }), `«${c.testo}» non ha la forma del mockup`).toEqual({});
+      expect(c.iconaPrima, `«${c.testo}»: l'icona del mockup sta PRIMA della parola`).toBe(true);
+      expect(c.icona, `«${c.testo}»: l'icona del mockup misura 16×16`).toBe('16x16');
+    }
 
     /* ── E IL CONTENUTO È QUELLO VERO: il nome è l'etichetta del server, non un id ─────── */
     const nomi = await page.evaluate(() => [...document.querySelectorAll('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id]')].map((n) => ({ id: n.dataset.providerId, nome: n.querySelector('.talos-provider__name')?.textContent })));
@@ -308,27 +377,197 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
     expect(misura.eccedenza, 'e niente scorre in orizzontale').toBeLessThanOrEqual(0);
   });
 
-  test('PROV-03 — «Configura» apre la configurazione VERA, e «Verifica accesso» fa partire la sonda VERA', async ({ page }) => {
+  /*
+   * ⛔⛔ RISCRITTA IL 19/09/2026 (FASE 4-bis) — IL BERSAGLIO È CAMBIATO, IL SIGNIFICATO NO.
+   *   Il significato resta: «"Configura" apre la configurazione VERA di QUEL fornitore». Il
+   *   bersaglio non può più essere il corpo che si apre in linea, perché l'owner ha bocciato
+   *   proprio quello («su 4174 c'è un **collapse bruttissimo**») e al suo posto c'è la **modale
+   *   del mockup**. ⇒ Si prova la modale: che sia un `<dialog>` APERTO, dentro quella card, col
+   *   nome del fornitore e i campi veri.
+   * ⛔ E si prova anche il verso che PRIMA non esisteva: che il clic NON passi dalla regia della
+   *   disclosure. Senza il `stopPropagation`, `app.js` scriverebbe `aria-expanded` invertito e
+   *   `c.hidden` sul corpo, e la lista si RIDISEGNEREBBE portandosi via la card con dentro la
+   *   modale appena aperta — una modale che si chiude da sola, senza un errore da nessuna parte.
+   *   La riga `prove.length` + `data-provider-signature` invariata è quella che lo morde.
+   */
+  test('PROV-03 — «Configura» apre la MODALE col nome del fornitore e i campi veri, e «Verifica accesso» fa partire la sonda VERA', async ({ page }) => {
     await page.setViewportSize({ width: SOGLIE.larga, height: 900 });
-    const { prove, tentate } = await apriProvider(page, { test: true });
+    const { prove, tentate, salvataggi } = await apriProvider(page, { test: true });
 
     const card = page.locator('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id="openai"]');
     const corpo = card.locator('.talos-provider__body');
     const configura = card.locator('.talos-provider__azioni [data-provider-toggle]');
 
-    /* La card è CHIUSA di partenza, e il comando lo dichiara. */
+    /* La configurazione è CHIUSA di partenza, e il comando lo dichiara. */
+    await expect(card.locator(':scope > .talos-provider__modale')).toHaveCount(0);
     await expect(corpo).toBeHidden();
     await expect(configura).toHaveAttribute('aria-expanded', 'false');
     await expect(configura).toContainText('Configura');
+    const firmaPrima = await card.getAttribute('data-provider-signature');
     await configura.click();
 
-    /* ⛔ LA PROVA CHE MORDE: il clic passa per la REGIA VERA (`app.js`, delega su
-       `[data-provider-toggle]`) e cambia lo stato VERO. Staccando `data-provider-toggle` dal
-       pulsante, questa riga diventa rossa: lo stato dell'app non cambia e la card resta chiusa. */
-    await expect.poll(() => page.evaluate(() => {
-      const c = document.querySelector('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id="openai"]');
-      return c?.querySelector('.talos-provider__body')?.hidden ?? null;
-    }), { message: '«Configura» non ha aperto la configurazione' }).toBe(false);
+    /* ── LA MODALE C'È, ed è una modale vera ─────────────────────────────────────────── */
+    const modale = card.locator(':scope > .talos-provider__modale');
+    await expect(modale, '«Configura» non ha aperto nessuna modale').toHaveCount(1);
+    const stato = await page.evaluate(() => {
+      const d = document.querySelector('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id="openai"] > .talos-provider__modale');
+      const r = d.getBoundingClientRect();
+      return {
+        tag: d.tagName, open: d.open, modale: d.matches(':modal'),
+        titolo: d.querySelector('h2')?.textContent ?? null,
+        etichettata: Boolean(document.getElementById(d.getAttribute('aria-labelledby'))),
+        dentroLaCard: Boolean(d.closest('[data-provider-id="openai"]')),
+        /*
+         * ⛔ «Il resto è inerte» NON si legge da `elemento.inert`: la proprietà IDL `inert` è
+         *   un'ALTRA cosa (l'attributo), e un `<dialog>` aperto con `showModal()` blocca il resto
+         *   a livello del browser senza scriverla addosso a nessuno. L'ho scoperto così: la prima
+         *   stesura di questa riga leggeva `.inert` su una card lontana, trovava `false` e
+         *   accusava il prodotto di un difetto che non c'era. Si misura invece l'EFFETTO —
+         *   provare a portare il fuoco fuori, e vedere che non ci va.
+         */
+        fuocoBloccatoFuori: (() => {
+          const fuori = document.querySelector('.talos-sidebar [data-vaia="impostazioni"]');
+          if (!fuori) return null;
+          fuori.focus({ preventScroll: true });
+          return d.contains(document.activeElement);
+        })(),
+        chiave: Boolean(d.querySelector('[data-provider-key]')),
+        indirizzo: Boolean(d.querySelector('[data-provider-endpoint]')),
+        avviso: d.querySelector('[data-provider-modale-avviso]')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+        annulla: d.querySelector('[data-provider-modale-annulla]')?.textContent ?? null,
+        primaria: d.querySelector('[data-provider-modale-salva]')?.textContent ?? null,
+        primariaTipo: d.querySelector('[data-provider-modale-salva]')?.dataset.providerModaleSalva ?? null,
+        fuocoDentro: d.contains(document.activeElement),
+        fuocoSu: document.activeElement?.getAttribute('data-provider-key') !== null ? 'chiave' : (document.activeElement?.tagName ?? null),
+        larghezza: Math.round(r.width), altezza: Math.round(r.height),
+        /* Il corpo NON si è spostato fuori dalla card: la regia lo cerca con
+           `button.closest('[data-provider-id]')` e da lì `card.querySelector('[data-provider-key]')`. */
+        corpoDentroLaCard: Boolean(d.querySelector('.talos-provider__body')),
+      };
+    });
+    expect(stato.tag).toBe('DIALOG');
+    expect(stato.open, 'il `<dialog>` non è aperto').toBe(true);
+    expect(stato.modale, '`showModal()` non è stato chiamato: il resto della pagina non è inerte e il fuoco scappa').toBe(true);
+    expect(stato.titolo, 'il titolo del mockup: «Configura <Fornitore>»').toBe('Configura OpenAI');
+    expect(stato.etichettata, '`aria-labelledby` deve puntare a un nodo vero').toBe(true);
+    expect(stato.dentroLaCard, 'la modale vive DENTRO la card: è lì che la regia cerca i campi').toBe(true);
+    expect(stato.corpoDentroLaCard, 'e i campi sono ancora suoi discendenti').toBe(true);
+    expect(stato.fuocoBloccatoFuori, 'aperta la modale, il fuoco non deve poter uscire dal suo riquadro').toBe(true);
+    /* I CAMPI VERI, non due `readonly` dimostrativi come quelli del mockup. */
+    expect(stato.chiave, 'manca il campo della chiave').toBe(true);
+    expect(stato.indirizzo, 'OpenAI dichiara `supportsEndpoint`: l\'indirizzo deve esserci').toBe(true);
+    /*
+     * ⛔ E LA NOTA DI SICUREZZA STA QUI, dov'è nel mockup (il suo `.inline-notice` è dentro la
+     *   modale) — ma con le NOSTRE parole: quelle del mockup («Confermando si modifica solo lo
+     *   stato temporaneo del prototipo») in TALOS sono false. La prova tiene tutte e due le metà.
+     */
+    expect(stato.avviso, 'la nota di sicurezza deve stare dentro la modale, dove si scrivono le credenziali').toContain('Le chiavi restano sul computer');
+    expect(stato.avviso, 'e deve dire le verifiche distinte, che è la frase vera').toContain('verifiche distinte');
+    expect(stato.avviso, 'la frase del mockup è del prototipo: qui sarebbe falsa').not.toContain('stato temporaneo del prototipo');
+    expect(stato.annulla).toBe('Annulla');
+    /* ⛔ LA PRIMARIA È IL GESTO VERO DELLA CARD, e il suo nome lo dice. Il mockup porta «Salva
+       configurazione demo»: la sua è un'azione di PROTOTIPO. Qui la primaria preme il pulsante
+       che la card premerebbe davvero — per OpenAI la CONFIGURAZIONE (indirizzo e tempo massimo,
+       il `save-runtime` che la regia serve da sempre), per un fornitore che non ne ha una, la
+       chiave. Un piede che promette «Salva configurazione» dove non c'è niente da configurare
+       sarebbe la stessa classe di difetto del pulsante che promette un'altra cosa. */
+    expect(stato.primaria).toBe('Salva configurazione');
+    expect(stato.primariaTipo).toBe('runtime');
+    /* E il corpo NON perde il suo gesto: «Salva chiave» resta dentro la modale, raggiungibile. */
+    expect(await card.locator('.talos-provider__body [data-provider-action="save-key"]').count(), 'la chiave ha ancora il suo pulsante').toBe(1);
+    /* Il fuoco entra nel primo controllo utile, non sul contenitore. */
+    expect(stato.fuocoDentro, 'il fuoco è rimasto fuori dalla modale').toBe(true);
+    expect(stato.fuocoSu, 'il fuoco entra nel primo controllo UTILE').toBe('chiave');
+    expect(stato.larghezza, 'la larghezza del mockup').toBe(600);
+    expect(stato.altezza).toBeGreaterThan(200);
+
+    /*
+     * ── IL VERSO CHE CONTA: il clic NON è passato dalla regia della disclosure ──────────
+     * Se ci passasse, `providerAperti` cambierebbe e la lista si RIDISEGNEREBBE: la firma della
+     * card cambierebbe e la card verrebbe sostituita — con dentro la modale appena aperta.
+     */
+    expect(await card.getAttribute('data-provider-signature'), 'la card è stata ridisegnata sotto la modale: il clic è arrivato alla regia').toBe(firmaPrima);
+    await expect(modale, 'la modale si è chiusa da sola').toHaveCount(1);
+
+    /* ── ESC CHIUDE, e il fuoco TORNA a chi ha aperto (WCAG 2.1.2 + APG «Dialog (Modal)») ── */
+    await page.keyboard.press('Escape');
+    await expect(modale, 'ESC non ha chiuso la modale').toHaveCount(0);
+    const dopoEsc = await page.evaluate(() => {
+      const a = document.activeElement;
+      return { chi: a?.getAttribute('data-provider-toggle') ? 'configura' : a?.tagName ?? null, espanso: a?.getAttribute('aria-expanded') ?? null, dentro: a?.closest('[data-provider-id]')?.dataset.providerId ?? null };
+    });
+    expect(dopoEsc.chi, 'il fuoco non è tornato al pulsante che ha aperto la modale').toBe('configura');
+    expect(dopoEsc.dentro).toBe('openai');
+    expect(dopoEsc.espanso, 'e lo stato è tornato chiuso').toBe('false');
+    /* Il corpo è tornato al suo posto, e richiuso. */
+    await expect(corpo).toBeHidden();
+    await expect(card.locator(':scope > .talos-provider__modale')).toHaveCount(0);
+
+    /* ── E LA MODALE NON SI CHIUDE DAL VELO: dentro ci sono le chiavi che si stanno scrivendo ── */
+    await configura.click();
+    await expect(modale).toHaveCount(1);
+    await page.mouse.click(20, 400); // fuori dal riquadro: sul velo scuro
+    await expect(modale, 'un clic fuori non deve buttare via quello che si è scritto').toHaveCount(1);
+
+    /*
+     * ── E IL RIDISEGNO DELLA LISTA NON SE LA PORTA VIA ──────────────────────────────────
+     * ⛔ Salvare RIDISEGNA: il salvataggio chiama l'«Aggiorna» del prodotto, la riga del fornitore
+     *   cambia, la firma della card cambia e il renderer ne costruisce una NUOVA — portandosi via
+     *   la card vecchia e, con lei, la modale appena aperta. Misurato il 19/09/2026: la richiesta
+     *   partiva con il valore giusto e la modale spariva senza mostrare l'esito.
+     * ⛔ QUI IL RIDISEGNO LO GUIDA LA PROVA, e non è un trucco: la regia che serve il salvataggio
+     *   è quella del BUNDLE di ieri (`public/`, dell'orchestratore), quindi il SUO ridisegno
+     *   userebbe il renderer di ieri. La cura è di OGGI e vive in `aggiornaProviderList`: per
+     *   provarla si chiama quella, con la riga aggiornata — cioè ciò che farà il boot dopo il
+     *   build. (È la stessa cosa che questa spec dichiara in testa: le foto provano il CODICE,
+     *   non la consegna.)
+     */
+    await page.evaluate(() => {
+      const righe = window.__righe.map((r) => r.id === 'openai' ? { ...r, endpoint: 'https://esempio.test/v1', endpointConfigured: true } : r);
+      window.__righe = righe;
+      window.__prov.aggiornaProviderList(document.querySelector('#modelLabCard [data-model-lab-panel="providers"] #providerList'), righe, {});
+    });
+    await expect(modale, 'il ridisegno della lista si è portato via la modale').toHaveCount(1);
+    await expect(card.locator('.talos-provider__fatti'), 'la card nuova porta il dato nuovo').toContainText('Indirizzo personalizzato');
+    await expect(card.locator('[data-provider-modale-salva]'), 'e la modale è quella della card nuova').toHaveCount(1);
+
+    /*
+     * ── LA PRIMARIA SALVA DAVVERO ─────────────────────────────────────────────────────
+     * Non si crede al nome: si preme e si CONTA la richiesta. E si vede anche che il valore
+     * scritto dentro la modale arriva al salvataggio — i campi sono gli STESSI nodi del corpo,
+     * non due copie che si somigliano.
+     */
+    await card.locator('[data-provider-endpoint]').fill('https://esempio.test/v2');
+    await card.locator('[data-provider-modale-salva]').click();
+    await expect.poll(() => salvataggi.length, { message: 'la primaria della modale non ha salvato niente' }).toBe(1);
+    expect(salvataggi[0].percorso).toBe('/api/v1/providers/openai/runtime');
+    expect(salvataggi[0].corpo.endpoint, 'l\'indirizzo scritto nella modale arriva al salvataggio').toBe('https://esempio.test/v2');
+    /* L'esito vive DENTRO la modale, dove stanno i campi: è la ragione per cui non si chiude. */
+    await expect(card.locator('[data-provider-feedback]')).toHaveText('Collegamento salvato.');
+    /*
+     * ⛔ E QUI LA PROVA SI FERMA, DICHIARANDO IL CONFINE. Dopo il salvataggio il ridisegno lo fa
+     *   la REGIA DEL BUNDLE (quella di ieri, servita da `public/`), che non ha la cura di oggi:
+     *   la card viene sostituita e la modale va con lei. Nel prodotto, dopo il build, il ridisegno
+     *   passa dal renderer di oggi e la modale resta — ed è ciò che la prova qui sopra ha appena
+     *   misurato. Quello che si può pretendere DA QUESTA parte del confine è che l'esito
+     *   sopravviva al ridisegno: il nodo del feedback è preservato, e si legge.
+     */
+
+    /*
+     * ⛔ E PRIMA DELLA SONDA SI ASPETTA CHE IL RIDISEGNO DEL SALVATAGGIO SIA FINITO, poi si chiude
+     *   la modale se è ancora lì. Non è pignoleria: questa prova è diventata ROSSA A SINGHIOZZO
+     *   finché la riga non c'è stata, e la causa era una CORSA — dopo «Salva configurazione»
+     *   partono DUE ridisegni, quello del bundle (che porta via la card con la modale) e quello
+     *   della sorgente di oggi (che con `daRiaprire` la RIAPRE). Quale arrivasse per ultimo
+     *   dipendeva dal tempo, e con la modale aperta il piede della card è coperto: il clic su
+     *   «Verifica accesso» scadeva a 30 s. Una prova che balla non protegge — e una prova che
+     *   accusa il prodotto di una corsa che ha fatto lei è peggio di nessuna prova.
+     *   ⇒ L'ATTESA è ancorata a un fatto osservabile (la riga aggiornata è arrivata alla card),
+     *     non a un `waitForTimeout`, e la CHIUSURA è una conseguenza dichiarata, non un caso.
+     */
+    await expect(card.locator('.talos-provider__fatti')).toContainText('Indirizzo personalizzato');
+    if (await card.locator(':scope > .talos-provider__modale').count()) await card.locator('[data-provider-modale-annulla]').click();
+    await expect(card.locator(':scope > .talos-provider__modale')).toHaveCount(0);
 
     /* E la sonda: `data-provider-action="test"` è il nome che la regia riconosce. */
     await ridisegna(page);
@@ -338,8 +577,8 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
     await expect.poll(() => prove.length, { message: '«Verifica accesso» non ha chiamato la sonda' }).toBe(1);
     expect(prove[0]).toBe('/api/v1/providers/openai/test');
 
-    /* ⛔ E niente scritture: l'unica non-GET è quella che abbiamo intercettato noi. */
-    expect(tentate.filter((t) => !t.includes('/test')), 'nessuna scrittura non prevista').toEqual([]);
+    /* ⛔ E niente scritture: le uniche non-GET sono le due che abbiamo intercettato noi. */
+    expect(tentate.filter((t) => !t.includes('/test') && !t.includes('/runtime')), 'nessuna scrittura non prevista').toEqual([]);
   });
 
   test('PROV-04 — D9: nella scheda «Provider» c\'è UNA testata sola', async ({ page }) => {
@@ -498,16 +737,65 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
     expect(chiuso.testo).toBe('Configura');
     expect(chiuso.nome, 'Label in Name: il nome deve contenere la parola visibile').toContain(chiuso.testo);
 
-    /* Si apre DAVVERO (passando dalla regia vera, come PROV-03), poi si ridisegna con la
-       sorgente di oggi e si rilegge lo STESSO comando da aperto. */
+    /* Si apre DAVVERO — e dal 19/09/2026 «aprire» vuol dire la MODALE (PROV-03) — poi si
+       ridisegna con la sorgente di oggi e si rilegge lo STESSO comando da aperto. */
     const card = page.locator('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id="openai"]');
     await card.locator('.talos-provider__azioni [data-provider-toggle]').click();
+    await expect(card.locator(':scope > .talos-provider__modale')).toHaveCount(1);
     await expect.poll(() => page.evaluate(() => document.querySelector('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id="openai"] .talos-provider__body')?.hidden ?? null)).toBe(false);
     await ridisegna(page, ['openai']);
     const aperto = await leggi();
     expect(aperto.espanso, 'aperto: lo stato è cambiato').toBe('true');
     expect(aperto.nome, '⛔ il nome accessibile NON deve cambiare col verso del comando').toBe(chiuso.nome);
     expect(aperto.testo, 'e nemmeno il testo visibile').toBe(chiuso.testo);
+  });
+
+  /*
+   * ⛔⛔ NIENTE, DENTRO LA MODALE, DEVE ESSERE IRRAGGIUNGIBILE — e questa prova nasce da una FOTO,
+   *   non da un ragionamento. Il primo giro della modale aveva la testata e il piede fissi ma il
+   *   corpo che NON scorreva: in una finestra bassa il contenuto finiva sotto il bordo e
+   *   «Salva chiave» non si poteva più premere. Il `<dialog>` ha `overflow:hidden`, quindi ciò che
+   *   non ci sta non si perde in silenzio: SPARISCE.
+   *   ⇒ Si prova nelle condizioni in cui il difetto vive — finestra CORTA — e si pretende che
+   *     l'ultimo comando del corpo diventi raggiungibile scorrendo. È la stessa disciplina del
+   *     composer (18/09: «la prova va fatta nelle condizioni in cui il difetto vive, non in quelle
+   *     comode»).
+   */
+  test('PROV-09 — in una finestra bassa il corpo della modale SCORRE, e nessun comando resta irraggiungibile', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 420 });
+    await apriProvider(page);
+    const card = page.locator('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id="bedrock"]');
+    await card.locator('.talos-provider__azioni [data-provider-toggle]').click();
+    const modale = card.locator(':scope > .talos-provider__modale');
+    await expect(modale).toHaveCount(1);
+
+    const misura = await page.evaluate(() => {
+      const d = document.querySelector('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id="bedrock"] > .talos-provider__modale');
+      const telaio = d.querySelector('.talos-provider__modale-corpo');
+      const cs = getComputedStyle(telaio);
+      /* ⛔ Solo i controlli che si VEDONO: in fondo al corpo stanno i comandi del menu «⋯», che
+         sono `hidden` e hanno rettangolo zero — prenderli per ultimi farebbe passare (o fallire)
+         la prova su un nodo che nessuno può premere. */
+      const dentro = [...telaio.querySelectorAll('input,textarea,button')].filter((n) => n.getClientRects().length > 0);
+      const ultimo = dentro.at(-1);
+      const prima = { riquadro: d.getBoundingClientRect(), ultimo: ultimo?.getBoundingClientRect(), scorre: telaio.scrollHeight > telaio.clientHeight, overflow: cs.overflowY, altezzaDialogo: d.getBoundingClientRect().height, altezzaFinestra: window.innerHeight };
+      /* Si scorre in fondo: se il corpo scorre, l'ultimo comando entra nel riquadro. */
+      telaio.scrollTop = telaio.scrollHeight;
+      const dopo = { ultimo: ultimo?.getBoundingClientRect() };
+      return { prima, dopo, bottoni: dentro.length };
+    });
+    expect(misura.bottoni, 'la card di Bedrock ha comandi nel corpo: senza, la prova sarebbe vacua').toBeGreaterThan(0);
+    /* La finestra è corta E il contenuto non ci sta: è la condizione del difetto. */
+    expect(misura.prima.altezzaFinestra).toBeLessThan(600);
+    expect(misura.prima.scorre, 'il contenuto del corpo non eccede: la prova non sta misurando il difetto').toBe(true);
+    expect(misura.prima.overflow, 'il corpo deve poter scorrere').toBe('auto');
+    expect(misura.prima.altezzaDialogo, 'e la modale non deve sfondare la finestra').toBeLessThanOrEqual(misura.prima.altezzaFinestra);
+    /* ⛔ E LA PROVA CHE MORDE: prima dello scorrimento l'ultimo comando è FUORI dal riquadro;
+       dopo, è dentro. Senza `overflow:auto` + `flex:1` sul corpo, `scrollTop` non muove niente
+       e la seconda riga è rossa. */
+    expect(misura.prima.ultimo.bottom, 'l\'ultimo comando era già dentro: la prova non prova niente').toBeGreaterThan(misura.prima.riquadro.bottom - 1);
+    expect(misura.dopo.ultimo.bottom, 'scorrendo, l\'ultimo comando deve entrare nel riquadro').toBeLessThanOrEqual(misura.prima.riquadro.bottom + 1);
+    expect(misura.dopo.ultimo.top, 'ed essersi mosso davvero').toBeLessThan(misura.prima.ultimo.top);
   });
 
   test('PROV-05 — le card reggono la finestra stretta del velo, e il velo vero si apre ancora', async ({ page }) => {
@@ -554,6 +842,13 @@ test('PROV-FOTO — la scheda Provider nei due temi e alle due larghezze', async
       await nuova.evaluate(() => document.querySelector('#modelLabCard [data-model-lab-panel="providers"] #providerList')?.scrollIntoView({ block: 'start' }));
       await nuova.waitForTimeout(200);
       await foto(nuova, `provider-card-${modo}-${larghezza}`);
+      /* ⛔ E LA MODALE, che è il difetto numero 2 dell'owner: «mi apre una modale del mock-up,
+         invece su 4174 c'è un collapse bruttissimo». Si apre dalla sua porta vera (il clic su
+         «Configura») e si fotografa nei due temi — perché un velo scuro e un riquadro chiaro
+         vivono in due mondi diversi, e una foto sola non li mostra tutti e due. */
+      await nuova.locator('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id="openrouter"] [data-provider-toggle]').click();
+      await nuova.waitForTimeout(250);
+      await foto(nuova, `provider-modale-${modo}-${larghezza}`);
       await nuova.close();
     }
   }

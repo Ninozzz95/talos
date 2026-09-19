@@ -257,12 +257,12 @@ function createCommandPalette(options) {
         row.setAttribute("role", "option");
         row.setAttribute("aria-selected", "false");
         row.setAttribute("aria-disabled", String(Boolean(item.disabledReason)));
-        const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.setAttribute("class", "i");
-        svg.setAttribute("aria-hidden", "true");
-        const use = doc.createElementNS(svg.namespaceURI, "use");
+        const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg2.setAttribute("class", "i");
+        svg2.setAttribute("aria-hidden", "true");
+        const use = doc.createElementNS(svg2.namespaceURI, "use");
         use.setAttribute("href", `#${command.icon}`);
-        svg.append(use);
+        svg2.append(use);
         const copy = doc.createElement("span");
         copy.className = "command-palette__copy";
         const label = doc.createElement("span");
@@ -271,7 +271,7 @@ function createCommandPalette(options) {
         const detail = doc.createElement("small");
         detail.textContent = t3(item.disabledReason || command.description);
         copy.append(label, detail);
-        row.append(svg, copy);
+        row.append(svg2, copy);
         if (command.shortcut) {
           const key = doc.createElement("kbd");
           key.className = "talos-kbd";
@@ -698,13 +698,13 @@ function createWorkspaceChrome(options) {
     return item;
   }
   function icon(name) {
-    const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("class", "i");
-    svg.setAttribute("aria-hidden", "true");
-    const use = doc.createElementNS(svg.namespaceURI, "use");
+    const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg2.setAttribute("class", "i");
+    svg2.setAttribute("aria-hidden", "true");
+    const use = doc.createElementNS(svg2.namespaceURI, "use");
     use.setAttribute("href", `#${name}`);
-    svg.append(use);
-    return svg;
+    svg2.append(use);
+    return svg2;
   }
   function button2(text2, action, className = "talos-button talos-button--secondary", symbol) {
     const b = node2("button", className);
@@ -1710,7 +1710,7 @@ function creaBarraFaccette({ onCambia, etichetta: etichetta2 = (k, v) => v } = {
     const ricerca = attivi.closest("#modelLabCatalogPanel")?.querySelector('input[type="search"]')?.value?.trim() || "";
     attivi.replaceChildren();
     if (ricerca) attivi.append(chipRicerca(ricerca));
-    for (const c of chips) attivi.append(chipFiltro(c));
+    for (const c of chips) attivi.append(chipFiltro2(c));
     if (chips.length || ricerca) {
       const azzera = el("button", "talos-button talos-button--ghost talos-button--sm", "Azzera tutto");
       azzera.type = "button";
@@ -1729,7 +1729,7 @@ function creaBarraFaccette({ onCambia, etichetta: etichetta2 = (k, v) => v } = {
     }
     barra.dataset.facetDati = senzaDati ? "non-misurati" : "misurati";
   }
-  function chipFiltro(c) {
+  function chipFiltro2(c) {
     const b = el("button", "talos-button talos-button--secondary talos-button--sm", c.label);
     b.type = "button";
     b.dataset.facetRemove = "";
@@ -2873,13 +2873,13 @@ function analizzaComando(riga2) {
   };
 }
 function iconaComando(d, famiglia) {
-  const svg = d.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("class", "i i--sm talos-cmd__icona");
-  svg.setAttribute("aria-hidden", "true");
+  const svg2 = d.createElementNS(SVG_NS, "svg");
+  svg2.setAttribute("class", "i i--sm talos-cmd__icona");
+  svg2.setAttribute("aria-hidden", "true");
   const use = d.createElementNS(SVG_NS, "use");
   use.setAttribute("href", `#${ICONA_FAMIGLIA[famiglia] || ICONA_FAMIGLIA.generico}`);
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
 }
 function disegnaComando(d, riga2, analisi = null) {
   const a = analisi || analizzaComando(riga2);
@@ -3338,13 +3338,13 @@ function bottoneApri(d, card, riga2, idRiga) {
   b.setAttribute("aria-expanded", "false");
   b.setAttribute("aria-controls", `processo-dettaglio-${idRiga}`);
   b.setAttribute("aria-label", "Mostra i dettagli di questo comando");
-  const svg = d.createElementNS(SVG_NS_INSPECTOR, "svg");
-  svg.setAttribute("class", "i i--sm");
-  svg.setAttribute("aria-hidden", "true");
+  const svg2 = d.createElementNS(SVG_NS_INSPECTOR, "svg");
+  svg2.setAttribute("class", "i i--sm");
+  svg2.setAttribute("aria-hidden", "true");
   const use = d.createElementNS(SVG_NS_INSPECTOR, "use");
   use.setAttribute("href", "#i-chev");
-  svg.append(use);
-  b.append(svg);
+  svg2.append(use);
+  b.append(svg2);
   b.addEventListener("click", (evento) => {
     evento.preventDefault?.();
     evento.stopPropagation?.();
@@ -3552,13 +3552,13 @@ function kv2(d, k, v, classeV = "") {
   return r;
 }
 function chevron(d) {
-  const svg = d.createElementNS(SVG_NS_INSPECTOR, "svg");
-  svg.setAttribute("class", "i talos-inspector-card__vai");
-  svg.setAttribute("aria-hidden", "true");
+  const svg2 = d.createElementNS(SVG_NS_INSPECTOR, "svg");
+  svg2.setAttribute("class", "i talos-inspector-card__vai");
+  svg2.setAttribute("aria-hidden", "true");
   const use = d.createElementNS(SVG_NS_INSPECTOR, "use");
   use.setAttribute("href", "#i-chevron-right");
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
 }
 function bottoneAzioni(d, a, azioni) {
   const nome = a.taskCorto || a.task || "delega senza compito";
@@ -3568,13 +3568,13 @@ function bottoneAzioni(d, a, azioni) {
   b.setAttribute("aria-haspopup", "menu");
   b.setAttribute("aria-label", `Azioni su: ${nome}`);
   b.title = "Azioni su questa delega";
-  const svg = d.createElementNS(SVG_NS_INSPECTOR, "svg");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
+  const svg2 = d.createElementNS(SVG_NS_INSPECTOR, "svg");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
   const use = d.createElementNS(SVG_NS_INSPECTOR, "use");
   use.setAttribute("href", "#i-more");
-  svg.append(use);
-  b.append(svg);
+  svg2.append(use);
+  b.append(svg2);
   b.addEventListener("click", (evento) => {
     evento.preventDefault();
     evento.stopPropagation();
@@ -4143,6 +4143,197 @@ var init_conversazione_dom = __esm({
   }
 });
 
+// src/components/loghi-fornitori.js
+function marchioDiFornitore(row = {}) {
+  const id2 = CONDIVISI[row.id] || row.id;
+  return MARCHI[id2] || null;
+}
+function inizialeFornitore(row = {}) {
+  const etichetta2 = String(row.label || row.id || "?").toUpperCase();
+  const prima = etichetta2.replace(/[^A-Z0-9]+/gu, " ").trim().split(/\s+/u)[0];
+  return (prima || etichetta2)[0] || "?";
+}
+function monogrammaFornitore(row = {}) {
+  return MONOGRAMMI[row.id] || inizialeFornitore(row);
+}
+function svg(doc, contenuto) {
+  const NS = "http://www.w3.org/2000/svg";
+  const nodo12 = doc.createElementNS(NS, "svg");
+  nodo12.setAttribute("viewBox", "0 0 24 24");
+  nodo12.setAttribute("aria-hidden", "true");
+  nodo12.setAttribute("focusable", "false");
+  Object.assign(nodo12.style, { width: LATO, height: LATO, fill: "currentColor", flex: "none" });
+  nodo12.append(contenuto);
+  return nodo12;
+}
+function glifoFornitore(row = {}, { document: doc = globalThis.document } = {}) {
+  const marchio = marchioDiFornitore(row);
+  if (marchio) {
+    const traccia = doc.createElementNS("http://www.w3.org/2000/svg", "path");
+    traccia.setAttribute("d", marchio.d);
+    const nodo13 = svg(doc, traccia);
+    nodo13.dataset.marchio = marchio.chiave;
+    return { nodo: nodo13, marchio };
+  }
+  const monogramma = monogrammaFornitore(row);
+  const nodo12 = doc.createElement("span");
+  nodo12.className = "talos-provider__monogramma";
+  nodo12.textContent = monogramma;
+  nodo12.setAttribute("aria-hidden", "true");
+  nodo12.dataset.glifo = "monogramma";
+  nodo12.dataset.monogramma = monogramma;
+  Object.assign(nodo12.style, {
+    display: "grid",
+    placeItems: "center",
+    flex: "none",
+    width: LATO,
+    height: LATO,
+    borderRadius: "50%",
+    background: "var(--talos-card-hover)",
+    /*
+     * ⛔ LA LETTERA PRENDE IL COLORE DEL TESTO, non quello attenuato dei marchi — e non è una
+     *   preferenza: **MISURATO**, col fondo VERO composto (`--talos-card-hover` è un velo al 5%,
+     *   non un colore pieno). Col colore attenuato il contrasto era **3,2:1 in tema SCURO** e
+     *   **5,4:1 in tema chiaro**: il tema scuro stava sotto il 4,5:1 che WCAG 1.4.3 chiede a un
+     *   testo di 11 px. Con `--talos-text` è **7,8:1** e **13,9:1** — la lettera è leggibile
+     *   quanto il NOME del fornitore che le sta accanto, in tutti e due i temi.
+     *   La forma del ripiego la dichiara il CERCHIO, non la debolezza del colore.
+     */
+    color: "var(--talos-text)",
+    fontWeight: "600",
+    lineHeight: "1",
+    letterSpacing: "0",
+    userSelect: "none",
+    /* Due lettere vanno più piccole, o sfondano il cerchio da 22. */
+    fontSize: monogramma.length > 1 ? "9px" : "11px"
+  });
+  return { nodo: nodo12, marchio: null, monogramma };
+}
+var LATO, MARCHI, CONDIVISI, SENZA_MARCHIO, MONOGRAMMI;
+var init_loghi_fornitori = __esm({
+  "src/components/loghi-fornitori.js"() {
+    LATO = "22px";
+    MARCHI = Object.freeze({
+      openrouter: {
+        titolo: "OpenRouter",
+        chiave: "Openrouter",
+        hex: "94A3B8",
+        guida: null,
+        d: "M16.778 1.844v1.919q-.569-.026-1.138-.032-.708-.008-1.415.037c-1.93.126-4.023.728-6.149 2.237-2.911 2.066-2.731 1.95-4.14 2.75-.396.223-1.342.574-2.185.798-.841.225-1.753.333-1.751.333v4.229s.768.108 1.61.333c.842.224 1.789.575 2.185.799 1.41.798 1.228.683 4.14 2.75 2.126 1.509 4.22 2.11 6.148 2.236.88.058 1.716.041 2.555.005v1.918l7.222-4.168-7.222-4.17v2.176c-.86.038-1.611.065-2.278.021-1.364-.09-2.417-.357-3.979-1.465-2.244-1.593-2.866-2.027-3.68-2.508.889-.518 1.449-.906 3.822-2.59 1.56-1.109 2.614-1.377 3.978-1.466.667-.044 1.418-.017 2.278.02v2.176L24 6.014Z"
+      },
+      gemini: {
+        titolo: "Google Gemini",
+        chiave: "Googlegemini",
+        hex: "8E75B2",
+        guida: null,
+        d: "M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"
+      },
+      deepseek: {
+        titolo: "DeepSeek",
+        chiave: "Deepseek",
+        hex: "5786FE",
+        guida: null,
+        d: "M23.748 4.651c-.254-.124-.364.113-.512.233-.051.04-.094.09-.137.137-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.155-.708-.311-.955-.65-.172-.24-.219-.509-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.094.172.187.129.323-.082.28-.18.553-.266.833-.055.179-.137.218-.328.14a5.5 5.5 0 0 1-1.737-1.179c-.857-.828-1.631-1.743-2.597-2.46a12 12 0 0 0-.689-.47c-.985-.957.13-1.743.387-1.836.27-.098.094-.433-.778-.428-.872.003-1.67.295-2.687.685a3 3 0 0 1-.465.136 9.6 9.6 0 0 0-2.883-.101c-1.885.21-3.39 1.1-4.497 2.622C.082 8.776-.231 10.854.152 13.02c.403 2.284 1.568 4.175 3.36 5.653 1.857 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.132-.284 4.994-1.86.47.234.962.328 1.78.398.629.058 1.235-.031 1.705-.129.735-.155.684-.836.418-.961-2.155-1.004-1.682-.595-2.112-.926 1.095-1.295 2.768-3.598 3.284-6.733.05-.346.115-.834.108-1.114-.004-.171.035-.238.23-.257a4.2 4.2 0 0 0 1.545-.475c1.397-.763 1.96-2.016 2.093-3.517.02-.23-.004-.467-.247-.588M11.58 18.168c-2.088-1.642-3.101-2.183-3.52-2.16-.39.024-.32.472-.234.763.09.288.207.487.371.74.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.168-1.361-.801-2.5-1.86-3.301-3.306-.775-1.393-1.225-2.888-1.299-4.482-.02-.385.094-.522.477-.592a4.7 4.7 0 0 1 1.53-.038c2.131.311 3.946 1.264 5.467 2.774.868.86 1.525 1.887 2.202 2.89.72 1.066 1.494 2.082 2.48 2.915.348.291.626.513.892.677-.802.09-2.14.109-3.055-.615zm1.001-6.44a.306.306 0 0 1 .415-.287.3.3 0 0 1 .113.074.3.3 0 0 1 .086.214c0 .17-.136.307-.308.307a.303.303 0 0 1-.306-.307m3.11 1.596c-.2.081-.4.151-.591.16a1.25 1.25 0 0 1-.798-.254c-.274-.23-.47-.358-.551-.758a1.7 1.7 0 0 1 .015-.588c.07-.327-.007-.537-.238-.727-.188-.156-.426-.199-.689-.199a.6.6 0 0 1-.254-.078.253.253 0 0 1-.114-.358 1 1 0 0 1 .192-.21c.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.392.451.462.576.685.915.176.264.336.536.446.848.066.194-.02.353-.25.45"
+      },
+      kimi: {
+        titolo: "Kimi",
+        chiave: "Kimi",
+        hex: "000000",
+        guida: "https://moonshotai.github.io/Branding-Guide",
+        d: "M21.765.351C22.998.351 24 1.353 24 2.586S22.998 4.82 21.765 4.82h-1.974c-.15 0-.26-.12-.26-.26V2.586A2.237 2.237 0 0 1 21.765.35M9.41 13.388l8.447-8.377c.16-.16.07-.471-.14-.471h-4.55s-.1.02-.14.06l-9.099 9.029c-.14.14-.35.02-.35-.21V4.81c0-.15-.1-.27-.221-.27H.22c-.12 0-.22.12-.22.27v18.57c0 .15.1.27.22.27h3.137c.12 0 .22-.12.22-.27v-3.79c0-.08.03-.16.08-.21l2.826-2.796c.07-.07.16-.08.241-.03l7.546 5.551a8.9 8.9 0 0 0 4.018 1.493c.12.01.23-.11.23-.27V19.76c0-.14-.08-.25-.19-.26a5.8 5.8 0 0 1-2.355-.942l-6.533-4.73c-.14-.09-.15-.32-.03-.441"
+      },
+      minimax: {
+        titolo: "MiniMax",
+        chiave: "Minimax",
+        hex: "E73562",
+        guida: null,
+        d: "M11.43 3.92a.86.86 0 1 0-1.718 0v14.236a1.999 1.999 0 0 1-3.997 0V9.022a.86.86 0 1 0-1.718 0v3.87a1.999 1.999 0 0 1-3.997 0V11.49a.57.57 0 0 1 1.139 0v1.404a.86.86 0 0 0 1.719 0V9.022a1.999 1.999 0 0 1 3.997 0v9.134a.86.86 0 0 0 1.719 0V3.92a1.998 1.998 0 1 1 3.996 0v11.788a.57.57 0 1 1-1.139 0zm10.572 3.105a2 2 0 0 0-1.999 1.997v7.63a.86.86 0 0 1-1.718 0V3.923a1.999 1.999 0 0 0-3.997 0v16.16a.86.86 0 0 1-1.719 0V18.08a.57.57 0 1 0-1.138 0v2a1.998 1.998 0 0 0 3.996 0V3.92a.86.86 0 0 1 1.719 0v12.73a1.999 1.999 0 0 0 3.996 0V9.023a.86.86 0 1 1 1.72 0v6.686a.57.57 0 0 0 1.138 0V9.022a2 2 0 0 0-1.998-1.997"
+      },
+      qwen: {
+        titolo: "QWen",
+        chiave: "Qwen",
+        hex: "6950EF",
+        guida: null,
+        d: "M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z"
+      },
+      ollama: {
+        titolo: "Ollama",
+        chiave: "Ollama",
+        hex: "000000",
+        guida: null,
+        d: "M16.361 10.26a.894.894 0 0 0-.558.47l-.072.148.001.207c0 .193.004.217.059.353.076.193.152.312.291.448.24.238.51.3.872.205a.86.86 0 0 0 .517-.436.752.752 0 0 0 .08-.498c-.064-.453-.33-.782-.724-.897a1.06 1.06 0 0 0-.466 0zm-9.203.005c-.305.096-.533.32-.65.639a1.187 1.187 0 0 0-.06.52c.057.309.31.59.598.667.362.095.632.033.872-.205.14-.136.215-.255.291-.448.055-.136.059-.16.059-.353l.001-.207-.072-.148a.894.894 0 0 0-.565-.472 1.02 1.02 0 0 0-.474.007Zm4.184 2c-.131.071-.223.25-.195.383.031.143.157.288.353.407.105.063.112.072.117.136.004.038-.01.146-.029.243-.02.094-.036.194-.036.222.002.074.07.195.143.253.064.052.076.054.255.059.164.005.198.001.264-.03.169-.082.212-.234.15-.525-.052-.243-.042-.28.087-.355.137-.08.281-.219.324-.314a.365.365 0 0 0-.175-.48.394.394 0 0 0-.181-.033c-.126 0-.207.03-.355.124l-.085.053-.053-.032c-.219-.13-.259-.145-.391-.143a.396.396 0 0 0-.193.032zm.39-2.195c-.373.036-.475.05-.654.086-.291.06-.68.195-.951.328-.94.46-1.589 1.226-1.787 2.114-.04.176-.045.234-.045.53 0 .294.005.357.043.524.264 1.16 1.332 2.017 2.714 2.173.3.033 1.596.033 1.896 0 1.11-.125 2.064-.727 2.493-1.571.114-.226.169-.372.22-.602.039-.167.044-.23.044-.523 0-.297-.005-.355-.045-.531-.288-1.29-1.539-2.304-3.072-2.497a6.873 6.873 0 0 0-.855-.031zm.645.937a3.283 3.283 0 0 1 1.44.514c.223.148.537.458.671.662.166.251.26.508.303.82.02.143.01.251-.043.482-.08.345-.332.705-.672.957a3.115 3.115 0 0 1-.689.348c-.382.122-.632.144-1.525.138-.582-.006-.686-.01-.853-.042-.57-.107-1.022-.334-1.35-.68-.264-.28-.385-.535-.45-.946-.03-.192.025-.509.137-.776.136-.326.488-.73.836-.963.403-.269.934-.46 1.422-.512.187-.02.586-.02.773-.002zm-5.503-11a1.653 1.653 0 0 0-.683.298C5.617.74 5.173 1.666 4.985 2.819c-.07.436-.119 1.04-.119 1.503 0 .544.064 1.24.155 1.721.02.107.031.202.023.208a8.12 8.12 0 0 1-.187.152 5.324 5.324 0 0 0-.949 1.02 5.49 5.49 0 0 0-.94 2.339 6.625 6.625 0 0 0-.023 1.357c.091.78.325 1.438.727 2.04l.13.195-.037.064c-.269.452-.498 1.105-.605 1.732-.084.496-.095.629-.095 1.294 0 .67.009.803.088 1.266.095.555.288 1.143.503 1.534.071.128.243.393.264.407.007.003-.014.067-.046.141a7.405 7.405 0 0 0-.548 1.873c-.062.417-.071.552-.071.991 0 .56.031.832.148 1.279L3.42 24h1.478l-.05-.091c-.297-.552-.325-1.575-.068-2.597.117-.472.25-.819.498-1.296l.148-.29v-.177c0-.165-.003-.184-.057-.293a.915.915 0 0 0-.194-.25 1.74 1.74 0 0 1-.385-.543c-.424-.92-.506-2.286-.208-3.451.124-.486.329-.918.544-1.154a.787.787 0 0 0 .223-.531c0-.195-.07-.355-.224-.522a3.136 3.136 0 0 1-.817-1.729c-.14-.96.114-2.005.69-2.834.563-.814 1.353-1.336 2.237-1.475.199-.033.57-.028.776.01.226.04.367.028.512-.041.179-.085.268-.19.374-.431.093-.215.165-.333.36-.576.234-.29.46-.489.822-.729.413-.27.884-.467 1.352-.561.17-.035.25-.04.569-.04.319 0 .398.005.569.04a4.07 4.07 0 0 1 1.914.997c.117.109.398.457.488.602.034.057.095.177.132.267.105.241.195.346.374.43.14.068.286.082.503.045.343-.058.607-.053.943.016 1.144.23 2.14 1.173 2.581 2.437.385 1.108.276 2.267-.296 3.153-.097.15-.193.27-.333.419-.301.322-.301.722-.001 1.053.493.539.801 1.866.708 3.036-.062.772-.26 1.463-.533 1.854a2.096 2.096 0 0 1-.224.258.916.916 0 0 0-.194.25c-.054.109-.057.128-.057.293v.178l.148.29c.248.476.38.823.498 1.295.253 1.008.231 2.01-.059 2.581a.845.845 0 0 0-.044.098c0 .006.329.009.732.009h.73l.02-.074.036-.134c.019-.076.057-.3.088-.516.029-.217.029-1.016 0-1.258-.11-.875-.295-1.57-.597-2.226-.032-.074-.053-.138-.046-.141.008-.005.057-.074.108-.152.376-.569.607-1.284.724-2.228.031-.26.031-1.378 0-1.628-.083-.645-.182-1.082-.348-1.525a6.083 6.083 0 0 0-.329-.7l-.038-.064.131-.194c.402-.604.636-1.262.727-2.04a6.625 6.625 0 0 0-.024-1.358 5.512 5.512 0 0 0-.939-2.339 5.325 5.325 0 0 0-.95-1.02 8.097 8.097 0 0 1-.186-.152.692.692 0 0 1 .023-.208c.208-1.087.201-2.443-.017-3.503-.19-.924-.535-1.658-.98-2.082-.354-.338-.716-.482-1.15-.455-.996.059-1.8 1.205-2.116 3.01a6.805 6.805 0 0 0-.097.726c0 .036-.007.066-.015.066a.96.96 0 0 1-.149-.078A4.857 4.857 0 0 0 12 3.03c-.832 0-1.687.243-2.456.698a.958.958 0 0 1-.148.078c-.008 0-.015-.03-.015-.066a6.71 6.71 0 0 0-.097-.725C8.997 1.392 8.337.319 7.46.048a2.096 2.096 0 0 0-.585-.041Zm.293 1.402c.248.197.523.759.682 1.388.03.113.06.244.069.292.007.047.026.152.041.233.067.365.098.76.102 1.24l.002.475-.12.175-.118.178h-.278c-.324 0-.646.041-.954.124l-.238.06c-.033.007-.038-.003-.057-.144a8.438 8.438 0 0 1 .016-2.323c.124-.788.413-1.501.696-1.711.067-.05.079-.049.157.013zm9.825-.012c.17.126.358.46.498.888.28.854.36 2.028.212 3.145-.019.14-.024.151-.057.144l-.238-.06a3.693 3.693 0 0 0-.954-.124h-.278l-.119-.178-.119-.175.002-.474c.004-.669.066-1.19.214-1.772.157-.623.434-1.185.68-1.382.078-.062.09-.063.159-.012z"
+      },
+      lmstudio: {
+        titolo: "LM Studio",
+        chiave: "Lmstudio",
+        hex: "000000",
+        guida: null,
+        d: "M14.025 0c3.492 0 5.237 0 6.571.68a6.24 6.24 0 0 1 2.725 2.724C24 4.738 24 6.484 24 9.975v4.05c0 3.492 0 5.237-.68 6.571a6.24 6.24 0 0 1-2.724 2.725c-1.334.679-3.08.679-6.571.679h-4.05c-3.492 0-5.237 0-6.571-.68A6.24 6.24 0 0 1 .68 20.597C0 19.262 0 17.516 0 14.025v-4.05c0-3.492 0-5.237.68-6.571A6.23 6.23 0 0 1 3.404.68C4.738 0 6.484 0 9.975 0zM7.688 16.313a1.313 1.313 0 0 0 0 2.625h11.625a1.313 1.313 0 0 0 0-2.625zm-3-3.75a1.313 1.313 0 0 0 0 2.624h11.625a1.313 1.313 0 0 0 0-2.624zm3-3.75a1.313 1.313 0 0 0 0 2.624h11.625a1.313 1.313 0 0 0 0-2.624zm-3-3.75a1.313 1.313 0 0 0 0 2.625h11.625a1.313 1.313 0 0 0 0-2.625z"
+      },
+      huggingface: {
+        titolo: "Hugging Face",
+        chiave: "Huggingface",
+        hex: "FFD21E",
+        guida: "https://huggingface.co/brand",
+        d: "M12.025 1.13c-5.77 0-10.449 4.647-10.449 10.378 0 1.112.178 2.181.503 3.185.064-.222.203-.444.416-.577a.96.96 0 0 1 .524-.15c.293 0 .584.124.84.284.278.173.48.408.71.694.226.282.458.611.684.951v-.014c.017-.324.106-.622.264-.874s.403-.487.762-.543c.3-.047.596.06.787.203s.31.313.4.467c.15.257.212.468.233.542.01.026.653 1.552 1.657 2.54.616.605 1.01 1.223 1.082 1.912.055.537-.096 1.059-.38 1.572.637.121 1.294.187 1.967.187.657 0 1.298-.063 1.921-.178-.287-.517-.44-1.041-.384-1.581.07-.69.465-1.307 1.081-1.913 1.004-.987 1.647-2.513 1.657-2.539.021-.074.083-.285.233-.542.09-.154.208-.323.4-.467a1.08 1.08 0 0 1 .787-.203c.359.056.604.29.762.543s.247.55.265.874v.015c.225-.34.457-.67.683-.952.23-.286.432-.52.71-.694.257-.16.547-.284.84-.285a.97.97 0 0 1 .524.151c.228.143.373.388.43.625l.006.04a10.3 10.3 0 0 0 .534-3.273c0-5.731-4.678-10.378-10.449-10.378M8.327 6.583a1.5 1.5 0 0 1 .713.174 1.487 1.487 0 0 1 .617 2.013c-.183.343-.762-.214-1.102-.094-.38.134-.532.914-.917.71a1.487 1.487 0 0 1 .69-2.803m7.486 0a1.487 1.487 0 0 1 .689 2.803c-.385.204-.536-.576-.916-.71-.34-.12-.92.437-1.103.094a1.487 1.487 0 0 1 .617-2.013 1.5 1.5 0 0 1 .713-.174m-10.68 1.55a.96.96 0 1 1 0 1.921.96.96 0 0 1 0-1.92m13.838 0a.96.96 0 1 1 0 1.92.96.96 0 0 1 0-1.92M8.489 11.458c.588.01 1.965 1.157 3.572 1.164 1.607-.007 2.984-1.155 3.572-1.164.196-.003.305.12.305.454 0 .886-.424 2.328-1.563 3.202-.22-.756-1.396-1.366-1.63-1.32q-.011.001-.02.006l-.044.026-.01.008-.03.024q-.018.017-.035.036l-.032.04a1 1 0 0 0-.058.09l-.014.025q-.049.088-.11.19a1 1 0 0 1-.083.116 1.2 1.2 0 0 1-.173.18q-.035.029-.075.058a1.3 1.3 0 0 1-.251-.243 1 1 0 0 1-.076-.107c-.124-.193-.177-.363-.337-.444-.034-.016-.104-.008-.2.022q-.094.03-.216.087-.06.028-.125.063l-.13.074q-.067.04-.136.086a3 3 0 0 0-.135.096 3 3 0 0 0-.26.219 2 2 0 0 0-.12.121 2 2 0 0 0-.106.128l-.002.002a2 2 0 0 0-.09.132l-.001.001a1.2 1.2 0 0 0-.105.212q-.013.036-.024.073c-1.139-.875-1.563-2.317-1.563-3.203 0-.334.109-.457.305-.454m.836 10.354c.824-1.19.766-2.082-.365-3.194-1.13-1.112-1.789-2.738-1.789-2.738s-.246-.945-.806-.858-.97 1.499.202 2.362c1.173.864-.233 1.45-.685.64-.45-.812-1.683-2.896-2.322-3.295s-1.089-.175-.938.647 2.822 2.813 2.562 3.244-1.176-.506-1.176-.506-2.866-2.567-3.49-1.898.473 1.23 2.037 2.16c1.564.932 1.686 1.178 1.464 1.53s-3.675-2.511-4-1.297c-.323 1.214 3.524 1.567 3.287 2.405-.238.839-2.71-1.587-3.216-.642-.506.946 3.49 2.056 3.522 2.064 1.29.33 4.568 1.028 5.713-.624m5.349 0c-.824-1.19-.766-2.082.365-3.194 1.13-1.112 1.789-2.738 1.789-2.738s.246-.945.806-.858.97 1.499-.202 2.362c-1.173.864.233 1.45.685.64.451-.812 1.683-2.896 2.322-3.295s1.089-.175.938.647-2.822 2.813-2.562 3.244 1.176-.506 1.176-.506 2.866-2.567 3.49-1.898-.473 1.23-2.037 2.16c-1.564.932-1.686 1.178-1.464 1.53s3.675-2.511 4-1.297c.323 1.214-3.524 1.567-3.287 2.405.238.839 2.71-1.587 3.216-.642.506.946-3.49 2.056-3.522 2.064-1.29.33-4.568 1.028-5.713-.624"
+      },
+      vertex: {
+        titolo: "Google Cloud",
+        chiave: "Googlecloud",
+        hex: "4285F4",
+        guida: null,
+        d: "M12.19 2.38a9.344 9.344 0 0 0-9.234 6.893c.053-.02-.055.013 0 0-3.875 2.551-3.922 8.11-.247 10.941l.006-.007-.007.03a6.717 6.717 0 0 0 4.077 1.356h5.173l.03.03h5.192c6.687.053 9.376-8.605 3.835-12.35a9.365 9.365 0 0 0-2.821-4.552l-.043.043.006-.05A9.344 9.344 0 0 0 12.19 2.38zm-.358 4.146c1.244-.04 2.518.368 3.486 1.15a5.186 5.186 0 0 1 1.862 4.078v.518c3.53-.07 3.53 5.262 0 5.193h-5.193l-.008.009v-.04H6.785a2.59 2.59 0 0 1-1.067-.23h.001a2.597 2.597 0 1 1 3.437-3.437l3.013-3.012A6.747 6.747 0 0 0 8.11 8.24c.018-.01.04-.026.054-.023a5.186 5.186 0 0 1 3.67-1.69z"
+      }
+    });
+    CONDIVISI = Object.freeze({ "minimax-anthropic": "minimax", "ollama-cloud": "ollama" });
+    SENZA_MARCHIO = Object.freeze({
+      /* ⛔ I DUE TOLTI SU ORDINE DELL'OWNER, 19/09/2026: «se non puoi usare loghi usare la lettera e
+         basta». Le condizioni di questi due marchi chiedono un'approvazione che non abbiamo, quindi
+         il marchio NON si può usare — e la regola è la lettera. Erano le due righe che avevo
+         segnalato come «da decidere»: la decisione è questa. */
+      anthropic: "Le sue Trademark Guidelines chiedono un'approvazione preventiva per l'uso dei marchi: non l'abbiamo, quindi il marchio non si può usare.",
+      mistral: "I suoi Commercial Terms hanno una «mutual prohibition on using the other party's name or marks without approval»: non l'abbiamo, quindi il marchio non si può usare.",
+      openai: "Rimosso su richiesta di OpenAI: l'icona non è più in Simple Icons per ragioni di marchio.",
+      azure: "Microsoft non è accettato da Simple Icons («banned until Microsoft give us a clear steer»), quindi Azure non ha un'icona lì.",
+      bedrock: "Amazon Web Services non è coperto da Simple Icons; le icone AWS Architecture sono CC BY-ND (no derivatives) e non si possono ricolorare.",
+      groq: "La sua Trademark Policy ammette la nominative fair use SOLO per le word mark, «no logos»; il logo in UI vuole una licenza scritta.",
+      zai: "Z.AI / Zhipu non è coperto da Simple Icons.",
+      "zai-anthropic": "Stesso marchio di Z.AI, che non è coperto da Simple Icons.",
+      xai: "xAI non è coperto da Simple Icons; l'icona `X` che c'è è il marchio dell'omonima rete sociale, un'altra azienda — usarla sarebbe falso.",
+      cerebras: "Cerebras non è coperto da Simple Icons.",
+      together: "Together AI non è coperto da Simple Icons.",
+      fireworks: "Fireworks AI non è coperto da Simple Icons.",
+      deepinfra: "DeepInfra non è coperto da Simple Icons.",
+      novita: "Novita AI non è coperto da Simple Icons.",
+      nebius: "Nebius non è coperto da Simple Icons.",
+      esterno: "Non è un fornitore: è l'agente che gira su questa macchina, e il suo ghilio lo dice (un robot)."
+    });
+    MONOGRAMMI = Object.freeze({
+      /* ⛔ QUESTA RIGA È NATA DA UNA PROVA, non da una svista: togliendo il marchio di Anthropic
+         (ordine dell'owner, 19/09/2026) la sua iniziale è diventata `A` — che era GIÀ di Azure, di
+         Amazon Bedrock e di Agente esterno — e `LOG-05` l'ha detto subito: «anthropic collide a una
+         lettera e non è nella tabella». Senza quella prova, due schede diverse avrebbero portato la
+         stessa lettera e nessuno se ne sarebbe accorto. */
+      anthropic: "AN",
+      // «Anthropic» — A è di Azure, di Amazon Bedrock e di Agente esterno
+      azure: "AF",
+      // «Azure AI Foundry»
+      bedrock: "AB",
+      // «Amazon Bedrock»
+      esterno: "AE",
+      // «Agente esterno»
+      zai: "ZA",
+      // «Z.AI» — Z è anche della sua porta Anthropic
+      "zai-anthropic": "ZP",
+      // «Z.AI (porta Anthropic)»
+      novita: "NO",
+      // «Novita» — N è anche di Nebius
+      nebius: "NE"
+      // «Nebius»
+    });
+  }
+});
+
 // src/components/provider-card.js
 function etichettaIndirizzo(row = {}) {
   if (!row.supportsEndpoint) return null;
@@ -4177,11 +4368,6 @@ function el4(tag2, cls, txt) {
 function vesti(nodo12, stile) {
   if (nodo12) Object.assign(nodo12.style, stile);
   return nodo12;
-}
-function simboloFornitore(row) {
-  if (row.id === "esterno") return "i-robot";
-  if (row.execution === "runtime locale") return "i-brain";
-  return "i-globe";
 }
 function campo(label, tipo, key, row, valore = "") {
   const wrap = el4("label", "talos-stack talos-provider__field");
@@ -4281,15 +4467,247 @@ function button(action, label, tone = "secondary") {
   b.dataset.providerAction = action;
   return b;
 }
+function creaAvvisoChiavi() {
+  const avviso = el4("div", "talos-provider__avviso");
+  vesti(avviso, VESTITO.avviso);
+  const icona13 = simboloProvider("i-shield");
+  icona13.style.flex = "none";
+  icona13.style.marginTop = "2px";
+  const forte = el4("strong", "", NOTA_CHIAVI);
+  Object.assign(forte.style, { color: "var(--talos-text)", fontWeight: "550" });
+  const testo2 = el4("span", "");
+  testo2.append(forte, document.createTextNode(" " + NOTA_CHIAVI_RESTO));
+  avviso.append(icona13, testo2);
+  return avviso;
+}
 function simboloProvider(nome) {
   const NS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("class", "i i--sm");
-  svg.setAttribute("aria-hidden", "true");
+  const svg2 = document.createElementNS(NS, "svg");
+  svg2.setAttribute("class", "i i--sm");
+  svg2.setAttribute("aria-hidden", "true");
   const use = document.createElementNS(NS, "use");
   use.setAttribute("href", "#" + nome);
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
+}
+function iconaAzione(nome, lato = "16px") {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg2 = document.createElementNS(NS, "svg");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("viewBox", "0 0 24 24");
+  svg2.setAttribute("aria-hidden", "true");
+  svg2.setAttribute("focusable", "false");
+  svg2.setAttribute("fill", "none");
+  svg2.setAttribute("stroke", "currentColor");
+  svg2.setAttribute("stroke-width", nome === "chiudi" ? "1.65" : "1.65");
+  svg2.setAttribute("stroke-linecap", "round");
+  svg2.setAttribute("stroke-linejoin", "round");
+  Object.assign(svg2.style, { width: lato, height: lato, flex: "none" });
+  for (const [tag2, spec] of ICONE_AZIONE[nome]) {
+    const n = document.createElementNS(NS, tag2);
+    if (tag2 === "path") n.setAttribute("d", spec);
+    else for (const [k, v] of Object.entries(spec)) n.setAttribute(k, v);
+    svg2.append(n);
+  }
+  return svg2;
+}
+function apriConfigurazioneProvider(card, row) {
+  if (!card || card.querySelector(":scope > .talos-provider__modale")) return null;
+  const doc = card.ownerDocument || globalThis.document;
+  const corpo = card.querySelector(".talos-provider__body");
+  if (!corpo) return null;
+  const configura = card.querySelector("[data-provider-toggle]");
+  const doveStava = { dopo: corpo.nextSibling, genitore: corpo.parentElement, hidden: corpo.hidden };
+  const dialogo = el4("dialog", "td-modal talos-provider__modale");
+  dialogo.dataset.providerModale = row.id;
+  dialogo.setAttribute("aria-labelledby", "titolo-modale-" + row.id);
+  vesti(dialogo, VESTITO.modale.dialogo);
+  const titolo2 = el4("h2", "talos-provider__modale-titolo", "Configura " + (row.label || row.id));
+  titolo2.id = "titolo-modale-" + row.id;
+  vesti(titolo2, VESTITO.modale.titolo);
+  const chiudi = el4("button", "talos-button talos-button--ghost talos-icon-button");
+  chiudi.type = "button";
+  chiudi.setAttribute("aria-label", "Chiudi");
+  chiudi.dataset.providerModaleChiudi = "";
+  vesti(chiudi, VESTITO.modale.chiudi);
+  chiudi.append(iconaAzione("chiudi", "18px"));
+  const testa = el4("header", "talos-provider__modale-testa");
+  vesti(testa, VESTITO.modale.testa);
+  testa.append(titolo2, chiudi);
+  const telaio = el4("div", "talos-provider__modale-corpo");
+  vesti(telaio, VESTITO.modale.corpo);
+  {
+    const avviso = creaAvvisoChiavi();
+    avviso.dataset.providerModaleAvviso = "";
+    telaio.append(avviso);
+  }
+  const piede = el4("footer", "talos-provider__modale-piede");
+  vesti(piede, VESTITO.modale.piede);
+  const annulla = el4("button", "talos-button talos-button--secondary", "Annulla");
+  annulla.type = "button";
+  annulla.dataset.providerModaleAnnulla = "";
+  vesti(annulla, VESTITO.modale.pulsante);
+  const salvaRuntime = corpo.querySelector('[data-provider-action="save-runtime"]');
+  const salvaChiave = corpo.querySelector('[data-provider-action="save-key"]');
+  const vero = salvaRuntime || salvaChiave;
+  if (vero) {
+    const primaria = el4("button", "talos-button talos-button--primary talos-button--sm", salvaRuntime ? "Salva configurazione" : vero.textContent || "Salva");
+    primaria.type = "button";
+    primaria.dataset.providerModaleSalva = salvaRuntime ? "runtime" : "chiave";
+    vesti(primaria, VESTITO.modale.pulsante);
+    primaria.addEventListener("click", () => vero.click());
+    piede.append(annulla, primaria);
+  } else piede.append(annulla);
+  const chiudiModale2 = () => {
+    if (typeof dialogo.close === "function" && dialogo.open) dialogo.close();
+  };
+  chiudi.addEventListener("click", chiudiModale2);
+  annulla.addEventListener("click", chiudiModale2);
+  dialogo.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") e.stopPropagation();
+  });
+  dialogo.addEventListener("close", () => {
+    if (doveStava.genitore) doveStava.genitore.insertBefore(corpo, doveStava.dopo && doveStava.dopo.isConnected ? doveStava.dopo : null);
+    corpo.hidden = doveStava.hidden;
+    corpo.style.removeProperty("padding");
+    corpo.style.removeProperty("border-top");
+    dialogo.remove();
+    aggiornaStatoConfigura(card, false);
+    if (configura?.isConnected) configura.focus({ preventScroll: true });
+  });
+  telaio.append(corpo);
+  corpo.hidden = false;
+  Object.assign(corpo.style, { padding: "0", borderTop: "0" });
+  dialogo.append(testa, telaio, piede);
+  card.append(dialogo);
+  if (typeof dialogo.showModal === "function") dialogo.showModal();
+  else dialogo.setAttribute("open", "");
+  aggiornaStatoConfigura(card, true);
+  const primo2 = telaio.querySelector("input:not([type=hidden]),textarea,select,button") || annulla;
+  primo2.focus?.({ preventScroll: true });
+  return dialogo;
+}
+function aggiornaStatoConfigura(card, aperto) {
+  const b = card?.querySelector("[data-provider-toggle]");
+  if (b) b.setAttribute("aria-expanded", String(Boolean(aperto)));
+}
+function credenzialeDiFornitore(row = {}) {
+  const e = etichettaOrigineChiave(row);
+  if (e === "Chiave facoltativa") return "facoltativa";
+  if (e === "Chiave mancante" || e === "Agente da configurare") return "daImpostare";
+  return "impostata";
+}
+function faccetteFornitori(rows = [], { prove = /* @__PURE__ */ new Map() } = {}) {
+  const credenziale = { impostata: 0, daImpostare: 0, facoltativa: 0 };
+  let provato = 0;
+  for (const row of rows) {
+    credenziale[credenzialeDiFornitore(row)]++;
+    if (prove?.get?.(row.id)) provato++;
+  }
+  return { credenziale, prova: { provato, mai: rows.length - provato }, totale: rows.length };
+}
+function filtriAccesi(filtri) {
+  return (filtri.cerca.trim() ? 1 : 0) + filtri.credenziale.length + filtri.prova.length;
+}
+function chipFiltro(gruppo, valore, etichetta2, conteggio2, acceso) {
+  const b = el4("button", "talos-button talos-button--sm " + (acceso ? "talos-button--primary" : "talos-button--secondary"), etichetta2);
+  b.type = "button";
+  b.dataset[FILTRO_CHIP] = gruppo + ":" + valore;
+  b.setAttribute("aria-pressed", String(acceso));
+  if (conteggio2 === 0) b.disabled = true;
+  b.append(el4("span", "talos-badge talos-badge--sm", String(conteggio2)));
+  return b;
+}
+function installaFiltriFornitori(lista) {
+  if (!lista || lista.hasAttribute("data-provider-filtri")) return null;
+  lista.setAttribute("data-provider-filtri", "");
+  statoLista.set(lista, { filtri: filtroVuoto(), rows: [], opzioni: {} });
+  const riga2 = el4("div", "talos-provider__filtri");
+  riga2.dataset.providerFiltriRiga = "";
+  riga2.setAttribute("role", "group");
+  riga2.setAttribute("aria-label", "Filtri dei fornitori");
+  vesti(riga2, VESTITO.filtri);
+  const cerca = el4("label", "talos-field talos-field--sm");
+  cerca.append(el4("span", "talos-muted", "Cerca"));
+  const campo2 = el4("input", "talos-field__input");
+  campo2.type = "search";
+  campo2.setAttribute("data-provider-filtro-cerca", "");
+  campo2.setAttribute("aria-label", "Cerca un fornitore");
+  campo2.autocomplete = "off";
+  campo2.placeholder = "Nome o identificatore…";
+  cerca.append(campo2);
+  const gruppoCred = el4("div", "talos-cluster");
+  gruppoCred.setAttribute("role", "group");
+  gruppoCred.setAttribute("aria-label", "Credenziale");
+  gruppoCred.dataset.providerFiltroGruppo = "credenziale";
+  const gruppoProva = el4("div", "talos-cluster");
+  gruppoProva.setAttribute("role", "group");
+  gruppoProva.setAttribute("aria-label", "Ultima prova");
+  gruppoProva.dataset.providerFiltroGruppo = "prova";
+  const togli = el4("button", "talos-button talos-button--ghost talos-button--sm", "Togli i filtri");
+  togli.type = "button";
+  togli.dataset.providerFiltroTogli = "";
+  togli.hidden = true;
+  const esito = el4("p", "talos-muted", "");
+  esito.dataset.providerFiltroEsito = "";
+  esito.setAttribute("role", "status");
+  esito.setAttribute("aria-live", "polite");
+  riga2.append(cerca, gruppoCred, gruppoProva, togli, esito);
+  lista.before(riga2);
+  collegaFiltriFornitori(lista, riga2, () => {
+    const s = statoLista.get(lista);
+    if (s) aggiornaProviderList(lista, s.rows, s.opzioni);
+  });
+  return riga2;
+}
+function disegnaFiltriFornitori(lista, rows, filtri, visibili, prove) {
+  const riga2 = lista.previousElementSibling;
+  if (!riga2?.matches?.("[data-provider-filtri-riga]")) return;
+  const c = faccetteFornitori(rows, { prove });
+  const gCred = riga2.querySelector('[data-provider-filtro-gruppo="credenziale"]');
+  const gProva = riga2.querySelector('[data-provider-filtro-gruppo="prova"]');
+  gCred.replaceChildren(
+    chipFiltro("credenziale", "impostata", "Impostata", c.credenziale.impostata, filtri.credenziale.includes("impostata")),
+    chipFiltro("credenziale", "daImpostare", "Da impostare", c.credenziale.daImpostare, filtri.credenziale.includes("daImpostare")),
+    chipFiltro("credenziale", "facoltativa", "Facoltativa", c.credenziale.facoltativa, filtri.credenziale.includes("facoltativa"))
+  );
+  gProva.replaceChildren(
+    chipFiltro("prova", "provato", "Provato", c.prova.provato, filtri.prova.includes("provato")),
+    chipFiltro("prova", "mai", "Mai provato", c.prova.mai, filtri.prova.includes("mai"))
+  );
+  const togli = riga2.querySelector("[data-provider-filtro-togli]");
+  if (togli) togli.hidden = filtriAccesi(filtri) === 0;
+  const esito = riga2.querySelector("[data-provider-filtro-esito]");
+  if (esito) esito.textContent = visibili === c.totale ? `${c.totale} fornitori` : `${visibili} fornitori su ${c.totale}`;
+}
+function collegaFiltriFornitori(lista, riga2, rendi) {
+  const leggi = () => statoLista.get(lista)?.filtri || filtroVuoto();
+  const scrivi2 = (nuovi) => {
+    const s = statoLista.get(lista);
+    if (s) s.filtri = nuovi;
+    rendi();
+  };
+  riga2.addEventListener("click", (evento) => {
+    evento.stopPropagation();
+    const togli = evento.target.closest("[data-provider-filtro-togli]");
+    if (togli) {
+      const c = riga2.querySelector("[data-provider-filtro-cerca]");
+      if (c) c.value = "";
+      scrivi2(filtroVuoto());
+      return;
+    }
+    const scelto = evento.target.closest("[data-provider-filter]");
+    if (!scelto || scelto.disabled) return;
+    const [gruppo, valore] = scelto.dataset[FILTRO_CHIP].split(":");
+    const attuali = leggi()[gruppo];
+    scrivi2({ ...leggi(), [gruppo]: attuali.includes(valore) ? attuali.filter((v) => v !== valore) : [...attuali, valore] });
+  });
+  riga2.addEventListener("input", (evento) => {
+    evento.stopPropagation();
+    const campo2 = evento.target.closest("[data-provider-filtro-cerca]");
+    if (!campo2) return;
+    scrivi2({ ...leggi(), cerca: campo2.value });
+  });
 }
 function componiIndirizzoCloud(provider, { endpoint = "", regione = "", progetto = "", versioneApi = "v1" } = {}) {
   const invalido = () => {
@@ -4366,9 +4784,8 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
   vesti(head, VESTITO.testata);
   const glifo = el4("span", "talos-provider__glifo");
   vesti(glifo, VESTITO.glifo);
-  const iconaGlifo = simboloProvider(simboloFornitore(row));
-  iconaGlifo.setAttribute("class", "i");
-  Object.assign(iconaGlifo.style, { width: "19px", height: "19px" });
+  const { nodo: iconaGlifo, marchio: glifoMarchio } = glifoFornitore(row, { document });
+  glifo.dataset.glifo = glifoMarchio ? "marchio" : "monogramma";
   glifo.append(iconaGlifo);
   const identita = el4("span", "talos-provider__identita");
   vesti(identita, VESTITO.identita);
@@ -4540,6 +4957,8 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
     }
     if (esterno) {
       test.hidden = false;
+      vesti(test, VESTITO.pulsante);
+      test.prepend(iconaAzione("verifica"));
       actions.append(test);
       for (const v of vociMenu) {
         v.elemento.hidden = false;
@@ -4582,24 +5001,48 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
     configura.setAttribute("aria-expanded", String(aperta2));
     configura.setAttribute("aria-controls", idCorpo);
     configura.setAttribute("aria-label", "Configura " + (row.label || row.id));
+    vesti(configura, VESTITO.pulsante);
+    configura.prepend(iconaAzione("configura"));
+    configura.addEventListener("click", (e) => {
+      e.stopPropagation();
+      apriConfigurazioneProvider(card, row);
+    });
     piede.append(configura);
     if (!esterno) {
       test.disabled = busy;
+      vesti(test, VESTITO.pulsante);
+      test.prepend(iconaAzione("verifica"));
       piede.append(test);
     }
     card.append(body, piede);
   }
   return card;
 }
-function aggiornaProviderList(lista, rows, { aperte = /* @__PURE__ */ new Set(), prove = /* @__PURE__ */ new Map(), occupati = /* @__PURE__ */ new Set(), caricamento = false, errore = null, onMenu = null, onAzionePool = null } = {}) {
+function aggiornaProviderList(lista, rows, opzioni = {}) {
+  const { aperte = /* @__PURE__ */ new Set(), prove = /* @__PURE__ */ new Map(), occupati = /* @__PURE__ */ new Set(), caricamento = false, errore = null, onMenu = null, onAzionePool = null } = opzioni;
   if (!lista) return;
   lista.className = "talos-provider-list";
   lista.setAttribute("aria-busy", String(caricamento));
   vesti(lista, VESTITO.griglia);
+  const stato = statoLista.get(lista);
+  if (stato) {
+    stato.rows = rows;
+    stato.opzioni = opzioni;
+  }
   if (errore || !rows.length) {
     const p = el4("p", "talos-muted", errore ? errore.message || String(errore) : caricamento ? "Leggo gli accessi…" : "Nessun fornitore dichiarato dal server.");
     p.dataset.c = "EmptyState";
     if (errore) p.setAttribute("role", "alert");
+    lista.replaceChildren(p);
+    lista.style.display = "block";
+    if (stato) disegnaFiltriFornitori(lista, rows, stato.filtri, 0, prove);
+    return;
+  }
+  const visibili = rows;
+  if (stato) disegnaFiltriFornitori(lista, rows, stato.filtri, visibili.length, prove);
+  if (!visibili.length) {
+    const p = el4("p", "talos-muted", "Nessun fornitore con questi filtri.");
+    p.dataset.c = "EmptyState";
     lista.replaceChildren(p);
     lista.style.display = "block";
     return;
@@ -4607,9 +5050,11 @@ function aggiornaProviderList(lista, rows, { aperte = /* @__PURE__ */ new Set(),
   const focus = document.activeElement, focusId = focus?.closest("[data-provider-id]")?.dataset.providerId;
   const old = new Map([...lista.querySelectorAll("[data-provider-id]")].map((n) => [n.dataset.providerId, n]));
   const ambito = lista.hasAttribute?.("data-velo-lista") || lista.closest?.("#veloFornitori") ? "velo" : "";
-  const cards = rows.map((row) => {
+  const daRiaprire = [];
+  const cards = visibili.map((row) => {
     const op = { aperta: aperte.has(row.id), prova: prove.get(row.id) || null, occupato: occupati.has(row.id) || caricamento }, signature = JSON.stringify([row, op, typeof onAzionePool === "function"]), precedente = old.get(row.id);
     if (precedente?.dataset.salvataggioCollegamento === "in-corso" || precedente?.dataset.providerSignature === signature && !precedente.dataset.providerReset) return precedente;
+    if (precedente?.querySelector?.(":scope > .talos-provider__modale[open]")) daRiaprire.push(row);
     const card = creaProviderCard(row, { ...op, onMenu, onAzionePool, ambito });
     card.dataset.providerSignature = signature;
     if (precedente && !precedente.dataset.providerReset) {
@@ -4633,6 +5078,7 @@ function aggiornaProviderList(lista, rows, { aperte = /* @__PURE__ */ new Set(),
     if (focus.isConnected && !focus.disabled) focus.focus({ preventScroll: true });
     else cards.find((n) => n.dataset.providerId === focusId)?.querySelector("[data-provider-toggle]")?.focus({ preventScroll: true });
   }
+  for (const row of daRiaprire) apriConfigurazioneProvider(cards.find((n) => n.dataset.providerId === row.id), row);
 }
 function montaProviderPanel(panel) {
   if (!panel || panel.dataset.providerMontato) return;
@@ -4645,7 +5091,7 @@ function montaProviderPanel(panel) {
   const note = head?.querySelector("p");
   if (note) {
     note.className = "talos-muted";
-    note.textContent = "Le chiavi restano sul computer. Presenza della chiave, collegamento ed esecuzione sono verifiche distinte.";
+    note.textContent = `${NOTA_CHIAVI} ${NOTA_CHIAVI_RESTO}`;
   }
   const test = panel.querySelector("#providerTestAll") || panel.querySelector("[data-provider-test-all]");
   if (test && !panel.querySelector("#providerRefresh")) {
@@ -4656,6 +5102,7 @@ function montaProviderPanel(panel) {
     delete refresh.dataset.providerAction;
     test.before(refresh);
   }
+  installaFiltriFornitori(panel.querySelector("#providerList"));
   curaDoppiaTestata(panel, head, title, note);
 }
 function curaDoppiaTestata(panel, head, title, note) {
@@ -4664,23 +5111,15 @@ function curaDoppiaTestata(panel, head, title, note) {
   title.hidden = true;
   note.hidden = true;
   if (panel.querySelector("[data-provider-avviso]")) return;
-  const avviso = el4("div", "talos-provider__avviso");
+  const avviso = creaAvvisoChiavi();
   avviso.dataset.providerAvviso = "";
-  vesti(avviso, VESTITO.avviso);
-  const icona13 = simboloProvider("i-shield");
-  icona13.style.flex = "none";
-  icona13.style.marginTop = "2px";
-  const testo2 = el4("span", "");
-  const forte = el4("strong", "", "Le chiavi restano sul computer.");
-  Object.assign(forte.style, { color: "var(--talos-text)", fontWeight: "550" });
-  testo2.append(forte, document.createTextNode(" " + note.textContent.replace(/^Le chiavi restano sul computer\.\s*/u, "")));
-  avviso.append(icona13, testo2);
   if (head) head.after(avviso);
   else panel.prepend(avviso);
 }
-var VESTITO, CLOUD_CONFIGURABILI;
+var VESTITO, FILTRO_CHIP, CLOUD_CONFIGURABILI, NOTA_CHIAVI, NOTA_CHIAVI_RESTO, ICONE_AZIONE, filtroVuoto, statoLista;
 var init_provider_card = __esm({
   "src/components/provider-card.js"() {
+    init_loghi_fornitori();
     VESTITO = Object.freeze({
       /* ⛔ `align-items` NON si dichiara: il mockup non lo dichiara, e le sue due card — una con TRE
          fatti e una con DUE — misurano entrambe **332** di altezza. È lo `stretch` di serie della
@@ -4701,9 +5140,72 @@ var init_provider_card = __esm({
       punto: { width: "5px", height: "5px" },
       fatti: { margin: "0 0 24px" },
       azioni: { display: "flex", flexWrap: "wrap", gap: "10px" },
-      avviso: { display: "flex", alignItems: "flex-start", gap: "10px", border: "1px solid var(--talos-border)", borderRadius: "9px", padding: "13px 14px", margin: "0 0 18px", color: "var(--talos-muted)", fontSize: "12px", lineHeight: "1.65" }
+      avviso: { display: "flex", alignItems: "flex-start", gap: "10px", border: "1px solid var(--talos-border)", borderRadius: "9px", padding: "13px 14px", margin: "0 0 18px", color: "var(--talos-muted)", fontSize: "12px", lineHeight: "1.65" },
+      /*
+       * `.button` del mockup, misurato dal DOM vivo il 19/09/2026 sulle `.provider-actions`:
+       *   min-height 38 · padding 9px 13px · raggio 8 · bordo 1 · 12px/550 · gap 8 · icona 16×16.
+       * ⛔ Si veste QUI, con le proprietà del CSSOM, e non con una variante nuova di `.talos-button`:
+       *   la misura è della CARD del mockup, non del sistema di design — e una variante nuova sarebbe
+       *   una regola di prodotto che nessuno ha chiesto (e `src/styles/*` non è di questa corsia).
+       *   I numeri di partenza erano: altezza 32, bordo 2, peso 600, gap 10, nessuna icona.
+       */
+      pulsante: { minHeight: "38px", padding: "9px 13px", borderRadius: "8px", borderWidth: "1px", gap: "8px", fontSize: "12px", fontWeight: "550", lineHeight: "1.4", whiteSpace: "normal" },
+      /*
+       * LA MODALE DI «CONFIGURA» — `.dialog` del mockup, misurato dal DOM vivo il 19/09/2026:
+       *   600×513,8 · raggio 16 · bordo 1 · `0 32px 90px rgb(0 0 0/30%)`
+       *   `.dialog-header` padding 25px 26px 17px · gap 18 · align flex-start · justify space-between
+       *   `h2` 22px · line-height 1.3 · letter-spacing −0,035em
+       *   `.dialog-body` padding 2px 26px 24px
+       *   `.dialog-footer` flex · justify flex-end · gap 10 · padding 16px 26px 21px · filetto in alto
+       *   `.icon-button` 36×36 · raggio 7 · `place-items: center` · `.eyebrow` 10px/500 · ls .17em
+       * ⛔ L'OCCHIELLO DEL MOCKUP NON SI PORTA: dice «TALOS · ANTEPRIMA INTERATTIVA», che è il cartello
+       *   del prototipo. Nel prodotto sarebbe FALSO — è la stessa regola della frase di sicurezza
+       *   («Qui non inserire chiavi reali», vedi `curaDoppiaTestata`), decisa dall'owner il 19/09/2026.
+       *   Nella tabella delle differenze è dichiarato invece che nascosto.
+       */
+      modale: {
+        dialogo: { padding: "0", border: "1px solid var(--talos-border)", borderRadius: "16px", background: "var(--talos-panel)", color: "var(--talos-text)", width: "600px", maxWidth: "calc(100vw - 36px)", maxHeight: "calc(100dvh - 48px)", boxShadow: "0 32px 90px rgb(0 0 0 / 30%)", overflow: "hidden" },
+        testa: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "18px", padding: "25px 26px 17px" },
+        titolo: { margin: "0", fontSize: "22px", fontWeight: "600", lineHeight: "1.3", letterSpacing: "-.035em", overflowWrap: "anywhere" },
+        chiudi: { width: "36px", height: "36px", flex: "none", display: "grid", placeItems: "center", borderRadius: "7px", color: "var(--talos-muted)", borderWidth: "0", background: "transparent", padding: "0" },
+        /*
+         * ⛔ IL CORPO SCORRE, E QUESTA RIGA È NATA DA UNA FOTO — non da un ragionamento. Il primo
+         *   giro mostrava la modale col contenuto TAGLIATO: «Salva chiave» finiva sotto il bordo e non
+         *   c'era modo di raggiungerlo. Le altre due parti erano già fisse (la testata e il piede non
+         *   hanno `flex`), ma senza `flex:1` e `overflow:auto` il corpo non scorreva: il `<dialog>` ha
+         *   `overflow:hidden` e il contenuto che non ci sta viene semplicemente perso.
+         *   È il vincolo che la ricerca del brief chiede — «altezza ≤ 80-90vh con testata e piede fissi
+         *   e solo il corpo che scorre» (<https://vercel.com/geist/modal>, letta il 19/09/2026) — e
+         *   senza, il piede resta raggiungibile ma i CAMPI no.
+         */
+        corpo: { padding: "2px 26px 24px", flex: "1 1 auto", minHeight: "0", overflowY: "auto" },
+        piede: { display: "flex", justifyContent: "flex-end", gap: "10px", padding: "16px 26px 21px", borderTop: "1px solid var(--talos-border)" },
+        /* `.dialog-footer .button { min-height: 40px }` — misurato, non dedotto. */
+        pulsante: { minHeight: "40px", paddingLeft: "14px", paddingRight: "14px" }
+      },
+      /*
+       * LA RIGA DEI FILTRI — `catalogo-faccette.js` è la FORMA già approvata per una barra a faccette
+       * (ricerca + chip coi conteggi + «Togli i filtri»); qui se ne portano le stesse classi e le stesse
+       * misure, senza inventarne un'altra. Ricerca 19/09/2026, fonti nella testata dei filtri: il
+       * conteggio per valore è ciò che rende una faccetta intelligente, OR dentro una faccetta e AND
+       * fra faccette, i valori a zero si grigiano.
+       */
+      filtri: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px", margin: "0 0 16px" }
     });
+    FILTRO_CHIP = "providerFilter";
     CLOUD_CONFIGURABILI = /* @__PURE__ */ new Set(["azure", "vertex", "bedrock"]);
+    NOTA_CHIAVI = "Le chiavi restano sul computer.";
+    NOTA_CHIAVI_RESTO = "Presenza della chiave, collegamento ed esecuzione sono verifiche distinte.";
+    ICONE_AZIONE = Object.freeze({
+      /* I cursori: due righe con due manopole — «metti a punto», cioè configura. */
+      configura: [["path", "M4 7h9m4 0h3M4 17h3m4 0h9"], ["circle", { cx: "15", cy: "7", r: "2" }], ["circle", { cx: "9", cy: "17", r: "2" }]],
+      /* Le due frecce circolari: «interroga il servizio e riporta», cioè verifica. */
+      verifica: [["path", "M20 7v5h-5M4 17v-5h5m-4-4a8 8 0 0 1 13-3l2 3M4 16l2 3a8 8 0 0 0 13-3"]],
+      /* La croce di chiusura della testata della modale (`.icon-button`, misurata: 18×18 dentro 36×36). */
+      chiudi: [["path", "m6 6 12 12M6 18 18 6"]]
+    });
+    filtroVuoto = () => ({ cerca: "", credenziale: [], prova: [] });
+    statoLista = /* @__PURE__ */ new WeakMap();
   }
 });
 
@@ -7518,13 +8020,13 @@ function nodo2(doc, tag2, classe, testo2) {
   return el28;
 }
 function icona(doc, nome) {
-  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
   const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", `#i-${nome}`);
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
 }
 function apriModale(titolo2, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null } = {}) {
   if (!doc?.body) return null;
@@ -9117,13 +9619,13 @@ function nodo3(doc, tag2, classe, testo2) {
   return el28;
 }
 function icona2(doc, nome) {
-  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
   const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", `#i-${nome}`);
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
 }
 function miniConversazione(doc) {
   const scena = nodo3(doc, "div", "td-mini");
@@ -9764,13 +10266,13 @@ function nodo4(doc, tag2, classe, testo2) {
   return el28;
 }
 function icona3(doc, nome, classe = "") {
-  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
   const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg.setAttribute("class", classe || "i");
-  svg.setAttribute("aria-hidden", "true");
+  svg2.setAttribute("class", classe || "i");
+  svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", `#i-${nome}`);
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
 }
 function montaAnteprimaTema(contenitore, {
   document: doc = globalThis.document,
@@ -9964,13 +10466,13 @@ var init_anteprima_tema = __esm({
 
 // src/features/settings/settings-view.ts
 function iconaSprite(sprite, className) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", "i " + className);
-  svg.setAttribute("aria-hidden", "true");
+  const svg2 = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg2.setAttribute("class", "i " + className);
+  svg2.setAttribute("aria-hidden", "true");
   const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
   use.setAttribute("href", "#i-" + sprite);
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
 }
 function iconaSezione(id2) {
   const sprite = SETTINGS_SECTIONS[id2]?.icon ?? "settings";
@@ -11101,12 +11603,12 @@ function creaExtensionRow(tipo, v, { document: doc = globalThis.document, selezi
   r.setAttribute("role", "option");
   r.setAttribute("aria-selected", String(selezionata));
   r.tabIndex = selezionata ? 0 : -1;
-  const i2 = el8(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), u = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
+  const i2 = el8(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), u = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
   u.setAttribute("href", tipo === "mcp" ? "#i-globe" : "#i-bolt");
-  svg.append(u);
-  i2.append(svg);
+  svg2.append(u);
+  i2.append(svg2);
   const t3 = el8(doc, "span", "talos-list-row__text");
   t3.append(el8(doc, "span", "talos-list-row__title", d.titolo), el8(doc, "span", "talos-list-row__sub", d.descrizione));
   const a = el8(doc, "span", "talos-list-row__aside");
@@ -11803,12 +12305,12 @@ function el11(doc, tag2, classe, testo2) {
   return n;
 }
 function icona5(doc) {
-  const contenitore = el11(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
+  const contenitore = el11(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-code");
-  svg.append(use);
-  contenitore.append(svg);
+  svg2.append(use);
+  contenitore.append(svg2);
   return contenitore;
 }
 function creaForgeRow(strumento, { document: doc = globalThis.document, selezionabile = true, selezionata = false, onSeleziona, onAbilita, salvataggio = false, salvataggioId = null } = {}) {
@@ -12227,13 +12729,13 @@ function nodo6(doc, tag2, classe, testo2) {
   return el28;
 }
 function iconaSvg(doc, nome) {
-  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
   const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", `#i-${nome}`);
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
 }
 function tag(doc, testo2, tono) {
   const el28 = nodo6(doc, "span", "td-tag", testo2);
@@ -13019,12 +13521,12 @@ function creaReportRow(ricerca, { document: doc = globalThis.document, aperta: a
   riga2.dataset.c = "ReportRow";
   riga2.dataset.researchId = ricerca?.id || "";
   riga2.setAttribute("role", "listitem");
-  const icona13 = el12(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
+  const icona13 = el12(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-globe");
-  svg.append(use);
-  icona13.append(svg);
+  svg2.append(use);
+  icona13.append(svg2);
   const testo2 = el12(doc, "span", "talos-list-row__text"), titolo2 = el12(doc, "span", "talos-list-row__title", t3.titolo), sotto = el12(doc, "span", "talos-list-row__sub");
   titolo2.title = t3.titolo;
   testo2.append(titolo2, sotto);
@@ -13164,12 +13666,12 @@ function creaLibraryRow(voce, { document: doc = globalThis.document, aperta: ape
   riga2.dataset.c = "LibraryRow";
   riga2.dataset.libraryId = id2;
   riga2.setAttribute("role", "listitem");
-  const icona13 = el13(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
+  const icona13 = el13(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + tipo.icona);
-  svg.append(use);
-  icona13.append(svg);
+  svg2.append(use);
+  icona13.append(svg2);
   const testo2 = el13(doc, "span", "talos-list-row__text"), titolo2 = el13(doc, "span", "talos-list-row__title", t3.nome), sotto = el13(doc, "span", "talos-list-row__sub");
   const aside = el13(doc, "span", "talos-list-row__aside");
   aside.append(el13(doc, "span", "talos-badge" + (voce?.origine === "generated" ? " talos-badge--accent" : ""), origine));
@@ -13443,12 +13945,12 @@ function creaTaskRow(a, { document: doc = globalThis.document, aperta: aperta2 =
   segna.setAttribute("role", "checkbox");
   segna.setAttribute("aria-checked", String(a?.stato === "done"));
   segna.setAttribute("aria-label", "Segna come fatta");
-  const icona13 = el14(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
+  const icona13 = el14(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + s.icona);
-  svg.append(use);
-  icona13.append(svg);
+  svg2.append(use);
+  icona13.append(svg2);
   const testo2 = el14(doc, "span", "talos-list-row__text"), titolo2 = el14(doc, "span", "talos-list-row__title", t3.titolo), sotto = el14(doc, "span", "talos-list-row__sub");
   titolo2.title = t3.titolo;
   testo2.append(titolo2, sotto);
@@ -13508,12 +14010,12 @@ function creaMemoryRow(memoria, { document: doc = globalThis.document, aperta: a
   riga2.dataset.c = "MemoryRow";
   riga2.setAttribute("role", "listitem");
   riga2.dataset.memoryId = memoria?.id || "";
-  const icona13 = el15(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
+  const icona13 = el15(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + g.icona);
-  svg.append(use);
-  icona13.append(svg);
+  svg2.append(use);
+  icona13.append(svg2);
   const testo2 = el15(doc, "span", "talos-list-row__text"), titolo2 = el15(doc, "span", "talos-list-row__title", t3.titolo), sotto = el15(doc, "span", "talos-list-row__sub");
   titolo2.title = t3.titolo;
   testo2.append(titolo2, sotto);
@@ -13731,7 +14233,7 @@ function collegaScorrimento(scorre, tabella, avviso) {
   }
   return aggiorna;
 }
-function tabellaCsv(doc, testo2, { nome, magazzino, chiave, ridisegna }) {
+function tabellaCsv(doc, testo2, { nome, magazzino, chiave, ridisegna: ridisegna2 }) {
   const righe = righeCsv(testo2, separatoreDi(nome));
   const pezzi = [];
   if (!righe.length) {
@@ -13772,14 +14274,14 @@ function tabellaCsv(doc, testo2, { nome, magazzino, chiave, ridisegna }) {
   if (dati > mostrati) {
     const apri = bottone2(doc, `Mostra tutte le ${dati.toLocaleString("it-IT")} righe`, () => {
       magazzino.tabelleAperte.add(chiave);
-      ridisegna?.();
+      ridisegna2?.();
     });
     pezzi.push(apri);
   }
   return pezzi;
 }
 function contenutoModoFile(doc, modo, contesto2) {
-  const { voce, nome, formato, lettura, opzioni, magazzino, ridisegna } = contesto2;
+  const { voce, nome, formato, lettura, opzioni, magazzino, ridisegna: ridisegna2 } = contesto2;
   const chiave = String(voce?.id ?? "");
   if (formato === "binario") {
     const frase = modo === "anteprima" ? "Questo formato si apre con l’app del sistema: TALOS non lo disegna in questa finestra." : "Il testo di questo formato non si estrae: TALOS sa creare PDF, DOCX e fogli di calcolo, non rileggerne le parole. Il file si apre con l’app del sistema.";
@@ -13806,7 +14308,7 @@ function contenutoModoFile(doc, modo, contesto2) {
   if (modo === "anteprima" && formato === "markdown") {
     pezzi.push(prosaInNodi(doc, mostrato, opzioni?.rendiMarkdown));
   } else if (modo === "anteprima" && formato === "tabella") {
-    pezzi.push(...tabellaCsv(doc, mostrato, { nome, magazzino, chiave, ridisegna }));
+    pezzi.push(...tabellaCsv(doc, mostrato, { nome, magazzino, chiave, ridisegna: ridisegna2 }));
   } else {
     const pre = nodo7(doc, "pre", "td-code td-file-testo", mostrato);
     pre.tabIndex = 0;
@@ -14133,13 +14635,13 @@ function nodo8(doc, tag2, classe, testo2) {
   return el28;
 }
 function icona6(doc, nome, classe = "i") {
-  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
   const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg.setAttribute("class", classe);
-  svg.setAttribute("aria-hidden", "true");
+  svg2.setAttribute("class", classe);
+  svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", `#i-${nome}`);
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
 }
 function etichetta(doc, testo2, tono = "") {
   const el28 = nodo8(doc, "span", "td-tag", testo2);
@@ -14148,10 +14650,10 @@ function etichetta(doc, testo2, tono = "") {
 }
 function disegnoVuoto(doc, nomeIcona) {
   const NS = "http://www.w3.org/2000/svg";
-  const svg = doc.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", "0 0 120 100");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("aria-hidden", "true");
+  const svg2 = doc.createElementNS(NS, "svg");
+  svg2.setAttribute("viewBox", "0 0 120 100");
+  svg2.setAttribute("fill", "none");
+  svg2.setAttribute("aria-hidden", "true");
   const linea = doc.createElementNS(NS, "path");
   linea.setAttribute("d", "M20 83h80");
   linea.setAttribute("stroke", "currentColor");
@@ -14167,8 +14669,8 @@ function disegnoVuoto(doc, nomeIcona) {
   dentro.append(use);
   const scintilla = doc.createElementNS(NS, "path");
   for (const [k, v] of Object.entries({ d: "M92 16v10m-5-5h10", class: "accent", "stroke-width": "1.5", "stroke-linecap": "round" })) scintilla.setAttribute(k, String(v));
-  svg.append(linea, dietro, davanti, dentro, scintilla);
-  return svg;
+  svg2.append(linea, dietro, davanti, dentro, scintilla);
+  return svg2;
 }
 function montaSezione(schermo, config) {
   if (!schermo) return 0;
@@ -15322,7 +15824,7 @@ function bottoneMenu(doc, titolo2, apri) {
   });
   return b;
 }
-function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
+function scrittura(schermo, { schema, lista, opzioni, ridisegna: ridisegna2 }) {
   const doc = schermo.ownerDocument || globalThis.document;
   const m = magazzinoScrittura(schermo);
   const avvisa = notificatore(opzioni);
@@ -15344,12 +15846,12 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
       m.voci.set(id2, { stato: "pronto", voce: dati?.[schema.campoRisposta] || null });
     }).catch((errore) => {
       m.voci.set(id2, { stato: "errore", errore: errore?.message || "motivo non registrato" });
-    }).then(() => ridisegna());
+    }).then(() => ridisegna2());
   }
   function apriModulo(modo, voce = null) {
     const valori = modo === "crea" ? m.bozza || valoriIniziali(schema) : valoriIniziali(schema, voceIntera(voce));
     m.modulo = { modo, id: modo === "crea" ? BOZZA : String(voce?.id ?? ""), originale: modo === "crea" ? null : voceIntera(voce), valori, errori: {}, inCorso: false, erroreRete: null, appesa: false };
-    ridisegna();
+    ridisegna2();
   }
   function chiudiModulo({ tieniBozza = false } = {}) {
     if (m.modulo?.modo === "crea") m.bozza = tieniBozza ? m.modulo.valori : null;
@@ -15362,16 +15864,16 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
     mod.errori = esito.errori;
     mod.erroreRete = null;
     if (!esito.ok) {
-      ridisegna();
+      ridisegna2();
       return;
     }
     if (!servizio) {
       mod.erroreRete = "Manca la sessione: riapri una conversazione e riprova.";
-      ridisegna();
+      ridisegna2();
       return;
     }
     mod.inCorso = true;
-    ridisegna();
+    ridisegna2();
     try {
       if (mod.modo === "crea") {
         const dati2 = await servizio.crea(corpoCreazione(schema, mod.valori));
@@ -15394,13 +15896,13 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
           }));
         }
         ricarica();
-        ridisegna();
+        ridisegna2();
         return;
       }
       const { corpo, cambiato } = corpoModifica(schema, mod.valori, mod.originale);
       if (!cambiato) {
         chiudiModulo();
-        ridisegna();
+        ridisegna2();
         return;
       }
       const prima = mod.originale;
@@ -15420,7 +15922,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
         ricarica();
       }));
       ricarica();
-      ridisegna();
+      ridisegna2();
     } catch (errore) {
       mod.inCorso = false;
       mod.erroreRete = paroleErroreRete(errore?.code, schema);
@@ -15428,7 +15930,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
         chiudiModulo();
         ricarica();
       }
-      ridisegna();
+      ridisegna2();
     }
   }
   function nodiModulo(doc2) {
@@ -15442,7 +15944,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
     salvaBtn.disabled = Boolean(mod.inCorso);
     const annullaBtn = bottone3(doc2, "Annulla", { variante: "ghost", esegui: () => {
       chiudiModulo();
-      ridisegna();
+      ridisegna2();
     } });
     annullaBtn.disabled = Boolean(mod.inCorso);
     return [salvaBtn, annullaBtn];
@@ -15502,7 +16004,7 @@ ${testoDi(schema, intera)}`);
       avvisa(`Non ${accordo(schema, "aggiornat")}`, paroleErroreRete(errore?.code, schema, { azione: "cambiare stato" }), { tono: "errore" });
     }
     ricarica();
-    ridisegna();
+    ridisegna2();
   }
   function vociMenu(v) {
     if (!servizio) return [];
@@ -15632,19 +16134,19 @@ ${testoDi(schema, intera)}`);
     }
   };
 }
-function montaScrivibile(schermo, scrivi2, config, ridisegna) {
+function montaScrivibile(schermo, scrivi2, config, ridisegna2) {
   const quante = montaSezione(schermo, config);
   scrivi2.montaPulsanteNuova();
   scrivi2.parolaTesta(config.nome);
-  if (scrivi2.sincronizza()) return ridisegna();
+  if (scrivi2.sincronizza()) return ridisegna2();
   return quante;
 }
 function montaNote(schermo, note, opzioni = {}) {
   const { cerca = "", onCopia = null, adesso = /* @__PURE__ */ new Date() } = opzioni;
   const avvisa = notificatore(opzioni);
   const lista = Array.isArray(note) ? note : [];
-  const ridisegna = () => montaNote(schermo, note, opzioni);
-  const scrivi2 = scrittura(schermo, { schema: SCHEMI.note, lista, opzioni, ridisegna });
+  const ridisegna2 = () => montaNote(schermo, note, opzioni);
+  const scrivi2 = scrittura(schermo, { schema: SCHEMI.note, lista, opzioni, ridisegna: ridisegna2 });
   const magazzino = magazzinoScrittura(schermo);
   return montaScrivibile(schermo, scrivi2, {
     chiave: "note",
@@ -15713,13 +16215,13 @@ ${n?.contenuto ?? ""}`);
     },
     notaPiede: () => scrivi2.notaPiede() || "Le note vivono in .notes-store/",
     vuoto: { titolo: "Nessuna nota", testo: "TALOS scrive una nota quando trova qualcosa che vale la pena ricordare, e da qui le scrivi anche tu. Le note vivono in .notes-store/ e valgono per tutti i progetti." }
-  }, ridisegna);
+  }, ridisegna2);
 }
 function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
   const avvisa = notificatore(opzioni);
   const lista = Array.isArray(memorie) ? memorie : [];
-  const ridisegna = () => aggiornaPaginaMemoria(schermo, memorie, opzioni);
-  const scrivi2 = scrittura(schermo, { schema: SCHEMI.memory, lista, opzioni, ridisegna });
+  const ridisegna2 = () => aggiornaPaginaMemoria(schermo, memorie, opzioni);
+  const scrivi2 = scrittura(schermo, { schema: SCHEMI.memory, lista, opzioni, ridisegna: ridisegna2 });
   return montaScrivibile(schermo, scrivi2, {
     chiave: "memoria",
     nome: "Memoria",
@@ -15787,12 +16289,12 @@ ${t3.contenuto}`);
     },
     notaPiede: () => scrivi2.notaPiede() || "I ricordi valgono per tutte le conversazioni",
     vuoto: { titolo: "Nessun ricordo", testo: "I ricordi sono globali, disponibili alle tue conversazioni. Li salva TALOS quando impara qualcosa di te, e da qui li scrivi anche tu." }
-  }, ridisegna);
+  }, ridisegna2);
 }
 function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
   const lista = Array.isArray(attivita) ? attivita : [];
-  const ridisegna = () => aggiornaPaginaAttivita(schermo, attivita, opzioni);
-  const scrivi2 = scrittura(schermo, { schema: SCHEMI.tasks, lista, opzioni, ridisegna });
+  const ridisegna2 = () => aggiornaPaginaAttivita(schermo, attivita, opzioni);
+  const scrivi2 = scrittura(schermo, { schema: SCHEMI.tasks, lista, opzioni, ridisegna: ridisegna2 });
   return montaScrivibile(schermo, scrivi2, {
     chiave: "attivita",
     nome: "Attività",
@@ -15880,7 +16382,7 @@ function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
        schermata non è ridondanza innocua: è spazio tolto a ciò che non è ancora stato detto. */
     notaPiede: () => scrivi2.notaPiede() || "Lo stato si cambia da qui e dalla chat",
     vuoto: { titolo: "Nessuna attività", testo: "Le attività sono globali, disponibili alle tue conversazioni. Le apre TALOS mentre lavora, e da qui le apri anche tu. Vivono in .tasks-store/." }
-  }, ridisegna);
+  }, ridisegna2);
 }
 function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
   const avvisa = notificatore(opzioni);
@@ -15889,7 +16391,7 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
   const eliminaInBlocco = sessionId && typeof opzioni.rete?.post === "function" ? (ids) => opzioni.rete.post(`/api/v1/sessions/${encodeURIComponent(sessionId)}/library/batch`, { azione: "elimina", ids }) : null;
   const magazzinoFile = magazzinoFileLibreria(schermo);
   const prov = (v) => provenienzaVoceLibreria(v, { nomeSessione: opzioni.nomeSessione });
-  const ridisegna = () => aggiornaPaginaLibreria(schermo, voci, opzioni);
+  const ridisegna2 = () => aggiornaPaginaLibreria(schermo, voci, opzioni);
   const leggiFile = typeof opzioni.leggiFile === "function" ? opzioni.leggiFile : lettoreFileLibreria(sessionId);
   const servizio = servizioVero && {
     ...servizioVero,
@@ -15960,7 +16462,7 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       pezzi.push(...montaAnteprimaFile(v, {
         doc,
         magazzino: magazzinoFile,
-        ridisegna,
+        ridisegna: ridisegna2,
         opzioni: {
           leggiFile,
           rendiMarkdown: opzioni.rendiMarkdown,
@@ -16049,7 +16551,7 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   const magazzino = magazzinoRicerche(schermo);
   const avvisa = notificatore(opzioni);
   const copia2 = copiatore(opzioni);
-  const ridisegna = () => aggiornaPaginaRicerca(schermo, ricerche, opzioni);
+  const ridisegna2 = () => aggiornaPaginaRicerca(schermo, ricerche, opzioni);
   const trovaVoce = (id2) => elenco2.find((r) => String(r?.id) === String(id2)) || null;
   const leggiRapporto = typeof opzioni.leggiRapporto === "function" ? opzioni.leggiRapporto : opzioni.sessionId ? async (voce) => {
     const indirizzo = indirizzoFileLibreria(opzioni.sessionId, voce?.reportLibraryId);
@@ -16069,7 +16571,7 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   const leggiDettaglio = typeof opzioni.leggiDettaglio === "function" ? opzioni.leggiDettaglio : servizio?.leggi ? async (voce) => (await servizio.leggi(voce?.id))?.ricerca ?? null : null;
   function ricarica() {
     if (typeof opzioni.onAggiorna === "function") return opzioni.onAggiorna();
-    return ridisegna();
+    return ridisegna2();
   }
   function aggiornaVoceInElenco(aggiornata) {
     if (!aggiornata?.id) return;
@@ -16107,7 +16609,7 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     const id2 = String(voce?.id);
     magazzino.viste.set(id2, "fonti");
     magazzino.riverifiche.set(id2, { stato: "in-corso" });
-    ridisegna();
+    ridisegna2();
     const aperta2 = String(statoSezione(schermo)?.selezione ?? "") === id2;
     try {
       const dati = await servizio.riverifica(id2);
@@ -16118,7 +16620,7 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       magazzino.riverifiche.set(id2, { stato: "errore", errore: parole });
       if (!aperta2) avvisa("Non riuscito", parole, { tono: "errore" });
     }
-    ridisegna();
+    ridisegna2();
   }
   function elimina(voce) {
     const titolo2 = frasiVoce(voce).domanda;
@@ -16157,7 +16659,7 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       } catch (errore) {
         magazzino.dettagli.set(id2, { stato: "errore", errore: errore?.message || "motivo non registrato" });
       }
-      ridisegna();
+      ridisegna2();
     }
     const elenco3 = esportazioniRicerca(voce, letturaDi(voce), dettaglioDi(voce));
     apriModale("Esporta la ricerca", montaPannelloEsportazioni(doc, elenco3, {
@@ -16284,13 +16786,13 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
           b.type = "button";
           b.setAttribute("aria-haspopup", "menu");
           b.setAttribute("aria-label", `Azioni su ${f.domanda}`);
-          const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+          const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
           const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-          svg.setAttribute("class", "i");
-          svg.setAttribute("aria-hidden", "true");
+          svg2.setAttribute("class", "i");
+          svg2.setAttribute("aria-hidden", "true");
           use.setAttribute("href", "#i-more");
-          svg.append(use);
-          b.append(svg);
+          svg2.append(use);
+          b.append(svg2);
           b.addEventListener("click", (e) => {
             e.stopPropagation();
             apriMenu(r, { ancoraEl: b });
@@ -16302,7 +16804,7 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     dettaglio: (r, { doc }) => montaDettaglioRicerca(r, {
       doc,
       magazzino,
-      ridisegna,
+      ridisegna: ridisegna2,
       apriMenu,
       opzioni: {
         leggiRapporto,
@@ -16429,13 +16931,13 @@ function el16(d, tag2, classe = "", testo2 = null) {
   return n;
 }
 function icona7(d, id2) {
-  const svg = d.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
+  const svg2 = d.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
   const use = d.createElementNS("http://www.w3.org/2000/svg", "use");
   use.setAttribute("href", `#${id2}`);
-  svg.appendChild(use);
-  return svg;
+  svg2.appendChild(use);
+  return svg2;
 }
 function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniziale = "panoramica", eta = () => null, azioni = {} } = {}) {
   const d = documento || globalThis.document;
@@ -17437,13 +17939,13 @@ function el18(documentObj, tag2, classe, testo2) {
   return n;
 }
 function icona8(documentObj, nome) {
-  const svg = documentObj.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
+  const svg2 = documentObj.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
   const use = documentObj.createElementNS("http://www.w3.org/2000/svg", "use");
   use.setAttribute("href", `#${nome}`);
-  svg.appendChild(use);
-  return svg;
+  svg2.appendChild(use);
+  return svg2;
 }
 function aggiornaPannelloNotifiche(pannello, notifiche = [], { ora = () => "", document: documentObj = globalThis.document } = {}) {
   if (!pannello) return { righe: [], tutte: null };
@@ -17618,13 +18120,13 @@ function el19(documentObj, tag2, classe, testo2) {
   return n;
 }
 function icona9(documentObj, nome, classe = "i") {
-  const svg = documentObj.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", classe);
-  svg.setAttribute("aria-hidden", "true");
+  const svg2 = documentObj.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg2.setAttribute("class", classe);
+  svg2.setAttribute("aria-hidden", "true");
   const use = documentObj.createElementNS("http://www.w3.org/2000/svg", "use");
   use.setAttribute("href", `#${nome}`);
-  svg.appendChild(use);
-  return svg;
+  svg2.appendChild(use);
+  return svg2;
 }
 function badge(documentObj, testo2, tono) {
   const b = el19(documentObj, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
@@ -17654,6 +18156,124 @@ function creaRigaInstallata(dati, { selezionato = false, seleziona, document: do
   b.append(ic, testo2, aside);
   if (typeof seleziona === "function") b.addEventListener("click", () => seleziona(dati.id));
   return b;
+}
+function verdettoAzioneModello(esito, { azione = "elimina", nome = "" } = {}) {
+  const chi = nome ? `«${nome}»` : "Il modello";
+  const rinominato = azione === "rinomina";
+  if (esito && esito.ok === true) {
+    return rinominato ? { tono: "success", etichetta: "Nome salvato", testo: `${chi} ora si chiama ${esito.nome ? `«${esito.nome}»` : "come hai scritto"}.` } : { tono: "success", etichetta: "Eliminato dal disco", testo: `${chi} non è più su questo computer.` };
+  }
+  if (esito && esito.ok === false) {
+    const motivo = esito.motivo || esito.messaggio || esito.message || "il comando non è andato a buon fine";
+    return {
+      tono: "danger",
+      etichetta: rinominato ? "Nome non salvato" : "Non eliminato",
+      testo: `${chi} è ancora come prima: ${motivo}.`
+    };
+  }
+  return {
+    tono: "warning",
+    etichetta: "Esito non confermato",
+    testo: `Il comando è partito, ma non ho potuto controllare se ${chi} è cambiato davvero: rileggi l'elenco per esserne sicuro.`
+  };
+}
+function creaConfermaEliminazione(dati, { inCorso = false, verdetto = null, onAnnulla, onEsegui, document: d = globalThis.document } = {}) {
+  const card = el19(d, "div", "talos-check-card talos-check-card--danger talos-lab__space");
+  card.dataset.c = "ConfermaEliminazione";
+  card.dataset.modello = dati.id;
+  card.appendChild(el19(d, "span", "talos-check-card__stripe"));
+  const corpo = el19(d, "div", "talos-check-card__body");
+  corpo.append(
+    el19(d, "b", "talos-check-card__title", `Eliminare «${dati.nome}»?`),
+    el19(d, "p", "", `Spariscono i file del modello${dati.dimensione ? ` (${dati.dimensione})` : ""} e la sua scheda: fra i modelli installati non ci sarà più. Dal sito d'origine resta scaricabile, ma qui va scaricato o importato da capo.`)
+  );
+  const az = el19(d, "div", "talos-check-card__actions");
+  const annulla = el19(d, "button", "talos-button talos-button--secondary talos-button--sm", "Annulla");
+  annulla.type = "button";
+  annulla.dataset.c = "Button";
+  annulla.dataset.action = "annullaEliminaModello";
+  annulla.disabled = inCorso;
+  if (onAnnulla) annulla.addEventListener("click", () => onAnnulla(dati.id));
+  const esegui = el19(d, "button", "talos-button talos-button--danger talos-button--sm", inCorso ? "Elimino…" : "Elimina dal disco");
+  esegui.type = "button";
+  esegui.dataset.c = "Button";
+  esegui.dataset.action = "eseguiEliminaModello";
+  esegui.disabled = inCorso;
+  if (onEsegui) esegui.addEventListener("click", () => onEsegui(dati.id));
+  az.append(annulla, esegui);
+  corpo.appendChild(az);
+  if (verdetto) corpo.appendChild(creaRigaEsitoModello(verdetto, { document: d }));
+  card.appendChild(corpo);
+  return card;
+}
+function creaCampoRinomina(dati, { bozza = "", inCorso = false, errore = null, verdetto = null, onAnnulla, onSalva, onBozza, document: d = globalThis.document } = {}) {
+  const card = el19(d, "div", "talos-check-card talos-check-card--info talos-lab__space");
+  card.dataset.c = "CampoRinomina";
+  card.dataset.modello = dati.id;
+  card.appendChild(el19(d, "span", "talos-check-card__stripe"));
+  const corpo = el19(d, "div", "talos-check-card__body");
+  const idCampo = `nomeModello-${String(dati.id).replace(/[^a-z0-9_-]/giu, "-")}`;
+  const etichetta2 = el19(d, "label", "talos-stack", "Nome mostrato");
+  etichetta2.htmlFor = idCampo;
+  const campo2 = el19(d, "input", "talos-field__input");
+  campo2.type = "text";
+  campo2.id = idCampo;
+  campo2.value = bozza;
+  campo2.autocomplete = "off";
+  campo2.maxLength = NOME_MODELLO_MAX;
+  campo2.dataset.campo = "nomeModello";
+  campo2.disabled = inCorso;
+  etichetta2.appendChild(campo2);
+  const aiuto = el19(d, "p", "talos-muted", `Cambia solo il nome con cui il modello compare qui e nella sua pagina: il file e la cartella sul disco non si toccano. Al massimo ${NOME_MODELLO_MAX} caratteri.`);
+  aiuto.id = `${idCampo}-aiuto`;
+  corpo.append(etichetta2, aiuto);
+  if (errore) {
+    const allarme = el19(d, "p", "talos-muted", errore);
+    allarme.dataset.campoErrore = "";
+    allarme.setAttribute("role", "alert");
+    allarme.id = `${idCampo}-errore`;
+    campo2.setAttribute("aria-invalid", "true");
+    campo2.setAttribute("aria-describedby", `${aiuto.id} ${allarme.id}`);
+    corpo.appendChild(allarme);
+  } else campo2.setAttribute("aria-describedby", aiuto.id);
+  const az = el19(d, "div", "talos-check-card__actions");
+  const annulla = el19(d, "button", "talos-button talos-button--secondary talos-button--sm", "Annulla");
+  annulla.type = "button";
+  annulla.dataset.c = "Button";
+  annulla.dataset.action = "annullaRinominaModello";
+  annulla.disabled = inCorso;
+  if (onAnnulla) annulla.addEventListener("click", () => onAnnulla(dati.id));
+  const salva = el19(d, "button", "talos-button talos-button--primary talos-button--sm", inCorso ? "Salvo…" : "Salva nome");
+  salva.type = "button";
+  salva.dataset.c = "Button";
+  salva.dataset.action = "salvaNomeModello";
+  salva.disabled = inCorso;
+  if (onSalva) salva.addEventListener("click", () => onSalva(dati.id, campo2.value));
+  az.append(annulla, salva);
+  campo2.addEventListener("input", () => onBozza?.(campo2.value));
+  campo2.addEventListener("keydown", (evento) => {
+    if (evento.key === "Enter") {
+      evento.preventDefault();
+      onSalva?.(dati.id, campo2.value);
+    } else if (evento.key === "Escape") {
+      evento.preventDefault();
+      onAnnulla?.(dati.id);
+    }
+  });
+  corpo.appendChild(az);
+  if (verdetto) corpo.appendChild(creaRigaEsitoModello(verdetto, { document: d }));
+  card.appendChild(corpo);
+  return card;
+}
+function creaRigaEsitoModello(verdetto, { document: d = globalThis.document } = {}) {
+  const riga2 = el19(d, "p", "talos-lab__space");
+  riga2.dataset.c = "EsitoModello";
+  riga2.dataset.tono = verdetto.tono;
+  riga2.setAttribute("role", "status");
+  riga2.setAttribute("aria-atomic", "true");
+  riga2.tabIndex = -1;
+  riga2.append(badge(d, verdetto.etichetta, verdetto.tono), d.createTextNode(` ${verdetto.testo}`));
+  return riga2;
 }
 function aggiornaDettaglioInstallato(aside, dati, { runtime = {}, azioni = {}, nodoFit = null, document: documentObj = globalThis.document } = {}) {
   if (!aside) return;
@@ -17809,7 +18429,7 @@ function montaInstallati(originale, canonico, { document: documentObj = globalTh
   }
   aggiornaDettaglioInstallato(originale.querySelector('[data-c="DetailPanel"]') || originale.querySelector("#dettaglioInstallato"), null, { document: documentObj });
 }
-var GB, numero5, STATI_INSTALLATO;
+var GB, numero5, STATI_INSTALLATO, NOME_MODELLO_MAX;
 var init_modelli_installati = __esm({
   "src/components/modelli-installati.js"() {
     GB = 1024 ** 3;
@@ -17820,6 +18440,7 @@ var init_modelli_installati = __esm({
       incompleto: { etichetta: "Incompleto", tono: "warning" },
       guasto: { etichetta: "Non riuscito", tono: "danger" }
     });
+    NOME_MODELLO_MAX = 160;
   }
 });
 
@@ -17935,12 +18556,103 @@ function datiRepoHf(item = {}) {
     titolo: `${autore} / ${nome || ""}`.trim(),
     autore,
     match: String(item.repo || "").toLowerCase(),
+    /* `conversione` esce da qui dal 19/09/2026 perché serve anche ai GRUPPI della lista
+       (`raggruppaRisultatiHf`): era calcolata e poi usata solo per comporre `sub1`. */
+    conversione,
     sub1,
     sub2,
     badge: item.gated ? { testo: "Accesso richiesto", tono: "warning" } : conversione ? null : { testo: "Autore del modello", tono: "info" },
     download: conteggio(item.downloads),
     likes: conteggio(item.likes),
     gated: Boolean(item.gated)
+  };
+}
+function etichettaTipoHf(valore) {
+  if (valore === TIPO_NON_DICHIARATO) return "Tipo non dichiarato";
+  return TIPI_PIPELINE[valore] || String(valore);
+}
+function bandaDownload(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v < 0) return "non-dichiarati";
+  return (BANDE_DOWNLOAD.find(([, , prova]) => prova(v)) || BANDE_DOWNLOAD[BANDE_DOWNLOAD.length - 1])[0];
+}
+function valoreFaccettaHf(item = {}, chiave) {
+  if (chiave === "accesso") return item.gated === true ? "richiesto" : "aperto";
+  if (chiave === "licenza") return item.license ? "dichiarata" : "non-dichiarata";
+  if (chiave === "popolarita") return bandaDownload(item.downloads);
+  if (chiave === "tipo") return item.pipelineTag || TIPO_NON_DICHIARATO;
+  if (chiave === "autore") return String(item.repo || item.id || "").split("/")[0] || TIPO_NON_DICHIARATO;
+  return null;
+}
+function vociFaccettaHf(risultati = [], chiave) {
+  if (chiave === "accesso") return [["aperto", "Accesso aperto"], ["richiesto", "Accesso richiesto"]];
+  if (chiave === "licenza") return [["dichiarata", "Con licenza"], ["non-dichiarata", "Senza licenza"]];
+  if (chiave === "popolarita") return BANDE_DOWNLOAD.map(([valore, testo2]) => [valore, testo2]);
+  if (chiave !== "tipo" && chiave !== "autore") return [];
+  const conteggi = /* @__PURE__ */ new Map();
+  for (const item of risultati) {
+    const v = valoreFaccettaHf(item, chiave);
+    if (v != null) conteggi.set(v, (conteggi.get(v) || 0) + 1);
+  }
+  return [...conteggi.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), "it")).map(([valore]) => [valore, chiave === "tipo" ? etichettaTipoHf(valore) : valore]);
+}
+function filtriHfVuoti() {
+  return { accesso: [], licenza: [], popolarita: [], tipo: [], autore: [] };
+}
+function normalizzaFiltriHf(grezzi = {}, risultati = []) {
+  const puliti = filtriHfVuoti();
+  for (const { chiave } of FACCETTE_HF) {
+    const ammessi = new Set(vociFaccettaHf(risultati, chiave).map(([valore]) => valore));
+    const scelti = Array.isArray(grezzi?.[chiave]) ? grezzi[chiave] : [];
+    puliti[chiave] = scelti.filter((valore, i2) => ammessi.has(valore) && scelti.indexOf(valore) === i2);
+  }
+  return puliti;
+}
+function filtraRisultatiHf(risultati = [], filtri = {}) {
+  const attivi = normalizzaFiltriHf(filtri, risultati);
+  return risultati.filter((item) => FACCETTE_HF.every(({ chiave }) => !attivi[chiave].length || attivi[chiave].includes(valoreFaccettaHf(item, chiave))));
+}
+function conteggiFaccettaHf(risultati = [], filtri = {}, chiave) {
+  const senzaLaPropria = { ...normalizzaFiltriHf(filtri, risultati), [chiave]: [] };
+  const conteggi = /* @__PURE__ */ new Map();
+  for (const item of filtraRisultatiHf(risultati, senzaLaPropria)) {
+    const v = valoreFaccettaHf(item, chiave);
+    if (v != null) conteggi.set(v, (conteggi.get(v) || 0) + 1);
+  }
+  return conteggi;
+}
+function raggruppaRisultatiHf(risultati = []) {
+  const perTipo = /* @__PURE__ */ new Map();
+  for (const r of risultati) {
+    const v = valoreFaccettaHf(r, "tipo");
+    if (!perTipo.has(v)) perTipo.set(v, []);
+    perTipo.get(v).push(r);
+  }
+  return [...perTipo.entries()].sort((a, b) => b[1].length - a[1].length || String(a[0]).localeCompare(String(b[0]), "it")).map(([chiave, righe]) => ({ chiave, etichetta: etichettaTipoHf(chiave), righe }));
+}
+function datiRigaHf(item = {}) {
+  const base = datiRepoHf(item);
+  const richiesto = base.gated;
+  return {
+    ...base,
+    accesso: richiesto ? "richiesto" : "aperto",
+    /*
+     * `.row-availability` del mockup: un pallino colorato e lo stato. Il tono non è decorazione —
+     * verde = si scarica, ambra = serve prima l'accesso.
+     * ⛔ LA NOTA SI LASCIA FUORI QUANDO IL REPOSITORY È GATED, e la ragione è una misura: la riga è
+     *   alta una riga sola e non manda a capo (`talos-list-row__sub`: `nowrap` + `ellipsis`), e con
+     *   la condizione estesa — «Accesso richiesto · Verifica le condizioni prima del download» — il
+     *   testo andava a 325 px in una scatola da 320 e veniva TAGLIATO A METÀ PAROLA, senza nemmeno i
+     *   puntini (misurato il 19/09/2026 con `scrollWidth`/`clientWidth` sulla riga vera). Il badge
+     *   dice già «Accesso richiesto», e la frase intera sta nel callout del pannello (`#hfAccesso`),
+     *   dove c'è lo spazio: in riga resta lo stato, che è corto e non si taglia. Per un repository
+     *   aperto invece la licenza resta: è corta e non c'era altrove.
+     */
+    stato: { testo: richiesto ? "Accesso richiesto" : "Accesso aperto", tono: richiesto ? "warning" : "success", nota: richiesto ? null : base.sub2 },
+    /* `.row-capacity` del mockup: un numero grande, la sua etichetta, e sotto un secondo fatto.
+       I due numeri veri che la ricerca porta sono i download e i preferiti. */
+    capacita: { misura: base.download, etichetta: "download", nota: base.likes ? `♥ ${base.likes} preferiti` : null },
+    revisione: item.revision || null
   };
 }
 function el20(d, tag2, classe, testo2) {
@@ -17950,13 +18662,13 @@ function el20(d, tag2, classe, testo2) {
   return n;
 }
 function icona10(d, nome, classe = "i") {
-  const svg = d.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", classe);
-  svg.setAttribute("aria-hidden", "true");
+  const svg2 = d.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg2.setAttribute("class", classe);
+  svg2.setAttribute("aria-hidden", "true");
   const use = d.createElementNS("http://www.w3.org/2000/svg", "use");
   use.setAttribute("href", `#${nome}`);
-  svg.appendChild(use);
-  return svg;
+  svg2.appendChild(use);
+  return svg2;
 }
 function badge2(d, testo2, tono) {
   const b = el20(d, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
@@ -17969,26 +18681,261 @@ function creaRigaHf(dati, { selezionato = false, seleziona, document: d = global
   b.dataset.c = "ListRow";
   b.dataset.hf = dati.id;
   b.dataset.author = dati.autore;
+  if (dati.revisione) b.dataset.hfRevisione = dati.revisione;
   b.setAttribute("aria-pressed", String(Boolean(selezionato)));
+  const nome = String(dati.titolo || "").replace(/\s*\/\s*/u, " / ");
+  b.setAttribute("aria-label", `${nome}. ${dati.stato.testo}.${dati.capacita.misura ? ` ${dati.capacita.misura} download.` : ""}`);
   const ic = el20(d, "span", "talos-list-row__icon");
+  ic.dataset.c = "Glyph";
   ic.appendChild(icona10(d, "i-files"));
   const testo2 = el20(d, "span", "talos-list-row__text");
-  const sub = el20(d, "span", "talos-list-row__sub", dati.sub1);
-  sub.appendChild(d.createElement("br"));
-  sub.appendChild(d.createTextNode(dati.sub2));
-  testo2.append(el20(d, "span", "talos-list-row__title", dati.titolo), sub);
+  const titolo2 = el20(d, "span", "talos-list-row__title", nome);
+  if (dati.badge) titolo2.appendChild(badge2(d, dati.badge.testo, dati.badge.tono));
+  const meta2 = el20(d, "span", "talos-list-row__sub", dati.sub1);
+  const stato = el20(d, "span", "talos-list-row__sub");
+  const rigaStato = el20(d, "span", "talos-cluster");
+  const pallino = el20(d, "span", `talos-dot talos-dot--sm talos-dot--${dati.stato.tono}`);
+  pallino.setAttribute("aria-hidden", "true");
+  rigaStato.append(pallino, el20(d, "span", "", dati.stato.nota ? `${dati.stato.testo} · ${dati.stato.nota}` : dati.stato.testo));
+  stato.append(rigaStato);
+  testo2.append(titolo2, meta2, stato);
   const aside = el20(d, "span", "talos-list-row__aside");
-  if (dati.download || dati.likes) {
-    const misure = el20(d, "span", "talos-list-row__misure");
-    if (dati.download) misure.appendChild(el20(d, "span", "talos-list-row__misura", `↓ ${dati.download}`));
-    if (dati.likes) misure.appendChild(el20(d, "span", "talos-list-row__misura", `♥ ${dati.likes}`));
-    misure.setAttribute("aria-label", `${dati.download ? `${dati.download} scaricamenti` : ""}${dati.download && dati.likes ? ", " : ""}${dati.likes ? `${dati.likes} preferiti` : ""}`);
-    aside.appendChild(misure);
-  }
-  if (dati.badge) aside.appendChild(badge2(d, dati.badge.testo, dati.badge.tono));
-  b.append(ic, testo2, aside);
+  const capacita = el20(d, "span", "talos-stack");
+  capacita.dataset.c = "Capacity";
+  if (dati.capacita.misura) capacita.append(el20(d, "strong", "", dati.capacita.misura), el20(d, "small", "talos-muted", dati.capacita.etichetta));
+  if (dati.capacita.nota) capacita.append(el20(d, "span", "talos-muted talos-mono--xs", dati.capacita.nota));
+  if (capacita.children.length) aside.appendChild(capacita);
+  const chevron2 = icona10(d, "i-chevron-right", "i talos-hf-chevron");
+  chevron2.setAttribute("aria-hidden", "true");
+  b.append(ic, testo2, aside, chevron2);
   if (typeof seleziona === "function") b.addEventListener("click", () => seleziona(dati.id));
   return b;
+}
+function creaGruppoHf(gruppo, { document: d = globalThis.document } = {}) {
+  const testa = el20(d, "div", "talos-cluster");
+  testa.dataset.hfGruppo = gruppo.chiave;
+  const etichetta2 = el20(d, "span", "talos-eyebrow", gruppo.etichetta);
+  etichetta2.setAttribute("role", "heading");
+  etichetta2.setAttribute("aria-level", "3");
+  testa.append(etichetta2, el20(d, "span", "talos-grow", ""), el20(d, "span", "talos-muted talos-mono--xs", new Intl.NumberFormat("it-IT").format(gruppo.righe.length)));
+  return testa;
+}
+function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) {
+  const barra = el20(d, "section", "talos-stack");
+  barra.id = "modelLabHfScoperta";
+  barra.dataset.hfScoperta = "";
+  barra.setAttribute("aria-label", "Scoperta e filtri del catalogo Hugging Face");
+  const ambito = el20(d, "div", "talos-cluster");
+  ambito.dataset.hfAmbito = "";
+  const faccette = el20(d, "div", "talos-choice-grid");
+  faccette.dataset.hfFaccette = "";
+  const gruppi = /* @__PURE__ */ new Map();
+  for (const { chiave, titolo: titolo2, forma } of FACCETTE_HF) {
+    if (forma !== "select") continue;
+    const campo2 = el20(d, "label", "talos-field talos-field--sm");
+    campo2.append(el20(d, "span", "talos-muted", titolo2));
+    const sel = el20(d, "select", "talos-select talos-select--sm");
+    sel.dataset.hfFaccetta = chiave;
+    sel.id = `modelLabHfFaccetta-${chiave}`;
+    sel.setAttribute("aria-label", titolo2);
+    campo2.append(sel);
+    faccette.append(campo2);
+    gruppi.set(chiave, sel);
+  }
+  const nota = el20(d, "p", "talos-muted", NOTA_FACCETTE_HF);
+  const testa = el20(d, "div", "talos-cluster");
+  const conteggio2 = el20(d, "p", "talos-cluster");
+  conteggio2.dataset.hfConteggio = "";
+  conteggio2.setAttribute("role", "status");
+  conteggio2.setAttribute("aria-live", "polite");
+  const forte = el20(d, "strong", "", "—");
+  const coda = el20(d, "span", "talos-muted", "");
+  conteggio2.append(forte, coda);
+  const azzera = el20(d, "button", "talos-button talos-button--ghost talos-button--sm", "Azzera i filtri");
+  azzera.type = "button";
+  azzera.dataset.hfAzzera = "";
+  azzera.hidden = true;
+  azzera.addEventListener("click", () => {
+    filtri = filtriHfVuoti();
+    onCambia?.(filtri);
+  });
+  testa.append(conteggio2, azzera);
+  barra.append(ambito, faccette, nota, testa);
+  let filtri = filtriHfVuoti();
+  const cambia = (chiave, valore) => {
+    const scelti = filtri[chiave];
+    filtri = { ...filtri, [chiave]: scelti.includes(valore) ? scelti.filter((v) => v !== valore) : [...scelti, valore] };
+    onCambia?.(filtri);
+  };
+  ambito.addEventListener("click", (evento) => {
+    const b = evento.target.closest("[data-hf-chip]");
+    if (b && !b.disabled) cambia(b.dataset.hfChip, b.dataset.hfValore);
+  });
+  for (const [chiave, sel] of gruppi) {
+    sel.addEventListener("change", () => {
+      filtri = { ...filtri, [chiave]: sel.value === "" ? [] : [sel.value] };
+      onCambia?.(filtri);
+    });
+  }
+  function aggiorna(stato = {}) {
+    const { risultati = [], visibili = [] } = stato;
+    if (stato.filtri) filtri = normalizzaFiltriHf(stato.filtri, risultati);
+    ambito.replaceChildren();
+    for (const { chiave, titolo: titolo2, forma } of FACCETTE_HF) {
+      if (forma !== "chip") continue;
+      const voci = vociFaccettaHf(risultati, chiave);
+      if (!voci.length) continue;
+      const gruppoChip = el20(d, "span", "talos-cluster");
+      gruppoChip.dataset.hfChipGruppo = chiave;
+      gruppoChip.setAttribute("role", "group");
+      gruppoChip.setAttribute("aria-label", titolo2);
+      const conteggi = conteggiFaccettaHf(risultati, filtri, chiave);
+      if (chiave === "accesso") gruppoChip.appendChild(chip2(d, "Tutti", chiave, "", { premuto: !filtri[chiave].length, conteggio: stato.senzaDati ? null : risultati.length }));
+      for (const [valore, testo2] of voci) {
+        const n = stato.senzaDati ? null : conteggi.get(valore) || 0;
+        const acceso = filtri[chiave].includes(valore);
+        gruppoChip.appendChild(chip2(d, testo2, chiave, valore, {
+          premuto: acceso,
+          conteggio: n,
+          disabilitato: n === 0 && !acceso,
+          titolo: n === 0 && !acceso ? "Nessun repository con questo valore fra quelli caricati" : null
+        }));
+      }
+      ambito.append(gruppoChip);
+    }
+    for (const [chiave, sel] of gruppi) {
+      const voci = vociFaccettaHf(risultati, chiave);
+      const conteggi = conteggiFaccettaHf(risultati, filtri, chiave);
+      const firma = JSON.stringify([voci.map(([v]) => v), [...conteggi.entries()].sort()]);
+      if (sel.dataset.firma !== firma) {
+        sel.dataset.firma = firma;
+        const scelto = filtri[chiave][0] || "";
+        sel.replaceChildren(new Option("Qualsiasi", "", false, scelto === ""));
+        for (const [valore, testo2] of voci) {
+          const n = conteggi.get(valore) || 0;
+          const opzione = new Option(n ? `${testo2} (${new Intl.NumberFormat("it-IT").format(n)})` : testo2, valore, false, scelto === valore);
+          opzione.disabled = !n && scelto !== valore;
+          sel.appendChild(opzione);
+        }
+        sel.value = scelto;
+        if (sel.selectedIndex < 0) sel.selectedIndex = 0;
+      }
+    }
+    const formatta = new Intl.NumberFormat("it-IT");
+    forte.textContent = `${formatta.format(visibili.length)} ${visibili.length === 1 ? "modello" : "modelli"}`;
+    coda.textContent = stato.altri ? ` su ${formatta.format(risultati.length)} caricati · altri disponibili` : ` su ${formatta.format(risultati.length)} ${risultati.length === 1 ? "caricato" : "caricati"}`;
+    azzera.hidden = !FACCETTE_HF.some(({ chiave }) => filtri[chiave].length);
+    barra.dataset.hfDati = stato.senzaDati ? "non-misurati" : "misurati";
+  }
+  barra.aggiorna = aggiorna;
+  return barra;
+}
+function chip2(d, etichetta2, chiave, valore, { premuto = false, conteggio: conteggio2 = null, disabilitato = false, titolo: titolo2 = null } = {}) {
+  const b = el20(d, "button", `talos-button talos-button--sm ${premuto ? "talos-button--primary" : "talos-button--secondary"}`, etichetta2);
+  b.type = "button";
+  b.dataset.hfChip = chiave;
+  b.dataset.hfValore = valore;
+  b.setAttribute("aria-pressed", String(premuto));
+  if (disabilitato) b.disabled = true;
+  if (titolo2) b.title = titolo2;
+  if (conteggio2 !== null && conteggio2 !== void 0) b.append(el20(d, "span", "talos-badge talos-badge--sm", new Intl.NumberFormat("it-IT").format(conteggio2)));
+  return b;
+}
+function montaSceltaFileHf(contenitore, detail, { stima: stima2 = /* @__PURE__ */ new Map(), scelta = null, azioni = {}, prefissoId = "hf", conAccesso = true, document: d = globalThis.document } = {}) {
+  if (!contenitore || !detail) return null;
+  const idDi = (nome) => `${prefissoId}${nome.charAt(0).toUpperCase()}${nome.slice(1)}`;
+  const gruppi = ordinaVarianti(gruppiVarianti(detail.files));
+  const consiglio = varianteConsigliata(gruppi, stima2);
+  const scelto = gruppi.find((g) => g.chiave === scelta) || consiglio?.gruppo || gruppi[0] || null;
+  const misurabile = gruppi.length > 0;
+  const inMisura = gruppi.some((g) => stima2.get?.(g.chiave)?.inCorso);
+  const misurato = gruppi.some((g) => {
+    const v = stima2.get?.(g.chiave);
+    return v && !v.inCorso && ["compatible", "tight", "blocked"].includes(v.state);
+  });
+  const nonMisurabile = !inMisura && gruppi.length > 0 && gruppi.every((g) => stima2.get?.(g.chiave)?.state === "unknown");
+  if (misurabile) {
+    const barra = el20(d, "div", "talos-hf-misura");
+    const misura = el20(d, "button", "talos-button talos-button--secondary talos-button--sm", inMisura ? "Misuro su questo PC…" : misurato ? "Rimisura su questo PC" : "Misura su questo PC");
+    misura.type = "button";
+    misura.dataset.c = "Button";
+    misura.dataset.azione = "misura";
+    misura.disabled = inMisura;
+    if (azioni.misura) misura.addEventListener("click", () => azioni.misura(gruppi));
+    barra.appendChild(misura);
+    if (misurato && !inMisura) barra.appendChild(el20(d, "span", "talos-muted talos-hf-misura__quando", "misurato adesso"));
+    contenitore.appendChild(barra);
+    if (nonMisurabile) {
+      const avviso = el20(d, "div", "talos-callout");
+      avviso.dataset.c = "Callout";
+      const testo2 = el20(d, "div");
+      testo2.append(el20(d, "b", "", "La memoria di questo PC non è misurabile"), el20(d, "p", "", "Manca un servizio locale che risponda. I consigli qui sotto valgono di norma, non su questa macchina: controlla tu che il file scelto ci stia."));
+      avviso.appendChild(testo2);
+      contenitore.appendChild(avviso);
+    }
+  }
+  const radio = el20(d, "div", "talos-stack");
+  radio.id = idDi("fileChoices");
+  radio.dataset.hfFileChoices = "";
+  radio.setAttribute("role", "radiogroup");
+  radio.setAttribute("aria-label", "File da scaricare");
+  gruppi.forEach((g, i2) => {
+    const b = el20(d, "button", "talos-choice");
+    b.type = "button";
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", String(g === scelto));
+    b.dataset.hfFile = String(i2);
+    b.dataset.variante = g.chiave;
+    const st = descriviStima(stima2.get?.(g.chiave), g.bytes);
+    const titolo2 = el20(d, "span", "talos-choice__title", `${g.quant} · ${gb(g.bytes)}${g.incompleto ? ` · set incompleto ${g.file.length}/${g.attesi}` : ""}`);
+    if (consiglio && consiglio.gruppo === g) titolo2.appendChild(badge2(d, consiglio.motivo === "convenzione" ? "Consigliato di norma" : "Consigliato", "accent"));
+    b.appendChild(titolo2);
+    const glossa = glossaQuant(g.quant);
+    if (glossa) b.appendChild(el20(d, "span", "talos-muted talos-choice__glossa", glossa));
+    b.appendChild(el20(d, "span", "talos-muted", g.senzaHash ? "impronta sha256 assente: non si scarica" : st.testo));
+    if (azioni.scegli) b.addEventListener("click", () => azioni.scegli(g.chiave));
+    radio.appendChild(b);
+  });
+  if (!gruppi.length) radio.appendChild(el20(d, "p", "talos-muted", "Nessun file GGUF in questo repository."));
+  contenitore.appendChild(radio);
+  const indiceScelto = scelto ? gruppi.indexOf(scelto) : -1;
+  const nodoScelto = indiceScelto >= 0 ? radio.children[indiceScelto] : null;
+  if (nodoScelto) {
+    const alto = nodoScelto.offsetTop - radio.offsetTop;
+    const basso = alto + (nodoScelto.offsetHeight || 0);
+    if (radio.clientHeight && basso > radio.clientHeight) radio.scrollTop = alto - 8;
+  }
+  if (misurato && !consiglio && gruppi.length) {
+    contenitore.appendChild(el20(d, "p", "talos-muted talos-hf-nessuno", "Nessuna variante consigliabile su questa macchina: quelle che ci starebbero scendono sotto i 4 bit per peso, dove la qualità cala troppo."));
+  }
+  if (conAccesso) {
+    const callout = el20(d, "div", "talos-callout");
+    callout.id = idDi("accesso");
+    callout.dataset.c = "Callout";
+    callout.hidden = !detail.gated;
+    const cb = el20(d, "div");
+    cb.append(el20(d, "b", "", "Serve l'accesso al repository"), el20(d, "p", "", "Apri la pagina del modello, verifica le condizioni e richiedi accesso con il tuo account."));
+    callout.appendChild(cb);
+    contenitore.appendChild(callout);
+  }
+  const stimaP = el20(d, "p", "talos-muted talos-lab__space");
+  stimaP.id = idDi("stima");
+  const voce = scelto ? stima2.get?.(scelto.chiave) : null;
+  if (scelto && voce && !voce.inCorso && Number.isFinite(voce.memory?.requiredBytes)) {
+    const m = el20(d, "span", "talos-measure talos-measure--estimate", gb(voce.memory.requiredBytes));
+    m.dataset.c = "Measure";
+    stimaP.append(m, d.createTextNode(` necessari${Number.isFinite(voce.memory?.availableBytes) ? ` · ${gb(voce.memory.availableBytes)} allocabili liberando il modello attuale.` : "."}`));
+  } else stimaP.textContent = scelto ? voce?.inCorso ? "Misuro su questo PC…" : "La misura pesa i file contro memoria e disco liberi adesso; la cache del contesto si somma dopo lo scaricamento." : "";
+  contenitore.appendChild(stimaP);
+  const scarica = el20(d, "button", "talos-button talos-button--primary talos-button--block");
+  scarica.id = idDi("scarica");
+  scarica.type = "button";
+  scarica.dataset.action = "download";
+  scarica.textContent = scelto ? `Scarica sul computer · ${gb(scelto.bytes)}` : "Scegli un file da scaricare";
+  scarica.disabled = !scelto || scelto.incompleto || scelto.senzaHash || Boolean(detail.gated);
+  if (azioni.scarica) scarica.addEventListener("click", () => scelto && azioni.scarica(scelto, detail));
+  contenitore.appendChild(scarica);
+  return scelto;
 }
 function aggiornaDettaglioHf(aside, detail, { stima: stima2 = /* @__PURE__ */ new Map(), scelta = null, azioni = {}, document: d = globalThis.document } = {}) {
   if (!aside) return null;
@@ -18022,94 +18969,7 @@ function aggiornaDettaglioHf(aside, detail, { stima: stima2 = /* @__PURE__ */ ne
   tutti.dataset.apreVelo = "veloFileModello";
   if (azioni.tuttiFile) tutti.addEventListener("click", () => azioni.tuttiFile(detail));
   aside.append(tutti, el20(d, "h3", "", "Scegli il file"));
-  const gruppi = ordinaVarianti(gruppiVarianti(detail.files));
-  const consiglio = varianteConsigliata(gruppi, stima2);
-  const scelto = gruppi.find((g) => g.chiave === scelta) || consiglio?.gruppo || gruppi[0] || null;
-  const misurabile = gruppi.length > 0;
-  const inMisura = gruppi.some((g) => stima2.get?.(g.chiave)?.inCorso);
-  const misurato = gruppi.some((g) => {
-    const v = stima2.get?.(g.chiave);
-    return v && !v.inCorso && ["compatible", "tight", "blocked"].includes(v.state);
-  });
-  const nonMisurabile = !inMisura && gruppi.length > 0 && gruppi.every((g) => stima2.get?.(g.chiave)?.state === "unknown");
-  if (misurabile) {
-    const barra = el20(d, "div", "talos-hf-misura");
-    const misura = el20(d, "button", "talos-button talos-button--secondary talos-button--sm", inMisura ? "Misuro su questo PC…" : misurato ? "Rimisura su questo PC" : "Misura su questo PC");
-    misura.type = "button";
-    misura.dataset.c = "Button";
-    misura.dataset.azione = "misura";
-    misura.disabled = inMisura;
-    if (azioni.misura) misura.addEventListener("click", () => azioni.misura(gruppi));
-    barra.appendChild(misura);
-    if (misurato && !inMisura) barra.appendChild(el20(d, "span", "talos-muted talos-hf-misura__quando", "misurato adesso"));
-    aside.appendChild(barra);
-    if (nonMisurabile) {
-      const avviso = el20(d, "div", "talos-callout");
-      avviso.dataset.c = "Callout";
-      const testo2 = el20(d, "div");
-      testo2.append(el20(d, "b", "", "La memoria di questo PC non è misurabile"), el20(d, "p", "", "Manca un servizio locale che risponda. I consigli qui sotto valgono di norma, non su questa macchina: controlla tu che il file scelto ci stia."));
-      avviso.appendChild(testo2);
-      aside.appendChild(avviso);
-    }
-  }
-  const radio = el20(d, "div", "talos-stack");
-  radio.id = "hfFileChoices";
-  radio.setAttribute("role", "radiogroup");
-  radio.setAttribute("aria-label", "File da scaricare");
-  gruppi.forEach((g, i2) => {
-    const b = el20(d, "button", "talos-choice");
-    b.type = "button";
-    b.setAttribute("role", "radio");
-    b.setAttribute("aria-checked", String(g === scelto));
-    b.dataset.hfFile = String(i2);
-    b.dataset.variante = g.chiave;
-    const st = descriviStima(stima2.get?.(g.chiave), g.bytes);
-    const titolo2 = el20(d, "span", "talos-choice__title", `${g.quant} · ${gb(g.bytes)}${g.incompleto ? ` · set incompleto ${g.file.length}/${g.attesi}` : ""}`);
-    if (consiglio && consiglio.gruppo === g) titolo2.appendChild(badge2(d, consiglio.motivo === "convenzione" ? "Consigliato di norma" : "Consigliato", "accent"));
-    b.appendChild(titolo2);
-    const glossa = glossaQuant(g.quant);
-    if (glossa) b.appendChild(el20(d, "span", "talos-muted talos-choice__glossa", glossa));
-    b.appendChild(el20(d, "span", "talos-muted", g.senzaHash ? "impronta sha256 assente: non si scarica" : st.testo));
-    if (azioni.scegli) b.addEventListener("click", () => azioni.scegli(g.chiave));
-    radio.appendChild(b);
-  });
-  if (!gruppi.length) radio.appendChild(el20(d, "p", "talos-muted", "Nessun file GGUF in questo repository."));
-  aside.appendChild(radio);
-  const indiceScelto = scelto ? gruppi.indexOf(scelto) : -1;
-  const nodoScelto = indiceScelto >= 0 ? radio.children[indiceScelto] : null;
-  if (nodoScelto) {
-    const alto = nodoScelto.offsetTop - radio.offsetTop;
-    const basso = alto + (nodoScelto.offsetHeight || 0);
-    if (radio.clientHeight && basso > radio.clientHeight) radio.scrollTop = alto - 8;
-  }
-  if (misurato && !consiglio && gruppi.length) {
-    aside.appendChild(el20(d, "p", "talos-muted talos-hf-nessuno", "Nessuna variante consigliabile su questa macchina: quelle che ci starebbero scendono sotto i 4 bit per peso, dove la qualità cala troppo."));
-  }
-  const callout = el20(d, "div", "talos-callout");
-  callout.id = "hfAccesso";
-  callout.dataset.c = "Callout";
-  callout.hidden = !detail.gated;
-  const cb = el20(d, "div");
-  cb.append(el20(d, "b", "", "Serve l'accesso al repository"), el20(d, "p", "", "Apri la pagina del modello, verifica le condizioni e richiedi accesso con il tuo account."));
-  callout.appendChild(cb);
-  aside.appendChild(callout);
-  const stimaP = el20(d, "p", "talos-muted talos-lab__space");
-  stimaP.id = "hfStima";
-  const voce = scelto ? stima2.get?.(scelto.chiave) : null;
-  if (scelto && voce && !voce.inCorso && Number.isFinite(voce.memory?.requiredBytes)) {
-    const m = el20(d, "span", "talos-measure talos-measure--estimate", gb(voce.memory.requiredBytes));
-    m.dataset.c = "Measure";
-    stimaP.append(m, d.createTextNode(` necessari${Number.isFinite(voce.memory?.availableBytes) ? ` · ${gb(voce.memory.availableBytes)} allocabili liberando il modello attuale.` : "."}`));
-  } else stimaP.textContent = scelto ? voce?.inCorso ? "Misuro su questo PC…" : "La misura pesa i file contro memoria e disco liberi adesso; la cache del contesto si somma dopo lo scaricamento." : "";
-  aside.appendChild(stimaP);
-  const scarica = el20(d, "button", "talos-button talos-button--primary talos-button--block");
-  scarica.id = "hfScarica";
-  scarica.type = "button";
-  scarica.dataset.action = "download";
-  scarica.textContent = scelto ? `Scarica sul computer · ${gb(scelto.bytes)}` : "Scegli un file da scaricare";
-  scarica.disabled = !scelto || scelto.incompleto || scelto.senzaHash || Boolean(detail.gated);
-  if (azioni.scarica) scarica.addEventListener("click", () => scelto && azioni.scarica(scelto, detail));
-  aside.appendChild(scarica);
+  const scelto = montaSceltaFileHf(aside, detail, { stima: stima2, scelta, azioni, prefissoId: "hf", conAccesso: true, document: d });
   const scheda = el20(d, "button", "talos-button talos-button--ghost talos-button--sm", "Leggi la scheda del modello");
   scheda.type = "button";
   scheda.dataset.c = "Button";
@@ -18127,6 +18987,15 @@ function aggiornaDettaglioHf(aside, detail, { stima: stima2 = /* @__PURE__ */ ne
   aside.appendChild(cont);
   return scelto;
 }
+function barraDelPannello2(panel, onCambia) {
+  const esistente = panel.querySelector("#modelLabHfScoperta");
+  if (esistente && esistente.aggiorna) return esistente;
+  const barra = creaBarraScopertaHf(panel.ownerDocument || globalThis.document, { onCambia });
+  const dove = panel.querySelector(".talos-toolbar--hf, .talos-toolbar, .model-lab-filters");
+  if (dove) dove.after(barra);
+  else panel.prepend(barra);
+  return barra;
+}
 function aggiornaHf(panel, risultati = [], { selezionato = null, detail = null, stima: stima2, scelta, errore = null, caricamento = false, altri = false, seleziona, azioni = {}, document: d = globalThis.document } = {}) {
   if (!panel) return null;
   const lista = panel.querySelector("[data-hf-lista], #listaHf, #modelLabHfResults");
@@ -18136,6 +19005,17 @@ function aggiornaHf(panel, risultati = [], { selezionato = null, detail = null, 
   panel.setAttribute("aria-busy", String(Boolean(caricamento)));
   if (!lista) return null;
   const scelto = risultati.find((r) => (r.repo || r.id) === selezionato) || risultati[0] || null;
+  const senzaDati = !risultati.length && Boolean(errore || caricamento);
+  const filtri = normalizzaFiltriHf(panel.__hfFiltri || filtriHfVuoti(), risultati);
+  panel.__hfFiltri = filtri;
+  const visibili = errore ? [] : filtraRisultatiHf(risultati, filtri);
+  panel.__hfUltimo = { risultati, opzioni: { selezionato, detail, stima: stima2, scelta, errore, caricamento, altri, seleziona, azioni } };
+  const barra = barraDelPannello2(panel, (nuovi) => {
+    panel.__hfFiltri = nuovi;
+    const u = panel.__hfUltimo;
+    if (u) aggiornaHf(panel, u.risultati, { ...u.opzioni, document: d });
+  });
+  barra.aggiorna({ risultati, visibili, filtri, senzaDati, altri });
   if (errore) {
     lista.replaceChildren(el20(d, "p", "talos-card--pad talos-muted", `Ricerca non disponibile: ${errore.message || errore}`));
     if (vuoto) vuoto.hidden = true;
@@ -18145,8 +19025,17 @@ function aggiornaHf(panel, risultati = [], { selezionato = null, detail = null, 
   } else if (!risultati.length) {
     lista.replaceChildren();
     if (vuoto) vuoto.hidden = false;
+  } else if (!visibili.length) {
+    lista.replaceChildren(el20(d, "p", "talos-card--pad talos-muted", "Nessun repository corrisponde ai filtri scelti. Togli un filtro per rivedere gli altri."));
+    if (vuoto) vuoto.hidden = true;
   } else {
-    lista.replaceChildren(...risultati.flatMap((r) => [d.createTextNode("\n"), creaRigaHf(datiRepoHf(r), { selezionato: r === scelto, seleziona, document: d })]), d.createTextNode("\n"));
+    const nodi = [];
+    for (const gruppo of raggruppaRisultatiHf(visibili)) {
+      nodi.push(d.createTextNode("\n"), creaGruppoHf(gruppo, { document: d }));
+      for (const r of gruppo.righe) nodi.push(d.createTextNode("\n"), creaRigaHf(datiRigaHf(r), { selezionato: r === scelto, seleziona, document: d }));
+    }
+    nodi.push(d.createTextNode("\n"));
+    lista.replaceChildren(...nodi);
     if (vuoto) vuoto.hidden = true;
   }
   if (bottoneAltri) bottoneAltri.hidden = !altri;
@@ -18180,7 +19069,7 @@ function montaHf(originale, canonico) {
   const altri = originale.querySelector("#modelLabHfNextButtonControl") || originale.querySelector("#altriHf");
   if (altri) altri.hidden = true;
 }
-var BIT_PER_PESO, SUFFISSO, PAVIMENTO_CONSIGLIO, GLOSSE, numero6, TIPI2;
+var BIT_PER_PESO, SUFFISSO, PAVIMENTO_CONSIGLIO, GLOSSE, numero6, TIPI2, CAMPI_RICERCA_HF, FACCETTE_NON_COLLEGATE, TIPI_PIPELINE, TIPO_NON_DICHIARATO, BANDE_DOWNLOAD, FACCETTE_HF, NOTA_FACCETTE_HF;
 var init_hf_catalogo = __esm({
   "src/components/hf-catalogo.js"() {
     init_modelli_installati();
@@ -18231,6 +19120,82 @@ var init_hf_catalogo = __esm({
     ];
     numero6 = new Intl.NumberFormat("it-IT");
     TIPI2 = { "text-generation": "Conversazione e codice", "text2text-generation": "Testo", "image-text-to-text": "Immagini e testo", "automatic-speech-recognition": "Voce", "feature-extraction": "Embedding" };
+    CAMPI_RICERCA_HF = Object.freeze(["repo", "revision", "downloads", "likes", "gated", "pipelineTag", "license", "tags"]);
+    FACCETTE_NON_COLLEGATE = Object.freeze([
+      ["Grandezza · parametri totali", "i parametri non sono in nessuno degli otto campi della ricerca"],
+      ["Contesto minimo · token", "il contesto non è in nessuno degli otto campi della ricerca"],
+      ["Formato del file", "il server filtra sempre `gguf`: la faccetta avrebbe un valore solo"],
+      ["Compatibilità RAM", "il verdetto si misura sui file, che si conoscono solo dal dettaglio"],
+      ["Locali · Cloud · Installati · Preferiti", "la ricerca restituisce repository, non modelli installati"],
+      ["Viste salvate · + Salva vista", "il prodotto non ha una memoria delle viste"],
+      ["Stella dei preferiti · casella di confronto", "non esistono un archivio dei preferiti né una modalità confronto"]
+    ]);
+    TIPI_PIPELINE = Object.freeze({
+      "text-generation": "Conversazione e codice",
+      "text2text-generation": "Testo in testo",
+      "text-classification": "Classificazione del testo",
+      "token-classification": "Etichettatura del testo",
+      "question-answering": "Domande su un testo",
+      "table-question-answering": "Domande su una tabella",
+      "zero-shot-classification": "Classificazione senza esempi",
+      translation: "Traduzione",
+      summarization: "Riassunto",
+      "feature-extraction": "Vettori di testo",
+      "fill-mask": "Parole mancanti",
+      "sentence-similarity": "Somiglianza fra frasi",
+      "text-ranking": "Ordinamento del testo",
+      "text-to-speech": "Voce sintetica",
+      "text-to-audio": "Audio da testo",
+      "automatic-speech-recognition": "Trascrizione della voce",
+      "audio-to-audio": "Trasformazione audio",
+      "audio-classification": "Classificazione audio",
+      "depth-estimation": "Profondità da immagine",
+      "image-classification": "Classificazione di immagini",
+      "object-detection": "Riconoscimento di oggetti",
+      "image-segmentation": "Segmentazione di immagini",
+      "text-to-image": "Immagini da testo",
+      "image-to-text": "Testo da immagine",
+      "image-to-image": "Trasformazione di immagini",
+      "image-to-video": "Video da immagine",
+      "unconditional-image-generation": "Generazione di immagini",
+      "video-classification": "Classificazione video",
+      "text-to-video": "Video da testo",
+      "zero-shot-image-classification": "Immagini senza esempi",
+      "zero-shot-object-detection": "Oggetti senza esempi",
+      "mask-generation": "Maschere da immagine",
+      "image-feature-extraction": "Vettori di immagine",
+      "image-text-to-text": "Immagini e testo",
+      "image-text-to-image": "Immagini da immagini e testo",
+      "image-text-to-video": "Video da immagini e testo",
+      "visual-question-answering": "Domande su un’immagine",
+      "document-question-answering": "Domande su un documento",
+      "video-text-to-text": "Video e testo",
+      "any-to-any": "Qualsiasi formato",
+      "audio-text-to-text": "Voce e testo",
+      "reinforcement-learning": "Apprendimento per rinforzo",
+      robotics: "Robotica",
+      "tabular-classification": "Classificazione tabellare",
+      "tabular-regression": "Regressione tabellare",
+      "time-series-forecasting": "Previsione di serie",
+      "graph-ml": "Grafi",
+      other: "Altro"
+    });
+    TIPO_NON_DICHIARATO = "__non-dichiarato";
+    BANDE_DOWNLOAD = Object.freeze([
+      ["oltre-100k", "Oltre 100.000", (n) => n > 1e5],
+      ["10k-100k", "Da 100.000 a 10.000", (n) => n > 1e4],
+      ["1k-10k", "Da 10.000 a 1.000", (n) => n > 1e3],
+      ["fino-1k", "Fino a 1.000", (n) => n >= 0],
+      ["non-dichiarati", "Download non dichiarati", () => false]
+    ]);
+    FACCETTE_HF = Object.freeze([
+      { chiave: "accesso", titolo: "Accesso", forma: "chip" },
+      { chiave: "licenza", titolo: "Licenza", forma: "chip" },
+      { chiave: "popolarita", titolo: "Popolarità · download", forma: "select" },
+      { chiave: "tipo", titolo: "Tipo · pipeline", forma: "select" },
+      { chiave: "autore", titolo: "Autore · organizzazione", forma: "select" }
+    ]);
+    NOTA_FACCETTE_HF = "La ricerca dice tipo, licenza, download e revisione. I parametri, il contesto e la memoria richiesta non sono nella risposta della ricerca: la memoria si misura nel dettaglio, file per file.";
   }
 });
 
@@ -19316,6 +20281,7 @@ function datiDownload(item = {}, { stima: stima2 = null } = {}) {
   return {
     id: item.id,
     nomeFile,
+    nome: item.name || item.request?.name || nomeFile,
     stato: item.state,
     etichettaStato: stato.etichetta,
     tono: stato.tono,
@@ -19348,13 +20314,13 @@ function el23(d, tag2, classe, testo2) {
   return n;
 }
 function icona11(d, nome, classe = "i") {
-  const svg = d.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", classe);
-  svg.setAttribute("aria-hidden", "true");
+  const svg2 = d.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg2.setAttribute("class", classe);
+  svg2.setAttribute("aria-hidden", "true");
   const use = d.createElementNS("http://www.w3.org/2000/svg", "use");
   use.setAttribute("href", `#${nome}`);
-  svg.appendChild(use);
-  return svg;
+  svg2.appendChild(use);
+  return svg2;
 }
 function badge4(d, testo2, tono) {
   const b = el23(d, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
@@ -19401,7 +20367,123 @@ function creaStatoVuotoDownload(radice2, { azioni = {}, document: d = globalThis
   riquadro.append(bottone5);
   return riquadro;
 }
-function creaRigaDownload(dati, { azioni = {}, document: d = globalThis.document } = {}) {
+function leggiStatoAzioni(panel) {
+  try {
+    const grezzo = panel.dataset.statoAzioniModello;
+    if (!grezzo) return { ...STATO_VUOTO, esiti: {} };
+    const letto = JSON.parse(grezzo);
+    return { aperto: letto.aperto ?? null, inCorso: letto.inCorso ?? null, erroreCampo: letto.erroreCampo ?? null, fuocoDato: letto.fuocoDato || "", esiti: letto.esiti && typeof letto.esiti === "object" ? letto.esiti : {} };
+  } catch {
+    return { ...STATO_VUOTO, esiti: {} };
+  }
+}
+function scriviStatoAzioni(panel, stato) {
+  panel.dataset.statoAzioniModello = JSON.stringify(stato);
+}
+function ridisegna(panel) {
+  const ultima = ultimaResa.get(panel);
+  if (ultima) aggiornaCodaDownload(panel, ultima.items, ultima.opzioni);
+}
+function conAzione(verdetto, azione) {
+  return { ...verdetto, azione };
+}
+async function eseguiEliminazione(panel, id2, azioni, nome) {
+  const prima = leggiStatoAzioni(panel);
+  if (prima.inCorso) return;
+  scriviStatoAzioni(panel, { ...prima, inCorso: id2 });
+  ridisegna(panel);
+  let esito;
+  try {
+    esito = await azioni.elimina(id2);
+  } catch (errore) {
+    esito = { ok: false, motivo: errore?.message || "la richiesta non è arrivata al server" };
+  }
+  const verdetto = conAzione(verdettoAzioneModello(esito, { azione: "elimina", nome }), "elimina");
+  const dopo = leggiStatoAzioni(panel);
+  scriviStatoAzioni(panel, {
+    ...dopo,
+    inCorso: null,
+    /* ⛔ Il pannello resta aperto SOLO se non è andata: lì c'è il comando per riprovare, e la
+       persona resta dove ha sbagliato. Riuscita, il pannello si chiude e l'esito va sulla riga. */
+    aperto: verdetto.tono === "success" ? null : dopo.aperto,
+    esiti: { ...dopo.esiti, [id2]: verdetto },
+    fuocoDato: ""
+  });
+  ridisegna(panel);
+  if (verdetto.tono === "success") tornaAlComando(panel, id2, "eliminaModello");
+}
+async function eseguiRinomina(panel, id2, nomeGrezzo, azioni) {
+  const prima = leggiStatoAzioni(panel);
+  if (prima.inCorso) return;
+  const nome = String(nomeGrezzo ?? "").trim();
+  if (!nome) {
+    scriviStatoAzioni(panel, { ...prima, erroreCampo: "Scrivi un nome: senza nome il modello resta quello di prima." });
+    ridisegna(panel);
+    return;
+  }
+  scriviStatoAzioni(panel, { ...prima, inCorso: id2, erroreCampo: null, aperto: { ...prima.aperto, bozza: nome } });
+  ridisegna(panel);
+  let esito;
+  try {
+    esito = await azioni.rinomina(id2, nome);
+  } catch (errore) {
+    esito = { ok: false, motivo: errore?.message || "la richiesta non è arrivata al server" };
+  }
+  const verdetto = conAzione(verdettoAzioneModello(esito, { azione: "rinomina", nome }), "rinomina");
+  const dopo = leggiStatoAzioni(panel);
+  scriviStatoAzioni(panel, {
+    ...dopo,
+    inCorso: null,
+    aperto: verdetto.tono === "success" ? null : dopo.aperto,
+    erroreCampo: verdetto.tono === "success" ? null : dopo.erroreCampo,
+    esiti: { ...dopo.esiti, [id2]: verdetto },
+    fuocoDato: ""
+  });
+  ridisegna(panel);
+  if (verdetto.tono === "success") tornaAlComando(panel, id2, "rinominaModello");
+}
+function annotaBozza(panel, id2, nome) {
+  const stato = leggiStatoAzioni(panel);
+  if (stato.aperto?.id !== id2) return;
+  scriviStatoAzioni(panel, { ...stato, aperto: { ...stato.aperto, bozza: nome } });
+}
+function applicaFuoco(panel, stato) {
+  if (!stato.aperto) return;
+  const chiave = `${stato.aperto.id}:${stato.aperto.tipo}`;
+  if (stato.fuocoDato === chiave) return;
+  const nodo12 = panel.querySelector(`[data-c="${stato.aperto.tipo === "elimina" ? "ConfermaEliminazione" : "CampoRinomina"}"]`);
+  if (!nodo12) return;
+  if (stato.aperto.tipo === "elimina") nodo12.querySelector('[data-action="annullaEliminaModello"]')?.focus();
+  else {
+    const campo2 = nodo12.querySelector('[data-campo="nomeModello"]');
+    campo2?.focus();
+    campo2?.select?.();
+  }
+  scriviStatoAzioni(panel, { ...stato, fuocoDato: chiave });
+}
+function apriElimina(panel, id2) {
+  const stato = leggiStatoAzioni(panel);
+  scriviStatoAzioni(panel, { ...stato, aperto: { id: id2, tipo: "elimina", bozza: "" }, erroreCampo: null, fuocoDato: "" });
+  ridisegna(panel);
+}
+function apriRinomina(panel, id2, nomeAttuale) {
+  const stato = leggiStatoAzioni(panel);
+  scriviStatoAzioni(panel, { ...stato, aperto: { id: id2, tipo: "rinomina", bozza: nomeAttuale || "" }, erroreCampo: null, fuocoDato: "" });
+  ridisegna(panel);
+}
+function chiudiPannello(panel, id2) {
+  const stato = leggiStatoAzioni(panel);
+  if (stato.aperto?.id !== id2) return;
+  scriviStatoAzioni(panel, { ...stato, aperto: null, erroreCampo: null, fuocoDato: "" });
+  ridisegna(panel);
+  tornaAlComando(panel, id2, stato.aperto.tipo === "elimina" ? "eliminaModello" : "rinominaModello");
+}
+function tornaAlComando(panel, id2, azione) {
+  const riga2 = panel.querySelector(`[data-c="DownloadRow"][data-download-id="${CSS.escape(String(id2))}"]`);
+  const comando = riga2?.querySelector(`[data-action="${azione}"]`) || riga2?.querySelector('[data-c="EsitoModello"]');
+  comando?.focus?.();
+}
+function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni = null, document: d = globalThis.document } = {}) {
   const art = el23(d, "article", "talos-lab__download");
   art.dataset.c = "DownloadRow";
   art.dataset.downloadId = dati.id;
@@ -19414,9 +20496,50 @@ function creaRigaDownload(dati, { azioni = {}, document: d = globalThis.document
   testa.append(titoli, dati.stato === "ready" ? badge4(d, dati.etichettaStato, dati.tono) : statoWrap);
   art.appendChild(testa);
   if (dati.stato === "ready") {
+    const esito = statoAzioni?.esiti?.[dati.id] || null;
+    const eliminato = esito?.azione === "elimina" && esito.tono === "success";
     const piede2 = el23(d, "div", "talos-toolbar");
-    piede2.append(el23(d, "span", "talos-muted", "Disponibile nei modelli installati."), bottone4(d, "Vedi modello", "talos-button talos-button--secondary talos-button--sm", "vediModello", () => azioni.vediModello?.(dati.id)));
+    const nota = el23(d, "span", "talos-muted", eliminato ? "Eliminato dal disco: per usarlo di nuovo va scaricato o importato." : "Disponibile nei modelli installati.");
+    const vedi = bottone4(d, "Vedi modello", "talos-button talos-button--secondary talos-button--sm", "vediModello", () => azioni.vediModello?.(dati.id));
+    if (eliminato) {
+      vedi.disabled = true;
+      vedi.title = "Questo modello non è più sul disco.";
+    }
+    piede2.append(nota, vedi);
     art.appendChild(piede2);
+    const apertoQui = statoAzioni?.aperto && statoAzioni.aperto.id === dati.id ? statoAzioni.aperto : null;
+    if (azioniModello && !eliminato && !apertoQui) {
+      const cluster2 = el23(d, "div", "talos-cluster");
+      cluster2.append(
+        bottone4(d, "Rinomina", "talos-button talos-button--secondary talos-button--sm", "rinominaModello", () => azioniModello.apriRinomina(dati.id, dati.nome)),
+        bottone4(d, "Elimina dal disco", "talos-button talos-button--secondary talos-button--sm", "eliminaModello", () => azioniModello.apriElimina(dati.id))
+      );
+      piede2.appendChild(cluster2);
+    }
+    if (apertoQui) {
+      art.appendChild(apertoQui.tipo === "elimina" ? creaConfermaEliminazione(
+        { id: dati.id, nome: dati.nome, dimensione: dati.totale },
+        {
+          inCorso: statoAzioni.inCorso === dati.id,
+          verdetto: esito,
+          document: d,
+          onAnnulla: () => azioniModello.chiudi(dati.id),
+          onEsegui: () => azioniModello.eseguiElimina(dati.id, dati.nome)
+        }
+      ) : creaCampoRinomina(
+        { id: dati.id },
+        {
+          bozza: apertoQui.bozza ?? "",
+          inCorso: statoAzioni.inCorso === dati.id,
+          errore: statoAzioni.erroreCampo,
+          verdetto: esito,
+          document: d,
+          onBozza: (nome) => azioniModello.annota(dati.id, nome),
+          onAnnulla: () => azioniModello.chiudi(dati.id),
+          onSalva: (id2, nome) => azioniModello.eseguiRinomina(id2, nome)
+        }
+      ));
+    } else if (esito) art.appendChild(creaRigaEsitoModello(esito, { document: d }));
     return art;
   }
   if (dati.stato === "failed") {
@@ -19508,8 +20631,28 @@ function statoVuotoDelPannello(panel, d, azioni = {}, serve = true) {
   else panel.append(vuoto);
   return vuoto;
 }
-function aggiornaCodaDownload(panel, items = [], { soloAttivi = false, stime = /* @__PURE__ */ new Map(), azioni = {}, errore = null, document: d = globalThis.document } = {}) {
+function aggiornaCodaDownload(panel, items = [], opzioni = {}) {
   if (!panel) return;
+  const { soloAttivi = false, stime = /* @__PURE__ */ new Map(), azioni = {}, errore = null, document: d = globalThis.document } = opzioni;
+  ultimaResa.set(panel, { items, opzioni });
+  const statoAzioni = leggiStatoAzioni(panel);
+  const azioniModello = typeof azioni.elimina === "function" || typeof azioni.rinomina === "function" ? {
+    apriElimina: (id2) => apriElimina(panel, id2),
+    apriRinomina: (id2, nome) => apriRinomina(panel, id2, nome),
+    chiudi: (id2) => chiudiPannello(panel, id2),
+    annota: (id2, nome) => annotaBozza(panel, id2, nome),
+    eseguiElimina: (id2, nome) => {
+      if (typeof azioni.elimina === "function") void eseguiEliminazione(panel, id2, azioni, nome);
+    },
+    eseguiRinomina: (id2, nome) => {
+      if (typeof azioni.rinomina === "function") void eseguiRinomina(panel, id2, nome, azioni);
+    }
+  } : null;
+  const presenti = new Set(items.map((i2) => i2.id));
+  const esitiVivi = Object.fromEntries(Object.entries(statoAzioni.esiti).filter(([id2]) => presenti.has(id2)));
+  const apertoVivo = azioniModello && statoAzioni.aperto && presenti.has(statoAzioni.aperto.id) ? statoAzioni.aperto : null;
+  const statoReso = { ...statoAzioni, esiti: esitiVivi, aperto: apertoVivo };
+  if (JSON.stringify(statoReso) !== JSON.stringify(statoAzioni)) scriviStatoAzioni(panel, statoReso);
   const conteggi = panel.querySelector(".talos-count");
   const coda = panel.querySelector('[data-c="DownloadQueue"]');
   const c = riepilogoCoda(items);
@@ -19553,7 +20696,13 @@ function aggiornaCodaDownload(panel, items = [], { soloAttivi = false, stime = /
     coda.replaceChildren(el23(d, "p", "talos-card--pad talos-muted", "Nessun download attivo. I download finiti restano nella coda: «Mostra tutti» li riporta."));
     return;
   }
-  coda.replaceChildren(...visibili.flatMap((i2) => [d.createTextNode("\n"), creaRigaDownload(datiDownload(i2, { stima: stime.get?.(i2.id) || null }), { azioni, document: d })]), d.createTextNode("\n"));
+  coda.replaceChildren(...visibili.flatMap((i2) => [d.createTextNode("\n"), creaRigaDownload(datiDownload(i2, { stima: stime.get?.(i2.id) || null }), {
+    azioni,
+    azioniModello,
+    statoAzioni: azioniModello ? statoReso : null,
+    document: d
+  })]), d.createTextNode("\n"));
+  if (azioniModello) applicaFuoco(panel, leggiStatoAzioni(panel));
 }
 function montaCodaDownload(originale, canonico) {
   if (!originale || !canonico || originale.dataset.downloadMontato) return;
@@ -19575,7 +20724,7 @@ function stimaFraLetture(prima, dopo) {
   const restanti = Math.max(0, Number(dopo.totalBytes) - Number(dopo.bytes));
   return { bytesAlSecondo, secondiRimanenti: restanti / bytesAlSecondo };
 }
-var STATI_DOWNLOAD, MOTIVI2;
+var STATI_DOWNLOAD, MOTIVI2, STATO_VUOTO, ultimaResa;
 var init_download_coda = __esm({
   "src/components/download-coda.js"() {
     init_modelli_installati();
@@ -19596,6 +20745,8 @@ var init_download_coda = __esm({
       HTTP_ERROR: "Il server di Hugging Face ha risposto con un errore",
       CANCELLED: "Annullato"
     });
+    STATO_VUOTO = Object.freeze({ aperto: null, inCorso: null, erroreCampo: null, fuocoDato: "", esiti: {} });
+    ultimaResa = /* @__PURE__ */ new WeakMap();
   }
 });
 
@@ -20129,12 +21280,12 @@ function titoloScheda(voce, tutte = [voce]) {
   return `${t2("tu")} · ${shell}${omonime.length > 1 && posizione > 0 ? ` ${posizione + 1}` : ""}`;
 }
 function svgIcona(nome, classi = "i i--sm") {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", classi);
+  const svg2 = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg2.setAttribute("class", classi);
   const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
   use.setAttribute("href", `#${nome}`);
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
 }
 function codaDelPiede(piede = {}) {
   const nota = piede?.nota;
@@ -20946,13 +22097,13 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     if (s.tipo === "viva") scheda.dataset.stato = s.stato || "pronta";
     const situazione = statoDellaScheda(s);
     scheda.dataset.statoScheda = situazione;
-    const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("class", "i talos-tabstrip__icona");
-    svg.setAttribute("aria-hidden", "true");
+    const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg2.setAttribute("class", "i talos-tabstrip__icona");
+    svg2.setAttribute("aria-hidden", "true");
     const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
     use.setAttribute("href", ICONA_PER_STATO[situazione] || (s.tipo === "viva" ? "#i-globe" : "#i-doc"));
-    svg.append(use);
-    scheda.append(svg);
+    svg2.append(use);
+    scheda.append(svg2);
     const nome = titoloScheda2(s);
     const titolo2 = doc.createElement("span");
     titolo2.className = "talos-tabstrip__titolo";
@@ -21523,12 +22674,12 @@ function el25(documentObj, tag2, className, testo2) {
   return nodo12;
 }
 function simbolo(documentObj, classe, nome) {
-  const svg = documentObj.createElementNS(SVG_NS2, "svg");
-  svg.setAttribute("class", classe);
+  const svg2 = documentObj.createElementNS(SVG_NS2, "svg");
+  svg2.setAttribute("class", classe);
   const use = documentObj.createElementNS(SVG_NS2, "use");
   use.setAttribute("href", `#${nome}`);
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
 }
 function oraMessaggio(quando = /* @__PURE__ */ new Date()) {
   const data = quando instanceof Date ? quando : new Date(quando);
@@ -22410,12 +23561,12 @@ function el26(d, tag2, classe, testo2) {
   return nodo12;
 }
 function simbolo2(d, classe, nome) {
-  const svg = d.createElementNS(SVG_NS3, "svg");
-  svg.setAttribute("class", classe);
+  const svg2 = d.createElementNS(SVG_NS3, "svg");
+  svg2.setAttribute("class", classe);
   const use = d.createElementNS(SVG_NS3, "use");
   use.setAttribute("href", `#${nome}`);
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
 }
 function ricorda(mappa, chiave, valore, tetto) {
   if (!chiave) return;
@@ -25285,12 +26436,12 @@ function el27(documentObj, tag2, className, testo2) {
   return nodo12;
 }
 function simbolo3(documentObj, classe, nome) {
-  const svg = documentObj.createElementNS(SVG_NS4, "svg");
-  svg.setAttribute("class", classe);
+  const svg2 = documentObj.createElementNS(SVG_NS4, "svg");
+  svg2.setAttribute("class", classe);
   const use = documentObj.createElementNS(SVG_NS4, "use");
   use.setAttribute("href", `#${nome}`);
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
 }
 function suggerimentiDallaCartella({ voci = [], packageJson = null, totaleTest = null } = {}) {
   const nomi2 = new Set((voci || []).map((v) => (typeof v === "string" ? v : v?.nome || v?.name || "").toLowerCase()));
@@ -25563,13 +26714,13 @@ function selezionaScheda(card, sezione) {
   return true;
 }
 function icona12(doc, nome) {
-  const svg = doc.createElementNS(NS_SVG, "svg");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
+  const svg2 = doc.createElementNS(NS_SVG, "svg");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
   const use = doc.createElementNS(NS_SVG, "use");
   use.setAttribute("href", `#${nome}`);
-  svg.append(use);
-  return svg;
+  svg2.append(use);
+  return svg2;
 }
 function maiuscola(testo2) {
   return testo2.charAt(0).toUpperCase() + testo2.slice(1);
@@ -25845,6 +26996,101 @@ var init_lab_cornice_v3 = __esm({
 });
 
 // src/components/scheda-modello.js
+function portaPreferenzeDiSerie(archivio = () => globalThis.localStorage) {
+  const leggiDocumento = () => {
+    try {
+      const letto = JSON.parse(String(archivio()?.getItem(CHIAVE_DOCUMENTO_IMPOSTAZIONI) || "{}"));
+      return letto && typeof letto === "object" && !Array.isArray(letto) ? letto : {};
+    } catch {
+      return {};
+    }
+  };
+  return {
+    leggi() {
+      const documento = leggiDocumento();
+      return documento?.chat?.[CHIAVE_IMMAGINI_REMOTE] === true;
+    },
+    scrivi(valore) {
+      try {
+        const documento = leggiDocumento();
+        const chat = documento.chat && typeof documento.chat === "object" && !Array.isArray(documento.chat) ? documento.chat : {};
+        archivio()?.setItem(CHIAVE_DOCUMENTO_IMPOSTAZIONI, JSON.stringify({ version: 1, ...documento, chat: { ...chat, [CHIAVE_IMMAGINI_REMOTE]: valore === true } }));
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  };
+}
+function bersaglioDi2(id2, repo = null) {
+  const esplicito = typeof repo === "string" ? repo.trim() : String(repo?.repo ?? "").trim();
+  if (esplicito) {
+    const revisione = typeof repo === "object" && repo ? String(repo.revision ?? "").trim() : "";
+    return { tipo: "repo", id: `${PREFISSO_REPO}${esplicito}`, repo: esplicito, revisione, chiave: esplicito };
+  }
+  const testo2 = String(id2 ?? "").trim();
+  if (testo2.toLowerCase().startsWith(PREFISSO_REPO)) {
+    const resto = testo2.slice(PREFISSO_REPO.length);
+    const taglio = resto.lastIndexOf("@");
+    const nome = (taglio > 0 ? resto.slice(0, taglio) : resto).trim();
+    const revisione = taglio > 0 ? resto.slice(taglio + 1).trim() : "";
+    if (nome) return { tipo: "repo", id: testo2, repo: nome, revisione, chiave: nome };
+  }
+  return { tipo: "locale", id: testo2, repo: "", revisione: "", chiave: testo2 };
+}
+function nomeUmano(modello = null, repo = null) {
+  const rinominato = String(modello?.name ?? "").trim();
+  if (rinominato) return rinominato;
+  const daRepo = String(repo?.repo || modello?.repo || "").split("/").filter(Boolean).pop() || "";
+  if (daRepo && daRepo !== REPO_IMPORTATO) return daRepo;
+  return String(modello?.id ?? "").trim() || "Modello";
+}
+function origineDi(modello = null, bersaglio = null) {
+  if (bersaglio?.tipo === "repo" || modello?.remoto === true) return ORIGINI4.repo;
+  return String(modello?.repo ?? "") === REPO_IMPORTATO ? ORIGINI4.importato : ORIGINI4.locale;
+}
+function immaginiDellaScheda(images = []) {
+  const viste = /* @__PURE__ */ new Set();
+  const fuori = [];
+  for (const voce of Array.isArray(images) ? images : []) {
+    const url = String(voce?.url ?? "").trim();
+    if (!url || !urlAmmesso(url, { soloImmagine: true }) || viste.has(url)) continue;
+    viste.add(url);
+    let host2 = "";
+    try {
+      host2 = new URL(url).host;
+    } catch {
+      host2 = "";
+    }
+    fuori.push({ url, alt: String(voce?.alt ?? "").trim(), host: host2 });
+  }
+  const host = [...new Set(fuori.map((i2) => i2.host).filter(Boolean))].sort();
+  return { immagini: fuori, host, quante: fuori.length };
+}
+function percorsoImmagine(url) {
+  return `/api/v1/huggingface/image?url=${encodeURIComponent(String(url ?? ""))}`;
+}
+function percorsoStima(bytes, { contextTokens = null } = {}) {
+  const parametri = new URLSearchParams({ bytes: String(bytes) });
+  if (Number.isInteger(contextTokens) && contextTokens > 0) parametri.set("contextTokens", String(contextTokens));
+  return `/api/v1/local-models/fit-estimate?${parametri.toString()}`;
+}
+function corpoDownloadHf(detail = {}, gruppo = null) {
+  const file = Array.isArray(gruppo?.file) ? gruppo.file : [];
+  const primo2 = file[0];
+  if (!primo2?.path) return null;
+  const id2 = `${String(detail.repo ?? "").replace(/[^a-z0-9_-]/giu, "-")}-${String(detail.revision || "main").slice(0, 12)}-${String(primo2.path).replace(/[^a-z0-9]/giu, "-")}`.slice(0, 120);
+  return {
+    id: id2,
+    repo: String(detail.repo ?? ""),
+    revision: String(detail.revision ?? ""),
+    files: file.map((f) => ({ path: String(f.path), bytes: Number(f.sizeBytes), sha256: String(f.sha256 ?? "") })),
+    bytes: Number(gruppo.bytes),
+    sha256: String(primo2.sha256 ?? ""),
+    license: detail.license || "unknown",
+    path: id2
+  };
+}
 function senzaFrontMatter(testo2) {
   const grezzo = String(testo2 ?? "").replace(/\r\n?/g, "\n");
   if (!grezzo.startsWith("---\n")) return grezzo;
@@ -25951,7 +27197,7 @@ function provenienzaFatto(fatto) {
 function slug(testo2) {
   return String(testo2 ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
 }
-function indiceDelReadme(frammento, doc, { prefisso = "readme", margine = 12 } = {}) {
+function indiceDelReadme(frammento, doc, { prefisso = "readme", margine = 12, caratteri = CARATTERI_INDICE } = {}) {
   const titoli = [...frammento?.querySelectorAll?.("h2, h3, h4") || []];
   return titoli.map((titolo2, i2) => {
     const testo2 = String(titolo2.textContent || "").trim();
@@ -25959,7 +27205,8 @@ function indiceDelReadme(frammento, doc, { prefisso = "readme", margine = 12 } =
     titolo2.id = id2;
     titolo2.tabIndex = -1;
     titolo2.style.scrollMarginTop = `${margine}px`;
-    return { id: id2, testo: testo2, livello: Number(String(titolo2.tagName).slice(1)) || 2 };
+    const breve2 = testo2.length > caratteri ? `${testo2.slice(0, caratteri).trimEnd()}…` : testo2;
+    return { id: id2, testo: testo2, breve: breve2, livello: Number(String(titolo2.tagName).slice(1)) || 2 };
   });
 }
 function percorsoModelli() {
@@ -26041,8 +27288,11 @@ function accorciaMovimento() {
 }
 function montaSchedaModello(contenitore, {
   apiGet,
+  apiPost = null,
   id: id2,
   modello = null,
+  repo = null,
+  preferenze = null,
   scheda = "card",
   contextTokens = null,
   profilo = "agent",
@@ -26055,16 +27305,36 @@ function montaSchedaModello(contenitore, {
   const doc = documento || contenitore?.ownerDocument || globalThis.document;
   if (!contenitore || !doc) throw new Error("La pagina del modello vuole un contenitore.");
   if (typeof apiGet !== "function") throw new Error("La pagina del modello vuole un lettore (`apiGet`).");
-  if (!id2) throw new Error("La pagina del modello vuole un id.");
+  const bersaglio = bersaglioDi2(id2, repo);
+  if (!bersaglio.id && bersaglio.tipo !== "repo") throw new Error("La pagina del modello vuole un id.");
   const suffisso = `sm${contatore3 += 1}`;
   const idPannello = `${suffisso}-pannello`;
+  const porta = preferenze && typeof preferenze.leggi === "function" && typeof preferenze.scrivi === "function" ? preferenze : portaPreferenzeDiSerie();
+  const consensoSalvato = (() => {
+    try {
+      return porta.leggi() === true;
+    } catch {
+      return false;
+    }
+  })();
   const stato = {
-    id: id2,
+    id: bersaglio.id,
+    bersaglio,
     scheda: SCHEDE2.includes(scheda) ? scheda : "card",
     modello: modello && typeof modello === "object" ? modello : null,
     fit: null,
     capacita: null,
     repo: null,
+    consenso: consensoSalvato,
+    consensoPersistente: consensoSalvato,
+    /*
+     * ⛔ LO STATO DELLA SCELTA DEL FILE — vive QUI e non dentro il blocco di `hf-catalogo.js`,
+     *   perché il blocco si ridisegna a ogni cambio di scheda (e a ogni azione) mentre la scelta,
+     *   la stima e l'esito del download devono sopravvivere al ridisegno. `stima` è la stessa
+     *   `Map` che il pannello stretto passa (`state.modelLab.hfStima.perVariante`): chiave della
+     *   variante → esito di `/fit-estimate` (o `{inCorso:true}`).
+     */
+    hf: { stima: /* @__PURE__ */ new Map(), scelta: null, inMisura: false, scarica: { inCorso: false, esito: "", errore: "" } },
     caricamento: { modello: false, fit: false, capacita: false, repo: false },
     errori: { modello: "", fit: "", capacita: "", repo: "" },
     distrutto: false
@@ -26072,20 +27342,21 @@ function montaSchedaModello(contenitore, {
   void inizio;
   const radice2 = nodo11(doc, "div", "talos-stack");
   radice2.dataset.schedaModello = "";
-  radice2.dataset.modelloId = String(id2);
-  const barra = nodo11(doc, "div", "talos-toolbar");
-  const testata = nodo11(doc, "header", "talos-stack");
+  radice2.dataset.modelloId = String(bersaglio.id);
+  const barra = nodo11(doc, "div", "model-page-toolbar talos-toolbar");
+  const testata = nodo11(doc, "header", "model-hero");
   testata.dataset.modelloTestata = "";
-  const rigaSchede = nodo11(doc, "div", "talos-cluster");
+  const rigaSchede = nodo11(doc, "div", "model-page-tabs talos-cluster");
   const listaSchede = nodo11(doc, "div", "talos-tabs__list");
   listaSchede.setAttribute("role", "tablist");
   listaSchede.setAttribute("aria-label", "Sezioni della pagina del modello");
-  const notaSchede = badge5(doc, "Nessun avvio automatico", "");
+  const notaSchede = nodo11(doc, "span", "model-page-tab-note");
+  notaSchede.append(icona6(doc, "shield", "i i--xs"), doc.createTextNode("Nessun avvio automatico"));
   rigaSchede.append(listaSchede, notaSchede);
   const pannello = nodo11(doc, "section", "talos-tabs__panel");
   pannello.id = idPannello;
   pannello.dataset.modelloPannello = stato.scheda;
-  const chiusura = paragrafo(doc, "talos-page__note", "Leggere questa pagina non scarica file, non carica il modello e non cambia le nuove chat.");
+  const chiusura = paragrafo(doc, "model-page-end talos-page__note", "Leggere questa pagina non scarica file, non carica il modello e non cambia le nuove chat.");
   const gruppoPannello = nodo11(doc, "div", "talos-tabs__panels");
   gruppoPannello.append(pannello);
   radice2.append(barra, testata, rigaSchede, gruppoPannello, chiusura);
@@ -26110,6 +27381,9 @@ function montaSchedaModello(contenitore, {
     suggerimento: ETICHETTE_SCHEDE[chiave]
   }));
   schede.aggiorna(VOCI, stato.scheda);
+  function remoto() {
+    return bersaglio.tipo === "repo" || stato.modello?.remoto === true;
+  }
   async function leggi(chiave, percorso, applica2) {
     if (stato.distrutto) return;
     stato.caricamento[chiave] = true;
@@ -26128,29 +27402,49 @@ function montaSchedaModello(contenitore, {
       }
     }
   }
+  function manifestDaRepo(dati) {
+    const file = (Array.isArray(dati?.files) ? dati.files : []).map((voce) => ({ path: String(voce?.path ?? ""), bytes: voce?.sizeBytes, sha256: String(voce?.sha256 ?? "") })).filter((voce) => voce.path);
+    const somma = file.reduce((tot, f) => Number.isFinite(f.bytes) ? tot + Number(f.bytes) : tot, 0);
+    return {
+      id: bersaglio.id,
+      repo: bersaglio.repo,
+      revision: String(dati?.revision || bersaglio.revisione || "").trim(),
+      license: dati?.license || null,
+      files: file,
+      bytes: null,
+      sha256: null,
+      path: "",
+      state: "remote",
+      remoto: true,
+      byteTotali: somma > 0 ? somma : null
+    };
+  }
   function caricaModello() {
     if (stato.modello) {
       disegna2();
       return Promise.resolve();
     }
+    if (bersaglio.tipo === "repo") return Promise.resolve();
     return leggi("modello", percorsoModelli(), (dati) => {
       const elenco2 = Array.isArray(dati?.items) ? dati.items : [];
-      stato.modello = elenco2.find((voce) => String(voce?.id) === String(id2)) || null;
+      stato.modello = elenco2.find((voce) => String(voce?.id) === String(stato.id)) || null;
       if (!stato.modello) stato.errori.modello = "Questo modello non è fra quelli installati.";
     });
   }
   function caricaRepo() {
-    const percorso = percorsoRepo(stato.modello);
+    const percorso = bersaglio.tipo === "repo" ? percorsoRepo({ repo: bersaglio.repo, revision: bersaglio.revisione }) : percorsoRepo(stato.modello);
     if (!percorso) {
       disegna2();
       return Promise.resolve();
     }
     return leggi("repo", percorso, (dati) => {
       stato.repo = dati && typeof dati === "object" ? dati : null;
+      if (bersaglio.tipo === "repo") stato.modello = manifestDaRepo(stato.repo);
     });
   }
   function caricaFit() {
-    return leggi("fit", percorsoFit(id2, { profilo, contextTokens }), (dati) => {
+    if (bersaglio.tipo === "repo") return Promise.resolve();
+    return leggi("fit", percorsoFit(stato.id, { profilo, contextTokens }), (dati) => {
       stato.fit = dati && typeof dati === "object" ? dati : null;
     });
   }
@@ -26168,9 +27462,10 @@ function montaSchedaModello(contenitore, {
     return b;
   }
   function azioniDellaTestata() {
-    const gruppo = nodo11(doc, "div", "talos-cluster");
+    const gruppo = nodo11(doc, "div", "model-page-actions talos-cluster");
     gruppo.dataset.modelloAzioni = "";
-    const hu = !percorsoRepo(stato.modello) ? null : `https://huggingface.co/${String(stato.modello.repo)}`;
+    const repoDelModello = String(stato.modello?.repo || bersaglio.repo || "");
+    const hu = !repoDelModello || repoDelModello === REPO_IMPORTATO ? null : `https://huggingface.co/${repoDelModello}`;
     if (hu) {
       const link = nodo11(doc, "a", "talos-button talos-button--secondary talos-button--sm");
       link.href = hu;
@@ -26185,37 +27480,47 @@ function montaSchedaModello(contenitore, {
   function disegnaBarra() {
     barra.replaceChildren();
     if (typeof indietro === "function") barra.append(bottoneIndietro());
+    const identita = nodo11(doc, "span", "toolbar-identity talos-cluster");
+    identita.dataset.modelloIdentita = "";
+    const origine = origineDi(stato.modello, bersaglio);
+    identita.append(doc.createTextNode(nomeUmano(stato.modello, bersaglio)), nodo11(doc, "span", "", origine));
+    identita.dataset.modelloOrigine = origine;
+    barra.append(identita);
     barra.append(nodo11(doc, "span", "talos-grow"));
     barra.append(azioniDellaTestata());
   }
   function disegnaTestata() {
     testata.replaceChildren();
     const dati = stato.modello ? datiModelloInstallato(stato.modello, { runtime, fit: null }) : null;
-    const identita = nodo11(doc, "div", "talos-cluster");
-    const nome = nodo11(doc, "h2", "", dati?.nome || stato.modello?.id || id2);
+    const identita = nodo11(doc, "div", "model-hero-identity");
+    const glifo = nodo11(doc, "span", "model-glyph model-glyph--large talos-lab__banda-glifo");
+    glifo.setAttribute("aria-hidden", "true");
+    glifo.append(icona6(doc, "robot", "i"));
+    const testo2 = nodo11(doc, "div", "");
+    testo2.append(nodo11(doc, "div", "eyebrow talos-eyebrow", "Nel tuo laboratorio"));
+    const nome = nodo11(doc, "h1", "", nomeUmano(stato.modello, bersaglio));
     nome.dataset.modelloNome = "";
-    const daDove = nodo11(doc, "div", "talos-stack");
-    daDove.append(
-      nodo11(doc, "span", "talos-eyebrow", "Modello locale"),
-      nome,
-      paragrafo(doc, "talos-muted", stato.modello?.path || "Percorso non dichiarato dal manifest.")
-    );
-    identita.append(icona6(doc, "robot", "i"), daDove);
-    testata.append(identita);
-    const rigaRepo = nodo11(doc, "p", "talos-muted");
+    nome.id = `${suffisso}-titolo`;
+    nome.tabIndex = -1;
+    testo2.append(nome);
+    const rigaRepo = nodo11(doc, "p", "model-repository talos-muted");
     rigaRepo.dataset.modelloRepo = "";
-    const repo = stato.repo;
+    const repo2 = stato.repo;
     const pezzi = [];
-    if (stato.modello?.repo && stato.modello.repo !== REPO_IMPORTATO) pezzi.push(stato.modello.repo);
+    const repoDelModello = String(stato.modello?.repo || bersaglio.repo || "");
+    if (repoDelModello && repoDelModello !== REPO_IMPORTATO) pezzi.push(repoDelModello);
     else pezzi.push("Importato dal computer: non ha un repository");
-    if (repo?.revision) pezzi.push(`revisione ${String(repo.revision).slice(0, 12)}`);
+    if (repo2?.revision || bersaglio.revisione) pezzi.push(`revisione ${String(repo2?.revision || bersaglio.revisione).slice(0, 12)}`);
     if (dati?.licenza) pezzi.push(dati.licenza);
-    if (repo?.gated) pezzi.push("accesso limitato");
-    if (repo?.pipelineTag) pezzi.push(repo.pipelineTag);
-    if (Number.isFinite(repo?.downloads)) pezzi.push(`${numero7.format(repo.downloads)} download`);
-    if (Number.isFinite(repo?.likes)) pezzi.push(`${numero7.format(repo.likes)} like`);
-    rigaRepo.append(nodo11(doc, "span", "talos-mono", pezzi.join(" · ")));
-    testata.append(rigaRepo);
+    if (repo2?.gated) pezzi.push("accesso limitato");
+    if (repo2?.pipelineTag) pezzi.push(repo2.pipelineTag);
+    if (Number.isFinite(repo2?.downloads)) pezzi.push(`${numero7.format(repo2.downloads)} download`);
+    if (Number.isFinite(repo2?.likes)) pezzi.push(`${numero7.format(repo2.likes)} like`);
+    rigaRepo.append(icona6(doc, "doc", "i i--xs"), nodo11(doc, "span", "talos-mono", pezzi.join(" · ")));
+    testo2.append(rigaRepo);
+    identita.append(glifo, testo2);
+    testata.append(identita);
+    testata.append(paragrafo(doc, "model-hero-caption", "Conosci il modello. Scegli come usarlo."));
     if (stato.errori.modello) {
       const avviso = paragrafo(doc, "talos-muted", stato.errori.modello);
       avviso.dataset.modelloErrore = "modello";
@@ -26225,39 +27530,60 @@ function montaSchedaModello(contenitore, {
     testata.append(disegnaStriscia(dati));
   }
   function disegnaStriscia(dati) {
-    const striscia = nodo11(doc, "div", "talos-cluster");
+    const striscia = nodo11(doc, "section", "model-context-strip");
     striscia.dataset.modelloStriscia = "";
-    const cella = (etichetta2, contenuto) => {
-      const c = nodo11(doc, "div", "talos-stack");
-      c.append(nodo11(doc, "span", "talos-eyebrow", etichetta2));
-      if (typeof contenuto === "string") c.append(nodo11(doc, "span", "talos-mono", contenuto));
-      else c.append(contenuto);
+    striscia.setAttribute("aria-label", "Stato del modello e del suo repository");
+    const cella = (etichetta2, contenuto, { icona: nomeIcona = "" } = {}) => {
+      const c = nodo11(doc, "div", "");
+      if (nomeIcona) c.append(icona6(doc, nomeIcona, "i i--sm"));
+      const dentro = nodo11(doc, "span", "talos-stack");
+      dentro.style.alignItems = "flex-start";
+      dentro.append(nodo11(doc, "small", "", etichetta2));
+      if (typeof contenuto === "string") dentro.append(nodo11(doc, "strong", "", contenuto));
+      else dentro.append(contenuto);
+      c.append(dentro);
       return c;
     };
-    const statoInstallato = STATI_INSTALLATO[dati?.stato] || STATI_INSTALLATO.disco;
-    striscia.append(
-      cella("Origine", dati?.origine || "—"),
-      cella("Stato", badge5(doc, statoInstallato.etichetta, statoInstallato.tono)),
-      cella("File sul disco", byte2(stato.modello?.bytes)),
-      cella("Formato", dati?.formato || "—")
-    );
+    const eRemoto = remoto();
+    const statoInstallato = eRemoto ? STATO_NON_INSTALLATO : STATI_INSTALLATO[dati?.stato] || STATI_INSTALLATO.disco;
+    striscia.append(cella("Destinazione", eRemoto ? "Solo nel repository" : "Sul dispositivo"));
+    striscia.append(cella("Profilo", eRemoto ? profiloDelRepository() : profiloLocale(dati)));
+    const pastigliaStato = badge5(doc, statoInstallato.etichetta, statoInstallato.tono);
+    pastigliaStato.dataset.modelloStato = eRemoto ? "non-installato" : dati?.stato || "disco";
+    striscia.append(cella("Stato", pastigliaStato));
+    if (eRemoto) {
+      striscia.append(cella("Verifica", "Dopo l’installazione"));
+      return striscia;
+    }
     if (stato.fit) {
       const verdetto = verdettoMemoria(stato.fit);
       const contenuto = badge5(doc, verdetto.etichetta, verdetto.tono);
       contenuto.dataset.modelloVerdetto = verdetto.chiave;
       striscia.append(cella("Verifica", contenuto));
-      striscia.append(cella("Contesto richiesto", contestoK(stato.fit.context?.requestedTokens) || "—"));
     } else if (stato.caricamento.fit) {
       striscia.append(cella("Verifica", "In corso…"));
+    } else {
+      striscia.append(cella("Verifica", "Non ancora richiesta"));
     }
     return striscia;
   }
+  function profiloLocale(dati) {
+    const formato = String(dati?.formato || "GGUF");
+    const peso = stato.modello?.bytes ? byte2(stato.modello.bytes) : "";
+    return peso && peso !== "—" ? `${formato} · ${peso}` : formato;
+  }
+  function profiloDelRepository() {
+    const quanti = Array.isArray(stato.modello?.files) ? stato.modello.files.length : null;
+    if (quanti === null) return "Repository non ancora letto";
+    const peso = byte2(stato.modello?.byteTotali);
+    return peso === "—" ? `${quanti} file` : `${quanti} file · ${peso}`;
+  }
   function disegnaCard() {
-    const scatola = nodo11(doc, "section", "talos-card");
+    const scatola = nodo11(doc, "section", "talos-card readme-surface");
     scatola.dataset.modelloCard = "";
-    const testa = nodo11(doc, "div", "talos-cluster");
+    const testa = nodo11(doc, "div", "readme-chrome talos-cluster");
     testa.style.padding = "12px 14px";
-    testa.append(icona6(doc, "doc", "i i--sm"), nodo11(doc, "span", "talos-mono", "README.md"), nodo11(doc, "span", "talos-label", "Markdown"));
+    testa.append(icona6(doc, "doc", "i i--sm"), nodo11(doc, "span", "talos-mono", "README.md"), nodo11(doc, "span", "talos-label", "Anteprima editoriale"));
     if (stato.repo?.revision) testa.append(badge5(doc, String(stato.repo.revision).slice(0, 12), ""));
     scatola.append(testa);
     if (stato.caricamento.repo) return conTesta(scatola, paragrafo(doc, "talos-muted", "Lettura della scheda…"));
@@ -26275,6 +27601,7 @@ function montaSchedaModello(contenitore, {
       );
     }
     if (!percorsoRepo(stato.modello)) {
+      if (remoto()) return conTesta(scatola, paragrafo(doc, "talos-muted", "Lettura della scheda…"));
       return conTesta(
         scatola,
         nodo11(doc, "h3", "", "Questo modello non ha una scheda Hugging Face"),
@@ -26309,19 +27636,21 @@ function montaSchedaModello(contenitore, {
     });
     const indice2 = indiceDelReadme(frammento, doc, { prefisso: `${suffisso}-readme` });
     if (indice2.length) {
-      const rigaIndice = nodo11(doc, "div", "talos-cluster");
+      const rigaIndice = nodo11(doc, "nav", "readme-index talos-cluster");
       rigaIndice.dataset.modelloIndice = "";
+      rigaIndice.setAttribute("aria-label", "Indice della scheda");
       rigaIndice.style.padding = "12px 14px";
-      rigaIndice.append(nodo11(doc, "span", "talos-label", "Nella scheda"));
+      rigaIndice.append(nodo11(doc, "span", "talos-label", "In questa scheda"));
       for (const voce of indice2) {
-        const b = nodo11(doc, "button", "talos-button talos-button--ghost talos-button--sm", voce.testo);
+        const b = nodo11(doc, "button", "talos-button talos-button--ghost talos-button--sm", voce.breve);
         b.type = "button";
         b.dataset.modelloIndiceVoce = voce.id;
+        if (voce.breve !== voce.testo) b.title = voce.testo;
         b.addEventListener("click", () => {
-          const bersaglio = pannello.querySelector(`#${voce.id}`);
-          if (!bersaglio) return;
-          bersaglio.scrollIntoView?.({ block: "start", behavior: accorciaMovimento() ? "auto" : "smooth" });
-          bersaglio.focus?.({ preventScroll: true });
+          const bersaglio2 = pannello.querySelector(`#${voce.id}`);
+          if (!bersaglio2) return;
+          bersaglio2.scrollIntoView?.({ block: "start", behavior: accorciaMovimento() ? "auto" : "smooth" });
+          bersaglio2.focus?.({ preventScroll: true });
         });
         rigaIndice.append(b);
       }
@@ -26331,6 +27660,90 @@ function montaSchedaModello(contenitore, {
     prosa.style.padding = "0 14px 14px";
     prosa.append(frammento);
     scatola.append(prosa);
+    const immagini = disegnaImmagini();
+    if (immagini) scatola.append(immagini);
+    return scatola;
+  }
+  function disegnaImmagini() {
+    const fuori = immaginiDellaScheda(stato.repo?.images);
+    if (!fuori.quante) return null;
+    const scatola = nodo11(doc, "section", "talos-card talos-card--pad");
+    scatola.dataset.modelloImmagini = String(fuori.quante);
+    scatola.dataset.modelloImmaginiConsenso = stato.consenso ? "dato" : "negato";
+    const testa = nodo11(doc, "div", "talos-cluster");
+    testa.append(
+      icona6(doc, "image", "i i--sm"),
+      nodo11(doc, "h3", "talos-lab__heading talos-grow", "Immagini della scheda"),
+      badge5(doc, String(fuori.quante), "")
+    );
+    scatola.append(testa);
+    if (!stato.consenso) {
+      const host = fuori.host.length ? fuori.host.join(", ") : "un server esterno";
+      scatola.append(paragrafo(
+        doc,
+        "talos-muted",
+        `Questa scheda porta ${fuori.quante} immagini da ${host}: non le carichiamo senza il tuo consenso.`
+      ));
+      const comandi = nodo11(doc, "div", "talos-cluster");
+      const mostra = nodo11(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Mostra le immagini");
+      mostra.type = "button";
+      mostra.dataset.modelloImmaginiMostra = "";
+      mostra.addEventListener("click", () => {
+        stato.consenso = true;
+        disegnaPannello();
+      });
+      const etichetta2 = nodo11(doc, "label", "talos-cluster");
+      const casella = doc.createElement("input");
+      casella.type = "checkbox";
+      casella.checked = stato.consensoPersistente;
+      casella.dataset.modelloImmaginiSempre = "";
+      casella.addEventListener("change", () => {
+        stato.consensoPersistente = casella.checked === true;
+        try {
+          porta.scrivi(stato.consensoPersistente);
+        } catch {
+        }
+        if (stato.consensoPersistente) {
+          stato.consenso = true;
+          disegnaPannello();
+        }
+      });
+      etichetta2.append(casella, doc.createTextNode("Ricordalo per tutte le schede"));
+      comandi.append(mostra, etichetta2);
+      scatola.append(comandi);
+      return scatola;
+    }
+    const griglia = nodo11(doc, "div", "talos-cluster");
+    griglia.dataset.modelloImmaginiGriglia = "";
+    for (const voce of fuori.immagini) {
+      const figura = nodo11(doc, "figure", "");
+      figura.dataset.modelloImmagine = voce.host;
+      const img = doc.createElement("img");
+      img.alt = voce.alt;
+      img.decoding = "async";
+      img.setAttribute("referrerpolicy", "no-referrer");
+      img.src = percorsoImmagine(voce.url);
+      img.addEventListener("error", () => {
+        const avviso = nodo11(doc, "figcaption", "talos-label", "Immagine della scheda non disponibile.");
+        avviso.setAttribute("role", "status");
+        figura.replaceChildren(avviso);
+      });
+      figura.append(img);
+      if (voce.alt) figura.append(nodo11(doc, "figcaption", "talos-label", voce.alt));
+      griglia.append(figura);
+    }
+    scatola.append(griglia);
+    const nascondi = nodo11(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Nascondi le immagini");
+    nascondi.type = "button";
+    nascondi.dataset.modelloImmaginiNascondi = "";
+    nascondi.addEventListener("click", () => {
+      stato.consenso = false;
+      disegnaPannello();
+    });
+    scatola.append(nascondi);
+    if (stato.consensoPersistente) {
+      scatola.append(paragrafo(doc, "talos-label", "Le immagini di ogni scheda si caricano da sole: è la preferenza «Immagini remote nelle schede», nelle Impostazioni."));
+    }
     return scatola;
   }
   function conTesta(scatola, ...figli) {
@@ -26340,24 +27753,120 @@ function montaSchedaModello(contenitore, {
     scatola.append(corpo);
     return scatola;
   }
+  const NOTA_STIMA = "Le varianti si stimano dal peso del file (base dichiarata dal server: i soli pesi) contro la memoria e il disco liberi adesso. Non è l’esito di un caricamento: la cache del contesto si somma dopo lo scaricamento, e il valore vero varia.";
+  function disegnaSceltaFile() {
+    const sezione = nodo11(doc, "section", "talos-card talos-card--pad");
+    sezione.dataset.modelloSceltaFile = "";
+    const testa = nodo11(doc, "div", "talos-cluster");
+    testa.append(icona6(doc, "download", "i i--sm"), nodo11(doc, "h3", "talos-lab__heading talos-grow", "Scegli il file da scaricare"));
+    sezione.append(testa, paragrafo(doc, "talos-label", NOTA_STIMA));
+    const dove = nodo11(doc, "div", "talos-stack");
+    sezione.append(dove);
+    const scelto = montaSceltaFileHf(dove, stato.repo, {
+      stima: stato.hf.stima,
+      scelta: stato.hf.scelta,
+      prefissoId: "hf",
+      document: doc,
+      azioni: { scegli: scegliVariante, misura: misuraVarianti, scarica: avviaDownload }
+    });
+    if (scelto && !stato.hf.scelta) stato.hf.scelta = scelto.chiave;
+    if (typeof apiPost !== "function") {
+      const pulsante = dove.querySelector("#paginaModelloScarica");
+      if (pulsante) {
+        pulsante.disabled = true;
+        pulsante.title = "La pagina è stata montata senza uno scrittore (`apiPost`): il download non può partire da qui.";
+      }
+      sezione.append(paragrafo(doc, "talos-label", "Questa pagina non ha ricevuto uno scrittore (`apiPost`): il download si avvia dal pannello del laboratorio."));
+    }
+    const scarica = stato.hf.scarica;
+    if (scarica.inCorso) {
+      sezione.append(paragrafo(doc, "talos-muted", "Avvio del download…"));
+    } else if (scarica.errore) {
+      const p = paragrafo(doc, "talos-muted", `Download non avviato: ${scarica.errore}`);
+      p.dataset.modelloScaricaEsito = "errore";
+      p.setAttribute("role", "alert");
+      sezione.append(p);
+    } else if (scarica.esito) {
+      const p = paragrafo(doc, "talos-muted", scarica.esito);
+      p.dataset.modelloScaricaEsito = "avviato";
+      p.setAttribute("role", "status");
+      sezione.append(p);
+    }
+    return sezione;
+  }
+  function scegliVariante(chiave) {
+    stato.hf.scelta = String(chiave ?? "") || null;
+    disegnaPannello();
+  }
+  function misuraVarianti(gruppi) {
+    if (!Array.isArray(gruppi) || !gruppi.length) return;
+    for (const g of gruppi) stato.hf.stima.set(g.chiave, { inCorso: true });
+    disegnaPannello();
+    Promise.all(gruppi.map(async ({ chiave, bytes }) => {
+      try {
+        stato.hf.stima.set(chiave, await apiGet(percorsoStima(bytes, { contextTokens })));
+      } catch (errore) {
+        stato.hf.stima.set(chiave, { state: "unknown", reason: "measurement", errore: String(errore?.message || errore) });
+      }
+    })).then(() => {
+      if (!stato.distrutto) disegnaPannello();
+    });
+  }
+  async function avviaDownload(gruppo) {
+    if (typeof apiPost !== "function") return;
+    const corpo = corpoDownloadHf(stato.repo, gruppo);
+    if (!corpo) {
+      stato.hf.scarica = { inCorso: false, esito: "", errore: "La variante scelta non ha un file da scaricare." };
+      disegnaPannello();
+      return;
+    }
+    stato.hf.scarica = { inCorso: true, esito: "", errore: "" };
+    disegnaPannello();
+    try {
+      const esito = await apiPost("/api/v1/huggingface/download", corpo);
+      if (stato.distrutto) return;
+      const stato2 = esito && typeof esito.state === "string" ? ` (${esito.state})` : "";
+      stato.hf.scarica = { inCorso: false, errore: "", esito: `Download avviato: ${corpo.files[0].path} · ${byte2(corpo.bytes)}${stato2}. Prosegue nella sezione Download.` };
+    } catch (errore) {
+      if (stato.distrutto) return;
+      stato.hf.scarica = { inCorso: false, esito: "", errore: String(errore?.message || errore) };
+    }
+    disegnaPannello();
+  }
   function disegnaFiles() {
     const scatola = nodo11(doc, "section", "talos-stack");
     scatola.dataset.modelloFiles = "";
-    if (stato.caricamento.modello) return conParagrafo(scatola, "Lettura dei file…");
+    if (stato.caricamento.modello || remoto() && stato.caricamento.repo) return conParagrafo(scatola, "Lettura dei file…");
     if (stato.errori.modello) return conParagrafo(scatola, stato.errori.modello, { errore: true });
-    const locali = Array.isArray(stato.modello?.files) ? stato.modello.files : [];
-    const confronto = confrontaFile(locali, stato.repo?.files || []);
+    if (remoto() && stato.errori.repo) return conParagrafo(scatola, `L’elenco dei file non è stato letto: ${stato.errori.repo}`, { errore: true });
+    const locali = remoto() ? [] : Array.isArray(stato.modello?.files) ? stato.modello.files : [];
+    const remoti = Array.isArray(stato.repo?.files) ? stato.repo.files : [];
+    const confronto = confrontaFile(locali, remoti);
+    if (remoto() && stato.repo) scatola.append(disegnaSceltaFile());
     const testa = nodo11(doc, "div", "talos-cluster");
-    testa.append(nodo11(doc, "h3", "talos-lab__heading", "File del modello"));
-    testa.append(badge5(doc, `${confronto.file.length} sul disco`, ""));
+    testa.append(nodo11(doc, "h3", "talos-lab__heading", remoto() ? "Tutti i file del repository" : "File del modello"));
+    if (!remoto() || locali.length) testa.append(badge5(doc, `${confronto.file.length} sul disco`, ""));
     if (Array.isArray(stato.repo?.files)) testa.append(badge5(doc, `${stato.repo.files.length} nel repository`, ""));
     scatola.append(testa);
     scatola.append(paragrafo(
       doc,
       "talos-label",
-      percorsoRepo(stato.modello) ? "L’impronta del file sul disco confrontata con quella dichiarata dal repository." : "Il modello è importato dal computer: non c’è un repository con cui confrontare l’impronta."
+      remoto() ? "Questo modello non è sul disco: qui sotto ci sono i file che il repository dichiara, con l’impronta che dichiara. Dopo il download, l’impronta del file scaricato si confronta con questa." : percorsoRepo(stato.modello) ? "L’impronta del file sul disco confrontata con quella dichiarata dal repository." : "Il modello è importato dal computer: non c’è un repository con cui confrontare l’impronta."
     ));
     if (!locali.length) {
+      if (remoto()) {
+        if (!confronto.soloRepository.length) {
+          scatola.append(paragrafo(doc, "talos-muted", "Il repository non elenca file nella revisione letta."));
+          return scatola;
+        }
+        for (const file of confronto.soloRepository) {
+          scatola.append(riga(doc, String(file.path), byte2(file.sizeBytes), { chiave: "nel-repository" }));
+        }
+        if (Number.isFinite(stato.modello?.byteTotali)) {
+          scatola.append(riga(doc, "Peso complessivo del repository", byte2(stato.modello.byteTotali), { chiave: "peso-repository" }));
+        }
+        return scatola;
+      }
       scatola.append(paragrafo(doc, "talos-muted", "Il manifest non elenca file."));
       return scatola;
     }
@@ -26442,6 +27951,20 @@ function montaSchedaModello(contenitore, {
   function disegnaCompatibilita() {
     const scatola = nodo11(doc, "section", "talos-stack");
     scatola.dataset.modelloCompatibilita = "";
+    if (remoto()) {
+      const card2 = nodo11(doc, "section", "talos-card talos-card--pad");
+      card2.append(nodo11(doc, "h3", "talos-lab__heading", "Memoria e spazio"));
+      const quanti = Array.isArray(stato.modello?.files) ? stato.modello.files.length : 0;
+      const dichiara = quanti ? `Il repository dichiara ${quanti} file${Number.isFinite(stato.modello?.byteTotali) ? `, ${byte2(stato.modello.byteTotali)} in tutto` : ""}.` : "Il repository non elenca file nella revisione letta.";
+      card2.append(paragrafo(
+        doc,
+        "talos-muted",
+        `Questo modello non è ancora sul disco: la verifica pesa il file che hai, e senza il file non c’è niente da pesare. ${dichiara} La stima si fa dopo il download — e il peso di una singola quantizzazione è quello del file che scaricherai, non il totale del repository.`
+      ));
+      scatola.append(card2);
+      scatola.append(disegnaMacchina());
+      return scatola;
+    }
     if (stato.caricamento.fit) {
       conParagrafo(scatola, "Verifica della memoria in corso…");
       scatola.append(disegnaMacchina());
@@ -26503,7 +28026,9 @@ function montaSchedaModello(contenitore, {
     ];
     for (const [etichetta2, fatto, opzioni] of fatti) contesto2.append(rigaFatto(doc, etichetta2, fatto, opzioni));
     const backend = [ispezione.backend, ispezione.build].map((fatto) => testoFatto(fatto)).filter((testo2, indice2, tutti) => testo2 && testo2 !== "—" && tutti.indexOf(testo2) === indice2).join(" · ");
-    contesto2.append(paragrafo(doc, "talos-muted talos-mono talos-lab__space", backend || "Backend non dichiarato dal runtime."));
+    const rigaBackend = paragrafo(doc, "talos-muted talos-mono talos-lab__space", backend || "Backend non dichiarato dal runtime.");
+    rigaBackend.dataset.modelloBackend = "";
+    contesto2.append(rigaBackend);
     if (ispezione.observedAt) {
       const quando = new Date(ispezione.observedAt);
       contesto2.append(paragrafo(doc, "talos-label", Number.isNaN(quando.getTime()) ? "Misura senza data." : `Misurato ${quando.toLocaleString("it-IT", { timeZone: "Europe/Rome" })}.`));
@@ -26588,6 +28113,7 @@ function montaSchedaModello(contenitore, {
     if (stato.distrutto) return Promise.resolve();
     stato.errori = { modello: "", fit: "", capacita: "", repo: "" };
     stato.repo = null;
+    if (remoto()) stato.modello = null;
     return caricaModello().then(() => Promise.all([caricaRepo(), caricaFit(), caricaCapacita()]));
   }
   function distruggi() {
@@ -26615,15 +28141,17 @@ function montaSchedaModello(contenitore, {
     }
   };
 }
-var SCHEDE2, ETICHETTE_SCHEDE, ICONE_SCHEDE, REPO_IMPORTATO, CARATTERI_IMPRONTA, QUOTA_STRETTA, contatore3, numero7, ESITI_FILE, MOTIVI3;
+var SCHEDE2, ETICHETTE_SCHEDE, ICONE_SCHEDE, REPO_IMPORTATO, CARATTERI_IMPRONTA, CARATTERI_INDICE, PREFISSO_REPO, ORIGINI4, STATO_NON_INSTALLATO, CHIAVE_IMMAGINI_REMOTE, CHIAVE_DOCUMENTO_IMPOSTAZIONI, CAMPO_IMMAGINI_REMOTE, QUOTA_STRETTA, contatore3, numero7, ESITI_FILE, MOTIVI3;
 var init_scheda_modello = __esm({
   "src/components/scheda-modello.js"() {
     init_schede();
     init_conversazione();
     init_markdown();
+    init_html_fidato();
     init_sezione_elenco_dettaglio();
     init_modelli_installati();
     init_misura_memoria();
+    init_hf_catalogo();
     SCHEDE2 = Object.freeze(["card", "files", "compatibility"]);
     ETICHETTE_SCHEDE = Object.freeze({
       card: "Scheda Hugging Face",
@@ -26633,6 +28161,20 @@ var init_scheda_modello = __esm({
     ICONE_SCHEDE = Object.freeze({ card: "doc", files: "folder", compatibility: "robot" });
     REPO_IMPORTATO = "local-upload";
     CARATTERI_IMPRONTA = 8;
+    CARATTERI_INDICE = 44;
+    PREFISSO_REPO = "hf:";
+    ORIGINI4 = Object.freeze({ locale: "Locale", repo: "Repository", importato: "Dal computer" });
+    STATO_NON_INSTALLATO = Object.freeze({ etichetta: "Non installato", tono: "warning" });
+    CHIAVE_IMMAGINI_REMOTE = "readmeRemoteImages";
+    CHIAVE_DOCUMENTO_IMPOSTAZIONI = "talos.harness.desktop.settings.v1";
+    CAMPO_IMMAGINI_REMOTE = Object.freeze({
+      id: "readmeRemoteImagesToggle",
+      chiave: CHIAVE_IMMAGINI_REMOTE,
+      tipo: "checkbox",
+      titolo: "Immagini remote nelle schede",
+      sezione: "chat",
+      gruppo: "chat"
+    });
     QUOTA_STRETTA = 0.9;
     contatore3 = 0;
     numero7 = new Intl.NumberFormat("it-IT");
@@ -31282,9 +32824,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           const avvisi = document.createElement("div");
           avvisi.className = "plugin-panel-warnings";
           avvisi.append(...plugin.avvisi.map((a) => {
-            const chip2 = textElement("span", "status-chip error", `${origineAvvisoPlugin(a.origine)}: ${a.avviso}`);
-            if (a.origine) chip2.title = a.origine;
-            return chip2;
+            const chip3 = textElement("span", "status-chip error", `${origineAvvisoPlugin(a.origine)}: ${a.avviso}`);
+            if (a.origine) chip3.title = a.origine;
+            return chip3;
           }));
           wrapper.append(avvisi);
         }
@@ -33323,7 +34865,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         }
       }
       function collegaAzioniPermessi(radice2, { dopoLaScelta = () => {
-      }, ridisegna = () => {
+      }, ridisegna: ridisegna2 = () => {
       } } = {}) {
         if (!radice2) return;
         $$("[data-dove-choice]", radice2).forEach((button2) => {
@@ -33374,7 +34916,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
                 state.realSession.comandiNellaConversazione = acceso;
                 aggiornaModalitaShell?.(composerInput?.value ?? "");
                 toast("Uscita dei comandi", acceso ? "Da ora il modello legge i comandi che lanci con «!». La risposta arriva al messaggio dopo, non subito." : "I comandi che lanci con «!» restano solo sul tuo schermo.");
-                ridisegna();
+                ridisegna2();
               } catch (errore) {
                 uscita.value = prima ? "si" : "no";
                 toast("Scelta non applicata", messaggioErroreUtente(errore, "Riprova, o guarda Doctor se si ripete."));
@@ -33388,7 +34930,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             else delete state.permessiPerAttrezzo[tool];
             sincronizzaImpostazioniSessione({ permessiPerAttrezzo: Object.keys(state.permessiPerAttrezzo).length ? { ...state.permessiPerAttrezzo } : null });
             toast("Permesso per-attrezzo aggiornato", select.value ? `${nomeUmanoAttrezzo2(tool)}: ${select.options[select.selectedIndex].textContent}` : `${nomeUmanoAttrezzo2(tool)}: torna al permesso della sessione`);
-            ridisegna();
+            ridisegna2();
           });
           radice2.addEventListener("click", (evento) => {
             const bottone5 = evento.target?.closest?.("[data-chiudi-porte-laterali]");
@@ -33399,7 +34941,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             for (const attrezzo of quali) state.permessiPerAttrezzo[attrezzo] = comeScrivi;
             sincronizzaImpostazioniSessione({ permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
             toast("Chiuse anche le altre vie", `${quali.map(nomeUmanoAttrezzo2).join(", ")}: ${comeScrivi === "nega" ? "nega sempre" : "chiedi conferma"}`);
-            ridisegna();
+            ridisegna2();
           });
         }
       }
@@ -34375,13 +35917,13 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           const bubble = articolo.querySelector(".message-bubble");
           if (bubble && (!bubble.textContent.trim() || bubble.textContent.trim() === "Descrivi l’immagine allegata.")) bubble.hidden = true;
         }
-        const chip2 = chipDegliAllegati(allegati.filter((a) => !immagini.includes(a)), state.model);
-        if (!chip2.length) return null;
+        const chip3 = chipDegliAllegati(allegati.filter((a) => !immagini.includes(a)), state.model);
+        if (!chip3.length) return null;
         const riga2 = document.createElement("div");
         riga2.className = "talos-allegati-chip";
         riga2.setAttribute("role", "list");
-        riga2.setAttribute("aria-label", chip2.length === 1 ? "1 allegato del messaggio" : `${chip2.length} allegati del messaggio`);
-        for (const c of chip2) {
+        riga2.setAttribute("aria-label", chip3.length === 1 ? "1 allegato del messaggio" : `${chip3.length} allegati del messaggio`);
+        for (const c of chip3) {
           const uno2 = document.createElement("span");
           uno2.className = "talos-allegati-chip__uno";
           uno2.setAttribute("role", "listitem");
@@ -37973,16 +39515,16 @@ ${testo2}` : testo2;
       }
       function iconaSvgAlbero(nomeSimbolo) {
         const svgNs = "http://www.w3.org/2000/svg";
-        const svg = document.createElementNS(svgNs, "svg");
-        svg.setAttribute("class", "i");
-        svg.setAttribute("aria-hidden", "true");
+        const svg2 = document.createElementNS(svgNs, "svg");
+        svg2.setAttribute("class", "i");
+        svg2.setAttribute("aria-hidden", "true");
         const esito = risolviSimboloIcona(nomeSimbolo);
         registraIconaMorta(esito);
-        if (!esito.nome) return svg;
+        if (!esito.nome) return svg2;
         const uso = document.createElementNS(svgNs, "use");
         uso.setAttribute("href", `#${esito.nome}`);
-        svg.append(uso);
-        return svg;
+        svg2.append(uso);
+        return svg2;
       }
       const ESTENSIONI_CODICE_ALBERO = /* @__PURE__ */ new Set(["js", "mjs", "cjs", "ts", "tsx", "jsx", "vue", "py", "java", "kt", "go", "rs", "c", "cpp", "h", "rb", "php", "swift"]);
       function categoriaFileAlbero(nome) {
@@ -43120,10 +44662,58 @@ ${testo2}`;
         aggiornaCodaDownload(panel, state.modelLab.downloads, {
           soloAttivi: downloadSoloAttivi,
           stime: stimeDownload,
-          azioni: { pausa: chiama("pause"), riprendi: chiama("resume"), annulla: (id2) => {
-            const velo = $2("#veloAnnullaDownload");
-            if (velo) velo.dataset.downloadId = id2;
-          }, vediModello: () => setModelLabSection("installed") }
+          azioni: {
+            pausa: chiama("pause"),
+            riprendi: chiama("resume"),
+            annulla: (id2) => {
+              const velo = $2("#veloAnnullaDownload");
+              if (velo) velo.dataset.downloadId = id2;
+            },
+            vediModello: () => setModelLabSection("installed"),
+            /*
+             * ⛔ 19/09/2026 — I DUE COMANDI NUOVI SULLA RIGA DEL DOWNLOAD, e le due trappole che la
+             * corsia D ha MISURATO eseguendo le rotte su un server suo (non leggendole):
+             *
+             * · `rename` cambia **solo il nome mostrato**: scrive `manifests/<id>.name.json`, mentre il
+             *   manifest, la cartella, i pesi e l'id **non si toccano**. Un nome vuoto o oltre 160
+             *   caratteri esce `MODEL_INVALID`, che **non ha una voce** in `STATUS_BY_CODE` ⇒ la persona
+             *   vedrebbe **500 «Errore interno · Apri Doctor»** per un campo suo: il campo lo impedisce
+             *   prima (`maxlength`), e qui si traduce comunque l'esito.
+             *
+             * · `delete` porta via i **file** (pesi, manifest, nome), non tocca mai niente fuori dalla
+             *   radice, e se il modello è **in uso** rifiuta **prima** di cancellare.
+             *   ⛔⛔ E risponde **200 `{deleted:true}` anche su un id che non esiste**, senza cambiare
+             *   niente sul disco. ⇒ **La rotta da sola non è una prova**: si legge **prima e dopo**,
+             *   perché «non c'è più» e «non c'è mai stato» si fotografano uguali. Un esito che non
+             *   dichiara nulla non vale come riuscita (la riga scrive «Esito non confermato»).
+             *   ⛔ E dopo un'eliminazione RIUSCITA il registro dei trasferimenti tiene ancora la riga
+             *   `ready`: senza ricaricare anche la coda, la riga direbbe «Disponibile nei modelli
+             *   installati» **per sempre** su un modello che non c'è più.
+             *
+             * Ricerca di questo passo, 19/09/2026 — è lo stesso vincolo, in generale: dopo una
+             * mutazione **la risposta non è la verità**, si riconcilia con lo stato vero rileggendo
+             * (`invalidateQueries` in `onSettled`, su successo E su fallimento), e l'eliminazione è
+             * fra le scritture che **non** si fanno in modo ottimistico — richiesta, attesa, rilettura.
+             * Fonti: <https://tanstack.com/query/v4/docs/framework/react/guides/optimistic-updates> ·
+             * <https://github.com/ciampo/expense-manager-v2/issues/135> ·
+             * <https://github.com/TanStack/query/discussions/10712> ·
+             * <https://skillsmp.com/creators/wbunker/skills-repo/optimistic-updates> (lette il 19/09/2026).
+             */
+            rinomina: (id2, nome) => apiPost(`/api/v1/local-models/${encodeURIComponent(id2)}/rename`, { name: nome }).then((risposta) => ({ ok: true, nome: risposta?.name ?? nome })).catch((errore) => ({ ok: false, motivo: errore?.message ?? "rinomina non riuscita" })),
+            elimina: async (id2) => {
+              const cEra = state.modelLab.installed.some((modello) => modello.id === id2);
+              try {
+                await apiPost(`/api/v1/local-models/${encodeURIComponent(id2)}/delete`, {});
+              } catch (errore) {
+                return { ok: false, motivo: errore?.message ?? "eliminazione non riuscita" };
+              }
+              await caricaModelliLocaliModelLab();
+              caricaDownloadModelLab();
+              if (!cEra) return { ok: false, motivo: "non risultava fra i modelli installati" };
+              if (state.modelLab.installed.some((modello) => modello.id === id2)) return { ok: false, motivo: "il modello risulta ancora installato" };
+              return { ok: true };
+            }
+          }
         });
         return true;
       }

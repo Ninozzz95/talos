@@ -74,23 +74,115 @@
  *     i numeri arrivano dal server, la barra li rende leggibili.
  *
  * ⛔ QUELLO CHE QUESTA PAGINA NON FA, E PERCHÉ (elenco secco, referto alla mano):
- *   · il pulsante «preferito» del prototipo, «Banco prova», «Scarica», «Usa per le nuove chat»:
- *     nessuna sorgente vera in questa corsia ⇒ non disegnati;
+ *   · il pulsante «preferito» del prototipo, «Banco prova», «Usa per le nuove chat»: nel prodotto
+ *     non esiste né un archivio dei preferiti, né una rotta che imposti il modello delle nuove
+ *     chat, né un banco di prova legato a un modello ⇒ NON disegnati, elencati (FASE 5, corsia E);
  *   · `parametersB`/`family`/`architecture`/`activities` del prototipo (`MODEL_SOURCES` è una
  *     fixture) ⇒ non esistono in nessuna risposta del server;
  *   · la GPU/VRAM: `/api/v1/model-lab/capacity` non ha un campo GPU (verificato
- *     `machine-capacity.mjs:57-65`) ⇒ il pannello «Compatibilità» non la nomina;
- *   · le immagini del repository: arrivano in `images[]`, ma il prototipo non ha una superficie per
- *     immagini e il lettore Markdown condiviso non rende `![](…)` (né i collegamenti) ⇒ si
- *     riferiscono, non si inventa una galleria.
+ *     `machine-capacity.mjs:57-65`) ⇒ il pannello «Compatibilità» non la nomina.
+ *
+ * ⭐ 19/09/2026 — IL DISEGNO DEL MOCKUP (`TALOS-Calm-Lab-04.html`, pagina
+ *   `#/impostazioni/modelli/scheda/local%3Aqwen8/<card|files|compatibility>`), misurato dal suo DOM
+ *   VIVO il 19/09/2026. Quello che il mockup ha, e che questa pagina ora porta:
+ *   · **toolbar** (`.model-page-toolbar`, 1122×67): «← Tutti i modelli» | il NOME + la parola
+ *     dell'origine | due azioni a destra;
+ *   · **hero** (`.model-hero`, 1122×193, `grid-template-columns:1fr auto`): riquadro del glifo
+ *     **70×70** arrotondato 18px, soprattitolo «NEL TUO LABORATORIO», titolo **40px / peso 550 /
+ *     lettere −1,8px**, riga del repository, e la frase «Conosci il modello. Scegli come usarlo.»;
+ *   · **striscia di contesto** (`.model-context-strip`, 1122×75): **quattro** blocchi separati da
+ *     filetti, ognuno `small` + `strong`;
+ *   · **linguette** con la nota a destra (`.model-page-tab-note`) e la chiusura di pagina.
+ *   ⛔ Le due frasi del mockup («Nel tuo laboratorio», «Conosci il modello. Scegli come usarlo.»)
+ *     sono COPY del mockup, portate parola per parola: non sono dati e non vengono da una risposta
+ *     del server.
+ *   ⛔ E IL VESTITO NON C'È ANCORA, E LO DICO: le classi del mockup (`.model-*`) non hanno regole in
+ *     `src/styles/` (misurato il 19/09/2026: **zero** occorrenze di `.model-page`, `.model-hero`,
+ *     `.model-context-strip`, `.model-glyph` nei fogli di prodotto). La misura e le regole da
+ *     aggiungere stanno nel referto della corsia E, che è la richiesta; qui ogni elemento del mockup
+ *     porta la SUA classe **e**, accanto, la classe di prodotto che oggi gli dà una forma
+ *     (`talos-toolbar`, `talos-page__head`, `talos-badge`…): il giorno in cui il foglio arriva, la
+ *     classe del mockup comanda e la seconda si toglie.
+ *
+ * ⭐ 19/09/2026 — UN REPOSITORY CHE NON È INSTALLATO (richiesta dell'orchestratore: la lista
+ *   Hugging Face apre una PAGINA, e non ogni riga ha un modello sul disco). La forma accettata è
+ *   **`hf:<repo>`**, con la revisione facoltativa (`hf:<repo>@<revisione>`), passata come `id`:
+ *   la rotta `#/impostazioni/modelli/scheda/<id>/<scheda>` porta **un id solo**, e un collegamento
+ *   incollato o una ricarica devono riaprire la stessa pagina senza altro stato. La seconda forma è
+ *   l'opzione di montaggio `repo` (`{repo, revision}`), per chi ha già l'oggetto in mano.
+ *   In quello stato: la scheda Hugging Face è quella VERA (il README arriva dal repository), i file
+ *   sono quelli del repository — **non scaricati**, e lo dicono — e la compatibilità **non finge
+ *   una verifica**: la stima di memoria vuole il file sul disco.
+ *
+ * ⭐ 19/09/2026 — LE IMMAGINI DELLA SCHEDA, E IL CONSENSO (owner, 19/09/2026: «1 a ma con switch»).
+ *   ⛔ MISURATO PRIMA DI SCRIVERE, e la misura sposta il punto di applicazione: il server
+ *     (`hf-hub-client.mjs:14-37`) **toglie già** dal README ogni `<img>` e ogni `![](…)`, e li
+ *     restituisce a parte in `images[]` (`resolve()` accetta solo `https:` e riscrive i percorsi
+ *     relativi su `huggingface.co`). Misurato il 19/09/2026 su `unsloth/GLM-4.7-Flash-GGUF`:
+ *     README di 8.146 byte con **0** `<img>` e **0** `![`, e **3** immagini in `images[]`
+ *     (`github.com`, `raw.githubusercontent.com`). ⇒ Non è il TESTO a poter chiamare casa: è il
+ *     momento in cui QUESTA pagina disegna quelle immagini. Quindi il consenso sta qui.
+ *   ⇒ Di serie **non si disegna nessuna immagine**: si dice quante sono e da quali host arrivano,
+ *     con un comando per mostrarle ADESSO e una preferenza che resta (`CAMPO_IMMAGINI_REMOTE`).
+ *     Le due vie si provano contando le richieste (zero a interruttore spento).
+ *   ⛔⛔ E LE IMMAGINI NON SI CHIEDONO AL SITO ESTERNO, SI CHIEDONO AL NOSTRO SERVER — misurato il
+ *     19/09/2026, e sono due fatti che insieme decidono il disegno:
+ *       1. **la CSP del prodotto NON lo permetterebbe**: `img-src 'self' data:` (`http-app.mjs:572`).
+ *          Un `<img src="https://github.com/…">` non parte nemmeno — quindi un interruttore che
+ *          promette «accendilo e le immagini arrivano» sarebbe una bugia;
+ *       2. **la rotta che serve le immagini c'è già**: `GET /api/v1/huggingface/image?url=…`
+ *          (`http-app.mjs:5533`), che le passa da `fetchAllowedHfImage` (`src/hf-image-proxy.mjs`):
+ *          solo `https:`, solo host `huggingface.co`/`hf.co` (e i loro sottodomini), risoluzione DNS
+ *          con rifiuto degli indirizzi privati (SSRF), i salti rivalidati uno per uno, solo
+ *          `png/jpeg/webp/gif/avif`, tetto a 4 MiB e 15 s. E `app.js:3678` la usa già così:
+ *          `element.src = API('/api/v1/huggingface/image?url=…')`.
+ *     ⇒ Questa pagina fa **la stessa cosa**: chiede le immagini al PROPRIO server, che è l'unico che
+ *       parla col sito esterno — e l'indirizzo di chi legge non arriva a terzi. L'interruttore
+ *       decide se la richiesta parte, non da chi.
+ *   ⛔ CONSEGUENZA DICHIARATA, misurata sulla scheda vera di `unsloth/GLM-4.7-Flash-GGUF`: le sue
+ *     **tre** immagini stanno su `github.com` e `raw.githubusercontent.com`, e il proxy quei due
+ *     host li RIFIUTA (`HF_IMAGE_HOST_REJECTED`) — quindi quelle tre non si vedranno mai, e la
+ *     pagina lo dice con la frase che il prodotto usa già («Immagine della scheda non
+ *     disponibile.»). Non è un difetto di questa pagina: è il perimetro del proxy, ed è la ragione
+ *     per cui si CONTA quello che si può mostrare invece di promettere che si vedrà tutto.
+ *   ⛔ `referrerpolicy="no-referrer"` resta lo stesso, in minuscolo, anche se con il proxy la
+ *     richiesta è verso il nostro server e il referrer non arriverebbe a terzi: è la cintura per il
+ *     giorno in cui qualcuno tornasse a puntare un `<img>` a un indirizzo esterno, e costa un
+ *     attributo (letto il 19/09/2026: <https://www.php.cn/faq/2971847.html> ·
+ *     <https://zeriflow.com/blog/referrer-policy-explained-control-data-leakage>).
+ *     Le fonti del brief: il Markdown con le immagini è una richiesta di rete, non un asset
+ *     incorporato (<https://dev.to/mdfold/markdown-images-are-network-requests-not-embedded-assets-5580>),
+ *     lista di schemi e host ammessi, `data:`/`src=""` trattati con sospetto
+ *     (<https://tanstack.com/markdown/latest/docs/core-concepts/security> ·
+ *      <https://deepwiki.com/vercel/streamdown/3.10-security-and-sanitization>).
+ *   ⛔ IL MODELLO È QUELLO DELLE APP DI POSTA, cercato il 19/09/2026 — blocco di serie, un comando
+ *     per il caso singolo, una scelta che resta per chi vuole sempre: Thunderbird e Gmail
+ *     («Load images» + «always from this sender»), Postbox, le tre opzioni di Fastmail, e la
+ *     variante che passa da un proxy per non rivelare nemmeno l'indirizzo
+ *     (<https://support.postbox-inc.com/hc/en-us/articles/202198030-Displaying-Remote-Image-Content> ·
+ *      <https://www.fastmail.help/hc/en-us/articles/1500000278102-Blocking-remote-images> ·
+ *      <https://mailtester.com/blog/email-clients-block-images-by-default/>).
+ *   ⛔ Come si contano le richieste in una prova: `page.route(…)` per INTERCETTARE e `route.abort()`
+ *     per non lasciarle uscire, più `page.on('request')` per osservarle (Playwright,
+ *     `docs/src/network.md` e `docs/src/mock.md`, letti con ctx7 il 19/09/2026).
  */
 
 import { creaSchede } from './schede.js';
 import { creaBloccoCodice } from './conversazione.js';
 import { renderizzaMarkdown } from './markdown.js';
+import { urlAmmesso } from './html-fidato.js';
 import { icona } from './sezione-elenco-dettaglio.js';
 import { contestoK, datiModelloInstallato, gb, STATI_INSTALLATO } from './modelli-installati.js';
 import { datiMemoria } from './misura-memoria.js';
+/*
+ * ⛔ LA SCELTA DEL FILE E IL DOWNLOAD NON SI RISCRIVONO QUI: sono di `hf-catalogo.js`, che li ha
+ *   ESTRATTI dal pannello stretto il 19/09/2026 proprio perché questa pagina li ospitasse
+ *   (`montaSceltaFileHf`, `hf-catalogo.js:955`). Montarli con `prefissoId: 'paginaModello'` dà id
+ *   propri (`paginaModelloFileChoices`, `…Stima`, `…Scarica`, `…Accesso`) e lascia intatti gli id
+ *   del pannello (`hfFileChoices`, `hfStima`, `hfScarica`), che `app.js` legge e pilota: due nodi
+ *   con lo stesso id renderebbero `querySelector('#x')` una domanda senza risposta unica.
+ */
+import { montaSceltaFileHf } from './hf-catalogo.js';
 
 /** Le tre schede del prototipo (`DETAIL_TABS`), nell'ordine in cui le disegna. */
 export const SCHEDE = Object.freeze(['card', 'files', 'compatibility']);
@@ -113,6 +205,231 @@ export const REPO_IMPORTATO = 'local-upload';
 
 /** Quanti file dell'impronta si mostrano per lato (`abcdef12…34567890`). */
 export const CARATTERI_IMPRONTA = 8;
+
+/**
+ * Quanti caratteri di un titolo del README entrano nell'etichetta dell'indice.
+ *
+ * ⛔ Misurato il 19/09/2026 sul README vero di `unsloth/GLM-4.7-Flash-GGUF`: il titolo più lungo è
+ *   di **145** caratteri, e in una fila di pulsanti diventa un paragrafo. Nel mockup le voci
+ *   dell'indice sono quattro parole (`Panoramica`, `Contesto e limiti`): 44 è la misura che tiene
+ *   quelle intere e accorcia le frasi.
+ */
+export const CARATTERI_INDICE = 44;
+
+/*
+ * ⛔ IL PREFISSO DI UN REPOSITORY NON INSTALLATO. `hf:Qwen/Qwen3-8B-GGUF`, con la revisione
+ *   facoltativa dopo una `@`. La `@` è il separatore giusto perché il nome di un repository
+ *   (`[A-Za-z0-9._-]`, `hf-hub-client.mjs:2`) non la può contenere, e la revisione che il prodotto
+ *   usa è una sha di 40-64 cifre esadecimali (`REVISION`, stesso file) o un ramo.
+ */
+export const PREFISSO_REPO = 'hf:';
+
+/** La parola dell'origine nella toolbar: «Locale» per un file sul disco, «Repository» per l'altro. */
+export const ORIGINI = Object.freeze({ locale: 'Locale', repo: 'Repository', importato: 'Dal computer' });
+
+/**
+ * Lo stato di un repository che non è sul disco. Non si può dedurre da `STATI_INSTALLATO`, che
+ * parla di file: «Non installato» è la parola che il laboratorio usa già per questa condizione
+ * (`hf-catalogo.js`, colonna dello stato).
+ */
+export const STATO_NON_INSTALLATO = Object.freeze({ etichetta: 'Non installato', tono: 'warning' });
+
+/*
+ * ⛔ LA PREFERENZA CHE RESTA — le immagini remote delle schede.
+ *
+ *   Il campo è dichiarato nella forma esatta di `CAMPI_IMPOSTAZIONI` (`impostazioni-campi.js`), e
+ *   col valore nella forma esatta del documento delle preferenze (`app.js:14465`,
+ *   `talos.harness.desktop.settings.v1` → `chat.<chiave>`). ⇒ Non è un terzo sistema di preferenze:
+ *   è lo stesso documento, la stessa sezione e lo stesso vocabolario. Perché `chat` e non `models`:
+ *   perché `normalizzaPreferenzeChatDesktop` (`app.js:14647`) è il posto dove il valore vive, e le
+ *   due sezioni in cui i campi dichiarati si distribuiscono oggi sono `appearance` e `chat`.
+ *   ⛔ QUELLO CHE MANCA, E CHE NON POSSO FARE IO (i file non sono di questa corsia): la riga
+ *     `readmeRemoteImages: boolValue(record.readmeRemoteImages, false)` dentro
+ *     `normalizzaPreferenzeChatDesktop`, la voce in `CAMPI_IMPOSTAZIONI` (l'oggetto qui sotto) e il
+ *     campo in `FIELD_HELP`. Finché non ci sono, la preferenza **si legge e si scrive lo stesso**
+ *     (il documento si legge e si riscrive intero, quindi la chiave sopravvive), ma non compare
+ *     fra i campi delle Impostazioni; e se un giorno il normalizzatore la scartasse, il verso del
+ *     guasto è quello giusto: si torna a **non caricare** le immagini, mai il contrario.
+ */
+export const CHIAVE_IMMAGINI_REMOTE = 'readmeRemoteImages';
+export const CHIAVE_DOCUMENTO_IMPOSTAZIONI = 'talos.harness.desktop.settings.v1';
+export const CAMPO_IMMAGINI_REMOTE = Object.freeze({
+  id: 'readmeRemoteImagesToggle',
+  chiave: CHIAVE_IMMAGINI_REMOTE,
+  tipo: 'checkbox',
+  titolo: 'Immagini remote nelle schede',
+  sezione: 'chat',
+  gruppo: 'chat',
+});
+/**
+ * La frase che spiega il campo, nella forma di `FIELD_HELP` (`features/settings/schema.ts`): è il
+ * pezzo che manca perché la voce compaia anche in Impostazioni, accanto alle altre.
+ */
+export const AIUTO_IMMAGINI_REMOTE = 'Carica le immagini che le schede dei modelli portano da server esterni. Spento, nessuna richiesta parte: si vede il testo e l’elenco delle figure.';
+
+/**
+ * La porta delle preferenze di serie: lo STESSO documento dell'app.
+ *
+ * ⛔ Si legge e si scrive a mano, e ogni passo è dentro un `try`: `localStorage` può mancare o
+ *   lanciare (finestra privata, dati di sito bloccati), e in quel caso si risponde `false` — cioè
+ *   **bloccato**. Un guasto non deve mai trasformarsi in un consenso che nessuno ha dato.
+ */
+export function portaPreferenzeDiSerie(archivio = () => globalThis.localStorage) {
+  const leggiDocumento = () => {
+    try {
+      const letto = JSON.parse(String(archivio()?.getItem(CHIAVE_DOCUMENTO_IMPOSTAZIONI) || '{}'));
+      return letto && typeof letto === 'object' && !Array.isArray(letto) ? letto : {};
+    } catch { return {}; }
+  };
+  return {
+    leggi() {
+      const documento = leggiDocumento();
+      return documento?.chat?.[CHIAVE_IMMAGINI_REMOTE] === true;
+    },
+    scrivi(valore) {
+      try {
+        const documento = leggiDocumento();
+        // ⛔ Si riscrive il documento INTERO con dentro il resto: sovrascrivere `chat` con il solo
+        //   nostro campo cancelleresti le preferenze della persona.
+        const chat = documento.chat && typeof documento.chat === 'object' && !Array.isArray(documento.chat) ? documento.chat : {};
+        archivio()?.setItem(CHIAVE_DOCUMENTO_IMPOSTAZIONI, JSON.stringify({ version: 1, ...documento, chat: { ...chat, [CHIAVE_IMMAGINI_REMOTE]: valore === true } }));
+        return true;
+      } catch { return false; }
+    },
+  };
+}
+
+/**
+ * Che cosa vuole mostrare questa pagina: un modello SUL DISCO o un repository.
+ *
+ * ⛔ Le due forme, e perché la prima è quella che conta: `hf:<repo>[@<revisione>]` viaggia
+ *   nell'`id`, e l'`id` è l'unica cosa che la rotta porta (`app.js:4142`). `repo` è la seconda
+ *   forma, per chi ha già l'oggetto. Se non c'è né l'una né l'altra, è un modello locale.
+ */
+export function bersaglioDi(id, repo = null) {
+  const esplicito = typeof repo === 'string' ? repo.trim() : String(repo?.repo ?? '').trim();
+  if (esplicito) {
+    const revisione = typeof repo === 'object' && repo ? String(repo.revision ?? '').trim() : '';
+    return { tipo: 'repo', id: `${PREFISSO_REPO}${esplicito}`, repo: esplicito, revisione, chiave: esplicito };
+  }
+  const testo = String(id ?? '').trim();
+  if (testo.toLowerCase().startsWith(PREFISSO_REPO)) {
+    const resto = testo.slice(PREFISSO_REPO.length);
+    const taglio = resto.lastIndexOf('@');
+    const nome = (taglio > 0 ? resto.slice(0, taglio) : resto).trim();
+    const revisione = taglio > 0 ? resto.slice(taglio + 1).trim() : '';
+    if (nome) return { tipo: 'repo', id: testo, repo: nome, revisione, chiave: nome };
+  }
+  return { tipo: 'locale', id: testo, repo: '', revisione: '', chiave: testo };
+}
+
+/**
+ * Il NOME UMANO di un modello: quello che va nel titolo, mai l'id grezzo.
+ *
+ * ⛔ L'ordine è una regola, non un ripiego: (1) `name` se qualcuno l'ha rinominato — è la volontà
+ *   della persona (la rinomina esiste: `POST /api/v1/local-models/<id>/rename`); (2) il nome del
+ *   repository, che è come il modello si chiama DAVVERO sul suo sito; (3) l'id, solo se non c'è
+ *   altro. Misurato il 19/09/2026 sul 4174: il modello installato ha
+ *   `id: 'unsloth-GLM-4-7-Flash-GGUF-0d32489ecb9d-GLM-4-7-Flash-Q4-K-M-gguf'` — che è l'id del
+ *   FILE, non il nome di niente — e `repo: 'unsloth/GLM-4.7-Flash-GGUF'`, cioè «GLM-4.7-Flash-GGUF».
+ */
+export function nomeUmano(modello = null, repo = null) {
+  const rinominato = String(modello?.name ?? '').trim();
+  if (rinominato) return rinominato;
+  /*
+   * ⛔ `||` E NON `??`: per un modello LOCALE il bersaglio ha `repo` a stringa VUOTA, e la stringa
+   *   vuota non è `null`/`undefined` — con `??` il ripiego sul manifest non scatterebbe mai e il
+   *   titolo tornerebbe a essere l'id grezzo, cioè esattamente il difetto da curare. Misurato
+   *   scrivendo questa funzione: `'' ?? 'x'` è `''`.
+   */
+  const daRepo = String(repo?.repo || modello?.repo || '').split('/').filter(Boolean).pop() || '';
+  if (daRepo && daRepo !== REPO_IMPORTATO) return daRepo;
+  return String(modello?.id ?? '').trim() || 'Modello';
+}
+
+/** La parola dell'origine per la toolbar: un file importato non è «locale» come uno scaricato. */
+export function origineDi(modello = null, bersaglio = null) {
+  // ⛔ Anche `modello.remoto`: dopo la lettura il repository HA un manifest (fabbricato), e
+  //   guardando solo il bersaglio la parola tornerebbe «Locale» su un modello che non è installato.
+  if (bersaglio?.tipo === 'repo' || modello?.remoto === true) return ORIGINI.repo;
+  return String(modello?.repo ?? '') === REPO_IMPORTATO ? ORIGINI.importato : ORIGINI.locale;
+}
+
+/**
+ * Le immagini che una scheda porta da fuori, ripulite e contate.
+ *
+ * ⛔ Il server le ha già separate dal README (`hf-hub-client.mjs:14-37`) e ha già accettato solo
+ *   `https:`; qui si rifà il controllo **lo stesso**, perché una seconda porta sullo stesso
+ *   pericolo è la regola di casa e non un sospetto: `urlAmmesso(url, {soloImmagine: true})` accetta
+ *   i soli schemi `https:` e `http:`, e scarta `data:` e i vuoti. Gli host si contano per dirli a
+ *   schermo: è l'equivalente del «da chi» delle app di posta.
+ */
+export function immaginiDellaScheda(images = []) {
+  const viste = new Set();
+  const fuori = [];
+  for (const voce of Array.isArray(images) ? images : []) {
+    const url = String(voce?.url ?? '').trim();
+    if (!url || !urlAmmesso(url, { soloImmagine: true }) || viste.has(url)) continue;
+    viste.add(url);
+    let host = '';
+    try { host = new URL(url).host; } catch { host = ''; }
+    fuori.push({ url, alt: String(voce?.alt ?? '').trim(), host });
+  }
+  const host = [...new Set(fuori.map((i) => i.host).filter(Boolean))].sort();
+  return { immagini: fuori, host, quante: fuori.length };
+}
+
+/**
+ * L'indirizzo da cui il BROWSER prende un'immagine: il nostro server, mai quello esterno.
+ *
+ * ⛔ È la stessa forma che il prodotto usa da sempre (`app.js:3678`), e non è un giro a vuoto:
+ *   la CSP del prodotto (`img-src 'self' data:`, `http-app.mjs:572`) un indirizzo esterno non lo
+ *   lascerebbe nemmeno partire, e il proxy è l'unico punto in cui si parla col sito di terzi — con
+ *   la sua lista di host e la sua difesa SSRF (`src/hf-image-proxy.mjs`).
+ */
+export function percorsoImmagine(url) {
+  return `/api/v1/huggingface/image?url=${encodeURIComponent(String(url ?? ''))}`;
+}
+
+/** La stima di memoria di una variante: la rotta vuole SOLO `bytes` (e `contextTokens`). */
+export function percorsoStima(bytes, { contextTokens = null } = {}) {
+  const parametri = new URLSearchParams({ bytes: String(bytes) });
+  if (Number.isInteger(contextTokens) && contextTokens > 0) parametri.set('contextTokens', String(contextTokens));
+  return `/api/v1/local-models/fit-estimate?${parametri.toString()}`;
+}
+
+/**
+ * Il corpo del download di una variante — la STESSA forma che il pannello stretto manda oggi.
+ *
+ * ⛔ Copiata parola per parola da `app.js:3824-3826` (`avviaDownloadHf`), e non inventata: il server
+ *   la valida a mano (`requireHuggingFaceDownloadBody`, `http-app.mjs:1546-1566`) e pretende
+ *   `{id, repo, revision (40-64 esa), files:[{path, bytes, sha256}], bytes, path, license}`.
+ *   Tre vincoli che si sbagliano facilmente:
+ *   · `license` NON può essere vuota — il negozio dei modelli rifiuta il manifesto DOPO aver
+ *     accettato la richiesta, e la risposta era un 500 (R-08, 13/09). Il pannello manda `'unknown'`
+ *     quando il repository non la dichiara, e così si fa qui;
+ *   · ogni file vuole `sha256` di 64 cifre — il blocco della scelta disabilita il pulsante quando
+ *     l'impronta manca (`senzaHash`), quindi a questa funzione non arriva;
+ *   · `bytes` è il peso del GRUPPO (un set `-00001-of-00003` pesa quanto i suoi pezzi).
+ * ⭐ L'`id` e il `path` sono la stessa stringa: è l'identità del download, e nasce dal repository e
+ *   dal primo file del gruppo (ripuliti), non da altro.
+ */
+export function corpoDownloadHf(detail = {}, gruppo = null) {
+  const file = Array.isArray(gruppo?.file) ? gruppo.file : [];
+  const primo = file[0];
+  if (!primo?.path) return null;
+  const id = `${String(detail.repo ?? '').replace(/[^a-z0-9_-]/giu, '-')}-${String(detail.revision || 'main').slice(0, 12)}-${String(primo.path).replace(/[^a-z0-9]/giu, '-')}`.slice(0, 120);
+  return {
+    id,
+    repo: String(detail.repo ?? ''),
+    revision: String(detail.revision ?? ''),
+    files: file.map((f) => ({ path: String(f.path), bytes: Number(f.sizeBytes), sha256: String(f.sha256 ?? '') })),
+    bytes: Number(gruppo.bytes),
+    sha256: String(primo.sha256 ?? ''),
+    license: detail.license || 'unknown',
+    path: id,
+  };
+}
 
 /** Sotto questa quota di memoria libera il verdetto «entra» è stretto (Unsloth #7880, 18/09/2026). */
 const QUOTA_STRETTA = 0.9;
@@ -309,7 +626,7 @@ function slug(testo) {
  *   per poter ricevere il fuoco dopo il salto, e `scroll-margin-top` — la distanza dal bordo che
  *   l'ancora deve lasciare, misurata in pixel perché il contenitore di scorrimento non è nostro.
  */
-export function indiceDelReadme(frammento, doc, { prefisso = 'readme', margine = 12 } = {}) {
+export function indiceDelReadme(frammento, doc, { prefisso = 'readme', margine = 12, caratteri = CARATTERI_INDICE } = {}) {
   const titoli = [...(frammento?.querySelectorAll?.('h2, h3, h4') || [])];
   return titoli.map((titolo, i) => {
     const testo = String(titolo.textContent || '').trim();
@@ -317,7 +634,18 @@ export function indiceDelReadme(frammento, doc, { prefisso = 'readme', margine =
     titolo.id = id;
     titolo.tabIndex = -1;
     titolo.style.scrollMarginTop = `${margine}px`;
-    return { id, testo, livello: Number(String(titolo.tagName).slice(1)) || 2 };
+    /*
+     * ⛔ L'ETICHETTA DELL'INDICE SI ACCORCIA, IL TESTO NO. Difetto trovato GUARDANDO la foto del
+     *   19/09/2026 sui dati veri del 4174: i titoli di un README vero non sono «Contesto e limiti»,
+     *   sono frasi intere — `## Jan 21 update: llama.cpp fixed a bug that caused looping and poor
+     *   outputs. We updated the GGUFs - please re-download the model for much better outputs.` — e
+     *   quell'etichetta da **145 caratteri** sfondava la riga dell'indice, che nel mockup è una
+     *   fila di quattro parole. L'indice è un aiuto a SALTARE, non un secondo sommario: si accorcia
+     *   a `CARATTERI_INDICE`, col testo intero nel `title` (e quindi per chi legge con uno screen
+     *   reader), e il titolo nel documento resta intero, perché è lui il bersaglio.
+     */
+    const breve = testo.length > caratteri ? `${testo.slice(0, caratteri).trimEnd()}…` : testo;
+    return { id, testo, breve, livello: Number(String(titolo.tagName).slice(1)) || 2 };
   });
 }
 
@@ -449,6 +777,10 @@ function accorciaMovimento() {
  * @param {object} opzioni
  * @param {(percorso:string)=>Promise<any>} opzioni.apiGet la lettura: torna i dati già srotolati
  *   (`envelope.data`) e lancia con un `.message` leggibile quando la richiesta fallisce
+ * @param {(percorso:string, corpo:object)=>Promise<any>} [opzioni.apiPost] la scrittura, con lo
+ *   stesso contratto di `apiGet` (`app.js` la usa: `apiPost('/api/v1/huggingface/download', …)`).
+ *   Serve al solo download di un repository non installato: senza, il pulsante «Scarica» è spento e
+ *   la pagina dice perché, invece di promettere un download che non può partire.
  * @param {string} opzioni.id l'id del modello locale
  * @param {object} [opzioni.modello] il manifest, se chi chiama ce l'ha già (risparmia la lista)
  * @param {'card'|'files'|'compatibility'} [opzioni.scheda] la scheda aperta all'avvio
@@ -457,13 +789,21 @@ function accorciaMovimento() {
  * @param {Function} [opzioni.indietro] se c'è, compare «Tutti i modelli»
  * @param {(scheda:string)=>void} [opzioni.onScheda] che cosa fare quando cambia scheda (la rotta)
  * @param {Object} [opzioni.runtime] il motore locale (`{caricato}`) per lo stato della riga
+ * @param {string|{repo:string, revision?:string}} [opzioni.repo] la seconda forma del repository
+ *   non installato (la prima è `hf:<repo>` dentro `id`): chi ha già `{repo, revision}` in mano non
+ *   deve comporre una stringa.
+ * @param {{leggi:()=>boolean, scrivi:(v:boolean)=>boolean}} [opzioni.preferenze] dove vive il
+ *   consenso che resta (di serie `portaPreferenzeDiSerie()`: lo stesso documento delle Impostazioni)
  * @param {Document} [opzioni.document] il documento su cui creare i nodi (per le prove)
  * @returns {{vaiA:Function, ricarica:Function, distruggi:Function, elemento:HTMLElement, stato:object}}
  */
 export function montaSchedaModello(contenitore, {
   apiGet,
+  apiPost = null,
   id,
   modello = null,
+  repo = null,
+  preferenze = null,
   scheda = 'card',
   contextTokens = null,
   profilo = 'agent',
@@ -476,17 +816,40 @@ export function montaSchedaModello(contenitore, {
   const doc = documento || contenitore?.ownerDocument || globalThis.document;
   if (!contenitore || !doc) throw new Error('La pagina del modello vuole un contenitore.');
   if (typeof apiGet !== 'function') throw new Error('La pagina del modello vuole un lettore (`apiGet`).');
-  if (!id) throw new Error('La pagina del modello vuole un id.');
+  const bersaglio = bersaglioDi(id, repo);
+  if (!bersaglio.id && bersaglio.tipo !== 'repo') throw new Error('La pagina del modello vuole un id.');
 
   const suffisso = `sm${(contatore += 1)}`;
   const idPannello = `${suffisso}-pannello`;
+  const porta = preferenze && typeof preferenze.leggi === 'function' && typeof preferenze.scrivi === 'function'
+    ? preferenze
+    : portaPreferenzeDiSerie();
+  /*
+   * ⛔ IL CONSENSO SI LEGGE UNA VOLTA, E SUA NONNA SI TORNA MAI: se la lettura fallisce (finestra
+   *   privata, dati di sito bloccati) il valore è `false` — bloccato. `stato.consenso` è il
+   *   consenso DI QUESTA SCHERMATA (il comando «mostra adesso»), `stato.consensoPersistente` è la
+   *   preferenza che resta: sono due cose diverse e si vedono diverse, perché chi mostra le
+   *   immagini una volta non ha detto di volerlo per sempre.
+   */
+  const consensoSalvato = (() => { try { return porta.leggi() === true; } catch { return false; } })();
   const stato = {
-    id,
+    id: bersaglio.id,
+    bersaglio,
     scheda: SCHEDE.includes(scheda) ? scheda : 'card',
     modello: modello && typeof modello === 'object' ? modello : null,
     fit: null,
     capacita: null,
     repo: null,
+    consenso: consensoSalvato,
+    consensoPersistente: consensoSalvato,
+    /*
+     * ⛔ LO STATO DELLA SCELTA DEL FILE — vive QUI e non dentro il blocco di `hf-catalogo.js`,
+     *   perché il blocco si ridisegna a ogni cambio di scheda (e a ogni azione) mentre la scelta,
+     *   la stima e l'esito del download devono sopravvivere al ridisegno. `stima` è la stessa
+     *   `Map` che il pannello stretto passa (`state.modelLab.hfStima.perVariante`): chiave della
+     *   variante → esito di `/fit-estimate` (o `{inCorso:true}`).
+     */
+    hf: { stima: new Map(), scelta: null, inMisura: false, scarica: { inCorso: false, esito: '', errore: '' } },
     caricamento: { modello: false, fit: false, capacita: false, repo: false },
     errori: { modello: '', fit: '', capacita: '', repo: '' },
     distrutto: false,
@@ -497,21 +860,36 @@ export function montaSchedaModello(contenitore, {
 
   const radice = nodo(doc, 'div', 'talos-stack');
   radice.dataset.schedaModello = '';
-  radice.dataset.modelloId = String(id);
+  radice.dataset.modelloId = String(bersaglio.id);
 
-  const barra = nodo(doc, 'div', 'talos-toolbar');
-  const testata = nodo(doc, 'header', 'talos-stack');
+  /*
+   * ⛔ Le classi sono DUE, e non è una svista: la prima è quella del mockup (`.model-*`, misurata
+   *   dal suo DOM vivo) e la seconda è la classe di prodotto che oggi dà una forma a quell'elemento
+   *   (`talos-toolbar`, `talos-cluster`, `talos-page__note`). Il foglio del mockup non esiste ancora
+   *   in `src/styles/` — è chiesto nel referto — e senza il ponte la pagina uscirebbe spoglia; con
+   *   il ponte, quando il foglio arriva le due regole convivono e la seconda si toglie.
+   */
+  const barra = nodo(doc, 'div', 'model-page-toolbar talos-toolbar');
+  const testata = nodo(doc, 'header', 'model-hero');
   testata.dataset.modelloTestata = '';
-  const rigaSchede = nodo(doc, 'div', 'talos-cluster');
+  const rigaSchede = nodo(doc, 'div', 'model-page-tabs talos-cluster');
   const listaSchede = nodo(doc, 'div', 'talos-tabs__list');
   listaSchede.setAttribute('role', 'tablist');
   listaSchede.setAttribute('aria-label', 'Sezioni della pagina del modello');
-  const notaSchede = badge(doc, 'Nessun avvio automatico', '');
+  // La nota del mockup (`.model-page-tab-note`): uno scudo e la frase, a destra delle linguette.
+  const notaSchede = nodo(doc, 'span', 'model-page-tab-note');
+  notaSchede.append(icona(doc, 'shield', 'i i--xs'), doc.createTextNode('Nessun avvio automatico'));
   rigaSchede.append(listaSchede, notaSchede);
   const pannello = nodo(doc, 'section', 'talos-tabs__panel');
   pannello.id = idPannello;
   pannello.dataset.modelloPannello = stato.scheda;
-  const chiusura = paragrafo(doc, 'talos-page__note', 'Leggere questa pagina non scarica file, non carica il modello e non cambia le nuove chat.');
+  /*
+   * ⛔ La chiusura di pagina del mockup porta un glifo «informazione» (un cerchio con la `i`): nel
+   *   foglio di TALOS quel glifo non c'è (`i-ignoto` è un quadrato tratteggiato col punto
+   *   interrogativo, che vuol dire un'altra cosa). ⇒ La frase resta, il glifo no: un'icona che dice
+   *   «non lo so» su una nota che spiega una regola sarebbe un secondo messaggio, e sbagliato.
+   */
+  const chiusura = paragrafo(doc, 'model-page-end talos-page__note', 'Leggere questa pagina non scarica file, non carica il modello e non cambia le nuove chat.');
 
   const gruppoPannello = nodo(doc, 'div', 'talos-tabs__panels');
   gruppoPannello.append(pannello);
@@ -539,6 +917,9 @@ export function montaSchedaModello(contenitore, {
   }));
   schede.aggiorna(VOCI, stato.scheda);
 
+  /** Vero quando questa pagina parla di un REPOSITORY, non di un file sul disco. */
+  function remoto() { return bersaglio.tipo === 'repo' || stato.modello?.remoto === true; }
+
   /* ------------------------------- i dati ------------------------------- */
 
   async function leggi(chiave, percorso, applica) {
@@ -560,23 +941,74 @@ export function montaSchedaModello(contenitore, {
     }
   }
 
+  /**
+   * Il manifest di un repository che non è sul disco: si COSTRUISCE dalla risposta vera, e si
+   * dichiara `remoto`.
+   *
+   * ⛔ Perché fabbricarlo invece di trattare il repository a parte in ogni disegno: metà di questa
+   *   pagina (`nomeUmano`, `percorsoRepo`, la scheda dei file) parla la lingua del manifest. Dargli
+   *   un manifest con `repo`, `license`, `files[]` **veri** evita un secondo ramo in ogni funzione —
+   *   che è il modo in cui nascono le due verità. Ciò che NON si fabbrica: `bytes` e `sha256` del
+   *   modello intero (non esistono prima del download) e `state`, che resta `'remote'` per non
+   *   diventare «Sul disco».
+   * ⛔ `byteTotali` è la somma dei file del repository, ed è un numero vero SOLO come «quanto pesa
+   *   il repository»: non è «la dimensione del modello» — un repository porta più quantizzazioni, e
+   *   chi ne scarica una non scarica le altre. Per questo la striscia non lo chiama «dimensione».
+   */
+  function manifestDaRepo(dati) {
+    const file = (Array.isArray(dati?.files) ? dati.files : [])
+      .map((voce) => ({ path: String(voce?.path ?? ''), bytes: voce?.sizeBytes, sha256: String(voce?.sha256 ?? '') }))
+      .filter((voce) => voce.path);
+    const somma = file.reduce((tot, f) => (Number.isFinite(f.bytes) ? tot + Number(f.bytes) : tot), 0);
+    return {
+      id: bersaglio.id,
+      repo: bersaglio.repo,
+      revision: String(dati?.revision || bersaglio.revisione || '').trim(),
+      license: dati?.license || null,
+      files: file,
+      bytes: null,
+      sha256: null,
+      path: '',
+      state: 'remote',
+      remoto: true,
+      byteTotali: somma > 0 ? somma : null,
+    };
+  }
+
   function caricaModello() {
     if (stato.modello) { disegna(); return Promise.resolve(); }
+    // ⛔ In modalità repository non c'è NIENTE da cercare fra gli installati: il repository è la
+    //   fonte, e chiedere la lista dei modelli locali per un id che non è un modello locale sarebbe
+    //   una richiesta che non può che fallire.
+    if (bersaglio.tipo === 'repo') return Promise.resolve();
     return leggi('modello', percorsoModelli(), (dati) => {
       const elenco = Array.isArray(dati?.items) ? dati.items : [];
-      stato.modello = elenco.find((voce) => String(voce?.id) === String(id)) || null;
+      stato.modello = elenco.find((voce) => String(voce?.id) === String(stato.id)) || null;
       if (!stato.modello) stato.errori.modello = 'Questo modello non è fra quelli installati.';
     });
   }
 
   function caricaRepo() {
-    const percorso = percorsoRepo(stato.modello);
+    const percorso = bersaglio.tipo === 'repo'
+      ? percorsoRepo({ repo: bersaglio.repo, revision: bersaglio.revisione })
+      : percorsoRepo(stato.modello);
     if (!percorso) { disegna(); return Promise.resolve(); }
-    return leggi('repo', percorso, (dati) => { stato.repo = dati && typeof dati === 'object' ? dati : null; });
+    return leggi('repo', percorso, (dati) => {
+      stato.repo = dati && typeof dati === 'object' ? dati : null;
+      // Il manifest nasce QUI, e solo qui: prima della risposta i file del repository non esistono.
+      if (bersaglio.tipo === 'repo') stato.modello = manifestDaRepo(stato.repo);
+    });
   }
 
   function caricaFit() {
-    return leggi('fit', percorsoFit(id, { profilo, contextTokens }), (dati) => {
+    /*
+     * ⛔ La verifica di memoria NON si chiede per un repository: `/fit` vuole l'id di un modello
+     *   sul disco, e senza il file sul disco non c'è niente da pesare. Chiederla lo stesso
+     *   significherebbe far rispondere il server su un modello che non ha — e mostrare all'utente
+     *   un verdetto su una cosa che non è stata misurata.
+     */
+    if (bersaglio.tipo === 'repo') return Promise.resolve();
+    return leggi('fit', percorsoFit(stato.id, { profilo, contextTokens }), (dati) => {
       stato.fit = dati && typeof dati === 'object' ? dati : null;
     });
   }
@@ -599,9 +1031,15 @@ export function montaSchedaModello(contenitore, {
   }
 
   function azioniDellaTestata() {
-    const gruppo = nodo(doc, 'div', 'talos-cluster');
+    const gruppo = nodo(doc, 'div', 'model-page-actions talos-cluster');
     gruppo.dataset.modelloAzioni = '';
-    const hu = !percorsoRepo(stato.modello) ? null : `https://huggingface.co/${String(stato.modello.repo)}`;
+    /*
+     * ⛔ L'indirizzo si compone dal REPOSITORY, che in modalità repository c'è già prima che la
+     *   risposta arrivi (`bersaglio.repo`): aspettare il manifest lascerebbe il pulsante spento
+     *   per tutta la lettura, su una pagina che il repository lo conosce dalla prima riga.
+     */
+    const repoDelModello = String(stato.modello?.repo || bersaglio.repo || '');
+    const hu = !repoDelModello || repoDelModello === REPO_IMPORTATO ? null : `https://huggingface.co/${repoDelModello}`;
     if (hu) {
       const link = nodo(doc, 'a', 'talos-button talos-button--secondary talos-button--sm');
       link.href = hu;
@@ -617,41 +1055,80 @@ export function montaSchedaModello(contenitore, {
   function disegnaBarra() {
     barra.replaceChildren();
     if (typeof indietro === 'function') barra.append(bottoneIndietro());
+    /*
+     * ⛔ L'IDENTITÀ DELLA TOOLBAR: il nome, e una parola per dire da dove viene. È il pezzo che il
+     *   mockup ha e questa pagina non aveva — prima la toolbar portava solo il pulsante indietro e
+     *   le azioni, e il NOME si vedeva solo scorrendo fino al titolo.
+     * ⛔ `nomeUmano` e non l'id: l'id di un modello installato è l'id del FILE
+     *   (`unsloth-GLM-4-7-Flash-GGUF-0d32489ecb9d-...-gguf`), e in una toolbar è illeggibile.
+     */
+    // ⛔ `talos-cluster` per la stessa ragione di `talos-stack` nella striscia: senza, il nome e la
+    //    parola dell'origine escono incollati («GLM-4.7-Flash-GGUF**Locale**», misurato in foto il
+    //    19/09/2026). Il mockup fa la stessa cosa (`.toolbar-identity{display:flex;gap:10px}`).
+    const identita = nodo(doc, 'span', 'toolbar-identity talos-cluster');
+    identita.dataset.modelloIdentita = '';
+    const origine = origineDi(stato.modello, bersaglio);
+    identita.append(doc.createTextNode(nomeUmano(stato.modello, bersaglio)), nodo(doc, 'span', '', origine));
+    identita.dataset.modelloOrigine = origine;
+    barra.append(identita);
+    /*
+     * ⛔ `talos-grow` è un PONTE, e si toglie quando arriva il foglio del mockup: là le azioni si
+     *   spingono a destra da sole (`margin-left:auto`, `.model-page-actions`), quindi lo spaziatore
+     *   diventa inutile — ma finché quel foglio non c'è, senza di lui le due azioni restano
+     *   incollate al nome invece di stare a destra.
+     */
     barra.append(nodo(doc, 'span', 'talos-grow'));
     barra.append(azioniDellaTestata());
   }
 
+  /**
+   * L'hero del mockup: glifo, soprattitolo, NOME, riga del repository, frase di chiusura.
+   *
+   * ⛔ La riga del percorso (`modello.path`) NON si mostra più qui: il mockup non ha un posto per
+   *   una cartella in un hero, e il percorso resta nella scheda dei file, che è dove serve. Al suo
+   *   posto sta il repository, che è l'identità pubblica del modello.
+   */
   function disegnaTestata() {
     testata.replaceChildren();
     const dati = stato.modello ? datiModelloInstallato(stato.modello, { runtime, fit: null }) : null;
-    const identita = nodo(doc, 'div', 'talos-cluster');
+    const identita = nodo(doc, 'div', 'model-hero-identity');
 
-    const nome = nodo(doc, 'h2', '', dati?.nome || stato.modello?.id || id);
+    const glifo = nodo(doc, 'span', 'model-glyph model-glyph--large talos-lab__banda-glifo');
+    glifo.setAttribute('aria-hidden', 'true');
+    // ⛔ `robot` e non un glifo per famiglia: nel foglio di TALOS `cpu` non esiste (misurato il
+    //    18/09/2026 sullo sprite) e i glifi `glyph-qwen`/`glyph-gemma` del mockup non hanno né un
+    //    asset né una mappa nel prodotto.
+    glifo.append(icona(doc, 'robot', 'i'));
+
+    const testo = nodo(doc, 'div', '');
+    testo.append(nodo(doc, 'div', 'eyebrow talos-eyebrow', 'Nel tuo laboratorio'));
+    const nome = nodo(doc, 'h1', '', nomeUmano(stato.modello, bersaglio));
     nome.dataset.modelloNome = '';
-    const daDove = nodo(doc, 'div', 'talos-stack');
-    daDove.append(
-      nodo(doc, 'span', 'talos-eyebrow', 'Modello locale'),
-      nome,
-      paragrafo(doc, 'talos-muted', stato.modello?.path || 'Percorso non dichiarato dal manifest.'),
-    );
-    identita.append(icona(doc, 'robot', 'i'), daDove);
-    testata.append(identita);
+    nome.id = `${suffisso}-titolo`;
+    nome.tabIndex = -1; // il mockup lo mette raggiungibile dal salto all'ancora, non dal Tab
+    testo.append(nome);
 
     /* La riga del repository: repo, revisione, licenza, accesso, e i due conti pubblici. */
-    const rigaRepo = nodo(doc, 'p', 'talos-muted');
+    const rigaRepo = nodo(doc, 'p', 'model-repository talos-muted');
     rigaRepo.dataset.modelloRepo = '';
     const repo = stato.repo;
     const pezzi = [];
-    if (stato.modello?.repo && stato.modello.repo !== REPO_IMPORTATO) pezzi.push(stato.modello.repo);
+    const repoDelModello = String(stato.modello?.repo || bersaglio.repo || '');
+    if (repoDelModello && repoDelModello !== REPO_IMPORTATO) pezzi.push(repoDelModello);
     else pezzi.push('Importato dal computer: non ha un repository');
-    if (repo?.revision) pezzi.push(`revisione ${String(repo.revision).slice(0, 12)}`);
+    if (repo?.revision || bersaglio.revisione) pezzi.push(`revisione ${String(repo?.revision || bersaglio.revisione).slice(0, 12)}`);
     if (dati?.licenza) pezzi.push(dati.licenza);
     if (repo?.gated) pezzi.push('accesso limitato');
     if (repo?.pipelineTag) pezzi.push(repo.pipelineTag);
     if (Number.isFinite(repo?.downloads)) pezzi.push(`${numero.format(repo.downloads)} download`);
     if (Number.isFinite(repo?.likes)) pezzi.push(`${numero.format(repo.likes)} like`);
-    rigaRepo.append(nodo(doc, 'span', 'talos-mono', pezzi.join(' · ')));
-    testata.append(rigaRepo);
+    rigaRepo.append(icona(doc, 'doc', 'i i--xs'), nodo(doc, 'span', 'talos-mono', pezzi.join(' · ')));
+    testo.append(rigaRepo);
+    identita.append(glifo, testo);
+    testata.append(identita);
+
+    // La frase del mockup, parola per parola: è copy del mockup, non un dato (vedi la testata).
+    testata.append(paragrafo(doc, 'model-hero-caption', 'Conosci il modello. Scegli come usarlo.'));
 
     /*
      * ⛔ Il modello che NON c'è si dice in testata, e non solo nella scheda «File»: la corsia ha
@@ -671,51 +1148,133 @@ export function montaSchedaModello(contenitore, {
     testata.append(disegnaStriscia(dati));
   }
 
-  /** La striscia del prototipo (`model-context-strip`): quattro caselle, tutte con un dato vero. */
+  /**
+   * La striscia del mockup (`model-context-strip`): QUATTRO caselle, ognuna `small` + `strong`.
+   *
+   * ⛔ Le quattro del mockup sono `DESTINAZIONE · PROFILO · STATO · NUOVE CHAT`. Le prime tre hanno
+   *   un dato vero e sono queste; la quarta — «Modello predefinito» — **non ha una sorgente in
+   *   questa pagina**: il modello delle nuove chat vive nel laboratorio (`#modelLabActiveModel`,
+   *   scritto da `app.js`), non arriva a un componente montato in una rotta, e non esiste una rotta
+   *   che lo imposti. ⇒ Al suo posto sta `VERIFICA`, che è un dato VERO (il verdetto di `/fit`), ed
+   *   è elencata come non collegata nel referto della corsia. Se il chiamante passerà il modello
+   *   attivo fra le opzioni di montaggio, la quarta casella può tornare a essere quella del mockup.
+   * ⛔ E le caselle non si moltiplicano: erano sei (`Origine · Stato · File sul disco · Formato ·
+   *   Verifica · Contesto richiesto`) e il mockup ne ha quattro. La dimensione è passata dentro
+   *   «Profilo» (dove il mockup mette `GGUF · Q4_K_M`), il contesto richiesto sta nella scheda
+   *   «Compatibilità», dove il numero serve davvero.
+   */
   function disegnaStriscia(dati) {
-    const striscia = nodo(doc, 'div', 'talos-cluster');
+    const striscia = nodo(doc, 'section', 'model-context-strip');
     striscia.dataset.modelloStriscia = '';
-    const cella = (etichetta, contenuto) => {
-      const c = nodo(doc, 'div', 'talos-stack');
-      c.append(nodo(doc, 'span', 'talos-eyebrow', etichetta));
-      if (typeof contenuto === 'string') c.append(nodo(doc, 'span', 'talos-mono', contenuto));
-      else c.append(contenuto);
+    striscia.setAttribute('aria-label', 'Stato del modello e del suo repository');
+    const cella = (etichetta, contenuto, { icona: nomeIcona = '' } = {}) => {
+      const c = nodo(doc, 'div', '');
+      if (nomeIcona) c.append(icona(doc, nomeIcona, 'i i--sm'));
+      /*
+       * ⛔ `talos-stack` NON È DECORAZIONE: senza, l'etichetta e il valore si incollano
+       *   («DestinazioneSul dispositivo», «ProfiloGGUF · Q4_K_M», misurato in foto il 19/09/2026 a
+       *   1024 e a 1440) perché `small` e `strong` sono inline. Il mockup li impila
+       *   (`.model-context-strip small{display:block}` + `strong{display:block}`), e `talos-stack` è
+       *   la stessa cosa con il vocabolario che c'è già (`display:flex; flex-direction:column`):
+       *   con il foglio del mockup le due regole dicono la stessa cosa, senza, la casella si legge
+       *   lo stesso. È l'unica aggiunta «di ponte» che serve anche a foglio arrivato.
+       */
+      const dentro = nodo(doc, 'span', 'talos-stack');
+      /*
+       * ⛔ E `align-items:flex-start`, o la pastiglia si ALLARGA a tutta la casella: in una colonna
+       *   flex il valore di serie è `stretch`, e una pastiglia stirata è una barra colorata che
+       *   sembra un altro controllo. Misurato in foto il 19/09/2026 a 1024 (le due pastiglie
+       *   «Sul disco» e «Non entra» occupavano tutta la larghezza). Con il foglio del mockup le due
+       *   pastiglie tornano inline da sole (`padding:0; background:none`), e questo non dà fastidio.
+       */
+      dentro.style.alignItems = 'flex-start';
+      dentro.append(nodo(doc, 'small', '', etichetta));
+      if (typeof contenuto === 'string') dentro.append(nodo(doc, 'strong', '', contenuto));
+      else dentro.append(contenuto);
+      c.append(dentro);
       return c;
     };
-    const statoInstallato = STATI_INSTALLATO[dati?.stato] || STATI_INSTALLATO.disco;
+    const eRemoto = remoto();
+    // ⛔ `state: 'remote'` non è uno stato del manifest, e `datiModelloInstallato` non lo conosce:
+    //    senza questo ramo un repository non installato si leggerebbe «Sul disco».
+    const statoInstallato = eRemoto ? STATO_NON_INSTALLATO : (STATI_INSTALLATO[dati?.stato] || STATI_INSTALLATO.disco);
+
     /*
-     * ⛔ Le parole delle caselle sono quelle che il prodotto usa già, non parole nuove:
-     *   «File sul disco» è l'etichetta della lista Installati (`modelli-installati.js:147`), e «Stato»
-     *   è quella delle colonne del board (`board.js:115`). Prima la seconda casella si chiamava
-     *   «Stato sul disco» e la terza «Sul disco»: due caselle di fila con la stessa parola, e la
-     *   prima che si rispondeva da sola («Stato sul disco: Sul disco», il valore era l'etichetta).
+     * ⛔ LA CASELLA DELLA DESTINAZIONE NON HA IL SUO GLIFO, E LO DICO: il mockup ci mette un
+     *   monitor, e nel foglio di TALOS quell'icona NON c'è (misurato il 19/09/2026 sullo sprite
+     *   di `index.template.html`: `image sun ignoto camera download trash robot edit sparkles
+     *   chevron-right arrow-left chevron file folder-open git link web search plus list grid files
+     *   brain check-sq check more settings terminal eye code globe chev stop send bell branch
+     *   shield clock play folder doc bolt user x command layout copy history mic menu diff` — e
+     *   `monitor` non è fra questi, come `cpu` non lo era il 18/09). Un'icona sbagliata al posto di
+     *   quella giusta è peggio di nessuna icona: `index.template.html` non è un file di questa
+     *   corsia, quindi la si chiede.
      */
-    striscia.append(
-      cella('Origine', dati?.origine || '—'),
-      cella('Stato', badge(doc, statoInstallato.etichetta, statoInstallato.tono)),
-      cella('File sul disco', byte(stato.modello?.bytes)),
-      cella('Formato', dati?.formato || '—'),
-    );
+    striscia.append(cella('Destinazione', eRemoto ? 'Solo nel repository' : 'Sul dispositivo'));
+    striscia.append(cella('Profilo', eRemoto ? profiloDelRepository() : profiloLocale(dati)));
+    const pastigliaStato = badge(doc, statoInstallato.etichetta, statoInstallato.tono);
+    pastigliaStato.dataset.modelloStato = eRemoto ? 'non-installato' : dati?.stato || 'disco';
+    striscia.append(cella('Stato', pastigliaStato));
+
+    if (eRemoto) {
+      /*
+       * ⛔ NIENTE BADGE QUI: la casella «Stato» qui sopra dice già «Non installato», e ripetere la
+       *   stessa parola due volte in due caselle di fila è la trappola che questa pagina ha già
+       *   pagato una volta («Sconosciuto · Sconosciuto», 18/09/2026): due parole uguali non sono
+       *   una misura, sono un guasto che sembra un guasto del disegno.
+       */
+      striscia.append(cella('Verifica', 'Dopo l’installazione'));
+      return striscia;
+    }
     if (stato.fit) {
       const verdetto = verdettoMemoria(stato.fit);
       const contenuto = badge(doc, verdetto.etichetta, verdetto.tono);
       contenuto.dataset.modelloVerdetto = verdetto.chiave;
       striscia.append(cella('Verifica', contenuto));
-      striscia.append(cella('Contesto richiesto', contestoK(stato.fit.context?.requestedTokens) || '—'));
     } else if (stato.caricamento.fit) {
       striscia.append(cella('Verifica', 'In corso…'));
+    } else {
+      striscia.append(cella('Verifica', 'Non ancora richiesta'));
     }
     return striscia;
+  }
+
+  /** Il profilo di un modello sul disco: il formato con la sua quantizzazione, e quanto pesa. */
+  function profiloLocale(dati) {
+    const formato = String(dati?.formato || 'GGUF');
+    const peso = stato.modello?.bytes ? byte(stato.modello.bytes) : '';
+    return peso && peso !== '—' ? `${formato} · ${peso}` : formato;
+  }
+
+  /**
+   * Il profilo di un repository: quanti file porta e quanto pesa INTERO.
+   *
+   * ⛔ Non si dice la quantizzazione: un repository ne porta molte, e la prima (`files[0]`) non è
+   *   «la» quantizzazione del modello — sarebbe un numero vero che dice una cosa falsa. La somma dei
+   *   file è invece esattamente «quanto pesa il repository», e la casella non la chiama dimensione
+   *   del modello.
+   */
+  function profiloDelRepository() {
+    const quanti = Array.isArray(stato.modello?.files) ? stato.modello.files.length : null;
+    if (quanti === null) return 'Repository non ancora letto';
+    const peso = byte(stato.modello?.byteTotali);
+    return peso === '—' ? `${quanti} file` : `${quanti} file · ${peso}`;
   }
 
   /* ---- scheda «card»: il README ---- */
 
   function disegnaCard() {
-    const scatola = nodo(doc, 'section', 'talos-card');
+    // `readme-surface` è la classe del mockup (`.readme-surface` avvolge chrome, indice e corpo).
+    const scatola = nodo(doc, 'section', 'talos-card readme-surface');
     scatola.dataset.modelloCard = '';
-    const testa = nodo(doc, 'div', 'talos-cluster');
+    const testa = nodo(doc, 'div', 'readme-chrome talos-cluster');
     testa.style.padding = '12px 14px';
-    testa.append(icona(doc, 'doc', 'i i--sm'), nodo(doc, 'span', 'talos-mono', 'README.md'), nodo(doc, 'span', 'talos-label', 'Markdown'));
+    /*
+     * ⛔ «ANTEPRIMA EDITORIALE» E NON «MARKDOWN»: è la parola del mockup, e dice cosa si sta
+     *   guardando (un'anteprima) invece di come è scritto (un formato). È anche la regola di casa
+     *   «niente nomi tecnici nella UI» — `Markdown` era un nome di formato a schermo.
+     */
+    testa.append(icona(doc, 'doc', 'i i--sm'), nodo(doc, 'span', 'talos-mono', 'README.md'), nodo(doc, 'span', 'talos-label', 'Anteprima editoriale'));
     if (stato.repo?.revision) testa.append(badge(doc, String(stato.repo.revision).slice(0, 12), ''));
     scatola.append(testa);
 
@@ -734,6 +1293,13 @@ export function montaSchedaModello(contenitore, {
         paragrafo(doc, 'talos-muted', stato.errori.modello));
     }
     if (!percorsoRepo(stato.modello)) {
+      /*
+       * ⛔ UN REPOSITORY SENZA RISPOSTA ANCORA NON È «UN MODELLO SENZA SCHEDA»: in modalità
+       *   repository il manifest nasce dalla risposta, quindi fra il montaggio e l'arrivo dei dati
+       *   `stato.modello` è `null` e questa riga direbbe una cosa falsa (che non c'è nessuna scheda)
+       *   su una scheda che sta arrivando. Un istante, ma è l'istante in cui si guarda la pagina.
+       */
+      if (remoto()) return conTesta(scatola, paragrafo(doc, 'talos-muted', 'Lettura della scheda…'));
       return conTesta(scatola,
         nodo(doc, 'h3', '', 'Questo modello non ha una scheda Hugging Face'),
         paragrafo(doc, 'talos-muted', 'Il file è stato importato dal computer: non c’è un repository da cui leggere README, revisione e impronte. I file e la compatibilità qui accanto restano quelli veri, letti dal disco e dal motore locale.'));
@@ -765,14 +1331,17 @@ export function montaSchedaModello(contenitore, {
     });
     const indice = indiceDelReadme(frammento, doc, { prefisso: `${suffisso}-readme` });
     if (indice.length) {
-      const rigaIndice = nodo(doc, 'div', 'talos-cluster');
+      const rigaIndice = nodo(doc, 'nav', 'readme-index talos-cluster');
       rigaIndice.dataset.modelloIndice = '';
+      rigaIndice.setAttribute('aria-label', 'Indice della scheda');
       rigaIndice.style.padding = '12px 14px';
-      rigaIndice.append(nodo(doc, 'span', 'talos-label', 'Nella scheda'));
+      rigaIndice.append(nodo(doc, 'span', 'talos-label', 'In questa scheda'));
       for (const voce of indice) {
-        const b = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm', voce.testo);
+        const b = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm', voce.breve);
         b.type = 'button';
         b.dataset.modelloIndiceVoce = voce.id;
+        // Il testo intero resta raggiungibile: sull'etichetta quando è stata accorciata.
+        if (voce.breve !== voce.testo) b.title = voce.testo;
         b.addEventListener('click', () => {
           const bersaglio = pannello.querySelector(`#${voce.id}`);
           if (!bersaglio) return;
@@ -789,6 +1358,117 @@ export function montaSchedaModello(contenitore, {
     prosa.style.padding = '0 14px 14px';
     prosa.append(frammento);
     scatola.append(prosa);
+    const immagini = disegnaImmagini();
+    if (immagini) scatola.append(immagini);
+    return scatola;
+  }
+
+  /**
+   * LE IMMAGINI DELLA SCHEDA — e il consenso, che è la cosa importante.
+   *
+   * ⛔ PERCHÉ UN BLOCCO E NON UN `<img>` E BASTA. Un `<img src>` di terzi è una RICHIESTA DI RETE:
+   *   parte da sola appena il nodo entra nel DOM e porta con sé `Referer` e indirizzo IP. In un
+   *   README di terzi quelle immagini sono, di fatto, un pixel di tracciamento che qualcuno può
+   *   aver messo lì. Le fonti del brief lo dicono con queste parole — «Markdown images are network
+   *   requests, not embedded assets» — e tutti i client di posta seri hanno risolto così: blocco di
+   *   serie, un comando per il caso singolo, una scelta che resta per chi vuole sempre (Gmail,
+   *   Thunderbird, Postbox, Fastmail: lette il 19/09/2026, vedi la testata).
+   * ⛔ E DOVE STA IL PERICOLO, QUI, MISURATO: non nel TESTO del README — il server lo ripulisce
+   *   già (`hf-hub-client.mjs:14-37`, 0 `<img>` e 0 `![` sul README vero di GLM-4.7-Flash) — ma
+   *   nelle `images[]` che il server restituisce a parte. Senza questo blocco, mostrarle sarebbe
+   *   stato l'unico punto della pagina da cui parte una richiesta verso un terzo.
+   * ⛔ NIENTE `loading="lazy"`: le fonti di questa fase coprono la richiesta di rete, non il
+   *   caricamento pigro (il brief lo dice esplicitamente), e un'immagine pigra che non parte
+   *   renderebbe la prova delle richieste **instabile** — cioè una prova che a volte dice zero e a
+   *   volte no. Se servirà, si cercherà a parte e si citerà.
+   */
+  function disegnaImmagini() {
+    const fuori = immaginiDellaScheda(stato.repo?.images);
+    if (!fuori.quante) return null;
+    const scatola = nodo(doc, 'section', 'talos-card talos-card--pad');
+    scatola.dataset.modelloImmagini = String(fuori.quante);
+    scatola.dataset.modelloImmaginiConsenso = stato.consenso ? 'dato' : 'negato';
+    const testa = nodo(doc, 'div', 'talos-cluster');
+    testa.append(
+      icona(doc, 'image', 'i i--sm'),
+      nodo(doc, 'h3', 'talos-lab__heading talos-grow', 'Immagini della scheda'),
+      badge(doc, String(fuori.quante), ''),
+    );
+    scatola.append(testa);
+
+    if (!stato.consenso) {
+      const host = fuori.host.length ? fuori.host.join(', ') : 'un server esterno';
+      scatola.append(paragrafo(doc, 'talos-muted',
+        `Questa scheda porta ${fuori.quante} immagini da ${host}: non le carichiamo senza il tuo consenso.`));
+      const comandi = nodo(doc, 'div', 'talos-cluster');
+      const mostra = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Mostra le immagini');
+      mostra.type = 'button';
+      mostra.dataset.modelloImmaginiMostra = '';
+      mostra.addEventListener('click', () => { stato.consenso = true; disegnaPannello(); });
+      /*
+       * ⛔ LA PREFERENZA CHE RESTA, e la sua forma: una casella, non un secondo pulsante. Chi vuole
+       *   le immagini «adesso» e chi le vuole «sempre» sono due persone diverse, e il modello è
+       *   quello delle app di posta. La casella scrive nel documento delle preferenze
+       *   dell'app (`CAMPO_IMMAGINI_REMOTE`), mai in un archivio nostro.
+       */
+      const etichetta = nodo(doc, 'label', 'talos-cluster');
+      const casella = doc.createElement('input');
+      casella.type = 'checkbox';
+      casella.checked = stato.consensoPersistente;
+      casella.dataset.modelloImmaginiSempre = '';
+      casella.addEventListener('change', () => {
+        stato.consensoPersistente = casella.checked === true;
+        try { porta.scrivi(stato.consensoPersistente); } catch { /* la preferenza non si scrive: resta bloccato */ }
+        if (stato.consensoPersistente) { stato.consenso = true; disegnaPannello(); }
+      });
+      etichetta.append(casella, doc.createTextNode('Ricordalo per tutte le schede'));
+      comandi.append(mostra, etichetta);
+      scatola.append(comandi);
+      return scatola;
+    }
+
+    const griglia = nodo(doc, 'div', 'talos-cluster');
+    griglia.dataset.modelloImmaginiGriglia = '';
+    for (const voce of fuori.immagini) {
+      const figura = nodo(doc, 'figure', '');
+      figura.dataset.modelloImmagine = voce.host;
+      const img = doc.createElement('img');
+      img.alt = voce.alt;
+      img.decoding = 'async';
+      // ⛔ `referrerpolicy` in minuscolo, scritto come attributo: la proprietà non eredita né il
+      //   `<meta name="referrer">` né la testata della risposta. Con il proxy la richiesta è verso
+      //   il nostro server e il referrer a terzi non arriverebbe comunque: è la cintura per il
+      //   giorno in cui qualcuno tornasse a puntare un `<img>` a un indirizzo esterno.
+      img.setAttribute('referrerpolicy', 'no-referrer');
+      // ⛔ IL NOSTRO SERVER, NON IL SITO ESTERNO (vedi `percorsoImmagine`). E nessun
+      //   `loading="lazy"` — il prodotto altrove lo usa (`app.js:3678`), qui no, e la ragione è
+      //   che questa pagina DICHIARA quante richieste fa: un'immagine pigra che non parte
+      //   renderebbe il conteggio una prova che a volte dice una cosa e a volte un'altra.
+      img.src = percorsoImmagine(voce.url); // ← da qui in poi la richiesta parte: sopra nessun `<img>`
+      /*
+       * ⛔ E SE NON ARRIVA, SI DICE — con la frase che il prodotto usa già in `app.js:3683`. Il
+       *   caso è vero e misurato: il proxy accetta solo `huggingface.co`/`hf.co`, e le tre immagini
+       *   del README di GLM-4.7-Flash stanno su `github.com`. Un `<img>` rotto lascerebbe un buco
+       *   muto; così si legge PERCHÉ non c'è.
+       */
+      img.addEventListener('error', () => {
+        const avviso = nodo(doc, 'figcaption', 'talos-label', 'Immagine della scheda non disponibile.');
+        avviso.setAttribute('role', 'status');
+        figura.replaceChildren(avviso);
+      });
+      figura.append(img);
+      if (voce.alt) figura.append(nodo(doc, 'figcaption', 'talos-label', voce.alt));
+      griglia.append(figura);
+    }
+    scatola.append(griglia);
+    const nascondi = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Nascondi le immagini');
+    nascondi.type = 'button';
+    nascondi.dataset.modelloImmaginiNascondi = '';
+    nascondi.addEventListener('click', () => { stato.consenso = false; disegnaPannello(); });
+    scatola.append(nascondi);
+    if (stato.consensoPersistente) {
+      scatola.append(paragrafo(doc, 'talos-label', 'Le immagini di ogni scheda si caricano da sole: è la preferenza «Immagini remote nelle schede», nelle Impostazioni.'));
+    }
     return scatola;
   }
 
@@ -802,25 +1482,199 @@ export function montaSchedaModello(contenitore, {
 
   /* ---- scheda «files»: i file e la verifica ---- */
 
+  /*
+   * ⛔ LA NOTA SULLA STIMA, e la sua parola è «stima», non «misura» — la stessa disciplina delle
+   *   «due misure che non tornano». `/fit-estimate` NON carica il modello: confronta il peso del
+   *   file con la memoria e il disco liberi **adesso** e dichiara la sua base
+   *   (`basis: 'weights-only'` — misurato sul 4174 il 19/09/2026:
+   *   `{bytes:18312339808, basis:'weights-only', memory:{requiredBytes:18312339808,…}, state:'blocked',
+   *   reason:'memory'}`). Quello che NON stima è la cache del contesto, che si somma dopo lo
+   *   scaricamento. Ricerca del 19/09/2026 su come si scrivono le stime senza farle leggere come
+   *   misure: si qualifica il numero come stima, si nomina la grandezza, si dice la base e che il
+   *   valore vero varia (mold, badge «est. 8.2 GB» + «Advisory — actual use varies»; osaurus PR
+   *   #2512, «swap increased by N GB — growth, not onset», che separa la grandezza misurata dalla
+   *   condizione dedotta; TruePPM `HeaderEstimateChip`, che sostituisce un «· estimated» criptico
+   *   con «2.5 pts · Estimated» a parole intere).
+   */
+  const NOTA_STIMA = 'Le varianti si stimano dal peso del file (base dichiarata dal server: i soli pesi) contro la memoria e il disco liberi adesso. Non è l’esito di un caricamento: la cache del contesto si somma dopo lo scaricamento, e il valore vero varia.';
+
+  /* --------------- la scelta del file e il download (repository non installato) --------------- */
+
+  /**
+   * IL BLOCCO DELLA SCELTA DEL FILE — quello del pannello stretto, montato qui.
+   *
+   * ⛔ PERCHÉ QUI E NON RISCRITTO: la scheda «File del modello» è il posto naturale della scelta
+   *   della variante, della stima e dello scaricamento (è dove il mockup mette i file, ed è dove
+   *   arriva il clic sulla riga della lista Hugging Face). Il blocco è di `hf-catalogo.js`
+   *   (`montaSceltaFileHf`), montato con `prefissoId: 'paginaModello'`: id PROPRI, e gli id del
+   *   pannello (`hfFileChoices`, `hfStima`, `hfScarica`, `hfAccesso`) restano suoi — `app.js`
+   *   continua a trovarli dov'erano, e nessun id esiste due volte nel documento.
+   */
+  function disegnaSceltaFile() {
+    const sezione = nodo(doc, 'section', 'talos-card talos-card--pad');
+    sezione.dataset.modelloSceltaFile = '';
+    const testa = nodo(doc, 'div', 'talos-cluster');
+    testa.append(icona(doc, 'download', 'i i--sm'), nodo(doc, 'h3', 'talos-lab__heading talos-grow', 'Scegli il file da scaricare'));
+    sezione.append(testa, paragrafo(doc, 'talos-label', NOTA_STIMA));
+
+    const dove = nodo(doc, 'div', 'talos-stack');
+    sezione.append(dove);
+    const scelto = montaSceltaFileHf(dove, stato.repo, {
+      stima: stato.hf.stima,
+      scelta: stato.hf.scelta,
+      prefissoId: 'paginaModello',
+      document: doc,
+      azioni: { scegli: scegliVariante, misura: misuraVarianti, scarica: avviaDownload },
+    });
+    /* La preselezione del blocco (la variante consigliata) si annota: è quella che «Scarica» prende. */
+    if (scelto && !stato.hf.scelta) stato.hf.scelta = scelto.chiave;
+
+    /*
+     * ⛔ SENZA UNO SCRITTORE IL PULSANTE NON SI LASCIA ACCESO. `apiPost` è facoltativo, ma il
+     *   blocco disegna il suo «Scarica» comunque: senza `azioni.scarica` (che è la stessa cosa)
+     *   il pulsante non farebbe NIENTE — un controllo che promette e non mantiene, il difetto che
+     *   questa casa chiama «un avviso che non può fermare è un commento a schermo». ⇒ Si spegne e
+     *   si dice perché.
+     */
+    if (typeof apiPost !== 'function') {
+      const pulsante = dove.querySelector('#paginaModelloScarica');
+      if (pulsante) { pulsante.disabled = true; pulsante.title = 'La pagina è stata montata senza uno scrittore (`apiPost`): il download non può partire da qui.'; }
+      sezione.append(paragrafo(doc, 'talos-label', 'Questa pagina non ha ricevuto uno scrittore (`apiPost`): il download si avvia dal pannello del laboratorio.'));
+    }
+
+    const scarica = stato.hf.scarica;
+    if (scarica.inCorso) {
+      sezione.append(paragrafo(doc, 'talos-muted', 'Avvio del download…'));
+    } else if (scarica.errore) {
+      const p = paragrafo(doc, 'talos-muted', `Download non avviato: ${scarica.errore}`);
+      p.dataset.modelloScaricaEsito = 'errore';
+      p.setAttribute('role', 'alert');
+      sezione.append(p);
+    } else if (scarica.esito) {
+      const p = paragrafo(doc, 'talos-muted', scarica.esito);
+      p.dataset.modelloScaricaEsito = 'avviato';
+      p.setAttribute('role', 'status');
+      sezione.append(p);
+    }
+    return sezione;
+  }
+
+  /** La variante scelta: si annota e si ridisegna (è il `scegli` del pannello, con lo stesso esito). */
+  function scegliVariante(chiave) {
+    stato.hf.scelta = String(chiave ?? '') || null;
+    disegnaPannello();
+  }
+
+  /**
+   * La stima delle varianti: una richiesta per variante, tutte insieme, e il risultato si tiene.
+   *
+   * ⛔ La rotta (`GET /api/v1/local-models/fit-estimate?bytes=…`) vuole il PESO, non un id: è per
+   *   questo che funziona su un repository che non è sul disco — misurato sul 4174 il 19/09/2026 con
+   *   i byte veri di `GLM-4.7-Flash-Q4_K_M.gguf` (18.312.339.808): risponde
+   *   `state:'blocked', reason:'memory'`. Una variante che non si riesce a stimare resta
+   *   `{state:'unknown'}` — mai un numero inventato al suo posto.
+   */
+  function misuraVarianti(gruppi) {
+    if (!Array.isArray(gruppi) || !gruppi.length) return;
+    for (const g of gruppi) stato.hf.stima.set(g.chiave, { inCorso: true });
+    disegnaPannello();
+    Promise.all(gruppi.map(async ({ chiave, bytes }) => {
+      try {
+        stato.hf.stima.set(chiave, await apiGet(percorsoStima(bytes, { contextTokens })));
+      } catch (errore) {
+        stato.hf.stima.set(chiave, { state: 'unknown', reason: 'measurement', errore: String(errore?.message || errore) });
+      }
+    })).then(() => {
+      // ⛔ La pagina può essere stata distrutta durante le richieste (si cambia scheda, si esce):
+      //   ridisegnare allora scriverebbe su nodi staccati.
+      if (!stato.distrutto) disegnaPannello();
+    });
+  }
+
+  /**
+   * Il download: il corpo lo costruisce `corpoDownloadHf` (la forma di `app.js:3824`), e l'esito si
+   * dice a schermo — avviato o il motivo per cui non è partito.
+   */
+  async function avviaDownload(gruppo) {
+    if (typeof apiPost !== 'function') return;
+    const corpo = corpoDownloadHf(stato.repo, gruppo);
+    if (!corpo) {
+      stato.hf.scarica = { inCorso: false, esito: '', errore: 'La variante scelta non ha un file da scaricare.' };
+      disegnaPannello();
+      return;
+    }
+    stato.hf.scarica = { inCorso: true, esito: '', errore: '' };
+    disegnaPannello();
+    try {
+      const esito = await apiPost('/api/v1/huggingface/download', corpo);
+      if (stato.distrutto) return;
+      const stato2 = esito && typeof esito.state === 'string' ? ` (${esito.state})` : '';
+      // Le stesse parole del pannello (`app.js:3827`): il file e il suo peso.
+      stato.hf.scarica = { inCorso: false, errore: '', esito: `Download avviato: ${corpo.files[0].path} · ${byte(corpo.bytes)}${stato2}. Prosegue nella sezione Download.` };
+    } catch (errore) {
+      if (stato.distrutto) return;
+      stato.hf.scarica = { inCorso: false, esito: '', errore: String(errore?.message || errore) };
+    }
+    disegnaPannello();
+  }
+
   function disegnaFiles() {
     const scatola = nodo(doc, 'section', 'talos-stack');
     scatola.dataset.modelloFiles = '';
-    if (stato.caricamento.modello) return conParagrafo(scatola, 'Lettura dei file…');
+    if (stato.caricamento.modello || (remoto() && stato.caricamento.repo)) return conParagrafo(scatola, 'Lettura dei file…');
     if (stato.errori.modello) return conParagrafo(scatola, stato.errori.modello, { errore: true });
+    if (remoto() && stato.errori.repo) return conParagrafo(scatola, `L’elenco dei file non è stato letto: ${stato.errori.repo}`, { errore: true });
 
-    const locali = Array.isArray(stato.modello?.files) ? stato.modello.files : [];
-    const confronto = confrontaFile(locali, stato.repo?.files || []);
+    /*
+     * ⛔ IN MODALITÀ REPOSITORY I FILE SUL DISCO SONO ZERO, e la lista «locale» deve restare VUOTA:
+     *   il manifest di un repository porta i suoi file (servono alla scheda, al profilo, al
+     *   confronto delle impronte dopo il download), e passarli a `confrontaFile` come se fossero
+     *   sul disco farebbe uscire **«Coincide col repository»** su ogni riga — cioè la pagina
+     *   direbbe che un file scaricato è identico a sé stesso. Sarebbe una bugia scritta in verde.
+     */
+    const locali = remoto() ? [] : (Array.isArray(stato.modello?.files) ? stato.modello.files : []);
+    const remoti = Array.isArray(stato.repo?.files) ? stato.repo.files : [];
+    const confronto = confrontaFile(locali, remoti);
+    /*
+     * ⛔ LA SCELTA DEL FILE STA IN CIMA, e solo su un repository: è il gesto che quella scheda
+     *   esiste per fare (il mockup ci mette i file, e il clic sulla riga della lista HF porta qui).
+     *   Il blocco è quello del pannello stretto (`montaSceltaFileHf`), montato con id propri.
+     *   Su un modello già sul disco non si sceglie niente — c'è — quindi la sezione non compare.
+     */
+    if (remoto() && stato.repo) scatola.append(disegnaSceltaFile());
+
     const testa = nodo(doc, 'div', 'talos-cluster');
-    testa.append(nodo(doc, 'h3', 'talos-lab__heading', 'File del modello'));
-    testa.append(badge(doc, `${confronto.file.length} sul disco`, ''));
+    testa.append(nodo(doc, 'h3', 'talos-lab__heading', remoto() ? 'Tutti i file del repository' : 'File del modello'));
+    if (!remoto() || locali.length) testa.append(badge(doc, `${confronto.file.length} sul disco`, ''));
     if (Array.isArray(stato.repo?.files)) testa.append(badge(doc, `${stato.repo.files.length} nel repository`, ''));
     scatola.append(testa);
     scatola.append(paragrafo(doc, 'talos-label',
-      percorsoRepo(stato.modello)
-        ? 'L’impronta del file sul disco confrontata con quella dichiarata dal repository.'
-        : 'Il modello è importato dal computer: non c’è un repository con cui confrontare l’impronta.'));
+      remoto()
+        ? 'Questo modello non è sul disco: qui sotto ci sono i file che il repository dichiara, con l’impronta che dichiara. Dopo il download, l’impronta del file scaricato si confronta con questa.'
+        : percorsoRepo(stato.modello)
+          ? 'L’impronta del file sul disco confrontata con quella dichiarata dal repository.'
+          : 'Il modello è importato dal computer: non c’è un repository con cui confrontare l’impronta.'));
 
     if (!locali.length) {
+      if (remoto()) {
+        if (!confronto.soloRepository.length) {
+          scatola.append(paragrafo(doc, 'talos-muted', 'Il repository non elenca file nella revisione letta.'));
+          return scatola;
+        }
+        /*
+         * ⛔ NIENTE `<details>` QUI, e la ragione è che non c'è niente da nascondere: il blocco
+         *   richiudibile esiste per non allungare la pagina con i file che NON servono a chi ha già
+         *   scaricato. Su un repository non installato quei file SONO la pagina — è quello che si è
+         *   venuti a vedere — e chiusi dietro un clic sarebbero il contenuto dietro una porta.
+         */
+        for (const file of confronto.soloRepository) {
+          scatola.append(riga(doc, String(file.path), byte(file.sizeBytes), { chiave: 'nel-repository' }));
+        }
+        if (Number.isFinite(stato.modello?.byteTotali)) {
+          scatola.append(riga(doc, 'Peso complessivo del repository', byte(stato.modello.byteTotali), { chiave: 'peso-repository' }));
+        }
+        return scatola;
+      }
       scatola.append(paragrafo(doc, 'talos-muted', 'Il manifest non elenca file.'));
       return scatola;
     }
@@ -921,6 +1775,27 @@ export function montaSchedaModello(contenitore, {
   function disegnaCompatibilita() {
     const scatola = nodo(doc, 'section', 'talos-stack');
     scatola.dataset.modelloCompatibilita = '';
+    /*
+     * ⛔ UN REPOSITORY NON HA UN VERDETTO, E NON SE NE INVENTA UNO. `/fit` risponde su un modello
+     *   che sta sul disco: chiederlo per un id che non è installato sarebbe una richiesta che il
+     *   server non può servire, e disegnare una stima al suo posto sarebbe un numero che nessuno ha
+     *   misurato — la malattia che questa pagina ha già curato due volte («Non verificato» con la
+     *   barra sotto, e «Sconosciuto · Sconosciuto»). Le cose vere che si possono dire sono tre: il
+     *   modello non è sul disco, che cosa dichiara il repository, e com'è fatta QUESTA macchina.
+     */
+    if (remoto()) {
+      const card = nodo(doc, 'section', 'talos-card talos-card--pad');
+      card.append(nodo(doc, 'h3', 'talos-lab__heading', 'Memoria e spazio'));
+      const quanti = Array.isArray(stato.modello?.files) ? stato.modello.files.length : 0;
+      const dichiara = quanti
+        ? `Il repository dichiara ${quanti} file${Number.isFinite(stato.modello?.byteTotali) ? `, ${byte(stato.modello.byteTotali)} in tutto` : ''}.`
+        : 'Il repository non elenca file nella revisione letta.';
+      card.append(paragrafo(doc, 'talos-muted',
+        `Questo modello non è ancora sul disco: la verifica pesa il file che hai, e senza il file non c’è niente da pesare. ${dichiara} La stima si fa dopo il download — e il peso di una singola quantizzazione è quello del file che scaricherai, non il totale del repository.`));
+      scatola.append(card);
+      scatola.append(disegnaMacchina());
+      return scatola;
+    }
     if (stato.caricamento.fit) {
       conParagrafo(scatola, 'Verifica della memoria in corso…');
       scatola.append(disegnaMacchina());
@@ -1026,7 +1901,11 @@ export function montaSchedaModello(contenitore, {
       .map((fatto) => testoFatto(fatto))
       .filter((testo, indice, tutti) => testo && testo !== '—' && tutti.indexOf(testo) === indice)
       .join(' · ');
-    contesto.append(paragrafo(doc, 'talos-muted talos-mono talos-lab__space', backend || 'Backend non dichiarato dal runtime.'));
+    const rigaBackend = paragrafo(doc, 'talos-muted talos-mono talos-lab__space', backend || 'Backend non dichiarato dal runtime.');
+    // ⛔ Un aggancio per la prova: questa riga è il difetto `[object Object]`, e un test che la
+    //   cercasse per classe la confonderebbe con le altre della card.
+    rigaBackend.dataset.modelloBackend = '';
+    contesto.append(rigaBackend);
     if (ispezione.observedAt) {
       const quando = new Date(ispezione.observedAt);
       contesto.append(paragrafo(doc, 'talos-label', Number.isNaN(quando.getTime()) ? 'Misura senza data.' : `Misurato ${quando.toLocaleString('it-IT', { timeZone: 'Europe/Rome' })}.`));
@@ -1121,6 +2000,10 @@ export function montaSchedaModello(contenitore, {
     if (stato.distrutto) return Promise.resolve();
     stato.errori = { modello: '', fit: '', capacita: '', repo: '' };
     stato.repo = null;
+    // ⛔ In modalità repository il manifest È la risposta: senza questa riga un «Riprova» dopo un
+    //   errore ridisegnerebbe il profilo e i file della risposta VECCHIA (o di nessuna), cioè un
+    //   numero che sta lì mentre la pagina dice che sta leggendo.
+    if (remoto()) stato.modello = null;
     /*
      * ⛔ Anche il REPOSITORY si rilegge, e dopo la lista: `percorsoRepo` vuole il modello, e senza
      *   questa seconda lettura una scheda che non era stata letta resterebbe nell'errore per
