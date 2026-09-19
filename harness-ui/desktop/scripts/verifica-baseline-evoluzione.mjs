@@ -77,7 +77,7 @@ export function desktopWorkflowSection(workflow) {
 
 export function validatePinnedDesktopActions(workflow) {
   const section = desktopWorkflowSection(workflow);
-  const refs = [...section.matchAll(/^\s*-\s+uses:\s+([^\s#]+)(?:\s+#.*)?$/gmu)].map((match) => match[1]);
+  const refs = [...section.matchAll(/^\s+(?:-\s+)?uses:\s+([^\s#]+)(?:\s+#.*)?$/gmu)].map((match) => match[1]);
   if (refs.length === 0) fail('Il job desktop non dichiara action esterne.', 'EVOLUTION_BASELINE_ACTIONS_MISSING');
   for (const ref of refs) {
     if (ref.startsWith('./')) continue;
