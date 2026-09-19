@@ -288,16 +288,25 @@ test('PARITA-08 · la colonna da 300px è PRENOTATA, e finché è vuota non si v
     const aside = el.querySelector(':scope > .settings-aside');
     return { griglia: getComputedStyle(el).gridTemplateColumns, gap: getComputedStyle(el).gap, vuota: aside.childElementCount === 0, display: getComputedStyle(aside).display };
   });
-  // Vuota: una colonna sola, come la pagina era prima. La colonna non deve rubare spazio a nessuno.
-  expect(await colonne()).toEqual({ griglia: expect.stringMatching(/^\d+(\.\d+)?px$/), gap: '36px', vuota: true, display: 'none' });
-  // E il posto è vero: appena l'anteprima ci mette qualcosa, la seconda colonna compare a 300px.
-  await page.evaluate(() => { const a = document.querySelector('#schermoImpostazioni .settings-aside'); const d = document.createElement('div'); d.style.height = '40px'; a.append(d); });
+  /*
+   * ⛔ AGGIORNATA il 19/09/2026 — qui la prova difendeva la PRENOTAZIONE VUOTA: «una colonna sola,
+   *   la colonna non deve rubare spazio a nessuno», e per provare il secondo tempo ci si infilava a
+   *   mano un `div` dentro lo slot. Quello stato **non esiste più nel prodotto**: la colonna
+   *   dell'anteprima è diventata una **funzione vera** (la corsia B l'ha montata in Aspetto,
+   *   `sincronizzaAnteprima` → `montaAnteprimaTema`), quindi lo slot è **occupato** appena la
+   *   sezione si apre, con dentro il canvas dell'anteprima.
+   * ⇒ Si asserisce la verità nuova, e non serve più iniettare niente: la griglia è a **due** colonne,
+   *   la seconda è **300px**, e la colonna ha **il suo contenuto** (non è più vuota).
+   * ⛔ E il verso che conta resta: **a finestra stretta il mockup la NASCONDE**, non la impila.
+   */
   const conAnteprima = await colonne();
-  expect(conAnteprima.vuota).toBe(false);
+  expect(conAnteprima.vuota, 'lo slot dell\'anteprima è occupato: l\'anteprima è una funzione vera').toBe(false);
   expect(conAnteprima.display).not.toBe('none');
+  expect(conAnteprima.gap).toBe('36px');
   const due = await telaio.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').map((v) => Math.round(Number.parseFloat(v))));
   expect(due).toHaveLength(2);
   expect(due[1], 'la colonna riservata non è più da 300px').toBe(300);
+  await expect(page.locator('#schermoImpostazioni .settings-aside .appearance-preview')).toBeVisible();
   /* ⛔ E LA METÀ CHE MANCAVA, dallo STESSO blocco del mockup: `@media (max-width:1080px)` non
      accorcia solo la griglia — `.appearance-preview{display:none}`. A finestra stretta l'anteprima
      SPARISCE, non si impila sotto il contenuto. Il contenitore è la schermata: a 1024 di viewport
@@ -347,13 +356,31 @@ test('PARITA-09 · «Aggiungi modello» apre la modale, e le due strade portano 
 
 test('PARITA-10 · le altre nove sezioni non hanno una testata di gruppo e si aprono come prima', async ({ page }) => {
   await apriAspetto(page);
-  // Le testate dei gruppi esistono SOLO nell'Aspetto: cinque, tutte lì dentro.
-  const testate = await page.evaluate(() => ({
-    totali: document.querySelectorAll('#schermoImpostazioni [data-settings-group-head]').length,
-    fuoriAspetto: [...document.querySelectorAll('#schermoImpostazioni [data-settings-group-head]')].filter((t) => !t.closest('#setting-panel-appearance')).length,
-  }));
-  expect(testate.totali).toBe(GRUPPI_MOCKUP.length);
-  expect(testate.fuoriAspetto).toBe(0);
+  /*
+   * ⛔ AGGIORNATA il 19/09/2026 — e la ragione è un CAMBIO DI PROGETTO, non un test da piegare.
+   *   Diceva: «le testate dei gruppi esistono SOLO nell'Aspetto: cinque, tutte lì dentro», e
+   *   pretendeva 5 in tutto e **0** fuori. Era vero prima della FASE 2; la fase ha poi dato a ogni
+   *   carta delle altre otto la **stessa testata**, dalla **stessa fabbrica** (`testataCarta`,
+   *   `settings-view.ts:490`) — una sola forma per un solo mestiere, che è la scelta giusta.
+   * ⇒ L'invariante che questa prova esiste per difendere resta VERO, e si dice meglio: fuori
+   *   dall'Aspetto una testata appartiene a **una carta** (`.talos-settings__section`), cioè non è
+   *   l'apparato dei gruppi del mockup rovesciato altrove — ed è esattamente ciò che il conteggio
+   *   16-contro-5 segnalava senza dirlo.
+   */
+  const testate = await page.evaluate(() => {
+    const tutte = [...document.querySelectorAll('#schermoImpostazioni [data-settings-group-head]')];
+    const fuori = tutte.filter((t) => !t.closest('#setting-panel-appearance'));
+    return {
+      totali: tutte.length,
+      fuoriAspetto: fuori.length,
+      fuoriSenzaCarta: fuori.filter((t) => !t.closest('.talos-settings__section')).length,
+      unaPerCarta: fuori.every((t) => t.closest('.talos-settings__section')?.querySelectorAll(':scope > [data-settings-group-head]').length === 1),
+    };
+  });
+  expect(testate.totali).toBeGreaterThanOrEqual(GRUPPI_MOCKUP.length);
+  expect(testate.fuoriAspetto).toBe(testate.totali - GRUPPI_MOCKUP.length);
+  expect(testate.fuoriSenzaCarta, 'una testata fuori dall\'Aspetto che non appartiene a una carta è l\'apparato del mockup sparso altrove').toBe(0);
+  expect(testate.unaPerCarta, 'ogni carta ha UNA testata, non due').toBe(true);
   // E ogni sezione si apre ancora, con la sua intestazione: la corsia non ha rubato la navigazione.
   for (const sezione of SEZIONI_IMPOSTAZIONI.map((s) => s.id)) {
     await page.evaluate((s) => window.__talosHarnessUiRuntime?.setSettingsSection?.(s, { persist: false }), sezione);
