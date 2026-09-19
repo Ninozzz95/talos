@@ -141,3 +141,16 @@ prima di dire «va bene così» su qualcosa che l'owner sta guardando.
 > **19.382 byte** contro il tetto d'allarme di 19.900, e le avevo aggiunte io
 > nello stesso giorno. Blocco spostato intero, non accorciato.
 
+
+## 🔜 APERTI del desktop — seconda tranche, spostati qui da MEMORY.md il 18/09/2026
+
+> ⛔ Stesso motivo del blocco gemello: `MEMORY.md` era a **164 righe** contro l'allarme a **140**
+> (il tetto di lettura è 200, il taglio oltre è **silenzioso**). Questi cinque sono gli APERTI del
+> blocco 13-17/09: blocco intero, non accorciato, nessuna riga persa. Le chiuse dello stesso
+> blocco stanno in `MEMORIA-LEZIONI.md`, sezione «Le lezioni del 13-17/09».
+
+- 🔜⛔⛔ [KIT DI OTTIMIZZAZIONE DEL MOTORE MOBILE — custodito](kit-ottimizzazione-motore-mobile-custodito.md) — owner 14/09: zip «importante e preziosa» in TALOS-RICERCHE; base del lavoro sul motore LLM locale DOPO le fasi UI; pacchetto candidato su un commit vecchio, niente misure sul dispositivo
+- 🔜⛔⛔ [IL LAB MODELLI DICE GPU E HEXAGON ASSENTI](lab-modelli-dice-gpu-e-hexagon-assenti.md) — owner 14/09 notte, sul Pad; il 21/08 la GPU era usata. Segnalato, non misurato: separare regressione vera da etichetta che legge il campo sbagliato
+- ⛔⛔ [PO-26 APPROVATA: una cartella dati sola fuori dal workspace](po-26-una-cartella-dati-sola-fuori-dal-workspace.md) — owner 16/09 «si»: dati generati sotto `<dati>/workspaces/<slug>/` per workspace, config sotto una sola `.talos/`, migrazione automatica; parte DOPO la fusione della P0
+- 🔜⛔⛔ [COMPATTAZIONE AUTOMATICA DA RIVEDERE — BC-65](compattazione-automatica-da-rivedere-bc-65.md) — owner 17/09: mai vista funzionare su sessioni lunghe, deve essere super robusta; «lo facciamo dopo»: la ripropongo io a fasi chiuse. Misurato: scatta al giro 8 di 10 col 9% della finestra; sul 4174 il motore del contesto è spento
+- 🔜⛔⛔ [L'OWNER STA RIFACENDO LA UI IN UNA PR BOZZA, più una PR dove l'app si modifica e si ricompila da sola](owner-refactor-ui-e-pr-app-che-si-modifica-da-sola.md) — owner 17/09, corretto subito dopo: «non dobbiamo aspettare le PR, adatteremo il lavoro in seguito, siamo noi a comandare» ⇒ l'interfaccia prosegue e si fonde come sempre; la sua PR si adatterà alla lane

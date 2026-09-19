@@ -27,6 +27,33 @@
 > ⛔ I file citati stanno in
 > `~/.claude/projects/C--Users-Antonino-Desktop-projects-AVM/memory/`.
 
+## ⛔⛔⛔ VINCOLO ASSOLUTO — I MOCKUP DELLE 3 PR SI INTEGRANO INTERAMENTE E IDENTICAMENTE (owner 18/09/2026)
+
+Owner, 18/09/2026: «**ricorda il vincolo assoluto i mockup dei refactory delle 3 pr vanno integrati
+INTERAMENTE e identicamente, fai riferimento alle zip in downloads nella cartella pr**».
+
+Le tre zip, misurate il 18/09/2026 in `C:\Users\Antonino\Downloads\pr\`:
+- `TALOS_Reviewer_PR28-31_CP5_23f631f8.zip` — 1.354.785 byte, 17/09 21:33
+- `sidebar-tested-source-final.zip` — 630.117 byte, 18/09 08:01
+- `talos-pr33-reviewer.zip` — 2.474.573 byte, 17/09 22:43
+
+⇒ **Non si applica «la parte utile», non si riadatta, non si sceglie**: si integra TUTTO ciò che il
+mockup contiene, **identico** — ogni misura, ogni colore, ogni movimento, ogni stato. Ciò che si
+intende escludere si elenca **PRIMA** di applicare e si aspetta il sì dell'owner
+([[di-una-pr-dellowner-non-decido-io-cosa-lasciare-fuori]]: il 17/09 ho applicato solo il CSS della
+#33 e l'ho detto dopo). Vale per ogni corsia che tocca quelle superfici; nel dubbio si chiede.
+
+⛔⛔ **MA NON ALLA CIECA — owner, 18/09/2026, subito dopo:** «i mockup non vanno integrati alla
+cieca, devono risultare **perfettamente funzionanti testati e verificati alla struttura attuale**,
+ad ogni passo di implementazione sei forzato a fare una **ricerca web** per trovare le best
+practices di implementazione (docs, repo, competitor) **per quella specifica implementazione**».
+
+⇒ Le due metà stanno insieme e vanno tenute tutte e due: **identico al mockup** nel risultato,
+**verificato nella struttura vera** nel funzionamento (build, suite, giro vero, foto) — e per ogni
+passo una ricerca web *di quel passo*, citata con fonte e data nel ledger e nel commit.
+Concretamente: un mockup che porta via un id, una rotta o una classe che oggi serve altrove NON si
+incolla così com'è — si porta per intero e si fa funzionare qui, e la prova lo dice.
+
 ## Le regole dell'11-12/09 — spostate qui da `MEMORY.md` il 12/09/2026
 
 - ⛔⛔⛔ [CRUD COMPLETI IN OGNI SEZIONE](crud-completi-in-ogni-sezione.md) · [ANIMAZIONI DEL MOCKUP ALLA PERFEZIONE](animazioni-del-mockup-alla-perfezione.md) — owner 11/09: ogni entità con crea/apri/modifica/elimina, e il movimento del mockup portato numero per numero, provati sul Pad prima di dire «chiusa»
