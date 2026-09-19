@@ -15,3 +15,72 @@
 @media (max-width:900px){
   .talos-pagina-modello{padding:var(--talos-space-md, 16px)}
 }
+
+/*
+ * LA PAGINA DEL MODELLO — le misure del mockup, i NOSTRI token. FASE 5, 19/09/2026.
+ *
+ * ⛔ TRADOTTE, NON TRASCRITTE. Le regole vengono da `prototypes/calm-lab/src/styles.css` (la stessa
+ *   fonte che la corsia E ha citato), ma quel foglio usa le variabili DEL PROTOTIPO — `--panel`,
+ *   `--line`, `--mono` — che qui **non esistono**: copiate alla lettera sarebbero **inerti in
+ *   silenzio** (sfondo trasparente, bordo invisibile), che è la classe di difetto peggiore.
+ *   ⇒ Stesse misure, nomi tradotti sui nostri token con la tabella in
+ *     `%TEMP%/copia-foglio-pagina-modello.mjs`: `--panel → --talos-panel`, `--line → --talos-border`,
+ *     `--line-soft → --talos-border-subtle`, `--mono → --talos-font-mono`, `--ui → --talos-font-ui`,
+ *     e tutti gli altri `--X → --talos-X`.
+ * ⛔ E DOVE I VALORI DIFFERISCONO VINCE IL NOSTRO: la pagina si deve accendere e spegnere col tema
+ *   come tutto il resto dell'app (è la lezione della banda, FASE 3).
+ *
+ * Regole prese: 51 · selettori chiesti: 18
+ */
+
+.model-page{width:100%;min-width:0}
+.model-page-toolbar{position:sticky;top:-32px;z-index:5;background:var(--talos-background);display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--talos-border-subtle);min-height:67px;margin-top:-18px}
+.model-page-toolbar>.button{padding-left:0;flex:none;color:var(--talos-muted)}
+.model-page-toolbar>.button:hover{background:transparent!important;color:var(--talos-text)}
+.toolbar-identity{font-size:.8125rem;font-weight:500;display:flex;gap:10px;align-items:center;padding-left:16px;border-left:1px solid var(--talos-border);min-width:0}
+.toolbar-identity>span{font-size:.625rem;font-weight:400;color:var(--talos-muted)}
+.model-page-actions{display:flex;gap:10px;align-items:center;margin-left:auto}
+.model-page-actions .button{min-height:38px}
+.model-hero{display:grid;grid-template-columns:1fr auto;gap:16px 24px;padding:33px 0 29px;align-items:start}
+.model-hero-identity{display:flex;gap:20px;align-items:center;min-width:0}
+.model-hero .model-glyph.large{width:70px;height:70px;border-radius:18px;background:var(--talos-panel)}
+.model-hero .model-glyph.large svg{width:38px;height:38px}
+.model-hero h1{font-size:2.5rem;font-weight:550;letter-spacing:-.045em;line-height:1.14}
+.model-hero .eyebrow{font-size:.5625rem;letter-spacing:.14em;margin-bottom:8px}
+.model-repository{display:flex;align-items:center;flex-wrap:wrap;gap:7px;color:var(--talos-muted);font-size:.75rem;margin-top:9px;overflow-wrap:anywhere}
+.model-repository .icon{width:13px;height:13px}
+.model-repository>span{min-width:0}
+.model-hero-caption{grid-column:1/-1;color:var(--talos-muted);font-size:.875rem}
+.model-context-strip{display:grid;grid-template-columns:1fr 1fr 1.3fr 1.1fr;background:var(--talos-panel);border:1px solid var(--talos-border);border-radius:11px;padding:16px 0;margin-bottom:19px}
+.model-context-strip>div{padding:0 21px;display:flex;gap:12px;align-items:center;border-right:1px solid var(--talos-border)}
+.model-context-strip>div:last-child{border-right:0}
+.model-context-strip>div>.icon{color:var(--talos-muted);width:18px;height:18px}
+.model-context-strip small{font-size:.5625rem;letter-spacing:.08em;color:var(--talos-muted);display:block;margin-bottom:6px}
+.model-context-strip strong{display:block;font-size:.75rem;font-weight:500}
+.model-context-strip .badge{font-size:.6875rem;padding:0;background:none;white-space:normal}
+.model-page-tabs{display:flex;align-items:stretch;gap:26px;border-bottom:1px solid var(--talos-border);margin-bottom:25px;min-width:0}
+.model-page-tabs>[role=tab]{display:flex;align-items:center;gap:8px;font-size:.8125rem;padding:14px 0 16px;min-height:51px;border-bottom:2px solid transparent;color:var(--talos-muted)}
+.model-page-tabs>[role=tab][aria-selected=true]{border-bottom-color:var(--talos-accent);color:var(--talos-text)}
+.model-page-tabs>[role=tab]:hover{color:var(--talos-text)}
+.model-page-tabs .icon{width:16px;height:16px}
+.model-page-tab-note{font-size:.6875rem;color:var(--talos-muted);margin-left:auto;display:flex;gap:7px;align-items:center}
+.readme-surface{border:1px solid var(--talos-border);border-radius:12px;background:var(--talos-panel);min-width:0}
+.readme-chrome{display:flex;align-items:center;justify-content:space-between;gap:15px;min-height:49px;padding:8px 22px;border-bottom:1px solid var(--talos-border);border-radius:12px 12px 0 0}
+.readme-chrome>span{display:flex;align-items:center;gap:10px;min-width:0}
+.readme-chrome .icon{width:15px;height:15px;color:var(--talos-muted)}
+.readme-chrome strong{font:400 .75rem var(--talos-font-mono)}
+.readme-format{font-size:.6875rem;color:var(--talos-muted);padding-left:13px;border-left:1px solid var(--talos-border)}
+.readme-index{padding:11px 22px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--talos-border-subtle)}
+.readme-index>span{font-size:.5625rem;letter-spacing:.08em;color:var(--talos-muted);margin-right:13px}
+.readme-index button{font-size:.6875rem;color:var(--talos-muted);padding:6px 9px;min-height:32px;border-radius:6px}
+.readme-index button:hover{color:var(--talos-text);background:var(--talos-panel-soft)}
+.readme-body{max-width:960px;margin:0 auto;padding:40px 48px 46px;font-size:.9375rem;line-height:1.85;min-width:0}
+.readme-body h2{font-size:1.85rem;letter-spacing:-.04em;font-weight:550;line-height:1.3;margin:9px 0 17px;overflow-wrap:anywhere}
+.readme-body h3{font-size:1.15rem;letter-spacing:-.023em;line-height:1.4;margin-bottom:13px;font-weight:550}
+.readme-body p{color:var(--talos-muted)}
+.readme-body .readme-lead{font-size:1.02rem;line-height:1.8;color:var(--talos-text)}
+.readme-body .source-caption{font-size:.6875rem;line-height:1.7}
+.readme-body .editor-note{font-size:.5625rem;letter-spacing:.09em;color:var(--talos-accent-text);margin:14px 0 9px}
+.model-page-end{color:var(--talos-muted);font-size:.6875rem;display:flex;gap:7px;align-items:center;margin:22px 0 5px}
+.model-page-end .icon{width:13px;height:13px;flex:none}
+.model-page h1,.model-page h2,.model-page h3{font-family:var(--talos-font-ui)}
