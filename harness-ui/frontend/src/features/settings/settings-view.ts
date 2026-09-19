@@ -108,6 +108,24 @@ const words = {
      (`chatFullWidthToggle`, titolo e aiuto), così com'è, invece di essere riscritto. Resta solo
      la parola della porta. */
   readSpaceGo: { it: 'Apri Chat e composer', en: 'Open Chat and composer' },
+  /* ⭐⭐ 18/09/2026 — LE OTTO SEZIONI NON DI QUESTA FASE: i titoli delle loro carte.
+     Il mockup queste otto non le disegna (sono attenuate, `disabled title="Fuori dal lotto
+     dimostrativo"` — misurato il 18/09/2026 su `TALOS-Calm-Lab-04.html:2346`), quindi qui non si
+     copia niente: si porta il suo VOCABOLARIO — la carta con la sua testata — sul contenuto che
+     l'app ha già. ⛔ I TITOLI NON RIPETONO QUELLO DELLA SEZIONE: il mockup fa così nei cinque
+     gruppi dell'Aspetto («Aspetto e movimento» è la pagina, i gruppi sono cinque titoli diversi),
+     e una testata che ripete l'h2 spende una riga per dire due volte la stessa cosa.
+     ⛔ Le parole sono quelle del PRODOTTO dove esistevano già (`Trasferisci le preferenze`,
+     `Configurazione e diagnostica`, `Lettura e scrittura`, `Sessione corrente`): i titoli nuovi
+     sono solo quelli che il prodotto non aveva, e sono elencati nel resoconto col perché. */
+  cartaAccessi: { it: 'Stato degli accessi', en: 'Access state' },
+  cartaPolicy: { it: 'Policy della sessione', en: 'Session policy' },
+  cartaFonte: { it: 'Origine della ricerca web', en: 'Web search source' },
+  cartaContesto: { it: 'Ripartizione del contesto', en: 'Context breakdown' },
+  cartaConsumo: { it: 'Consumo registrato', en: 'Recorded usage' },
+  cartaLocali: { it: 'Dati locali del browser', en: 'Local browser data' },
+  cartaTrasferimento: { it: 'Trasferisci le preferenze', en: 'Transfer preferences' },
+  cartaDiagnostica: { it: 'Configurazione e diagnostica', en: 'Configuration and diagnostics' },
 };
 
 /*
@@ -124,6 +142,27 @@ const GRUPPI: ReadonlyArray<readonly [string, { it: string; en: string }]> = [
   ['animazioni', { it: 'Movimento dell’interfaccia', en: 'Interface motion' }],
   ['desktop', { it: 'Desktop', en: 'Desktop' }],
   ['chat', { it: 'Spazio di lettura', en: 'Reading space' }],
+];
+
+/*
+ * ⭐⭐ 18/09/2026 — LA TESTATA DI OGNI CARTA DELLE OTTO SEZIONI NON DI QUESTA FASE.
+ * La chiave è quella scritta nel TEMPLATE (`data-settings-card="…"`): il legame fra la carta e il
+ * suo titolo si legge in un posto solo, e non dipende da un selettore posizionale che si rompe
+ * al primo nodo spostato — è esattamente il difetto che questa tabella cura (vedi `testataCarta`).
+ * ⛔ L'ordine è quello del documento, ma nessuno ci conta: la ricerca è per chiave.
+ */
+const TESTATE_CARTA: ReadonlyArray<readonly [string, { it: string; en: string }]> = [
+  ['chat-read', words.chatGroup],
+  ['chat-facts', words.currentSession],
+  ['providers-state', words.cartaAccessi],
+  ['tools-policy', words.cartaPolicy],
+  ['tools-search', words.cartaFonte],
+  ['memoria-context', words.cartaContesto],
+  ['costi-usage', words.cartaConsumo],
+  ['privacy-local', words.cartaLocali],
+  ['privacy-transfer', words.cartaTrasferimento],
+  ['workspace-session', words.currentSession],
+  ['account-controls', words.cartaDiagnostica],
 ];
 
 /** Composes existing controls; never copies their values into a second settings store. */
@@ -624,8 +663,82 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   if (chat) {
     let group = chat.querySelector<HTMLElement>('[data-settings-chat-controls]');
     if (!group) { group = node('section', 'talos-card talos-settings__section'); group.dataset.settingsChatControls = ''; group.append(node('h3'), node('p')); chat.prepend(group); }
+    group.dataset.settingsCard = 'chat-read';
     for (const id of CHAT_FIELDS) { const row = q<HTMLElement>('[data-setting-row="' + id + '"]'); if (row) group.append(row); }
   }
+  /* ══════════════════════════════════════════════════════════════════════════════
+   * ⭐⭐ 18/09/2026 — LE OTTO SEZIONI NON DI QUESTA FASE, COL VOCABOLARIO DEL MOCKUP.
+   *
+   * Il mockup ha DUE sezioni vere (Aspetto e Laboratorio): le altre otto sono attenuate
+   * (`disabled`, «Fuori dal lotto dimostrativo»). ⇒ Non si copia un disegno che non esiste: si
+   *   porta il suo VOCABOLARIO sulle carte che l'app ha già — la carta con la sua testata
+   *   (`.section-heading` = titolo + conteggio), la riga `.talos-setting` per ciò che si regola,
+   *   la lista chiave/valore per ciò che è un fatto misurato, e le azioni in un posto solo
+   *   (il `.settings-bottom` del mockup, che sta FUORI dalle carte).
+   *
+   * ⛔ PERCHÉ IL TITOLO VIENE SPOSTATO DENTRO LA TESTATA E NON CREATO DA ZERO.
+   *   `static-copy.ts` sceglie i suoi bersagli per POSIZIONE (`#setting-panel-x > .talos-card >
+   *   h3`), e con due carte in un pannello non sa distinguerle: misurato il 18/09/2026, la riga
+   *   scritta per la carta dei FATTI di Strumenti finiva sulla carta della RICERCA, e le
+   *   sostituiva il titolo («Origine della ricerca web») e la spiegazione vera con le sue. Le
+   *   righe di `static-copy` per gli `> h3` di queste otto sezioni restano quindi INERTI — non
+   *   possono più raggiungere un titolo che vive dentro la testata — e il testo lo porta questa
+   *   tabella, in italiano E in inglese, con le stesse parole del prodotto.
+   *
+   * ⛔ LA SPIEGAZIONE INVECE RESTA DOVE STA, sotto la testata (`> p`): è la forma della sezione
+   *   Aspetto, ed è la ragione per cui le righe `> p` di `static-copy` continuano a funzionare
+   *   per Memoria, Costi, Privacy e Account. L'UNICA eccezione è la carta della ricerca, dove la
+   *   spiegazione entra nella testata (`data-settings-card-head-copy`): è l'unico pannello con
+   *   DUE carte, e senza quello spostamento la riga 16 di `static-copy` la colpirebbe ancora.
+   *
+   * ⛔ IL CONTEGGIO CONTA LE RIGHE, NON SI SCRIVE: sono i `.talos-setting` della carta, gli
+   *   stessi che il mockup conta («9 CONTROLLI»). Una carta di soli fatti non lo porta, e non
+   *   porta nemmeno uno zero: «0 controlli» non è un'informazione.
+   * ══════════════════════════════════════════════════════════════════════════════ */
+  function testataCarta(card: HTMLElement, chiave: string) {
+    let testa = card.querySelector<HTMLElement>(':scope > [data-settings-group-head]');
+    if (testa) return testa;
+    testa = node('div', 'settings-group__head'); testa.dataset.settingsGroupHead = '';
+    const titolo = card.querySelector<HTMLElement>(':scope > h1, :scope > h2, :scope > h3, :scope > h4') ?? node('h3');
+    titolo.classList.add('settings-group__title'); titolo.id = 'settings-group-' + chiave; titolo.dataset.settingsGroupTitle = chiave;
+    const conteggio = node('span', 'settings-group__count'); conteggio.dataset.settingsGroupCount = ''; conteggio.hidden = true;
+    const descrizione = card.hasAttribute('data-settings-card-head-copy') ? card.querySelector<HTMLElement>(':scope > p') : null;
+    if (descrizione) { const copia = node('div', 'settings-group__copy'); copia.append(titolo, descrizione); testa.append(copia); }
+    else testa.append(titolo);
+    testa.append(conteggio); card.prepend(testa);
+    card.setAttribute('role', 'group'); card.setAttribute('aria-labelledby', titolo.id);
+    return testa;
+  }
+  for (const card of main.querySelectorAll<HTMLElement>('[data-settings-card]')) {
+    const chiave = card.dataset.settingsCard; if (chiave) testataCarta(card, chiave);
+  }
+  /*
+   * ── I FATTI IN LISTA: LA CHIAVE A SINISTRA, IL VALORE A DESTRA ────────────────
+   * `#settingsProvidersList` (28 fornitrici) e `#settingsPrivacyList` (le preferenze salvate in
+   * questo browser) sono fatti misurati, e la loro forma è GIÀ chiave/valore: `<li>` con un nome
+   * e il suo stato. Il vocabolario del mockup è `.talos-kv` (`dt`/`dd`, o `__k`/`__v`), e la
+   * traduzione non tocca chi le produce: `app.js` (`renderSettingsRiepiloghi`) le RISCRIVE a ogni
+   * cambio di sezione, quindi si vestono qui e si rivestono con un osservatore — non si riscrive
+   * il produttore, che è di un'altra corsia.
+   * ⛔ Il nodo resta un `<li>`: i lettori di lista e `settings-fatti-reali.spec.mjs` leggono
+   *   `#settingsProvidersList li` e `#settingsPrivacyList li`, e cambiarne il tag sarebbe una
+   *   funzione persa per un vestito guadagnato.
+   * ⛔ Le righe che NON hanno la forma non si vestono: il messaggio di lista vuota («Nessuna
+   *   preferenza TALOS salvata…») è una frase, non una coppia, e resta com'è.
+   */
+  function vesteFatti(lista: Element | null) {
+    if (!lista) return;
+    for (const riga of [...lista.children]) {
+      if (!(riga instanceof HTMLElement) || riga.children.length !== 2) continue;
+      const [chiave, valore] = [...riga.children] as HTMLElement[];
+      if (!chiave || !valore || (chiave.tagName !== 'STRONG' && chiave.tagName !== 'CODE')) continue;
+      riga.classList.add('talos-kv'); chiave.classList.add('talos-kv__k'); valore.classList.add('talos-kv__v');
+    }
+  }
+  const listeFatti = [q<HTMLElement>('#settingsProvidersList'), q<HTMLElement>('#settingsPrivacyList')];
+  listeFatti.forEach(vesteFatti);
+  const osservaFatti = new MutationObserver(() => listeFatti.forEach(vesteFatti));
+  for (const lista of listeFatti) if (lista) osservaFatti.observe(lista, { childList: true });
   const animation = q<HTMLElement>('[data-settings-group="animazioni"]');
   if (animation && !animation.querySelector('[data-settings-advanced]')) {
     const details = node('details', 'settings-advanced'); details.dataset.settingsAdvanced = '';
@@ -703,9 +816,28 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     paletteQuery.setAttribute('aria-label', tx('paletteTitle')); paletteClose.textContent = tx('paletteClose');
     paletteEmpty.textContent = tx('empty'); paletteList.setAttribute('aria-label', tx('results'));
     if (!save.dataset.state) save.textContent = tx('appearanceAuto'); else save.textContent = tx(save.dataset.state === 'saved' ? 'saved' : 'unsaved');
-    const chatGroup = q<HTMLElement>('[data-settings-chat-controls]'); if (chatGroup) { chatGroup.querySelector('h3')!.textContent = tx('chatGroup'); chatGroup.querySelector('p')!.textContent = tx('chatHelp'); }
-    const sessionFacts = q<HTMLElement>('#settingsChatFacts'); const sessionCard = sessionFacts?.closest<HTMLElement>('.talos-settings__section');
-    if (sessionCard) { const name = sessionCard.querySelector('h3'); const note = sessionCard.querySelector(':scope > p'); const link = sessionCard.querySelector('[data-settings-go="appearance"]'); if (name) name.textContent = tx('currentSession'); if (note) note.textContent = tx('currentSessionHelp'); if (link) link.textContent = tx('appearanceLink'); }
+    const chatGroup = q<HTMLElement>('[data-settings-chat-controls]'); if (chatGroup) { chatGroup.querySelector('p')!.textContent = tx('chatHelp'); }
+    /*
+     * ⛔ LA PORTA VERSO L'ASPETTO NON STA PIÙ DENTRO LA CARTA DEI FATTI: il 18/09/2026 è scesa
+     *   nella banda delle azioni in fondo al pannello, dove il mockup tiene il suo
+     *   `.settings-bottom` — «le azioni in un posto solo, non sparse fra le carte». Il suo testo
+     *   si cerca quindi nel PANNELLO, non più dentro la card: cercandolo ancora lì il bottone
+     *   resterebbe in italiano anche in inglese, che è una traduzione persa in silenzio.
+     */
+    const sessionCard = q<HTMLElement>('#settingsChatFacts')?.closest<HTMLElement>('.talos-settings__section');
+    if (sessionCard) { const note = sessionCard.querySelector(':scope > p'); if (note) note.textContent = tx('currentSessionHelp'); }
+    const vaiAspetto = q<HTMLElement>('#setting-panel-chat [data-settings-go="appearance"]'); if (vaiAspetto) vaiAspetto.textContent = tx('appearanceLink');
+    /* ⭐⭐ 18/09/2026 — LE TESTATE DELLE OTTO SEZIONI: titolo dal contratto di questa vista, e
+       conteggio CONTATO sulle righe che la carta ha davvero in quel momento. */
+    for (const [chiave, titolo] of TESTATE_CARTA) {
+      const card = q<HTMLElement>('[data-settings-card="' + chiave + '"]'); if (!card) continue;
+      const nome = card.querySelector<HTMLElement>('[data-settings-group-title="' + chiave + '"]');
+      if (nome) nome.textContent = localText(titolo, options.language());
+      const conteggio = card.querySelector<HTMLElement>('[data-settings-group-count]'); if (!conteggio) continue;
+      const quanti = card.querySelectorAll('[data-setting-row]').length;
+      conteggio.hidden = quanti === 0;
+      conteggio.textContent = quanti ? `${quanti} ${quanti === 1 ? tx('groupCountOne') : tx('groupCount')}` : '';
+    }
     const summary = q<HTMLElement>('[data-settings-advanced] > summary'); if (summary) { summary.querySelector('span')!.textContent = tx('advanced'); summary.querySelector('small')!.textContent = tx('advancedHelp'); }
     /* ⭐⭐ 18/09/2026 — LA STRUTTURA DELL'ASPETTO: banda, pastiglia, gruppi, e la modale.
        ⛔ I nodi si cercano NEL DOM e non si tengono in una variabile: al rimontaggio le card e i
@@ -763,5 +895,5 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     save.dataset.state = saved ? 'saved' : 'unsaved'; save.setAttribute('role', saved ? 'status' : 'alert'); save.textContent = tx(saved ? 'saved' : 'unsaved');
   }, { signal });
   search.value = previousQuery; refresh();
-  return { select, refresh, dispose: () => { osservaTema.disconnect(); controller.abort(); } };
+  return { select, refresh, dispose: () => { osservaTema.disconnect(); osservaFatti.disconnect(); controller.abort(); } };
 }
