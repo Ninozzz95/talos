@@ -1,3 +1,18 @@
+/*
+ * ⛔ SETTE RIGHE RITIRATE IL 19/09/2026, e ognuna con la sua prova — non «sembravano morte».
+ *   Erano i sette `#setting-panel-<x> > .talos-card > h3` (tools, providers, memoria, costi,
+ *   privacy, workspace, account): il selettore non pesca più **nessun elemento**, misurato su
+ *   tutte e dieci le sezioni aperte una per una (`artifacts/zoom-bar/inerti.mjs`, 4174 in sola
+ *   lettura). Il titolo di quelle carte lo porta ora `settings-view.ts`, in italiano **e** in
+ *   inglese — ed è una prova a dirlo: `_fase2-forme.spec.mjs` FORME-05.
+ *   ⛔ E la misura ha corretto la diagnosi: le righe non erano «inerti» (elemento presente con un
+ *   altro testo) ma **assenti** (nessun elemento). Le altre **14** righe di questa tabella sono
+ *   VIVE e restano: le spiegazioni, gli `h4` dei costi, le etichette delle azioni.
+ *   ⭐ Perché si ritira solo con due segnali d'accordo (statico + runtime) e mai con uno solo:
+ *   la pratica sulla rimozione del codice morto — `dead-code-eliminator` e `gh-aw/DEADCODE.md`,
+ *   letti il 19/09/2026 — dice che «non trovo chi la usa» **non è una prova**. Qui i due segnali
+ *   sono il selettore nel sorgente e il DOM vivo che non lo contiene in nessuno stato.
+ */
 /** Copy owned by the settings layout. Never translate provider responses, file names or input values. */
 export const SETTINGS_COPY: ReadonlyArray<readonly [string, string, string]> = [
   ['[data-settings-group="design"] > .talos-eyebrow', 'Aspetto', 'Appearance'],
@@ -12,22 +27,17 @@ export const SETTINGS_COPY: ReadonlyArray<readonly [string, string, string]> = [
   ['[data-settings-group="desktop"] > .talos-eyebrow', 'Desktop', 'Desktop'],
   ['[data-settings-group="desktop"] > h3', 'Spazio di lavoro', 'Workspace'],
   ['[data-settings-group="desktop"] > p', 'Preferenze della finestra e dello spazio di lettura.', 'Window and reading-space preferences.'],
-  ['#setting-panel-tools > .talos-card > h3', 'Strumenti agente e permessi', 'Agent tools and permissions'],
   ['#setting-panel-tools > .talos-card > p', 'Regole salvate con la sessione, conservate dopo un ricaricamento.', 'Rules saved with the session and retained after reloading.'],
   ['#setting-panel-tools [data-open-sheet="permissions"]', 'Gestisci permessi', 'Manage permissions'],
   ['#setting-panel-tools [data-vaia="capability"]', 'Gestisci strumenti', 'Manage tools'],
-  ['#setting-panel-providers > .talos-card > h3', 'Provider e accessi', 'Providers and access'],
   ['#setting-panel-providers > .talos-card > p', 'Stato della configurazione sul server locale. Una chiave presente non prova la connessione.', 'Configuration on the local server. A stored key does not prove connectivity.'],
   ['#setting-panel-providers [data-model-lab-go]', 'Gestisci chiavi e indirizzi', 'Manage keys and addresses'],
-  ['#setting-panel-memoria > .talos-card > h3', 'Memoria e contesto', 'Memory and context'],
   ['#setting-panel-memoria > .talos-card > p:first-of-type', 'Quanto della finestra del modello è già occupato prima che tu scriva: descrizioni degli strumenti, istruzioni e ricordi. Il resto è disponibile alla conversazione.', 'Context already occupied before you write: tool descriptions, instructions and memories. The remainder is available to the conversation.'],
   ['#setting-panel-memoria > .talos-card > p:last-child', 'Il conto degli strumenti è una stima del testo dello schema, non dei token che conterà il fornitore.', 'Tool usage is an estimate of schema text, not the tokens the provider will count.'],
-  ['#setting-panel-costi > .talos-card > h3', 'Costi e consumo', 'Costs and usage'],
   ['#setting-panel-costi > .talos-card > p:first-of-type', 'Consumo per giorno e modello dalle sessioni registrate su questo computer. Nessuna chiamata a un fornitore.', 'Usage by day and model from sessions recorded on this computer. No provider request is made.'],
   ['#setting-panel-costi h4:first-of-type', 'Per giorno', 'By day'],
   ['#setting-panel-costi h4:last-of-type', 'Per modello', 'By model'],
   ['#costiNota', 'Gli importi in denaro sono dichiarati dal fornitore. Qui si contano i token registrati nelle sessioni, non si stima un addebito.', 'Currency amounts are reported by the provider. This page counts recorded session tokens, not estimated charges.'],
-  ['#setting-panel-privacy > .talos-card:first-child > h3', 'Sicurezza e privacy', 'Security and privacy'],
   ['#setting-panel-privacy > .talos-card:first-child > p', 'Dati locali e preferenze del profilo. I permessi della singola sessione sono in “Strumenti agente e permessi”.', 'Local data and profile preferences. Session permissions are under “Agent tools and permissions”.'],
   ['#settingsTrasferimento > h3', 'Trasferisci le preferenze', 'Transfer preferences'],
   ['#settingsTrasferimento > p:first-of-type', 'Esporta o importa un file di preferenze, oppure ripristina i valori iniziali. Queste azioni non trasferiscono le conversazioni.', 'Export or import a preferences file, or restore defaults. These actions do not transfer conversations.'],
@@ -35,11 +45,9 @@ export const SETTINGS_COPY: ReadonlyArray<readonly [string, string, string]> = [
   ['#settingsImporta', 'Importa da un file', 'Import from a file'],
   ['#settingsRipristina', 'Ripristina i valori iniziali', 'Restore defaults'],
   ['#settingsSvuotaLocali', 'Svuota le preferenze di questo browser', 'Clear this browser’s preferences'],
-  ['#setting-panel-workspace > .talos-card > h3', 'File e workspace', 'Files and workspace'],
   ['#setting-panel-workspace > .talos-card > p', 'Cartella e dati della sessione corrente.', 'Folder and data for the current session.'],
   ['#setting-panel-workspace [data-open-panel="inspector"]', 'Apri l’albero dei file', 'Open the file tree'],
   ['#settingsNuovaSessioneAltrove', 'Nuova sessione in un’altra cartella', 'New session in another folder'],
-  ['#setting-panel-account > .talos-card > h3', 'Configurazione e diagnostica', 'Configuration and diagnostics'],
   ['#setting-panel-account > .talos-card > p', 'Controlli e configurazione dell’agente. Il backup non è disponibile da questa pagina.', 'Agent controls and configuration. Backup is not available from this page.'],
   ['[data-td-studio-temi] .td-studio-rimando__copia strong', 'Temi e atmosfere', 'Themes and atmospheres'],
   ['[data-td-studio-temi] .td-studio-rimando__copia p', 'Palette, modalità chiara o scura e sfondi animati si regolano nello studio temi, con anteprima.', 'Adjust palettes, light or dark mode and animated backgrounds in the theme studio, with a preview.'],
