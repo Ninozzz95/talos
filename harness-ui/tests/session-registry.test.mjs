@@ -124,6 +124,30 @@ function sessioneControllabile() {
   };
 }
 
+/** Più run davvero indipendenti: serve a provare madre e figlia vive nello stesso istante. */
+function sessioniControllabili() {
+  const run = [];
+  return {
+    avviaSessioneFn(input) {
+      let risolvi;
+      const promessa = new Promise((resolve) => { risolvi = resolve; });
+      const indice = run.length;
+      const voce = { input, risolvi, conclusa: false };
+      run.push(voce);
+      input.onEvento({ type: 'RunStarted', threadId: `t${indice + 1}`, runId: `r${indice + 1}` });
+      return promessa;
+    },
+    emetti(indice, evento) { run[indice].input.onEvento(evento); },
+    concludi(indice, evento, risultato = { ok: true }) {
+      run[indice].input.onEvento(evento);
+      run[indice].conclusa = true;
+      run[indice].risolvi(risultato);
+    },
+    run(indice) { return run[indice]; },
+    get chiamate() { return run.length; },
+  };
+}
+
 test('LOCAL-RESUME-JSON-01 — recupera nella stessa sessione senza riscrivere chiamate e risultati originali', async () => {
   const cartellaStore = cartellaStoreVera();
   const sessionId = 'sess-json-recupero';
@@ -2945,24 +2969,181 @@ test('⭐⭐⭐ onDelega è SEMPRE costruito su avvia() — una funzione vera, a
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
-test('⭐⭐⭐⭐ delega FILO INTERO: onDelega del padre avvia DAVVERO una seconda sessione isolata, e la Promise si sblocca quando la figlia conclude', async () => {
-  const finta = sessioneControllabile(); // STESSO fake per padre e figlio: avviaSessioneFn è iniettato una volta sola sul registro, la seconda avviaESegui() (per la delega) lo richiama identico
+test('⭐⭐⭐⭐ delega FILO INTERO: la madre riceve AVVIATO subito, continua viva e il terminale della figlia entra nella FIFO canonica', async () => {
+  const finta = sessioniControllabili();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId: padreId } = registro.avvia('task-vero');
-  const onDelegaDelPadre = finta.ultimoInput.onDelega;
+  const onDelegaDelPadre = finta.run(0).input.onDelega;
 
-  const promessaDelega = onDelegaDelPadre('scrivi un modulo di test', '/tmp/figlio-isolato');
-  // ⛔ dopo questa chiamata, finta.ultimoInput punta al FIGLIO (la seconda chiamata ad avviaSessioneFn) — è la prova che avviaESegui è stato richiamato per davvero, non solo che l'orchestratore ha fatto finta.
+  const esitoAvvio = await Promise.race([
+    onDelegaDelPadre('scrivi un modulo di test', '/tmp/figlio-isolato'),
+    new Promise((resolve) => setTimeout(() => resolve({ esito: 'timeout-test' }), 50)),
+  ]);
   assert.equal(finta.chiamate, 2, 'la delega deve aver richiamato avviaSessioneFn una SECONDA volta, per il figlio');
-  assert.equal(finta.ultimoInput.cartella, '/tmp/figlio-isolato', 'la figlia lavora nella SUA cartella, mai in quella del padre');
-  assert.notEqual(finta.ultimoInput.cartella, '/tmp/x', 'per chiarezza: /tmp/x è la cartella del padre in questo test');
+  assert.equal(finta.run(1).input.cartella, '/tmp/figlio-isolato', 'la figlia lavora nella SUA cartella, mai in quella del padre');
+  assert.equal(esitoAvvio.esito, 'avviato');
+  assert.equal(esitoAvvio.childId, [...registro.elenca()].find((s) => s.padreId === padreId).sessionId);
+  assert.equal(finta.run(0).conclusa, false, 'il giro della madre non è stato chiuso per aspettare la figlia');
 
-  finta.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'Modulo scritto e testato.', comeFinita: 'concluso', messaggiFinali: [] } });
-  const esitoDelega = await promessaDelega;
-  assert.deepEqual(esitoDelega, { riassunto: 'Modulo scritto e testato.', esito: 'concluso' });
+  finta.concludi(1, { type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'Modulo scritto e testato.', comeFinita: 'concluso', messaggiFinali: [] } });
+  await new Promise((r) => setImmediate(r));
+  const consegnaCanonica = finta.run(0).input.codaMessaggiFn();
+  assert.match(consegnaCanonica, /Modulo scritto e testato\./);
+  assert.match(consegnaCanonica, /sotto-agente/i);
 
   const figliDelPadre = registro.elencaFigli(padreId);
   assert.equal(figliDelPadre.figli.length, 1, 'il registro riconosce la figlia come figlia DI QUESTO padre, non una sessione slegata');
+  assert.equal(figliDelPadre.figli[0].esitoDelega, 'concluso');
+  finta.concludi(0, { type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { detto: 'madre conclusa', comeFinita: 'concluso', messaggiFinali: [] } });
+});
+
+test('AGENTI LIVE: created/updated/completed arrivano agli antenati, con stato reale e senza argomenti o output privati', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: radiceId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(radiceId, (evento) => ricevuti.push(evento));
+
+  const primo = await finta.run(0).input.onDelega('analizza il modulo senza mostrare segreti', '/tmp/figlio');
+  await new Promise((resolve) => setImmediate(resolve));
+  finta.emetti(1, { type: 'ReasoningStart', messageId: 'reason-1' });
+  finta.emetti(1, { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 3, completion_tokens: 2, cached_tokens: 0, giri: 1 } }] });
+  finta.emetti(1, { type: 'ToolCallStart', toolCallId: 'tool-1', toolCallName: 'leggi' });
+  finta.emetti(1, { type: 'ToolCallArgs', toolCallId: 'tool-1', delta: '{"token":"SEGRETO-ARG"}' });
+  finta.emetti(1, { type: 'ToolCallOutput', toolCallId: 'tool-1', delta: 'SEGRETO-STREAM' });
+  finta.emetti(1, { type: 'ToolCallResult', toolCallId: 'tool-1', content: 'SEGRETO-OUTPUT' });
+
+  const eventiFiglio = [];
+  registro.iscriviti(primo.childId, (evento) => eventiFiglio.push(evento));
+  const attesaApprovazione = finta.run(1).input.chiediApprovazioneFn({ tipo: 'scrivi', percorso: '/tmp/figlio/a.txt' });
+  const richiesta = eventiFiglio.find((evento) => evento.type === 'ApprovalRequested');
+  assert.ok(richiesta);
+  assert.equal(registro.elencaFigli(radiceId).figli[0].approvalPendingCount, 1);
+  assert.equal(registro.rispondiApprovazione(primo.childId, richiesta.requestId, true).ok, true);
+  assert.equal(await attesaApprovazione, true);
+  finta.concludi(1, { type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'analisi conclusa', comeFinita: 'concluso', messaggiFinali: [] } });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const live = ricevuti.filter((evento) => evento.type === 'CUSTOM' && evento.name === 'talos.agenti');
+  assert.ok(live.some((evento) => evento.value.reason === 'created'));
+  assert.ok(live.some((evento) => evento.value.reason === 'updated' && evento.value.operation.kind === 'reasoning'));
+  assert.ok(live.some((evento) => evento.value.reason === 'updated' && evento.value.operation.kind === 'tool'));
+  assert.ok(live.some((evento) => evento.value.reason === 'completed'));
+  for (const evento of live) {
+    assert.equal(evento.value.version, 1);
+    assert.equal(evento.value.sessionId, radiceId);
+    assert.equal(evento.value.parentId, radiceId);
+    assert.equal(evento.value.childId, primo.childId);
+    assert.equal(evento.value.agent.sessionId, primo.childId);
+    assert.equal(evento.value.agent.padreId, radiceId);
+  }
+  const serializzato = JSON.stringify(live);
+  assert.doesNotMatch(serializzato, /SEGRETO-(?:ARG|STREAM|OUTPUT)/);
+  const snapshot = registro.elencaFigli(radiceId).figli[0];
+  assert.equal(snapshot.conclusa, true);
+  assert.equal(snapshot.approvalPendingCount, 0);
+  assert.equal(snapshot.ultimoEsito, 'successo');
+  assert.equal(snapshot.usageSessione.prompt_tokens, 3);
+  assert.equal(snapshot.operazioneCorrente, null);
+  assert.equal(typeof snapshot.conclusaAlle, 'string');
+  finta.concludi(0, { type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { detto: 'radice conclusa', comeFinita: 'concluso', messaggiFinali: [] } });
+});
+
+test('AGENTI LIVE: una nipote mantiene parentId reale ma viene notificata anche alla radice; fermare la radice non abortisce la discendenza', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: radiceId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(radiceId, (evento) => ricevuti.push(evento));
+  const figlio = await finta.run(0).input.onDelega('coordina una fase', '/tmp/figlio');
+  const nipote = await finta.run(1).input.onDelega('esegui il controllo isolato', '/tmp/nipote');
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const creazioneNipote = ricevuti.find((evento) => evento.type === 'CUSTOM' && evento.name === 'talos.agenti'
+    && evento.value.reason === 'created' && evento.value.childId === nipote.childId);
+  assert.ok(creazioneNipote);
+  assert.equal(creazioneNipote.value.sessionId, radiceId);
+  assert.equal(creazioneNipote.value.parentId, figlio.childId);
+  assert.equal(creazioneNipote.value.agent.padreId, figlio.childId);
+
+  assert.equal(registro.ferma(radiceId), true);
+  assert.equal(finta.run(0).input.segnaleStop.aborted, true);
+  assert.equal(finta.run(1).input.segnaleStop.aborted, false);
+  assert.equal(finta.run(2).input.segnaleStop.aborted, false);
+  finta.concludi(2, { type: 'RunFinished', threadId: 't3', runId: 'r3' }, { ok: true, esito: { detto: 'controllo finito', comeFinita: 'concluso', messaggiFinali: [] } });
+  finta.concludi(1, { type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'fase finita', comeFinita: 'concluso', messaggiFinali: [] } });
+  finta.concludi(0, { type: 'RunError', code: 'fermato', threadId: 't1', runId: 'r1' }, { ok: false, esito: { detto: 'fermata', comeFinita: 'fermato', messaggiFinali: [] } });
+});
+
+test('DELEGA DURABILE: se la madre conclude prima della figlia, il risultato entra nello storico una volta sola con provenienza persistita', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const finta = sessioniControllabili();
+  try {
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+    const { sessionId: padreId } = registro.avvia('task-vero');
+    const avvio = await finta.run(0).input.onDelega('raccogli il risultato in background', '/tmp/figlio');
+    finta.concludi(0, { type: 'RunFinished', threadId: 't1', runId: 'r1' }, {
+      ok: true,
+      esito: { detto: 'continuo senza attendere', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'continuo senza attendere' }] },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    finta.concludi(1, { type: 'RunFinished', threadId: 't2', runId: 'r2' }, {
+      ok: true,
+      esito: { detto: 'risultato tardivo verificato', comeFinita: 'concluso', messaggiFinali: [] },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(registro.statoCoda(padreId), { ok: true, voci: [], inPausa: false });
+    const record = readFileSync(join(cartellaStore, `${padreId}.jsonl`), 'utf8').trim().split(/\r?\n/u).map((riga) => JSON.parse(riga));
+    const finali = record.filter((riga) => riga.tipo === 'messaggi-finali').at(-1)?.messaggiFinali ?? [];
+    const risultati = finali.filter((messaggio) => messaggio?.role === 'user' && String(messaggio.content).includes('talos.subagent-result.v1'));
+    assert.equal(risultati.length, 1);
+    assert.match(risultati[0].content, /risultato tardivo verificato/);
+    assert.ok(risultati[0].content.includes(avvio.childId));
+    const consegna = record.find((riga) => riga.type === 'QueuedMessageDelivered' && riga.origine === 'delega' && riga.childId === avvio.childId);
+    assert.ok(consegna, 'la provenienza del risultato consegnato deve sopravvivere al reload');
+    const ultimaCoda = record.filter((riga) => riga.tipo === 'coda').at(-1);
+    assert.deepEqual(ultimaCoda.voci, []);
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('DELEGA DURABILE: cronologia salvata svuota la FIFO anche se fallisce il solo evento di provenienza', async () => {
+  const finta = sessioniControllabili();
+  const recordSincroni = [];
+  let negaProvenienza = false;
+  const registro = createSessionRegistry({
+    cartellaStore: '/store-finto',
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiave: 'k', cartellaEsisteFn: () => true,
+    registraRigaFn: async () => {},
+    registraRigaSyncFn: ({ record }) => {
+      if (negaProvenienza && record?.type === 'QueuedMessageDelivered') throw new Error('ENOSPC provenance');
+      recordSincroni.push(structuredClone(record));
+    },
+  });
+  const { sessionId: padreId } = registro.avvia('task-vero');
+  const avvio = await finta.run(0).input.onDelega('produci il risultato', '/tmp/figlio');
+  finta.concludi(0, { type: 'RunFinished' }, {
+    ok: true,
+    esito: { detto: 'madre conclusa', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'madre conclusa' }] },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  negaProvenienza = true;
+
+  finta.concludi(1, { type: 'RunFinished' }, {
+    ok: true,
+    esito: { detto: 'risultato persistito', comeFinita: 'concluso', messaggiFinali: [] },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(registro.statoCoda(padreId).voci, [], 'la copia gia salvata nello storico non deve restare inviabile una seconda volta');
+  const finali = recordSincroni.filter((record) => record.tipo === 'messaggi-finali').at(-1)?.messaggiFinali ?? [];
+  assert.equal(finali.filter((messaggio) => String(messaggio.content).includes('talos.subagent-result.v1')).length, 1);
+  const figlio = registro.elencaFigli(padreId).figli.find((voce) => voce.sessionId === avvio.childId);
+  assert.match(figlio.erroreConsegnaDelega, /evento durevole di provenienza non e stato salvato/);
 });
 
 test('⭐⭐⭐ 06/9 — la delega sulla STESSA cartella del padre parte, e il figlio eredita il modello della madre', async () => {
@@ -2982,9 +3163,9 @@ test('⭐⭐⭐ 06/9 — la delega sulla STESSA cartella del padre parte, e il f
   const promessa = onDelegaDelPadre('fai qualcosa', '/tmp/x'); // STESSA cartella del padre
   assert.equal(finta.chiamate, 2, 'la delega sullo stesso progetto deve partire, non essere rifiutata');
   assert.equal(finta.ultimoInput.cartella, '/tmp/x');
-  finta.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'fatto', comeFinita: 'concluso', messaggiFinali: [] } });
   const esito = await promessa;
-  assert.equal(esito.esito, 'concluso');
+  assert.equal(esito.esito, 'avviato');
+  finta.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'fatto', comeFinita: 'concluso', messaggiFinali: [] } });
 });
 
 test('⛔⛔⛔ AL CONTRARIO — la delega su una cartella che NON esiste è rifiutata, e nessun figlio parte', async () => {
@@ -3012,8 +3193,9 @@ test('⭐⭐⭐ elencaFigli(): NOT_FOUND su una sessione inesistente, zero figli
   const onDelegaDelPadre = finta.ultimoInput.onDelega;
   const promessaDelega = onDelegaDelPadre('fai qualcosa di isolato', '/tmp/figlio-isolato');
   const figlioId = [...registro.elenca()].map((s) => s.sessionId).find((id) => id !== padreId);
+  assert.equal((await promessaDelega).esito, 'avviato');
   finta.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'fatto', comeFinita: 'concluso', messaggiFinali: [] } });
-  await promessaDelega;
+  await new Promise((r) => setImmediate(r));
 
   const conFigli = registro.elencaFigli(padreId);
   assert.equal(conFigli.ok, true);
@@ -3064,6 +3246,219 @@ test('⭐⭐⭐⭐ FILO INTERO: accodaMessaggio() popola voce.codaMessaggi, e la
   assert.equal(codaMessaggiFn(), null, 'drenato: la seconda lettura torna vuota, mai lo stesso messaggio due volte');
   assert.equal(ricevuti.filter((e) => e.type === 'QueuedMessageDelivered').length, 1, 'AL CONTRARIO — una lettura a vuoto non emette un secondo evento fantasma');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('INVIA CODA: input utente usa un solo evento conversazionale, senza un QueuedMessageDelivered duplicato', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (evento) => ricevuti.push(evento));
+  const id = registro.accodaMessaggio(sessionId, 'correggi adesso').coda.voci[0].id;
+  const inizio = ricevuti.length;
+
+  const esito = await registro.inviaDallaCoda(sessionId, id);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.modo, 'reindirizzato');
+  assert.equal(ricevuti.slice(inizio).filter((evento) => evento.type === 'QueuedMessageDelivered').length, 0,
+    'il redirect/RunStarted rappresenta già questo input: un secondo evento produce due bolle');
+  finta.concludi(0, { type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { detto: 'fermato', comeFinita: 'fermato', messaggiFinali: [{ role: 'user', content: 'c' }] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  finta.concludi(1, { type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'fatto', comeFinita: 'concluso', messaggiFinali: finta.run(1).input.messaggiIniziali } });
+});
+
+test('INVIA CODA: una delega ripresa conserva origine e childId sul RunStarted e non crea una seconda bolla', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-invia-delega';
+  const testo = 'Risultato asincrono della figlia';
+  const childId = 'figlia-42';
+  const codaId = 'coda-delega-42';
+  const finta = sessioneControllabile();
+  try {
+    for (const record of [
+      { tipo: 'intestazione', schema: 1, sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: 'c' }, modello: 'm', avviataAlle: new Date().toISOString() },
+      { type: 'RunStarted', input: { consegna: 'c' }, _sequenza: 1 },
+      { type: 'RunFinished', _sequenza: 2 },
+      { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'pronta' }] },
+      { tipo: 'coda', voci: [{ id: codaId, testo, origine: 'delega', childId }], inPausa: true },
+    ]) registraRigaSync({ cartellaStore, sessionId, record });
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+    const ricevuti = [];
+    registro.iscriviti(sessionId, (evento) => ricevuti.push(evento));
+    const inizio = ricevuti.length;
+
+    const esito = await registro.inviaDallaCoda(sessionId, codaId);
+
+    assert.equal(esito.ok, true);
+    assert.equal(finta.ultimoInput.task.origine, 'delega');
+    assert.equal(finta.ultimoInput.task.childId, childId);
+    assert.equal(finta.ultimoInput.task.codaId, codaId);
+    assert.equal(ricevuti.slice(inizio).filter((evento) => evento.type === 'QueuedMessageDelivered').length, 0);
+  } finally {
+    if (finta.chiamate) finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali, comeFinita: 'concluso' } });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('INVIA CODA: delega su madre attiva conserva provenienza su RedirectApplied e RunStarted', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: padreId } = registro.avvia('task-vero');
+  const figlia = await finta.run(0).input.onDelega('produci un risultato', '/tmp/x');
+  finta.concludi(1, { type: 'RunFinished' }, { ok: true, esito: { detto: 'risultato vivo', comeFinita: 'concluso', messaggiFinali: [] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  const codaId = registro.statoCoda(padreId).voci[0].id;
+  const eventi = [];
+  registro.iscriviti(padreId, (evento) => eventi.push(evento));
+  const inizio = eventi.length;
+
+  assert.equal((await registro.inviaDallaCoda(padreId, codaId)).ok, true);
+  finta.concludi(0, { type: 'RunFinished' }, { ok: true, esito: { detto: 'madre fermata', comeFinita: 'fermato', messaggiFinali: [{ role: 'user', content: 'c' }] } });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const applicato = eventi.slice(inizio).find((evento) => evento.type === 'RunRedirectApplied');
+  assert.equal(applicato.origine, 'delega');
+  assert.equal(applicato.childId, figlia.childId);
+  assert.equal(applicato.codaId, codaId);
+  assert.equal(finta.run(2).input.task.origine, 'delega');
+  assert.equal(finta.run(2).input.task.childId, figlia.childId);
+  assert.equal(finta.run(2).input.task.codaId, codaId);
+  assert.equal(eventi.slice(inizio).filter((evento) => evento.type === 'QueuedMessageDelivered').length, 0);
+  finta.concludi(2, { type: 'RunFinished' }, { ok: true, esito: { detto: 'fatto', comeFinita: 'concluso', messaggiFinali: finta.run(2).input.messaggiIniziali } });
+});
+
+test('INVIA CODA: fallimento della prova durevole non avvia il redirect e non rimuove la voce', async () => {
+  const finta = sessioneControllabile();
+  let negaRedirect = false;
+  const registro = createSessionRegistry({
+    cartellaStore: '/store-finto',
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiave: 'k', cartellaEsisteFn: () => true,
+    registraRigaFn: async () => {},
+    registraRigaSyncFn: ({ record }) => {
+      if (negaRedirect && record?.type === 'RunRedirectRequested') throw new Error('ENOSPC');
+    },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  const id = registro.accodaMessaggio(sessionId, 'resta in coda').coda.voci[0].id;
+  negaRedirect = true;
+
+  const esito = await registro.inviaDallaCoda(sessionId, id);
+
+  assert.equal(esito.code, 'SESSION_STORE_WRITE_FAILED');
+  assert.equal(finta.segnaleStop.aborted, false, 'un redirect non persistito non viene avviato né abortisce il giro');
+  assert.deepEqual(registro.statoCoda(sessionId).voci.map((voce) => voce.id), [id]);
+  finta.concludi({ type: 'RunFinished' });
+});
+
+test('INVIA CODA: Stop prima dell’applicazione rimette la voce nella FIFO in pausa', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  const id = registro.accodaMessaggio(sessionId, 'non perdermi').coda.voci[0].id;
+
+  assert.equal((await registro.inviaDallaCoda(sessionId, id)).ok, true);
+  assert.deepEqual(registro.statoCoda(sessionId).voci, [], 'durante il redirect la voce non resta duplicata nel pannello');
+  assert.equal(registro.ferma(sessionId), true);
+  assert.deepEqual(registro.statoCoda(sessionId), {
+    ok: true,
+    voci: [{ id, testo: 'non perdermi', immagini: 0 }],
+    inPausa: true,
+  });
+  finta.concludi({ type: 'RunError', code: 'stopped' }, { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: [{ role: 'user', content: 'c' }] } });
+});
+
+test('DELEGA RECOVERY: crash dopo QueuedMessageDelivered conserva una sola consegna canonica e svuota la coda stale', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-crash-consegna-delega';
+  const testo = 'Risultato figlia già consegnato al kernel';
+  const codaId = 'coda-crash-1';
+  const childId = 'figlia-crash-1';
+  const finta = sessioneControllabile();
+  try {
+    for (const record of [
+      { tipo: 'intestazione', schema: 1, sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: 'c' }, modello: 'm', avviataAlle: new Date().toISOString() },
+      { type: 'RunStarted', input: { consegna: 'c' }, _sequenza: 1 },
+      { tipo: 'coda', voci: [{ id: codaId, testo, origine: 'delega', childId }], inPausa: false },
+      { type: 'QueuedMessageDelivered', testo, origine: 'delega', childId, codaId, _sequenza: 2 },
+    ]) registraRigaSync({ cartellaStore, sessionId, record });
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+
+    assert.deepEqual(registro.statoCoda(sessionId).voci, [], 'la vecchia fotografia della FIFO non riconsegna lo stesso risultato');
+    assert.equal(registro.resume(sessionId, 'continua').sessionId, sessionId);
+    const contenuti = finta.ultimoInput.messaggiIniziali.map((messaggio) => messaggio.content);
+    assert.equal(contenuti.filter((contenuto) => contenuto === testo).length, 1, 'il risultato resta nel contesto canonico una volta sola');
+  } finally {
+    if (finta.chiamate) finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali, comeFinita: 'concluso' } });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('DELEGA RECOVERY: crash durante redirect attivo conserva una sola copia canonica', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-crash-redirect-delega';
+  const testo = 'Risultato asincrono consegnato durante un redirect';
+  const childId = 'figlia-crash-redirect';
+  const codaId = 'coda-crash-redirect';
+  const messaggiCheckpoint = [
+    { role: 'user', content: 'compito originale' },
+    { role: 'assistant', content: 'sto ancora lavorando' },
+    { role: 'user', content: testo },
+  ];
+  const finta = sessioneControllabile();
+  try {
+    for (const record of [
+      { tipo: 'intestazione', schema: 1, sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: 'compito originale' }, modello: 'm', avviataAlle: new Date().toISOString() },
+      { type: 'RunStarted', input: { consegna: 'compito originale' }, _sequenza: 1 },
+      { tipo: 'coda', voci: [{ id: codaId, testo, origine: 'delega', childId }], inPausa: false },
+      { type: 'RunRedirectRequested', redirectId: 'redirect-crash', testo, origine: 'delega', childId, codaId, _sequenza: 2 },
+      { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: messaggiCheckpoint.slice(0, 2) },
+      { tipo: 'checkpoint-ripresa', versioneGiro: 2, messaggi: messaggiCheckpoint, consegnaCoda: { codaId, origine: 'delega', childId } },
+    ]) registraRigaSync({ cartellaStore, sessionId, record });
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+
+    assert.deepEqual(registro.statoCoda(sessionId).voci, [], 'il checkpoint consumato invalida la vecchia fotografia della FIFO');
+    assert.equal(registro.resume(sessionId, 'continua').sessionId, sessionId);
+    const contenuti = finta.ultimoInput.messaggiIniziali.map((messaggio) => messaggio.content);
+    assert.equal(contenuti.filter((contenuto) => contenuto === testo).length, 1, 'il risultato della figlia resta nel checkpoint una sola volta');
+  } finally {
+    if (finta.chiamate) finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali, comeFinita: 'concluso' } });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('DELEGA RECOVERY: checkpoint successivo resta autorevole sui risultati gia compattati', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-checkpoint-autorevole-delega';
+  const vecchioRisultato = 'Risultato figlia precedente gia riassunto';
+  const finta = sessioneControllabile();
+  try {
+    for (const record of [
+      { tipo: 'intestazione', schema: 1, sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: 'compito originale' }, modello: 'm', avviataAlle: new Date().toISOString() },
+      { type: 'RunStarted', input: { consegna: 'compito originale' }, _sequenza: 1 },
+      { type: 'QueuedMessageDelivered', testo: vecchioRisultato, origine: 'delega', childId: 'figlia-vecchia', codaId: 'coda-vecchia', _sequenza: 2 },
+      { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: [{ role: 'user', content: 'compito originale' }, { role: 'assistant', content: vecchioRisultato }] },
+      {
+        tipo: 'checkpoint-ripresa', versioneGiro: 2,
+        messaggi: [{ role: 'user', content: 'compito originale' }, { role: 'assistant', content: 'Sintesi autorevole senza il testo integrale precedente' }],
+      },
+    ]) registraRigaSync({ cartellaStore, sessionId, record });
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+
+    assert.equal(registro.resume(sessionId, 'continua').sessionId, sessionId);
+    const contenuti = finta.ultimoInput.messaggiIniziali.map((messaggio) => messaggio.content);
+    assert.equal(contenuti.includes(vecchioRisultato), false, 'una consegna precedente al checkpoint non puo resuscitare contenuto compattato');
+    assert.ok(contenuti.includes('Sintesi autorevole senza il testo integrale precedente'));
+  } finally {
+    if (finta.chiamate) finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali, comeFinita: 'concluso' } });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
 });
 
 test('⛔ accodaMessaggio: NOT_FOUND su un id inesistente', () => {
@@ -7406,4 +7801,50 @@ test('MSG-POSIZIONE-05 — la porta riporta `toltoDalModello`, e non dice «fatt
   } finally {
     rimuoviCartellaDiProva(cartellaStore);
   }
+});
+
+
+for (const [inizio, fine] of [['ReasoningMessageStart','ReasoningMessageEnd'], ['ReasoningStart','ReasoningEnd']]) {
+ test(`RIPRESA-TRACKING-REASONING ${inizio}: lifecycle, privacy e operazione subentrata`,async()=>{
+  const finta=sessioniControllabili();
+  const registro=createSessionRegistry({avviaSessioneFn:finta.avviaSessioneFn,preparaEsecuzioneFn:preparaEsecuzioneFinta,modello:'m',chiave:'k',cartellaEsisteFn:()=>true});
+  const {sessionId:radice}=registro.avvia('task-vero');const ricevuti=[];registro.iscriviti(radice,e=>ricevuti.push(e));
+  await finta.run(0).input.onDelega('analizza il modulo','/tmp/figlio');
+  try {
+   const operazione=()=>registro.elencaFigli(radice).figli[0].operazioneCorrente;
+   finta.emetti(1,{type:inizio,messageId:'r1'});assert.equal(operazione()?.kind,'reasoning');assert.equal(operazione()?.status,'running');
+   finta.emetti(1,{type:'ReasoningMessageContent',messageId:'r1',delta:'SEGRETO-RAGIONAMENTO'});
+   finta.emetti(1,{type:inizio,messageId:'r2'});finta.emetti(1,{type:fine,messageId:'r1'});assert.equal(operazione()?.kind,'reasoning','fine vecchia non chiude messaggio nuovo');
+   finta.emetti(1,{type:fine,messageId:'r2'});assert.equal(operazione(),null);
+   finta.emetti(1,{type:inizio,messageId:'r3'});finta.emetti(1,{type:'ToolCallStart',toolCallId:'t1',toolCallName:'leggi'});
+   finta.emetti(1,{type:fine,messageId:'r3'});assert.equal(operazione()?.kind,'tool','fine reasoning non cancella tool subentrato');
+   finta.emetti(1,{type:'ToolCallResult',toolCallId:'t1',content:'letto'});assert.equal(operazione(),null);
+   const live=ricevuti.filter(e=>e.type==='CUSTOM'&&e.name==='talos.agenti');
+   assert.ok(live.some(e=>e.value.operation?.kind==='reasoning'&&e.value.operation.status==='running'));
+   assert.doesNotMatch(JSON.stringify(live),/SEGRETO-RAGIONAMENTO/);
+  } finally {
+   for (const i of [1,0]) finta.concludi(i,{type:'RunFinished',threadId:`t${i}`,runId:`r${i}`},{ok:true,esito:{detto:'finito',comeFinita:'concluso',messaggiFinali:[]}});
+  }
+ });
+}
+
+
+test('RIPRESA-QUATTRO-DELEGHE — padre operativo mentre quattro runtime figli restano aperti',async()=>{
+ const finta=sessioniControllabili();
+ const registro=createSessionRegistry({avviaSessioneFn:finta.avviaSessioneFn,preparaEsecuzioneFn:preparaEsecuzioneFinta,modello:'m',chiave:'k',cartellaEsisteFn:()=>true});
+ const {sessionId:radice}=registro.avvia('task-vero');const ricevuti=[];registro.iscriviti(radice,e=>ricevuti.push(e));
+ try {
+  for(let i=0;i<4;i++) {
+   let timer;
+   const risultato=await Promise.race([finta.run(0).input.onDelega(`Verifica modulo distinto ${i}`,`/tmp/figlio-${i}`),new Promise(resolve=>timer=setTimeout(()=>resolve({esito:'timeout'}),250))]);
+   clearTimeout(timer);assert.equal(risultato.esito,'avviato');
+  }
+  assert.equal(finta.chiamate,5);for(let i=0;i<5;i++)assert.equal(finta.run(i).conclusa,false);
+  finta.emetti(0,{type:'ToolCallStart',toolCallId:'lavoro-padre',toolCallName:'leggi'});
+  finta.emetti(0,{type:'ToolCallResult',toolCallId:'lavoro-padre',content:'Il padre continua'});
+  assert.ok(ricevuti.some(e=>e.type==='ToolCallResult'&&e.toolCallId==='lavoro-padre'));
+  assert.equal(registro.elencaFigli(radice).figli.filter(f=>!f.conclusa).length,4);
+ } finally {
+  for(let i=finta.chiamate-1;i>=0;i--) finta.concludi(i,{type:'RunFinished',threadId:`t${i}`,runId:`r${i}`},{ok:true,esito:{detto:'finito',comeFinita:'concluso',messaggiFinali:[]}});
+ }
 });

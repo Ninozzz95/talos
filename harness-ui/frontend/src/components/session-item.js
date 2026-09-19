@@ -550,3 +550,8 @@ export function creaSessionItem(sessione, opzioni = {}) {
   }
   return riga;
 }
+
+/** Proiezione della sidebar richiesta dall’owner: il catalogo completo resta intatto. */
+export function sessioniRadice(elenco) {
+  return (Array.isArray(elenco) ? elenco : []).filter(s => s && !s.padreId && !(Number(s.profonditaDelega) > 0));
+}

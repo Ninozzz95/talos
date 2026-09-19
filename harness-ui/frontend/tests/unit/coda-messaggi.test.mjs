@@ -56,3 +56,15 @@ test('CODA — un messaggio di 90 caratteri NON si taglia a mano: decide la larg
   const medio = 'Quando hai finito, aggiungi in fondo una riga che dica quanti numeri hai trovato davvero.';
   assert.equal(descriviCoda({ voci: [{ id: 'a', testo: medio }] }).testo, `«${medio}»`, '14/09, giro vero: a 1440 px si fermava a «quan…» con spazio libero');
 });
+
+test('RIPRESA-CODA-ORIGINE — risultato agente distinto da input persona',()=>{
+ const c=normalizzaStatoCoda({voci:[{id:'q',testo:'risultato',origine:'delega',childId:'f'}]});
+ assert.equal(c.voci[0].origine,'delega');assert.equal(c.voci[0].childId,'f');assert.match(descriviCoda(c).testo,/Risultato di un agente/);
+});
+
+test('RIPRESA-CODA-RISULTATO — schema valido, sorgente e testo ostile restano dati',async()=>{
+ const m=await import('../../src/components/coda-messaggi.js');assert.equal(typeof m.descriviRisultatoDelega,'function');
+ const testo='Avviso\n'+JSON.stringify({schema:'talos.subagent-result.v1',childId:'a',stato:'concluso',compito:'Test',risultatoNonFidato:'<script>mai()</script>'});
+ assert.deepEqual(m.descriviRisultatoDelega(testo,'a'),{titolo:'Test',testo:'<script>mai()</script>',errore:false});
+ assert.equal(m.descriviRisultatoDelega(testo,'b'),null);assert.equal(m.descriviRisultatoDelega('rotto','a'),null);
+});

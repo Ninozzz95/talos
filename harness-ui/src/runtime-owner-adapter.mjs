@@ -135,7 +135,7 @@ const AVVISO_MOTORE_SENZA_ATTREZZI = 'Questo modello non usa gli attrezzi: qui r
  * ⛔ Nessun secondo esecutore di attrezzi, nessun modello «consigliato», nessun template forzato.
  */
 class MotoreLocaleRifiutaError extends Error {
-  constructor(stato, dettaglio) {
+  constructor(stato, dettaglio, tentativi = [{ stato, dettaglio }]) {
     super('Il motore locale non ha accettato questa richiesta, nemmeno senza gli attrezzi.');
     this.name = 'MotoreLocaleRifiutaError';
     this.code = 'LOCAL_ENGINE_REJECTED_REQUEST';
@@ -143,7 +143,33 @@ class MotoreLocaleRifiutaError extends Error {
     /* ⛔ Il grezzo del server si CONSERVA (serve a chi apre una segnalazione) ma non viaggia nel
        messaggio: `agent-service` mette il solo `message` dentro `RunError`, e lì finisce a schermo. */
     this.dettaglio = dettaglio;
+    // Diagnostica interna: non entra nella serializzazione pubblica dell'errore.
+    Object.defineProperty(this, 'tentativi', { value: Object.freeze(tentativi.map(t => Object.freeze({ ...t }))) });
   }
+}
+
+/** Legge soltanto il prefisso diagnostico, poi rilascia il corpo della risposta. */
+async function leggiDettaglioRifiuto(risposta, limite = 2_000) {
+  const reader = risposta.body?.getReader();
+  if (!reader) return '';
+  const decoder = new TextDecoder();
+  let testo = '', letti = 0, concluso = false;
+  try {
+    while (letti < limite) {
+      const { done, value } = await reader.read();
+      if (done) { concluso = true; break; }
+      const parte = value.subarray(0, limite - letti);
+      testo += decoder.decode(parte, { stream: true });
+      letti += parte.byteLength;
+    }
+  } catch (error) {
+    if (error?.name === 'AbortError' || error?.name === 'TimeoutError' || error?.code === 'PROVIDER_SILENCE') throw error;
+    // Per un corpo danneggiato restano disponibili status e prefisso già letto.
+  } finally {
+    if (!concluso) await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+  return testo + decoder.decode();
 }
 
 function attesaEsponenziale(tentativo) {
@@ -796,12 +822,13 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       if (prima.status !== 400) return prima;
       /* Il grezzo si legge ORA: dopo la riprova questa risposta non serve più, e il suo corpo
          resterebbe aperto. Serve solo come dettaglio dell'errore, mai a schermo. */
-      let dettaglio = '';
-      try { dettaglio = String(await prima.text()).slice(0, 2_000); } catch { /* lo stato basta */ }
+      const dettaglio = await leggiDettaglioRifiuto(prima);
       const seconda = await spedisci(corpoSenzaAttrezzi());
       if (!seconda.ok) {
-        await seconda.body?.cancel().catch(() => {});
-        throw new MotoreLocaleRifiutaError(prima.status, dettaglio);
+        const dettaglioSecondo = await leggiDettaglioRifiuto(seconda);
+        throw new MotoreLocaleRifiutaError(prima.status, dettaglio, [
+          { stato: prima.status, dettaglio }, { stato: seconda.status, dettaglio: dettaglioSecondo },
+        ]);
       }
       /* ⛔ Prima la memoria, poi l'avviso: se `onAvviso` lancia, il giro deve comunque smettere di
          mandare `tools` — altrimenti si tornerebbe a un 400 per giro con in più un'eccezione. */

@@ -706,6 +706,9 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
    (in `chat-full-width` il respiro del piede è una percentuale, e una percentuale in `margin` si
    misura su una base diversa da quella del `padding` del padre). */
 :root.chat-full-width .talos-chat-foot > *:not(#pannelloTerminale){--talos-colonna-chat:100%; width:calc(100% - var(--talos-turno-coda)); max-width:none; margin-left:0}
+:root.chat-full-width .talos-chat-foot > #composerForm{width:min(var(--composer-max-w, var(--talos-measure-w)), calc(100% - var(--talos-turno-coda))); margin-left:max(0px, calc((100% - var(--talos-turno-coda) - var(--composer-max-w, var(--talos-measure-w))) / 2))}
+/* La riga del ritorno resta ancorata alla chat, indipendente dalla misura del composer. */
+.talos-chat-foot > .talos-chat-return:not(#pannelloTerminale){--talos-larghezza-piede:var(--talos-testo-chat)}
 /* ⛔ 07/9, misurato a 1920 px: «a tutta larghezza» allargava la colonna e il composer (1216 e
    1212) ma i MESSAGGI restavano a 768 — il tetto di `.talos-message` non veniva sciolto, e la
    modalita manteneva solo meta della sua promessa. Si vedeva poco finche la misura era `78ch`
@@ -724,45 +727,10 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 
 /* ---------- 9. PIEDE DELLA CHAT: striscia (B31), coda (B15), compositore ---------- */
 .talos-chat-foot{flex:none; padding:0 var(--talos-chat-gutter) 12px}   /* ⛔ lo STESSO respiro della conversazione, dallo stesso token: e cosi che le due colonne coincidono */
-.talos-chat-return{position:relative; height:0}
-/* ⛔⛔⛔ F2, 17/09/2026 — IL TONDO STAVA SOPRA UNA DECISIONE IN ATTESA.
-   Trovato dall'owner nelle foto (`6-menu-utente-piu-dark-1440x900`, `4-menu-risposta-piu-light-1024x800`):
-   con `left:50%` il pulsante sta in mezzo alla colonna, e con `bottom:12px` su un contenitore alto 0
-   galleggia sugli ULTIMI 48 px della conversazione. Misurato dalla prova qui accanto: a 1440 copriva
-   63 px² di «Per questa sessione» e 75 px² di «Nega», a 1024 178 px² di «Per questa sessione».
-   ⛔ Non è un difetto della scheda di approvazione: è la POSIZIONE. In quella striscia ci finisce
-   qualunque cosa — la riga «⋯ copia esegui» di una risposta, «Visualizza le modifiche» della carta
-   dei file — e un comando che ne copre un altro fa cliccare la cosa sbagliata.
-   ⇒ Il tondo si sposta dove il layout ha GIÀ un posto vuoto: la coda del turno, i 46 px che ogni
-   turno riserva a destra (`--talos-turno-coda`, griglia `0 minmax(0,1fr) 46px`) e che nessuna scheda
-   occupa a nessuna larghezza — verificato misurando: le schede finiscono sempre a 46 px esatti dal
-   bordo destro della colonna, a 1024 come a 1440. Non un numero nuovo da tenere aggiornato a mano:
-   la stessa variabile della spina. Il primo addendo riporta il bordo al TESTO quando il composer è
-   stato allargato a mano (`--composer-max-w`), perché il piede è centrato sulla colonna del testo.
-   Fonti 17/09/2026: W3C WAI, «F110» e SC 2.4.11 «Focus Not Obscured» (WCAG 2.2) — contenuto
-   dell'autore che copre un componente a fuoco; SC 2.5.8 «Target Size (Minimum)» — bersagli da 24 px
-   e spaziatura, «sufficient space between targets makes it less likely that a user will accidentally
-   activate the wrong control». Qui il tondo rubava proprio dei pixel al bersaglio «Nega». */
-/*
- * ⛔⛔⛔ 18/09/2026 — LA CENTRATURA È STATA RITIRATA, E QUESTA È LA PROVA (review avversaria).
- *
- * L'avevo messa su ordine dell'owner («sistema il pulsante torna in fondo che non è al centro ma a
- * destra»). La review avversaria di QUELLA modifica l'ha bocciata, con la misura e nei due versi
- * sullo stesso build:
- *  · `tests/browser/torna-in-fondo-non-copre.spec.mjs` — il guardiano committato il 17/09 proprio
- *    per questo — passa da **4 passed** (formula vecchia) a **4 failed / 0 passed** (centrata);
- *  · a 1440 dark il tondo copre **247 px²** dell'elemento «Per questa sessione», che è un bersaglio
- *    toccabile della scheda di approvazione: è il difetto F2 che quello spec esiste per impedire;
- *  · e non è nemmeno «centrato» dove si credeva: è al centro del PIEDE (665), non della
- *    conversazione (688) né della finestra (720).
- * ⇒ Torna la formula del 17/09. ⛔ Resta aperta la domanda vera, che non decido io: «centrato» e
- *   «non coprire» oggi non convivono. La ricerca del 18/09/2026 dice che la cura di un galleggiante
- *   che copre contenuto interattivo è **riservargli lo spazio** (`scroll-padding`/`scroll-margin`
- *   pari alla sua altezza) o **rifluirlo** perché non possa mai coprire — non spostarlo di lato:
- *   WCAG 2.4.11 «Focus Not Obscured (Minimum)», accessibility.build e EqualWeb, letti il 18/09/2026.
- *   La via che soddisfa TUTTI E DUE (centrato + non copre) è dargli una RIGA SUA nel piede.
- */
-.talos-chat-return__button{position:absolute; bottom:12px; left:auto; right:calc((var(--talos-larghezza-piede) - var(--talos-testo-chat)) / 2 - var(--talos-turno-coda) + 5px); width:36px; height:36px; min-width:36px; padding:0; border-radius:50%; box-shadow:var(--talos-shadow-card); z-index:3}
+/* Il tondo galleggia sulla conversazione: nessuna fascia sottratta allo scorrimento. */
+.talos-chat-return{position:relative; height:0; background:transparent; border:0; box-shadow:none; pointer-events:none}
+.talos-conversation{scroll-padding-bottom:60px}
+.talos-chat-return__button{pointer-events:auto; position:absolute; bottom:12px; left:calc(50% - 18px); right:auto; width:36px; height:36px; min-width:36px; padding:0; border-radius:50%; box-shadow:var(--talos-shadow-card); z-index:3}
 .talos-chat-return__button:is(:hover,:active):not(:disabled){transform:none; background:var(--talos-panel-soft); border-color:var(--talos-border)}
 .talos-status-strip{display:flex; align-items:center; gap:12px; padding:9px 14px; margin-bottom:8px; border-radius:11px; border:1px solid var(--talos-border); background:var(--talos-panel)}
 .talos-status-strip__pulse{width:8px; height:8px; border-radius:50%; background:var(--talos-accent-hover); flex:none; animation:talos-pulse 1.6s var(--talos-motion-ease) infinite}
@@ -1288,7 +1256,7 @@ a.talos-button{text-decoration:none}
 .talos-bivio__testo{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .talos-composer{border:1px solid var(--talos-border-strong); border-radius:18px; background:var(--talos-panel); padding:14px 14px 12px; box-shadow:var(--talos-shadow-card)}
 .talos-composer:focus-within{border-color:var(--talos-accent-border); box-shadow:0 0 0 3px var(--talos-accent-soft)}
-.talos-composer{position:relative; min-height:var(--composer-canonical-h, auto); display:flex; flex-direction:column}
+.talos-composer{position:relative; min-height:var(--composer-canonical-h, 120px); display:flex; flex-direction:column}
 .talos-composer .talos-composer__input{flex:1 1 auto}
 .talos-composer .talos-composer__bar{flex:none; margin-top:10px}
 /* ⛔ la larghezza del composer la decide la regola sopra, con `--composer-max-w`: una misura, un posto solo. */
@@ -2005,9 +1973,9 @@ a.talos-button{text-decoration:none}
  * dei permessi e i passi dell'intro, e un `display:flex` globale sul titolo
  * spezzerebbe quelle senza che nessuno se ne accorga.
  */
-#hfFileChoices .talos-choice__title{display:flex; align-items:baseline; justify-content:space-between; gap:8px}
-#hfFileChoices .talos-choice__glossa{display:block; font-size:11.5px; margin-bottom:4px}
-#hfFileChoices .talos-choice[aria-checked="true"] .talos-choice__glossa{color:var(--talos-assistant-text)}
+:is(#hfFileChoices,[data-hf-file-choices]) .talos-choice__title{display:flex; align-items:baseline; justify-content:space-between; gap:8px; flex-wrap:wrap}
+:is(#hfFileChoices,[data-hf-file-choices]) .talos-choice__glossa{display:block; font-size:11.5px; margin-bottom:4px}
+:is(#hfFileChoices,[data-hf-file-choices]) .talos-choice[aria-checked="true"] .talos-choice__glossa{color:var(--talos-assistant-text)}
 /* La barra che misura sta SOPRA la lista: sotto quindici varianti non la vedeva nessuno. */
 .talos-hf-misura{display:flex; align-items:baseline; gap:10px; margin:2px 0 10px; flex-wrap:wrap}
 .talos-hf-misura__quando{font-size:11.5px}
@@ -2038,7 +2006,7 @@ a.talos-button{text-decoration:none}
  * Con il tetto, il pulsante «Scarica» resta raggiungibile senza attraversare
  * tutta la scala delle quantizzazioni.
  */
-#hfFileChoices{max-height:min(46vh,420px); overflow-y:auto; padding-right:4px}
+:is(#hfFileChoices,[data-hf-file-choices]){max-height:min(46vh,420px); overflow-y:auto; padding-right:4px}
 .talos-picker{display:grid; grid-template-columns:190px minmax(0,1fr); gap:14px}
 .talos-picker__nav{position:static}
 .talos-callout{display:flex; gap:12px; align-items:flex-start; margin-top:12px; padding:12px 14px; border-radius:var(--talos-radius-card); border:1px solid var(--talos-warning-border); background:var(--talos-warning-soft); font-size:13px; color:var(--talos-assistant-text)}
@@ -2771,3 +2739,8 @@ a.talos-button{text-decoration:none}
 .talos-context-separator{display:flex;align-items:center;gap:var(--talos-space-sm);color:var(--talos-muted);font-size:var(--talos-font-size-xs);margin-block:var(--talos-space-lg)}
 .talos-context-separator::before{content:"";height:1px;background:var(--talos-border);flex:1}
 @media(max-width:600px){.talos-context__metrics,.talos-context__form-grid{grid-template-columns:1fr}.talos-context-separator{flex-wrap:wrap}}
+
+/* Il comando del runtime è distinto dalle quattro schede del laboratorio. */
+.talos-lab-tabs-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.talos-lab-tabs-actions > [role=tablist]{flex:1 1 auto;min-width:0}
+#modelLabLiberaMemoria{flex:0 0 auto;margin-left:auto}

@@ -47,15 +47,17 @@ const SOVRAPPOSIZIONI = `(() => {
       const q = n.getBoundingClientRect();
       return q.width > 0 && q.height > 0 && q.bottom > scorrevole.top && q.top < scorrevole.bottom;
     });
+  const visibile = n => { const q=n.getBoundingClientRect(); return {left:Math.max(q.left,scorrevole.left),right:Math.min(q.right,scorrevole.right),top:Math.max(q.top,scorrevole.top),bottom:Math.min(q.bottom,scorrevole.bottom)}; };
   const colpiti = toccabili
-    .map((n) => ({ area: area(r, n.getBoundingClientRect()), che: (n.getAttribute('aria-label') || n.textContent || '').trim().slice(0, 40) }))
+    .map((n) => ({ area: area(r, visibile(n)), che: (n.getAttribute('aria-label') || n.textContent || '').trim().slice(0, 40) }))
     .filter((x) => x.area > 0);
   const schede = [...document.querySelectorAll('#conversation [data-c="ApprovalCard"] .talos-approval__foot button')];
   return {
     visibile: true,
+    limiteConversazione: scorrevole.bottom,
     tondo: { left: Math.round(r.left), right: Math.round(r.right), top: Math.round(r.top), bottom: Math.round(r.bottom) },
     colpiti,
-    suiBottoniDellaScheda: schede.reduce((s, b) => s + area(r, b.getBoundingClientRect()), 0),
+    suiBottoniDellaScheda: schede.reduce((s, b) => s + area(r, visibile(b)), 0),
     /* Il bordo destro delle schede: la cura mette il tondo alla sua destra, nella striscia dei 46 px
        che ogni turno riserva (la coda del turno) e che nessuna scheda occupa a nessuna larghezza.
        ⛔ Qui dentro niente apici inversi: chiuderebbero la stringa che porta questa sonda. */
@@ -133,8 +135,8 @@ for (const [larghezza, altezza] of [[1024, 800], [1440, 900]]) {
         if (!m.visibile) continue;
         accesoAlmenoUnaVolta = true;
         if (m.colpiti.length) guai.push({ distanza: d, tondo: m.tondo, colpiti: m.colpiti, suiBottoniDellaScheda: m.suiBottoniDellaScheda });
-        /* La regola strutturale, valida a OGNI posizione: il tondo sta a destra delle schede. */
-        if (m.tondo.left < m.destraSchede) fuoriPosto.push({ distanza: d, sinistraTondo: m.tondo.left, destraSchede: m.destraSchede });
+        /* Il tondo centrato occupa una riga propria fuori dalla conversazione. */
+        if (m.tondo.top < m.limiteConversazione - 1) fuoriPosto.push({ distanza: d, top: m.tondo.top, limiteConversazione: m.limiteConversazione });
       }
       expect(accesoAlmenoUnaVolta, 'la scena non si è formata: il tondo non si è mai acceso').toBe(true);
       expect(guai, `il tondo copriva roba toccabile: ${JSON.stringify(guai)}`).toEqual([]);

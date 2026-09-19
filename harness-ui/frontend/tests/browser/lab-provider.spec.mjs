@@ -175,6 +175,11 @@ async function apriProvider(page, { colorMode = 'dark', test = false } = {}) {
   });
   /* Il POST della sonda: si CONTA invece di sperarlo, ed è l'unica non-GET ammessa. */
   if (test) {
+    let providerFixture;
+    await page.route('**/api/v1/providers', async route => {
+      providerFixture ??= route.fetch().then(response => response.json());
+      return route.fulfill({ json: await providerFixture });
+    });
     await page.route('**/api/v1/providers/*/test', (route) => {
       prove.push(new URL(route.request().url()).pathname);
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { provider: 'x', esito: 'collegato', motivo: 'Servizio raggiunto.', modelli: 4, millisecondi: 12 } }) });
@@ -182,8 +187,13 @@ async function apriProvider(page, { colorMode = 'dark', test = false } = {}) {
     /* Il salvataggio della configurazione — quello che preme la PRIMARIA della modale. Si conta
        come la sonda, e per la stessa ragione: una primaria che non salva niente è un pulsante
        che promette un'altra cosa, e senza questa riga la prova non se ne accorgerebbe. */
-    await page.route('**/api/v1/providers/*/runtime', (route) => {
+    await page.route('**/api/v1/providers/*/runtime', async (route) => {
       salvataggi.push({ percorso: new URL(route.request().url()).pathname, corpo: route.request().postDataJSON() });
+      const documento = await providerFixture;
+      const provider = new URL(route.request().url()).pathname.split('/')[4];
+      const corpo = route.request().postDataJSON();
+      documento.data.items = documento.data.items.map(row => row.id === provider
+        ? { ...row, endpoint: corpo.endpoint, timeoutSeconds: corpo.timeoutSeconds, endpointConfigured: true } : row);
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: {} }) });
     });
   }
@@ -205,13 +215,13 @@ async function apriProvider(page, { colorMode = 'dark', test = false } = {}) {
   });
   await page.click('#modelLabCard [data-lab-scheda="providers"]');
   await expect(page.locator('#modelLabCard [data-model-lab-panel="providers"]')).toBeVisible();
-  const esito = await page.evaluate(async () => {
-    const modulo = await import('/__lab/provider-card.js');
+  const esito = await page.evaluate(async (usaBundle) => {
+    const modulo = usaBundle ? null : await import('/__lab/provider-card.js');
     window.__prov = modulo;
     const risposta = await (await fetch('/api/v1/providers')).json();
     window.__righe = risposta.data.items;
     const lista = document.querySelector('#modelLabCard [data-model-lab-panel="providers"] #providerList');
-    modulo.aggiornaProviderList(lista, window.__righe, { aperte: new Set(['openrouter']) });
+    if (modulo) modulo.aggiornaProviderList(lista, window.__righe, { aperte: new Set(['openrouter']) });
     /*
      * ⛔ IL PANNELLO SI RIMONTA DALLA SORGENTE DI OGGI, e non è un trucco della prova: il
      *   bundle che il server serve è quello costruito ieri, e questa prova misura il codice che
@@ -222,11 +232,10 @@ async function apriProvider(page, { colorMode = 'dark', test = false } = {}) {
      */
     const pannello = document.querySelector('#modelLabCard [data-model-lab-panel="providers"]');
     const primaRefresh = pannello.querySelectorAll('#providerRefresh').length;
-    delete pannello.dataset.providerMontato;
-    modulo.montaProviderPanel(pannello);
+    if (modulo) { delete pannello.dataset.providerMontato; modulo.montaProviderPanel(pannello); }
     const dopoRefresh = pannello.querySelectorAll('#providerRefresh').length;
     return { n: window.__righe.length, prima: window.__righe[0]?.id ?? null, lista: Boolean(lista), primaRefresh, dopoRefresh };
-  });
+  }, test);
   return { tentate, prove, salvataggi, esito };
 }
 
@@ -390,7 +399,7 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
    *   modale appena aperta — una modale che si chiude da sola, senza un errore da nessuna parte.
    *   La riga `prove.length` + `data-provider-signature` invariata è quella che lo morde.
    */
-  test('PROV-03 — «Configura» apre la MODALE col nome del fornitore e i campi veri, e «Verifica accesso» fa partire la sonda VERA', async ({ page }) => {
+  test('PROV-03 — «Configura» apre la MODALE col nome del fornitore e i campi veri, e «Verifica accesso» invia la richiesta HTTP attesa', async ({ page }) => {
     await page.setViewportSize({ width: SOGLIE.larga, height: 900 });
     const { prove, tentate, salvataggi } = await apriProvider(page, { test: true });
 
@@ -473,8 +482,8 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
        sarebbe la stessa classe di difetto del pulsante che promette un'altra cosa. */
     expect(stato.primaria).toBe('Salva configurazione');
     expect(stato.primariaTipo).toBe('runtime');
-    /* E il corpo NON perde il suo gesto: «Salva chiave» resta dentro la modale, raggiungibile. */
-    expect(await card.locator('.talos-provider__body [data-provider-action="save-key"]').count(), 'la chiave ha ancora il suo pulsante').toBe(1);
+    // Il montaggio reale passa l'adapter per più chiavi; il comando mantiene un listener proprio.
+    await expect(card.getByRole('button', { name: 'Aggiungi chiave', exact: true })).toBeVisible();
     /* Il fuoco entra nel primo controllo utile, non sul contenitore. */
     expect(stato.fuocoDentro, 'il fuoco è rimasto fuori dalla modale').toBe(true);
     expect(stato.fuocoSu, 'il fuoco entra nel primo controllo UTILE').toBe('chiave');
@@ -509,24 +518,12 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
     await page.mouse.click(20, 400); // fuori dal riquadro: sul velo scuro
     await expect(modale, 'un clic fuori non deve buttare via quello che si è scritto').toHaveCount(1);
 
-    /*
-     * ── E IL RIDISEGNO DELLA LISTA NON SE LA PORTA VIA ──────────────────────────────────
-     * ⛔ Salvare RIDISEGNA: il salvataggio chiama l'«Aggiorna» del prodotto, la riga del fornitore
-     *   cambia, la firma della card cambia e il renderer ne costruisce una NUOVA — portandosi via
-     *   la card vecchia e, con lei, la modale appena aperta. Misurato il 19/09/2026: la richiesta
-     *   partiva con il valore giusto e la modale spariva senza mostrare l'esito.
-     * ⛔ QUI IL RIDISEGNO LO GUIDA LA PROVA, e non è un trucco: la regia che serve il salvataggio
-     *   è quella del BUNDLE di ieri (`public/`, dell'orchestratore), quindi il SUO ridisegno
-     *   userebbe il renderer di ieri. La cura è di OGGI e vive in `aggiornaProviderList`: per
-     *   provarla si chiama quella, con la riga aggiornata — cioè ciò che farà il boot dopo il
-     *   build. (È la stessa cosa che questa spec dichiara in testa: le foto provano il CODICE,
-     *   non la consegna.)
-     */
-    await page.evaluate(() => {
-      const righe = window.__righe.map((r) => r.id === 'openai' ? { ...r, endpoint: 'https://esempio.test/v1', endpointConfigured: true } : r);
-      window.__righe = righe;
-      window.__prov.aggiornaProviderList(document.querySelector('#modelLabCard [data-model-lab-panel="providers"] #providerList'), righe, {});
-    });
+    // Il salvataggio e il successivo ridisegno passano entrambi dal bundle.
+    // La fixture HTTP cambia i dati restituiti, senza chiamare il renderer.
+    await card.locator('[data-provider-endpoint]').fill('https://esempio.test/v1');
+    await card.locator('[data-provider-modale-salva]').click();
+    await expect.poll(() => salvataggi.length).toBe(1);
+    expect(salvataggi[0].corpo.endpoint).toBe('https://esempio.test/v1');
     await expect(modale, 'il ridisegno della lista si è portato via la modale').toHaveCount(1);
     await expect(card.locator('.talos-provider__fatti'), 'la card nuova porta il dato nuovo').toContainText('Indirizzo personalizzato');
     await expect(card.locator('[data-provider-modale-salva]'), 'e la modale è quella della card nuova').toHaveCount(1);
@@ -539,38 +536,19 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
      */
     await card.locator('[data-provider-endpoint]').fill('https://esempio.test/v2');
     await card.locator('[data-provider-modale-salva]').click();
-    await expect.poll(() => salvataggi.length, { message: 'la primaria della modale non ha salvato niente' }).toBe(1);
-    expect(salvataggi[0].percorso).toBe('/api/v1/providers/openai/runtime');
-    expect(salvataggi[0].corpo.endpoint, 'l\'indirizzo scritto nella modale arriva al salvataggio').toBe('https://esempio.test/v2');
+    await expect.poll(() => salvataggi.length, { message: 'la primaria della modale non ha salvato niente' }).toBe(2);
+    expect(salvataggi[1].percorso).toBe('/api/v1/providers/openai/runtime');
+    expect(salvataggi[1].corpo.endpoint, 'l\'indirizzo scritto nella modale arriva al salvataggio').toBe('https://esempio.test/v2');
     /* L'esito vive DENTRO la modale, dove stanno i campi: è la ragione per cui non si chiude. */
     await expect(card.locator('[data-provider-feedback]')).toHaveText('Collegamento salvato.');
-    /*
-     * ⛔ E QUI LA PROVA SI FERMA, DICHIARANDO IL CONFINE. Dopo il salvataggio il ridisegno lo fa
-     *   la REGIA DEL BUNDLE (quella di ieri, servita da `public/`), che non ha la cura di oggi:
-     *   la card viene sostituita e la modale va con lei. Nel prodotto, dopo il build, il ridisegno
-     *   passa dal renderer di oggi e la modale resta — ed è ciò che la prova qui sopra ha appena
-     *   misurato. Quello che si può pretendere DA QUESTA parte del confine è che l'esito
-     *   sopravviva al ridisegno: il nodo del feedback è preservato, e si legge.
-     */
 
-    /*
-     * ⛔ E PRIMA DELLA SONDA SI ASPETTA CHE IL RIDISEGNO DEL SALVATAGGIO SIA FINITO, poi si chiude
-     *   la modale se è ancora lì. Non è pignoleria: questa prova è diventata ROSSA A SINGHIOZZO
-     *   finché la riga non c'è stata, e la causa era una CORSA — dopo «Salva configurazione»
-     *   partono DUE ridisegni, quello del bundle (che porta via la card con la modale) e quello
-     *   della sorgente di oggi (che con `daRiaprire` la RIAPRE). Quale arrivasse per ultimo
-     *   dipendeva dal tempo, e con la modale aperta il piede della card è coperto: il clic su
-     *   «Verifica accesso» scadeva a 30 s. Una prova che balla non protegge — e una prova che
-     *   accusa il prodotto di una corsa che ha fatto lei è peggio di nessuna prova.
-     *   ⇒ L'ATTESA è ancorata a un fatto osservabile (la riga aggiornata è arrivata alla card),
-     *     non a un `waitForTimeout`, e la CHIUSURA è una conseguenza dichiarata, non un caso.
-     */
+
+    // Attendiamo la card aggiornata e chiudiamo la modale prima della sonda HTTP simulata.
     await expect(card.locator('.talos-provider__fatti')).toContainText('Indirizzo personalizzato');
     if (await card.locator(':scope > .talos-provider__modale').count()) await card.locator('[data-provider-modale-annulla]').click();
     await expect(card.locator(':scope > .talos-provider__modale')).toHaveCount(0);
 
     /* E la sonda: `data-provider-action="test"` è il nome che la regia riconosce. */
-    await ridisegna(page);
     const verifica = page.locator('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id="openai"] .talos-provider__azioni [data-provider-action="test"]');
     await expect(verifica).toHaveText('Verifica accesso');
     await verifica.click();

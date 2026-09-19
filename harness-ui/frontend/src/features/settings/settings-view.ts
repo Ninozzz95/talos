@@ -10,6 +10,7 @@ interface SettingsViewOptions {
   translate: (value: string) => string;
   chooseSection: (section: string) => void;
   openStudio: (fieldId: string) => void;
+  resetAppearance?: () => void;
 }
 /*
  * ⭐ 18/09/2026 — LA MAPPA DELLE ICONE DELLE SEZIONI, in un posto solo.
@@ -55,6 +56,7 @@ const words = {
   empty: { it: 'Nessuna impostazione trovata', en: 'No settings found' },
   emptyHelp: { it: 'Prova un termine più generale, come “tema”, “permessi” o “provider”.', en: 'Try a broader term such as “theme”, “permissions” or “provider”.' },
   studio: { it: 'Apri nello studio temi', en: 'Open in theme studio' },
+  resetAppearance: { it: 'Ripristina tutto l’aspetto', en: 'Reset all appearance' },
   appearanceAuto: { it: 'Le preferenze di aspetto si applicano subito.', en: 'Appearance preferences apply immediately.' },
   saved: { it: 'Preferenza salvata in questo profilo.', en: 'Preference saved in this profile.' },
   unsaved: { it: 'Salvataggio non riuscito. La modifica potrebbe durare solo fino alla chiusura: libera spazio o verifica lo storage del profilo.', en: 'Could not save. This change may last only until you close the app: free space or check profile storage.' },
@@ -328,6 +330,10 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
    *   una fila di figli che si spostano a seconda di cosa è visibile.
    */
   const coda = node('div', 'settings-section-heading__aside');
+  const resetAppearance = node('button', 'talos-button');
+  resetAppearance.type = 'button'; resetAppearance.dataset.resetAppearance = '';
+  resetAppearance.addEventListener('click', () => options.resetAppearance?.(), { signal });
+  coda.append(resetAppearance);
   h2.tabIndex = -1; h2.dataset.settingsHeading = ''; eyebrow.dataset.settingsEyebrow = ''; headingCopy.append(eyebrow, h2, description); coda.append(scope); heading.append(headingCopy, coda);
   /*
    * ⭐⭐ 18/09/2026 — IL BREADCRUMB. Il mockup ce l'ha («Impostazioni › Laboratorio modelli»), qui
@@ -771,6 +777,8 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
        di restare appesa in tutte e nove le altre. */
     banda.hidden = searching || selected !== 'appearance';
     pastiglia.hidden = selected !== 'appearance';
+    resetAppearance.hidden = selected !== 'appearance' || !options.resetAppearance;
+    resetAppearance.textContent = tx('resetAppearance');
     aggiungi.hidden = selected !== 'models';
     const metadata = SETTINGS_SECTIONS[selected];
     h2.textContent = localText(metadata.title, options.language()); description.textContent = localText(metadata.description, options.language()); scope.textContent = localText(metadata.scope, options.language());

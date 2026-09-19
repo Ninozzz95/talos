@@ -1241,6 +1241,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)$/, metodi: ['GET', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tool-forge$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/children$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/agent-timeline$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/terminals$/, metodi: ['GET', 'POST'] },
   { schema: /^\/api\/v1\/search-source(?:\/(key|key\/remove|test))?$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/providers\/([^/]+)\/test$/, metodi: ['POST'] },
@@ -5668,6 +5669,7 @@ export function createHttpApp({
         const forgeListMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tool-forge$/.exec(url.pathname);
         // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il foglio "Albero sessione" elenca i figli VERI di una sessione, stesso principio di hooksMatch sopra.
         const childrenMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/children$/.exec(url.pathname);
+        const timelineMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/agent-timeline$/.exec(url.pathname);
         // ⭐⭐⭐ 28/8 — non SESSION-scoped: un artefatto ha un id UUID già globalmente unico (agent-service.mjs), stesso principio di /api/v1/models.
         const artifactMatch = /^\/api\/v1\/artifacts\/([^/]+)$/.exec(url.pathname);
         // K-I 06/9 — la cornice del Browser: `?url=` e si risponde con le intestazioni lette, mai con la pagina
@@ -6101,6 +6103,20 @@ export function createHttpApp({
           /* ⛔ A-4 (17/09/2026): `falliti` moriva QUI. Un pacchetto guasto spariva dal pannello
              senza che niente dicesse perché — vedi `caricaPlugin` e `elencaPlugin`. */
           data = { plugin: esito.plugin, falliti: esito.falliti ?? [], errore: esito.errore };
+        } else if (timelineMatch) {
+          const query = {};
+          for (const [key, value] of url.searchParams) {
+            if (!['after', 'through', 'limit'].includes(key) || Object.hasOwn(query, key) || !/^(0|[1-9][0-9]*)$/u.test(value) || !Number.isSafeInteger(Number(value))) {
+              const error = new Error('Parametri della cronologia non validi'); error.code = 'QUERY_INVALID'; throw error;
+            }
+            query[key] = Number(value);
+          }
+          let sessionId;
+          try { sessionId = decodeURIComponent(timelineMatch[1]); }
+          catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          const esito = await sessionRegistry.timelineAgenti(sessionId, query);
+          if (esito.erroreAvvio) { const error = new Error(esito.erroreAvvio); error.code = esito.code; throw error; }
+          data = esito;
         } else if (childrenMatch) {
           requireNoQuery(url);
           let sessionId;

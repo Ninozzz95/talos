@@ -59,7 +59,8 @@ async function serviIlModulo(page) {
   });
 }
 
-async function apriIlLaboratorio(page, { colorMode = 'dark' } = {}) {
+async function apriIlLaboratorio(page, { colorMode = 'dark', runtime = null } = {}) {
+  if (runtime) await page.route('**/api/v1/runtime', route => route.fulfill({ json: { ok: true, data: { items: runtime } } }));
   await page.addInitScript((modo) => {
     window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
       version: 1,
@@ -82,12 +83,9 @@ async function apriIlLaboratorio(page, { colorMode = 'dark' } = {}) {
   /* La scheda «Sistema» del guscio: mostra il pannello `overview`, che è dove vive la card.
      ⛔ Si preme il pulsante VERO e non si chiama l'API del modulo: è quel che fa una persona, e
      il guscio è di un'altra corsia — questa prova non deve sapere come è fatto dentro. */
-  /* ⛔ Si preme con `evaluate` e non con `locator.click()`: la carta del laboratorio vive dentro
-     il pannello «Modelli» delle Impostazioni, che all'apertura NON è quello mostrato — e
-     `locator.click()` aspetta la visibilità, cioè scade a 30 s su un elemento che c'è ed è
-     montato ma non è a schermo. Il click vero è quello che il pulsante riceve, non il puntatore. */
-  await page.evaluate(() => { document.querySelector('#labSchedaSystem')?.click(); });
-  await expect(page.locator('#modelLabOverviewPanel')).toBeAttached({ timeout: 10_000 });
+  await page.locator('#setting-tab-models').click();
+  await page.locator('#labSchedaSystem').click();
+  await expect(page.locator('#modelLabOverviewPanel')).toBeVisible({ timeout: 10_000 });
   await page.waitForTimeout(1200);
   return page;
 }
@@ -410,45 +408,20 @@ test.describe('la scheda Sistema', () => {
     expect(dentro.opt).toBe('0');
   });
 
-  /*
-   * ⭐ LA DOMANDA DELLA CORSIA, RISPOSTA CON UNA MISURA.
-   *
-   * «1 runtime disponibile» (il badge della cornice) e «Nessun runtime raggiunto» (lo stato del
-   * gate) sembrano due verdetti opposti sullo stesso soggetto, a 400 px di distanza. Non lo sono,
-   * e la prova lo dimostra leggendo IL CARICO VERO e ricostruendo le DUE formule dai due file:
-   *   · `cornice-model-lab.js:5-7`  → `osservati.filter(con almeno un modello)`  = «disponibile»
-   *   · `app.js:3558`               → `osservati.filter(raggiunti)`              = «raggiunto»
-   * Con llama.cpp `observed` + `runtimeState:'unavailable'` + 1 modello le due formule danno
-   * 1 e 0, e la card del runtime mostra le due frasi. La prova non pretende che siano uguali:
-   * pretende che siano ESATTAMENTE quelli che le due formule dicono — così, il giorno in cui una
-   * delle due leggesse davvero il campo sbagliato, questa prova diventa rossa.
-   */
+  // Tre stati espliciti al confine HTTP verificano le etichette del bundle.
+  // Non richiede modelli preinstallati e non ricopia le formule di produzione.
   test('SIS-07 — «disponibile» e «raggiunto» misurano due cose diverse, dallo stesso carico', async ({ page }) => {
-    await apriIlLaboratorio(page);
-    const esito = await page.evaluate(async () => {
-      const items = (await (await fetch('/api/v1/runtime')).json()).data.items;
-      const osservati = items.filter((r) => r.state === 'observed');
-      const disponibili = osservati.filter((r) => Array.isArray(r.models) && r.models.length > 0).length;
-      const raggiunti = items.filter((r) => r.state === 'observed' && (r.runtimeId !== 'llama.cpp' || r.runtimeState === 'ready')).length;
-      /* Le due formule, riscritte QUI come stanno nei due file — tre rami per il badge
-         (`cornice-model-lab.js:7`) e due per lo stato (`app.js:3559`). Se una delle due cambia
-         forma, questa prova diventa rossa invece di seguire il prodotto in silenzio. */
-      const attesoBadge = disponibili ? `${disponibili} runtime ${disponibili === 1 ? 'disponibile' : 'disponibili'}` : (osservati.length ? 'Nessun modello disponibile' : 'Nessun runtime raggiunto');
-      const attesoStato = raggiunti ? `${raggiunti} ${raggiunti === 1 ? 'motore raggiunto' : 'motori raggiunti'} · ${disponibili} con modelli disponibili` : 'Nessun runtime raggiunto';
-      return {
-        righe: items.map((r) => ({ id: r.runtimeId, stato: r.state, motore: r.runtimeState ?? null, modelli: (r.models || []).length })),
-        disponibili, raggiunti, attesoBadge, attesoStato,
-        badge: document.querySelector('#modelLabRuntimeBadge')?.textContent ?? null,
-        stato: document.querySelector('#modelLabRuntimeStatus')?.textContent ?? null,
-      };
-    });
-    expect(esito.badge).toBe(esito.attesoBadge);
-    expect(esito.stato).toBe(esito.attesoStato);
-    // Il caso che le separa: un runtime osservato, con un modello, NON avviato.
-    const separatore = esito.righe.filter((r) => r.stato === 'observed' && r.modelli > 0 && r.motore !== 'ready');
-    expect(separatore.length, 'serve almeno un runtime osservato con modello e non pronto: è il caso che separa le due frasi').toBeGreaterThan(0);
-    // E se non c'è nessun runtime pronto, le due frasi NON possono coincidere: è la misura.
-    if (esito.raggiunti === 0) expect(esito.disponibili).toBeGreaterThan(0);
+    const modelli = [{ id: 'fixture-gguf', name: 'Modello di prova' }];
+    const casi = [
+      { runtimeState: 'unavailable', state: 'observed', models: modelli, badge: '1 runtime disponibile', stato: 'Nessun runtime raggiunto' },
+      { runtimeState: 'ready', state: 'observed', models: modelli, badge: '1 runtime disponibile', stato: '1 motore raggiunto · 1 con modelli disponibili' },
+      { runtimeState: 'unavailable', state: 'unavailable', models: [], badge: 'Nessun runtime raggiunto', stato: 'Nessun runtime raggiunto' },
+    ];
+    for (const caso of casi) {
+      await apriIlLaboratorio(page, { runtime: [{ runtimeId: 'llama.cpp', state: caso.state, runtimeState: caso.runtimeState, models: caso.models }] });
+      await expect(page.locator('#modelLabRuntimeBadge')).toHaveCount(0); // Badge rimosso su richiesta owner.
+      await expect(page.locator('#modelLabRuntimeStatus')).toHaveText(caso.stato);
+    }
   });
 
   test('SIS-08 — il montaggio non tocca il 4174 e non rompe la banda: il denominatore resta uno', async ({ page }) => {

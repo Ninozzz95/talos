@@ -264,7 +264,22 @@ export function compitoDaPromptDiDelega(prompt) {
 export function creaSubagentOrchestrator({
   sessioni, avviaESeguiFn, cartellaEsisteFn = esisteCartella,
   modelloPerLaFigliaFn = (padre) => ({ ok: true, modello: padre?.modello ?? null }),
+  statisticheFiglioFn = () => ({}),
+  onFiglioCreatoFn = null,
+  onFiglioConclusoFn = null,
 }) {
+  function notificaSenzaBloccare(callback, payload, { onErrore = null } = {}) {
+    if (typeof callback !== 'function') return;
+    Promise.resolve()
+      .then(() => callback(payload))
+      .catch((errore) => {
+        if (typeof onErrore === 'function') {
+          try { onErrore(errore); } catch { /* la diagnosi non deve mascherare l'errore originale */ }
+        }
+        console.error('[subagent-orchestrator] notifica asincrona fallita:', errore instanceof Error ? errore.message : errore);
+      });
+  }
+
   function contaFigliAttivi(sessionPadreId) {
     let n = 0;
     for (const voce of sessioni.values()) {
@@ -273,13 +288,14 @@ export function creaSubagentOrchestrator({
     return n;
   }
 
-  /** Per il foglio "Albero sessione" (C.3) — ordinati per avvio, il più vecchio prima. */
-  function elencaFigli(sessionPadreId) {
-    const figli = [];
-    for (const [sessionId, voce] of sessioni.entries()) {
-      if (voce.padreId === sessionPadreId) {
-        figli.push({
+  /** Proietta una sola figlia. Gli eventi live non devono ricalcolare tutte le sorelle. */
+  function snapshotFiglio(sessionId) {
+    const voce = sessioni.get(sessionId);
+    if (!voce?.padreId) return null;
+    const statistiche = statisticheFiglioFn(voce) ?? {};
+    return {
           sessionId,
+          parentId: voce.padreId,
           task: voce.task?.consegna ?? null,
           /*
            * ⛔ 09/09, visto nella FOTO della scheda «Agenti» dopo il giro vero della delega (D2): le due
@@ -312,6 +328,14 @@ export function creaSubagentOrchestrator({
           esitoDelega: voce.esitoDelega ?? null,
           evidenzaDelega: voce.evidenzaDelega ?? null,
           avviataAlle: voce.avviataAlle ?? null,
+          conclusaAlle: statistiche.conclusaAlle ?? null,
+          ultimaAttivitaAlle: statistiche.ultimaAttivitaAlle ?? null,
+          approvalPendingCount: Number.isSafeInteger(statistiche.approvalPendingCount) ? statistiche.approvalPendingCount : 0,
+          ultimoEsito: statistiche.ultimoEsito ?? null,
+          motivoChiusura: statistiche.motivoChiusura ?? null,
+          usageSessione: statistiche.usageSessione ?? null,
+          operazioneCorrente: statistiche.operazioneCorrente ?? null,
+          erroreConsegnaDelega: voce.erroreConsegnaDelega ?? null,
           /*
            * ⛔⛔ PO-30 (18/09/2026) — ciò che serve al DETTAGLIO di un agente e alla scheda File («chi sta toccando questo
            *   file»), come nel laboratorio dell'owner ma dai dati veri: il modello e i permessi con cui la figlia gira, e che
@@ -321,15 +345,23 @@ export function creaSubagentOrchestrator({
           modello: voce.modello ?? null,
           permessi: voce.permessi ?? null,
           attivita: riassuntoAttivitaSessione(voce.eventi),
-        });
-      }
+    };
+  }
+
+  /** Per il foglio "Albero sessione" (C.3) — ordinati per avvio, il più vecchio prima. */
+  function elencaFigli(sessionPadreId) {
+    const figli = [];
+    for (const [sessionId, voce] of sessioni.entries()) {
+      if (voce.padreId !== sessionPadreId) continue;
+      const snapshot = snapshotFiglio(sessionId);
+      if (snapshot) figli.push(snapshot);
     }
     figli.sort((a, b) => String(a.avviataAlle).localeCompare(String(b.avviataAlle)));
     return figli;
   }
 
   /**
-   * @returns {Promise<{riassunto?: string, esito: 'concluso'|'fallito'|'rifiutato', motivo?: string}>}
+   * @returns {Promise<{riassunto?: string, childId?: string, esito: 'avviato'|'rifiutato', motivo?: string}>}
    * Non lancia MAI — un rifiuto (cartella invalida, tetto raggiunto,
    * padre scomparso) è un `esito:'rifiutato'` con `motivo`, non
    * un'eccezione: il dispatcher del kernel lo traduce in un REFUSED
@@ -423,7 +455,18 @@ export function creaSubagentOrchestrator({
           voceFiglia.esitoDelega = esito.esito;
           voceFiglia.evidenzaDelega = analizzaEvidenzaDelega(eventi);
         }
-        resolve(esito);
+        notificaSenzaBloccare(onFiglioConclusoFn, {
+          parentId: sessionPadreId,
+          childId: figlioId,
+          risultato: esito,
+          evidenza: voceFiglia?.evidenzaDelega ?? null,
+        }, {
+          onErrore: (errore) => {
+            if (!voceFiglia) return;
+            voceFiglia.erroreConsegnaDelega = errore instanceof Error ? errore.message : String(errore);
+            voceFiglia.esitoDelega = 'fallito';
+          },
+        });
       };
       /*
        * ⛔⛔⛔ 06/9, stessa misura: i figli partivano con `glm-4.7-flash` mentre la sessione madre
@@ -490,13 +533,24 @@ export function creaSubagentOrchestrator({
         },
       });
       figlioId = risultatoAvvio?.sessionId ?? null;
-      if (conclusioneRicevuta) completaConclusione(conclusioneRicevuta);
       // ⛔ AL CONTRARIO: avviaESeguiFn può rifiutare PRIMA di avviare (es. chiave API non configurata) — mai una Promise appesa in eterno se onConclusioneFn non scatterà mai.
-      if (!conclusioneGestita && !conclusioneRicevuta && risultatoAvvio?.erroreAvvio) {
+      if (risultatoAvvio?.erroreAvvio) {
         resolve({ esito: 'rifiutato', motivo: risultatoAvvio.erroreAvvio });
+        return;
       }
+      if (!figlioId) {
+        resolve({ esito: 'rifiutato', motivo: 'la sessione figlia non ha restituito un identificatore valido' });
+        return;
+      }
+      notificaSenzaBloccare(onFiglioCreatoFn, { parentId: sessionPadreId, childId: figlioId });
+      if (conclusioneRicevuta) completaConclusione(conclusioneRicevuta);
+      resolve({
+        esito: 'avviato',
+        childId: figlioId,
+        riassunto: `Sotto-agente ${figlioId} avviato in background. Continua il lavoro: il risultato finale verrà consegnato separatamente quando sarà disponibile.`,
+      });
     });
   }
 
-  return Object.freeze({ delegaSottoTask, contaFigliAttivi, elencaFigli });
+  return Object.freeze({ delegaSottoTask, contaFigliAttivi, elencaFigli, snapshotFiglio });
 }

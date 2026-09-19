@@ -9,10 +9,9 @@ import { resolve } from 'node:path';
  * ============================================================================
  * Prova `src/components/provider-card.js` (la riga dei filtri) e
  * `src/components/loghi-fornitori.js` (il marchio di ogni fornitore).
- * La forma è la stessa di `lab-provider.spec.mjs`: il modulo si serve dalla
- * SORGENTE su disco (`page.route('**\/__lab\/*.js')` + `import()` dalla pagina,
- * che la CSP `script-src 'self'` ammette perché è same-origin) e si disegna
- * sulla CARTA VERA del laboratorio, coi FORNITORI VERI del server.
+ * Usa il bundle costruito dal banco e la regia effettiva dell'app. Una seconda
+ * istanza del renderer importata dalla prova avrebbe una WeakMap diversa,
+ * mentre il timbro DOM del primo montaggio impedirebbe di collegare i filtri.
  *
  * ⛔ DA DOVE VIENE LA RICHIESTA (owner, 19/09/2026):
  *     «Ci devono essere tutti i filtri relativi: per Provider, per Impostato,
@@ -36,32 +35,12 @@ import { resolve } from 'node:path';
  * ============================================================================
  */
 
-const COMPONENTI = resolve(process.cwd(), 'src', 'components');
 const ASSET = resolve(process.cwd(), 'src', 'assets', 'loghi-fornitori');
 const CARTELLA_FOTO = resolve(process.cwd(), 'artifacts', 'fase4-provider', 'foto');
 
-async function serviIlModulo(page) {
-  await page.route('**/__lab/*.js', async (route) => {
-    const nome = new URL(route.request().url()).pathname.split('/').pop();
-    try {
-      const sorgente = readFileSync(resolve(COMPONENTI, nome), 'utf8');
-      await route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: sorgente });
-    } catch {
-      await route.fulfill({ status: 404, contentType: 'text/plain; charset=utf-8', body: `manca ${nome}` });
-    }
-  });
-}
-
-/**
- * Apre l'app, va in Impostazioni → Laboratorio modelli → scheda «Provider», monta il
- * pannello (è il montaggio VERO che installa i filtri) e ridisegna la lista con la
- * SORGENTE di oggi e le righe VERE del server.
- * ⛔ L'ORDINE CONTA: `montaProviderPanel` PRIMA di `aggiornaProviderList`, perché è il
- *   montaggio a installare la riga dei filtri e solo il disegno a riempirla coi conteggi.
- *   Al contrario si otterrebbero chip vuoti — cioè una prova che accusa il prodotto di un
- *   ordine che è della prova.
- */
-async function apriProvider(page, { colorMode = 'dark', righe = null } = {}) {
+/** Apre il percorso reale dell’app e lascia montaggio e filtri al bundle.
+ * Le fixture opzionali entrano soltanto attraverso le risposte HTTP. */
+async function apriProvider(page, { colorMode = 'dark', righe = null, prove = {} } = {}) {
   const tentate = [];
   const esterne = [];
   /* ⛔ PRIMA il blocco, POI le eccezioni (stessa ragione di `lab-provider.spec.mjs`):
@@ -78,10 +57,19 @@ async function apriProvider(page, { colorMode = 'dark', righe = null } = {}) {
     tentate.push(`${metodo} ${url.pathname}`);
     return route.abort();
   });
+  if (righe) await page.route('**/api/v1/providers', route => route.fulfill({ json: { ok: true, data: { items: righe } } }));
+  for (const [id, esito] of Object.entries(prove)) {
+    await page.route(`**/api/v1/providers/${id}/test`, route => route.fulfill({ json: {
+      ok: true, data: { provider: id, esito, motivo: 'Risposta controllata della prova', modelli: 1, millisecondi: 1 },
+    } }));
+  }
+  // Il modulo puro serve soltanto al confronto indipendente dei marchi.
+  await page.route('**/__lab/loghi-fornitori.js', route => route.fulfill({
+    contentType: 'text/javascript', body: readFileSync(resolve(process.cwd(), 'src/components/loghi-fornitori.js'), 'utf8'),
+  }));
   await page.addInitScript((modo) => {
     window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode: modo, themePreset: 'calm', themePresetVersione: 2, uiLanguage: 'it' }, chat: {}, workspaces: {} }));
   }, colorMode);
-  await serviIlModulo(page);
   await page.goto('/');
   await page.waitForSelector('#talosAvvio', { state: 'detached', timeout: 15000 });
   await page.evaluate(() => {
@@ -95,18 +83,13 @@ async function apriProvider(page, { colorMode = 'dark', righe = null } = {}) {
   await page.click('#modelLabCard [data-lab-scheda="providers"]');
   await expect(page.locator('#modelLabCard [data-model-lab-panel="providers"]')).toBeVisible();
   const esito = await page.evaluate(async () => {
-    const modulo = await import('/__lab/provider-card.js');
-    window.__prov = modulo;
     const risposta = await (await fetch('/api/v1/providers')).json();
     window.__righe = risposta.data.items;
     const pannello = document.querySelector('#modelLabCard [data-model-lab-panel="providers"]');
     const lista = pannello.querySelector('#providerList');
-    /* Il montaggio VERO (col suo timbro) — è lui che installa i filtri. */
-    delete pannello.dataset.providerMontato;
-    modulo.montaProviderPanel(pannello);
-    modulo.aggiornaProviderList(lista, window.__righe, {});
     return { n: window.__righe.length, filtri: Boolean(lista.previousElementSibling?.matches?.('[data-provider-filtri-riga]')) };
   });
+  await expect(page.locator('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id]')).toHaveCount(esito.n);
   return { tentate, esterne, esito };
 }
 
@@ -226,7 +209,7 @@ test.describe('i filtri dei fornitori — conteggi veri, e filtrano davvero', ()
           dicendo che gli altri non esistono ─────────────────────────────────────────── */
     const dopo = await leggiChip(page, 'credenziale');
     expect(dopo.find((b) => b.valore === valore).conteggio, 'il conteggio resta quello dell\'elenco intero').toBe(atteso);
-    expect(dopo.filter((b) => b.valore !== valore).every((b) => !b.spento), 'gli altri restano accendibili: è così che si cambia filtro').toBe(true);
+    for (const chip of dopo) expect(chip.spento, `disponibilità coerente col conteggio di ${chip.valore}`).toBe(chip.conteggio === 0);
 
     /* ── L'ESITO LO DICE, e «Togli i filtri» compare ─────────────────────────────── */
     await expect(page.locator('[data-provider-filtro-esito]')).toHaveText(`${atteso} fornitori su ${totale}`);
@@ -242,12 +225,11 @@ test.describe('i filtri dei fornitori — conteggi veri, e filtrano davvero', ()
 
   test('FILL-03 — OR dentro una faccetta, AND fra faccette, e la ricerca è una terza faccetta', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await apriProvider(page);
     /* ⛔ Righe SINTETICHE, e dichiarate: servono a provare la LOGICA (OR/AND) con le
        combinazioni che i dati veri di questo banco non hanno — un ambiente con una chiave
        salvata, uno con una chiave d'ambiente, due senza. Non sono un surrogato del
        prodotto: il renderer è quello vero, e le righe sono la sua materia prima. */
-    const finte = await page.evaluate(() => {
+    const finte = (() => {
       const base = { execution: 'collegato', supportsEndpoint: true, endpoint: 'https://x.test/v1', timeoutSeconds: 60 };
       const righe = [
         { ...base, id: 'a-salvata', label: 'Alfa', requiresKey: true, keyConfigured: true },
@@ -256,14 +238,14 @@ test.describe('i filtri dei fornitori — conteggi veri, e filtrano davvero', ()
         { ...base, id: 'd-mancante', label: 'Delta', requiresKey: true },
         { ...base, id: 'e-facoltativa', label: 'Epsilon', requiresKey: false, execution: 'runtime locale' },
       ];
-      window.__finte = righe;
-      const lista = document.querySelector('#modelLabCard [data-model-lab-panel="providers"] #providerList');
-      /* Le prove si passano dal vivo: la mappa dice che Alfa e Gamma sono state provate. */
-      window.__prove = new Map([['a-salvata', { esito: 'collegato' }], ['c-mancante', { esito: 'errore' }]]);
-      window.__prov.aggiornaProviderList(lista, righe, { prove: window.__prove });
-      return righe.length;
-    });
-    expect(finte).toBe(5);
+      return righe;
+    })();
+    await apriProvider(page, { righe: finte, prove: { 'a-salvata': 'collegato', 'c-mancante': 'errore' } });
+    expect(finte).toHaveLength(5);
+    for (const id of ['a-salvata', 'c-mancante']) {
+      await page.locator(`#providerList [data-provider-id="${id}"] [data-provider-action="test"]`).click();
+    }
+    await expect(page.locator('[data-provider-filter="prova:provato"] .talos-badge')).toHaveText('2');
     const conta = async () => quanteCard(page);
     await expect.poll(conta, { timeout: 15000 }).toBe(5);
     const chip = await leggiChip(page, 'credenziale');
@@ -457,13 +439,15 @@ test.describe('i loghi veri dei fornitori', () => {
            confronto per stringa esatta accuserebbe il prodotto di una differenza di maiuscole. */
         colori: [...new Set(svg.map((n) => String(n.style.fill || getComputedStyle(n).fill).toLowerCase()))],
         esadecimali: svg.flatMap((n) => [...n.attributes].map((a) => a.value)).filter((v) => /#[0-9a-f]{3,8}/i.test(v)),
-        taglie: [...new Set(svg.map((n) => `${n.getBoundingClientRect().width}x${n.getBoundingClientRect().height}`))],
+        taglie: svg.map((n) => { const r = n.getBoundingClientRect(); return [r.width, r.height]; }),
       };
     });
     expect(disegno.quanti, 'almeno un marchio disegnato').toBeGreaterThan(0);
     expect(disegno.colori, 'il marchio si dipinge col colore del tema, non con un colore suo').toEqual(['currentcolor']);
     expect(disegno.esadecimali, 'nessun esadecimale del marchio addosso al nodo').toEqual([]);
-    expect(disegno.taglie, 'la misura del mockup: 22×22 dentro il riquadro da 38').toEqual(['22x22']);
+    for (const taglia of disegno.taglie) for (const lato of taglia) {
+      expect(Math.abs(lato - 22), '22×22 con tolleranza subpixel di 0,01 px').toBeLessThan(0.01);
+    }
 
     /*
      * ⛔ E IL MONOGRAMMA HA LA STESSA MISURA, o la riga delle card ballerebbe: le card con un

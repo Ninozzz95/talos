@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ordinaSessioniAdAlbero, prefissoComuneDiParole, nomiDistintiFraSorelle } from '../../src/components/session-item.js';
+import { sessioniRadice, ordinaSessioniAdAlbero, prefissoComuneDiParole, nomiDistintiFraSorelle } from '../../src/components/session-item.js';
 
 /*
  * ⛔ 08/09/2026 — la barra a sinistra mostrava le figlie di una delega SCIOLTE accanto alla madre.
@@ -196,4 +196,14 @@ test('⛔ AL CONTRARIO: fra sessioni FERME l’ordine non cambia — la barra no
 test('⛔ AL CONTRARIO: senza nessuna sessione viva l’ordine resta esattamente quello ricevuto', () => {
   const righe = [{ sessionId: 'x', conclusa: true }, { sessionId: 'y', conclusa: true }];
   assert.deepEqual(ordinaSessioniAdAlbero(righe).map((v) => v.sessione.sessionId), ['x', 'y']);
+});
+
+
+test('RIPRESA-SIDEBAR-RADICI — non promuove figli orfani e conserva il catalogo', () => {
+  const roots = [riga('radice-A'), riga('radice-B')];
+  const all = [roots[0], riga('figlio','radice-A'), riga('nipote','figlio'), riga('orfano','assente'), {sessionId:'profondita-sola',profonditaDelega:2}, roots[1]];
+  assert.deepEqual(sessioniRadice(all), roots);
+  assert.equal(all.length,6);
+  assert.equal(sessioniRadice(all)[0],roots[0]);
+  assert.deepEqual(sessioniRadice(null),[]);
 });

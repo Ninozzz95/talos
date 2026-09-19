@@ -404,7 +404,7 @@ export function aggiornaDettaglioInstallato(aside, dati, { runtime = {}, azioni 
   }
   aside.appendChild(stima);
   const azione = el(documentObj, 'button', 'talos-button talos-button--secondary talos-button--block'); azione.id = 'azioneModello'; azione.type = 'button';
-  if (dati.caricato) { azione.dataset.action = 'memoria'; azione.textContent = 'Libera memoria'; if (azioni.libera) azione.addEventListener('click', () => azioni.libera(dati.id)); }
+  if (dati.caricato) { azione.dataset.action = 'memoria'; azione.textContent = runtime.unloading ? 'Liberazione…' : 'Libera memoria'; azione.disabled = Boolean(runtime.unloading || runtime.loading || runtime.error); if (azioni.libera) azione.addEventListener('click', () => azioni.libera(dati.id)); }
   else { azione.dataset.action = 'verifica'; azione.dataset.verifyFit = dati.id; azione.textContent = 'Verifica compatibilità'; if (azioni.verifica) azione.addEventListener('click', () => azioni.verifica(dati.id)); }
   aside.appendChild(azione);
   const effetto = el(documentObj, 'p', 'talos-muted talos-lab__space'); effetto.id = 'modelloEffetto';
@@ -443,7 +443,7 @@ export function aggiornaInstallati(panel, modelli = [], opzioni = {}) {
   if (memoria) {
     const testi = memoria.querySelectorAll('strong, span:not(.talos-grow)');
     if (testi[0]) testi[0].textContent = Number.isFinite(runtime.ramTotaleBytes) ? `Questo computer · ${Math.round(runtime.ramTotaleBytes / GB)} GB di RAM` : 'Questo computer · RAM non misurata';
-    if (testi[1]) testi[1].textContent = Number.isFinite(runtime.usatiDalModelloBytes) && runtime.caricato ? `${gb(runtime.usatiDalModelloBytes)} usati dal modello` : 'Nessun modello in memoria';
+    if (testi[1]) testi[1].textContent = Number.isFinite(runtime.usatiDalModelloBytes) && runtime.caricato ? `${gb(runtime.usatiDalModelloBytes)} usati dal modello` : runtime.caricato ? 'Modello in memoria · uso RAM non misurato' : runtime.loading || runtime.error ? 'Stato memoria non disponibile' : 'Nessun modello in memoria';
     if (testi[2]) testi[2].textContent = Number.isFinite(runtime.liberiBytes) ? `${gb(runtime.liberiBytes)} liberi` : 'RAM libera non misurata';
   }
   panel.setAttribute('aria-busy', String(Boolean(caricamento)));

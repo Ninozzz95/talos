@@ -2,6 +2,25 @@ const REVISION = /^[a-f0-9]{40,64}$/iu;
 const REPO = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}\/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/u;
 const OFFICIAL_HOSTS = new Set(['huggingface.co']);
 
+function parametriDichiarati(row) {
+  const total = row.gguf?.total ?? row.safetensors?.total;
+  return Number.isSafeInteger(total) && total > 0 ? total : null;
+}
+function accessoHf(value) { return value === false ? false : [true, 'manual', 'auto'].includes(value) ? true : null; }
+function cursoreSeguente(link, root) {
+  for (const part of String(link || '').split(/,(?=\s*<)/u)) {
+    const match = /^\s*<([^>]+)>\s*;.*\brel\s*=\s*"?next"?(?:\s*;|\s*$)/iu.exec(part);
+    if (!match) continue;
+    try {
+      const url = new URL(match[1], root);
+      if (url.origin !== root.origin || url.pathname !== '/api/models' || url.username || url.password) continue;
+      const cursor = url.searchParams.get('cursor');
+      if (cursor && cursor.length <= 16384) return cursor;
+    } catch { /* Header non utilizzabile: non visitare URL arbitrari. */ }
+  }
+  return null;
+}
+
 export class HfHubError extends Error {
   constructor(message, code = 'HF_HUB_ERROR') { super(message); this.name = 'HfHubError'; this.code = code; }
 }
@@ -58,21 +77,23 @@ export function createHfHubClient({ fetchImpl = fetch, token, baseUrl = 'https:/
     throw new HfHubError(`Hugging Face HTTP ${response.status}`, 'HF_HUB_UPSTREAM');
   }
   async function searchModels({ query = '', limit = 20, cursor = null, sort = 'downloads', direction = '-1', author = null, filters = [] } = {}) {
-    const allowedSort = new Set(['downloads', 'likes', 'created', 'lastModified']);
+    // Compatibilità con preferenze salvate prima del nome canonico upstream.
+    if (sort === 'created') sort = 'createdAt';
+    const allowedSort = new Set(['downloads', 'likes', 'createdAt', 'lastModified']);
     const allowedDirection = new Set(['-1', '1']);
     if (typeof query !== 'string' || query.length > 200 || !Number.isInteger(limit) || limit < 1 || limit > 50 || !allowedSort.has(sort) || !allowedDirection.has(String(direction)) || (author !== null && (typeof author !== 'string' || author.length > 100)) || !Array.isArray(filters) || filters.some((filter) => typeof filter !== 'string' || filter.length === 0 || filter.length > 80)) invalid('search parameters are invalid');
     const params = new URLSearchParams({ sort, direction: String(direction), limit: String(limit) });
     params.append('filter', 'gguf');
     for (const filter of filters) params.append('filter', filter);
     if (author?.trim()) params.set('author', author.trim());
-    for (const field of ['sha', 'gguf', 'downloads', 'downloadsAllTime', 'likes', 'pipeline_tag', 'tags', 'siblings', 'cardData']) params.append('expand[]', field);
+    for (const field of ['sha', 'gguf', 'safetensors', 'gated', 'downloads', 'downloadsAllTime', 'likes', 'pipeline_tag', 'tags', 'siblings', 'cardData']) params.append('expand[]', field);
     if (query.trim()) params.set('search', query.trim());
     if (cursor) params.set('cursor', String(cursor));
     const response = await request(`/api/models?${params}`);
     const rows = await response.json();
     const payload = Array.isArray(rows) ? rows : (Array.isArray(rows?.items) ? rows.items : (Array.isArray(rows?.data) ? rows.data : []));
-    const items = payload.map((row) => ({ repo: row.id, revision: /^[a-f0-9]{40,64}$/iu.test(row.sha || '') ? row.sha : null, downloads: Number.isFinite(row.downloads) ? row.downloads : null, likes: Number.isFinite(row.likes) ? row.likes : null, gated: row.gated === true, pipelineTag: row.pipeline_tag || null, license: row.cardData?.license || row.license || null, tags: Array.isArray(row.tags) ? row.tags.slice(0, 40) : [] }));
-    const nextCursor = rows?.next ?? rows?.next_cursor ?? rows?.nextCursor ?? response.headers.get('x-next-cursor') ?? null;
+    const items = payload.filter(row => row && typeof row.id === 'string').map((row) => ({ repo: row.id, revision: /^[a-f0-9]{40,64}$/iu.test(row.sha || '') ? row.sha : null, downloads: Number.isFinite(row.downloads) ? row.downloads : null, likes: Number.isFinite(row.likes) ? row.likes : null, gated: accessoHf(row.gated), parameterCount: parametriDichiarati(row), pipelineTag: row.pipeline_tag || null, license: row.cardData?.license || row.license || null, tags: Array.isArray(row.tags) ? row.tags.slice(0, 40) : [] }));
+    const nextCursor = rows?.next ?? rows?.next_cursor ?? rows?.nextCursor ?? response.headers.get('x-next-cursor') ?? cursoreSeguente(response.headers.get('link'), root);
     return { items, nextCursor: typeof nextCursor === 'string' && nextCursor ? nextCursor : null };
   }
   async function describeModel(repo, revision = 'main') {
@@ -80,7 +101,7 @@ export function createHfHubClient({ fetchImpl = fetch, token, baseUrl = 'https:/
     const [meta, readme] = await Promise.all([request(`/api/models/${repo}`).then((r) => r.json()), request(`/${repo}/raw/${encodeURIComponent(rev)}/README.md`, { headers: { Accept: 'text/plain' } }).then((r) => r.text()).catch((error) => error.code === 'HF_HUB_UPSTREAM' ? '' : Promise.reject(error))]);
     const revisionResolved = /^[a-f0-9]{40,64}$/iu.test(meta.sha || '') ? meta.sha : rev;
     const card = extractModelCardImages(readme, { repo, revision: revisionResolved });
-    return { repo, revision: revisionResolved, gated: meta.gated === true, license: meta.cardData?.license || meta.license || null, readme: card.readme, images: card.images, downloads: meta.downloads ?? null, likes: meta.likes ?? null, pipelineTag: meta.pipeline_tag || null };
+    return { repo, revision: revisionResolved, gated: accessoHf(meta.gated), license: meta.cardData?.license || meta.license || null, readme: card.readme, images: card.images, downloads: meta.downloads ?? null, likes: meta.likes ?? null, pipelineTag: meta.pipeline_tag || null };
   }
   async function listGgufFiles(repo, revision) {
     ensureRepo(repo); ensureRevision(revision);

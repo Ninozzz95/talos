@@ -41,6 +41,7 @@ export function normalizzaStatoCoda(valore) {
       id: typeof v?.id === 'string' ? v.id : null,
       testo: typeof v?.testo === 'string' ? v.testo : '',
       immagini: Number.isFinite(v?.immagini) ? v.immagini : 0,
+      ...(v?.origine === 'delega' ? { origine: 'delega', childId: typeof v.childId === 'string' ? v.childId : null } : {}),
     }))
     .filter((v) => v.testo.trim() !== '');
   return { voci, inPausa: Boolean(valore?.inPausa) && voci.length > 0 };
@@ -60,8 +61,12 @@ export function normalizzaStatoCoda(valore) {
 export function descriviCoda(stato, { giroVivo = false } = {}) {
   const { voci, inPausa } = normalizzaStatoCoda(stato);
   if (voci.length === 0) return null;
-  const anteprima = `«${accorcia(voci[0].testo, LUNGHEZZA_ANTEPRIMA)}»`;
-  const intero = `«${accorcia(voci[0].testo, LUNGHEZZA_TITOLO)}»`;
+  const delega = voci[0].origine === 'delega';
+  const risultato = delega ? descriviRisultatoDelega(voci[0].testo, voci[0].childId) : null;
+  const origine = delega ? 'Risultato di un agente · ' : '';
+  const testo = risultato ? `${risultato.titolo}: ${risultato.testo}` : voci[0].testo;
+  const anteprima = `${origine}«${accorcia(testo, LUNGHEZZA_ANTEPRIMA)}»`;
+  const intero = `${origine}«${accorcia(testo, LUNGHEZZA_TITOLO)}»`;
   /*
    * ⛔ 14/09, giro vero (banco 5475): la PAUSA la decide lo stop, l'AZIONE la decide il giro — due fatti diversi. Ripreso il
    *   giro con «Invia ora», la voce rimasta in pausa diceva «Invia ora» e «Il giro è fermo» mentre il modello lavorava, e
@@ -78,4 +83,14 @@ export function descriviCoda(stato, { giroVivo = false } = {}) {
   }
   const spiegazione = 'Parte quando TALOS finisce di rispondere';
   return { conteggio: `${voci.length} in coda`, tono: 'neutro', testo: anteprima, spiegazione, titoloTesto: `${intero} — ${spiegazione}`, ...azione };
+}
+
+/** Presentazione del contratto emesso dal registro: mai istruzioni e mai HTML. */
+export function descriviRisultatoDelega(testo, childId) {
+  if (typeof testo !== 'string' || testo.length > 1000000 || typeof childId !== 'string') return null;
+  try {
+    const p = JSON.parse(testo.slice(testo.indexOf('\n') + 1));
+    if (p?.schema !== 'talos.subagent-result.v1' || p.childId !== childId || !['concluso','non concluso'].includes(p.stato) || typeof p.risultatoNonFidato !== 'string') return null;
+    return { titolo: typeof p.compito === 'string' && p.compito.trim() ? p.compito : 'Sotto-agente', testo: p.risultatoNonFidato, errore: p.stato !== 'concluso' };
+  } catch { return null; }
 }

@@ -210,6 +210,284 @@ const STIMA = {
 
 const RISPOSTE_BASE = { modelli: { dati: { items: [manifest()] } }, fit: { dati: fit() }, capacita: { dati: CAPACITA }, repo: { dati: REPO_DATI }, stima: { dati: STIMA } };
 
+test('RIPRESA-HF-DOWNLOAD-ROUTE — il montaggio reale della app passa il download al confine HTTP', async ({ page }) => {
+  const posts = [];
+  const busta = data => ({ json: { ok: true, data, meta: { schema: 'talos.harness-ui.api.v1' } } });
+  await page.route('**/api/v1/huggingface/repo?**', route => route.fulfill(busta(REPO_DATI)));
+  await page.route('**/api/v1/model-lab/capacity**', route => route.fulfill(busta(CAPACITA)));
+  await page.route('**/api/v1/local-models/fit-estimate?**', route => route.fulfill(busta(STIMA)));
+  await page.route('**/api/v1/huggingface/download', async route => {
+    expect(route.request().method()).toBe('POST');
+    posts.push(route.request().postDataJSON());
+    await route.fulfill(busta({ id: posts.at(-1).id, state: 'queued' }));
+  });
+  await page.goto(`/#/impostazioni/modelli/scheda/${encodeURIComponent(`hf:${REPO}@${REVISION}`)}/files`);
+  await expect(page.locator('#talosAvvio')).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.locator('#paginaModello')).toBeVisible();
+  const variante = page.locator('#paginaModelloFileChoices [data-variante$="Q8_0.gguf"]');
+  await variante.click();
+  const scarica = page.locator('#paginaModelloScarica');
+  // Deve fallire se apriPaginaModello smette di passare apiPost.
+  await expect(scarica).toBeEnabled();
+  await scarica.click();
+  await expect.poll(() => posts.length).toBe(1);
+  expect(posts[0]).toMatchObject({
+    repo: REPO, revision: REVISION, bytes: 32000000000, license: 'unknown',
+    files: [{ path: 'GLM-4.7-Flash-Q8_0.gguf', bytes: 32000000000, sha256: REPO_DATI.files[1].sha256 }],
+  });
+  expect(posts[0].id).toBe(posts[0].path);
+  await expect(page.locator('#paginaModello [data-modello-scarica-esito="avviato"]')).toContainText('Download avviato');
+  await expect(page.locator('#paginaModelloFileChoices')).toHaveCount(1);
+});
+
+async function preparaRipresaHf(page, { download, appearance = {}, dallaLista = false } = {}) {
+  const busta = data => ({ json: { ok: true, data, meta: { schema: 'talos.harness-ui.api.v1' } } });
+  await page.route('**/api/v1/huggingface/repo?**', route => route.fulfill(busta(REPO_DATI)));
+  await page.route('**/api/v1/model-lab/capacity**', route => route.fulfill(busta(CAPACITA)));
+  await page.route('**/api/v1/local-models/fit-estimate?**', route => route.fulfill(busta(STIMA)));
+  if (download) await page.route('**/api/v1/huggingface/download', download);
+  await page.addInitScript(appearance => {
+    try {
+      localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
+        version: 1, appearance: { colorMode: 'dark', themePreset: 'calm', themePresetVersione: 2, ...appearance }, chat: {}, workspaces: {},
+      }));
+    } catch { /* Gli iframe a origine opaca non possiedono questo storage. */ }
+  }, appearance);
+  await page.route('**/api/v1/huggingface/search?**', route => route.fulfill(busta({ items: [REPO_DATI] })));
+  await page.goto(dallaLista ? '/' : `/#/impostazioni/modelli/scheda/${encodeURIComponent(`hf:${REPO}@${REVISION}`)}/files`);
+  await expect(page.locator('#talosAvvio')).toHaveCount(0, { timeout: 10_000 });
+  if (dallaLista) {
+    const voce = page.locator('.talos-sidebar [data-vaia="impostazioni"]');
+    const gruppo = await voce.evaluate(el => el.closest('.td-nav-group')?.id);
+    if (gruppo) {
+      const testata = page.locator(`.talos-sidebar [aria-controls="${gruppo}"]`);
+      if (await testata.getAttribute('aria-expanded') === 'false') await testata.click();
+    }
+    await voce.click();
+    await page.locator('#setting-tab-models').click();
+    await page.locator('#labSchedaModels').click();
+    await expect(page.locator('#modelLabHfPanel [data-hf]')).toHaveCount(1);
+    return;
+  }
+  await expect(page.locator('#paginaModelloFileChoices [data-variante]')).toHaveCount(2);
+}
+
+for (const width of [1440, 3840]) {
+  test(`RIPRESA-HF-SHELL ${width} — la pagina conserva sidebar visibile e utilizzabile`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await preparaRipresaHf(page);
+    const m = await page.evaluate(() => {
+      const sidebar = document.querySelector('.talos-sidebar'); const s = sidebar.getBoundingClientRect(); const p = document.querySelector('#paginaModello').getBoundingClientRect();
+      return { sidebar: s.width, left: p.left, right: s.right, libera: sidebar.contains(document.elementFromPoint(s.left + 30, s.top + 35)) };
+    });
+    expect(m.sidebar).toBeGreaterThan(100); expect(m.left).toBeGreaterThanOrEqual(m.right - 1); expect(m.libera).toBe(true);
+  });
+  test(`RIPRESA-HF-README ${width} — prosa centrata con la larghezza del mockup`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await preparaRipresaHf(page);
+    await page.locator('#paginaModello [role="tab"]').nth(0).click();
+    const prosa = page.locator('#paginaModello .readme-body');
+    await expect(prosa).toBeVisible();
+    const m = await prosa.evaluate(n => { const r = n.getBoundingClientRect(), p = n.closest('.readme-surface').getBoundingClientRect(); return { width: r.width, offset: Math.abs(r.left + r.width / 2 - p.left - p.width / 2) }; });
+    expect(m.width).toBeGreaterThan(850); expect(m.width).toBeLessThanOrEqual(width >= 1920 ? 1031 : 961); expect(m.offset).toBeLessThan(2);
+    const layout = await page.locator('#paginaModello .model-page').evaluate(n => {
+      const tab = n.querySelector('[role="tab"][aria-selected="true"]');
+      const header = n.querySelector('.readme-chrome');
+      return { width: n.getBoundingClientRect().width, underline: getComputedStyle(tab).borderBottomWidth,
+        radius: getComputedStyle(tab).borderRadius, headerGap: header.children[1].getBoundingClientRect().left - header.children[0].getBoundingClientRect().right };
+    });
+    expect.soft(layout.width).toBeLessThanOrEqual(1261);
+    expect.soft(layout.underline).toBe('2px');
+    expect.soft(layout.radius).toBe('0px');
+    expect.soft(layout.headerGap).toBeLessThanOrEqual(16);
+  });
+}
+test('RIPRESA-LAB-SENZA-RIEPILOGHI — i quattro riepiloghi rimossi dall’owner sono assenti', async ({ page }) => {
+  await preparaRipresaHf(page, { dallaLista: true });
+  await expect(page.locator('#modelLabCard .model-lab-ledger')).toHaveCount(0);
+  await expect(page.locator('#modelLabRuntimeBadge')).toHaveCount(0);
+  await expect(page.locator('#labSchedaSystem')).toBeVisible();
+});
+
+test('RIPRESA-HF-DOWNLOAD — lista, pagina, variante e accesso alla coda reale', async ({ page }) => {
+  const posts = [];
+  await page.route('**/api/v1/huggingface/downloads', route => route.fulfill({ json: { ok: true,
+    data: { items: posts.map(post => ({ ...post, state: 'queued', downloadedBytes: 0 })) } } }));
+  await preparaRipresaHf(page, { dallaLista: true, download: async route => {
+    posts.push(route.request().postDataJSON());
+    await route.fulfill({ json: { ok: true, data: { id: posts.at(-1).id, state: 'queued' } } });
+  } });
+  await page.locator('#modelLabHfPanel [data-hf]').click();
+  await expect(page.locator('#paginaModello')).toBeVisible();
+  await page.locator('#paginaModello [role="tab"]').nth(1).click();
+  await page.locator('#paginaModelloFileChoices [data-variante$="Q8_0.gguf"]').click();
+  await page.locator('#paginaModelloScarica').click();
+  await expect.poll(() => posts.length).toBe(1);
+  expect(posts[0]).toMatchObject({ repo: REPO, revision: REVISION, bytes: 32000000000,
+    files: [{ path: REPO_DATI.files[1].path, bytes: 32000000000, sha256: REPO_DATI.files[1].sha256 }] });
+  await page.getByRole('button', { name: 'Apri Download', exact: true }).click();
+  await expect(page.locator('#paginaModello')).toBeHidden();
+  await expect(page.locator('#modelLabDownloadsPanel')).toBeVisible();
+  await expect(page.locator('#labSchedaDownloads')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator(`#modelLabDownloadsPanel [data-download-id="${posts[0].id}"]`)).toBeVisible();
+});
+
+test('RIPRESA-HF-RIENTRO — ricarica conserva revisione, variante e ritorno alla ricerca', async ({ page }) => {
+  await preparaRipresaHf(page, { dallaLista: true });
+  await page.locator('#modelLabHfSearch').fill('GLM');
+  await page.locator('#modelLabHfSearch').press('Enter');
+  await page.locator('#modelLabHfPanel [data-hf]').click();
+  await expect(page.locator('#paginaModello')).toBeVisible();
+  await page.locator('#paginaModello [role="tab"]').nth(1).click();
+  const q8 = page.locator('#paginaModelloFileChoices [data-variante$="Q8_0.gguf"]');
+  await q8.click();
+  await page.reload();
+  await expect(page.locator('#talosAvvio')).toHaveCount(0);
+  await expect(q8).toHaveAttribute('aria-checked', 'true');
+  await expect(page).toHaveURL(new RegExp(REVISION));
+  await page.locator('#paginaModello [data-modello-indietro]').click();
+  await expect(page.locator('#modelLabHfPanel')).toBeVisible();
+  await expect(page.locator('#modelLabHfSearch')).toHaveValue('GLM');
+  await page.locator('#modelLabHfPanel [data-hf]').click();
+  await page.locator('#paginaModello [role="tab"]').nth(1).click();
+  await expect(q8).toHaveAttribute('aria-checked', 'true');
+  expect(await page.locator('#paginaModello [id]').evaluateAll(nodes => {
+    return nodes.map(n => n.id).filter(id => document.querySelectorAll(`#${CSS.escape(id)}`).length !== 1);
+  })).toEqual([]);
+});
+
+test('RIPRESA-HF-HASH-INVALIDO — un collegamento malformato non interrompe la app', async ({ page }) => {
+  const errori = [];
+  page.on('pageerror', error => errori.push(error.message));
+  await page.goto('/#/impostazioni/modelli/scheda/%E0%A4%A/files');
+  await expect(page.locator('#talosAvvio')).toHaveCount(0);
+  expect(errori).toEqual([]);
+});
+
+test('RIPRESA-HF-CAMBIO-RAPIDO — la risposta del repository lasciato non cambia la pagina corrente', async ({ page }) => {
+  await preparaRipresaHf(page);
+  let sospesa;
+  await page.route('**/api/v1/huggingface/repo?**', route => {
+    if (new URL(route.request().url()).searchParams.get('repo') === 'esempio/altro') { sospesa = route; return; }
+    return route.fulfill({ json: { ok: true, data: REPO_DATI } });
+  });
+  const rotta = id => `#/impostazioni/modelli/scheda/${encodeURIComponent(id)}/files`;
+  await page.evaluate(hash => { location.hash = hash; }, rotta('hf:esempio/altro@main'));
+  await expect.poll(() => Boolean(sospesa)).toBe(true);
+  await page.goBack();
+  await expect(page.locator('#paginaModelloFileChoices [data-variante]')).toHaveCount(2);
+  const vecchiaRisposta = page.waitForResponse(r => new URL(r.url()).searchParams.get('repo') === 'esempio/altro');
+  await sospesa.fulfill({ json: { ok: true, data: { ...REPO_DATI, repo: 'esempio/altro', files: [] } } });
+  await (await vecchiaRisposta).finished();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(page.locator('#paginaModello [data-modello-id]')).toHaveAttribute('data-modello-id', `hf:${REPO}@${REVISION}`);
+  await expect(page.locator('#paginaModelloFileChoices [data-variante]')).toHaveCount(2);
+});
+
+test('RIPRESA-HF-REVISIONE — main risolta resta fissata dopo la ricarica', async ({ page }) => {
+  await preparaRipresaHf(page);
+  const revisioni = [];
+  await page.route('**/api/v1/huggingface/repo?**', route => {
+    revisioni.push(new URL(route.request().url()).searchParams.get('revision'));
+    return route.fulfill({ json: { ok: true, data: REPO_DATI } });
+  });
+  await page.evaluate(hash => { location.hash = hash; }, `#/impostazioni/modelli/scheda/${encodeURIComponent(`hf:${REPO}@main`)}/files`);
+  const q8 = page.locator('#paginaModelloFileChoices [data-variante$="Q8_0.gguf"]');
+  await q8.click();
+  await page.reload();
+  await expect(q8).toHaveAttribute('aria-checked', 'true');
+  expect(revisioni).toEqual(['main', REVISION]);
+});
+
+test('RIPRESA-HF-SCELTA-ALTERATA — un file salvato assente dal repository non diventa un download', async ({ page }) => {
+  const posts = [];
+  await preparaRipresaHf(page, { download: async route => {
+    posts.push(route.request().postDataJSON());
+    await route.fulfill({ json: { ok: true, data: { state: 'queued' } } });
+  } });
+  await page.evaluate(({ id, revision }) => {
+    sessionStorage.setItem('talos.harness.desktop.modelli.ripresa.v1', JSON.stringify({ version: 1,
+      pagine: [{ id, revision, scelta: '../../non-esiste.gguf' }] }));
+  }, { id: `hf:${REPO}@${REVISION}`, revision: REVISION });
+  await page.reload();
+  await expect(page.locator('#talosAvvio')).toHaveCount(0);
+  await page.locator('#paginaModelloScarica').click();
+  await expect.poll(() => posts.length).toBe(1);
+  expect(REPO_DATI.files.map(f => f.path)).toContain(posts[0].files[0].path);
+});
+
+test('RIPRESA-HF-PIN-URL — lo storage non sostituisce la revisione esplicita nel collegamento', async ({ page }) => {
+  await preparaRipresaHf(page);
+  await page.evaluate(id => {
+    sessionStorage.setItem('talos.harness.desktop.modelli.ripresa.v1', JSON.stringify({ version: 1,
+      pagine: [{ id, revision: 'a'.repeat(40), scelta: null }] }));
+  }, `hf:${REPO}@${REVISION}`);
+  const revisioni = [];
+  await page.route('**/api/v1/huggingface/repo?**', route => {
+    revisioni.push(new URL(route.request().url()).searchParams.get('revision'));
+    return route.fulfill({ json: { ok: true, data: REPO_DATI } });
+  });
+  await page.reload();
+  await expect(page.locator('#paginaModelloFileChoices [data-variante]')).toHaveCount(2);
+  expect(revisioni).toEqual([REVISION]);
+});
+
+test('RIPRESA-HF-DOPPIO — in attesa del server il download non si invia due volte', async ({ page }) => {
+  const richieste = [];
+  await preparaRipresaHf(page, { download: route => { richieste.push(route); } });
+  const scarica = page.locator('#paginaModelloScarica');
+  await scarica.click();
+  await expect.poll(() => richieste.length).toBe(1);
+  await expect(scarica).toBeDisabled();
+  await richieste[0].fulfill({ json: { ok: true, data: { state: 'queued' } } });
+  await expect(page.locator('[data-modello-scarica-esito="avviato"]')).toBeVisible();
+  expect(richieste).toHaveLength(1);
+});
+
+test('RIPRESA-HF-TAB-STATO — il percorso reale conserva la variante fra schede e cronologia', async ({ page }) => {
+  await preparaRipresaHf(page);
+  const q8 = () => page.locator('#paginaModelloFileChoices [data-variante$="Q8_0.gguf"]');
+  await q8().click();
+  const tabs = page.locator('#paginaModello [role="tab"]');
+  await tabs.nth(0).click();
+  await expect(page).toHaveURL(/\/card$/);
+  await tabs.nth(1).click();
+  await expect(page).toHaveURL(/\/files$/);
+  await expect(q8()).toHaveAttribute('aria-checked', 'true');
+  await page.goBack();
+  await expect(page).toHaveURL(/\/card$/);
+  await page.goForward();
+  await expect(q8()).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('#paginaModelloFileChoices')).toHaveCount(1);
+});
+
+for (const colorMode of ['dark', 'light']) {
+  test(`RIPRESA-HF-LAYOUT — pagina reale a 1024, scala 130%, ${colorMode}`, async ({ page }, info) => {
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await preparaRipresaHf(page, { appearance: { colorMode, uiFontScale: 'xlarge' } });
+    const pagina = page.locator('#paginaModello');
+    const misure = await pagina.evaluate(el => {
+      const glifo = el.querySelector('.model-glyph');
+      const lista = el.querySelector('[data-hf-file-choices]');
+      return { zoom: el.currentCSSZoom, width: el.clientWidth, scrollWidth: el.scrollWidth,
+        glyphWidth: getComputedStyle(glifo).width, glyphHeight: getComputedStyle(glifo).height,
+        listaWidth: lista.clientWidth, listaScroll: lista.scrollWidth,
+        radios: [...lista.querySelectorAll('[role="radio"]')].map(n => ({ width: n.clientWidth, scroll: n.scrollWidth })) };
+    });
+    await info.attach('geometria', { body: JSON.stringify(misure), contentType: 'application/json' });
+    await page.screenshot({ path: info.outputPath('pagina.png'), fullPage: true });
+    await page.locator('#paginaModelloScarica').scrollIntoViewIfNeeded();
+    await expect(page.locator('#paginaModelloScarica')).toBeInViewport();
+    await page.screenshot({ path: info.outputPath('selettore.png'), fullPage: true });
+    expect.soft(Number(misure.zoom)).toBeCloseTo(1.3, 2);
+    expect.soft(misure.glyphWidth).toBe('70px');
+    expect.soft(misure.glyphHeight).toBe('70px');
+    expect.soft(misure.scrollWidth).toBeLessThanOrEqual(misure.width + 1);
+    expect.soft(misure.listaScroll).toBeLessThanOrEqual(misure.listaWidth + 1);
+    for (const radio of misure.radios) expect.soft(radio.scroll).toBeLessThanOrEqual(radio.width + 1);
+  });
+}
+
 /** Le sorgenti servite su un percorso finto, come il cancello della corsia 4 (`/__c4/`). */
 async function serviLeSorgenti(page) {
   await page.route('**/__ce/**', async (route) => {
@@ -976,4 +1254,25 @@ test('PAGINA-10 — le foto: due temi, due larghezze, e zero errori in console',
   expect(bloccoDentroLaPagina.scarica).toContain('Scarica sul computer');
   expect(bloccoDentroLaPagina.stima, 'e la stima ha i suoi numeri, non un segnaposto').toContain('necessari');
   expect(errori, 'e le foto del repository non aggiungono errori in console').toEqual([]);
+});
+
+
+test('RIPRESA-HF-RIPROVA-CONCORRENTE — doppio clic non crea due letture della stessa scheda', async ({ page }) => {
+  await preparaRipresaHf(page, { dallaLista: true });
+  let first = true;
+  const pending = [];
+  await page.route('**/api/v1/huggingface/repo?**', async route => {
+    if (first) { first = false; await route.fulfill({ status: 503, json: { ok: false, error: { message: 'Repository temporaneamente non disponibile' } } }); return; }
+    pending.push(route);
+  });
+  await page.locator('#modelLabHfPanel [data-hf]').click();
+  const retry = page.locator('#paginaModello [data-modello-ricarica]').first();
+  await expect(retry).toBeVisible();
+  await retry.dblclick();
+  await expect.poll(() => pending.length).toBe(1);
+  await page.waitForTimeout(250);
+  expect(pending).toHaveLength(1);
+  await pending[0].fulfill({ json: { ok: true, data: REPO_DATI } });
+  await expect(page.locator('#paginaModelloFileChoices [data-variante]')).toHaveCount(2);
+  await expect(page.locator('#paginaModello [data-modello-errore]')).toHaveCount(0);
 });

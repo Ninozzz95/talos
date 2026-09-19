@@ -182,7 +182,7 @@ import { datiMemoria } from './misura-memoria.js';
  *   del pannello (`hfFileChoices`, `hfStima`, `hfScarica`), che `app.js` legge e pilota: due nodi
  *   con lo stesso id renderebbero `querySelector('#x')` una domanda senza risposta unica.
  */
-import { montaSceltaFileHf } from './hf-catalogo.js';
+import { montaSceltaFileHf, gruppiVarianti } from './hf-catalogo.js';
 
 /** Le tre schede del prototipo (`DETAIL_TABS`), nell'ordine in cui le disegna. */
 export const SCHEDE = Object.freeze(['card', 'files', 'compatibility']);
@@ -809,6 +809,9 @@ export function montaSchedaModello(contenitore, {
   profilo = 'agent',
   indietro = null,
   onScheda = null,
+  onScelta = null,
+  apriDownload = null,
+  onLiberaMemoria = null,
   runtime = {},
   inizio = null,
   document: documento = null,
@@ -854,11 +857,10 @@ export function montaSchedaModello(contenitore, {
     errori: { modello: '', fit: '', capacita: '', repo: '' },
     distrutto: false,
   };
-  void inizio; // riservato: chi chiama può passare uno stato iniziale senza rompere la firma
 
   /* ------------------------------- lo scheletro ------------------------------- */
 
-  const radice = nodo(doc, 'div', 'talos-stack');
+  const radice = nodo(doc, 'div', 'model-page talos-stack');
   radice.dataset.schedaModello = '';
   radice.dataset.modelloId = String(bersaglio.id);
 
@@ -922,19 +924,23 @@ export function montaSchedaModello(contenitore, {
 
   /* ------------------------------- i dati ------------------------------- */
 
+  let generazioneLettura = 0;
+  let ricaricaInCorso = null;
+
   async function leggi(chiave, percorso, applica) {
     if (stato.distrutto) return;
+    const generazione = generazioneLettura;
     stato.caricamento[chiave] = true;
     stato.errori[chiave] = '';
     try {
       const dati = await apiGet(percorso);
-      if (stato.distrutto) return;
+      if (stato.distrutto || generazione !== generazioneLettura) return;
       applica(dati);
     } catch (errore) {
-      if (stato.distrutto) return;
+      if (stato.distrutto || generazione !== generazioneLettura) return;
       stato.errori[chiave] = String(errore?.message || errore || 'Richiesta non riuscita');
     } finally {
-      if (!stato.distrutto) {
+      if (!stato.distrutto && generazione === generazioneLettura) {
         stato.caricamento[chiave] = false;
         disegna();
       }
@@ -989,14 +995,20 @@ export function montaSchedaModello(contenitore, {
   }
 
   function caricaRepo() {
+    const revisioneSalvata = !/^[a-f0-9]{40,64}$/iu.test(bersaglio.revisione)
+      && inizio?.id === bersaglio.id && /^[a-f0-9]{40,64}$/iu.test(inizio.revision)
+      ? inizio.revision : bersaglio.revisione;
     const percorso = bersaglio.tipo === 'repo'
-      ? percorsoRepo({ repo: bersaglio.repo, revision: bersaglio.revisione })
+      ? percorsoRepo({ repo: bersaglio.repo, revision: revisioneSalvata })
       : percorsoRepo(stato.modello);
     if (!percorso) { disegna(); return Promise.resolve(); }
     return leggi('repo', percorso, (dati) => {
       stato.repo = dati && typeof dati === 'object' ? dati : null;
       // Il manifest nasce QUI, e solo qui: prima della risposta i file del repository non esistono.
       if (bersaglio.tipo === 'repo') stato.modello = manifestDaRepo(stato.repo);
+      const scelta = stato.hf.scelta || (inizio?.id === bersaglio.id && inizio.revision === stato.repo?.revision ? inizio.scelta : null);
+      stato.hf.scelta = gruppiVarianti(stato.repo?.files).some(g => g.chiave === scelta) ? scelta : null;
+      onScelta?.({ revision: stato.repo?.revision, scelta: stato.hf.scelta });
     });
   }
 
@@ -1129,6 +1141,20 @@ export function montaSchedaModello(contenitore, {
 
     // La frase del mockup, parola per parola: è copy del mockup, non un dato (vedi la testata).
     testata.append(paragrafo(doc, 'model-hero-caption', 'Conosci il modello. Scegli come usarlo.'));
+    if (!remoto() && stato.modello && typeof onLiberaMemoria === 'function') {
+      const comandi = nodo(doc, 'div', 'talos-cluster');
+      const libera = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm',
+        runtime.unloading ? 'Liberazione…' : 'Libera memoria');
+      libera.type = 'button';
+      libera.dataset.modelloLiberaMemoria = '';
+      libera.disabled = !dati?.caricato || Boolean(runtime.unloading || runtime.loading || runtime.error);
+      libera.addEventListener('click', () => { void onLiberaMemoria(stato.modello.id); });
+      const statoMemoria = runtime.loading ? 'Verifica memoria…' : runtime.error ? 'Stato memoria non disponibile'
+        : dati?.caricato ? 'Caricato in memoria' : 'Non caricato in memoria';
+      comandi.append(libera, paragrafo(doc, 'talos-muted', statoMemoria + ' · Il file resta sul disco.'));
+      testata.append(comandi);
+    }
+
 
     /*
      * ⛔ Il modello che NON c'è si dice in testata, e non solo nella scheda «File»: la corsia ha
@@ -1268,7 +1294,6 @@ export function montaSchedaModello(contenitore, {
     const scatola = nodo(doc, 'section', 'talos-card readme-surface');
     scatola.dataset.modelloCard = '';
     const testa = nodo(doc, 'div', 'readme-chrome talos-cluster');
-    testa.style.padding = '12px 14px';
     /*
      * ⛔ «ANTEPRIMA EDITORIALE» E NON «MARKDOWN»: è la parola del mockup, e dice cosa si sta
      *   guardando (un'anteprima) invece di come è scritto (un formato). È anche la regola di casa
@@ -1334,7 +1359,6 @@ export function montaSchedaModello(contenitore, {
       const rigaIndice = nodo(doc, 'nav', 'readme-index talos-cluster');
       rigaIndice.dataset.modelloIndice = '';
       rigaIndice.setAttribute('aria-label', 'Indice della scheda');
-      rigaIndice.style.padding = '12px 14px';
       rigaIndice.append(nodo(doc, 'span', 'talos-label', 'In questa scheda'));
       for (const voce of indice) {
         const b = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm', voce.breve);
@@ -1354,8 +1378,7 @@ export function montaSchedaModello(contenitore, {
       scatola.append(rigaIndice);
     }
     // `.td-prosa-rapporto` è la superficie di prosa condivisa: il README non si veste da solo.
-    const prosa = nodo(doc, 'div', 'td-prosa-rapporto');
-    prosa.style.padding = '0 14px 14px';
+    const prosa = nodo(doc, 'div', 'td-prosa-rapporto readme-body');
     prosa.append(frammento);
     scatola.append(prosa);
     const immagini = disegnaImmagini();
@@ -1544,6 +1567,8 @@ export function montaSchedaModello(contenitore, {
 
     const scarica = stato.hf.scarica;
     if (scarica.inCorso) {
+      const pulsante = dove.querySelector('#paginaModelloScarica');
+      if (pulsante) pulsante.disabled = true;
       sezione.append(paragrafo(doc, 'talos-muted', 'Avvio del download…'));
     } else if (scarica.errore) {
       const p = paragrafo(doc, 'talos-muted', `Download non avviato: ${scarica.errore}`);
@@ -1555,6 +1580,12 @@ export function montaSchedaModello(contenitore, {
       p.dataset.modelloScaricaEsito = 'avviato';
       p.setAttribute('role', 'status');
       sezione.append(p);
+      if (typeof apriDownload === 'function') {
+        const apri = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Apri Download');
+        apri.type = 'button';
+        apri.addEventListener('click', apriDownload);
+        sezione.append(apri);
+      }
     }
     return sezione;
   }
@@ -1562,6 +1593,7 @@ export function montaSchedaModello(contenitore, {
   /** La variante scelta: si annota e si ridisegna (è il `scegli` del pannello, con lo stesso esito). */
   function scegliVariante(chiave) {
     stato.hf.scelta = String(chiave ?? '') || null;
+    onScelta?.({ revision: stato.repo?.revision, scelta: stato.hf.scelta });
     disegnaPannello();
   }
 
@@ -1596,7 +1628,7 @@ export function montaSchedaModello(contenitore, {
    * dice a schermo — avviato o il motivo per cui non è partito.
    */
   async function avviaDownload(gruppo) {
-    if (typeof apiPost !== 'function') return;
+    if (typeof apiPost !== 'function' || stato.hf.scarica.inCorso || stato.distrutto) return;
     const corpo = corpoDownloadHf(stato.repo, gruppo);
     if (!corpo) {
       stato.hf.scarica = { inCorso: false, esito: '', errore: 'La variante scelta non ha un file da scaricare.' };
@@ -1953,6 +1985,7 @@ export function montaSchedaModello(contenitore, {
     const b = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Riprova');
     b.type = 'button';
     b.dataset.modelloRicarica = '';
+    b.disabled = Boolean(ricaricaInCorso);
     b.addEventListener('click', () => ricarica());
     return b;
   }
@@ -1998,6 +2031,8 @@ export function montaSchedaModello(contenitore, {
 
   function ricarica() {
     if (stato.distrutto) return Promise.resolve();
+    if (ricaricaInCorso) return ricaricaInCorso;
+    generazioneLettura++;
     stato.errori = { modello: '', fit: '', capacita: '', repo: '' };
     stato.repo = null;
     // ⛔ In modalità repository il manifest È la risposta: senza questa riga un «Riprova» dopo un
@@ -2009,7 +2044,11 @@ export function montaSchedaModello(contenitore, {
      *   questa seconda lettura una scheda che non era stata letta resterebbe nell'errore per
      *   sempre — un «Riprova» che promette una cosa e ne fa un'altra.
      */
-    return caricaModello().then(() => Promise.all([caricaRepo(), caricaFit(), caricaCapacita()]));
+    ricaricaInCorso = Promise.resolve().then(() => caricaModello())
+      .then(() => Promise.all([caricaRepo(), caricaFit(), caricaCapacita()]))
+      .finally(() => { ricaricaInCorso = null; disegna(); });
+    disegna();
+    return ricaricaInCorso;
   }
 
   function distruggi() {
@@ -2027,13 +2066,19 @@ export function montaSchedaModello(contenitore, {
     // Il repository si legge dal manifest che ci hanno dato: niente lista da chiedere.
     avvio.push(caricaRepo());
   } else {
-    avvio.push(caricaModello().then(() => caricaRepo()));
+    const generazioneAvvio = generazioneLettura;
+    avvio.push(caricaModello().then(() => { if (!stato.distrutto && generazioneAvvio === generazioneLettura) return caricaRepo(); }));
   }
   Promise.all(avvio).catch(() => {}); // gli errori sono già raccolti e disegnati da `leggi`
 
   return {
     vaiA,
     ricarica,
+    aggiornaRuntime(nuovo) {
+      if (stato.distrutto) return;
+      runtime = nuovo || {};
+      disegnaTestata();
+    },
     distruggi,
     elemento: radice,
     get stato() { return stato; },

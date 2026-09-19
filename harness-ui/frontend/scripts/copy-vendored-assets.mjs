@@ -39,6 +39,8 @@ async function copyAndDescribe(source, destination, relativePath) {
 export async function copyVendoredAssets({ frontendRoot, outputDir }) {
   const assetsRoot = path.join(frontendRoot, 'src/assets');
   const entries = [
+    { source: path.join(frontendRoot, 'node_modules/@dagrejs/dagre/LICENSE'), relativePath: 'vendor/dagre/LICENSE-dagre' },
+    { source: path.join(frontendRoot, 'node_modules/@dagrejs/graphlib/LICENSE'), relativePath: 'vendor/dagre/LICENSE-graphlib' },
     ...FONT_NAMES.map((name) => ({ source: path.join(assetsRoot, 'fonts', name), relativePath: `fonts/${name}` })),
     ...XTERM_NAMES.map((name) => ({ source: path.join(assetsRoot, 'xterm', name), relativePath: `vendor/xterm/${name}` })),
     ...PRISM_NAMES.map((name) => ({ source: path.join(assetsRoot, 'prism', name), relativePath: `vendor/prism/${name}` })),
