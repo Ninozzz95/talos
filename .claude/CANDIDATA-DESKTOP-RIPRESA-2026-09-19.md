@@ -2,6 +2,8 @@
 
 ## Gate aggiornato 2026-09-19T22:35Z
 
+Commit/push privato verificato: `904244abd5efb03962095d2fb32d2003dfb30f42` su `lane/harness-desktop`.
+
 - Fix streaming/rotella: il forwarding sul tasto `#chatTornaInFondo` non forza più layout; focused wheel, `scroll-p0` e `chat-lunga-p0` verdi (`d8084fe2`, `d4de2d61`, `3021e377`).
 - Electron isolato `2026-09-19T22-17-11-401Z-desktop-c5f4b5db`: pure e shell/backend reali verdi; keyring resta sostituito in memoria e installer/provider credentials non certificati.
 - Backend aggiornato `2026-09-19T22-19-10-435Z-backend-48a8756a` exit 0. 4174 resta vivo senza riavvio, health 200 e `app.js` live hash `0c1634b5f12e8ce4af45aab4bb1a8ff65e4c98f65ab3a30aeadc699e74820f75`.

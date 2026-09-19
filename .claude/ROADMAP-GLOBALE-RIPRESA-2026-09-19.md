@@ -2,6 +2,8 @@
 
 ## Stato gate 2026-09-19T22:35Z
 
+Checkpoint remoto: commit `904244abd5efb03962095d2fb32d2003dfb30f42` pushato su `talos-private/lane/harness-desktop`.
+
 - La regressione percepita durante la rotella è stata ricondotta al solo listener del tasto ritorno: eliminate le letture di layout sul percorso pixel, mantenuti click e scroll. Wheel focused, `scroll-p0` e `chat-lunga-p0` verdi.
 - Electron isolato e backend aggiornato verdi; il server 4174 è ancora PID 19300, health 200, bundle `app.js` live aggiornato senza riavvio. Evidenza e backup in `.claude/release-2026-09-19/public-scroll-stream-update.json`.
 - R0 resta aperto: la baseline browser completa 711/648/46/17 è storica rispetto agli ultimi test e va rieseguita/classificata. R5 resta aperto per installer, credenziali provider reali e advisory HIGH transitive.

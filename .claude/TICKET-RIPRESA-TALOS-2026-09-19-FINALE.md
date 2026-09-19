@@ -2,6 +2,8 @@
 
 ## Aggiornamento operativo 2026-09-19T22:35Z — regressione streaming/rotella chiusa
 
+Commit/push privato verificato: `904244abd5efb03962095d2fb32d2003dfb30f42` su `talos-private/lane/harness-desktop`.
+
 - La prima cura della rotella inoltrava ogni evento leggendo `getComputedStyle`, `scrollHeight` e `clientHeight`. L'ispezione ha isolato queste letture sincrone come unico lavoro nuovo sul gesto: possono forzare layout mentre il renderer dipinge token.
 - `harness-ui/frontend/src/components/chat-foot.js` ora usa 16 px fissi per `deltaMode=line`, legge `clientHeight` solo per `page` e lascia il clamp a `scrollTop`; click, `preventDefault` condizionale e scroll sullo stesso `.talos-conversation` restano invariati.
 - RED/GREEN browser: `2026-09-19T22-30-42-540Z-browser-d8084fe2` (wheel + controllo `getComputedStyle`) e `2026-09-19T22-31-01-489Z-browser-d4de2d61` (`scroll-p0`) exit 0; banco streaming lungo `2026-09-19T22-32-35-584Z-browser-3021e377` 10/10, vivo 240 0 ms, nessun LoAF oltre 50 ms.
