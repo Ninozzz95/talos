@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talos.local/evolution/schemas/lineage-attestation.schema.json",
+  "title": "TALOS Lineage Attestation v1",
+  "$comment": "E0-2 defines structure only. E3 selects the canonical signing profile. Never hash generic JSON or serialized Protobuf as an implied canonical payload.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "attestationId",
+    "namespace",
+    "subjectType",
+    "subjectHash",
+    "parentHashes",
+    "supervisorVersion",
+    "signerIdentity",
+    "assuranceLevel",
+    "createdAt",
+    "signing"
+  ],
+  "properties": {
+    "schema": {
+      "const": "talos.evolution.lineage-attestation.v1"
+    },
+    "attestationId": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "namespace": {
+      "enum": [
+        "OFFICIAL",
+        "LOCAL_EVOLVED",
+        "FEDERATED_EXTERNAL"
+      ]
+    },
+    "subjectType": {
+      "enum": [
+        "runtime",
+        "extension",
+        "innovation"
+      ]
+    },
+    "subjectHash": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "parentHashes": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "common.schema.json#/$defs/sha256"
+      }
+    },
+    "supervisorVersion": {
+      "$ref": "common.schema.json#/$defs/semver"
+    },
+    "signerIdentity": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "assuranceLevel": {
+      "enum": [
+        "software-development",
+        "os-keyring",
+        "hardware-backed",
+        "official-release"
+      ]
+    },
+    "createdAt": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "signing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "algorithm",
+        "keyId",
+        "signatureBase64"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "algorithm": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "keyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "signatureBase64": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384,
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+        }
+      }
+    }
+  }
+}
