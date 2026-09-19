@@ -198,12 +198,122 @@
 #schermoImpostazioni .talos-settings__nav .settings-nav__search .talos-nav-item__label { white-space: nowrap; font-size: .75rem; }
 #schermoImpostazioni .talos-settings__nav .settings-nav__search .settings-nav__kbd { padding: 2px 4px; }
 :root[data-sidebar="icone"] .settings-nav__search .settings-nav__kbd { display: none; }
+/*
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ * ⭐⭐ FASE 2 · CORSIA 1 — IL VESTITO DELLE DIECI SEZIONI (18/09/2026)
+ *
+ * ⛔ LE MISURE DI QUESTO BLOCCO NON VENGONO DAL BRIEF: sono state RILETTE dal DOM VIVO del mockup
+ *    `C:\Users\Antonino\Downloads\TALOS-Calm-Lab-04.html` (e `prototypes/calm-lab/TALOS-Calm-Lab.html`,
+ *    che ne è byte-identico) il 18/09/2026, viewport 1440×900, con `getComputedStyle` sugli elementi
+ *    veri — `.setting-row`, `.setting-copy label`, `.setting-control`, `.settings-section`,
+ *    `.provider-card`, `.system-card`, `.provider-facts > div`, `.section-heading` — e non da una
+ *    nota. Il brief attribuiva al mockup quattro numeri che sono dell'APP: vedi la nota della CARTA.
+ *
+ * ⭐ QUELLO CHE IL MOCKUP MISURA DAVVERO (i numeri miei, non quelli del brief):
+ *    `.setting-row`          display:flex · align-items:center · justify-content:space-between
+ *                            gap:24px · padding:21px 0 · min-height:111px · border-top:1px solid var(--line)
+ *    `.setting-copy label`   14px · 550 · 21px
+ *    `.setting-copy p`       12px · 400 · 20,4px (1,7) · margin-top:6px · max-width:350px · tenue
+ *    `.setting-control`      flex:0 0 auto · min-width:190px · max-width:230px · width:35%  (resa: 230×42)
+ *    `.settings-section`     padding:2px 0 0 · NIENTE sfondo · NIENTE bordo · raggio 0 (piatta)
+ *    `.provider-card`, `.system-card`, `.download-card`
+ *                            padding:22px · border:1px solid var(--line) · border-radius:12px · fondo var(--panel)
+ *                            (`.download-card` a finestra stretta: padding:17px)
+ *    `.provider-facts > div` display:flex · justify-content:space-between · gap:10px · padding:12px 0
+ *                            border-bottom:1px solid var(--line-soft) · 12px/400/18px
+ *    `.provider-facts dt`    tenue · 12px · allineata a sinistra
+ *    `.provider-facts dd`    colore del testo · 12px · **text-align:right** · NON monospaziata
+ *    `.section-heading`      display:flex · align-items:center · justify-content:space-between · gap:10px
+ *                            margin:0 0 8px · titolo 15px/600/22,5px con letter-spacing −0,3px ( = −.02em )
+ *
+ * ⛔ LA CARTA — LA CORREZIONE CHE CONTA, E UNA DECISIONE CHE NON È MIA. Il brief chiedeva
+ *    `border-radius:14px; padding:20px 24px` «del mockup». Sono i valori dell'APP, non del mockup:
+ *    `padding:20px 24px` compare **0 volte** nei 102.935 byte di CSS del mockup
+ *    (`indexOf('padding:20px 24px')` → −1), e il 14px è `--ui-radius-surface` di
+ *    `design-system/foundations.css:7` — cioè il token con cui questa stessa regola si disegnava
+ *    prima. Misurato, non dedotto: la carta dell'app era già `padding: 20px 24px; raggio 14px`.
+ *    ⇒ Il mockup di carte di SEZIONE non ne ha: le sue `.settings-section` sono PIATTE
+ *      (`padding:2px 0 0`, misurato) e la sezione Aspetto dell'app è già piatta come loro.
+ *      La sua unica forma di carta è quella dei CONTENUTI (`.provider-card`, `.system-card`,
+ *      `.download-card`): **22px di padding, 12px di raggio**.
+ *    ⛔ E allora perché la carta NON cambia? Perché i due numeri alternativi sono una decisione,
+ *      non una misura da applicare di nascosto: appiattire le nove sezioni cambia il loro
+ *      raggruppamento, e portarle a 22/12 ha fatto diventare ROSSE due prove che esistono già e
+ *      che questa corsia non può toccare (`sezioni-stile.spec.mjs:322` pretende `paddingLeft:24px`
+ *      sulla card di Memoria e `:505` pretende `paddingTop:20px` sul pannello del risultato della
+ *      ricerca). ⇒ La scelta fra le TRE forme — com'è (20/24, raggio 14) · la carta del mockup
+ *      (22/12) · la sezione piatta del mockup (2px in alto, senza bordo) — sta in elenco nel
+ *      resoconto con i numeri, e la prende l'OWNER. La carta resta com'è.
+ *
+ * ⛔ `min-height:111px` NON SI APPLICA, ed è una misura scartata dichiarata: è l'altezza di una riga
+ *    del mockup che ha dentro un controllo alto 42px — non un'altezza da imporre a righe di testo
+ *    (le nostre sono 79,5 o 98,7px). Imporla gonfierebbe di ~32px ognuna delle 42 righe delle
+ *    Impostazioni. Stessa cosa per `.setting-copy p{max-width:350px}`, che qui è già `49ch`.
+ *
+ * ⛔ `font-weight:550` È UNA MISURA CHE LA NOSTRA FONT NON HA, e va detto invece che nascosto: il
+ *    mockup chiede 550 e non porta nessun `@font-face`; noi serviamo Instrument Sans in TRE facce
+ *    STATICHE (`public/fonts/instrument-sans-latin-{400,500,600}-normal.woff2`). L'algoritmo di
+ *    fallback del peso (CSS Fonts 4 §5.2;  fonte letta il 18/09/2026:
+ *    https://www.w3.org/TR/css-fonts-4/#font-matching-algorithm) per un valore >500 cerca la faccia
+ *    PIÙ PESANTE disponibile in ordine crescente: quindi il 550 si DISEGNA a **600**.
+ *    Si scrive 550 lo stesso — è il numero del mockup, il valore calcolato resta leggibile in una
+ *    prova, e il giorno in cui il progetto servirà una font variabile il 550 arriva da solo.
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ */
+
+/* ── A · LA CARTA DI SEZIONE — I VALORI DELL'APP, E LA DECISIONE TORNA ALL'OWNER ──────────────
+   ⛔ QUESTA REGOLA DOVEVA CAMBIARE E NON CAMBIA, e la ragione è una misura, non un ripensamento:
+     1. i due numeri del brief (`border-radius:14px; padding:20px 24px` «del mockup») sono i valori
+        dell'APP: `padding:20px 24px` compare **0 volte** nei 102.935 byte di CSS del mockup
+        (`indexOf('padding:20px 24px')` → −1) e il 14px è `--ui-radius-surface` di
+        `design-system/foundations.css:7`. Cioè la carta era GIÀ ai numeri chiesti;
+     2. il mockup di carte di SEZIONE non ne ha: le sue `.settings-section` sono PIATTE
+        (`padding:2px 0 0`, misurato) e la sezione Aspetto dell'app è già piatta come loro. La sua
+        unica carta è quella dei contenuti (`.provider-card`, `.system-card`, `.download-card`):
+        **22px di padding, 12px di raggio**;
+     3. applicare quei 22/12 ha fatto diventare ROSSE due prove che esistono già e che questa corsia
+        non può toccare (`sezioni-stile.spec.mjs:322` pretende `paddingLeft:24px` sulla card di
+        Memoria, `:505` pretende `paddingTop:20px` sul pannello del risultato della ricerca).
+     ⇒ La carta resta com'è, e la scelta fra le TRE forme possibili — com'è (20/24 + raggio 14),
+        la carta del mockup (22/12) o la sezione piatta del mockup (2px in alto, niente bordo) —
+        è dell'OWNER: cambia il raggruppamento di nove schermate e la prova che la difende.
+        Sta in elenco nel resoconto, coi numeri per deciderla. */
 #schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section { padding: 20px 24px; margin-block-end: 18px; border: 1px solid var(--talos-border); border-radius: var(--ui-radius-surface); background: var(--talos-panel); box-shadow: none; }
-#schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section > h3 { margin: 0 0 6px; font-size: .9375rem; font-weight: 600; }
+/* La testata dentro la carta: 15px/600 e `letter-spacing:-.3px` ( = -.02em ) — l'unica parte della
+   testata che non era già alla misura del mockup (`h3{font-size:.9375rem;font-weight:600;
+   letter-spacing:-.02em}`, misurato: `.provider-card h3` 15px/600/22,5px/−0,3px). Il margine resta
+   6px: nel mockup quel margine è del contenitore flessibile (`.section-heading`), non del titolo. */
+#schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section > h3 { margin: 0 0 6px; font-size: .9375rem; font-weight: 600; letter-spacing: -.02em; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section > p { font-size: .8125rem; color: var(--talos-muted); line-height: 1.65; margin-block: 0 14px; }
-#schermoImpostazioni[data-settings-ui="v3"] .talos-setting { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 40%); align-items: center; gap: 20px; padding: 17px 0; border-block-start: 1px solid var(--talos-border); }
-#schermoImpostazioni[data-settings-ui="v3"] .talos-setting__label { display: block; font-size: .875rem; line-height: 1.45; font-weight: 500; }
-#schermoImpostazioni[data-settings-ui="v3"] .talos-setting__help { margin: 5px 0 0; color: var(--talos-muted); font-size: .75rem; line-height: 1.6; max-width: 49ch; }
+
+/* ── B · LA RIGA — `.setting-row`: flex, gap 24, 21px sopra e sotto ────────────────────────────
+   Era `display:grid; grid-template-columns: minmax(0,1fr) minmax(160px,40%); gap:20px;
+   padding:17px 0` con l'etichetta a peso 500. Il mockup usa flex con la copia a sinistra e il
+   controllo a destra, e le misure sono quelle scritte sopra.
+   ⛔ FLEX E NON GRID NON È UN GUSTO: il mockup tiene il controllo a `flex:0 0 auto` e la copia a
+   prendersi il resto. Con `min-width:0` sulla copia — la trappola del minimo automatico dei flex
+   item, che senza quello impedisce al testo lungo di restringersi e sfonda la riga
+   (fonte letta il 18/09/2026: CSS Flexible Box Layout Module Level 1 §4.5,
+   https://www.w3.org/TR/css-flexbox-1/#min-size-auto) — un'etichetta lunga va a capo invece di
+   spingere il controllo fuori. La regola esiste già in `index.css:1854`
+   (`#schermoImpostazioni .talos-setting>div:first-child{min-width:0}`): la riscrivo qui, perché
+   `flex:1 1 auto` da solo NON porta con sé il minimo, e perché la copia è la figlia che contiene
+   il testo lungo. */
+#schermoImpostazioni[data-settings-ui="v3"] .talos-setting { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 21px 0; border-block-start: 1px solid var(--talos-border); }
+#schermoImpostazioni[data-settings-ui="v3"] .talos-setting > .settings-field-info,
+#schermoImpostazioni[data-settings-ui="v3"] .talos-setting > div:first-child { flex: 1 1 auto; min-width: 0; }
+/* Il lato del CONTROLLO: nel mockup `.setting-control{flex:0 0 auto; min-width:190px;
+   max-width:230px; width:35%}`, misurato 230×42 su una riga di 786. Le nostre righe sono larghe
+   792 (sezioni a tutta larghezza) e 506 (Aspetto, che ha la colonna dell'anteprima): il controllo
+   passa da 316,8 a 230 px nella prima e da 202,4 a 190 nella seconda — la stessa forbice del
+   mockup, che è il motivo per cui i suoi controlli non mangiano metà riga. */
+#schermoImpostazioni[data-settings-ui="v3"] .talos-setting > .settings-field-control { flex: 0 0 auto; min-width: 190px; max-width: 230px; width: 35%; }
+/* ⛔ Ogni ALTRO figlio oltre il primo resta alla sua larghezza: nella penultima riga di Aspetto il
+   controllo è un `button.talos-button` (la porta dello studio temi), non un `.settings-field-control`,
+   e un bottone che si restringe perde il testo. */
+#schermoImpostazioni[data-settings-ui="v3"] .talos-setting > :not(:first-child) { flex: 0 0 auto; }
+#schermoImpostazioni[data-settings-ui="v3"] .talos-setting__label { display: block; font-size: .875rem; line-height: 1.5; font-weight: 550; }
+#schermoImpostazioni[data-settings-ui="v3"] .talos-setting__help { margin: 6px 0 0; color: var(--talos-muted); font-size: .75rem; line-height: 1.7; max-width: 49ch; }
 .settings-field-control { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
 .settings-field-control > select { flex: 1; min-width: 0; width: 100%; }
 #schermoImpostazioni .settings-field-control .talos-setting__control { flex: 1; min-width: 0; grid-template-columns: minmax(60px, 1fr) auto; }
@@ -233,8 +343,39 @@
 .settings-empty h3 { font-size: 1rem; margin: 0 0 8px; }
 .settings-empty p { color: var(--talos-muted); font-size: .875rem; line-height: 1.65; margin: 0; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-kv__v { min-width: 0; overflow-wrap: anywhere; }
+
+/* ── C · LE LISTE CHIAVE/VALORE — `.talos-kv`, la forma di `.provider-facts` ────────────────────
+   Misurato sul mockup: `.provider-facts > div` (dentro `dl.provider-facts`: la stessa forma del
+   nostro `<dl id="settingsToolsFacts">`) è `display:flex · justify-content:space-between · gap:10px
+   · padding:12px 0 · border-bottom:1px solid var(--line-soft) · 12px/400/18px`, con `dt` tenue a
+   sinistra e `dd` a DESTRA (`text-align:right`, misurato).
+   Oggi: `gap:18px` (`index.css:1869`) · `min-height:30px` · filetto SOPRA, con la prima riga esente
+   · chiave a 12,5px. ⇒ Si portano le due misure che si vedono (respiro verticale, distanza fra
+   chiave e valore) e il verso del filetto, che nel mockup sta SOTTO OGNI RIGA — anche l'ultima,
+   misurato: tre `.provider-facts > div` da 43px e la `dl` alta 129 = 3×43.
+   ⛔ `border-block-start:0` NON è una ripetizione: `index.css:1563` dà a `.talos-kv` un filetto in
+   ALTO, e senza spegnerlo resterebbero DUE filetti per riga.
+   ⛔ LA DIVERGENZA DICHIARATA, UNA SOLA — e non è una misura ma una voce: la `dd` del mockup non è
+   monospaziata, la nostra `__v` sì (`--talos-font-mono`, `index.css:1570`, peso 500 contro 400).
+   Si tiene la nostra: in questo prodotto il mono marca i VALORI DI MACCHINA — percorsi, versioni,
+   conteggi — in ogni schermata, e le Impostazioni sono piene di quei valori; toglierlo qui
+   renderebbe questa l'unica schermata che li scrive in tondo. Cambiano quindi gap, padding e
+   filetto: tre misure, tutte e tre del mockup. */
+#schermoImpostazioni[data-settings-ui="v3"] .talos-kv { gap: 10px; padding: 12px 0; border-block-start: 0; border-block-end: 1px solid var(--talos-border-subtle); }
+#schermoImpostazioni[data-settings-ui="v3"] .talos-kv__k { font-size: 12px; }
+/* ⛔ `:not(.talos-badge)` NON È PIGNOLERIA, È UNA MISURA: nel Laboratorio il VALORE di una riga
+   chiave/valore È una pastiglia (`cornice-model-lab.js:72` le dà `talos-kv__v talos-badge
+   talos-badge--sm`), e la pastiglia ha la sua misura — 11px, la stessa forma `.badge` del mockup.
+   Senza questa esclusione la regola qui sopra la portava a 12px: una misura del mockup applicata
+   all'elemento SBAGLIATO, che è il modo in cui una parità si rompe in silenzio. Trovato misurando
+   (`models`, `.talos-kv__v`: 11px prima → 12px dopo), non leggendo. */
+#schermoImpostazioni[data-settings-ui="v3"] .talos-kv__v:not(.talos-badge) { font-size: 12px; }
+
 #schermoImpostazioni[data-settings-ui="v3"] .talos-setting[data-td-migrata="si"] { display: none; }
-:root[data-density="compact"] #schermoImpostazioni[data-settings-ui="v3"] .talos-setting { padding-block: 12px; }
+/* Densità compatta: il mockup ha `[data-density=compact] .setting-row{min-height:91px;
+   padding-block:15px}` — 15px invece dei 21 della riga normale, misurato. Noi avevamo 12px, che era
+   la nostra scala e non la sua: si porta il numero del mockup, e la differenza 21→15 resta la sua. */
+:root[data-density="compact"] #schermoImpostazioni[data-settings-ui="v3"] .talos-setting { padding-block: 15px; }
 
 /*
  * ════════════════════════════════════════════════════════════════════════════════════════════
@@ -315,8 +456,13 @@
 
 /* ── IL GRUPPO CHE NON HA UNA CARD ──────────────────────────────────────────────────────────────
    «Spazio di lettura» nomina il suo controllo e apre la sua porta: stessa anatomia di una riga
-   (`padding: 17px 0`, separatore in alto), così non sembra un'altra specie di cosa. */
-#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-appearance > [data-settings-group="chat"] .talos-setting { grid-template-columns: minmax(0, 1fr) auto; padding-block: 17px; }
+   (`padding: 21px 0` come tutte le altre, separatore in alto), così non sembra un'altra specie di
+   cosa.
+   ⛔ IL CONTROLLO QUI È A CONTENUTO, ed è la sola riga delle Impostazioni che resti così: è
+   un'interruttore, non un selettore, e la misura del mockup (`.setting-control` 190-230px) serve a
+   un controllo che si allarga, non a un pomello. Era `grid-template-columns: minmax(0,1fr) auto`
+   quando la riga era una griglia: con flex la stessa intenzione si scrive così. */
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-appearance > [data-settings-group="chat"] .talos-setting > .settings-field-control { flex: 0 0 auto; min-width: 0; max-width: none; width: auto; }
 
 /* ── LA MODALE DELLE DUE STRADE ─────────────────────────────────────────────────────────────────
    Misure del mockup (`.dialog`): 600px, `padding:0`, raggio 16px, ombra `0 32px 90px rgba(0,0,0,.3)`,
@@ -374,8 +520,13 @@
   .settings-section-heading { flex-wrap: wrap; }
   .settings-header { align-items: start; }
   .settings-save { max-width: 27ch; }
-  #schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section { padding: 18px; }
-  #schermoImpostazioni[data-settings-ui="v3"] .talos-setting { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  /* ⛔ QUI NON SI TOCCA IL PADDING DELLA CARTA: il mockup la stringe solo sotto i 760px di
+     finestra (`.download-card{padding:17px}`), che nella nostra scala di contenitore è il blocco
+     dei 660 — non questo. Prima c'era un `padding:18px` nostro, che non era una misura di nessuno. */
+  #schermoImpostazioni[data-settings-ui="v3"] .talos-setting { flex-direction: column; align-items: stretch; gap: 10px; }
+  /* La riga si impila: etichetta sopra, controllo sotto. Il controllo prende la larghezza della
+     riga — come nel mockup a finestra stretta (`.setting-control{width:100%;max-width:none}`). */
+  #schermoImpostazioni[data-settings-ui="v3"] .talos-setting > .settings-field-control { justify-content: start; width: 100%; min-width: 0; max-width: none; }
   .settings-field-control { justify-content: start; }
   .settings-field-control > select { max-width: 100%; }
 }
@@ -393,6 +544,8 @@
   .settings-toolbar { margin-block-end: 8px; }
   .settings-section-heading { gap: 10px; margin-block-end: 16px; }
   .settings-section-heading h2 { font-size: 1.125rem; }
+  /* La carta a finestra stretta torna ai valori dell'app: la misura del mockup (17px) non si
+     applica, perché il padding della carta non si tocca in questa fase (vedi la nota A). */
   #schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section { padding: 16px; border-radius: 10px; }
   #schermoImpostazioni[data-settings-ui="v3"] .td-studio-rimando { display: flex; flex-direction: column; align-items: start; }
   #schermoImpostazioni[data-settings-ui="v3"] .td-studio-rimando button { width: 100%; justify-content: center; }
