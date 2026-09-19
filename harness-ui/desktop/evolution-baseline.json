@@ -1,0 +1,214 @@
+{
+  "schema": "talos.evolution.implementation-baseline.v1",
+  "source": {
+    "repository": "Ninozzz95/talos",
+    "commit": "13f65c15cdeaf8986b882993a0773cdeafb867d2",
+    "desktopVersion": "0.1.13",
+    "capturedAt": "2026-09-19"
+  },
+  "semantics": {
+    "historicalSnapshot": true,
+    "locksFutureDesktopVersion": false,
+    "rule": "A future migration may replace a guardrail only by changing this record deliberately and shipping equivalent or stronger evidence in the same reviewed change."
+  },
+  "guardrails": [
+    {
+      "id": "release.evolution-baseline-verifier",
+      "category": "release",
+      "evidence": [
+        {
+          "path": ".github/workflows/release.yml",
+          "contains": "npm --prefix harness-ui/desktop run verify:evolution-baseline"
+        },
+        {
+          "path": "harness-ui/desktop/package.json",
+          "contains": "\"verify:evolution-baseline\": \"node scripts/verifica-baseline-evoluzione.mjs\""
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "contains": "name: baseline evoluzione"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "contains": "run: npm run verify:evolution-baseline"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "contains": "name: test puri desktop"
+        }
+      ]
+    },
+    {
+      "id": "release.checkout-tag-commit",
+      "category": "release",
+      "evidence": [
+        {
+          "path": ".github/workflows/release.yml",
+          "contains": "if ($LASTEXITCODE -ne 0 -or $prima -cne $tag) { throw 'La checkout non corrisponde al commit del tag.' }"
+        }
+      ]
+    },
+    {
+      "id": "release.checkout-no-persisted-credentials",
+      "category": "supply-chain",
+      "evidence": [
+        {
+          "path": ".github/workflows/release.yml",
+          "contains": "persist-credentials: false"
+        }
+      ]
+    },
+    {
+      "id": "release.server-tests",
+      "category": "test",
+      "evidence": [
+        {
+          "path": ".github/workflows/release.yml",
+          "contains": "node --test harness-ui/tests/*.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "release.kernel-tests",
+      "category": "test",
+      "evidence": [
+        {
+          "path": ".github/workflows/release.yml",
+          "contains": "npm --prefix harness-ui run test:kernel"
+        }
+      ]
+    },
+    {
+      "id": "release.kernel-control",
+      "category": "test",
+      "evidence": [
+        {
+          "path": ".github/workflows/release.yml",
+          "contains": "npm --prefix harness-ui run kernel:controlla"
+        }
+      ]
+    },
+    {
+      "id": "release.frontend-unit",
+      "category": "test",
+      "evidence": [
+        {
+          "path": ".github/workflows/release.yml",
+          "contains": "npm --prefix harness-ui/frontend run test:unit"
+        }
+      ]
+    },
+    {
+      "id": "release.desktop-pure",
+      "category": "test",
+      "evidence": [
+        {
+          "path": ".github/workflows/release.yml",
+          "contains": "npm --prefix harness-ui/desktop run test:puri"
+        }
+      ]
+    },
+    {
+      "id": "release.desktop-real-electron",
+      "category": "test",
+      "evidence": [
+        {
+          "path": ".github/workflows/release.yml",
+          "contains": "npm --prefix harness-ui/desktop run test:guscio"
+        }
+      ]
+    },
+    {
+      "id": "release.full-distribution",
+      "category": "release",
+      "evidence": [
+        {
+          "path": ".github/workflows/release.yml",
+          "contains": "npm --prefix harness-ui/desktop run dist"
+        }
+      ]
+    },
+    {
+      "id": "release.installed-smoke",
+      "category": "release",
+      "evidence": [
+        {
+          "path": ".github/workflows/release.yml",
+          "contains": "./harness-ui/desktop/scripts/ci-smoke.ps1 -Installer $env:INSTALLER"
+        }
+      ]
+    },
+    {
+      "id": "release.asset-hashes",
+      "category": "provenance",
+      "evidence": [
+        {
+          "path": ".github/workflows/release.yml",
+          "contains": "node harness-ui/desktop/scripts/release-assets.mjs"
+        },
+        {
+          "path": "harness-ui/desktop/scripts/release-assets.mjs",
+          "contains": "createHash('sha256')"
+        }
+      ]
+    },
+    {
+      "id": "release.github-attestation",
+      "category": "provenance",
+      "evidence": [
+        {
+          "path": ".github/workflows/release.yml",
+          "contains": "uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"
+        }
+      ]
+    },
+    {
+      "id": "desktop.loopback-auth",
+      "category": "security",
+      "evidence": [
+        {
+          "path": "harness-ui/desktop/tests/backend.spec.mjs",
+          "contains": "assert.equal((await fetch(base + '/api/v1/health')).status, 401);"
+        },
+        {
+          "path": "harness-ui/desktop/tests/backend.spec.mjs",
+          "contains": "assert.match(cookie, /HttpOnly/); assert.match(cookie, /SameSite=Strict/);"
+        }
+      ]
+    },
+    {
+      "id": "desktop.renderer-sandbox",
+      "category": "security",
+      "evidence": [
+        {
+          "path": "harness-ui/desktop/tests/guscio.spec.mjs",
+          "contains": "assert.deepEqual(protezioni, { sandbox: true, contextIsolation: true, nodeIntegration: false, preload: undefined });"
+        }
+      ]
+    },
+    {
+      "id": "desktop.no-orphan-backend",
+      "category": "recovery",
+      "evidence": [
+        {
+          "path": "harness-ui/desktop/tests/backend.spec.mjs",
+          "contains": "assert.throws(() => process.kill(proc.pid, 0), { code: 'ESRCH' });"
+        }
+      ]
+    },
+    {
+      "id": "package.content-sha256-manifest",
+      "category": "supply-chain",
+      "evidence": [
+        {
+          "path": "harness-ui/desktop/tests/pacchetto.test.mjs",
+          "contains": "R02-MANIFEST — nomi ordinati, byte e impronte per ogni file"
+        },
+        {
+          "path": "harness-ui/desktop/scripts/prepara-pacchetto.mjs",
+          "contains": "schema: 'talos.desktop.package.v1'"
+        }
+      ]
+    }
+  ]
+}
