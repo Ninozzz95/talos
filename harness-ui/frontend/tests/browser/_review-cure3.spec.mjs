@@ -110,7 +110,7 @@ async function togliRegola(page, selettore) {
  * ══════════════════════════════════════════════════════════════════════════ */
 test('P1 · la riga HF a sedici larghezze: chi si comprime, chi sfonda, chi resta a 220', async ({ page }) => {
   await apriLaboratorio(page);
-  await page.selectOption('#modelLabHfSortControl', 'updated', { force: true });
+  await page.selectOption('#modelLabHfSortControl', 'lastModified', { force: true });
   await page.waitForTimeout(200);
   const larghezze = [1920, 1600, 1440, 1366, 1280, 1200, 1150, 1101, 1100, 1024, 900, 768, 660, 560, 480, 390];
   for (const w of larghezze) {
@@ -172,13 +172,13 @@ test('P1 · la riga HF a sedici larghezze: chi si comprime, chi sfonda, chi rest
  * ══════════════════════════════════════════════════════════════════════════ */
 test('P1b · A/B della riga: 220 (cura) · 150 (la misura sbagliata) · senza regola (prima di `be736bc9`)', async ({ page }) => {
   await apriLaboratorio(page);
-  await page.selectOption('#modelLabHfSortControl', 'updated', { force: true });
+  await page.selectOption('#modelLabHfSortControl', 'lastModified', { force: true });
   await page.waitForTimeout(200);
   const scorciatoia = (m) => ({ ordine: m.ordine.w, etichetta: m.etichetta?.tagliata, campo: m.campo.w, segnapostoTagliato: m.campo.segnapostoTagliato, sfonda: m.sfonda, fuoriDi: m.fuoriDiQuanto, controlloDentro: m.controlloVisibile });
   for (const w of [1440, 1280]) {
     await apriLaboratorio(page);
     await page.setViewportSize({ width: w, height: 900 });
-    await page.selectOption('#modelLabHfSortControl', 'updated', { force: true });
+    await page.selectOption('#modelLabHfSortControl', 'lastModified', { force: true });
     await page.waitForTimeout(250);
     const con220 = await page.evaluate(MISURA);
     // 150 — la misura della prima stesura (`be736bc9`), rimessa con `!important` sopra la cura.

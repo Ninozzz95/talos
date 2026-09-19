@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createSessionRegistry } from '../../../src/session-registry.mjs';
+import { registraRiga } from '../../../src/session-store.mjs';
 import { createHttpApp } from '../../../src/http-app.mjs';
 import { createStaticHandler } from '../../../src/static-files.mjs';
 
@@ -64,8 +65,8 @@ for(const width of [1024,1440])for(const theme of ['dark','light'])test(`RIPRESA
 
 test('RIPRESA-REPLAY-HTTP-UI: registro reale, apertura tardiva e riavvio senza fixture di rete',async({page},info)=>{
  test.setTimeout(45000);
- const store=mkdtempSync(join(tmpdir(),'talos-replay-ui-')),runs=[];
- const options={cartellaStore:store,modello:'test',chiave:'test',guardaWorkspaceFn:()=>()=>{},cartellaEsisteFn:()=>true,
+ const store=mkdtempSync(join(tmpdir(),'talos-replay-ui-')),runs=[],writes=[];
+ const options={registraRigaFn:(...args)=>{const pending=registraRiga(...args);writes.push(pending);return pending;},cartellaStore:store,modello:'test',chiave:'test',guardaWorkspaceFn:()=>()=>{},cartellaEsisteFn:()=>true,
   preparaEsecuzioneFn:()=>({cartella:store,task:{id:'task',consegna:'Controlla il progetto'}}),
   avviaSessioneFn:input=>new Promise(resolve=>{runs.push({input,resolve});input.onEvento({type:'RunStarted',input:{consegna:'Controlla il progetto'}});})};
  let registry=createSessionRegistry(options),server;
@@ -110,7 +111,9 @@ test('RIPRESA-REPLAY-HTTP-UI: registro reale, apertura tardiva e riavvio senza f
   await page.goto('about:blank');
   for(const run of runs)run.resolve({ok:true,esito:{messaggiFinali:[]}});
   if(server?.listening)await close();
-  await new Promise(resolve=>setTimeout(resolve,50));rmSync(store,{recursive:true,force:true,maxRetries:10,retryDelay:100});
+  await new Promise(resolve=>setImmediate(resolve));
+  for(let count=-1;count!==writes.length;){count=writes.length;await Promise.all(writes);}
+  rmSync(store,{recursive:true,force:true});
  }
 });
 

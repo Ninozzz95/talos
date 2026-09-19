@@ -2821,3 +2821,50 @@ for (const width of [1024, 1440]) for (const mode of ['dark', 'light']) test(`RI
   await down.click(); await expect(down).toBeHidden();
   expect(await scroller.evaluate(e => e.clientHeight)).toBe(height);
 });
+
+test('RIPRESA-RITORNO-WHEEL-SUL-TONDO â€” la rotella sopra il pulsante continua a scorrere durante lo streaming', async ({ page }) => {
+  await ripresaChatLunga(page);
+  const scroller = page.locator('#schermoChat .talos-conversation');
+  await scroller.hover();
+  await page.mouse.wheel(0, -20000);
+  const down = page.locator('#chatTornaInFondo');
+  await expect(down).toBeVisible();
+  /* Dal bordo alto si torna a metà: il secondo wheel deve attraversare il tondo, non partire già a zero. */
+  await scroller.hover();
+  await page.mouse.wheel(0, 900);
+  await page.waitForTimeout(120);
+  const aMeta = await scroller.evaluate((element) => element.scrollTop);
+  expect(aMeta).toBeGreaterThan(100);
+
+  /* Il giro è vivo mentre la persona legge: la prova passa dal listener reale, non da uno scrollTop assegnato. */
+  await page.evaluate(() => {
+    const runtime = window.__talosHarnessUiRuntime;
+    const generation = runtime.realSessionState.generation;
+    runtime.handleRealEvent({ type: 'RunStarted', input: { consegna: 'Continua mentre leggo' }, _sequenza: 9000 }, generation);
+    runtime.handleRealEvent({ type: 'TextMessageContent', messageId: 'wheel-live', delta: 'Testo in arrivo. '.repeat(60), _sequenza: 9001 }, generation);
+  });
+  await page.waitForTimeout(120);
+  const prima = await scroller.evaluate((element) => element.scrollTop);
+  const box = await down.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, -260);
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeLessThan(prima - 20);
+
+  /* Il percorso della rotella non deve forzare il calcolo dello stile mentre
+     il renderer sta dipingendo token. La conversione delle linee è fissa:
+     una lettura di getComputedStyle qui riaprirebbe il jank del frame. */
+  const stileLetto = await page.evaluate(() => {
+    const pulsante = document.querySelector('#chatTornaInFondo');
+    const originale = window.getComputedStyle;
+    let chiamate = 0;
+    window.getComputedStyle = (...args) => { chiamate += 1; return originale(...args); };
+    try {
+      pulsante.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, deltaMode: 1, bubbles: true, cancelable: true }));
+      return chiamate;
+    } finally {
+      window.getComputedStyle = originale;
+    }
+  });
+  expect(stileLetto, 'la rotella non deve leggere lo stile nel frame dello streaming').toBe(0);
+});

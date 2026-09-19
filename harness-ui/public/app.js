@@ -6276,6 +6276,22 @@ function statoGiri(giri, tettoGiri) {
   if (quota < 0.5) return null;
   return quota >= 0.8 ? "vicino" : "quieto";
 }
+function inoltraRotellaConversazione(evento, piede) {
+  if (evento.ctrlKey) return;
+  const scroller = piede.closest?.("#schermoChat")?.querySelector(".talos-conversation");
+  if (!scroller) return;
+  let delta = Number(evento.deltaY) || 0;
+  if (evento.deltaMode === 1) {
+    delta *= 16;
+  } else if (evento.deltaMode === 2) {
+    delta *= scroller.clientHeight;
+  }
+  if (!delta) return;
+  const prima = scroller.scrollTop;
+  scroller.scrollTop = prima + delta;
+  if (scroller.scrollTop === prima) return;
+  if (evento.cancelable) evento.preventDefault();
+}
 function aggiornaPiedeChat(piede, dati = {}) {
   if (!piede) return;
   const documentObj = piede.ownerDocument;
@@ -6287,6 +6303,7 @@ function aggiornaPiedeChat(piede, dati = {}) {
       tornaInFondo.addEventListener("click", () => {
         tornaInFondo.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
       });
+      tornaInFondo.addEventListener("wheel", (evento) => inoltraRotellaConversazione(evento, piede), { passive: false });
     }
   }
   const striscia = piede.querySelector(".talos-status-strip");
@@ -17696,7 +17713,7 @@ var init_cronologia_grafo = __esm({
   }
 });
 
-// ../../../../../../../Desktop/projects/AVM-harness-desktop/harness-ui/frontend/node_modules/@dagrejs/dagre/dist/dagre.esm.js
+// node_modules/@dagrejs/dagre/dist/dagre.esm.js
 function Re(e, n) {
   e[n] ? e[n]++ : e[n] = 1;
 }
@@ -19269,7 +19286,7 @@ function _e(e) {
 }
 var Te, In, Sn, je, ie, Mn, Se, Q, Fn, H, Wn, Pe, zn, Un, K, T, Xe, st, D, ce, $e, dt, ne, wt, Nt, en, dn, _t, ln, bn, xn, sr, ar, dr, lr, Tn, ur, cr, fr;
 var init_dagre_esm = __esm({
-  "../../../../../../../Desktop/projects/AVM-harness-desktop/harness-ui/frontend/node_modules/@dagrejs/dagre/dist/dagre.esm.js"() {
+  "node_modules/@dagrejs/dagre/dist/dagre.esm.js"() {
     Te = Object.defineProperty;
     In = (e, n, t3) => n in e ? Te(e, n, { enumerable: true, configurable: true, writable: true, value: t3 }) : e[n] = t3;
     Sn = (e, n) => {

@@ -34,6 +34,8 @@ const RADICE_FRONTEND = fileURLToPath(new URL('../frontend/tests/', import.meta.
 
 /** I file che NON adottano l'aiuto, e il perche'. Il valore e' il motivo, e viene letto. */
 const CLASSE_B = new Map([
+  ['tests/agent-timeline.test.mjs', 'registro con writer asincroni e server HTTP: attendere le scritture prima della rimozione, senza retry che nascondano handle aperti'],
+  ['frontend/tests/browser/ripresa-replay.spec.mjs', 'browser e server HTTP reali con registro persistente: chiudere le connessioni e attendere tutti i writer prima della rimozione senza retry'],
   ['tests/acp-agent.test.mjs', 'un agente ACP esterno vive nella cartella e va chiuso (`agente.chiudi()`)'],
   ['tests/context-embedding-runtime.test.mjs', 'il runtime degli embedding lancia un processo figlio (`runtime.close()`)'],
   ['tests/context-engine-server.test.mjs', 'il servizio del contesto e un processo figlio con un socket (`stop()`)'],
