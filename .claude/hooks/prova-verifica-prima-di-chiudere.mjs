@@ -108,6 +108,43 @@ prova(
     ]),
 )
 
+// ── 19/09/2026 — I DUE MODI CHE MANCAVANO (e il loro verso che deve fallire) ──
+prova(
+    'ha toccato un cancello E ne ha lanciato la prova → passa',
+    false,
+    decidiVerifica(chiudi, [
+        { name: 'Edit', command: '.claude/hooks/ricerca-prima-di-scrivere.mjs' },
+        { name: 'Bash', command: 'node .claude/hooks/prova-ricerca-prima-di-scrivere.mjs' },
+    ]),
+)
+
+prova(
+    'le prove di TUTTI i cancelli in un colpo solo → passa',
+    false,
+    decidiVerifica(chiudi, [
+        { name: 'Edit', command: '.claude/hooks/cancelli.mjs' },
+        { name: 'Bash', command: 'node .claude/hooks/prova-cancelli.mjs' },
+    ]),
+)
+
+prova(
+    'ha toccato la UI E ha fatto girare una spec Playwright → passa',
+    false,
+    decidiVerifica(chiudi, [
+        { name: 'Edit', command: 'harness-ui/frontend/src/components/hf-catalogo.js' },
+        { name: 'Bash', command: 'npx playwright test tests/browser/lab-faccette.spec.mjs' },
+    ]),
+)
+
+prova(
+    '`node -e "…"` NON è una verifica → blocca lo stesso (la riga nuova non è un lasciapassare)',
+    true,
+    decidiVerifica(chiudi, [
+        { name: 'Edit', command: '.claude/hooks/x.mjs' },
+        { name: 'Bash', command: 'node -e "console.log(1)"' },
+    ]),
+)
+
 // ── La lettura del transcript ────────────────────────────────────────────────
 {
     const transcript = [

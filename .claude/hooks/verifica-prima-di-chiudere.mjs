@@ -76,6 +76,23 @@ const VERIFICHE = [
     /\bpytest\b|\bcargo\s+test\b|\bgo\s+test\b/i,
     // Il telecomando del Pad: trovare e toccare sul dispositivo vero.
     /device\.mjs\b/i,
+    /*
+     * ⛔ 19/09/2026 — DUE MODI DI VERIFICARE CHE MANCAVANO, e li ha trovati chi ci lavora.
+     *
+     * · **Le prove dei cancelli.** Chi tocca `.claude/hooks/` verifica così: `node
+     *   .claude/hooks/prova-<qualcosa>.mjs`, e `prova-cancelli.mjs` le lancia tutte. Senza
+     *   questa riga il cancello **richiama proprio chi sta provando** — successo il 19/09,
+     *   con le prove girate tre volte e il richiamo lo stesso — e per farlo tacere si finisce
+     *   a lanciare una suite che con quella modifica non c'entra.
+     * · **Playwright.** È la verifica principale di questo repo (`npx playwright test …`, le
+     *   spec in `tests/browser/`), e nella lista non c'era: chi prova la UI vedendo il
+     *   richiamo lo prende per buono.
+     *
+     * ⛔ Additivo, mai sottrattivo: ciò che contava prima conta ancora. E il verso che deve
+     * fallire resta — `git status`, `node -e …` e una lettura NON aprono la porta.
+     */
+    /\bnode\b[^\n]*\bprova-[\w.-]+\.mjs\b/i,
+    /\bplaywright\s+test\b/i,
 ]
 
 const NON_VERIFICATO = /⛔\s*NON\s+VERIFICATO\s*:/i
