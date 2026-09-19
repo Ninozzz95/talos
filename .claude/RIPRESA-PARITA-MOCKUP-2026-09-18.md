@@ -1,5 +1,29 @@
 # RIPRESA — LA PARITÀ COL MOCKUP · scritto il 18/09/2026
 
+> ## ⛔ SE SEI UN AGENTE NUOVO, PARTI DA QUI
+>
+> **Cosa leggere, in quest'ordine:** (1) **questo documento per intero**; (2) il **piano attuabile**
+> in `C:/Users/Antonino/.claude/plans/fizzy-pondering-diffie.md` — è **fuori dal repo**, quindi non lo
+> trovi cercando; (3) gli indici di memoria del repo (`.claude/MEMORIA-*.md`, importati da `CLAUDE.md`)
+> e le due lezioni nuove di questa sessione, nella cartella della memoria:
+> `una-prova-che-balla-non-protegge.md` e `il-pattern-dei-link-mangiava-le-immagini.md`.
+>
+> **Dove siamo, in cinque righe.** Le **Impostazioni** hanno la struttura e il vestito del mockup
+> (FASE 1 e 2 chiuse, `7752c68d`); le **decisioni dell'owner** su carta, peso 550 e chiave/valore sono
+> prese e **tengono ciò che c'è**; il **codice morto** è stato ritirato con la sua misura
+> (`58b18413`); la **FASE 3 (la banda del laboratorio) è IN CORSO** — una corsia sta scrivendo adesso.
+>
+> ⛔ **IL PRIMO PASSO, e non è una formalità:** controllare se la corsia della FASE 3 è **ancora viva**
+> (il suo lavoro sta **solo nell'albero di lavoro**, non committato, e in **due istantanee** in
+> `%TEMP%	alos-fase3-in-corso-1010` e `-1014`: `lab-cornice-v3.js`, `app.js`, `main.css`).
+> Se è morta, quel lavoro va **ripreso dalle istantanee** o **rifatto**, e la sua prova è
+> `tests/browser/_fase3-banda.spec.mjs`.
+>
+> **Cosa NON è verificato, e non va dato per buono:** i **37 rossi** della suite intera sono
+> **classificati per lettura**, non A/B-ati uno per uno (e due ballano fra i giri: `visual-matrix`,
+> `ragionamento-compresso`); la FASE 3 non è stata provata da me; le **immagini remote** del README
+> sono una superficie **dichiarata e non decisa**; **il push non è mai stato chiesto**.
+
 > **Documento di ripresa autosufficiente.** Se la sessione che l'ha scritto si interrompe, chi
 > arriva dopo deve poter riprendere **da qui**, senza leggere trascritti (che sono centinaia di MB)
 > e senza rifare misure già fatte.
@@ -516,7 +540,7 @@ si collega. ⛔ In particolare ho chiesto di **verificare se «Nessun passaggio 
 VERO**: se l'app avesse un ripiego automatico sulla rete, quella frase sarebbe una bugia.
 **Stato del lavoro in corsa**: `lab-cornice-v3.js` (+279/−45), `app.js` (+21/−2), `main.css` (+1:
 l'`@import './banda-laboratorio.css'`) — **non committato** (è a metà) e **copiato fuori dal repo** in
-`%TEMP%	alos-fase3-in-corso-1010` come rete di sicurezza. La sua prova è `_fase3-banda.spec.mjs`.
+`%TEMP%	alos-fase3-in-corso-1010` e `%TEMP%	alos-fase3-in-corso-1014` (due istantanee: la corsia stava scrivendo) come rete di sicurezza. La sua prova è `_fase3-banda.spec.mjs`.
 
 ## COSA GIRA ADESSO (18/09/2026, tarda sera)
 
