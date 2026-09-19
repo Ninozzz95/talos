@@ -64,5 +64,58 @@ p('AGENTE — la ricerca resta visibile anche dopo i risultati degli strumenti',
 p('AGENTE — e quindi il cancello NON blocca chi ha cercato', false, serveRicerca({ strumento: 'Edit', percorso: 'C:/…/harness-ui/src/config.mjs', eventi: eventiRecenti(transcriptAgente) }))
 p('AL CONTRARIO — un transcript senza nessuna ricerca blocca comunque', true, serveRicerca({ strumento: 'Edit', percorso: 'C:/…/harness-ui/src/config.mjs', eventi: eventiRecenti(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read', input: {} }] } })) }))
 
-console.log(falliti === 0 ? '\nTutte verdi (compresi i casi dell\'agente).' : `\n${falliti} PROVE FALLITE.`)
+/*
+ * ⛔ 19/09/2026 — IL CASO CHE MANCAVA: chi obbedisce DA UN CONTESTO DELEGATO.
+ *
+ * La corsia A è stata bloccata dal cancello **pur avendo cercato due volte**. Causa misurata:
+ * dentro un sotto-agente il payload porta `agent_id` giusto ma `transcript_path` che punta alla
+ * sessione **madre** (claude-code#76333), quindi le ricerche del figlio non si vedevano mai — e
+ * quelle del padre lo sbloccavano gratis. Le prove qui sopra coprivano le FUNZIONI: mancava la
+ * scelta di **quale transcript** leggere, che è dove stava il difetto.
+ *
+ * Si prova nei TRE versi, come vuole la regola: chi viola (nega), chi obbedisce (passa), e chi
+ * obbedisce **da un contesto diverso** (deve passare).
+ */
+const { transcriptsDiChiScrive } = await import('./ricerca-prima-di-scrivere.mjs')
+
+p('TRANSCRIPT — senza agent_id si legge quello che il payload dà', ['C:/s/abc.jsonl'], transcriptsDiChiScrive({ transcript_path: 'C:/s/abc.jsonl' }))
+p('TRANSCRIPT — con agent_id si legge PRIMA il proprio, e poi quello della sessione',
+  ['C:/s/abc/subagents/agent-a1b2.jsonl', 'C:/s/abc.jsonl'],
+  transcriptsDiChiScrive({ transcript_path: 'C:/s/abc.jsonl', agent_id: 'a1b2' }))
+p('TRANSCRIPT — e non si inventa un percorso quando il payload non dà niente', [], transcriptsDiChiScrive({}))
+
+// --- e la prova vera: si lancia il cancello, con due transcript su disco ---
+const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs')
+const { tmpdir } = await import('node:os')
+const { join } = await import('node:path')
+const { spawnSync } = await import('node:child_process')
+
+const riga = (nome) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: nome, input: {} }] } })
+const senzaRicerca = [riga('Read'), riga('Bash')].join('\n')
+const conRicerca = [riga('Read'), riga('WebSearch'), riga('Read')].join('\n')
+
+function lancia({ testoMadre, testoFiglio, agentId = 'a1b2' }) {
+  const dir = mkdtempSync(join(tmpdir(), 'cancello-prova-'))
+  const sessione = join(dir, 'abc.jsonl')
+  writeFileSync(sessione, testoMadre)
+  const payload = { tool_name: 'Edit', tool_input: { file_path: 'C:/…/harness-ui/src/config.mjs' }, transcript_path: sessione }
+  if (testoFiglio !== null) {
+    mkdirSync(join(dir, 'abc', 'subagents'), { recursive: true })
+    writeFileSync(join(dir, 'abc', 'subagents', `agent-${agentId}.jsonl`), testoFiglio)
+    payload.agent_id = agentId
+  }
+  const esito = spawnSync(process.execPath, [join(import.meta.dirname ?? '.', 'ricerca-prima-di-scrivere.mjs')], { input: JSON.stringify(payload), encoding: 'utf8' })
+  return { nega: String(esito.stdout ?? '').includes('"permissionDecision":"deny"'), uscita: esito.status }
+}
+
+const casoDelegatoON = lancia({ testoMadre: senzaRicerca, testoFiglio: conRicerca })
+p('DELEGATO che HA CERCATO (la ricerca è solo nel SUO transcript): PASSA', false, casoDelegatoON.nega)
+const casoDelegatoNO = lancia({ testoMadre: senzaRicerca, testoFiglio: senzaRicerca })
+p('DELEGATO che NON ha cercato: BLOCCA lo stesso', true, casoDelegatoNO.nega)
+const casoPadreON = lancia({ testoMadre: conRicerca, testoFiglio: senzaRicerca })
+p('ADDITIVO — se ha cercato il PADRE, il figlio passa come prima', false, casoPadreON.nega)
+const casoSessione = lancia({ testoMadre: senzaRicerca, testoFiglio: null })
+p('SESSIONE PRINCIPALE senza ricerca: BLOCCA', true, casoSessione.nega)
+
+console.log(falliti === 0 ? '\nTutte verdi (compresi i casi dell\'agente e del delegato).' : `\n${falliti} PROVE FALLITE.`)
 process.exit(falliti === 0 ? 0 : 1)

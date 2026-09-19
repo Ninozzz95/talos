@@ -84,6 +84,34 @@ export function eventiRecenti(testoTranscript, finestra = 300) {
     return eventi
 }
 
+/*
+ * ⛔ QUALE TRANSCRIPT SI GUARDA — la cura del 19/09/2026, e il difetto che cura.
+ *
+ * Dentro un sotto-agente il payload di `PreToolUse` porta `agent_id` **giusto** ma
+ * `transcript_path` che punta al transcript della sessione **madre**
+ * (claude-code#76333, v2.1.206: la derivazione del percorso riceve un override di
+ * sessione `void 0` e ricade sulla sessione corrente). ⇒ Questo cancello contava le
+ * ricerche **nel posto sbagliato**: il 19/09/2026 una corsia che aveva cercato due
+ * volte è stata **bloccata**, e una che non aveva cercato passava **gratis** quando il
+ * padre aveva cercato da poco. Tutti e due i versi sbagliati — ed è la lezione che
+ * questo repo ha già in memoria: un cancello che nega a chi ha obbedito insegna solo
+ * ad aggirarlo.
+ *
+ * Il transcript di chi scrive sta **accanto** a quello della sessione:
+ *   <cartella>/<sessione>.jsonl                              ← quello che il payload dà
+ *   <cartella>/<sessione>/subagents/agent-<agent_id>.jsonl   ← quello VERO, per un figlio
+ * ⇒ Si leggono TUTTI E DUE e conta la ricerca trovata in uno qualunque: è
+ *   **ADDITIVO** — chi passava prima passa ancora, e chi era bloccato a torto ora passa.
+ */
+export function transcriptsDiChiScrive(input) {
+    const dato = String(input?.transcript_path ?? '')
+    const agentId = String(input?.agent_id ?? input?.agentId ?? '')
+    const percorsi = []
+    if (dato && agentId) percorsi.push(`${dato.replace(/\.jsonl$/i, '')}/subagents/agent-${agentId}.jsonl`)
+    if (dato) percorsi.push(dato)
+    return percorsi
+}
+
 /** Estensioni che sono codice eseguibile del prodotto. */
 const ESTENSIONI_CODICE = ['.mjs', '.js', '.cjs', '.ts', '.tsx', '.jsx', '.vue', '.css', '.html', '.java', '.kt', '.py']
 
@@ -155,15 +183,25 @@ async function principale() {
     const strumento = input?.tool_name ?? ''
     const percorso = input?.tool_input?.file_path ?? input?.tool_input?.notebook_path ?? ''
 
-    let transcript = ''
-    try { transcript = readFileSync(input?.transcript_path ?? '', 'utf8') } catch { transcript = '' }
-    // ⛔ Transcript illeggibile: NON si blocca. Un cancello che nega per un file che non riesce
-    // ad aprire diventa un muro cieco, e un muro cieco viene aggirato invece che rispettato.
-    if (transcript === '') process.exit(0)
+    /* ⛔ SI LEGGONO I TRANSCRIPT DI CHI SCRIVE — e per un figlio sono DUE: il proprio
+       (`<sessione>/subagents/agent-<agent_id>.jsonl`, che il payload NON dà) e quello della
+       sessione madre (che è quello che il payload dà). Conta la ricerca trovata in uno qualunque,
+       quindi la cura è **additiva**: nessuno perde un diritto che aveva, e chi era bloccato a
+       torto — la corsia del 19/09/2026 — adesso passa. Vedi `transcriptsDiChiScrive`. */
+    const eventi = []
+    let lettoQualcosa = false
+    for (const percorsoTranscript of transcriptsDiChiScrive(input)) {
+        let testo = ''
+        try { testo = readFileSync(percorsoTranscript, 'utf8') } catch { continue }
+        lettoQualcosa = true
+        // Vale la ricerca più recente delle due letture: il turno (sessione principale)
+        // oppure la finestra (agente delegato, dove il turno si azzera di continuo).
+        eventi.push(...eventiDelTurno(testo), ...eventiRecenti(testo))
+    }
+    // ⛔ Nessun transcript leggibile: NON si blocca. Un cancello che nega per un file che non
+    // riesce ad aprire diventa un muro cieco, e un muro cieco viene aggirato invece che rispettato.
+    if (!lettoQualcosa) process.exit(0)
 
-    // Vale la ricerca più recente delle due letture: il turno (sessione principale)
-    // oppure la finestra (agente delegato, dove il turno si azzera di continuo).
-    const eventi = [...eventiDelTurno(transcript), ...eventiRecenti(transcript)]
     if (serveRicerca({ strumento, percorso, eventi })) {
         nega(MOTIVO)
         process.exit(0)
