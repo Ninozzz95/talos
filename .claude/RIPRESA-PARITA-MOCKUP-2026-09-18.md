@@ -15,7 +15,7 @@
 >
 > ⛔ **IL PRIMO PASSO, e non è una formalità:** controllare se la corsia della FASE 3 è **ancora viva**
 > (il suo lavoro sta **solo nell'albero di lavoro**, non committato, e in **due istantanee** in
-> `%TEMP%	alos-fase3-in-corso-1010` e `-1014`: `lab-cornice-v3.js`, `app.js`, `main.css`).
+> `C:/Users/Antonino/AppData/Local/Temp/talos-fase3-in-corso-1010` e `-1014`: `lab-cornice-v3.js`, `app.js`, `main.css`).
 > Se è morta, quel lavoro va **ripreso dalle istantanee** o **rifatto**, e la sua prova è
 > `tests/browser/_fase3-banda.spec.mjs`.
 >
@@ -540,7 +540,7 @@ si collega. ⛔ In particolare ho chiesto di **verificare se «Nessun passaggio 
 VERO**: se l'app avesse un ripiego automatico sulla rete, quella frase sarebbe una bugia.
 **Stato del lavoro in corsa**: `lab-cornice-v3.js` (+279/−45), `app.js` (+21/−2), `main.css` (+1:
 l'`@import './banda-laboratorio.css'`) — **non committato** (è a metà) e **copiato fuori dal repo** in
-`%TEMP%	alos-fase3-in-corso-1010` e `%TEMP%	alos-fase3-in-corso-1014` (due istantanee: la corsia stava scrivendo) come rete di sicurezza. La sua prova è `_fase3-banda.spec.mjs`.
+`C:/Users/Antonino/AppData/Local/Temp/talos-fase3-in-corso-1010` e `C:/Users/Antonino/AppData/Local/Temp/talos-fase3-in-corso-1014` (due istantanee: la corsia stava scrivendo) come rete di sicurezza. La sua prova è `_fase3-banda.spec.mjs`.
 
 ## COSA GIRA ADESSO (18/09/2026, tarda sera)
 
