@@ -81,13 +81,26 @@ export function validateUnsafeBoundary(sources) {
   for (const [name, text] of sources) {
     if (name === 'talos-windows-sandbox') {
       requireText(text, '#![deny(unsafe_op_in_unsafe_fn)]', 'NATIVE_WINDOWS_UNSAFE_POLICY');
-      if (/\bunsafe\s*\{/u.test(text)) fail('E0-3 non autorizza ancora alcun blocco unsafe.', 'NATIVE_UNSAFE_TOO_EARLY');
       continue;
     }
     requireText(text, '#![forbid(unsafe_code)]', 'NATIVE_SAFE_CRATE_UNSAFE_POLICY');
     if (/\bunsafe\b/u.test(text.replace('#![forbid(unsafe_code)]', ''))) {
       fail(`${name}: unsafe compare fuori dal crate Windows.`, 'NATIVE_UNSAFE_BOUNDARY');
     }
+  }
+}
+
+export function validateWindowsContainmentSource(text) {
+  requireText(text, 'PROC_THREAD_ATTRIBUTE_JOB_LIST', 'NATIVE_WINDOWS_CREATE_TIME_JOB');
+  requireText(text, 'JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE', 'NATIVE_WINDOWS_KILL_ON_CLOSE');
+  requireText(text, 'CREATE_SUSPENDED', 'NATIVE_WINDOWS_CREATE_SUSPENDED');
+  requireText(text, 'IsProcessInJob', 'NATIVE_WINDOWS_MEMBERSHIP_CHECK');
+  const policy = /const BASE_LIMIT_FLAGS:\s*u32\s*=\s*([^;]+);/u.exec(String(text));
+  if (!policy || !policy[1].includes('JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE')) {
+    fail('M1-D richiede KILL_ON_JOB_CLOSE nella policy base.', 'NATIVE_WINDOWS_KILL_ON_CLOSE');
+  }
+  if (/BREAKAWAY/u.test(policy[1])) {
+    fail('M1-D non autorizza flag di breakaway nella policy base.', 'NATIVE_WINDOWS_BREAKAWAY_POLICY');
   }
 }
 
@@ -115,6 +128,9 @@ export async function verifyNativeScaffold({
     sources.set(name, await readText(resolve(crateDir, name, sourceName)));
   }
   validateUnsafeBoundary(sources);
+  validateWindowsContainmentSource(
+    await readText(resolve(crateDir, 'talos-windows-sandbox', 'src/windows.rs')),
+  );
 
   const dependenciesPolicy = await readText(resolve(nativeRoot, 'DEPENDENCIES.md'));
   requireText(dependenciesPolicy, '**Direct third-party Rust dependencies: none.**', 'NATIVE_DEPENDENCY_POLICY');
@@ -124,13 +140,14 @@ export async function verifyNativeScaffold({
     rust: '1.98.1',
     members: MEMBERS.length,
     thirdPartyDependencies: 0,
+    windowsContainment: true,
   });
 }
 
 async function main() {
   const result = await verifyNativeScaffold();
   process.stdout.write(
-    `Native scaffold verificato: Rust ${result.rust}, ${result.members} crate, ${result.thirdPartyDependencies} dipendenze third-party.\n`,
+    `Native scaffold verificato: Rust ${result.rust}, ${result.members} crate, ${result.thirdPartyDependencies} dipendenze third-party, Job Object M1-D presente.\n`,
   );
 }
 
