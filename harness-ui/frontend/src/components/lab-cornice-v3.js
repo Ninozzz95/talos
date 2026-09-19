@@ -17,15 +17,20 @@
  * `talos-muted`, `talos-lab__meter`, `workspace-sr`. (Regola owner 04/09:
  * si cambia la struttura, non il linguaggio visivo.)
  *
- * ⛔ PERCHÉ QUESTO MODULO NON PORTA NESSUN FOGLIO DI STILE PROPRIO, e non è
- * una rinuncia: è una misura. La CSP di questo server è
- * `style-src 'self' 'nonce-…'` (`harness-ui/src/http-app.mjs:572`), quindi un
- * `<style>` creato da JavaScript **viene scartato dal browser in silenzio** —
- * è già costato una volta in questo repo e la lezione sta scritta a
- * `http-app.mjs:638` («il browser li scartava senza un errore in pagina»).
- * Un guscio che si veste da solo sarebbe sembrato giusto in prova e nudo nel
- * prodotto. ⇒ O si usa il design system esistente, o si chiede al
- * coordinatore di scrivere le regole in `src/styles/` (che non è mio).
+ * ⛔ PERCHÉ QUESTO MODULO NON PORTA NESSUN FOGLIO DI STILE PROPRIO — e la ragione
+ * NON è tecnica. **La versione precedente di questo commento diceva il falso**, e va
+ * corretto invece di tramandato: sosteneva che la CSP (`style-src 'self' 'nonce-…'`)
+ * facesse scartare in silenzio un `<style>` creato da JavaScript.
+ * **Misurato il 19/09/2026 dalla corsia 4: non è vero.** `harness-ui/src/http-app.mjs:666`
+ * inietta un timbro che **patcha `Document.prototype.createElement`** e scrive il nonce
+ * su ogni elemento creato (serve a xterm: BH-06), quindi un foglio creato dalla pagina
+ * **si applica**, e senza violazioni. La prova è riproducibile: la sonda della corsia ha
+ * creato un foglio via JS e `getComputedStyle` ha restituito la regola.
+ * ⇒ La ragione vera è una **regola di casa**, non un limite del browser: **il CSS sta in
+ * `src/styles/`**, dove si cerca, si spegne col tema e lo trova chi arriva dopo — non
+ * dentro un componente che se lo scrive da solo. O si usa il design system, o si chiede
+ * al coordinatore di scrivere le regole lì. (Una ragione falsa è peggio di nessuna
+ * ragione: la si legge come una prova, e nessuno la rimisura.)
  *
  * ⛔ NESSUNA SEZIONE SI PERDE IN SILENZIO. Il guscio si monta solo se OGNI
  * `[data-model-lab-panel]` del DOM ha una scheda che lo contiene; se ne trova
