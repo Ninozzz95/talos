@@ -314,6 +314,40 @@ senza il motore sarebbe una finestrella che incolla testo con più passaggi. ⛔
 
 ---
 
+# 📍 STATO AL 19/09/2026 — LA PARITÀ COL MOCKUP ENTRA NELLA TABELLA (questa sezione vince su quella del 17/09, che vince su ciò che sta sotto)
+
+> ⛔ **Owner, 19/09/2026**: «devi includere **anche la tabella di marcia delle fasi globale**, non solo
+> questo». Fino a oggi la catena della **parità col mockup** (`TALOS-Calm-Lab-04.html`) viveva **solo**
+> in `.claude/PIANO-PARITA-MOCKUP-2026-09-18.md` e nel documento di ripresa: da qui in poi sta **anche
+> qui**, perché questa è la tabella di marcia unica del desktop.
+
+## La catena della parità col mockup — le sue fasi
+
+| Fase | Stato | Che cosa è chiuso (commit) | Che cosa manca |
+|---|---|---|---|
+| **1 · l'intelaiatura delle Impostazioni** | ✅ | sidebar, voce attiva, gruppi, cercatore, testata di sezione, griglia | — |
+| **2 · le dieci sezioni** (vestito + forme) | ✅ | `7752c68d` (le due corsie, con le loro prove e il cancello dell'identità) | — |
+| **3 · la banda del laboratorio** | ✅ | `0948d437` — misure del mockup, badge Locale/Cloud, budget col denominatore **vero**, politica cloud con la **frase vera** (quella del mockup è falsa in TALOS: `session-registry.mjs:3739`). Difetto latente di `gib()` curato in `a46ee7e3` | — |
+| **4 · le quattro schede del laboratorio** | ⛔ **CONSEGNATA E BOCCIATA** | `6d50ec52` (le quattro schede coi contenuti veri; la **scatola grigia** tolta su richiesta dell'owner) | **i cinque difetti dell'owner** → FASE 4-bis |
+| **4-bis · le correzioni dell'owner** | 🔜 **IN CORSO** | — | lista Hugging Face col disegno del mockup **e il clic che apre la pagina** (non il pannello da 320 px) · Provider: modale di «Configura», vestito delle card, filtri, **loghi veri bundled** · Download: **elimina e rinomina** gli installati (rotte vere: `http-app.mjs:1251`) |
+| **5 · la pagina del modello** | 🔜 **IN CORSO** | — | toolbar con le due azioni, hero col **nome umano** (oggi è l'id grezzo), **striscia a quattro blocchi**, README reso; curare il `[object Object]` di `scheda-modello.js:994`; **immagini remote bloccate con interruttore** (owner 19/09) |
+| **6 · il confronto finale** | ⬜ | — | ogni vista affiancata al mockup, e la tabella delle differenze che resta |
+| **PARTE B · sidebar sinistra (PR #32)** | ⬜ | — | **prima il feed, poi l'interfaccia** (ordine dell'owner); innesto a `git merge-file` con base `13f65c15`, un solo punto a mano (`apiGet`) |
+| **PARTE B · sidebar destra + GRAFO agenti (PR #33)** | ⬜ | — | il grafo come **vista centrale** (decisione owner); la tabella del collegamento funzione per funzione, e il laboratorio servito **a parte** sulla 4178 |
+
+> ⛔ **Metodo obbligatorio** (owner 19/09, in maiuscolo): **lo stesso delle Impostazioni, niente di meno**
+> — in memoria come `metodo-refactor-sempre-lo-stesso-delle-impostazioni`: ricognizione misurata del
+> mockup dal DOM vivo (**comprese modali e cosa fa il clic su una riga**), ricerca web per ogni passo con
+> fonte e data, collegamento filo per filo coi `file:riga`, ciò che non si collega **elencato**, ogni
+> difesa **rotta per provarla**, foto del 4174 nei due temi **a pagina intera** e ispezionate, review
+> avversaria di ogni consegna.
+
+> **Stato del resto del desktop: la sezione del 17/09 qui sotto, che resta valida** (P0 e P0-bis chiuse,
+> CLI-REQ chiuse, PO-27 chiusa, FASE A ferma sui suoi due rami, BC-81 e FASE B aperte) — ⛔ ma è del
+> **17/09**: va riverificata prima di contarla come vera.
+
+---
+
 # 📍 STATO AL 17/09/2026, ore 22:30 — dove siamo, e che cosa aspetta (questa sezione vince su ciò che sta sotto)
 
 > **Owner, 17/09 notte:** tre PR sue da integrare → finire il lavoro → se possibile RILASCIARE una nuova versione. Io ATTENDO il suo via.
