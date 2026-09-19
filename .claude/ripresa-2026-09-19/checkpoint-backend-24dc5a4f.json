@@ -1,0 +1,35 @@
+{
+  "run": "C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\harness-ui\\frontend\\artifacts\\ripresa\\2026-09-19T20-41-35-273Z-backend-24dc5a4f",
+  "counts": {
+    "tests": 537,
+    "pass": 537,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "backendResult": {
+    "started": "2026-09-19T20:41:48.594Z",
+    "finished": "2026-09-19T20:41:54.223Z",
+    "args": [
+      "--test",
+      "--test-concurrency=1",
+      "--test-reporter=tap",
+      "..\\tests\\agent-timeline.test.mjs",
+      "..\\tests\\session-registry.test.mjs",
+      "..\\tests\\subagent-orchestrator.test.mjs",
+      "..\\tests\\http-routes-model-lab.test.mjs",
+      "..\\tests\\hf-hub-client.test.mjs",
+      "..\\tests\\http-routes-huggingface.test.mjs",
+      "..\\tests\\runtime-owner-adapter.test.mjs",
+      "..\\tests\\process-policy-env-narrowing.test.mjs",
+      "..\\tests\\local-model-store.test.mjs",
+      "..\\tests\\bc76-figlie-di-madre-locale.test.mjs",
+      "..\\tests\\corsia2-errore-del-reindirizzamento-a-schermo.test.mjs",
+      "..\\tests\\delega-parallelo-sequenza-cartella.test.mjs",
+      "..\\tests\\delega-percorso-e-scheda-agenti.test.mjs"
+    ],
+    "code": 0,
+    "logPath": "C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\harness-ui\\frontend\\artifacts\\ripresa\\2026-09-19T20-41-35-273Z-backend-24dc5a4f\\backend.log"
+  },
+  "scope": "13 spec backend interessate, non suite intera"
+}

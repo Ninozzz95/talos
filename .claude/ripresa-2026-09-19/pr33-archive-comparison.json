@@ -1,0 +1,261 @@
+[
+  {
+    "archive": "talos-pr33-reviewer/README.md",
+    "file": "harness-ui/frontend/lab/sidebar-review/README.md",
+    "blob": "024d6399c8dec9c61512b05e6dde19111f23697e",
+    "githubBlob": "2098e11abe6c019a4d7d6bb51d7be3f359c9a25e",
+    "match": false
+  },
+  {
+    "archive": "talos-pr33-reviewer/checkpoints/CP02-reviewed.json",
+    "file": "harness-ui/frontend/lab/sidebar-review/checkpoints/CP02-reviewed.json",
+    "blob": "e9a814ba38872d9eff6e22557620d81211dcea6f",
+    "githubBlob": "e9a814ba38872d9eff6e22557620d81211dcea6f",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/docs/CHECKPOINTS.md",
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/CHECKPOINTS.md",
+    "blob": "193ac97286c933df04a464e9bfe78f2e688b5c38",
+    "githubBlob": "193ac97286c933df04a464e9bfe78f2e688b5c38",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/docs/CODE_REVIEW.md",
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/CODE_REVIEW.md",
+    "blob": "411a636f80155f0d4cf2772d08bba3ffb4f74279",
+    "githubBlob": "411a636f80155f0d4cf2772d08bba3ffb4f74279",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/docs/ENGINEERING_REVIEW.md",
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/ENGINEERING_REVIEW.md",
+    "blob": "a78c92255dea58f4f1abffb9562ae76c321db1ad",
+    "githubBlob": "a78c92255dea58f4f1abffb9562ae76c321db1ad",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/docs/REQUIREMENTS_MATRIX.md",
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/REQUIREMENTS_MATRIX.md",
+    "blob": "bb4765f5a8d5d65e2282524f86f2cb4c6b52c0ca",
+    "githubBlob": "bb4765f5a8d5d65e2282524f86f2cb4c6b52c0ca",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/docs/RESEARCH.md",
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/RESEARCH.md",
+    "blob": "8b25d448e78c1b6ed3969d4b2a29661a52212c78",
+    "githubBlob": "8b25d448e78c1b6ed3969d4b2a29661a52212c78",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/docs/REVIEWER_CHECKLIST.md",
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/REVIEWER_CHECKLIST.md",
+    "blob": "304621c81c1f5078d631eeb04bd5f66816f672c1",
+    "githubBlob": "304621c81c1f5078d631eeb04bd5f66816f672c1",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/docs/REVIEWER_START.md",
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/REVIEWER_START.md",
+    "blob": "41adddd7b544c70a31895aad22d1cdfcc9a12f37",
+    "githubBlob": "41adddd7b544c70a31895aad22d1cdfcc9a12f37",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/docs/TESTING.md",
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/TESTING.md",
+    "blob": "1b2d0d40d53507120211eba5f61de0531cf2f087",
+    "githubBlob": "1b2d0d40d53507120211eba5f61de0531cf2f087",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/docs/UX_BEFORE_AFTER.md",
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/UX_BEFORE_AFTER.md",
+    "blob": "7bb9ba97f452b2b45f426d8276ed1aedca99ffa7",
+    "githubBlob": "7bb9ba97f452b2b45f426d8276ed1aedca99ffa7",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/production/inspector-tab-visibility.css",
+    "file": "harness-ui/frontend/src/styles/inspector-tab-visibility.css",
+    "blob": "8fe88027162573a56999a807c6d2902668a5aea1",
+    "githubBlob": "8fe88027162573a56999a807c6d2902668a5aea1",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/.gitignore",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/.gitignore",
+    "blob": "8ff44fcc9a292cf75f3c90933c57e7b7966afdc0",
+    "githubBlob": "8ff44fcc9a292cf75f3c90933c57e7b7966afdc0",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/README.md",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/README.md",
+    "blob": "f3c990d24a601e94d6812a35d4a714fd4ca0f5be",
+    "githubBlob": "f3c990d24a601e94d6812a35d4a714fd4ca0f5be",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/artifacts/.gitkeep",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/artifacts/.gitkeep",
+    "blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+    "githubBlob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/build.py",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/build.py",
+    "blob": "b54f3e00c2483fa182ad95f9bdbe1aef16bda7ed",
+    "githubBlob": "b54f3e00c2483fa182ad95f9bdbe1aef16bda7ed",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/actions.js",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/actions.js",
+    "blob": "6558c99d7a2dc5530ab8cc58ec1c8440d666ad3b",
+    "githubBlob": "6558c99d7a2dc5530ab8cc58ec1c8440d666ad3b",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/agent-views.js",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/agent-views.js",
+    "blob": "35f1bbab583d9765d66f13c40768b04a95113fcb",
+    "githubBlob": "35f1bbab583d9765d66f13c40768b04a95113fcb",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/calm-files.css",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/calm-files.css",
+    "blob": "26baad7295edc1941e2a3c3d5c0b84fce6d052f7",
+    "githubBlob": "26baad7295edc1941e2a3c3d5c0b84fce6d052f7",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/controller.js",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/controller.js",
+    "blob": "0c78b0882e6ddbebdb853f4da5188ac5eb882677",
+    "githubBlob": "0c78b0882e6ddbebdb853f4da5188ac5eb882677",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/events.js",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/events.js",
+    "blob": "51b7aa3304cebac6fab8ca873207a2e899356bfd",
+    "githubBlob": "51b7aa3304cebac6fab8ca873207a2e899356bfd",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/explorer-model.mjs",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/explorer-model.mjs",
+    "blob": "55b8e87e42852d9c402d6f91c81b30c3c04562b7",
+    "githubBlob": "55b8e87e42852d9c402d6f91c81b30c3c04562b7",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/explorer-view.js",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/explorer-view.js",
+    "blob": "a2041f2361c5ea9163996d933e0e70202f48c139",
+    "githubBlob": "a2041f2361c5ea9163996d933e0e70202f48c139",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/inspector-state.mjs",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/inspector-state.mjs",
+    "blob": "1fe3520cee12c75bb376112970d28e200c265785",
+    "githubBlob": "1fe3520cee12c75bb376112970d28e200c265785",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/inspector-tab-visibility.css",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/inspector-tab-visibility.css",
+    "blob": "8fe88027162573a56999a807c6d2902668a5aea1",
+    "githubBlob": "8fe88027162573a56999a807c6d2902668a5aea1",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/lab-data.js",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/lab-data.js",
+    "blob": "d07d7c6f37e4ea1f8d0024d8636e4869a4306d2e",
+    "githubBlob": "d07d7c6f37e4ea1f8d0024d8636e4869a4306d2e",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/prototype.css",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/prototype.css",
+    "blob": "bc09ab108e855f20389d1399fff7b9592096c650",
+    "githubBlob": "bc09ab108e855f20389d1399fff7b9592096c650",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/shell.html",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/shell.html",
+    "blob": "7cf1b9b43d0dd488d898b637b8a66f8d5e8a7d97",
+    "githubBlob": "7cf1b9b43d0dd488d898b637b8a66f8d5e8a7d97",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/talos-tokens.css",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/talos-tokens.css",
+    "blob": "0702cff045b50147086be1b6354285ddc98cd394",
+    "githubBlob": "0702cff045b50147086be1b6354285ddc98cd394",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/src/workspace-views.js",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/workspace-views.js",
+    "blob": "8cd25783027e8daae88e4ad852d1225274036c28",
+    "githubBlob": "8cd25783027e8daae88e4ad852d1225274036c28",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/tests/hardening.test.mjs",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/hardening.test.mjs",
+    "blob": "630afab1010d52847ee6bac8deafac345807ddc9",
+    "githubBlob": "630afab1010d52847ee6bac8deafac345807ddc9",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/tests/state.test.mjs",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/state.test.mjs",
+    "blob": "246a815547bc6c9a65de04911abcc1328655f50d",
+    "githubBlob": "246a815547bc6c9a65de04911abcc1328655f50d",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/tests/test_explorer.py",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/test_explorer.py",
+    "blob": "d2f6c052e7bd728bef275e71caea5ae395ec96ad",
+    "githubBlob": "d2f6c052e7bd728bef275e71caea5ae395ec96ad",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/tests/test_hardening.py",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/test_hardening.py",
+    "blob": "60fd0f5c6b838e5fc45e1e8c99b511db2c73af1e",
+    "githubBlob": "60fd0f5c6b838e5fc45e1e8c99b511db2c73af1e",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/tests/test_prototype.py",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/test_prototype.py",
+    "blob": "ebc84acd37f4cf7ab3b75af86df36811edcdc32b",
+    "githubBlob": "ebc84acd37f4cf7ab3b75af86df36811edcdc32b",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/tests/test_visibility.py",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/test_visibility.py",
+    "blob": "a2d436bf7855e738fa13c56da7f722aa04594d32",
+    "githubBlob": "a2d436bf7855e738fa13c56da7f722aa04594d32",
+    "match": true
+  },
+  {
+    "archive": "talos-pr33-reviewer/prototype/tests/visibility-regression.html",
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/visibility-regression.html",
+    "blob": "7fd982471707a8b357d8586fc3dd5f9baea0ebc4",
+    "githubBlob": "7fd982471707a8b357d8586fc3dd5f9baea0ebc4",
+    "match": true
+  }
+]

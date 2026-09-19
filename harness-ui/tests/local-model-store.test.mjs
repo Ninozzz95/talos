@@ -63,6 +63,27 @@ test('allows one lock, rejects a second lock, and releases it explicitly', async
   });
 });
 
+test('RIPRESA-MODEL-LOCKED-STORE — remove rifiutato conserva nome, manifest e file fisico', async () => {
+  await withStore(async (store, rootDir) => {
+    const { mkdir, writeFile, readFile, stat } = await import('node:fs/promises');
+    const file = join(rootDir, valid.path);
+    await mkdir(join(rootDir, valid.id), { recursive: true });
+    const pesi = Buffer.alloc(valid.bytes, 0x47);
+    await writeFile(file, pesi);
+    await store.register(valid);
+    const prima = await store.rename(valid.id, 'Nome da conservare');
+    await store.lock(valid.id);
+    await assert.rejects(store.remove(valid.id), error => error.code === 'MODEL_LOCKED');
+    assert.deepEqual(await readFile(file), pesi);
+    assert.deepEqual(await store.inspect(valid.id), prima);
+    assert.equal((await store.list()).some(model => model.id === valid.id), true);
+    await store.unlock(valid.id);
+    assert.equal(await store.remove(valid.id), true);
+    await assert.rejects(stat(file), error => error.code === 'ENOENT');
+    assert.equal(await store.inspect(valid.id), null);
+  });
+});
+
 test('does not publish a manifest when the atomic rename fails', async () => {
   await withStore(async (_unused, rootDir) => {
     const store = createLocalModelStore({

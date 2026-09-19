@@ -1,0 +1,24 @@
+{
+  "ownerConfirmed": "2026-09-19",
+  "references": [
+    {
+      "surface": "Sidebar destra e grafo agenti",
+      "path": "C:/Users/Antonino/Downloads/talos-sidebar-calm-review.html",
+      "sha256": "59b2b6d1ce90f7b29a74f6ba0f9646f3be980776767e6b0930c27882f8ce20f1"
+    },
+    {
+      "surface": "Model Lab e impostazioni",
+      "path": "C:/Users/Antonino/Downloads/TALOS-Calm-Lab-04.html",
+      "route": "#/impostazioni/modelli/models",
+      "sha256": "094207523b3b76b01cd9aac27792ff2cc2f97ddd69cbd9757898fa558284460e"
+    }
+  ],
+  "noMockup": [
+    "chat",
+    "composer"
+  ],
+  "invalidParityEvidence": [
+    "chat-aspetto-live-2026-09-19T17-25-41-260Z-8bcd4d13",
+    "chat-aspetto-live-2026-09-19T17-26-21-846Z-0d8e9243"
+  ]
+}

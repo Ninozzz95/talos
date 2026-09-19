@@ -1,5 +1,7 @@
 # TABELLA DELLE FASI — la tabella di marcia unica del desktop (riscritta il 16/09/2026)
 
+> **Aggiornamento di ripresa — 19/09/2026, 20:36 UTC.** Lo stato operativo corrente, le prove e l'ordine raccomandato sono nel [quadro aggiornato della roadmap globale](ROADMAP-GLOBALE-RIPRESA-2026-09-19.md#quadro-corrente-e-prossime-fasi--aggiornamento-1909-2036-utc). Questo documento conserva la tabella canonica dei requisiti e la storia; le fotografie del16–19/09 e le vecchie chiusure sotto non prevalgono sulla ricognizione più recente. Replay implementato con gate reale residuo; Model Lab, parallelo reale, interruzioni Qwen, audit e candidata restano aperti. 4174 ripristinata oggi con33sessioni, stabilità fra turni da confermare. Le vecchie istruzioni operative/delega non sostituiscono quelle vigenti nella conversazione; nessun commit o push autorizzato.
+
 > Owner, 16/09/2026, al reset dei limiti: «ispeziona le modifiche fatte e aggiorna la tabella di
 > marcia unica alle ultime modifiche eliminando doc e tutto quello che è obsoleto/passato/fatto».
 >

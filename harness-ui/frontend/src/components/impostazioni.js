@@ -90,7 +90,7 @@ export function mostraSezioneImpostazioni(screen, section) {
   if (view) view.select(selected, preserveSearch);
   else for (const panel of screen.querySelectorAll('[data-settings-panel]')) panel.hidden = panel.dataset.settingsPanel !== selected;
 }
-export function montaImpostazioni(screen, values, { recupera, cambiaSezione, defaultValues = {} } = {}) {
+export function montaImpostazioni(screen, values, { recupera, cambiaSezione, defaultValues = {}, ripristinaAspetto } = {}) {
   if (!screen) return;
   views.get(screen)?.dispose();
   for (const field of CAMPI_IMPOSTAZIONI) {
@@ -108,6 +108,7 @@ export function montaImpostazioni(screen, values, { recupera, cambiaSezione, def
   const view = createSettingsView(screen, {
     fields: CAMPI_IMPOSTAZIONI, studioIds: CONTROLLI_MIGRATI, language: linguaCorrenteDiT, translate: t,
     chooseSection: section => cambiaSezione ? cambiaSezione(section) : mostraSezioneImpostazioni(screen, section),
+    resetAppearance: ripristinaAspetto,
     openStudio: fieldId => {
       apriStudioTemi({ document: screen.ownerDocument });
       const control = screen.ownerDocument.getElementById('td-studio-' + fieldId);

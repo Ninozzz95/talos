@@ -181,6 +181,118 @@ async function apriIlLaboratorio(page, { colorMode = 'dark', dove = '' } = {}) {
   return { fermati };
 }
 
+/**
+ * Apre l'ingresso vero di «Installati» con risposte HTTP deterministiche. Il secondo elenco
+ * compare solo quando il polling vero dei download osserva una riga `ready`: in questo modo la
+ * prova attraversa lo stesso aggiornamento che usa l'app, senza chiamare funzioni interne.
+ */
+async function apriInstallatiConAggiornamento(page, { colorMode = 'dark' } = {}) {
+  const GB = 1024 ** 3;
+  const modello = (id, name, repo, bytes) => ({
+    id,
+    name,
+    repo,
+    revision: 'a'.repeat(40),
+    state: 'ready',
+    license: 'Apache-2.0',
+    bytes,
+    path: `${id}/${id}.gguf`,
+    files: [{ path: `${id}.gguf`, bytes, sha256: 'a'.repeat(64) }],
+    sha256: 'a'.repeat(64),
+    updatedAt: '2026-09-19T12:00:00.000Z',
+  });
+  const iniziali = [
+    modello('qwen8', 'Qwen3 8B', 'Qwen/Qwen3-8B-GGUF', 5 * GB),
+    modello('gemma', 'Gemma 3 12B', 'google/gemma-3-12b-it-GGUF', 8 * GB),
+    modello('mistral', 'Mistral 7B', 'mistralai/Mistral-7B-GGUF', 4 * GB),
+  ];
+  const arrivato = modello('gemma-refresh', 'Gemma aggiornata', 'google/gemma-refresh-GGUF', 9 * GB);
+  const controllo = { download: 0, locali: 0, pronto: false };
+
+  await page.route(/\/api\/v1\/local-models(?:\?.*)?$/, route => {
+    controllo.locali += 1;
+    return route.fulfill({ json: { ok: true, data: { items: controllo.pronto ? [...iniziali, arrivato] : iniziali } } });
+  });
+  await page.route(/\/api\/v1\/runtime(?:\?.*)?$/, route => route.fulfill({
+    json: {
+      ok: true,
+      data: {
+        items: [{
+          runtimeId: 'llama.cpp',
+          state: 'observed',
+          runtimeState: 'ready',
+          modelId: 'qwen8',
+          models: iniziali.map(({ id, name }) => ({ id, name })),
+        }],
+      },
+    },
+  }));
+  await page.route(/\/api\/v1\/huggingface\/downloads(?:\?.*)?$/, route => {
+    controllo.download += 1;
+    const state = controllo.pronto ? 'ready' : 'running';
+    return route.fulfill({
+      json: {
+        ok: true,
+        data: {
+          items: [{
+            id: 'aggiornamento-installati',
+            repo: 'google/gemma-refresh-GGUF',
+            file: 'gemma-refresh.gguf',
+            bytes: 9 * GB,
+            downloadedBytes: state === 'ready' ? 9 * GB : 4 * GB,
+            state,
+          }],
+        },
+      },
+    });
+  });
+  await page.addInitScript((modo) => {
+    window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
+      version: 1,
+      appearance: { colorMode: modo, themePreset: 'calm', themePresetVersione: 2, uiLanguage: 'it' },
+      chat: {},
+      workspaces: {},
+    }));
+  }, colorMode);
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__talosHarnessUiRuntime, null, { timeout: 20_000 });
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 15_000 }).catch(() => {});
+  await page.evaluate(() => {
+    const voce = document.querySelector('.talos-sidebar [data-vaia="impostazioni"]');
+    if (voce && !voce.offsetParent) {
+      const gruppo = voce.closest('.td-nav-group');
+      const testata = gruppo?.id ? document.querySelector(`.talos-sidebar [aria-controls="${gruppo.id}"]`) : null;
+      if (testata?.getAttribute('aria-expanded') === 'false') testata.click();
+    }
+    voce?.click();
+    window.__talosHarnessUiRuntime?.setSettingsSection?.('models');
+  });
+  await expect(page.locator('#modelLabCard')).toBeVisible({ timeout: 10_000 });
+  await vaiAInstallati(page);
+  await expect(page.locator('#modelLabInstalledList [data-c="ListRow"]')).toHaveCount(3);
+  return controllo;
+}
+
+/** Usa il combobox Calm che vede la persona; il `<select>` sorgente resta intenzionalmente nascosto. */
+async function scegliInstallatiCalm(page, value) {
+  const sorgente = page.locator('#modelLabInstalledStateFilter');
+  const nome = (await sorgente.locator(`option[value="${value}"]`).textContent())?.trim();
+  expect(nome).toBeTruthy();
+  await page.locator('#modelLabInstalledStateFilter--calm').click();
+  await page.getByRole('option', { name: nome, exact: true }).click();
+  await expect(sorgente).toHaveValue(value);
+}
+
+/** Entra negli installati dalla porta visibile «Aggiungi modello → Da un file», senza premere tab nascosti. */
+async function vaiAInstallati(page) {
+  await page.locator('[data-settings-add-model]').click();
+  const modale = page.locator('#settingsAddModel');
+  await expect(modale).toBeVisible();
+  await modale.locator('[data-settings-road="file"]').click();
+  await expect(modale).toBeHidden();
+  await expect(page.locator('#modelLabInstalledPanel')).toBeVisible();
+}
+
 /** Rende una coda nel pannello VERO, con le azioni VERE (o senza, per il confronto). */
 async function rendi(page, items, { conAzioni = true, soloAttivi = false } = {}) {
   return page.evaluate(({ items, conAzioni, soloAttivi }) => {
@@ -233,6 +345,45 @@ const idNuovo = (t) => `corsia-d-${t}-${Date.now().toString(36)}`;
 async function pulisci(request, id) {
   await request.post(`/api/v1/local-models/${encodeURIComponent(id)}/delete`, { data: {} }).catch(() => {});
 }
+
+test('RIPRESA-MODEL-LOCKED — la app mostra il rifiuto e conserva il modello nel server', async ({ page, request }, testInfo) => {
+  test.skip(SU_SERVER_VIVO(portaDi(testInfo)), 'Solo banco isolato');
+  const id = idNuovo('locked');
+  const { bytes } = await creaModello(request, id);
+  let tentativi = 0;
+  try {
+    await page.route('**/api/v1/huggingface/downloads', route => route.fulfill({ json: {
+      ok: true, data: { items: [rigaPronta(id, bytes)] },
+    } }));
+    await page.route(`**/api/v1/local-models/${id}/delete`, route => {
+      tentativi += 1;
+      return route.fulfill({ status: 409, json: { ok: false,
+        error: { code: 'MODEL_LOCKED', message: 'Il modello è in uso: libera la memoria prima di eliminarlo.' },
+      } });
+    });
+    await page.goto('/');
+    await expect(page.locator('#talosAvvio')).toHaveCount(0);
+    const voce = page.locator('.talos-sidebar [data-vaia="impostazioni"]');
+    const gruppo = await voce.evaluate(el => el.closest('.td-nav-group')?.id);
+    if (gruppo) {
+      const testata = page.locator(`.talos-sidebar [aria-controls="${gruppo}"]`);
+      if (await testata.getAttribute('aria-expanded') === 'false') await testata.click();
+    }
+    await voce.click();
+    await page.locator('#setting-tab-models').click();
+    await page.locator('#labSchedaDownloads').click();
+    const riga = page.locator(`#modelLabDownloadsPanel [data-download-id="${id}"]`);
+    await riga.locator('[data-action="eliminaModello"]').click();
+    expect(tentativi).toBe(0);
+    await expect(riga.locator('[data-action="annullaEliminaModello"]')).toBeFocused();
+    await riga.locator('[data-action="eseguiEliminaModello"]').click();
+    await expect(riga.locator('[data-c="EsitoModello"]')).toContainText('Il modello è in uso');
+    await expect(riga.locator('[data-c="EsitoModello"]')).not.toHaveAttribute('data-tono', 'success');
+    expect(tentativi).toBe(1);
+    expect((await (await request.get('/api/v1/local-models')).json()).data.items.map(model => model.id)).toContain(id);
+    await expect(riga).not.toContainText('Eliminato dal disco:');
+  } finally { await pulisci(request, id); }
+});
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // 1 · I DUE PASSI
@@ -472,6 +623,48 @@ test('AZ-CAMPO-VUOTO — un nome vuoto non chiama la rete e non manda la persona
     // E il campo non si svuota: quello che la persona ha scritto resta dov'è, e si può correggere.
     await expect(riga.locator('[data-c="CampoRinomina"] input')).toHaveValue('   ');
   } finally { await pulisci(request, id); }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// 5 · FILTRI INSTALLATI — ingresso vero, controllo Calm e refresh periodico
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+test('RIPRESA-INSTALLATI-FILTRI — ricerca e stato restano applicati durante il refresh e si azzerano a schermo', async ({ page }) => {
+  const controllo = await apriInstallatiConAggiornamento(page);
+  const righe = page.locator('#modelLabInstalledList [data-c="ListRow"]');
+  const ricerca = page.locator('#modelLabInstalledSearchControl');
+  const calm = page.locator('#modelLabInstalledStateFilter--calm');
+
+  await scegliInstallatiCalm(page, 'caricato');
+  await expect(righe).toHaveCount(1);
+  await expect(righe).toContainText('Qwen3 8B');
+
+  await scegliInstallatiCalm(page, 'disco');
+  await ricerca.fill('Gemma');
+  await expect(righe).toHaveCount(1);
+  await expect(righe).toContainText('Gemma 3 12B');
+
+  // Il polling della coda è il percorso reale che rilegge gli installati quando un download è pronto.
+  await page.locator('#labSchedaDownloads').click();
+  await expect.poll(() => controllo.download).toBeGreaterThan(0);
+  await vaiAInstallati(page);
+  controllo.pronto = true;
+  await expect.poll(() => controllo.locali, { timeout: 5_000 }).toBeGreaterThan(1);
+  await expect(righe).toHaveCount(2);
+  await expect(righe).toContainText(['Gemma 3 12B', 'Gemma aggiornata']);
+  await expect(ricerca).toHaveValue('Gemma');
+  await expect(page.locator('#modelLabInstalledStateFilter')).toHaveValue('disco');
+  await expect(calm).toContainText('Solo sul disco');
+
+  await ricerca.fill('nessuna-corrispondenza');
+  await expect(righe).toHaveCount(0);
+  const azzera = page.locator('#modelLabInstalledPanel [data-clear="installati"]');
+  await expect(azzera).toBeVisible();
+  await azzera.click();
+  await expect(ricerca).toHaveValue('');
+  await expect(page.locator('#modelLabInstalledStateFilter')).toHaveValue('tutti');
+  await expect(calm).toContainText('Tutti gli stati');
+  await expect(righe).toHaveCount(4);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────

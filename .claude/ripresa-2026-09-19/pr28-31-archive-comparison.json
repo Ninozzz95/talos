@@ -1,0 +1,352 @@
+[
+  {
+    "pr": 28,
+    "file": "harness-ui/docs/performance/local-engine-investigation.md",
+    "blob": "e2e2c869e04e2de5f77b91e33eba9bce8801d56f",
+    "githubBlob": "e2e2c869e04e2de5f77b91e33eba9bce8801d56f",
+    "match": true
+  },
+  {
+    "pr": 28,
+    "file": "harness-ui/docs/performance/local-stream-results.json",
+    "blob": "1a4014eba822027ba4a64b972257faac63aa869f",
+    "githubBlob": "1a4014eba822027ba4a64b972257faac63aa869f",
+    "match": true
+  },
+  {
+    "pr": 28,
+    "file": "harness-ui/scripts/bench-local-runtime-stream.mjs",
+    "blob": "a65e8dcc3911050ebb453d12b981dac3db802c36",
+    "githubBlob": "a65e8dcc3911050ebb453d12b981dac3db802c36",
+    "match": true
+  },
+  {
+    "pr": 28,
+    "file": "harness-ui/src/local-runtime-llama-server.mjs",
+    "blob": "abb230c3e31b99550455359e6e0b74b4cd0d89c8",
+    "githubBlob": "abb230c3e31b99550455359e6e0b74b4cd0d89c8",
+    "match": true
+  },
+  {
+    "pr": 28,
+    "file": "harness-ui/tests/local-runtime-stream-fragments.test.mjs",
+    "blob": "9121735deb6f6b25cf4318f840e8d09fb6c10075",
+    "githubBlob": "9121735deb6f6b25cf4318f840e8d09fb6c10075",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": ".github/workflows/local-engine-kernel.yml",
+    "blob": "d92b706c5629d47ec9241a3841be24a9020b43d5",
+    "githubBlob": "d92b706c5629d47ec9241a3841be24a9020b43d5",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/docs/performance/local-kernel-fixture-results.json",
+    "blob": "4b2f813f0f16fdd1887208b95b42ae3c2c21c05e",
+    "githubBlob": "4b2f813f0f16fdd1887208b95b42ae3c2c21c05e",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/docs/performance/local-kernel-implementation.md",
+    "blob": "891e0e4651723319469c61698ff6cdb5b37ffea0",
+    "githubBlob": "891e0e4651723319469c61698ff6cdb5b37ffea0",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/scripts/bench-local-kernel-loop.mjs",
+    "blob": "b2d4260db00177a4228b21fb039d363f7cd02832",
+    "githubBlob": "b2d4260db00177a4228b21fb039d363f7cd02832",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/scripts/local-engine-source-baseline.mjs",
+    "blob": "9daa2ebd42130673e8d6ccb1b284350632ccf2be",
+    "githubBlob": "9daa2ebd42130673e8d6ccb1b284350632ccf2be",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/server.mjs",
+    "blob": "f969431560c6f0b278a7907d15022cf2d8563d59",
+    "githubBlob": "f969431560c6f0b278a7907d15022cf2d8563d59",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/agent-service.mjs",
+    "blob": "90e568770e0e937dc9767fc43094d45b9a2a488a",
+    "githubBlob": "90e568770e0e937dc9767fc43094d45b9a2a488a",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/config.mjs",
+    "blob": "e95ea5da225e2cb99cdc572d8c4502cc37523225",
+    "githubBlob": "e95ea5da225e2cb99cdc572d8c4502cc37523225",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/llama-server-supervisor.mjs",
+    "blob": "55c9bcded1e7372ee2bce7cf78b4b71a21512138",
+    "githubBlob": "55c9bcded1e7372ee2bce7cf78b4b71a21512138",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/local-kernel-session.mjs",
+    "blob": "52056a0fd0d6f790c27a15fe51291fd71b078b8d",
+    "githubBlob": "52056a0fd0d6f790c27a15fe51291fd71b078b8d",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/local-kernel-stream.mjs",
+    "blob": "53af4169122a01a7ef196deaf8d32249bda1117b",
+    "githubBlob": "53af4169122a01a7ef196deaf8d32249bda1117b",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/runtime-owner-adapter.mjs",
+    "blob": "ada65fbc573504713b218eaeecdd5ae4bc531530",
+    "githubBlob": "ada65fbc573504713b218eaeecdd5ae4bc531530",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/session-registry.mjs",
+    "blob": "be94ea4f00ca6e194b870abe48396084b80e5de6",
+    "githubBlob": "be94ea4f00ca6e194b870abe48396084b80e5de6",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/tests/fixtures/local-kernel-fixture.mjs",
+    "blob": "2e06cb5d07ef308df16ce993c492cc279ee71939",
+    "githubBlob": "2e06cb5d07ef308df16ce993c492cc279ee71939",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/tests/local-engine-source-baseline.test.mjs",
+    "blob": "f0c6ff5a2cb2b0b22e53d4044cbde15dd9014ecc",
+    "githubBlob": "f0c6ff5a2cb2b0b22e53d4044cbde15dd9014ecc",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/tests/local-kernel-integration.test.mjs",
+    "blob": "5b663d3cfbe9135ac73b44ab4fe4f3ce18623f12",
+    "githubBlob": "5b663d3cfbe9135ac73b44ab4fe4f3ce18623f12",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/tests/local-kernel-session.test.mjs",
+    "blob": "a33f3231bd0c567524f200f1af824e78a84b5666",
+    "githubBlob": "a33f3231bd0c567524f200f1af824e78a84b5666",
+    "match": true
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/tests/local-kernel-stream.test.mjs",
+    "blob": "e14db89e700d267047f422703f7c83308fc2bc0e",
+    "githubBlob": "e14db89e700d267047f422703f7c83308fc2bc0e",
+    "match": true
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/docs/performance/local-engine-preflight.md",
+    "blob": "6b5458878319e0a44e3868d9aa4896177f987ef9",
+    "githubBlob": "6b5458878319e0a44e3868d9aa4896177f987ef9",
+    "match": true
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/docs/performance/local-preflight-results.json",
+    "blob": "e9a6675010f27478813f97635c2fd82dbcf46101",
+    "githubBlob": "e9a6675010f27478813f97635c2fd82dbcf46101",
+    "match": true
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/scripts/bench-llama-preflight.mjs",
+    "blob": "c05f9e93170475f45a8c771291814a8fc38a9ad1",
+    "githubBlob": "c05f9e93170475f45a8c771291814a8fc38a9ad1",
+    "match": true
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/src/llama-binary-probe.mjs",
+    "blob": "c6e1d9c107b1e14ace691bcce787ff667193dad3",
+    "githubBlob": "c6e1d9c107b1e14ace691bcce787ff667193dad3",
+    "match": true
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/src/llama-server-supervisor.mjs",
+    "blob": "0e021cf772c577f26221726bc45918d48fa185a6",
+    "githubBlob": "0e021cf772c577f26221726bc45918d48fa185a6",
+    "match": true
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/tests/llama-binary-probe.test.mjs",
+    "blob": "1c91fcd414fd85aa04fbe757033181740a9eae25",
+    "githubBlob": "1c91fcd414fd85aa04fbe757033181740a9eae25",
+    "match": true
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/tests/llama-server-preflight.test.mjs",
+    "blob": "97beff45645c931e8e8ab4cd46502357e35fe838",
+    "githubBlob": "97beff45645c931e8e8ab4cd46502357e35fe838",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-checkpoints.md",
+    "blob": "d4ae8e8b13737cd4ca4e3d9fa57e04e399a5aab0",
+    "githubBlob": "d4ae8e8b13737cd4ca4e3d9fa57e04e399a5aab0",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-cp2.md",
+    "blob": "b1e72b6bda49d6e8c9e7b4277ea9354c7fd1c2dd",
+    "githubBlob": "b1e72b6bda49d6e8c9e7b4277ea9354c7fd1c2dd",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-cp2.tap",
+    "blob": "02f4ecd4c734cd00b37d564695996f558083c3fb",
+    "githubBlob": "02f4ecd4c734cd00b37d564695996f558083c3fb",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-cp3.md",
+    "blob": "824494ed2de6f6815a34d6c15fb7fd2db9e926d7",
+    "githubBlob": "824494ed2de6f6815a34d6c15fb7fd2db9e926d7",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-cp3.raw.json.br",
+    "blob": "3cb184ec81d2f37ead9c25d6505d6a2bf33dba4a",
+    "githubBlob": "3cb184ec81d2f37ead9c25d6505d6a2bf33dba4a",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-cp5-evidence-manifest.json",
+    "blob": "387aece86bc4aae00dc94bbe41d0c1cdd3bd8868",
+    "githubBlob": "387aece86bc4aae00dc94bbe41d0c1cdd3bd8868",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-cp5.md",
+    "blob": "07e230b5dbdf8f8d096beb5242cc14215189d2fd",
+    "githubBlob": "07e230b5dbdf8f8d096beb5242cc14215189d2fd",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-protocol.md",
+    "blob": "32d6517331251cda8d075183d93b89961b6763d9",
+    "githubBlob": "32d6517331251cda8d075183d93b89961b6763d9",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/scripts/bench-local-resume.mjs",
+    "blob": "80be8f974df9cb6869e1ebbb7b86db6425f2a171",
+    "githubBlob": "80be8f974df9cb6869e1ebbb7b86db6425f2a171",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/scripts/compare-local-resume.mjs",
+    "blob": "a2458e153a43c0d2098bb8a6e3d348ea5af4dca5",
+    "githubBlob": "a2458e153a43c0d2098bb8a6e3d348ea5af4dca5",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/scripts/report-local-resume.mjs",
+    "blob": "95dbc9a81b2b1a4149387fb6c2bd4eb6fa02af96",
+    "githubBlob": "95dbc9a81b2b1a4149387fb6c2bd4eb6fa02af96",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/server.mjs",
+    "blob": "e0d6357d2b3f13806abe065e439ebd238b3216e0",
+    "githubBlob": "e0d6357d2b3f13806abe065e439ebd238b3216e0",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/src/local-resume-diagnostics.mjs",
+    "blob": "c32c5adad71413d948bbba9aa519535a0421af14",
+    "githubBlob": "c32c5adad71413d948bbba9aa519535a0421af14",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/src/local-resume-observer.mjs",
+    "blob": "4ff7e2338b45b2800a5a9077f14819d107e8f869",
+    "githubBlob": "4ff7e2338b45b2800a5a9077f14819d107e8f869",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/src/local-resume-prefix.mjs",
+    "blob": "a133f919460af0fd1cd16216f2bf1ba5825bbe89",
+    "githubBlob": "a133f919460af0fd1cd16216f2bf1ba5825bbe89",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/tests/bc09-classificazione-rimozioni.test.mjs",
+    "blob": "e69bbaec542142c11ca94ac6eaf94de6aa010e30",
+    "githubBlob": "e69bbaec542142c11ca94ac6eaf94de6aa010e30",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/tests/local-resume-diagnostics.test.mjs",
+    "blob": "b9ad0b327153373abf0102089f229155fec79dec",
+    "githubBlob": "b9ad0b327153373abf0102089f229155fec79dec",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/tests/local-resume-observer.test.mjs",
+    "blob": "acb6597220c5ffcadc90fd8af1e7ca65d59b2edf",
+    "githubBlob": "acb6597220c5ffcadc90fd8af1e7ca65d59b2edf",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/tests/local-resume-report.test.mjs",
+    "blob": "60c16130583b3c01f53e92f762ec1614ce8e4d51",
+    "githubBlob": "60c16130583b3c01f53e92f762ec1614ce8e4d51",
+    "match": true
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/tests/local-resume-sink.test.mjs",
+    "blob": "f0553a6d5f8791a4eba507205e21e0c0895b50c6",
+    "githubBlob": "f0553a6d5f8791a4eba507205e21e0c0895b50c6",
+    "match": true
+  }
+]

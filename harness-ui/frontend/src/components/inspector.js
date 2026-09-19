@@ -23,6 +23,7 @@
  * restano Conversazione e Libera, che sono misure vere.
  */
 
+import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
 import { testoRiusoCache } from './consumo-sessione.js';
 /* ⛔ 16/09, P0-E punto 9: la riga di comando si LEGGE (parser vendorizzato dietro un adattatore
    nostro), non si stampa come stringa troncata. Vedi `components/comando-shell.js`. */
@@ -757,7 +758,49 @@ function bottoneAzioni(d, a, azioni) {
   return b;
 }
 
+const filtriAgenti = new WeakMap();
+
 export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
+  // Il controller rimane montato durante i refresh: focus e testo appartengono alla persona.
+  if (typeof azioni.onGrafo === 'function') {
+    let s = filtriAgenti.get(contenitore);
+    if (!s || s.sessionId !== azioni.sessionId || s.righe.parentNode !== contenitore) {
+      const barra = el(d, 'div', 'talos-agenti-filtri');
+      const grafo = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Apri visuale diagramma'); grafo.type = 'button';
+      const cerca = el(d, 'input'); cerca.type = 'search'; cerca.setAttribute('aria-label', 'Cerca agenti'); cerca.placeholder = 'Cerca nome, modello o compito…';
+      const titolo = el(d, 'h3', 'talos-agenti-titolo', 'Agenti della sessione');
+      const filtro = el(d, 'div', 'talos-agenti-stati'); filtro.setAttribute('role', 'group'); filtro.setAttribute('aria-label', 'Filtra stato agenti');
+      const conto = el(d, 'span'); conto.setAttribute('role', 'status');
+      const righe = el(d, 'div', 'talos-agenti-elenco');
+      barra.append(titolo, grafo, cerca, filtro, conto); contenitore.replaceChildren(barra, righe);
+      s = { sessionId: azioni.sessionId, cerca, filtro, valore: 'tutti', conto, righe, dati: [], azioni: {} };
+      const disegna = () => {
+        const q = s.cerca.value.toLocaleLowerCase().trim();
+        const filtrati = s.dati.filter(a => (!q || `${a.taskCorto || ''} ${a.task || ''} ${a.modello || ''}`.toLocaleLowerCase().includes(q)) && (s.valore === 'tutti' || statoDelega(a) === s.valore));
+        const testoConto = s.azioni.errore ? `Dati non aggiornati: ${s.azioni.errore}` : `${filtrati.length} di ${s.dati.length} agenti · tutti i livelli`;
+        if (s.conto.textContent !== testoConto) s.conto.textContent = testoConto;
+        const attivo = d.activeElement, rigaAttiva = s.righe.contains(attivo) ? attivo.closest('[data-sessione-figlia]') : null;
+        const idAttivo = rigaAttiva?.dataset.sessioneFiglia, menuAttivo = attivo?.getAttribute('aria-haspopup') === 'menu';
+        disegnaAgenti(d, s.righe, filtrati, { onApri: s.azioni.onApri, onMenu: s.azioni.onMenu, compatta: true });
+        if (s.dati.length && !filtrati.length) s.righe.replaceChildren(el(d, 'p', 'talos-inspector__hint', 'Nessun agente per questi filtri.'));
+        if (idAttivo) {
+          const riga = [...s.righe.querySelectorAll('[data-sessione-figlia]')].find(n => n.dataset.sessioneFiglia === idAttivo);
+          (menuAttivo ? riga?.querySelector('[aria-haspopup="menu"]') || s.cerca : riga || s.cerca).focus({preventScroll:true});
+        }
+        for (const b of filtro.children) {
+          b.setAttribute('aria-pressed', String(b.dataset.stato === s.valore));
+          b.hidden = ['ignoto', 'interrotta'].includes(b.dataset.stato) && s.valore !== b.dataset.stato && !s.dati.some(a => statoDelega(a) === b.dataset.stato);
+        }
+      };
+      for (const [valore, testo] of [['tutti', 'Tutti'], ['in-corso', 'Attivi'], ['attesa', 'In attesa'], ['fallita', 'Errori'], ['conclusa', 'Terminati'], ['interrotta', 'Interrotti'], ['ignoto', 'Non disponibili']]) {
+        const b = el(d, 'button', '', testo); b.type = 'button'; b.dataset.stato = valore;
+        b.addEventListener('click', () => { s.valore = valore; disegna(); }); filtro.append(b);
+      }
+      s.disegna = disegna; cerca.addEventListener('input', disegna); grafo.addEventListener('click', () => s.azioni.onGrafo());
+      filtriAgenti.set(contenitore, s);
+    }
+    s.dati = Array.isArray(agenti) ? agenti : []; s.azioni = azioni; s.disegna(); return s.dati.length;
+  }
   const lista = Array.isArray(agenti) ? agenti : [];
   contenitore.replaceChildren();
   if (!lista.length) {
@@ -780,6 +823,7 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
   for (const a of lista) {
     const card = el(d, 'div', 'talos-card talos-inspector-card');
     card.dataset.c = 'AgentRow';
+    if (azioni.compatta) card.classList.add('talos-agenti-riga');
     card.dataset.stato = statoDelega(a);
     if (a.sessionId) card.dataset.sessioneFiglia = a.sessionId;
     /*
@@ -832,11 +876,23 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
     if (typeof azioni.onMenu === 'function' && a.sessionId) head.append(bottoneAzioni(d, a, azioni));
     if (apribile) head.append(chevron(d));
     card.append(head);
+    if (azioni.compatta) {
+      const icona = el(d, 'span', 'talos-agenti-icona'); icona.setAttribute('aria-hidden', 'true');
+      const svg = d.createElementNS('http://www.w3.org/2000/svg', 'svg'), use = d.createElementNS('http://www.w3.org/2000/svg', 'use');
+      svg.setAttribute('class', 'i'); use.setAttribute('href', '#i-robot'); svg.append(use); icona.append(svg); card.prepend(icona);
+      const descrizione = a.task || a.modello;
+      if (descrizione) card.append(el(d, 'p', 'talos-agenti-compito', descrizione));
+      const meta = el(d, 'div', 'talos-agenti-meta');
+      if (a.attivita?.attrezzoCorrente) meta.append(el(d, 'span', '', nomeUmanoAttrezzo(a.attivita.attrezzoCorrente)));
+      if (a.avviataAlle) meta.append(el(d, 'span', '', `Avviata ${oraBreve(a.avviataAlle)}`));
+      if (Number.isSafeInteger(a.numeroFigli)) meta.append(el(d, 'span', '', `${a.numeroFigli} ${a.numeroFigli === 1 ? 'figlio' : 'figli'}`));
+      if (meta.childNodes.length) card.append(meta);
+    }
     // ⛔ il server manda `avviataAlle` ed `evidenzaDelega` (scritture, artefatti, chiamate ad attrezzi):
     // si mostra quello che c'e' davvero, mai una riga «Modello —» che non ha dietro nessun dato.
     const ev = a.evidenzaDelega && typeof a.evidenzaDelega === 'object' ? a.evidenzaDelega : null;
     const righe = [];
-    if (a.avviataAlle) righe.push(['Avviata', oraBreve(a.avviataAlle)]);
+    if (a.avviataAlle && !azioni.compatta) righe.push(['Avviata', oraBreve(a.avviataAlle)]);
     if (ev) righe.push(['Ha fatto', `${plurale(Number(ev.toolCalls || 0), 'chiamata')} · ${plurale(Number(ev.scritture || 0), 'scrittura', 'scritture')}`]);
     for (const [k, v] of righe) {
       const kv = el(d, 'div', 'talos-kv');
@@ -950,8 +1006,13 @@ export function schedaAgentiDaRileggere({ elenco = [], sessioneCorrente = null, 
 }
 
 // ⛔ 06/9, T05-D3: «interrotta» PRIMA di «in corso» — un figlio che nessuno sta più eseguendo non è vivo.
-function statoDelega(a) { if (a?.interrotta === true) return 'interrotta'; if (!a?.conclusa) return 'in-corso'; return a.esitoDelega === 'fallito' ? 'fallita' : 'conclusa'; }
-function etichettaDelega(a) { const s = statoDelega(a); return s === 'interrotta' ? 'Interrotta' : s === 'in-corso' ? 'In corso' : s === 'fallita' ? 'Non riuscita' : 'Conclusa'; }
+function statoDelega(a) {
+  if (a?.interrotta === true || a?.motivoChiusura === 'fermata') return 'interrotta';
+  if (a?.conclusa === true) return ['errore', 'error', 'fallito', 'failed', 'rifiutato'].includes(a.ultimoEsito || a.esitoDelega) ? 'fallita' : 'conclusa';
+  if (a?.approvalPendingCount > 0 || a?.inAttesaApprovazione > 0 || a?.inAttesaApprovazione === true) return 'attesa';
+  return a?.conclusa === false ? 'in-corso' : 'ignoto';
+}
+function etichettaDelega(a) { return { interrotta: 'Interrotta', 'in-corso': 'In corso', fallita: 'Non riuscita', conclusa: 'Conclusa', attesa: 'In attesa', ignoto: 'Stato non disponibile' }[statoDelega(a)]; }
 function oraBreve(iso) {
   const t = new Date(iso);
   return Number.isNaN(t.getTime()) ? '—' : t.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });

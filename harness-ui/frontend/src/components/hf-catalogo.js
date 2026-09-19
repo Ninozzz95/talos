@@ -335,9 +335,9 @@ export function datiRepoHf(item = {}) {
  *
  * ⛔ QUELLO CHE SI PORTA È LA FORMA, NON I SUOI DATI. I valori del mockup sono di un catalogo
  *   dimostrativo (`Locali/Cloud`, `parametri`, «Compatibilità RAM · demo») e le faccette che li
- *   leggono NON hanno una sorgente nella risposta vera della ricerca: `searchModels`
- *   (`hf-hub-client.mjs:60`) mappa ogni riga su OTTO campi soli — `repo`, `revision`, `downloads`,
- *   `likes`, `gated`, `pipelineTag`, `license`, `tags`. Tutto il resto si ELENCA
+ *   leggono NON hanno una sorgente nella risposta vera della ricerca. `searchModels` conserva anche
+ *   il totale dichiarato da `gguf.total` (o `safetensors.total`) come `parameterCount`; non lo
+ *   ricava mai dal nome del repository o dai byte su disco. Tutto il resto si ELENCA
  *   (`FACCETTE_NON_COLLEGATE`) e non si inventa: è la regola del 18/09 («ciò che non si collega si
  *   elenca, non si inventa»).
  *
@@ -361,15 +361,14 @@ export function datiRepoHf(item = {}) {
  * I CAMPI CHE LA RICERCA RESTITUISCE DAVVERO. È la sorgente di ogni faccetta: ciò che non è in
  * questo elenco non ha un dato dietro, e la faccetta che lo userebbe non si offre.
  */
-export const CAMPI_RICERCA_HF = Object.freeze(['repo', 'revision', 'downloads', 'likes', 'gated', 'pipelineTag', 'license', 'tags']);
+export const CAMPI_RICERCA_HF = Object.freeze(['repo', 'revision', 'downloads', 'likes', 'gated', 'parameterCount', 'pipelineTag', 'license', 'tags']);
 
 /*
  * ⛔ LE FACCETTE DEL MOCKUP CHE QUI NON SI POSSONO OFFRIRE — elencate, non inventate.
  *   Ognuna dice la sua ragione MISURATA sul campo che le mancherebbe:
- *   · «Grandezza · parametri totali» — i parametri non sono in nessuno degli otto campi. L'API li
- *     porta dentro `expand[]=gguf`, che il client chiede e poi SCARTA (`hf-hub-client.mjs:60`,
- *     la mappa finale tiene otto campi). Leggerli dal NOME del repository sarebbe inventare.
- *   · «Contesto minimo · token» — stessa sorte dei parametri: sta in `expand[]=gguf`.
+ *   · «Parametri totali» ora è collegata a `parameterCount`, derivato soltanto dai metadati
+ *     numerici ufficiali; un valore assente resta «non dichiarato» e il nome non viene analizzato.
+ *   · «Contesto minimo · token» — il metadato non è conservato dalla risposta normalizzata.
  *   · «Formato del file» — il server aggiunge SEMPRE `filter=gguf` alla ricerca
  *     (`hf-hub-client.mjs:66`), quindi ogni risultato è GGUF per costruzione: una faccetta con un
  *     valore solo è un controllo che non filtra niente.
@@ -388,8 +387,7 @@ export const CAMPI_RICERCA_HF = Object.freeze(['repo', 'revision', 'downloads', 
  *     peggio di un controllo assente.
  */
 export const FACCETTE_NON_COLLEGATE = Object.freeze([
-  ['Grandezza · parametri totali', 'i parametri non sono in nessuno degli otto campi della ricerca'],
-  ['Contesto minimo · token', 'il contesto non è in nessuno degli otto campi della ricerca'],
+  ['Contesto minimo · token', 'il contesto non è in nessuno dei campi normalizzati della ricerca'],
   ['Formato del file', 'il server filtra sempre `gguf`: la faccetta avrebbe un valore solo'],
   ['Compatibilità RAM', 'il verdetto si misura sui file, che si conoscono solo dal dettaglio'],
   ['Locali · Cloud · Installati · Preferiti', 'la ricerca restituisce repository, non modelli installati'],
@@ -481,18 +479,26 @@ export const BANDE_DOWNLOAD = Object.freeze([
   ['non-dichiarati', 'Download non dichiarati', () => false],
 ]);
 export function bandaDownload(n) {
+  if (n === null || n === undefined || typeof n !== 'number') return 'non-dichiarati';
   const v = Number(n);
   if (!Number.isFinite(v) || v < 0) return 'non-dichiarati';
   return (BANDE_DOWNLOAD.find(([, , prova]) => prova(v)) || BANDE_DOWNLOAD[BANDE_DOWNLOAD.length - 1])[0];
 }
 
-/** Le cinque faccette che i dati veri sostengono: due a chip (l'ambito) e tre a select. */
+/** Le sei faccette che i dati veri sostengono: due a chip (l'ambito) e quattro a select. */
 export const FACCETTE_HF = Object.freeze([
   { chiave: 'accesso', titolo: 'Accesso', forma: 'chip' },
   { chiave: 'licenza', titolo: 'Licenza', forma: 'chip' },
+  { chiave: 'parametri', titolo: 'Parametri totali · miliardi', forma: 'select' },
   { chiave: 'popolarita', titolo: 'Popolarità · download', forma: 'select' },
   { chiave: 'tipo', titolo: 'Tipo · pipeline', forma: 'select' },
   { chiave: 'autore', titolo: 'Autore · organizzazione', forma: 'select' },
+]);
+const BANDE_PARAMETRI = Object.freeze([
+  ['fino-1b', 'Fino a 1B', 1e9], ['1-3b', 'Oltre 1B fino a 3B', 3e9],
+  ['3-8b', 'Oltre 3B fino a 8B', 8e9], ['8-15b', 'Oltre 8B fino a 15B', 15e9],
+  ['15-35b', 'Oltre 15B fino a 35B', 35e9], ['35-70b', 'Oltre 35B fino a 70B', 70e9],
+  ['oltre-70b', 'Oltre 70B', Infinity], ['non-dichiarati', 'Parametri non dichiarati', null],
 ]);
 
 /**
@@ -500,7 +506,8 @@ export const FACCETTE_HF = Object.freeze([
  * conteggio giusto (un risultato conta una volta sola dentro la sua faccetta).
  */
 export function valoreFaccettaHf(item = {}, chiave) {
-  if (chiave === 'accesso') return item.gated === true ? 'richiesto' : 'aperto';
+  if (chiave === 'accesso') return item.gated === true ? 'richiesto' : item.gated === false ? 'aperto' : 'non-dichiarato';
+  if (chiave === 'parametri') return Number.isSafeInteger(item.parameterCount) && item.parameterCount > 0 ? BANDE_PARAMETRI.find(([, , max]) => item.parameterCount <= max)[0] : 'non-dichiarati';
   if (chiave === 'licenza') return item.license ? 'dichiarata' : 'non-dichiarata';
   if (chiave === 'popolarita') return bandaDownload(item.downloads);
   if (chiave === 'tipo') return item.pipelineTag || TIPO_NON_DICHIARATO;
@@ -516,8 +523,9 @@ export function valoreFaccettaHf(item = {}, chiave) {
  *  · DERIVATO (`tipo`, `autore`): le voci sono quelle presenti nei risultati ricevuti. Non ha senso
  *    elencare un autore che non c'è: il vocabolario non esiste a priori.
  */
-export function vociFaccettaHf(risultati = [], chiave) {
-  if (chiave === 'accesso') return [['aperto', 'Accesso aperto'], ['richiesto', 'Accesso richiesto']];
+export function vociFaccettaHf(risultati = [], chiave, selezionati = []) {
+  if (chiave === 'accesso') return [['aperto', 'Accesso aperto'], ['richiesto', 'Accesso richiesto'], ['non-dichiarato', 'Accesso non dichiarato']];
+  if (chiave === 'parametri') return BANDE_PARAMETRI.map(([value, label]) => [value, label]);
   if (chiave === 'licenza') return [['dichiarata', 'Con licenza'], ['non-dichiarata', 'Senza licenza']];
   if (chiave === 'popolarita') return BANDE_DOWNLOAD.map(([valore, testo]) => [valore, testo]);
   if (chiave !== 'tipo' && chiave !== 'autore') return [];
@@ -526,25 +534,26 @@ export function vociFaccettaHf(risultati = [], chiave) {
     const v = valoreFaccettaHf(item, chiave);
     if (v != null) conteggi.set(v, (conteggi.get(v) || 0) + 1);
   }
+  // Una pagina parziale non dimostra che un valore già scelto non esista.
+  for (const valore of selezionati) if (valoreDerivatoHfValido(valore) && !conteggi.has(valore)) conteggi.set(valore, 0);
   return [...conteggi.entries()]
     .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'it'))
     .map(([valore]) => [valore, chiave === 'tipo' ? etichettaTipoHf(valore) : valore]);
 }
 
-export function filtriHfVuoti() { return { accesso: [], licenza: [], popolarita: [], tipo: [], autore: [] }; }
+export function filtriHfVuoti() { return { accesso: [], licenza: [], parametri: [], popolarita: [], tipo: [], autore: [] }; }
 
-/**
- * Ripulisce i filtri ricevuti: chiavi che non sono faccette e valori che non sono nel vocabolario
- * si SCARTANO. Senza, un filtro rimasto da un'altra lista (o da un vocabolario che nel frattempo è
- * cambiato) svuoterebbe la lista senza che nessun controllo a schermo lo mostri — la stessa specie
- * del chip che non toglie niente.
- */
+const valoreDerivatoHfValido = valore => typeof valore === 'string' && /^[\p{L}\p{N}_.:-]{1,200}$/u.test(valore);
+
+/** I valori fissi si validano sul vocabolario; autore/tipo restano visibili
+ * anche a zero finché la persona li azzera: il catalogo arriva per pagine. */
 export function normalizzaFiltriHf(grezzi = {}, risultati = []) {
   const puliti = filtriHfVuoti();
   for (const { chiave } of FACCETTE_HF) {
     const ammessi = new Set(vociFaccettaHf(risultati, chiave).map(([valore]) => valore));
     const scelti = Array.isArray(grezzi?.[chiave]) ? grezzi[chiave] : [];
-    puliti[chiave] = scelti.filter((valore, i) => ammessi.has(valore) && scelti.indexOf(valore) === i);
+    const derivata = chiave === 'tipo' || chiave === 'autore';
+    puliti[chiave] = scelti.filter((valore, i) => (derivata ? valoreDerivatoHfValido(valore) : ammessi.has(valore)) && scelti.indexOf(valore) === i).slice(0, 20);
   }
   return puliti;
 }
@@ -629,11 +638,11 @@ export function conteggiFaccettaHf(risultati = [], filtri = {}, chiave) {
  *   «SUL DISPOSITIVO 12».
  *
  * ⛔ L'ASSE `library` È DICHIARATO NON DISPONIBILE, e la ragione è una misura, non una preferenza:
- *   · il campo `library` **non c'è in nessuna delle 104 righe** — la ricerca mappa otto campi
- *     (`repo · revision · downloads · likes · gated · pipelineTag · license · tags`,
- *     `hf-hub-client.mjs:60`) e `library` non è fra quelli. Si potrebbe chiedere all'hub (l'API
+ *   · il campo `library` **non c'è in nessuna delle 104 righe** — la ricerca normalizzata non lo
+ *     conserva (`repo · revision · downloads · likes · gated · parameterCount · pipelineTag ·
+ *     license · tags`) e `library` non è fra quelli. Si potrebbe chiedere all'hub (l'API
  *     espone `models-tags-by-type`, e il client chiede già `expand[]=cardData` che lo contiene), ma
- *     quei campi li SCARTA il client, che non è un file di questa corsia;
+ *     quei campi non entrano nel contratto normalizzato di questo lotto;
  *   · e NON si ricava dai `tags`: 104 su 104 ne portano almeno uno di libreria, ma **51 su 104 ne
  *     portano PIÙ DI UNO** (`transformers` + `gguf` + `llama.cpp` insieme). Un valore multi-valore
  *     non PARTIZIONA: lo stesso repository finirebbe in due gruppi, oppure servirebbe una regola di
@@ -661,7 +670,7 @@ export function datiRigaHf(item = {}) {
   const richiesto = base.gated;
   return {
     ...base,
-    accesso: richiesto ? 'richiesto' : 'aperto',
+    accesso: valoreFaccettaHf(item, 'accesso'),
     /*
      * `.row-availability` del mockup: un pallino colorato e lo stato. Il tono non è decorazione —
      * verde = si scarica, ambra = serve prima l'accesso.
@@ -674,7 +683,7 @@ export function datiRigaHf(item = {}) {
      *   dove c'è lo spazio: in riga resta lo stato, che è corto e non si taglia. Per un repository
      *   aperto invece la licenza resta: è corta e non c'era altrove.
      */
-    stato: { testo: richiesto ? 'Accesso richiesto' : 'Accesso aperto', tono: richiesto ? 'warning' : 'success', nota: richiesto ? null : base.sub2 },
+    stato: { testo: richiesto ? 'Accesso richiesto' : item.gated === false ? 'Accesso aperto' : 'Accesso non dichiarato', tono: richiesto ? 'warning' : item.gated === false ? 'success' : 'muted', nota: richiesto ? null : base.sub2 },
     /* `.row-capacity` del mockup: un numero grande, la sua etichetta, e sotto un secondo fatto.
        I due numeri veri che la ricerca porta sono i download e i preferiti. */
     capacita: { misura: base.download, etichetta: 'download', nota: base.likes ? `♥ ${base.likes} preferiti` : null },
@@ -682,8 +691,8 @@ export function datiRigaHf(item = {}) {
   };
 }
 
-/** La nota sotto le faccette: dice a schermo ciò che la ricerca NON porta (vedi FACCETTE_NON_COLLEGATE). */
-export const NOTA_FACCETTE_HF = 'La ricerca dice tipo, licenza, download e revisione. I parametri, il contesto e la memoria richiesta non sono nella risposta della ricerca: la memoria si misura nel dettaglio, file per file.';
+/** La nota sotto le faccette distingue il totale dichiarato da contesto, memoria e parametri attivi. */
+export const NOTA_FACCETTE_HF = 'I filtri si applicano ai risultati caricati; scorrendo ne arrivano altri. 1B = un miliardo di parametri totali dichiarati, non attivi né memoria richiesta. I valori mancanti restano “non dichiarati”. La memoria si misura nel dettaglio, file per file.';
 
 function el(d, tag, classe, testo) { const n = d.createElement(tag); if (classe) n.className = classe; if (testo != null) n.textContent = testo; return n; }
 function icona(d, nome, classe = 'i') { const svg = d.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', classe); svg.setAttribute('aria-hidden', 'true'); const use = d.createElementNS('http://www.w3.org/2000/svg', 'use'); use.setAttribute('href', `#${nome}`); svg.appendChild(use); return svg; }
@@ -858,7 +867,7 @@ export function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) 
       /* Un vocabolario DERIVATO non si mostra a chip: `accesso` e `licenza` sono gli unici fissi, e
          sono gli unici che il mockup mette nei chip. Se un giorno non lo fossero, il chip sparisce
          invece di disegnare un gruppo vuoto. */
-      const voci = vociFaccettaHf(risultati, chiave);
+      const voci = vociFaccettaHf(risultati, chiave, filtri[chiave]);
       if (!voci.length) continue;
       const gruppoChip = el(d, 'span', 'talos-cluster'); gruppoChip.dataset.hfChipGruppo = chiave;
       gruppoChip.setAttribute('role', 'group'); gruppoChip.setAttribute('aria-label', titolo);
@@ -866,7 +875,7 @@ export function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) 
       /* «Tutti» apre la fila e sta solo sul primo gruppo, come `quick-all` nel mockup: è lo stato in
          cui l'ambito non restringe niente. Senza risultati non si scrive nessun numero: «0» vorrebbe
          dire «contati: nessuno» mentre non è stato contato niente. */
-      if (chiave === 'accesso') gruppoChip.appendChild(chip(d, 'Tutti', chiave, '', { premuto: !filtri[chiave].length, conteggio: stato.senzaDati ? null : risultati.length }));
+      if (chiave === 'accesso') gruppoChip.appendChild(chip(d, 'Tutti', chiave, '', { premuto: !filtri[chiave].length, conteggio: stato.senzaDati ? null : [...conteggi.values()].reduce((a,b) => a+b, 0) }));
       for (const [valore, testo] of voci) {
         const n = stato.senzaDati ? null : (conteggi.get(valore) || 0);
         const acceso = filtri[chiave].includes(valore);
@@ -880,12 +889,12 @@ export function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) 
       ambito.append(gruppoChip);
     }
     for (const [chiave, sel] of gruppi) {
-      const voci = vociFaccettaHf(risultati, chiave);
+      const voci = vociFaccettaHf(risultati, chiave, filtri[chiave]);
       const conteggi = conteggiFaccettaHf(risultati, filtri, chiave);
-      const firma = JSON.stringify([voci.map(([v]) => v), [...conteggi.entries()].sort()]);
+      const scelto = filtri[chiave][0] || '';
+      const firma = JSON.stringify([voci.map(([v]) => v), [...conteggi.entries()].sort(), scelto]);
       if (sel.dataset.firma !== firma) {
         sel.dataset.firma = firma;
-        const scelto = filtri[chiave][0] || '';
         /* «Qualsiasi» è la prima voce, come nel mockup (`.facet-select`): l'etichetta sopra il select
            dice già che cosa si sta scegliendo, e ripeterlo dentro l'opzione sarebbe la stessa parola
            due volte a due centimetri. */
@@ -1139,7 +1148,7 @@ function barraDelPannello(panel, onCambia) {
  *   `app.js` già passa a `aggiornaHf` (`renderizzaHfConMockup`), oppure delegare il clic su
  *   `#modelLabHfResults [data-hf]`.
  */
-export function aggiornaHf(panel, risultati = [], { selezionato = null, detail = null, stima, scelta, errore = null, caricamento = false, altri = false, seleziona, azioni = {}, document: d = globalThis.document } = {}) {
+export function aggiornaHf(panel, risultati = [], { selezionato = null, detail = null, stima, scelta, errore = null, errorePagina = null, caricamento = false, altri = false, seleziona, azioni = {}, document: d = globalThis.document } = {}) {
   if (!panel) return null;
   const lista = panel.querySelector('[data-hf-lista], #listaHf, #modelLabHfResults');
   const vuoto = panel.querySelector('[data-c="EmptyState"]');
@@ -1149,16 +1158,15 @@ export function aggiornaHf(panel, risultati = [], { selezionato = null, detail =
   if (!lista) return null;
   const scelto = risultati.find((r) => (r.repo || r.id) === selezionato) || risultati[0] || null;
   const senzaDati = !risultati.length && Boolean(errore || caricamento);
-  /* I filtri si rileggono SEMPRE dai risultati di adesso: un valore rimasto da una ricerca
-     precedente (un autore che non c'è più) verrebbe scartato dalla normalizzazione, invece di
-     svuotare la lista senza che nessun controllo a schermo lo mostri. */
+  /* La selezione resta esplicita anche se la pagina corrente non contiene ancora
+     quel valore: la barra lo mostra a zero e permette di azzerarlo. */
   const filtri = normalizzaFiltriHf(panel.__hfFiltri || filtriHfVuoti(), risultati);
   panel.__hfFiltri = filtri;
   const visibili = errore ? [] : filtraRisultatiHf(risultati, filtri);
   /* ⛔ L'ULTIMA ISTANTANEA serve al clic sulle faccette: la barra è costruita una volta e il suo
      ascoltatore non conosce gli argomenti di QUESTA chiamata. È lo stesso patto di
      `panel.__catalogoUltimo` in `catalogo-modelli.js`. */
-  panel.__hfUltimo = { risultati, opzioni: { selezionato, detail, stima, scelta, errore, caricamento, altri, seleziona, azioni } };
+  panel.__hfUltimo = { risultati, opzioni: { selezionato, detail, stima, scelta, errore, errorePagina, caricamento, altri, seleziona, azioni } };
   const barra = barraDelPannello(panel, (nuovi) => {
     panel.__hfFiltri = nuovi;
     const u = panel.__hfUltimo;
@@ -1187,7 +1195,15 @@ export function aggiornaHf(panel, risultati = [], { selezionato = null, detail =
     lista.replaceChildren(...nodi);
     if (vuoto) vuoto.hidden = true;
   }
-  if (bottoneAltri) bottoneAltri.hidden = !altri;
+  if (bottoneAltri) {
+    bottoneAltri.hidden = !altri;
+    bottoneAltri.disabled = caricamento;
+    bottoneAltri.textContent = errorePagina ? 'Riprova caricamento' : caricamento ? 'Caricamento…' : 'Carica altri modelli';
+    let messaggio = panel.querySelector('[data-hf-errore-pagina]');
+    if (!messaggio) { messaggio = el(d, 'p', 'talos-muted'); messaggio.dataset.hfErrorePagina = ''; messaggio.setAttribute('role', 'status'); bottoneAltri.before(messaggio); }
+    messaggio.hidden = !errorePagina;
+    messaggio.textContent = errorePagina ? `I modelli già caricati restano disponibili. ${errorePagina.message || 'La pagina successiva non è disponibile.'}` : '';
+  }
   // senza risultati non resta un dettaglio di un repository che non è più in lista
   aggiornaDettaglioHf(aside, risultati.length ? detail : null, { stima, scelta, azioni, document: d });
   return scelto ? (scelto.repo || scelto.id) : null;
@@ -1223,6 +1239,12 @@ export function montaHf(originale, canonico) {
     for (const label of originale.querySelectorAll(`label[for="${prima}"]`)) label.htmlFor = dopo;
     n.id = dopo;
   }
+  /* Il mockup usa chiavi dimostrative (`created`, `updated`); l'API pubblica HF accetta
+     `createdAt` e `lastModified`. Il mockup resta intatto e l'adapter del montaggio traduce il
+     contratto prima che `app.js` legga il valore. */
+  const ordine = originale.querySelector('#modelLabHfSortControl');
+  const recenti = ordine?.querySelector('option[value="created"]'); if (recenti) recenti.value = 'createdAt';
+  const aggiornati = ordine?.querySelector('option[value="updated"]'); if (aggiornati) aggiornati.value = 'lastModified';
   const lista = originale.querySelector('#modelLabHfResults') || originale.querySelector('#listaHf'); if (lista) { lista.dataset.hfLista = ''; lista.replaceChildren(); }
   const aside = originale.querySelector('[data-c="DetailPanel"]') || originale.querySelector('#modelLabHfDetail'); if (aside) { aside.id = 'modelLabHfDetail'; aside.replaceChildren(); aside.hidden = true; }
   const altri = originale.querySelector('#modelLabHfNextButtonControl') || originale.querySelector('#altriHf'); if (altri) altri.hidden = true;

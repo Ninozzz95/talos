@@ -43,8 +43,8 @@
 .model-page-actions .button{min-height:38px}
 .model-hero{display:grid;grid-template-columns:1fr auto;gap:16px 24px;padding:33px 0 29px;align-items:start}
 .model-hero-identity{display:flex;gap:20px;align-items:center;min-width:0}
-.model-hero .model-glyph.large{width:70px;height:70px;border-radius:18px;background:var(--talos-panel)}
-.model-hero .model-glyph.large svg{width:38px;height:38px}
+.model-hero .model-glyph--large{width:70px;height:70px;flex:none;border-radius:18px;background:var(--talos-panel)}
+.model-hero .model-glyph--large svg{width:38px;height:38px}
 .model-hero h1{font-size:2.5rem;font-weight:550;letter-spacing:-.045em;line-height:1.14}
 .model-hero .eyebrow{font-size:.5625rem;letter-spacing:.14em;margin-bottom:8px}
 .model-repository{display:flex;align-items:center;flex-wrap:wrap;gap:7px;color:var(--talos-muted);font-size:.75rem;margin-top:9px;overflow-wrap:anywhere}
@@ -84,3 +84,38 @@
 .model-page-end{color:var(--talos-muted);font-size:.6875rem;display:flex;gap:7px;align-items:center;margin:22px 0 5px}
 .model-page-end .icon{width:13px;height:13px;flex:none}
 .model-page h1,.model-page h2,.model-page h3{font-family:var(--talos-font-ui)}
+
+/* La pagina è montata fuori dalla shell: riceve la stessa preferenza di scala.
+   Le dimensioni minime dei figli non devono allargare il contenitore effettivo. */
+.talos-pagina-modello{zoom:var(--talos-ui-font-scale,1)}
+.model-page-toolbar{flex-wrap:wrap}
+.toolbar-identity{flex-wrap:wrap;overflow-wrap:anywhere}
+.model-hero{grid-template-columns:minmax(0,1fr)}
+.model-hero-identity>div{min-width:0}
+.model-hero h1{overflow-wrap:anywhere}
+.model-context-strip{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.1fr)}
+.model-context-strip>div{min-width:0;overflow-wrap:anywhere}
+.model-page-tabs,.model-page-tabs .talos-tabs__list{flex-wrap:wrap}
+.model-page [data-hf-file-choices] .talos-choice{min-width:0;overflow-wrap:anywhere}
+
+/* La pagina appartiene al centro della shell: la sidebar rimane raggiungibile.
+   La scala è già applicata al guscio e non va moltiplicata una seconda volta. */
+#centro.talos-model-page-open{position:relative}
+#centro.talos-model-page-open>:not(#paginaModello){visibility:hidden;pointer-events:none}
+#centro>.talos-pagina-modello{position:absolute;inset:0;zoom:1;z-index:5}
+.model-page .readme-body{box-sizing:border-box;width:100%;max-width:960px;margin-inline:auto;padding:40px 48px 46px}
+.model-page .readme-body table{max-width:100%;display:block;overflow-x:auto}
+.model-page .readme-body pre{max-width:100%;overflow-x:auto}
+.model-page .readme-body img{max-width:100%;height:auto}
+@media(min-width:1920px){.model-page .readme-body{max-width:1030px;padding-inline:58px}}
+@media(max-width:1200px){.model-page .readme-body{padding:34px 35px}}
+@media(max-width:760px){.model-page .readme-body{padding:30px}}
+
+/* La larghezza editoriale riguarda anche il contenitore esterno del mockup. */
+.talos-pagina-modello>.model-page{max-width:1260px;margin-inline:auto}
+.model-page .model-page-tabs>.talos-tabs__list{background:transparent;border:0;border-radius:0;box-shadow:none;padding:0;gap:26px}
+.model-page .model-page-tabs .talos-tabs__tab{border:0;border-bottom:2px solid transparent;border-radius:0;box-shadow:none;background:transparent;min-height:51px;padding:14px 0 16px;color:var(--talos-muted)}
+.model-page .model-page-tabs .talos-tabs__tab[aria-selected=true]{border-bottom-color:var(--talos-accent);background:transparent;box-shadow:none;color:var(--talos-text)}
+.model-page .readme-chrome{justify-content:flex-start;gap:10px;flex-wrap:wrap}
+.model-page .readme-chrome>.talos-label{border-left:1px solid var(--talos-border);padding-left:13px;font-size:.6875rem;color:var(--talos-muted)}
+.model-page .readme-chrome>.talos-badge{margin-left:auto}

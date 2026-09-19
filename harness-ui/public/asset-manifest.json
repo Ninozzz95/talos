@@ -62,6 +62,16 @@
       "sha256": "fbc7d4ea66a0abf30b0b3a296122114df562fb7bf7fbe8448b0c2e8b48dce52a"
     },
     {
+      "path": "vendor/dagre/LICENSE-dagre",
+      "bytes": 1062,
+      "sha256": "6a349742a6cb219d5a2fc8d0844f6d89a6efc62e20c664450d884fc7ff2d6015"
+    },
+    {
+      "path": "vendor/dagre/LICENSE-graphlib",
+      "bytes": 1062,
+      "sha256": "6a349742a6cb219d5a2fc8d0844f6d89a6efc62e20c664450d884fc7ff2d6015"
+    },
+    {
       "path": "vendor/floating-ui/LICENSE-core",
       "bytes": 1089,
       "sha256": "0e4c9a9b6c71019cbbea3bdc20b01223110a9035700f9c960c8fcbf78c2325ce"

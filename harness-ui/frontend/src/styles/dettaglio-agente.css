@@ -33,7 +33,7 @@
 .talos-agente .talos-figlia{border:0; padding:0; background:transparent; box-shadow:none}
 
 .talos-agente__etichetta{margin:0; font-size:11px}
-.talos-agente__compito{border:1px solid var(--talos-border); border-radius:var(--talos-radius-card, 12px); padding:var(--talos-space-sm) var(--talos-space-md); overflow-wrap:anywhere; white-space:pre-wrap}
+.talos-agente__compito{border:1px solid var(--talos-border); border-radius:var(--talos-radius-card, 12px); padding:var(--talos-space-sm) var(--talos-space-md); min-width:0; flex-shrink:0; overflow-wrap:anywhere; white-space:normal; line-height:1.55}
 .talos-agente__compito p{margin:4px 0 0}
 .talos-agente__fatti{display:flex; flex-direction:column}
 .talos-agente__titoletto{margin-top:var(--talos-space-xs)}
@@ -48,3 +48,13 @@
 .talos-agente__ora{flex:none; font-size:11px; min-width:4.6em}
 .talos-agente__frase{min-width:0; overflow-wrap:anywhere}
 .talos-agente__passo[data-tipo="errore"] .talos-agente__frase{color:var(--talos-danger, var(--talos-accent))}
+
+/* Stessa prosa del prodotto, adattata al rail: codice e tabelle scorrono nel proprio blocco. */
+.talos-agente__compito :is(h1,h2,h3,h4,h5,h6){font-size:1em;line-height:1.4;margin:12px 0 6px;font-weight:600}
+.talos-agente__compito > :first-child{margin-top:0}
+.talos-agente__compito > :last-child{margin-bottom:0}
+.talos-agente__compito :is(ul,ol){margin:6px 0;padding-inline-start:20px}
+.talos-agente__compito li+li{margin-top:3px}
+.talos-agente__compito pre{max-width:100%;overflow-x:auto;white-space:pre;padding:8px;border-radius:6px;background:var(--talos-panel-soft);font-size:12px}
+.talos-agente__compito code{font-family:var(--talos-font-mono,monospace)}
+.talos-agente__compito .md-table-wrap{max-width:100%}

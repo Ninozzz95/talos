@@ -296,3 +296,39 @@ test('OPENROUTER-RETRY-02 contrario — errore dopo testo non riavvia il turno e
   assert.equal(risposta.status, 200);
   await assert.rejects(risposta.text(), /provider disconnected/);
 });
+
+for (const finale of [400, 503]) test(`RIPRESA-LOCALE-DOPPIO-RIFIUTO 400→${finale}: conserva entrambi senza esporre diagnostica`, async () => {
+  let chiamate = 0;
+  const f = creaFetchMultiProvider(async () => new Response(++chiamate === 1 ? 'primo-rifiuto-riservato' : 'secondo-rifiuto-riservato', { status: chiamate === 1 ? 400 : finale }), {
+    dipendenze: {}, risolvi: () => ({ fonte: 'ollama', modelloRemoto: 'test', url: 'http://127.0.0.1/chat/completions', headers: {} }),
+  });
+  await assert.rejects(() => f('http://127.0.0.1/chat/completions', { body: JSON.stringify({ model: 'ollama:test', tools: [{ type: 'function', function: { name: 'leggi', parameters: { type: 'object' } } }] }) }), error => {
+    assert.equal(error.code, 'LOCAL_ENGINE_REJECTED_REQUEST');
+    assert.equal(error.stato, 400); assert.equal(error.dettaglio, 'primo-rifiuto-riservato');
+    assert.deepEqual(error.tentativi, [{ stato: 400, dettaglio: 'primo-rifiuto-riservato' }, { stato: finale, dettaglio: 'secondo-rifiuto-riservato' }]);
+    assert.equal(Object.keys(error).includes('tentativi'), false);
+    assert.doesNotMatch(error.message, /riservato/); return true;
+  });
+  assert.equal(chiamate, 2);
+});
+
+test('RIPRESA-LOCALE-DETTAGLIO-LIMITATO: legge prefisso e cancella entrambi i corpi', async () => {
+  const letti = [0, 0], cancellati = [false, false]; let chiamate = 0;
+  const f = creaFetchMultiProvider(async () => {
+    const i = chiamate++;
+    return new Response(new ReadableStream({ pull(c) { letti[i]++; if (letti[i] > 20) c.close(); else c.enqueue(new Uint8Array(1024).fill(65 + i)); }, cancel() { cancellati[i] = true; } }), { status: 400 });
+  }, { dipendenze: {}, risolvi: () => ({ fonte: 'ollama', modelloRemoto: 'test', url: 'http://127.0.0.1/chat/completions', headers: {} }) });
+  await assert.rejects(() => f('http://127.0.0.1/chat/completions', { body: JSON.stringify({ model: 'ollama:test', tools: [{}] }) }), error => {
+    assert.equal(error.dettaglio.length, 2000); assert.equal(error.tentativi[1].dettaglio.length, 2000); return true;
+  });
+  assert.deepEqual(cancellati, [true, true]); assert.ok(letti.every(n => n < 6), `Corpi consumati: ${letti}`);
+});
+
+test('RIPRESA-LOCALE-STOP-DIAGNOSI: abort durante errore HTTP resta abort e non avvia riprova', async () => {
+  let chiamate = 0;
+  const f = creaFetchMultiProvider(async () => { chiamate++; return new Response(new ReadableStream({ start(c) { c.error(new DOMException('Stop', 'AbortError')); } }), { status: 400 }); }, {
+    dipendenze: {}, risolvi: () => ({ fonte: 'ollama', modelloRemoto: 'test', url: 'http://127.0.0.1/chat/completions', headers: {} }),
+  });
+  await assert.rejects(() => f('http://127.0.0.1/chat/completions', { body: JSON.stringify({ model: 'ollama:test', tools: [{}] }) }), { name: 'AbortError' });
+  assert.equal(chiamate, 1);
+});

@@ -1,0 +1,974 @@
+{
+  "sourceSha256": "e06cb739a488d8462a85fa703cfac4531d1eee5e6f7313d032807e2e9623cf1c",
+  "requirements": [
+    {
+      "id": "CANON:P0:1terminaleatuttalarghezza",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 104,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "1 terminale a tutta larghezza",
+        "✅",
+        "pannello = area principale a 1024 e 1440 (cancello in pixel; sweep 26 larghezze: 19 esatte, 7 rientrate ≤44 px nella banda 1580→1820); foto nei due temi: il pannello va da bordo a bordo della colonna centrale",
+        "—"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "—"
+    },
+    {
+      "id": "CANON:P0:2schedanuova",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 105,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "2 scheda nuova",
+        "✅",
+        "`Ctrl T/B/R` spariti dalla palette; un toggle per clic anche col cablaggio doppio (unit + browser)",
+        "il «clic che apre una scheda» non è mai stato riprodotto: curata la causa plausibile (scorciatoie annunciate e non intercettate)"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "il «clic che apre una scheda» non è mai stato riprodotto: curata la causa plausibile (scorciatoie annunciate e non intercettate)"
+    },
+    {
+      "id": "CANON:P0:3clipboard",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 106,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "3 clipboard",
+        "✅",
+        "copia con selezione (Ctrl+C / Ctrl+Shift+C / Ctrl+Insert), incolla (Ctrl+V / Ctrl+Shift+V / Shift+Insert / menu), `Ctrl+C` senza selezione → `^C` alla shell, su PTY finto coi permessi clipboard",
+        "non provato con la clipboard di sistema di Windows dal vivo"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "non provato con la clipboard di sistema di Windows dal vivo"
+    },
+    {
+      "id": "CANON:P0:4browserrobusto",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 107,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "4 browser robusto",
+        "✅",
+        "macchina a stati per scheda, ritentativi con backoff e `AbortController`, iframe nascosto e non ricostruito, una scheda in errore non tocca le altre (browser-p0 13/13; foto: «La pagina vieta ogni cornice (X-Frame-Options: DENY). Qui sotto c'è il testo che ha letto l'agente» sulla pagina IANA)",
+        "la vista viva resta una alla volta per scelta dichiarata"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "la vista viva resta una alla volta per scelta dichiarata"
+    },
+    {
+      "id": "CANON:P0:5PaginaTestoperscheda",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 108,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "5 Pagina/Testo per scheda",
+        "✅",
+        "stato per id di scheda, A=Pagina B=Testo C=Pagina → A ancora Pagina, e al contrario",
+        "—"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "—"
+    },
+    {
+      "id": "CANON:P0:6scrolldurantelagenerazione",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 109,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "6 scroll durante la generazione",
+        "✅",
+        "uno scrittore di scroll, un flag; 240 delta con la persona a metà → `scrollTop` invariato; `RunStarted` non riarma (al base tirava giù di 5.334 px); zero `setTimeout` nuovi, due tolti",
+        "—"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "—"
+    },
+    {
+      "id": "CANON:P0:7nessuntettoalragionamento",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 110,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "7 nessun tetto al ragionamento",
+        "✅",
+        "via i 180 s del kernel e la deadline totale dell'adapter (al base: 4 token su 12 e interrotta a 5,0 s; curato: 12 su 12 a 13,0 s); un solo failsafe di **inattività** 30 min (`TALOS_GENERATION_IDLE_MS`), commenti SSE = vita, Stop <1 s su fornitore muto (P0-D 20/20)",
+        "non provato con un modello LOCALE che ragiona >60 s dal vivo"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "non provato con un modello LOCALE che ragiona >60 s dal vivo"
+    },
+    {
+      "id": "CANON:P0:8renderingragionamentochatlunghe",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 111,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "8 rendering ragionamento / chat lunghe",
+        "✅ con numeri",
+        "sessione da 34.026 righe (DESKTOP-BJ9I7OU, mediana di 3): ragionamento vivo collassato **74 → 37 ms**, lavoro per frame **40 → 1 ms**, costo per token piatto (rapporto 240/480 delta **4,06 → 1**), nodi DOM **25.7k → 11.0k**; **al contrario**: aprire una scheda costa **8 → 205 ms** (ora monta a pezzi) e il replay è **374 → 560 ms** con LoAF peggiore 254 → 334 ms",
+        "virtualizzazione **non introdotta**, coi numeri scritti; il costo all'apertura e il replay più lento sono il prezzo dichiarato — da guardare in una fase di prestazioni se l'owner lo sente"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "virtualizzazione **non introdotta**, coi numeri scritti; il costo all'apertura e il replay più lento sono il prezzo dichiarato — da guardare in una fase di prestazioni se l'owner lo sente"
+    },
+    {
+      "id": "CANON:P0:9schedaProcessi",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 112,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "9 scheda Processi",
+        "✅",
+        "aggiornamento per riga su un rAF (`replaceChildren` sparito), comando parsato con `shell-quote` vendorizzato, icona per famiglia, stato con icona, cwd, uscita, figlia; 1.000 processi finti misurati; foto: `npm test` / `ls -la` / `node --version` / `git status`, «Riuscito · uscita 0»",
+        "⛔ visto in foto: nel replay la durata è «0 s» (i tempi non sopravvivono al registro) e `prova` non compare fra i processi (è un comando anche lui)"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "⛔ visto in foto: nel replay la durata è «0 s» (i tempi non sopravvivono al registro) e `prova` non compare fra i processi (è un comando anche lui)"
+    },
+    {
+      "id": "CANON:P0:10schedaAgenti",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 113,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "10 scheda Agenti",
+        "✅",
+        "figlia col renderer Markdown condiviso, riduzione incrementale, scroll conservato, re-render della madre = 0 (colonna-destra-p0); foto: «Ha fatto 1 giro · 5 chiamate», 1 attrezzo, ragionamento ripiegabile, risposta in Markdown",
+        "a 1024 la colonna destra è ripiegata: la figlia non è fotografata a quella larghezza"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "a 1024 la colonna destra è ripiegata: la figlia non è fotografata a quella larghezza"
+    },
+    {
+      "id": "CANON:P0:",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 147,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "#",
+        "punto",
+        "cosa succede oggi (dall'owner)",
+        "finita quando"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "finita quando"
+    },
+    {
+      "id": "CANON:P0:1",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 149,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "1",
+        "**Terminale dal composer a tutta larghezza**",
+        "la pill «Terminale» apre il terminale con la larghezza del composer",
+        "si apre usando tutta l'area principale, coerente con la sezione dedicata, responsive"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "si apre usando tutta l'area principale, coerente con la sezione dedicata, responsive"
+    },
+    {
+      "id": "CANON:P0:2",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 150,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "2",
+        "**Il terminale a volte apre una scheda nuova**",
+        "un clic sul terminale apre ogni tanto una tab del browser",
+        "il clic è deterministico: mai una tab nuova, mai un duplicato (`target=_blank`, `window.open`, bubbling, handler doppi, routing)"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "il clic è deterministico: mai una tab nuova, mai un duplicato (`target=_blank`, `window.open`, bubbling, handler doppi, routing)"
+    },
+    {
+      "id": "CANON:P0:3",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 151,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "3",
+        "**Copia/incolla nel terminale Bash**",
+        "tasto destro, `Ctrl+V`, selezione e clipboard di sistema non affidabili, in entrambi i terminali",
+        "selezione, copia, incolla, menu contestuale e scorciatoie giuste per il sistema operativo, senza perdere quelle native del terminale"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "selezione, copia, incolla, menu contestuale e scorciatoie giuste per il sistema operativo, senza perdere quelle native del terminale"
+    },
+    {
+      "id": "CANON:P0:4",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 152,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "4",
+        "**Browser interno robusto**",
+        "instabile, molte pagine non si caricano",
+        "stati chiari *loading / loaded / error / retrying / unreachable / cancelled*; una tab non compromette il browser; mai uno schermo vuoto senza spiegazione"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "stati chiari *loading / loaded / error / retrying / unreachable / cancelled*; una tab non compromette il browser; mai uno schermo vuoto senza spiegazione"
+    },
+    {
+      "id": "CANON:P0:5",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 153,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "5",
+        "**Ogni tab ricorda Pagina/Testo**",
+        "cambiando tab la modalità si perde",
+        "stato per **id di tab**, sopravvive a switch, re-render, navigazione, streaming"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "stato per **id di tab**, sopravvive a switch, re-render, navigazione, streaming"
+    },
+    {
+      "id": "CANON:P0:6",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 154,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "6",
+        "**Scroll della chat durante la generazione**",
+        "scorrendo verso l'alto la schermata continua a spostarsi",
+        "auto-scroll **solo** se si è in fondo; scroll manuale sempre prioritario; niente `setTimeout`"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "auto-scroll **solo** se si è in fondo; scroll manuale sempre prioritario; niente `setTimeout`"
+    },
+    {
+      "id": "CANON:P0:7",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 155,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "7",
+        "**Nessun limite arbitrario al reasoning**",
+        "un tetto in secondi può interrompere ragionamento/streaming",
+        "separare *timeout di generazione* da *salute della connessione*; si interrompe solo per Stop, errore del fornitore, socket morto; eventuale failsafe altissimo, configurabile, documentato, lato server"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "separare *timeout di generazione* da *salute della connessione*; si interrompe solo per Stop, errore del fornitore, socket morto; eventuale failsafe altissimo, configurabile, documentato, lato server"
+    },
+    {
+      "id": "CANON:P0:8",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 156,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "8",
+        "**Rendering del reasoning e delle chat lunghe**",
+        "reasoning collassato tenuto tutto nel DOM; re-render dell'intera chat a ogni token; freeze",
+        "collassato = niente DOM inutile; espanso = progressivo; streaming isolato; chat da centinaia di messaggi usabili; spinner solo con lavoro vero; **profiling prima/dopo**"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "collassato = niente DOM inutile; espanso = progressivo; streaming isolato; chat da centinaia di messaggi usabili; spinner solo con lavoro vero; **profiling prima/dopo**"
+    },
+    {
+      "id": "CANON:P0:9",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 157,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "9",
+        "**Tab Processi: paginazione, prestazioni, ridisegno**",
+        "lista lunga e indistinta di stringhe di comando",
+        "paginazione/virtualizzazione scelta **misurando**; ogni riga con tipo, comando, argomenti, cwd, stato, durata, exit code; comandi riconosciuti e formattati (git/npm/python/docker…); icone affidabili con fallback; un aggiornamento non ridisegna tutte le righe"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "paginazione/virtualizzazione scelta **misurando**; ogni riga con tipo, comando, argomenti, cwd, stato, durata, exit code; comandi riconosciuti e formattati (git/npm/python/docker…); icone affidabili con fallback; un aggiornamento non ridisegna tutte le righe"
+    },
+    {
+      "id": "CANON:P0:10",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 158,
+      "section": "FASE P0 · Terminale, Browser, Chat, Reasoning, Processi e Agenti — i dieci punti dell'owner",
+      "cells": [
+        "10",
+        "**Tab Agenti: apertura leggera e Markdown**",
+        "la conversazione della figlia si apre dentro la chat principale senza Markdown e con costo pieno",
+        "apertura veloce e isolata dalla chat principale; lazy load; skeleton onesto; Markdown/code block/reasoning come nella chat, senza duplicare il renderer; switch A→B→C→A stabile; scroll per agente; **profiling**"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "apertura veloce e isolata dalla chat principale; lazy load; skeleton onesto; Markdown/code block/reasoning come nella chat, senza duplicare il renderer; switch A→B→C→A stabile; scroll per agente; **profiling**"
+    },
+    {
+      "id": "CANON:P0-bis:riga",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 232,
+      "section": "FASE P0-bis · La shell chiede davanti a un segreto — **approvata dall'owner il 16/09** («Sì»)",
+      "cells": [
+        "riga",
+        "cosa",
+        "finita quando"
+      ],
+      "lot": "G1",
+      "status": "historical-unverified",
+      "proofRequirement": "finita quando"
+    },
+    {
+      "id": "CANON:P0-bis:BC-54",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 234,
+      "section": "FASE P0-bis · La shell chiede davanti a un segreto — **approvata dall'owner il 16/09** («Sì»)",
+      "cells": [
+        "**BC-54**",
+        "`wsl.exe --` fa passare la riga da DUE shell: `$HOME`, `$?`, `$X` espansi prima del nostro `bash -lc`, anche negli apici singoli. Cura misurata: `--exec` (`talosHarness.mjs:4268`)",
+        "`echo '$HOME'` → `$HOME`, `false; echo $?` → `1`, `X=42 sh -c 'echo $X'` → `42`; test sull'argv + integrazione che gira solo se WSL c'è"
+      ],
+      "lot": "G1",
+      "status": "historical-unverified",
+      "proofRequirement": "`echo '$HOME'` → `$HOME`, `false; echo $?` → `1`, `X=42 sh -c 'echo $X'` → `42`; test sull'argv + integrazione che gira solo se WSL c'è"
+    },
+    {
+      "id": "CANON:P0-bis:BC-55",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 235,
+      "section": "FASE P0-bis · La shell chiede davanti a un segreto — **approvata dall'owner il 16/09** («Sì»)",
+      "cells": [
+        "**BC-55**",
+        "`VAR=…`, `export`, `(cd …` finiscono su cmd.exe `[sandbox: none]` perché `primoProgramma` prende il primo token e WSL «non ce l'ha»",
+        "i tre comandi del report girano in WSL con `dove: null` e l'esito dice dove; la scelta della sessione (`doveGiranoIComandi`) esposta nell'interfaccia"
+      ],
+      "lot": "G1",
+      "status": "historical-unverified",
+      "proofRequirement": "i tre comandi del report girano in WSL con `dove: null` e l'esito dice dove; la scelta della sessione (`doveGiranoIComandi`) esposta nell'interfaccia"
+    },
+    {
+      "id": "CANON:P0-bis:BC-56",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 236,
+      "section": "FASE P0-bis · La shell chiede davanti a un segreto — **approvata dall'owner il 16/09** («Sì»)",
+      "cells": [
+        "**BC-56**",
+        "comando vuoto = `TypeError` non catturato sul ramo Windows, `{  ; }` su WSL",
+        "esito `-1` con «Il comando è vuoto», nei due rami"
+      ],
+      "lot": "G1",
+      "status": "historical-unverified",
+      "proofRequirement": "esito `-1` con «Il comando è vuoto», nei due rami"
+    },
+    {
+      "id": "CANON:P0-bis:BC-57",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 237,
+      "section": "FASE P0-bis · La shell chiede davanti a un segreto — **approvata dall'owner il 16/09** («Sì»)",
+      "cells": [
+        "**BC-57**",
+        "`prova` → `exit 0` senza suite (trascritto `4c3e1649`, app 0.1.13), non riprodotto sul banco",
+        "causa trovata con un giro vero su banco; e comunque «nessuna suite trovata in <cartella>» al posto del verde, che conta come NON provato"
+      ],
+      "lot": "G1",
+      "status": "historical-unverified",
+      "proofRequirement": "causa trovata con un giro vero su banco; e comunque «nessuna suite trovata in <cartella>» al posto del verde, che conta come NON provato"
+    },
+    {
+      "id": "CANON:P0-bis:BC-58",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 238,
+      "section": "FASE P0-bis · La shell chiede davanti a un segreto — **approvata dall'owner il 16/09** («Sì»)",
+      "cells": [
+        "**BC-58**",
+        "a 1024 la pill del composer tronca «Giri 10» in «Giri 1…» (owner 17/09: «mettile nella P0-bis»)",
+        "il contatore non si tronca mai: a 1024, con un numero a due cifre, si legge intero nei due temi (foto)"
+      ],
+      "lot": "G1",
+      "status": "historical-unverified",
+      "proofRequirement": "il contatore non si tronca mai: a 1024, con un numero a due cifre, si legge intero nei due temi (foto)"
+    },
+    {
+      "id": "CANON:P0-bis:OSS-1",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 239,
+      "section": "FASE P0-bis · La shell chiede davanti a un segreto — **approvata dall'owner il 16/09** («Sì»)",
+      "cells": [
+        "**OSS-1**",
+        "nel replay la scheda Processi dice «0 s» per ogni comando: i tempi non sopravvivono al registro",
+        "la durata viaggia nell'evento di fine attrezzo (`durataMs`) e al replay si legge da lì; se non è misurata, la riga non dice «0 s» ma niente"
+      ],
+      "lot": "G1",
+      "status": "historical-unverified",
+      "proofRequirement": "la durata viaggia nell'evento di fine attrezzo (`durataMs`) e al replay si legge da lì; se non è misurata, la riga non dice «0 s» ma niente"
+    },
+    {
+      "id": "CANON:P0-bis:OSS-2",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 240,
+      "section": "FASE P0-bis · La shell chiede davanti a un segreto — **approvata dall'owner il 16/09** («Sì»)",
+      "cells": [
+        "**OSS-2**",
+        "`prova` non compare fra i processi: la scheda elenca solo `shell`",
+        "`npm test` lanciato da `prova` è una riga della scheda come le altre, con uscita e durata"
+      ],
+      "lot": "G1",
+      "status": "historical-unverified",
+      "proofRequirement": "`npm test` lanciato da `prova` è una riga della scheda come le altre, con uscita e durata"
+    },
+    {
+      "id": "CANON:P0-bis:BC-59",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 241,
+      "section": "FASE P0-bis · La shell chiede davanti a un segreto — **approvata dall'owner il 16/09** («Sì»)",
+      "cells": [
+        "**BC-59**",
+        "nella riga attività della chat compare il nome tecnico `file_edit` (owner 17/09); misurato: `file_edit` ha ZERO voci nelle mappe umane (`nomi-attrezzi.js:30/135`, `conversazione.js:484`, `permessi.js:22`) e la mappa è duplicata in `app.js:2560`",
+        "ogni nome che il kernel espone ha un nome umano, un'icona e una descrizione in UN posto solo, con un test di contratto che confronta l'elenco degli attrezzi del kernel con la mappa; la copia in `app.js:2560` sparisce"
+      ],
+      "lot": "G1",
+      "status": "historical-unverified",
+      "proofRequirement": "ogni nome che il kernel espone ha un nome umano, un'icona e una descrizione in UN posto solo, con un test di contratto che confronta l'elenco degli attrezzi del kernel con la mappa; la copia in `app.js:2560` sparisce"
+    },
+    {
+      "id": "CANON:P0-bis:OSS-3",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 242,
+      "section": "FASE P0-bis · La shell chiede davanti a un segreto — **approvata dall'owner il 16/09** («Sì»)",
+      "cells": [
+        "**OSS-3**",
+        "due errori JS «Failed to read localStorage… sandboxed» a ogni apertura del Browser su una pagina terza con script (iframe `sandbox`)",
+        "misurato da quale frame nascono; se sono della pagina terza, la console della nostra app non li riporta come nostri (o li etichetta); se sono nostri, si curano"
+      ],
+      "lot": "G1",
+      "status": "historical-unverified",
+      "proofRequirement": "misurato da quale frame nascono; se sono della pagina terza, la console della nostra app non li riporta come nostri (o li etichetta); se sono nostri, si curano"
+    },
+    {
+      "id": "CANON:3-bis:1",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 298,
+      "section": "FASE 3-bis · MODALITÀ WORKFLOW — il modello che LANCIA E COORDINA SOTTO-AGENTI, come fa Claude Code",
+      "cells": [
+        "1",
+        "**WF-1**",
+        "il piano è un oggetto: fasi in sequenza, lavorazioni in parallelo, ognuna dichiara **i file che tocca**; due lavorazioni sullo stesso file ⇒ **piano respinto prima di partire**",
+        "`src/piano-di-lavoro.mjs` (nuovo)",
+        "un piano con file sovrapposti è respinto **prima** di aprire una figlia; uno con file disgiunti passa"
+      ],
+      "lot": "G5",
+      "status": "historical-unverified",
+      "proofRequirement": "un piano con file sovrapposti è respinto **prima** di aprire una figlia; uno con file disgiunti passa"
+    },
+    {
+      "id": "CANON:3-bis:2",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 299,
+      "section": "FASE 3-bis · MODALITÀ WORKFLOW — il modello che LANCIA E COORDINA SOTTO-AGENTI, come fa Claude Code",
+      "cells": [
+        "2",
+        "**WF-3**",
+        "il motore: apre tutte le lavorazioni della fase senza aspettarle una a una; oltre il tetto di dieci figli la undicesima **si accoda** invece di essere respinta",
+        "`src/workflow-orchestrator.mjs` (nuovo)",
+        "undici lavorazioni con tetto dieci: la undicesima parte quando si libera un posto"
+      ],
+      "lot": "G5",
+      "status": "historical-unverified",
+      "proofRequirement": "undici lavorazioni con tetto dieci: la undicesima parte quando si libera un posto"
+    },
+    {
+      "id": "CANON:3-bis:3",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 300,
+      "section": "FASE 3-bis · MODALITÀ WORKFLOW — il modello che LANCIA E COORDINA SOTTO-AGENTI, come fa Claude Code",
+      "cells": [
+        "3",
+        "**WF-2 + WF-5**",
+        "l'attrezzo con cui il modello **propone** un piano senza eseguirlo; il budget opzionale che, se acceso, vale sull'albero intero",
+        "`src/kernel/talosHarness.mjs`",
+        "il modello propone e non esegue; col budget acceso un piano troppo grande è respinto prima, con quello spento parte"
+      ],
+      "lot": "G5",
+      "status": "historical-unverified",
+      "proofRequirement": "il modello propone e non esegue; col budget acceso un piano troppo grande è respinto prima, con quello spento parte"
+    },
+    {
+      "id": "CANON:3-bis:4",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 301,
+      "section": "FASE 3-bis · MODALITÀ WORKFLOW — il modello che LANCIA E COORDINA SOTTO-AGENTI, come fa Claude Code",
+      "cells": [
+        "4",
+        "**WF-4**",
+        "ripresa dopo la chiusura col **doppio lucchetto**: chi ha il *diritto* di eseguire e quale esecuzione è *viva adesso* sono due campi",
+        "`src/session-registry.mjs`, `src/agent-service.mjs`, rotte in `src/http-app.mjs`",
+        "piano interrotto, server riavviato, riprende dalla lavorazione non conclusa; due riprese insieme, una sola prende"
+      ],
+      "lot": "G5",
+      "status": "historical-unverified",
+      "proofRequirement": "piano interrotto, server riavviato, riprende dalla lavorazione non conclusa; due riprese insieme, una sola prende"
+    },
+    {
+      "id": "CANON:3-bis:5",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 302,
+      "section": "FASE 3-bis · MODALITÀ WORKFLOW — il modello che LANCIA E COORDINA SOTTO-AGENTI, come fa Claude Code",
+      "cells": [
+        "5",
+        "**WF-6 + WF-7**",
+        "a schermo **dentro la scheda Agenti che esiste**, mai una sezione nuova; nessuna lavorazione ferma in silenzio: per ognuna «che cosa la fa avanzare adesso»",
+        "`frontend/src/components/inspector.js`",
+        "un piano a due fasi si vede partire, avanzare e concludersi nei due temi; una figlia muta compare **ferma con un motivo**"
+      ],
+      "lot": "G5",
+      "status": "historical-unverified",
+      "proofRequirement": "un piano a due fasi si vede partire, avanzare e concludersi nei due temi; una figlia muta compare **ferma con un motivo**"
+    },
+    {
+      "id": "CANON:4:1",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 588,
+      "section": "FASE 4 · Il motore locale più rapido dei concorrenti",
+      "cells": [
+        "1",
+        "il codice atterrato decide la memoria di lavoro dai parametri del modello e indovina le parole ripetute in anticipo: **nessuno dei due è misurato su un dispositivo vero**",
+        "i numeri vengono da una misura sul dispositivo, non da una stima"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "i numeri vengono da una misura sul dispositivo, non da una stima"
+    },
+    {
+      "id": "CANON:4:2",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 589,
+      "section": "FASE 4 · Il motore locale più rapido dei concorrenti",
+      "cells": [
+        "2",
+        "il confronto vero coi concorrenti, **sulla stessa richiesta**",
+        "primo token sotto il secondo con l'agente acceso, oppure il numero vero dichiarato per quello che è"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "primo token sotto il secondo con l'agente acceso, oppure il numero vero dichiarato per quello che è"
+    },
+    {
+      "id": "CANON:4:3",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 590,
+      "section": "FASE 4 · Il motore locale più rapido dei concorrenti",
+      "cells": [
+        "3",
+        "col modello più piccolo il secondo turno si interrompe: il motore **non legge il campo che dice perché la risposta è finita** (`src/kernel/`)",
+        "il secondo turno completa anche col modello più piccolo"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "il secondo turno completa anche col modello più piccolo"
+    },
+    {
+      "id": "CANON:4:4",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 591,
+      "section": "FASE 4 · Il motore locale più rapido dei concorrenti",
+      "cells": [
+        "4",
+        "codici di errore sbagliati: «servizio non disponibile»/«errore interno» per richieste malformate (`src/http-app.mjs`)",
+        "ogni codice provato nel verso che lo genera"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "ogni codice provato nel verso che lo genera"
+    },
+    {
+      "id": "CANON:4:5",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 592,
+      "section": "FASE 4 · Il motore locale più rapido dei concorrenti",
+      "cells": [
+        "5 🔒",
+        "tre difetti dell'interfaccia che si contraddicono: un errore vero perde motivo e azione; il server cade e per un minuto barra e chat dicono due cose opposte; il suggerimento del composer sopravvive alla sessione (`legacy/app.js`)",
+        "i tre riprodotti e chiusi, ognuno con la sua fotografia"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "i tre riprodotti e chiusi, ognuno con la sua fotografia"
+    },
+    {
+      "id": "CANON:5:1",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 605,
+      "section": "FASE 5 · La lingua, le etichette e i numeri",
+      "cells": [
+        "1 🔒",
+        "la traduzione copre tutta l'app (oggi la sola barra laterale), compresi Agents, Hooks, Skills, Plugins, MCP. **Nello stesso giro: togliere i temi Paper, Claudius e Basicus** (owner 13/09, «non mi piacciono»). Misurato: 14 temi, elenco in **due posti**, ogni tema vive in **otto posti** (scene animate parallele per posizione). ⛔ Due conseguenze da mettere davanti all'owner prima: i temi chiari restano **uno**; chi ha salvato uno dei tre resta con un tema che non esiste ⇒ serve una migrazione (PO-22)",
+        "cambiando lingua cambia tutta la pagina, provato nei due versi; i tre nomi spariti dagli otto posti, scene a undici, profilo migrato, anche al contrario"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "cambiando lingua cambia tutta la pagina, provato nei due versi; i tre nomi spariti dagli otto posti, scene a undici, profilo migrato, anche al contrario"
+    },
+    {
+      "id": "CANON:5:2",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 606,
+      "section": "FASE 5 · La lingua, le etichette e i numeri",
+      "cells": [
+        "2",
+        "un solo posto per i nomi umani; ⛔ i nomi che riceve il **modello** non si toccano (contratto col motore)",
+        "zero nomi tecnici a schermo, contratto invariato"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "zero nomi tecnici a schermo, contratto invariato"
+    },
+    {
+      "id": "CANON:5:3",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 607,
+      "section": "FASE 5 · La lingua, le etichette e i numeri",
+      "cells": [
+        "3",
+        "numeri che non tornano: **tre numerazioni dello stesso giro** nella stessa schermata; il cursore del ragionamento promette **sei livelli**, il modello ne ha **tre**",
+        "un solo numero di giro, livelli veri"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "un solo numero di giro, livelli veri"
+    },
+    {
+      "id": "CANON:5:4",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 608,
+      "section": "FASE 5 · La lingua, le etichette e i numeri",
+      "cells": [
+        "4",
+        "frasi del mockup e identificativi grezzi rimasti a schermo; ricerca senza risultati che mostra una lista vuota col contatore fermo",
+        "nessuna stringa del mockup, il vuoto dichiarato a parole"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "nessuna stringa del mockup, il vuoto dichiarato a parole"
+    },
+    {
+      "id": "CANON:5:5",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 609,
+      "section": "FASE 5 · La lingua, le etichette e i numeri",
+      "cells": [
+        "5",
+        "le fotografie del README, **in inglese**, ognuna col sì esplicito dell'owner una per una (`README.md`, `docs/immagini/`)",
+        "ogni foto approvata per nome nel manifesto"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "ogni foto approvata per nome nel manifesto"
+    },
+    {
+      "id": "CANON:6:1",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 621,
+      "section": "FASE 6 · Le sezioni con un elenco",
+      "cells": [
+        "1 🔒",
+        "Libreria scrive sempre «0 file · Token non disponibili»; Memoria divisa per **genere** invece che per **strato**; Attività senza **chi** ha fatto la cosa (`legacy/app.js` e le sezioni)",
+        "ogni sezione mostra il numero vero e l'autore vero"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "ogni sezione mostra il numero vero e l'autore vero"
+    },
+    {
+      "id": "CANON:6:2",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 622,
+      "section": "FASE 6 · Le sezioni con un elenco",
+      "cells": [
+        "2",
+        "**sul proprio messaggio non si può fare niente.** Misurato il 13/09 (e corretta una mia misura sbagliata): **tre azioni sulla risposta del modello, zero sul messaggio della persona** — niente modifica, elimina, nemmeno copia. Il mobile con la pressione lunga ne ha almeno due: qui siamo **dietro**. Trovato dalla lane mobile provando a **disfare** un invio — la domanda di una persona vera. Un messaggio di prova è rimasto nella chat dell'owner: si dichiara, non si «risolve» cancellando la conversazione",
+        "si modifica e si elimina un proprio messaggio dal menu della bolla, la sessione conserva la modifica; al contrario, eliminare un messaggio altrui o già usato dal modello è rifiutato con un motivo"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "si modifica e si elimina un proprio messaggio dal menu della bolla, la sessione conserva la modifica; al contrario, eliminare un messaggio altrui o già usato dal modello è rifiutato con un motivo"
+    },
+    {
+      "id": "CANON:6:3",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 623,
+      "section": "FASE 6 · Le sezioni con un elenco",
+      "cells": [
+        "3",
+        "il rapporto e le fonti della ricerca approfondita non si aprono dall'interfaccia",
+        "rapporto e fonti si aprono da una ricerca vera"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "rapporto e fonti si aprono da una ricerca vera"
+    },
+    {
+      "id": "CANON:6:4",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 624,
+      "section": "FASE 6 · Le sezioni con un elenco",
+      "cells": [
+        "4",
+        "la prima sessione di chi apre l'app la prima volta: modale a due colonne, progetti senza conteggio, «Planner opzionale» di un'altra epoca, manca la riga totale attrezzi/costo per giro. ⛔ **E rifare la modale del primo avvio** (owner 13/09: «deve seguire le linee guida delle modali intro moderne 2026, ui super smooth e setup veloce»). Misurato: componente di **296 righe, quattro passi**, legge dati veri e porta già la ricerca del 06/09 (primo valore nel minor numero di passi, si può saltare). ⛔ Due cose morte attaccate: la vecchia modale (**176 righe** senza chiamanti) e un commento verso una funzione inesistente. ⛔ Serve la ricerca sulle linee guida 2026, con fonte e data, prima di disegnare (PO-24)",
+        "provata da **profilo vergine**, con contati passi e secondi fino al primo messaggio utile; provata saltando tutto; foto nei due temi e due larghezze; niente commenti verso funzioni inesistenti"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "provata da **profilo vergine**, con contati passi e secondi fino al primo messaggio utile; provata saltando tutto; foto nei due temi e due larghezze; niente commenti verso funzioni inesistenti"
+    },
+    {
+      "id": "CANON:6:5",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 625,
+      "section": "FASE 6 · Le sezioni con un elenco",
+      "cells": [
+        "5",
+        "copertura dei permessi per attrezzo: il foglio ne elenca **cinque**, gli attrezzi sono **43**; `config.mjs` ammette **sei** override (compreso `file_edit`, commit `4e8bfd6d`) — i numeri storici non sono requisiti",
+        "ogni attrezzo del catalogo corrente dichiara la policy applicata; gli override provati nei due versi"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "ogni attrezzo del catalogo corrente dichiara la policy applicata; gli override provati nei due versi"
+    },
+    {
+      "id": "CANON:7:1",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 655,
+      "section": "FASE 7 · L'installatore con una vera interfaccia",
+      "cells": [
+        "1",
+        "l'installatore assistito col consenso. **Nello stesso giro: l'icona del desktop su fondo pieno** (owner 13/09, con foto: «prendere tale e quale l'icona della app mobile»). Misurato: il file ha **due sole misure** (256 e 32); Windows usa la **48** per il collegamento, che non c'è ⇒ sgrana. L'icona mobile è a **due strati** e vettoriale: si prendono i due strati e si **ridisegna**, non si copia (margini Android sbagliati su Windows); un generatore esiste già. Due scelte all'owner: una icona o una per tema; quale fondo, guardato su chiaro **e** scuro (PO-23)",
+        "un'installazione vera dal vivo col consenso che blocca se rifiutato; il file con **tutte** le misure di Windows contate aprendolo; il collegamento fotografato su chiaro, scuro e a 16 px"
+      ],
+      "lot": "G8",
+      "status": "historical-unverified",
+      "proofRequirement": "un'installazione vera dal vivo col consenso che blocca se rifiutato; il file con **tutte** le misure di Windows contate aprendolo; il collegamento fotografato su chiaro, scuro e a 16 px"
+    },
+    {
+      "id": "CANON:7:2",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 656,
+      "section": "FASE 7 · L'installatore con una vera interfaccia",
+      "cells": [
+        "2",
+        "un cancello che esiste e non gira: il comando delle verifiche non invoca quella dell'interfaccia",
+        "il comando la invoca, provato nel verso che deve fallire"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "il comando la invoca, provato nel verso che deve fallire"
+    },
+    {
+      "id": "CANON:7:3",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 657,
+      "section": "FASE 7 · L'installatore con una vera interfaccia",
+      "cells": [
+        "3",
+        "codice morto misurato: una funzione di ~**180 righe** senza chiamanti, uno schermo irraggiungibile, **12 veli** che nessuno apre, due coppie di funzioni doppie, librerie esterne che nessuno carica",
+        "rimosso o ricollegato, dicendo quante righe"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "rimosso o ricollegato, dicendo quante righe"
+    },
+    {
+      "id": "CANON:7:4",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 658,
+      "section": "FASE 7 · L'installatore con una vera interfaccia",
+      "cells": [
+        "4",
+        "lo script di costruzione copia la cartella pubblica dentro una cartella ignorata dal repository",
+        "la copia serve e va altrove, o non serve e va tolta"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "la copia serve e va altrove, o non serve e va tolta"
+    },
+    {
+      "id": "CANON:7:5",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 659,
+      "section": "FASE 7 · L'installatore con una vera interfaccia",
+      "cells": [
+        "5",
+        "accessibilità: in tutta l'app **non c'è una trappola del fuoco** — con Tab si esce dalla modale e si finisce nella pagina dietro",
+        "il fuoco resta dentro una modale aperta, provato da tastiera"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "il fuoco resta dentro una modale aperta, provato da tastiera"
+    },
+    {
+      "id": "CANON:8:1",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 671,
+      "section": "FASE 8 · La finestra dell'app come interfaccia",
+      "cells": [
+        "1 🔒",
+        "la finestra (guscio e `legacy/app.js`)",
+        "inventario prima e dopo, nessuna funzione sparita"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "inventario prima e dopo, nessuna funzione sparita"
+    },
+    {
+      "id": "CANON:8:2",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 672,
+      "section": "FASE 8 · La finestra dell'app come interfaccia",
+      "cells": [
+        "2",
+        "i segreti che viaggiano dove non dovrebbero: gettone e chiave di firma **nell'ambiente del processo** che esegue i comandi, quindi leggibili da qualunque comando. ⭐ La **0.1.13 pubblica ha già** un gate sul seme d'ambiente per la chiave OpenRouter (PR #22): riaccertare cosa resta scoperto. ⛔ **Misurato il 16/09 (segnalazione della lane CLI, riga F15, riprodotta in forma desktop):** `leggi` è confinato al workspace (`path-policy.mjs`) e rifiuta `~/.ssh/id_rsa`; la `shell` ha solo la policy per attrezzo (`config.mjs:307`) e D-10E le toglie i segreti dall'**ambiente**, ma **nessuno esamina l'argomento del comando** — con la shell su «sempre», `cat ~/.ssh/id_rsa` o `grep -r AWS_SECRET ~` passano dove `leggi` si ferma. ⛔ **Decisione dell'owner** (non una cura da corsia): una classificazione dei percorsi segreti sull'argomento (`.ssh`, `.env`, `.aws`, `.netrc`, chiavi) che riporti la shell a «chiedi» anche quando è su «sempre», come già fanno i file di controllo",
+        "nessun segreto nell'ambiente di un figlio, provato leggendolo davvero; e la shell che legge un segreto **chiede**, provato al contrario"
+      ],
+      "lot": "G1",
+      "status": "historical-unverified",
+      "proofRequirement": "nessun segreto nell'ambiente di un figlio, provato leggendolo davvero; e la shell che legge un segreto **chiede**, provato al contrario"
+    },
+    {
+      "id": "CANON:8:3",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 673,
+      "section": "FASE 8 · La finestra dell'app come interfaccia",
+      "cells": [
+        "3",
+        "il terminale: l'uscita arriva **tutta insieme alla fine** invece che mentre scorre; il comando `!` **non funziona mentre il modello lavora**. (D-10C, l'ordine dei due flussi, è chiuso con prova nella coda del 10/09: non si riapre senza riprodurlo.) ⛔ Si coordina con la **Fase P0 punti 1-3**, che tocca lo stesso terminale: una fase sola tocca quei file per volta",
+        "streaming durante l'esecuzione; `!` a modello occupato"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "streaming durante l'esecuzione; `!` a modello occupato"
+    },
+    {
+      "id": "CANON:8:4",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 674,
+      "section": "FASE 8 · La finestra dell'app come interfaccia",
+      "cells": [
+        "4",
+        "dove gira davvero un tuo comando (il sottosistema Linux, non dichiarato: percorsi sorprendenti) e la copia del motore lì presente, coi suoi difetti",
+        "dichiarato a schermo e nei percorsi"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "dichiarato a schermo e nei percorsi"
+    },
+    {
+      "id": "CANON:8:5",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 675,
+      "section": "FASE 8 · La finestra dell'app come interfaccia",
+      "cells": [
+        "5",
+        "il segnavia che non si muove sul Chrome dell'owner («rompicoglioni»). ⛔ Misurato **nel suo browser con l'accelerazione accesa**, non in quello senza finestra",
+        "riprodotto e chiuso con la foto"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "riprodotto e chiuso con la foto"
+    },
+    {
+      "id": "CANON:9:1",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 683,
+      "section": "FASE 9 · Le righe che erano date per chiuse e non lo sono",
+      "cells": [
+        "1",
+        "accessi ai fornitori: uno collegato **a metà** (manca il giro vero); **ChatGPT e Claude a zero**, non c'è il codice",
+        "un giro vero per ciascuno, coi limiti dimostrati"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "un giro vero per ciascuno, coi limiti dimostrati"
+    },
+    {
+      "id": "CANON:9:2",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 684,
+      "section": "FASE 9 · Le righe che erano date per chiuse e non lo sono",
+      "cells": [
+        "2",
+        "⛔ **decisione owner:** la compattazione del contesto è fatta e provata, ma sul server di prova è **vietata per costruzione**; togliere quel divieto è togliere una guardia scritta apposta",
+        "l'owner decide"
+      ],
+      "lot": "G4",
+      "status": "historical-unverified",
+      "proofRequirement": "l'owner decide"
+    },
+    {
+      "id": "CANON:9:3",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 685,
+      "section": "FASE 9 · Le righe che erano date per chiuse e non lo sono",
+      "cells": [
+        "3",
+        "le misure che la compattazione doveva portare: acceso/spento, latenza (una sola misura: **61,2 s** al primo token, fuori bersaglio), riuso della cache (il 40% attuale è finto), costi prima/dopo, un ritorno indietro **eseguito**, annullamento mentre scorre",
+        "i numeri veri, dichiarati"
+      ],
+      "lot": "G4",
+      "status": "historical-unverified",
+      "proofRequirement": "i numeri veri, dichiarati"
+    },
+    {
+      "id": "CANON:9:4",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 686,
+      "section": "FASE 9 · Le righe che erano date per chiuse e non lo sono",
+      "cells": [
+        "4",
+        "fornitori aggiuntivi (P-D…P-L implementati, mancano i giri reali senza credenziali e il fallback), l'agente esterno ACP (non chiude PO-15, la delega esterna completa), GitHub (PO-16)",
+        "giri reali; PO-15 e PO-16 distinti e chiusi"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "giri reali; PO-15 e PO-16 distinti e chiusi"
+    },
+    {
+      "id": "CANON:9:5",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 687,
+      "section": "FASE 9 · Le righe che erano date per chiuse e non lo sono",
+      "cells": [
+        "5",
+        "il registro dei numeri: le proposte si numerano in **due documenti senza registro unico**, e ha già prodotto una collisione",
+        "un registro solo"
+      ],
+      "lot": "G0",
+      "status": "historical-unverified",
+      "proofRequirement": "un registro solo"
+    },
+    {
+      "id": "CANON:9:poi",
+      "source": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "line": 688,
+      "section": "FASE 9 · Le righe che erano date per chiuse e non lo sono",
+      "cells": [
+        "poi",
+        "**BC-52 — attrezzi su richiesta** (approvato 13/09): esporre gli strumenti caricando gli schemi quando servono; prima contratto, policy e compatibilità dei provider; dopo PO-15, PO-16 e l'A/B del preambolo; un lotto suo, non un sesto agente",
+        "strumenti ancora usabili dal composer, compatibilità provata, confronto misurato"
+      ],
+      "lot": "G6",
+      "status": "historical-unverified",
+      "proofRequirement": "strumenti ancora usabili dal composer, compatibilità provata, confronto misurato"
+    }
+  ]
+}

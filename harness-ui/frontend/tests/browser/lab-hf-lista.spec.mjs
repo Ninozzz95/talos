@@ -143,20 +143,115 @@ async function disegna(page, risultati, opzioni = {}) {
 
 const chipDi = (page, testo) => page.locator('[data-hf-chip]').filter({ hasText: testo }).first();
 const righe = (page) => page.locator('#modelLabHfResults .talos-list-row');
+
+/** Usa la tendina Calm visibile, quindi lo stesso percorso di mouse/tastiera dell'app. */
+async function scegliCalm(page, selettore, valore) {
+  const sorgente = page.locator(selettore);
+  const testo = (await sorgente.locator(`option[value="${valore}"]`).textContent())?.trim();
+  if (!testo) throw new Error(`Opzione ${valore} assente da ${selettore}`);
+  await page.locator(`${selettore}--calm`).click();
+  await page.getByRole('option', { name: testo, exact: true }).click();
+  await expect(sorgente).toHaveValue(valore);
+}
+const scegliFaccetta = (page, chiave, valore) => scegliCalm(page, `#modelLabHfFaccetta-${chiave}`, valore);
+
+const paginaHfFixture = (inizio, quanti) => Array.from({ length: quanti }, (_, i) => ({ repo: `ripresa/modello-${inizio+i}`, revision: 'a'.repeat(40), gated: false, parameterCount: (inizio+i)%2 ? 7e9 : 30e9, downloads: 100, pipelineTag: 'text-generation', license: 'mit' }));
+async function apriHfHttp(page, handler) {
+  await page.route('**/api/v1/huggingface/search*', handler);
+  await page.goto('/');
+  await page.locator('#talosAvvio').waitFor({ state: 'detached' });
+  await page.evaluate(() => document.querySelector('.talos-sidebar [data-vaia="impostazioni"]')?.click());
+  await page.evaluate(() => document.querySelector('[data-settings-tab="models"]')?.click());
+  await page.locator('#labSchedaModels').click();
+  await expect(righe(page)).toHaveCount(20);
+}
+test('RIPRESA-HF-INFINITE — scorrimento oltre 20, dedup, fine e filtro parametri', async ({ page }) => {
+  const calls = [];
+  await apriHfHttp(page, async route => {
+    const cursor = new URL(route.request().url()).searchParams.get('cursor'); calls.push(cursor);
+    await route.fulfill({ json: { ok:true, data: { items: cursor ? paginaHfFixture(19, 6) : paginaHfFixture(0,20), nextCursor: cursor ? null : 'seconda' } } });
+  });
+  await page.locator('#modelLabHfNextButtonControl').scrollIntoViewIfNeeded();
+  await expect(righe(page)).toHaveCount(25);
+  expect(calls.filter(c=>c==='seconda')).toHaveLength(1);
+  await expect(page.locator('#modelLabHfNextButtonControl')).toBeHidden();
+  await scegliFaccetta(page, 'parametri', '3-8b');
+  await expect(righe(page)).toHaveCount(12);
+  await page.locator('[data-hf-azzera]').click();
+  await expect(righe(page)).toHaveCount(25);
+});
+test('RIPRESA-HF-PAGINA-ERRORE — conserva righe, niente loop di retry, riprova esplicita', async ({ page }) => {
+  let attempts = 0;
+  await apriHfHttp(page, async route => {
+    const cursor = new URL(route.request().url()).searchParams.get('cursor');
+    if(cursor && ++attempts===1) { await route.fulfill({status:503,json:{ok:false,error:{message:'Hub temporaneamente non disponibile'}}}); return; }
+    await route.fulfill({json:{ok:true,data:{items:cursor?paginaHfFixture(20,3):paginaHfFixture(0,20),nextCursor:cursor?null:'seconda'}}});
+  });
+  await page.locator('#modelLabHfNextButtonControl').scrollIntoViewIfNeeded();
+  await expect(page.locator('#modelLabHfPanel')).toContainText('Riprova');
+  await expect(righe(page)).toHaveCount(20);
+  expect(attempts).toBe(1);
+  await page.locator('#modelLabHfNextButtonControl').click();
+  await expect(righe(page)).toHaveCount(23);
+});
+test('RIPRESA-HF-RICERCA-TARDIVA — nuova query e ordinamento vuoto non ereditano pagine vecchie', async ({ page }) => {
+  let release; const waiting = new Promise(r=>release=r); let entered;
+  const pending = new Promise(r=>entered=r); const calls=[];
+  await apriHfHttp(page, async route => {
+    const params=new URL(route.request().url()).searchParams;calls.push(Object.fromEntries(params));
+    if(params.get('cursor')) { entered(); await waiting; }
+    await route.fulfill({json:{ok:true,data:{items:params.get('query')==='nuova'?[{...paginaHfFixture(100,1)[0],repo:'ripresa/nuova'}]:params.get('cursor')?paginaHfFixture(20,5):paginaHfFixture(0,20),nextCursor:params.get('query')==='nuova'||params.get('cursor')?null:'seconda'}}});
+  });
+  await page.locator('#modelLabHfNextButtonControl').scrollIntoViewIfNeeded(); await pending;
+  await page.locator('#modelLabHfSearch').fill('n');
+  await expect(page.locator('#modelLabHfNextButtonControl')).toBeHidden();
+  await page.locator('#modelLabHfSearch').fill('nuova'); await page.locator('#modelLabHfSearch').press('Enter');
+  await expect(righe(page)).toHaveCount(1);release();
+  await expect(righe(page)).toHaveCount(1);
+  await expect(righe(page).first()).toContainText('nuova');
+  await page.locator('#modelLabHfSearch').fill(''); await page.locator('#modelLabHfSearch').press('Enter');
+  await expect(righe(page)).toHaveCount(20);
+  await scegliCalm(page, '#modelLabHfSortControl', 'likes');
+  await expect.poll(()=>calls.at(-1)?.sort).toBe('likes');
+});
+
+test('RIPRESA-HF-AZZERA — il comando visibile ripulisce query, server filter, ordine e faccette', async ({ page }) => {
+  const calls = [];
+  await page.route('**/api/v1/huggingface/search*', async route => {
+    const params = new URL(route.request().url()).searchParams;
+    calls.push(Object.fromEntries(params));
+    await route.fulfill({ json: { ok: true, data: { items: params.get('query') === 'nessuno' ? [] : paginaHfFixture(0, 20), nextCursor: null } } });
+  });
+  await page.goto('/');
+  await page.locator('#talosAvvio').waitFor({ state: 'detached' });
+  await page.evaluate(() => document.querySelector('.talos-sidebar [data-vaia="impostazioni"]')?.click());
+  await page.evaluate(() => document.querySelector('[data-settings-tab="models"]')?.click());
+  await page.locator('#labSchedaModels').click();
+  await expect(righe(page)).toHaveCount(20);
+  for (const ordine of ['likes', 'createdAt', 'lastModified', 'downloads', 'likes']) {
+    await scegliCalm(page, '#modelLabHfSortControl', ordine);
+    await expect.poll(() => calls.at(-1)?.sort).toBe(ordine);
+  }
+  await page.locator('#modelLabHfAuthorControl').fill('ripresa');
+  await page.locator('#modelLabHfFiltersControl').fill('q4');
+  await scegliFaccetta(page, 'parametri', '3-8b');
+  await page.locator('#modelLabHfSearch').fill('nessuno');
+  await page.locator('#modelLabHfSearch').press('Enter');
+  await expect(page.locator('#vuotoHf')).toBeVisible();
+  await page.locator('#vuotoHf [data-clear="hf"]').click();
+  for (const id of ['modelLabHfSearch', 'modelLabHfAuthorControl', 'modelLabHfFiltersControl']) await expect(page.locator(`#${id}`)).toHaveValue('');
+  await expect(page.locator('#modelLabHfSortControl')).toHaveValue('downloads');
+  await expect(page.locator('[data-hf-faccetta="parametri"]')).toHaveValue('');
+  expect(calls.some(c => c.query === 'nessuno' && c.sort === 'likes' && c.author === 'ripresa' && c.filter === 'q4')).toBe(true);
+});
 /** La riga di UN repository, per id: non `.nth(n)`, che dipende dall'ordine dei gruppi. */
 const rigaDi = (page, repo) => page.locator(`#modelLabHfResults .talos-list-row[data-hf="${repo}"]`);
 
 /*
- * ⛔ LE FACCETTE SONO VESTITE DA «CALM», e `selectOption` pretende un elemento visibile: il nodo
- *   vero ha `data-calm-source`, `aria-hidden="true"`, `tabindex="-1"` e `display:none` (misurato il
- *   19/09/2026 su `#modelLabHfFaccetta-tipo`), mentre sopra c'è il gemello che si vede e si preme
- *   (`#modelLabHfFaccetta-tipo--calm`). ⇒ si passa `{ force: true }`: è esattamente il select che il
- *   modulo legge, e `calm-controls.js` ne rispecchia l'etichetta. Il percorso che un dito fa davvero
- *   — aprire la tendina vestita — è di un'altra superficie e non è compito di questa corsia: si
- *   DICHIARA, non si finge. (Stessa scelta, stessa ragione, in `lab-faccette.spec.mjs`.)
+ * ⛔ LE FACCETTE SONO VESTITE DA «CALM»: il `<select>` è la sorgente di stato nascosta e
+ *   `#<id>--calm` è il combobox visibile. Le prove passano dal combobox e dalle opzioni ARIA; così
+ *   verificano anche che il vestito inoltri davvero `input`/`change` alla sorgente.
  */
-const scegliFaccetta = (page, chiave, valore) => page.locator(`[data-hf-faccetta="${chiave}"]`).selectOption(valore, { force: true });
-
 test.describe('la lista Hugging Face col disegno del mockup', () => {
   test('HF-LISTA-01 — la barra della scoperta, e i numeri sono contati sui risultati', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -173,13 +268,14 @@ test.describe('la lista Hugging Face col disegno del mockup', () => {
     })));
     expect(chip).toEqual([
       { testo: 'Tutti8', valore: '', gruppo: 'accesso', conteggio: '8', spento: false, acceso: true },
-      { testo: 'Accesso aperto8', valore: 'aperto', gruppo: 'accesso', conteggio: '8', spento: false, acceso: false },
+      { testo: 'Accesso aperto7', valore: 'aperto', gruppo: 'accesso', conteggio: '7', spento: false, acceso: false },
       { testo: 'Accesso richiesto0', valore: 'richiesto', gruppo: 'accesso', conteggio: '0', spento: true, acceso: false },
+      { testo: 'Accesso non dichiarato1', valore: 'non-dichiarato', gruppo: 'accesso', conteggio: '1', spento: false, acceso: false },
       { testo: 'Con licenza7', valore: 'dichiarata', gruppo: 'licenza', conteggio: '7', spento: false, acceso: false },
       { testo: 'Senza licenza1', valore: 'non-dichiarata', gruppo: 'licenza', conteggio: '1', spento: false, acceso: false },
     ]);
 
-    /* Le tre faccette a select, con l'etichetta SOPRA (`.facet-select` del mockup), la prima voce
+    /* Le quattro faccette a select, con l'etichetta SOPRA (`.facet-select` del mockup), la prima voce
        «Qualsiasi» e i conteggi nelle voci. Una voce a ZERO non porta il numero: `(0)` si leggerebbe
        «contati: nessuno», mentre quel valore non è stato contato perché non c'è. */
     const faccette = await page.locator('[data-hf-faccetta]').evaluateAll((nodi) => nodi.map((s) => ({
@@ -189,20 +285,23 @@ test.describe('la lista Hugging Face col disegno del mockup', () => {
       voci: [...s.options].slice(1).map((o) => [o.textContent, o.disabled]),
     })));
     expect(faccette.map((f) => [f.chiave, f.etichetta, f.prima, f.scelta])).toEqual([
+      ['parametri', 'Parametri totali · miliardi', 'Qualsiasi', ''],
       ['popolarita', 'Popolarità · download', 'Qualsiasi', ''],
       ['tipo', 'Tipo · pipeline', 'Qualsiasi', ''],
       ['autore', 'Autore · organizzazione', 'Qualsiasi', ''],
     ]);
-    expect(faccette[0].voci).toEqual([
+    expect(faccette[0].voci.at(-1)).toEqual(['Parametri non dichiarati (8)', false]);
+    expect(faccette[0].voci.slice(0, -1).every(([, disabilitata]) => disabilitata)).toBe(true);
+    expect(faccette[1].voci).toEqual([
       ['Oltre 100.000 (7)', false], ['Da 100.000 a 10.000', true], ['Da 10.000 a 1.000 (1)', false],
       ['Fino a 1.000', true], ['Download non dichiarati', true],
     ]);
-    expect(faccette[1].voci).toEqual([['Immagini e testo (3)', false], ['Conversazione e codice (3)', false], ['Tipo non dichiarato (2)', false]]);
-    expect(faccette[2].voci).toEqual([['unsloth (2)', false], ['cdiamond (1)', false], ['HauhauCS (1)', false], ['huihui-ai (1)', false], ['JonathanColetti (1)', false], ['lmstudio-community (1)', false], ['RichardErkhov (1)', false]]);
+    expect(faccette[2].voci).toEqual([['Immagini e testo (3)', false], ['Conversazione e codice (3)', false], ['Tipo non dichiarato (2)', false]]);
+    expect(faccette[3].voci).toEqual([['unsloth (2)', false], ['cdiamond (1)', false], ['HauhauCS (1)', false], ['huihui-ai (1)', false], ['JonathanColetti (1)', false], ['lmstudio-community (1)', false], ['RichardErkhov (1)', false]]);
 
     /* La nota: dice a schermo ciò che la ricerca NON porta. È il posto dove il mockup ha
        «1B = un miliardo di parametri…», e la frase dev'essere la nostra. */
-    await expect(page.locator('#modelLabHfScoperta p.talos-muted')).toContainText('non sono nella risposta della ricerca');
+    await expect(page.locator('#modelLabHfScoperta p.talos-muted')).toContainText('parametri totali dichiarati');
 
     /* La testa dei risultati, e il pulsante di uscita che compare SOLO quando c'è qualcosa da
        azzerare: un comando sempre presente che non fa niente è un comando che mente. */
@@ -231,20 +330,25 @@ test.describe('la lista Hugging Face col disegno del mockup', () => {
     await disegna(page, RISULTATI_CON_GATED);
     await expect(righe(page)).toHaveCount(9);
 
-    /* OR dentro: due valori della STESSA faccetta si sommano — 8 aperti + 1 richiesto = 9. È la
+    /* OR dentro: i tre valori della STESSA faccetta si sommano — 7 aperti + 1 richiesto + 1 non
+       dichiarato = 9. L'assenza del metadato non viene scambiata per accesso aperto. È la
        prova che il conteggio di un valore non è un filtro esclusivo. */
     await chipDi(page, 'Accesso aperto').click();
-    await expect(righe(page)).toHaveCount(8);
+    await expect(righe(page)).toHaveCount(7);
     await chipDi(page, 'Accesso richiesto').click();
+    await expect(righe(page)).toHaveCount(8);
+    await chipDi(page, 'Accesso non dichiarato').click();
     await expect(righe(page)).toHaveCount(9);
     await expect(chipDi(page, 'Accesso aperto')).toHaveAttribute('aria-pressed', 'true');
     await expect(chipDi(page, 'Accesso richiesto')).toHaveAttribute('aria-pressed', 'true');
+    await expect(chipDi(page, 'Accesso non dichiarato')).toHaveAttribute('aria-pressed', 'true');
 
     /* AND fra faccette: si riparte senza filtri di accesso, si accende «Con licenza», e il risultato
        è l'INTERSEZIONE. Otto dei nove dichiarano la licenza (il gated della fixture dichiara
        «Gemma»); il nono è RichardErkhov, che non la dichiara. */
     await chipDi(page, 'Accesso aperto').click();
     await chipDi(page, 'Accesso richiesto').click();
+    await chipDi(page, 'Accesso non dichiarato').click();
     await expect(righe(page)).toHaveCount(9);
     await chipDi(page, 'Con licenza').click();
     await expect(righe(page)).toHaveCount(8);
@@ -463,10 +567,15 @@ test.describe('la lista Hugging Face col disegno del mockup', () => {
     await apriIlLaboratorio(page);
     await disegna(page, RISULTATI_VERI);
 
-    /* Due filtri che si escludono: «Immagini e testo» ∩ «lmstudio-community» è vuoto — i due
-       repository di lmstudio-community sono senza tipo dichiarato. */
-    await scegliFaccetta(page, 'tipo', 'image-text-to-text');
-    await scegliFaccetta(page, 'autore', 'lmstudio-community');
+    /* Le opzioni a conteggio zero sono correttamente disabilitate, quindi questa combinazione non è
+       producibile dal controllo visibile. Si inietta qui come stato difensivo (per esempio uno
+       snapshot ereditato) per provare che il modulo offre comunque una via d'uscita. */
+    await page.evaluate(() => {
+      const panel = document.querySelector('#modelLabHfPanel');
+      panel.__hfFiltri = { ...panel.__hfFiltri, tipo: ['image-text-to-text'], autore: ['lmstudio-community'] };
+      const ultimo = panel.__hfUltimo;
+      window.__hf.aggiornaHf(panel, ultimo.risultati, ultimo.opzioni);
+    });
     await expect(righe(page)).toHaveCount(0);
     await expect(page.locator('#modelLabHfResults')).toContainText('Nessun repository corrisponde ai filtri scelti.');
     await expect(page.locator('[data-hf-conteggio]')).toHaveText('0 modelli su 8 caricati');
@@ -550,8 +659,8 @@ test.describe('la lista Hugging Face col disegno del mockup', () => {
     const misto = [...RISULTATI_VERI, gated];
     const vuoti = mod.filtriHfVuoti();
 
-    /* OR dentro: i due valori di `accesso` sommati danno il totale. */
-    expect(mod.filtraRisultatiHf(misto, { ...vuoti, accesso: ['aperto', 'richiesto'] })).toHaveLength(9);
+    /* OR dentro: i tre valori di `accesso` sommati danno il totale; assente non significa aperto. */
+    expect(mod.filtraRisultatiHf(misto, { ...vuoti, accesso: ['aperto', 'richiesto', 'non-dichiarato'] })).toHaveLength(9);
     /* AND fra: accesso ∧ licenza. */
     expect(mod.filtraRisultatiHf(misto, { ...vuoti, accesso: ['richiesto'], licenza: ['dichiarata'] })).toHaveLength(1);
     expect(mod.filtraRisultatiHf(misto, { ...vuoti, accesso: ['richiesto'], licenza: ['non-dichiarata'] })).toHaveLength(0);
@@ -584,7 +693,7 @@ test.describe('la lista Hugging Face col disegno del mockup', () => {
     /* Un filtro che non esiste più — un valore inventato, o un autore sparito dai risultati — si
        SCARTA: senza, un filtro rimasto da un'altra ricerca svuoterebbe la lista senza che nessun
        controllo a schermo lo mostri. */
-    expect(mod.normalizzaFiltriHf({ accesso: ['boh', 'aperto', 'aperto'], autore: ['non-esiste'] }, RISULTATI_VERI)).toEqual({ ...vuoti, accesso: ['aperto'] });
+    expect(mod.normalizzaFiltriHf({ accesso: ['boh', 'aperto', 'aperto'], autore: ['non-esiste'] }, RISULTATI_VERI)).toEqual({ ...vuoti, accesso: ['aperto'], autore: ['non-esiste'] });
   });
 
   test('HF-LISTA-11 — la lista vista nei due temi, a 1440 e a 1024', async ({ page }) => {
@@ -607,7 +716,7 @@ test.describe('la lista Hugging Face col disegno del mockup', () => {
         /* ⛔ E LA FOTO SI GUARDA: la barra c'è, i chip hanno i loro numeri, i gruppi sono tre, e le
            righe sono nove. Una fotografia di una superficie vuota non prova niente. */
         await expect(page.locator('#modelLabHfScoperta')).toBeVisible();
-        await expect(page.locator('[data-hf-chip]')).toHaveCount(5);
+        await expect(page.locator('[data-hf-chip]')).toHaveCount(6);
         await expect(page.locator('[data-hf-gruppo]')).toHaveCount(3);
         await expect(righe(page)).toHaveCount(9);
         /* E il tema è DAVVERO quello chiesto: nel chiaro la radice porta `data-theme="light"`. */
@@ -644,3 +753,62 @@ test.describe('la lista Hugging Face col disegno del mockup', () => {
  *  R11 `creaRigaHf`, `data-hf-revisione` tolto → 06 rossa.
  *  R12 `creaBarraScopertaHf`, `aria-live`/`role` tolti dal conteggio → 07 rossa.
  */
+
+
+test('RIPRESA-HF-FILTRI-DIGITATI — autore e tag cercano senza Invio, Invio non duplica il timer', async ({ page }) => {
+  const calls = [];
+  await apriHfHttp(page, async route => {
+    calls.push(Object.fromEntries(new URL(route.request().url()).searchParams));
+    await route.fulfill({ json: { ok: true, data: { items: paginaHfFixture(0, 20), nextCursor: null } } });
+  });
+  const author = page.locator('#modelLabHfAuthorControl');
+  await author.fill('publisher');
+  await expect.poll(() => calls.filter(c => c.author === 'publisher').length).toBe(1);
+  const tags = page.locator('#modelLabHfFiltersControl');
+  await tags.fill('q4');
+  await expect.poll(() => calls.filter(c => c.filter === 'q4').length).toBe(1);
+  await tags.fill('q8');
+  await tags.press('Enter');
+  await expect.poll(() => calls.filter(c => c.filter === 'q8').length).toBe(1);
+  await page.waitForTimeout(650);
+  expect(calls.filter(c => c.filter === 'q8')).toHaveLength(1);
+  await author.fill('');
+  await expect.poll(() => calls.at(-1).author ?? '').toBe('');
+});
+
+
+test('RIPRESA-HF-FACCETTA-PERSISTENTE — autore della seconda pagina sopravvive a reload e rientro', async ({ page }) => {
+  const repo = 'second-page/model';
+  const revision = 'a'.repeat(40);
+  let hold = false;
+  const pending = [];
+  const second = { items: [{ ...paginaHfFixture(20, 1)[0], repo }], nextCursor: null };
+  await page.route('**/api/v1/huggingface/repo?**', route => route.fulfill({ json: { ok: true, data: {
+    repo, revision, readme: '# Modello seconda pagina', files: [], gated: false, license: 'mit',
+  } } }));
+  await apriHfHttp(page, async route => {
+    const cursor = new URL(route.request().url()).searchParams.get('cursor');
+    if (cursor && hold) { pending.push(route); return; }
+    await route.fulfill({ json: { ok: true, data: cursor ? second : { items: paginaHfFixture(0, 20), nextCursor: 'seconda' } } });
+  });
+  await page.locator('#modelLabHfNextButtonControl').scrollIntoViewIfNeeded();
+  await expect(righe(page)).toHaveCount(21);
+  await scegliFaccetta(page, 'autore', 'second-page');
+  await expect(righe(page)).toHaveCount(1);
+  await page.locator(`[data-hf="${repo}"]`).click();
+  await expect(page.locator('#paginaModello')).toBeVisible();
+  hold = true;
+  await page.reload();
+  await expect(page.locator('#paginaModello [data-modello-indietro]')).toBeVisible();
+  await page.locator('#paginaModello [data-modello-indietro]').click();
+  await expect(page.locator('#modelLabHfFaccetta-autore')).toHaveValue('second-page');
+  await expect(page.locator('#modelLabHfFaccetta-autore--calm')).toContainText('second-page');
+  await expect(righe(page)).toHaveCount(0);
+  await page.locator('#modelLabHfNextButtonControl').scrollIntoViewIfNeeded();
+  await expect.poll(() => pending.length).toBe(1);
+  await pending[0].fulfill({ json: { ok: true, data: second } });
+  await expect(righe(page)).toHaveCount(1);
+  await expect(page.locator('#modelLabHfFaccetta-autore')).toHaveValue('second-page');
+  await page.locator('[data-hf-azzera]').click();
+  await expect(righe(page)).toHaveCount(21);
+});

@@ -1,0 +1,86 @@
+[
+  {
+    "archive": "TALOS-Revisione-PR27-Calm04/05-sorgenti-e-patch/prodotto-4728659/baseline.mjs",
+    "blob": "3bbab54c51407bd9acd61305a384fbab7a7ecab8",
+    "matchedFiles": [
+      "harness-ui/frontend/tests/qualification/baseline.mjs"
+    ],
+    "match": true
+  },
+  {
+    "archive": "TALOS-Revisione-PR27-Calm04/05-sorgenti-e-patch/prodotto-4728659/calm-controls-real.mjs",
+    "blob": "be5f446f76d0131cf93260c1c185760eb88910c4",
+    "matchedFiles": [
+      "harness-ui/frontend/tests/qualification/calm-controls-real.mjs"
+    ],
+    "match": true
+  },
+  {
+    "archive": "TALOS-Revisione-PR27-Calm04/05-sorgenti-e-patch/prodotto-4728659/calm-controls.css",
+    "blob": "e50f66ab960345c36fc50e991ebf04c8673a057e",
+    "matchedFiles": [
+      "harness-ui/frontend/prototypes/calm-lab/shared/calm-controls.css",
+      "harness-ui/frontend/src/design-system/calm-controls.css"
+    ],
+    "match": true
+  },
+  {
+    "archive": "TALOS-Revisione-PR27-Calm04/05-sorgenti-e-patch/prodotto-4728659/calm-controls.js",
+    "blob": "190c2d9b0602d40f4200a7ac3cc8fb7796c01b0f",
+    "matchedFiles": [
+      "harness-ui/frontend/prototypes/calm-lab/shared/calm-controls.js",
+      "harness-ui/frontend/src/components/calm-controls.js"
+    ],
+    "match": true
+  },
+  {
+    "archive": "TALOS-Revisione-PR27-Calm04/05-sorgenti-e-patch/prodotto-4728659/custom-control-driver.mjs",
+    "blob": "28d07148ad94cee8d433a5fcdf652a8ce1d8b228",
+    "matchedFiles": [
+      "harness-ui/frontend/tests/qualification/custom-control-driver.mjs"
+    ],
+    "match": true
+  },
+  {
+    "archive": "TALOS-Revisione-PR27-Calm04/05-sorgenti-e-patch/prodotto-4728659/impostazioni-campi.js",
+    "blob": "c9b74c51c58e87098c9b9053f7e0c235dffe0158",
+    "matchedFiles": [
+      "harness-ui/frontend/src/components/impostazioni-campi.js"
+    ],
+    "match": true
+  },
+  {
+    "archive": "TALOS-Revisione-PR27-Calm04/05-sorgenti-e-patch/prodotto-4728659/main.js",
+    "blob": "05c5da80e43290bd8794bb97da2e1c9cc5658baa",
+    "matchedFiles": [
+      "harness-ui/frontend/src/main.js"
+    ],
+    "match": true
+  },
+  {
+    "archive": "TALOS-Revisione-PR27-Calm04/05-sorgenti-e-patch/prodotto-4728659/settings-models-real.mjs",
+    "blob": "c3c306ee3fc66c288505e527e096a766d3110a6c",
+    "matchedFiles": [
+      "harness-ui/frontend/tests/qualification/settings-models-real.mjs"
+    ],
+    "match": true
+  },
+  {
+    "archive": "TALOS-Revisione-PR27-Calm04/05-sorgenti-e-patch/prodotto-4728659/theme-studio.js",
+    "blob": "5b274e7f7ac3163c965a43c45f8d3436f87a9570",
+    "matchedFiles": [
+      "harness-ui/frontend/src/components/theme-studio.js"
+    ],
+    "match": true,
+    "githubContentsBlob": "5b274e7f7ac3163c965a43c45f8d3436f87a9570",
+    "note": "File invariato nella PR: verificato con contents API al pin, assente dal diff per questo motivo"
+  },
+  {
+    "archive": "TALOS-Revisione-PR27-Calm04/05-sorgenti-e-patch/prodotto-4728659/workspace-real.mjs",
+    "blob": "fddfb4b4d20972890a69b6a7c402d6a2e3f353da",
+    "matchedFiles": [
+      "harness-ui/frontend/tests/qualification/workspace-real.mjs"
+    ],
+    "match": true
+  }
+]

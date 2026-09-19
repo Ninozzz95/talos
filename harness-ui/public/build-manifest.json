@@ -8,13 +8,13 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 2321076,
-      "sha256": "b0b04c6c00495f43706c8c8980594ba92bedbe838ef87b2bc3ceb0ebaf061e80"
+      "bytes": 2466298,
+      "sha256": "52b9f6dbf6c84008f1cfbac88c594114e94bc48a8fd17b8c6c762b8825ed5f30"
     },
     {
       "path": "asset-manifest.json",
-      "bytes": 5121,
-      "sha256": "eef3a96e2bf8363b20e94b13d7cacff9d28697f676211b335e921b714c45312e"
+      "bytes": 5446,
+      "sha256": "1fca0c9a124abfb56923aac624b21adc0a8daca721f498b170d4d16925e61b42"
     },
     {
       "path": "avvio.js",
@@ -78,8 +78,8 @@
     },
     {
       "path": "styles.css",
-      "bytes": 421934,
-      "sha256": "fb964e77c842d42fc6c5a935a42a6d266dad130a709194f04b94b910863720e3"
+      "bytes": 440820,
+      "sha256": "c96134bca97e6aac267278b8736dcb6e522b7f236dcd7bba96126c1b963dc07a"
     },
     {
       "path": "talos/brand/logo-short.svg",
@@ -90,6 +90,16 @@
       "path": "talos/browser-annota.js",
       "bytes": 11646,
       "sha256": "fbc7d4ea66a0abf30b0b3a296122114df562fb7bf7fbe8448b0c2e8b48dce52a"
+    },
+    {
+      "path": "vendor/dagre/LICENSE-dagre",
+      "bytes": 1062,
+      "sha256": "6a349742a6cb219d5a2fc8d0844f6d89a6efc62e20c664450d884fc7ff2d6015"
+    },
+    {
+      "path": "vendor/dagre/LICENSE-graphlib",
+      "bytes": 1062,
+      "sha256": "6a349742a6cb219d5a2fc8d0844f6d89a6efc62e20c664450d884fc7ff2d6015"
     },
     {
       "path": "vendor/floating-ui/LICENSE-core",

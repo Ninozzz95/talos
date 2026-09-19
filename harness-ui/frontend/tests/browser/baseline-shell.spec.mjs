@@ -395,41 +395,16 @@ test('LAG-INTERACTION-DIALOG-38 — una modale pausa lo sfondo e la chiusura lo 
   await page.keyboard.press('Control+k');
   await expect(page.locator('#veloComandi')).toBeVisible();
 
-  /*
-   * ⛔⛔⛔ 18/09/2026 — QUESTA RIGA RESTA ROSSA, ED È UN DIFETTO DI PRODOTTO, non un puntatore.
-   *
-   * Con il velo APERTO le classi non cambiano: `html` e `body` restano `background-motion-active`
-   * e `background-motion-paused` non arriva mai (misurato due volte, a 300 ms e a 520 ms
-   * dall'apertura, `sonda-interazioni-2.mjs`). E non è il velo dei comandi a essere speciale:
-   * misurato con `sonda-modali.mjs` sulla stessa porta — il foglio «Modello»
-   * (`[data-open-sheet="model"]`) apre anche lui un velo (`veloModello`) e lascia le classi
-   * invariate. Cioè: **nessuna modale canonica pausa più lo sfondo**.
-   *
-   * Causa alla fonte, letta e non dedotta: `syncBackgroundDialogPause()` chiama
-   * `setBackgroundInteractionPause('dialog', commandDialog.open || sheetDialog.open)`
-   * (`src/legacy/app.js:14877-14878`) e i suoi due soli chiamanti stanno in `showEmbeddedDialog`
-   * (`app.js:2169`) e `closeEmbeddedDialog` (`app.js:2202`) — i due `<dialog>` LEGACY. Il cutover
-   * ha portato ogni foglio e ogni pannello sui veli `.overlay-layer`: `openCommandPalette()` passa
-   * da `apriVeloMockup('veloComandi')` e tocca il dialog solo nel ramo di ripiego, «se il velo non
-   * esiste» (`app.js:20959-20962`); `openSheet()` fa lo stesso con `VELO_PER_FOGLIO`
-   * (`app.js:7802-7811`, «torna `true` quando il velo ha preso il posto del foglio»). E
-   * `apriVeloMockup`/`chiudiVeloMockup` (`app.js:22431-22468`) non chiamano MAI la pausa. ⇒ Il
-   * meccanismo è intatto; è la sua unica porta d'ingresso che non è più quella.
-   *
-   * Ricerca 18/09/2026 (21st.dev, «Animated Backgrounds in React», ago 2026: su 155 sfondi
-   * censiti 67 girano un ciclo continuo e solo 6 si fermano quando nessuno guarda; ctxr-dev
-   * `skill-frontend-excellence`, `references/motion.md`: «pause all motion on a route change»):
-   * una modale a tutto schermo è esattamente la condizione «nessuno sta guardando», e il ciclo
-   * decorativo compete per lo stesso budget di 16,7 ms dell'animazione d'ingresso della modale.
-   * La regola del prodotto è quindi giusta — è il collegamento che manca.
-   */
+  // Il renderer deve fermarsi davvero dietro la modale, oltre a pubblicare lo stato.
   await expect(root).toHaveClass(/background-motion-active/);
   await expect(root).toHaveClass(/background-motion-paused/);
+  await expect.poll(() => page.evaluate(() => window.__talosDesktopMotion.status().running)).toBe(false);
 
   await page.locator('[data-chiudi="veloComandi"]').click();
   await expect(page.locator('#veloComandi')).toBeHidden();
   await expect(root).toHaveClass(/background-motion-active/);
   await expect(root).not.toHaveClass(/background-motion-paused/);
+  await expect.poll(() => page.evaluate(() => window.__talosDesktopMotion.status().running)).toBe(true);
 });
 
 test('LAG-INTERACTION-SCROLL-39 — lo scroll pausa lo sfondo solo durante il gesto', async ({ page }) => {
@@ -2372,13 +2347,7 @@ test('COMPOSER-SHAPE-FULL-WIDTH-01 — il toggle full width preserva ogni forma 
   }
 });
 
-test('COMPOSER-MOCKUP-HEIGHT-01 — ogni forma desktop conserva l’altezza canonica del mockup', async ({ page, context }) => {
-  const mockup = await context.newPage();
-  await mockup.setViewportSize({ width: 1440, height: 900 });
-  await mockup.goto(pathToFileURL(resolve(process.cwd(), '..', 'mockup-originale', 'index.html')).href);
-  const altezzaMockup = await mockup.locator('.composer').evaluate((composer) => composer.getBoundingClientRect().height);
-  expect(altezzaMockup).toBe(116);
-  await mockup.close();
+test('COMPOSER-LAYOUT-01 — forme leggibili, multilinea e altezza stabile al reload', async ({ page }) => {
 
   for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 800 }]) {
     await page.setViewportSize(viewport);
@@ -2403,7 +2372,8 @@ test('COMPOSER-MOCKUP-HEIGHT-01 — ogni forma desktop conserva l’altezza cano
           toolbarTop: toolbar.getBoundingClientRect().top,
         };
       });
-      expect(Math.abs(misura.height - altezzaMockup), `${viewport.width}px · ${forma}`).toBeLessThanOrEqual(1);
+      expect(misura.height).toBeGreaterThan(80);
+      const altezzaIniziale = misura.height;
       expect(misura.inputBottom, `${viewport.width}px · ${forma} · input`).toBeLessThanOrEqual(misura.toolbarTop + 1);
 
       await page.locator('#composerInput').fill('Prima riga\nSeconda riga');
@@ -2412,12 +2382,13 @@ test('COMPOSER-MOCKUP-HEIGHT-01 — ogni forma desktop conserva l’altezza cano
         inputBottom: composer.querySelector('textarea').getBoundingClientRect().bottom,
         toolbarTop: composer.querySelector('.talos-composer__bar').getBoundingClientRect().top,
       }));
-      expect(multilinea.height).toBeGreaterThanOrEqual(altezzaMockup);
+      expect(multilinea.height).toBeGreaterThanOrEqual(altezzaIniziale);
       expect(multilinea.inputBottom).toBeLessThanOrEqual(multilinea.toolbarTop + 1);
 
       await page.reload();
+      await page.locator('.talos-nav-item[data-vaia="chat"]').click();
       const dopoReload = await page.locator('#composerForm').evaluate((composer) => composer.getBoundingClientRect().height);
-      expect(Math.abs(dopoReload - altezzaMockup), `${viewport.width}px · ${forma} · reload`).toBeLessThanOrEqual(1);
+      expect(Math.abs(dopoReload - altezzaIniziale), `${viewport.width}px · ${forma} · reload`).toBeLessThanOrEqual(1);
     }
   }
 });
@@ -2645,4 +2616,208 @@ test('LAG-LIVE-INCREMENTAL-40 — i blocchi già chiusi non vengono ricreati a o
   expect(result.ul).toBe(1);
   expect(result.testo).toContain('riga 39 della coda');
   expect(result.ultimoP).toContain('riga 0 della coda');
+});
+
+
+for (const width of [1440, 390]) {
+  test(`RIPRESA-SFONDO-RIAPERTURA — pixel, navigazione e movimento ridotto a ${width}`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.addInitScript(() => {
+      if (window !== window.top) return;
+      localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
+        version: 1, appearance: { backgroundMotion: true, motionMode: 'adaptive', reducedMotion: false, colorMode: 'dark' },
+      }));
+    });
+    await page.goto('/');
+    const navigate = async (view) => {
+      if (width <= 860) await page.locator('#apriCassettoBarra').click();
+      await page.locator(`.talos-sidebar [data-vaia="${view}"]`).first().click();
+      await expect(page.locator(view === 'chat' ? '#schermoChat' : '#schermoHome')).toBeVisible();
+    };
+    await navigate('chat');
+    const canvas = page.locator('#schermoChat > canvas.talos-motion-canvas');
+    await expect(canvas).toBeVisible();
+    const state = () => page.evaluate(() => window.__talosDesktopMotion.status());
+    await expect.poll(async () => (await state()).running).toBe(true);
+    const pixels = async (name) => PNG.sync.read(await canvas.screenshot({ path: testInfo.outputPath(name), caret: 'hide' }));
+    const changes = (a, b) => {
+      expect([a.width, a.height]).toEqual([b.width, b.height]);
+      return pixelmatch(a.data, b.data, null, a.width, a.height, { threshold: 0, includeAA: true });
+    };
+    const before = await pixels('sfondo-prima.png');
+    const first = await state();
+    await page.waitForTimeout(700);
+    const during = await pixels('sfondo-durante.png');
+    expect((await state()).frames).toBeGreaterThan(first.frames);
+    expect(changes(before, during), 'il canvas deve cambiare anche nei pixel compositati').toBeGreaterThan(0);
+    await navigate('home');
+    await expect.poll(async () => (await state()).running).toBe(false);
+    await navigate('chat');
+    const reopened = await state();
+    await expect.poll(async () => (await state()).frames).toBeGreaterThan(reopened.frames);
+    await expect(canvas).toHaveAttribute('data-scene-status', 'animating');
+    const input = page.locator('#composerInput');
+    await input.click();
+    await expect(input).toBeFocused();
+    await input.fill('La superficie resta interattiva');
+    await expect(input).toHaveValue('La superficie resta interattiva');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect.poll(async () => (await state()).running).toBe(false);
+    await expect(canvas).toHaveAttribute('data-scene-status', 'reduced');
+    // Togliere il cursore del campo dalla superficie fotografata, senza cambiare lo sfondo.
+    await input.blur();
+    await page.waitForTimeout(350);
+    const calm = await pixels('sfondo-ridotto-prima.png');
+    const stopped = await state();
+    await page.waitForTimeout(700);
+    expect(changes(calm, await pixels('sfondo-ridotto-dopo.png'))).toBe(0);
+    expect((await state()).frames).toBe(stopped.frames);
+  });
+}
+
+async function ripresaChatLunga(page, full = false) {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(full => localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { chatFullWidth: full, interfaceMotion: false, backgroundMotion: false } })), full);
+  await page.route('**/api/v1/sessions/ripresa-chat-geometry/events*', () => {});
+  await apriChat(page);
+  await page.evaluate(() => {
+    const r = window.__talosHarnessUiRuntime;
+    r.passaASessione('ripresa-chat-geometry', 'workspace', 'Prova geometria', 'local:prova', { conclusa: true });
+    for (const event of [
+      { type: 'RunStarted', input: { consegna: 'Descrivi il progetto' } },
+      { type: 'TextMessageContent', messageId: 'geometry', delta: Array.from({length:60}, (_,i) => `Paragrafo ${i+1}: ${'Il testo deve avere una misura leggibile. '.repeat(12)}\n\n`).join('') },
+      { type: 'TextMessageEnd', messageId: 'geometry' }, { type: 'RunFinished' },
+    ]) r.handleRealEvent(event, r.realSessionState.generation);
+  });
+  await expect(page.locator('#conversation .is-streaming')).toHaveCount(0);
+}
+test('RIPRESA-CHAT-768 — misura predefinita e tutta larghezza dal controllo reale', async ({ page }) => {
+  await ripresaChatLunga(page);
+  const copy = page.locator('#conversation .talos-message').last();
+  await expect(copy).toBeVisible();
+  const before = await copy.boundingBox();
+  expect(Math.abs(before.width - 768)).toBeLessThanOrEqual(1);
+  const composerWidth = (await page.locator('#composerForm').boundingBox()).width;
+  await page.locator('[data-vaia="impostazioni"]').click();
+  await page.locator('#setting-tab-chat').click();
+  await page.locator('[data-setting-row="chatFullWidthToggle"] button[role="switch"]').click();
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+  await expect.poll(async () => (await copy.boundingBox()).width).toBeGreaterThan(before.width + 100);
+  expect(Math.abs((await page.locator('#composerForm').boundingBox()).width - composerWidth)).toBeLessThanOrEqual(1);
+});
+for (const full of [false, true]) test(`RIPRESA-COMPOSER-RITORNO ${full} — due assi, ritorno colpibile e persistenza`, async ({ page }) => {
+  await ripresaChatLunga(page, full);
+  const form = page.locator('#composerForm'), handle = page.locator('#composerResizeHandle');
+  const before = await form.boundingBox();
+  await handle.focus();
+  for (let i=0;i<8;i++) await handle.press('ArrowRight');
+  await handle.press('ArrowUp');
+  const resized = await form.boundingBox();
+  expect(resized.width).toBeLessThan(before.width - 80);
+  expect(resized.height).toBeGreaterThan(before.height + 10);
+  const scroller = page.locator('#schermoChat .talos-conversation');
+  await scroller.hover(); await page.mouse.wheel(0, -20000);
+  const down = page.locator('#chatTornaInFondo'); await expect(down).toBeVisible();
+  // RIPRESA-RITORNO-CENTRATO: il centro resta quello del testo dopo resize nei due assi.
+  const centerDelta = async () => {
+    const b=await down.boundingBox(), text=await page.locator('#conversation .talos-message').last().boundingBox();
+    return Math.abs(b.x+b.width/2-text.x-text.width/2);
+  };
+  await expect.poll(centerDelta).toBeLessThanOrEqual(1);
+
+  expect(await down.evaluate(b => { const r=b.getBoundingClientRect(); return b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })).toBe(true);
+  const topBefore = await scroller.evaluate(e => e.scrollTop);
+  await handle.focus(); await handle.press('ArrowUp');
+  await expect(down).toBeVisible();
+  expect(Math.abs(await scroller.evaluate(e => e.scrollTop) - topBefore)).toBeLessThan(5);
+  await expect.poll(centerDelta).toBeLessThanOrEqual(1);
+  await down.click(); await expect(down).toBeHidden();
+  // Trascinamento reale: entrambi gli assi devono rispondere e restare dentro il piede.
+  const h = await handle.boundingBox(), pointerBefore = await form.boundingBox();
+  await page.mouse.move(h.x+h.width/2,h.y+h.height/2); await page.mouse.down();
+  await page.mouse.move(h.x+h.width/2-30,h.y+h.height/2-25,{steps:5}); await page.mouse.up();
+  const pointerAfter = await form.boundingBox();
+  expect(pointerAfter.width).toBeGreaterThan(pointerBefore.width+25);
+  expect(pointerAfter.height).toBeGreaterThan(pointerBefore.height+15);
+  const foot = await page.locator('#schermoChat .talos-chat-foot').boundingBox();
+  expect(pointerAfter.x).toBeGreaterThanOrEqual(foot.x);
+  expect(pointerAfter.x+pointerAfter.width).toBeLessThanOrEqual(foot.x+foot.width+1);
+  await expect(down).toBeHidden();
+  await page.reload(); await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+  expect(Math.abs((await form.boundingBox()).width-pointerAfter.width)).toBeLessThanOrEqual(2);
+  expect(Math.abs((await form.boundingBox()).height-pointerAfter.height)).toBeLessThanOrEqual(2);
+});
+test('RIPRESA-ASPETTO-RESET — reset completo visuale, altre preferenze conservate e reload', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('ripresaResetSeed')) return;
+    sessionStorage.setItem('ripresaResetSeed','1');
+    localStorage.setItem('talos.harness.desktop.settings.v1',JSON.stringify({version:1,appearance:{chatFullWidth:true,colorMode:'light',uiDensity:'compatta',backgroundMotion:true,backgroundMotionVersione:2},chat:{showReasoning:true},workspaces:{prova:{expandedPaths:['src'],filter:'test'}}}));
+    localStorage.setItem('talos-harness-composer-size-v1',JSON.stringify({width:500,height:250}));
+  });
+  await apriChat(page);
+  await page.locator('[data-vaia="impostazioni"]').click();
+  await page.locator('#setting-tab-appearance').click();
+  await expect(page.locator('html')).toHaveAttribute('data-density','compact');
+  await expect(page.locator('html')).toHaveAttribute('data-densita','compatta');
+  await expect(page.locator('html')).toHaveClass(/chat-full-width/);
+  await expect(page.locator('html')).toHaveAttribute('data-talos-color-mode','light');
+  const reset=page.getByRole('button',{name:/^(Ripristina tutto l’aspetto|Reset all appearance)$/});
+  await expect(reset).toBeVisible(); await reset.click();
+  await expect(page.locator('html')).not.toHaveClass(/chat-full-width/);
+  const saved=await page.evaluate(()=>({doc:JSON.parse(localStorage.getItem('talos.harness.desktop.settings.v1')),size:localStorage.getItem('talos-harness-composer-size-v1')}));
+  expect(saved.doc.appearance).toEqual({}); expect(saved.doc.chat.showReasoning).toBe(true); expect(saved.doc.workspaces.prova).toEqual({expandedPaths:['src'],filter:'test'}); expect(saved.size).toBeNull();
+  await expect(page.locator('html')).not.toHaveAttribute('data-density','compact');
+  await expect(page.locator('html')).not.toHaveAttribute('data-densita','compatta');
+  await expect(page.locator('html')).toHaveAttribute('data-talos-color-mode','system');
+  await page.reload(); await expect(page.locator('html')).not.toHaveClass(/chat-full-width/);
+  await expect(page.locator('html')).not.toHaveAttribute('data-density','compact');
+  await expect(page.locator('html')).not.toHaveAttribute('data-densita','compatta');
+});
+
+
+test('RIPRESA-ASPETTO-RESET-STORAGE — errore del secondo archivio dichiarato e dati futuri conservati', async ({ page }) => {
+  const future = JSON.stringify({ version: 99, density: 'compact', ownerData: 'conservare' });
+  await page.addInitScript(value => {
+    localStorage.setItem('talos.desktop.workspace.v2', value);
+    localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({version:1,appearance:{chatFullWidth:true}}));
+  }, future);
+  await apriChat(page);
+  await page.locator('[data-vaia="impostazioni"]').click();
+  await page.locator('#setting-tab-appearance').click();
+  await page.locator('[data-reset-appearance]').click();
+  await expect(page.locator('[data-settings-save]')).toHaveAttribute('data-state','unsaved');
+  expect(await page.evaluate(() => localStorage.getItem('talos.desktop.workspace.v2'))).toBe(future);
+  await expect(page.locator('html')).not.toHaveClass(/chat-full-width/);
+});
+
+for (const width of [1024, 1440]) for (const mode of ['dark', 'light']) test(`RIPRESA-RITORNO-TRASPARENTE ${width} ${mode} — chat dipinta e scorrevole dietro il tondo`, async ({ page }, testInfo) => {
+  await ripresaChatLunga(page, width === 1440);
+  await page.setViewportSize({ width, height: width === 1024 ? 800 : 900 });
+  await page.emulateMedia({ colorScheme: mode });
+  const scroller = page.locator('#schermoChat .talos-conversation'), down = page.locator('#chatTornaInFondo');
+  await scroller.hover(); await page.mouse.wheel(0, -20000); await expect(down).toBeVisible();
+  await page.locator('#composerResizeHandle').focus(); await page.locator('#composerResizeHandle').press('ArrowUp');
+  const b = await down.boundingBox(), s = await scroller.boundingBox();
+  expect(b.y, 'tondo dentro la superficie che scorre').toBeGreaterThanOrEqual(s.y);
+  expect(b.y + b.height).toBeLessThanOrEqual(s.y + s.height + 1);
+  expect(await page.locator('.talos-chat-return').evaluate(e => e.getBoundingClientRect().height)).toBe(0);
+  const x = Math.round(b.x - 210), y = Math.round(b.y + 3);
+  expect(await scroller.evaluate((e, p) => e.contains(document.elementFromPoint(p.x, p.y)), { x: x + 100, y: y + 15 })).toBe(true);
+  const clip = { x, y, width: 190, height: 30 };
+  const before = PNG.sync.read(await page.screenshot({ clip, path: testInfo.outputPath('dietro-prima.png') }));
+  const top = await scroller.evaluate(e => e.scrollTop);
+  await page.mouse.move(x + 100, y + 15); await page.mouse.wheel(0, 37);
+  await expect.poll(() => scroller.evaluate(e => e.scrollTop)).toBeGreaterThan(top + 20);
+  const after = PNG.sync.read(await page.screenshot({ clip, path: testInfo.outputPath('dietro-dopo.png') }));
+  expect(pixelmatch(before.data, after.data, null, before.width, before.height, { threshold: .05 }), 'cambia il testo dipinto dietro la fascia').toBeGreaterThan(20);
+  const text = await page.locator('#conversation .talos-message').last().boundingBox();
+  expect(Math.abs(b.x + b.width / 2 - text.x - text.width / 2)).toBeLessThanOrEqual(1);
+  expect(await down.evaluate(e => { const r = e.getBoundingClientRect(); return e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); })).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('chat-trasparente.png'), fullPage: true });
+  const height = await scroller.evaluate(e => e.clientHeight);
+  await down.click(); await expect(down).toBeHidden();
+  expect(await scroller.evaluate(e => e.clientHeight)).toBe(height);
 });

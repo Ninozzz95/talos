@@ -1,0 +1,1335 @@
+<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TALOS · Laboratorio sidebar destra</title><meta name="description" content="Prototipo desktop offline File / Agenti, costruito sui token Calm verificati di Talos. Dati dimostrativi, nessuna chiamata al backend."><style>/* Estratto dai token Calm reali di Talos, index.css @13f65c15. Font non redistribuiti. */
+:root {
+color-scheme:dark;
+--talos-background:#1e1f22; --talos-panel:#25262a; --talos-panel-soft:#2b2c30; --talos-card:#313237;
+--talos-window-bg:#17181b; --talos-text:#f3f0e9; --talos-assistant-text:#d6d2ca; --talos-muted:#9c9da2;
+--talos-border:#36373b; --talos-border-strong:#4a4b50;
+--talos-accent:#c08b3c; --talos-accent-hover:#d7a554; --talos-accent-soft:rgba(192,139,60,.14);
+--talos-accent-border:rgba(192,139,60,.34); --talos-accent-text:#f0c783; --talos-secondary:#8daaa2;
+--talos-success:#77a884; --talos-warning:#d4a558; --talos-danger:#d87d72; --talos-info:#7f9fc4;
+--talos-font-ui:"Instrument Sans",Inter,ui-sans-serif,system-ui,sans-serif;
+--talos-font-display:var(--talos-font-ui); --talos-font-mono:"JetBrains Mono","SFMono-Regular",Consolas,monospace;
+--talos-font-size-xs:.75rem; --talos-font-size-sm:.875rem; --talos-font-size-md:1rem; --talos-font-size-lg:1.25rem;
+--talos-space-page:clamp(1.5rem,4vw,4.5rem); --talos-space-section:clamp(1.5rem,3vw,2.5rem);
+--talos-space-card:1.25rem; --talos-space-control:.75rem; --talos-space-inline:.625rem;
+--talos-space-xs:.25rem; --talos-space-sm:.5rem; --talos-space-md:1rem; --talos-space-lg:1.5rem;
+--talos-radius-card:12px; --talos-radius-control:12px; --talos-radius-pill:999px;
+--talos-touch-target:2.25rem; --talos-control-height:2.25rem; --talos-primary-height:2.5rem; --talos-icon-size:1.125rem;
+--talos-motion-duration-control:160ms; --talos-motion-duration-surface-enter:180ms; --talos-motion-duration-surface-exit:150ms; --talos-motion-duration-tab-change:180ms;
+--talos-motion-ease:cubic-bezier(.2,.7,.2,1); --talos-motion-ease-exit:ease-in;
+--talos-ring:#d8a650; --talos-ring-soft:rgba(192,139,60,.09); --talos-focus-width:2px; --talos-focus-offset:3px;
+--talos-z-app-overlay:100; --talos-z-menu:120; --talos-z-tooltip:130;
+--talos-text-on-accent:#151411; --talos-card-subtle:color-mix(in srgb,var(--talos-text) 2%,transparent);
+--talos-card-hover:color-mix(in srgb,var(--talos-text) 5%,transparent); --talos-card-faint:color-mix(in srgb,var(--talos-text) .8%,transparent);
+--talos-border-subtle:color-mix(in srgb,var(--talos-border) 70%,transparent); --talos-overlay:rgba(9,10,12,.62);
+--talos-shadow-card:0 8px 24px rgba(0,0,0,.18); --talos-shadow-floating:0 18px 52px rgba(0,0,0,.28);
+--talos-success-soft:rgba(119,168,132,.13); --talos-success-border:rgba(119,168,132,.25);
+--talos-warning-soft:rgba(212,165,88,.14); --talos-warning-border:rgba(212,165,88,.4);
+--talos-danger-soft:rgba(216,125,114,.13); --talos-danger-border:rgba(216,125,114,.4);
+--talos-info-soft:rgba(127,159,196,.14); --talos-info-border:rgba(127,159,196,.35);
+--talos-measure-measured:var(--talos-text); --talos-measure-estimated:var(--talos-muted);
+--talos-sidebar-w:276px; --talos-inspector-w:340px; --talos-topbar-h:60px; --talos-measure-w:768px;
+--talos-row-session:66px; --talos-row:44px; --talos-row-pad:12px; --talos-gap:10px;
+}
+
+/* Laboratory-only composition. Palette and radii reuse Calm tokens; standalone geometry is not a production component port. */
+*{box-sizing:border-box} [hidden]{display:none!important} html,body{margin:0;height:100%;overflow:hidden}body{font-family:var(--talos-font-ui);font-size:var(--talos-font-size-sm);color:var(--talos-text);background:var(--talos-background)}button,input,select,textarea{font:inherit;color:inherit}button,select{cursor:pointer}button{background:transparent;border:1px solid transparent;border-radius:var(--talos-radius-control);min-height:32px;padding:6px 10px;display:inline-flex;align-items:center;justify-content:center;gap:6px}button:hover{background:var(--talos-card-hover)}button:disabled{opacity:.4;cursor:not-allowed}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:var(--talos-focus-width) solid var(--talos-ring);outline-offset:2px}input,select,textarea{background:var(--talos-panel-soft);border:1px solid var(--talos-border);border-radius:var(--talos-radius-control);padding:8px 10px;min-width:0}input[type=range]{padding:0;accent-color:var(--talos-accent)}input[type=checkbox]{accent-color:var(--talos-accent)}a{color:var(--talos-accent-text)}.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}.muted{color:var(--talos-muted)}.mono,code,pre{font-family:var(--talos-font-mono)}.small{font-size:12px}.eyebrow{font-size:11px;letter-spacing:.09em;text-transform:uppercase;font-weight:600;color:var(--talos-muted)}h1,h2,h3,p{margin:0}h1{font-size:15px;font-weight:600}h2{font-size:21px;font-weight:600;letter-spacing:-.02em}h3{font-size:14px;font-weight:600}p{line-height:1.65}.grow{flex:1;min-width:0}.row{display:flex;align-items:center;gap:8px;min-width:0}.wrap{flex-wrap:wrap}.stack{display:flex;flex-direction:column;gap:12px}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.btn{border-color:var(--talos-border);background:var(--talos-panel-soft)}.primary{background:var(--talos-accent);color:var(--talos-text-on-accent);border-color:var(--talos-accent);font-weight:600}.primary:hover{background:var(--talos-accent-hover)}.danger{color:var(--talos-danger)}.good{color:var(--talos-success)}.warn{color:var(--talos-warning)}.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:var(--talos-radius-pill);font-size:11px;background:var(--talos-panel-soft);border:1px solid var(--talos-border);white-space:nowrap}.badge.accent{color:var(--talos-accent-text);border-color:var(--talos-accent-border);background:var(--talos-accent-soft)}.badge.good{background:var(--talos-success-soft);border-color:var(--talos-success-border)}.badge.warn{background:var(--talos-warning-soft);border-color:var(--talos-warning-border)}.badge.danger{background:var(--talos-danger-soft);border-color:var(--talos-danger-border)}.dot{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block}.labbar{height:36px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--talos-border);background:var(--talos-window-bg);gap:12px;font-size:12px}.labbar button{font-size:12px;min-height:28px;padding:3px 8px}.shell{height:calc(100% - 36px);display:grid;grid-template-columns:var(--talos-sidebar-w) minmax(0,1fr) var(--inspector,380px);min-width:1050px}.talos-sidebar{display:flex;flex-direction:column;background:var(--talos-panel);border-right:1px solid var(--talos-border);min-height:0;padding:16px 12px 8px}.brand{font-size:20px;font-weight:600;letter-spacing:.13em;height:42px;padding:0 10px}.brand small{font-size:10px;letter-spacing:.08em;margin-left:auto;color:var(--talos-muted)}.navgroup{margin:20px 4px 14px}.navgroup .eyebrow{padding:0 10px 8px;display:block}.navitem{justify-content:flex-start;width:100%;height:36px;color:var(--talos-assistant-text);border-radius:var(--talos-radius-control)}.navitem.active{background:var(--talos-accent-soft);color:var(--talos-accent-text)}.sessions{flex:1;overflow:auto;border-top:1px solid var(--talos-border);padding-top:14px;min-height:0}.session{width:100%;text-align:left;display:block;padding:12px;margin-top:7px;border:1px solid transparent}.session.selected{background:var(--talos-card-subtle);border-color:var(--talos-accent-border)}.session b{display:block;font-size:13px;margin-bottom:5px;font-weight:500}.session .small{font-size:11px}.sidebar-foot{border-top:1px solid var(--talos-border);padding:12px 8px 2px}.main{min-width:0;display:flex;flex-direction:column;overflow:hidden}.topbar{min-height:var(--talos-topbar-h);border-bottom:1px solid var(--talos-border);padding:10px 20px;display:flex;gap:12px;align-items:center}.topbar .path{font-size:11px;color:var(--talos-muted);margin-top:3px}.center-tabs{display:flex;gap:3px;border-bottom:1px solid var(--talos-border);height:42px;padding:4px 12px;overflow-x:auto;flex-shrink:0}.center-tabs button{font-size:12px;white-space:nowrap}.center-tabs button[aria-pressed=true]{background:var(--talos-panel-soft);color:var(--talos-accent-text)}.center-body{flex:1;min-height:0;overflow:auto;position:relative}.chat{max-width:var(--talos-measure-w);padding:36px 36px 24px;margin:auto;display:flex;flex-direction:column;gap:30px}.msg-head{font-size:11px;color:var(--talos-muted);display:flex;gap:10px;align-items:center;margin-bottom:12px}.msg-head b{letter-spacing:.1em;color:var(--talos-accent-text);font-size:11px}.user-msg{border:1px solid var(--talos-border);border-radius:var(--talos-radius-card);padding:16px 20px;background:var(--talos-card-subtle)}.assistant-copy{color:var(--talos-assistant-text);font-size:15px;line-height:1.8}.toolgroup{border:1px solid var(--talos-border);border-radius:var(--talos-radius-card);margin:16px 0;overflow:hidden}.toolrow{padding:11px 14px;border-bottom:1px solid var(--talos-border-subtle);display:flex;align-items:center;gap:10px;font-size:12px}.toolrow:last-child{border-bottom:0}.checkpoint{border-left:2px solid var(--talos-accent);padding:0 0 0 16px}.composer-wrap{max-width:var(--talos-measure-w);width:100%;margin:auto;padding:0 28px 24px}.composer{border:1px solid var(--talos-border-strong);border-radius:var(--talos-radius-card);background:var(--talos-panel);overflow:hidden}.composer textarea{border:0;background:transparent;resize:none;width:100%;min-height:72px;outline:none;padding:16px}.composer-bar{padding:0 10px 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.composer button{font-size:12px}.talos-inspector{background:var(--talos-panel);border-left:1px solid var(--talos-border);position:relative;display:flex;flex-direction:column;min-width:0;min-height:0}.resizer{position:absolute;top:0;bottom:0;left:-4px;width:8px;cursor:col-resize;z-index:6}.resizer:hover{background:var(--talos-accent-soft)}#railTabs{height:var(--talos-topbar-h);display:flex;align-items:stretch;border-bottom:1px solid var(--talos-border);padding:10px 8px;gap:3px;flex-shrink:0}#railTabs button{border-radius:var(--talos-radius-control);font-size:12px;flex:1;position:relative}#railTabs button[aria-selected=true]{background:var(--talos-accent-soft);color:var(--talos-accent-text);font-weight:600}.rail-panel{min-height:0;flex:1;display:flex;flex-direction:column;overflow:hidden}.rail-top{padding:16px 16px 12px;border-bottom:1px solid var(--talos-border-subtle);display:flex;flex-direction:column;gap:12px}.searchbox{display:flex;align-items:center;border:1px solid var(--talos-border);border-radius:var(--talos-radius-control);background:var(--talos-panel-soft);padding:0 10px;gap:6px}.searchbox input{background:none;border:0;border-radius:0;outline:none;width:100%;padding-left:0;font-size:12px}.searchbox:focus-within{outline:2px solid var(--talos-ring)}.searchbox .i{color:var(--talos-muted);width:16px}.filters{display:flex;gap:4px;flex-wrap:wrap}.filters button{font-size:11px;min-height:26px;padding:4px 8px;border-radius:var(--talos-radius-pill);color:var(--talos-muted)}.filters button[aria-pressed=true]{border-color:var(--talos-accent-border);color:var(--talos-accent-text);background:var(--talos-accent-soft)}.scroll{overflow:auto;min-height:0;flex:1;scrollbar-width:thin;scrollbar-color:var(--talos-border-strong) transparent}.section-label{display:flex;align-items:center;gap:6px;padding:12px 16px 6px;font-size:11px;color:var(--talos-muted)}.tree{padding:2px 8px 12px}.folder{min-height:30px;font-size:12px;display:flex;align-items:center;color:var(--talos-assistant-text);gap:6px;padding:0 8px;cursor:pointer;border-radius:var(--talos-radius-control)}.file-row{min-height:36px;display:flex;align-items:center;gap:5px;padding:3px 7px;border:1px solid transparent;border-radius:var(--talos-radius-control);font-size:12px;cursor:pointer}.file-row:hover,.folder:hover{background:var(--talos-card-hover)}.file-row.selected{background:var(--talos-accent-soft);border-color:var(--talos-accent-border)}.file-row .i{width:15px;height:15px;color:var(--talos-muted)}.file-row .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-row .status{font-size:11px;color:var(--talos-warning);width:12px}.file-row button{padding:2px;min-height:25px;min-width:23px;font-size:11px}.file-row input{width:12px;height:12px;padding:0}.file-row .agent-indicator{color:var(--talos-accent-text);background:var(--talos-accent-soft)}.rail-foot{padding:12px 16px;border-top:1px solid var(--talos-border);background:var(--talos-panel);flex-shrink:0}.rail-foot .row{gap:6px}.rail-foot button{font-size:12px}.rail-foot .small{margin-bottom:8px}.agent-row{margin:0 8px;padding:12px 10px;display:flex;gap:10px;align-items:flex-start;border-bottom:1px solid var(--talos-border-subtle);cursor:pointer;min-height:90px}.agent-row:hover{background:var(--talos-card-hover);border-radius:var(--talos-radius-control)}.agent-icon{height:30px;width:30px;display:grid;place-items:center;border-radius:var(--talos-radius-control);background:var(--talos-panel-soft);border:1px solid var(--talos-border);flex-shrink:0;color:var(--talos-secondary)}.agent-row h3{font-size:13px}.agent-row p{font-size:12px;color:var(--talos-muted);margin:4px 0 7px;line-height:1.4}.detail{padding:16px;display:flex;flex-direction:column;gap:16px}.detail .task{background:var(--talos-card-subtle);border:1px solid var(--talos-border);border-radius:var(--talos-radius-card);padding:12px;font-size:12px;line-height:1.65}.kv{display:grid;grid-template-columns:100px 1fr;gap:10px 6px;font-size:12px}.kv dt{color:var(--talos-muted)}.kv dd{margin:0;overflow-wrap:anywhere}.filelink{display:flex;align-items:center;text-align:left;font-size:12px;max-width:100%;justify-content:flex-start}.event{font-size:12px;padding:9px 0;display:flex;gap:10px;border-bottom:1px solid var(--talos-border-subtle);line-height:1.5}.event time{font-family:var(--talos-font-mono);color:var(--talos-muted);font-size:10px;white-space:nowrap}.empty{padding:40px 20px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px;color:var(--talos-muted)}.empty h3{color:var(--talos-text)}.workspace-view{height:100%;display:flex;flex-direction:column;min-width:0}.view-head{padding:20px 24px 16px;border-bottom:1px solid var(--talos-border);display:flex;align-items:center;gap:12px}.view-head p{font-size:12px;color:var(--talos-muted);margin-top:6px}.toolbar{padding:10px 16px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--talos-border)}.toolbar button,.toolbar select{font-size:11px}.toolbar input{font-size:12px}.graph-canvas{flex:1;min-height:230px;overflow:hidden;position:relative;background:radial-gradient(var(--talos-border) 1px,transparent 1px);background-size:20px 20px;cursor:grab}.graph-world{transform-origin:0 0;width:930px;height:540px;position:absolute;top:0;left:0;will-change:transform}.graph-world>svg{position:absolute;width:930px;height:540px;pointer-events:none}.node{position:absolute;width:214px;min-height:121px;text-align:left;border:1px solid var(--talos-border-strong);border-radius:var(--talos-radius-card);background:var(--talos-panel);padding:12px;display:flex;flex-direction:column;gap:8px;cursor:pointer;box-shadow:var(--talos-shadow-card)}.node:hover{background:var(--talos-panel-soft)}.node.selected{border-color:var(--talos-accent);box-shadow:0 0 0 2px var(--talos-accent-soft)}.node h3{font-size:12px}.node p{font-size:11px;color:var(--talos-muted);line-height:1.45}.node button{font-size:11px;min-height:22px;padding:2px 6px}.node .node-foot{font-size:10px;color:var(--talos-muted);justify-content:space-between}.graph-key{position:absolute;bottom:12px;left:12px;display:flex;gap:12px;background:var(--talos-panel);border:1px solid var(--talos-border);border-radius:var(--talos-radius-control);padding:8px 12px;font-size:10px;color:var(--talos-muted);pointer-events:none}.mini{position:absolute;right:12px;bottom:12px;background:var(--talos-panel);border:1px solid var(--talos-border);border-radius:var(--talos-radius-control);width:105px;height:70px}.timeline{padding:12px 16px;border-top:1px solid var(--talos-border);display:flex;align-items:center;gap:12px;font-size:11px;flex-shrink:0}.timeline input{flex:1}.file-header{padding:18px 24px;border-bottom:1px solid var(--talos-border)}.source-code{font-family:var(--talos-font-mono);font-size:12px;line-height:1.85;margin:0;padding:24px;tab-size:2;white-space:pre;overflow:auto;background:var(--talos-window-bg);flex:1}.source-code .ln{display:inline-block;color:var(--talos-muted);width:32px;user-select:none}.source-code .kw{color:var(--talos-secondary)}.source-code .str{color:var(--talos-accent-text)}.provenance{padding:16px 24px;border-top:1px solid var(--talos-border);font-size:12px;line-height:1.6}.review-layout{display:grid;grid-template-columns:180px minmax(0,1fr);flex:1;min-height:0}.review-files{border-right:1px solid var(--talos-border);padding:10px;overflow:auto}.review-files button{display:block;text-align:left;width:100%;font-size:12px;padding:10px;margin-bottom:5px}.review-files button.active{background:var(--talos-accent-soft);color:var(--talos-accent-text)}.diff{font-size:12px;line-height:1.9;font-family:var(--talos-font-mono);overflow:auto;padding:16px 0;flex:1;background:var(--talos-window-bg)}.diff div{padding:0 16px;white-space:pre;min-width:max-content}.diff .add{background:var(--talos-success-soft);color:var(--talos-success)}.diff .del{background:var(--talos-danger-soft);color:var(--talos-danger)}.checks{padding:12px 18px;display:flex;flex-wrap:wrap;gap:12px;border-top:1px solid var(--talos-border);font-size:11px}.notice{padding:10px 14px;border:1px solid var(--talos-accent-border);border-radius:var(--talos-radius-control);color:var(--talos-accent-text);background:var(--talos-accent-soft);font-size:12px;line-height:1.5}.state-bar{border-top:1px solid var(--talos-border);padding:7px 12px;display:flex;gap:8px;align-items:center;font-size:10px;color:var(--talos-muted)}.state-bar select{padding:3px 5px;font-size:10px;height:26px}.popover{position:fixed;z-index:var(--talos-z-menu);background:var(--talos-panel);border:1px solid var(--talos-border-strong);border-radius:var(--talos-radius-card);padding:6px;width:225px;box-shadow:var(--talos-shadow-floating)}.popover button{display:flex;width:100%;justify-content:flex-start;font-size:12px}.popover hr{border:0;border-top:1px solid var(--talos-border);margin:5px}.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--talos-card);border:1px solid var(--talos-accent-border);border-radius:var(--talos-radius-card);padding:12px 18px;z-index:140;box-shadow:var(--talos-shadow-floating);font-size:13px;max-width:650px}.sheet-backdrop{position:fixed;inset:0;background:var(--talos-overlay);z-index:99}.sheet{position:fixed;right:0;top:0;bottom:0;background:var(--talos-panel);border-left:1px solid var(--talos-border);width:440px;z-index:100;padding:24px;overflow:auto}.sheet h2{margin:20px 0 12px}.sheet p{font-size:13px;color:var(--talos-assistant-text);margin:10px 0}.sheet ol{padding-left:20px;font-size:13px;line-height:1.7}.sheet li{margin-bottom:10px}.sheet hr{border:0;border-top:1px solid var(--talos-border);margin:20px 0}.split-preview{position:absolute;right:0;top:0;bottom:0;width:40%;background:var(--talos-background);border-left:1px solid var(--talos-border);overflow:auto;z-index:3}.split-preview pre{font-size:11px;line-height:1.6;padding:12px;overflow:auto}.split-preview .row{padding:8px 12px;border-bottom:1px solid var(--talos-border)}.graph-canvas.split{margin-right:40%}.stress-info{font-size:11px;padding:6px 16px;color:var(--talos-muted)}.skeleton{height:54px;margin:12px 16px;border-radius:var(--talos-radius-control);background:var(--talos-panel-soft)}.compact .file-row{min-height:28px}.compact .agent-row{min-height:72px;padding:8px 10px}.iconbutton{padding:6px;width:32px}.details-inline{margin:12px 0}.details-inline summary{cursor:pointer;font-size:12px;color:var(--talos-muted)}@media(max-width:1200px){.shell{grid-template-columns:230px minmax(0,1fr) var(--inspector,340px)}.chat{padding:24px}.topbar{padding:10px 16px}.review-layout{grid-template-columns:140px minmax(0,1fr)}.labbar .wide-only{display:none}}@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* Calm refinement, scoped to File;
+   the approved shell, palette and graph stay intact. */
+.tree  {
+   --file-row-height: 36px;
+   }
+
+.compact .tree  {
+   --file-row-height: 32px;
+   }
+
+.files-top  {
+   gap: var(--talos-space-sm);
+   }
+
+.file-browse-row  {
+   display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:var(--talos-space-sm);
+   }
+
+.file-browse-row select  {
+   border-color:transparent;
+  background:transparent;
+  padding:var(--talos-space-xs);
+  font-size:var(--talos-font-size-xs);
+  max-width:75%;
+   }
+
+.file-browse-row select:hover  {
+   border-color:var(--talos-border);
+   }
+
+#railFile .section-label  {
+   padding-top:var(--talos-space-xs);
+  padding-bottom:var(--talos-space-xs);
+  font-size:11px;
+  text-transform:none;
+  letter-spacing:0;
+   }
+
+#railFile .file-row  {
+   block-size:var(--file-row-height);
+  min-height:var(--file-row-height);
+  padding-block:3px;
+   }
+
+#railFile .file-row button  {
+   min-width:24px;
+  min-height:24px;
+   }
+
+#railFile .file-row .agent-indicator  {
+   background:transparent;
+  color:var(--talos-muted);
+   }
+
+#railFile .file-row .agent-indicator:hover  {
+   background:var(--talos-accent-soft);
+  color:var(--talos-accent-text);
+   }
+
+#railFile .file-row .file-more, #railFile .file-row .file-check  {
+   opacity:0;
+   }
+
+#railFile .file-row:hover .file-more, #railFile .file-row:focus-within .file-more,
+#railFile .file-row.selected .file-more, #railFile .file-row:hover .file-check,
+#railFile .file-row:focus-within .file-check, #railFile .file-row.selected .file-check,
+#railFile .selection-mode .file-check  {
+   opacity:1;
+   }
+
+#railFile .file-selection  {
+   display:flex;
+  align-items:center;
+  gap:var(--talos-space-sm);
+  padding:var(--talos-space-sm) var(--talos-space-md);
+   }
+
+#railFile .file-selection .small  {
+   margin:0;
+   }
+
+#railFile #renameInput  {
+   min-height:24px;
+  height:24px;
+  flex:1;
+  width:100%;
+   }
+
+.sr-only  {
+   position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  margin:-1px;
+  overflow:hidden;
+  clip-path:inset(50%);
+  white-space:nowrap;
+  border:0;
+   }
+
+.popover  {
+   max-height:calc(100vh - 16px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+   }
+
+
+.folder-item:focus-visible  {
+   outline:none;
+   }
+
+.folder-item:focus-visible > .folder  {
+   outline:var(--talos-focus-width) solid var(--talos-ring);
+  outline-offset:var(--talos-space-xs);
+   }
+
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol><symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3v5h5M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/></symbol><symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol><symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M8 17c5 0 8-2 8-9"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol><symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol><symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.6 3 7.8 7.5 9.5 4.5-1.7 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-5"/></symbol><symbol id="i-robot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M9 4h6"/><circle cx="9" cy="14" r="1.2"/><circle cx="15" cy="14" r="1.2"/></symbol><symbol id="i-code" viewBox="0 0 24 24"><path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol><symbol id="i-left" viewBox="0 0 24 24"><path d="M19 12H5m7 7-7-7 7-7"/></symbol><symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M12 15h5"/></symbol><symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-send" viewBox="0 0 24 24"><path d="m4 4 17 8-17 8 3-8-3-8ZM7 12h14"/></symbol>
+</defs></svg>
+<div class="labbar"><span class="badge accent">LABORATORIO</span><span>File / Agenti</span><span class="muted wide-only">Token Calm da Talos · dati demo · nessun backend</span><span class="grow"></span><button data-action="density" title="Cambia densità della sidebar">Densità</button><button data-action="guide" class="btn">Come provarlo</button><button data-action="reset" title="Ripristina solo i dati del prototipo">Ripristina demo</button></div>
+<div class="shell" id="shell">
+<aside class="talos-sidebar" aria-label="Shell Talos, contesto dimostrativo">
+ <div class="brand row">TALOS <small>LOCALE</small></div>
+ <button class="btn row" data-action="new-session" style="margin:12px 4px 0;justify-content:flex-start"><svg class="i"><use href="#i-plus"/></svg>Nuova conversazione</button>
+ <div class="navgroup"><span class="eyebrow">Spazi di lavoro</span><div class="navitem row active"><svg class="i"><use href="#i-list"/></svg>Conversazioni</div><div class="navitem row"><svg class="i"><use href="#i-file"/></svg>Note</div><div class="navitem row"><svg class="i"><use href="#i-check"/></svg>Attività</div><div class="navitem row"><svg class="i"><use href="#i-folder"/></svg>Libreria</div></div>
+ <details style="padding:0 12px 14px"><summary class="eyebrow" style="cursor:pointer">Strumenti</summary><p class="small muted" style="margin-top:10px">La navigazione globale resta fuori dal refactor. Questa shell ridotta riprende i gruppi del template Talos.</p></details>
+ <div class="sessions"><div class="row" style="padding:0 12px"><span class="eyebrow">Conversazioni demo</span><span class="grow"></span><svg class="i muted"><use href="#i-search"/></svg></div><button class="session selected" data-action="session" data-id="sidebar"><b>Refactor sidebar destra</b><span class="small muted">talos · File e Agenti</span></button><button class="session" data-action="session" data-id="tests"><b>Verifica regressioni</b><span class="small muted">talos · suite di test</span></button><button class="session" data-action="session" data-id="docs"><b>Documentazione del workspace</b><span class="small muted">talos · contesto separato</span></button></div>
+ <div class="sidebar-foot row"><span class="dot good"></span><span class="small">Calm</span><span class="grow"></span><span class="small muted">Solo su questo browser</span></div>
+</aside>
+<main class="main"><div class="topbar"><div class="grow"><h1 id="sessionTitle">Refactor sidebar destra</h1><div class="path">talos / harness-ui / frontend</div></div><span class="badge">Fixture locale</span><button class="iconbutton" data-action="toggle-rail" aria-label="Mostra o nascondi i dettagli" title="Mostra o nascondi i dettagli"><svg class="i"><use href="#i-list"/></svg></button></div><nav class="center-tabs" aria-label="Viste della sessione"><button data-action="view" data-value="chat" aria-pressed="true">Chat</button><button disabled title="Fuori perimetro del laboratorio">Terminale</button><button data-action="view" data-value="review" aria-pressed="false">Review <span id="reviewCount" class="muted">2</span></button><button disabled title="Fuori perimetro del laboratorio">Browser</button><button id="fileViewTab" data-action="view" data-value="file" aria-pressed="false" hidden>Anteprima</button><button id="graphViewTab" data-action="view" data-value="graph" aria-pressed="false" hidden>Diagramma agenti</button></nav><div class="center-body" id="center"></div><div id="composerHost" class="composer-wrap"><div class="composer"><textarea id="composer" aria-label="Bozza del messaggio demo" placeholder="Scrivi un messaggio o aggiungi un file al contesto…"></textarea><div class="composer-bar"><button data-action="context-selected" title="Aggiungi il file selezionato al Context"><svg class="i"><use href="#i-plus"/></svg></button><span class="badge">Modello demo</span><span class="badge accent"><svg class="i"><use href="#i-shield"/></svg>Revisione prima di integrare</span><span class="grow"></span><button class="primary iconbutton" data-action="send" aria-label="Invia messaggio nella simulazione"><svg class="i"><use href="#i-send"/></svg></button></div></div></div></main>
+<aside class="talos-inspector" id="inspector"><div class="resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-valuemin="300" aria-valuemax="600" aria-valuenow="380" aria-label="Larghezza sidebar: usa le frecce" id="resizer"></div><div id="railTabs" role="tablist" aria-label="Dettagli della sessione"><button role="tab" id="inspector-tab-context" data-rail="contesto" data-tab="context" aria-selected="false" aria-controls="railContext" tabindex="-1">Context</button><button role="tab" id="inspector-tab-files" data-rail="file" data-tab="files" aria-selected="true" aria-controls="railFile" tabindex="0">File</button><button role="tab" id="inspector-tab-agents" data-rail="agenti" data-tab="agents" aria-selected="false" aria-controls="railAgenti" tabindex="-1">Agenti</button><button role="tab" id="inspector-tab-processes" data-rail="processi" data-tab="processes" aria-selected="false" aria-controls="railProcessi" tabindex="-1">Processi</button></div><div id="railContent" class="rail-panel"></div><div class="state-bar"><span>Stato demo</span><select id="scenario" aria-label="Simula stato del pannello"><option value="normal">Normale</option><option value="loading">Caricamento</option><option value="empty">Vuoto</option><option value="error">Errore</option><option value="partial">Dati parziali</option><option value="large">1.000 file</option></select><span class="grow"></span><span id="widthLabel">380 px</span></div></aside>
+</div><div id="menu" class="popover" hidden></div><div id="toast" class="toast" role="status" hidden></div><div id="overlay" hidden><div class="sheet-backdrop" data-action="close-guide"></div><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="guideTitle" tabindex="-1"><div class="row"><span class="eyebrow">Banco interattivo</span><span class="grow"></span><button data-action="close-guide" aria-label="Chiudi guida"><svg class="i"><use href="#i-x"/></svg></button></div><h2 id="guideTitle">Prova il flusso, non una figura.</h2><p>Prototipo offline costruito sui token <b>Calm scuro</b> del repository Talos e sui contratti DOM della sidebar. La shell è ridotta; le nuove interazioni sono una proposta, non una build completa dell’app.</p><ol><li><b>Il bug di navigazione.</b> Apri Agenti → un dettaglio → File → Agenti. Ritrovi lo stesso dettaglio senza bloccare le altre tab.</li><li><b>File e contesto.</b> Cerca, cambia la vista con Tutti i file e apri il menu ⋯. La selezione multipla è nelle Opzioni file; Spazio seleziona, Shift+F10 apre le azioni. Prova rinomina, duplica, cestina e ripristina.</li><li><b>Da file ad agente.</b> Premi il piccolo indicatore dell’agente accanto al file. Il diagramma apre quel nodo; il dettaglio contiene i file correlati.</li><li><b>Il diagramma.</b> Cambia ambito, cerca un agente, filtra lo stato, trascina il canvas, zooma, isola o collassa un ramo. Prova la timeline e l’affiancamento.</li><li><b>Revisione.</b> Da File seleziona un elemento, apri Azioni selezione (⋯) e scegli Refactor o Genera test. In Review prova il conflitto, la revisione, l’integrazione e lo scarto.</li><li><b>Robustezza.</b> Trascina il bordo della sidebar, oppure focalizzalo e usa le frecce. Prova gli stati in basso e passa fra sessioni.</li></ol><hr><h3>Che cosa è simulato</h3><p>Contenuti dei file, agenti, eventi, grafi, diff, esiti dei test e applicazione delle modifiche. Nessuna operazione modifica il filesystem o la repository. La ricerca AI/semantica è esplicitamente non collegata. I dati si azzerano ricaricando; soltanto la larghezza è ricordata quando il browser lo consente.</p><h3>Identità e font</h3><p>I colori, le famiglie tipografiche dichiarate, i raggi e le misure sono quelli del file <code>index.css</code> @13f65c15. I font non sono incorporati: se Instrument Sans e JetBrains Mono non sono installati, vengono usati i fallback. Non è una verifica pixel-per-pixel dell’app avviata.</p><button class="primary" data-action="close-guide" style="margin-top:20px">Inizia la prova</button></section></div>
+<script>
+(() => {
+"use strict";
+/** Pure, scoped prototype state: selectedAgent never owns activeTab. */
+const TABS = Object.freeze(['context', 'files', 'agents', 'processes']);
+function initialState() {
+    return { activeTab: 'files', session: 'sidebar', contexts: {}, central: 'chat',
+        selectedFile: 'inspector.js', selectedFiles: [], selectedAgent: null,
+        fileQuery: '', fileFilter: 'all', agentQuery: '', agentFilter: 'all',
+        scope: 'session', width: 380, detailSection: 'overview', graphIsolated: null,
+        reviewStatus: 'ready', conflict: false, revision: 0 };
+}
+function reduce(s, a) {
+    switch (a.type) {
+        case 'TAB':
+            if (!TABS.includes(a.value))
+                throw new RangeError('Unknown tab');
+            return { ...s, activeTab: a.value };
+        case 'AGENT': return { ...s, selectedAgent: a.id, activeTab: 'agents' };
+        case 'LIST': return { ...s, selectedAgent: null };
+        case 'FILE': return { ...s, selectedFile: a.id, selectedFiles: a.ids || [a.id], central: 'file' };
+        case 'SCOPE':
+            if (!['execution', 'session', 'workspace'].includes(a.value))
+                throw new RangeError('Unknown scope');
+            return { ...s, scope: a.value, graphIsolated: null };
+        case 'SESSION': {
+            if (a.id === s.session)
+                return s;
+            const contexts = { ...s.contexts, [s.session]: { selectedAgent: s.selectedAgent, selectedFile: s.selectedFile, selectedFiles: [...s.selectedFiles], fileQuery: s.fileQuery, fileFilter: s.fileFilter, agentQuery: s.agentQuery, agentFilter: s.agentFilter, detailSection: s.detailSection } };
+            return { ...s, contexts, session: a.id, selectedAgent: null, selectedFile: null, selectedFiles: [], fileQuery: '', fileFilter: 'all', agentQuery: '', agentFilter: 'all', detailSection: 'overview', graphIsolated: null, ...(Object.hasOwn(contexts, a.id) ? contexts[a.id] : {}) };
+        }
+        case 'WIDTH': return { ...s, width: Math.max(300, Math.min(600, Number.isFinite(a.value) ? a.value : s.width)) };
+        case 'APPLY': return s.conflict || s.reviewStatus !== 'ready' ? s : { ...s, reviewStatus: 'applied' };
+        case 'REVISION': return { ...s, reviewStatus: 'ready', revision: s.revision + 1 };
+        case 'DISCARD': return s.reviewStatus === 'ready' ? { ...s, reviewStatus: 'discarded' } : s;
+        case 'PATCH': return { ...s, ...a.value };
+        default: return s;
+    }
+}
+function createStore(seed = initialState()) {
+    let state = seed;
+    const listeners = new Set();
+    return { get: () => state, dispatch(a) { const old = state; state = reduce(state, a); if (state !== old)
+            for (const fn of [...listeners])
+                fn(state, old, a); return state; },
+        subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); } };
+}
+
+/** Bounded, deterministic helpers for the offline explorer. Not a filesystem API. */
+const FILE_FILTERS = Object.freeze(['all', 'modified', 'agents', 'favorites', 'recent', 'trash']);
+function validateFileName(value, existing, previous = '') {
+    const name = String(value).trim();
+    if (!name || name.length > 240 || /[\\/:*?"<>|\x00-\x1f]/.test(name) || /[. ]$/.test(name) ||
+        ['.', '..', '__proto__', 'constructor', 'prototype'].includes(name) ||
+        /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) {
+        return { ok: false, error: 'Nome non valido. Usa un nome di file, senza percorsi o caratteri riservati.' };
+    }
+    if (existing.some(id => id !== previous && id.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+        return { ok: false, error: 'Nome già presente nel workspace o nel cestino.' };
+    }
+    return { ok: true, name };
+}
+function uniqueCopyName(name, existing) {
+    let number = 1;
+    while (existing.some(id => id.toLowerCase() === `copia-${number}-${name}`.toLowerCase()))
+        number++;
+    return `copia-${number}-${name}`;
+}
+function compileFileQuery(value) {
+    const query = String(value).trim();
+    const q = query.toLowerCase();
+    if (query.length > 128)
+        return { error: 'Ricerca troppo lunga: massimo 128 caratteri.', test: () => false };
+    if (q.startsWith('/')) {
+        const pattern = query.slice(1, query.endsWith('/') ? -1 : undefined);
+        // This offline lab intentionally supports a bounded subset, not arbitrary JavaScript regex.
+        // Reject groups, counted repetitions and backreferences before invoking RegExp.
+        const unescaped = pattern.replace(/\\./g, 'x').replace(/\[[^\]]*\]/g, 'x');
+        if (/[(){}]/.test(unescaped) || /\\[1-9]/.test(pattern) || (unescaped.match(/[*+]/g) || []).length > 1) {
+            return { error: 'Regex semplice: niente gruppi, ripetizioni {n}, riferimenti o quantificatori multipli.', test: () => false };
+        }
+        try {
+            const re = new RegExp(pattern, 'i');
+            return { error: null, test: (_file, path) => re.test(path.slice(0, 512)) };
+        }
+        catch {
+            return { error: 'Regex non valida. Correggi il pattern o usa un nome.', test: () => false };
+        }
+    }
+    if (q.startsWith('testo:'))
+        return { error: null, test: (_file, _path, body) => body.toLowerCase().includes(q.slice(6)) };
+    if (q.startsWith('~'))
+        return { error: null, test: (_file, path) => {
+                let index = 0;
+                const needle = q.slice(1);
+                for (const c of path.toLowerCase())
+                    if (c === needle[index])
+                        index++;
+                return index === needle.length;
+            } };
+    if (q.startsWith('ext:')) {
+        const [extension, ...rest] = q.slice(4).split(/\s+/);
+        return { error: null, test: (file, path) => file.id.toLowerCase().endsWith('.' + extension) && path.toLowerCase().includes(rest.join(' ')) };
+    }
+    return { error: null, test: (_file, path) => path.toLowerCase().includes(q) };
+}
+function virtualRange(length, scroll, viewport, rowHeight, overscan = 4) {
+    const height = Number.isFinite(rowHeight) && rowHeight > 0 ? rowHeight : 36;
+    const count = Math.max(1, Math.ceil(Math.max(0, viewport) / height)) + overscan * 2;
+    const start = Math.max(0, Math.min(Math.max(0, length - count), Math.floor(Math.max(0, scroll) / height) - overscan));
+    const end = Math.min(length, start + count);
+    return { start, end, before: start * height, after: Math.max(0, length - end) * height };
+}
+
+
+// Source: lab-data.js
+// Offline interaction laboratory. No fetch, sockets, filesystem or model calls.
+const $ = (q, r = document) => r.querySelector(q);
+const $$ = (q, r = document) => Array.from(r.querySelectorAll(q));
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const icon = n => `<svg class="i" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const badge = (text, tone = '') => `<span class="badge ${tone}">${esc(text)}</span>`;
+const store = createStore();
+const act = (type, value) => store.dispatch({ type, ...value });
+const contextBySession = new Map();
+let scenario = 'normal', folderOpen = new Set(['components', 'styles', 'bridge', 'tests']), renaming = null, clipboard = null, deleted = [], contextFiles = [], scrolls = new Map(), graph = { zoom: 1, x: 0, y: 0, collapsed: new Set(), query: '', status: 'all', time: 4, follow: false, split: false }, lastSelected = null, toastTimer, menuReturn, guideReturn, simulationStep = 0;
+const bodies = {
+    'inspector.js': `// Fixture di lettura: estratto semplificato, non il file completo.\n// L’inspector consuma i dati della sessione.\nexport function renderInspector(session) {\n  const { agents, files, processes } = session;\n  renderAgentList(agents);\n  renderFileTree(files);\n  renderProcesses(processes);\n}\n\n// Ogni vista conserva il suo contesto.\n// Il dettaglio non decide mai la tab attiva.`,
+    'conversazione-figlia.js': `// Anteprima dimostrativa — conversazione delegata.\nconst drawnTurns = new Map();\n\nfunction updateEvent(event) {\n  // Conserva i nodi già disegnati e lo scroll.\n  const turn = drawnTurns.get(event.turnId);\n  if (turn) updateTurn(turn, event);\n  else drawnTurns.set(event.turnId, createTurn(event));\n}`,
+    'legacy-dom.js': `// Mappa presente nel ponte Talos:\nconst schede = {\n  contesto: 'context', file: 'files',\n  agenti: 'agents', processi: 'processes'\n};\n// Il laboratorio usa lo stesso vocabolario DOM.`,
+    'main.css': `@import './index.css';\n// … fogli esistenti invariati …\n@import './mockup-animazioni.css';\n@import './inspector-tab-visibility.css';`,
+    'index.css': `/* Token Calm effettivi */\n:root {\n  --talos-background: #1e1f22;\n  --talos-panel: #25262a;\n  --talos-accent: #c08b3c;\n  --talos-text: #f3f0e9;\n  --talos-radius-card: 12px;\n  --talos-inspector-w: 340px;\n}`,
+    'inspector-state.test.mjs': `// Test dimostrativo: tab e dettaglio indipendenti.\ntest('File non è bloccato dal dettaglio', () => {\n  const s = { activeTab: 'agents', agent: 'audit' };\n  const next = { ...s, activeTab: 'files' };\n  assert.equal(next.activeTab, 'files');\n  assert.equal(next.agent, 'audit');\n});`
+};
+let files = [
+    { id: 'inspector.js', folder: 'components', git: 'M', agent: 'ux', activity: 'lettura', favorite: true },
+    { id: 'conversazione-figlia.js', folder: 'components', git: '', agent: 'audit', activity: 'lettura' },
+    { id: 'chat.js', folder: 'components', git: '', agent: null },
+    { id: 'file-explorer.js', folder: 'components', git: '', agent: null },
+    { id: 'inspector-tab-visibility.css', folder: 'styles', git: 'A', agent: 'fix', activity: 'scrittura', favorite: true },
+    { id: 'index.css', folder: 'styles', git: '', agent: 'ux', activity: 'lettura' },
+    { id: 'main.css', folder: 'styles', git: 'M', agent: 'fix', activity: 'scrittura' },
+    { id: 'desktop-final.css', folder: 'styles', git: '', agent: null },
+    { id: 'legacy-dom.js', folder: 'bridge', git: '', agent: 'audit', activity: 'lettura' },
+    { id: 'inspector-state.test.mjs', folder: 'tests', git: 'A', agent: 'qa', activity: 'test' },
+    { id: 'sidebar.test.mjs', folder: 'tests', git: '', agent: 'e2e', activity: 'errore' },
+    { id: 'README.md', folder: '', git: '', agent: 'docs', activity: 'lettura' },
+    { id: 'package.json', folder: '', git: '', agent: null }
+];
+bodies["inspector-tab-visibility.css"] = "/* The child conversation is a sibling of #railAgenti. Visibility belongs to\n   the selected tab; keep the child DOM and scroll position intact. */\n.talos-inspector .talos-figlia-ospite[hidden] {\n  display: none !important;\n}\n\n/* Keep the plain [hidden] rule independent: unsupported :has() selectors must\n   not invalidate it. Older engines retain legacy behavior, not a fake fallback. */\n@supports selector(:has(*)) {\n  .talos-inspector:not(:has(#railTabs [data-rail=\"agenti\"][aria-selected=\"true\"]))\n    .talos-figlia-ospite,\n  .talos-inspector:has(#railTabs [data-rail]:not([data-rail=\"agenti\"])[aria-selected=\"true\"])\n    .talos-figlia-ospite {\n    display: none !important;\n  }\n\n  /* An empty/hidden detail must not suppress the list. Closing the visible\n     detail restores the legacy list without overriding its own hidden state. */\n  .talos-inspector:has(#railTabs [data-rail=\"agenti\"][aria-selected=\"true\"]):has(.talos-figlia-ospite:not([hidden]) .talos-figlia:not([hidden]))\n    #railAgenti {\n    display: none !important;\n  }\n}\n";
+const initialFiles = structuredClone(files);
+const initialBodies = structuredClone(bodies);
+let virtualFiles = [], largeSeeded = false, selectionMode = false, cachedQuery = '', compiledQuery = compileFileQuery('');
+const agents = [
+    { id: 'lead', name: 'Coordinatore', role: 'Sessione principale', task: 'Refactor della sidebar destra, senza modificare la navigazione globale.', status: 'active', tool: 'Delega', session: 'sidebar', run: 'r1', parent: null, model: 'Modello demo', duration: '4m 12s', files: ['inspector.js'], pos: [358, 22], born: 0 },
+    { id: 'audit', name: 'Audit stato', role: 'Analisi · sola lettura', task: 'Verifica il ponte legacy, la tab attiva e la conversazione figlia.', status: 'done', tool: 'Read', session: 'sidebar', run: 'r1', parent: 'lead', model: 'Modello demo', duration: '1m 26s', files: ['legacy-dom.js', 'conversazione-figlia.js'], pos: [50, 216], born: 1 },
+    { id: 'fix', name: 'Navigazione', role: 'Implementazione isolata', task: 'Confina la visibilità del dettaglio alla tab Agenti e conserva il contesto.', status: 'active', tool: 'Edit', session: 'sidebar', run: 'r1', parent: 'lead', model: 'Modello demo', duration: '2m 04s', files: ['inspector-tab-visibility.css', 'main.css'], pos: [358, 216], born: 1 },
+    { id: 'ux', name: 'File explorer', role: 'UX · design system', task: 'Rivede densità, azioni contestuali e uso dei token Calm.', status: 'waiting', tool: 'Attesa', session: 'sidebar', run: 'r2', parent: 'lead', model: 'Modello demo', duration: '1m 18s', files: ['index.css', 'inspector.js'], pos: [666, 216], born: 2 },
+    { id: 'qa', name: 'Test stato', role: 'Verifica regressioni', task: 'Verifica File ↔ Agenti, isolamento del contesto e applicazione con conflitto.', status: 'active', tool: 'Test', session: 'sidebar', run: 'r1', parent: 'fix', model: 'Modello demo', duration: '42s', files: ['inspector-state.test.mjs'], pos: [205, 410], born: 2 },
+    { id: 'e2e', name: 'Prova desktop', role: 'Verifica interazione', task: 'Controlla scroll, focus e sidebar stretta.', status: 'error', tool: 'Browser', session: 'sidebar', run: 'r1', parent: 'fix', model: 'Modello demo', duration: '28s', files: ['sidebar.test.mjs'], pos: [514, 410], born: 3 },
+    { id: 'docs', name: 'Documentazione', role: 'Altro contesto', task: 'Documenta i contratti del workspace.', status: 'done', tool: 'Write', session: 'docs', run: 'r3', parent: null, model: 'Modello demo', duration: '3m 11s', files: ['README.md'], pos: [666, 22], born: 0 },
+    { id: 'tests-agent', name: 'Suite isolata', role: 'Altra sessione', task: 'Verifica i test del progetto.', status: 'active', tool: 'Test', session: 'tests', run: 'r4', parent: null, model: 'Modello demo', duration: '51s', files: ['inspector-state.test.mjs'], pos: [50, 22], born: 0 }
+];
+const initialAgents = structuredClone(agents);
+const statuses = { active: ['In corso', 'accent'], done: ['Terminato', 'good'], waiting: ['In attesa', 'warn'], error: ['Errore', 'danger'] };
+function toast(t) { clearTimeout(toastTimer); $('#toast').textContent = t; $('#toast').hidden = false; toastTimer = setTimeout(() => $('#toast').hidden = true, 4000); }
+function filePath(f) { return f.folder ? (f.folder === 'tests' ? 'tests/' : 'src/') + f.folder.replace(/^tests$/, '') + (f.folder === 'tests' ? '' : '/') + f.id : f.id; }
+function fileBy(id) { return files.find(f => f.id === id); }
+function stateBadge(a) { const v = statuses[a.status]; return badge(v[0], v[1]); }
+function sessionAgents() { return agents.filter(a => a.session === store.get().session); }
+function tabMarkup() { const s = store.get(); $$('#railTabs [role=tab]').forEach(b => { const active = b.dataset.tab === s.activeTab; b.setAttribute('aria-selected', String(active)); b.tabIndex = active ? 0 : -1; }); $$('.session').forEach(b => b.classList.toggle('selected', b.dataset.id === s.session)); $('#sessionTitle').textContent = ({ sidebar: 'Refactor sidebar destra', tests: 'Verifica regressioni', docs: 'Documentazione del workspace', new: 'Nuova conversazione demo' })[s.session] || s.session; }
+
+
+// Source: explorer-view.js
+function scrollKey() { const s = store.get(); return [s.session, s.activeTab, s.activeTab === 'agents' ? s.selectedAgent || 'list' : ''].join(':'); }
+function rememberScroll() { const host = $('#railContent'), x = $('.scroll', host); if (x && host.dataset.scrollKey)
+    scrolls.set(host.dataset.scrollKey, x.scrollTop); }
+function renderRail() {
+    rememberScroll();
+    const focused = document.activeElement;
+    const focusFile = focused?.closest('[data-file]')?.dataset.file;
+    const focusFolder = focused?.closest('[data-folder]')?.dataset.folder;
+    const focusAction = focused?.dataset.action;
+    const focusActionId = focused?.dataset.id;
+    const s = store.get();
+    const host = $('#railContent');
+    host.id = 'railContent';
+    host.setAttribute('role', 'tabpanel');
+    host.setAttribute('aria-labelledby', 'inspector-tab-' + s.activeTab);
+    host.dataset.currentTab = s.activeTab;
+    host.dataset.scrollKey = scrollKey();
+    const focusId = document.activeElement?.id;
+    const cursor = document.activeElement?.selectionStart;
+    if (scenario === 'loading') {
+        host.innerHTML = `<div class="rail-top"><h3>Caricamento della ${s.activeTab === 'agents' ? 'lista agenti' : 'vista'}…</h3><p class="small muted">Stato di prova. Puoi comunque cambiare tab.</p></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>`;
+    }
+    else if (scenario === 'error') {
+        host.innerHTML = `<div class="empty">${icon('shield')}<h3>Collegamento non disponibile</h3><p>Errore simulato. Nessun dato locale è stato modificato.</p><button class="btn" data-action="normal">Riprova</button></div>`;
+    }
+    else if (scenario === 'empty') {
+        host.innerHTML = `<div class="empty">${icon('folder')}<h3>Nessun elemento</h3><p>Questo è lo stato vuoto della vista. La navigazione rimane disponibile.</p><button class="btn" data-action="normal">Carica dati demo</button></div>`;
+    }
+    else if (s.activeTab === 'files')
+        renderFiles();
+    else if (s.activeTab === 'agents')
+        renderAgents();
+    else if (s.activeTab === 'context')
+        renderContext();
+    else
+        renderProcesses();
+    if (scenario === 'partial')
+        host.insertAdjacentHTML('afterbegin', '<div class="notice" style="margin:12px">Dati parziali simulati: le metriche mancanti sono mostrate come «—».</div>');
+    host.removeAttribute('role');
+    host.removeAttribute('aria-labelledby');
+    const names = { context: 'railContext', files: 'railFile', agents: 'railAgenti', processes: 'railProcessi' };
+    const content = [...host.childNodes];
+    for (const [tab, panelId] of Object.entries(names)) {
+        const panel = document.createElement('div');
+        panel.id = panelId;
+        panel.className = 'rail-panel';
+        panel.setAttribute('role', 'tabpanel');
+        panel.setAttribute('aria-labelledby', 'inspector-tab-' + tab);
+        panel.hidden = tab !== s.activeTab;
+        if (!panel.hidden)
+            panel.append(...content);
+        host.append(panel);
+    }
+    const scroll = $('#railContent .scroll');
+    if (scroll)
+        scroll.scrollTop = scrolls.get(scrollKey()) || 0;
+    if (!focusId) {
+        const f = focusFile ? $$('[data-file]').find(n => n.dataset.file === focusFile) : focusFolder ? $$('[data-folder]').find(n => n.dataset.folder === focusFolder) : focusAction ? $$('[data-action]').find(n => n.dataset.action === focusAction && n.dataset.id === focusActionId) : null;
+        f?.focus({ preventScroll: true });
+    }
+    if (focusId && document.getElementById(focusId)) {
+        const f = document.getElementById(focusId);
+        f.focus();
+        if (typeof cursor === 'number' && f.setSelectionRange)
+            try {
+                f.setSelectionRange(cursor, cursor);
+            }
+            catch { }
+    }
+}
+function matchFile(f) {
+    const s = store.get();
+    if (s.fileFilter === 'modified' && !f.git || s.fileFilter === 'favorites' && !f.favorite || s.fileFilter === 'agents' && !f.agent || s.fileFilter === 'recent' && !f.git && !f.agent)
+        return false;
+    if (cachedQuery !== s.fileQuery) {
+        cachedQuery = s.fileQuery;
+        compiledQuery = compileFileQuery(cachedQuery);
+    }
+    return compiledQuery.test(f, filePath(f), bodies[f.id] || '');
+}
+function fileRow(f, flat = false) { const s = store.get(); const selected = s.selectedFiles.includes(f.id); return `<div class="file-row ${selected ? 'selected' : ''}" tabindex="${selected ? 0 : -1}" role="treeitem" aria-selected="${selected}" aria-label="${esc(filePath(f))}" aria-level="${f.folder && !flat ? 2 : 1}" data-file="${esc(f.id)}" draggable="true" style="padding-left:${f.folder && !flat ? '24' : '7'}px"><input class="file-check" type="checkbox" tabindex="-1" aria-label="Seleziona ${esc(f.id)}" ${selected ? 'checked' : ''} data-select-file="${esc(f.id)}">${icon('file')}${renaming === f.id ? `<input id="renameInput" value="${esc(f.id)}" aria-label="Nuovo nome del file" style="width:100%;padding:3px">` : `<span class="fname" title="${esc(filePath(f))}">${esc(f.id)}</span>`}<span class="status" title="${f.git === 'M' ? 'Modificato nella fixture' : f.git === 'A' ? 'Creato nella fixture' : ''}">${f.git || ''}</span>${f.agent ? `<button class="agent-indicator" tabindex="-1" data-action="file-agent" data-id="${esc(f.agent)}" aria-label="Apri agente ${esc(agents.find(a => a.id === f.agent)?.name || '')}" title="${esc(f.activity)} · ${esc(agents.find(a => a.id === f.agent)?.name || '')}">${icon('robot')}</button>` : ''}<button class="file-more" tabindex="-1" aria-haspopup="menu" aria-expanded="false" data-action="file-menu" data-id="${esc(f.id)}" aria-label="Azioni su ${esc(f.id)}" title="Azioni sul file">${icon('more')}</button></div>`; }
+function renderFiles() {
+    const s = store.get();
+    if (cachedQuery !== s.fileQuery) {
+        cachedQuery = s.fileQuery;
+        compiledQuery = compileFileQuery(cachedQuery);
+    }
+    virtualFiles = [];
+    if (scenario === 'large' && !largeSeeded) {
+        for (let i = 0; i < 1000; i++)
+            files.push({ id: `fixture-${String(i).padStart(4, '0')}.ts`, folder: 'generated', git: '', agent: null, synthetic: true });
+        largeSeeded = true;
+    }
+    const list = s.fileFilter === 'trash' ? deleted : files.filter(f => scenario === 'large' || !f.synthetic).filter(matchFile);
+    const filterNames = { all: 'Tutti i file', modified: 'Modificati', agents: 'Con attività agente', favorites: 'Preferiti', recent: 'Recenti', trash: `Cestino (${deleted.length})` };
+    $('#railContent').innerHTML = `<div class="rail-top files-top"><div class="row">${icon('folder')}<b class="grow">talos</b><button data-action="new-file" class="iconbutton" title="Crea file demo" aria-label="Crea file demo">${icon('plus')}</button><button class="iconbutton" data-action="file-tools" aria-label="Opzioni file" aria-haspopup="menu" aria-expanded="false" title="Opzioni file">${icon('more')}</button></div><div class="searchbox">${icon('search')}<input id="fileSearch" maxlength="128" value="${esc(s.fileQuery)}" placeholder="Cerca file…" aria-label="Cerca file" aria-describedby="fileSearchError" aria-invalid="${!!compiledQuery.error}"></div><div class="file-browse-row"><label class="sr-only" for="fileFilter">Vista file</label><select id="fileFilter">${FILE_FILTERS.map(v => `<option value="${v}" ${s.fileFilter === v ? 'selected' : ''}>${filterNames[v]}</option>`).join('')}</select><span class="small muted" aria-live="polite">${list.length} file</span></div><p id="fileSearchError" class="small danger" role="status" ${compiledQuery.error ? '' : 'hidden'}>${esc(compiledQuery.error || '')}</p></div><div class="scroll" id="fileScroll"><div class="section-label"><span>harness-ui / frontend</span></div><div class="tree ${selectionMode ? 'selection-mode' : ''}" id="fileTree" role="tree" aria-label="File del workspace demo" aria-multiselectable="true"></div></div>${s.selectedFiles.length ? `<div class="rail-foot file-selection"><span class="small muted" role="status">${s.selectedFiles.length} ${s.selectedFiles.length === 1 ? 'selezionato' : 'selezionati'}</span><span class="grow"></span><button class="btn" data-action="context-selected">Al Context</button><button class="iconbutton" data-action="selection-menu" aria-label="Azioni selezione" aria-haspopup="menu" aria-expanded="false" title="Azioni selezione">${icon('more')}</button></div>` : ''}`;
+    const tree = $('#fileTree');
+    if (s.fileFilter === 'trash') {
+        tree.removeAttribute('role');
+        tree.removeAttribute('aria-multiselectable');
+        tree.innerHTML = list.map(f => `<div class="file-row"><span class="fname">${esc(f.id)}</span><button data-action="restore-file" data-id="${esc(f.id)}">Ripristina</button></div>`).join('') || '<div class="empty">Cestino vuoto</div>';
+        return;
+    }
+    if (compiledQuery.error || !list.length) {
+        tree.removeAttribute('role');
+        tree.removeAttribute('aria-multiselectable');
+        tree.innerHTML = `<div class="empty"><h3>${compiledQuery.error ? 'Controlla la ricerca' : 'Nessuna corrispondenza'}</h3><p>Prova un nome, /regex semplice/ o ext:css.</p><button class="btn" data-action="clear-search">Azzera ricerca</button></div>`;
+        return;
+    }
+    if (scenario === 'large') {
+        virtualFiles = list;
+        const scroller = $('#fileScroll');
+        let previous = '';
+        const draw = () => {
+            const rowHeight = parseFloat(getComputedStyle(tree).getPropertyValue('--file-row-height')) || 36;
+            const range = virtualRange(list.length, Math.max(0, scroller.scrollTop - 30), scroller.clientHeight || 700, rowHeight);
+            const key = `${range.start}:${range.end}:${rowHeight}`;
+            if (key === previous)
+                return;
+            previous = key;
+            const hadFocus = tree.contains(document.activeElement), focusedId = document.activeElement?.closest('[data-file]')?.dataset.file;
+            tree.innerHTML = `<div role="none" style="height:${range.before}px"></div>${list.slice(range.start, range.end).map((f, i) => fileRow(f, true).replace('role="treeitem"', `role="treeitem" aria-setsize="${list.length}" aria-posinset="${range.start + i + 1}"`)).join('')}<div role="none" style="height:${range.after}px"></div>`;
+            prepareTreeFocus();
+            if (hadFocus) {
+                const rows = $$('[data-file]', tree);
+                const target = rows.find(n => n.dataset.file === focusedId) || rows[0];
+                if (target) {
+                    rows.forEach(n => n.tabIndex = -1);
+                    target.tabIndex = 0;
+                    target.focus({ preventScroll: true });
+                }
+            }
+        };
+        scroller.addEventListener('scroll', draw);
+        scroller.scrollTop = scrolls.get(scrollKey()) || 0;
+        draw();
+        return;
+    }
+    const filtered = !!s.fileQuery || s.fileFilter !== 'all';
+    if (filtered)
+        tree.innerHTML = list.map(f => fileRow(f, true)).join('');
+    else {
+        const groups = Array.from(new Set(list.map(f => f.folder))).filter(Boolean).concat('');
+        tree.innerHTML = groups.map(group => {
+            const subset = list.filter(f => f.folder === group);
+            if (!subset.length)
+                return '';
+            return group ? `<div class="folder-item" tabindex="-1" data-folder="${esc(group)}" role="treeitem" aria-label="${esc(group)}" aria-level="1" aria-expanded="${folderOpen.has(group)}"><div class="folder"><span>${folderOpen.has(group) ? '⌄' : '›'}</span>${icon('folder')}<span>${esc(group)}</span></div>${folderOpen.has(group) ? `<div role="group">${subset.map(f => fileRow(f)).join('')}</div>` : ''}</div>` : subset.map(f => fileRow(f)).join('');
+        }).join('');
+    }
+    prepareTreeFocus();
+    if (renaming) {
+        $('#renameInput')?.focus();
+        $('#renameInput')?.select();
+    }
+}
+function prepareTreeFocus() {
+    const tree = $('#fileTree');
+    if (!tree)
+        return;
+    const rows = $$('[data-file],[data-folder]', tree);
+    for (const row of rows)
+        row.tabIndex = -1;
+    const preferred = rows.find(n => n.dataset.file === store.get().selectedFile) || rows[0];
+    if (preferred)
+        preferred.tabIndex = 0;
+}
+function resetFileScroll() { const scroller = $('#fileScroll'); if (scroller)
+    scroller.scrollTop = 0; scrolls.set(scrollKey(), 0); }
+function remapReferences(oldId, newId) {
+    const remap = list => list.map(id => id === oldId ? newId : id).filter(Boolean);
+    const s = store.get();
+    const contexts = { ...s.contexts };
+    for (const key of Object.keys(contexts)) {
+        const c = contexts[key];
+        contexts[key] = { ...c, selectedFile: c.selectedFile === oldId ? newId : c.selectedFile, selectedFiles: remap(c.selectedFiles || []) };
+    }
+    for (const [key, ids] of contextBySession)
+        contextBySession.set(key, remap(ids));
+    contextFiles = remap(contextFiles);
+    agents.forEach(a => a.files = remap(a.files));
+    if (lastSelected === oldId)
+        lastSelected = newId;
+    if (clipboard?.source === oldId) {
+        if (newId)
+            clipboard.source = newId;
+        else if (clipboard.cut)
+            clipboard = null;
+    }
+    act('PATCH', { value: { contexts, selectedFile: s.selectedFile === oldId ? newId : s.selectedFile, selectedFiles: remap(s.selectedFiles) } });
+}
+function resetDemo() {
+    files = structuredClone(initialFiles);
+    for (const k of Object.keys(bodies))
+        delete bodies[k];
+    Object.assign(bodies, structuredClone(initialBodies));
+    agents.splice(0, agents.length, ...structuredClone(initialAgents));
+    contextBySession.clear();
+    contextFiles = [];
+    deleted = [];
+    scrolls.clear();
+    clipboard = null;
+    renaming = null;
+    lastSelected = null;
+    largeSeeded = false;
+    selectionMode = false;
+    folderOpen = new Set(['components', 'styles', 'bridge', 'tests']);
+    scenario = 'normal';
+    $('#scenario').value = 'normal';
+    graph = { zoom: 1, x: 0, y: 0, collapsed: new Set(), query: '', status: 'all', time: 4, follow: false, split: false };
+    simulationStep = 0;
+    const width = store.get().width;
+    act('PATCH', { value: { ...initialState(), width } });
+    $('#composer').value = '';
+    $('#fileViewTab').hidden = true;
+    $('#graphViewTab').hidden = true;
+    renderAll();
+    toast('Dati della demo ripristinati.');
+}
+
+
+// Source: agent-views.js
+function renderAgents() { const s = store.get(); const selected = agents.find(a => a.id === s.selectedAgent && a.session === s.session); if (selected) {
+    renderAgentDetail(selected);
+    return;
+} const list = sessionAgents().filter(a => (s.agentFilter === 'all' || a.status === s.agentFilter) && (a.name + ' ' + a.task).toLowerCase().includes(s.agentQuery.toLowerCase())); $('#railContent').innerHTML = `<div class="rail-top"><div class="row"><h3 class="grow">Agenti della sessione</h3>${badge(sessionAgents().length + ' demo')}</div><button class="btn" data-action="open-graph">${icon('branch')}Apri visuale diagramma</button><div class="searchbox">${icon('search')}<input id="agentSearch" value="${esc(s.agentQuery)}" placeholder="Cerca nome, ruolo o task…" aria-label="Cerca agenti"></div><div class="filters">${[['all', 'Tutti'], ['active', 'Attivi'], ['waiting', 'In attesa'], ['error', 'Errori'], ['done', 'Terminati']].map(([v, t]) => `<button data-action="agent-filter" data-value="${v}" aria-pressed="${s.agentFilter === v}">${t}</button>`).join('')}</div></div><div class="scroll">${list.map(a => `<div class="agent-row" role="button" tabindex="0" data-agent="${a.id}" aria-label="Dettaglio ${a.name}"><div class="agent-icon">${icon(a.id === 'lead' ? 'branch' : 'robot')}</div><div class="grow"><div class="row"><h3 class="grow">${esc(a.name)}</h3>${stateBadge(a)}</div><p>${esc(a.task)}</p><div class="row small muted"><span>${esc(a.tool)}</span><span>·</span><span>${a.duration}</span><span class="grow"></span><span>${agents.filter(x => x.parent === a.id).length} figli</span></div></div></div>`).join('') || '<div class="empty"><h3>Nessun agente in questa vista</h3><p>Cambia filtro o sessione.</p></div>'}</div><div class="rail-foot"><p class="small muted">La selezione resta nella sessione. Le altre tab rimangono sempre accessibili.</p></div>`; }
+function renderAgentDetail(a) { const s = store.get(); $('#railContent').innerHTML = `<div class="rail-top"><div class="row"><button data-action="agent-list">${icon('left')}Tutti gli agenti</button><span class="grow"></span><button data-action="open-graph" aria-label="Apri questo agente nel diagramma" title="Apri nel diagramma">${icon('branch')}</button></div><div class="row"><div class="agent-icon">${icon('robot')}</div><div class="grow"><h3>${esc(a.name)}</h3><p class="small muted">${esc(a.role)}</p></div>${stateBadge(a)}</div><div class="filters">${[['overview', 'Panoramica'], ['files', 'File'], ['events', 'Eventi']].map(([v, t]) => `<button data-action="detail-section" data-value="${v}" aria-pressed="${s.detailSection === v}">${t}</button>`).join('')}</div></div><div class="scroll"><div class="detail" id="agentDetail" data-agent-id="${a.id}">${s.detailSection === 'overview' ? `<div><div class="eyebrow" style="margin-bottom:8px">Task corrente</div><div class="task">${esc(a.task)}</div></div><dl class="kv"><dt>Modello</dt><dd>${esc(a.model)}</dd><dt>Durata</dt><dd>${scenario === 'partial' ? '—' : a.duration}</dd><dt>Attrezzo</dt><dd>${esc(a.tool)}</dd><dt>Parent</dt><dd>${esc(agents.find(x => x.id === a.parent)?.name || 'Sessione principale')}</dd><dt>Esecuzione</dt><dd class="mono">${a.run} · fixture</dd><dt>Permessi</dt><dd>${a.id === 'audit' ? 'Sola lettura' : 'Area isolata demo'}</dd><dt>Token / costo</dt><dd>— / —</dd></dl><div class="notice">${a.status === 'error' ? 'Errore demo: la finestra di test non era disponibile. Nessun processo reale è in errore.' : 'Stato dimostrativo. Nessuna esecuzione reale collegata.'}</div>${a.status === 'error' ? '<button class="btn" data-action="retry-agent" data-id="' + a.id + '">Simula retry</button>' : ''}<div class="row"><button class="btn" data-action="isolate" data-id="${a.id}">Isola nel diagramma</button><button data-action="follow" data-id="${a.id}" aria-pressed="${graph.follow}">Segui</button></div><div><h3 style="margin-bottom:8px">File coinvolti</h3>${a.files.map(id => fileLink(id)).join('')}</div><div class="task"><b>Sintesi disponibile</b><p>Il task riguarda ${esc(a.files.join(', '))}. Il laboratorio mostra una sintesi del lavoro, non pensieri interni del modello.</p></div>` : s.detailSection === 'files' ? `<h3>File letti / modificati</h3>${a.files.map(id => fileLink(id)).join('')}<button class="btn" data-action="view" data-value="review">Apri differenze demo</button><p class="small muted">La provenienza distingue le letture dalle scritture dell’agente. I collegamenti puntano alle fixture.</p>` : `<h3>Eventi della fixture</h3>${eventRows(a)}<p class="small muted">Eventi riproducibili dal cursore del diagramma; nessun WebSocket collegato.</p>`}</div></div>`; }
+function fileLink(id) { return `<button class="filelink" data-action="reveal-file" data-id="${esc(id)}">${icon('file')}<span class="truncate">${esc(id)}</span><span class="grow"></span><span class="muted">↗</span></button>`; }
+function eventRows(a) { return [['00:00', 'Task assegnato'], ['00:08', 'Lettura di ' + (a.files[0] || '(file non disponibile)')], ['00:22', a.tool + ' · ' + a.task], ['00:35', a.status === 'error' ? 'Errore simulato, disponibile il retry' : 'Checkpoint della fixture']].map(([t, d]) => `<div class="event"><time>${t}</time><span>${esc(d)}</span></div>`).join(''); }
+function renderContext() { const list = contextFiles.map(fileBy).filter(Boolean); $('#railContent').innerHTML = `<div class="rail-top"><h3>Context della sessione</h3><p class="small muted">File aggiunti in questa prova. Nessun invio a un modello.</p></div><div class="scroll"><div class="detail">${list.length ? list.map(f => `<div class="row grow">${fileLink(f.id)}<button class="danger" data-action="remove-context" data-id="${esc(f.id)}" aria-label="Rimuovi ${esc(f.id)} dal Context">${icon('x')}</button></div>`).join('') : '<div class="empty"><h3>Nessun file aggiunto</h3><p>In File seleziona uno o più elementi, poi premi Al Context.</p></div>'}<div class="notice">Sola lettura per le analisi. Scrittura, comandi e azioni esterne restano autorizzazioni separate nel flusso proposto.</div></div></div>`; }
+function renderProcesses() { $('#railContent').innerHTML = `<div class="rail-top"><h3>Processi</h3><p class="small muted">Vista di controllo per verificare che il dettaglio Agenti non la blocchi.</p></div><div class="detail"><div class="row">${icon('terminal')}<b class="grow small">Test della fixture</b>${badge('Terminato', 'good')}</div><p class="small muted">Nessun comando eseguito da questa pagina. La gestione reale dei processi non è modificata dal laboratorio.</p><pre class="task mono">node --test …\n[output dimostrativo]</pre></div>`; }
+
+
+// Source: workspace-views.js
+// A review proposal is an immutable snapshot, independent of explorer rename/delete.
+const reviewSource = initialBodies['inspector-tab-visibility.css'];
+function chatView() { return `<div class="chat"><div class="user-msg"><div class="msg-head"><b style="color:var(--talos-text)">TU</b><span>Scenario demo</span></div><p>Rivedi File e Agenti nella sidebar destra. Conserva lo stile Talos e lascia che io possa seguire il lavoro senza perdere il contesto.</p></div><div><div class="msg-head"><b>TALOS</b><span>Risposta dimostrativa · nessun modello collegato</span></div><div class="assistant-copy">Parto dai componenti esistenti. La tab attiva e il dettaglio dell’agente devono restare indipendenti: puoi esplorare i file, tornare all’agente e ritrovare il punto in cui eri.</div><div class="toolgroup"><div class="toolrow">${icon('check')}<span class="grow">Riferimenti del design system</span><span class="muted mono">index.css</span></div><div class="toolrow">${icon('branch')}<span class="grow">Ponte delle tab e contenitore del dettaglio</span><span class="badge">Fixture</span></div><div class="toolrow">${icon('shield')}<span class="grow">Modifiche proposte in area isolata</span><button data-action="view" data-value="review" class="small">Vedi Review →</button></div></div><div class="checkpoint"><h3 style="margin-bottom:7px">Un workspace, due punti di vista.</h3><p class="muted">I file mostrano chi li sta leggendo o modificando. Ogni agente porta ai file del suo task e alle differenze da verificare.</p></div></div><div class="toolgroup" style="margin:0"><div class="toolrow"><span class="grow">File → attività → agente</span><button class="btn" data-action="file-agent" data-id="fix">Prova il collegamento</button></div><div class="toolrow"><span class="grow">Grafo operativo della sessione</span><button class="btn" data-action="open-graph">Apri diagramma</button></div></div></div>`; }
+function fileView() {
+    const s = store.get(), f = fileBy(s.selectedFile);
+    if (!f)
+        return '<div class="empty"><h2>File non disponibile</h2><p>Seleziona un file presente nel workspace. I file eliminati restano nel cestino.</p></div>';
+    const body = bodies[f.id] || `// Fixture locale: ${f.id}\n// Il contenuto del file reale non è caricato in questa pagina.\n\nexport const example = true;`;
+    return `<div class="workspace-view"><div class="file-header"><div class="row"><span class="eyebrow grow">Anteprima locale</span><button data-action="favorite" data-id="${esc(f.id)}" aria-pressed="${!!f.favorite}" class="small">${f.favorite ? 'Rimuovi preferito' : 'Preferito'}</button><button class="file-more" aria-haspopup="menu" aria-expanded="false" data-action="file-menu" data-id="${esc(f.id)}" aria-label="Azioni sul file aperto">${icon('more')}</button></div><h3 style="margin-top:8px">${esc(filePath(f))}</h3></div><pre class="source-code" tabindex="0" aria-label="Codice dimostrativo">${body.split('\n').map((l, i) => `<span class="ln">${i + 1}</span>${esc(l)}`).join('\n')}</pre><div class="provenance"><div class="row"><span class="badge accent">Fixture</span><span class="grow">${f.agent ? esc(agents.find(a => a.id === f.agent)?.name) + ' · ' + esc(f.activity) : 'Nessuna attività agente associata'}</span>${f.agent ? `<button class="btn" data-action="file-agent" data-id="${f.agent}">Apri agente</button>` : ''}</div><p class="muted" style="margin-top:8px">La lettura non modifica il workspace. Refactor e Genera test aprono una proposta da rivedere.</p></div></div>`;
+}
+function graphAgents() { const s = store.get(); let list = agents.filter(a => (s.scope === 'workspace' || a.session === s.session) && (s.scope !== 'execution' || a.run === (s.session === 'sidebar' ? 'r1' : s.session === 'tests' ? 'r4' : 'r3')) && a.born <= graph.time); const hidden = new Set(); function childHide(id) { agents.filter(a => a.parent === id).forEach(a => { if (hidden.has(a.id))
+    return; hidden.add(a.id); childHide(a.id); }); } graph.collapsed.forEach(childHide); list = list.filter(a => !hidden.has(a.id)); if (s.graphIsolated)
+    list = list.filter(a => a.id === s.graphIsolated); if (graph.query)
+    list = list.filter(a => (a.name + ' ' + a.task).toLowerCase().includes(graph.query.toLowerCase())); if (graph.status !== 'all')
+    list = list.filter(a => a.status === graph.status); return list; }
+function graphView() { const s = store.get(); return `<div class="workspace-view"><div class="view-head"><div class="grow"><div class="eyebrow" style="margin-bottom:6px">Agenti / osservabilità</div><h2>Diagramma della sessione</h2><p>Gerarchie, dipendenze e attività. Dati dimostrativi.</p></div><button data-action="graph-close" class="iconbutton" title="Chiudi il diagramma" aria-label="Chiudi il diagramma">${icon('x')}</button></div><div class="toolbar"><select id="graphScope" aria-label="Ambito del diagramma">${[['execution', 'Esecuzione'], ['session', 'Sessione corrente'], ['workspace', 'Workspace']].map(([v, t]) => `<option value="${v}" ${s.scope === v ? 'selected' : ''}>${t}</option>`).join('')}</select><input id="graphSearch" aria-label="Cerca agente nel diagramma" placeholder="Cerca agente…" value="${esc(graph.query)}" style="flex:1;width:120px"><select id="graphStatus" aria-label="Filtra stato nel diagramma">${[['all', 'Tutti gli stati'], ['active', 'In corso'], ['waiting', 'In attesa'], ['error', 'Errori'], ['done', 'Terminati']].map(([v, t]) => `<option value="${v}" ${graph.status === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div><div class="toolbar"><button class="btn" data-action="fit">Adatta</button><button data-action="zoom-out" aria-label="Riduci zoom">−</button><span id="zoomLabel" class="small mono">${Math.round(graph.zoom * 100)}%</span><button data-action="zoom-in" aria-label="Aumenta zoom">+</button><button data-action="follow" aria-pressed="${graph.follow}" class="${graph.follow ? 'btn' : ''}">Segui attivo</button><button data-action="split" aria-pressed="${graph.split}">Affianca file</button><span class="grow"></span>${s.graphIsolated ? '<button data-action="clear-isolate" class="btn">Esci da isolamento</button>' : ''}</div><div style="position:relative;display:flex;flex:1;min-height:0"><div class="graph-canvas ${graph.split ? 'split' : ''}" id="graphCanvas" tabindex="0" aria-label="Diagramma: trascina per spostare, usa i controlli per lo zoom"><div class="graph-world" id="graphWorld"></div><div class="graph-key"><span>─ Delega</span><span>┄ Dipendenza</span><span>··· Messaggio</span></div><svg class="mini" viewBox="0 0 930 540" aria-label="Panoramica del diagramma" id="minimap"></svg></div>${graph.split ? `<div class="split-preview"><div class="row"><b class="small grow truncate">${esc(s.selectedFile)}</b><button data-action="split" aria-label="Chiudi affiancamento">${icon('x')}</button></div><pre>${esc(bodies[s.selectedFile] || '// Anteprima demo')}</pre></div>` : ''}</div><div class="timeline"><button class="btn" data-action="event-next" title="Avanza di un evento nella simulazione">Evento +</button><span>${graph.time === 4 ? 'ORA' : 'T' + graph.time}</span><input type="range" id="replay" min="0" max="4" value="${graph.time}" step="1" aria-label="Timeline della simulazione"><span class="muted">Replay demo</span></div></div>`; }
+function drawGraph() {
+    const host = $('#graphWorld');
+    if (!host)
+        return;
+    const s = store.get(), list = graphAgents();
+    const visible = new Set(list.map(a => a.id));
+    let edges = '';
+    for (const a of list) {
+        if (a.parent && visible.has(a.parent)) {
+            const p = agents.find(x => x.id === a.parent);
+            edges += `<path d="M${p.pos[0] + 107},${p.pos[1] + 124} C${p.pos[0] + 107},${p.pos[1] + 172} ${a.pos[0] + 107},${a.pos[1] - 38} ${a.pos[0] + 107},${a.pos[1]}"/>`;
+        }
+    }
+    if (visible.has('audit') && visible.has('fix'))
+        edges += `<path d="M264,278 L358,278" stroke-dasharray="5 5"/>`;
+    if (visible.has('ux') && visible.has('qa'))
+        edges += `<path d="M774,340 C774,380 312,380 312,410" stroke-dasharray="2 6"/>`;
+    host.innerHTML = `<svg viewBox="0 0 930 540" fill="none" stroke="var(--talos-secondary)" stroke-width="1.3">${edges}</svg>${list.map(a => `<article class="node ${a.id === s.selectedAgent ? 'selected' : ''}" style="left:${a.pos[0]}px;top:${a.pos[1]}px" data-agent="${a.id}" tabindex="0" role="button" aria-label="Apri dettaglio ${esc(a.name)}"><div class="row"><h3 class="grow">${esc(a.name)}</h3>${a.status === 'error' ? '<span class="danger">!</span>' : `<span class="dot ${statuses[a.status][1] === 'accent' ? 'warn' : statuses[a.status][1]}"></span>`}</div><p>${esc(a.role)}</p><div class="row">${stateBadge(a)}<span class="grow"></span><span class="small muted">${a.duration}</span></div><div class="row node-foot"><span>${esc(a.tool)} · demo</span>${agents.some(x => x.parent === a.id) ? `<button data-action="collapse-branch" data-id="${a.id}" aria-expanded="${!graph.collapsed.has(a.id)}" title="Espandi o collassa i figli">${graph.collapsed.has(a.id) ? 'Espandi' : 'Collassa'} ${agents.filter(x => x.parent === a.id).length}</button>` : ''}</div></article>`).join('')}${!list.length ? '<div class="empty" style="width:500px"><h3>Nessun agente per questi filtri</h3><button class="btn" data-action="graph-clear">Azzera filtri</button></div>' : ''}`;
+    $('#minimap').innerHTML = `<g fill="var(--talos-panel-soft)" stroke="var(--talos-accent)">${list.map(a => `<rect x="${a.pos[0]}" y="${a.pos[1]}" width="214" height="124" rx="12"/>`).join('')}</g>`;
+    transformGraph();
+}
+function transformGraph() { const w = $('#graphWorld'); if (w)
+    w.style.transform = `translate(${graph.x}px,${graph.y}px) scale(${graph.zoom})`; if ($('#zoomLabel'))
+    $('#zoomLabel').textContent = Math.round(graph.zoom * 100) + '%'; }
+function fitGraph() { const c = $('#graphCanvas'); if (!c)
+    return; const list = graphAgents(); if (!list.length)
+    return; const minX = Math.min(...list.map(a => a.pos[0])), minY = Math.min(...list.map(a => a.pos[1])); const w = Math.max(...list.map(a => a.pos[0] + 214)) - minX, h = Math.max(...list.map(a => a.pos[1] + 125)) - minY; graph.zoom = Math.min(1.1, Math.max(.25, Math.min((c.clientWidth - 40) / w, (c.clientHeight - 70) / h))); graph.x = (c.clientWidth - w * graph.zoom) / 2 - minX * graph.zoom; graph.y = 16 - minY * graph.zoom; transformGraph(); }
+function reviewView() { const s = store.get(); const applied = s.reviewStatus === 'applied', discarded = s.reviewStatus === 'discarded'; return `<div class="workspace-view"><div class="view-head"><div class="grow"><div class="eyebrow" style="margin-bottom:6px">Proposta in area isolata · demo</div><h2>Revisione modifiche</h2><p>Navigazione · guardia della conversazione figlia</p></div>${badge(applied ? 'Integrata nella demo' : discarded ? 'Scartata' : s.conflict ? 'Conflitto' : 'Da approvare', applied ? 'good' : s.conflict ? 'danger' : 'warn')}</div><div class="toolbar"><button class="primary" data-action="apply" ${s.conflict || applied || discarded ? 'disabled' : ''}>Integra nella demo</button><button class="btn" data-action="revision">Richiedi revisione</button><button class="danger" data-action="discard" ${applied || discarded ? 'disabled' : ''}>Scarta</button><span class="grow"></span><button data-action="file-agent" data-id="fix" title="Apri l’agente responsabile">${icon('branch')}</button></div><div class="provenance"><div class="row wrap"><span>Agente <b>Navigazione</b></span><span>·</span><span class="mono small">isolata/demo-sidebar</span><span class="grow"></span><label class="row small"><input type="checkbox" id="conflictToggle" ${s.conflict ? 'checked' : ''} ${applied ? 'disabled' : ''}>Simula conflitto</label></div><p class="muted" style="margin-top:7px">Motivo: il dettaglio separato non deve restare visibile sopra File, Context o Processi. ${s.revision ? 'Revisione richiesta: ' + s.revision + '.' : ''}</p>${s.conflict ? '<div class="notice" style="margin-top:10px;color:var(--talos-danger);border-color:var(--talos-danger-border)">Il file di destinazione è cambiato. Integrazione bloccata: nessuna sovrascrittura silenziosa. Disattiva il conflitto simulato per continuare.</div>' : ''}</div><div class="review-layout"><div class="review-files"><span class="eyebrow" style="padding:8px;display:block">2 file demo</span><button class="${s.selectedFile === 'main.css' ? '' : 'active'}" data-action="review-file" data-id="inspector-tab-visibility.css">inspector-tab-visibility.css<div class="small good">+${reviewSource.trimEnd().split('\n').length}</div></button><button class="${s.selectedFile === 'main.css' ? 'active' : ''}" data-action="review-file" data-id="main.css">main.css<div class="small good">+1</div></button></div><div class="stack" style="min-width:0;gap:0"><div class="diff" tabindex="0" aria-label="Differenze proposte, dati demo">${s.selectedFile === 'main.css' ? `<div>  @import './mockup-animazioni.css';</div><div class="add">+ @import './inspector-tab-visibility.css';</div>` : reviewSource.trimEnd().split('\n').map(line => '<div class="add">+ ' + esc(line) + '</div>').join('')}</div><div class="checks"><span class="good">✓ Verifiche della fixture</span><span>Esiti dimostrativi · non CI</span><span class="grow"></span><span>${s.conflict ? '1 conflitto' : 'Nessun conflitto demo'}</span></div></div></div><div class="rail-foot"><p class="small muted">${applied ? 'La proposta è segnata come integrata soltanto nella memoria del browser.' : discarded ? 'La proposta è stata scartata nella simulazione. Richiedi una revisione per ripartire.' : 'La conferma riguarda la demo. Nessun file reale, commit o processo viene modificato da questa pagina.'}</p></div></div>`; }
+
+
+// Source: controller.js
+function renderCenter() { const s = store.get(); const preserve = $('#center').scrollTop; $('#center').innerHTML = s.central === 'graph' ? graphView() : s.central === 'review' ? reviewView() : s.central === 'file' ? fileView() : chatView(); $('#composerHost').hidden = s.central !== 'chat'; $$('.center-tabs [data-value]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.value === s.central))); if (s.central === 'file')
+    $('#fileViewTab').hidden = false; if (s.central === 'graph') {
+    $('#graphViewTab').hidden = false;
+    drawGraph();
+    setupGraphDrag();
+}
+else
+    $('#center').scrollTop = preserve; }
+function renderAll() { tabMarkup(); renderRail(); renderCenter(); setWidth(store.get().width, false); }
+function setWidth(value, save = true) { const width = Math.max(300, Math.min(600, value, window.innerWidth - 650)); $('#shell').style.setProperty('--inspector', width + 'px'); $('#resizer').setAttribute('aria-valuenow', width); $('#widthLabel').textContent = width + ' px'; if (save) {
+    act('WIDTH', { value: width });
+    try {
+        localStorage.setItem('talos.sidebar.lab.width', String(width));
+    }
+    catch { }
+} }
+function changeTab(value) { closeMenu(); renaming = null; rememberScroll(); act('TAB', { value }); tabMarkup(); renderRail(); }
+function openAgent(id) { const a = agents.find(x => x.id === id); if (!a)
+    return; rememberScroll(); if (a.session !== store.get().session) {
+    contextBySession.set(store.get().session, [...contextFiles]);
+    act('SESSION', { id: a.session });
+    contextFiles = [...(contextBySession.get(a.session) || [])];
+} act('AGENT', { id }); tabMarkup(); renderRail(); if (store.get().central === 'graph')
+    drawGraph(); }
+function openGraph(id) { if (id)
+    openAgent(id); act('PATCH', { value: { central: 'graph' } }); renderCenter(); requestAnimationFrame(fitGraph); }
+function openFile(id, ids) { if (!fileBy(id)) {
+    toast('File non più disponibile.');
+    return;
+} rememberScroll(); act('FILE', { id, ids }); renderRail(); renderCenter(); }
+function closeMenu(restore = false) { const m = $('#menu'); m.hidden = true; m.innerHTML = ''; menuReturn?.setAttribute('aria-expanded', 'false'); if (restore) {
+    if (menuReturn?.isConnected)
+        menuReturn.focus();
+    else
+        $('#fileSearch')?.focus();
+} }
+function openMenu(anchor, html) { closeMenu(); const r = anchor.getBoundingClientRect(), m = $('#menu'); menuReturn = anchor; anchor.setAttribute('aria-haspopup', 'menu'); anchor.setAttribute('aria-expanded', 'true'); anchor.setAttribute('aria-controls', 'menu'); m.setAttribute('role', 'menu'); m.setAttribute('aria-label', anchor.getAttribute('aria-label') || 'Azioni'); m.innerHTML = html; $$('button', m).forEach(b => { b.setAttribute('role', 'menuitem'); b.tabIndex = -1; }); m.hidden = false; m.style.left = Math.max(8, Math.min(window.innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth)) + 'px'; m.style.top = Math.max(8, Math.min(window.innerHeight - m.offsetHeight - 8, r.bottom + 4)) + 'px'; m.querySelector('button:not(:disabled)')?.focus(); }
+function actionButton(v, t, id = '') { return `<button data-action="${v}" ${id ? `data-id="${esc(id)}"` : ''}>${t}</button>`; }
+function fileMenu(anchor, id) { const f = fileBy(id); if (!f)
+    return; act('PATCH', { value: { selectedFile: id, selectedFiles: [id] } }); openMenu(anchor, (f.agent ? actionButton('file-agent', 'Apri agente collegato', f.agent) : '') + actionButton('context-selected', 'Aggiungi al Context') + actionButton('favorite', f.favorite ? 'Rimuovi preferito' : 'Aggiungi ai preferiti', id) + actionButton('rename', 'Rinomina', id) + actionButton('duplicate', 'Duplica', id) + actionButton('copy-file', 'Copia', id) + actionButton('cut-file', 'Taglia', id) + actionButton('paste-file', 'Incolla qui', id) + '<hr>' + `<button data-action="ai" data-value="Spiega">Spiega / analizza</button><button data-action="ai" data-value="Trova bug">Trova bug (sola lettura)</button><button data-action="ai" data-value="Refactor">Refactor in area isolata</button><button data-action="ai" data-value="Genera test">Genera test in area isolata</button>` + '<hr>' + actionButton('delete-file', 'Sposta nel cestino demo', id)); }
+function aiAction(kind) { closeMenu(); if (!store.get().selectedFiles.length) {
+    toast('Seleziona almeno un file.');
+    return;
+} if (['Refactor', 'Genera test'].includes(kind)) {
+    act('PATCH', { value: { central: 'review', reviewStatus: 'ready', conflict: false } });
+    renderCenter();
+    toast(kind + ': proposta dimostrativa pronta per la revisione. Nessun agente avviato.');
+}
+else {
+    contextFiles = Array.from(new Set([...contextFiles, ...store.get().selectedFiles]));
+    $('#composer').value = `${kind}: ${store.get().selectedFiles.join(', ')}. Usa soltanto lettura; non applicare modifiche.`;
+    act('PATCH', { value: { central: 'chat' } });
+    renderCenter();
+    toast('Bozza preparata nel composer. Non inviata.');
+} }
+function showGuide() { guideReturn = document.activeElement; closeMenu(); $('#shell').inert = true; $('.labbar').inert = true; $('#overlay').hidden = false; $('.sheet').focus(); }
+function hideGuide() { $('#overlay').hidden = true; $('#shell').inert = false; $('.labbar').inert = false; guideReturn?.focus(); }
+function renameSubmit(cancel = false) {
+    const old = renaming, input = $('#renameInput');
+    if (!old)
+        return;
+    if (!cancel) {
+        const result = validateFileName(input?.value || '', files.concat(deleted).map(f => f.id), old);
+        if (!result.ok) {
+            input?.setAttribute('aria-invalid', 'true');
+            toast(result.error);
+            input?.focus();
+            return;
+        }
+        if (result.name !== old) {
+            const f = fileBy(old);
+            if (!f) {
+                renaming = null;
+                return;
+            }
+            f.id = result.name;
+            if (Object.hasOwn(bodies, old)) {
+                bodies[result.name] = bodies[old];
+                delete bodies[old];
+            }
+            remapReferences(old, result.name);
+        }
+    }
+    renaming = null;
+    renderRail();
+    if (store.get().central === 'file')
+        renderCenter();
+    const row = $$('[data-file]').find(n => n.dataset.file === store.get().selectedFile);
+    row?.focus();
+}
+
+
+// Source: actions.js
+document.addEventListener('click', e => {
+    const tab = e.target.closest('[data-tab]');
+    if (tab) {
+        changeTab(tab.dataset.tab);
+        return;
+    }
+    const cb = e.target.closest('[data-select-file]');
+    if (cb) {
+        const id = cb.dataset.selectFile;
+        const ids = new Set(store.get().selectedFiles);
+        cb.checked ? ids.add(id) : ids.delete(id);
+        act('PATCH', { value: { selectedFile: id, selectedFiles: [...ids] } });
+        renderRail();
+        return;
+    }
+    const b = e.target.closest('[data-action]');
+    if (b) {
+        const action = b.dataset.action, id = b.dataset.id, v = b.dataset.value;
+        const s = store.get();
+        if (b.disabled)
+            return;
+        if (!['file-menu', 'selection-menu', 'file-tools'].includes(action))
+            closeMenu();
+        switch (action) {
+            case 'view':
+                act('PATCH', { value: { central: v } });
+                renderCenter();
+                break;
+            case 'density':
+                rememberScroll();
+                document.body.classList.toggle('compact');
+                renderRail();
+                break;
+            case 'guide':
+                showGuide();
+                break;
+            case 'close-guide':
+                hideGuide();
+                break;
+            case 'reset':
+                resetDemo();
+                break;
+            case 'session':
+            case 'new-session':
+                rememberScroll();
+                contextBySession.set(s.session, [...contextFiles]);
+                act('SESSION', { id: action === 'new-session' ? 'new' : id });
+                contextFiles = [...(contextBySession.get(store.get().session) || [])];
+                act('PATCH', { value: { central: 'chat' } });
+                renderAll();
+                break;
+            case 'toggle-rail': {
+                const rail = $('#inspector');
+                rail.hidden = !rail.hidden;
+                $('#shell').style.gridTemplateColumns = rail.hidden ? 'var(--talos-sidebar-w) minmax(0,1fr) 0' : '';
+                break;
+            }
+            case 'normal':
+                scenario = 'normal';
+                $('#scenario').value = 'normal';
+                renderRail();
+                break;
+            case 'file-filter':
+                resetFileScroll();
+                act('PATCH', { value: { fileFilter: v } });
+                renderRail();
+                break;
+            case 'agent-filter':
+                act('PATCH', { value: { agentFilter: v } });
+                renderRail();
+                break;
+            case 'clear-search':
+                resetFileScroll();
+                act('PATCH', { value: { fileQuery: '', fileFilter: 'all' } });
+                renderRail();
+                break;
+            case 'search-help':
+                toast('Nome/percorso · /regex/ · ext:css · testo:parola · ~fuzzy. Solo fixture; ricerca semantica e simboli non collegati.');
+                break;
+            case 'agent-list':
+                act('LIST', {});
+                renderRail();
+                break;
+            case 'detail-section':
+                act('PATCH', { value: { detailSection: v } });
+                renderRail();
+                break;
+            case 'open-graph':
+                openGraph();
+                break;
+            case 'file-agent':
+                openGraph(id);
+                break;
+            case 'graph-close':
+                act('PATCH', { value: { central: 'chat' } });
+                renderCenter();
+                $('#graphViewTab').hidden = true;
+                break;
+            case 'reveal-file':
+                changeTab('files');
+                const f = fileBy(id);
+                if (f?.folder)
+                    folderOpen.add(f.folder);
+                act('PATCH', { value: { fileFilter: 'all', fileQuery: '' } });
+                openFile(id);
+                break;
+            case 'isolate':
+                openGraph(id);
+                act('PATCH', { value: { graphIsolated: id } });
+                renderCenter();
+                fitGraph();
+                break;
+            case 'clear-isolate':
+                act('PATCH', { value: { graphIsolated: null } });
+                renderCenter();
+                fitGraph();
+                break;
+            case 'collapse-branch':
+                graph.collapsed.has(id) ? graph.collapsed.delete(id) : graph.collapsed.add(id);
+                drawGraph();
+                break;
+            case 'fit':
+                fitGraph();
+                break;
+            case 'zoom-in':
+                graph.zoom = Math.min(2.5, graph.zoom + .1);
+                transformGraph();
+                break;
+            case 'zoom-out':
+                graph.zoom = Math.max(.2, graph.zoom - .1);
+                transformGraph();
+                break;
+            case 'follow':
+                graph.follow = !graph.follow;
+                if (s.central !== 'graph')
+                    openGraph(id || s.selectedAgent);
+                else
+                    renderCenter();
+                fitGraph();
+                toast(graph.follow ? 'Seguimento demo attivo: Evento + porta al nodo aggiornato.' : 'Seguimento disattivato.');
+                break;
+            case 'split':
+                graph.split = !graph.split;
+                renderCenter();
+                fitGraph();
+                break;
+            case 'graph-clear':
+                graph.query = '';
+                graph.status = 'all';
+                graph.time = 4;
+                graph.collapsed.clear();
+                act('PATCH', { value: { graphIsolated: null } });
+                renderCenter();
+                fitGraph();
+                break;
+            case 'event-next':
+                graph.time = (graph.time + 1) % 5;
+                simulationStep++;
+                if (graph.follow) {
+                    const a = agents.find(a => a.born === graph.time && a.session === s.session);
+                    if (a)
+                        openAgent(a.id);
+                }
+                renderCenter();
+                fitGraph();
+                toast('Evento ' + simulationStep + ' della sequenza demo.');
+                break;
+            case 'retry-agent':
+                agents.find(a => a.id === id).status = 'active';
+                renderRail();
+                if (s.central === 'graph')
+                    drawGraph();
+                toast('Retry simulato, nessun processo avviato.');
+                break;
+            case 'file-tools':
+                openMenu(b, `<button data-action="toggle-selection">${selectionMode ? 'Nascondi selezione' : 'Selezione multipla'}</button><button data-action="collapse-folders">Comprimi cartelle</button><button data-action="search-help">Sintassi ricerca</button><button data-action="file-filter" data-value="trash">Cestino (${deleted.length})</button>`);
+                break;
+            case 'toggle-selection':
+                selectionMode = !selectionMode;
+                renderRail();
+                break;
+            case 'collapse-folders':
+                folderOpen.clear();
+                renderRail();
+                break;
+            case 'file-menu':
+                fileMenu(b, id);
+                break;
+            case 'selection-menu':
+                openMenu(b, `<button data-action="ai" data-value="Refactor">Refactor</button><button data-action="ai" data-value="Genera test">Genera test</button><button data-action="ai" data-value="Spiega">Spiega selezione</button><button data-action="ai" data-value="Trova dipendenze">Trova dipendenze · bozza</button><button data-action="ai" data-value="Trova utilizzi">Trova utilizzi · bozza</button><button data-action="ai" data-value="Confronta">Confronta · bozza</button><button data-action="ai" data-value="Assegna a un agente">Assegna a un agente · bozza</button><button data-action="context-selected">Aggiungi al Context</button>`);
+                break;
+            case 'ai':
+                aiAction(v);
+                break;
+            case 'context-selected':
+                contextFiles = Array.from(new Set([...contextFiles, ...s.selectedFiles]));
+                changeTab('context');
+                toast('Selezione aggiunta al Context locale.');
+                break;
+            case 'remove-context':
+                contextFiles = contextFiles.filter(x => x !== id);
+                renderRail();
+                break;
+            case 'favorite': {
+                const f = fileBy(id || s.selectedFile);
+                if (f)
+                    f.favorite = !f.favorite;
+                renderRail();
+                if (s.central === 'file')
+                    renderCenter();
+                break;
+            }
+            case 'rename':
+                renaming = id;
+                renderRail();
+                break;
+            case 'new-file': {
+                let n = 1;
+                while (files.concat(deleted).some(f => f.id.toLowerCase() === `nuovo-${n}.js`))
+                    n++;
+                const f = { id: `nuovo-${n}.js`, folder: 'components', git: 'A' };
+                files.push(f);
+                folderOpen.add(f.folder);
+                act('PATCH', { value: { fileFilter: 'all', fileQuery: '', selectedFile: f.id, selectedFiles: [f.id] } });
+                renaming = f.id;
+                renderRail();
+                break;
+            }
+            case 'duplicate':
+            case 'copy-file':
+            case 'cut-file': {
+                const f = fileBy(id);
+                if (!f) {
+                    toast('File non disponibile.');
+                    break;
+                }
+                if (action === 'duplicate') {
+                    const name = uniqueCopyName(f.id, files.concat(deleted).map(x => x.id));
+                    files.push({ ...f, id: name, git: 'A', agent: null });
+                    if (Object.hasOwn(bodies, id))
+                        bodies[name] = bodies[id];
+                    renderRail();
+                    toast('Duplicato nei dati demo.');
+                }
+                else {
+                    clipboard = { file: structuredClone(f), body: bodies[id], source: id, cut: action === 'cut-file' };
+                    toast(clipboard.cut ? 'File tagliato negli appunti del laboratorio.' : 'File copiato negli appunti del laboratorio.');
+                }
+                break;
+            }
+            case 'paste-file': {
+                if (!clipboard) {
+                    toast('Appunti del laboratorio vuoti.');
+                    break;
+                }
+                const target = fileBy(id);
+                if (!target) {
+                    toast('Destinazione non disponibile.');
+                    break;
+                }
+                if (clipboard.cut) {
+                    const f = fileBy(clipboard.source);
+                    if (!f) {
+                        clipboard = null;
+                        toast('Il file tagliato non è più disponibile.');
+                        break;
+                    }
+                    f.folder = target.folder;
+                    clipboard = null;
+                }
+                else {
+                    const name = uniqueCopyName(clipboard.file.id, files.concat(deleted).map(f => f.id));
+                    files.push({ ...clipboard.file, id: name, folder: target.folder, git: 'A', agent: null });
+                    if (clipboard.body !== undefined)
+                        bodies[name] = clipboard.body;
+                }
+                folderOpen.add(target.folder);
+                renderRail();
+                if (s.central === 'file')
+                    renderCenter();
+                toast('Incollato nella fixture.');
+                break;
+            }
+            case 'delete-file': {
+                const f = fileBy(id);
+                if (f) {
+                    deleted.push({ ...f });
+                    files = files.filter(x => x.id !== id);
+                    remapReferences(id, null);
+                    renderRail();
+                    if (s.central === 'file')
+                        renderCenter();
+                    toast('Nel cestino demo. Ripristina dalla vista Cestino.');
+                }
+                break;
+            }
+            case 'restore-file': {
+                const f = deleted.find(x => x.id === id);
+                if (f) {
+                    if (files.some(x => x.id.toLowerCase() === id.toLowerCase())) {
+                        toast('Esiste già un file con questo nome.');
+                        break;
+                    }
+                    files.push(f);
+                    deleted = deleted.filter(x => x.id !== id);
+                    renderRail();
+                }
+                break;
+            }
+            case 'review-file':
+                act('PATCH', { value: { selectedFile: id } });
+                renderCenter();
+                break;
+            case 'apply':
+                act('APPLY', {});
+                renderCenter();
+                toast(s.conflict ? 'Conflitto: integrazione bloccata.' : 'Integrato soltanto nei dati della demo.');
+                break;
+            case 'revision':
+                act('REVISION', {});
+                renderCenter();
+                toast('Nuova revisione della fixture disponibile.');
+                break;
+            case 'discard':
+                act('DISCARD', {});
+                renderCenter();
+                toast('Proposta scartata nella demo.');
+                break;
+            case 'send': {
+                const t = $('#composer').value.trim();
+                if (t) {
+                    toast('Messaggio conservato nella simulazione, non inviato a un modello.');
+                    $('#composer').value = '';
+                    const area = $('#center .chat');
+                    if (area) {
+                        const x = document.createElement('div');
+                        x.className = 'user-msg';
+                        x.textContent = t;
+                        area.append(x);
+                        x.scrollIntoView({ block: 'end' });
+                    }
+                }
+                break;
+            }
+        }
+        return;
+    }
+    const folder = e.target.closest('[data-folder]');
+    if (folder && !e.target.closest('[data-file]')) {
+        const g = folder.dataset.folder;
+        folderOpen.has(g) ? folderOpen.delete(g) : folderOpen.add(g);
+        renderRail();
+        return;
+    }
+    const ag = e.target.closest('[data-agent]');
+    if (ag) {
+        openAgent(ag.dataset.agent);
+        return;
+    }
+    const row = e.target.closest('[data-file]');
+    if (row && !e.target.closest('input')) {
+        const id = row.dataset.file;
+        let ids = [id];
+        if (e.ctrlKey || e.metaKey) {
+            const set = new Set(store.get().selectedFiles);
+            set.has(id) ? set.delete(id) : set.add(id);
+            ids = [...set];
+        }
+        else if (e.shiftKey && lastSelected) {
+            const list = scenario === 'large' ? virtualFiles.map(f => f.id) : $$('[data-file]', $('#fileTree')).map(n => n.dataset.file), i = list.indexOf(lastSelected), j = list.indexOf(id);
+            if (i >= 0 && j >= 0)
+                ids = list.slice(Math.min(i, j), Math.max(i, j) + 1);
+        }
+        lastSelected = id;
+        openFile(id, ids);
+        return;
+    }
+    if (!e.target.closest('#menu'))
+        closeMenu();
+});
+
+
+// Source: events.js
+document.addEventListener('input', e => { if (e.target.id === 'fileSearch') {
+    if (e.isComposing)
+        return;
+    resetFileScroll();
+    act('PATCH', { value: { fileQuery: e.target.value } });
+    renderRail();
+} if (e.target.id === 'agentSearch') {
+    act('PATCH', { value: { agentQuery: e.target.value } });
+    renderRail();
+} if (e.target.id === 'graphSearch') {
+    graph.query = e.target.value;
+    drawGraph();
+} if (e.target.id === 'replay') {
+    graph.time = +e.target.value;
+    drawGraph();
+    e.target.previousElementSibling.textContent = graph.time === 4 ? 'ORA' : 'T' + graph.time;
+} });
+document.addEventListener('compositionend', e => { if (e.target.id === 'fileSearch')
+    e.target.dispatchEvent(new Event('input', { bubbles: true })); });
+document.addEventListener('change', e => { if (e.target.id === 'fileFilter') {
+    resetFileScroll();
+    act('PATCH', { value: { fileFilter: e.target.value } });
+    renderRail();
+} if (e.target.id === 'scenario') {
+    scenario = e.target.value;
+    renderRail();
+} if (e.target.id === 'graphScope') {
+    act('SCOPE', { value: e.target.value });
+    drawGraph();
+    fitGraph();
+} if (e.target.id === 'graphStatus') {
+    graph.status = e.target.value;
+    drawGraph();
+    fitGraph();
+} if (e.target.id === 'conflictToggle') {
+    act('PATCH', { value: { conflict: e.target.checked } });
+    renderCenter();
+} });
+document.addEventListener('keydown', e => {
+    if (e.target.closest('#menu')) {
+        const items = $$('#menu button:not(:disabled)');
+        const i = items.indexOf(document.activeElement);
+        if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+            e.preventDefault();
+            const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+            items[next]?.focus();
+            return;
+        }
+        if (e.key === 'Tab') {
+            closeMenu(true);
+            return;
+        }
+    }
+    if (e.key === 'Escape') {
+        if (!$('#overlay').hidden)
+            hideGuide();
+        else if (renaming)
+            renameSubmit(true);
+        else {
+            closeMenu(true);
+        }
+        return;
+    }
+    if (!$('#overlay').hidden && e.key === 'Tab') {
+        const controls = $$('button,[href],input,select,textarea,[tabindex="0"]', $('.sheet')).filter(x => !x.disabled);
+        const first = controls[0], last = controls.at(-1);
+        if (e.shiftKey && (document.activeElement === first || document.activeElement === $('.sheet'))) {
+            e.preventDefault();
+            last.focus();
+        }
+        else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+        return;
+    }
+    if (e.target.id === 'renameInput') {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            renameSubmit();
+        }
+        return;
+    }
+    if (e.target.closest('#railTabs')) {
+        const tabs = $$('#railTabs [role=tab]');
+        let i = tabs.indexOf(e.target);
+        if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+            e.preventDefault();
+            i = e.key === 'Home' ? 0 : e.key === 'End' ? 3 : (i + (e.key === 'ArrowRight' ? 1 : 3)) % 4;
+            changeTab(tabs[i].dataset.tab);
+            tabs[i].focus();
+        }
+        return;
+    }
+    if (e.target.id === 'resizer' && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+        e.preventDefault();
+        setWidth(e.key === 'Home' ? 300 : e.key === 'End' ? 600 : store.get().width + (e.key === 'ArrowLeft' ? 20 : -20));
+        return;
+    }
+    const row = e.target.closest('[data-file],[data-agent],[data-folder]');
+    if (row && e.target === row) {
+        const tree = $('#fileTree');
+        const nodes = $$('[data-file],[data-folder],[data-agent]', $('#railContent'));
+        const i = nodes.indexOf(row);
+        const focus = n => { if (!n)
+            return; for (const x of nodes)
+            x.tabIndex = -1; n.tabIndex = 0; n.focus(); };
+        if (e.shiftKey && e.key === 'F10' && row.dataset.file) {
+            e.preventDefault();
+            fileMenu(row, row.dataset.file);
+            return;
+        }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            row.click();
+            return;
+        }
+        if (e.key === ' ') {
+            e.preventDefault();
+            if (row.dataset.file) {
+                const cb = $('[data-select-file]', row);
+                cb?.click();
+            }
+            else
+                row.click();
+            return;
+        }
+        if (scenario === 'large' && row.dataset.file && ['ArrowDown', 'ArrowUp', 'Home', 'End', 'PageDown', 'PageUp'].includes(e.key)) {
+            e.preventDefault();
+            const index = virtualFiles.findIndex(f => f.id === row.dataset.file);
+            const scroller = $('#fileScroll');
+            const height = parseFloat(getComputedStyle(tree).getPropertyValue('--file-row-height')) || 36;
+            const step = e.key.startsWith('Page') ? Math.max(1, Math.floor(scroller.clientHeight / height)) : 1;
+            const next = e.key === 'Home' ? 0 : e.key === 'End' ? virtualFiles.length - 1 : Math.max(0, Math.min(virtualFiles.length - 1, index + (['ArrowDown', 'PageDown'].includes(e.key) ? step : -step)));
+            scroller.scrollTop = next * height;
+            scroller.dispatchEvent(new Event('scroll'));
+            const target = $$('[data-file]', tree).find(n => n.dataset.file === virtualFiles[next]?.id);
+            if (target) {
+                $$('[data-file]', tree).forEach(n => n.tabIndex = -1);
+                target.tabIndex = 0;
+                target.focus({ preventScroll: true });
+            }
+            return;
+        }
+        if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+            e.preventDefault();
+            focus(nodes[e.key === 'Home' ? 0 : e.key === 'End' ? nodes.length - 1 : Math.max(0, Math.min(nodes.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))]);
+            return;
+        }
+        if (e.key === 'ArrowRight' && row.dataset.folder) {
+            e.preventDefault();
+            if (!folderOpen.has(row.dataset.folder))
+                row.click();
+            else
+                focus(nodes[i + 1]);
+            return;
+        }
+        if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            if (row.dataset.folder && folderOpen.has(row.dataset.folder))
+                row.click();
+            else if (row.dataset.file) {
+                const folder = fileBy(row.dataset.file)?.folder;
+                focus(nodes.find(n => n.dataset.folder === folder));
+            }
+            return;
+        }
+        if (e.key === 'F2' && row.dataset.file) {
+            e.preventDefault();
+            renaming = row.dataset.file;
+            renderRail();
+            return;
+        }
+        if (tree && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+            e.preventDefault();
+            act('PATCH', { value: { selectedFiles: scenario === 'large' ? virtualFiles.map(f => f.id) : $$('[data-file]', tree).map(n => n.dataset.file) } });
+            renderRail();
+            return;
+        }
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        changeTab('files');
+        $('#fileSearch')?.focus();
+    }
+});
+document.addEventListener('contextmenu', e => { const row = e.target.closest('[data-file]'); if (row) {
+    e.preventDefault();
+    fileMenu(row, row.dataset.file);
+} });
+let draggedFile = null;
+document.addEventListener('dragstart', e => { const row = e.target.closest('[data-file]'); if (row) {
+    draggedFile = row.dataset.file;
+    e.dataTransfer.setData('text/plain', draggedFile);
+} });
+document.addEventListener('dragend', () => { draggedFile = null; });
+document.addEventListener('dragover', e => { if (e.target.closest('[data-folder]'))
+    e.preventDefault(); });
+document.addEventListener('drop', e => { const folder = e.target.closest('[data-folder]'); if (folder && draggedFile) {
+    e.preventDefault();
+    const f = files.find(f => f.id === draggedFile);
+    if (f) {
+        f.folder = folder.dataset.folder;
+        folderOpen.add(f.folder);
+        renderRail();
+        toast('File spostato nella cartella demo.');
+    }
+    draggedFile = null;
+} });
+$('#resizer').addEventListener('pointerdown', e => { e.preventDefault(); const r = e.currentTarget; r.setPointerCapture(e.pointerId); const start = e.clientX, w = $('#inspector').getBoundingClientRect().width; const move = ev => setWidth(Math.round(w + start - ev.clientX), false); const up = ev => { r.removeEventListener('pointermove', move); r.removeEventListener('pointerup', up); r.removeEventListener('pointercancel', up); setWidth(ev.type === 'pointercancel' ? w : Math.round(w + start - ev.clientX)); }; r.addEventListener('pointermove', move); r.addEventListener('pointerup', up); r.addEventListener('pointercancel', up); });
+function setupGraphDrag() { const c = $('#graphCanvas'); if (!c)
+    return; c.addEventListener('pointerdown', e => { if (e.target.closest('.node'))
+    return; e.preventDefault(); c.setPointerCapture(e.pointerId); const x = e.clientX, y = e.clientY, ox = graph.x, oy = graph.y; const move = ev => { graph.x = ox + ev.clientX - x; graph.y = oy + ev.clientY - y; transformGraph(); }; const up = () => { c.removeEventListener('pointermove', move); c.removeEventListener('pointerup', up); c.removeEventListener('pointercancel', up); }; c.addEventListener('pointermove', move); c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up); }); c.addEventListener('wheel', e => { if (e.ctrlKey) {
+    e.preventDefault();
+    graph.zoom = Math.max(.2, Math.min(2.5, graph.zoom - e.deltaY * .002));
+    transformGraph();
+} }, { passive: false }); }
+try {
+    const width = Number(localStorage.getItem('talos.sidebar.lab.width'));
+    if (width >= 300)
+        act('WIDTH', { value: width });
+}
+catch { }
+renderAll();
+window.addEventListener('resize', () => { setWidth(store.get().width, false); if (store.get().central === 'graph')
+    fitGraph(); });
+// Introspection is read-only apart from explicit demo actions, useful for acceptance tests.
+window.TalosLab = { state: () => structuredClone(store.get()), fileCount: () => files.length, graphCount: () => graphAgents().length };
+
+})();
+</script></body></html>

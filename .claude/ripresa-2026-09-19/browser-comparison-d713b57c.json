@@ -1,0 +1,391 @@
+{
+  "baseline": "40382865",
+  "current": "d713b57c",
+  "counts": {
+    "passed": 168,
+    "failed": 20,
+    "timedOut": 1
+  },
+  "failures": [
+    {
+      "title": "LAG-INTERACTION-DIALOG-38 — una modale pausa lo sfondo e la chiusura lo riprende",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveClass\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('html')\nExpected pattern: \u001b[32m/background-motion-paused/\u001b[39m\nReceived string:  \u001b[31m\"background-motion-active talos-final-ui\"\u001b[39m\nTimeout: 5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveClass\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('html')\u001b[22m\n\u001b[2m    14 × locator resolved to <html lang=\"en\" data-theme=\"light\" data-schermo=\"chat\" data-vista=\"sessione\" data-tam-montato=\"si\" data-workspace-ui=\"v2\" data-talos-theme=\"calm\" data-talos-scene=\"calm\" data-density=\"comfortable\" data-lingua-applicata=\"en\" data-talos-entrypoint=\"app\" data-talos-color-mode=\"system\" data-talos-composer-plus=\"drawer\" data-talos-motion-mode=\"adaptive\" data-talos-motion-profile=\"preset\" data-talos-motion-easing=\"precise\" data-talos-message-style=\"sections\" data-talos-composer-shape=\"standard\" data-talos…>…</html>\u001b[22m\n\u001b[2m       - unexpected value \"background-motion-active talos-final-ui\"\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveClass\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('html')\nExpected pattern: \u001b[32m/background-motion-paused/\u001b[39m\nReceived string:  \u001b[31m\"background-motion-active talos-final-ui\"\u001b[39m\nTimeout: 5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveClass\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('html')\u001b[22m\n\u001b[2m    14 × locator resolved to <html lang=\"en\" data-theme=\"light\" data-schermo=\"chat\" data-vista=\"sessione\" data-tam-montato=\"si\" data-workspace-ui=\"v2\" data-talos-theme=\"calm\" data-talos-scene=\"calm\" data-density=\"comfortable\" data-lingua-applicata=\"en\" data-talos-entrypoint=\"app\" data-talos-color-mode=\"system\" data-talos-composer-plus=\"drawer\" data-talos-motion-mode=\"adaptive\" data-talos-motion-profile=\"preset\" data-talos-motion-easing=\"precise\" data-talos-message-style=\"sections\" data-talos-composer-shape=\"standard\" data-talos…>…</html>\u001b[22m\n\u001b[2m       - unexpected value \"background-motion-active talos-final-ui\"\u001b[22m\n\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:427:22",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 22,
+            "line": 427
+          },
+          "snippet": "\u001b[0m \u001b[90m 425 |\u001b[39m \u001b[90m   */\u001b[39m\n \u001b[90m 426 |\u001b[39m   \u001b[36mawait\u001b[39m expect(root)\u001b[33m.\u001b[39mtoHaveClass(\u001b[35m/background-motion-active/\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 427 |\u001b[39m   \u001b[36mawait\u001b[39m expect(root)\u001b[33m.\u001b[39mtoHaveClass(\u001b[35m/background-motion-paused/\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 428 |\u001b[39m\n \u001b[90m 429 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-chiudi=\"veloComandi\"]'\u001b[39m)\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n \u001b[90m 430 |\u001b[39m   \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'#veloComandi'\u001b[39m))\u001b[33m.\u001b[39mtoBeHidden()\u001b[33m;\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "LAG-REPLAY-TEXT-32 — molti delta storici fanno un solo commit visuale finale",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m0\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m0\u001b[39m\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:668:27",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 27,
+            "line": 668
+          },
+          "snippet": "\u001b[0m \u001b[90m 666 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 667 |\u001b[39m   expect(result\u001b[33m.\u001b[39mtext)\u001b[33m.\u001b[39mtoBe(\u001b[32m'a'\u001b[39m\u001b[33m.\u001b[39mrepeat(\u001b[35m250\u001b[39m))\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 668 |\u001b[39m   expect(result\u001b[33m.\u001b[39mmessages)\u001b[33m.\u001b[39mtoBe(\u001b[35m1\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                           \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 669 |\u001b[39m   expect(result\u001b[33m.\u001b[39mmutations)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(\u001b[35m12\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 670 |\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m 671 |\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "cold start does not expose invented runtime telemetry",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('[data-runtime-usage]')\nExpected: \u001b[32m\"Contesto non osservato\"\u001b[39m\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('[data-runtime-usage]')\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('[data-runtime-usage]')\nExpected: \u001b[32m\"Contesto non osservato\"\u001b[39m\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('[data-runtime-usage]')\u001b[22m\n\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:835:54",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 54,
+            "line": 835
+          },
+          "snippet": "\u001b[0m \u001b[90m 833 |\u001b[39m     expect(text)\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoContain(value)\u001b[33m;\u001b[39m\n \u001b[90m 834 |\u001b[39m   }\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 835 |\u001b[39m   \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-runtime-usage]'\u001b[39m))\u001b[33m.\u001b[39mtoHaveText(\u001b[32m'Contesto non osservato'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 836 |\u001b[39m   \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-environment-label]'\u001b[39m)\u001b[33m.\u001b[39mfirst())\u001b[33m.\u001b[39mtoHaveText(\u001b[32m'Ambiente non osservato'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 837 |\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m 838 |\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "OPEN-WITH-TALOS-BROWSER-01 — il fragment prepara il workspace senza inventare Full access",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('#sessionTitle')\nExpected: \u001b[32m\"N\u001b[7muova · Progetto Ω\u001b[27m\"\u001b[39m\nReceived: \u001b[31m\"N\u001b[7messuna sessione\u001b[27m\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('#sessionTitle')\u001b[22m\n\u001b[2m    14 × locator resolved to <h1 id=\"sessionTitle\">Nessuna sessione</h1>\u001b[22m\n\u001b[2m       - unexpected value \"Nessuna sessione\"\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('#sessionTitle')\nExpected: \u001b[32m\"N\u001b[7muova · Progetto Ω\u001b[27m\"\u001b[39m\nReceived: \u001b[31m\"N\u001b[7messuna sessione\u001b[27m\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('#sessionTitle')\u001b[22m\n\u001b[2m    14 × locator resolved to <h1 id=\"sessionTitle\">Nessuna sessione</h1>\u001b[22m\n\u001b[2m       - unexpected value \"Nessuna sessione\"\u001b[22m\n\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:885:47",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 47,
+            "line": 885
+          },
+          "snippet": "\u001b[0m \u001b[90m 883 |\u001b[39m\n \u001b[90m 884 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`/#open-workspace=${launchId}`\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 885 |\u001b[39m   \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'#sessionTitle'\u001b[39m))\u001b[33m.\u001b[39mtoHaveText(\u001b[32m'Nuova · Progetto Ω'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                               \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 886 |\u001b[39m   \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'#conversation'\u001b[39m))\u001b[33m.\u001b[39mtoContainText(\u001b[32m'Sessione pronta su Progetto Ω.'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 887 |\u001b[39m   \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'#inspector-files .file-tree'\u001b[39m))\u001b[33m.\u001b[39mtoContainText(\u001b[32m'Progetto Ω'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 888 |\u001b[39m   \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'#inspector-files .file-tree'\u001b[39m))\u001b[33m.\u001b[39mtoContainText(\u001b[32m'I file appariranno appena inizi la sessione.'\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "Nuova automazione comunica in linguaggio naturale quando non ci sono attività",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: locator.evaluate: Error: strict mode violation: locator('[data-automation-action=\"new\"]') resolved to 2 elements:\n    1) <button disabled data-automation-action=\"new\" class=\"talos-button talos-button--primary talos-button--md\">…</button> aka getByRole('button', { name: 'Nuova automazione' })\n    2) <button class=\"primary-btn compact\" data-automation-action=\"new\">Nuova automazione</button> aka locator('#talos-legacy').getByText('Nuova automazione')\n\nCall log:\n\u001b[2m  - waiting for locator('[data-automation-action=\"new\"]')\u001b[22m\n",
+          "stack": "Error: locator.evaluate: Error: strict mode violation: locator('[data-automation-action=\"new\"]') resolved to 2 elements:\n    1) <button disabled data-automation-action=\"new\" class=\"talos-button talos-button--primary talos-button--md\">…</button> aka getByRole('button', { name: 'Nuova automazione' })\n    2) <button class=\"primary-btn compact\" data-automation-action=\"new\">Nuova automazione</button> aka locator('#talos-legacy').getByText('Nuova automazione')\n\nCall log:\n\u001b[2m  - waiting for locator('[data-automation-action=\"new\"]')\u001b[22m\n\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:1284:56",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 56,
+            "line": 1284
+          },
+          "snippet": "\u001b[0m \u001b[90m 1282 |\u001b[39m   \u001b[36mawait\u001b[39m apriChat(page)\u001b[33m;\u001b[39m\n \u001b[90m 1283 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-vaia=\"automazioni\"]'\u001b[39m)\u001b[33m.\u001b[39mevaluate((element) \u001b[33m=>\u001b[39m element\u001b[33m.\u001b[39mclick())\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 1284 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-automation-action=\"new\"]'\u001b[39m)\u001b[33m.\u001b[39mevaluate((element) \u001b[33m=>\u001b[39m element\u001b[33m.\u001b[39mclick())\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m                                                        \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 1285 |\u001b[39m   \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'#sheetBody'\u001b[39m))\u001b[33m.\u001b[39mtoContainText(\u001b[32m'Non ci sono ancora attività pronte'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 1286 |\u001b[39m   \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'#sheetBody'\u001b[39m))\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoContainText(\u001b[32m'TASK_NOT_AVAILABLE'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 1287 |\u001b[39m })\u001b[33m;\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "REDUCED-MOTION-02 — l’indicatore resta leggibile e CALMO con movimento ridotto, mai fermo",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('.talos-line-loader-node')\nExpected: \u001b[32m3\u001b[39m\nReceived: \u001b[31m0\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('.talos-line-loader-node')\u001b[22m\n\u001b[2m    14 × locator resolved to 0 elements\u001b[22m\n\u001b[2m       - unexpected value \"0\"\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('.talos-line-loader-node')\nExpected: \u001b[32m3\u001b[39m\nReceived: \u001b[31m0\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('.talos-line-loader-node')\u001b[22m\n\u001b[2m    14 × locator resolved to 0 elements\u001b[22m\n\u001b[2m       - unexpected value \"0\"\u001b[22m\n\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:1569:23",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 23,
+            "line": 1569
+          },
+          "snippet": "\u001b[0m \u001b[90m 1567 |\u001b[39m \u001b[90m   */\u001b[39m\n \u001b[90m 1568 |\u001b[39m   \u001b[36mconst\u001b[39m punti \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'.talos-line-loader-node'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 1569 |\u001b[39m   \u001b[36mawait\u001b[39m expect(punti)\u001b[33m.\u001b[39mtoHaveCount(\u001b[35m3\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m                       \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 1570 |\u001b[39m   \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'.talos-line-loader-head, .run-activity-shimmer'\u001b[39m))\u001b[33m.\u001b[39mtoHaveCount(\u001b[35m0\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 1571 |\u001b[39m   \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'.talos-line-loader-sweep'\u001b[39m))\u001b[33m.\u001b[39mtoHaveCount(\u001b[35m1\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 1572 |\u001b[39m   \u001b[36mfor\u001b[39m (\u001b[36mconst\u001b[39m punto \u001b[36mof\u001b[39m \u001b[36mawait\u001b[39m punti\u001b[33m.\u001b[39mall()) \u001b[36mawait\u001b[39m expect(punto)\u001b[33m.\u001b[39mtoHaveCSS(\u001b[32m'animation-name'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m'talosLineNodeFill'\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "RUN-PRIMARY-STOP-03/RUN-QUEUE-04 — durante il run il primario ferma, Enter accoda e il testo abilita Reindirizza",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\nExpected: \u001b[32m{\"messaggio\": \"prima attendi il confine sicuro\"}\u001b[39m\nReceived: \u001b[31mnull\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\nExpected: \u001b[32m{\"messaggio\": \"prima attendi il confine sicuro\"}\u001b[39m\nReceived: \u001b[31mnull\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:1623:35",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 35,
+            "line": 1623
+          },
+          "snippet": "\u001b[0m \u001b[90m 1621 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mscreenshot({ path\u001b[33m:\u001b[39m resolve(visualDir\u001b[33m,\u001b[39m \u001b[32m'run-stop-redirect-composer-1024x800.png'\u001b[39m)\u001b[33m,\u001b[39m fullPage\u001b[33m:\u001b[39m \u001b[36mtrue\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m 1622 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'#composerInput'\u001b[39m)\u001b[33m.\u001b[39mpress(\u001b[32m'Enter'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 1623 |\u001b[39m   \u001b[36mawait\u001b[39m expect\u001b[33m.\u001b[39mpoll(() \u001b[33m=>\u001b[39m queued)\u001b[33m.\u001b[39mtoEqual({ messaggio\u001b[33m:\u001b[39m \u001b[32m'prima attendi il confine sicuro'\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m                                   \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 1624 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'.send-btn'\u001b[39m)\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n \u001b[90m 1625 |\u001b[39m   \u001b[36mawait\u001b[39m expect\u001b[33m.\u001b[39mpoll(() \u001b[33m=>\u001b[39m stopCalls)\u001b[33m.\u001b[39mtoBe(\u001b[35m1\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 1626 |\u001b[39m })\u001b[33m;\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "TOOL-LIFECYCLE-SAME-ROW-01 — start, argomenti ed esito aggiornano la stessa riga",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 7\u001b[39m\n\u001b[31m+ Received  + 7\u001b[39m\n\n\u001b[2m  Object {\u001b[22m\n\u001b[32m-   \"during\": \"Lettura di src/app.js…\",\u001b[39m\n\u001b[31m+   \"during\": \"\",\u001b[39m\n\u001b[2m    \"end\": Object {\u001b[22m\n\u001b[32m-     \"busy\": \"false\",\u001b[39m\n\u001b[32m-     \"state\": \"complete\",\u001b[39m\n\u001b[32m-     \"text\": \"1 file letto\",\u001b[39m\n\u001b[31m+     \"busy\": undefined,\u001b[39m\n\u001b[31m+     \"state\": null,\u001b[39m\n\u001b[31m+     \"text\": \"\",\u001b[39m\n\u001b[2m    },\u001b[22m\n\u001b[2m    \"sameNode\": true,\u001b[22m\n\u001b[2m    \"start\": Object {\u001b[22m\n\u001b[32m-     \"busy\": \"true\",\u001b[39m\n\u001b[32m-     \"state\": \"running\",\u001b[39m\n\u001b[32m-     \"text\": \"Lettura file…\",\u001b[39m\n\u001b[31m+     \"busy\": undefined,\u001b[39m\n\u001b[31m+     \"state\": null,\u001b[39m\n\u001b[31m+     \"text\": \"\",\u001b[39m\n\u001b[2m    },\u001b[22m\n\u001b[2m  }\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 7\u001b[39m\n\u001b[31m+ Received  + 7\u001b[39m\n\n\u001b[2m  Object {\u001b[22m\n\u001b[32m-   \"during\": \"Lettura di src/app.js…\",\u001b[39m\n\u001b[31m+   \"during\": \"\",\u001b[39m\n\u001b[2m    \"end\": Object {\u001b[22m\n\u001b[32m-     \"busy\": \"false\",\u001b[39m\n\u001b[32m-     \"state\": \"complete\",\u001b[39m\n\u001b[32m-     \"text\": \"1 file letto\",\u001b[39m\n\u001b[31m+     \"busy\": undefined,\u001b[39m\n\u001b[31m+     \"state\": null,\u001b[39m\n\u001b[31m+     \"text\": \"\",\u001b[39m\n\u001b[2m    },\u001b[22m\n\u001b[2m    \"sameNode\": true,\u001b[22m\n\u001b[2m    \"start\": Object {\u001b[22m\n\u001b[32m-     \"busy\": \"true\",\u001b[39m\n\u001b[32m-     \"state\": \"running\",\u001b[39m\n\u001b[32m-     \"text\": \"Lettura file…\",\u001b[39m\n\u001b[31m+     \"busy\": undefined,\u001b[39m\n\u001b[31m+     \"state\": null,\u001b[39m\n\u001b[31m+     \"text\": \"\",\u001b[39m\n\u001b[2m    },\u001b[22m\n\u001b[2m  }\u001b[22m\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:1885:18",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 18,
+            "line": 1885
+          },
+          "snippet": "\u001b[0m \u001b[90m 1883 |\u001b[39m     }\u001b[33m;\u001b[39m\n \u001b[90m 1884 |\u001b[39m   })\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 1885 |\u001b[39m   expect(result)\u001b[33m.\u001b[39mtoEqual({\n \u001b[90m      |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 1886 |\u001b[39m     sameNode\u001b[33m:\u001b[39m \u001b[36mtrue\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 1887 |\u001b[39m     start\u001b[33m:\u001b[39m { state\u001b[33m:\u001b[39m \u001b[32m'running'\u001b[39m\u001b[33m,\u001b[39m busy\u001b[33m:\u001b[39m \u001b[32m'true'\u001b[39m\u001b[33m,\u001b[39m text\u001b[33m:\u001b[39m \u001b[32m'Lettura file…'\u001b[39m }\u001b[33m,\u001b[39m\n \u001b[90m 1888 |\u001b[39m     during\u001b[33m:\u001b[39m \u001b[32m'Lettura di src/app.js…'\u001b[39m\u001b[33m,\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "TOOL-DESCRIPTION-LIFECYCLE-04 — la descrizione del modello resta nella stessa riga dopo la conclusione",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"Verifica la configurazione del server…\"\u001b[39m\nReceived: \u001b[31m\"\"\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"Verifica la configurazione del server…\"\u001b[39m\nReceived: \u001b[31m\"\"\u001b[39m\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:1927:25",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 25,
+            "line": 1927
+          },
+          "snippet": "\u001b[0m \u001b[90m 1925 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 1926 |\u001b[39m   expect(result\u001b[33m.\u001b[39msameNode)\u001b[33m.\u001b[39mtoBe(\u001b[36mtrue\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 1927 |\u001b[39m   expect(result\u001b[33m.\u001b[39mduring)\u001b[33m.\u001b[39mtoBe(\u001b[32m'Verifica la configurazione del server…'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m                         \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 1928 |\u001b[39m   expect(result\u001b[33m.\u001b[39mfinal)\u001b[33m.\u001b[39mtoBe(\u001b[32m'Verifica la configurazione del server'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 1929 |\u001b[39m   expect(result\u001b[33m.\u001b[39mdetail)\u001b[33m.\u001b[39mtoContain(\u001b[32m'comando: node --test tests/config.test.mjs'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 1930 |\u001b[39m   expect(result\u001b[33m.\u001b[39mdetail)\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoContain(\u001b[32m'descrizione:'\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "TOOL-BATCH-AGGREGATION-01 — cinque letture diventano un solo totale grammaticalmente corretto",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 3\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[2m  Object {\u001b[22m\n\u001b[32m-   \"batches\": 1,\u001b[39m\n\u001b[32m-   \"rows\": 1,\u001b[39m\n\u001b[32m-   \"summary\": \"1 file letto\",\u001b[39m\n\u001b[31m+   \"batches\": 0,\u001b[39m\n\u001b[31m+   \"rows\": 0,\u001b[39m\n\u001b[31m+   \"summary\": \"\",\u001b[39m\n\u001b[2m  }\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 3\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[2m  Object {\u001b[22m\n\u001b[32m-   \"batches\": 1,\u001b[39m\n\u001b[32m-   \"rows\": 1,\u001b[39m\n\u001b[32m-   \"summary\": \"1 file letto\",\u001b[39m\n\u001b[31m+   \"batches\": 0,\u001b[39m\n\u001b[31m+   \"rows\": 0,\u001b[39m\n\u001b[31m+   \"summary\": \"\",\u001b[39m\n\u001b[2m  }\u001b[22m\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:1968:30",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 30,
+            "line": 1968
+          },
+          "snippet": "\u001b[0m \u001b[90m 1966 |\u001b[39m     \u001b[36mreturn\u001b[39m { singular\u001b[33m,\u001b[39m plural }\u001b[33m;\u001b[39m\n \u001b[90m 1967 |\u001b[39m   })\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 1968 |\u001b[39m   expect(summaries\u001b[33m.\u001b[39msingular)\u001b[33m.\u001b[39mtoEqual({ batches\u001b[33m:\u001b[39m \u001b[35m1\u001b[39m\u001b[33m,\u001b[39m rows\u001b[33m:\u001b[39m \u001b[35m1\u001b[39m\u001b[33m,\u001b[39m summary\u001b[33m:\u001b[39m \u001b[32m'1 file letto'\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m                              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 1969 |\u001b[39m   expect(summaries\u001b[33m.\u001b[39mplural)\u001b[33m.\u001b[39mtoEqual({ batches\u001b[33m:\u001b[39m \u001b[35m1\u001b[39m\u001b[33m,\u001b[39m rows\u001b[33m:\u001b[39m \u001b[35m5\u001b[39m\u001b[33m,\u001b[39m summary\u001b[33m:\u001b[39m \u001b[32m'5 file letti'\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m 1970 |\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m 1971 |\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "TOOL-LIFECYCLE-ERROR-01 — l’errore conclude la riga e aggiorna il batch correlato",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 7\u001b[39m\n\u001b[31m+ Received  + 4\u001b[39m\n\n\u001b[2m  Object {\u001b[22m\n\u001b[32m-   \"batches\": Array [\u001b[39m\n\u001b[32m-     \"1 comando eseguito (1 errore)\",\u001b[39m\n\u001b[32m-     \"Lettura di 1 file…\",\u001b[39m\n\u001b[32m-   ],\u001b[39m\n\u001b[32m-   \"rowBusy\": \"false\",\u001b[39m\n\u001b[32m-   \"rowState\": \"error\",\u001b[39m\n\u001b[32m-   \"rowText\": \"1 comando fallito\",\u001b[39m\n\u001b[31m+   \"batches\": Array [],\u001b[39m\n\u001b[31m+   \"rowBusy\": undefined,\u001b[39m\n\u001b[31m+   \"rowState\": null,\u001b[39m\n\u001b[31m+   \"rowText\": \"\",\u001b[39m\n\u001b[2m  }\u001b[22m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 7\u001b[39m\n\u001b[31m+ Received  + 4\u001b[39m\n\n\u001b[2m  Object {\u001b[22m\n\u001b[32m-   \"batches\": Array [\u001b[39m\n\u001b[32m-     \"1 comando eseguito (1 errore)\",\u001b[39m\n\u001b[32m-     \"Lettura di 1 file…\",\u001b[39m\n\u001b[32m-   ],\u001b[39m\n\u001b[32m-   \"rowBusy\": \"false\",\u001b[39m\n\u001b[32m-   \"rowState\": \"error\",\u001b[39m\n\u001b[32m-   \"rowText\": \"1 comando fallito\",\u001b[39m\n\u001b[31m+   \"batches\": Array [],\u001b[39m\n\u001b[31m+   \"rowBusy\": undefined,\u001b[39m\n\u001b[31m+   \"rowState\": null,\u001b[39m\n\u001b[31m+   \"rowText\": \"\",\u001b[39m\n\u001b[2m  }\u001b[22m\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:1997:18",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 18,
+            "line": 1997
+          },
+          "snippet": "\u001b[0m \u001b[90m 1995 |\u001b[39m     }\u001b[33m;\u001b[39m\n \u001b[90m 1996 |\u001b[39m   })\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 1997 |\u001b[39m   expect(result)\u001b[33m.\u001b[39mtoEqual({\n \u001b[90m      |\u001b[39m                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 1998 |\u001b[39m     rowState\u001b[33m:\u001b[39m \u001b[32m'error'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 1999 |\u001b[39m     rowBusy\u001b[33m:\u001b[39m \u001b[32m'false'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 2000 |\u001b[39m     rowText\u001b[33m:\u001b[39m \u001b[32m'1 comando fallito'\u001b[39m\u001b[33m,\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "WAITING-LOADER-MOTION-01 — il loader reale è quello del mobile e avanza fra due fotogrammi",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('.real-waiting-note .talos-line-loader')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('.real-waiting-note .talos-line-loader')\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('.real-waiting-note .talos-line-loader')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('.real-waiting-note .talos-line-loader')\u001b[22m\n\n    at triggerWaitingLoader (C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:2031:24)\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:2046:18",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 24,
+            "line": 2031
+          },
+          "snippet": "\u001b[0m \u001b[90m 2029 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 2030 |\u001b[39m   \u001b[36mconst\u001b[39m loader \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'.real-waiting-note .talos-line-loader'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 2031 |\u001b[39m   \u001b[36mawait\u001b[39m expect(loader)\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m                        \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 2032 |\u001b[39m   \u001b[36mreturn\u001b[39m loader\u001b[33m;\u001b[39m\n \u001b[90m 2033 |\u001b[39m }\n \u001b[90m 2034 |\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "WAITING-LOADER-REDUCED-MOTION-01 — ridurre il movimento CALMA il loader, non lo congela",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('.real-waiting-note .talos-line-loader')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('.real-waiting-note .talos-line-loader')\u001b[22m\n",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('.real-waiting-note .talos-line-loader')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('.real-waiting-note .talos-line-loader')\u001b[22m\n\n    at triggerWaitingLoader (C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:2031:24)\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:2099:18",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 24,
+            "line": 2031
+          },
+          "snippet": "\u001b[0m \u001b[90m 2029 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 2030 |\u001b[39m   \u001b[36mconst\u001b[39m loader \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'.real-waiting-note .talos-line-loader'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 2031 |\u001b[39m   \u001b[36mawait\u001b[39m expect(loader)\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m                        \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 2032 |\u001b[39m   \u001b[36mreturn\u001b[39m loader\u001b[33m;\u001b[39m\n \u001b[90m 2033 |\u001b[39m }\n \u001b[90m 2034 |\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "lo streaming porta l’ultimo output verso il centro della conversazione",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'getBoundingClientRect')\n    at eval (eval at evaluate (:311:30), <anonymous>:25:31)\n    at async <anonymous>:337:30",
+          "stack": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'getBoundingClientRect')\n    at eval (eval at evaluate (:311:30), <anonymous>:25:31)\n    at async <anonymous>:337:30\n    at eval (eval at evaluate (:311:30), <anonymous>:25:31)\n    at async <anonymous>:337:30\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:2126:30",
+          "location": {
+            "file": "eval at evaluate (:311:30), <anonymous>",
+            "column": 31,
+            "line": 25
+          }
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "CHAT-FULL-WIDTH-01 — allarga solo messaggi e bolle, mai il composer",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m681\u001b[39m\nReceived:    \u001b[31m860\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m681\u001b[39m\nReceived:    \u001b[31m860\u001b[39m\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:2291:24",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 24,
+            "line": 2291
+          },
+          "snippet": "\u001b[0m \u001b[90m 2289 |\u001b[39m   \u001b[36mawait\u001b[39m preparaMessaggi()\u001b[33m;\u001b[39m\n \u001b[90m 2290 |\u001b[39m   \u001b[36mconst\u001b[39m prima \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m misura()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 2291 |\u001b[39m   expect(prima\u001b[33m.\u001b[39mutente)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(\u001b[35m681\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m                        \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 2292 |\u001b[39m   expect(prima\u001b[33m.\u001b[39massistente)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(\u001b[35m761\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 2293 |\u001b[39m\n \u001b[90m 2294 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-vaia=\"impostazioni\"]'\u001b[39m)\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "COMPOSER-SHAPE-FULL-WIDTH-01 — il toggle full width preserva ogni forma del composer",
+      "status": "timedOut",
+      "baselineStatus": "timedOut",
+      "errors": [
+        {
+          "message": "\u001b[31mTest timeout of 30000ms exceeded.\u001b[39m",
+          "stack": "\u001b[31mTest timeout of 30000ms exceeded.\u001b[39m"
+        },
+        {
+          "message": "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('#schermoChat .mode-tab[data-vaia=\"chat\"]')\u001b[22m\n\u001b[2m    - locator resolved to <button role=\"tab\" data-t=\"chat\" tabindex=\"-1\" data-vaia=\"chat\" data-mode=\"chat\" aria-pressed=\"false\" aria-selected=\"false\" class=\"talos-tabs__tab mode-tab\">Chat</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    54 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is not visible\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n",
+          "stack": "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('#schermoChat .mode-tab[data-vaia=\"chat\"]')\u001b[22m\n\u001b[2m    - locator resolved to <button role=\"tab\" data-t=\"chat\" tabindex=\"-1\" data-vaia=\"chat\" data-mode=\"chat\" aria-pressed=\"false\" aria-selected=\"false\" class=\"talos-tabs__tab mode-tab\">Chat</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    54 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is not visible\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:2362:68",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 68,
+            "line": 2362
+          },
+          "snippet": "\u001b[0m \u001b[90m 2360 |\u001b[39m     \u001b[36mif\u001b[39m (\u001b[36mawait\u001b[39m fullWidth\u001b[33m.\u001b[39misChecked()) \u001b[36mawait\u001b[39m spegniFullWidth(page)\u001b[33m;\u001b[39m\n \u001b[90m 2361 |\u001b[39m     \u001b[36mawait\u001b[39m accendiFullWidth(page)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 2362 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'#schermoChat .mode-tab[data-vaia=\"chat\"]'\u001b[39m)\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m                                                                    \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 2363 |\u001b[39m     \u001b[36mconst\u001b[39m dopo \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m misuraComposer()\u001b[33m;\u001b[39m\n \u001b[90m 2364 |\u001b[39m     expect(dopo\u001b[33m,\u001b[39m \u001b[32m`forma ${forma}`\u001b[39m)\u001b[33m.\u001b[39mtoEqual(prima)\u001b[33m;\u001b[39m\n \u001b[90m 2365 |\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "COMPOSER-MOCKUP-HEIGHT-01 — ogni forma desktop conserva l’altezza canonica del mockup",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: 1440px · standard\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m1\u001b[39m\nReceived:    \u001b[31m4\u001b[39m",
+          "stack": "Error: 1440px · standard\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m1\u001b[39m\nReceived:    \u001b[31m4\u001b[39m\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:2406:89",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 89,
+            "line": 2406
+          },
+          "snippet": "\u001b[0m \u001b[90m 2404 |\u001b[39m         }\u001b[33m;\u001b[39m\n \u001b[90m 2405 |\u001b[39m       })\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 2406 |\u001b[39m       expect(\u001b[33mMath\u001b[39m\u001b[33m.\u001b[39mabs(misura\u001b[33m.\u001b[39mheight \u001b[33m-\u001b[39m altezzaMockup)\u001b[33m,\u001b[39m \u001b[32m`${viewport.width}px · ${forma}`\u001b[39m)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(\u001b[35m1\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m                                                                                         \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 2407 |\u001b[39m       expect(misura\u001b[33m.\u001b[39minputBottom\u001b[33m,\u001b[39m \u001b[32m`${viewport.width}px · ${forma} · input`\u001b[39m)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(misura\u001b[33m.\u001b[39mtoolbarTop \u001b[33m+\u001b[39m \u001b[35m1\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 2408 |\u001b[39m\n \u001b[90m 2409 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'#composerInput'\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'Prima riga\\nSeconda riga'\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "CHAT-FULL-WIDTH-SHORT-BUBBLE-01 — una domanda breve non viene stirata",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: < \u001b[32m180\u001b[39m\nReceived:   \u001b[31m860\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: < \u001b[32m180\u001b[39m\nReceived:   \u001b[31m860\u001b[39m\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:2445:23",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 23,
+            "line": 2445
+          },
+          "snippet": "\u001b[0m \u001b[90m 2443 |\u001b[39m   \u001b[36mawait\u001b[39m preparaDomandaBreve()\u001b[33m;\u001b[39m\n \u001b[90m 2444 |\u001b[39m   \u001b[36mconst\u001b[39m prima \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m misura()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 2445 |\u001b[39m   expect(prima\u001b[33m.\u001b[39mbolla)\u001b[33m.\u001b[39mtoBeLessThan(\u001b[35m180\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m                       \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 2446 |\u001b[39m\n \u001b[90m 2447 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-vaia=\"impostazioni\"]'\u001b[39m)\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n \u001b[90m 2448 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'#setting-tab-chat'\u001b[39m)\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "LAG-LIVE-INCREMENTAL-40 — i blocchi già chiusi non vengono ricreati a ogni delta, la coda sì e il testo finale è completo",
+      "status": "failed",
+      "baselineStatus": "failed",
+      "errors": [
+        {
+          "message": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'children')\n    at eval (eval at evaluate (:311:30), <anonymous>:24:37)\n    at async <anonymous>:337:30",
+          "stack": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'children')\n    at eval (eval at evaluate (:311:30), <anonymous>:24:37)\n    at async <anonymous>:337:30\n    at eval (eval at evaluate (:311:30), <anonymous>:24:37)\n    at async <anonymous>:337:30\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:2601:29",
+          "location": {
+            "file": "eval at evaluate (:311:30), <anonymous>",
+            "column": 37,
+            "line": 24
+          }
+        }
+      ],
+      "classification": "baseline reproducible; root cause still requires individual review"
+    },
+    {
+      "title": "RIPRESA-COMPOSER-RITORNO false — due assi, ritorno colpibile e persistenza",
+      "status": "failed",
+      "baselineStatus": null,
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m670\u001b[39m\nReceived:   \u001b[31m670\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m670\u001b[39m\nReceived:   \u001b[31m670\u001b[39m\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:2761:30",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 30,
+            "line": 2761
+          },
+          "snippet": "\u001b[0m \u001b[90m 2759 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mmouse\u001b[33m.\u001b[39mmove(h\u001b[33m.\u001b[39mx\u001b[33m+\u001b[39mh\u001b[33m.\u001b[39mwidth\u001b[33m/\u001b[39m\u001b[35m2\u001b[39m\u001b[33m-\u001b[39m\u001b[35m30\u001b[39m\u001b[33m,\u001b[39mh\u001b[33m.\u001b[39my\u001b[33m+\u001b[39mh\u001b[33m.\u001b[39mheight\u001b[33m/\u001b[39m\u001b[35m2\u001b[39m\u001b[33m-\u001b[39m\u001b[35m25\u001b[39m\u001b[33m,\u001b[39m{steps\u001b[33m:\u001b[39m\u001b[35m5\u001b[39m})\u001b[33m;\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mmouse\u001b[33m.\u001b[39mup()\u001b[33m;\u001b[39m\n \u001b[90m 2760 |\u001b[39m   \u001b[36mconst\u001b[39m pointerAfter \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m form\u001b[33m.\u001b[39mboundingBox()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 2761 |\u001b[39m   expect(pointerAfter\u001b[33m.\u001b[39mwidth)\u001b[33m.\u001b[39mtoBeGreaterThan(pointerBefore\u001b[33m.\u001b[39mwidth\u001b[33m+\u001b[39m\u001b[35m30\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m                              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 2762 |\u001b[39m   expect(pointerAfter\u001b[33m.\u001b[39mheight)\u001b[33m.\u001b[39mtoBeGreaterThan(pointerBefore\u001b[33m.\u001b[39mheight\u001b[33m+\u001b[39m\u001b[35m15\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 2763 |\u001b[39m   \u001b[36mconst\u001b[39m foot \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'#schermoChat .talos-chat-foot'\u001b[39m)\u001b[33m.\u001b[39mboundingBox()\u001b[33m;\u001b[39m\n \u001b[90m 2764 |\u001b[39m   expect(pointerAfter\u001b[33m.\u001b[39mx)\u001b[33m.\u001b[39mtoBeGreaterThanOrEqual(foot\u001b[33m.\u001b[39mx)\u001b[33m;\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "new scenario/failure; inspect"
+    },
+    {
+      "title": "RIPRESA-COMPOSER-RITORNO true — due assi, ritorno colpibile e persistenza",
+      "status": "failed",
+      "baselineStatus": null,
+      "errors": [
+        {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m974\u001b[39m\nReceived:   \u001b[31m974\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m974\u001b[39m\nReceived:   \u001b[31m974\u001b[39m\n    at C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs:2761:30",
+          "location": {
+            "file": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-ripresa-RQRd3x\\source\\harness-ui\\frontend\\tests\\browser\\baseline-shell.spec.mjs",
+            "column": 30,
+            "line": 2761
+          },
+          "snippet": "\u001b[0m \u001b[90m 2759 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mmouse\u001b[33m.\u001b[39mmove(h\u001b[33m.\u001b[39mx\u001b[33m+\u001b[39mh\u001b[33m.\u001b[39mwidth\u001b[33m/\u001b[39m\u001b[35m2\u001b[39m\u001b[33m-\u001b[39m\u001b[35m30\u001b[39m\u001b[33m,\u001b[39mh\u001b[33m.\u001b[39my\u001b[33m+\u001b[39mh\u001b[33m.\u001b[39mheight\u001b[33m/\u001b[39m\u001b[35m2\u001b[39m\u001b[33m-\u001b[39m\u001b[35m25\u001b[39m\u001b[33m,\u001b[39m{steps\u001b[33m:\u001b[39m\u001b[35m5\u001b[39m})\u001b[33m;\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mmouse\u001b[33m.\u001b[39mup()\u001b[33m;\u001b[39m\n \u001b[90m 2760 |\u001b[39m   \u001b[36mconst\u001b[39m pointerAfter \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m form\u001b[33m.\u001b[39mboundingBox()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 2761 |\u001b[39m   expect(pointerAfter\u001b[33m.\u001b[39mwidth)\u001b[33m.\u001b[39mtoBeGreaterThan(pointerBefore\u001b[33m.\u001b[39mwidth\u001b[33m+\u001b[39m\u001b[35m30\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m                              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 2762 |\u001b[39m   expect(pointerAfter\u001b[33m.\u001b[39mheight)\u001b[33m.\u001b[39mtoBeGreaterThan(pointerBefore\u001b[33m.\u001b[39mheight\u001b[33m+\u001b[39m\u001b[35m15\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 2763 |\u001b[39m   \u001b[36mconst\u001b[39m foot \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'#schermoChat .talos-chat-foot'\u001b[39m)\u001b[33m.\u001b[39mboundingBox()\u001b[33m;\u001b[39m\n \u001b[90m 2764 |\u001b[39m   expect(pointerAfter\u001b[33m.\u001b[39mx)\u001b[33m.\u001b[39mtoBeGreaterThanOrEqual(foot\u001b[33m.\u001b[39mx)\u001b[33m;\u001b[39m\u001b[0m"
+        }
+      ],
+      "classification": "new scenario/failure; inspect"
+    }
+  ]
+}

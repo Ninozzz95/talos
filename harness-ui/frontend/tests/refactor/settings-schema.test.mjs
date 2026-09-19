@@ -46,7 +46,12 @@ test('SET-01 current and translated labels remain findable', () => {
 test('SET-01 production entry imports the settings stylesheet and passes canonical defaults', async () => {
   const css=await readFile(new URL('../../src/styles/main.css',import.meta.url),'utf8');assert.match(css,/design-system\/settings\.css/);
   const app=await readFile(new URL('../../src/legacy/app.js',import.meta.url),'utf8');
-  assert.equal((app.match(/cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS/g)||[]).length,3);
+  const mounts = app.split('\n').filter(line => /^\s*montaImpostazioni\(/.test(line));
+  assert.ok(mounts.length >= 3);
+  for (const mount of mounts) {
+    assert.match(mount, /defaultValues: DESKTOP_APPEARANCE_DEFAULTS/);
+    assert.match(mount, /ripristinaAspetto: resettaAspettoDesktop/);
+  }
   assert.match(app,/talos:settings-persisted.*saved: true/);assert.match(app,/talos:settings-persisted.*saved: false/);
   assert.match(app,/if \(!salvaImpostazioniDesktop\(letto\)\) throw/);
 });

@@ -1,0 +1,9 @@
+{
+  "run": "2026-09-19T12-00-44-763Z-browser-3487714b",
+  "status": "interrupted",
+  "lastLoggedOrdinal": 142,
+  "finalReportPresent": false,
+  "processPresentAtResume": false,
+  "cause": "unknown",
+  "limitation": "Non è una suite completa. Non attribuire al prodotto l'interruzione senza riproduzione; conservare log, trace e screenshot parziali."
+}

@@ -1,0 +1,128 @@
+[
+  {
+    "file": "manifest.json",
+    "archiveBlob": "7720641653fff72b43911c5ca9aa39d1873da30a",
+    "githubBlob": null,
+    "match": false
+  },
+  {
+    "file": "harness-ui/docs/sidebar-desktop-design.md",
+    "archiveBlob": "06d8bc49419aeea8e65a2ff701fcd104e34a5775",
+    "githubBlob": "06d8bc49419aeea8e65a2ff701fcd104e34a5775",
+    "match": true
+  },
+  {
+    "file": "harness-ui/frontend/playwright.sidebar.config.mjs",
+    "archiveBlob": "8541c408450ccaa64a52b7b58f2bd1175587d1e4",
+    "githubBlob": "8541c408450ccaa64a52b7b58f2bd1175587d1e4",
+    "match": true
+  },
+  {
+    "file": "harness-ui/frontend/src/components/sidebar-desktop.js",
+    "archiveBlob": "83cc9653c6195c2cc36e9b4f614c484bdfe19056",
+    "githubBlob": "83cc9653c6195c2cc36e9b4f614c484bdfe19056",
+    "match": true
+  },
+  {
+    "file": "harness-ui/frontend/src/components/sidebar-state.js",
+    "archiveBlob": "bcc44968cbb0aaab7b96f94d7f46b8ac511928d2",
+    "githubBlob": "bcc44968cbb0aaab7b96f94d7f46b8ac511928d2",
+    "match": true
+  },
+  {
+    "file": "harness-ui/frontend/src/components/sidebar-view.js",
+    "archiveBlob": "a619b31c96693886c8371b81f72c0a85d11dfd1d",
+    "githubBlob": "a619b31c96693886c8371b81f72c0a85d11dfd1d",
+    "match": true
+  },
+  {
+    "file": "harness-ui/frontend/src/legacy/app.js",
+    "archiveBlob": "83b4e8f6955cf6982ecf5efe0ba9e68876d92f4b",
+    "githubBlob": "83b4e8f6955cf6982ecf5efe0ba9e68876d92f4b",
+    "match": true
+  },
+  {
+    "file": "harness-ui/frontend/src/styles/main.css",
+    "archiveBlob": "c00a40a3930a7a135182df74bc4bae0a664c0e3d",
+    "githubBlob": "c00a40a3930a7a135182df74bc4bae0a664c0e3d",
+    "match": true
+  },
+  {
+    "file": "harness-ui/frontend/src/styles/sidebar-desktop.css",
+    "archiveBlob": "7eb1f6772b5c5429b0a0700eb200dc8b4a12d8a5",
+    "githubBlob": "7eb1f6772b5c5429b0a0700eb200dc8b4a12d8a5",
+    "match": true
+  },
+  {
+    "file": "harness-ui/frontend/tests/browser/elenco-dopo-lo-stop.spec.mjs",
+    "archiveBlob": "b426b4b807abe3f3e50a85f6c3910038ceefd48d",
+    "githubBlob": "b426b4b807abe3f3e50a85f6c3910038ceefd48d",
+    "match": true
+  },
+  {
+    "file": "harness-ui/frontend/tests/browser/sidebar-desktop.spec.mjs",
+    "archiveBlob": "56266f5915aa8ff971791f1c3fc98af2e76066ff",
+    "githubBlob": "56266f5915aa8ff971791f1c3fc98af2e76066ff",
+    "match": true
+  },
+  {
+    "file": "harness-ui/frontend/tests/fixtures/sidebar-fixture.mjs",
+    "archiveBlob": "8a1f82ac498531ee823f1d77246d8e3bcc984950",
+    "githubBlob": "8a1f82ac498531ee823f1d77246d8e3bcc984950",
+    "match": true
+  },
+  {
+    "file": "harness-ui/frontend/tests/unit/sidebar-state.test.mjs",
+    "archiveBlob": "534691a1eb697db9c6fb6ce0097f7a274097fb07",
+    "githubBlob": "534691a1eb697db9c6fb6ce0097f7a274097fb07",
+    "match": true
+  },
+  {
+    "file": "harness-ui/src/http-app.mjs",
+    "archiveBlob": "a5e97f9215962df53400d9835643e3ecc4bf6703",
+    "githubBlob": "a5e97f9215962df53400d9835643e3ecc4bf6703",
+    "match": true
+  },
+  {
+    "file": "harness-ui/src/session-registry.mjs",
+    "archiveBlob": "b56f996509b411073eecfce5831b6f126d2a5aab",
+    "githubBlob": "b56f996509b411073eecfce5831b6f126d2a5aab",
+    "match": true
+  },
+  {
+    "file": "harness-ui/src/sidebar-activity.mjs",
+    "archiveBlob": "e86f6a75cb22a8767596a761f0b5fd83c25017f0",
+    "githubBlob": "e86f6a75cb22a8767596a761f0b5fd83c25017f0",
+    "match": true
+  },
+  {
+    "file": "harness-ui/src/sidebar-feed.mjs",
+    "archiveBlob": "2405e89a1dcb8c1b3fd238ba5b5680a28f0e81b4",
+    "githubBlob": "2405e89a1dcb8c1b3fd238ba5b5680a28f0e81b4",
+    "match": true
+  },
+  {
+    "file": "harness-ui/tests/sidebar-feed.test.mjs",
+    "archiveBlob": "d2722d3ee6937d17ec5bd55b0cafe8db339cf9bd",
+    "githubBlob": "d2722d3ee6937d17ec5bd55b0cafe8db339cf9bd",
+    "match": true
+  },
+  {
+    "file": "harness-ui/frontend/scripts/benchmark-sidebar.mjs",
+    "archiveBlob": "951d978427882b2d2c642a99135f2346a8c25ef9",
+    "githubBlob": "951d978427882b2d2c642a99135f2346a8c25ef9",
+    "match": true
+  },
+  {
+    "file": "harness-ui/frontend/tests/parity/nessun-errore-a-runtime.spec.mjs",
+    "archiveBlob": "d8f0915b17b718da8dddc7bfa57bb66187be291e",
+    "githubBlob": "d8f0915b17b718da8dddc7bfa57bb66187be291e",
+    "match": true
+  },
+  {
+    "file": "harness-ui/tests/bc09-classificazione-rimozioni.test.mjs",
+    "archiveBlob": "81af371d7edbf8e6cb9834ac4bf280db7c5abdea",
+    "githubBlob": "81af371d7edbf8e6cb9834ac4bf280db7c5abdea",
+    "match": true
+  }
+]

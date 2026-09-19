@@ -187,7 +187,7 @@ test('GUSCIO-01 — le sei linguette diventano quattro schede, e nessun pannello
   });
   expect(stato.pannelliVisibili).toEqual(['overview']);
   expect(stato.tabpanelAnnidati).toBe(0);
-  expect(stato.ledger).toBe(4);
+  expect(stato.ledger).toBe(0); // Riepiloghi rimossi su richiesta owner 19/09.
   expect(stato.classi).toContain('talos-model-lab');
   expect(SCHEDE).toContain(stato.schedaAttiva);
   // ⛔ `hidden` da solo non basta a dire «non si vede»: la lezione del 18/09 è

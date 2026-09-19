@@ -45,6 +45,7 @@ import test from 'node:test';
 import { createSessionRegistry } from '../src/session-registry.mjs';
 import { createOwnerRuntimeAdapter } from '../src/runtime-owner-adapter.mjs';
 import { avviaSessione } from '../src/agent-service.mjs';
+import { leggiRicerca } from '../src/research-store.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const SEGRETO = 'SEGRETO-DELLA-MADRE';
@@ -120,6 +121,17 @@ const attendiFine = async (registro, sessionId, ms = 20_000) => {
   throw new Error(`la sessione ${sessionId} non ha chiuso il giro: ${JSON.stringify((registro.esporta(sessionId)?.eventi ?? []).map((e) => e.type))}`);
 };
 
+const attendiRicercaPersistita = async (cartella, id, ms = 20_000) => {
+  const scadenza = Date.now() + ms;
+  while (Date.now() < scadenza) {
+    const record = await leggiRicerca({ cartella, id });
+    if (typeof record?.terminata === 'string' && record.terminata !== '') return record;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  const ultimo = await leggiRicerca({ cartella, id });
+  throw new Error(`la ricerca ${id} ha chiuso la sessione ma non la persistenza: ${JSON.stringify(ultimo)}`);
+};
+
 /**
  * Aspetta che la figlia nasca, la FERMA e aspetta che chiuda.
  *
@@ -155,8 +167,15 @@ const attendiFigliaEFermala = async (registro, padreId, { finoA = null, ms = 20_
 
 function cartellaDiProva(t, nome) {
   const cartella = mkdtempSync(join(tmpdir(), `bc76-figlie-${nome}-`));
-  t.after(() => rimuoviCartellaDiProva(cartella));
-  return cartella;
+  const primaDellaRimozione = [];
+  t.after(async () => {
+    for (const pulisci of primaDellaRimozione) await pulisci();
+    rimuoviCartellaDiProva(cartella);
+  });
+  return {
+    cartella,
+    primaDiRimuovere(pulisci) { primaDellaRimozione.push(pulisci); },
+  };
 }
 
 /**
@@ -165,22 +184,30 @@ function cartellaDiProva(t, nome) {
  *   vivere dopo l'asserzione — ritenta, aspetta, ritenta. Una prova che non spegne ciò che accende
  *   appende l'INTERA suite di backend, non solo sé stessa.
  */
-function spegniTutteAllaFine(t, registro) {
-  t.after(() => { for (const sessione of registro.elenca()) registro.ferma(sessione.sessionId); });
+function spegniTutteAllaFine(fixture, registro, { ricercaIds = () => [] } = {}) {
+  fixture.primaDiRimuovere(async () => {
+    const sessioni = registro.elenca();
+    for (const sessione of sessioni) registro.ferma(sessione.sessionId);
+    for (const sessione of sessioni) await attendiFine(registro, sessione.sessionId, 10_000);
+    for (const ricercaId of ricercaIds()) {
+      await attendiRicercaPersistita(fixture.cartella, ricercaId, 10_000);
+    }
+  });
 }
 
 /* ---------------------------------------------------------------- le prove */
 
 test('⛔⛔⛔⛔ FIG-01 — la figlia DELEGATA da una madre locale resta sul motore locale: niente esce dal computer', async (t) => {
   const partenza = fuori.length;
-  const cartella = cartellaDiProva(t, 'delega');
+  const fixture = cartellaDiProva(t, 'delega');
+  const { cartella } = fixture;
   writeFileSync(join(cartella, 'a.txt'), 'contenuto');
   const motore = await accendiMotore(t, [
     [chiamata('delega_sottotask', { task: `${SEGRETO}: riassumi a.txt` })],
     [testo('fatto')],
   ]);
   const registro = registroComeIlServer({ porta: motore.porta, cartella });
-  spegniTutteAllaFine(t, registro);
+  spegniTutteAllaFine(fixture, registro);
 
   const { sessionId } = registro.avvia('task-vero', { provider: 'local', runtimeId: 'llama.cpp', modelId: 'mio.gguf' });
   const figlia = await attendiFigliaEFermala(registro, sessionId, {
@@ -202,16 +229,19 @@ test('⛔⛔⛔⛔ FIG-01 — la figlia DELEGATA da una madre locale resta sul m
 
 test('⛔⛔⛔⛔ FIG-02 — la RICERCA approfondita avviata da una madre locale resta sul motore locale', async (t) => {
   const partenza = fuori.length;
-  const cartella = cartellaDiProva(t, 'ricerca');
+  const fixture = cartellaDiProva(t, 'ricerca');
+  const { cartella } = fixture;
+  let ricercaId = null;
   const motore = await accendiMotore(t, [
     [chiamata('research_start', { question: `${SEGRETO}: quanto è grande la luna?`, depth: 'quick' })],
     [testo('avviata')],
   ]);
   const registro = registroComeIlServer({ porta: motore.porta, cartella });
-  spegniTutteAllaFine(t, registro);
+  spegniTutteAllaFine(fixture, registro, { ricercaIds: () => ricercaId ? [ricercaId] : [] });
 
   const { sessionId } = registro.avvia('task-vero', { provider: 'local', runtimeId: 'llama.cpp', modelId: 'mio.gguf' });
   const figlia = await attendiFigliaEFermala(registro, sessionId);
+  ricercaId = figlia.sessionId;
   try { await attendiFine(registro, sessionId, 10_000); } catch { /* la madre puo restare appesa sull attrezzo della figlia fermata: non e cio che si misura qui */ }
 
   assert.equal(figlia.modello, 'local:mio.gguf',
@@ -222,7 +252,8 @@ test('⛔⛔⛔⛔ FIG-02 — la RICERCA approfondita avviata da una madre local
 
 test('⛔⛔ FIG-03 — una madre CLOUD passa alla figlia il SUO modello, esattamente come prima', async (t) => {
   const partenza = fuori.length;
-  const cartella = cartellaDiProva(t, 'cloud');
+  const fixture = cartellaDiProva(t, 'cloud');
+  const { cartella } = fixture;
   writeFileSync(join(cartella, 'a.txt'), 'contenuto');
   const motore = await accendiMotore(t, [
     [chiamata('delega_sottotask', { task: 'riassumi a.txt' })],
@@ -235,7 +266,7 @@ test('⛔⛔ FIG-03 — una madre CLOUD passa alla figlia il SUO modello, esatta
     endpointPerFonte: { deepseek: `http://127.0.0.1:${motore.porta}` },
     chiavePerFonte: { deepseek: 'chiave-finta' },
   });
-  spegniTutteAllaFine(t, registro);
+  spegniTutteAllaFine(fixture, registro);
 
   const { sessionId } = registro.avvia('task-vero', { modelloScelto: 'deepseek:un-modello' });
   const figlia = await attendiFigliaEFermala(registro, sessionId);

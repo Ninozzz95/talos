@@ -13,6 +13,7 @@
  * ⛔ Componente puro di DOM: non chiama la rete e non conosce lo stato dell'app. Chi lo monta gli passa i dati e le azioni.
  */
 import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
+import { renderizzaMarkdown } from './markdown.js';
 
 export const SEZIONI_AGENTE = Object.freeze([['panoramica', 'Panoramica'], ['file', 'File'], ['eventi', 'Eventi'], ['conversazione', 'Conversazione']]);
 export const ETICHETTE_PERMESSI = Object.freeze({ 'read-only': 'Solo lettura', 'workspace-write': 'Scrive nel progetto', 'full-access': 'Accesso pieno' });
@@ -86,6 +87,15 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
   indietro.append(icona(d, 'i-arrow-left'), d.createTextNode('Tutti gli agenti'));
   indietro.addEventListener('click', () => azioni.indietro?.());
   cima.appendChild(indietro);
+  if (typeof azioni.apriGrafo === 'function') {
+    const grafo = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm');
+    grafo.type = 'button';
+    grafo.setAttribute('aria-label', 'Apri questo agente nel diagramma');
+    grafo.title = 'Apri questo agente nel diagramma';
+    grafo.append(icona(d, 'i-branch'));
+    grafo.addEventListener('click', () => azioni.apriGrafo(dati));
+    cima.append(grafo);
+  }
 
   const chi = el(d, 'div', 'talos-agente__chi');
   const segno = el(d, 'span', 'talos-agente__icona');
@@ -138,7 +148,9 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
     const attivita = dati.attivita || {};
     const pezzi = [];
     pezzi.push(el(d, 'p', 'talos-agente__etichetta talos-muted', 'Compito'));
-    pezzi.push(el(d, 'div', 'talos-agente__compito', dati.task || dati.taskCorto || 'Delega senza compito registrato'));
+    const compito = el(d, 'div', 'talos-agente__compito');
+    compito.append(renderizzaMarkdown(dati.task || dati.taskCorto || 'Delega senza compito registrato', { document: d, linkMarkdown: true }));
+    pezzi.push(compito);
     const fatti = el(d, 'div', 'talos-agente__fatti');
     if (dati.modello) fatti.appendChild(riga('Modello', String(dati.modello)));
     const quanto = dati.avviataAlle ? eta(dati.avviataAlle) : null;
@@ -166,7 +178,7 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
     if (file.length > 5) { const altri = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', `Vedi tutti i ${file.length + (attivita.fileTagliati || 0)} file`); altri.type = 'button'; altri.addEventListener('click', () => mostra('file')); pezzi.push(altri); }
     if (dati.esitoDelega) {
       const sintesi = el(d, 'div', 'talos-agente__compito');
-      sintesi.append(el(d, 'b', '', 'Che cosa ha riportato'), el(d, 'p', '', String(dati.esitoDelega)));
+      sintesi.append(el(d, 'b', 'talos-agente__etichetta', 'Che cosa ha riportato'), renderizzaMarkdown(String(dati.esitoDelega), { document: d, linkMarkdown: true }));
       pezzi.push(sintesi);
     }
     p.replaceChildren(...pezzi);

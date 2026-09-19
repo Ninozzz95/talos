@@ -39,6 +39,7 @@ import {
   aggiornaPaginaMemoria, montaNote, montaProgetti,
 } from '../components/sezioni-adattatori.js';
 import { creaDettaglioAgente } from '../components/dettaglio-agente.js'; // PO-30 fetta 2: il dettaglio di un agente col disegno del laboratorio
+import { montaGrafoAgenti, modelloGrafoAgenti } from '../components/grafo-agenti.js';
 import { renderizzaMarkdown } from '../components/markdown.js'; // BC-29 (12/09): il render Markdown della chat, uno solo per chat, note, libreria e ricerca
 import { confermaModale } from '../components/modale-td.js'; // 11/09 lotto G: al posto di window.confirm()
 import { montaScorciatoiaTemi } from '../components/theme-studio.js'; // 11/09 lotto F
@@ -47,7 +48,7 @@ import { creaPilaToast } from '../components/toast.js';
 import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione
 import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella, deveAvvisareFuoriDallaFinestra, testoNotificaSistema, statoConsensoNotifiche } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup; 06/9 G29: notifica di sistema
 import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab
-import { aggiornaHf, gruppiVarianti } from '../components/hf-catalogo.js'; // 06/9 B6.9: scheda «Hugging Face» del Model Lab
+import { aggiornaHf, filtriHfVuoti, gruppiVarianti } from '../components/hf-catalogo.js'; // 06/9 B6.9: scheda «Hugging Face» del Model Lab
 import { aggiornaCosti } from '../components/costi-consumo.js'; // 06/9 D21/D22: costi e consumo per giorno e per modello
 import { aggiornaContesto, ripartizioneContesto } from '../components/contesto.js'; // 06/9 D26: ripartizione della finestra di contesto
 import { montaHf } from '../components/hf-catalogo.js';
@@ -62,7 +63,7 @@ import { ritraduciImpostazioni } from '../components/impostazioni.js'; // P-i18n
 import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSIMO_SCHEDE as MASSIMO_SCHEDE_BROWSER, localeAnnotabile, hostDaUrl } from '../components/browser.js'; // 06/9 K-I: il Browser a schede
 import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser con annotazione 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
-import { creaSessionItem, ordinaSessioniAdAlbero, statoSessione } from '../components/session-item.js';
+import { creaSessionItem, sessioniRadice, ordinaSessioniAdAlbero, statoSessione } from '../components/session-item.js';
 import { montaConversazioneFiglia } from '../components/conversazione-figlia.js'; // PO-08 (10/09): la conversazione di un sotto-agente, nel pannello
 import { leggiEsitoComando, rigaDiStatoComando } from '../components/esito-comando.js'; // PO-06 (10/09): l'esito di un comando, detto a una persona
 import { raggruppaInHunk } from '../components/diff-hunk.js'; // PO-11 (10/09): i pezzi del diff
@@ -81,7 +82,7 @@ import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i sugge
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
 import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, tonoDelTick, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
 import { ETICHETTA_INTERRUTTORE_RAGIONAMENTO, argomentoDelRagionamento, etichettaRagionamento, formattaDurataRagionamento, argomentoPuoCambiare } from '../components/ragionamento.js'; // 13/09 sera: il ragionamento si comprime invece di sparire, e mentre ragiona dice su cosa
-import { descriviCoda, normalizzaStatoCoda } from '../components/coda-messaggi.js'; // 14/09: la coda è della sessione — le sue parole in un posto solo
+import { descriviCoda, normalizzaStatoCoda, descriviRisultatoDelega } from '../components/coda-messaggi.js'; // 14/09: la coda è della sessione — le sue parole in un posto solo
 // 06/9 C24: la pagina delle Note — la monta `sezioni-adattatori.js`, che riusa `note.js`
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
@@ -844,6 +845,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
     if (scroller.dataset.seguiCollegato === 'si') return;
     scroller.dataset.seguiCollegato = 'si';
     scroller.addEventListener('scroll', () => {
+      fondoInVistaRicordato = null;
       if (streamingLastTargetTop !== null && Math.abs(scroller.scrollTop - streamingLastTargetTop) <= CONVERSATION_FOLLOW_EPSILON_PX) {
         streamingAutoFollow = true; // siamo stati noi (o la persona non si è mossa): si continua
         return;
@@ -851,7 +853,25 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
       streamingAutoFollow = fondoConversazioneInVista();
     }, { passive: true });
     // Lo spazio in coda è metà dell'altezza VISIBILE: se la finestra cambia, cambia anche lui.
-    if (typeof ResizeObserver === 'function') new ResizeObserver(() => aggiornaSpazioCodaConversazione(conversation)).observe(scroller);
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => {
+      const seguiva = streamingAutoFollow;
+      aggiornaSpazioCodaConversazione(conversation);
+      fondoInVistaRicordato = null;
+      if (seguiva) {
+        if (!runRealeAttivo()) {
+          // Il ritorno esplicito allo storico concluso resta al fondo anche quando la sua riga si chiude.
+          if (streamingScrollFrame !== null) window.cancelAnimationFrame?.(streamingScrollFrame);
+          streamingScrollFrame = null;
+          streamingScrollTarget = null;
+          scroller.scrollTop = scroller.scrollHeight;
+          streamingLastTargetTop = scroller.scrollTop;
+        } else {
+          const ultimo = conversation.lastElementChild;
+          if (ultimo) scrollStreamingOutput(ultimo);
+        }
+      }
+      aggiornaPiedeChatDaStato();
+    }).observe(scroller);
   }
   collegaSeguiFondoConversazione();
 
@@ -1598,6 +1618,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
   function setView(view, options = {}) {
     const target = $(`[data-view="${view}"]`);
     if (!target) return;
+    if (!options.paginaModello && $('#paginaModello:not([hidden])')) chiudiPaginaModello({ ripristina: false });
     if (!options.startup) startupNavigation.next();
     const previous = views.find((pane) => pane.classList.contains('active'));
     // Una vista può diventare nuovamente il target mentre la sua precedente
@@ -3435,16 +3456,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /**
    * 06/9 B6.8: la scheda «Installati» è il pannello del
    * mockup (`components/modelli-installati.js`). Il modello caricato lo dice il motore locale
-   * (llama.cpp «ready» + il modello scelto); RAM da `state.modelLab.capacity`; il verdetto
+   * (llama.cpp «ready» + modelId osservato); RAM da `state.modelLab.capacity`; il verdetto
    * «Entra» da `state.modelLab.fit` (si chiede con «Verifica compatibilità», mai da solo).
    */
   function runtimeInstallati() {
     const llama = (state.modelLab.runtimes || []).find((r) => r.runtimeId === 'llama.cpp');
     const mem = state.modelLab.capacity?.memory;
-    const caricato = llama?.runtimeState === 'ready' ? (state.modelLab.selectedRuntimeModel || null) : null;
+    const caricato = llama?.state === 'observed' && llama.runtimeState === 'ready' ? (llama.modelId || null) : null;
     const fitCaricato = caricato ? state.modelLab.fit.get(caricato)?.esito?.memory?.requiredBytes : undefined;
     return {
       caricato,
+      unloading: Boolean(state.modelLab.unloading),
+      loading: Boolean(state.modelLab.loadingRuntime || !state.modelLab.runtimeMeasured),
+      error: state.modelLab.runtimeError || null,
       ramTotaleBytes: mem?.totalBytes,
       liberiBytes: mem?.freeBytes,
       usatiDalModelloBytes: Number.isFinite(fitCaricato) ? fitCaricato : undefined,
@@ -3468,7 +3492,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       nodoFit: (id) => nodoVerdettoFit(id),
       azioni: {
         verifica: (id) => { void verificaCompatibilitaModello(id); },
-        libera: () => { void liberaMemoriaModello(); },
+        libera: (id) => { void liberaMemoriaModello(id); },
         copia: async (id) => { const m = state.modelLab.installed.find((x) => x.id === id); try { await navigator.clipboard?.writeText(m?.path || ''); toast('Percorso copiato', m?.path || ''); } catch { toast('Percorso non copiato', 'Il browser non ha dato accesso agli appunti.'); } },
         rinomina: (id) => apriRinominaModelloLocale(id),
         elimina: (id) => apriEliminaModelloLocale(id),
@@ -3597,6 +3621,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.modelLab.loadingRuntime = false;
       state.modelLab.runtimeMeasured = true;
       renderizzaRuntimeModelLab();
+      renderizzaModelliLocaliModelLab();
+      aggiornaPannelloMemoria();
     }
   }
 
@@ -3620,7 +3646,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const hfPanel = $('#modelLabHfPanel'); const installedPanel = $('#modelLabInstalledPanel');
     if (hfPanel && !hfPanel.dataset.hfMontato && !hfPanel.querySelector('[data-model-lab-enhanced="hf"]')) {
       const controls = document.createElement('div'); controls.dataset.modelLabEnhanced = 'hf'; controls.className = 'model-lab-enhanced-controls';
-      controls.innerHTML = '<label class="setting-control"><span>Ordina</span><select id="modelLabHfSortControl" aria-label="Ordina risultati Hugging Face"><option value="downloads">Download</option><option value="likes">Preferiti</option><option value="created">Più recenti</option><option value="lastModified">Aggiornati</option></select></label><label class="setting-control"><span>Autore</span><input id="modelLabHfAuthorControl" type="search" aria-label="Filtra per autore Hugging Face" placeholder="Organizzazione" /></label><label class="setting-control"><span>Filtri</span><input id="modelLabHfFiltersControl" type="search" aria-label="Filtra modelli Hugging Face" placeholder="q4, text-generation" /></label><button class="secondary-btn compact" id="modelLabHfNextButtonControl" type="button" hidden>Carica altri risultati</button>';
+      controls.innerHTML = '<label class="setting-control"><span>Ordina</span><select id="modelLabHfSortControl" aria-label="Ordina risultati Hugging Face"><option value="downloads">Download</option><option value="likes">Preferiti</option><option value="createdAt">Più recenti</option><option value="lastModified">Aggiornati</option></select></label><label class="setting-control"><span>Autore</span><input id="modelLabHfAuthorControl" type="search" aria-label="Filtra per autore Hugging Face" placeholder="Organizzazione" /></label><label class="setting-control"><span>Filtri</span><input id="modelLabHfFiltersControl" type="search" aria-label="Filtra modelli Hugging Face" placeholder="q4, text-generation" /></label><button class="secondary-btn compact" id="modelLabHfNextButtonControl" type="button" hidden>Carica altri risultati</button>';
       hfPanel.insertBefore(controls, hfPanel.querySelector('.model-lab-catalog-layout'));
     }
     if (installedPanel && !installedPanel.dataset.installatiMontato && !installedPanel.querySelector('[data-model-lab-enhanced="installed"]')) {
@@ -3783,8 +3809,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     else for (const [k, v] of state.modelLab.hfStima?.perVariante || []) stima.set(k, v);
     aggiornaHf(panel, state.modelLab.hfResults, {
       selezionato: state.modelLab.hfSelected, detail, stima, scelta: state.modelLab.hfVariante || null,
-      errore: state.modelLab.hfError, caricamento: state.modelLab.hfCaricamento === true, altri: Boolean(state.modelLab.hfCursor),
-      seleziona: (repo) => { void apriDettaglioHf(repo); },
+      errore: state.modelLab.hfError, errorePagina: state.modelLab.hfErrorePagina, caricamento: state.modelLab.hfCaricamento === true, altri: Boolean(state.modelLab.hfCursor),
+      seleziona: (repo) => apriPaginaHfDallaLista(repo),
       azioni: {
         scegli: (chiave) => { state.modelLab.hfVariante = chiave; renderizzaHfConMockup(); },
         misura: (gruppi) => { void misuraVariantiHfModelLab(gruppi.map((g) => ({ chiave: g.chiave, bytes: g.bytes }))); },
@@ -3793,6 +3819,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         scheda: (det, bottone) => mostraSchedaModelloHf(det, bottone),
       },
     });
+    aggiornaOsservazioneHf();
     return true;
   }
   async function apriDettaglioHf(repo) {
@@ -4110,6 +4137,23 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * pulsante che libera quella — l'unica memoria di cui siamo padroni.
    */
   function aggiornaPannelloMemoria() {
+    const osservato = (state.modelLab.runtimes || []).find(r => r.runtimeId === 'llama.cpp');
+    const pronto = osservato?.state === 'observed' && osservato.runtimeState === 'ready';
+    const bloccato = !pronto || state.modelLab.loadingRuntime || state.modelLab.unloading || state.modelLab.runtimeError;
+    const globale = $('#modelLabLiberaMemoria');
+    if (globale) {
+      globale.disabled = Boolean(bloccato);
+      globale.textContent = state.modelLab.unloading ? 'Liberazione…' : 'Libera memoria';
+      globale.title = state.modelLab.runtimeError ? 'Stato del runtime non disponibile: aggiorna Sistema'
+        : pronto ? 'Scarica dalla memoria il modello locale. I file restano sul disco.' : 'Nessun modello locale caricato';
+    }
+    const locale = $('#azioneModello[data-action="memoria"]');
+    if (locale) {
+      locale.disabled = Boolean(bloccato);
+      locale.textContent = state.modelLab.unloading ? 'Liberazione…' : 'Libera memoria';
+    }
+    montaggioPaginaModello?.aggiornaRuntime(runtimeInstallati());
+
     /*
      * ⛔ 18/09/2026 — IL NODO SI CERCA IN ENTRAMBE LE DESTINAZIONI, come le cinque funzioni di
      *   montaggio (corsia 3). Segnalato dalla corsia 3 stessa come «una riga da cambiare, non è
@@ -4142,7 +4186,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   const ROTTA_PAGINA_MODELLO = /^#\/impostazioni\/modelli\/scheda\/([^/]+)\/(card|files|compatibility)$/;
   function leggiRottaPaginaModello() {
     const trovato = ROTTA_PAGINA_MODELLO.exec(window.location.hash || '');
-    return trovato ? { id: decodeURIComponent(trovato[1]), scheda: trovato[2] } : null;
+    if (!trovato) return null;
+    try { return { id: decodeURIComponent(trovato[1]), scheda: trovato[2] }; }
+    catch { return null; }
   }
   function contenitorePaginaModello() {
     let pagina = $('#paginaModello');
@@ -4159,34 +4205,114 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        *   nasceva e l'errore restava in console, invisibile a chi guardava lo schermo. Si appende
        *   al corpo (o all'host, quando la app gira dentro una cornice), dove stanno le schermate.
        */
-      const ospite = HOST() === document.documentElement ? document.body : HOST();
+      const ospite = $('#centro');
       ospite?.appendChild(pagina);
     }
     return pagina;
   }
   let montaggioPaginaModello = null;
+  const RIPRESA_MODELLI_KEY = 'talos.harness.desktop.modelli.ripresa.v1';
+  const CAMPI_RICERCA_RIPRESA = ['modelLabHfSearch', 'modelLabHfSortControl', 'modelLabHfAuthorControl', 'modelLabHfFiltersControl'];
+  function leggiRipresaModelli() {
+    try {
+      const testo = window.sessionStorage.getItem(RIPRESA_MODELLI_KEY);
+      if (!testo || testo.length > 65536) return { pagine: [] };
+      const dati = JSON.parse(testo);
+      if (dati?.version !== 1) return { pagine: [] };
+      const pagine = (Array.isArray(dati.pagine) ? dati.pagine : []).slice(-20).filter(p =>
+        typeof p?.id === 'string' && p.id.length <= 1024 && /^[a-f0-9]{40,64}$/iu.test(p.revision)
+        && (p.scelta === null || (typeof p.scelta === 'string' && p.scelta.length <= 2048)));
+      const filtri = Object.fromEntries(CAMPI_RICERCA_RIPRESA.map(id => [id,
+        typeof dati.filtri?.[id] === 'string' ? dati.filtri[id].slice(0, 1024) : '']));
+      const faccette = Object.fromEntries(['accesso', 'licenza', 'parametri', 'popolarita', 'tipo', 'autore'].map(key => [key,
+        (Array.isArray(dati.faccette?.[key]) ? dati.faccette[key] : []).filter(v => typeof v === 'string' && v.length <= 200).slice(0, 20)]));
+      return { pagine, filtri, faccette };
+    } catch { return { pagine: [] }; }
+  }
+  function salvaRipresaModelli(dati) {
+    try { window.sessionStorage.setItem(RIPRESA_MODELLI_KEY, JSON.stringify({ ...dati, version: 1 })); }
+    catch { /* La navigazione resta utilizzabile anche con lo storage disabilitato. */ }
+  }
+  function salvaSceltaPaginaModello(id, scelta) {
+    if (!/^[a-f0-9]{40,64}$/iu.test(scelta?.revision)) return;
+    const dati = leggiRipresaModelli();
+    dati.pagine = [...dati.pagine.filter(p => p.id !== id), { id, revision: scelta.revision, scelta: scelta.scelta }].slice(-20);
+    salvaRipresaModelli(dati);
+  }
+  function apriPaginaHfDallaLista(repo) {
+    const item = state.modelLab.hfResults.find(r => (r.repo || r.id) === repo);
+    if (!item) return;
+    salvaRipresaModelli({ ...leggiRipresaModelli(),
+      filtri: Object.fromEntries(CAMPI_RICERCA_RIPRESA.map(id => [id, $('#' + id)?.value || ''])),
+      faccette: $('#modelLabHfPanel')?.__hfFiltri,
+    });
+    state.modelLab.hfSelected = repo;
+    apriPaginaModello(`hf:${repo}@${item.revision || 'main'}`, 'files');
+  }
+  async function ripristinaListaHf() {
+    setView('settings');
+    setSettingsSection('models');
+    const dati = leggiRipresaModelli();
+    const daRicaricare = !state.modelLab.hfCatalogoIniziale;
+    if (daRicaricare && dati.filtri) {
+      for (const id of CAMPI_RICERCA_RIPRESA) {
+        const input = $('#' + id);
+        if (input && dati.filtri[id]) input.value = dati.filtri[id];
+      }
+      state.modelLab.hfCatalogoIniziale = true;
+    }
+    setModelLabSection('huggingface');
+    if (daRicaricare && dati.filtri) {
+      await cercaHuggingFaceModelLab();
+      const panel = $('#modelLabHfPanel');
+      if (panel) panel.__hfFiltri = dati.faccette;
+      renderizzaHfConMockup();
+    }
+  }
   function apriPaginaModello(id, scheda = 'card', { daRotta = false } = {}) {
     if (!id) return;
+    setView('settings', { paginaModello: true });
     const pagina = contenitorePaginaModello();
+    $('#centro')?.classList.add('talos-model-page-open');
+    if (montaggioPaginaModello?.stato.id === id && !montaggioPaginaModello.stato.distrutto) {
+      if (montaggioPaginaModello.stato.scheda !== scheda) montaggioPaginaModello.vaiA(scheda);
+      pagina.hidden = false;
+      if (!daRotta) scriviRottaPaginaModello(id, scheda);
+      return;
+    }
     montaggioPaginaModello?.distruggi?.();
     montaggioPaginaModello = montaSchedaModello(pagina, {
       apiGet: (percorso) => apiGet(percorso),
+      apiPost: (percorso, corpo) => apiPost(percorso, corpo),
       id,
       scheda,
+      runtime: runtimeInstallati(),
+      onLiberaMemoria: modelId => liberaMemoriaModello(modelId),
+      inizio: leggiRipresaModelli().pagine.find(p => p.id === id) || null,
+      onScelta: scelta => salvaSceltaPaginaModello(id, scelta),
       indietro: () => chiudiPaginaModello(),
       onScheda: (nuova) => scriviRottaPaginaModello(id, nuova),
+      apriDownload: () => {
+        chiudiPaginaModello({ ripristina: false });
+        setView('settings');
+        setSettingsSection('models');
+        setModelLabSection('downloads');
+      },
     });
     pagina.hidden = false;
     if (!daRotta) scriviRottaPaginaModello(id, scheda);
   }
-  function chiudiPaginaModello({ daRotta = false } = {}) {
+  function chiudiPaginaModello({ daRotta = false, ripristina = true } = {}) {
+    const tornaHf = ripristina && montaggioPaginaModello?.stato.bersaglio.tipo === 'repo';
     const pagina = $('#paginaModello');
     if (pagina) pagina.hidden = true;
+    $('#centro')?.classList.remove('talos-model-page-open');
     montaggioPaginaModello?.distruggi?.();
     montaggioPaginaModello = null;
     /* Uscendo dalla pagina la rotta non deve restare appesa: il prossimo «indietro» del
        browser riaprirebbe una pagina che l'utente ha appena chiuso. */
     if (!daRotta && leggiRottaPaginaModello()) window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`);
+    if (tornaHf) void ripristinaListaHf();
   }
   function scriviRottaPaginaModello(id, scheda) {
     const nuova = `#/impostazioni/modelli/scheda/${encodeURIComponent(id)}/${scheda}`;
@@ -4205,40 +4331,27 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (rottaIniziale) apriPaginaModello(rottaIniziale.id, rottaIniziale.scheda, { daRotta: true });
   }, 0);
 
-  async function liberaMemoriaModello() {
-    const bottone = $('#memoriaScarica');
-    if (state.modelLab.unloading || bottone?.disabled) return;
+  async function liberaMemoriaModello(modelId = null) {
+    const runtime = (state.modelLab.runtimes || []).find(r => r.runtimeId === 'llama.cpp');
+    if (state.modelLab.unloading || state.modelLab.loadingRuntime || state.modelLab.runtimeError
+      || runtime?.state !== 'observed' || runtime.runtimeState !== 'ready'
+      || (modelId && runtime.modelId !== modelId)) return;
     state.modelLab.unloading = true;
     aggiornaPannelloMemoria();
-    const originale = bottone?.textContent;
-    if (bottone) { bottone.disabled = true; bottone.textContent = 'Liberazione…'; }
-    const primaLiberi = state.modelLab.capacity?.memory?.freeBytes;
     try {
-      /*
-       * ⛔ 02/9 (notte) — il corpo era `{}` e la rotta rispondeva SEMPRE
-       * QUERY_INVALID: pretende `runtimeId`. Il pulsante non avrebbe mai
-       * funzionato. `modelId` non si manda perche' il server non espone
-       * quale modello sia caricato e l'implementazione lo ignora — la
-       * rotta e' stata corretta per non chiederlo piu' (vedi http-app.mjs).
-       */
       await apiPost('/api/v1/runtime/unload', { runtimeId: 'llama.cpp' });
-      // ⭐ Si RIMISURA subito: il risultato si dichiara con i byte veri
-      // liberati, non con un «fatto» generico.
       state.modelLab.capacity = null;
       await caricaCapacitaMacchina();
-      // ⛔ Anche lo stato del runtime va riletto: senza, il pulsante
-      // resterebbe abilitato su un runtime che ormai e' spento.
       await caricaRuntimeModelLab();
-      const dopoLiberi = state.modelLab.capacity?.memory?.freeBytes;
-      const guadagno = (Number.isFinite(primaLiberi) && Number.isFinite(dopoLiberi)) ? dopoLiberi - primaLiberi : null;
-      toast('Memoria liberata', guadagno && guadagno > 0
-        ? `${formattaByteModelLab(guadagno)} tornati disponibili.`
-        : 'Modello scaricato. La misura di sistema può aggiornarsi con qualche secondo di ritardo.');
+      if (state.modelLab.runtimeError) {
+        toast('Modello scaricato', 'Comando eseguito, ma non è stato possibile rileggere lo stato. Aggiorna Sistema.');
+      } else {
+        toast('Memoria liberata', 'Modello scaricato dalla memoria. I file installati restano sul disco.');
+      }
     } catch (error) {
       toast('Memoria non liberata', error.message || 'Il runtime locale non ha risposto.');
     } finally {
       state.modelLab.unloading = false;
-      if (bottone) { bottone.textContent = originale || 'Libera la memoria del modello'; }
       aggiornaPannelloMemoria();
     }
   }
@@ -4467,7 +4580,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (!salvaImpostazioniDesktop(letto)) throw new Error(t('Salvataggio delle preferenze non riuscito.')); // retain the validated import only after persistence
         const documento = leggiImpostazioniDesktop();
         applicaAspettoDesktop(documento.appearance);
-        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS });
+        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
         montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
         sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
         dillo(`Preferenze importate da «${file.name}».`);
@@ -4497,7 +4610,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         window.localStorage.removeItem(DESKTOP_SETTINGS_KEY);
         const documento = leggiImpostazioniDesktop();
         applicaAspettoDesktop(documento.appearance);
-        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS });
+        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
         montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
         sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
         dillo('Preferenze riportate ai valori iniziali. Le conversazioni non sono state toccate.');
@@ -4649,7 +4762,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function inizializzaSettingsNavigation() {
-    montaImpostazioni($('#schermoImpostazioni'), leggiImpostazioniDesktop().appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS });
+    montaImpostazioni($('#schermoImpostazioni'), leggiImpostazioniDesktop().appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
     montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
     montaTrasferimentoImpostazioni(); // 06/9 D5: esporta · importa · ripristina
     sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(leggiImpostazioniDesktop().appearance)); // 06/9 B8
@@ -4676,26 +4789,51 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     setSettingsSection(saved || 'appearance', { persist: false });
   }
 
+  let hfGenerazione = 0;
+  let hfFirmaRicerca = '';
+  let hfCursoriLetti = new Set();
+  let hfOsservatore = null;
+  function aggiornaOsservazioneHf() {
+    hfOsservatore?.disconnect();
+    const next = $('#modelLabHfNextButtonControl');
+    if (!next || !state.modelLab.hfCursor || state.modelLab.hfCaricamento || state.modelLab.hfErrorePagina || !globalThis.IntersectionObserver) return;
+    hfOsservatore ||= new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting) && !document.hidden && state.view === 'settings' && !$('#paginaModello:not([hidden])')) void cercaHuggingFaceModelLab({ append: true });
+    }, { threshold: 0, rootMargin: '0px 0px 120px 0px' });
+    hfOsservatore.observe(next);
+  }
   async function cercaHuggingFaceModelLab({ append = false } = {}) {
     const search = $('#modelLabHfSearch', $('#modelLabCard'))?.value?.trim() || '';
-    state.modelLab.hfQuery = search;
-    if (!append) state.modelLab.hfCursor = null;
-    state.modelLab.hfError = null;
     const sort = $('#modelLabHfSortControl')?.value || 'downloads';
     const author = $('#modelLabHfAuthorControl')?.value?.trim() || '';
     const filters = ($('#modelLabHfFiltersControl')?.value || '').split(',').map((value) => value.trim()).filter(Boolean).slice(0, 8);
+    const firma = JSON.stringify([search, sort, author, filters]);
+    if (append && firma !== hfFirmaRicerca) append = false;
+    if (append && (state.modelLab.hfCaricamento || !state.modelLab.hfCursor)) return;
+    if (!append) { hfGenerazione++; hfCursoriLetti = new Set(); state.modelLab.hfCursor = null; state.modelLab.hfResults = []; hfFirmaRicerca = firma; }
+    const generazione = hfGenerazione, cursor = append ? state.modelLab.hfCursor : null;
+    state.modelLab.hfQuery = search;
+    state.modelLab.hfError = null; state.modelLab.hfErrorePagina = null;
     const status = $('#modelLabHfStatus'); if (status) status.textContent = 'Ricerca in corso...';
     state.modelLab.hfCaricamento = true; renderizzaHfConMockup();
     try {
       const params = new URLSearchParams({ query: state.modelLab.hfQuery, limit: '20', sort, direction: '-1' });
-      if (state.modelLab.hfCursor) params.set('cursor', state.modelLab.hfCursor);
+      if (cursor) params.set('cursor', cursor);
       if (author) params.set('author', author);
       for (const filter of filters) params.append('filter', filter);
       const data = await apiGet(`/api/v1/huggingface/search?${params}`);
-      state.modelLab.hfResults = append ? [...state.modelLab.hfResults, ...(data.items || [])] : (data.items || []);
-      state.modelLab.hfCursor = data.nextCursor || null;
+      if (generazione !== hfGenerazione) return;
+      const items = Array.isArray(data.items) ? data.items.filter(r => typeof r?.repo === 'string') : [];
+      state.modelLab.hfResults = [...new Map([...(append ? state.modelLab.hfResults : []), ...items].map(r => [r.repo, r])).values()];
+      if (cursor) hfCursoriLetti.add(cursor);
+      state.modelLab.hfCursor = typeof data.nextCursor === 'string' && data.nextCursor && !hfCursoriLetti.has(data.nextCursor) ? data.nextCursor : null;
       if (status) status.textContent = `${state.modelLab.hfResults.length} repository osservati`;
-    } catch (error) { state.modelLab.hfError = error; if (!append) state.modelLab.hfResults = []; if (status) status.textContent = 'Ricerca non disponibile'; }
+    } catch (error) {
+      if (generazione !== hfGenerazione) return;
+      if (append) state.modelLab.hfErrorePagina = error;
+      else { state.modelLab.hfError = error; state.modelLab.hfResults = []; }
+      if (status) status.textContent = 'Ricerca non disponibile';
+    }
     state.modelLab.hfCaricamento = false;
     const next = $('#modelLabHfNextButtonControl'); if (next) next.hidden = !state.modelLab.hfCursor;
     renderizzaHfRisultatiModelLab();
@@ -4730,12 +4868,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     // aggiornaPannelloMemoria per perché NON si uccidono processi).
     $('#memoriaRimisura')?.addEventListener('click', async () => { state.modelLab.capacity = null; await caricaCapacitaMacchina(); await caricaRuntimeModelLab(); });
     $('#memoriaScarica')?.addEventListener('click', () => { void liberaMemoriaModello(); });
+    $('#modelLabLiberaMemoria')?.addEventListener('click', () => { void liberaMemoriaModello(); });
     $('#modelLabRuntimeSelect')?.addEventListener('change', (event) => { state.modelLab.selectedRuntime = event.target.value; state.modelLab.selectedRuntimeModel = ''; renderizzaRuntimeModelLab(); });
     $('#modelLabModelSelect')?.addEventListener('change', (event) => { state.modelLab.selectedRuntimeModel = event.target.value; renderizzaRuntimeModelLab(); });
     $('#modelLabRunButton')?.addEventListener('click', () => avviaProvaRuntimeModelLab());
     $('#modelLabCancelButton')?.addEventListener('click', () => annullaProvaRuntimeModelLab());
-    $('#modelLabHfSearchButton')?.addEventListener('click', () => cercaHuggingFaceModelLab());
-    $('#modelLabHfSearch')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
+    $('#modelLabHfSearchButton')?.addEventListener('click', () => { clearTimeout(attesaRicercaHf); cercaHuggingFaceModelLab(); });
     /*
      * ⛔⛔ 06/09 — la ricerca si avvia anche SCRIVENDO, non solo con Invio.
      *
@@ -4752,18 +4890,36 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * ogni tasto. Sotto i due caratteri non si chiama: `q=z` non è una ricerca.
      */
     let attesaRicercaHf = null;
-    $('#modelLabHfSearch')?.addEventListener('input', (event) => {
+    function programmaRicercaHf(event) {
       clearTimeout(attesaRicercaHf);
-      const testo = event.target.value.trim();
-      if (testo.length > 0 && testo.length < 2) return;
+      hfGenerazione++; state.modelLab.hfCaricamento = false; state.modelLab.hfCursor = null; state.modelLab.hfErrorePagina = null; hfOsservatore?.disconnect(); renderizzaHfConMockup();
+      const testo = $('#modelLabHfSearch')?.value.trim() || '';
+      if (event?.isComposing || (testo.length > 0 && testo.length < 2)) return;
       attesaRicercaHf = setTimeout(() => cercaHuggingFaceModelLab(), 450);
-    });
+    }
+    for (const id of ['modelLabHfSearch', 'modelLabHfAuthorControl', 'modelLabHfFiltersControl']) {
+      const campo = $(`#${id}`);
+      campo?.addEventListener('input', programmaRicercaHf);
+      campo?.addEventListener('compositionend', programmaRicercaHf);
+      campo?.addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !event.isComposing) {
+          clearTimeout(attesaRicercaHf);
+          cercaHuggingFaceModelLab();
+        }
+      });
+    }
     $('#modelLabHfNextButtonControl')?.addEventListener('click', () => cercaHuggingFaceModelLab({ append: true }));
-    $('#modelLabHfSortControl')?.addEventListener('change', () => { if (state.modelLab.hfQuery) cercaHuggingFaceModelLab(); }); // 06/9 B6.9
-    for (const id of ['modelLabHfAuthorControl', 'modelLabHfFiltersControl']) $(`#${id}`)?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
+    $('#modelLabHfSortControl')?.addEventListener('change', () => { clearTimeout(attesaRicercaHf); cercaHuggingFaceModelLab(); });
     $('#modelLabDownloadsPanel [data-action="soloAttivi"]')?.addEventListener('click', () => { downloadSoloAttivi = !downloadSoloAttivi; renderizzaDownloadConMockup(); }); // 06/9 B6.10
     $('#veloAnnullaDownload [data-lab-dialog-action="annullaDownload"], #veloAnnullaDownload .talos-button--danger')?.addEventListener('click', async () => { const id = $('#veloAnnullaDownload')?.dataset.downloadId; if (!id) return; try { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id)}/cancel`, {}); toast('Download annullato', id); } catch (error) { toast('Annullamento non riuscito', error.message); } chiudiVeloMockup('veloAnnullaDownload'); caricaDownloadModelLab(); });
-    $('#modelLabHfPanel [data-clear="hf"]')?.addEventListener('click', () => { for (const id of ['modelLabHfSearch', 'modelLabHfAuthorControl', 'modelLabHfFiltersControl']) { const c = $(`#${id}`); if (c) c.value = ''; } state.modelLab.hfResults = []; state.modelLab.hfError = null; state.modelLab.hfCursor = null; renderizzaHfConMockup(); });
+    $('#modelLabHfPanel [data-clear="hf"]')?.addEventListener('click', () => {
+      clearTimeout(attesaRicercaHf); hfGenerazione++; hfFirmaRicerca = ''; hfCursoriLetti = new Set(); hfOsservatore?.disconnect();
+      for (const id of ['modelLabHfSearch', 'modelLabHfAuthorControl', 'modelLabHfFiltersControl']) { const c = $(`#${id}`); if (c) c.value = ''; }
+      const ordine = $('#modelLabHfSortControl'); if (ordine) ordine.value = 'downloads';
+      const panel = $('#modelLabHfPanel'); if (panel) panel.__hfFiltri = filtriHfVuoti();
+      Object.assign(state.modelLab, { hfQuery: '', hfResults: [], hfSelected: null, hfDetail: null, hfStima: null, hfVariante: null, hfError: null, hfErrorePagina: null, hfCursor: null, hfCaricamento: false });
+      renderizzaHfConMockup();
+    });
     $('#modelLabInstalledStateFilter')?.addEventListener('change', (event) => { state.modelLab.installedStateFilter = event.target.value; renderizzaModelliLocaliModelLab(); }); // 06/9 B6.8
     // 06/9 B6.8: i dialoghi del mockup — SOLO rinomina/elimina: «annulla» è del velo Annulla download (B6.10) e non deve mai toccare un modello
     $$('[data-lab-dialog-action="rinomina"], [data-lab-dialog-action="elimina"]').forEach((b) => b.addEventListener('click', () => { void confermaDialogoModelloLocale(b.dataset.labDialogAction); }));
@@ -9388,6 +9544,114 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⛔⛔ PO-08 — la conversazione di UNA figlia alla volta, nel pannello destro.
    */
   let figliaAperta = null;
+  let grafoAgenti = null;
+  let grafoTimer = null;
+  let figliLettura = 0;
+  let figliErrore = null;
+  let figliAggiornati = null;
+  const agentiInDiretta = new Map();
+  const risultatiDelegaMostrati = new Set();
+
+  function mostraRisultatoDelega(evento) {
+    if (evento?.origine !== 'delega') return false;
+    if (evento.codaId && risultatiDelegaMostrati.has(evento.codaId)) return true;
+    const risultato = descriviRisultatoDelega(evento.testo ?? evento.consegna, evento.childId);
+    appendStatusNote(risultato ? `${risultato.titolo}\n${risultato.testo}` : 'Un sotto-agente ha consegnato il risultato. È disponibile nel suo dettaglio.', false,
+      { meta: risultato?.errore ? 'Risultato del sotto-agente · non concluso' : 'Risultato del sotto-agente' });
+    if (evento.codaId) risultatiDelegaMostrati.add(evento.codaId);
+    return true;
+  }
+
+  let frameAgentiInDiretta = null;
+  let frameGrafoMadre = null;
+  let ultimoEventoGrafoMadre = null;
+  const GRAFO_APERTO_KEY = 'talos.grafo.aperto.v1';
+
+  function datiGrafoAgenti() {
+    const nota = state.sessionSelection.available.get(state.realSession.id) || {};
+    const operazione = [...state.realSession.toolCallNomi.values()].find(a => a.stato === 'running')?.nome || null;
+    const esitoMadre = ultimoEventoGrafoMadre;
+    const chiamate = new Set(state.realSession.eventiAttrezzi.filter(e => e.type === 'ToolCallStart').map(e => e.toolCallId)).size;
+    return {
+      corrente: { ...nota, ultimoEsito: esitoMadre ? (esitoMadre.type === 'RunError' ? 'errore' : esitoMadre.type === 'RunFinished' ? 'concluso' : null) : nota.ultimoEsito, interrotta: esitoMadre ? esitoMadre.type === 'RunError' && esitoMadre.code === 'fermato' : nota.interrotta, motivoChiusura: esitoMadre ? (esitoMadre.code === 'fermato' ? 'fermata' : null) : nota.motivoChiusura, attivita: { chiamate, attrezzoCorrente: operazione, passi: [] }, sessionId: state.realSession.id, nome: state.session || 'Sessione corrente', cartella: state.realSession.cartellaAssoluta || nota.cartella, conclusa: !runRealeAttivo(), inAttesaApprovazione: state.realSession.approvazioniPendenti.size, usageSessione: state.realSession.usageSessione || nota.usageSessione },
+      sessioni: [...state.sessionSelection.available.values(), ...agentiInDiretta.values()], figli: state.realSession.figli || [],
+      errore: figliErrore, aggiornato: figliAggiornati,
+    };
+  }
+  function agentiPerInspector() {
+    return modelloGrafoAgenti(datiGrafoAgenti()).nodi
+      .filter(n => n.id !== state.realSession.id)
+      .map(n => ({ ...n.dati, taskCorto: n.dati.taskCorto || n.nome, numeroFigli: n.figli }));
+  }
+  function applicaEventoAgenti(value) {
+    const id = state.realSession.id, agente = value?.agent;
+    if (value?.version !== 1 || (value.sessionId ?? value.parentId) !== id || typeof value.childId !== 'string' || agente?.sessionId !== value.childId) return;
+    if (typeof agente.padreId !== 'string' || agente.padreId !== value.parentId || agente.sessionId === id) return;
+    figliLettura++; // uno snapshot HTTP partito prima dell'evento non può cancellarlo
+    agentiInDiretta.set(agente.sessionId, agente);
+    if (agente.padreId === id) {
+      const indice = state.realSession.figli.findIndex(a => a.sessionId === agente.sessionId);
+      if (indice < 0) state.realSession.figli.push(agente); else state.realSession.figli[indice] = agente;
+    }
+    if (!figliErrore) figliAggiornati = new Date().toISOString();
+    if (frameAgentiInDiretta === null) {
+      const generazione = state.realSession.generation;
+      frameAgentiInDiretta = requestAnimationFrame(() => {
+        frameAgentiInDiretta = null;
+        if (generazione !== state.realSession.generation) return;
+        aggiornaGrafoAgenti(); aggiornaInspectorDaStato(); aggiornaPuntiniStatoAlbero();
+        if (figliaAperta?.dettaglio) { const fresca = agentiInDiretta.get(figliaAperta.sessionId); if (fresca) figliaAperta.dettaglio.aggiorna(fresca); }
+      });
+    }
+    if (value.reason === 'created' || value.reason === 'completed') programmaAggiornamentoElencoSessioniReali();
+  }
+  function aggiornaGrafoAgenti() { grafoAgenti?.aggiorna(datiGrafoAgenti()); }
+  function chiudiGrafoAgenti({ ricorda = false } = {}) {
+    clearInterval(grafoTimer); grafoTimer = null;
+    grafoAgenti?.distruggi(); grafoAgenti = null;
+    $('[data-view="chat"]')?.classList.remove('talos-grafo-aperto');
+    if (!ricorda) { try { sessionStorage.removeItem(GRAFO_APERTO_KEY); } catch { /* storage non disponibile */ } }
+  }
+  function apriGrafoAgenti(figlia = null) {
+    if (!state.realSession.id) return;
+    setView('chat');
+    closePanels();
+    const host = $('[data-view="chat"]');
+    if (!host) return;
+    if (!grafoAgenti) {
+      host.classList.add('talos-grafo-aperto');
+      grafoAgenti = montaGrafoAgenti(host, {
+        dati: datiGrafoAgenti(),
+        onLeggiCronologia: ((id) => query => apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/agent-timeline?${new URLSearchParams(query)}`))(state.realSession.id),
+        onChiudi: () => { chiudiGrafoAgenti(); $('#railAgenti button')?.focus(); },
+        onAggiorna: () => caricaFigliSessione(),
+        onLeggiFile: async (agente, percorso) => {
+          const risposta = await apiGet(`/api/v1/sessions/${encodeURIComponent(agente.sessionId)}/tree/file?percorso=${encodeURIComponent(percorso)}`);
+          return risposta.contenuto ?? risposta.testo ?? null;
+        },
+        onApri: async (voce) => {
+          const id = state.realSession.id, vista = grafoAgenti;
+          if (voce.sessionId === id) { $('#railTabs [data-rail="contesto"]')?.click(); openPanel('inspector'); return; }
+          let dati = state.realSession.figli.find(a => a.sessionId === voce.sessionId) || agentiInDiretta.get(voce.sessionId);
+          if (!dati && voce.padreId) {
+            try { dati = (await apiGet(`/api/v1/sessions/${encodeURIComponent(voce.padreId)}/children`))?.figli?.find(a => a.sessionId === voce.sessionId); }
+            catch (error) { if (state.realSession.id === id && grafoAgenti === vista) toast('Dettaglio non disponibile', error.message); return; }
+            if (state.realSession.id !== id || grafoAgenti !== vista) return;
+          }
+          if (!dati) { passaASessione(voce.sessionId, voce.taskId || voce.sessionId, voce.nome, voce.modello, voce); return; }
+          $('#railTabs [data-rail="agenti"]')?.click();
+          apriConversazioneFiglia(dati);
+          openPanel('inspector');
+        },
+      });
+      // Nessuna nuova connessione: la rilettura usa lo stesso contratto children dell'inspector.
+      grafoTimer = setInterval(() => { if (state.view === 'chat' && !document.hidden) void caricaFigliSessione(); }, 5000);
+    }
+    if (figlia?.sessionId) grafoAgenti.seleziona(figlia.sessionId);
+    try { sessionStorage.setItem(GRAFO_APERTO_KEY, state.realSession.id); } catch { /* storage non disponibile */ }
+    aggiornaGrafoAgenti();
+    host.querySelector('.talos-grafo button')?.focus();
+  }
 
   /** L'unico posto che sa come si ascolta una sessione figlia: il componente resta puro, e le sue
       prove non hanno bisogno di rete. Ritorna la funzione che stacca il flusso. */
@@ -9451,6 +9715,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       eta: (iso) => formattaEta(iso),
       azioni: {
         indietro: chiudiConversazioneFiglia,
+        apriGrafo: apriGrafoAgenti,
         apriFile: async (percorso) => {
           $('#railTabs [data-rail="file"]')?.click();
           const vista = $('#fileVista');
@@ -9636,10 +9901,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       giri: giriPerInspector(),
       file,
       processi: processiDagliEventi(state.realSession.eventiAttrezzi),
-      agenti: state.realSession.figli || [],
+      agenti: agentiPerInspector(),
       /* PO-08: la card diventa apribile solo perché qui c'è chi ascolta — senza questa funzione
          `disegnaAgenti` la lascia statica, e non promette niente che non può mantenere. */
-      azioniAgenti: { onApri: apriConversazioneFiglia, onMenu: menuDellaDelega },
+      azioniAgenti: { onApri: apriConversazioneFiglia, onMenu: menuDellaDelega, onGrafo: state.realSession.id ? apriGrafoAgenti : null, sessionId: state.realSession.id, errore: figliErrore },
     });
   }
 
@@ -9649,20 +9914,54 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * sessione»): qui si leggono una volta all'apertura della sessione e a ogni fine giro, e finiscono
    * nella colonna. Mai un'invenzione: senza deleghe resta lo stato vuoto.
    */
-  async function caricaFigliSessione() {
+  let letturaFigliInCorso = null;
+  function caricaFigliSessione() {
+    const id = state.realSession.id, generation = state.realSession.generation;
+    if (letturaFigliInCorso?.id === id && letturaFigliInCorso.generation === generation) return letturaFigliInCorso.promise;
+    const richiesta = { id, generation, promise: null };
+    letturaFigliInCorso = richiesta;
+    richiesta.promise = leggiFigliSessione().finally(() => { if (letturaFigliInCorso === richiesta) letturaFigliInCorso = null; });
+    return richiesta.promise;
+  }
+  async function leggiFigliSessione() {
     const id = state.realSession.id;
+    const lettura = ++figliLettura;
     if (!id) { state.realSession.figli = []; aggiornaInspectorDaStato(); return; }
     try {
       const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/children`);
-      if (state.realSession.id !== id) return; // la sessione e' cambiata mentre la richiesta era in volo
-      state.realSession.figli = Array.isArray(dati?.figli) ? dati.figli : [];
-    } catch {
-      state.realSession.figli = []; // una delega non leggibile non inventa righe
+      if (state.realSession.id !== id || lettura !== figliLettura) return;
+      if (!Array.isArray(dati?.figli)) throw new Error('Risposta delle deleghe non valida');
+      // Gli eventi live sono effimeri: ricostruire anche i discendenti noti dopo una caduta.
+      const conosciuti = [...state.sessionSelection.available.values(), ...agentiInDiretta.values()];
+      const raggiungibili = new Set([id, ...dati.figli.map(a => a.sessionId)]);
+      let aggiunti;
+      do { aggiunti = false; for (const a of conosciuti) if (raggiungibili.has(a.padreId) && !raggiungibili.has(a.sessionId)) { raggiungibili.add(a.sessionId); aggiunti = true; } } while (aggiunti);
+      const genitori = [...new Set(conosciuti.filter(a => a.padreId !== id && raggiungibili.has(a.padreId)).map(a => a.padreId))];
+      const snapshot = [];
+      // Sequenziale: non creare una raffica di richieste mentre il runtime lavora.
+      for (const parentId of genitori) {
+        const risposta = await apiGet(`/api/v1/sessions/${encodeURIComponent(parentId)}/children`);
+        if (state.realSession.id !== id || lettura !== figliLettura) return;
+        if (!Array.isArray(risposta?.figli)) throw new Error('Risposta delle deleghe discendenti non valida');
+        snapshot.push({ parentId, figli: risposta.figli });
+      }
+      if (state.realSession.id !== id || lettura !== figliLettura) return;
+      for (const { parentId, figli } of [{ parentId: id, figli: dati.figli }, ...snapshot]) {
+        for (const [chiave, a] of agentiInDiretta) if (a.padreId === parentId) agentiInDiretta.delete(chiave);
+        for (const a of figli) agentiInDiretta.set(a.sessionId, { ...a, padreId: parentId });
+      }
+      state.realSession.figli = dati.figli;
+      figliErrore = null; figliAggiornati = new Date().toISOString();
+    } catch (error) {
+      if (state.realSession.id !== id || lettura !== figliLettura) return;
+      figliErrore = error?.message || 'Impossibile leggere le deleghe';
     }
+    if (!grafoAgenti) { try { if (sessionStorage.getItem(GRAFO_APERTO_KEY) === id && state.view === 'chat') apriGrafoAgenti(); } catch { /* storage non disponibile */ } }
+    aggiornaGrafoAgenti();
     aggiornaInspectorDaStato();
     aggiornaPuntiniStatoAlbero(); // PO-30: chi sta toccando quale file cambia insieme alle figlie
     /* PO-30 fetta 2: il dettaglio APERTO si aggiorna con i dati nuovi della sua figlia (stato, attrezzo in corso, file, passi). */
-    if (figliaAperta?.dettaglio) { const fresca = state.realSession.figli.find((x) => x.sessionId === figliaAperta.sessionId); if (fresca) figliaAperta.dettaglio.aggiorna(fresca); }
+    if (figliaAperta?.dettaglio) { const fresca = agentiPerInspector().find((x) => x.sessionId === figliaAperta.sessionId); if (fresca) figliaAperta.dettaglio.aggiorna(fresca); }
   }
   function syncRunComposerState() {
     aggiornaPiedeChatDaStato(); // 05/9 Fase 2: ChatFooter
@@ -14894,7 +15193,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     avviaBackgroundDesktop();
   }
   function syncBackgroundDialogPause() {
-    setBackgroundInteractionPause('dialog', commandDialog.open || sheetDialog.open);
+    setBackgroundInteractionPause('dialog', commandDialog.open || sheetDialog.open || Boolean($('.overlay-layer:not([hidden])')));
   }
   function queueBackgroundScrollPause() {
     setBackgroundInteractionPause('scroll', true);
@@ -14972,6 +15271,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     document.addEventListener('wheel', queueBackgroundScrollPause, { capture: true, passive: true });
     document.addEventListener('scroll', queueBackgroundScrollPause, { capture: true, passive: true });
     applicaAspettoDesktop(leggiImpostazioniDesktop().appearance);
+  }
+  function resettaAspettoDesktop() {
+    const documento = leggiImpostazioniDesktop();
+    documento.appearance = { ...DESKTOP_APPEARANCE_DEFAULTS };
+    if (!salvaImpostazioniDesktop(documento)) return;
+    const composerSaved = resetComposerSize();
+    workspacePreferences.update({ density: 'comfortable' });
+    applicaAspettoDesktop(documento.appearance);
+    const screen = $('#schermoImpostazioni');
+    montaImpostazioni(screen, documento.appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
+    montaScorciatoiaTemi(screen);
+    setSettingsSection('appearance');
+    screen.querySelector('[data-reset-appearance]')?.focus({ preventScroll: true });
+    document.dispatchEvent(new CustomEvent('talos:settings-persisted', { detail: { saved: composerSaved && workspacePreferences.persistent } }));
   }
   function resettaMotionDesktop() {
     const documento = leggiImpostazioniDesktop();
@@ -15733,8 +16046,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** Piano §1.3, riga "Contesto workspace" — l'albero file REALE, radice + tutto ciò che era già aperto (treeOpen), riscaricato dal vivo. */
   async function renderizzaAlberoRealeUnaVolta() {
-    if (!state.realSession.id && !state.realSession.previewProjectId) return;
     syncFileTreeToolbar();
+    if (!state.realSession.id && !state.realSession.previewProjectId) return;
     ripristinaImpostazioniAlbero();
     const generation = state.realSession.generation;
     const contenitore = $('#inspector-files .file-tree');
@@ -16221,6 +16534,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       return;
     }
     /* ⭐⭐ 14/09 — lo stato della coda, di solo trasporto: arriva a ogni finestra quando cambia, e a chi apre dopo la storia. */
+    if (evento.type === 'CUSTOM' && evento.name === 'talos.agenti') { applicaEventoAgenti(evento.value); return; }
     if (evento.type === 'CUSTOM' && evento.name === 'talos.coda') {
       applicaStatoCoda(evento.value);
       return;
@@ -16257,6 +16571,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (typeof evento._sequenza === 'number') {
       if (state.realSession.sequenzeViste.has(evento._sequenza)) return;
       state.realSession.sequenzeViste.add(evento._sequenza);
+    }
+    if (['RunStarted', 'RunFinished', 'RunError'].includes(evento.type)) ultimoEventoGrafoMadre = { type: evento.type, code: evento.code };
+    if (grafoAgenti && ['ToolCallStart', 'ToolCallResult', 'StateDelta', 'ApprovalRequested', 'ApprovalResolved', 'RunStarted', 'RunFinished', 'RunError'].includes(evento.type) && frameGrafoMadre === null) {
+      frameGrafoMadre = requestAnimationFrame(() => { frameGrafoMadre = null; if (generation === state.realSession.generation) aggiornaGrafoAgenti(); });
     }
     if ((evento.type === 'CUSTOM' && evento.name === 'consumo-fornitore') || ['RunStarted', 'RunFinished', 'RunError'].includes(evento.type)) caricaCacheSessioneDalRegistro();
     /*
@@ -16510,7 +16828,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          *   che Anthropic descrive per la shell mode («shows real-time progress and output»,
          *   «Interactive mode», letto il 10/09/2026).
          */
-        if (!state.realSession.taskBubbleMostrata && evento.input) {
+        if (mostraRisultatoDelega(evento.input)) {
+          state.realSession.followUpBubbleInAttesa = false;
+        } else if (!state.realSession.taskBubbleMostrata && evento.input) {
           appendRealTaskStart(evento.input, evento.contesto, evento._sequenza);
         } else if (state.realSession.taskBubbleMostrata && evento.input?.seguito) {
           if (state.realSession.followUpBubbleInAttesa) {
@@ -17036,6 +17356,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         break;
       }
       case 'QueuedMessageDelivered': {
+        if (mostraRisultatoDelega(evento)) break;
+
         /*
          * ⭐⭐⭐ FASE D (28/8) — il kernel ha DAVVERO consumato un messaggio
          * dalla coda (session-registry.mjs, codaMessaggiFn) — il SOLO
@@ -17078,8 +17400,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          *   (`codex-rs/tui/src/bottom_pane/mod.rs:252`), mai dentro un blocco vecchio.
          */
         nascondiAttesaRisposta();
-        appendUserFollowUp(evento.testo, null, evento.immagini);
-        state.realSession.followUpBubbleInAttesa = true;
+        const risultatoDelega = mostraRisultatoDelega(evento);
+        if (!risultatoDelega) appendUserFollowUp(evento.testo, null, evento.immagini);
+        state.realSession.followUpBubbleInAttesa = !risultatoDelega;
         mostraAttesaRisposta();
         syncRunComposerState();
         break;
@@ -17320,7 +17643,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.realSession.inRigiocata = true;
     const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
     segnaTappaLatenza('sseCollegato');
-    source.onopen = () => { if (generation === state.realSession.generation) state.realSession.inRigiocata = true; };
+    source.onopen = () => { if (generation === state.realSession.generation) { state.realSession.inRigiocata = true; void aggiornaElencoSessioniReali().then(() => { if (generation === state.realSession.generation) void caricaFigliSessione(); }); } };
     state.realSession.eventSource = source;
     source.onmessage = (message) => {
       sorveglianza?.segnalaEventoVivo(); // T-15: il canale è vivo
@@ -17344,7 +17667,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     source.onerror = () => {
       if (generation !== state.realSession.generation) return;
-      if (state.realSession.eventoTerminaleVisto) {
+      const figliAttivi = [...(state.realSession.figli || []), ...agentiInDiretta.values()].some(a => a.conclusa === false && !a.interrotta);
+      if (state.realSession.eventoTerminaleVisto && !figliAttivi) {
         source.close();
         state.realSession.eventSource = null;
         return;
@@ -17358,6 +17682,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** Chiude l'EventSource corrente (se c'è) e apre una nuova generazione. */
   function nuovaGenerazioneSessione({ continua = false } = {}) {
+    if (!continua) { risultatiDelegaMostrati.clear(); ultimoEventoGrafoMadre = null; if (frameGrafoMadre !== null) cancelAnimationFrame(frameGrafoMadre); frameGrafoMadre = null; agentiInDiretta.clear(); if (frameAgentiInDiretta !== null) cancelAnimationFrame(frameAgentiInDiretta); frameAgentiInDiretta = null; chiudiGrafoAgenti({ ricorda: true }); figliLettura++; figliErrore = null; figliAggiornati = null; state.realSession.figli = []; chiudiConversazioneFiglia(); }
     if (!continua) { contextCompactor?.close(); contextCompactor?.setSession(null); contextMonitor?.stop(); contextChatSnapshot = null; aggiornaAvanzamentoContesto($('#conversation'), null); }
     nascondiAttesaRisposta();
     cancellaRenderMessaggiStreaming();
@@ -17880,7 +18205,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function aggiornaToolbarSelezioneSessioni() {
-    const totale = state.sessionSelection.available.size;
+    const totale = sessioniRadice([...state.sessionSelection.available.values()]).length;
     const selezionate = state.sessionSelection.selected.size;
     /*
      * ⛔⛔ 07/9 — provato dal vivo, e la prova ha trovato quello che l'occhio non vedeva: le caselle
@@ -17949,7 +18274,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function toggleSessionSelection(sessionId, checked) {
-    if (!sessionId) return;
+    if (!sessionId || !sessioniRadice([state.sessionSelection.available.get(sessionId)]).length) return;
     if (checked) state.sessionSelection.selected.add(sessionId);
     else state.sessionSelection.selected.delete(sessionId);
     aggiornaStatoRigheSelezione();
@@ -17957,7 +18282,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** Gli id davvero selezionati, filtrati su quelli che esistono ancora nell'elenco. */
   function sessioniSelezionate() {
-    return [...state.sessionSelection.selected].filter((id) => state.sessionSelection.available.has(id));
+    return [...state.sessionSelection.selected].filter((id) => sessioniRadice([state.sessionSelection.available.get(id)]).length > 0);
   }
 
   /*
@@ -18035,7 +18360,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   async function eliminaSessioniSelezionate() {
-    const ids = [...state.sessionSelection.selected].filter((id) => state.sessionSelection.available.has(id));
+    const ids = sessioniSelezionate();
     if (ids.length === 0 || state.sessionSelection.deleting) return;
     state.sessionSelection.deleting = true;
     aggiornaToolbarSelezioneSessioni();
@@ -18551,7 +18876,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
     aggiornaNotifiche(elenco);
     const pendente = rigaSessionePendente(); // W1-12
-    $('#noSessionsPlaceholder')?.toggleAttribute('hidden', (Array.isArray(elenco) && elenco.length > 0) || pendente.length > 0); // 02/09 — il riquadro "Nessuna sessione ancora" stava sotto quattro sessioni reali
+    $('#noSessionsPlaceholder')?.toggleAttribute('hidden', sessioniRadice(elenco).length > 0 || pendente.length > 0); // 02/09 — il riquadro "Nessuna sessione ancora" stava sotto quattro sessioni reali
     /*
      * ⭐ 27/8, trovato analizzando quali badge non si spengono MAI: questa
      * funzione aggiungeva sessioni vere in un blocco separato senza mai
@@ -18607,16 +18932,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       void caricaFigliSessione();
     }
     state.sessionSelection.available = new Map(elenco.map((sessione) => [sessione.sessionId, sessione]));
+    const radici = sessioniRadice(elenco);
+    const radiciIds = new Set(radici.map(s => s.sessionId));
     void aggiornaContatoriLuoghi(elenco.length); // 05/9 Fase 2: NavItem
     for (const id of [...state.sessionSelection.selected]) {
-      if (!state.sessionSelection.available.has(id)) state.sessionSelection.selected.delete(id);
+      if (!radiciIds.has(id)) state.sessionSelection.selected.delete(id);
     }
-    if (elenco.length === 0) {
+    if (radici.length === 0) {
       state.sessionSelection.active = false;
       state.sessionSelection.selected.clear();
       const conteggioVuoto = $('#sessionList .talos-sidebar__block-head .talos-nav-item__count');
       if (conteggioVuoto) conteggioVuoto.textContent = '0'; // 05/9 Fase 2
       contenitore.replaceChildren(...pendente);
+      applicaFiltroSessioniSidebar();
       aggiornaToolbarSelezioneSessioni();
       aggiornaSottotitoloSessione();
       return;
@@ -18630,15 +18958,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * reali» non c'è più: la testata del mockup («Sessioni · N») dice il conteggio.
      */
     const conteggio = $('#sessionList .talos-sidebar__block-head .talos-nav-item__count');
-    if (conteggio) conteggio.textContent = String(elenco.length);
+    if (conteggio) conteggio.textContent = String(radici.length);
     const pezzi = [...pendente];
-    /*
-     * ⛔⛔⛔ 08/09 — le figlie di una delega comparivano SCIOLTE accanto alla madre, come tre lavori
-     * indipendenti (visto dal vivo dall'owner). Ora escono annidate sotto di lei: `ordinaSessioniAdAlbero`
-     * fa il lavoro puro (ordine + rientro) ed è provata a parte; qui resta solo il rientro a schermo.
-     * ⛔ Non si NASCONDONO: sono sessioni vere, con un costo e una storia — vedi la doc della funzione.
-     */
-    for (const { sessione, profondita, ultima, nomeDistintivo } of ordinaSessioniAdAlbero(elenco)) {
+    // Owner 19/09: solo sessioni iniziali nella lista; catalogo completo per destra/grafo.
+    for (const { sessione, profondita, ultima, nomeDistintivo } of ordinaSessioniAdAlbero(elenco).filter(riga => radiciIds.has(riga.sessione.sessionId))) {
       const etichetta = sessione.nome || sessione.taskId; // ⭐ un nome scelto dall'owner vince sempre sul taskId
       const button = creaSessionItem(sessione, {
         corrente: sessione.sessionId === state.realSession.id,
@@ -18725,7 +19048,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!contenitore.dataset.tastiera) {
       contenitore.dataset.tastiera = 'si';
       contenitore.addEventListener('keydown', (event) => {
-        const tutte = [...contenitore.querySelectorAll('.talos-session-item')];
+        const tutte = [...contenitore.querySelectorAll('.talos-session-item')].filter(r => !r.hidden && !r.closest('.td-session-row')?.hidden);
         const i = tutte.indexOf(document.activeElement);
         if (i < 0 || tutte.length === 0) return;
         let j = i;
@@ -18741,6 +19064,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       });
     }
     contenitore.replaceChildren(...pezzi);
+    applicaFiltroSessioniSidebar();
     aggiornaToolbarSelezioneSessioni();
     aggiornaSottotitoloSessione(); // W1-12 — l'elenco si ridisegna a ogni transizione: il sottotitolo lo segue
   }
@@ -20573,16 +20897,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *
    * ⇒ La cura non è raddrizzare la direzione a mano: è non lasciare MAI
    * che la larghezza superi lo spazio vero fra le sidebar
-   * (`.composer-wrap`, che le esclude già per costruzione — misurato:
-   * 792px disponibili su 1440 di finestra con entrambe le sidebar aperte).
+   * (`.talos-chat-foot`, misurato al netto del proprio padding).
    * Dentro quel limite, `margin-inline:auto` ricentra correttamente da
    * solo: il difetto spariva insieme alla causa, non richiedeva una
    * seconda cura sulla direzione.
    */
   function spazioDisponibileComposer() {
-    const wrap = $('.composer-wrap');
+    const wrap = composerForm.closest('.talos-chat-foot') || composerForm.parentElement;
     const rect = wrap?.getBoundingClientRect();
-    return rect && rect.width > 0 ? rect.width : window.innerWidth;
+    if (!rect || rect.width <= 0) return window.innerWidth;
+    const style = getComputedStyle(wrap);
+    return rect.width - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
   }
 
   function clampComposerSize(width, height) {
@@ -20601,43 +20926,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     document.documentElement.style.setProperty('--composer-canonical-h', `${size.height}px`);
     document.documentElement.style.setProperty('--composer-textarea-max-h', `${size.height + 4}px`);
     document.documentElement.style.setProperty('--composer-max-w', `${size.width}px`);
-    /*
-     * ⭐⭐⭐ 3/9 — owner: "resta bloccata [sul sinistro]... si estende
-     * all'infinito dal lato destro". `margin-inline:auto` centra SOLO
-     * finché la larghezza sta dentro il CONTENT-box del genitore
-     * (`.composer-wrap` meno il SUO proprio padding, 752px in questa
-     * finestra) — non dentro il suo bordo esterno (792px). Appena la
-     * supera, per specifica CSS gli auto-margin collassano a 0 e il
-     * riquadro cresce ancorato a sinistra: MISURATO, non presunto (lo
-     * stesso comportamento restava identico anche dopo aver corretto
-     * SOLO il tetto). La cura vera: centrare col margine calcolato a
-     * mano, non affidarsi a `auto` oltre il punto in cui smette di
-     * funzionare per definizione.
-     */
-    const wrap = $('.composer-wrap');
-    if (wrap) {
-      /*
-       * ⛔ Il primo tentativo calcolava il margine sul bordo ESTERNO del
-       * wrap, ma un `margin-left` su `.composer` è relativo al CONTENT-BOX
-       * del suo genitore (cioè il wrap MENO il suo stesso padding, ~20px
-       * per lato in questa finestra) — misurato: il composer finiva 12px
-       * più a destra di dove doveva. Si legge il padding vero del wrap,
-       * non lo si assume.
-       */
-      const wrapRect = wrap.getBoundingClientRect();
-      const wrapStyle = getComputedStyle(wrap);
-      const wrapPaddingLeft = parseFloat(wrapStyle.paddingLeft) || 0;
-      const wrapContentLeft = wrapRect.x + wrapPaddingLeft;
-      const targetLeft = wrapRect.x + (wrapRect.width - size.width) / 2; // centrato sul bordo ESTERNO del wrap, non sul suo content-box: e' quello lo spazio "quasi al massimo" che puo' usare
-      // ⛔ Un margine NEGATIVO è corretto qui, non un errore da bloccare: è
-      // così che il composer invade il padding del wrap invece di restare
-      // confinato al suo content-box — esattamente "estendersi quasi al
-      // massimo della sezione". Un Math.max(0,…) qui annullava la metà
-      // sinistra della crescita, la stessa causa del difetto originale.
-      const marginLeft = Math.round(targetLeft - wrapContentLeft);
-      composerForm.style.marginLeft = `${marginLeft}px`;
-      composerForm.style.marginRight = '0px'; // la larghezza esplicita + il margine sinistro bastano a posizionare il riquadro: un margine destro fisso lotterebbe con `width` per lo spazio residuo
-    }
+    // Il CSS centra sulla colonna reale, anche quando cambiano le sidebar.
     composerForm.classList.add('composer-user-sized');
     return size;
   }
@@ -20649,7 +20938,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     composerForm.style.removeProperty('margin-left'); // ⭐ 3/9 — la centratura calcolata a mano va tolta insieme al resto, o resterebbe un residuo asimmetrico
     composerForm.style.removeProperty('margin-right');
     composerForm.classList.remove('composer-user-sized');
-    try { window.localStorage.removeItem(COMPOSER_RESIZE_STORAGE_KEY); } catch { /* niente da pulire se lo storage non risponde */ }
+    try { window.localStorage.removeItem(COMPOSER_RESIZE_STORAGE_KEY); return true; } catch { return false; }
   }
 
   /**
@@ -20659,7 +20948,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * compare/sparisce), non necessariamente un resize della FINESTRA — va
    * ri-agganciata anche ai due toggle delle sidebar, non solo a un
    * eventuale ridimensionamento della finestra. `spazioDisponibileComposer()`
-   * rimisura `.composer-wrap` dal vivo ad ogni chiamata: qui basta
+   * rimisura `.talos-chat-foot` dal vivo ad ogni chiamata: qui basta
    * richiamare `applyComposerSize` con la taglia attuale perché il nuovo
    * tetto (più stretto, se una sidebar si è appena aperta) la corregga da solo.
    */
@@ -21529,12 +21818,25 @@ ${testo}`;
 
   runStateToggle?.addEventListener('click', () => setQueueMode(!state.queueMode, true));
 
-  $('#sessionSearch').addEventListener('input', (event) => {
-    const q = event.target.value.toLowerCase().trim();
-    // 06/09 (gruppo navigazione): la casella filtrava SOLO le righe demo
-    // `.session-item`; le sessioni vere (`.real-session-item`) restavano tutte a schermo — 74 su 74.
-    $$('.session-item, .real-session-item').forEach((item) => { item.hidden = Boolean(q) && !item.textContent.toLowerCase().includes(q); });
-  });
+  function applicaFiltroSessioniSidebar() {
+    const q = ($('#sessionSearch')?.value || '').toLowerCase().trim();
+    $$('.session-item, .real-session-item').forEach(item => {
+      const hidden = Boolean(q) && !item.textContent.toLowerCase().includes(q);
+      item.hidden = hidden;
+      const row = item.closest('.td-session-row');
+      if (row) row.hidden = hidden;
+    });
+    const righe = $$('.real-session-item');
+    const visibili = righe.filter(r => !r.hidden && !r.closest('.td-session-row')?.hidden);
+    const fermata = visibili.find(r => r === document.activeElement)
+      || visibili.find(r => r.getAttribute('aria-current') === 'true') || visibili[0];
+    for (const riga of righe) {
+      riga.tabIndex = riga === fermata ? 0 : -1;
+      const menu = riga.parentElement?.querySelector(':scope > .td-session-menu');
+      if (menu) menu.tabIndex = riga === fermata ? 0 : -1;
+    }
+  }
+  $('#sessionSearch').addEventListener('input', applicaFiltroSessioniSidebar);
 
   $$('.session-item').forEach((item) => {
     item.addEventListener('click', () => {
@@ -22158,11 +22460,9 @@ ${testo}`;
   $('#apriCassettoBarra')?.addEventListener('click', alternaCassettoBarra);
   sessionSelectionToggle?.addEventListener('click', () => { toggleSessionSelectionMode(); });
   sessionSelectionSelectAll?.addEventListener('click', () => {
-    const tutto = state.sessionSelection.available.size > 0
-      && state.sessionSelection.selected.size === state.sessionSelection.available.size;
-    state.sessionSelection.selected = tutto
-      ? new Set()
-      : new Set(state.sessionSelection.available.keys());
+    const radici = sessioniRadice([...state.sessionSelection.available.values()]);
+    const tutto = radici.length > 0 && radici.every(s => state.sessionSelection.selected.has(s.sessionId));
+    state.sessionSelection.selected = tutto ? new Set() : new Set(radici.map(s => s.sessionId));
     aggiornaStatoRigheSelezione();
   });
   sessionSelectionMore?.addEventListener('click', (event) => { event.stopPropagation(); apriMenuSelezioneSessioni(event); });
@@ -22453,6 +22753,7 @@ ${testo}`;
     const opener = ROOT().activeElement;
     ultimoFuocoVelo = opener;
     v.hidden = false;
+    syncBackgroundDialogPause();
     /* ⭐ 18/09 — il velo Fornitori mostra dati VERI: si popola all'apertura (e poi da
        `renderizzaProviderModelLab`, che è dove lo stato diventa DOM). Se gli accessi non
        sono ancora stati letti si chiedono adesso: la prima apertura non deve mostrare un
@@ -22482,6 +22783,7 @@ ${testo}`;
     if (id === 'veloContesto' && contextCompactor) { contextCompactor.close(); return; }
     const v = $(`#${id}`); if (!v || v.hidden) return;
     v.hidden = true;
+    syncBackgroundDialogPause();
     if (modalManager) modalManager.deactivate(v);
     else if (ultimoFuocoVelo?.focus) ultimoFuocoVelo.focus();
   }
@@ -22531,6 +22833,7 @@ ${testo}`;
    */
   renderRealReviewList();
   aggiornaSommarioReviewReale();
+  syncFileTreeToolbar();
   setInspectorTab($('.inspector-tabs button.active'));
   renderReviewFile('composer');
   autoGrowTextarea();

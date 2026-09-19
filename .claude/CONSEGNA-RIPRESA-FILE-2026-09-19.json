@@ -1,0 +1,670 @@
+{
+  "schema": "talos.ripresa.commit-scope.v1",
+  "baseHead": "a89be85374acf3a83b767b61e3ee44589f40f4a6",
+  "destination": "talos-private/agent-virtual-machine:lane/harness-desktop",
+  "files": [
+    {
+      "path": ".claude/CANDIDATA-DESKTOP-RIPRESA-2026-09-19.md",
+      "bytes": 4502,
+      "sha256": "c03a3eb3ec575e50388f77fd929bc116e1b3d5a08e9c4d4b725abc7d78ee5e3f"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-AGENTI-COERENZA-2026-09-19.md",
+      "bytes": 8945,
+      "sha256": "181a58bbf677f632922e334689c00f7e7dafbd9c8d6bbc9942a11e3aee54ed61"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-AGENTI-GRAFO-2026-09-19.md",
+      "bytes": 27251,
+      "sha256": "375abf45124aebd60311cb96ec63095580b7b7cd9b90984ec17311f0882ab426"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-AGENTI-RUNTIME-2026-09-19.md",
+      "bytes": 18415,
+      "sha256": "e3aaae85b5a3d7e3000e7786c26264e2a2f398dc5b825d7a3ddb114c5fa65f07"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-AUDIT-SPEC-2026-09-19.md",
+      "bytes": 6151,
+      "sha256": "a9c4edb096eaca93a9afc1c7bde8a1781e76e0743f50f24df57433ed9e66ebf7"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-CHAT-ASPETTO-2026-09-19.md",
+      "bytes": 8093,
+      "sha256": "ed67d1e7bc6a3aa617081a822bbcfc04fba986e8972a41be7385fb865a75cab4"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-COLD-START-2026-09-19.md",
+      "bytes": 5207,
+      "sha256": "43304bcb2e7cab34af12163b04f8f80a3e8687b2bf4df12ded59156c89094971"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-DIAGNOSI-LOCALE-2026-09-19.md",
+      "bytes": 2546,
+      "sha256": "21a4cb61f1d7f35cb0d287005bd3e57390d2c33672221db4f37286305c45d03f"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-GRAFO-PANORAMICA-2026-09-19.md",
+      "bytes": 2818,
+      "sha256": "ef2cb42e4b33079079f9026aa01155701b8ae0d68543602c6d1d7d080cccd996"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-HF-2026-09-19.md",
+      "bytes": 8895,
+      "sha256": "fb423f5edc9630b55abdba6e2de892018335114ce17b2e6b02dee413fe8ba04c"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-HF-FILTRI-PAGINE-2026-09-19.md",
+      "bytes": 11256,
+      "sha256": "713e9fcddd1f92c2192f4c1bb5b75891dbef62ad2586f08a733a70f48c32872c"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-LAYOUT-2026-09-19.md",
+      "bytes": 6753,
+      "sha256": "b9494dca1b4f56f06b928b9837a9f101ca7579579907103001ab273716b54669"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-LIBERA-MEMORIA-2026-09-19.md",
+      "bytes": 5867,
+      "sha256": "8a7ab5c461438072762784093d44bdcae61088bdbcafd5de0f757705eb9256b0"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-MODELLI-2026-09-19.md",
+      "bytes": 1987,
+      "sha256": "3fb7140cd3a921ab0be22f7897f956d73af373e397b1041e3c46e2a3b46d5546"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-R0-2026-09-19.md",
+      "bytes": 10972,
+      "sha256": "909dfe8a59bb95041d947b333999cfa7c7cf763a489d441da27a97f0aecdb253"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-REPLAY-PERSISTENTE-2026-09-19.md",
+      "bytes": 9963,
+      "sha256": "9c5b7b4a9b77e9a8fb573473febe7fa752f70853b45e539f383cff9d07816bfa"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-RITORNO-TRASPARENTE-2026-09-19.md",
+      "bytes": 2949,
+      "sha256": "a88f3450b5b6eddab3d062042fa2cd1fd8d9278108d2fed3c15e0c83425d2741"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-ROADMAP-SERVER-2026-09-19.md",
+      "bytes": 2775,
+      "sha256": "a0341495d621ff7f5f1de0b3deb7e5b39c3a85776e616435588a66cfc10e309b"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-SEC23-2026-09-19.md",
+      "bytes": 3319,
+      "sha256": "6ff5522815bc56bfd162691c5e771949d2c8e6806167d3c563525e917e8cfe23"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-SIDEBAR-RITORNO-2026-09-19.md",
+      "bytes": 10199,
+      "sha256": "19f101d3c215b475329f9108c7fc520cbe46fcb6a1134b3b44195dcfe6460ba6"
+    },
+    {
+      "path": ".claude/LEDGER-RIPRESA-TRACKING-2026-09-19.md",
+      "bytes": 2970,
+      "sha256": "8d37f121fcf0afd4a7d9c9ab58e2e7146eafbf35609b4830a470fe45d620d62a"
+    },
+    {
+      "path": ".claude/MATRICE-RIPRESA-PARITA-2026-09-19.md",
+      "bytes": 16384,
+      "sha256": "59ddb0340c43b4fed4e6d82cbda55f59a8b1f49122951c53df592cfabee163fb"
+    },
+    {
+      "path": ".claude/RIPRESA-OPERATIVA-2026-09-19.md",
+      "bytes": 13685,
+      "sha256": "bb31b88d35d5f1088d121f7f9fbbfea3245c73b6dfea7ccd980e9765ff47df36"
+    },
+    {
+      "path": ".claude/ROADMAP-GLOBALE-RIPRESA-2026-09-19.md",
+      "bytes": 71133,
+      "sha256": "7cddf2d5bd1510467aab63297745ebb93aa96eb61206b2897552f9e4a3b73ea1"
+    },
+    {
+      "path": ".claude/TABELLA-FASI-COMPLETA-2026-09-13.md",
+      "bytes": 94044,
+      "sha256": "376c2d5a44232e563ef44533e257d31bbc72137af91aba62766f9120bd21eaef"
+    },
+    {
+      "path": ".claude/TICKET-RIPRESA-TALOS-2026-09-19-FINALE.md",
+      "bytes": 16112,
+      "sha256": "7f764b4ea5b566ce4a4c0518a3f136a81aa53b0cde10ec9a539af1dbc522a9ee"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/CONFRONTO-PR29-BC76.md",
+      "bytes": 4806,
+      "sha256": "1b5b5ea96cfb7b7a140ce16cd513ba96693f2f811ec817ebdd964ad5109204f5"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/archive-hashes.json",
+      "bytes": 803,
+      "sha256": "9c1bd0b6a1deedb75be74825b538970c94f06519672c65069338d42131a4001d"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/baseline-817a21a9.json",
+      "bytes": 212388,
+      "sha256": "535061556460e14f90529fcdeb1d8e23a1559ebcc5763a0c30ea0d7b2ac9e53a"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/baseline-817a21a9.md",
+      "bytes": 14191,
+      "sha256": "5c1927f1bcc559ca13c9c73e31147fe0c91ecb1fc30aa9a51dbbb5698961aef2"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/baseline-interrotta.json",
+      "bytes": 353,
+      "sha256": "36829900d8ec850eb697180723a9324229f7a5c9627d5796b82bfe4b7ce8bdac"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/browser-comparison-d713b57c.json",
+      "bytes": 59546,
+      "sha256": "fc5aa4400fba01404bd595c1bbfc420c78aa2569d90091f6ee62bf67f59997ec"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/canonical-phase-requirements-v2.json",
+      "bytes": 57571,
+      "sha256": "8b44c0eeab48646f1402139f9f6fb23dbcf067b06bf21205ece92502a0532e90"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/canonical-phase-requirements.json",
+      "bytes": 51864,
+      "sha256": "d9ebfcbfe59bcbbc5d786367ec967e7bcaf1288e2d3f2faf4f0f6e1bace1db41"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/confronto-chat-aspetto-live.mjs",
+      "bytes": 4645,
+      "sha256": "6c5b3ff7468b39fe0a01ba2095b9c533274c04d4338c0e3f565b3fd3558e651a"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/confronto-grafo-live.mjs",
+      "bytes": 6807,
+      "sha256": "703e7d4a873a892f7eae1f5f63aff711fa9a7aaf6f2047ac9c03122167f00329"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/confronto-visivo-live.mjs",
+      "bytes": 8500,
+      "sha256": "d58a9f944c147ad7e17d96e6dfedb3ed938ee95be28f76e92b7783ca2979d696"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/consegna-asset.mjs",
+      "bytes": 3481,
+      "sha256": "e1a80cb603f457d9a909b67e4714b7d5153296fd78ea1993753d2f13cdc74aae"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/mockup-owner-canonici.json",
+      "bytes": 737,
+      "sha256": "53c0015b2ae3847cc79f6ca438956cb500fc16e87f5b6b2e6311ecfa95a9ef2a"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/mutazione-hf.mjs",
+      "bytes": 3610,
+      "sha256": "27259a65b4b8f82de18bc739a317852b5c41da245ce5ee18e9a24729008304b5"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/pr-inventory.json",
+      "bytes": 18046,
+      "sha256": "8383c55c616c4f8a2eb1cfd4ecc4745fa0fae52dc8bb76f5534b9023af11f7d3"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/pr-source-placement.json",
+      "bytes": 120568,
+      "sha256": "aa77e9f7534bda910355e83a5ab4f72c2fb4184f1a656a3771cf77a98bddd747"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/pr27-manifest-verification.json",
+      "bytes": 107,
+      "sha256": "66cca969f8bc0d4b3659e72322fddd3c569e3181f5841084d885c61ba64b3c78"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/pr27-product-sources-comparison.json",
+      "bytes": 3186,
+      "sha256": "5cdfb15bd9d2206bf95947dfb51825547533293291fcb266cd7efafd319c9867"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/pr28-31-archive-comparison.json",
+      "bytes": 11389,
+      "sha256": "a00ab4f0dd1886933966a5a19030ac96e807b6a25e5ee4bab86fe0d235df2e0a"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/pr32-archive-comparison.json",
+      "bytes": 4566,
+      "sha256": "dbd46cca37a950e88ef8aca147f09ef2752b3e34b2afef589ec0287d62f75683"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/pr33-archive-comparison.json",
+      "bytes": 11085,
+      "sha256": "98fdc3f48bebd549e6cde05337187875d9d11d806f7a28e4975bc00f2b856956"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/references/README.md",
+      "bytes": 357,
+      "sha256": "12af2d301ecc99edf38d1d813f8b617f614af0145f6142155bd3e9abc1387bbe"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/references/TALOS-Calm-Lab-04.html",
+      "bytes": 330027,
+      "sha256": "094207523b3b76b01cd9aac27792ff2cc2f97ddd69cbd9757898fa558284460e"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/references/talos-sidebar-calm-review.html",
+      "bytes": 116112,
+      "sha256": "59b2b6d1ce90f7b29a74f6ba0f9646f3be980776767e6b0930c27882f8ce20f1"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/restore-4174-20260919T2034Z/avvia.py",
+      "bytes": 1545,
+      "sha256": "a1c055c12ab8d7ab1a162904f1544585ac1e569b5aa2f46c3e08137b7d4ed506"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/verifica-chat-live.mjs",
+      "bytes": 6219,
+      "sha256": "b48fa414944dd4164bfbcaba47cef10175261164c35e05c01e85b0c476a42ab2"
+    },
+    {
+      "path": "harness-ui/frontend/package-lock.json",
+      "bytes": 20094,
+      "sha256": "0f803b1914626ace7378925db7170f97f261f9f0dc3fda05d910ac70e8853156"
+    },
+    {
+      "path": "harness-ui/frontend/package.json",
+      "bytes": 861,
+      "sha256": "5891db87e6c641877db9b02f543c9a03c6c8558f0a8c10cd286b60f16684d561"
+    },
+    {
+      "path": "harness-ui/frontend/playwright.ripresa.config.mjs",
+      "bytes": 1513,
+      "sha256": "255ddc45981eac2c471aa6c8e7157ee4b5717a2508510ae9436e3281eceebf5c"
+    },
+    {
+      "path": "harness-ui/frontend/scripts/copy-vendored-assets.mjs",
+      "bytes": 4118,
+      "sha256": "8316f505a5d35e8b6afb6ebd18456c788c34c3f9c0020b24f2fef09be1eab290"
+    },
+    {
+      "path": "harness-ui/frontend/scripts/ripresa-reporter.mjs",
+      "bytes": 1372,
+      "sha256": "d07cb832e13a3019637049df80b86e53b4e282bd4d6935756e63471e935ef928"
+    },
+    {
+      "path": "harness-ui/frontend/scripts/ripresa-run.mjs",
+      "bytes": 11774,
+      "sha256": "6d1ae3b9b73f0b16e696a7fcc9d03f8891db55b95c79dad979eef9dc6cc2e6ca"
+    },
+    {
+      "path": "harness-ui/frontend/src/components/coda-messaggi.js",
+      "bytes": 6504,
+      "sha256": "3bb724e265c9cb3b85377fac5187996910f3d6f10e99f61c6aba8297dbf065ac"
+    },
+    {
+      "path": "harness-ui/frontend/src/components/cornice-model-lab.js",
+      "bytes": 5789,
+      "sha256": "82f9f23b9788aae0e6c1fe0369c848e4d89c5c87742797bc0f0216f82a80cfc1"
+    },
+    {
+      "path": "harness-ui/frontend/src/components/cronologia-grafo.js",
+      "bytes": 2193,
+      "sha256": "39b1999b7c207fa01b18d57a3feceaa1593119c5d1c889a874f9f6313ae7a869"
+    },
+    {
+      "path": "harness-ui/frontend/src/components/dettaglio-agente.js",
+      "bytes": 13137,
+      "sha256": "d95b033144785010758eb7785aca6b956f33538616b1ad77ed3e5e9904fc09d2"
+    },
+    {
+      "path": "harness-ui/frontend/src/components/grafo-agenti.js",
+      "bytes": 34409,
+      "sha256": "00dbfda97ea15da3effc896ecbdc2882a21c31fec41149571b4faf5d8814c875"
+    },
+    {
+      "path": "harness-ui/frontend/src/components/hf-catalogo.js",
+      "bytes": 82996,
+      "sha256": "fd1ac43d1224d41a5f16add5ee7e06d8f7a14d9be81bf94e04d26507d60db262"
+    },
+    {
+      "path": "harness-ui/frontend/src/components/impostazioni.js",
+      "bytes": 8420,
+      "sha256": "9facab816a4af49653b8f2983678974b05c54da981ac1287b53525e5d8b62452"
+    },
+    {
+      "path": "harness-ui/frontend/src/components/inspector.js",
+      "bytes": 77747,
+      "sha256": "58b1ac051cb90785de4229fa4fc4bfa673b32f9ae460bbbdc797e0852d78215a"
+    },
+    {
+      "path": "harness-ui/frontend/src/components/modelli-installati.js",
+      "bytes": 35521,
+      "sha256": "8ccdff8d91bae173fcc3a865347934df848141927d6c5dae99259605a00f5ad6"
+    },
+    {
+      "path": "harness-ui/frontend/src/components/scheda-modello.js",
+      "bytes": 118803,
+      "sha256": "486d533343e0747519f030c449aa38e3e14ca52de7a0b7b2b0a882429e4eeb3d"
+    },
+    {
+      "path": "harness-ui/frontend/src/components/session-item.js",
+      "bytes": 32176,
+      "sha256": "56eb46a3e913fb455215bc65bb159cef9cd218d7a8291671392945c5d0b837f0"
+    },
+    {
+      "path": "harness-ui/frontend/src/design-system/workspace.css",
+      "bytes": 8004,
+      "sha256": "5e0decf0e576e61516ce944a94516758cefc385c1796a718ecbd433ba73a2b9b"
+    },
+    {
+      "path": "harness-ui/frontend/src/features/settings/settings-view.ts",
+      "bytes": 70480,
+      "sha256": "d9affe405b50296fef30184f200d71b0a6fe9542b4224fbc1468bbc0194f2e92"
+    },
+    {
+      "path": "harness-ui/frontend/src/legacy/app.js",
+      "bytes": 1367897,
+      "sha256": "c5b8fc92cfd7f0350f6acd4dd3208ed18592673d089e92cbdf326f9e68eb36d3"
+    },
+    {
+      "path": "harness-ui/frontend/src/legacy/frammenti.html",
+      "bytes": 47048,
+      "sha256": "4cb319a865f4639f2eb11dd7997cbe0786c4466e494dccd615c5ea244347a96b"
+    },
+    {
+      "path": "harness-ui/frontend/src/motion/desktop-background.js",
+      "bytes": 17649,
+      "sha256": "e94ccf4dbd87ee635a9e44e91c715fdf24ade8f334acfec2881f85b411264299"
+    },
+    {
+      "path": "harness-ui/frontend/src/styles/dettaglio-agente.css",
+      "bytes": 5495,
+      "sha256": "b9fc9b66e19fbf088dc991f3a3b80c8a7238215995c54bb268c9161b76cd8db8"
+    },
+    {
+      "path": "harness-ui/frontend/src/styles/grafo-agenti.css",
+      "bytes": 13000,
+      "sha256": "ada659fa7c981fb30f9dad3fdc906d3dffd9cdd3b5a331874994a64595f4d020"
+    },
+    {
+      "path": "harness-ui/frontend/src/styles/index.css",
+      "bytes": 252663,
+      "sha256": "ddf25e56d6ac76a2136333f8dd0400173b5762b7ff2d0b9c1890bc7255f4b4fc"
+    },
+    {
+      "path": "harness-ui/frontend/src/styles/main.css",
+      "bytes": 7743,
+      "sha256": "84249006e6fc44d81ff93356c8569853970c83765911d5b867d4fd2c206b5cbe"
+    },
+    {
+      "path": "harness-ui/frontend/src/styles/pagina-modello.css",
+      "bytes": 9703,
+      "sha256": "b1d08fdce2000cf04fbcc7bbd07ec2686dcb1fc1994efa15c820740af4da41df"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/baseline-shell.spec.mjs",
+      "bytes": 171216,
+      "sha256": "2c5f7bc89e78db3e171ae8e502bf5dd09adcda25c1396bb7ed56bcd73d6a22de"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/lab-guscio.spec.mjs",
+      "bytes": 36916,
+      "sha256": "373520286735ae9c8502af5fd3da5a2c966de0c6b4854a351016b8d9a0f40c79"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/lab-hf-lista.spec.mjs",
+      "bytes": 55376,
+      "sha256": "4b007497acd7d686e7bb7e0f7b466c3b7d13117b3813604797b47efece13a530"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/lab-installati-azioni.spec.mjs",
+      "bytes": 55212,
+      "sha256": "4f1301d5fd98cdf7e838bdc7ce4b70b5db7ce985e7c7ac50f5aa0a390d6bfbce"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/lab-libera-memoria.spec.mjs",
+      "bytes": 6587,
+      "sha256": "01fd0e00fbb539fceb155aa76a9484ba1a2ed87f6668847d507c2a969b10b827"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/lab-pagina-modello.spec.mjs",
+      "bytes": 77035,
+      "sha256": "156573fbe46e9db39c96cab2110b56736c0e29767b495d899b7bf146af2b6e30"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/lab-provider-filtri.spec.mjs",
+      "bytes": 36738,
+      "sha256": "bf821a1d0f77510703b3a8f980cf1cd5ed20b6530b364fb4e79672a9d9f0156b"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/lab-provider.spec.mjs",
+      "bytes": 59983,
+      "sha256": "3bebc5fab6c5751d91da27644711c290f901f25a9200efccf3ddb823a3621472"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/lab-scheda-modello.spec.mjs",
+      "bytes": 72710,
+      "sha256": "02135054c7193839cbe087180b1cc63617087707e9b51dcb218063cc755ce4e0"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/lab-sistema.spec.mjs",
+      "bytes": 32348,
+      "sha256": "ec0e72aae5188268566c88e04a6b5689b6a69fc59f904dba3e5a8d82787378bb"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/po30-dettaglio-agente.spec.mjs",
+      "bytes": 44785,
+      "sha256": "05ee6a3608bc140c30d1465600b4407edd33513ace73b9a33eb4fa5267bd4f08"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/ripresa-banco.spec.mjs",
+      "bytes": 733,
+      "sha256": "b8e90717c30cbaf96fa86bdc05bd5b5a06acac0989b1b5bd47e2ee3e9dbc3c5f"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/ripresa-replay.spec.mjs",
+      "bytes": 10588,
+      "sha256": "15ebf8bd9186db1b4c2c767959b6741ff8453d34bc5adfa2601b6dbbc2e8a2b8"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/ripresa-sidebar-radici.spec.mjs",
+      "bytes": 4348,
+      "sha256": "fb3105c38c16565d56cbea28ca7fce9db55d172c4bfa107120bf7e6e8a13233d"
+    },
+    {
+      "path": "harness-ui/frontend/tests/browser/torna-in-fondo-non-copre.spec.mjs",
+      "bytes": 9813,
+      "sha256": "aee1443cf5221d4ebde1885003ecef8c3568dd14418a24561347631c7cd28b40"
+    },
+    {
+      "path": "harness-ui/frontend/tests/contract/vendored-assets.test.mjs",
+      "bytes": 2854,
+      "sha256": "e7e667124e5adb5cd8413a63b1d8524d6f2472642994fc39f8f63e620f133fa1"
+    },
+    {
+      "path": "harness-ui/frontend/tests/fixtures/ripresa-keyring-memory.mjs",
+      "bytes": 385,
+      "sha256": "4ef713f288f9753ac097560b46ab71383fef682d7ca195d19b196ef73cec8f37"
+    },
+    {
+      "path": "harness-ui/frontend/tests/fixtures/ripresa-keyring-preload.mjs",
+      "bytes": 438,
+      "sha256": "61d199da65df8b062fd3b2c0ea7db92214b993ba75c13b3d2d75d1f340ba66d1"
+    },
+    {
+      "path": "harness-ui/frontend/tests/parity/catalogo-modelli-vivo.spec.mjs",
+      "bytes": 8863,
+      "sha256": "b1560cbd1d10f226ab42dd3142a2e65d6ec0c9c7aa1dc1a934a6a980907a1266"
+    },
+    {
+      "path": "harness-ui/frontend/tests/refactor/settings-schema.test.mjs",
+      "bytes": 4348,
+      "sha256": "3ae5138cf0db02fb63434fd64de2c96ecc780b25200559787163f91caf09f830"
+    },
+    {
+      "path": "harness-ui/frontend/tests/unit/coda-messaggi.test.mjs",
+      "bytes": 5234,
+      "sha256": "c39dfb737215f675cadc3a0843adf029e79afde42df8898e84dd6bcbbc8ee26c"
+    },
+    {
+      "path": "harness-ui/frontend/tests/unit/cronologia-grafo.test.mjs",
+      "bytes": 1912,
+      "sha256": "74ed39384aa595b1c0219e29d428639f862d34a2c0fd85a598a9ae4b2fe91ffe"
+    },
+    {
+      "path": "harness-ui/frontend/tests/unit/grafo-agenti.test.mjs",
+      "bytes": 6237,
+      "sha256": "c85cabfafce2def6e10cd62f38547bf338970637aa8c2a7b5bc85f66233bb44a"
+    },
+    {
+      "path": "harness-ui/frontend/tests/unit/hf-catalogo.test.mjs",
+      "bytes": 12350,
+      "sha256": "0698e87e69b4d0a6e99a277fd9ce93938dc8a89883a8bfbd4bd954710e61a7ac"
+    },
+    {
+      "path": "harness-ui/frontend/tests/unit/ripresa-isolamento.test.mjs",
+      "bytes": 6368,
+      "sha256": "6b666ac7701f8464cf9fb7e8fc72704fa14c8913abde51c799e8a7f2d1452671"
+    },
+    {
+      "path": "harness-ui/frontend/tests/unit/sessioni-albero.test.mjs",
+      "bytes": 12295,
+      "sha256": "aa036baa786a1614e2032214f87fef7defb12972a2ff9fd965e31b199e517c8e"
+    },
+    {
+      "path": "harness-ui/public/app.js",
+      "bytes": 2466298,
+      "sha256": "52b9f6dbf6c84008f1cfbac88c594114e94bc48a8fd17b8c6c762b8825ed5f30"
+    },
+    {
+      "path": "harness-ui/public/asset-manifest.json",
+      "bytes": 5446,
+      "sha256": "1fca0c9a124abfb56923aac624b21adc0a8daca721f498b170d4d16925e61b42"
+    },
+    {
+      "path": "harness-ui/public/build-manifest.json",
+      "bytes": 6293,
+      "sha256": "ec239ba2cede66dc0bc3ba1637ce1460ced243d65d2d80b1626835f16105f33c"
+    },
+    {
+      "path": "harness-ui/public/styles.css",
+      "bytes": 440820,
+      "sha256": "c96134bca97e6aac267278b8736dcb6e522b7f236dcd7bba96126c1b963dc07a"
+    },
+    {
+      "path": "harness-ui/public/vendor/dagre/LICENSE-dagre",
+      "bytes": 1062,
+      "sha256": "6a349742a6cb219d5a2fc8d0844f6d89a6efc62e20c664450d884fc7ff2d6015"
+    },
+    {
+      "path": "harness-ui/public/vendor/dagre/LICENSE-graphlib",
+      "bytes": 1062,
+      "sha256": "6a349742a6cb219d5a2fc8d0844f6d89a6efc62e20c664450d884fc7ff2d6015"
+    },
+    {
+      "path": "harness-ui/src/agent-timeline.mjs",
+      "bytes": 2767,
+      "sha256": "d07f41d4d7eaa417a1ff4071b2a472613ae5bf94ae3f23869f9f6702cb2ad2ae"
+    },
+    {
+      "path": "harness-ui/src/hf-hub-client.mjs",
+      "bytes": 10034,
+      "sha256": "21a858e3c9438453d08d9254e31827e0c77ce1e5121c7943f1083284dec2a4ff"
+    },
+    {
+      "path": "harness-ui/src/http-app.mjs",
+      "bytes": 363781,
+      "sha256": "ae7c5e16d4b240949e09920ae8faf5344cc415c3941e3df0a07ea1bb3b01e79e"
+    },
+    {
+      "path": "harness-ui/src/process-policy.mjs",
+      "bytes": 15401,
+      "sha256": "2f8af2179ac3fd15b2d80f2db64e8842c37e5d1b3ef7848c9737c4e57287977e"
+    },
+    {
+      "path": "harness-ui/src/runtime-owner-adapter.mjs",
+      "bytes": 91135,
+      "sha256": "ba39f20cc502246e1b4e984cab81ef7e9b3089625853c0858ed8a00dd97982d5"
+    },
+    {
+      "path": "harness-ui/src/session-registry.mjs",
+      "bytes": 401913,
+      "sha256": "e12cc57b779697e45d2b2f0c5d271859976e0b942f2b7238cbb879045ceec7d8"
+    },
+    {
+      "path": "harness-ui/src/subagent-orchestrator.mjs",
+      "bytes": 31314,
+      "sha256": "e31041315dc446a306aed20b050cd09bbb73fcf37d1fc93f5f12bb3f37930beb"
+    },
+    {
+      "path": "harness-ui/tests/agent-timeline.test.mjs",
+      "bytes": 8622,
+      "sha256": "1e92579ff223fb46d2074993285b3d96a67b6364aae444e7e5d048fad44086ad"
+    },
+    {
+      "path": "harness-ui/tests/bc76-figlie-di-madre-locale.test.mjs",
+      "bytes": 14930,
+      "sha256": "8cf416f3f4b72f65a79d879771e6143ddccb9e2ae28e4a1f0a0f61cb04ee1ffa"
+    },
+    {
+      "path": "harness-ui/tests/corsia2-errore-del-reindirizzamento-a-schermo.test.mjs",
+      "bytes": 13931,
+      "sha256": "bca3ab99e45413b68680f8b2e3083ae7ba2ee87e43cc501edbaef72320effb16"
+    },
+    {
+      "path": "harness-ui/tests/delega-parallelo-sequenza-cartella.test.mjs",
+      "bytes": 29969,
+      "sha256": "b5bec0f086c787674904d66096c7e0b72433eb722c41d062cc9c7ce983b4416e"
+    },
+    {
+      "path": "harness-ui/tests/delega-percorso-e-scheda-agenti.test.mjs",
+      "bytes": 21051,
+      "sha256": "de9383df9e5cad4248b5094410373b14e3949aabc9e07f92ba54d45b1947eb8c"
+    },
+    {
+      "path": "harness-ui/tests/hf-hub-client.test.mjs",
+      "bytes": 7222,
+      "sha256": "4c1ad3b7fd0acadb708ce2f29afe3d9a3c88e23984ab8e9ba4964afdf4a0aa03"
+    },
+    {
+      "path": "harness-ui/tests/http-routes-huggingface.test.mjs",
+      "bytes": 7261,
+      "sha256": "8bbf7491c59e3659d53215b792c270e0b8cceeabc2c57d5b5b5094bb559fc901"
+    },
+    {
+      "path": "harness-ui/tests/local-model-store.test.mjs",
+      "bytes": 13657,
+      "sha256": "ed53c319c152cc2269a39e7eef1de50232234c6a0c8df85dc8b7db46adedfa47"
+    },
+    {
+      "path": "harness-ui/tests/process-policy-env-narrowing.test.mjs",
+      "bytes": 10074,
+      "sha256": "5989adfe9e960fa232c91ad315f175705af90c213d2d2c42b5ff832ce4372e74"
+    },
+    {
+      "path": "harness-ui/tests/runtime-owner-adapter.test.mjs",
+      "bytes": 18785,
+      "sha256": "d576ddac09a717f6f2c47645a954ed3489e6e16d35eda9ee83d25a10c33895f0"
+    },
+    {
+      "path": "harness-ui/tests/session-registry.test.mjs",
+      "bytes": 458348,
+      "sha256": "54ab8eeba7e7614518d966ee31aeab3fbf7d95712cfa0e1356fd8a266438ecf3"
+    },
+    {
+      "path": "harness-ui/tests/subagent-orchestrator.test.mjs",
+      "bytes": 31007,
+      "sha256": "7e9032585ce24d9e05804a1f2c56a595124d2e258a0d9c75abe2137e23c5c702"
+    },
+    {
+      "path": ".claude/ripresa-2026-09-19/checkpoint-backend-24dc5a4f.json",
+      "bytes": 1425,
+      "sha256": "fe5994263a86055a19024c7a437e19d843cdaed43ed586ec52ccb3fc6c220617"
+    }
+  ],
+  "exclusions": [
+    "owner stores, credentials and chat images",
+    "runtime backups/screenshots/traces/reports with personal data",
+    "pre-existing unrelated .claude/archivio, brief-18-09 and scratchpad artifacts",
+    "temporary harness-ui/relative, scratch-l9 and .tmp-corsia-d"
+  ],
+  "secretPatternFindings": [],
+  "hashBasis": "Bytes del working tree prima dello staging; Git puo normalizzare CRLF in LF."
+}

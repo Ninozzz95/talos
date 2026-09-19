@@ -2,6 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { conteggio, gruppiVarianti, quantDaNome, descriviStima, datiRepoHf, bitPerPeso, ordinaVarianti, varianteConsigliata, glossaQuant, eSenzaQuantizzazione } from '../../src/components/hf-catalogo.js';
 import { RISULTATI_HF, DETTAGLIO_HF, STIMA_HF } from '../../lab/fixtures/hf-catalogo.js';
+import { valoreFaccettaHf, filtraRisultatiHf, conteggiFaccettaHf, bandaDownload } from '../../src/components/hf-catalogo.js';
+
+test('RIPRESA-HF-PARAMETRI — limiti esatti, ignoti e parametri totali MoE', () => {
+  const cases = [[null,'non-dichiarati'],[0,'non-dichiarati'],['8000000000','non-dichiarati'],[1e9,'fino-1b'],[1e9+1,'1-3b'],[3e9,'1-3b'],[3e9+1,'3-8b'],[8e9,'3-8b'],[8e9+1,'8-15b'],[15e9+1,'15-35b'],[35e9+1,'35-70b'],[70e9+1,'oltre-70b']];
+  for (const [parameterCount, expected] of cases) assert.equal(valoreFaccettaHf({ parameterCount, repo: 'org/30B-A3B' }, 'parametri'), expected);
+  assert.equal(bandaDownload(null), 'non-dichiarati');
+  assert.equal(valoreFaccettaHf({ gated: null }, 'accesso'), 'non-dichiarato');
+});
+test('RIPRESA-HF-PARAMETRI-AND-OR — conteggi condizionati e propria faccetta esclusa', () => {
+  const rows = [{repo:'a/uno',parameterCount:2e9,gated:false},{repo:'a/due',parameterCount:7e9,gated:false},{repo:'b/tre',parameterCount:7e9,gated:true},{repo:'a/quattro',parameterCount:null,gated:false}];
+  const filters = { parametri:['1-3b','3-8b'], accesso:['aperto'] };
+  assert.deepEqual(filtraRisultatiHf(rows, filters).map(x=>x.repo), ['a/uno','a/due']);
+  assert.equal(conteggiFaccettaHf(rows, filters, 'parametri').get('non-dichiarati'), 1);
+  assert.equal(conteggiFaccettaHf(rows, filters, 'accesso').get('richiesto'), 1);
+  assert.equal(conteggiFaccettaHf(rows, filters, 'accesso').get('non-dichiarato'), undefined);
+});
 
 // 06/09 B6.9 — le parole del mockup escono dai dati del monolite; i set multi-file stanno insieme.
 
@@ -152,4 +168,17 @@ test('HF-STIMA-IGNOTA: senza misura la riga dice quanto PESA, non ripete «non m
   // ⛔ verso contrario: il perché non si ripete su ogni riga, lo dice il callout una volta sola
   assert.ok(!/servizio locale|non misurabile su questa macchina/.test(senza.testo));
   assert.equal(descriviStima({ state: 'unknown' }).testo, 'memoria non misurata');
+});
+
+
+test('RIPRESA-HF-FACCETTA-ZERO — una pagina parziale non cancella autore e tipo selezionati', async () => {
+  const { normalizzaFiltriHf, filtraRisultatiHf, vociFaccettaHf } = await import('../../src/components/hf-catalogo.js');
+  const filters = { autore: ['second-page'], tipo: ['text-generation'] };
+  const current = [{ repo: 'first-page/a', pipelineTag: 'text-generation' }];
+  const normalized = normalizzaFiltriHf(filters, current);
+  assert.deepEqual(normalized.autore, ['second-page']);
+  assert.deepEqual(filtraRisultatiHf(current, normalized), []);
+  assert.ok(vociFaccettaHf(current, 'autore', normalized.autore).some(([value]) => value === 'second-page'));
+  assert.deepEqual(filtraRisultatiHf([...current, { repo: 'second-page/b', pipelineTag: 'text-generation' }], normalized).map(r => r.repo), ['second-page/b']);
+  assert.deepEqual(normalizzaFiltriHf({ autore: [null, {}, '', 'x'.repeat(201)], accesso: ['inventato'] }, []).autore, []);
 });

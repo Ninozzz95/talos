@@ -71,15 +71,23 @@ function vocePadre(cartella) {
 function orchestratoreColDiscoVero(cartellaMadre) {
   const sessioni = new Map([['madre', vocePadre(cartellaMadre)]]);
   const avvii = [];
+  const conclusioni = [];
   const orch = creaSubagentOrchestrator({
     sessioni,
     avviaESeguiFn: (opzioni) => {
-      avvii.push(opzioni);
-      opzioni.onConclusioneFn({ ok: true, esito: { detto: 'fatto', comeFinita: 'concluso' } });
-      return { sessionId: `figlia-${avvii.length}` };
+      const sessionId = `figlia-${avvii.length + 1}`;
+      avvii.push({
+        ...opzioni,
+        sessionId,
+        concludi: (risultato = { ok: true, esito: { detto: 'fatto', comeFinita: 'concluso' } }) => {
+          opzioni.onConclusioneFn(risultato);
+        },
+      });
+      return { sessionId };
     },
+    onFiglioConclusoFn: (terminale) => { conclusioni.push(terminale); },
   });
-  return { orch, avvii, sessioni };
+  return { orch, avvii, sessioni, conclusioni };
 }
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────
@@ -156,15 +164,25 @@ test('⭐ la forma si legge dalla RADICE, non dal sistema operativo scritto in u
 test('⭐⭐⭐ AL CONTRARIO — la cartella VERA della madre passa, omessa o ripetuta, e la figlia ci finisce dentro', async () => {
   const cartellaMadre = cartellaVera();
   try {
-    const { orch, avvii } = orchestratoreColDiscoVero(cartellaMadre);
+    const { orch, avvii, conclusioni } = orchestratoreColDiscoVero(cartellaMadre);
 
     const omessa = await orch.delegaSottoTask({ sessionPadreId: 'madre', task: 'leggi il README' });
-    assert.equal(omessa.esito, 'concluso', 'il caso NORMALE — delegare senza dire la cartella — non deve mai essere rifiutato');
+    assert.equal(omessa.esito, 'avviato', 'il caso NORMALE parte e restituisce subito la ricevuta senza attendere la figlia');
+    assert.equal(omessa.childId, avvii[0].sessionId);
     assert.equal(avvii[0].cartella, cartellaMadre);
+    avvii[0].concludi();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(conclusioni[0]?.childId, omessa.childId);
+    assert.equal(conclusioni[0]?.risultato?.esito, 'concluso', 'il terminale reale arriva sul callback separato');
 
     const ripetuta = await orch.delegaSottoTask({ sessionPadreId: 'madre', task: 'leggi il package.json', cartella: cartellaMadre });
-    assert.equal(ripetuta.esito, 'concluso');
+    assert.equal(ripetuta.esito, 'avviato');
+    assert.notEqual(ripetuta.childId, omessa.childId);
     assert.equal(avvii[1].cartella, cartellaMadre, 'la cartella non si tocca: né normalizzata, né allargata');
+    avvii[1].concludi();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(conclusioni[1]?.childId, ripetuta.childId);
+    assert.equal(conclusioni[1]?.risultato?.esito, 'concluso');
 
     // ⛔ la prova morde solo se la cartella non è già la radice del disco
     assert.notEqual(parsePath(cartellaMadre).root, cartellaMadre);
@@ -177,10 +195,15 @@ test('⭐⭐ AL CONTRARIO — una cartella con uno SPAZIO nel nome è una forma 
   const radice = cartellaVera('talos-forma-sp-');
   const conSpazi = mkdtempSync(join(radice, 'progetto con spazi '));
   try {
-    const { orch, avvii } = orchestratoreColDiscoVero(conSpazi);
+    const { orch, avvii, conclusioni } = orchestratoreColDiscoVero(conSpazi);
     const esito = await orch.delegaSottoTask({ sessionPadreId: 'madre', task: 'x', cartella: conSpazi });
-    assert.equal(esito.esito, 'concluso', 'uno spazio non è un errore di forma: il progetto di una persona si chiama così');
+    assert.equal(esito.esito, 'avviato', 'uno spazio non è un errore di forma: la figlia parte senza bloccare la madre');
+    assert.equal(esito.childId, avvii[0].sessionId);
     assert.equal(avvii[0].cartella, conSpazi);
+    avvii[0].concludi();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(conclusioni[0]?.childId, esito.childId);
+    assert.equal(conclusioni[0]?.risultato?.esito, 'concluso');
   } finally {
     rimuoviCartellaDiProva(radice);
   }
@@ -272,9 +295,9 @@ test('⭐⭐⭐ TRE DELEGHE SU TRE riescono dopo un tentativo storto, e la sched
     const cartellaSuggerita = cartellaMadre;
     assert.ok(storta.motivo.includes(cartellaSuggerita));
 
-    const uno = madre.onDelega('scrivi la PARTE 1', cartellaSuggerita);
-    const due = madre.onDelega('scrivi la PARTE 2'); // omessa: il caso normale
-    const tre = madre.onDelega('scrivi la PARTE 3', cartellaSuggerita);
+    const ricevutaUno = madre.onDelega('scrivi la PARTE 1', cartellaSuggerita);
+    const ricevutaDue = madre.onDelega('scrivi la PARTE 2'); // omessa: il caso normale
+    const ricevutaTre = madre.onDelega('scrivi la PARTE 3', cartellaSuggerita);
 
     assert.equal(finto.avvii.length, 4, 'madre + tre figlie: se sono meno, una delega non è partita');
     for (const figlia of finto.avvii.slice(1)) {
@@ -284,10 +307,19 @@ test('⭐⭐⭐ TRE DELEGHE SU TRE riescono dopo un tentativo storto, e la sched
     assert.equal(registro.elencaFigli(madreId).figli.length, 3,
       'la scheda «Agenti» legge questa rotta: se qui sono meno di tre, la scheda mente');
 
+    const ricevute = await Promise.all([ricevutaUno, ricevutaDue, ricevutaTre]);
+    assert.ok(ricevute.every((ricevuta) => ricevuta.esito === 'avviato'),
+      'ogni delega deve restituire la ricevuta senza attendere la conclusione');
+    assert.equal(new Set(ricevute.map((ricevuta) => ricevuta.childId)).size, 3,
+      'le tre ricevute devono riferirsi a tre figlie distinte');
+
     for (const figlia of finto.avvii.slice(1)) figlia.concludi({ ok: true });
-    for (const promessa of [uno, due, tre]) assert.equal((await promessa).esito, 'concluso');
+    await new Promise((resolve) => setImmediate(resolve));
 
     const figli = registro.elencaFigli(madreId).figli;
+    assert.deepEqual(new Set(figli.map((figlia) => figlia.sessionId)), new Set(ricevute.map((ricevuta) => ricevuta.childId)));
+    assert.ok(figli.every((figlia) => figlia.conclusa && figlia.esitoDelega === 'concluso'),
+      'le tre conclusioni esplicite devono produrre tre terminali reali nella scheda');
     assert.deepEqual(figli.map((f) => f.task), ['scrivi la PARTE 1', 'scrivi la PARTE 2', 'scrivi la PARTE 3'],
       'i tre compiti si sono confusi fra loro, o la scheda mostra tre righe uguali');
   } finally {

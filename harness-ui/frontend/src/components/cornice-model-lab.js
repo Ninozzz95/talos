@@ -61,21 +61,22 @@ export function montaCorniceModelLab(card) {
    *     tre in una riga, e non lascia in giro un eyebrow orfano senza il suo titolo.
    */
   if (heading) heading.setAttribute('hidden', '');
-  const ledger = card.querySelector('.model-lab-ledger');
-  const badge = card.querySelector('#modelLabRuntimeBadge');
-  const rows = [...(ledger?.children || [])];
-  for (const [i, row] of rows.entries()) {
-    row.classList.add('talos-kv'); row.dataset.c = 'KeyValue';
-    const label = row.querySelector('span'); let value = row.querySelector('strong');
-    if (i === 3 && badge && value) { value.replaceWith(badge); value = badge; value.textContent = 'Verifica in corso…'; }
-    if (label) { label.className = 'talos-kv__k'; row.prepend(label); }
-    if (value) value.className = 'talos-kv__v talos-badge talos-badge--sm';
-  }
+  // Rimozione esplicita richiesta dall'owner il 19/09: nessun riepilogo duplicato.
+  card.querySelector('.model-lab-ledger')?.remove();
+  card.querySelector('#modelLabRuntimeBadge')?.remove();
   const list = card.querySelector('[role=tablist]'); if (!list) return;
   // ⛔ Se il guscio a quattro schede è già montato, la tastiera e le classi
   // delle schede sono sue (`lab-cornice-v3.js`): qui non si rimette mano.
   if (card.dataset.labGuscio === 'v3') return;
-  avvolgiStrisciaSchede(card, list);
+  const striscia = avvolgiStrisciaSchede(card, list);
+  striscia.classList.add('talos-lab-tabs-actions');
+  const libera = card.ownerDocument.createElement('button');
+  libera.id = 'modelLabLiberaMemoria';
+  libera.type = 'button';
+  libera.className = 'talos-button talos-button--secondary talos-button--sm';
+  libera.textContent = 'Libera memoria';
+  libera.disabled = true;
+  striscia.append(libera);
   const tabs = [...list.querySelectorAll('[data-model-lab-tab]')];
   for (const tab of tabs) { tab.classList.add('talos-tabs__tab'); tab.tabIndex = tab.getAttribute('aria-selected') === 'true' ? 0 : -1; }
   list.addEventListener('keydown', event => {

@@ -54,7 +54,7 @@
 .td-sidebar-nav .workspace-home-link:not([aria-current]):hover { background:var(--talos-card-hover); }
 .workspace-home-link[aria-current="page"] { color:var(--talos-accent-text); border-color:var(--talos-accent-border); background:var(--talos-accent-soft); }
 :root[data-sidebar="icone"] .workspace-home-link .talos-nav-item__label { display:none; }
-:root[data-workspace-ui="v2"] .talos-conversation__column { max-width:var(--ui-prose-width); margin-inline:auto; width:100%; }
+/* La misura della conversazione appartiene a index.css: 768px e modalità tutta larghezza. */
 :root[data-workspace-ui="v2"] .talos-topbar { border-bottom-color:var(--talos-border-subtle); }
 :root[data-density="compact"] .workspace-recent { min-height:60px; padding-block:8px; }
 :root[data-density="compact"] .workspace-card { padding:18px; }

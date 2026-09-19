@@ -257,7 +257,12 @@ function mountStage(parent, { preview = false } = {}) {
   if (!context) { canvas.remove(); return null; }
   const stage = { parent, canvas, context, preview, state: null, definition: null, scene: '', width: 1, height: 1, dpr: 1, draws: 0, lastCost: 0, slowCount: 0, forcedLow: false, budgetStatic: false, manualPaused: false };
   stages.add(stage);
-  const resize = new ResizeObserver(() => requestAnimationFrame(() => { if (stages.has(stage)) prepare(stage, false); }));
+  const resize = new ResizeObserver(() => requestAnimationFrame(() => {
+    if (!stages.has(stage)) return;
+    prepare(stage, false);
+    // Una superficie prima nascosta può tornare visibile a loop già fermo.
+    schedule();
+  }));
   resize.observe(parent);
   stage.dispose = () => { resize.disconnect(); stages.delete(stage); canvas.remove(); schedule(); };
   prepare(stage, true);

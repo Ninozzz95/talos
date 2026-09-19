@@ -421,7 +421,7 @@ const LEGGI = () => {
   };
 };
 
-test.describe.configure({ mode: 'serial' });
+// Ogni test apre un banco proprio; un fallimento non deve saltare gli altri.
 
 test('SCHEDA-00 — presupposto: la sorgente si serve, si importa, e non inventa classi', async ({ page }) => {
   const esportate = await apriIlBanco(page);
@@ -485,15 +485,17 @@ test('SCHEDA-01 — le tre schede: ruoli, `aria-controls`, pannello unico, e la 
   expect(letto.schede.every((s) => s.controlla === letto.pannello.id), 'ogni linguetta punta al pannello').toBe(true);
   const attiva = letto.schede.find((s) => s.selezionata === 'true');
   expect(letto.pannello.etichettatoDa, 'il pannello e\' descritto dalla linguetta attiva').toBe(attiva.etichettato);
-  expect(letto.nome, 'il nome del modello in testata').toBe('qwen2.5-7b-q4km');
+  expect(letto.nome, 'il nome umano del modello in testata').toBe('Qwen2.5-7B-Instruct-GGUF');
+  await expect(page.locator('#c4-tela [data-modello-id]')).toHaveAttribute('data-modello-id', 'qwen2.5-7b-q4km');
   expect(letto.repo, 'la riga del repository').toContain('bartowski/Qwen2.5-7B-Instruct-GGUF');
   expect(letto.repo, 'con la revisione accorciata').toContain('revisione b1e2f3a4c5d6');
   expect(letto.repo).toContain('apache-2.0');
   expect(letto.repo, 'e i due conti pubblici, scritti all\'italiana').toContain('15.234 download');
   expect(letto.repo).toContain('87 like');
   // la striscia: quattro caselle, tutte con un dato vero
-  expect(letto.striscia).toContain('Hugging Face');
-  expect(letto.striscia, '⛔ le parole delle caselle sono quelle del prodotto, non due volte la stessa').toContain('File sul disco');
+  await expect(page.locator('#c4-tela [data-modello-striscia] small')).toHaveText(['Destinazione', 'Profilo', 'Stato', 'Verifica']);
+  expect(letto.striscia).toContain('Sul dispositivo');
+  expect(letto.striscia).toContain('Sul disco');
   expect(letto.striscia).toContain('GGUF · Q4_K_M');
   expect(letto.striscia, '⛔ i byte con `gb`, non con un secondo formattatore').toContain('4,4 GB');
   /*
@@ -772,7 +774,7 @@ test('SCHEDA-05 — importato dal computer: non si inventa una scheda, e la rott
   expect(letto.repo).not.toContain('revisione a1b2c3d4e5f6');
   expect(letto.azioni, 'niente pulsanti inventati verso un repository che non c\'e\'').not.toContain('Hugging Face');
   expect(letto.azioni).not.toContain('Copia link');
-  expect(letto.striscia).toContain('Importato dal computer');
+  expect(letto.repo).toContain('Importato dal computer: non ha un repository');
   expect(letto.fonti, 'e nessun collegamento verso l\'esterno').toEqual([]);
 
   // e i FILE restano quelli veri, con l'esito dichiarato: non confrontabile

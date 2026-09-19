@@ -1,0 +1,3570 @@
+[
+  {
+    "pr": 23,
+    "file": "harness-ui/docs/evolution/PR00-process-policy-env.md",
+    "prStatus": "added",
+    "prBlob": "0875cbc2e19c017b21b528c4a97f7a04cfb9506e",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 23,
+    "file": "harness-ui/src/process-policy.mjs",
+    "prStatus": "modified",
+    "prBlob": "c0e5911259c5c2d36914445eb00bd5d24e7bf274",
+    "currentNormalizedBlob": "2d9d6cadc65f15796a4c531d430a75a203cab2ed",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 23,
+    "file": "harness-ui/tests/process-policy-env-narrowing.test.mjs",
+    "prStatus": "added",
+    "prBlob": "2162405f013b88aa0b14b9f90ca9cf0feff3e33b",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": ".github/workflows/evolution-client-standard-user.yml",
+    "prStatus": "added",
+    "prBlob": "16fa980de6323e3c3a10ff4dc8a398ec8ab38f87",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": ".github/workflows/evolution-containment-spike.yml",
+    "prStatus": "added",
+    "prBlob": "f02f9089c93beec7c24cb57a034eacadccb8c074",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": ".github/workflows/evolution-containment-v2.yml",
+    "prStatus": "added",
+    "prBlob": "70928f97f66ea291f13964a06d6735501dce165f",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": ".github/workflows/evolution-extension-prototype.yml",
+    "prStatus": "added",
+    "prBlob": "3a150f4f11e9b50f62d2eff2a850cdc2939956ad",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/.gitignore",
+    "prStatus": "added",
+    "prBlob": "4be1ce22d48141e5205d455fc12e09a296abf960",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/CLIENT-NETWORK-WITNESS.md",
+    "prStatus": "added",
+    "prBlob": "bc09ebe9b9bfdef16c0afcef80c0f8000b9c7f47",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/CLIENT-STANDARD-USER.md",
+    "prStatus": "added",
+    "prBlob": "1917e0419c5b9d953229bf2e5d9b8c8302964121",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/CONTAINMENT-CONTRACT-V2.json",
+    "prStatus": "added",
+    "prBlob": "954f2add540dbd448c9f1a81a7521d940b01fe24",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/CONTAINMENT-V2.md",
+    "prStatus": "added",
+    "prBlob": "758eecc713d1777a5ab59c5f30b32f211fdf9b74",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/Cargo.lock",
+    "prStatus": "added",
+    "prBlob": "c610aff2d3aeefcfd6c771e6b2ee25766aa779dd",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/Cargo.toml",
+    "prStatus": "added",
+    "prBlob": "5a0230ff8af60bbef6eaead86ce8dc4cf92444af",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/DIAGNOSTICS.md",
+    "prStatus": "added",
+    "prBlob": "7b6a1a5255baa749edc8bcc84719d2593088bbb4",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/NETWORK-CORRELATION.md",
+    "prStatus": "added",
+    "prBlob": "b1cfc0d0404dcfc79477a90c700e0321b336125d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/README.md",
+    "prStatus": "added",
+    "prBlob": "3ab8a75187161b00e9dcebc0bc7daeb244862df5",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/WINDOWS-FINDINGS.md",
+    "prStatus": "added",
+    "prBlob": "235dab961f5ebad4e01e6c7cda8b04d4ee042dac",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/ci-client-standard-user.ps1",
+    "prStatus": "added",
+    "prBlob": "d068cfae63cded53b7d5a5d780c0c4ba7cf5f820",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/ci-observe-client-network.ps1",
+    "prStatus": "added",
+    "prBlob": "a9ff72bf7522ad6183638eea08b4d6cc72d678df",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/review_client_network.py",
+    "prStatus": "added",
+    "prBlob": "6a28c657c34b3b0cd6e8ed07e6d141e52ae5f5a4",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/review_containment_v2.py",
+    "prStatus": "added",
+    "prBlob": "e5d3f9a44f4d1f09cc2d428c42002ac425e08b62",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/review_network_correlation.py",
+    "prStatus": "added",
+    "prBlob": "d2718df9f7b008074bd5f19ac7cfff3fdab815b5",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/run-client.ps1",
+    "prStatus": "added",
+    "prBlob": "316bf84bc1a2854a812af4d0500473b24a308a23",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/run-v2.ps1",
+    "prStatus": "added",
+    "prBlob": "b7b3fa0abc6cc358dfada3d23509363ed51fa064",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/run.ps1",
+    "prStatus": "added",
+    "prBlob": "7b6b6cefdb3ef291de8339164ad62cd957cbeef7",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/rust-toolchain.toml",
+    "prStatus": "added",
+    "prBlob": "fadb1595695b26f821c5aef0cb3ec438dbdde31d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/src/client_profile.rs",
+    "prStatus": "added",
+    "prBlob": "d909b24957c8c97aa0d872b75b5a0e74a0d8b3df",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/src/main.rs",
+    "prStatus": "added",
+    "prBlob": "cff19489c39ecbebecf910ba6e35c56ef051591d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/src/protocol.rs",
+    "prStatus": "added",
+    "prBlob": "9b01745640e54a158df60be7a65a072f6620cd89",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/src/windows/checks.rs",
+    "prStatus": "added",
+    "prBlob": "fae01fd90debeff9bcfb1912d84487259e949df9",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/src/windows/ffi.rs",
+    "prStatus": "added",
+    "prBlob": "c454ce4f0c5cae589d8349972ba472ebc65aa7db",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/src/windows/mod.rs",
+    "prStatus": "added",
+    "prBlob": "9aa275e5b9db6cb47b454645f089528e2af3acdd",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/src/windows/network.rs",
+    "prStatus": "added",
+    "prBlob": "82ca979bab28b0e590feaf44c3fb0c4053f2bacc",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/src/windows/network/observer.rs",
+    "prStatus": "added",
+    "prBlob": "df0b01a48c567ec2dd32873a973591d49162e75a",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/src/windows/network/wfp.rs",
+    "prStatus": "added",
+    "prBlob": "0a1445fe7c5ff6a1e91b0f8b6dd8cf28489f3ba0",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/src/windows/security.rs",
+    "prStatus": "added",
+    "prBlob": "24e592095cc0b4a704750e0be5b9f58fc982d57c",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/test_client_network.py",
+    "prStatus": "added",
+    "prBlob": "9274426f8028e12fca6ba683528387812d1ed5c8",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/test_containment_v2.py",
+    "prStatus": "added",
+    "prBlob": "d053208b7e00d1eb7f155428afc63376be6cc3d4",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/labs/evolution-containment/test_network_correlation.py",
+    "prStatus": "added",
+    "prBlob": "0bc5fb098070b807eaf89fb0b9dd100db0c1672e",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/.gitignore",
+    "prStatus": "added",
+    "prBlob": "4be1ce22d48141e5205d455fc12e09a296abf960",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/Cargo.lock",
+    "prStatus": "added",
+    "prBlob": "9b39a465017f9fd7ad9cad39c97c03683d4fdc4b",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/Cargo.toml",
+    "prStatus": "added",
+    "prBlob": "28ee442992ed19f593153b067d3058279aa866c2",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/DEVELOPMENT-ADAPTER.md",
+    "prStatus": "added",
+    "prBlob": "587948317d48e60f6ce5753ac6595852f170244f",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/LIFECYCLE.md",
+    "prStatus": "added",
+    "prBlob": "1fe7ec4f73de1dd1b71134b4862414ae899185b5",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/README.md",
+    "prStatus": "added",
+    "prBlob": "966e63785f10e2b51a70a779651dbe1bfab9deaa",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/build.rs",
+    "prStatus": "added",
+    "prBlob": "7e6a36543cede2fa76546e9e34fedcfe98a65f7f",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/contracts/dev_bridge.proto",
+    "prStatus": "added",
+    "prBlob": "505487d4df8acd30f29231c884cd975b34535e5d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/contracts/evolution.proto",
+    "prStatus": "added",
+    "prBlob": "5890fcabf12ee615d488a2897fdf5c658163acf4",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/contracts/extension.wit",
+    "prStatus": "added",
+    "prBlob": "285931b4f4e26864657314f4d86d2f1f4bdf31f7",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/fixtures/loop.wat",
+    "prStatus": "added",
+    "prBlob": "becc13405fa89c6d4c67fc59067773cbb7037bab",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/fixtures/sum.wat",
+    "prStatus": "added",
+    "prBlob": "d43b9f6ef9f86f4c3da6ec1bf156786d4678d4cb",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/rust-toolchain.toml",
+    "prStatus": "added",
+    "prBlob": "c3891f04890f3ca930ba11bfde5602688e1affba",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/src/authority.rs",
+    "prStatus": "added",
+    "prBlob": "d945db8e8fe212a17412f12ad174371a15082ee4",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/src/bin/lifecycle_fixture.rs",
+    "prStatus": "added",
+    "prBlob": "063a4aa31f5eb7dbce7827fcaee9a5837eb507d4",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/src/bin/supervisor.rs",
+    "prStatus": "added",
+    "prBlob": "0394f9b662a999926d8c16c82ccaa4e061c2c405",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/src/bin/worker.rs",
+    "prStatus": "added",
+    "prBlob": "51c2a5424bdce21a80a54f3eddd1d4d4d82746a3",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/src/dev_bridge.rs",
+    "prStatus": "added",
+    "prBlob": "d240571c88e99ca8249297bbce4766e24fd18f5d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/src/engine.rs",
+    "prStatus": "added",
+    "prBlob": "be890651256b9d7d74dc4d218aaeb14786737157",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/src/lib.rs",
+    "prStatus": "added",
+    "prBlob": "ccf1e8ee1c6b5b1e51e428fef6ba0cf5319c0cde",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/src/lifecycle.rs",
+    "prStatus": "added",
+    "prBlob": "9c1303937941c1d2ad8dc0f770f115b516bead9f",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/src/windows/ffi.rs",
+    "prStatus": "added",
+    "prBlob": "4fafbb2fb02f8e2d93892f9659397b9310000e1f",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/src/windows/mod.rs",
+    "prStatus": "added",
+    "prBlob": "eb6748e2d8c88385dfdb3bf547fcc992495550e2",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/src/windows/testing.rs",
+    "prStatus": "added",
+    "prBlob": "2b8f6f661fabc9c1f924cb885d169299eb31e127",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/src/windows/transport.rs",
+    "prStatus": "added",
+    "prBlob": "bef886d5119248cfdb027e6e63e507ac7bb68db6",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/src/wire.rs",
+    "prStatus": "added",
+    "prBlob": "56e784b4c1e65a4d2117b6f06cf56fbe4603a60b",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/tests/contained_worker.rs",
+    "prStatus": "added",
+    "prBlob": "39eee70844300652227b5708119d813a29cfbbdf",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/tests/dev-adapter.integration.mjs",
+    "prStatus": "added",
+    "prBlob": "97e7773d140763861177018e28761a82a45ce6ae",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/native/evolution-prototype/tests/lifecycle.rs",
+    "prStatus": "added",
+    "prBlob": "82cd66f3b681d0ddf5b57049e56c03dfbc99fc4c",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/scripts/evolution-dev.mjs",
+    "prStatus": "added",
+    "prBlob": "29b6af6d3170869539c9d68d7142469ab5429d7d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/src/evolution-dev-adapter.mjs",
+    "prStatus": "added",
+    "prBlob": "6c66d3aacb53c3f4f6d04ae82c3e538535533049",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/src/evolution-dev/codec.mjs",
+    "prStatus": "added",
+    "prBlob": "ead54a3ac469011deca5f000ece0ed9e2cf3cd21",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/src/evolution-dev/session.mjs",
+    "prStatus": "added",
+    "prBlob": "ed3579f087031caad08de6ec097cacf560aec3b8",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 24,
+    "file": "harness-ui/tests/evolution-dev-adapter.test.mjs",
+    "prStatus": "added",
+    "prBlob": "f5780d93d2fa84e7e7c06de5df7a5956231186b2",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 25,
+    "file": ".github/workflows/desktop-harness-demo.yml",
+    "prStatus": "added",
+    "prBlob": "b0cb4066d2d05648d378bfc079409c2a3ace0492",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 25,
+    "file": "harness-ui/desktop/scripts/demo-smoke.mjs",
+    "prStatus": "added",
+    "prBlob": "86c9e2e08c0e4d210f2bd50d7e36b76d36e920ab",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 25,
+    "file": "harness-ui/frontend/showcase/README.md",
+    "prStatus": "added",
+    "prBlob": "a0db80239bd86be956bf704d8755d04b8497071d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 25,
+    "file": "harness-ui/frontend/showcase/baseline/connessione.js",
+    "prStatus": "added",
+    "prBlob": "1d3813a52f91261feef454af600bdc6cd9e2e654",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 25,
+    "file": "harness-ui/frontend/showcase/baseline/dialoghi.js",
+    "prStatus": "added",
+    "prBlob": "354f68f56c4d8dc822f215baf3fa5d88f742698e",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 25,
+    "file": "harness-ui/frontend/showcase/baseline/motion-mockup.js",
+    "prStatus": "added",
+    "prBlob": "a3900e9c1e30403919382a44bd66b2077fa95957",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 25,
+    "file": "harness-ui/frontend/showcase/index.html",
+    "prStatus": "added",
+    "prBlob": "378d7ce075a13fbd877d0c22773cb036d976bb50",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 25,
+    "file": "harness-ui/frontend/showcase/serve.mjs",
+    "prStatus": "added",
+    "prBlob": "5a18880cda1684e6ede686a86a9423ace6ec5836",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 25,
+    "file": "harness-ui/frontend/showcase/showcase.js",
+    "prStatus": "added",
+    "prBlob": "e1caafc07ff710345d1fffb7e886d6d7877a263a",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 25,
+    "file": "harness-ui/frontend/showcase/styles.css",
+    "prStatus": "added",
+    "prBlob": "5a5f76f9da539d24627f77ad065577550d47401d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 25,
+    "file": "harness-ui/frontend/src/components/connessione.js",
+    "prStatus": "modified",
+    "prBlob": "13dea577712a5456512db5f587ebabcdd82c6f98",
+    "currentNormalizedBlob": "13dea577712a5456512db5f587ebabcdd82c6f98",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 25,
+    "file": "harness-ui/frontend/src/components/dialoghi.js",
+    "prStatus": "modified",
+    "prBlob": "d0813f2a783456c29cdebdc3834860b35203916a",
+    "currentNormalizedBlob": "d443d7b47dff8dbfcb05952fbb82eb422bd9ffd9",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 25,
+    "file": "harness-ui/frontend/src/components/motion-mockup.js",
+    "prStatus": "modified",
+    "prBlob": "75a60270e165bbf57ca4ec96a98acbff10427025",
+    "currentNormalizedBlob": "75a60270e165bbf57ca4ec96a98acbff10427025",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 25,
+    "file": "harness-ui/frontend/tests/unit/ui-experience-regression.test.mjs",
+    "prStatus": "added",
+    "prBlob": "9cf437d73287cd9a5d074496609c0bdd082950fd",
+    "currentNormalizedBlob": "9cf437d73287cd9a5d074496609c0bdd082950fd",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 26,
+    "file": ".github/workflows/desktop-foundation.yml",
+    "prStatus": "added",
+    "prBlob": "2391d74f07275df5c03f3df56da9cdc3a4414178",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": ".github/workflows/desktop-ledger.yml",
+    "prStatus": "added",
+    "prBlob": "76c51d875ca1ec979bc64b13c443f4b8f25d3224",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/docs/ledger-delivery.md",
+    "prStatus": "added",
+    "prBlob": "a826a8932b3deb1ab174bb829d37408f5d27bb5e",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/docs/ledger-execution.json",
+    "prStatus": "added",
+    "prBlob": "27cac14715482db8c2e035dba0847822c670366a",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/package-lock.json",
+    "prStatus": "modified",
+    "prBlob": "46882d5dda2628f466b06d3075ce866036fa561b",
+    "currentNormalizedBlob": "af349689b46722e6b609417bf91f8f88ea364f35",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/package.json",
+    "prStatus": "modified",
+    "prBlob": "15a016a440b7713339dfdf31db01c4689f5d62cf",
+    "currentNormalizedBlob": "6f37b1522e00738489e35f5aaa6c1d9013261834",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/scripts/extract-legacy-contract.mjs",
+    "prStatus": "modified",
+    "prBlob": "f994a29c7674f0266331e5018e38fb958892fbba",
+    "currentNormalizedBlob": "7aefc40712816a26f055969e2aa1695a946ce12f",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/scripts/ledger-capture.mjs",
+    "prStatus": "added",
+    "prBlob": "d8cba8790a0b5c7ca526e79462a95f19fcf04e0f",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/scripts/ledger/apply-l02.mjs",
+    "prStatus": "added",
+    "prBlob": "5dd2d44afc45e537540a07c1166915076fa615e1",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/scripts/ledger/l02-files.json",
+    "prStatus": "added",
+    "prBlob": "a78bf081cbe6a1d0e66432206ddb5a2cb94ae2c4",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/scripts/ledger/qualify-l02.mjs",
+    "prStatus": "added",
+    "prBlob": "1347cb9ade4d3c0cf71f547898058ed0015add8b",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/scripts/verify.mjs",
+    "prStatus": "modified",
+    "prBlob": "2223bf34cbd220ff061858061727d684a09dd294",
+    "currentNormalizedBlob": "b63a22b1b6705eaef57f596e1dc2d98abb0a61cc",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/app/state.ts",
+    "prStatus": "added",
+    "prBlob": "bf4e2b24bcb37d785a373b0e5326b369716ee23b",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/contracts/api-client.js",
+    "prStatus": "removed",
+    "prBlob": "a90397d1ef97da797f648c5dc780eef99185dc6f",
+    "currentNormalizedBlob": "a90397d1ef97da797f648c5dc780eef99185dc6f",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/contracts/host-bridge.js",
+    "prStatus": "removed",
+    "prBlob": "7fe28854d647e0f9e931c4c4da91c90a13b385e0",
+    "currentNormalizedBlob": "7fe28854d647e0f9e931c4c4da91c90a13b385e0",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/contracts/persistence.js",
+    "prStatus": "removed",
+    "prBlob": "a3af340585cfc72b286ee1c45b31a9b31c234b65",
+    "currentNormalizedBlob": "a3af340585cfc72b286ee1c45b31a9b31c234b65",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/contracts/session-events.js",
+    "prStatus": "removed",
+    "prBlob": "9c0e961d609183dbe971ac885b2b0836cac4be44",
+    "currentNormalizedBlob": "9c0e961d609183dbe971ac885b2b0836cac4be44",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/contracts/session-stream.js",
+    "prStatus": "removed",
+    "prBlob": "58c35a82c84766232091e27f41a22f9e05b353f2",
+    "currentNormalizedBlob": "58c35a82c84766232091e27f41a22f9e05b353f2",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/domain/resource-state.ts",
+    "prStatus": "added",
+    "prBlob": "755586693b4d16f0c1705fc09a2a5062487a1e67",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/domain/session-events.ts",
+    "prStatus": "added",
+    "prBlob": "006d822dd178e96f579ba764d1e8b78a95aec755",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/infrastructure/api/client.ts",
+    "prStatus": "added",
+    "prBlob": "77cceb78a637e32045438aad70b208c9bce53dda",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/infrastructure/events/session-stream.ts",
+    "prStatus": "added",
+    "prBlob": "57fffe6cd216355867560f0e3152b12be91bc1ad",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/infrastructure/host/bridge.ts",
+    "prStatus": "added",
+    "prBlob": "33ec52c2d20c6f99fad50f27a1056df5b8ba3405",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/infrastructure/lifecycle.ts",
+    "prStatus": "added",
+    "prBlob": "e0b5378c39513a3674756eed1e4e9e3e773b5f9d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/infrastructure/persistence/preferences.ts",
+    "prStatus": "added",
+    "prBlob": "413c6cccc3ce7866faa26a2070f43893648976ea",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/src/legacy/app.js",
+    "prStatus": "modified",
+    "prBlob": "1917f25b09ab5700115d643d1e484a1a2195c115",
+    "currentNormalizedBlob": "b856689499073ec968779c63b85eacd922dd647a",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/tests/contract/foundation.test.mjs",
+    "prStatus": "added",
+    "prBlob": "f51d5b4b8f5d14493a04e3b0c98626944507e6b7",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/tests/contract/new-production-graph.test.mjs",
+    "prStatus": "added",
+    "prBlob": "c90eaa5ce915f90079a2b21c685daceb3289090d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/tests/contract/session-events.test.mjs",
+    "prStatus": "modified",
+    "prBlob": "fe6c68a9fa39c88aee26da993593be3f18336633",
+    "currentNormalizedBlob": "bed79c43b5d03d5991572013659f1501d5f5c37d",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 26,
+    "file": "harness-ui/frontend/tsconfig.json",
+    "prStatus": "added",
+    "prBlob": "7e2449f740791652344b2981509f73e0ca21268c",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-calm-review.yml",
+    "prStatus": "added",
+    "prBlob": "0d7a3557d5b1eebf2f50b7786cac8495f0ab8dfb",
+    "currentNormalizedBlob": "0d7a3557d5b1eebf2f50b7786cac8495f0ab8dfb",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-ledger-command-entry.yml",
+    "prStatus": "added",
+    "prBlob": "b5499d440e74aa655a8356b88cb5e511e6717b3a",
+    "currentNormalizedBlob": "b5499d440e74aa655a8356b88cb5e511e6717b3a",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-ledger-core-transfer.yml",
+    "prStatus": "added",
+    "prBlob": "50122ff43d04ccf149c39b083ccf9f0e75cf11e8",
+    "currentNormalizedBlob": "50122ff43d04ccf149c39b083ccf9f0e75cf11e8",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-ledger-devtools.yml",
+    "prStatus": "added",
+    "prBlob": "ba5b4498fe2723a6e1dd3210c6dfdf7d858e1140",
+    "currentNormalizedBlob": "ba5b4498fe2723a6e1dd3210c6dfdf7d858e1140",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-ledger-execution.yml",
+    "prStatus": "added",
+    "prBlob": "a97c0c6d029b0a52499b50d6fcdf695f937a1e7d",
+    "currentNormalizedBlob": "a97c0c6d029b0a52499b50d6fcdf695f937a1e7d",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-ledger-isolation-transfer.yml",
+    "prStatus": "added",
+    "prBlob": "4cad259e7f511855e7db373e9e6c28aab665c12e",
+    "currentNormalizedBlob": "4cad259e7f511855e7db373e9e6c28aab665c12e",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-ledger-log-diagnostic.yml",
+    "prStatus": "added",
+    "prBlob": "6c2b8e3a787acf7e75782849004c77067d588749",
+    "currentNormalizedBlob": "6c2b8e3a787acf7e75782849004c77067d588749",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-ledger-navigation.yml",
+    "prStatus": "added",
+    "prBlob": "1cdd0cca277196f46ccbaa390b0b89dc54b078c8",
+    "currentNormalizedBlob": "1cdd0cca277196f46ccbaa390b0b89dc54b078c8",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-ledger-preview.yml",
+    "prStatus": "added",
+    "prBlob": "7d04d9bd7fef4c7e999167347d24b033c3bf5059",
+    "currentNormalizedBlob": "7d04d9bd7fef4c7e999167347d24b033c3bf5059",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-ledger-snapshot.yml",
+    "prStatus": "added",
+    "prBlob": "7b8d313c81dcb734e1858cebe5f3bc267736c639",
+    "currentNormalizedBlob": "7b8d313c81dcb734e1858cebe5f3bc267736c639",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-review-snapshot.yml",
+    "prStatus": "added",
+    "prBlob": "9ebcfbc49ebddae9963186531ae267b81b47c3df",
+    "currentNormalizedBlob": "9ebcfbc49ebddae9963186531ae267b81b47c3df",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-settings-models.yml",
+    "prStatus": "added",
+    "prBlob": "e563545a8e6d13313ebb1565c259ce5923c895a9",
+    "currentNormalizedBlob": "e563545a8e6d13313ebb1565c259ce5923c895a9",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-settings-transfer.yml",
+    "prStatus": "added",
+    "prBlob": "2bd5b63bbbd11be06769622c89efa354939f2bbc",
+    "currentNormalizedBlob": "2bd5b63bbbd11be06769622c89efa354939f2bbc",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-source-bootstrap.yml",
+    "prStatus": "added",
+    "prBlob": "56b798685dd543b648ee71d1bea2a8978eacfb61",
+    "currentNormalizedBlob": "56b798685dd543b648ee71d1bea2a8978eacfb61",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-source-delivery.yml",
+    "prStatus": "added",
+    "prBlob": "66238fc14e6326afe9525ced7a00dbbce0bfb3cc",
+    "currentNormalizedBlob": "66238fc14e6326afe9525ced7a00dbbce0bfb3cc",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".github/workflows/desktop-source-export.yml",
+    "prStatus": "added",
+    "prBlob": "b3f18c3fbe298a305894cd5cf768297e593a5ea0",
+    "currentNormalizedBlob": "b3f18c3fbe298a305894cd5cf768297e593a5ea0",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": ".gitignore",
+    "prStatus": "modified",
+    "prBlob": "70fed17eef560daf998272776a9667a38e77352e",
+    "currentNormalizedBlob": "4e19a207ea7aed03e91cbc41f3887936cbed4cce",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "AVVIA-TALOS.cmd",
+    "prStatus": "added",
+    "prBlob": "578c4563c159b200a01fce4d3d7d5aebb845f358",
+    "currentNormalizedBlob": "578c4563c159b200a01fce4d3d7d5aebb845f358",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "README-AVVIO.md",
+    "prStatus": "added",
+    "prBlob": "4b455d1efe68084dd9dbcf39a2400da2055c3101",
+    "currentNormalizedBlob": "4b455d1efe68084dd9dbcf39a2400da2055c3101",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/REVIEW-AGENT.md",
+    "prStatus": "added",
+    "prBlob": "33af064ebde0917ea4cf656acd88faeefc1b1eca",
+    "currentNormalizedBlob": "33af064ebde0917ea4cf656acd88faeefc1b1eca",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/calm-lab/CP13-mandato.md",
+    "prStatus": "added",
+    "prBlob": "35ad86b6e3fbdd2eabe639be463324550c0aa922",
+    "currentNormalizedBlob": "35ad86b6e3fbdd2eabe639be463324550c0aa922",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/calm-lab/CP14-controlli.md",
+    "prStatus": "added",
+    "prBlob": "64101aca91051d5ff522a0c60a3738cdf9ca413c",
+    "currentNormalizedBlob": "64101aca91051d5ff522a0c60a3738cdf9ca413c",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/calm-lab/CP15-pubblicazione.md",
+    "prStatus": "added",
+    "prBlob": "6812ace89349a3124366fa94ff00ceb55d568a0f",
+    "currentNormalizedBlob": "6812ace89349a3124366fa94ff00ceb55d568a0f",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/calm-lab/CP16-review.md",
+    "prStatus": "added",
+    "prBlob": "89f8d6943412f5b5cfcd69349b8bca8eb3b0e79e",
+    "currentNormalizedBlob": "89f8d6943412f5b5cfcd69349b8bca8eb3b0e79e",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/calm-lab/CP17-ricerca-e-review.md",
+    "prStatus": "added",
+    "prBlob": "8075887d4fc575676dda658580942c48ddf5ad02",
+    "currentNormalizedBlob": "8075887d4fc575676dda658580942c48ddf5ad02",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/calm-lab/CP18-preserva-ricerca.md",
+    "prStatus": "added",
+    "prBlob": "d4487a4323e33da158b3cb3d0dfcd1abf600ae52",
+    "currentNormalizedBlob": "d4487a4323e33da158b3cb3d0dfcd1abf600ae52",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/calm-lab/REVIEWER.md",
+    "prStatus": "added",
+    "prBlob": "a131b7fae090d005c67f23768b580c390ec027cb",
+    "currentNormalizedBlob": "a131b7fae090d005c67f23768b580c390ec027cb",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/core-modal-slice/apply.mjs",
+    "prStatus": "added",
+    "prBlob": "de51dbdae86dfd1a9fc793f1000ddbdd957d3367",
+    "currentNormalizedBlob": "de51dbdae86dfd1a9fc793f1000ddbdd957d3367",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/core-modal-slice/part-1.b64",
+    "prStatus": "added",
+    "prBlob": "820039fb19f177914ba4e04aafec5b82f586fdbc",
+    "currentNormalizedBlob": "820039fb19f177914ba4e04aafec5b82f586fdbc",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/core-modal-slice/part-2.b64",
+    "prStatus": "added",
+    "prBlob": "0df203c1ae1f248ff77238f4e7b5e08ea761a7c3",
+    "currentNormalizedBlob": "0df203c1ae1f248ff77238f4e7b5e08ea761a7c3",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/core-modal-slice/part-3.b64",
+    "prStatus": "added",
+    "prBlob": "4560ae7c453baa6bbd4a959a294ab32e7e4335d2",
+    "currentNormalizedBlob": "4560ae7c453baa6bbd4a959a294ab32e7e4335d2",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/execution-recovery.md",
+    "prStatus": "added",
+    "prBlob": "89f96c7aab3871e8ee10f0ab2dec437399d6a8fe",
+    "currentNormalizedBlob": "89f96c7aab3871e8ee10f0ab2dec437399d6a8fe",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/isolation-slice/apply.mjs",
+    "prStatus": "added",
+    "prBlob": "8087e6bbe23fc138ddb8f9f376501296bb9a4063",
+    "currentNormalizedBlob": "8087e6bbe23fc138ddb8f9f376501296bb9a4063",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/isolation-slice/changes.b64",
+    "prStatus": "added",
+    "prBlob": "6cefcfb47042b6e4b9a591f45eda9b71d1de328f",
+    "currentNormalizedBlob": "6cefcfb47042b6e4b9a591f45eda9b71d1de328f",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/model-lab-v3-slice/part-1.b64",
+    "prStatus": "added",
+    "prBlob": "90332c59a3f855ed464e53521af5a00dceb9d18b",
+    "currentNormalizedBlob": "90332c59a3f855ed464e53521af5a00dceb9d18b",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/navigation-slice/README.md",
+    "prStatus": "added",
+    "prBlob": "e23be31fc255ba924e8d7c43b58886d2439f3af0",
+    "currentNormalizedBlob": "e23be31fc255ba924e8d7c43b58886d2439f3af0",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/navigation-slice/apply.mjs",
+    "prStatus": "added",
+    "prBlob": "c7102c5d7293f650e14a9ddec6ad6dd18f67b212",
+    "currentNormalizedBlob": "c7102c5d7293f650e14a9ddec6ad6dd18f67b212",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/navigation-slice/changes-1.b64",
+    "prStatus": "added",
+    "prBlob": "f7235c9170d46cedc9130986b20d189ae781b0c1",
+    "currentNormalizedBlob": "f7235c9170d46cedc9130986b20d189ae781b0c1",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/navigation-slice/changes-2.b64",
+    "prStatus": "added",
+    "prBlob": "ddf602d183b66ee19d9db3340f3c366fc09a4c74",
+    "currentNormalizedBlob": "ddf602d183b66ee19d9db3340f3c366fc09a4c74",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/navigation-slice/changes-3.b64",
+    "prStatus": "added",
+    "prBlob": "4bea37f37f30e3ab9a9f3e9276c271bb9fa3a772",
+    "currentNormalizedBlob": "4bea37f37f30e3ab9a9f3e9276c271bb9fa3a772",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/navigation-slice/changes-4.b64",
+    "prStatus": "added",
+    "prBlob": "8721e07b81f3024cfbd38b179584b5da134304fe",
+    "currentNormalizedBlob": "8721e07b81f3024cfbd38b179584b5da134304fe",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/settings-polish.mjs",
+    "prStatus": "added",
+    "prBlob": "78a8e33e81d4d100904dc07516012e453d6bc9fe",
+    "currentNormalizedBlob": "78a8e33e81d4d100904dc07516012e453d6bc9fe",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/settings-v3-slice/apply.mjs",
+    "prStatus": "added",
+    "prBlob": "13c304645789729ecc2b40995d6714a3c9b1a496",
+    "currentNormalizedBlob": "13c304645789729ecc2b40995d6714a3c9b1a496",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/settings-v3-slice/part-1.b64",
+    "prStatus": "added",
+    "prBlob": "862ddc77cbeb0e2127e5824f148a83661f3eeb47",
+    "currentNormalizedBlob": "862ddc77cbeb0e2127e5824f148a83661f3eeb47",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/settings-v3-slice/part-2.b64",
+    "prStatus": "added",
+    "prBlob": "c66069dc4ee51c39dded1638bf90028f4ea46118",
+    "currentNormalizedBlob": "c66069dc4ee51c39dded1638bf90028f4ea46118",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/settings-v3-slice/part-3.b64",
+    "prStatus": "added",
+    "prBlob": "c74056ca638fbb7c4408cfb21dcefa0e248dd67a",
+    "currentNormalizedBlob": "c74056ca638fbb7c4408cfb21dcefa0e248dd67a",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/settings-v3-slice/part-4.b64",
+    "prStatus": "added",
+    "prBlob": "d7c73916e8ff531b1213771c4539ba1003d4343e",
+    "currentNormalizedBlob": "d7c73916e8ff531b1213771c4539ba1003d4343e",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/workspace-slice/README.md",
+    "prStatus": "added",
+    "prBlob": "962ec124c0f3ee915a57adf1e2501d17a03362c4",
+    "currentNormalizedBlob": "962ec124c0f3ee915a57adf1e2501d17a03362c4",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/workspace-slice/apply.mjs",
+    "prStatus": "added",
+    "prBlob": "c692efb43499cde8f8f9ca7fe610f166d170c172",
+    "currentNormalizedBlob": "c692efb43499cde8f8f9ca7fe610f166d170c172",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/workspace-slice/part-01.b64",
+    "prStatus": "added",
+    "prBlob": "9cf8aa7a3edc6a83ab40ef10cc12f3b0b4dee794",
+    "currentNormalizedBlob": "9cf8aa7a3edc6a83ab40ef10cc12f3b0b4dee794",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/workspace-slice/part-02.b64",
+    "prStatus": "added",
+    "prBlob": "fff64630bd084dbc717a771b6dcf623c70cee514",
+    "currentNormalizedBlob": "fff64630bd084dbc717a771b6dcf623c70cee514",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/workspace-slice/part-03.b64",
+    "prStatus": "added",
+    "prBlob": "84f491f2ec64940c81f0e86d4e89423b3ef1bb35",
+    "currentNormalizedBlob": "84f491f2ec64940c81f0e86d4e89423b3ef1bb35",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/workspace-slice/part-04.b64",
+    "prStatus": "added",
+    "prBlob": "3950fc0f022f7f6f699cfff71f4c6d6f95fb444c",
+    "currentNormalizedBlob": "3950fc0f022f7f6f699cfff71f4c6d6f95fb444c",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/workspace-slice/part-05.b64",
+    "prStatus": "added",
+    "prBlob": "ef082c1172c1208fe79535a86389c3e0806c8edc",
+    "currentNormalizedBlob": "ef082c1172c1208fe79535a86389c3e0806c8edc",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/workspace-slice/part-06.b64",
+    "prStatus": "added",
+    "prBlob": "d723d9ee4c692982985e99a12c4d982cbaec7038",
+    "currentNormalizedBlob": "d723d9ee4c692982985e99a12c4d982cbaec7038",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "docs/refactor/workspace-slice/part-07.b64",
+    "prStatus": "added",
+    "prBlob": "acc1e43d26d6dbdf656ef7272df46d929482b1a1",
+    "currentNormalizedBlob": "acc1e43d26d6dbdf656ef7272df46d929482b1a1",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/desktop/main.mjs",
+    "prStatus": "modified",
+    "prBlob": "e3cf511f3f9bbbdd8d0e8291442dda3225b9014b",
+    "currentNormalizedBlob": "e3cf511f3f9bbbdd8d0e8291442dda3225b9014b",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/desktop/package.json",
+    "prStatus": "modified",
+    "prBlob": "5915b14f4346139752578b5d00de398f723c181f",
+    "currentNormalizedBlob": "5915b14f4346139752578b5d00de398f723c181f",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/desktop/profile.mjs",
+    "prStatus": "added",
+    "prBlob": "f91dfd1b4608fc3675ffb6ab0146af974d392318",
+    "currentNormalizedBlob": "f91dfd1b4608fc3675ffb6ab0146af974d392318",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/desktop/runtime.mjs",
+    "prStatus": "modified",
+    "prBlob": "7f6fac1197211dd28bc9929011d27866aa8f076f",
+    "currentNormalizedBlob": "7f6fac1197211dd28bc9929011d27866aa8f076f",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/desktop/scripts/distribuisci.mjs",
+    "prStatus": "modified",
+    "prBlob": "5ade67bda99a1328992ec537c84f3789278af8fa",
+    "currentNormalizedBlob": "5ade67bda99a1328992ec537c84f3789278af8fa",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/desktop/scripts/ledger-preview-smoke.mjs",
+    "prStatus": "added",
+    "prBlob": "1bac46f40dcc709850cc2814624a8ab06899a4cc",
+    "currentNormalizedBlob": "1bac46f40dcc709850cc2814624a8ab06899a4cc",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/desktop/scripts/prepara-pacchetto.mjs",
+    "prStatus": "modified",
+    "prBlob": "e59e766d492c8ba04d300f7f48598ef7a8da3e8a",
+    "currentNormalizedBlob": "e59e766d492c8ba04d300f7f48598ef7a8da3e8a",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/desktop/tests/guscio.spec.mjs",
+    "prStatus": "modified",
+    "prBlob": "ad58c93929f83fa54883c5567b6998fbdac4bcbb",
+    "currentNormalizedBlob": "ad58c93929f83fa54883c5567b6998fbdac4bcbb",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/desktop/tests/profile-isolation.test.mjs",
+    "prStatus": "added",
+    "prBlob": "057f09cd26765d44913d748b1054d07b14fd90bd",
+    "currentNormalizedBlob": "057f09cd26765d44913d748b1054d07b14fd90bd",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/index.template.html",
+    "prStatus": "modified",
+    "prBlob": "43fd5aa2ac0b44da123277de5050b6ab01b684bb",
+    "currentNormalizedBlob": "b198df540bf05dbd05336a6cb519eadef8b10afe",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/LICENSE",
+    "prStatus": "added",
+    "prBlob": "be3f7b28e564e7dd05eaf59d64adba1a4065ac0e",
+    "currentNormalizedBlob": "be3f7b28e564e7dd05eaf59d64adba1a4065ac0e",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/NOTICE.md",
+    "prStatus": "added",
+    "prBlob": "fb15dc7851f60cd029e7e590795aff01ecb6d3f6",
+    "currentNormalizedBlob": "fb15dc7851f60cd029e7e590795aff01ecb6d3f6",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/README.md",
+    "prStatus": "added",
+    "prBlob": "a1af3bf82dd6e1965029ac47fa88bc915b1f7970",
+    "currentNormalizedBlob": "a1af3bf82dd6e1965029ac47fa88bc915b1f7970",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/TALOS-Calm-Lab.html",
+    "prStatus": "added",
+    "prBlob": "0fc8884333ca06a1f82a3af3b20625fd780b7bb5",
+    "currentNormalizedBlob": "0fc8884333ca06a1f82a3af3b20625fd780b7bb5",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/build.mjs",
+    "prStatus": "added",
+    "prBlob": "95129d6389021937568c8cf420d37c2c43c9b038",
+    "currentNormalizedBlob": "95129d6389021937568c8cf420d37c2c43c9b038",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/docs/theme-source-hashes.json",
+    "prStatus": "added",
+    "prBlob": "808fbcb2f50bdc534adf7102dd26dc11bbe852d3",
+    "currentNormalizedBlob": "808fbcb2f50bdc534adf7102dd26dc11bbe852d3",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/make-contract.mjs",
+    "prStatus": "added",
+    "prBlob": "67229cdcbe209582b63ac916c85f5a9f7b8d6ecd",
+    "currentNormalizedBlob": "67229cdcbe209582b63ac916c85f5a9f7b8d6ecd",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/package.json",
+    "prStatus": "added",
+    "prBlob": "a21f375a8b92ac4c311430013f047e7d2b07a954",
+    "currentNormalizedBlob": "a21f375a8b92ac4c311430013f047e7d2b07a954",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/shared/calm-controls.css",
+    "prStatus": "added",
+    "prBlob": "e50f66ab960345c36fc50e991ebf04c8673a057e",
+    "currentNormalizedBlob": "e50f66ab960345c36fc50e991ebf04c8673a057e",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/shared/calm-controls.js",
+    "prStatus": "added",
+    "prBlob": "190c2d9b0602d40f4200a7ac3cc8fb7796c01b0f",
+    "currentNormalizedBlob": "190c2d9b0602d40f4200a7ac3cc8fb7796c01b0f",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/shared/desktop-scenes.js",
+    "prStatus": "added",
+    "prBlob": "3b48f71d245423742b7f700307a6f92b485db6b9",
+    "currentNormalizedBlob": "3b48f71d245423742b7f700307a6f92b485db6b9",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/shared/theme-contract.mjs",
+    "prStatus": "added",
+    "prBlob": "e28b8668c003d9bfd5a6dbb73f90bda758b538fa",
+    "currentNormalizedBlob": "e28b8668c003d9bfd5a6dbb73f90bda758b538fa",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/shared/theme-tokens.css",
+    "prStatus": "added",
+    "prBlob": "b13946ad53ff05deac10731b7d9594fa3bb6b57f",
+    "currentNormalizedBlob": "b13946ad53ff05deac10731b7d9594fa3bb6b57f",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/app.mjs",
+    "prStatus": "added",
+    "prBlob": "409070c6d12df5da42f69de2f49e15cc983ae8a4",
+    "currentNormalizedBlob": "409070c6d12df5da42f69de2f49e15cc983ae8a4",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/appearance-domain.mjs",
+    "prStatus": "added",
+    "prBlob": "7519e9d586a29469dac889b26053163bc6ca80ad",
+    "currentNormalizedBlob": "7519e9d586a29469dac889b26053163bc6ca80ad",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/appearance-runtime.mjs",
+    "prStatus": "added",
+    "prBlob": "76b262067d144b30b2298bee1b8cb4546fb53280",
+    "currentNormalizedBlob": "76b262067d144b30b2298bee1b8cb4546fb53280",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/appearance.css",
+    "prStatus": "added",
+    "prBlob": "bdf75158fe1c325fd4c87d6cc43cb8733f9c028a",
+    "currentNormalizedBlob": "bdf75158fe1c325fd4c87d6cc43cb8733f9c028a",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/catalog-controls.mjs",
+    "prStatus": "added",
+    "prBlob": "f6b533c6810f6da784a8d5cf3ffe00b08036e01e",
+    "currentNormalizedBlob": "f6b533c6810f6da784a8d5cf3ffe00b08036e01e",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/catalog-data.mjs",
+    "prStatus": "added",
+    "prBlob": "3a94ce2e2dcba0f8673c3e30e47ff05cc9802393",
+    "currentNormalizedBlob": "3a94ce2e2dcba0f8673c3e30e47ff05cc9802393",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/catalog-engine.mjs",
+    "prStatus": "added",
+    "prBlob": "b637606dda76ba1c5c1b5470a37513ebdf532311",
+    "currentNormalizedBlob": "b637606dda76ba1c5c1b5470a37513ebdf532311",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/domain.mjs",
+    "prStatus": "added",
+    "prBlob": "2ec9695246811fedddd15c375611e19ef45be310",
+    "currentNormalizedBlob": "2ec9695246811fedddd15c375611e19ef45be310",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/index.template.html",
+    "prStatus": "added",
+    "prBlob": "05470b5da650a6bf09360205d6e5d1ebc2a27263",
+    "currentNormalizedBlob": "05470b5da650a6bf09360205d6e5d1ebc2a27263",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/model-lab.mjs",
+    "prStatus": "added",
+    "prBlob": "4d17a814360c21dc42e2078414c07140283e9860",
+    "currentNormalizedBlob": "4d17a814360c21dc42e2078414c07140283e9860",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/model-navigation.mjs",
+    "prStatus": "added",
+    "prBlob": "f88843832859b1f11f434a440b8efe822d523414",
+    "currentNormalizedBlob": "f88843832859b1f11f434a440b8efe822d523414",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/model-page.mjs",
+    "prStatus": "added",
+    "prBlob": "497cab3c6ac040781f65a409c39b43b7105ce7de",
+    "currentNormalizedBlob": "497cab3c6ac040781f65a409c39b43b7105ce7de",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/settings.mjs",
+    "prStatus": "added",
+    "prBlob": "36d486ccd0a7daa5b3a792c11cec9b549c0ff883",
+    "currentNormalizedBlob": "36d486ccd0a7daa5b3a792c11cec9b549c0ff883",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/styles.css",
+    "prStatus": "added",
+    "prBlob": "b0e3e862128b7a6f130fe62b00f7e9ae3a7c564f",
+    "currentNormalizedBlob": "b0e3e862128b7a6f130fe62b00f7e9ae3a7c564f",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/src/ui.mjs",
+    "prStatus": "added",
+    "prBlob": "124d9ce9609e34317fc1e71e5089104a54063384",
+    "currentNormalizedBlob": "124d9ce9609e34317fc1e71e5089104a54063384",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/tests/appearance-browser.py",
+    "prStatus": "added",
+    "prBlob": "71e6f91b5be0bdaf643a667febdf843308893c51",
+    "currentNormalizedBlob": "71e6f91b5be0bdaf643a667febdf843308893c51",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/tests/appearance.test.mjs",
+    "prStatus": "added",
+    "prBlob": "0fed50962c95b1c365cb6c0422cf7e7636e3b95b",
+    "currentNormalizedBlob": "0fed50962c95b1c365cb6c0422cf7e7636e3b95b",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/tests/browser03.py",
+    "prStatus": "added",
+    "prBlob": "b135750ce91d456b145bcde552b229225799426b",
+    "currentNormalizedBlob": "b135750ce91d456b145bcde552b229225799426b",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/tests/catalog-engine.test.mjs",
+    "prStatus": "added",
+    "prBlob": "1684cb0d2cf2e499888bb3bdedf7fec03a24d109",
+    "currentNormalizedBlob": "1684cb0d2cf2e499888bb3bdedf7fec03a24d109",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/tests/controls-browser.py",
+    "prStatus": "added",
+    "prBlob": "a6e774f11614418fd7415ca8f4a926d81eaf7cae",
+    "currentNormalizedBlob": "a6e774f11614418fd7415ca8f4a926d81eaf7cae",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/tests/domain.test.mjs",
+    "prStatus": "added",
+    "prBlob": "3bba77aefe35888a2d2948bd79c997139f057144",
+    "currentNormalizedBlob": "3bba77aefe35888a2d2948bd79c997139f057144",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/prototypes/calm-lab/tests/model-page.test.mjs",
+    "prStatus": "added",
+    "prBlob": "d3710355379672cc22f90ceb90e5e620d8cf88e8",
+    "currentNormalizedBlob": "d3710355379672cc22f90ceb90e5e620d8cf88e8",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/scripts/mockup-to-template.mjs",
+    "prStatus": "modified",
+    "prBlob": "c2f2a0d6623ea30b6e7093eba186e27fcc7ef139",
+    "currentNormalizedBlob": "c2f2a0d6623ea30b6e7093eba186e27fcc7ef139",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/app/lifecycle.ts",
+    "prStatus": "added",
+    "prBlob": "29b9895b9a97d120208c660cd95224e30c093992",
+    "currentNormalizedBlob": "29b9895b9a97d120208c660cd95224e30c093992",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/app/startup-policy.ts",
+    "prStatus": "added",
+    "prBlob": "8ccc1e5320c14c72fd295d1d3e656d5bc6a7dc9a",
+    "currentNormalizedBlob": "8ccc1e5320c14c72fd295d1d3e656d5bc6a7dc9a",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/bridge/legacy-dom.js",
+    "prStatus": "modified",
+    "prBlob": "a0003443b7812d1ce591c68e5886ca9aa1406b39",
+    "currentNormalizedBlob": "87332e5043a00401d17bfda0cb27b567bb553189",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/components/calm-controls.js",
+    "prStatus": "added",
+    "prBlob": "190c2d9b0602d40f4200a7ac3cc8fb7796c01b0f",
+    "currentNormalizedBlob": "190c2d9b0602d40f4200a7ac3cc8fb7796c01b0f",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/components/connessione.js",
+    "prStatus": "modified",
+    "prBlob": "13dea577712a5456512db5f587ebabcdd82c6f98",
+    "currentNormalizedBlob": "13dea577712a5456512db5f587ebabcdd82c6f98",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/components/context-compactor.js",
+    "prStatus": "modified",
+    "prBlob": "e237ff8043888bf0b4fa61e82f7edff427d0e7a8",
+    "currentNormalizedBlob": "e237ff8043888bf0b4fa61e82f7edff427d0e7a8",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/components/dialoghi.js",
+    "prStatus": "modified",
+    "prBlob": "b8c84a4b99d6aae1af79cc878c7a690584910264",
+    "currentNormalizedBlob": "d443d7b47dff8dbfcb05952fbb82eb422bd9ffd9",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/components/immagini-chat.js",
+    "prStatus": "modified",
+    "prBlob": "fc2b2a730801f45492c29e1fcbe6c060caf7b527",
+    "currentNormalizedBlob": "fc2b2a730801f45492c29e1fcbe6c060caf7b527",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/components/impostazioni-campi.js",
+    "prStatus": "modified",
+    "prBlob": "c9b74c51c58e87098c9b9053f7e0c235dffe0158",
+    "currentNormalizedBlob": "c9b74c51c58e87098c9b9053f7e0c235dffe0158",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/components/impostazioni.js",
+    "prStatus": "modified",
+    "prBlob": "7104633e720d249830fef9ddb32b6ba62ce8fb5a",
+    "currentNormalizedBlob": "7104633e720d249830fef9ddb32b6ba62ce8fb5a",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/components/intro.js",
+    "prStatus": "removed",
+    "prBlob": "43c58ca1e777722b5c7f13bd4ce80e54a9552a56",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/components/modale-td.js",
+    "prStatus": "modified",
+    "prBlob": "c796a069d38ed31fc2e294a913141a3dce204779",
+    "currentNormalizedBlob": "c796a069d38ed31fc2e294a913141a3dce204779",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/components/motion-mockup.js",
+    "prStatus": "modified",
+    "prBlob": "75a60270e165bbf57ca4ec96a98acbff10427025",
+    "currentNormalizedBlob": "75a60270e165bbf57ca4ec96a98acbff10427025",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/components/scorciatoie.js",
+    "prStatus": "modified",
+    "prBlob": "41f00f8c4e5131992d171c33a227cfbcd7c24f8c",
+    "currentNormalizedBlob": "0598cbd3332d520acfaa42feb95b8c7a6895047b",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/design-system/calm-controls.css",
+    "prStatus": "added",
+    "prBlob": "e50f66ab960345c36fc50e991ebf04c8673a057e",
+    "currentNormalizedBlob": "e50f66ab960345c36fc50e991ebf04c8673a057e",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/design-system/command-palette.css",
+    "prStatus": "added",
+    "prBlob": "ce89562be5bef75523fa3eacb010cbe4a64ddba7",
+    "currentNormalizedBlob": "ce89562be5bef75523fa3eacb010cbe4a64ddba7",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/design-system/controls.css",
+    "prStatus": "added",
+    "prBlob": "723ff3cc5a374365302368394aecd7da6e2b0079",
+    "currentNormalizedBlob": "723ff3cc5a374365302368394aecd7da6e2b0079",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/design-system/foundations.css",
+    "prStatus": "added",
+    "prBlob": "3e019479990597676dd1a9e74ae7ff59e189061f",
+    "currentNormalizedBlob": "00ead134e9a0a5fe373850a8105a9b95106aba01",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/design-system/overlays/manager.ts",
+    "prStatus": "added",
+    "prBlob": "5bf9972b33915075f7a8ad2b64e486ffd07f8381",
+    "currentNormalizedBlob": "3833136f261347e6ff6e3f9de8bc8fd661130535",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/design-system/settings.css",
+    "prStatus": "added",
+    "prBlob": "159861dcbe6616bec27ee1facf51863c112d1e16",
+    "currentNormalizedBlob": "21fc3ef25d10a744c9e7c25e3ed7d6f23a18141c",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/design-system/workspace.css",
+    "prStatus": "added",
+    "prBlob": "29646c924a864a7b64492f75d5a60b2dd7146ecf",
+    "currentNormalizedBlob": "5fd45e0bc59b488070f95783587d0d93d95fb6f2",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/domain/navigation.ts",
+    "prStatus": "added",
+    "prBlob": "5696dd0b4a4f2173f98dd4c73d81b97769ff17ee",
+    "currentNormalizedBlob": "5696dd0b4a4f2173f98dd4c73d81b97769ff17ee",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/domain/workspace-path.ts",
+    "prStatus": "added",
+    "prBlob": "b4ed562db49b3437f13379e7bbd8f9cb41b9e1b4",
+    "currentNormalizedBlob": "b4ed562db49b3437f13379e7bbd8f9cb41b9e1b4",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/features/navigation/command-palette.ts",
+    "prStatus": "added",
+    "prBlob": "fea5c0d766ddea479f05f1b575ba5b8185c709db",
+    "currentNormalizedBlob": "fea5c0d766ddea479f05f1b575ba5b8185c709db",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/features/navigation/presets.ts",
+    "prStatus": "added",
+    "prBlob": "a6b5e455e4342e59e89565d0bf2722bfb4e2255b",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/features/navigation/workspace-chrome.ts",
+    "prStatus": "added",
+    "prBlob": "ae33d1e680c6a70ac46bb8590f95804cb0264f62",
+    "currentNormalizedBlob": "850139ab3cd561779b32da92fdef454e117aa26e",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/features/settings/schema.ts",
+    "prStatus": "added",
+    "prBlob": "8bc56898c283348a9142c5a09e34f81f81216d17",
+    "currentNormalizedBlob": "15492e5b66fdcc1840de72395497d56f28dd83b8",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/features/settings/settings-view.ts",
+    "prStatus": "added",
+    "prBlob": "36e1bb5e041ef7860676f83a5e429683f8a767a5",
+    "currentNormalizedBlob": "eb89e837b1eb1c88895f59cc362d0cde5e8c6fa8",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/features/settings/static-copy.ts",
+    "prStatus": "added",
+    "prBlob": "f590650662bfc759ea6d523ddb161de457094c06",
+    "currentNormalizedBlob": "3e609fd52f52a62679f21a38e64e447c23e7bbdb",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/i18n/en.js",
+    "prStatus": "modified",
+    "prBlob": "0d8f95b5c77ff65fd20c01831c2fe503f64e7112",
+    "currentNormalizedBlob": "a1685482afd8b7cf6f43c2c07a1269eb2142ea65",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/i18n/workspace-en.js",
+    "prStatus": "added",
+    "prBlob": "1c50a2cd19faea2b45d48ec94ed9012dcf67ad61",
+    "currentNormalizedBlob": "1c50a2cd19faea2b45d48ec94ed9012dcf67ad61",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/legacy/app.js",
+    "prStatus": "modified",
+    "prBlob": "e0b415be23a2340962145a2c9dda631bba7c4bbf",
+    "currentNormalizedBlob": "b856689499073ec968779c63b85eacd922dd647a",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/legacy/frammenti.html",
+    "prStatus": "modified",
+    "prBlob": "df30215332fbc07838429b2878ac50420efd01af",
+    "currentNormalizedBlob": "1b5fc8d44fc1542f7164c61396eb24b432a3d922",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/main.js",
+    "prStatus": "modified",
+    "prBlob": "05c5da80e43290bd8794bb97da2e1c9cc5658baa",
+    "currentNormalizedBlob": "05c5da80e43290bd8794bb97da2e1c9cc5658baa",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/services/api-client.ts",
+    "prStatus": "added",
+    "prBlob": "8b4d27e82e77730338cef6db21edbcfafea7a5f8",
+    "currentNormalizedBlob": "8b4d27e82e77730338cef6db21edbcfafea7a5f8",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/services/commands/registry.ts",
+    "prStatus": "added",
+    "prBlob": "2bba92a15648bd2909e7b5ec683ba68a1c2f037e",
+    "currentNormalizedBlob": "14ed0d1acaaeaca9a2cda5b350b9a7e434f4afdf",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/services/workspace-preferences.ts",
+    "prStatus": "added",
+    "prBlob": "e7cc6679f65e14b20c8f0234396629c8fdd6001f",
+    "currentNormalizedBlob": "b8265e480117ec831d6cb3f563751c3b127344fe",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/styles/foglio-monolite.css",
+    "prStatus": "modified",
+    "prBlob": "f1085365ca862630d6be89d475e34108f64ca8ca",
+    "currentNormalizedBlob": "faa7b9227976bfd4e0dd71e23d6d81dc835d2f63",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/styles/index.css",
+    "prStatus": "modified",
+    "prBlob": "6206749402f83351cdaa1124338378e97a405591",
+    "currentNormalizedBlob": "1480d067f067d55ca9a8253c65b35c649592d2c7",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/src/styles/main.css",
+    "prStatus": "modified",
+    "prBlob": "0b30b5dda6e3eddc4ff797c9d3368ed29cd196fc",
+    "currentNormalizedBlob": "f43c50fd930f6d134aa3bdb274ebc9c52df938cf",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/contract/legacy-contract-snapshot.test.mjs",
+    "prStatus": "modified",
+    "prBlob": "3a887a9b9ef22589e427de41cc59b22986535a1b",
+    "currentNormalizedBlob": "4a2bcfbbd16b0b7b5286e12f71474fcb4423d0a6",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/parity/nessun-errore-a-runtime.spec.mjs",
+    "prStatus": "modified",
+    "prBlob": "d718e53df76ff0d2d39319960c3e0ddf69744f30",
+    "currentNormalizedBlob": "64b0028a182c4cd6fdbf548c09c0fd5b74338500",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/qualification/baseline.mjs",
+    "prStatus": "added",
+    "prBlob": "3bbab54c51407bd9acd61305a384fbab7a7ecab8",
+    "currentNormalizedBlob": "3bbab54c51407bd9acd61305a384fbab7a7ecab8",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/qualification/calm-controls-real.mjs",
+    "prStatus": "added",
+    "prBlob": "be5f446f76d0131cf93260c1c185760eb88910c4",
+    "currentNormalizedBlob": "be5f446f76d0131cf93260c1c185760eb88910c4",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/qualification/custom-control-driver.mjs",
+    "prStatus": "added",
+    "prBlob": "28d07148ad94cee8d433a5fcdf652a8ce1d8b228",
+    "currentNormalizedBlob": "28d07148ad94cee8d433a5fcdf652a8ce1d8b228",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/qualification/settings-models-real.mjs",
+    "prStatus": "added",
+    "prBlob": "c3c306ee3fc66c288505e527e096a766d3110a6c",
+    "currentNormalizedBlob": "c3c306ee3fc66c288505e527e096a766d3110a6c",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/qualification/workspace-real.mjs",
+    "prStatus": "added",
+    "prBlob": "fddfb4b4d20972890a69b6a7c402d6a2e3f353da",
+    "currentNormalizedBlob": "88fa28c3ff12361e6026aee448b4a1397cb778b4",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/refactor/api-preferences.test.mjs",
+    "prStatus": "added",
+    "prBlob": "83c66a3d913e159d14d5ca327ee3b2eea5eb8c4a",
+    "currentNormalizedBlob": "6b4ae8cfc75c2e72e71fe671d4e4db75aae3450c",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/refactor/command-registry.test.mjs",
+    "prStatus": "added",
+    "prBlob": "7cf1e2457d65f417bf3465ea2e1a2d54a8135777",
+    "currentNormalizedBlob": "7cf1e2457d65f417bf3465ea2e1a2d54a8135777",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/refactor/modal-stack.test.mjs",
+    "prStatus": "added",
+    "prBlob": "b680b56d8c42576a8a171bc4f9ad77bf3d0624a9",
+    "currentNormalizedBlob": "b680b56d8c42576a8a171bc4f9ad77bf3d0624a9",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/refactor/settings-schema.test.mjs",
+    "prStatus": "added",
+    "prBlob": "8d9b9e9e9c4008658e2f3dda51bd915f7f87080f",
+    "currentNormalizedBlob": "8d9b9e9e9c4008658e2f3dda51bd915f7f87080f",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/refactor/workspace-foundations.test.mjs",
+    "prStatus": "added",
+    "prBlob": "a62a13f5628a43833489d25230605835a451c77b",
+    "currentNormalizedBlob": "94b0787eb9e0115afc2c0373cfcb85ff4988a30e",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/unit/barra-gruppi-e-cassetto.test.mjs",
+    "prStatus": "modified",
+    "prBlob": "12dceaa5331c8317ca38222fe4079546329f7550",
+    "currentNormalizedBlob": "b2746b537cabbd16f6e6585484e477032438e132",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/unit/calm-settings-search-preservation.test.mjs",
+    "prStatus": "added",
+    "prBlob": "494ce2f72ebaba1e50d94a1776728ed17ea02f14",
+    "currentNormalizedBlob": "494ce2f72ebaba1e50d94a1776728ed17ea02f14",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/unit/cancello-funzioni-morte.test.mjs",
+    "prStatus": "modified",
+    "prBlob": "c6b283929ed2e375c012fd8d8ba093f1b30ca741",
+    "currentNormalizedBlob": "32aa2478ad5338ce907583d22b982b145f57e7ce",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/unit/intro.test.mjs",
+    "prStatus": "removed",
+    "prBlob": "123ee777a69f475d0abc5e388b6de0eb2af85666",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/unit/ui-experience-regression.test.mjs",
+    "prStatus": "added",
+    "prBlob": "9cf437d73287cd9a5d074496609c0bdd082950fd",
+    "currentNormalizedBlob": "9cf437d73287cd9a5d074496609c0bdd082950fd",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tests/unit/workspace-path.test.mjs",
+    "prStatus": "added",
+    "prBlob": "3b213d81bdf0849d99f210762ce6b3ee6559be82",
+    "currentNormalizedBlob": "3b213d81bdf0849d99f210762ce6b3ee6559be82",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/frontend/tsconfig.refactor.json",
+    "prStatus": "added",
+    "prBlob": "1574672bf5b96c5e5a7c293e499bc00a72573c46",
+    "currentNormalizedBlob": "1574672bf5b96c5e5a7c293e499bc00a72573c46",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/server.mjs",
+    "prStatus": "modified",
+    "prBlob": "d0991ac311c47ab73a6f81432c8f74cd084fd7b6",
+    "currentNormalizedBlob": "4a7fd689760dcf765879b4337e8c876a396dd54f",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/src/adattatore-keyring.mjs",
+    "prStatus": "modified",
+    "prBlob": "4b5f1a62709c4f7bf2f9c20dccc81227664d1547",
+    "currentNormalizedBlob": "4b5f1a62709c4f7bf2f9c20dccc81227664d1547",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/src/browser-proxy.mjs",
+    "prStatus": "modified",
+    "prBlob": "f0303ecd513253e7df9c325df0211acf79e6f29c",
+    "currentNormalizedBlob": "01379bffabab28fd5cd17be2ffc0133da8833b48",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/tests/browser-proxy-budget.test.mjs",
+    "prStatus": "added",
+    "prBlob": "d02cb5a27d37c6076328d2a9eb850c255ba3ecfb",
+    "currentNormalizedBlob": "d02cb5a27d37c6076328d2a9eb850c255ba3ecfb",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "harness-ui/tests/browser-proxy.test.mjs",
+    "prStatus": "modified",
+    "prBlob": "33ee01b8dd7c4f1f8f7d8def027d452d5f021503",
+    "currentNormalizedBlob": "fcadf5e0ea4536456f831bc9b8663633a19c4a78",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 27,
+    "file": "tools/delivery/assemble.py",
+    "prStatus": "added",
+    "prBlob": "c6ec839c66fb02f427de9c961b3bd263dda921eb",
+    "currentNormalizedBlob": "c6ec839c66fb02f427de9c961b3bd263dda921eb",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "tools/delivery/runtime-lock.json",
+    "prStatus": "added",
+    "prBlob": "c187765b16a49f2884c928ee4a6fe7fef2b90228",
+    "currentNormalizedBlob": "c187765b16a49f2884c928ee4a6fe7fef2b90228",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "tools/delivery/source-smoke.mjs",
+    "prStatus": "added",
+    "prBlob": "a560543f46860d722021316959b735c746c52dc9",
+    "currentNormalizedBlob": "a560543f46860d722021316959b735c746c52dc9",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "tools/delivery/start.mjs",
+    "prStatus": "added",
+    "prBlob": "a5d8853025c96299a692898fbd6a228141517319",
+    "currentNormalizedBlob": "a5d8853025c96299a692898fbd6a228141517319",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 27,
+    "file": "tools/delivery/start.test.mjs",
+    "prStatus": "added",
+    "prBlob": "411574b5dc2910b1881d2ffcd5560f07a9a41bae",
+    "currentNormalizedBlob": "411574b5dc2910b1881d2ffcd5560f07a9a41bae",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 28,
+    "file": "harness-ui/docs/performance/local-engine-investigation.md",
+    "prStatus": "added",
+    "prBlob": "e2e2c869e04e2de5f77b91e33eba9bce8801d56f",
+    "currentNormalizedBlob": "e2e2c869e04e2de5f77b91e33eba9bce8801d56f",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 28,
+    "file": "harness-ui/docs/performance/local-stream-results.json",
+    "prStatus": "added",
+    "prBlob": "1a4014eba822027ba4a64b972257faac63aa869f",
+    "currentNormalizedBlob": "1a4014eba822027ba4a64b972257faac63aa869f",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 28,
+    "file": "harness-ui/scripts/bench-local-runtime-stream.mjs",
+    "prStatus": "added",
+    "prBlob": "a65e8dcc3911050ebb453d12b981dac3db802c36",
+    "currentNormalizedBlob": "a65e8dcc3911050ebb453d12b981dac3db802c36",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 28,
+    "file": "harness-ui/src/local-runtime-llama-server.mjs",
+    "prStatus": "modified",
+    "prBlob": "abb230c3e31b99550455359e6e0b74b4cd0d89c8",
+    "currentNormalizedBlob": "abb230c3e31b99550455359e6e0b74b4cd0d89c8",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 28,
+    "file": "harness-ui/tests/local-runtime-stream-fragments.test.mjs",
+    "prStatus": "added",
+    "prBlob": "9121735deb6f6b25cf4318f840e8d09fb6c10075",
+    "currentNormalizedBlob": "9121735deb6f6b25cf4318f840e8d09fb6c10075",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 29,
+    "file": ".github/workflows/local-engine-kernel.yml",
+    "prStatus": "added",
+    "prBlob": "d92b706c5629d47ec9241a3841be24a9020b43d5",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/docs/performance/local-kernel-fixture-results.json",
+    "prStatus": "added",
+    "prBlob": "4b2f813f0f16fdd1887208b95b42ae3c2c21c05e",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/docs/performance/local-kernel-implementation.md",
+    "prStatus": "added",
+    "prBlob": "891e0e4651723319469c61698ff6cdb5b37ffea0",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/scripts/bench-local-kernel-loop.mjs",
+    "prStatus": "added",
+    "prBlob": "b2d4260db00177a4228b21fb039d363f7cd02832",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/scripts/local-engine-source-baseline.mjs",
+    "prStatus": "added",
+    "prBlob": "9daa2ebd42130673e8d6ccb1b284350632ccf2be",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/server.mjs",
+    "prStatus": "modified",
+    "prBlob": "f969431560c6f0b278a7907d15022cf2d8563d59",
+    "currentNormalizedBlob": "4a7fd689760dcf765879b4337e8c876a396dd54f",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/agent-service.mjs",
+    "prStatus": "modified",
+    "prBlob": "90e568770e0e937dc9767fc43094d45b9a2a488a",
+    "currentNormalizedBlob": "d5e83abfddda87d2d52a3d6e5580f2d4d21d6975",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/config.mjs",
+    "prStatus": "modified",
+    "prBlob": "e95ea5da225e2cb99cdc572d8c4502cc37523225",
+    "currentNormalizedBlob": "de447b644d170a761e55470bc24363d88e57599a",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/llama-server-supervisor.mjs",
+    "prStatus": "modified",
+    "prBlob": "55c9bcded1e7372ee2bce7cf78b4b71a21512138",
+    "currentNormalizedBlob": "0e021cf772c577f26221726bc45918d48fa185a6",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/local-kernel-session.mjs",
+    "prStatus": "added",
+    "prBlob": "52056a0fd0d6f790c27a15fe51291fd71b078b8d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/local-kernel-stream.mjs",
+    "prStatus": "added",
+    "prBlob": "53af4169122a01a7ef196deaf8d32249bda1117b",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/runtime-owner-adapter.mjs",
+    "prStatus": "modified",
+    "prBlob": "ada65fbc573504713b218eaeecdd5ae4bc531530",
+    "currentNormalizedBlob": "eb12b737c19e28bf334f67a0314261876adde94f",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/src/session-registry.mjs",
+    "prStatus": "modified",
+    "prBlob": "be94ea4f00ca6e194b870abe48396084b80e5de6",
+    "currentNormalizedBlob": "8e0047a7adaa414b4bbd944768a9b98df0b4647b",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/tests/fixtures/local-kernel-fixture.mjs",
+    "prStatus": "added",
+    "prBlob": "2e06cb5d07ef308df16ce993c492cc279ee71939",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/tests/local-engine-source-baseline.test.mjs",
+    "prStatus": "added",
+    "prBlob": "f0c6ff5a2cb2b0b22e53d4044cbde15dd9014ecc",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/tests/local-kernel-integration.test.mjs",
+    "prStatus": "added",
+    "prBlob": "5b663d3cfbe9135ac73b44ab4fe4f3ce18623f12",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/tests/local-kernel-session.test.mjs",
+    "prStatus": "added",
+    "prBlob": "a33f3231bd0c567524f200f1af824e78a84b5666",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 29,
+    "file": "harness-ui/tests/local-kernel-stream.test.mjs",
+    "prStatus": "added",
+    "prBlob": "e14db89e700d267047f422703f7c83308fc2bc0e",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/docs/performance/local-engine-preflight.md",
+    "prStatus": "added",
+    "prBlob": "6b5458878319e0a44e3868d9aa4896177f987ef9",
+    "currentNormalizedBlob": "6b5458878319e0a44e3868d9aa4896177f987ef9",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/docs/performance/local-preflight-results.json",
+    "prStatus": "added",
+    "prBlob": "e9a6675010f27478813f97635c2fd82dbcf46101",
+    "currentNormalizedBlob": "e9a6675010f27478813f97635c2fd82dbcf46101",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/scripts/bench-llama-preflight.mjs",
+    "prStatus": "added",
+    "prBlob": "c05f9e93170475f45a8c771291814a8fc38a9ad1",
+    "currentNormalizedBlob": "c05f9e93170475f45a8c771291814a8fc38a9ad1",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/src/llama-binary-probe.mjs",
+    "prStatus": "added",
+    "prBlob": "c6e1d9c107b1e14ace691bcce787ff667193dad3",
+    "currentNormalizedBlob": "4fb68b8421599188aef972def5a8f69ee78ee766",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/src/llama-server-supervisor.mjs",
+    "prStatus": "modified",
+    "prBlob": "0e021cf772c577f26221726bc45918d48fa185a6",
+    "currentNormalizedBlob": "0e021cf772c577f26221726bc45918d48fa185a6",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/tests/llama-binary-probe.test.mjs",
+    "prStatus": "added",
+    "prBlob": "1c91fcd414fd85aa04fbe757033181740a9eae25",
+    "currentNormalizedBlob": "1c91fcd414fd85aa04fbe757033181740a9eae25",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 30,
+    "file": "harness-ui/tests/llama-server-preflight.test.mjs",
+    "prStatus": "added",
+    "prBlob": "97beff45645c931e8e8ab4cd46502357e35fe838",
+    "currentNormalizedBlob": "97beff45645c931e8e8ab4cd46502357e35fe838",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-checkpoints.md",
+    "prStatus": "added",
+    "prBlob": "d4ae8e8b13737cd4ca4e3d9fa57e04e399a5aab0",
+    "currentNormalizedBlob": "d4ae8e8b13737cd4ca4e3d9fa57e04e399a5aab0",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-cp2.md",
+    "prStatus": "added",
+    "prBlob": "b1e72b6bda49d6e8c9e7b4277ea9354c7fd1c2dd",
+    "currentNormalizedBlob": "b1e72b6bda49d6e8c9e7b4277ea9354c7fd1c2dd",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-cp2.tap",
+    "prStatus": "added",
+    "prBlob": "02f4ecd4c734cd00b37d564695996f558083c3fb",
+    "currentNormalizedBlob": "02f4ecd4c734cd00b37d564695996f558083c3fb",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-cp3.md",
+    "prStatus": "added",
+    "prBlob": "824494ed2de6f6815a34d6c15fb7fd2db9e926d7",
+    "currentNormalizedBlob": "824494ed2de6f6815a34d6c15fb7fd2db9e926d7",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-cp3.raw.json.br",
+    "prStatus": "added",
+    "prBlob": "3cb184ec81d2f37ead9c25d6505d6a2bf33dba4a",
+    "currentNormalizedBlob": "3cb184ec81d2f37ead9c25d6505d6a2bf33dba4a",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-cp5-evidence-manifest.json",
+    "prStatus": "added",
+    "prBlob": "387aece86bc4aae00dc94bbe41d0c1cdd3bd8868",
+    "currentNormalizedBlob": "387aece86bc4aae00dc94bbe41d0c1cdd3bd8868",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-cp5.md",
+    "prStatus": "added",
+    "prBlob": "07e230b5dbdf8f8d096beb5242cc14215189d2fd",
+    "currentNormalizedBlob": "07e230b5dbdf8f8d096beb5242cc14215189d2fd",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/docs/performance/local-resume-protocol.md",
+    "prStatus": "added",
+    "prBlob": "32d6517331251cda8d075183d93b89961b6763d9",
+    "currentNormalizedBlob": "32d6517331251cda8d075183d93b89961b6763d9",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/scripts/bench-local-resume.mjs",
+    "prStatus": "added",
+    "prBlob": "80be8f974df9cb6869e1ebbb7b86db6425f2a171",
+    "currentNormalizedBlob": "80be8f974df9cb6869e1ebbb7b86db6425f2a171",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/scripts/compare-local-resume.mjs",
+    "prStatus": "added",
+    "prBlob": "a2458e153a43c0d2098bb8a6e3d348ea5af4dca5",
+    "currentNormalizedBlob": "a2458e153a43c0d2098bb8a6e3d348ea5af4dca5",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/scripts/report-local-resume.mjs",
+    "prStatus": "added",
+    "prBlob": "95dbc9a81b2b1a4149387fb6c2bd4eb6fa02af96",
+    "currentNormalizedBlob": "95dbc9a81b2b1a4149387fb6c2bd4eb6fa02af96",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/server.mjs",
+    "prStatus": "modified",
+    "prBlob": "e0d6357d2b3f13806abe065e439ebd238b3216e0",
+    "currentNormalizedBlob": "4a7fd689760dcf765879b4337e8c876a396dd54f",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/src/local-resume-diagnostics.mjs",
+    "prStatus": "added",
+    "prBlob": "c32c5adad71413d948bbba9aa519535a0421af14",
+    "currentNormalizedBlob": "c32c5adad71413d948bbba9aa519535a0421af14",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/src/local-resume-observer.mjs",
+    "prStatus": "added",
+    "prBlob": "4ff7e2338b45b2800a5a9077f14819d107e8f869",
+    "currentNormalizedBlob": "4ff7e2338b45b2800a5a9077f14819d107e8f869",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/src/local-resume-prefix.mjs",
+    "prStatus": "added",
+    "prBlob": "a133f919460af0fd1cd16216f2bf1ba5825bbe89",
+    "currentNormalizedBlob": "a133f919460af0fd1cd16216f2bf1ba5825bbe89",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/tests/bc09-classificazione-rimozioni.test.mjs",
+    "prStatus": "modified",
+    "prBlob": "e69bbaec542142c11ca94ac6eaf94de6aa010e30",
+    "currentNormalizedBlob": "e69bbaec542142c11ca94ac6eaf94de6aa010e30",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/tests/local-resume-diagnostics.test.mjs",
+    "prStatus": "added",
+    "prBlob": "b9ad0b327153373abf0102089f229155fec79dec",
+    "currentNormalizedBlob": "b9ad0b327153373abf0102089f229155fec79dec",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/tests/local-resume-observer.test.mjs",
+    "prStatus": "added",
+    "prBlob": "acb6597220c5ffcadc90fd8af1e7ca65d59b2edf",
+    "currentNormalizedBlob": "acb6597220c5ffcadc90fd8af1e7ca65d59b2edf",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/tests/local-resume-report.test.mjs",
+    "prStatus": "added",
+    "prBlob": "60c16130583b3c01f53e92f762ec1614ce8e4d51",
+    "currentNormalizedBlob": "60c16130583b3c01f53e92f762ec1614ce8e4d51",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 31,
+    "file": "harness-ui/tests/local-resume-sink.test.mjs",
+    "prStatus": "added",
+    "prBlob": "f0553a6d5f8791a4eba507205e21e0c0895b50c6",
+    "currentNormalizedBlob": "f0553a6d5f8791a4eba507205e21e0c0895b50c6",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 32,
+    "file": ".github/workflows/sidebar-apply.yml",
+    "prStatus": "added",
+    "prBlob": "66ac5bf350bdb1e29d558fa5560181ad03c661a8",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": ".github/workflows/sidebar-bootstrap.yml",
+    "prStatus": "added",
+    "prBlob": "6d44b7dd360309d248be18555375c5381037cead",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": ".github/workflows/sidebar-finalize.yml",
+    "prStatus": "added",
+    "prBlob": "187c19a9851f26473f4496b302b7536072685fb3",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": ".github/workflows/sidebar-race-final.yml",
+    "prStatus": "added",
+    "prBlob": "513b5a3567fa1499e29f2962de6618fc6308e94f",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/docs/sidebar-desktop-checkpoint-01.md",
+    "prStatus": "added",
+    "prBlob": "5e112dfa3594412270e057db4d7e5cc52a90cf14",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/docs/sidebar-desktop-design.md",
+    "prStatus": "added",
+    "prBlob": "06d8bc49419aeea8e65a2ff701fcd104e34a5775",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/docs/sidebar-desktop-refactor-2026-09-17.md",
+    "prStatus": "added",
+    "prBlob": "3e7153ed5ee8b605abd4529f07371d93a4d062ae",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/playwright.sidebar.config.mjs",
+    "prStatus": "added",
+    "prBlob": "8541c408450ccaa64a52b7b58f2bd1175587d1e4",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/scripts/benchmark-sidebar.mjs",
+    "prStatus": "added",
+    "prBlob": "951d978427882b2d2c642a99135f2346a8c25ef9",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/src/components/session-item.js",
+    "prStatus": "modified",
+    "prBlob": "744f66c73c3f1891812eb4bd8161df81c3e3988c",
+    "currentNormalizedBlob": "4d374130485a0685b98c06f4a7d296275f743a39",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/src/components/sidebar-desktop.js",
+    "prStatus": "added",
+    "prBlob": "83cc9653c6195c2cc36e9b4f614c484bdfe19056",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/src/components/sidebar-state.js",
+    "prStatus": "added",
+    "prBlob": "bcc44968cbb0aaab7b96f94d7f46b8ac511928d2",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/src/components/sidebar-view.js",
+    "prStatus": "added",
+    "prBlob": "a619b31c96693886c8371b81f72c0a85d11dfd1d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/src/legacy/app.js",
+    "prStatus": "modified",
+    "prBlob": "83b4e8f6955cf6982ecf5efe0ba9e68876d92f4b",
+    "currentNormalizedBlob": "b856689499073ec968779c63b85eacd922dd647a",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/src/styles/main.css",
+    "prStatus": "modified",
+    "prBlob": "c00a40a3930a7a135182df74bc4bae0a664c0e3d",
+    "currentNormalizedBlob": "f43c50fd930f6d134aa3bdb274ebc9c52df938cf",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/src/styles/sidebar-desktop.css",
+    "prStatus": "added",
+    "prBlob": "7eb1f6772b5c5429b0a0700eb200dc8b4a12d8a5",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/tests/browser/elenco-dopo-lo-stop.spec.mjs",
+    "prStatus": "modified",
+    "prBlob": "b426b4b807abe3f3e50a85f6c3910038ceefd48d",
+    "currentNormalizedBlob": "4edd377c9c71f0796f07274c6317c8c338981135",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/tests/browser/sidebar-desktop.spec.mjs",
+    "prStatus": "added",
+    "prBlob": "56266f5915aa8ff971791f1c3fc98af2e76066ff",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/tests/fixtures/sidebar-fixture.mjs",
+    "prStatus": "added",
+    "prBlob": "8a1f82ac498531ee823f1d77246d8e3bcc984950",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/tests/parity/nessun-errore-a-runtime.spec.mjs",
+    "prStatus": "modified",
+    "prBlob": "d8f0915b17b718da8dddc7bfa57bb66187be291e",
+    "currentNormalizedBlob": "64b0028a182c4cd6fdbf548c09c0fd5b74338500",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/tests/unit/session-item-stabilita.test.mjs",
+    "prStatus": "added",
+    "prBlob": "cb09042c9803061bcbb0382426c2e587e10c43ae",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/frontend/tests/unit/sidebar-state.test.mjs",
+    "prStatus": "added",
+    "prBlob": "534691a1eb697db9c6fb6ce0097f7a274097fb07",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/src/http-app.mjs",
+    "prStatus": "modified",
+    "prBlob": "a5e97f9215962df53400d9835643e3ecc4bf6703",
+    "currentNormalizedBlob": "a49b9205cf2f185c03e5bf16061381dde3246915",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/src/session-registry.mjs",
+    "prStatus": "modified",
+    "prBlob": "b56f996509b411073eecfce5831b6f126d2a5aab",
+    "currentNormalizedBlob": "8e0047a7adaa414b4bbd944768a9b98df0b4647b",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/src/sidebar-activity.mjs",
+    "prStatus": "added",
+    "prBlob": "e86f6a75cb22a8767596a761f0b5fd83c25017f0",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/src/sidebar-feed.mjs",
+    "prStatus": "added",
+    "prBlob": "2405e89a1dcb8c1b3fd238ba5b5680a28f0e81b4",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/tests/bc09-classificazione-rimozioni.test.mjs",
+    "prStatus": "modified",
+    "prBlob": "81af371d7edbf8e6cb9834ac4bf280db7c5abdea",
+    "currentNormalizedBlob": "e69bbaec542142c11ca94ac6eaf94de6aa010e30",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 32,
+    "file": "harness-ui/tests/sidebar-feed.test.mjs",
+    "prStatus": "added",
+    "prBlob": "d2722d3ee6937d17ec5bd55b0cafe8db339cf9bd",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/README.md",
+    "prStatus": "added",
+    "prBlob": "2098e11abe6c019a4d7d6bb51d7be3f359c9a25e",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/checkpoints/CP00-approved.json",
+    "prStatus": "added",
+    "prBlob": "c4f903a6a19ccc37351e7d01e23559e3ef556f30",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/checkpoints/CP02-reviewed.json",
+    "prStatus": "added",
+    "prBlob": "e9a814ba38872d9eff6e22557620d81211dcea6f",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/CHECKPOINTS.md",
+    "prStatus": "added",
+    "prBlob": "193ac97286c933df04a464e9bfe78f2e688b5c38",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/CODE_REVIEW.md",
+    "prStatus": "added",
+    "prBlob": "411a636f80155f0d4cf2772d08bba3ffb4f74279",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/ENGINEERING_REVIEW.md",
+    "prStatus": "added",
+    "prBlob": "a78c92255dea58f4f1abffb9562ae76c321db1ad",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/REQUIREMENTS_MATRIX.md",
+    "prStatus": "added",
+    "prBlob": "bb4765f5a8d5d65e2282524f86f2cb4c6b52c0ca",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/RESEARCH.md",
+    "prStatus": "added",
+    "prBlob": "8b25d448e78c1b6ed3969d4b2a29661a52212c78",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/REVIEWER_CHECKLIST.md",
+    "prStatus": "added",
+    "prBlob": "304621c81c1f5078d631eeb04bd5f66816f672c1",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/REVIEWER_START.md",
+    "prStatus": "added",
+    "prBlob": "41adddd7b544c70a31895aad22d1cdfcc9a12f37",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/TESTING.md",
+    "prStatus": "added",
+    "prBlob": "1b2d0d40d53507120211eba5f61de0531cf2f087",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/docs/UX_BEFORE_AFTER.md",
+    "prStatus": "added",
+    "prBlob": "7bb9ba97f452b2b45f426d8276ed1aedca99ffa7",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/.gitignore",
+    "prStatus": "added",
+    "prBlob": "8ff44fcc9a292cf75f3c90933c57e7b7966afdc0",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/README.md",
+    "prStatus": "added",
+    "prBlob": "f3c990d24a601e94d6812a35d4a714fd4ca0f5be",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/artifacts/.gitkeep",
+    "prStatus": "added",
+    "prBlob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/build.py",
+    "prStatus": "added",
+    "prBlob": "b54f3e00c2483fa182ad95f9bdbe1aef16bda7ed",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/actions.js",
+    "prStatus": "added",
+    "prBlob": "6558c99d7a2dc5530ab8cc58ec1c8440d666ad3b",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/agent-views.js",
+    "prStatus": "added",
+    "prBlob": "35f1bbab583d9765d66f13c40768b04a95113fcb",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/calm-files.css",
+    "prStatus": "added",
+    "prBlob": "26baad7295edc1941e2a3c3d5c0b84fce6d052f7",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/controller.js",
+    "prStatus": "added",
+    "prBlob": "0c78b0882e6ddbebdb853f4da5188ac5eb882677",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/events.js",
+    "prStatus": "added",
+    "prBlob": "51b7aa3304cebac6fab8ca873207a2e899356bfd",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/explorer-model.mjs",
+    "prStatus": "added",
+    "prBlob": "55b8e87e42852d9c402d6f91c81b30c3c04562b7",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/explorer-view.js",
+    "prStatus": "added",
+    "prBlob": "a2041f2361c5ea9163996d933e0e70202f48c139",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/inspector-state.mjs",
+    "prStatus": "added",
+    "prBlob": "1fe3520cee12c75bb376112970d28e200c265785",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/inspector-tab-visibility.css",
+    "prStatus": "added",
+    "prBlob": "8fe88027162573a56999a807c6d2902668a5aea1",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/lab-data.js",
+    "prStatus": "added",
+    "prBlob": "d07d7c6f37e4ea1f8d0024d8636e4869a4306d2e",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/prototype.css",
+    "prStatus": "added",
+    "prBlob": "bc09ab108e855f20389d1399fff7b9592096c650",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/shell.html",
+    "prStatus": "added",
+    "prBlob": "7cf1b9b43d0dd488d898b637b8a66f8d5e8a7d97",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/talos-tokens.css",
+    "prStatus": "added",
+    "prBlob": "0702cff045b50147086be1b6354285ddc98cd394",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/src/workspace-views.js",
+    "prStatus": "added",
+    "prBlob": "8cd25783027e8daae88e4ad852d1225274036c28",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/hardening.test.mjs",
+    "prStatus": "added",
+    "prBlob": "630afab1010d52847ee6bac8deafac345807ddc9",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/state.test.mjs",
+    "prStatus": "added",
+    "prBlob": "246a815547bc6c9a65de04911abcc1328655f50d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/test_explorer.py",
+    "prStatus": "added",
+    "prBlob": "d2f6c052e7bd728bef275e71caea5ae395ec96ad",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/test_hardening.py",
+    "prStatus": "added",
+    "prBlob": "60fd0f5c6b838e5fc45e1e8c99b511db2c73af1e",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/test_prototype.py",
+    "prStatus": "added",
+    "prBlob": "ebc84acd37f4cf7ab3b75af86df36811edcdc32b",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/test_visibility.py",
+    "prStatus": "added",
+    "prBlob": "a2d436bf7855e738fa13c56da7f722aa04594d32",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/prototype/tests/visibility-regression.html",
+    "prStatus": "added",
+    "prBlob": "7fd982471707a8b357d8586fc3dd5f9baea0ebc4",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/lab/sidebar-review/visibility-regression.html",
+    "prStatus": "added",
+    "prBlob": "372a6543d598b397be1599ca4f150c59915ad92d",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/src/styles/inspector-tab-visibility.css",
+    "prStatus": "added",
+    "prBlob": "8fe88027162573a56999a807c6d2902668a5aea1",
+    "currentNormalizedBlob": "8fe88027162573a56999a807c6d2902668a5aea1",
+    "placement": "identical-normalized"
+  },
+  {
+    "pr": 33,
+    "file": "harness-ui/frontend/src/styles/main.css",
+    "prStatus": "modified",
+    "prBlob": "10c9ac07bc01d7c74492a71a8801f93a7e094a8e",
+    "currentNormalizedBlob": "f43c50fd930f6d134aa3bdb274ebc9c52df938cf",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 34,
+    "file": ".github/workflows/ci.yml",
+    "prStatus": "modified",
+    "prBlob": "2242ee13f0280a8a2615486113a536215549136d",
+    "currentNormalizedBlob": "c0e47d1fade829a5622e55ea305c4e373c0c85e2",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 34,
+    "file": ".github/workflows/release.yml",
+    "prStatus": "modified",
+    "prBlob": "ba1edf7abc773bf25d0e7c0b7f56043a1ef3cda3",
+    "currentNormalizedBlob": "6dbaac8b5b1b4b4ef350ab6178866293deea81c9",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 34,
+    "file": "harness-ui/desktop/evolution-baseline.json",
+    "prStatus": "added",
+    "prBlob": "b2548b5b67ae471af2c09b38e6e40bc6183e5492",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 34,
+    "file": "harness-ui/desktop/package.json",
+    "prStatus": "modified",
+    "prBlob": "bb6572b27e522e5f080f92795d91817cb148d06f",
+    "currentNormalizedBlob": "5915b14f4346139752578b5d00de398f723c181f",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 34,
+    "file": "harness-ui/desktop/scripts/verifica-baseline-evoluzione.mjs",
+    "prStatus": "added",
+    "prBlob": "dca51ae7a808dc9e5361151e82f526da280c3462",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 34,
+    "file": "harness-ui/desktop/tests/evolution-baseline.test.mjs",
+    "prStatus": "added",
+    "prBlob": "eda033b3c9cc8e2a5228d7fe74418ab142651110",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 34,
+    "file": "harness-ui/desktop/tests/workflow.test.mjs",
+    "prStatus": "modified",
+    "prBlob": "6c1a587ed1c4c27ecc5266de8a157fa41dd15036",
+    "currentNormalizedBlob": "6a4de5b8607465a92cd4d1dcc345db15dd292ede",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/desktop/evolution-baseline.json",
+    "prStatus": "modified",
+    "prBlob": "31e6592a12221da9995ab29ff159ad2d3d1af36c",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/desktop/package.json",
+    "prStatus": "modified",
+    "prBlob": "9714e02b21dde395cbd6f1167c0f0c8d4ebe39d3",
+    "currentNormalizedBlob": "5915b14f4346139752578b5d00de398f723c181f",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/desktop/scripts/verifica-contratti-evoluzione.mjs",
+    "prStatus": "added",
+    "prBlob": "d987e818f1010b8a1cc72eff1f16361a31b86e2e",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/desktop/tests/evolution-protocol.test.mjs",
+    "prStatus": "added",
+    "prBlob": "d89a5a489907039f391b917f98639e924d63f47f",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/evolution-protocol/README.md",
+    "prStatus": "added",
+    "prBlob": "52579d742b2560c10f8e5332ee4391d002e0ce77",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/evolution-protocol/proto/evolution.proto",
+    "prStatus": "added",
+    "prBlob": "5162c8a328881c91ab3dd42afdeb3688b04d7b2e",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/evolution-protocol/schemas/common.schema.json",
+    "prStatus": "added",
+    "prBlob": "1c13e41eb4de709a4358ebe2196a35b2dea337de",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/evolution-protocol/schemas/extension-manifest.schema.json",
+    "prStatus": "added",
+    "prBlob": "998a69b9482c0b6f44913926f675d43fb3b3ef2c",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/evolution-protocol/schemas/feature-contract.schema.json",
+    "prStatus": "added",
+    "prBlob": "579b9f6a366c38a7ad38c229727823ffa6aec57f",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/evolution-protocol/schemas/lineage-attestation.schema.json",
+    "prStatus": "added",
+    "prBlob": "0e5a3832290e09882c846b1360fd3727c1e6ef23",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/evolution-protocol/schemas/runtime-manifest.schema.json",
+    "prStatus": "added",
+    "prBlob": "c9d0bbab5a5b4a40c5576ddcc368b9b57d66dbec",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/evolution-protocol/schemas/semantic-changeset.schema.json",
+    "prStatus": "added",
+    "prBlob": "8a01d5c890aae6e18ccc7453ec48c43bff1ab302",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/evolution-protocol/schemas/ui-contribution.schema.json",
+    "prStatus": "added",
+    "prBlob": "d76114250b9ae03189529de029ed7d417c966150",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/evolution-protocol/schemas/verification-dossier.schema.json",
+    "prStatus": "added",
+    "prBlob": "6ab06285dbc4df3521871f1894b2f916b1adac53",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 35,
+    "file": "harness-ui/evolution-protocol/wit/talos-extension.wit",
+    "prStatus": "added",
+    "prBlob": "dc2fee1988c3d8f0e073221c105d521b57f065fc",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/evolution-baseline.json",
+    "prStatus": "modified",
+    "prBlob": "73b8b2010978628e570567472e661505f386a36a",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/native/Cargo.lock",
+    "prStatus": "added",
+    "prBlob": "5332c9565314e86fe0b0ec86878fd2e95dbb0003",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/native/Cargo.toml",
+    "prStatus": "added",
+    "prBlob": "8f743264ebde73ab8e13821e2c05f05df166b271",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/native/DEPENDENCIES.md",
+    "prStatus": "added",
+    "prBlob": "1d517cc2488d9c7b4378df49a7a96fe7e5faea36",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/native/crates/evolution-wire/Cargo.toml",
+    "prStatus": "added",
+    "prBlob": "9cc97d0b4999013b5c104551939eb4cb92125ac4",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/native/crates/evolution-wire/src/lib.rs",
+    "prStatus": "added",
+    "prBlob": "5e692150ec0b167a6489b3dda11b714136fd50d9",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/native/crates/talos-extension-host/Cargo.toml",
+    "prStatus": "added",
+    "prBlob": "0098d03315c97d81a573e1fa3bfbdaabe28c59eb",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/native/crates/talos-extension-host/src/main.rs",
+    "prStatus": "added",
+    "prBlob": "ce46b574a71745625f1617d62599ba62adcc6943",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/native/crates/talos-supervisor/Cargo.toml",
+    "prStatus": "added",
+    "prBlob": "c530b2bd247346eef37ca52820b5653aac38f5f5",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/native/crates/talos-supervisor/src/main.rs",
+    "prStatus": "added",
+    "prBlob": "99defc94f562adaf5455cc8224a94b0c651ff17f",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/native/crates/talos-windows-sandbox/Cargo.toml",
+    "prStatus": "added",
+    "prBlob": "2f1f5d37162c36473c43b0ea70b07f47289e1ee0",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/native/crates/talos-windows-sandbox/src/lib.rs",
+    "prStatus": "added",
+    "prBlob": "7a8fd348d93c9afdc61a81f0307b904f79f02c26",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/native/deny.toml",
+    "prStatus": "added",
+    "prBlob": "5578b0f1fd839e3b9ab0bc5b7edea37a521d0bd1",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/native/rust-toolchain.toml",
+    "prStatus": "added",
+    "prBlob": "fd993240bf36bb336c73be8deac6e25aed801bbe",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/package.json",
+    "prStatus": "modified",
+    "prBlob": "37c5b737334b690efae9b09a661ed6bee2f493f4",
+    "currentNormalizedBlob": "5915b14f4346139752578b5d00de398f723c181f",
+    "placement": "different-review-porting"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/scripts/verifica-native-scaffold.mjs",
+    "prStatus": "added",
+    "prBlob": "f920069f98528d66e533f0a980b01ba6c3e4ade9",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  },
+  {
+    "pr": 36,
+    "file": "harness-ui/desktop/tests/native-scaffold.test.mjs",
+    "prStatus": "added",
+    "prBlob": "537669915223fbf6d92ae7c7d858e1553221d048",
+    "currentNormalizedBlob": null,
+    "placement": "absent"
+  }
+]

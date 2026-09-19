@@ -6,6 +6,33 @@ function response(body, { status = 200, headers = {} } = {}) {
   return { ok: status >= 200 && status < 300, status, headers: new Headers(headers), json: async () => body, text: async () => String(body ?? '') };
 }
 
+test('RIPRESA-HF-PARAMETRI-API — totale dichiarato, mai nome o byte', async () => {
+  const values = [30532122624, null, -1, '8000000000', Infinity, 0];
+  const client = createHfHubClient({ fetchImpl: async () => response(values.map((total, i) => ({ id: `org/8B-${i}`, gguf: { total } }))) });
+  assert.deepEqual((await client.searchModels()).items.map(x => x.parameterCount), [30532122624, null, null, null, null, null]);
+});
+test('RIPRESA-HF-ACCESSO-ENUM — manual e auto richiedono accesso, assenza ignota', async () => {
+  let url;
+  const client = createHfHubClient({ fetchImpl: async u => { url = u; return response([false, true, 'manual', 'auto', undefined].map((gated, i) => ({ id: `org/model-${i}`, gated }))); } });
+  assert.deepEqual((await client.searchModels()).items.map(x => x.gated), [false, true, true, true, null]);
+  assert.ok(url.searchParams.getAll('expand[]').includes('gated'));
+});
+test('RIPRESA-HF-PAGINE-LINK — cursore ufficiale e preservazione query', async () => {
+  const calls = [];
+  const client = createHfHubClient({ fetchImpl: async url => { calls.push(url); return response([{ id: 'org/model' }], { headers: { Link: '<https://huggingface.co/api/models?cursor=pagina%2B2>; rel="next"' } }); } });
+  const first = await client.searchModels({ query: 'qwen' });
+  assert.equal(first.nextCursor, 'pagina+2');
+  await client.searchModels({ query: 'qwen', cursor: first.nextCursor });
+  assert.equal(calls[1].searchParams.get('cursor'), 'pagina+2');
+  assert.equal(calls[1].searchParams.get('search'), 'qwen');
+});
+test('RIPRESA-HF-PAGINE-LINK-OSTILE — non importare cursori da altri host o percorsi', async () => {
+  for (const link of ['https://evil.example/api/models?cursor=x','https://huggingface.co/api/datasets?cursor=x','https://user@huggingface.co/api/models?cursor=x']) {
+    const client = createHfHubClient({ fetchImpl: async () => response([], { headers: { Link: `<${link}>; rel="next"` } }) });
+    assert.equal((await client.searchModels()).nextCursor, null);
+  }
+});
+
 test('HF-HUB-SEARCH-01 normalizza risultati e non espone token', async () => {
   const calls = [];
   const client = createHfHubClient({ token: 'secret', fetchImpl: async (url, options) => { calls.push({ url: String(url), options }); return response([{ id: 'org/model', sha: 'a'.repeat(40), downloads: 12, likes: 3, gated: false, tags: ['gguf'], cardData: { license: 'apache-2.0' } }]); } });
@@ -63,4 +90,21 @@ test('HF-HUB-SEARCH-02 inoltra filtri, ordinamento e cursore senza perdere la re
   assert.deepEqual(requested.searchParams.getAll('filter'), ['gguf', 'text-generation', 'q4']);
   assert.equal(requested.searchParams.get('cursor'), 'cursor-1');
   assert.equal(result.nextCursor, 'cursor-2');
+});
+
+
+test('RIPRESA-HF-ORDINAMENTI-ADAPTER — valori della UI, alias e paginazione attraversano il client', async () => {
+  const calls = [];
+  const client = createHfHubClient({ fetchImpl: async url => {
+    calls.push(new URL(url));
+    return response([{ id: 'org/model' }]);
+  } });
+  for (const sort of ['downloads', 'likes', 'createdAt', 'lastModified', 'created']) {
+    await client.searchModels({ sort, cursor: 'next-page', query: 'qwen', limit: 1 });
+    assert.equal(calls.at(-1).searchParams.get('sort'), sort === 'created' ? 'createdAt' : sort);
+    assert.equal(calls.at(-1).searchParams.get('cursor'), 'next-page');
+    assert.equal(calls.at(-1).searchParams.get('search'), 'qwen');
+  }
+  await assert.rejects(client.searchModels({ sort: 'anything' }), { code: 'HF_HUB_INVALID' });
+  assert.equal(calls.length, 5, 'un sort sconosciuto non deve contattare upstream');
 });
