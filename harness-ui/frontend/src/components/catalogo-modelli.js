@@ -151,13 +151,64 @@ function barraDelPannello(panel){
 /* I conteggi dei fornitori nelle VOCI del select vero. Il numero è quello del filtro senza la
    propria faccetta (cioè: con la ricerca e le altre faccette applicate), come vuole un conteggio
    di faccetta. ⛔ L'etichetta originale si tiene da parte la prima volta: riscriverla due volte
-   produrrebbe «aion-labs (3) (2)». */
-function scriviConteggiFornitori(panel,conteggi,totale){
+   produrrebbe «aion-labs (3) (2)».
+   ⛔ E SENZA CATALOGO NON SI SCRIVE NESSUN NUMERO — 19/09/2026: `(0)` in questa voce vuol dire
+   «contati: nessuno», e senza una risposta dal server non è stato contato niente. L'etichetta
+   torna quella originale (la prima volta che si è letta), perché «non misurato» e «zero» non si
+   scrivono con la stessa faccia ([[la-colonna-del-costo-ha-una-risoluzione]]). */
+function scriviConteggiFornitori(panel,conteggi,totale,{senzaDati=false}={}){
  for(const o of panel.querySelectorAll('#modelLabProviderFilter option')){
   o.dataset.etichetta??=o.textContent;
+  if(senzaDati){o.textContent=o.dataset.etichetta;continue;}
   const n=o.value==='all'?totale:conteggi.get(o.value);
   o.textContent=n===undefined?o.dataset.etichetta:o.dataset.etichetta+' ('+new Intl.NumberFormat('it-IT').format(n)+')';
  }
+}
+/*
+ * ⛔⛔ LA PORTA DEL CATALOGO — 19/09/2026, MISURATA PRIMA DI SCRIVERLA.
+ *
+ * Il guscio a quattro schede (corsia 2) ha raggruppato i sei pannelli legacy sotto quattro
+ * schede: `catalog` sta in «Provider» (`lab-cornice-v3.js`, `SCHEDE_LAB`, e `lab-guscio`
+ * GUSCIO-01 lo asserisce). Ma dentro quella scheda il guscio apre la PRIMA sezione
+ * (`providers`) e non esiste NESSUN controllo che accenda la seconda: le sei linguette legacy
+ * sono in `[data-lab-comandi]`, un contenitore `hidden` (misurato sul 4174 il 19/09/2026:
+ * `comandiVisibili: 0`).
+ *
+ * ⇒ Conseguenza misurata, non dedotta: `setModelLabSection('catalog')` è l'UNICA riga che fa
+ *   partire `caricaCatalogoModelLab` (`app.js`), quindi il catalogo non si è mai caricato, la
+ *   barra a faccette non si è mai costruita — «Modelli osservati · Catalogo non caricato»,
+ *   `#modelLabFacets` **0 copie** sul 4174 — e una funzione intera della app era diventata
+ *   irraggiungibile. Non era «la barra non montata»: era la sua SUPERFICIE senza porta.
+ *
+ * ⛔ PERCHÉ QUI E NON ALTROVE: questa è la porta della superficie del catalogo, e la superficie
+ *   vive in quella scheda. Il clic non inventa una strada — preme il BOTTONE VERO dell'app
+ *   (`[data-model-lab-tab="catalog"]`), cioè fa ciò che fa il guscio quando deve aprire una
+ *   sezione (`comando.click()`, `selezionaScheda`). Il listener è quello di `app.js:4724`,
+ *   che `setModelLabSection` lo chiami è la sola cosa che accende pannello, stato e caricatore
+ *   insieme.
+ * ⛔ Manca la cosa giusta: uno scambio di sezione DENTRO la scheda è del guscio
+ *   (`lab-cornice-v3.js`, non di questa corsia). Questa porta è la riparazione minima e
+ *   dichiarata; il giorno che il guscio avrà il suo scambio di sezione, questa riga si ritira.
+ */
+function portaDelCatalogo(originale){
+ const d=originale.ownerDocument;
+ if(!d||d.querySelector('#modelLabCatalogDoor'))return null;
+ const pannello=d.querySelector('#modelLabProvidersPanel');
+ const azioni=pannello?.querySelector('.provider-heading-actions')||pannello?.querySelector('.model-lab-panel-heading');
+ if(!azioni)return null;
+ const porta=d.createElement('button');
+ porta.type='button';porta.id='modelLabCatalogDoor';
+ porta.className='talos-button talos-button--secondary talos-button--sm';
+ porta.textContent='Catalogo dei fornitori';
+ /* `aria-controls` SENZA `aria-expanded`: la regia delle disclosure (`app.js:22339`) prende
+    ogni elemento con LA COPPIA e ne inverte lo stato da sé — vedi il commento in
+    `catalogo-faccette.js`. Un solo attributo non la sveglia. */
+ porta.setAttribute('aria-controls','modelLabCatalogPanel');
+ /* Il comando si risolve al CLIC, non alla costruzione: la superficie di comando la crea il
+    guscio, e una carta costruita a mano (i banchi di prova) non ce l'ha. */
+ porta.addEventListener('click',()=>{d.querySelector('[data-lab-comandi] [data-model-lab-tab="catalog"]')?.click();});
+ azioni.append(porta);
+ return porta;
 }
 export function aggiornaCatalogoModelli(panel,dati,opzioni={}){
  const{query='',provider='all',selezionato=null,limite=120,caricamento=false,errore='',seleziona,altri,fornitori}=opzioni;
@@ -171,17 +222,36 @@ export function aggiornaCatalogoModelli(panel,dati,opzioni={}){
  const riferimenti=new Map(),adattati=tutti.map(m=>{const a=modelloCatalogo(m);riferimenti.set(a,m);return a;});
  const ammessi=new Set(filtraModelli(tutti,query,'all'));
  const base=adattati.filter(m=>ammessi.has(riferimenti.get(m)));
- const barra=dati?barraDelPannello(panel):null;
+ /*
+  * ⛔⛔ 19/09/2026 — LA BARRA SI MONTA SEMPRE, E PRIMA DI OGNI USCITA. Prima era
+  * `dati ? barraDelPannello(panel) : null`: la barra esisteva SOLO dopo che il catalogo era
+  * arrivato. ⇒ Con una risposta lenta, un errore o un catalogo vuoto la superficie restava
+  * senza la sua riga di scoperta, e «0 copie» sul 4174 era indistinguibile da «mai montata».
+  * La barra è parte del DISEGNO della superficie, non un premio per chi ha i dati: si monta
+  * appena il pannello esiste, e i conteggi si riempiono quando arrivano (vedi `senzaDati`).
+  * ⛔ E si aggiorna PRIMA del ramo d'errore, altrimenti proprio il caso che serve — «il
+  * catalogo non è arrivato» — resterebbe l'unico senza la sua barra.
+  */
+ const barra=barraDelPannello(panel);
  const filtri={...(panel.__catalogoFiltri||emptyCatalogFilters()),providers:provider==='all'?[]:[provider]};
+ const senzaDati=!dati;
+ if(barra){
+  aggiornaBarraFaccette(barra,{modelli:base,contesto:{},capacita:capacitaDelCatalogo(adattati),filtri,senzaDati});
+  scriviConteggiFornitori(panel,conteggiPerFornitore(base,filtri),tutti.length,{senzaDati});
+ }
  const visibili=dati?selectCatalog(base,filtri).map(m=>riferimenti.get(m)).filter(Boolean):[];
  const selected=visibili.find(m=>m.id===selezionato?.id)||visibili[0]||null;
  list.replaceChildren();if(vuoto)vuoto.hidden=true;more.hidden=true;refresh.disabled=caricamento;panel.setAttribute('aria-busy',String(caricamento));
  if(errore){const p=el('p','talos-card talos-card--pad',errore);p.setAttribute('role','alert');list.append(p);count.textContent='Catalogo non disponibile';aggiornaDettaglioCatalogo(detail,null);return null;}
  panel.__catalogoUltimo={dati,opzioni};
- if(barra){
-  aggiornaBarraFaccette(barra,{modelli:base,contesto:{},capacita:capacitaDelCatalogo(adattati),filtri});
-  scriviConteggiFornitori(panel,conteggiPerFornitore(base,filtri),tutti.length);
- }
+ /* ⛔ Il conteggio dei risultati si ANNUNCIA: `role="status"` + `aria-live` sul nodo che questa
+    funzione riscrive a ogni passata. Ricerca (19/09/2026, `saasui.design` · `ideaplan.io` ·
+    `designsystems.one` · `uixhero.com`): con un filtro a faccette «aria-live sui cambi di
+    risultato» — senza, chi non vede lo schermo spunta una faccetta e non sa che i risultati
+    sono cambiati. Sta sul conteggio vero della superficie invece che in una seconda riga
+    dentro la barra: due conteggi della stessa cosa a due centimetri sono la copia che questo
+    progetto chiama difetto, non ridondanza. */
+ count.setAttribute('aria-live','polite'); count.setAttribute('role','status');
  count.textContent=caricamento?'Aggiornamento del catalogo…':dati?visibili.length+' di '+dati.modelli.length+' modelli · OpenRouter · '+(dati.daCache?'copia salvata · ':'')+new Date(dati.aggiornatoAlle).toLocaleString('it-IT',{timeZone:'Europe/Rome'}):'Catalogo non caricato';
  if(!dati){list.append(el('p','talos-card--pad talos-muted',caricamento?'Caricamento…':'Apri questa sezione per caricare il catalogo.'));}
  else if(!visibili.length){const p=el('p','talos-card--pad talos-muted',dati.modelli.length?'Nessun modello corrisponde ai filtri.':'Il catalogo osservato è vuoto.');list.append(p);}
@@ -217,4 +287,7 @@ export function montaCatalogoModelli(originale,canonico){
  if (listaCatalogo) listaCatalogo.replaceChildren();
  const dettaglioCatalogo = originale.querySelector('[data-catalog-detail]') || originale.querySelector('#modelLabModelDetail');
  if (dettaglioCatalogo) aggiornaDettaglioCatalogo(dettaglioCatalogo, null);
+ /* La porta della superficie: senza, il pannello appena montato resta irraggiungibile dentro
+    la scheda «Provider» — vedi `portaDelCatalogo` per la misura che lo ha stabilito. */
+ portaDelCatalogo(originale);
 }

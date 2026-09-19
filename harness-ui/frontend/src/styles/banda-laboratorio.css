@@ -57,6 +57,44 @@
  * ============================================================================
  */
 
+/*
+ * ⛔⛔ LA SCATOLA GRIGIA ATTORNO AL LABORATORIO NON SI DISEGNA — owner 19/09/2026,
+ *   guardando il suo schermo: «devi levare il container grigio che ingloba il model
+ *   lab». Misurato con una sonda che CHIEDE AL BROWSER quali regole lo dipingono
+ *   (mai un selettore indovinato): `#modelLabCard` è un
+ *   `ARTICLE.talos-card.talos-settings__section` con sfondo `rgb(37,38,42)`, bordo
+ *   `1px rgb(54,55,59)`, raggio 14 e padding 20/24 — **lo stesso sfondo e lo stesso
+ *   bordo della banda che ci sta dentro**, e le regole che lo dipingono sono due:
+ *   `.talos-card` (un gradiente) e
+ *   `#schermoImpostazioni[data-settings-ui="v3"] .talos-settings__section`.
+ *
+ *   ⇒ Due rettangoli identici, uno dentro l'altro, ognuno col suo bordo: è la forma
+ *     che la ricerca di questo passo chiama per nome — «**non annidare card dentro
+ *     card**» (<https://docs.cognite.com/cdf/aura/primitives/card>, consultata il
+ *     19/09/2026) e «**niente card a tutta larghezza come struttura di pagina**,
+ *     è l'aspetto da prototipo», col caso identico al nostro (sezioni bordate,
+ *     scatole grigie dentro le card, tre strati di contenitore) e la cura:
+ *     **contenitori neutri per il layout esterno**, intestazioni e filetti per
+ *     separare (<https://github.com/apache/maka/blob/main/docs/settings-astryx-deep-review.zh-CN.md>,
+ *     05/09/2026). Il meccanismo è spiegato anche qui:
+ *     <https://zenn.dev/seekseep/articles/no-nested-surfaces-elevation> — annidare
+ *     superfici **raddoppia bordi, ombre e padding** e fa leggere male la gerarchia.
+ *
+ *   ⛔ E NON È UNA QUESTIONE DI GUSTO: nel mockup il laboratorio sta **sulla
+ *     pagina**, la banda è la prima cosa che si incontra e l'unica superficie
+ *     bordata in cima. Togliendo la scatola, la banda passa da 792 a **842** px —
+ *     cioè alla larghezza del contenuto, come nel mockup.
+ *   ⛔ Si spegne SOLO per il laboratorio: le altre nove sezioni tengono la loro
+ *     carta, che è una decisione presa e verificata nella FASE 2.
+ */
+#schermoImpostazioni[data-settings-ui="v3"] #modelLabCard.talos-settings__section {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
 .talos-lab__banda {
   display: flex;
   align-items: center;

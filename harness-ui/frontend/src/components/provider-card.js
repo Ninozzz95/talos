@@ -29,6 +29,90 @@ export function statoChiavePool(chiave={}){
  return (istante?'In panchina fino a '+istante:'In panchina')+' · '+(cause[chiave.causa]||'Accesso da verificare');
 }
 function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!=null)n.textContent=txt;return n;}
+
+/*
+ * ============================================================================
+ * IL VESTITO DEL MOCKUP — le misure, e DOVE STANNO (FASE 4, corsia 2, 19/09/2026)
+ * ============================================================================
+ * ⛔ TUTTI I NUMERI QUI SOTTO SONO STATI MISURATI DAL DOM VIVO del mockup
+ *   (`C:\Users\Antonino\Downloads\TALOS-Calm-Lab-04.html`, md5
+ *   `952fd467eff2cdd331f968c419fa1cc0`, rotta `#/impostazioni/modelli/providers`),
+ *   con Playwright, il **19/09/2026** — non letti dal suo CSS a occhio.
+ *
+ *   viewport | contenuto | `.provider-grid`          | card
+ *   1440     | 1122      | 2 colonne, gap 20         | **551×332**
+ *   1024     | 754       | **1 colonna**, gap 15     | **754×303** e 754×332
+ *   `.provider-card`   padding 22 · raggio 12 · bordo 1px · fondo `--panel`
+ *   `.provider-head`   flex · align center · gap 12 · margin-bottom 24
+ *   `.model-glyph`     38×38 · raggio 10 · bordo 1 · `display:grid` place-items center
+ *   `h3`               15px/600 · letter-spacing −0,3px (a 15px = −0,02em)
+ *   `.provider-head p` 11px · muted · margin-top 3
+ *   `.provider-head>.badge`  `margin-left:auto` · `.badge` 11px/500 · padding 4px 7px
+ *                            · raggio 5 · gap 5 · NIENTE bordo
+ *   `.status-dot`      5×5 · raggio 50% · `background:currentColor`
+ *   `.provider-facts>.div`  flex · gap 10 · padding 12px 0 · filetto in basso
+ *   `.provider-actions`     flex · gap 10
+ *   `.inline-notice`        flex · gap 10 · bordo 1 · raggio 9 · padding 13/14 · 12px
+ *
+ * ⛔ PERCHÉ LE REGOLE NON STANNO IN UN FOGLIO — e non è una preferenza, è MISURATO.
+ *   Il server serve la app con `style-src 'self' 'nonce-…'` (letto il 19/09/2026
+ *   dall'intestazione vera della 4174 e della 4195): un `<style>` creato da JS, un
+ *   `setAttribute('style', …)` e un foglio costruito con `new CSSStyleSheet()` sono
+ *   TUTTI E TRE respinti — provati uno per uno, `getComputedStyle` tornava il valore
+ *   di prima e la console registrava «Applying inline style violates … 'style-src'».
+ *   L'unico meccanismo che passa è l'assegnazione di PROPRIETÀ sul CSSOM
+ *   (`nodo.style.padding='22px'`): il testo della direttiva non lo copre — MDN
+ *   «Content-Security-Policy: style-src», «styles properties that are set directly
+ *   on the element's `style` property will not be blocked»
+ *   (<https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src>,
+ *   letta il 19/09/2026). ⇒ Qui si veste con il CSSOM, ed è la stessa forma che questo
+ *   file usava già (`Object.assign(input.style, …)`), non un'invenzione.
+ *   ⛔ I COLORI NON SI COPIANO DAL MOCKUP: il mockup ha una palette sua che per nove
+ *     decimi coincide con i nostri token, e la regola di casa è che una superficie si
+ *     accende e si spegne COL TEMA (lezione di `banda-laboratorio.css`, 19/09/2026).
+ *     ⇒ Si portano le MISURE, i colori restano `var(--talos-*)`.
+ *
+ * La GRIGLIA, e perché `min(100%, 340px)`: la soglia del mockup è a 754 di contenuto
+ * (due colonne da 551 ne vogliono 1122), quindi si esprime **relativa al contenitore**
+ * invece che al viewport — il contenitore delle Impostazioni è più stretto del suo
+ * (misurato: `#modelLabCard` 842, il gruppo delle schede 792, contro i 1122 del mockup).
+ * `repeat(auto-fit, minmax(min(100%, 340px), 1fr))` sceglie il numero di colonne da sé e
+ * NON sfonda quando il contenitore è più stretto della soglia: è la stessa meccanica
+ * dell'auto-repeat di CSS Grid Level 1 — «the largest possible positive integer that
+ * does not cause the grid to overflow its grid container»
+ * (<https://www.w3.org/TR/css-grid-1/#auto-repeat>, consultata il 19/09/2026) — con la
+ * guardia `min(100%, …)` documentata per il caso in cui anche UNA ripetizione
+ * sfonderebbe (vedi anche la revisione comunitaria del pattern, letta il 19/09/2026).
+ */
+const VESTITO=Object.freeze({
+ /* ⛔ `align-items` NON si dichiara: il mockup non lo dichiara, e le sue due card — una con TRE
+    fatti e una con DUE — misurano entrambe **332** di altezza. È lo `stretch` di serie della
+    griglia a pareggiarle, e senza di lui due card della stessa riga finirebbero di altezze
+    diverse. (Misurato sul DOM vivo, 19/09/2026.) */
+ griglia:{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',gap:'20px'},
+ carta:{padding:'22px',borderRadius:'12px',border:'1px solid var(--talos-border)',background:'var(--talos-panel)',minWidth:'0'},
+ /* `flex-wrap:wrap` è la regola del mockup a contenitore stretto (misurato a 1024:
+    `.provider-head{flex-wrap:wrap}`; il mockup ci arriva con una media query, qui è la
+    stessa cosa senza — e serve perché la pastiglia non sfondi la card a due colonne). */
+ testata:{display:'flex',alignItems:'center',flexWrap:'wrap',gap:'12px',marginBottom:'24px',textAlign:'left',minWidth:'0'},
+ glifo:{display:'grid',placeItems:'center',width:'38px',height:'38px',flex:'none',borderRadius:'10px',border:'1px solid var(--talos-border)',background:'var(--talos-card)',color:'var(--talos-muted)'},
+ identita:{display:'grid',gap:'3px',minWidth:'0'},
+ nome:{fontSize:'15px',fontWeight:'600',letterSpacing:'-.02em',lineHeight:'1.4'},
+ identificatore:{fontSize:'11px',color:'var(--talos-muted)',overflowWrap:'anywhere'},
+ stato:{marginLeft:'auto',flex:'none'},
+ pastiglia:{minHeight:'0',padding:'4px 7px',borderRadius:'5px',borderWidth:'0',gap:'5px',fontSize:'11px',fontWeight:'500',lineHeight:'1.4'},
+ punto:{width:'5px',height:'5px'},
+ fatti:{margin:'0 0 24px'},
+ azioni:{display:'flex',flexWrap:'wrap',gap:'10px'},
+ avviso:{display:'flex',alignItems:'flex-start',gap:'10px',border:'1px solid var(--talos-border)',borderRadius:'9px',padding:'13px 14px',margin:'0 0 18px',color:'var(--talos-muted)',fontSize:'12px',lineHeight:'1.65'},
+});
+function vesti(nodo,stile){if(nodo)Object.assign(nodo.style,stile);return nodo;}
+/** Il simbolo di un fornitore. La mappa sta in UN posto solo, e sceglie da dati veri del server. */
+function simboloFornitore(row){
+ if(row.id==='esterno')return 'i-robot';           // un agente che gira fuori da TALOS
+ if(row.execution==='runtime locale')return 'i-brain'; // il modello sta su questa macchina
+ return 'i-globe';                                  // un servizio raggiunto in rete
+}
 function campo(label,tipo,key,row,valore=''){const wrap=el('label','talos-stack talos-provider__field');wrap.append(el('span','talos-muted',label));const input=el('input','talos-field__input');input.type=tipo;input.dataset[key]=row.id;input.autocomplete='off';input.value=valore;if(tipo==='password'){input.spellcheck=false;input.placeholder=row.keyConfigured?'Incolla una nuova chiave':'Incolla la chiave';}if(tipo==='number'){input.min='5';input.max='300';input.step='1';}wrap.append(input);return wrap;}
 // P-K-bis/P-L-bis: identità esplicite e configurazione non segreta del processo.
 const CLOUD_CONFIGURABILI=new Set(['azure','vertex','bedrock']);
@@ -122,13 +206,94 @@ function aggiungiCampiCloud(body,row){
 }
 // P-K — fine
 
-export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onMenu=null,onAzionePool=null}={}){
+export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onMenu=null,onAzionePool=null,ambito=''}={}){
  const esterno=row.id==='esterno',configurazionePropria=esterno||CLOUD_CONFIGURABILI.has(row.id);
+ /*
+  * ⛔⛔ L'ID DEL CORPO PORTA IL NOME DELLA SUPERFICIE — segnalato dalla corsia 4 il 19/09/2026 e
+  *   MISURATO qui: `document.querySelectorAll('#provider-body-openrouter').length` valeva **2**,
+  *   e vale **1** quando il velo è chiuso. Il velo «Fornitori e accessi» disegna lo STESSO
+  *   fornitore del pannello con lo STESSO renderer, quindi per un po' di tempo il documento aveva
+  *   due nodi con lo stesso id — e `getElementById`/`querySelector('#x')` tornano il PRIMO in
+  *   ordine d'albero, quindi `aria-controls` poteva puntare alla card SBAGLIATA senza un errore.
+  *   È la stessa classe di difetto di `#schermoHome` doppio (18/09: la Home galleggiava sopra la
+  *   chat sul server dell'owner) e di `#providerRefresh` doppio (18/09).
+  * ⛔ E IL SUFFISSO VA SOLO AL VELO, non al pannello: gli id del pannello sono congelati dal
+  *   cancello dell'identità (`tests/browser/fixtures/inventario-sezioni.json`, chiave `models`,
+  *   118 id). Rinominarli lo farebbe diventare rosso — cioè la cura di un difetto ne aprirebbe
+  *   un altro. ⇒ `ambito` è vuoto per il pannello, `'velo'` per il dialogo: **1 e 1**, non 2 e 0.
+  */
+ const idCorpo='provider-body-'+(ambito?ambito+'-':'')+row.id;
  const d=statoProvider(row,prova),busy=occupato||d.occupato,card=el('article','talos-card talos-provider');card.dataset.c='ProviderCard';card.dataset.providerId=row.id;card.setAttribute('aria-busy',String(busy));if(prova)card.dataset.provaEsito=prova.esito;
- const head=el('button','talos-provider__head');head.type='button';head.dataset.providerToggle=row.id;head.setAttribute('aria-expanded',String(aperta));head.setAttribute('aria-controls','provider-body-'+row.id);
- const title=el('strong','talos-provider__name',row.label||row.id),marks=el('span','talos-cluster');head.append(title,marks);
- for(const [txt,tone]of [[d.chiave,row.keyConfigured?'success':''],[etichettaIndirizzo(row),row.supportsEndpoint&&!row.endpointConfigured&&!row.endpoint?'warning':''],[d.prova,d.tono]])if(txt){const badge=el('span','talos-badge talos-badge--sm'+(tone?' talos-badge--'+tone:''),txt);badge.dataset.c='Badge';marks.append(badge);}card.append(head);
- const body=el('div','talos-provider__body');body.id='provider-body-'+row.id;body.hidden=!aperta;
+ vesti(card,VESTITO.carta);
+ /*
+  * ⛔ 19/09/2026 — LA TESTATA NON È PIÙ UN PULSANTE, ed è la forma del mockup: `.provider-head`
+  *   è un `div` con glifo, nome, sottotitolo e UNA pastiglia di stato. Il pulsante che apre la
+  *   configurazione è «Configura», in fondo alla card, come nel mockup (`provider-actions`).
+  *   ⛔ Cosa si guadagna, oltre alla forma: prima il nome accessibile della testata era la
+  *     CONCATENAZIONE delle tre pastiglie («OpenAI Chiave dall'ambiente Indirizzo predefinito
+  *     Mai provato») — un pulsante che si annuncia così non dice cosa fa. Ora il nome della card
+  *     è testo, e il comando ha un nome suo.
+  *   ⛔ Cosa NON si perde: tutti e tre i fatti restano sulla card, sempre visibili, nella riga
+  *     «Credenziale · Configurazione · Ultima prova» del mockup (`.provider-facts`).
+  */
+ /*
+  * ⛔ E NON SI CHIAMA PIÙ `talos-provider__head`, ed è una riga che conta: quella classe porta
+  *   `.talos-provider__head:after{content:"+"}` (`index.css:2688`), il segno di apertura di
+  *   QUANDO la testata era un pulsante. Su un `div` non aprirebbe niente e resterebbe lì per
+  *   sempre, perché un `:after` non si spegne da CSSOM. Trovato nella FOTO del 19/09/2026:
+  *   un `+` disegnato accanto alla pastiglia di ogni card. Verificato che nessuna prova del
+  *   repo nomina quella classe (grep su `tests/`, 19/09/2026): solo `--__body`, `--__name`
+  *   e `-panel` sono lette da fuori.
+  */
+ const head=el('div','talos-provider__testata');vesti(head,VESTITO.testata);
+ const glifo=el('span','talos-provider__glifo');vesti(glifo,VESTITO.glifo);
+ const iconaGlifo=simboloProvider(simboloFornitore(row));iconaGlifo.setAttribute('class','i');Object.assign(iconaGlifo.style,{width:'19px',height:'19px'});
+ glifo.append(iconaGlifo);
+ const identita=el('span','talos-provider__identita');vesti(identita,VESTITO.identita);
+ const title=el('strong','talos-provider__name',row.label||row.id);vesti(title,VESTITO.nome);
+ /* ⛔ Il nome umano è primario, l'id grezzo è secondario — `provider-head p` del mockup. L'id
+    NON è decorazione: è la chiave che il server riconosce, e per dodici fornitori su ventotto
+    dice qualcosa che l'etichetta non dice (`zai-anthropic`, `ollama-cloud`, `lmstudio`…). */
+ const identificatore=el('span','talos-provider__id',row.id);
+ identificatore.setAttribute('aria-hidden','true'); // il nome accessibile resta un nome
+ vesti(identificatore,VESTITO.identificatore);
+ identita.append(title,identificatore);
+ const marks=el('span','talos-cluster');vesti(marks,VESTITO.stato);
+ /*
+  * UNA pastiglia, non tre: è la riga di stato del mockup, col suo punto. Credenziale e indirizzo
+  * scendono nei fatti — non spariscono, cambiano posto (vedi `provider-facts`).
+  */
+ {
+  const badge=el('span','talos-badge talos-badge--sm'+(d.tono?' talos-badge--'+d.tono:''));badge.dataset.c='Badge';
+  const punto=el('span','talos-dot'+(d.tono?' talos-dot--'+d.tono:''));punto.setAttribute('aria-hidden','true');vesti(punto,VESTITO.punto);
+  badge.append(punto,el('span','',d.prova));vesti(badge,VESTITO.pastiglia);marks.append(badge);
+ }
+ head.append(glifo,identita,marks);card.append(head);
+ /*
+  * I FATTI — `.provider-facts` del mockup, e la forma ce l'abbiamo GIÀ: `.talos-kv` dentro
+  * `#schermoImpostazioni[data-settings-ui="v3"]` è, parola per parola,
+  * `gap:10px; padding:12px 0; border-block-end:1px` con le due parti a 12px
+  * (`src/design-system/settings.css:364-372`, scritto il 18/09 dalla FASE 2 e verde nel
+  * cancello `_fase2-vestito.spec.mjs`). ⇒ Nessuna regola nuova: si usano le classi che ci sono.
+  * ⛔ OGNI RIGA PORTA UN CAMPO CHE IL SERVER HA DAVVERO MANDATO. La riga «Configurazione»
+  *   compare solo dove il fornitore DICHIARA di saper reggere un indirizzo (`supportsEndpoint`):
+  *   per Anthropic, Gemini e l'agente esterno il mockup non ha un equivalente e non si inventa.
+  */
+ const fatti=el('div','talos-provider__fatti');vesti(fatti,VESTITO.fatti);
+ /*
+  * ⛔ TRE CHIAVI, E SONO QUELLE DEL MOCKUP — `Credenziale · Configurazione · Ultima prova`. E sono
+  *   anche le tre cose che la nota di questa pagina nomina da sempre: «presenza della chiave,
+  *   collegamento ed esecuzione sono verifiche distinte». Nessun campo grezzo del server sale a
+  *   schermo: `row.execution` vale `collegato` per 22 fornitori su 28 ed è un valore di enum, non
+  *   una frase — mostrarlo sotto un'etichetta italiana sarebbe rumore travestito da dato.
+  * ⛔ E dove un indirizzo non c'è (Anthropic, Gemini, l'agente esterno: `supportsEndpoint` falso)
+  *   la riga NON compare: due righe, che è esattamente la card locale del mockup. Una riga con
+  *   dentro «non previsto» sarebbe una parola nostra, e le parole nostre non si inventano.
+  */
+ for(const [k,v]of [['Credenziale',d.chiave],['Configurazione',etichettaIndirizzo(row)],['Ultima prova',d.prova]])
+  if(v)  {const riga=el('div','talos-kv');riga.dataset.c='KeyValue';riga.append(el('span','talos-kv__k',k),el('span','talos-kv__v',v));fatti.append(riga);}
+ card.append(fatti);
+ const body=el('div','talos-provider__body');body.id=idCorpo;body.hidden=!aperta;
  {
  /*
   * ⛔ PO-01 — se il fornitore ha l'accesso, quello è il gesto principale e il campo della chiave
@@ -212,7 +377,20 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  if(!esterno)actions.append(salva);
  const nascoste=[];
  const aggiungiNascosto=(b)=>{b.hidden=true;nascoste.push(b);return b;};
- const vociMenu=[{chiave:'test',etichetta:'Prova collegamento',icona:'i-play',elemento:aggiungiNascosto(button('test','Prova collegamento'))}];
+ /*
+  * ⛔⛔ 19/09/2026 — «PROVA COLLEGAMENTO» ESCE DAL MENU «⋯» E DIVENTA IL «VERIFICA ACCESSO» DEL
+  *   MOCKUP, in fondo alla card. Tre ragioni, in ordine di peso:
+  *   1. il mockup mette la sonda fra le azioni della card, non in un menu (`provider-actions`);
+  *   2. nel menu era **hidden**, quindi il comando si poteva invocare solo aprendo «⋯»: un
+  *      controllo che dice lo stato di un accesso deve stare DOVE quello stato si legge;
+  *   3. un nodo solo per card, in un posto solo — con due nodi che portano lo stesso
+  *      `data-provider-action="test"` un `.click()` dal di fuori diventa ambiguo.
+  *   ⛔ E per l'agente esterno NON si sposta: lì la sonda è già visibile nel corpo
+  *     (`Prova collegamento`, ed è il gesto principale di quella card) e il menu non l'ha mai
+  *     nascosta. Spostarla anche lì darebbe due comandi identici sulla stessa card.
+  */
+ const test=button('test',esterno?'Prova collegamento':'Verifica accesso');
+ const vociMenu=[];
  if(d.tempo)vociMenu.push({chiave:'save-runtime',etichetta:row.supportsEndpoint||esterno?'Salva collegamento':'Salva tempo massimo',icona:'i-clock',elemento:aggiungiNascosto(button('save-runtime',row.supportsEndpoint||esterno?'Salva collegamento':'Salva tempo massimo'))});
  if(row.supportsEndpoint&&row.endpointConfigured)vociMenu.push({chiave:'reset-runtime',etichetta:'Ripristina indirizzo',icona:'i-history',elemento:aggiungiNascosto(button('reset-runtime','Ripristina indirizzo'))});
  if(row.keyConfigured&&!poolCollegato)vociMenu.push({chiave:'remove-key',etichetta:pool.length>1?'Rimuovi tutte le chiavi':'Rimuovi chiave',icona:'i-trash',pericolo:true,separaPrima:true,elemento:aggiungiNascosto(button('remove-key',pool.length>1?'Rimuovi tutte le chiavi':'Rimuovi chiave','ghost talos-button--danger'))});
@@ -230,7 +408,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
    finally{feedback.hidden=false;delete card.dataset.salvataggioCollegamento;card.setAttribute('aria-busy',String(busy));controlli.forEach((c,i)=>{c.disabled=prima[i];});}
   });
  }
- if(esterno){for(const v of vociMenu){v.elemento.hidden=false;} }
+ if(esterno){test.hidden=false;actions.append(test);for(const v of vociMenu){v.elemento.hidden=false;} }
  if(!esterno&&typeof onMenu==='function'&&vociMenu.length){
   const tre=el('button','talos-button talos-button--ghost talos-icon-button talos-button--sm');tre.type='button';
   tre.setAttribute('aria-label','Altre azioni per '+(row.label||row.id));tre.setAttribute('aria-haspopup','menu');
@@ -246,14 +424,66 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  if(prova&&prova.esito!=='in-corso'){const note=el('p','talos-muted',prova.esito==='collegato'?(esterno?'Agente inizializzato e chiuso. Nessun messaggio inviato.':row.id==='openrouter'?'Il catalogo risponde. La validità della chiave richiede una verifica dedicata.':'La verifica del servizio non esegue un modello.'):(prova.motivo||d.prova));note.dataset.provaEsito=prova.esito;if(Number.isFinite(prova.millisecondi))note.append(document.createTextNode(' · '+prova.millisecondi+' ms'));body.append(note);}
  const feedback=el('p','talos-muted');feedback.dataset.providerFeedback=row.id;feedback.setAttribute('role','status');feedback.hidden=true;body.append(feedback);
  for(const control of body.querySelectorAll('input,textarea,button'))control.disabled=busy;
- }card.append(body);return card;
+ /*
+  * ⛔⛔ IL PIEDE DELLA CARD — le `.provider-actions` del mockup, e sta FUORI dal corpo.
+  *   Fuori non è estetica: `.talos-provider__body` è il pannello che si apre e si chiude, e
+  *   «Configura» deve funzionare anche da CHIUSA — è l'unico comando che la card mostra quando
+  *   è chiusa. (E due prove di `tests/unit/provider-pkl-bis-dom.test.mjs` contano i pulsanti
+  *   VISIBILI dentro `.talos-provider__body`: aggiungerne uno lì dentro le farebbe rosse. Il
+  *   piede fuori dal corpo tiene quel contratto invece di doverlo rinegoziare.)
+  * ⛔ «Configura» È il disclosure della card: `data-provider-toggle` + `aria-expanded` +
+  *   `aria-controls`, e la regia delegata (`app.js:3189`, `:4780`) lo trova senza sapere che
+  *   esiste — è la stessa forma che aveva la testata, spostata sul comando che la nomina.
+  * ⛔ «Verifica accesso» è `data-provider-action="test"`: la sonda VERA, non una finta. Per
+  *   l'agente esterno il piede non la porta (vedi la nota sopra `test`).
+  */
+ const piede=el('div','talos-provider__azioni');vesti(piede,VESTITO.azioni);
+ /*
+  * ⛔ IL NOME ACCESSIBILE NON CAMBIA COL VERSO DEL COMANDO — e questa riga nasce da una ricerca
+  *   che ha SMENTITO la mia prima stesura (19/09/2026). Il pulsante diceva «Configura» da chiuso
+  *   e «Chiudi» da aperto, con un `aria-label` capovolto insieme al testo: è il modello che le
+  *   fonti SCONSIGLIANO, perché nome e stato finiscono per annunciare la stessa cosa due volte e
+  *   in versi opposti («Nascondi, aperto»). W3C WAI-ARIA APG, pattern Disclosure: `aria-expanded`
+  *   sull'elemento che apre, lo stato LÌ, e il nome che nomina il CONTENUTO («Configura OpenAI»),
+  *   non l'azione del momento
+  *   (<https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/examples/disclosure-card/>, letta il
+  *   19/09/2026). La regola per esteso, e la ragione: il nome di un controllo non si cambia mentre
+  *   lo si sta usando
+  *   (<https://amplify.studio24.net/amplify/advanced-components/disclosure-widget.html>, letta il
+  *   19/09/2026), col caso di scuola che le fonti citano e che si vede in un audit vero: il testo
+  *   visibile dice «Mostra» e il nome accessibile «Nascondi il sottomenu» mentre il menu è chiuso.
+  * ⇒ Testo visibile STABILE, nome STABILE (e contiene la parola visibile: WCAG 2.5.3 «Label in
+  *   Name»), stato solo in `aria-expanded`. Il verso del comando, a schermo, lo dice il corpo che
+  *   si apre — non serve dirlo due volte.
+  */
+ const configura=el('button','talos-button talos-button--secondary talos-button--sm','Configura');
+ configura.type='button';configura.dataset.c='Button';configura.dataset.providerToggle=row.id;
+ configura.setAttribute('aria-expanded',String(aperta));configura.setAttribute('aria-controls',idCorpo);
+ configura.setAttribute('aria-label','Configura '+(row.label||row.id));
+ piede.append(configura);
+ if(!esterno){test.disabled=busy;piede.append(test);}
+ card.append(body,piede);
+ }
+ return card;
 }
 export function aggiornaProviderList(lista,rows,{aperte=new Set(),prove=new Map(),occupati=new Set(),caricamento=false,errore=null,onMenu=null,onAzionePool=null}={}){
  if(!lista)return;lista.className='talos-provider-list';lista.setAttribute('aria-busy',String(caricamento));
- if(errore||!rows.length){const p=el('p','talos-muted',errore?errore.message||String(errore):caricamento?'Leggo gli accessi…':'Nessun fornitore dichiarato dal server.');p.dataset.c='EmptyState';if(errore)p.setAttribute('role','alert');lista.replaceChildren(p);return;}
+ /* La griglia del mockup (due colonne a 1122 di contenuto, una a 754): vedi `VESTITO.griglia`. */
+ vesti(lista,VESTITO.griglia);
+ /* ⛔ Un messaggio solo non è una card: nell'elenco vuoto la griglia si spegne, o il testo
+    resterebbe incolonnato in una cella da 340 invece di leggersi come una riga. */
+ if(errore||!rows.length){const p=el('p','talos-muted',errore?errore.message||String(errore):caricamento?'Leggo gli accessi…':'Nessun fornitore dichiarato dal server.');p.dataset.c='EmptyState';if(errore)p.setAttribute('role','alert');lista.replaceChildren(p);lista.style.display='block';return;}
  const focus=document.activeElement,focusId=focus?.closest('[data-provider-id]')?.dataset.providerId;
  const old=new Map([...lista.querySelectorAll('[data-provider-id]')].map(n=>[n.dataset.providerId,n]));
- const cards=rows.map(row=>{const op={aperta:aperte.has(row.id),prova:prove.get(row.id)||null,occupato:occupati.has(row.id)||caricamento},signature=JSON.stringify([row,op,typeof onAzionePool==='function']),precedente=old.get(row.id);if(precedente?.dataset.salvataggioCollegamento==='in-corso'||precedente?.dataset.providerSignature===signature&&!precedente.dataset.providerReset)return precedente;const card=creaProviderCard(row,{...op,onMenu,onAzionePool});card.dataset.providerSignature=signature;
+ /*
+  * ⛔ L'AMBITO — la stessa riga può essere disegnata in DUE posti insieme (il pannello del
+  *   laboratorio e il velo «Fornitori e accessi»): è da lì che nasceva `#provider-body-openrouter`
+  *   doppio. Il segno della superficie ce l'ha la LISTA, non il chiamante: il velo la marca
+  *   `data-velo-lista` (`app.js`, `popolaVeloFornitori`), il pannello no. ⇒ Si legge da qui, e
+  *   nessun chiamante deve ricordarsi di passarlo — che è il modo in cui un parametro si dimentica.
+  */
+ const ambito=lista.hasAttribute?.('data-velo-lista')||lista.closest?.('#veloFornitori')?'velo':'';
+ const cards=rows.map(row=>{const op={aperta:aperte.has(row.id),prova:prove.get(row.id)||null,occupato:occupati.has(row.id)||caricamento},signature=JSON.stringify([row,op,typeof onAzionePool==='function']),precedente=old.get(row.id);if(precedente?.dataset.salvataggioCollegamento==='in-corso'||precedente?.dataset.providerSignature===signature&&!precedente.dataset.providerReset)return precedente;const card=creaProviderCard(row,{...op,onMenu,onAzionePool,ambito});card.dataset.providerSignature=signature;
  if(precedente&&!precedente.dataset.providerReset){for(const input of card.querySelectorAll('input,textarea')){const attr=[...input.attributes].find(a=>a.name.startsWith('data-provider-'));const prima=precedente.querySelector('['+attr.name+']');if(prima){prima.disabled=input.disabled;prima.className=input.className;prima.placeholder=input.placeholder;input.replaceWith(prima);}}}
  const feedback=precedente?.querySelector('[data-provider-feedback]'),target=card.querySelector('[data-provider-feedback]');if(feedback&&target)target.replaceWith(feedback);return card;});lista.replaceChildren(...cards);
  if(focusId){if(focus.isConnected&&!focus.disabled)focus.focus({preventScroll:true});else cards.find(n=>n.dataset.providerId===focusId)?.querySelector('[data-provider-toggle]')?.focus({preventScroll:true});}
@@ -282,4 +512,56 @@ export function montaProviderPanel(panel){
  const note=head?.querySelector('p');if(note){note.className='talos-muted';note.textContent='Le chiavi restano sul computer. Presenza della chiave, collegamento ed esecuzione sono verifiche distinte.';}
  const test=panel.querySelector('#providerTestAll')||panel.querySelector('[data-provider-test-all]');
  if(test&&!panel.querySelector('#providerRefresh')){test.className='talos-button talos-button--secondary talos-button--sm';test.dataset.c='Button';const refresh=button('refresh','Aggiorna');refresh.id='providerRefresh';delete refresh.dataset.providerAction;test.before(refresh);}
+ curaDoppiaTestata(panel,head,title,note);
+}
+/*
+ * ⛔⛔ D9 — LA DOPPIA TESTATA. MISURATA, NON DEDOTTA (19/09/2026, 4174 in sola lettura, tema scuro,
+ *   viewport 1440, scheda «Provider» aperta). Sulla schermata viva c'erano DUE intestazioni
+ *   impilate, tutte e due visibili:
+ *
+ *     H3  «Collegamenti, non scatole nere.»   792×30   20px/600   → il guscio a quattro schede
+ *                                                                  (`lab-cornice-v3.js:193`, `[data-lab-frase]`)
+ *     H4  «Fornitori e accessi»               671×21   14px/700   → il pannello legacy, rinominato
+ *                                                                  qui sopra
+ *
+ *   ⇒ Il difetto ESISTE, ed è questo: **due nomi per la stessa pagina**, a 30 px di distanza.
+ *   ⛔ La cura NON è cancellare un nodo: il `<h4>` è la testata del pannello legacy, che vive
+ *     ANCHE fuori dal guscio (la schermata Impostazioni, il velo) e là è l'unica che c'è.
+ *     E `tests/browser/lab-montaggio-neutro.spec.mjs:571` pretende che il suo testo resti
+ *     «Fornitori e accessi». ⇒ Si nasconde (`hidden`), non si rimuove: il testo resta nel DOM,
+ *     il cancello resta verde, e chi guarda vede UNA testata sola.
+ *   ⛔ E si nasconde SOLO DENTRO IL GUSCIO: la condizione è «questo pannello sta in una carta del
+ *     laboratorio che porta già la frase della scheda?». Fuori di lì — velo compreso — la testata
+ *     del pannello resta al suo posto, com'era.
+ *   ⛔ La FRASE del pannello non si butta: scende nell'avviso in fondo alla griglia, che è la
+ *     posizione in cui il mockup tiene la sua nota di sicurezza (`.inline-notice`, misurato:
+ *     flex · gap 10 · bordo 1 · raggio 9 · 13/14 di padding · 12px). ⛔ E il testo dell'avviso è
+ *     il NOSTRO, non quello del mockup: «Qui non inserire chiavi reali.» in TALOS è FALSO — qui
+ *     le chiavi vere si inseriscono, è il posto apposta. Stessa scelta, e stesso precedente, della
+ *     politica della banda (`lab-cornice-v3.js:334` «la frase del mockup NON si copia»), decisa
+ *     dall'owner il 19/09/2026.
+ */
+function curaDoppiaTestata(panel,head,title,note){
+ const dentroIlGuscio=Boolean(panel.closest?.('#modelLabCard')?.querySelector('[data-lab-frase]'));
+ if(!dentroIlGuscio||!title||!note)return;
+ title.hidden=true;note.hidden=true;
+ if(panel.querySelector('[data-provider-avviso]'))return;
+ const avviso=el('div','talos-provider__avviso');avviso.dataset.providerAvviso='';vesti(avviso,VESTITO.avviso);
+ const icona=simboloProvider('i-shield');icona.style.flex='none';icona.style.marginTop='2px';
+ const testo=el('span','');
+ const forte=el('strong','','Le chiavi restano sul computer.');
+ Object.assign(forte.style,{color:'var(--talos-text)',fontWeight:'550'});
+ testo.append(forte,document.createTextNode(' '+note.textContent.replace(/^Le chiavi restano sul computer\.\s*/u,'')));
+ avviso.append(icona,testo);
+ /*
+  * ⛔ DOVE VA L'AVVISO, E PERCHÉ NON DOVE STA NEL MOCKUP. Il mockup lo mette DOPO la griglia
+  *   (`.provider-grid{margin-bottom:24px}` e l'avviso le sta sotto) — e con le sue **2 card**
+  *   è la riga successiva, a un dito dal titolo. Da noi le card sono **28**: la stessa posizione
+  *   manderebbe la frase a circa **5.000 px** sotto, cioè a una schermata e mezza da chi la
+  *   legge — e quella frase, «Le chiavi restano sul computer», era **in testa** fino a ieri.
+  *   Spostarla in fondo non sarebbe una perdita nel DOM, sarebbe una perdita DI FATTO. ⇒ Sta
+  *   subito sotto i comandi, dov'era: stesso elemento, stesso stile del mockup, stesso testo.
+  *   La differenza di posizione è dichiarata, non nascosta.
+  */
+ if(head)head.after(avviso);else panel.prepend(avviso);
 }
