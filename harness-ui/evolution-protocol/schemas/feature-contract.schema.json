@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talos.local/evolution/schemas/feature-contract.schema.json",
+  "title": "TALOS Feature Contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "featureContractId",
+    "sourceAuthority",
+    "sourceRequestHash",
+    "intent",
+    "requestedSurfaces",
+    "requestedCapabilities",
+    "acceptanceCriteria",
+    "authorityDelta",
+    "createdAt"
+  ],
+  "properties": {
+    "schema": {
+      "const": "talos.evolution.feature-contract.v1"
+    },
+    "featureContractId": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "sourceAuthority": {
+      "enum": [
+        "user",
+        "autonomous-evidence"
+      ]
+    },
+    "sourceSessionId": {
+      "anyOf": [
+        {
+          "$ref": "common.schema.json#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sourceEventId": {
+      "anyOf": [
+        {
+          "$ref": "common.schema.json#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sourceRequestHash": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "intent": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "requestedSurfaces": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "tool",
+          "action",
+          "ui",
+          "state"
+        ]
+      }
+    },
+    "requestedCapabilities": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/capability"
+      }
+    },
+    "acceptanceCriteria": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "statement"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "kind": {
+            "enum": [
+              "positive",
+              "negative",
+              "security",
+              "resource"
+            ]
+          },
+          "statement": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "oracleHint": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      }
+    },
+    "authorityDelta": {
+      "enum": [
+        "none",
+        "expansion-requested"
+      ]
+    },
+    "createdAt": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    }
+  }
+}
