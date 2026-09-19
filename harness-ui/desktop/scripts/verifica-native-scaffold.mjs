@@ -49,14 +49,18 @@ export function validateMemberManifest(name, text) {
   requireText(text, 'rust-version.workspace = true', 'NATIVE_CRATE_WORKSPACE_INHERITANCE');
   requireText(text, 'publish = false', 'NATIVE_CRATE_PUBLISH_FORBIDDEN');
 
-  const dependencyBlocks = [...String(text).matchAll(/^\[(?:target\.[^\]]+\.)?(?:build-)?dependencies(?:\.[^\]]+)?\]\s*$([\s\S]*?)(?=^\[|\z)/gmu)];
-  for (const [, block] of dependencyBlocks) {
-    for (const raw of block.split(/\r?\n/u)) {
-      const line = raw.replace(/#.*$/u, '').trim();
-      if (!line) continue;
-      if (!/^[A-Za-z0-9_-]+\s*=\s*\{[^}]*\bpath\s*=\s*"[^"]+"[^}]*\}\s*$/u.test(line)) {
-        fail(`${name}: E0-3 ammette solo dipendenze path locali: ${line}`, 'NATIVE_EXTERNAL_DEPENDENCY');
-      }
+  let dependencySection = false;
+  for (const raw of String(text).split(/\r?\n/u)) {
+    const trimmed = raw.trim();
+    if (/^\[[^\]]+\]$/u.test(trimmed)) {
+      dependencySection = /^\[(?:target\.[^\]]+\.)?(?:build-)?dependencies(?:\.[^\]]+)?\]$/u.test(trimmed);
+      continue;
+    }
+    if (!dependencySection) continue;
+    const line = raw.replace(/#.*$/u, '').trim();
+    if (!line) continue;
+    if (!/^[A-Za-z0-9_-]+\s*=\s*\{[^}]*\bpath\s*=\s*"[^"]+"[^}]*\}\s*$/u.test(line)) {
+      fail(`${name}: E0-3 ammette solo dipendenze path locali: ${line}`, 'NATIVE_EXTERNAL_DEPENDENCY');
     }
   }
 }
