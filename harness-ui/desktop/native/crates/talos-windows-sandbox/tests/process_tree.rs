@@ -3,8 +3,7 @@
 use std::{
     env,
     ffi::OsString,
-    fs,
-    io,
+    fs, io,
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus},
     sync::atomic::{AtomicU64, Ordering},
@@ -111,7 +110,11 @@ fn wait_child(child: &mut Child, timeout: Duration) -> io::Result<ExitStatus> {
     ))
 }
 
-fn spawn_tree(job: &Job, tree: &TempTree, mode: &str) -> io::Result<(ContainedProcess, ObservedProcess)> {
+fn spawn_tree(
+    job: &Job,
+    tree: &TempTree,
+    mode: &str,
+) -> io::Result<(ContainedProcess, ObservedProcess)> {
     let pid_file = tree.file("grandchild.pid");
     let parent = job.spawn(
         &fixture(),
