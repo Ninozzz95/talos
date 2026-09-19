@@ -469,14 +469,13 @@ impl Job {
         if flags & (JOB_OBJECT_LIMIT_BREAKAWAY_OK | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK) != 0 {
             return Err(invariant("Job unexpectedly permits process breakaway"));
         }
-        if let Some(expected) = active_process_limit {
-            if flags & JOB_OBJECT_LIMIT_ACTIVE_PROCESS == 0
-                || actual.basic_limit_information.active_process_limit != expected
-            {
-                return Err(invariant(
-                    "Job active-process limit differs from requested policy",
-                ));
-            }
+        if let Some(expected) = active_process_limit
+            && (flags & JOB_OBJECT_LIMIT_ACTIVE_PROCESS == 0
+                || actual.basic_limit_information.active_process_limit != expected)
+        {
+            return Err(invariant(
+                "Job active-process limit differs from requested policy",
+            ));
         }
 
         Ok(Self {
