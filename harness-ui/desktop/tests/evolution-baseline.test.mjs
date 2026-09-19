@@ -64,6 +64,20 @@ test('E0-1 AL CONTRARIO — un action desktop puntato a tag e non a SHA pieno vi
   );
 });
 
+test('E0-1 AL CONTRARIO — anche una action con name + uses deve essere fissata a SHA pieno', () => {
+  const workflow = [
+    'jobs:',
+    '  desktop:',
+    '    steps:',
+    '      - name: cache',
+    '        uses: actions/cache@v6',
+  ].join('\n');
+  assert.throws(
+    () => validatePinnedDesktopActions(workflow),
+    (error) => error instanceof EvolutionBaselineError && error.code === 'EVOLUTION_BASELINE_ACTION_NOT_PINNED',
+  );
+});
+
 test('E0-1 AL CONTRARIO — due guardrail con lo stesso id non possono mascherarsi', () => {
   const baseline = {
     schema: 'talos.evolution.implementation-baseline.v1',
