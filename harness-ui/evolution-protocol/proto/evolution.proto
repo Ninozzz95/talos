@@ -1,0 +1,244 @@
+syntax = "proto3";
+
+package talos.evolution.v1;
+
+// TALOS Evolution ABI v1.
+//
+// This file defines transport messages only. Serialized Protobuf bytes MUST NOT
+// be used as canonical cryptographic identities for durable TALOS objects.
+
+message ProtocolVersion {
+  uint32 major = 1;
+  uint32 minor = 2;
+}
+
+message HashDigest {
+  enum Algorithm {
+    ALGORITHM_UNSPECIFIED = 0;
+    ALGORITHM_SHA256 = 1;
+  }
+
+  Algorithm algorithm = 1;
+  bytes digest = 2; // SHA-256 is exactly 32 bytes; validated by endpoints.
+}
+
+message TraceContext {
+  // W3C Trace Context. Observability only; never authorization or peer identity.
+  string traceparent = 1;
+  string tracestate = 2;
+}
+
+message RuntimeIdentity {
+  string runtime_id = 1;
+  HashDigest runtime_hash = 2;
+  string generation_id = 3;
+  uint32 process_id = 4;
+}
+
+message ClientHello {
+  repeated ProtocolVersion supported_versions = 1;
+  repeated string supported_features = 2;
+  RuntimeIdentity runtime = 3;
+  bytes client_nonce = 4; // v1 implementation requires exactly 32 random bytes.
+}
+
+message SupervisorHello {
+  ProtocolVersion selected_version = 1;
+  repeated string enabled_features = 2;
+  string connection_id = 3;
+  bytes supervisor_nonce = 4; // v1 implementation requires exactly 32 random bytes.
+}
+
+message ProtocolReject {
+  ProtocolErrorCode code = 1;
+  string message = 2;
+  repeated ProtocolVersion supported_versions = 3;
+}
+
+enum RuntimeHealthState {
+  RUNTIME_HEALTH_STATE_UNSPECIFIED = 0;
+  RUNTIME_HEALTH_STATE_STARTING = 1;
+  RUNTIME_HEALTH_STATE_READY = 2;
+  RUNTIME_HEALTH_STATE_DEGRADED = 3;
+  RUNTIME_HEALTH_STATE_STOPPING = 4;
+}
+
+message RuntimeReady {
+  RuntimeIdentity runtime = 1;
+}
+
+message RuntimeHealthRequest {}
+
+message RuntimeHealthResponse {
+  RuntimeHealthState state = 1;
+  string detail_code = 2;
+}
+
+message RuntimeShutdownRequest {
+  string reason_code = 1;
+}
+
+message CancelRequest {
+  string target_message_id = 1;
+  string reason_code = 2;
+}
+
+enum CandidateState {
+  CANDIDATE_STATE_UNSPECIFIED = 0;
+  CANDIDATE_STATE_DRAFT = 1;
+  CANDIDATE_STATE_REVIEWED = 2;
+  CANDIDATE_STATE_BUILDING = 3;
+  CANDIDATE_STATE_BUILT = 4;
+  CANDIDATE_STATE_FROZEN = 5;
+  CANDIDATE_STATE_VERIFYING = 6;
+  CANDIDATE_STATE_VERIFIED = 7;
+  CANDIDATE_STATE_REJECTED = 8;
+}
+
+message CandidateCreateRequest {
+  string feature_contract_id = 1;
+  HashDigest parent_runtime_hash = 2;
+}
+
+message CandidateCreateResponse {
+  string candidate_id = 1;
+  uint32 revision = 2;
+  CandidateState state = 3;
+}
+
+message BlobChunk {
+  string transfer_id = 1;
+  uint32 index = 2;
+  bytes data = 3;
+  bool final_chunk = 4;
+  HashDigest complete_digest = 5; // Required only on the final chunk.
+}
+
+message CandidatePutBlobRequest {
+  string candidate_id = 1;
+  uint32 revision = 2;
+  string logical_path = 3;
+  BlobChunk chunk = 4;
+}
+
+message CandidatePutBlobResponse {
+  string candidate_id = 1;
+  uint32 revision = 2;
+  uint64 accepted_bytes = 3;
+}
+
+message CandidateFreezeRequest {
+  string candidate_id = 1;
+  uint32 revision = 2;
+}
+
+message CandidateFreezeResponse {
+  string candidate_id = 1;
+  uint32 revision = 2;
+  HashDigest candidate_hash = 3;
+  CandidateState state = 4;
+}
+
+message CandidateStatusRequest {
+  string candidate_id = 1;
+}
+
+message CandidateStatusResponse {
+  string candidate_id = 1;
+  uint32 revision = 2;
+  CandidateState state = 3;
+  HashDigest candidate_hash = 4;
+  string verification_dossier_id = 5;
+}
+
+enum EvolutionFreezeState {
+  EVOLUTION_FREEZE_STATE_UNSPECIFIED = 0;
+  EVOLUTION_FREEZE_STATE_RUNNING = 1;
+  EVOLUTION_FREEZE_STATE_FROZEN = 2;
+}
+
+message EvolutionStatusRequest {}
+
+message EvolutionStatusResponse {
+  EvolutionFreezeState freeze_state = 1;
+  HashDigest active_runtime_hash = 2;
+}
+
+message EvolutionFreezeRequest {
+  string reason_code = 1;
+}
+
+message EvolutionUnfreezeRequest {
+  string reason_code = 1;
+}
+
+enum ProtocolErrorCode {
+  PROTOCOL_ERROR_CODE_UNSPECIFIED = 0;
+  PROTOCOL_ERROR_CODE_MALFORMED_FRAME = 1;
+  PROTOCOL_ERROR_CODE_FRAME_TOO_LARGE = 2;
+  PROTOCOL_ERROR_CODE_UNSUPPORTED_VERSION = 3;
+  PROTOCOL_ERROR_CODE_UNSUPPORTED_FEATURE = 4;
+  PROTOCOL_ERROR_CODE_HANDSHAKE_REQUIRED = 5;
+  PROTOCOL_ERROR_CODE_IDENTITY_MISMATCH = 6;
+  PROTOCOL_ERROR_CODE_INVALID_STATE = 7;
+  PROTOCOL_ERROR_CODE_INVALID_ARGUMENT = 8;
+  PROTOCOL_ERROR_CODE_NOT_FOUND = 9;
+  PROTOCOL_ERROR_CODE_HASH_MISMATCH = 10;
+  PROTOCOL_ERROR_CODE_CANCELLED = 11;
+  PROTOCOL_ERROR_CODE_INTERNAL = 12;
+}
+
+message ProtocolError {
+  ProtocolErrorCode code = 1;
+  string message = 2;
+  string related_message_id = 3;
+}
+
+message Envelope {
+  ProtocolVersion protocol_version = 1;
+
+  // Empty only for pre-handshake client_hello / protocol_reject traffic.
+  string connection_id = 2;
+
+  // Caller-generated stable correlation identifier. Requests and their response
+  // reuse the same message_id. Notifications still carry a unique message_id.
+  string message_id = 3;
+
+  TraceContext trace = 4;
+
+  // Tag ranges are intentionally grouped:
+  // 10-19 handshake
+  // 20-29 runtime
+  // 30-39 candidate
+  // 40-49 evolution
+  // 50-59 capability (future)
+  // 60-69 extension (future)
+  // 90-99 protocol errors/control
+  oneof body {
+    ClientHello client_hello = 10;
+    SupervisorHello supervisor_hello = 11;
+    ProtocolReject protocol_reject = 12;
+
+    RuntimeReady runtime_ready = 20;
+    RuntimeHealthRequest runtime_health_request = 21;
+    RuntimeHealthResponse runtime_health_response = 22;
+    RuntimeShutdownRequest runtime_shutdown_request = 23;
+    CancelRequest cancel_request = 24;
+
+    CandidateCreateRequest candidate_create_request = 30;
+    CandidateCreateResponse candidate_create_response = 31;
+    CandidatePutBlobRequest candidate_put_blob_request = 32;
+    CandidatePutBlobResponse candidate_put_blob_response = 33;
+    CandidateFreezeRequest candidate_freeze_request = 34;
+    CandidateFreezeResponse candidate_freeze_response = 35;
+    CandidateStatusRequest candidate_status_request = 36;
+    CandidateStatusResponse candidate_status_response = 37;
+
+    EvolutionStatusRequest evolution_status_request = 40;
+    EvolutionStatusResponse evolution_status_response = 41;
+    EvolutionFreezeRequest evolution_freeze_request = 42;
+    EvolutionUnfreezeRequest evolution_unfreeze_request = 43;
+
+    ProtocolError error = 90;
+  }
+}
