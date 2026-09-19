@@ -117,5 +117,26 @@ p('ADDITIVO — se ha cercato il PADRE, il figlio passa come prima', false, caso
 const casoSessione = lancia({ testoMadre: senzaRicerca, testoFiglio: null })
 p('SESSIONE PRINCIPALE senza ricerca: BLOCCA', true, casoSessione.nega)
 
-console.log(falliti === 0 ? '\nTutte verdi (compresi i casi dell\'agente e del delegato).' : `\n${falliti} PROVE FALLITE.`)
+/*
+ * ⛔ 19/09/2026 — LA CORSA AFFOLLATA, cioè la finestra che era troppo corta.
+ * La corsia BC è stata **bloccata dopo OTTO ricerche vere**: in una sessione affollata le prime
+ * erano già uscite dalle ultime 300 voci. Qui si costruisce quella corsa — UNA ricerca e poi
+ * mille voci di lavoro — e si guarda con le **due** finestre: con quella di prima (300) la ricerca
+ * **non si vede** (il difetto), con quella di adesso (3000) si vede. Il verso che deve fallire sta
+ * dentro la prova, non in un file vecchio da riesumare.
+ */
+{
+    const righe = [JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'WebSearch', input: {} }] } })]
+    for (let i = 0; i < 1000; i += 1) {
+        righe.push(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: `f${i}.mjs` } }] } }))
+    }
+    const affollata = righe.join('\n')
+    const conLaVecchia = eventiRecenti(affollata, 300).some((e) => e.name === 'WebSearch')
+    const conLaNuova = eventiRecenti(affollata).some((e) => e.name === 'WebSearch')
+    p('CORSA AFFOLLATA — con la finestra di PRIMA (300) la ricerca è invisibile: ecco il difetto', false, conLaVecchia)
+    p('CORSA AFFOLLATA — con la finestra di ADESSO (3000) la ricerca si vede', true, conLaNuova)
+    p('CORSA AFFOLLATA — e quindi il cancello non blocca chi ha cercato', false, serveRicerca({ strumento: 'Edit', percorso: 'C:/…/harness-ui/src/config.mjs', eventi: eventiRecenti(affollata) }))
+}
+
+console.log(falliti === 0 ? '\nTutte verdi (compresi i casi dell\'agente, del delegato e della corsa affollata).' : `\n${falliti} PROVE FALLITE.`)
 process.exit(falliti === 0 ? 0 : 1)

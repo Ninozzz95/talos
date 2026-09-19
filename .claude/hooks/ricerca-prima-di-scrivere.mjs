@@ -67,8 +67,16 @@ import { eventiDelTurno } from './cancelli.mjs'
  * se una ricerca c'è fra le ultime N voci, vale. Nella sessione principale il
  * turno corrente sta comunque dentro la finestra; nel transcript di un agente
  * la finestra sopravvive ai falsi azzeramenti.
+ *
+ * ⛔ 19/09/2026 — LA FINESTRA ERA TROPPO CORTA, e l'ha pagata una corsia: **300 voci**
+ * sono pochi minuti di lavoro di un agente, e la corsia BC è stata **bloccata dopo
+ * OTTO ricerche vere** (le prime erano già uscite dalla finestra). ⇒ Si guarda molto più
+ * indietro: **3000 voci**. Il file si legge comunque **tutto** (`readFileSync`), quindi
+ * allargare la finestra non costa un byte di lettura in più — costava solo di non vedere.
+ * ⛔ E la lezione è quella di sempre, in una forma nuova: la finestra era nata per
+ * *non negare a chi ha obbedito*, ed è diventata lei stessa la causa del diniego.
  */
-export function eventiRecenti(testoTranscript, finestra = 300) {
+export function eventiRecenti(testoTranscript, finestra = 3000) {
     const righe = String(testoTranscript ?? '').split('\n').filter(Boolean)
     const eventi = []
     for (const riga of righe.slice(-finestra)) {
