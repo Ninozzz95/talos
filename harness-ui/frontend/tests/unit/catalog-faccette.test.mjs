@@ -85,6 +85,24 @@ test('capacitaDelCatalogo: le faccette si offrono solo dove il dato esiste', () 
   assert.equal(senzaDati.haPrezzo, false);
   assert.equal(senzaDati.haBuchi, true);
   assert.deepEqual(senzaDati.ordinamenti.map(([id]) => id), ['catalog', 'name'], 'senza il dato l’ordinamento non si offre');
+  /*
+   * ⛔ E IL CASO CHE VALE DI PIÙ — 19/09/2026: NESSUN catalogo, non un catalogo senza un dato.
+   * È lo stato in cui la superficie vive mentre il server interroga l'upstream, ed è quello in
+   * cui la barra deve tacere invece di scrivere «0». Questa è la funzione che DECIDE: se
+   * affermasse qualcosa su un catalogo vuoto, la barra disegnerebbe faccette e conteggi che
+   * nessuno ha misurato ([[la-colonna-del-costo-ha-una-risoluzione]]: «sotto la risoluzione»
+   * non è «economico», e «non contato» non è «zero»).
+   *   · nessun parametro da offrire ⇒ il gruppo delle capacità non si disegna;
+   *   · nessun contesto, nessun prezzo, nessun buco ⇒ gli altri tre nemmeno;
+   *   · restano solo gli ordinamenti che NON dipendono dal catalogo: `catalog` e `name`.
+   */
+  const nessuno = capacitaDelCatalogo([]);
+  assert.deepEqual(nessuno.parametri, [], 'un catalogo vuoto non ha parametri da offrire');
+  assert.equal(nessuno.haContesto, false);
+  assert.equal(nessuno.haPrezzo, false);
+  assert.equal(nessuno.haBuchi, false);
+  assert.deepEqual(nessuno.ordinamenti.map(([id]) => id), ['catalog', 'name']);
+  assert.deepEqual([...conteggiPerFornitore([], emptyCatalogFilters()).keys()], [], 'e non si contano fornitori di niente');
 });
 
 test('⛔ conteggiPerFornitore e facetCount danno lo STESSO numero, con le altre faccette accese', () => {

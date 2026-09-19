@@ -11028,6 +11028,133 @@ body.reduce-motion .real-reasoning-note[data-ragionamento=vivo] > .talos-activit
   animation: talosAttesaShimmer 1.9s linear infinite !important;
 }
 
+/* src/styles/stato-vuoto.css */
+#modelLabCard [data-model-lab-panel=downloads] .empty-state {
+  min-height: 330px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  border: 1px dashed var(--talos-border);
+  border-radius: 12px;
+  padding: 40px 24px;
+}
+#modelLabCard [data-model-lab-panel=downloads] .empty-state > .i {
+  width: 34px;
+  height: 34px;
+  color: var(--talos-accent-text);
+  margin-bottom: 20px;
+}
+#modelLabCard [data-model-lab-panel=downloads] .empty-state h3 {
+  font-size: 1.25rem;
+  letter-spacing: -.04em;
+  margin-bottom: 10px;
+}
+#modelLabCard [data-model-lab-panel=downloads] .empty-state p {
+  color: var(--talos-muted);
+  font-size: .8125rem;
+  max-width: 420px;
+  line-height: 1.7;
+  margin-bottom: 22px;
+}
+@media (max-width: 1100px) {
+  #modelLabCard [data-model-lab-panel=downloads] .empty-state {
+    padding: 30px 20px;
+    min-height: 240px;
+  }
+}
+
+/* src/styles/sistema-schede.css */
+#modelLabOverviewPanel .system-card,
+#modelLabRuntimeGate.system-card {
+  border: 1px solid var(--talos-border);
+  border-radius: 12px;
+  background: var(--talos-panel);
+  padding: 22px;
+}
+#modelLabOverviewPanel .section-heading,
+#modelLabRuntimeGate .section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 20px;
+}
+#modelLabOverviewPanel .section-heading h3,
+#modelLabRuntimeGate .section-heading h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .9375rem;
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+#modelLabOverviewPanel .system-value {
+  font-family: var(--talos-font-mono);
+  font-size: 2.75rem;
+  line-height: 1.1;
+  letter-spacing: -.06em;
+  margin: 24px 0 6px;
+}
+#modelLabOverviewPanel .system-value small {
+  font-family: var(--talos-font-ui);
+  font-size: 1rem;
+  color: var(--talos-muted);
+}
+#modelLabOverviewPanel .budget-track {
+  height: 7px;
+  margin: 22px 0;
+  border-radius: 3px;
+  border: 0;
+  background: var(--talos-border);
+  accent-color: var(--talos-muted);
+  appearance: none;
+  overflow: hidden;
+}
+#modelLabOverviewPanel .model-facts {
+  margin: 14px 0;
+  padding: 0;
+}
+#modelLabOverviewPanel .model-facts > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0;
+  font-size: .75rem;
+}
+#modelLabOverviewPanel .model-facts dt {
+  color: var(--talos-muted);
+}
+#modelLabOverviewPanel .model-facts dd {
+  margin: 0;
+  text-align: right;
+}
+#modelLabOverviewPanel .inline-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 13px 14px;
+  border: 1px solid var(--talos-border);
+  border-radius: 9px;
+  color: var(--talos-muted);
+  font-size: .75rem;
+  line-height: 1.65;
+}
+[data-sistema-schede=v1] {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 1150px) {
+  [data-sistema-schede=v1] {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* src/styles/segnavia-mobile.css */
 .talos-line-loader {
   display: block;
@@ -14969,6 +15096,13 @@ body.reduce-motion {
 }
 
 /* src/styles/banda-laboratorio.css */
+#schermoImpostazioni[data-settings-ui=v3] #modelLabCard.talos-settings__section {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
 .talos-lab__banda {
   display: flex;
   align-items: center;

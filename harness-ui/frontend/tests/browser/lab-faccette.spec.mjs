@@ -15,22 +15,28 @@ import { modelloCatalogo } from '../../src/components/catalogo-modelli.js';
  * Prova `src/components/catalogo-faccette.js` e l'anello che la lega al catalogo
  * (`src/components/catalogo-modelli.js` + `src/domain/catalog-engine.ts`) DENTRO
  * l'app VERA, per le PORTE VERE: il pulsante `Impostazioni` della barra, la
- * linguetta `Laboratorio modelli`, la linguetta `Modelli` del guscio, la casella
- * di ricerca `#modelLabSearch`, il select `#modelLabProviderFilter` e i clic sulle
- * faccette. Il pannello è quello che `montaCatalogoModelli` travasa da
- * `#panel-catalogo`: non un finto DOM, non una fixture di markup.
+ * linguetta `Laboratorio modelli`, la scheda `Provider` del guscio, la PORTA del
+ * catalogo (`#modelLabCatalogDoor`), la casella di ricerca `#modelLabSearch`, il
+ * select `#modelLabProviderFilter` e i clic sulle faccette. Il pannello è quello
+ * che `montaCatalogoModelli` travasa da `#panel-catalogo`: non un finto DOM, non
+ * una fixture di markup.
  *
- * ⛔ LA PORTA, MISURATA E NON DEDOTTA (18/09/2026, dopo il commit `513b8bed`).
- *    Il guscio a quattro schede della corsia 2 è entrato nell'app e ha cambiato la
- *    strada: la striscia legacy (`[data-model-lab-tab=catalog]`, «Catalogo API») sta
- *    in un contenitore NASCOSTO — misurato, `offsetParent === null` — e a premerla è
- *    la scheda «Modelli» del guscio (`tablist "Sezioni laboratorio modelli"`, accanto
- *    a Provider · Download · Sistema). Prima si arriva su «Sistema»; dopo il clic su
- *    «Modelli» il pannello legacy resta `offsetParent === null` ma `aria-selected`
- *    diventa `true`, `#modelLabCatalogPanel` diventa visibile e la barra è dentro.
- *    ⇒ La catena di questo file è la porta di OGGI. Chi la rompe la rimisura, non la
- *    aggiusta a occhio: le prove che cliccano `[data-model-lab-tab=catalog]` non
- *    funzionano più perché quel nodo non è più cliccabile.
+ * ⛔ LA PORTA, RIMISURATA IL 19/09/2026 — e questa volta la strada è cambiata davvero.
+ *    Il guscio a quattro schede ha raggruppato i sei pannelli legacy: `catalog` sta
+ *    nella scheda «Provider» (`lab-cornice-v3.js`, `SCHEDE_LAB`; `lab-guscio`
+ *    GUSCIO-01 lo asserisce) e la scheda si apre sulla PRIMA sezione (`providers`).
+ *    Misurato sul 4174 il 19/09/2026 con una sonda di sola lettura: nessun controllo
+ *    visibile accendeva la seconda sezione (`comandiVisibili: 0` — le sei linguette
+ *    legacy stanno in `[data-lab-comandi]`, `hidden`), quindi `caricaCatalogoModelLab`
+ *    non è mai partita, la barra non si è mai costruita e la superficie del catalogo
+ *    era IRRAGGIUNGIBILE. `#modelLabFacets` 0 copie, `[data-facet-check]` 0.
+ *    ⇒ La catena di questo file è la porta di OGGI, e la porta è un controllo vero
+ *      sulla schermata: scheda «Provider» → `#modelLabCatalogDoor` («Catalogo dei
+ *      fornitori», montata da `portaDelCatalogo` in `catalogo-modelli.js`).
+ *      Il clic NON è una scorciatoia: preme il bottone vero dell'app
+ *      (`[data-model-lab-tab="catalog"]`), cioè la stessa riga che preme il guscio
+ *      quando deve aprire una sezione. Chi rompe questa catena la rimisura, non la
+ *      aggiusta a occhio.
  *
  * ⛔ IL SELECT DEL FORNITORE È VESTITO DA «CALM»: il nodo vero ha `data-calm-source`,
  *    `aria-hidden="true"`, `tabindex="-1"` e NON è visibile — sopra c'è un
@@ -101,6 +107,23 @@ import { modelloCatalogo } from '../../src/components/catalogo-modelli.js';
  *     → **4 failed | 3 passed**: FACCETTE-02, 03, 05 **e 06**. ⇒ la copertura del ramo
  *     dormiente è reale, e il suo morso passa dal clic di «Vedi altri».
  *
+ * ⛔ LE RICETTE DEL 19/09/2026 — la seconda tornata, sulle cure di questa sessione.
+ *    Sono state scritte DOPO averle misurate, ognuna col suo rosso:
+ *   · R8 — `catalogo-modelli.js`, `aggiornaCatalogoModelli`: si rimette
+ *     `const barra = dati ? barraDelPannello(panel) : null;`
+ *     → **FACCETTE-08 rossa** (con la barra costruita solo sui dati, la superficie che
+ *     aspetta il catalogo non ha NESSUNA barra: `#modelLabFacets` 0 copie). Le altre
+ *     restano verdi perché in tutte le altre il catalogo è già arrivato;
+ *   · R9 — `catalogo-modelli.js`, `portaDelCatalogo`: si toglie la chiamata da
+ *     `montaCatalogoModelli` → **TUTTE rosse**: senza porta la superficie del catalogo
+ *     non si apre da nessuna parte, ed è la misura che ha prodotto questa cura;
+ *   · R10 — `catalogo-faccette.js`, `aggiorna`: si torna a `conteggio: n` invece di
+ *     `senzaDati ? null : n` → **FACCETTE-08 rossa** (la barra scrive «0» dove non ha
+ *     contato niente, e spegne un valore che non sa essere a zero).
+ *   ⛔ E UN LIMITE DELLA MUTAZIONE, misurato: R8 e R10 mordono SOLO FACCETTE-08, perché
+ *     è l'unica prova che guarda una superficie SENZA catalogo. Chi vuole una
+ *     mutazione a morso largo passi da R9.
+ *
  * ⛔ LE DUE RICETTE CHE NON MORDONO — misurate, e dichiarate qui perché nessuno le
  *    creda per buone (erano nell'elenco delle previsioni, al posto di R4b e R6c):
  *   · R4 — `catalogo-modelli.js`, `onCambia`: si rilegge il fornitore da
@@ -116,7 +139,16 @@ import { modelloCatalogo } from '../../src/components/catalogo-modelli.js';
  * ⛔ I LIMITI DICHIARATI, che questa prova NON copre:
  *   · il catalogo VERO (FACCETTE-06) dipende da `/api/v1/models`: se il server non
  *     risponde, quel test è rosso per la rete e non per il codice — il perché sta
- *     nel messaggio dell'asserzione;
+ *     nel messaggio dell'asserzione. ⛔ E il PRIMO giro di un server con lo store
+ *     vuoto serve l'elenco di RISERVA (misurato sul server isolato il 19/09/2026:
+ *     la prima chiamata 2 modelli, la seconda 447): per questo il test ASPETTA che
+ *     l'upstream sia arrivato invece di misurare la riserva;
+ *   · ⛔ LA BARRA STA DOVE STA IL CATALOGO, e il catalogo sta nella scheda «Provider».
+ *     Questa prova NON dimostra che la barra sia nella scheda «Hugging Face»: il
+ *     mockup la disegna lì, l'owner ha deciso che «Modelli» è la scheda dei modelli
+ *     LOCALI (catalogo Hugging Face) e il guscio mette `catalog` in «Provider». La
+ *     scheda in cui la barra vive è quindi una DECISIONE, e non è di questa corsia:
+ *     qui si prova che la superficie è raggiungibile e che la barra è viva;
  *   · il percorso del controllo «Calm» è provato sulla CASELLA (FACCETTE-03 clicca
  *     `button.calm-check`, il controllo che sta a schermo) e sul SELECT solo per via
  *     diretta con `{ force: true }`: aprire il dropdown VESTITO — il gesto che un dito
@@ -159,18 +191,28 @@ const CATALOGO = {
 const ADATTATI = CATALOGO.modelli.map(modelloCatalogo);
 const righe = (page) => page.locator('#modelLabCatalogList [data-catalog]');
 
-async function foto(page, nome, info) {
+/*
+ * ⛔ La larghezza nel nome è quella VERA della pagina, non quella del progetto: dal 19/09/2026
+ * c'è un test che cambia viewport a mano (1024 e 1440), e leggendo `info.project` le due foto
+ * si sovrascriverebbero a vicenda con lo stesso nome — cioè la seconda cancellerebbe la prima,
+ * in silenzio, ed è la specie di difetto che questo progetto paga più spesso
+ * ([[git-add-su-una-cartella-scarta-in-silenzio]]).
+ */
+async function foto(page, nome) {
   await mkdir(FOTO, { recursive: true });
-  await page.screenshot({ path: path.join(FOTO, `${nome}-${info.project.use.viewport.width}.png`), animations: 'disabled', fullPage: false });
+  const { width } = page.viewportSize() ?? { width: 0 };
+  await page.screenshot({ path: path.join(FOTO, `${nome}-${width}.png`), animations: 'disabled', fullPage: false });
 }
 
 /**
- * Apre il catalogo per le PORTE VERE. `/api/v1/models` si intercetta con la fixture: gli
- * altri indirizzi restano quelli veri del server (sono tutti locali — capacità della
- * macchina, provider configurati, runtime — quindi la prova non esce in rete).
+ * Apre il laboratorio e accende la scheda «Provider», senza aprire il catalogo.
+ * `/api/v1/models` si intercetta con la fixture: gli altri indirizzi restano quelli veri
+ * del server (sono tutti locali — capacità della macchina, provider configurati, runtime —
+ * quindi la prova non esce in rete).
  */
-async function apriCatalogo(page, { colorMode = 'dark', catalogo = CATALOGO } = {}) {
-  await page.route('**/api/v1/models*', (route) => route.fulfill({
+async function apriLaboratorio(page, { colorMode = 'dark', catalogo = CATALOGO, risposta = null } = {}) {
+  if (risposta) page.route('**/api/v1/models*', risposta);
+  else if (catalogo) await page.route('**/api/v1/models*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({ ok: true, data: catalogo, meta: { schema: 'talos.harness-ui.api.v1' } }),
@@ -191,8 +233,37 @@ async function apriCatalogo(page, { colorMode = 'dark', catalogo = CATALOGO } = 
   if (await salta.isVisible()) await salta.click();
   await page.getByRole('button', { name: /^Impostazioni(?: \(Ctrl ,\))?$/ }).click();
   await page.getByRole('tab', { name: 'Laboratorio modelli', exact: true }).click();
-  /* La scheda del GUSCIO: è quella che preme la linguetta legacy (vedi l'intestazione). */
-  await page.getByRole('tab', { name: 'Modelli', exact: true }).click();
+  /* La scheda del GUSCIO che contiene il pannello del catalogo (`lab-cornice-v3.js`,
+     `SCHEDE_LAB`: `providers` + `catalog`). La scheda si apre sulla PRIMA sezione, quindi
+     da qui il catalogo non è ancora acceso. */
+  await page.locator('#labSchedaProviders').click();
+  await expect(page.locator('[data-lab-pannello="providers"]')).toBeVisible();
+}
+
+/**
+ * La PORTA del catalogo: il controllo che questa sessione ha aggiunto perché la
+ * superficie ne era priva (misurato il 19/09/2026: `comandiVisibili: 0`, nessun
+ * controllo visibile accendeva la seconda sezione della scheda «Provider», quindi il
+ * catalogo non si caricava mai e la barra non si costruiva mai).
+ * ⛔ Si prova il controllo VERO a schermo, non il clic programmatico sul bottone
+ * nascosto: è la differenza fra «una prova verde» e «una strada che una persona può
+ * fare».
+ */
+async function apriIlCatalogoDallaPorta(page) {
+  const porta = page.locator('#modelLabCatalogDoor');
+  await expect(porta, 'la porta del catalogo non è nella schermata: la superficie è irraggiungibile').toBeVisible();
+  const misura = await porta.boundingBox();
+  expect(misura, 'la porta non ha un\'area cliccabile').not.toBeNull();
+  expect(misura.height, 'la porta è sotto la soglia di 24 px delle Impostazioni').toBeGreaterThanOrEqual(24);
+  await porta.click();
+  await expect(page.locator('[data-model-lab-panel="catalog"]')).toBeVisible();
+}
+
+/** Il laboratorio col catalogo aperto dalla sua porta, coi dati della fixture. */
+async function apriCatalogo(page, opzioni = {}) {
+  const { catalogo = CATALOGO } = opzioni;
+  await apriLaboratorio(page, opzioni);
+  await apriIlCatalogoDallaPorta(page);
   await expect(page.locator('#modelLabCatalogPanel')).toBeVisible();
   await expect(righe(page)).toHaveCount(catalogo.modelli.length);
 }
@@ -222,6 +293,24 @@ async function apriIFiltri(page) {
   await page.waitForTimeout(250);
   await expect(apri, 'il pannello si è richiuso da solo: un altro proprietario tocca questo disclosure?').toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('#modelLabFacetsAdvanced')).toBeVisible();
+  /*
+   * ⛔ E IL VESTITO «CALM» ARRIVA DOPO — misurato il 19/09/2026 guardando le foto.
+   *   `calm-controls.js` sostituisce ogni `input[type=checkbox]` con un `button.calm-check`, e
+   *   lo fa da un osservatore: per qualche istante la riga porta ancora la casella NUDA, che è
+   *   alta diversa. Conseguenza vista nell'album `artifacts/lab-faccette-2026-09-18/`: la PRIMA
+   *   riga dei parametri impaginata in due modi diversi in due foto della stessa schermata alla
+   *   stessa larghezza (in `faccette-dark-1440` la casella è in linea, in `faccette-light-1440`
+   *   va a capo). Una foto scattata durante quel passaggio documenta la corsa, non il disegno.
+   *   ⇒ Prima di fotografare o di misurare una riga si aspetta che il vestito sia arrivato su
+   *   tutte le righe ATTIVE (una riga a zero è `disabled` e il vestito non lo prende).
+   *   Rimedio del metodo: [[una-prova-che-balla-non-protegge]] — si riprova invece di aspettare.
+   */
+  await expect.poll(
+    async () => page.locator('[data-facet-group="capabilities"] [data-facet-row]').evaluateAll((nodi) => nodi
+      .filter((n) => !n.querySelector('input').disabled)
+      .every((n) => Boolean(n.querySelector('.calm-check')))),
+    { message: 'il vestito Calm non è arrivato su tutte le righe: la foto documenterebbe una corsa', timeout: 5_000 },
+  ).toBe(true);
 }
 
 /** Gli errori che la NOSTRA pagina ha davvero alzato, con lo scarto del progetto per i terzi. */
@@ -255,7 +344,7 @@ test('FACCETTE-01 — la barra è nella carta, subito dopo la riga degli strumen
   await page.locator('[data-facet-group="capabilities"] [data-facet-row="tools"] span.talos-grow').click();
   await expect(righe(page)).toHaveCount(3);
   await expect(barra).toHaveCount(1);
-  await foto(page, 'faccette-filtrato', info);
+  await foto(page, 'faccette-filtrato');
 });
 
 test('FACCETTE-02 — i conteggi sono quelli del MOTORE, e un valore a zero si vede ma non si sceglie', async ({ page }) => {
@@ -393,21 +482,21 @@ test('FACCETTE-05 — la ricerca resta quella dell’app, e i conteggi la seguon
   await expect(page.locator('[data-facet-active] [data-facet-remove-search]')).toHaveCount(0);
 });
 
-test('FACCETTE-06 — sul catalogo VERO la barra regge, e «Vedi altri» è un disclosure vero', async ({ page }, info) => {
+test('FACCETTE-06 — sul catalogo VERO la barra regge, e «Vedi altri» è un disclosure vero', async ({ page, request }, info) => {
+  /* ⛔ Il catalogo vero arriva dall'upstream e il PRIMO giro può servire l'elenco di
+     RISERVA (misurato sul server isolato il 19/09/2026: prima chiamata 2 modelli, seconda
+     447). Si aspetta che l'upstream sia arrivato, invece di misurare la riserva: senza
+     questa attesa la prova sarebbe rossa per l'ambiente e non direbbe niente sul codice.
+     Il tempo lo chiede solo QUESTO test: gli altri non escono in rete. */
+  test.setTimeout(180_000);
+  await expect.poll(
+    async () => ((await (await request.get('/api/v1/models')).json()).data?.modelli ?? []).length,
+    { message: 'l’upstream del catalogo non è arrivato: si starebbe misurando l’elenco di riserva', timeout: 150_000, intervals: [2_000, 5_000] },
+  ).toBeGreaterThan(100);
+
   /* Senza `page.route`: si guarda il catalogo che il server ha davvero. */
-  await page.addInitScript(() => {
-    try {
-      window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
-        version: 1, appearance: { colorMode: 'dark', themePreset: 'calm', themePresetVersione: 2, uiLanguage: 'it' }, chat: {}, workspaces: {},
-      }));
-    } catch { /* cornice ospitata */ }
-  });
-  await page.goto('/');
-  const salta = page.getByRole('button', { name: 'Salta per ora', exact: true });
-  if (await salta.isVisible()) await salta.click();
-  await page.getByRole('button', { name: /^Impostazioni(?: \(Ctrl ,\))?$/ }).click();
-  await page.getByRole('tab', { name: 'Laboratorio modelli', exact: true }).click();
-  await page.getByRole('tab', { name: 'Modelli', exact: true }).click();
+  await apriLaboratorio(page, { catalogo: null });
+  await apriIlCatalogoDallaPorta(page);
   await expect(page.locator('#modelLabCatalogPanel')).toBeVisible();
   await expect(page.locator('#modelLabFacets')).toHaveCount(1);
 
@@ -467,7 +556,7 @@ test('FACCETTE-06 — sul catalogo VERO la barra regge, e «Vedi altri» è un d
     await expect(altri, 'niente da rivelare: il disclosure non si offre').toBeHidden();
     await expect(altri).toHaveAttribute('aria-expanded', 'false');
   }
-  await foto(page, 'faccette-catalogo-vero', info);
+  await foto(page, 'faccette-catalogo-vero');
 });
 
 test('FACCETTE-07 — con il tema CHIARO la barra si vede lo stesso, e non nasce nessun errore a runtime', async ({ page }, info) => {
@@ -484,7 +573,141 @@ test('FACCETTE-07 — con il tema CHIARO la barra si vede lo stesso, e non nasce
   });
   expect(contrasto.altezza).toBeGreaterThan(0);
   expect(contrasto.colore).not.toBe(contrasto.fondo);
-  await foto(page, 'faccette-tema-chiaro', info);
+  await foto(page, 'faccette-tema-chiaro');
   const nostri = erroriNostri(page, raccolti);
   expect(nostri, 'errori alzati dalla NOSTRA pagina:\n' + nostri.join('\n')).toEqual([]);
+});
+
+/*
+ * FACCETTE-08 — LA BARRA C'È ANCHE QUANDO IL CATALOGO NON È ARRIVATO, E NON DICE ZERO.
+ *
+ * Nasce da una diagnosi misurata, non da un'idea: `aggiornaCatalogoModelli` costruiva la
+ * barra con `dati ? barraDelPannello(panel) : null`, quindi su una superficie che aspetta il
+ * catalogo (o che l'ha chiesto e non l'ha ricevuto) la riga di scoperta NON ESISTEVA, e «0
+ * copie» era indistinguibile da «mai montata».
+ *
+ * ⛔ E il secondo pezzo è quello che rende la prova interessante: con zero dati a schermo un
+ *   conteggio sarebbe la bugia più facile di tutte — `0` si legge «contati: nessuno» mentre
+ *   non è stato contato NIENTE — e un valore «a zero» verrebbe per giunta spento, dicendo che
+ *   non si può scegliere. Qui si prova che la barra NON scrive numeri e NON spegne niente.
+ *
+ * ⛔ LA ROTTA NON RISPONDE, e non è un caso di laboratorio: è lo stato in cui la superficie
+ *   vive mentre il server interroga l'upstream (misurato: il primo giro di uno store vuoto
+ *   serve l'elenco di riserva, la risposta vera arriva dopo).
+ */
+test('FACCETTE-08 — senza catalogo la barra c’è lo stesso, e non scrive «0» dove non ha contato', async ({ page }, info) => {
+  /* La richiesta resta APPESA: nessun `fulfill`, nessun `abort`. Il catalogo non è arrivato. */
+  await apriLaboratorio(page, { risposta: () => { /* appesa di proposito */ } });
+  /* ⛔ E la porta si apre lo stesso: la superficie non dipende dalla risposta del server. */
+  await apriIlCatalogoDallaPorta(page);
+  await expect(page.locator('[data-model-lab-panel="catalog"]')).toBeVisible();
+
+  const barra = page.locator('#modelLabFacets');
+  await expect(barra, 'la barra non si monta senza dati: la superficie resta muta mentre aspetta').toHaveCount(1);
+  await expect(barra).toHaveAttribute('data-facet-dati', 'non-misurati');
+  /* ⛔ Il conteggio della superficie dice lo stato VERO, e i due stati veri qui sono due:
+     la richiesta è appesa ⇒ «Aggiornamento del catalogo…»; nessuna richiesta partita ⇒
+     «Catalogo non caricato». Ciò che non deve MAI comparire è un numero: «0 di 0 modelli»
+     sarebbe la stessa bugia della barra, scritta un piano più su. */
+  await expect(page.locator('#modelLabCatalogCount')).toHaveText(/^(Aggiornamento del catalogo…|Catalogo non caricato)$/);
+
+  /* I chip ci sono tutti, e nessuno porta un numero: il badge non si disegna. */
+  const chips = await barra.locator('[data-facet-scope] [data-facet-chip]').evaluateAll((nodi) => nodi.map((n) => ({
+    testo: n.textContent.replace(/\s+/g, ''),
+    conteggioDisegnato: Boolean(n.querySelector('.talos-badge')),
+    disabilitato: n.disabled,
+  })));
+  expect(chips.map((c) => c.testo)).toEqual(['Tutti', 'Locali', 'Cloud']);
+  expect(chips.filter((c) => c.conteggioDisegnato), 'un conteggio disegnato senza aver contato niente').toEqual([]);
+  expect(chips.filter((c) => c.disabilitato), 'un valore spento senza sapere che è a zero').toEqual([]);
+
+  /* E il pulsante dei filtri non promette un pannello vuoto: qui non c'è nessun gruppo da aprire. */
+  await expect(page.locator('[data-facet-toggle]')).toBeHidden();
+  await expect(page.locator('#modelLabFacetsAdvanced')).toBeHidden();
+  await foto(page, 'faccette-senza-catalogo');
+});
+
+/*
+ * FACCETTE-09 — LA PORTA: la superficie del catalogo si raggiunge con un controllo a schermo.
+ *
+ * ⛔ Questa è la prova del DIFETTO VERO trovato il 19/09/2026, e vale più delle altre perché
+ *   non riguarda un numero: prima di questa cura la superficie del catalogo — e con lei la
+ *   barra — non si apriva da NESSUNA parte. Misurato sul 4174 con una sonda di sola lettura:
+ *   premendo «Provider» si accende `providers` e i sei bottoni legacy stanno in un contenitore
+ *   `hidden` (`comandiVisibili: 0`), quindi `setModelLabSection('catalog')` non partiva mai,
+ *   `caricaCatalogoModelLab` non veniva chiamata e `#modelLabFacets` restava a **0 copie**.
+ *
+ * ⛔ Si prova il CONTROLLO VERO, col clic di Playwright: se la porta ci fosse ma non fosse
+ *   cliccabile (coperta, alta zero, `disabled`) questa prova sarebbe rossa, ed è esattamente
+ *   la differenza fra «la barra esiste nel DOM» e «una persona la può vedere».
+ */
+test('FACCETTE-09 — la superficie del catalogo ha una porta vera, e da lì si arriva alla barra', async ({ page }) => {
+  await apriLaboratorio(page);
+  /* Prima della porta: il catalogo è chiuso, come lo era per chiunque aprisse il laboratorio. */
+  await expect(page.locator('[data-model-lab-panel="catalog"]')).toBeHidden();
+  const porta = page.locator('#modelLabCatalogDoor');
+  await expect(porta).toHaveCount(1);
+  await expect(porta).toBeVisible();
+  await expect(porta).toHaveText('Catalogo dei fornitori');
+  await expect(porta).toHaveAttribute('aria-controls', 'modelLabCatalogPanel');
+  /* ⛔ `aria-expanded` NON c'è, e non è una dimenticanza: la regia del mockup
+     (`app.js:22339`) prende ogni elemento con quella COPPIA e ne inverte lo stato da sé,
+     quindi su questa porta diventerebbe un secondo proprietario (è il difetto misurato
+     dell'interruttore: `aria-expanded` scritto da noi alle 22 ms e riportato indietro
+     alle 25 ms). Un attributo solo non la sveglia. */
+  await expect(porta).not.toHaveAttribute('aria-expanded', /.*/u);
+  /* La foto della PORTA, che è la prova che la superficie si vede prima di aprirla. */
+  await foto(page, 'porta-catalogo');
+
+  await porta.click();
+  /* Dopo il clic: il pannello è acceso, i dati sono arrivati, la barra è dentro. */
+  await expect(page.locator('[data-model-lab-panel="catalog"]')).toBeVisible();
+  await expect(righe(page)).toHaveCount(CATALOGO.modelli.length);
+  await expect(page.locator('#modelLabFacets')).toHaveCount(1);
+  await expect(page.locator('#modelLabFacets')).toHaveAttribute('data-facet-dati', 'misurati');
+  /* E il conteggio vero è tornato al suo posto: la prova non ha acceso una superficie vuota. */
+  await expect(page.locator('#modelLabCatalogCount')).toHaveText(/^6 di 6 modelli/);
+  /* ⛔ Il conteggio si annuncia: senza, chi non vede lo schermo spunta una faccetta e non sa
+     che i risultati sono cambiati (ricerca 19/09/2026, `aria-live` sui cambi di risultato). */
+  await expect(page.locator('#modelLabCatalogCount')).toHaveAttribute('aria-live', 'polite');
+});
+
+/*
+ * FACCETTE-10 — LE FOTO DELLA BARRA TROVATA, nei due temi e alle due larghezze del desktop.
+ *
+ * ⛔ Owner 18/09/2026: «OBBLIGATORIO verificare VISIVAMENTE usando screenshot dell'ambiente
+ *   4174 e verificare automaticamente e autonomamente errori visivi, glitch, disallineamenti».
+ *   Le foto si prendono qui (stessa build, stesso pacchetto) e si GUARDANO: questo test le
+ *   accompagna con due misure che un occhio solo non fa — la barra non esce dal suo pannello e
+ *   non allarga la pagina. Il difetto della larghezza è già costato una volta a questo
+ *   laboratorio (il selettore dell'ordine che si mangiava la riga sotto i 1100 px).
+ */
+test('FACCETTE-10 — le foto: due temi per due larghezze, e la barra non allarga niente', async ({ page }, info) => {
+  for (const larghezza of [1024, 1440]) {
+    for (const modo of ['dark', 'light']) {
+      await page.setViewportSize({ width: larghezza, height: 900 });
+      await apriCatalogo(page, { colorMode: modo });
+      await apriIFiltri(page);
+      const misure = await page.evaluate(() => {
+        const barra = document.querySelector('#modelLabFacets');
+        const pannello = barra.closest('[data-model-lab-panel]');
+        let scroller = barra.parentElement, traboccanti = 0;
+        while (scroller) {
+          if (scroller.scrollWidth > scroller.clientWidth + 1) traboccanti += 1;
+          scroller = scroller.parentElement;
+        }
+        return {
+          barra: Math.round(barra.getBoundingClientRect().width),
+          pannello: Math.round(pannello.getBoundingClientRect().width),
+          traboccanti,
+          gruppiVisibili: [...barra.querySelectorAll('[data-facet-group]')].filter((n) => n.getBoundingClientRect().height > 0).length,
+        };
+      });
+      expect(misure.pannello, `a ${larghezza} il pannello non ha larghezza`).toBeGreaterThan(300);
+      expect(misure.barra, `a ${larghezza} la barra esce dal suo pannello`).toBeLessThanOrEqual(misure.pannello);
+      expect(misure.traboccanti, `a ${larghezza} (${modo}) qualcosa scorre di lato: guardare la foto`).toBe(0);
+      expect(misure.gruppiVisibili, `a ${larghezza} (${modo}) nessun gruppo di faccette disegnato`).toBeGreaterThan(0);
+      await foto(page, `faccette-${modo}`);
+    }
+  }
 });

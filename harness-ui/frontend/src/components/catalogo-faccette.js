@@ -117,6 +117,11 @@ function chip(etichetta, valore, { premuto = false, conteggio = null, disabilita
   return b;
 }
 
+/*
+ * Una riga di faccetta. `conteggio` è un NUMERO quando è stato contato, `null` quando il
+ * catalogo non è arrivato: nel secondo caso non si scrive né un numero né lo spegnimento,
+ * perché «non misurato» non è «zero» (vedi la nota su `senzaDati` in `aggiorna`).
+ */
 function rigaValore(gruppo, valore, testo, conteggio, acceso) {
   const riga = el('label', 'talos-cluster');
   riga.dataset.facetRow = valore;
@@ -124,9 +129,12 @@ function rigaValore(gruppo, valore, testo, conteggio, acceso) {
   casella.type = 'checkbox'; casella.value = valore; casella.dataset.facetCheck = gruppo; casella.checked = acceso;
   // ⛔ «Zero non cliccabile»: il valore resta a schermo — dice che quel valore esiste nel
   // vocabolario — ma non porta a un vicolo cieco. Se è già acceso resta spegnibile.
-  if (!conteggio && !acceso) { casella.disabled = true; riga.dataset.facetZero = ''; }
-  const conto = el('small', 'talos-muted', numero(conteggio));
-  conto.setAttribute('aria-label', conteggio + ' corrispondenze con gli altri filtri');
+  const contato = typeof conteggio === 'number';
+  if (contato && !conteggio && !acceso) { casella.disabled = true; riga.dataset.facetZero = ''; }
+  const conto = el('small', 'talos-muted', contato ? numero(conteggio) : '—');
+  conto.setAttribute('aria-label', contato
+    ? conteggio + ' corrispondenze con gli altri filtri'
+    : 'conteggio non disponibile: il catalogo non è arrivato');
   riga.append(casella, el('span', 'talos-grow', testo), conto);
   return riga;
 }
@@ -253,7 +261,9 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
   barra.append(attivi);
 
   let filtri = emptyCatalogFilters();   // i filtri CORRENTI: la sola fonte per chi risponde al clic
-  let stato = { modelli: [], contesto: {}, capacita: capacitaDelCatalogo([]) };
+  // ⛔ Nasce `senzaDati`: prima che il catalogo arrivi non si è contato niente, e la barra non
+  //   deve dire «0» (vedi la nota su `senzaDati` in `aggiorna`).
+  let stato = { modelli: [], contesto: {}, capacita: capacitaDelCatalogo([]), senzaDati: true };
   let aperti = new Set();               // quali gruppi hanno «Vedi altri» premuto
 
   const cambia = (nuovi) => { filtri = nuovi; onCambia?.(nuovi); };
@@ -323,6 +333,19 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
     if (nuovoStato) stato = nuovoStato;
     const { modelli, contesto, capacita } = stato;
     if (stato.filtri) filtri = stato.filtri;
+    /*
+     * ⛔⛔ SENZA CATALOGO I NUMERI NON SI SCRIVONO — 19/09/2026.
+     * `senzaDati` vuol dire: la risposta del catalogo non è arrivata (mai chiesta, ancora in
+     * corso, o fallita). In quello stato un conteggio a schermo è la bugia più facile di tutte,
+     * perché `0` si legge «contati: nessuno» mentre non è stato contato NIENTE, e un valore
+     * «a zero» verrebbe per giunta spento (`disabled`) dicendo che non si può scegliere.
+     * ⇒ Con `senzaDati`: il numero si OMETTE (è la convenzione del prototipo, `opt(v,label,sel,n=null)`,
+     *   che non scrive la parentesi quando il conteggio è nullo) e il valore resta scegliibile.
+     *   È la regola di casa: «non misurato» non si scrive come «zero»
+     *   ([[la-colonna-del-costo-ha-una-risoluzione]] — «sotto la risoluzione» non è «economico»).
+     */
+    const senzaDati = stato.senzaDati === true;
+    const conta = (chiave, valore) => (senzaDati ? null : facetCount(modelli, filtri, chiave, valore, contesto));
 
     const ordinaSelezionata = filtri.sort || 'catalog';
     if (selectOrdina.dataset.firma !== JSON.stringify(capacita.ordinamenti)) {
@@ -332,26 +355,29 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
     selectOrdina.value = ordinaSelezionata;
 
     ambito.replaceChildren();
-    const totale = selectCatalog(modelli, { ...filtri, destination: [] }, contesto).length;
+    const totale = senzaDati ? null : selectCatalog(modelli, { ...filtri, destination: [] }, contesto).length;
     ambito.append(chip('Tutti', 'all', { premuto: !filtri.destination.length, conteggio: totale }));
     for (const [valore, testo] of FACET_OPTIONS.destination) {
-      const n = facetCount(modelli, filtri, 'destination', valore, contesto);
+      const n = conta('destination', valore);
+      const spento = n === 0 && !filtri.destination.includes(valore);
       ambito.append(chip(testo, valore, {
-        premuto: filtri.destination.includes(valore), conteggio: n, disabilitato: !n && !filtri.destination.includes(valore),
-        titolo: !n && !filtri.destination.includes(valore) ? 'Nessun modello in questo catalogo' : null,
+        premuto: filtri.destination.includes(valore), conteggio: n, disabilitato: spento,
+        titolo: spento ? 'Nessun modello in questo catalogo' : null,
       }));
     }
 
     // Le soglie di contesto, coi conteggi nelle voci: identico al prototipo, `opt(v,label,sel,n)`.
+    // ⛔ Senza catalogo le voci restano, senza il numero e senza lo spegnimento: la soglia esiste
+    //   nel vocabolario del prodotto anche quando non c'è niente da contare.
     const contestoMostrato = capacita.haContesto || filtri.minContext !== '';
     gContesto.hidden = !contestoMostrato;
     if (contestoMostrato) {
       selContesto.replaceChildren();
       selContesto.append(new Option('Qualsiasi', '', false, filtri.minContext === ''));
       for (const s of SOGLIE_CONTESTO) {
-        const n = facetCount(modelli, filtri, 'minContext', String(s), contesto);
-        selContesto.append(new Option(`${numero(s)} (${numero(n)})`, String(s), false, filtri.minContext === String(s)));
-        selContesto.lastChild.disabled = !n && filtri.minContext !== String(s);
+        const n = conta('minContext', String(s));
+        selContesto.append(new Option(n === null ? numero(s) : `${numero(s)} (${numero(n)})`, String(s), false, filtri.minContext === String(s)));
+        selContesto.lastChild.disabled = n === 0 && filtri.minContext !== String(s);
       }
       selContesto.value = filtri.minContext;
       if (selContesto.selectedIndex < 0) selContesto.selectedIndex = 0;
@@ -365,7 +391,7 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
       const visibili = capacita.parametri.slice(0, VOCI_VISIBILI);
       const daMostrare = [...new Set([...gruppi, ...visibili])];
       const righe = gParametri.querySelector('[data-facet-rows]');
-      righe.replaceChildren(...daMostrare.map((v) => rigaValore('capabilities', v, etichetta('capabilities', v), facetCount(modelli, filtri, 'capabilities', v, contesto), filtri.capabilities.includes(v))));
+      righe.replaceChildren(...daMostrare.map((v) => rigaValore('capabilities', v, etichetta('capabilities', v), conta('capabilities', v), filtri.capabilities.includes(v))));
       const altri = gParametri.querySelector('[data-facet-more]');
       const resto = capacita.parametri.length - daMostrare.length;
       const apertoOra = aperti.has('capabilities');
@@ -399,6 +425,24 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
     attivi.hidden = !attivi.children.length;
     insegna.textContent = String(chips.length);
     insegna.hidden = !chips.length;
+    /*
+     * ⛔ E IL PULSANTE DEI FILTRI NON PROMETTE UN PANNELLO VUOTO. Quando il catalogo non è
+     * arrivato, nessuno dei quattro gruppi avanzati si disegna (nessun parametro da offrire,
+     * nessun contesto, nessun prezzo, nessun buco da dichiarare): «Tutti i filtri» aprirebbe il
+     * nulla, cioè un controllo che promette una cosa e non ne apre nessuna. Si nasconde, e se
+     * era aperto si richiude — l'etichetta e `aria-expanded` tornano coerenti invece di restare
+     * a dire «Meno filtri» sopra un pannello che non c'è più.
+     */
+    const avanzatiOffribili = capacita.parametri.length > 0 || capacita.haContesto || capacita.haPrezzo || capacita.haBuchi || filtri.minContext !== '';
+    apri.hidden = !avanzatiOffribili;
+    if (!avanzatiOffribili) {
+      avanzati.hidden = true;
+      apri.setAttribute('aria-expanded', 'false');
+      apri.firstChild.textContent = 'Tutti i filtri';
+    }
+    /* Lo stato dei dati, leggibile da una prova e dal taccuino della QA: `non-misurati` vuol
+       dire «nessun numero in questa barra è stato contato», e non è la stessa cosa di «zero». */
+    barra.dataset.facetDati = senzaDati ? 'non-misurati' : 'misurati';
   }
 
   function chipFiltro(c) {
