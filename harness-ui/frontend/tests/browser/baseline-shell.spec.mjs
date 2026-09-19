@@ -1389,7 +1389,24 @@ test('Model Lab filters have explicit names and hit areas', async ({ page }) => 
    * ⛔ `toHaveCount(1)` è il verso contrario dentro il test: un nome accessibile che sparisce, o
    * che si sdoppia, rende rosso qui invece di far passare una misura su un nodo qualsiasi.
    */
-  await page.locator('#labSchedaModels').click();
+  /*
+   * ⛔ 19/09/2026 — LA NAVIGAZIONE SEGUE LA SUPERFICIE, e la superficie l'ha decisa l'owner.
+   * Fino a ieri si cliccava `#labSchedaModels`; misurato il 19/09 **dentro** quella scheda i tre
+   * filtri valgono **0 · 0 · 0**, perché la riga del catalogo (ricerca, fornitore, ordinamento) il
+   * guscio la mette nella scheda **«Provider»** — e l'owner il 18/09 l'ha detto a parole: «nella
+   * sezione Modelli il catalogo Hugging Face, **NON** quello dei provider». ⇒ **Si sposta il
+   * cancello, non il prodotto per far contento il cancello.**
+   * ⛔ E la porta è nuova: la sezione del catalogo non era raggiungibile da nessun controllo (le
+   * sei linguette legacy stanno in `[data-lab-comandi]`, `hidden`), quindi il 19/09 la corsia 1
+   * ha montato `#modelLabCatalogDoor` in `#modelLabProvidersPanel`. **Senza quel clic la barra —
+   * e i suoi tre filtri — non esistono**: la superficie era senza porta, non la barra senza dati.
+   * ⛔ **COSA RESTA ASSERITO, e non cambia di una virgola**: i tre filtri hanno un **nome
+   * accessibile esplicito** e un **bersaglio di almeno 36 px** (`getByRole` confronta il nome
+   * accessibile, non l'id né il testo grezzo — github.com/microsoft/playwright, letto il
+   * 18/09/2026). Misure del 19/09 sul pacchetto della corsia: **280×40 · 792×42 · 222×42**.
+   */
+  await page.locator('#labSchedaProviders').click();
+  await page.locator('#modelLabCatalogDoor').click();
   const cerca = page.getByRole('searchbox', { name: 'Cerca nel catalogo' });
   const fornitore = page.getByRole('combobox', { name: 'Fornitore' });
   const ordina = page.getByRole('combobox', { name: 'Ordina i modelli' });
