@@ -660,6 +660,29 @@ misurata, i **file vietati** e le **ricerche citate**.
   <https://www.npmjs.com/package/@rosepetal/node-red-dashboard-2-system-monitor> ·
   <https://github.com/Theohox/zmenu> (letti il 19/09/2026).
 
+## ⛔⛔ 19/09/2026 — IL TEMPO È FINITO: LA SESSIONE SI CHIUDE QUI, E IL TESTIMONE PASSA A CODEX
+
+> Owner, 19/09: «**HAI FINITO IL TEMPO A DISPOSIZIONE, stoppa e SALVA TUTTO IL LAVORO DEGLI AGENTI E
+> METTI TUTTO AL SICURO ADESSO, SU DOWNLOAD AGGIORNA IL TICKET DA PASSARE AD AGENTE**».
+
+**Cosa è stato fatto, in ordine:**
+1. **Le due corsie vive FERMATE** (`BC` e `E`): la BC stava rendendo deterministico un poll instabile,
+   la E aveva appena trovato che il CSS del blocco della scelta file è legato a `#hfFileChoices` ed è
+   **la cura che stava scrivendo**. ⇒ **Entrambe sono ferme a metà**, e va detto così.
+2. **TUTTO SALVATO** in `5a6dec0f` — il lavoro delle quattro corsie, i loro spec, gli asset dei loghi,
+   e **il bundle servito** (il 4174 mostra **questo** fermo immagine). Il messaggio del commit elenca
+   **cosa non funziona**, e non è una consegna.
+3. **IL TICKET PER CODEX** è in `C:/Users/Antonino/Downloads/TICKET-RIPRESA-CODEX-LABORATORIO-2026-09-19.md`
+   — riscritto con le tre richieste testuali dell'owner: **molte funzioni non sono collegate** (§4,
+   esplicito), l'agente dev'essere **estremamente esigente e scettico** e **non fidarsi delle mie
+   modifiche**, e il compito principale è **ispezionare tutte le PR finora fatte coi sorgenti e la
+   4174, verificando che nessuna funzione sia andata persa rispetto all'ultima release** (§5).
+
+**Cosa resta in mano a chi arriva** (il ticket lo dice per esteso): il **clic sulla riga HF → la
+pagina** (mio, aspetta il montaggio del selettore file), la **lettera** nei loghi (fermata a metà), il
+**difetto a 1024** (pastiglie fuori dalla carta fino a 173 px, misurato), i **30 rossi** non attribuiti,
+gli **8 px** di parità, e le **fasi 6, la sidebar sinistra e il grafo agenti** mai iniziate.
+
 ## ⛔ IL CANCELLO `COMP CodaDownload` — misurato il 19/09/2026, e NON è un difetto da inseguire
 
 Dopo il **ripristino del riferimento** (avevo tolto per errore la testata «Download», credendola una
