@@ -28,7 +28,7 @@ test('R04-WINDOWS — Node 24, PowerShell, cache e cancelli prima dello staging'
   assert.equal(setup.with.cache, 'npm');
   for (const lock of ['harness-ui/package-lock.json', 'harness-ui/frontend/package-lock.json', 'harness-ui/desktop/package-lock.json']) assert.ok(setup.with['cache-dependency-path'].split(/\s+/).includes(lock));
   assert.ok(passi.find(p => p.uses?.startsWith('actions/cache@')));
-  for (const gate of ['tests/*.test.mjs', 'test:kernel', 'kernel:controlla', 'test:unit', 'test:puri', 'test:guscio']) assert.ok(passo('cancelli').run.includes(gate), gate);
+  for (const gate of ['verify:evolution-baseline', 'tests/*.test.mjs', 'test:kernel', 'kernel:controlla', 'test:unit', 'test:puri', 'test:guscio']) assert.ok(passo('cancelli').run.includes(gate), gate);
   for (const prefix of ['harness-ui', 'harness-ui/frontend', 'harness-ui/desktop']) assert.ok(run.includes(`npm ci --prefix ${prefix}`));
   assert.doesNotMatch(run, /ignore-scripts|continue-on-error/);
   assert.match(run, /node harness-ui\/frontend\/node_modules\/playwright\/cli\.js install chromium/);
