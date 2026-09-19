@@ -261,6 +261,36 @@
           "contains": "E0-3 — lo scaffold Rust reale ha quattro crate e zero dipendenze third-party"
         }
       ]
+    },
+    {
+      "id": "evolution.windows-process-tree-containment",
+      "category": "security",
+      "evidence": [
+        {
+          "path": "harness-ui/desktop/native/crates/talos-windows-sandbox/src/windows.rs",
+          "contains": "PROC_THREAD_ATTRIBUTE_JOB_LIST"
+        },
+        {
+          "path": "harness-ui/desktop/native/crates/talos-windows-sandbox/src/windows.rs",
+          "contains": "const BASE_LIMIT_FLAGS: u32 = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;"
+        },
+        {
+          "path": "harness-ui/desktop/native/crates/talos-windows-sandbox/tests/process_tree.rs",
+          "contains": "job_close_terminates_parent_and_grandchild"
+        },
+        {
+          "path": "harness-ui/desktop/native/crates/talos-windows-sandbox/tests/process_tree.rs",
+          "contains": "abrupt_job_owner_exit_terminates_tree_without_destructors"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "contains": "name: native Rust gates"
+        },
+        {
+          "path": "harness-ui/desktop/native/DEPENDENCIES.md",
+          "contains": "## M1-D / E1-4 Windows process-tree containment"
+        }
+      ]
     }
   ]
 }

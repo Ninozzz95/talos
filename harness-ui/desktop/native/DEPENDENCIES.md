@@ -44,3 +44,17 @@ The intended architecture is:
 - `talos-windows-sandbox`: the only crate that may contain narrowly reviewed Windows FFI/unsafe code when a later slice needs it.
 
 No unsafe code is required in E0-3.
+
+## M1-D / E1-4 Windows process-tree containment
+
+The fresh 10×4 research gate authorizes the first real unsafe/FFI in this workspace, still with **zero third-party Rust dependencies**.
+
+- only `talos-windows-sandbox/src/windows.rs` contains hand-written Win32 FFI/unsafe;
+- every unsafe block documents the Win32 preconditions it relies on;
+- Supervisor-owned children are attached to an unnamed Job Object during `CreateProcessW` through `PROC_THREAD_ATTRIBUTE_JOB_LIST`;
+- `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` is mandatory;
+- breakaway flags are forbidden;
+- an optional active-process limit is enforced and tested;
+- Job Objects are process-tree lifecycle containment only, not a filesystem/network/AppContainer sandbox.
+
+The experimental code under PR #24 is not imported into this workspace and remains a separate laboratory.

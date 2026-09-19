@@ -282,6 +282,22 @@ jobs:
         working-directory: harness-ui/desktop
 
       - if: steps.dove.outputs.ci == 'si'
+        name: policy scaffold Rust nativo
+        run: npm run verify:native-scaffold
+        working-directory: harness-ui/desktop
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: native Rust gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo build --workspace --locked
+          cargo test --workspace --all-targets --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+        working-directory: harness-ui/desktop/native
+
+      - if: steps.dove.outputs.ci == 'si'
         name: baseline evoluzione
         run: npm run verify:evolution-baseline
         working-directory: harness-ui/desktop
