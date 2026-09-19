@@ -1,0 +1,12 @@
+[package]
+name = "talos-extension-host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+evolution-wire = { path = "../evolution-wire" }
+
+[lints]
+workspace = true
