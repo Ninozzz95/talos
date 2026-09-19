@@ -98,8 +98,7 @@ test('WORKSPACE-CHOOSER-INVERSE-19 — cartella arbitraria non eleva da sola i p
    * `Workspace write=true`, `Full access=false`, pulsante acceso «Continua nella chat — Users»,
    * nota/cancello «Non è fra i progetti già autorizzati: viene verificata all'avvio.».
    */
-  /* INVERSO-1 */
-  await expect(page.locator('#workspaceChooserSubmit')).toBeDisabled();
+  await expect(page.locator('#workspaceChooserSubmit')).toBeEnabled();
   await expect(page.locator('#workspaceChooserSubmit')).toContainText('Continua nella chat — Users');
   await expect(page.locator('[data-workspace-permission="Workspace write"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-workspace-permission="Full access"]')).toHaveAttribute('aria-pressed', 'false');
@@ -148,9 +147,8 @@ test('WORKSPACE-CHOOSER-SUBMIT-10 — una cartella allowlisted conserva cartella
    * «Auto-retrying assertions» (`/docs/test-assertions`): asserzioni web-first che riprovano fino
    * al timeout, al posto di un'attesa fissa.
    */
-  /* INVERSO-2 */
-  await page.locator('#composerInput').fill('Controlla la cartella scelta');
   await expect(page.locator('#sheetDialog')).not.toBeVisible();
+  await page.locator('#composerInput').fill('Controlla la cartella scelta');
   await expect(page.locator('#composerInput')).toHaveValue('Controlla la cartella scelta');
   await page.locator('#composerForm').evaluate((form) => form.requestSubmit());
   await expect.poll(() => body).not.toBeNull();
@@ -293,8 +291,7 @@ test('WORKSPACE-CHOOSER-ERROR-15 — un errore resta naturale e offre ripresa e 
    * da `aria-describedby="workspaceChooserSubmitNote"` dice «Scegli la cartella su cui vuoi
    * lavorare.». Ciò che l'errore NON deve fare è lasciare un pulsante che promette di partire.
    */
-  /* INVERSO-3 */
-  await expect(page.locator('#workspaceChooserSubmit')).toBeDisabled();
+  await expect(page.locator('#workspaceChooserSubmit')).toBeEnabled();
   await expect(page.locator('#workspaceChooserSubmit')).toHaveText('Scegli una cartella');
   await expect(page.locator('#workspaceChooserSubmitNote')).toHaveText('Scegli la cartella su cui vuoi lavorare.');
 });
@@ -368,7 +365,7 @@ test('MODAL-RESIZE-ISOLATION-02 — Modello e Permessi non condividono la stessa
    * deve dire.
    */
   await page.locator('[data-open-sheet="model"]').first().click();
-  const modello = page.locator('#sheetDialog'); /* INVERSO-4 */
+  const modello = page.locator('#veloModello .talos-dialog');
   await expect(modello).toBeVisible();
   await modello.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
   let box = await modello.boundingBox();
@@ -461,7 +458,7 @@ test('MODAL-RESIZE-VIEWPORT-04 — misure enormi vengono limitate alla finestra,
   await page.locator('#newSessionBtn').click();
   await expect(page.locator('#sheetDialog')).toBeVisible();
   await page.setViewportSize({ width: 780, height: 700 });
-  await expect(page.locator('#sheetDialog .dialog-resize-handle')).toHaveCount(2); /* INVERSO-5 */
+  await expect(page.locator('#sheetDialog .dialog-resize-handle')).toHaveCount(3);
   await expect(page.locator('#sheetDialog [data-dialog-resize="both"]')).toBeHidden();
   box = await page.locator('#sheetDialog').boundingBox();
   expect(box.width).toBeLessThanOrEqual(780);
