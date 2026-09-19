@@ -486,6 +486,38 @@ azioni in fondo, il conteggio solo dove ci sono righe).
 **Restano**: i tre punti della corsia 2 (`static-copy.ts` 8 righe inerti · `PARITA-10` · il
 filetto sulla prima riga delle liste).
 
+## ✅ FASE 2 — COMMITTATA E AL SICURO (19/09/2026)
+
+`7752c68d` — **la FASE 2 è in storia**, non solo nel disco: `settings.css` (+162/−9, il vestito su
+tutte e dieci le sezioni), `settings-view.ts` (+136/−4) e `index.template.html` (±7, le forme delle
+otto), più le due prove delle corsie. Prima di quel commit viveva **solo nell'albero di lavoro**:
+una giornata di lavoro appesa a un `git checkout` di troppo.
+
+**I numeri di riferimento, aggiornati**: unit **1420/0** · le sei prove della superficie **35/35** ·
+la **suite intera 490 verdi / 37 rossi** (era 479/40: le mie due cure hanno chiuso tre rossi).
+⛔ **I 37 per nome**: 22 `baseline-shell` (chat/movimento + i due cancelli della **FASE 4**) ·
+7 `lab-faccette` (**FASE 4**) · 2 `bc78` · 1 `_confronto-exa` e 1 `_impostazioni-parita` (i due server
+sulla **4210**, spenti su ordine dell'owner) · 1 `anteprima-tema` · 1 `chat-lunga-p0` ·
+1 `context-compactor` · 1 `ragionamento-compresso`. ⛔ **Due voci ballano fra i giri**
+(`visual-matrix`, `ragionamento-compresso`): classificati per lettura, **non** A/B-ati uno per uno.
+
+**E il codice morto è stato ritirato** (`58b18413`): **7 righe** di `static-copy.ts`
+(`#setting-panel-<x> > .talos-card > h3`) i cui selettori **non pescano più nessun elemento** —
+misurato su tutte e dieci le sezioni. ⭐ La misura ha **corretto la diagnosi**: non erano «inerti»
+ma **assenti**, ed erano sette, non otto; le altre **14 righe sono vive** e restano. Ritirate con
+**due segnali d'accordo** (sorgente + DOM vivo), mai con uno solo.
+
+## 🔜 FASE 3 — LA BANDA DEL LABORATORIO (aperta il 19/09/2026, IN CORSO)
+
+Corsia al lavoro: la banda del mockup (`.setup-band`, **1260×116**, tre parti: «MODELLO PER LE NUOVE
+CHAT» + il modello · «BUDGET RAM» col numero e la barra · «Nessun passaggio automatico al cloud»)
+su **tutti e quattro i tab**, collegata a **dati veri** e con l'obbligo di **riportare** ciò che non
+si collega. ⛔ In particolare ho chiesto di **verificare se «Nessun passaggio automatico al cloud» è
+VERO**: se l'app avesse un ripiego automatico sulla rete, quella frase sarebbe una bugia.
+**Stato del lavoro in corsa**: `lab-cornice-v3.js` (+279/−45), `app.js` (+21/−2), `main.css` (+1:
+l'`@import './banda-laboratorio.css'`) — **non committato** (è a metà) e **copiato fuori dal repo** in
+`%TEMP%	alos-fase3-in-corso-1010` come rete di sicurezza. La sua prova è `_fase3-banda.spec.mjs`.
+
 ## COSA GIRA ADESSO (18/09/2026, tarda sera)
 
 - ⛔ **Le corsie A, B e C NON sono più vive** (verificato: l'elenco degli agenti mostra solo i
