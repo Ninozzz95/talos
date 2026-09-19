@@ -23,6 +23,18 @@
         {
           "path": "harness-ui/desktop/package.json",
           "contains": "\"verify:evolution-baseline\": \"node scripts/verifica-baseline-evoluzione.mjs\""
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "contains": "name: baseline evoluzione"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "contains": "run: npm run verify:evolution-baseline"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "contains": "name: test puri desktop"
         }
       ]
     },
