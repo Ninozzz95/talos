@@ -448,6 +448,34 @@ la corsia del laboratorio.
 `public/` è stato ricostruito**: il pacchetto consegnato era **stale**, e ricostruirlo dalla fonte
 vera ha scoperto rossi che nessuno aveva misurato. **Non attribuirli alla barra.**
 
+## ✅ FASE 2 — LE DUE CONSEGNE SONO ARRIVATE, E LA REVIEW HA TROVATO TRE COSE (19/09/2026)
+
+| corsia | file | prova | esito |
+|---|---|---|---|
+| **1 · il vestito** | `settings.css` (+162/−9) | `_fase2-vestito.spec.mjs` **2/2**, rossa col CSS di HEAD | ✅ applicata |
+| **2 · le forme delle otto** | `index.template.html` (±7) · `settings-view.ts` (+139/−4) | `_fase2-forme.spec.mjs` **6/6**, rossa togliendo un id · **id 535 → 535** | ✅ applicata |
+
+**La mia review avversaria** (`5aa6ff3e`) ha trovato **tre difetti**, tutti curati:
+1. ⛔ **un difetto VERO MIO**, nel renderer: il pattern dei link mangiava le **immagini markdown** —
+   `![licenza](…)` diventava `!licenza` e **l'indirizzo spariva** (né immagine né testo). Cura: il
+   guardo `(?<!!)` (in Markdown quel `!` è l'unica cosa che distingue un'immagine da un link).
+   Provato nei due versi: prima la pagina mostrava `!licenza`, dopo il testo resta intero.
+2. **due asserzioni stantie per colpa di `c42d909f`** (il README in HTML, chiesto dall'owner): «il
+   solo collegamento esterno è il repository» e «il lettore non rende collegamenti» non erano più
+   vere ⇒ ora asseriscono la cosa più forte (`ogni` link esterno con `_blank` + `noopener`, immagini
+   ancora zero, l'indirizzo vero presente).
+3. **la prova del vestito ballava**: misurato **2 rossi su 13 giri** insieme alle altre, **0 su 6**
+   da sola — la sezione annidata di Strumenti si costruisce **dopo** il montaggio. Cura con
+   `expect.poll`: **8 giri verdi** dopo.
+
+**Verificato**: build 35 asset · unit **1420/0** · `lab-scheda-modello` + `html-fidato` **15/15** ·
+cancello dell'identità **verde** · **32 foto** rigenerate · otto sezioni fotografate e **guardate**
+(Strumenti e Chat in dettaglio: una testata per carta, i fatti in chiave/valore, **una** banda di
+azioni in fondo, il conteggio solo dove ci sono righe).
+**Restano**: le **tre decisioni** della fase (carta di sezione · `font-weight 550` · peso del valore
+chiave/valore) e i tre punti della corsia 2 (`static-copy.ts` 8 righe inerti · `PARITA-10` · il
+filetto sulla prima riga delle liste).
+
 ## COSA GIRA ADESSO (18/09/2026, tarda sera)
 
 - ⛔ **Le corsie A, B e C NON sono più vive** (verificato: l'elenco degli agenti mostra solo i
