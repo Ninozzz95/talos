@@ -7,12 +7,18 @@ import {
   validateMemberManifest,
   validateToolchain,
   validateUnsafeBoundary,
+  validateWindowsContainmentSource,
   verifyNativeScaffold,
 } from '../scripts/verifica-native-scaffold.mjs';
 
 test('E0-3 — lo scaffold Rust reale ha quattro crate e zero dipendenze third-party', async () => {
   const result = await verifyNativeScaffold();
-  assert.deepEqual(result, { rust: '1.98.1', members: 4, thirdPartyDependencies: 0 });
+  assert.deepEqual(result, {
+    rust: '1.98.1',
+    members: 4,
+    thirdPartyDependencies: 0,
+    windowsContainment: true,
+  });
 });
 
 test('E0-3 AL CONTRARIO — floating stable non è una toolchain accettabile', () => {
@@ -58,14 +64,25 @@ test('E0-3 AL CONTRARIO — unsafe fuori dal crate Windows è vietato per costru
   );
 });
 
-test('E0-3 AL CONTRARIO — anche il crate Windows non usa unsafe prima della tranche che lo autorizza', () => {
+test('M1-D — unsafe è confinato al crate Windows già marcato come boundary', () => {
+  assert.doesNotThrow(() => validateUnsafeBoundary(new Map([
+    ['evolution-wire', '#![forbid(unsafe_code)]'],
+    ['talos-supervisor', '#![forbid(unsafe_code)]'],
+    ['talos-extension-host', '#![forbid(unsafe_code)]'],
+    ['talos-windows-sandbox', '#![deny(unsafe_op_in_unsafe_fn)]\nfn f(){ unsafe { } }'],
+  ])));
+});
+
+test('M1-D AL CONTRARIO — la policy base non può abilitare breakaway', () => {
   assert.throws(
-    () => validateUnsafeBoundary(new Map([
-      ['evolution-wire', '#![forbid(unsafe_code)]'],
-      ['talos-supervisor', '#![forbid(unsafe_code)]'],
-      ['talos-extension-host', '#![forbid(unsafe_code)]'],
-      ['talos-windows-sandbox', '#![deny(unsafe_op_in_unsafe_fn)]\nfn f(){ unsafe { } }'],
-    ])),
-    (error) => error instanceof NativeScaffoldError && error.code === 'NATIVE_UNSAFE_TOO_EARLY',
+    () => validateWindowsContainmentSource([
+      'const PROC_THREAD_ATTRIBUTE_JOB_LIST: usize = 0x2000d;',
+      'const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x2000;',
+      'const JOB_OBJECT_LIMIT_BREAKAWAY_OK: u32 = 0x800;',
+      'const BASE_LIMIT_FLAGS: u32 = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;',
+      'const CREATE_SUSPENDED: u32 = 4;',
+      'fn f(){ IsProcessInJob(); }',
+    ].join('\n')),
+    (error) => error instanceof NativeScaffoldError && error.code === 'NATIVE_WINDOWS_BREAKAWAY_POLICY',
   );
 });
