@@ -76,9 +76,15 @@ dice e si nasconde* — non si inventa una fixture, non si sceglie un surrogato,
 - **FASE 2 — le dieci sezioni**, una per una: dal mockup si prende il DISEGNO, dall'app il
   CONTENUTO vero. Per ognuna: cosa mostra il mockup (o che è vuota), cosa mostra l'app, e la
   tabella di azioni.
-- **FASE 3 — il Laboratorio: la banda** («Modello per le nuove chat» + budget RAM + nessun
-  passaggio automatico al cloud).
+- ✅ **FASE 3 — il Laboratorio: la banda** — **CHIUSA il 19/09/2026** (`0948d437`): «Modello per le
+  nuove chat» + budget RAM + la politica cloud. ⛔ La terza frase **non** è quella del mockup:
+  «Nessun passaggio automatico al cloud» è **falso** in TALOS — il ripiego esiste ed è condizionato
+  (`session-registry.mjs:3739` e `:3735`) — quindi la banda porta «Al cloud solo con un consenso
+  esplicito.» e la prova **vieta** l'altra (BANDA-01). Review mia con mutazione, 4174 in sola
+  lettura, foto nei due temi. Le tre decisioni dell'owner del 19/09 sono nel documento di ripresa.
 - **FASE 4 — le quattro schede**, una per una: Hugging Face · Provider · Download · Sistema.
+  È anche la fase che fa diventare verdi `lab-faccette` (7/7, oggi in `timedOut`) e «Model Lab
+  filters» di `baseline-shell` — gli unici due cancelli rossi che questa catena di fasi possiede.
 - **FASE 5 — la pagina del modello** e i suoi lati.
 - **FASE 6 — il confronto finale**: ogni vista, mockup contro app, coi file in
   `Downloads/confronto-mockup-app/`, e la tabella delle differenze che resta.

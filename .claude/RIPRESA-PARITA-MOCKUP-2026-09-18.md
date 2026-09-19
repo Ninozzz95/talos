@@ -11,18 +11,30 @@
 > **Dove siamo, in cinque righe.** Le **Impostazioni** hanno la struttura e il vestito del mockup
 > (FASE 1 e 2 chiuse, `7752c68d`); le **decisioni dell'owner** su carta, peso 550 e chiave/valore sono
 > prese e **tengono ciò che c'è**; il **codice morto** è stato ritirato con la sua misura
-> (`58b18413`); la **FASE 3 (la banda del laboratorio) è IN CORSO** — una corsia sta scrivendo adesso.
+> (`58b18413`); la **FASE 3 — la banda del laboratorio — è CHIUSA il 19/09** (`0948d437`), con la
+> review avversaria **fatta da me** sulla strada vera (mutazione: vedi § FASE 3). ⛔ **L'agente della
+> FASE 3 non serve più**: il suo lavoro è in git, non più nell'albero di lavoro — le due istantanee
+> in `%TEMP%` valgono solo come rete di sicurezza storica.
 >
-> ⛔ **IL PRIMO PASSO, e non è una formalità:** controllare se la corsia della FASE 3 è **ancora viva**
-> (il suo lavoro sta **solo nell'albero di lavoro**, non committato, e in **due istantanee** in
-> `C:/Users/Antonino/AppData/Local/Temp/talos-fase3-in-corso-1010` e `-1014`: `lab-cornice-v3.js`, `app.js`, `main.css`).
-> Se è morta, quel lavoro va **ripreso dalle istantanee** o **rifatto**, e la sua prova è
-> `tests/browser/_fase3-banda.spec.mjs`.
+> ⛔ **IL PRIMO PASSO adesso è la FASE 4 — le quattro schede** (Hugging Face · Provider · Download ·
+> Sistema), che è anche la fase in cui diventano verdi i due cancelli oggi rossi (`lab-faccette` 7/7
+> e «Model Lab filters»). Prima di aprirla: la scomposizione con la **proprietà dei file** e le
+> intersezioni **vuote**.
 >
-> **Cosa NON è verificato, e non va dato per buono:** i **37 rossi** della suite intera sono
-> **classificati per lettura**, non A/B-ati uno per uno (e due ballano fra i giri: `visual-matrix`,
-> `ragionamento-compresso`); la FASE 3 non è stata provata da me; le **immagini remote** del README
-> sono una superficie **dichiarata e non decisa**; **il push non è mai stato chiesto**.
+> ⛔ **E due difetti del repo sono stati curati lo stesso giorno**, da sapere perché spiegano due
+> commit altrimenti enormi: il bundle `public/` **non si committava dalla `66e6023b`** — il ramo e il
+> server che l'owner guarda erano **divergenti**, con la FASE 2 e la barra di ricerca presenti in
+> `src/` e sul disco ma non in git; e il commit della FASE 2 **diceva** di aver committato due prove
+> **senza contenerne nessuna** — `_fase2-forme.spec.mjs` è arrivata solo con `41b85df5`.
+>
+> **Cosa NON è verificato, e non va dato per buono:** i rossi della suite intera — **misurati il
+> 19/09 con la mia esecuzione: 502 verdi / 35 rossi** — sono **classificati per lettura**, non
+> A/B-ati uno per uno (e due ballano fra i giri: `visual-matrix`, `ragionamento-compresso`); la FASE 3
+> l'ho provata **io** (mutazione sulla strada vera, 4174 in sola lettura, foto nei due temi), **non un
+> revisore indipendente**; **due strumenti committati in `41b85df5` restano rossi finché il mockup non
+> è servito sulla 4210** (`ERR_CONNECTION_REFUSED`: è l'ambiente, non il prodotto — la metà «app» di
+> `_impostazioni-parita` è verde); le **immagini remote** del README sono una superficie **dichiarata
+> e non decisa**; **il push non è mai stato chiesto** (ci sono 4 commit pronti).
 
 > **Documento di ripresa autosufficiente.** Se la sessione che l'ha scritto si interrompe, chi
 > arriva dopo deve poter riprendere **da qui**, senza leggere trascritti (che sono centinaia di MB)
@@ -295,8 +307,10 @@ modello), confrontate coi rispettivi lati del mockup. Tre difetti, tutti **veri*
    testo identico alla fonte. ⇒ Era un mio sospetto sbagliato guardando un'immagine a bassa
    risoluzione. **Non si riporta come difetto.**
 
-⛔ **Delta di parità dichiarati, non curati** (sono di fase): la **banda** del mockup («MODELLO PER
-LE NUOVE CHAT» · budget RAM · «Nessun passaggio automatico al cloud») è la FASE 3; il bottone
+⛔ **Delta di parità dichiarati, non curati** (sono di fase): la **banda** del mockup è la **FASE 3,
+CHIUSA il 19/09** (`0948d437`) — con una correzione che vale la pena leggere: la sua terza frase,
+«Nessun passaggio automatico al cloud», è **falsa** in TALOS, e la banda porta quella vera (§ FASE 3);
+il bottone
 **«Configura»** dei fornitori è la FASE 4; la tab del mockup si chiama «Modelli» e la nostra
 «Hugging Face» — **decisione dell'owner**, non una divergenza.
 
@@ -531,21 +545,59 @@ misurato su tutte e dieci le sezioni. ⭐ La misura ha **corretto la diagnosi**:
 ma **assenti**, ed erano sette, non otto; le altre **14 righe sono vive** e restano. Ritirate con
 **due segnali d'accordo** (sorgente + DOM vivo), mai con uno solo.
 
-## 🔜 FASE 3 — LA BANDA DEL LABORATORIO (aperta il 19/09/2026, IN CORSO)
+## ✅ FASE 3 — LA BANDA DEL LABORATORIO (CHIUSA il 19/09/2026, `0948d437`)
 
-Corsia al lavoro: la banda del mockup (`.setup-band`, **1260×116**, tre parti: «MODELLO PER LE NUOVE
-CHAT» + il modello · «BUDGET RAM» col numero e la barra · «Nessun passaggio automatico al cloud»)
-su **tutti e quattro i tab**, collegata a **dati veri** e con l'obbligo di **riportare** ciò che non
-si collega. ⛔ In particolare ho chiesto di **verificare se «Nessun passaggio automatico al cloud» è
-VERO**: se l'app avesse un ripiego automatico sulla rete, quella frase sarebbe una bugia.
-**Stato del lavoro in corsa**: `lab-cornice-v3.js` (+279/−45), `app.js` (+21/−2), `main.css` (+1:
-l'`@import './banda-laboratorio.css'`) — **non committato** (è a metà) e **copiato fuori dal repo** in
-`C:/Users/Antonino/AppData/Local/Temp/talos-fase3-in-corso-1010` e `C:/Users/Antonino/AppData/Local/Temp/talos-fase3-in-corso-1014` (due istantanee: la corsia stava scrivendo) come rete di sicurezza. La sua prova è `_fase3-banda.spec.mjs`.
+Consegnata e **rivista da me**. La banda del mockup (`.setup-band`, misurata **1260×116** a 1600 di
+viewport) con le tre celle — «MODELLO PER LE NUOVE CHAT» + il modello · «BUDGET RAM · SCENARIO DEMO»
+col numero e la barra · la politica cloud — su **tutti e quattro i tab**, collegata a **dati veri**, e
+ciò che non si collega **elencato, non inventato**.
 
-## COSA GIRA ADESSO (18/09/2026, tarda sera)
+⛔ **LA FRASE DEL MOCKUP ERA UNA BUGIA, e la verifica che avevo chiesto è servita**: «Nessun passaggio
+automatico al cloud» è **falso** in TALOS — il ripiego esiste (`session-registry.mjs:3739`,
+`ripiegaSulCloud`) ed è **condizionato** (`ripiegaPossibile()`, `:3735`: consenso
+`fallbackConsentEffettivo === true`, una chiave, un modello di ripiego). La banda porta la frase
+**vera**: «**Al cloud solo con un consenso esplicito.**», e BANDA-01 **vieta** quella del mockup, così
+ricopiarla non può passare per una rassicurazione.
 
-- ⛔ **Le corsie A, B e C NON sono più vive** (verificato: l'elenco degli agenti mostra solo i
-  revisori). Nessuno sta scrivendo in `src/`: le build non si sovrascrivono più.
+**Le tre decisioni dell'owner, 19/09/2026** (chieste e date, non dedotte):
+
+1. la frase **vera** resta — il mockup **non** si ricopia («sì, tienila»);
+2. il **pulsante `privacy-info` resta FUORI**: non ha una destinazione vera (la più vicina per nome è
+   «Sicurezza e privacy», che però parla di dati del browser e trasferimento preferenze);
+3. la **doppia cornice va bene così**: la banda ha il suo bordo dentro la carta del laboratorio che ne
+   ha un altro (misurato: banda `1px` raggio 12, carta `1px` raggio 14, **stesso riempimento**).
+
+**Prove della consegna**: `_fase3-banda.spec.mjs` **10/10**; unit **1420/1420**; cartella intera
+**502 verdi / 35 rossi**, e **nessuna prova della FASE 3 è rossa**. **La mia review avversaria** ha
+mutato il prodotto: togliendo l'unica riga aggiunta in `app.js` (quella che timbra
+`data-modello-destinazione`) **BANDA-02 diventa rossa** a `_fase3-banda.spec.mjs:176`; ripristino
+verificato **al byte** (numstat di nuovo `21/2`, `public/app.js` ricostruito **identico** con `cmp`).
+E sul **4174 in sola lettura (0 non-GET)**, due temi e tre stati: la banda la monta **l'app vera**
+(`app.js:4714`), una banda e un nodo-nome, tutte e quattro le schede la tengono, pastiglia
+*Locale/Cloud/assente*, cella politica spenta a 1024. Foto guardate.
+
+⛔ **Difetti dichiarati e NON curati**: `gib()` (`lab-cornice-v3.js:376`) cancella i punti **prima** di
+convertire la virgola, quindi una misura `31.6 GiB` diventerebbe **316** e la barra mostrerebbe
+**5,9% in silenzio** — latente, perché la sorgente è fissata a `it-IT` (`misura-memoria.js:11`) e
+nessuna prova può raggiungerlo oggi. La soglia stretta è **1100 di viewport**, non i 460 del mockup
+(la colonna delle Impostazioni ha la sua navigazione: a 1024 la banda misura **430** contro i **754**
+del mockup), e la **container query è stata provata e non funziona** — un contenitore non veste sé
+stesso: `flex-wrap` restava `nowrap` mentre le regole sui figli passavano.
+
+⛔ **Da sapere per chi tocca questa superficie**: il montaggio è **protetto dal doppio**
+(`if (card.dataset.labGuscio === 'v3') return true;`) e la carta **rifiuta di montare** se una sezione
+resterebbe orfana (`data-lab-guscio-negato`); la banda **rimuove** il `<p class="model-lab-active-model">`
+legacy, e quel nodo **non era nell'inventario** di `_fase2-niente-perso` — quel cancello non poteva
+vederlo (dichiarato, non nascosto).
+
+## COSA GIRA ADESSO (19/09/2026)
+
+- ⛔ **NESSUNA corsia è viva**: le A, B e C erano già chiuse il 18/09, e la **corsia della FASE 3 ha
+  consegnato** il 19/09 — il suo lavoro è **committato** (`0948d437`), non più solo nell'albero di
+  lavoro. Nessuno sta scrivendo in `src/`: le build non si sovrascrivono più.
+  ⛔ Conseguenza pratica: **non c'è niente da raccogliere** da un agente, e le due istantanee in
+  `%TEMP%` (`talos-fase3-in-corso-1010`/`-1014`) non servono più a niente. Chi riprende parte dalla
+  **FASE 4**.
 - **Tre giri di review avversaria consegnati e curati** — sulla barra (`bb148037`), sulle due cure
   (`a253687a` + `f856e853`), sul terzo (`a07bced8`). Ogni giro ha consegnato una **prova
   indipendente** committata: `_review-barra.spec.mjs` (8), `_review-cure.spec.mjs` (16),
@@ -561,20 +613,22 @@ l'`@import './banda-laboratorio.css'`) — **non committato** (è a metà) e **c
 - Il 4174 è **aggiornato all'ultima build** e verificato a ogni giro; le **32 foto** in
   `Downloads/confronto-fase1/` sono del build finale.
 
-## COSA FARE ALLA RIPRESA, IN ORDINE
+## COSA FARE ALLA RIPRESA, IN ORDINE — aggiornata il 19/09/2026
 
-1. **Raccogliere il quarto referto.** Se trova un difetto **di prodotto**, curarlo e poi **chiudere
-   il ciclo di review** (proposta all'owner: dopo il quarto, le review tornano a coprire le **fasi
-   nuove**, non le singole cure — altrimenti ogni cura ne genera una che trova qualcosa nella cura).
-2. **Le quattro decisioni che aspettano l'owner** (§ «COSA MANCA, PER NOME», in fondo).
-3. ✅ **FASE 2 APERTA il 18/09/2026 (tarda sera)** — § «FASE 2, LE DUE CORSIE» qui sotto. ⛔ Corsia 1
-   e corsia 2 lavorano su **file disgiunti**; il laboratorio (`models`) e la chat **non sono di
-   questa fase**.
+1. ⛔ **La prima cosa è la FASE 4 — le quattro schede** (Hugging Face · Provider · Download ·
+   Sistema), § «LE FASI» nel piano. Prima di aprirla: la scomposizione con la **proprietà dei file**
+   (intersezioni **vuote**), il **consiglio modello+effort** all'owner e la sua **FERMATA**.
+2. ✅ **Chiusi prima di lei, il 19/09**: la **FASE 3** (`0948d437`, con la review e le tre decisioni
+   dell'owner), il bundle `public/` che **non si committava dalla `66e6023b`**, e
+   `_fase2-forme.spec.mjs` che **non era mai stata committata** (`41b85df5`). Il **ciclo di review**
+   sulle singole cure è **chiuso**: le review tornano a coprire le **fasi**.
+3. **Le decisioni che aspettano l'owner** (§ «COSA MANCA, PER NOME», in fondo) — ⛔ quelle della
+   banda sono state **date** il 19/09 e stanno nel § FASE 3, non aspettano più.
 4. **L'ispezione visiva è già stata fatta** su tutte e otto le viste (§ qui sopra) e le foto sono
-   rigenerate: alla ripresa si rifanno **dopo** ogni modifica di `src/`, mai prima.
-5. Le fasi successive: **2** (le dieci sezioni) · **3** (la banda del laboratorio) · **4** (le
-   quattro schede, **e il port della barra a faccette**) · **5** (la pagina del modello) · **6** (il
-   confronto finale).
+   rigenerate: alla ripresa si rifanno **dopo** ogni modifica di `src/`, mai prima. ⛔ Le **32 foto**
+   vanno rigenerate **dopo la FASE 4**, non ora: il laboratorio cambia di nuovo.
+5. Le fasi che restano: **4** (le quattro schede, **e il port della barra a faccette**) · **5** (la
+   pagina del modello) · **6** (il confronto finale).
 6. ⭐ **Dopo il piano** (owner 18/09): lo **stesso metodo sulla sidebar di DESTRA** — il **grafo
    agenti** e lo stile generale rifattorizzato. ⛔ Prima di riaprire: verificare se la «tab file» è
    davvero già fatta.
@@ -648,7 +702,7 @@ Ha lavorato in **sola lettura** sul 4174 (zero non-GET, zero righe di prodotto t
 | **D4** | il breadcrumb **non è quello del mockup**: nel mockup sta **nella topbar**, `gap:12px`, chevron **SVG 13×13**, e ha **regole mobili** (sotto i 720px nasconde il primo crumb); l'app è nel contenuto, `gap:8px`, glifo `›`, **nessuna regola mobile** | **decide l'owner** |
 | **D6** | il primo tab si chiama **«Hugging Face»** mentre il mockup ha **«Modelli»** — ⛔ **ma l'owner l'ha deciso testualmente**: «*la tab "modelli" si deve chiamare Hugging Face*». **L'owner vince sul mockup**; la review non lo sapeva | chiarito, nessuna azione |
 | **D7** | la **pagina del modello è nuda**: nessuna cornice, nessun breadcrumb (`breadcrumbDentroLaScheda: 0`) | FASE 5 |
-| **D9** | **doppia testata** in `lab-provider` e `lab-download` («Collegamenti, non scatole nere.» + «Fornitori e accessi») | sospetto, corsia C in corso |
+| **D9** | **doppia testata** in `lab-provider` e `lab-download` («Collegamenti, non scatole nere.» + «Fornitori e accessi») | sospetto — ⛔ la corsia C è **chiusa** il 18/09, quindi nessuno lo sta verificando: **si verifica aprendo la FASE 4**, che è la fase di quelle due schede |
 | — | **la prova non morde su 4 punti**: il **colore del punto** · la copia in `settings.css:28` (curata) · il **`letter-spacing`** del titolo · il **raggio dello scope** | da decidere: si aggiungono i test o si accetta |
 
 **Verificato buono dalla review**: la barra principale dell'app **non cambia** (le misure sono scoped);
@@ -774,6 +828,16 @@ Niente è stato buttato e niente è stato dichiarato chiuso per stanchezza. Per 
 3. **Il ciclo di review** → ✅ **chiuso dopo il quarto giro**; le review tornano a coprire le FASI.
    Prezzo dichiarato: le cure di `771201c1` e le tre nate dalle foto restano **non riviste**.
 
+### 1-ter · ✅ LE TRE DECISIONI DELLA BANDA — DATE DALL'OWNER IL 19/09/2026
+
+Chieste **prima** di consegnare le cure, come vuole la regola, e date secche. Il dettaglio sta nel
+§ FASE 3; qui solo l'esito:
+
+1. **La frase del cloud** → ✅ **resta quella vera** («Al cloud solo con un consenso esplicito.»): la
+   frase del mockup è **falsa** in TALOS e non si ricopia. La prova la **vieta** (BANDA-01).
+2. **Il pulsante `privacy-info`** → ✅ **resta fuori**: non ha una destinazione vera nel prodotto.
+3. **La doppia cornice** → ✅ **va bene così**: identica al mockup dentro la nostra carta.
+
 ### 1-bis · LE DECISIONI GIÀ CHIUSE (per memoria)
 
 1. **Due porte di ricerca o una?** In colonna ci sono il **cercatore del mockup** (bottone + Ctrl K,
@@ -788,8 +852,10 @@ Niente è stato buttato e niente è stato dichiarato chiuso per stanchezza. Per 
    controllo: `max-width:245px`, reso 158). ⇒ **Consiglio: tenere 220 adesso**, e adottare la
    **forma a gradini** del mockup alla prossima modifica di quella riga. Decide l'owner.
 4. **Il ciclo di review.** Tre giri, **~700k token**, ogni giro con difetti veri — il terzo, uno
-   **introdotto dalla cura precedente**. ⇒ **Consiglio: chiudere dopo il QUARTO giro** (in corso) e
-   far tornare le review a coprire le **FASI**, non le singole cure: com'è ora il ciclo non ha fine.
+   **introdotto dalla cura precedente**. ⇒ **Consiglio: chiudere dopo il QUARTO giro** — ⛔ **e il
+   quarto giro HA CONSEGNATO il 18/09 e il ciclo È CHIUSO**: le review coprono le **fasi**, non le
+   singole cure. Prezzo dichiarato: le cure di `771201c1` e le tre nate dalle foto restano
+   **non riviste**.
    Decide l'owner.
 
 ### 2 · I ROSSI PREESISTENTI — misurati, non miei, e con la prova
