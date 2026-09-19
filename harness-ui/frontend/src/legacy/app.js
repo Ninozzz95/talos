@@ -22578,7 +22578,53 @@ ${testo}`;
     const chiama = (verbo) => async (id) => { try { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id)}/${verbo}`, {}); } catch (error) { toast('Comando non eseguito', error.message); } caricaDownloadModelLab(); };
     aggiornaCodaDownload(panel, state.modelLab.downloads, {
       soloAttivi: downloadSoloAttivi, stime: stimeDownload,
-      azioni: { pausa: chiama('pause'), riprendi: chiama('resume'), annulla: (id) => { const velo = $('#veloAnnullaDownload'); if (velo) velo.dataset.downloadId = id; }, vediModello: () => setModelLabSection('installed') },
+      azioni: {
+        pausa: chiama('pause'), riprendi: chiama('resume'),
+        annulla: (id) => { const velo = $('#veloAnnullaDownload'); if (velo) velo.dataset.downloadId = id; },
+        vediModello: () => setModelLabSection('installed'),
+        /*
+         * ⛔ 19/09/2026 — I DUE COMANDI NUOVI SULLA RIGA DEL DOWNLOAD, e le due trappole che la
+         * corsia D ha MISURATO eseguendo le rotte su un server suo (non leggendole):
+         *
+         * · `rename` cambia **solo il nome mostrato**: scrive `manifests/<id>.name.json`, mentre il
+         *   manifest, la cartella, i pesi e l'id **non si toccano**. Un nome vuoto o oltre 160
+         *   caratteri esce `MODEL_INVALID`, che **non ha una voce** in `STATUS_BY_CODE` ⇒ la persona
+         *   vedrebbe **500 «Errore interno · Apri Doctor»** per un campo suo: il campo lo impedisce
+         *   prima (`maxlength`), e qui si traduce comunque l'esito.
+         *
+         * · `delete` porta via i **file** (pesi, manifest, nome), non tocca mai niente fuori dalla
+         *   radice, e se il modello è **in uso** rifiuta **prima** di cancellare.
+         *   ⛔⛔ E risponde **200 `{deleted:true}` anche su un id che non esiste**, senza cambiare
+         *   niente sul disco. ⇒ **La rotta da sola non è una prova**: si legge **prima e dopo**,
+         *   perché «non c'è più» e «non c'è mai stato» si fotografano uguali. Un esito che non
+         *   dichiara nulla non vale come riuscita (la riga scrive «Esito non confermato»).
+         *   ⛔ E dopo un'eliminazione RIUSCITA il registro dei trasferimenti tiene ancora la riga
+         *   `ready`: senza ricaricare anche la coda, la riga direbbe «Disponibile nei modelli
+         *   installati» **per sempre** su un modello che non c'è più.
+         *
+         * Ricerca di questo passo, 19/09/2026 — è lo stesso vincolo, in generale: dopo una
+         * mutazione **la risposta non è la verità**, si riconcilia con lo stato vero rileggendo
+         * (`invalidateQueries` in `onSettled`, su successo E su fallimento), e l'eliminazione è
+         * fra le scritture che **non** si fanno in modo ottimistico — richiesta, attesa, rilettura.
+         * Fonti: <https://tanstack.com/query/v4/docs/framework/react/guides/optimistic-updates> ·
+         * <https://github.com/ciampo/expense-manager-v2/issues/135> ·
+         * <https://github.com/TanStack/query/discussions/10712> ·
+         * <https://skillsmp.com/creators/wbunker/skills-repo/optimistic-updates> (lette il 19/09/2026).
+         */
+        rinomina: (id, nome) => apiPost(`/api/v1/local-models/${encodeURIComponent(id)}/rename`, { name: nome })
+          .then((risposta) => ({ ok: true, nome: risposta?.name ?? nome }))
+          .catch((errore) => ({ ok: false, motivo: errore?.message ?? 'rinomina non riuscita' })),
+        elimina: async (id) => {
+          const cEra = state.modelLab.installed.some((modello) => modello.id === id);
+          try { await apiPost(`/api/v1/local-models/${encodeURIComponent(id)}/delete`, {}); }
+          catch (errore) { return { ok: false, motivo: errore?.message ?? 'eliminazione non riuscita' }; }
+          await caricaModelliLocaliModelLab();
+          caricaDownloadModelLab();
+          if (!cEra) return { ok: false, motivo: 'non risultava fra i modelli installati' };
+          if (state.modelLab.installed.some((modello) => modello.id === id)) return { ok: false, motivo: 'il modello risulta ancora installato' };
+          return { ok: true };
+        },
+      },
     });
     return true;
   }
