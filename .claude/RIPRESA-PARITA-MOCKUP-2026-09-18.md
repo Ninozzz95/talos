@@ -660,6 +660,22 @@ misurata, i **file vietati** e le **ricerche citate**.
   <https://www.npmjs.com/package/@rosepetal/node-red-dashboard-2-system-monitor> ·
   <https://github.com/Theohox/zmenu> (letti il 19/09/2026).
 
+## ⛔ IL CANCELLO `COMP CodaDownload` — misurato il 19/09/2026, e NON è un difetto da inseguire
+
+Dopo il **ripristino del riferimento** (avevo tolto per errore la testata «Download», credendola una
+correzione BC-22: il banco confronta l'app **resa dalle fixture**, e lì la testata c'è — vedi il
+commit di ripristino), il cancello è rosso per **una sola causa**:
+
+- **struttura ✓ e parole ✓ passano**;
+- resta **`dimensioni diverse: mockup 1108×680, app 1108×688`** — **8 px** di altezza, che
+  accumulano **in cima**: la testata e la riga dei conteggi sono leggermente più alte nella resa
+  dell'app (le due foto salvate dal cancello lo mostrano: le righe dell'app stanno ~7 px più in basso).
+
+⇒ **E questo appartiene a un debito già dichiarato**: la tabella di marcia globale porta «**12 rossi
+di parità componenti** (ProviderCard, Conversazione, Inspector — mockup vs app, **decisione owner**)»
+— è la stessa famiglia, e l'8 px non si cura a intuito sul riferimento ✗: si misura e **decide
+l'owner**.
+
 ## ⛔ LA CHECKLIST DELLA CONSEGNA (owner 19/09/2026: «salva il lavoro e consegna ticket di ripresa e aggiorna i documenti / tabella di marcia»)
 
 Quando l'owner dà il via, **in quest'ordine**, e poi ci si ferma:
