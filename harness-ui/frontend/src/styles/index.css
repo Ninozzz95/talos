@@ -1733,6 +1733,12 @@ a.talos-button{text-decoration:none}
 .talos-list-row__misure{display:flex; align-items:center; gap:10px; font-size:11.5px; color:var(--talos-muted); font-variant-numeric:tabular-nums}
 .talos-list-row__misura{white-space:nowrap}
 .talos-split{display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:14px; align-items:start}
+/* ⛔ 19/09/2026 — IL DETTAGLIO CHIUSO NON TIENE LA SUA COLONNA. Un figlio `hidden` non si disegna,
+   ma la TRACCIA della griglia resta: misurato sulla lista Hugging Face, `#modelLabHfDetail` era
+   `hidden` a 0×0 e la griglia diceva ancora `508px 320px` ⇒ la lista perdeva 320 px di larghezza
+   per un pannello che non c'era (il mockup chiede 1122 px di riga). Specificità 0-2-1 contro lo
+   0-1-0 della regola sopra: vince senza `!important`. Fonte della misura: corsia A, FASE 4-bis. */
+.talos-split:has(> aside.talos-detail[hidden]){grid-template-columns:minmax(0,1fr)}
 /* ⛔⛔ BC-78.3, 17/09/2026 — UN PANNELLO APPICCICATO SENZA SCORRIMENTO PROPRIO NASCONDE IL SUO PIEDE.
    `position:sticky; top:0` tiene il pannello incollato in cima allo scorrimento: se è più alto dello
    spazio che ha, la sua parte bassa — dove stanno i pulsanti, «Fida» compreso — non si raggiunge
