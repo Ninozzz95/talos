@@ -10,6 +10,7 @@
 @import './terminale-basso.css'; /* PO-09: il terminale in split orizzontale in basso */
 @import './sessioni-vive.css'; /* le sessioni in corso salgono in cima, e lo segnalano */
 @import './attesa-shimmer.css';
+@import './stato-vuoto.css'; /* FASE 4, corsia 3: lo stato vuoto del mockup per la coda dei download (scoped al pannello) */
 @import './segnavia-mobile.css'; /* 10/09: il segnavia com'e' nel mobile, piu' piccolo */ /* 10/09: l'attesa si vede sulla riga, il segnavia e' nascosto */ /* il composer dice quando sei in shell libera */ /* D-10B: l'uscita di un comando mentre esce */
 /*
  * ⭐⭐⭐ 11/09 — `temi.css` e `aspetto.css` SONO TORNATI, e il fondo dell'owner non torna verde.
