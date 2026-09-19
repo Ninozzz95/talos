@@ -81,6 +81,25 @@ La **pagina del modello** (FASE 5: i tre lati, più il difetto `[object Object]`
 `scheda-modello.js:994` già localizzato col suo `file:riga`) · il **confronto finale** (FASE 6) ·
 le **due sidebar** (PARTE B: prima si chiudono TUTTE le fasi delle impostazioni — ordine dell'owner).
 
+## La review di ogni corsia — decisa PRIMA, non improvvisata alla consegna
+
+⛔ Le tre condizioni di sempre ([[ogni-corsia-ha-il-suo-controllore]]): il revisore **cerca il
+difetto**, **prova a romperlo** mostrando che la prova diventa rossa, e **dichiara** se ha verificato
+davvero. E una quarta, imparata il 19/09 sulla mutazione: **baseline verde prima**, si rompe **una
+cosa sola**, e il ripristino si verifica **al byte** (`git diff --numstat` di nuovo uguale, bundle
+ricostruito `cmp`-identico al blindato). Se la prova resta verde togliendo la difesa che nomina,
+**quel pezzo non è provato** — e va scritto, non aggiustato.
+
+| corsia | la pretesa che provo a falsificare | la mutazione |
+|---|---|---|
+| **1 · faccette** | «la barra è collegata al catalogo vero e i conteggi seguono i filtri» | tolgo il montaggio della barra dal percorso vivo → il suo spec deve diventare **rosso**; e tolgo il ricalcolo del conteggio → il caso che lo misura deve diventare rosso |
+| **2 · provider** | «le 28 card nel vestito del mockup e le modali vere ancora raggiungibili» | stacco il legame che apre la modale di configurazione → la prova deve diventare **rossa**; e cerco D9 con la misura, non a occhio |
+| **3 · download** | «lo stato vuoto è quello del mockup e i contatori dicono il vero» | riempio/svuoto la coda → i contatori e le righe devono seguire; stacco la condizione dello stato vuoto → rosso |
+| **4 · sistema** | «i fatti veri, senza zeri inventati, e la banda della FASE 3 intatta» | rinomino/rimuovo `#machineMemoryMetric` → `_fase3-banda` **deve** diventare rossa (prova che la dipendenza è reale e sorvegliata); e rimetto uno `0` al posto di un dato mancante → la prova della corsia deve morderlo |
+
+⛔ **E la regola che vale per tutte**: la consegna arriva **non deployabile**; solo la review la rende
+usabile, e una consegna bocciata si **ritira o si cura** — non si aggiusta in silenzio.
+
 ## Come si chiude (non è un'opinione)
 
 `npm run build` + consegna sul 4174 dall'orchestratore · `npm run test:unit` (base **1420**) · gli
