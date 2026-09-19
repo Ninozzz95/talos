@@ -58,8 +58,53 @@
  * NON stanno in questo file — le foglie stanno in `src/styles/` — e sono state CHIESTE
  * all'orchestratore insieme alla consegna di questa corsia (misure del mockup: min-height
  * 330px, bordo tratteggiato, angoli 12px, icona 34px, h3 1.25rem, p 13px su 420px).
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────────────
+ * ⭐⭐⭐⭐ 19/09/2026 — FASE 4-bis, corsia D: «ELIMINA» E «RINOMINA» ANCHE SULLA RIGA COMPLETATA.
+ *
+ * Owner: «Download non ha tutte le opzioni: non posso eliminare i modelli installati, non posso
+ * rinominarli. È tutto previsto dal backend su 4174». Fino a stamattina la riga `ready` offriva
+ * «Vedi modello» e basta (`app.js:22579` passa `pausa/riprendi/annulla/vediModello`: né `elimina`
+ * né `rinomina` esistevano in quel vocabolario).
+ *
+ * ⛔ PERCHÉ I DUE COMANDI COMPAIONO SOLO SE QUALCUNO LI SA FARE. Si disegnano se e solo se il
+ *   chiamante passa `azioni.elimina` / `azioni.rinomina`. Il laboratorio dei componenti
+ *   (`lab/main.js:442`) non passa NESSUNA azione e il cancello `COMP CodaDownload`
+ *   (`tests/parity/componenti.spec.mjs`) confronta proprio quel disegno col mockup: un comando
+ *   disegnato «perché prima o poi servirà» cambierebbe quella misura e romperebbe il cancello.
+ *   ⇒ Il vocabolario della riga cresce solo dove c'è una porta vera dietro.
+ *
+ * ⛔ COSA SUCCEDE DOPO UN'ELIMINAZIONE RIUSCITA — MISURATO il 19/09/2026 su un server ISOLATO
+ *   (porta 4218, sonda `sonda-coda.mjs`): il modello sparisce da `GET /api/v1/local-models`, ma
+ *   `GET /api/v1/huggingface/downloads` **porta ancora la sua riga `ready`** (il registro dei
+ *   trasferimenti tiene la voce in memoria e non la pota). ⇒ Se non si dicesse niente, la riga
+ *   continuerebbe a scrivere «Disponibile nei modelli installati» sopra un modello che non c'è
+ *   più: la bugia che questa corsia esiste per impedire. Perciò, dopo un'eliminazione riuscita,
+ *   la riga cambia frase, spegne «Vedi modello» (prometterebbe una pagina che non esiste più) e
+ *   non rioffre i due comandi.
+ *
+ * ⛔ E L'ESITO NON SI DEDUCE DAL CODICE HTTP. `POST …/delete` su un id inesistente risponde
+ *   **200 `{"deleted":true}`** senza toccare il disco (misurato). La riga quindi non legge la
+ *   busta: chiede un VERDETTO a chi ha eseguito l'azione (`verdettoAzioneModello`, in
+ *   `modelli-installati.js`) e, se il verdetto non arriva, scrive che l'esito non è confermato
+ *   invece di scrivere una vittoria che nessuno ha misurato.
+ *
+ * ⛔ LO STATO DEL PANNELLO VIVE SUL PANNELLO, non in una variabile di modulo. La coda si ridisegna
+ *   ogni 800 ms finché qualcosa scarica (`app.js:3661`), e `aggiornaCodaDownload` ricostruisce le
+ *   righe: un pannello aperto, un nome appena scritto o un esito appena letto sparirebbero sotto
+ *   le mani di chi li sta guardando. Lo stato sta su `panel.dataset.statoAzioniModello` — lo stesso
+ *   posto e la stessa idea del contatore del filtro — e si riapplica a ogni disegno.
+ *
+ * Ricerca fatta PRIMA di scrivere, 19/09/2026 (le fonti della fase coprono la modale, non il
+ * pannello dentro la riga): il comando si trasforma SUL POSTO in conferma/annulla, perché così si
+ * resta nel contesto e non si sposta il fuoco lontano — «stay in context, keep focus… lighter
+ * weight than a full dialog» (ember-safe-button); «Idle shows the trigger, Confirming shows
+ * confirm/cancel» (dioxus-nox-inline-confirm 0.13.2). ⛔ E la conferma NON è un esito: risponde a
+ * «sei sicuro?», non a «è andata?» — servono comunque uno stato di riuscita e uno d'errore propri
+ * (docs.wappler.io, «Delete with Confirmation»). L'annullamento resta sempre raggiungibile e
+ * nessun default è distruttivo (Deibler, «forgiveness-confirmation-and-prevention»).
  */
-import { gb } from './modelli-installati.js';
+import { gb, creaConfermaEliminazione, creaCampoRinomina, creaRigaEsitoModello, verdettoAzioneModello } from './modelli-installati.js';
 
 export const STATI_DOWNLOAD = Object.freeze({
   queued: { etichetta: 'In coda', tono: '', attivo: true },
@@ -127,7 +172,7 @@ export function datiDownload(item = {}, { stima = null } = {}) {
   const velocita = mbs(stima?.bytesAlSecondo);
   const resto = rimanente(stima?.secondiRimanenti);
   return {
-    id: item.id, nomeFile, stato: item.state, etichettaStato: stato.etichetta, tono: stato.tono, attivo: stato.attivo,
+    id: item.id, nomeFile, nome: item.name || item.request?.name || nomeFile, stato: item.state, etichettaStato: stato.etichetta, tono: stato.tono, attivo: stato.attivo,
     sotto: item.state === 'ready'
       ? `${gb(totale)} · completato${item.finishedAt ? ` alle ${oraBreve(item.finishedAt)}` : ''} · verifica del file riuscita`
       : `${repo ? `${repo.replace('/', ' / ')} · ` : ''}${item.state === 'failed' ? gb(totale) : 'Hugging Face'}`,
@@ -223,8 +268,183 @@ export function creaStatoVuotoDownload(radice, { azioni = {}, document: d = glob
   return riquadro;
 }
 
-/** La riga, esattamente come nel mockup (tre forme: in corso · fallito · completato). */
-export function creaRigaDownload(dati, { azioni = {}, document: d = globalThis.document } = {}) {
+/*
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ * FASE 4-bis, corsia D — LO STATO DELLE DUE AZIONI SUL MODELLO INSTALLATO.
+ *
+ * Vive su `panel.dataset`, non in una variabile di modulo: la coda si ridisegna da sola ogni
+ * 800 ms finché qualcosa scarica, e uno stato di modulo verrebbe condiviso da due pannelli
+ * (nel DOM vivono duplicati legacy). Forma:
+ *
+ *   { aperto: { id, tipo: 'elimina'|'rinomina', bozza }, inCorso: id|null,
+ *     erroreCampo: stringa|null, fuocoDato: stringa, esiti: { [id]: {tono, etichetta, testo, azione} } }
+ *
+ * `fuocoDato` è la chiave dell'apertura a cui il fuoco è già stato dato: senza di lui ogni
+ * ridisegno (ogni 800 ms) riporterebbe il fuoco e riselezionerebbe il testo, cioè strapperebbe
+ * la tastiera di mano a chi sta scrivendo il nome.
+ */
+const STATO_VUOTO = Object.freeze({ aperto: null, inCorso: null, erroreCampo: null, fuocoDato: '', esiti: {} });
+/** L'ultima resa di ogni pannello: serve a ridisegnare DA DENTRO, dopo un clic. */
+const ultimaResa = new WeakMap();
+
+function leggiStatoAzioni(panel) {
+  try {
+    const grezzo = panel.dataset.statoAzioniModello;
+    if (!grezzo) return { ...STATO_VUOTO, esiti: {} };
+    const letto = JSON.parse(grezzo);
+    return { aperto: letto.aperto ?? null, inCorso: letto.inCorso ?? null, erroreCampo: letto.erroreCampo ?? null, fuocoDato: letto.fuocoDato || '', esiti: letto.esiti && typeof letto.esiti === 'object' ? letto.esiti : {} };
+  } catch { return { ...STATO_VUOTO, esiti: {} }; } // uno stato illeggibile non deve spegnere la coda: si riparte puliti
+}
+function scriviStatoAzioni(panel, stato) { panel.dataset.statoAzioniModello = JSON.stringify(stato); }
+
+/** Riscrive il pannello con gli argomenti dell'ultimo disegno: chi clicca vede il risultato subito. */
+function ridisegna(panel) {
+  const ultima = ultimaResa.get(panel);
+  if (ultima) aggiornaCodaDownload(panel, ultima.items, ultima.opzioni);
+}
+
+/** Il verdetto di un'azione, con la stessa forma che la riga sa disegnare. */
+function conAzione(verdetto, azione) { return { ...verdetto, azione }; }
+
+/**
+ * Esegue l'eliminazione e scrive COM'È FINITA. `azioni.elimina` deve rispondere con un verdetto
+ * (`{ok:true}` / `{ok:false, motivo}`), non con la busta della rotta: vedi
+ * `verdettoAzioneModello` in `modelli-installati.js` per la misura che rende necessaria quella
+ * distinzione (`delete` su un id inesistente risponde 200 senza toccare il disco).
+ */
+async function eseguiEliminazione(panel, id, azioni, nome) {
+  const prima = leggiStatoAzioni(panel);
+  if (prima.inCorso) return; // un secondo invio mentre il primo è in volo non parte
+  scriviStatoAzioni(panel, { ...prima, inCorso: id });
+  ridisegna(panel);
+  let esito;
+  try { esito = await azioni.elimina(id); } catch (errore) { esito = { ok: false, motivo: errore?.message || 'la richiesta non è arrivata al server' }; }
+  const verdetto = conAzione(verdettoAzioneModello(esito, { azione: 'elimina', nome }), 'elimina');
+  const dopo = leggiStatoAzioni(panel);
+  scriviStatoAzioni(panel, {
+    ...dopo,
+    inCorso: null,
+    /* ⛔ Il pannello resta aperto SOLO se non è andata: lì c'è il comando per riprovare, e la
+       persona resta dove ha sbagliato. Riuscita, il pannello si chiude e l'esito va sulla riga. */
+    aperto: verdetto.tono === 'success' ? null : dopo.aperto,
+    esiti: { ...dopo.esiti, [id]: verdetto },
+    fuocoDato: '',
+  });
+  ridisegna(panel);
+  if (verdetto.tono === 'success') tornaAlComando(panel, id, 'eliminaModello');
+}
+
+/**
+ * Esegue la rinomina. Il nome vuoto o tutto spazi NON chiama la rete: si ferma nel campo e lo
+ * dice. Non è una comodità: MISURATO, il deposito risponde a quel caso un 500 «Errore interno…
+ * Apri Doctor», cioè manda la persona a cercare un guasto del server per un campo che è suo.
+ */
+async function eseguiRinomina(panel, id, nomeGrezzo, azioni) {
+  const prima = leggiStatoAzioni(panel);
+  if (prima.inCorso) return;
+  const nome = String(nomeGrezzo ?? '').trim();
+  if (!nome) {
+    scriviStatoAzioni(panel, { ...prima, erroreCampo: 'Scrivi un nome: senza nome il modello resta quello di prima.' });
+    ridisegna(panel);
+    return;
+  }
+  scriviStatoAzioni(panel, { ...prima, inCorso: id, erroreCampo: null, aperto: { ...prima.aperto, bozza: nome } });
+  ridisegna(panel);
+  let esito;
+  try { esito = await azioni.rinomina(id, nome); } catch (errore) { esito = { ok: false, motivo: errore?.message || 'la richiesta non è arrivata al server' }; }
+  const verdetto = conAzione(verdettoAzioneModello(esito, { azione: 'rinomina', nome }), 'rinomina');
+  const dopo = leggiStatoAzioni(panel);
+  scriviStatoAzioni(panel, {
+    ...dopo,
+    inCorso: null,
+    aperto: verdetto.tono === 'success' ? null : dopo.aperto,
+    erroreCampo: verdetto.tono === 'success' ? null : dopo.erroreCampo,
+    esiti: { ...dopo.esiti, [id]: verdetto },
+    fuocoDato: '',
+  });
+  ridisegna(panel);
+  if (verdetto.tono === 'success') tornaAlComando(panel, id, 'rinominaModello');
+}
+
+/**
+ * La bozza del nome, annotata a ogni tasto e SENZA ridisegnare: è quello che il prossimo giro di
+ * ridisegno (l'app lo fa ogni 800 ms mentre qualcosa scarica) ritrova dentro il campo. Ridisegnare
+ * qui sarebbe peggio del male: il campo si ricostruirebbe a ogni carattere e il cursore andrebbe a
+ * fondo riga sotto le dita di chi scrive.
+ */
+function annotaBozza(panel, id, nome) {
+  const stato = leggiStatoAzioni(panel);
+  if (stato.aperto?.id !== id) return;
+  scriviStatoAzioni(panel, { ...stato, aperto: { ...stato.aperto, bozza: nome } });
+}
+
+/**
+ * Il fuoco entra nel pannello UNA VOLTA SOLA, quando si apre.
+ *
+ * ⛔ Perché una volta sola: la coda si ridisegna ogni 800 ms mentre qualcosa scarica. Un fuoco
+ *   dato a ogni disegno riporterebbe la selezione all'inizio ogni 800 ms, cioè strapperebbe la
+ *   tastiera di mano a chi sta scrivendo il nome. La chiave dell'apertura (`id:tipo`) si annota
+ *   in `fuocoDato` appena il fuoco è stato dato, e da lì in poi il disegno non lo tocca più.
+ * ⛔ L'eliminazione vuole il fuoco su «Annulla» — chi apre il pannello con la tastiera non deve
+ *   trovarsi la punta delle dita sul comando che cancella (ricerca della fase, 19/09/2026).
+ *   La rinomina invece lo vuole DENTRO il campo, col testo selezionato: si scrive sopra al nome
+ *   vecchio invece di doverlo cancellare a mano (Chakra `Editable`, `selectAllOnFocus`).
+ */
+function applicaFuoco(panel, stato) {
+  if (!stato.aperto) return;
+  const chiave = `${stato.aperto.id}:${stato.aperto.tipo}`;
+  if (stato.fuocoDato === chiave) return;
+  const nodo = panel.querySelector(`[data-c="${stato.aperto.tipo === 'elimina' ? 'ConfermaEliminazione' : 'CampoRinomina'}"]`);
+  if (!nodo) return;
+  if (stato.aperto.tipo === 'elimina') nodo.querySelector('[data-action="annullaEliminaModello"]')?.focus();
+  else { const campo = nodo.querySelector('[data-campo="nomeModello"]'); campo?.focus(); campo?.select?.(); }
+  scriviStatoAzioni(panel, { ...stato, fuocoDato: chiave });
+}
+
+/**
+ * Apre il pannello dell'eliminazione: il primo clic ARMA, non cancella niente.
+ */
+function apriElimina(panel, id) {
+  const stato = leggiStatoAzioni(panel);
+  scriviStatoAzioni(panel, { ...stato, aperto: { id, tipo: 'elimina', bozza: '' }, erroreCampo: null, fuocoDato: '' });
+  ridisegna(panel);
+}
+
+/** Apre il campo della rinomina, con dentro il nome di adesso (che può essere nullo: vale il file). */
+function apriRinomina(panel, id, nomeAttuale) {
+  const stato = leggiStatoAzioni(panel);
+  scriviStatoAzioni(panel, { ...stato, aperto: { id, tipo: 'rinomina', bozza: nomeAttuale || '' }, erroreCampo: null, fuocoDato: '' });
+  ridisegna(panel);
+}
+
+/** Chiude il pannello e RIPORTA IL FUOCO al comando che l'aveva aperto. */
+function chiudiPannello(panel, id) {
+  const stato = leggiStatoAzioni(panel);
+  if (stato.aperto?.id !== id) return;
+  scriviStatoAzioni(panel, { ...stato, aperto: null, erroreCampo: null, fuocoDato: '' });
+  ridisegna(panel);
+  tornaAlComando(panel, id, stato.aperto.tipo === 'elimina' ? 'eliminaModello' : 'rinominaModello');
+}
+
+/**
+ * Il fuoco torna da dove è partito. Se quel comando non c'è più — l'eliminazione riuscita lo
+ * toglie, perché non c'è più niente da eliminare — il fuoco va sulla riga d'esito, che è la cosa
+ * che c'è da leggere. Mai lasciato sul `body`: chi usa la tastiera perderebbe il posto.
+ */
+function tornaAlComando(panel, id, azione) {
+  const riga = panel.querySelector(`[data-c="DownloadRow"][data-download-id="${CSS.escape(String(id))}"]`);
+  const comando = riga?.querySelector(`[data-action="${azione}"]`) || riga?.querySelector('[data-c="EsitoModello"]');
+  comando?.focus?.();
+}
+
+/**
+ * La riga, esattamente come nel mockup (tre forme: in corso · fallito · completato).
+ *
+ * `azioniModello` (facoltativo) = i comandi dell'eliminazione e della rinomina, già legati al
+ * pannello da `aggiornaCodaDownload`; quando manca, la riga è quella di sempre. `statoAzioni` è
+ * lo stato del pannello per questa coda (vedi il blocco sopra).
+ */
+export function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni = null, document: d = globalThis.document } = {}) {
   const art = el(d, 'article', 'talos-lab__download'); art.dataset.c = 'DownloadRow'; art.dataset.downloadId = dati.id; art.dataset.state = dati.stato;
   const testa = el(d, 'div', 'talos-toolbar');
   const titoli = el(d, 'div'); titoli.append(el(d, 'h3', 'talos-lab__heading', dati.nomeFile), el(d, 'p', 'talos-muted', dati.sotto));
@@ -232,9 +452,46 @@ export function creaRigaDownload(dati, { azioni = {}, document: d = globalThis.d
   testa.append(titoli, dati.stato === 'ready' ? badge(d, dati.etichettaStato, dati.tono) : statoWrap);
   art.appendChild(testa);
   if (dati.stato === 'ready') {
+    const esito = statoAzioni?.esiti?.[dati.id] || null;
+    /* ⛔ Un modello eliminato NON è più «disponibile nei modelli installati»: MISURATO il 19/09,
+       la coda del server porta ancora la riga `ready` di un modello appena eliminato, quindi
+       senza questa correzione la riga direbbe il falso per sempre. */
+    const eliminato = esito?.azione === 'elimina' && esito.tono === 'success';
     const piede = el(d, 'div', 'talos-toolbar');
-    piede.append(el(d, 'span', 'talos-muted', 'Disponibile nei modelli installati.'), bottone(d, 'Vedi modello', 'talos-button talos-button--secondary talos-button--sm', 'vediModello', () => azioni.vediModello?.(dati.id)));
+    const nota = el(d, 'span', 'talos-muted', eliminato
+      ? 'Eliminato dal disco: per usarlo di nuovo va scaricato o importato.'
+      : 'Disponibile nei modelli installati.');
+    const vedi = bottone(d, 'Vedi modello', 'talos-button talos-button--secondary talos-button--sm', 'vediModello', () => azioni.vediModello?.(dati.id));
+    /* «Vedi modello» porta agli installati, dove quel modello non c'è più: un comando che promette
+       una cosa e ne apre un'altra si spegne, e DICE perché. */
+    if (eliminato) { vedi.disabled = true; vedi.title = 'Questo modello non è più sul disco.'; }
+    piede.append(nota, vedi);
     art.appendChild(piede);
+    const apertoQui = statoAzioni?.aperto && statoAzioni.aperto.id === dati.id ? statoAzioni.aperto : null;
+    /* ⛔ I DUE COMANDI NON SI DISEGNANO MENTRE IL PANNELLO È APERTO: il comando si TRASFORMA in
+       conferma/annulla, non resta lì accanto (ed è anche il modo di non lasciare raggiungibile da
+       tastiera il comando che ha già aperto il suo pannello — XWIKI-19145, WCAG 2.4.3). E non si
+       ridisegnano su un modello già eliminato: non c'è più niente da rinominare o da togliere. */
+    if (azioniModello && !eliminato && !apertoQui) {
+      const cluster = el(d, 'div', 'talos-cluster');
+      cluster.append(
+        bottone(d, 'Rinomina', 'talos-button talos-button--secondary talos-button--sm', 'rinominaModello', () => azioniModello.apriRinomina(dati.id, dati.nome)),
+        bottone(d, 'Elimina dal disco', 'talos-button talos-button--secondary talos-button--sm', 'eliminaModello', () => azioniModello.apriElimina(dati.id)),
+      );
+      piede.appendChild(cluster);
+    }
+    if (apertoQui) {
+      art.appendChild(apertoQui.tipo === 'elimina'
+        ? creaConfermaEliminazione(
+          { id: dati.id, nome: dati.nome, dimensione: dati.totale },
+          { inCorso: statoAzioni.inCorso === dati.id, verdetto: esito, document: d,
+            onAnnulla: () => azioniModello.chiudi(dati.id), onEsegui: () => azioniModello.eseguiElimina(dati.id, dati.nome) })
+        : creaCampoRinomina(
+          { id: dati.id },
+          { bozza: apertoQui.bozza ?? '', inCorso: statoAzioni.inCorso === dati.id, errore: statoAzioni.erroreCampo, verdetto: esito, document: d,
+            onBozza: (nome) => azioniModello.annota(dati.id, nome),
+            onAnnulla: () => azioniModello.chiudi(dati.id), onSalva: (id, nome) => azioniModello.eseguiRinomina(id, nome) }));
+    } else if (esito) art.appendChild(creaRigaEsitoModello(esito, { document: d }));
     return art;
   }
   if (dati.stato === 'failed') {
@@ -325,8 +582,32 @@ function statoVuotoDelPannello(panel, d, azioni = {}, serve = true) {
 }
 
 /** Riscrive conteggi, filtro «solo attivi» e la coda. `stime` = Map id → { bytesAlSecondo, secondiRimanenti }. */
-export function aggiornaCodaDownload(panel, items = [], { soloAttivi = false, stime = new Map(), azioni = {}, errore = null, document: d = globalThis.document } = {}) {
+export function aggiornaCodaDownload(panel, items = [], opzioni = {}) {
   if (!panel) return;
+  const { soloAttivi = false, stime = new Map(), azioni = {}, errore = null, document: d = globalThis.document } = opzioni;
+  /* L'ultima resa resta scritta: chi clicca un comando della riga deve vedere il risultato subito,
+     senza aspettare il prossimo giro di `caricaDownloadModelLab` (che arriva ogni 800 ms solo
+     mentre qualcosa scarica, e MAI quando la coda è ferma). */
+  ultimaResa.set(panel, { items, opzioni });
+  const statoAzioni = leggiStatoAzioni(panel);
+  const azioniModello = (typeof azioni.elimina === 'function' || typeof azioni.rinomina === 'function') ? {
+    apriElimina: (id) => apriElimina(panel, id),
+    apriRinomina: (id, nome) => apriRinomina(panel, id, nome),
+    chiudi: (id) => chiudiPannello(panel, id),
+    annota: (id, nome) => annotaBozza(panel, id, nome),
+    eseguiElimina: (id, nome) => { if (typeof azioni.elimina === 'function') void eseguiEliminazione(panel, id, azioni, nome); },
+    eseguiRinomina: (id, nome) => { if (typeof azioni.rinomina === 'function') void eseguiRinomina(panel, id, nome, azioni); },
+  } : null;
+  /* ⛔ Gli esiti delle righe che non ci sono più si buttano: un esito appeso a un id che la coda
+     non porta più non ha niente a cui riferirsi, e se quell'id tornasse (una rilettura, un
+     riavvio) resusciterebbe un messaggio vecchio su una riga nuova. E un pannello aperto quando i
+     comandi che l'hanno aperto non ci sono più si chiude, invece di restare lì a promettere
+     un'azione che nessuno sa fare. */
+  const presenti = new Set(items.map((i) => i.id));
+  const esitiVivi = Object.fromEntries(Object.entries(statoAzioni.esiti).filter(([id]) => presenti.has(id)));
+  const apertoVivo = azioniModello && statoAzioni.aperto && presenti.has(statoAzioni.aperto.id) ? statoAzioni.aperto : null;
+  const statoReso = { ...statoAzioni, esiti: esitiVivi, aperto: apertoVivo };
+  if (JSON.stringify(statoReso) !== JSON.stringify(statoAzioni)) scriviStatoAzioni(panel, statoReso);
   const conteggi = panel.querySelector('.talos-count');
   const coda = panel.querySelector('[data-c="DownloadQueue"]');
   const c = riepilogoCoda(items);
@@ -370,7 +651,11 @@ export function aggiornaCodaDownload(panel, items = [], { soloAttivi = false, st
     coda.replaceChildren(el(d, 'p', 'talos-card--pad talos-muted', 'Nessun download attivo. I download finiti restano nella coda: «Mostra tutti» li riporta.'));
     return;
   }
-  coda.replaceChildren(...visibili.flatMap((i) => [d.createTextNode('\n'), creaRigaDownload(datiDownload(i, { stima: stime.get?.(i.id) || null }), { azioni, document: d })]), d.createTextNode('\n'));
+  coda.replaceChildren(...visibili.flatMap((i) => [d.createTextNode('\n'), creaRigaDownload(datiDownload(i, { stima: stime.get?.(i.id) || null }), {
+    azioni, azioniModello, statoAzioni: azioniModello ? statoReso : null, document: d,
+  })]), d.createTextNode('\n'));
+  /* Il fuoco entra nel pannello appena disegnato, una volta sola (vedi `applicaFuoco`). */
+  if (azioniModello) applicaFuoco(panel, leggiStatoAzioni(panel));
 }
 
 /**
