@@ -1,0 +1,74 @@
+package talos:extension@0.1.0;
+
+interface types {
+  enum entry-kind {
+    file,
+    directory,
+  }
+
+  record workspace-entry {
+    path: string,
+    kind: entry-kind,
+    bytes: u64,
+  }
+
+  record extension-description {
+    id: string,
+    version: string,
+    title: string,
+    description: string,
+  }
+
+  variant host-error {
+    denied(string),
+    not-found(string),
+    invalid(string),
+    resource-limit(string),
+    internal(string),
+  }
+}
+
+interface workspace {
+  use types.{workspace-entry, host-error};
+
+  list: func(path: string) -> result<list<workspace-entry>, host-error>;
+  read: func(path: string) -> result<list<u8>, host-error>;
+}
+
+interface git {
+  use types.{host-error};
+
+  status-json: func() -> result<string, host-error>;
+  diff-text: func(path: option<string>) -> result<string, host-error>;
+}
+
+interface state {
+  use types.{host-error};
+
+  get: func(key: string) -> result<option<list<u8>>, host-error>;
+  set: func(key: string, value: list<u8>) -> result<_, host-error>;
+}
+
+interface ui {
+  use types.{host-error};
+
+  // JSON must conform to ui-contribution.schema.json. The host validates it
+  // independently before the main renderer sees any contribution.
+  publish: func(contribution-json: string) -> result<_, host-error>;
+}
+
+world extension {
+  use types.{extension-description, host-error};
+
+  import workspace;
+  import git;
+  import state;
+  import ui;
+
+  export describe: func() -> extension-description;
+
+  // JSON is used at the extension/tool boundary for provider-neutral schemas.
+  // It is not the Supervisor control wire and does not carry authority.
+  export invoke-tool: func(name: string, input-json: string) -> result<string, host-error>;
+  export invoke-action: func(name: string, input-json: string) -> result<string, host-error>;
+}
