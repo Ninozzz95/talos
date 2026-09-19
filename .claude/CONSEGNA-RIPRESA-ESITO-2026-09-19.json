@@ -1,0 +1,20 @@
+{
+  "checkpointCommit": "725d66cd5d66c7a2a2d194382bbf2903a2c915b3",
+  "branch": "lane/harness-desktop",
+  "remote": "https://github.com/talos-private/agent-virtual-machine",
+  "push": "verified",
+  "updatedAt": "2026-09-19T20:45:37.039294+00:00",
+  "release": "not-published; gates open",
+  "verifiedRemoteSha": "725d66cd5d66c7a2a2d194382bbf2903a2c915b3",
+  "verifiedBy": "GitHub REST refs/heads/lane/harness-desktop",
+  "verifiedAt": "2026-09-19T20:47:09+00:00",
+  "filesInCheckpoint": 132,
+  "previousLocalCommitsAlsoPushed": 22,
+  "health4174": 200,
+  "recoveredSessions": 33,
+  "backendGate": {
+    "run": "2026-09-19T20-41-35-273Z-backend-24dc5a4f",
+    "pass": 537,
+    "fail": 0
+  }
+}

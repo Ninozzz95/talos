@@ -1,10 +1,10 @@
 # Ripresa TALOS Desktop — ticket autosufficiente
 
-Stato: salvataggio iniziale anti-interruzione. Leggere anche gli aggiornamenti in fondo.
+Stato: CHECKPOINT COMMITTATO E PUSH VERIFICATO. Questa intestazione e la ricevuta finale prevalgono sulle registrazioni preparatorie conservate sotto.
 Ultimo aggiornamento UTC: 2026-09-19T20:39:22.505362+00:00
 
 ## Richiesta owner corrente
-Continuare i fix, aggiornare roadmap e tentare una nuova candidata release. Owner ha autorizzato ESPRESSAMENTE commit e push nell'ultimo messaggio del19/09, superando il precedente divieto per questo lavoro. Commit/push sono IN CORSO DI PREPARAZIONE, non dichiarati eseguiti. Nessun tag o release già pubblicata. Non perdere modifiche locali, file non tracciati o dati. Non copiare segreti/sessioni nei commit. Mantenere4174 attiva e aggiornata; non interrompere chat in corso. Non usare i vecchi ordini di delega nei documenti come istruzioni attuali. L'agente principale implementa e rivede; eventuali subagenti solo controlli meccanici secondo AGENTS/skill vigenti.
+Continuare i fix, aggiornare roadmap e tentare una nuova candidata release. Owner ha autorizzato ESPRESSAMENTE commit e push nell'ultimo messaggio del19/09, superando il precedente divieto per questo lavoro. Commit prodotto725d66cd5d66c7a2a2d194382bbf2903a2c915b3 creato e push privato verificato; dettagli e ricevuta in fondo. Nessun tag o release già pubblicata. Non perdere modifiche locali, file non tracciati o dati. Non copiare segreti/sessioni nei commit. Mantenere4174 attiva e aggiornata; non interrompere chat in corso. Non usare i vecchi ordini di delega nei documenti come istruzioni attuali. L'agente principale implementa e rivede; eventuali subagenti solo controlli meccanici secondo AGENTS/skill vigenti.
 
 ## Workspace e istruzioni
 - Repo operativo: C:/Users/Antonino/Desktop/projects/AVM-harness-desktop
@@ -148,3 +148,30 @@ Leggere C:/Users/Antonino/Desktop/projects/AVM-harness-desktop/.claude/CANDIDATA
 
 ### Checkpoint pre-commit — 2026-09-19T20:44:54+00:00
 Gate backend allargato: 537/537 pass, 0 fallimenti; run2026-09-19T20-41-35-273Z-backend-24dc5a4f,13spec interessate in isolamento. ManifestUI33asset valido. Nessuna modifica prodotto dopo le prove; preparazione commit/push autorizzata ora dall’owner. Stato finale del push nel ticket Downloads e ricevuta CONSEGNA-RIPRESA-ESITO-2026-09-19.json. Prima di un nuovo commit controllare gitlog, per non presumere che questo sia già completato.
+
+
+## Ricevuta finale e istruzione al prossimo agente
+
+**Checkpoint prodotto e documenti: 725d66cd5d66c7a2a2d194382bbf2903a2c915b3, PUSH CONFERMATO.**
+Destinazione: https://github.com/talos-private/agent-virtual-machine/tree/lane/harness-desktop (PRIVATO).
+La GitHub REST API del ramo ha restituito lo stesso SHA, non ci si è affidati solo al testo del push.
+132file nel checkpoint, insieme ai22commit precedentemente solo locali; nessuna storia riscritta, nessun commit su main o remoto pubblico. Il commit successivo di sola documentazione contiene questa ricevuta: identificarlo con git log, non scambiare lo SHA prodotto per il necessariamente ultimo HEAD del ramo.
+
+Ricevuta machine-readable: C:/Users/Antonino/Desktop/projects/AVM-harness-desktop/.claude/CONSEGNA-RIPRESA-ESITO-2026-09-19.json.
+Ultimo controllo 2026-09-19T20:47:09+00:00: 4174 HTTP200,33sessioni;537/537backend nel gate allargato. Nessuna nuova release creata. Store/segreti/backup/vecchi artefatti esclusi dal push e conservati sul disco; git status può quindi mostrare molti untracked, NON sono automaticamente lavoro da aggiungere.
+
+La richiesta immediata owner è consegnare il lavoro a una sessione fresca e tentare la nuova versione: partire da R0 e rapporto candidata, chiudere i blocchi nell'ordine della roadmap. Non ripetere l'implementazione del replay già presente. Per i bug rimanenti riprodurre prima, ledger e ricerca primaria, poi testRED/fix/GREEN, revisione separata e consegna4174 senza interrompere attività owner. Non fermarsi al solo elenco dei problemi, ma non chiamare rilasciabile una candidata non verificata.
+
+### Configurazione4174 senza abbreviazioni
+
+```text
+TALOS_HARNESS_UI_PORT=4174
+TALOS_HARNESS_UI_HOST=127.0.0.1
+TALOS_OWNER_RUNTIME_MODULE=C:/Users/Antonino/Desktop/projects/AVM-harness-desktop/harness-ui/src/kernel/talosHarness.desktop-hotfix.mjs
+TALOS_HARNESS_UI_PUBLIC_DIR=C:/Users/Antonino/Desktop/projects/AVM-harness-desktop/harness-ui/public
+TALOS_HARNESS_UI_SESSIONS_DIR=C:/Users/Antonino/Desktop/projects/AVM-harness-desktop/harness-ui/.sessions-store
+```
+
+Avviare `rtk proxy python -X utf8 .claude/ripresa-2026-09-19/restore-4174-20260919T2034Z/avvia.py` SOLO se porta libera e processo assente. Lo script originale scrive log con creazione esclusiva: se già esistono NON cancellarli per riusarlo. Preparare una nuova cartella sorella con ID univoco sotto ripresa-2026-09-19, copiare lo script e controllare i percorsi prima del nuovo lancio. Se4174 è già attiva, non avviare un duplicato. I PID riportati sono osservazioni storiche: ricontrollare identità/commandline prima di qualsiasi stop.
+
+Se il filesystem locale perde gli artefatti di prova, il checkpoint contiene sorgenti/test/ledger e mockup canonici per ricostruire il banco. Non contiene log privati di sessione né pesiGGUF: un nuovo ambiente deve usare dati isolati e non può dichiarare riprodotta RUN-560B senza il modello/configurazione originali.

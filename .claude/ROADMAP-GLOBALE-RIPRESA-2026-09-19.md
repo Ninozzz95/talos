@@ -400,3 +400,7 @@ Registrazione finale: 2026-09-19T20:06:27+00:00
 
 ### Checkpoint pre-commit — 2026-09-19T20:44:54+00:00
 Gate backend allargato: 537/537 pass, 0 fallimenti; run2026-09-19T20-41-35-273Z-backend-24dc5a4f,13spec interessate in isolamento. ManifestUI33asset valido. Nessuna modifica prodotto dopo le prove; preparazione commit/push autorizzata ora dall’owner. Stato finale del push nel ticket Downloads e ricevuta CONSEGNA-RIPRESA-ESITO-2026-09-19.json. Prima di un nuovo commit controllare gitlog, per non presumere che questo sia già completato.
+
+
+## Salvataggio remoto confermato — 2026-09-19T20:47:09+00:00
+Commit prodotto `725d66cd5d66c7a2a2d194382bbf2903a2c915b3` sul ramo privato `talos-private/agent-virtual-machine:lane/harness-desktop`, SHA verificato via GitHubAPI. Inclusi22commit precedenti. Ticket autosufficiente in `.claude/TICKET-RIPRESA-TALOS-2026-09-19-FINALE.md` e `C:/Users/Antonino/Downloads/TICKET-RIPRESA-TALOS-2026-09-19-FINALE.md`; ricevuta in `.claude/CONSEGNA-RIPRESA-ESITO-2026-09-19.json`. Gate537/537backend e manifest33asset validi;4174HTTP200/33sessioni. Nessun tag, pubblicazione o nuova versione; restano i blocchi della candidata.
