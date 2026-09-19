@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talos.local/evolution/schemas/runtime-manifest.schema.json",
+  "title": "TALOS Runtime Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "runtimeId",
+    "runtimeVersion",
+    "platform",
+    "compatibility",
+    "files",
+    "rootHash",
+    "officialProvenanceRef",
+    "updateMetadataRef",
+    "createdAt"
+  ],
+  "properties": {
+    "schema": {
+      "const": "talos.evolution.runtime-manifest.v1"
+    },
+    "runtimeId": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "runtimeVersion": {
+      "$ref": "common.schema.json#/$defs/semver"
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "arch"
+      ],
+      "properties": {
+        "os": {
+          "enum": [
+            "windows"
+          ]
+        },
+        "arch": {
+          "enum": [
+            "x64",
+            "arm64"
+          ]
+        }
+      }
+    },
+    "compatibility": {
+      "$ref": "common.schema.json#/$defs/protocolCompatibility"
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "bytes",
+          "sha256"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "common.schema.json#/$defs/relativePath"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1099511627776
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      }
+    },
+    "rootHash": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "officialProvenanceRef": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 2048
+    },
+    "updateMetadataRef": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 2048
+    },
+    "createdAt": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    }
+  }
+}
