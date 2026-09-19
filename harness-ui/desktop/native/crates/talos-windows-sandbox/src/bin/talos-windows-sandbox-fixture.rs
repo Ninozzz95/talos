@@ -5,8 +5,7 @@ mod real {
     use std::{
         env,
         ffi::{OsStr, OsString},
-        fs,
-        io,
+        fs, io,
         os::windows::process::CommandExt,
         path::{Path, PathBuf},
         process::Command,
