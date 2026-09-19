@@ -63,6 +63,11 @@ async function inventarioStabile(page, leggi) {
 }
 
 async function apriImpostazioni(page) {
+  // The old master included a selected local model; an empty isolated store cannot render it.
+  await page.route('**/api/v1/local-models', route => route.fulfill({json:{ok:true,data:{items:[{
+    id:'inventory-local',name:'Modello inventario',repo:'local-upload',state:'ready',bytes:1024,
+    files:[{path:'inventory.gguf',bytes:1024}],path:'C:/fixture/inventory',license:'unknown'
+  }]}}}));
   await page.addInitScript(() => {
     window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { uiLanguage: 'it' }, chat: {}, workspaces: {} }));
   });
@@ -85,6 +90,10 @@ test('FASE2-NIENTE-PERSO · nessun id, nessun gancio, nessun controllo in meno',
   const master = JSON.parse(readFileSync(MASTER, 'utf8'));
 
   await apriImpostazioni(page);
+  await page.locator('#setting-tab-models').click();
+  await page.locator('[data-settings-add-model]').click();
+  await page.locator('#settingsAddModel [data-settings-road="file"]').click();
+  await expect(page.locator('#modelLabInstalledPanel #modelloNome')).toBeVisible();
   const vivo = await inventarioStabile(page, RACCOGLI);
 
   const mancanti = { sezioni: [], id: [], righe: [], calati: [] };

@@ -146,7 +146,7 @@ async function primaSana(page, partenzaRotta, tetto) {
 test('C4-A · la scala dell’interfaccia stringe la riga senza muovere la finestra: la soglia 1500 non la vede', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await apriLaboratorio(page);
-  await page.selectOption('#modelLabHfSortControl', 'updated', { force: true });
+  await page.selectOption('#modelLabHfSortControl', 'lastModified', { force: true });
   await page.waitForTimeout(200);
 
   const righe = [];
@@ -180,7 +180,7 @@ test('C4-A · la scala dell’interfaccia stringe la riga senza muovere la fines
 test('C4-B · A/B della soglia (1100 · 1500) alla stessa scala: la cura restringe la fascia o la chiude?', async ({ page }) => {
   await page.setViewportSize({ width: 1700, height: 900 });
   await apriLaboratorio(page);
-  await page.selectOption('#modelLabHfSortControl', 'updated', { force: true });
+  await page.selectOption('#modelLabHfSortControl', 'lastModified', { force: true });
   await applicaScala(page, 'large');
   await page.waitForTimeout(400);
 
@@ -213,7 +213,7 @@ test('C4-B · A/B della soglia (1100 · 1500) alla stessa scala: la cura restrin
 test('C4-B2 · la fascia rotta a ogni scala: dove finisce, e dove finiva con la soglia 1100', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await apriLaboratorio(page);
-  await page.selectOption('#modelLabHfSortControl', 'updated', { force: true });
+  await page.selectOption('#modelLabHfSortControl', 'lastModified', { force: true });
   const esito = [];
   for (const scala of ['default', 'large', 'xlarge']) {
     await applicaScala(page, scala);
@@ -334,7 +334,7 @@ test('C4-C · la posizione assoluta della barra: falsi rossi su codice sano', as
 test('C4-D · la forma a capo sotto i 1500: altezze, trabocchi, e la soglia vista da vicino', async ({ page }) => {
   await page.setViewportSize({ width: 1501, height: 900 });
   await apriLaboratorio(page);
-  await page.selectOption('#modelLabHfSortControl', 'updated', { force: true });
+  await page.selectOption('#modelLabHfSortControl', 'lastModified', { force: true });
   await page.waitForTimeout(250);
   const esito = [];
   for (const w of [1501, 1500, 1499, 1440, 1280, 1101, 1100, 900, 660, 560, 480]) {

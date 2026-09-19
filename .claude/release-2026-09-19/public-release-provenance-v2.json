@@ -1,0 +1,66 @@
+{
+  "at": "2026-09-19T21:34:29.804207+00:00",
+  "release": "a898162feff3ed8ad4cb0586344fe9d9e390d1a5",
+  "public": "13f65c15cdeaf8986b882993a0773cdeafb867d2",
+  "current": "143145103a59dfb8f8411e7cea8610d98bfd0c2c",
+  "paths": [
+    {
+      "file": "harness-ui/src/adattatore-keyring.mjs",
+      "release": "93a4c6527c0822bdf1c8b447f03681ce713683ba",
+      "public": "93a4c6527c0822bdf1c8b447f03681ce713683ba",
+      "current": "4b5f1a62709c4f7bf2f9c20dccc81227664d1547",
+      "samePublicRelease": true,
+      "sameCurrentPublic": false
+    },
+    {
+      "file": "harness-ui/src/provider-credential-store.mjs",
+      "release": "1280b59a2be4ed7029b315fbef7f5a861b8785c6",
+      "public": "1280b59a2be4ed7029b315fbef7f5a861b8785c6",
+      "current": "1d9be47dbe3fe576a64ae7e48c1a16d1ebace75f",
+      "samePublicRelease": true,
+      "sameCurrentPublic": false
+    },
+    {
+      "file": "harness-ui/desktop/assets/installer.nsh",
+      "release": "01ec23e39bc2d5c71b8309ef4ee63932bf8761a6",
+      "public": "01ec23e39bc2d5c71b8309ef4ee63932bf8761a6",
+      "current": "01ec23e39bc2d5c71b8309ef4ee63932bf8761a6",
+      "samePublicRelease": true,
+      "sameCurrentPublic": true
+    },
+    {
+      "file": "harness-ui/desktop/scripts/distribuisci.mjs",
+      "release": "995f3b0d15efad0f8dc89a2dc728c5306665ac99",
+      "public": "995f3b0d15efad0f8dc89a2dc728c5306665ac99",
+      "current": "5ade67bda99a1328992ec537c84f3789278af8fa",
+      "samePublicRelease": true,
+      "sameCurrentPublic": false
+    },
+    {
+      "file": "harness-ui/desktop/scripts/prepara-pacchetto.mjs",
+      "release": "0c8999ff70dd15d101e558845fe1e89706a6a735",
+      "public": "0c8999ff70dd15d101e558845fe1e89706a6a735",
+      "current": "e59e766d492c8ba04d300f7f48598ef7a8da3e8a",
+      "samePublicRelease": true,
+      "sameCurrentPublic": false
+    },
+    {
+      "file": "harness-ui/desktop/runtime.mjs",
+      "release": "93f1f9241d28d8846ba79f86667a89e7c897a684",
+      "public": "93f1f9241d28d8846ba79f86667a89e7c897a684",
+      "current": "7f6fac1197211dd28bc9929011d27866aa8f076f",
+      "samePublicRelease": true,
+      "sameCurrentPublic": false
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "release": "7c4d5232d0207921996449e0b6303ddd739cdf83",
+      "public": "7c4d5232d0207921996449e0b6303ddd739cdf83",
+      "current": "6dbaac8b5b1b4b4ef350ab6178866293deea81c9",
+      "samePublicRelease": true,
+      "sameCurrentPublic": false
+    }
+  ],
+  "note": "Blob identity proves preservation only for identical files, not full behavioral correctness.",
+  "supersedes": "public-release-provenance.json"
+}

@@ -430,7 +430,7 @@ test('R19 · mentre si cerca, cosa resta disegnato nella colonna', async ({ page
 test('R18 · a 220 px entrano sia l’etichetta lunga sia il segnaposto', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await apriLaboratorio(page);
-  await page.selectOption('#modelLabHfSortControl', 'updated', { force: true });
+  await page.selectOption('#modelLabHfSortControl', 'lastModified', { force: true });
   await page.waitForTimeout(150);
   const leggi = () => page.evaluate(() => {
     const r = document.querySelector('.talos-toolbar--hf');

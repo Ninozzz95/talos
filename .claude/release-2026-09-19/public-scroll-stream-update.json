@@ -1,0 +1,33 @@
+{
+  "schema": "talos.release.public-update.v1",
+  "created": "2026-09-19T22:32:14.308270+00:00",
+  "backup": "C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\.claude\\release-2026-09-19\\public-before-scroll-stream-20260919T223158Z",
+  "files": [
+    {
+      "file": "index.html",
+      "before": "0b4c9bff0702da3755c1de470d3250be6a02cb8397055465a9b85063346f3fbc",
+      "after": "0b4c9bff0702da3755c1de470d3250be6a02cb8397055465a9b85063346f3fbc",
+      "dist": "0b4c9bff0702da3755c1de470d3250be6a02cb8397055465a9b85063346f3fbc"
+    },
+    {
+      "file": "app.js",
+      "before": "e13b0b8dec8aeefe1d9835bfc70a5bd6bed9b5f0fdc9e495d49eaa288fb28656",
+      "after": "0c1634b5f12e8ce4af45aab4bb1a8ff65e4c98f65ab3a30aeadc699e74820f75",
+      "dist": "0c1634b5f12e8ce4af45aab4bb1a8ff65e4c98f65ab3a30aeadc699e74820f75"
+    },
+    {
+      "file": "styles.css",
+      "before": "c96134bca97e6aac267278b8736dcb6e522b7f236dcd7bba96126c1b963dc07a",
+      "after": "c96134bca97e6aac267278b8736dcb6e522b7f236dcd7bba96126c1b963dc07a",
+      "dist": "c96134bca97e6aac267278b8736dcb6e522b7f236dcd7bba96126c1b963dc07a"
+    },
+    {
+      "file": "build-manifest.json",
+      "before": "8f028eb718ab78eeb664e832f039388f0fb352b837d23c3dec4d6055e73f847b",
+      "after": "d3971fa8f9e61eedd1cc06090734fad5a46a0100d58cfa9af2eaad8b3aea0b91",
+      "dist": "d3971fa8f9e61eedd1cc06090734fad5a46a0100d58cfa9af2eaad8b3aea0b91"
+    }
+  ],
+  "serverPid": 19300,
+  "serverRestarted": false
+}

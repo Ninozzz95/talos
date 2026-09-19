@@ -1,5 +1,25 @@
 # Candidata desktop — checkpoint ripresa 19/09/2026
 
+## Gate aggiornato 2026-09-19T22:35Z
+
+- Fix streaming/rotella: il forwarding sul tasto `#chatTornaInFondo` non forza più layout; focused wheel, `scroll-p0` e `chat-lunga-p0` verdi (`d8084fe2`, `d4de2d61`, `3021e377`).
+- Electron isolato `2026-09-19T22-17-11-401Z-desktop-c5f4b5db`: pure e shell/backend reali verdi; keyring resta sostituito in memoria e installer/provider credentials non certificati.
+- Backend aggiornato `2026-09-19T22-19-10-435Z-backend-48a8756a` exit 0. 4174 resta vivo senza riavvio, health 200 e `app.js` live hash `0c1634b5f12e8ce4af45aab4bb1a8ff65e4c98f65ab3a30aeadc699e74820f75`.
+- La candidata resta **NON rilasciabile**: full browser baseline 711/648/46/17 da riconciliare, percorsi provider/installer reali mancanti e advisory HIGH transitive aperti.
+- Full browser aggiornato `2026-09-19T22-35-37-174Z-browser-361dcb2d`: 658 pass, 37 fail, 3 skip, 14 non eseguiti. Il wheel/streaming fix è verde nel run; i 37 fallimenti nominativi e i 14 non eseguiti impediscono ancora la candidata.
+
+## Preparazione rilascio in corso — 2026-09-19T21:40:30.278989+00:00
+
+Richiesta owner: fare tutto il necessario per il rilascio. HEAD143145103a59dfb8f8411e7cea8610d98bfd0c2c salvato sul privato. Nessun tag. Questo riquadro prevale sui conteggi storici sotto.
+- Backend completo nuovo:3916test,3900pass,3fail,13skip (fbbc97a8). Classificazione cleanup replay corretta e focused verde(cb027bd5). I due fallimenti shell marker passano in due repliche isolate(8e4c06a7,b610da00), causa ancora ignota: diagnostica aggiunta ai messaggi di fallimento, serve nuova suite completa.
+- Browser completo in corso:2026-09-19T21-32-50-461Z-browser-00ccbf68. Non avviare un secondo full-run contemporaneo. Prove correnti in harness-ui/frontend/artifacts/ripresa; events.jsonl conserva ogni esito anche con interruzione improvvisa.
+- Correzioni SOLO di test per ora: writer replay attesi esplicitamente; inventario rispetta eliminazione owner dei quattro riepiloghi e prepara modello locale; sonde HF usano lastModified; test confronto usa SOLO TALOS-Calm-Lab-04.html, che ha3ingressi funzionanti e7voci disabilitate. GREEN browser di queste modifiche ancora da eseguire dopo la baseline.
+- Nuovo runner isolato Electron: harness-ui/desktop/scripts/ripresa-desktop-gate.mjs. Solo syntaxcheck per ora; eseguirlo dopo browser. Strumenta SOLO snapshot bootstrap per keyring in memoria; nessuna certificazione installer/credenziali reali implicita.
+- Public main13f65c15cdeaf8986b882993a0773cdeafb867d2 verificato. Workflow pubblico più recente: non sovrascriverlo con privato. Provenienza corretta in .claude/release-2026-09-19/public-release-provenance-v2.json (v1 conteneva provider-store assente, non prova valida).
+- G10 Evolution: censita nuova PR#37 https://github.com/talos-private/agent-virtual-machine/pull/37, head4175dc760d39d78011fa1e545d7fc9d23049055c; Windows process-tree containment su baseevolution/e0-3-native-rust-workspace. Aperta, nessun merge/import implicito; affianca#34–36 come dipendenza da auditare.
+Ledger esatto: .claude/LEDGER-RELEASE-GATE-2026-09-19.md. Nessuna modifica prodotto/deploy4174 in questo lotto. 4174 resta da controllare a fine gate senza riavvio.
+
+
 **Stato: checkpoint di sviluppo salvabile, NON ancora rilasciabile.** Nessun numero di versione nuovo assegnato, tag creato o pacchetto pubblicato.
 Ultima release pubblica verificata via GitHub il19/09: desktop-v0.1.13, pubblicata16/09/2026 16:35:27Z. Le versioni già pubblicate non si riscrivono.
 

@@ -258,7 +258,7 @@ describe('F15 — la shell chiede davanti a un segreto, anche con «sempre»', (
             permessiPerAttrezzo: { shell: 'sempre' },
             chiediApprovazioneFn: async () => true,
         })
-        assert.equal(existsSync(join(cartella, 'marker.txt')), true, 'approvato = eseguito, come sempre')
+        assert.equal(existsSync(join(cartella, 'marker.txt')), true, JSON.stringify(rete.chiamate[1]?.corpo.messages.filter(m => m.role === "tool")))
     })
 
     it('⛔⛔⛔ LO STOP MENTRE LA DOMANDA È SULLO SCHERMO resta gestito anche qui', async (t) => {
@@ -365,7 +365,7 @@ describe('F15 — la shell chiede davanti a un segreto, anche con «sempre»', (
             assert.ok(richiesta)
             scena.registro.rispondiApprovazione(scena.sessionId, richiesta.requestId, true)
             await scena.attesa
-            assert.equal(existsSync(join(scena.cartella, 'marker.txt')), true)
+            assert.equal(existsSync(join(scena.cartella, "marker.txt")), true, JSON.stringify(scena.rete.chiamate[1]?.corpo.messages.filter(m => m.role === "tool")))
         })
 
         it('⛔⛔⛔ e il NO non esegue', async (t) => {

@@ -1,5 +1,25 @@
 # Roadmap globale di ripresa — 19 settembre 2026
 
+## Stato gate 2026-09-19T22:35Z
+
+- La regressione percepita durante la rotella è stata ricondotta al solo listener del tasto ritorno: eliminate le letture di layout sul percorso pixel, mantenuti click e scroll. Wheel focused, `scroll-p0` e `chat-lunga-p0` verdi.
+- Electron isolato e backend aggiornato verdi; il server 4174 è ancora PID 19300, health 200, bundle `app.js` live aggiornato senza riavvio. Evidenza e backup in `.claude/release-2026-09-19/public-scroll-stream-update.json`.
+- R0 resta aperto: la baseline browser completa 711/648/46/17 è storica rispetto agli ultimi test e va rieseguita/classificata. R5 resta aperto per installer, credenziali provider reali e advisory HIGH transitive.
+- Prossimo ordine operativo: (1) classificare i 46 fallimenti con un full browser aggiornato; (2) chiudere i percorsi reali D-LAB-03/RUN-560B; (3) ripetere parità mockup testa-a-testa; (4) soltanto dopo comporre il manifest candidato.
+- Full browser aggiornato concluso `2026-09-19T22-35-37-174Z-browser-361dcb2d`: 658 pass, 37 fail, 3 skip, 14 non eseguiti. Il primo passo della coda ora è classificare questi 37 fallimenti nominativi e recuperare i 14 casi non eseguiti; il fix wheel/streaming non è tra i fallimenti.
+
+## Preparazione rilascio in corso — 2026-09-19T21:40:30.278989+00:00
+
+Richiesta owner: fare tutto il necessario per il rilascio. HEAD143145103a59dfb8f8411e7cea8610d98bfd0c2c salvato sul privato. Nessun tag. Questo riquadro prevale sui conteggi storici sotto.
+- Backend completo nuovo:3916test,3900pass,3fail,13skip (fbbc97a8). Classificazione cleanup replay corretta e focused verde(cb027bd5). I due fallimenti shell marker passano in due repliche isolate(8e4c06a7,b610da00), causa ancora ignota: diagnostica aggiunta ai messaggi di fallimento, serve nuova suite completa.
+- Browser completo in corso:2026-09-19T21-32-50-461Z-browser-00ccbf68. Non avviare un secondo full-run contemporaneo. Prove correnti in harness-ui/frontend/artifacts/ripresa; events.jsonl conserva ogni esito anche con interruzione improvvisa.
+- Correzioni SOLO di test per ora: writer replay attesi esplicitamente; inventario rispetta eliminazione owner dei quattro riepiloghi e prepara modello locale; sonde HF usano lastModified; test confronto usa SOLO TALOS-Calm-Lab-04.html, che ha3ingressi funzionanti e7voci disabilitate. GREEN browser di queste modifiche ancora da eseguire dopo la baseline.
+- Nuovo runner isolato Electron: harness-ui/desktop/scripts/ripresa-desktop-gate.mjs. Solo syntaxcheck per ora; eseguirlo dopo browser. Strumenta SOLO snapshot bootstrap per keyring in memoria; nessuna certificazione installer/credenziali reali implicita.
+- Public main13f65c15cdeaf8986b882993a0773cdeafb867d2 verificato. Workflow pubblico più recente: non sovrascriverlo con privato. Provenienza corretta in .claude/release-2026-09-19/public-release-provenance-v2.json (v1 conteneva provider-store assente, non prova valida).
+- G10 Evolution: censita nuova PR#37 https://github.com/talos-private/agent-virtual-machine/pull/37, head4175dc760d39d78011fa1e545d7fc9d23049055c; Windows process-tree containment su baseevolution/e0-3-native-rust-workspace. Aperta, nessun merge/import implicito; affianca#34–36 come dipendenza da auditare.
+Ledger esatto: .claude/LEDGER-RELEASE-GATE-2026-09-19.md. Nessuna modifica prodotto/deploy4174 in questo lotto. 4174 resta da controllare a fine gate senza riavvio.
+
+
 > **Riferimenti UI vincolanti confermati dall’owner (19/09):** `C:/Users/Antonino/Downloads/talos-sidebar-calm-review.html` per sidebar DESTRA e grafo; `C:/Users/Antonino/Downloads/TALOS-Calm-Lab-04.html` per Model Lab e impostazioni. **Chat e composer non hanno mockup.** Sidebar SINISTRA: solo sessioni iniziali, zero figli o espansioni. Qualunque proposta storica diversa qui sotto è superata. Hash in `ripresa-2026-09-19/mockup-owner-canonici.json`.
 
 Documento distinto dal piano operativo desktop, avviato immediatamente come richiesto. Stato: riconciliazione in corso; nessun completamento storico riconfermato automaticamente. Non è ancora un ledger di implementazione dei lotti futuri.

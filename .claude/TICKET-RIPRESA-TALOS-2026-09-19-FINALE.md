@@ -1,5 +1,36 @@
 # Ripresa TALOS Desktop — ticket autosufficiente
 
+## Aggiornamento operativo 2026-09-19T22:35Z — regressione streaming/rotella chiusa
+
+- La prima cura della rotella inoltrava ogni evento leggendo `getComputedStyle`, `scrollHeight` e `clientHeight`. L'ispezione ha isolato queste letture sincrone come unico lavoro nuovo sul gesto: possono forzare layout mentre il renderer dipinge token.
+- `harness-ui/frontend/src/components/chat-foot.js` ora usa 16 px fissi per `deltaMode=line`, legge `clientHeight` solo per `page` e lascia il clamp a `scrollTop`; click, `preventDefault` condizionale e scroll sullo stesso `.talos-conversation` restano invariati.
+- RED/GREEN browser: `2026-09-19T22-30-42-540Z-browser-d8084fe2` (wheel + controllo `getComputedStyle`) e `2026-09-19T22-31-01-489Z-browser-d4de2d61` (`scroll-p0`) exit 0; banco streaming lungo `2026-09-19T22-32-35-584Z-browser-3021e377` 10/10, vivo 240 0 ms, nessun LoAF oltre 50 ms.
+- Gate Electron isolato `2026-09-19T22-17-11-401Z-desktop-c5f4b5db`: pure 0, shell/backend reale 0, 3/3; limite esplicito: keyring in memoria, installer/provider credentials non esercitati. Backend aggiornato `2026-09-19T22-19-10-435Z-backend-48a8756a`: exit 0.
+- 4174 non riavviato: health 200, nessun non-GET durante la sonda, wheel reale `6000 → 5740`; `/app.js` servito SHA256 `0c1634b5f12e8ce4af45aab4bb1a8ff65e4c98f65ab3a30aeadc699e74820f75`, uguale a `harness-ui/public/app.js`. Backup append-only e hash in `.claude/release-2026-09-19/public-scroll-stream-update.json`.
+- La suite browser completa resta una baseline rossa precedente (`711: 648 pass, 46 fail, 17 skip`) e non è stata falsamente promossa a verde; i 46 fallimenti, la copertura provider/installer reale e i due advisory HIGH transitive restano blocchi R0/R5.
+- Full browser aggiornato `2026-09-19T22-35-37-174Z-browser-361dcb2d` (un worker, build exit 0, browser exit 1): 658 passati, 37 fallimenti, 3 skip, 14 non eseguiti. Il test nuovo della rotella e i gate streaming dedicati sono verdi; i 37 nominativi sono riportati nel `browser.log` e restano da classificare/correggere prima del tag.
+
+## Preparazione rilascio in corso — 2026-09-19T21:40:30.278989+00:00
+
+### Aggiornamento operativo 2026-09-19T23:52:12+02:00
+- Il full gate browser `2026-09-19T21-32-50-461Z-browser-00ccbf68` è terminato in isolamento, un solo worker: 711 test, 648 passati, 46 fallimenti e 17 skip (`browser-result.json`, exit 1). È una baseline precedente alle ultime modifiche dei test e al fix della rotella; non è il verdetto finale.
+- I 46 fallimenti sono ora nominativi nel rapporto: comprendono test con fixture/selettori storici (inventario, mockup 4210, sort HF `updated`), 4174 non coinvolto, e residui prodotto da classificare. Nessuno viene attribuito a una causa senza riproduzione.
+- Restano verdi e non sovrascritti i focused replay/BC09; il runner Electron `harness-ui/desktop/scripts/ripresa-desktop-gate.mjs` è stato preparato e syntaxchecked, ma la suite isolata partirà solo dopo la conclusione del browser.
+- Audit dipendenze: `harness-ui` conserva due advisory HIGH transitive su `image-size <=2.0.2` via `pptxgenjs 2.2.0`; frontend e desktop sono a zero advisory. È un gate di distribuzione ancora aperto, non una modifica automatica al lockfile.
+- 4174 resta attivo e in sola lettura: nessun riavvio o deploy durante il collaudo.
+- Nuovo RED `R-SCROLL-RETURN-01`: la rotella sopra `#chatTornaInFondo` non muoveva il fratello scorrevole (`1292 -> 892` fermo; sopra la chat `892 -> 642`). Fix in `frontend/src/components/chat-foot.js`: forwarding verticale con conversione `deltaMode`, senza perdere il click. Focused GREEN: `2026-09-19T22-14-02-180Z-browser-4e2188a3` exit 0; regressione `scroll-p0` GREEN `2026-09-19T22-14-21-109Z-browser-5b1daf87` exit 0.
+- Bundle consegnato senza riavvio alla 4174 dopo backup `.../.claude/release-2026-09-19/public-before-scroll-correct-20260919T221616Z/`: `public/app.js` e `dist/app.js` SHA256 `e13b0b8dec8aeefe1d9835bfc70a5bd6bed9b5f0fdc9e495d49eaa288fb28656`; GET 4174/app.js coincide, health resta 200. Il server può trasformare `index.html`, quindi il confronto byte-a-byte vale per app/styles, non per l'HTML iniettato.
+
+Richiesta owner: fare tutto il necessario per il rilascio. HEAD143145103a59dfb8f8411e7cea8610d98bfd0c2c salvato sul privato. Nessun tag. Questo riquadro prevale sui conteggi storici sotto.
+- Backend completo nuovo:3916test,3900pass,3fail,13skip (fbbc97a8). Classificazione cleanup replay corretta e focused verde(cb027bd5). I due fallimenti shell marker passano in due repliche isolate(8e4c06a7,b610da00), causa ancora ignota: diagnostica aggiunta ai messaggi di fallimento, serve nuova suite completa.
+- Browser completo in corso:2026-09-19T21-32-50-461Z-browser-00ccbf68. Non avviare un secondo full-run contemporaneo. Prove correnti in harness-ui/frontend/artifacts/ripresa; events.jsonl conserva ogni esito anche con interruzione improvvisa.
+- Correzioni SOLO di test per ora: writer replay attesi esplicitamente; inventario rispetta eliminazione owner dei quattro riepiloghi e prepara modello locale; sonde HF usano lastModified; test confronto usa SOLO TALOS-Calm-Lab-04.html, che ha3ingressi funzionanti e7voci disabilitate. GREEN browser di queste modifiche ancora da eseguire dopo la baseline.
+- Nuovo runner isolato Electron: harness-ui/desktop/scripts/ripresa-desktop-gate.mjs. Solo syntaxcheck per ora; eseguirlo dopo browser. Strumenta SOLO snapshot bootstrap per keyring in memoria; nessuna certificazione installer/credenziali reali implicita.
+- Public main13f65c15cdeaf8986b882993a0773cdeafb867d2 verificato. Workflow pubblico più recente: non sovrascriverlo con privato. Provenienza corretta in .claude/release-2026-09-19/public-release-provenance-v2.json (v1 conteneva provider-store assente, non prova valida).
+- G10 Evolution: censita nuova PR#37 https://github.com/talos-private/agent-virtual-machine/pull/37, head4175dc760d39d78011fa1e545d7fc9d23049055c; Windows process-tree containment su baseevolution/e0-3-native-rust-workspace. Aperta, nessun merge/import implicito; affianca#34–36 come dipendenza da auditare.
+Ledger esatto: .claude/LEDGER-RELEASE-GATE-2026-09-19.md. Nessuna modifica prodotto/deploy4174 in questo lotto. 4174 resta da controllare a fine gate senza riavvio.
+
+
 Stato: CHECKPOINT COMMITTATO E PUSH VERIFICATO. Questa intestazione e la ricevuta finale prevalgono sulle registrazioni preparatorie conservate sotto.
 Ultimo aggiornamento UTC: 2026-09-19T20:39:22.505362+00:00
 

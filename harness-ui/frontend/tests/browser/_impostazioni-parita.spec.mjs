@@ -1,5 +1,5 @@
-import { test } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { expect, test } from '@playwright/test';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /*
@@ -25,19 +25,22 @@ const SEZIONI = [
   ['Account, Doctor e backup', 'account'],
 ];
 
-test('IMP-MOCKUP — le dieci sezioni del mockup', async ({ page }) => {
-  mkdirSync(FOTO, { recursive: true });
+test('IMP-MOCKUP — tre ingressi disponibili nel mockup canonico, sette dichiarati fuori lotto', async ({ page }, info) => {
+  const source = new URL('../../../../.claude/ripresa-2026-09-19/references/TALOS-Calm-Lab-04.html', import.meta.url);
+  const html = readFileSync(source, 'utf8');
+  await page.route('https://talos-mockup.invalid/**', route => route.fulfill({contentType:'text/html',body:html}));
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('http://127.0.0.1:4210/TALOS-Calm-Lab.html');
-  await page.waitForTimeout(2000);
-  for (const [nome, id] of SEZIONI) {
-    const fuga = nome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const voce = page.locator(`button, a, [role="button"]`).filter({ hasText: new RegExp(`^\\s*${fuga}\\s*$`) }).first();
-    await voce.click({ timeout: 4000 }).catch(() => {});
-    await page.waitForTimeout(700);
-    await page.screenshot({ path: join(FOTO, `mockup-${id}.png`), fullPage: false, animations: 'disabled', caret: 'hide' });
+  await page.goto('https://talos-mockup.invalid/');
+  await expect(page.locator('#settings-nav button:disabled')).toHaveCount(7);
+  for (const [id, selector, heading] of [
+    ['appearance','#settings-nav [data-value="appearance"]','Aspetto e movimento'],
+    ['models','#settings-nav [data-value="models"]','Laboratorio modelli'],
+    ['providers','#settings-nav [data-action="providers-tab"]','Laboratorio modelli'],
+  ]) {
+    await page.locator(selector).click();
+    await expect(page.locator('#page-title')).toHaveText(heading);
+    await page.screenshot({path:info.outputPath(`mockup-${id}.png`),fullPage:true,animations:'disabled'});
   }
-  console.log('IMP-MOCKUP fatto: ' + SEZIONI.length);
 });
 
 test('IMP-APP — le stesse dieci sezioni nell’app, dal pacchetto costruito', async ({ page }) => {

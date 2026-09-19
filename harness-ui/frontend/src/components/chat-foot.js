@@ -251,6 +251,36 @@ export function statoGiri(giri, tettoGiri) {
   return quota >= 0.8 ? 'vicino' : 'quieto';
 }
 
+/*
+ * Il tondo resta sopra la chat, quindi è un hit target reale anche se la fascia
+ * che lo contiene ha altezza zero. Un wheel iniziato proprio sul tondo non ha un
+ * antenato scorrevole: il browser consegna l'evento al bottone e la conversazione
+ * non cambia. Inoltriamo solo il delta verticale allo scroller vero, conservando
+ * il click e lasciando propagare l'evento al gestore di pausa dello sfondo.
+ *
+ * `deltaMode` non è sempre in pixel (MDN WheelEvent): le linee usano la misura
+ * convenzionale del controllo e le pagine la misura effettiva dello scroller.
+ * Non leggiamo `scrollHeight`/`getComputedStyle` sul percorso caldo: quelle
+ * letture possono forzare un layout mentre il renderer sta dipingendo token.
+ * L'assegnazione a `scrollTop` viene clampata nativamente dal browser.
+ */
+function inoltraRotellaConversazione(evento, piede) {
+  if (evento.ctrlKey) return; // non intercettare lo zoom da rotella
+  const scroller = piede.closest?.('#schermoChat')?.querySelector('.talos-conversation');
+  if (!scroller) return;
+  let delta = Number(evento.deltaY) || 0;
+  if (evento.deltaMode === 1) {
+    delta *= 16;
+  } else if (evento.deltaMode === 2) {
+    delta *= scroller.clientHeight;
+  }
+  if (!delta) return;
+  const prima = scroller.scrollTop;
+  scroller.scrollTop = prima + delta;
+  if (scroller.scrollTop === prima) return;
+  if (evento.cancelable) evento.preventDefault();
+}
+
 export function aggiornaPiedeChat(piede, dati = {}) {
   if (!piede) return;
   const documentObj = piede.ownerDocument;
@@ -263,6 +293,7 @@ export function aggiornaPiedeChat(piede, dati = {}) {
       tornaInFondo.addEventListener('click', () => {
         tornaInFondo.dispatchEvent(new CustomEvent('talos-vai-in-fondo', { bubbles: true }));
       });
+      tornaInFondo.addEventListener('wheel', (evento) => inoltraRotellaConversazione(evento, piede), { passive: false });
     }
   }
   // striscia di stato

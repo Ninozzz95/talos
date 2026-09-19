@@ -1,0 +1,26 @@
+{
+  "backup": "C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\.claude\\release-2026-09-19\\public-before-scroll-correct-20260919T221616Z",
+  "files": [
+    {
+      "file": "index.html",
+      "dist": "0b4c9bff0702da3755c1de470d3250be6a02cb8397055465a9b85063346f3fbc",
+      "public": "0b4c9bff0702da3755c1de470d3250be6a02cb8397055465a9b85063346f3fbc",
+      "equal": true,
+      "before": "0b4c9bff0702da3755c1de470d3250be6a02cb8397055465a9b85063346f3fbc"
+    },
+    {
+      "file": "app.js",
+      "dist": "e13b0b8dec8aeefe1d9835bfc70a5bd6bed9b5f0fdc9e495d49eaa288fb28656",
+      "public": "e13b0b8dec8aeefe1d9835bfc70a5bd6bed9b5f0fdc9e495d49eaa288fb28656",
+      "equal": true,
+      "before": "52b9f6dbf6c84008f1cfbac88c594114e94bc48a8fd17b8c6c762b8825ed5f30"
+    },
+    {
+      "file": "styles.css",
+      "dist": "c96134bca97e6aac267278b8736dcb6e522b7f236dcd7bba96126c1b963dc07a",
+      "public": "c96134bca97e6aac267278b8736dcb6e522b7f236dcd7bba96126c1b963dc07a",
+      "equal": true,
+      "before": "c96134bca97e6aac267278b8736dcb6e522b7f236dcd7bba96126c1b963dc07a"
+    }
+  ]
+}

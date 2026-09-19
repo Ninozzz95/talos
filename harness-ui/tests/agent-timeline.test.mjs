@@ -6,19 +6,30 @@ import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { createSessionRegistry } from '../src/session-registry.mjs';
 import { createHttpApp } from '../src/http-app.mjs';
+import { registraRiga } from '../src/session-store.mjs';
 import { creaTimelineAgenti } from '../src/agent-timeline.mjs';
 
 function banco(t, extra = {}) {
   const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-replay-'));
-  const runs = [];
+  const runs = [], writes = [];
   const options = { cartellaStore, guardaWorkspaceFn: () => () => {}, cartellaEsisteFn: () => true,
     modello: 'm', chiave: 'test', preparaEsecuzioneFn: () => ({ cartella: cartellaStore, task: { id: 'task', consegna: 'Controlla il progetto' } }),
     avviaSessioneFn(input) { return new Promise(resolve => { runs.push({ input, resolve }); input.onEvento({ type: 'RunStarted' }); }); }, ...extra };
+  const write = options.registraRigaFn ?? registraRiga;
+  options.registraRigaFn = (...args) => {
+    const pending = Promise.resolve().then(() => write(...args));
+    writes.push(pending.catch(() => {})); // The disk-failure scenario intentionally rejects.
+    return pending;
+  };
   const registro = createSessionRegistry(options);
   t.after(async () => {
     for (const r of runs) { r.input.onEvento({ type: 'RunFinished' }); r.resolve({ ok: true, esito: { messaggiFinali: [], detto: 'Fine', comeFinita: 'concluso' } }); }
-    await new Promise(r => setTimeout(r, 50));
-    rmSync(cartellaStore, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await new Promise(resolve => setImmediate(resolve)); // Complete the registry's resolved runs.
+    for (let count = -1; count !== writes.length;) {
+      count = writes.length;
+      await Promise.all(writes);
+    }
+    rmSync(cartellaStore, { recursive: true, force: true });
   });
   return { registro, options, runs, cartellaStore };
 }
@@ -102,7 +113,7 @@ test('RIPRESA-REPLAY-FINE: durata del padre e fine figlio congelate; riavvio pul
   const {registro:r,runs,options}=banco(t);const {sessionId}=r.avvia('task');
   await runs[0].input.onDelega('Controlla');
   for(const run of runs){run.input.onEvento({type:'RunFinished'});run.resolve({ok:true,esito:{detto:'Fine',comeFinita:'concluso',messaggiFinali:[]}});}
-  await new Promise(resolve=>setTimeout(resolve,30));
+  await new Promise(resolve=>setImmediate(resolve));
   const before=await r.timelineAgenti(sessionId,{limit:500});
   const parent=before.items.findLast(x=>x.node.sessionId===sessionId).node;
   assert.equal(parent.conclusa,true);assert.ok(Number.isFinite(Date.parse(parent.conclusaAlle)));
