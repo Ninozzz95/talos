@@ -660,6 +660,23 @@ misurata, i **file vietati** e le **ricerche citate**.
   <https://www.npmjs.com/package/@rosepetal/node-red-dashboard-2-system-monitor> ·
   <https://github.com/Theohox/zmenu> (letti il 19/09/2026).
 
+## ⛔ LA CHECKLIST DELLA CONSEGNA (owner 19/09/2026: «salva il lavoro e consegna ticket di ripresa e aggiorna i documenti / tabella di marcia»)
+
+Quando l'owner dà il via, **in quest'ordine**, e poi ci si ferma:
+
+1. **Raccogliere le corsie** — ciò che hanno prodotto entra nell'albero; se una è a metà, **si dichiara**.
+2. **Salvare**: commit di tutto (messaggi in **inglese**, su file con `-F`, senza co-authoring).
+3. **Copiare da parte il referto** della cartella intera (il JSON è un file solo: la lezione sopra).
+4. **Aggiornare il ticket di ripresa** in `C:/Users/Antonino/Downloads/TICKET-RIPRESA-CODEX-LABORATORIO-2026-09-19.md` con lo stato del momento.
+5. **Aggiornare i documenti**: questo file, `.claude/PIANO-PARITA-MOCKUP-2026-09-18.md`,
+   `.claude/FASE-4-BIS-CORREZIONI-2026-09-19.md` — **E LA TABELLA DI MARCIA GLOBALE**,
+   `.claude/TABELLA-FASI-COMPLETA-2026-09-13.md`: ⛔ **la parità col mockup NON è ancora dentro quella
+   tabella**, e l'owner ha chiesto espressamente il 19/09 di includerla («anche la tabella di marcia
+   delle fasi globale, non solo questo»). Si aggiungono le sue fasi (intelaiatura, dieci sezioni,
+   banda, quattro schede, **4-bis**, pagina del modello, confronto finale, **le due sidebar**) con lo
+   stato di ognuna, e si aggiorna la sezione «STATO AL …» che vince su tutto il resto.
+6. **Spegnere i server di prova** (il mockup sulla 4214 e le porte delle corsie), **lasciare il 4174**.
+
 ## ⛔ UNA LEZIONE OPERATIVA — IL REFERTO DELLA CARTELLA VA COPIATO DA PARTE SUBITO
 
 Il referto JSON di Playwright è **un file solo** (`artifacts/playwright.json`), e **ogni corsa lo
