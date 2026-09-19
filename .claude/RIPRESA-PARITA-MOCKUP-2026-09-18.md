@@ -660,6 +660,16 @@ misurata, i **file vietati** e le **ricerche citate**.
   <https://www.npmjs.com/package/@rosepetal/node-red-dashboard-2-system-monitor> ·
   <https://github.com/Theohox/zmenu> (letti il 19/09/2026).
 
+## ⛔ UNA LEZIONE OPERATIVA — IL REFERTO DELLA CARTELLA VA COPIATO DA PARTE SUBITO
+
+Il referto JSON di Playwright è **un file solo** (`artifacts/playwright.json`), e **ogni corsa lo
+sovrascrive**. Il 19/09 la corsa della **cartella intera** (537 verdi / 30 rossi / 3 saltati) ha
+scritto il suo referto, e le corse successive — i sette cancelli della consegna — l'hanno
+**cancellato**: i 30 rossi restano **non attribuibili** senza rifare la corsa, e rifarla costa 3
+minuti e mezzo. ⇒ **Appena una corsa della cartella finisce, il referto si copia altrove** (col nome
+e l'ora), prima di qualunque altra corsa. È lo stesso difetto di forma delle «misure ristrette»:
+l'evidenza c'era, ed è stata persa per non averla messa da parte.
+
 ## COSA GIRA ADESSO (19/09/2026)
 
 - ⛔ **NESSUNA corsia è viva**: le A, B e C erano già chiuse il 18/09, e la **corsia della FASE 3 ha
