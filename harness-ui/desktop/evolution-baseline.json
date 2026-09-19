@@ -235,6 +235,32 @@
           "contains": "world extension"
         }
       ]
+    },
+    {
+      "id": "evolution.native-rust-scaffold",
+      "category": "test",
+      "evidence": [
+        {
+          "path": "harness-ui/desktop/package.json",
+          "contains": "\"verify:native-scaffold\": \"node scripts/verifica-native-scaffold.mjs\""
+        },
+        {
+          "path": "harness-ui/desktop/native/rust-toolchain.toml",
+          "contains": "channel = \"1.98.1\""
+        },
+        {
+          "path": "harness-ui/desktop/native/Cargo.toml",
+          "contains": "resolver = \"3\""
+        },
+        {
+          "path": "harness-ui/desktop/native/DEPENDENCIES.md",
+          "contains": "**Direct third-party Rust dependencies: none.**"
+        },
+        {
+          "path": "harness-ui/desktop/tests/native-scaffold.test.mjs",
+          "contains": "E0-3 — lo scaffold Rust reale ha quattro crate e zero dipendenze third-party"
+        }
+      ]
     }
   ]
 }
