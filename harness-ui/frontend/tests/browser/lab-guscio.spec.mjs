@@ -293,7 +293,19 @@ test('GUSCIO-03 — il conteggio dei download sta sulla scheda, e a zero non si 
   expect(testo).not.toContain('0');
 });
 
-test('GUSCIO-04 — la banda rispecchia i valori veri, e non inventa un rapporto', async ({ page }) => {
+/* ⛔⛔ 19/09/2026 — QUESTA PROVA È STATA RISCRITTA, E IL SUO COMMENTO RIletto.
+   Prima pretendeva `[data-lab-banda-valore]` = la RAM LIBERA rispecchiata
+   (`#machineFreeMemoryMetric`) e un `<progress>` con `max`/`value`. La banda
+   della FASE 3 mostra un BUDGET, non la RAM libera: la cella dichiara «BUDGET
+   RAM · SCENARIO DEMO» e la grandezza che quel nome descrive è la soglia del
+   catalogo (`lab-cornice-v3.js`, `BUDGET_DEMO_GIB`), non ciò che avanza.
+   ⇒ Le asserzioni sul VALORE sono passate a `_fase3-banda.spec.mjs` (BANDA-03),
+     che le prova meglio: muove il denominatore e pretende che la barra lo segua.
+   ⛔ Qui resta ciò che è di QUESTO modulo e che valeva anche prima: il nodo vero
+     dentro la banda, la sua unicità, e la regola che il guscio non INVENTA un
+     rapporto quando la fonte non è misurabile. «Un'unità che non è GiB» e «non
+     ancora misurata» restano, perché sono la stessa regola di prima. */
+test('GUSCIO-04 — la banda tiene il nodo vero, e non inventa un rapporto', async ({ page }) => {
   await apriEEmonta(page);
   const banda = page.locator('#modelLabCard [data-lab-banda]');
   await expect(banda).toHaveCount(1);
@@ -306,25 +318,22 @@ test('GUSCIO-04 — la banda rispecchia i valori veri, e non inventa un rapporto
   expect(modello.dentro).toBe(true);
   expect(modello.copie).toBe(1);
 
-  // I due valori veri arrivano dai nodi del pannello Sistema, rispecchiati.
-  await page.evaluate(() => {
-    document.querySelector('#machineFreeMemoryMetric').textContent = '18,6 GiB';
-    document.querySelector('#machineMemoryMetric').textContent = '32 GiB';
-  });
-  await expect(banda.locator('[data-lab-banda-valore]')).toHaveText('18,6 GiB');
-  await expect(banda.locator('[data-lab-banda-frazione]')).toHaveText('su 32 GiB');
+  // Il denominatore è quello vero del pannello Sistema, rispecchiato.
+  await page.evaluate(() => { document.querySelector('#machineMemoryMetric').textContent = '32 GiB'; });
   const barra = banda.locator('[data-lab-banda-track]');
+  await expect(banda.locator('[data-lab-banda-frazione]')).toHaveText('su 32 GiB');
   await expect(barra).toBeVisible();
-  expect(await barra.evaluate(nodo => ({ max: nodo.max, value: nodo.value }))).toEqual({ max: 32, value: 18.6 });
 
-  // Un'unità che non è GiB: il rapporto NON si inventa, la barra sparisce.
-  await page.evaluate(() => { document.querySelector('#machineFreeMemoryMetric').textContent = '512 MiB'; });
-  await expect(banda.locator('[data-lab-banda-valore]')).toHaveText('512 MiB');
+  // Un'unità che non è GiB: il rapporto NON si inventa, la barra sparisce — e
+  // con lei la frazione: «18,6 GiB su 512 MiB» non è un rapporto.
+  await page.evaluate(() => { document.querySelector('#machineMemoryMetric').textContent = '512 MiB'; });
   await expect(barra).toBeHidden();
+  await expect(banda.locator('[data-lab-banda-frazione]')).toHaveText('');
 
-  // La fonte non è ancora misurata: si mostra il suo «—», mai uno zero.
-  await page.evaluate(() => { document.querySelector('#machineFreeMemoryMetric').textContent = '—'; });
-  await expect(banda.locator('[data-lab-banda-valore]')).toHaveText('—');
+  // La fonte non è ancora misurata: stessa regola, mai uno zero.
+  await page.evaluate(() => { document.querySelector('#machineMemoryMetric').textContent = '—'; });
+  await expect(barra).toBeHidden();
+  await expect(banda.locator('[data-lab-banda-frazione]')).toHaveText('');
 });
 
 test('GUSCIO-05 — su una sezione che non sa dove mettere, il guscio NEGA il montaggio', async ({ page }) => {

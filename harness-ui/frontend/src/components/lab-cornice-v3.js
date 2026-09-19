@@ -120,6 +120,18 @@
 import { STATI_DOWNLOAD } from './download-coda.js';
 import { plurale } from './plurale.js';
 import { avvolgiStrisciaSchede } from './cornice-model-lab.js';
+/*
+ * ⛔ PERCHÉ NON SI IMPORTA `fornitoreDelModello` DA `workspace-footer.js`, che
+ * pure sarebbe la cosa giusta. Misurato il 19/09/2026: quel file importa
+ * `fonti-modelli.js`, che importa `catalogo-modelli.js`, che importa
+ * `'../domain/catalog-engine.ts'` — un TYPESCRIPT. Il bundler lo risolve, il
+ * browser no: importarlo da qui fa fallire l'intero modulo con «Failed to fetch
+ * dynamically imported module», e la prova lo ha detto subito (le nove prove
+ * della banda e GUSCIO-01 sono diventate rosse insieme).
+ * ⇒ La classificazione la fa `app.js`, che il grafo ce l'ha intero, e la scrive
+ *   nel DOM (`data-modello-destinazione`); qui si LEGGE. Una classificazione
+ *   sola in tutto il prodotto, e un modulo che resta caricabile.
+ */
 
 const NS_SVG = 'http://www.w3.org/2000/svg';
 
@@ -269,18 +281,86 @@ export function aggiornaConteggiScheda(card, conteggi = {}) {
 }
 
 /*
- * I tre nodi veri da cui la banda legge. `#modelLabActiveModel` lo
- * SCRIVIAMO (lo sposta dentro la banda, conservandolo); gli altri due li
- * LEGGIAMO soltanto — stanno nel pannello Sistema e `montaMisuraMemoria` li
- * ricrea, quindi vanno rispecchiati, non spostati.
+ * I DUE nodi veri da cui la banda legge. `#modelLabActiveModel` lo
+ * SPOSTIAMO dentro la banda, conservandolo (e `app.js:8395` continua a
+ * scriverci); l'altro lo LEGGIAMO soltanto — sta nel pannello Sistema e
+ * `montaMisuraMemoria` lo ricrea, quindi va rispecchiato, non spostato.
+ * ⛔ Fino al 19/09 qui c'era anche `#machineFreeMemoryMetric`, e la banda
+ * mostrava la RAM libera: era la grandezza SBAGLIATA per una cella che dichiara
+ * un budget (vedi `BUDGET_DEMO_GIB` qui sotto).
  * ⛔ `#machineAllocatableMetric` NON si usa: è l'allocabile sul DISCO, non la
  * RAM (lezione del 18/09 «una conclusione tratta da un nome, non da una
  * misura»; `local-runtime-probe.mjs:251`).
  */
 const NODO = Object.freeze({
   modello: '#modelLabActiveModel',
-  libera: '#machineFreeMemoryMetric',
   totale: '#machineMemoryMetric',
+});
+
+/*
+ * ⛔⛔ IL BUDGET DELLA BANDA NON È LA RAM LIBERA, E QUESTA RIGA È IL MOTIVO.
+ * Il mockup dice «BUDGET RAM · SCENARIO DEMO» (`TALOS-Calm-Lab-04.html`, banda
+ * `.setup-band`): un budget, non una misura di consumo. La prima versione di
+ * questa banda mostrava la RAM LIBERA (`#machineFreeMemoryMetric`) con la barra
+ * su `libera/totale` — una grandezza vera, ma **non quella che la cella
+ * dichiara**, e «RAM libera» non è un budget: è ciò che avanza.
+ *
+ * La grandezza che in TALOS si chiama DAVVERO «budget» è un'altra, e una sola:
+ * la soglia con cui il catalogo giudica se un modello ci sta —
+ * `catalog-engine.ts:346` (`a.required <= 18.6 ? 'fits' : 'exceeds'`), che il
+ * prodotto stesso nomina «Oltre il **budget demo**» e «Entro **18,6 GiB** ·
+ * stima» (`catalog-engine.ts:172`). Il mockup e il prodotto dicono la stessa
+ * parola: **scenario demo**.
+ * ⇒ Il numeratore è quella soglia dichiarata; il DENOMINATORE è la RAM totale
+ *   VERA della macchina, letta dal nodo che la misura
+ *   (`#machineMemoryMetric`, nel pannello Sistema), e la barra è il loro
+ *   rapporto — che è esattamente il conto del mockup: misurato sul suo DOM
+ *   vivo, la sua barra sta al **58,117%**, cioè `18,6 / 32`.
+ *
+ * ⛔ Il numero è UNA COSTANTE, e si dichiara invece di nasconderla: non esiste
+ * un'API che misuri «il budget del motore» — verificato il 19/09/2026 leggendo
+ * `src/machine-capacity.mjs` e `local-runtime-probe.mjs` (espongono
+ * `memory.totalBytes` e `memory.freeBytes`, non un limite). Il denominatore
+ * però è misurato, e la prova lo dimostra muovendolo.
+ * ⛔ `18.6` vive in DUE righe di `catalog-engine.ts` (172 e 346) e non è
+ * esportato: qui se ne dichiara una terza copia, con un test di parità
+ * (`tests/unit/banda-laboratorio.test.mjs`) che legge quel sorgente e fallisce
+ * se i tre divergono — è lo stesso contratto di
+ * `tests/provider-registry-parita.test.mjs`.
+ */
+export const BUDGET_DEMO_GIB = 18.6;
+
+/*
+ * LA POLITICA — e perché la frase del mockup NON si copia.
+ *
+ * Il mockup dice «Nessun passaggio automatico al cloud». ⛔ Verificato il
+ * 19/09/2026: in TALOS quel passaggio ESISTE, ed è automatico —
+ * `session-registry.mjs:3728-3742`, `ripiegaSulCloud`: quando il motore locale
+ * torna `esito == null` (un GUASTO, non un esito del task) la stessa sessione
+ * riparte da sola su **openrouter**, senza che nessuno rilanci niente, e
+ * annuncia un `RuntimeFallback` in chat. Scrivere quella frase sarebbe
+ * scrivere una bugia con l'aria di una rassicurazione.
+ *
+ * ⛔ Ma il ripiego NON è senza condizioni, e la condizione è misurabile alla
+ * stessa riga: `ripiegoPossibile()` pretende `fallbackConsentEffettivo === true`
+ * OLTRE a una chiave utilizzabile e a un modello di serie (`:3735-3738`). Ed è
+ * l'unica frase vera che questa banda possa portare: un passaggio al cloud
+ * avviene solo se qualcuno l'ha consentito per iscritto in quella sessione.
+ * ⇒ Si scrive QUELLA. La frase del mockup è riportata al coordinatore
+ *   (`artifacts/fase3-banda/`), non disegnata.
+ *
+ * ⛔ E NON È UN PULSANTE. Il mockup ne fa un bottone con un chevron che apre un
+ *   «privacy-info»: in TALOS non esiste nessuna superficie che spieghi questa
+ *   politica. La più vicina per nome è «Sicurezza e privacy», ma le sue carte
+ *   sono «Dati locali del browser» e «Trasferisci le preferenze»
+ *   (`settings-view.ts:126-127`) — un chevron che promette «privacy» e apre la
+ *   gestione dei dati del browser è precisamente il difetto che il progetto
+ *   chiama «un pulsante che promette una cosa e ne apre un'altra». Un'affermazione,
+ *   senza freccia: l'assenza è dichiarata al coordinatore.
+ */
+export const POLITICA_CLOUD = Object.freeze({
+  frase: 'Al cloud solo con un consenso esplicito.',
+  icona: 'i-shield',
 });
 
 function testoDi(radice, selettore) {
@@ -297,6 +377,34 @@ function gib(testo) {
   return Number.isFinite(numero) && numero > 0 ? numero : null;
 }
 
+/** Il numero del budget, scritto come lo scrive il resto dell'app (`it-IT`, una cifra). */
+function numeroBudget(gib) {
+  return new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(gib);
+}
+
+/*
+ * LA PASTIGLIA DELLA DESTINAZIONE — «Locale» o «Cloud» — e da dove viene.
+ *
+ * ⛔ Il DATO è `data-modello-destinazione` sull'id vero del modello, e lo scrive
+ * `app.js` (`aggiornaPillolaModello`) leggendo `state.model` e chiedendo la
+ * classificazione alla funzione di `workspace-footer.js:63`: un solo
+ * posto decide, e non è questo. Qui si LEGGE — come per ogni altra cosa in
+ * questa banda, che non possiede nessun dato.
+ * ⛔ Perché non dal nome a schermo: `nomeModelloUmano` (`chat-foot.js:67`) toglie
+ * proprio il prefisso `local:` che distingue un modello locale da uno di rete.
+ * Dedurlo dal testo sarebbe una conclusione tratta da un nome, non da una
+ * misura (lezione del 18/09).
+ * ⇒ Le parole sono due, `Locale` e `Cloud`, ed è il vocabolario del prodotto:
+ *   `catalog-engine.ts:171` dichiara la faccetta `destination` con esattamente
+ *   questi due valori. Non è una casella «tutto il resto è Cloud»: il vuoto
+ *   (nessuna scelta) NON è una destinazione, ed è il terzo stato.
+ */
+const PAROLA_DESTINAZIONE = Object.freeze({ locale: 'Locale', cloud: 'Cloud' });
+
+function destinazioneDelModello(destinazione) {
+  return PAROLA_DESTINAZIONE[String(destinazione ?? '').trim()] ?? null;
+}
+
 /**
  * La banda rispecchia i valori VERI che stanno nel pannello Sistema.
  * ⛔ Scrive solo se il valore è cambiato: è ciò che rende innocuo il
@@ -307,26 +415,67 @@ function gib(testo) {
 export function aggiornaBandaLaboratorio(card) {
   const banda = card?.querySelector('[data-lab-banda]');
   if (!banda) return false;
-  const libera = testoDi(card, NODO.libera);
+  let scritto = false;
+  const scrivi = (nodo, testo) => {
+    if (!nodo || nodo.textContent === testo) return;
+    nodo.textContent = testo;
+    scritto = true;
+  };
+
+  /* --- 1. IL MODELLO, E CHI LO SERVE ------------------------------------- */
+  const nodoModello = banda.querySelector(NODO.modello);
+  const destinazione = destinazioneDelModello(nodoModello?.dataset?.modelloDestinazione);
+  const badge = banda.querySelector('[data-lab-banda-badge]');
+  if (badge) {
+    if (!destinazione) {
+      // Nessun id: non si disegna una pastiglia che direbbe «Cloud» per
+      // esclusione. Il vuoto si vede, e la nota dice cosa si può fare.
+      if (!badge.hidden) { badge.hidden = true; scritto = true; }
+    } else {
+      if (badge.textContent !== destinazione) { badge.textContent = destinazione; scritto = true; }
+      if (badge.hidden) { badge.hidden = false; scritto = true; }
+      badge.classList.toggle('talos-badge--success', destinazione === 'Locale');
+      badge.classList.toggle('talos-badge--accent', destinazione === 'Cloud');
+    }
+  }
+  const nota = banda.querySelector('[data-lab-banda-nota]');
+  scrivi(nota, destinazione
+    ? 'Le chat già aperte non cambiano.'
+    : 'Esplora il laboratorio, anche senza configurare un provider.');
+
+  /* --- 2. IL BUDGET, E IL DENOMINATORE VERO ------------------------------ */
   const totale = testoDi(card, NODO.totale);
   const valore = banda.querySelector('[data-lab-banda-valore]');
+  scrivi(valore, numeroBudget(BUDGET_DEMO_GIB));
+  /*
+   * ⛔ LA FRAZIONE VIVE SOLO SE IL DENOMINATORE È UN NUMERO. Il nodo del
+   * totale dice «Non misurata» finché il server non ha misurato (e la copia
+   * statica nello spezzone legacy dice «—»): in quello stato «18,6 GiB su —»
+   * sarebbe una frazione con un buco dentro, cioè peggio di nessuna frazione.
+   * ⇒ Non si riconosce la parola «non misurata» — fragile e localizzata — si
+   *   chiede alla MISURA se è una misura: `gib()` risponde `null` per tutto ciò
+   *   che non è un numero in GiB. Stessa condizione della barra, quindi le due
+   *   non possono divergere.
+   */
+  const massimo = gib(totale);
   const frazione = banda.querySelector('[data-lab-banda-frazione]');
+  scrivi(frazione, massimo === null ? '' : `su ${totale}`);
   const barra = banda.querySelector('[data-lab-banda-track]');
-  let scritto = false;
-  // Si rispecchia ciò che la fonte dice, compreso il suo «—»: se la fonte non
-  // c'è, si mostra «—» e la barra SPARISCE. Non si inventa uno zero.
-  const mostra = libera ?? '—';
-  if (valore && valore.textContent !== mostra) { valore.textContent = mostra; scritto = true; }
-  const su = totale ? `su ${totale}` : '';
-  if (frazione && frazione.textContent !== su) { frazione.textContent = su; scritto = true; }
   if (barra) {
-    const massimo = gib(totale);
-    const attuale = gib(libera);
-    const misurabile = massimo !== null && attuale !== null;
+    const riempimento = barra.querySelector('[data-lab-banda-fill]');
+    const misurabile = massimo !== null;
     if (barra.hidden === misurabile) { barra.hidden = !misurabile; scritto = true; }
-    if (misurabile) {
-      if (barra.max !== massimo) { barra.max = massimo; scritto = true; }
-      if (barra.value !== attuale) { barra.value = attuale; scritto = true; }
+    if (misurabile && riempimento) {
+      // La tolleranza dello 0,1% non è pignoleria: `style.width` torna una
+      // stringa con sei decimali, e senza la soglia ogni passaggio
+      // dell'osservatore riscriverebbe lo stesso valore — un giro che non si
+      // ferma mai. (Lezione: una scrittura identica non è una mutazione.)
+      const dovuto = Math.min(100, Math.max(0, (BUDGET_DEMO_GIB / massimo) * 100));
+      const attuale = Number.parseFloat(riempimento.style.width) || 0;
+      if (Math.abs(attuale - dovuto) > 0.1) {
+        riempimento.style.width = `${dovuto.toFixed(3)}%`;
+        scritto = true;
+      }
     }
   }
   return scritto;
@@ -642,39 +791,124 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
     }
   }
 
-  // (4) LA BANDA — il modello corrente e la RAM libera.
+  /*
+   * (4) LA BANDA — le tre celle del mockup (`TALOS-Calm-Lab-04.html`,
+   * `.setup-band`, misurata dal suo DOM vivo: 1260×116 a 1600 di viewport, tre
+   * figli — corrente, budget, politica).
+   *
+   * 1. **Modello per le nuove chat** — glifo + soprattitolo + nome + pastiglia
+   *    della destinazione + nota. Il NOME è il nodo vero `#modelLabActiveModel`:
+   *    non lo si ricrea, lo si SPOSTA, quindi `app.js:8395` continua a
+   *    scriverci e non esistono due nodi con lo stesso id.
+   * 2. **Budget RAM** — la soglia dichiarata del catalogo sul totale VERO della
+   *    macchina (vedi `BUDGET_DEMO_GIB`).
+   * 3. **La politica** — la frase vera, non quella del mockup (vedi
+   *    `POLITICA_CLOUD`).
+   *
+   * ⛔ DOVE VA A FINIRE IL `<p class="model-lab-active-model">` LEGACY. La banda
+   *   del 18/09 spostava dentro di sé quel paragrafo intero, testo compreso
+   *   («Modello attivo condiviso con Chat: …»). La banda del mockup porta la
+   *   stessa informazione in forma di SOPRATTITOLO, che è la sua forma: tenere
+   *   tutti e due direbbe due volte la stessa cosa a due centimetri di distanza.
+   *   ⇒ Si conserva il NODO (`<strong id="modelLabActiveModel">`), si conserva
+   *     l'id, si conserva chi lo scrive; sparisce la sola etichetta di testo,
+   *     che il soprattitolo sostituisce parola per parola. Dichiarato al
+   *     coordinatore, non deciso in silenzio.
+   */
   const banda = doc.createElement('section');
-  banda.className = 'talos-card talos-card--pad talos-cluster';
+  banda.className = 'talos-lab__banda';
   banda.dataset.labBanda = '';
-  banda.setAttribute('aria-label', 'Stato corrente del laboratorio');
-  const corrente = card.querySelector('.model-lab-active-model');
-  if (corrente) {
-    corrente.classList.add('talos-grow');
-    banda.append(corrente); // il nodo vero, col suo id: `app.js:8298` continua a scriverci
-  }
-  const ram = doc.createElement('div');
-  ram.className = 'talos-stack';
-  const etichettaRam = doc.createElement('span');
-  etichettaRam.className = 'talos-muted';
-  etichettaRam.textContent = 'RAM libera'; // il nome vero della misura (`misura-memoria.js`)
-  const riga = doc.createElement('div');
-  riga.className = 'talos-cluster';
-  const valore = doc.createElement('strong');
+  banda.setAttribute('aria-label', 'Configurazione del laboratorio');
+
+  // 1 — il modello per le nuove chat
+  const corrente = doc.createElement('div');
+  corrente.className = 'talos-lab__banda-corrente';
+  const glifo = doc.createElement('span');
+  glifo.className = 'talos-lab__banda-glifo';
+  glifo.setAttribute('aria-hidden', 'true');
+  glifo.append(icona(doc, 'i-brain'));
+  const testoCorrente = doc.createElement('div');
+  testoCorrente.className = 'talos-lab__banda-testo';
+  const soprattitolo = doc.createElement('span');
+  soprattitolo.className = 'talos-lab__banda-sopra';
+  soprattitolo.textContent = 'Modello per le nuove chat';
+  const rigaNome = doc.createElement('div');
+  rigaNome.className = 'talos-lab__banda-nome';
+  const modello = doc.createElement('strong');
+  modello.id = 'modelLabActiveModel';
+  modello.textContent = 'Nessun modello selezionato';
+  const pastiglia = doc.createElement('span');
+  pastiglia.className = 'talos-badge talos-badge--sm';
+  pastiglia.dataset.labBandaBadge = '';
+  pastiglia.hidden = true;
+  const nota = doc.createElement('p');
+  nota.className = 'talos-lab__banda-nota';
+  nota.dataset.labBandaNota = '';
+  /*
+   * ⛔ IL NODO LEGACY SI SPOSTA, NON SI CLONA, E IL SUO TESTO NON SI BUTTA.
+   * Il `<strong>` vero arriva da `#modelLabCard` e porta con sé `data-modello-id`
+   * che `app.js` gli timbra accanto al nome. Se per qualunque ragione quel nodo
+   * non c'è (una carta costruita a mano, una prova), resta il `<strong>` appena
+   * creato: la banda non crolla e il guscio non nega il montaggio per questo.
+   */
+  const legacy = card.querySelector('.model-lab-active-model #modelLabActiveModel');
+  rigaNome.append(legacy ?? modello, pastiglia);
+  /*
+   * ⛔ E IL PARAGRAFO CHE RESTA VUOTO SI TOGLIE. Preso il `<strong>`, il
+   * `<p class="model-lab-active-model">` resterebbe con la sola etichetta
+   * «Modello attivo condiviso con Chat:» e niente dopo i due punti — un'etichetta
+   * appesa a un valore che non c'è più, cioè peggio di prima. Il suo significato
+   * è passato al soprattitolo, parola per parola.
+   * ⛔ Verificato prima di togliere: `model-lab-active-model` compare **0** volte
+   *   nell'inventario delle sezioni (`tests/browser/fixtures/inventario-sezioni.json`)
+   *   e in nessun altro file di `src/` o di `tests/`: nessuno lo cerca per nome.
+   *   L'id `modelLabActiveModel`, che invece è nell'inventario, resta.
+   */
+  legacy?.closest('.model-lab-active-model')?.remove();
+  testoCorrente.append(soprattitolo, rigaNome, nota);
+  corrente.append(glifo, testoCorrente);
+  banda.append(corrente);
+
+  // 2 — il budget
+  const budget = doc.createElement('div');
+  budget.className = 'talos-lab__banda-budget';
+  const sopraBudget = doc.createElement('span');
+  sopraBudget.className = 'talos-lab__banda-sopra';
+  sopraBudget.textContent = 'Budget RAM · scenario demo';
+  const numero = doc.createElement('div');
+  numero.className = 'talos-lab__banda-numero';
+  const valore = doc.createElement('span');
   valore.dataset.labBandaValore = '';
-  valore.textContent = '—';
-  const frazione = doc.createElement('span');
-  frazione.className = 'talos-muted';
+  const unita = doc.createElement('span');
+  unita.className = 'talos-lab__banda-unita';
+  unita.textContent = 'GiB';
+  const frazione = doc.createElement('small');
+  frazione.className = 'talos-lab__banda-frazione';
   frazione.dataset.labBandaFrazione = '';
-  const barra = doc.createElement('progress');
-  barra.className = 'talos-lab__meter';
+  const barra = doc.createElement('div');
+  barra.className = 'talos-lab__banda-track';
   barra.dataset.labBandaTrack = '';
-  // Il rapporto è già scritto per esteso nel testo accanto: la barra non porta
-  // informazione che il testo non dica, quindi non si annuncia due volte.
+  // Il rapporto è già scritto per esteso nel testo accanto («18,6 GiB su …»):
+  // la barra non porta informazione che il testo non dica, quindi non si
+  // annuncia due volte. È la decisione della prima versione, e resta.
   barra.setAttribute('aria-hidden', 'true');
   barra.hidden = true;
-  riga.append(valore, frazione);
-  ram.append(etichettaRam, riga, barra);
-  banda.append(ram);
+  const riempimento = doc.createElement('span');
+  riempimento.dataset.labBandaFill = '';
+  barra.append(riempimento);
+  numero.append(valore, doc.createTextNode(' '), unita, frazione);
+  budget.append(sopraBudget, numero, barra);
+  banda.append(budget);
+
+  // 3 — la politica
+  const politica = doc.createElement('p');
+  politica.className = 'talos-lab__banda-policy';
+  politica.dataset.labBandaPolitica = '';
+  const testoPolitica = doc.createElement('span');
+  testoPolitica.textContent = POLITICA_CLOUD.frase;
+  politica.append(icona(doc, POLITICA_CLOUD.icona), testoPolitica);
+  banda.append(politica);
+
   const testata = card.querySelector('.settings-card-heading');
   if (testata) testata.after(banda); else card.prepend(banda);
 

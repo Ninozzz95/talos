@@ -100,7 +100,7 @@ import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-v
 import { montaGuscioLaboratorio } from '../components/lab-cornice-v3.js'; // 18/09 corsia 2: il guscio a quattro schede del Laboratorio modelli — monta i comandi legacy in una scheda sola
 import { montaSchedaModello } from '../components/scheda-modello.js'; // 18/09 corsia 4: la pagina del modello (scheda HF, file, compatibilità) — la monta `apriPaginaModello`
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
-import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
+import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup // 19/09 FASE 3: `fornitoreDelModello` serve alla banda del laboratorio, che deve dire «Locale» o «Cloud»
 
 (() => {
   // BOOT-03/CORE-04: one navigation epoch and additive UI preferences.
@@ -8393,7 +8393,26 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const label = piedeDelMockup() ? (nomeModelloBreve(state.model) || 'Scegli il modello') : (state.model || 'Seleziona modello'); // 05/9 Fase 2: il chip mostra il nome breve
     if (span) span.textContent = label;
     const activeModel = $('#modelLabActiveModel');
-    if (activeModel) activeModel.textContent = label;
+    /* ⛔ 19/09 — L'ID GREZZO E CHI LO SERVE, accanto al nome: è ciò che la banda del laboratorio
+       (FASE 3) deve dire, e da `label` non si può più sapere. `label` è il nome UMANO
+       (`nomeModelloBreve`): è proprio il prefisso `local:` che la traduzione toglie, quindi
+       dedurlo dal testo a schermo sarebbe una conclusione tratta da un nome — la lezione del
+       18/09 «una conclusione tratta da un nome, non da una misura».
+       La classificazione NON si riscrive qui: la fa `fornitoreDelModello` (`workspace-footer.js:63`),
+       che il prodotto usa già e che risponde `'locale'` per `local:<id>` e il fornitore per
+       `<fornitore>/<modello>`. Qui si riduce alle DUE destinazioni del catalogo
+       (`catalog-engine.ts:171`, la faccetta `destination`: `local` e `cloud`), perché è il
+       vocabolario con cui il prodotto parla di dove un modello viene eseguito.
+       Scritture additive, sullo stesso nodo che questa funzione già scrive: nessun comportamento
+       cambia e `state.model` resta l'unica fonte. */
+    if (activeModel) {
+      const grezzo = state.model || '';
+      activeModel.textContent = label;
+      activeModel.dataset.modelloId = grezzo;
+      // `''` = nessuna scelta. Non è «cloud» per esclusione: è «non lo so», e la banda non
+      // disegna una pastiglia sopra un modello che non c'è.
+      activeModel.dataset.modelloDestinazione = grezzo === '' ? '' : (fornitoreDelModello(grezzo) === 'locale' ? 'locale' : 'cloud');
+    }
     aggiornaInvitoPrimoAvvio(); // 17/09, PO-27: il modello è metà di ciò che l'invito nomina
   }
 
