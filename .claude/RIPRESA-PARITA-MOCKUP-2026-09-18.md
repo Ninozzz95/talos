@@ -590,6 +590,74 @@ resterebbe orfana (`data-lab-guscio-negato`); la banda **rimuove** il `<p class=
 legacy, e quel nodo **non era nell'inventario** di `_fase2-niente-perso` — quel cancello non poteva
 vederlo (dichiarato, non nascosto).
 
+## 🔜 FASE 4 — LE QUATTRO SCHEDE (APERTA il 19/09/2026, «via fase 4» dall'owner)
+
+Scomposizione scritta **prima** di aprire (regola 13/09): `.claude/FASE-4-SCOMPOSIZIONE-2026-09-19.md`
+— quattro corsie con **proprietà dei file disgiunte**, i condivisi (`app.js`, `frammenti.html`,
+`lab-cornice-v3.js`, `cornice-model-lab.js`, i CSS, `public/*`) **dell'orchestratore**.
+
+| corsia | file suoi | porta | dichiara finito |
+|---|---|---|---|
+| **1 · Hugging Face + faccette** | `catalogo-faccette.js`, `catalogo-modelli.js`, `catalog-engine.ts`, `lab-faccette.spec.mjs` | 4194 | `lab-faccette` **7/7** + «Model Lab filters» verdi, barra vista sul 4174 |
+| **2 · Provider** | `provider-card.js`, `velo-fornitori.spec.mjs`, spec nuovo | 4195 | 28 card nello stile del mockup, modali vere vive, **D9 risolto o smentito** |
+| **3 · Download** | `download-coda.js`, `modelli-installati.js`, spec nuovo | 4196 | stato vuoto del mockup riprodotto + coda piena nello stile, contatori coerenti |
+| **4 · Sistema** | `misura-memoria.js`, spec nuovo | 4197 | due card sul contenuto vero, `_fase3-banda` **10/10**, `_fase2-niente-perso` verde |
+
+I brief stanno in `.claude/brief-19-09/` (uno per corsia), ognuno con la riga **«cosa esiste già»**
+misurata, i **file vietati** e le **ricerche citate**.
+
+### ⛔ Le misure della ricognizione (19/09/2026, 4174 in sola lettura, 0 non-GET)
+
+1. **La barra a faccette esiste, è importata e CHIAMATA — e non è nella pagina**: `#modelLabFacets`
+   **0 copie**, `[data-catalog-facets]` **0**, caselle **0**; il pannello `huggingface` è
+   `display:block` alto **1858 px**. Causa nella catena: `aggiornaCatalogoModelli`
+   (`catalogo-modelli.js:174`) la costruisce solo `dati ? … : null`. ⇒ Il compito della corsia 1 è
+   **collegare**, non riscrivere.
+2. **Le 7 prove scadono per un motivo preciso**: `lab-faccette.spec.mjs:195` clicca la linguetta
+   **«Modelli»**, che oggi si chiama **«Hugging Face»** (decisione dell'owner).
+3. **Provider**: pannello alto **1791 px** con le 28 card **vere** e i loro stati misurati —
+   «Chiave salvata» (OpenRouter), «Chiave dall'ambiente» (OpenAI, DeepSeek, Anthropic, Gemini),
+   «Chiave mancante» (Kimi, MiniMax, Qwen, Z.AI, Groq), «Chiave facoltativa» (Ollama, LM Studio),
+   più «Aggiorna» e «Prova tutti».
+4. **Download**: pannello **226 px**, badge **«1 completato»** ⇒ **la coda NON è vuota adesso**: lo
+   stato vuoto del mockup si prova **riproducendolo**.
+5. **Sistema**: le metriche vere (**31,6** · **11,7** · **213,3** · **212,3 GiB** · «19,9 GiB in uso
+   su 31,6 GiB · 63%») e i badge **«Nessun runtime raggiunto»/«Non raggiunto»/«Non avviato»** mentre
+   il registro dice **«1 runtime disponibile»** → contraddizione da misurare (compito della corsia 4).
+
+### Le ricerche di questa fase — fonte e data, o la ricerca non c'è stata (regola owner)
+
+- **Mutazione / «la prova morde?»**: una guardia non si fida perché è stata riletta, ma **solo dopo
+  aver rotto ciò che protegge e visto il rosso**, con **baseline verde prima** e **ripristino byte
+  identico**; e non si muta il checkout attivo (worktree temporaneo). Fonti:
+  <https://github.com/Kidus-M/MaruCheck/blob/main/docs/decisions/0012-isolate-mutation-verification-in-temporary-git-worktrees.md> ·
+  <https://github.com/koala73/worldmonitor/commit/cb2999cd6344520a99e1aa575208b25938cb90d1> ·
+  <https://arxiv.org/html/2608.26183v1> (letti il 19/09/2026).
+- **Faccette**: conteggio per valore, OR dentro / AND fra, zeri **grigiati**, «Vedi altri» oltre 5-10,
+  `aria-live` sui risultati, 5-8 faccette visibili. Fonti:
+  <https://www.saasui.design/blog/saas-filtering-sorting-ux-patterns> ·
+  <https://www.ideaplan.io/templates/faceted-search-template> ·
+  <https://www.designsystems.one/design-systems/patterns/filters-and-refinement> ·
+  <https://www.uixhero.com/resources/ui-components/filter> (lette il 19/09/2026).
+- **Provider**: una card è **uno stato, non una barra di strumenti**; chiave **mai** mostrata; verifica
+  prima di salvare e **nel tempo**; un controllo disabilitato **spiega**. Fonti:
+  <https://github.com/activepieces/activepieces/pull/14825> ·
+  <https://github.com/coleam00/Archon/issues/1956> ·
+  <https://deepwiki.com/tingly-dev/tingly-box/5.3-provider-configuration-pages> ·
+  <https://enterprise-docs.dify.ai/en/3.12.x/use/workspace/model-providers> (lette il 19/09/2026).
+- **Coda di download**: la voce resta montata **anche da vuota**; **niente 0% quando il totale non
+  c'è**; pausa/riprova a interruttore per riga; «pulisci» non tocca gli attivi; errore onesto. Fonti:
+  <https://github.com/unslothai/unsloth/pull/9849> ·
+  <https://github.com/invoke-ai/InvokeAI/pull/8910> ·
+  <https://deepwiki.com/UNIkeEN/SJMCL/4.10-download-tasks-page> ·
+  <https://appmaster.io/it/blog/tasks-in-background-progress-updates-ui-patterns> (lette il 19/09/2026).
+- **Metriche di sistema**: un dato vecchio si mostra **con la sua età** e la tenuta scade (~60 s);
+  **zero quando la misura non c'è è la bugia tipica**; degrado garbato quando lo strumento manca.
+  Fonti: <https://github.com/hasso5703/neurodash> ·
+  <https://github.com/Forge-the-Kingdom/llm-serve-dashboard> ·
+  <https://www.npmjs.com/package/@rosepetal/node-red-dashboard-2-system-monitor> ·
+  <https://github.com/Theohox/zmenu> (letti il 19/09/2026).
+
 ## COSA GIRA ADESSO (19/09/2026)
 
 - ⛔ **NESSUNA corsia è viva**: le A, B e C erano già chiuse il 18/09, e la **corsia della FASE 3 ha
