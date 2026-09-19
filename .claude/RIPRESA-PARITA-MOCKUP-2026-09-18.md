@@ -472,8 +472,18 @@ vera ha scoperto rossi che nessuno aveva misurato. **Non attribuirli alla barra.
 cancello dell'identità **verde** · **32 foto** rigenerate · otto sezioni fotografate e **guardate**
 (Strumenti e Chat in dettaglio: una testata per carta, i fatti in chiave/valore, **una** banda di
 azioni in fondo, il conteggio solo dove ci sono righe).
-**Restano**: le **tre decisioni** della fase (carta di sezione · `font-weight 550` · peso del valore
-chiave/valore) e i tre punti della corsia 2 (`static-copy.ts` 8 righe inerti · `PARITA-10` · il
+**✅ LE TRE DECISIONI DELLA FASE — PRESE DALL'OWNER il 19/09/2026, e TUTTE E TRE TENGONO CIÒ CHE C'È**
+(non una modifica, un «sì» allo stato consegnato: nessun file da toccare):
+1. **Carta di sezione**: **(a) com'è** (`padding 20px 24px`, raggio 14). Motivo suo e nostro: la regola
+   del 04/09 — «si cambia la **struttura**, non il linguaggio visivo» — e il linguaggio di TALOS usa
+   le carte. ⛔ Scartate (b) la carta del mockup (22/12: aveva reso rosse due prove) e (c) la sezione
+   piatta del mockup.
+2. **`font-weight: 550`**: **si tiene 600**, che è quello che il browser già disegna con le tre facce
+   statiche di Instrument Sans. Non si cambia carattere per un peso variabile.
+3. **Il valore delle chiave/valore**: **resta il nostro** — monospaziato, peso 500 — perché i numeri
+   restano incolonnati (giri, costi, dimensioni).
+
+**Restano**: i tre punti della corsia 2 (`static-copy.ts` 8 righe inerti · `PARITA-10` · il
 filetto sulla prima riga delle liste).
 
 ## COSA GIRA ADESSO (18/09/2026, tarda sera)
