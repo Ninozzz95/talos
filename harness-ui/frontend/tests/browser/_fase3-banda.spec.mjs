@@ -274,6 +274,28 @@ test.describe('la banda del laboratorio', () => {
     // Il numeratore resta: è una soglia dichiarata, non una misura. Non
     // dipende dalla macchina, quindi non ha motivo di sparire con lei.
     await expect(banda.locator('[data-lab-banda-valore]')).toHaveText('18,6');
+
+    /* ⛔⛔ UNA MISURA CHE NON È NELLA NOSTRA FORMA NON SI INDOVINA — il difetto
+       latente dichiarato il 19/09 e curato qui. `gib()` toglieva i punti PRIMA di
+       convertire la virgola, quindi «31.6 GiB» diventava **316** e la barra
+       mostrava il **5,9%** — un numero sbagliato con l'aria di un numero giusto, il
+       difetto peggiore che questa banda possa fare, e **in silenzio**.
+       La fonte di oggi scrive all'italiana (`misura-memoria.js:11`,
+       `Intl.NumberFormat('it-IT')`), quindi il caso non si presenta: ma la banda
+       legge il TESTO di un'altra superficie, e un giorno quel testo può cambiare
+       formato. ⇒ Si accetta **solo** la forma italiana — virgola per i decimali,
+       punto per le migliaia — e tutto il resto è «non è una misura»: la frazione
+       sparisce, come quando la misura non c'è.
+       ⛔ Questo caso è stato scritto PRIMA della cura e visto ROSSO con la cura
+       vecchia (`gib()` leggeva 31.6 come 316 e la barra restava accesa): se qui
+       restasse verde, la cura non starebbe curando niente. */
+    await page.evaluate(() => { document.querySelector('#machineMemoryMetric').textContent = '31.6 GiB'; });
+    await expect(frazione, 'un formato che non è il nostro non si interpreta: si rifiuta').toHaveText('');
+    await expect(track).toBeHidden();
+    // E la forma italiana con le migliaia si legge ancora: lì il punto È un separatore di migliaia.
+    await page.evaluate(() => { document.querySelector('#machineMemoryMetric').textContent = '1.024 GiB'; });
+    await expect(frazione).toHaveText('su 1.024 GiB');
+    expect(await riempimento.evaluate(n => Number.parseFloat(n.style.width))).toBeLessThan(2);
   });
 
   test('BANDA-04 — le misure sono quelle del mockup, non «belle a vedersi»', async ({ page }) => {
