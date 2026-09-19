@@ -374,11 +374,28 @@ function testoDi(radice, selettore) {
   return testo.length > 0 ? testo : null;
 }
 
-/** Solo GiB: una misura in MiB non è un rapporto con una in GiB. */
+/*
+ * Solo GiB — una misura in MiB non è un rapporto con una in GiB — **e solo nella
+ * NOSTRA forma**: virgola per i decimali, punto per le migliaia.
+ *
+ * ⛔ LA CURA DEL 19/09/2026, e la ragione per cui la forma si pretende invece di
+ *   indovinarla. La versione precedente toglieva i punti PRIMA di convertire la
+ *   virgola: `'31.6 GiB'.replace(/\./g,'')` → `'316'`, quindi il denominatore
+ *   diventava **316** e la barra mostrava il **5,9%** — un numero sbagliato con
+ *   l'aria di un numero giusto, e in silenzio. La fonte di oggi scrive all'italiana
+ *   (`misura-memoria.js:11`, `Intl.NumberFormat('it-IT')`), quindi il caso non si
+ *   presenta; ma qui si legge il **testo** di un'altra superficie, e un formato è
+ *   una cosa che cambia senza chiedere permesso.
+ *   ⇒ Chi non è nella nostra forma **non è una misura**: `null`, come per «—» e per
+ *     i MiB. La frazione sparisce e la barra pure, che è ciò che questa banda fa
+ *     quando non sa — meglio di un rapporto inventato.
+ *   ⛔ La prova sta in `_fase3-banda.spec.mjs` (BANDA-03) ed è stata vista **rossa
+ *     col codice vecchio** prima che questa cura esistesse.
+ */
 function gib(testo) {
-  const trovato = /^([\d.,]+)\s*GiB$/i.exec(String(testo ?? '').trim());
+  const trovato = /^(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d+))?\s*GiB$/i.exec(String(testo ?? '').trim());
   if (!trovato) return null;
-  const numero = Number(trovato[1].replace(/\./g, '').replace(',', '.'));
+  const numero = Number(`${trovato[1].replace(/\./g, '')}${trovato[2] ? `.${trovato[2]}` : ''}`);
   return Number.isFinite(numero) && numero > 0 ? numero : null;
 }
 

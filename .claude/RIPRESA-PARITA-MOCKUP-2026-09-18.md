@@ -576,10 +576,12 @@ E sul **4174 in sola lettura (0 non-GET)**, due temi e tre stati: la banda la mo
 (`app.js:4714`), una banda e un nodo-nome, tutte e quattro le schede la tengono, pastiglia
 *Locale/Cloud/assente*, cella politica spenta a 1024. Foto guardate.
 
-⛔ **Difetti dichiarati e NON curati**: `gib()` (`lab-cornice-v3.js:376`) cancella i punti **prima** di
-convertire la virgola, quindi una misura `31.6 GiB` diventerebbe **316** e la barra mostrerebbe
-**5,9% in silenzio** — latente, perché la sorgente è fissata a `it-IT` (`misura-memoria.js:11`) e
-nessuna prova può raggiungerlo oggi. La soglia stretta è **1100 di viewport**, non i 460 del mockup
+✅ **Il difetto latente di `gib()` è CURATO il 19/09/2026.** Cancellava i punti **prima** di convertire
+la virgola, quindi una misura `31.6 GiB` diventava **316** e la barra mostrava il **5,9% in silenzio**.
+Ora la forma si **pretende** invece di indovinarla: solo virgola per i decimali e punto per le
+migliaia, e tutto il resto è «non è una misura» (fraccia vuota, barra spenta — come per «—»). ⛔ La
+prova in `_fase3-banda.spec.mjs` (BANDA-03) è stata scritta **prima** della cura e vista **rossa col
+codice vecchio**; dopo la cura, `_fase3-banda` 10 + `lab-sistema` 9 + `lab-guscio` 9 = **28 verdi**. La soglia stretta è **1100 di viewport**, non i 460 del mockup
 (la colonna delle Impostazioni ha la sua navigazione: a 1024 la banda misura **430** contro i **754**
 del mockup), e la **container query è stata provata e non funziona** — un contenitore non veste sé
 stesso: `flex-wrap` restava `nowrap` mentre le regole sui figli passavano.
