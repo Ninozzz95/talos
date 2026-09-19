@@ -1,7 +1,7 @@
 #![allow(non_snake_case, dead_code)]
 
 use std::{
-    ffi::{c_void, OsStr, OsString},
+    ffi::{OsStr, OsString, c_void},
     io,
     mem::{size_of, size_of_val},
     os::windows::ffi::OsStrExt,
@@ -128,12 +128,7 @@ unsafe extern "system" {
     fn GetLastError() -> u32;
     fn CloseHandle(handle: Handle) -> i32;
     fn CreateJobObjectW(attributes: *const c_void, name: *const u16) -> Handle;
-    fn SetInformationJobObject(
-        job: Handle,
-        class: i32,
-        data: *const c_void,
-        length: u32,
-    ) -> i32;
+    fn SetInformationJobObject(job: Handle, class: i32, data: *const c_void, length: u32) -> i32;
     fn QueryInformationJobObject(
         job: Handle,
         class: i32,
@@ -426,7 +421,9 @@ pub struct Job {
 impl Job {
     pub fn new(active_process_limit: Option<u32>) -> io::Result<Self> {
         if active_process_limit == Some(0) {
-            return Err(invalid_input("active process limit must be greater than zero"));
+            return Err(invalid_input(
+                "active process limit must be greater than zero",
+            ));
         }
 
         // SAFETY: null security attributes and null name create a private unnamed Job.
@@ -476,7 +473,9 @@ impl Job {
             if flags & JOB_OBJECT_LIMIT_ACTIVE_PROCESS == 0
                 || actual.basic_limit_information.active_process_limit != expected
             {
-                return Err(invariant("Job active-process limit differs from requested policy"));
+                return Err(invariant(
+                    "Job active-process limit differs from requested policy",
+                ));
             }
         }
 
@@ -569,7 +568,9 @@ impl Job {
                 // SAFETY: CreateProcessW returned this thread handle to us.
                 let _ = unsafe { CloseHandle(information.thread) };
             }
-            return Err(invariant("CreateProcessW returned incomplete process information"));
+            return Err(invariant(
+                "CreateProcessW returned incomplete process information",
+            ));
         }
 
         let process = OwnedHandle(information.process);
@@ -686,13 +687,8 @@ impl ObservedProcess {
         }
         // SAFETY: OpenProcess receives a concrete PID and requests only
         // synchronize/query access; no inherited handle is requested.
-        let handle = unsafe {
-            OpenProcess(
-                SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
-                0,
-                pid,
-            )
-        };
+        let handle =
+            unsafe { OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
         Ok(Self {
             process: OwnedHandle::new(handle, "OpenProcess")?,
             pid,
@@ -720,7 +716,8 @@ mod tests {
     fn base_policy_kills_on_close_and_never_allows_breakaway() {
         assert_ne!(BASE_LIMIT_FLAGS & JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, 0);
         assert_eq!(
-            BASE_LIMIT_FLAGS & (JOB_OBJECT_LIMIT_BREAKAWAY_OK | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK),
+            BASE_LIMIT_FLAGS
+                & (JOB_OBJECT_LIMIT_BREAKAWAY_OK | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK),
             0
         );
     }
