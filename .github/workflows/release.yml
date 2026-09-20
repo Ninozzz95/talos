@@ -492,6 +492,8 @@ jobs:
         name: server, kernel, frontend e guscio Electron reale
         timeout-minutes: 15
         run: |
+          npm --prefix harness-ui/desktop run verify:evolution-baseline
+          if ($LASTEXITCODE -ne 0) { throw 'Baseline evoluzione non valida.' }
           node --test harness-ui/tests/*.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Test server falliti.' }
           npm --prefix harness-ui run test:kernel

@@ -263,6 +263,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             harness-ui/package-lock.json
+            harness-ui/desktop/package-lock.json
             context-engine/package-lock.json
 
       - if: steps.dove.outputs.ci == 'si'
@@ -274,6 +275,21 @@ jobs:
         name: dipendenze del motore di contesto
         run: npm ci
         working-directory: context-engine
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: dipendenze del guscio desktop
+        run: npm ci
+        working-directory: harness-ui/desktop
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: baseline evoluzione
+        run: npm run verify:evolution-baseline
+        working-directory: harness-ui/desktop
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: test puri desktop
+        run: npm run test:puri
+        working-directory: harness-ui/desktop
 
       - if: steps.dove.outputs.ci == 'si'
         name: server

@@ -11,6 +11,7 @@
     "test": "npm run test:puri && npm run test:guscio",
     "test:puri": "node --test tests/*.test.mjs",
     "test:guscio": "node --test --test-concurrency=1 tests/backend.spec.mjs tests/guscio.spec.mjs",
+    "verify:evolution-baseline": "node scripts/verifica-baseline-evoluzione.mjs",
     "icone": "node scripts/genera-icone.mjs",
     "prova:pty": "node scripts/prova-pty.mjs",
     "prepara": "node scripts/prepara-pacchetto.mjs && node scripts/applica-hotfix-critical-tools.mjs",
