@@ -1,0 +1,27 @@
+[workspace]
+resolver = "3"
+members = [
+  "crates/evolution-wire",
+  "crates/talos-supervisor",
+  "crates/talos-windows-sandbox",
+  "crates/talos-extension-host",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98.1"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+undocumented_unsafe_blocks = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
