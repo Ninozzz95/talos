@@ -6,6 +6,29 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.14 — 2026-09-20
+
+Release candidate assembled from the verified desktop worktree after the
+`desktop-v0.1.13` comparison. This entry is published only with the installer,
+runtime, and smoke gates from `.github/workflows/release.yml` green.
+
+### Fixed
+
+- Chat streaming keeps rendering smoothly while the conversation is scrolled;
+  the scroll position remains user-controlled and the live response does not
+  rebuild the entire message list on every token.
+- Model Lab and the agent graph retain their real navigation/replay contracts,
+  including model-page routes, download actions, persistent timeline state, and
+  the graph/sidebar hand-off.
+- The desktop package carries the same version in `package.json`, the lockfile,
+  installer names, and release metadata so a tag cannot publish a mismatched
+  binary.
+
+### Verification
+
+- Backend, kernel tests, frontend unit tests (1,447), desktop pure tests (81),
+  and real Electron shell tests (3) pass on the release candidate commit.
+
 ## desktop-v0.1.13 — 2026-09-16
 
 Same product as `desktop-v0.1.12`, which never published: its release job died building the

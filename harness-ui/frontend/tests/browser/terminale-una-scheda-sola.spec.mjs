@@ -24,11 +24,23 @@ test.use({ locale: 'it-IT' });
 const linguette = (page) => page.evaluate(() => [...document.querySelectorAll('.talos-terminal__tab[role="tab"][data-terminale-id]')]
   .map((b) => b.innerText.replace(/\s+/g, ' ').trim()));
 
+/* Il banco ripresa restringe deliberatamente i workspace a TALOS_HARNESS_UI_PROJECT_DIRS.
+   Creare la cartella in %TEMP% passa la validazione filesystem di Node ma viene rifiutato dal
+   confine del server, facendo fallire la fixture prima di arrivare alla prova delle linguette.
+   In esecuzioni normali la variabile non c'è e si conserva il comportamento storico. */
+const rootWorkspace = process.env.TALOS_HARNESS_UI_PROJECT_DIRS?.split(';')[0]?.trim() || tmpdir();
+const cartellaDiProva = (prefisso) => mkdtempSync(join(rootWorkspace, prefisso));
+
 test('BC62-01 — entrare nella vista Terminale non crea schede: una per sessione, anche passando da A a B e ritorno, anche dopo una ricarica', async ({ page, request, baseURL }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1440, height: 900 });
+  /* Il server isolato parte senza credenziali reali. La sessione custom deve però attraversare
+     il cancello di configurazione; una chiave finta resta nel keyring in-memory e non viene mai
+     usata per una chiamata di rete in questa prova delle schede terminale. */
+  const chiave = await request.post(new URL('/api/v1/providers/openrouter/key', baseURL).href, { data: { key: 'sk-bc62-fixture' } });
+  expect(chiave.ok(), 'configurazione provider fittizia del banco BC-62').toBe(true);
   const crea = async (nome) => {
-    const cartella = mkdtempSync(join(tmpdir(), `bc62-${nome}-`));
+    const cartella = cartellaDiProva(`bc62-${nome}-`);
     const r = await request.post(new URL('/api/v1/sessions/custom', baseURL).href, { data: { cartellaLibera: cartella, consegna: `sessione ${nome} della prova BC-62: non fare nulla`, modello: 'z-ai/glm-5.3-flash' } });
     expect(r.ok(), `creazione della sessione ${nome}`).toBe(true);
     return (await r.json()).data.sessionId;
@@ -60,7 +72,9 @@ test('BC62-01 — entrare nella vista Terminale non crea schede: una per session
 test('BC62-02 — al contrario: «Nuovo» crea ESATTAMENTE una scheda in più', async ({ page, request, baseURL }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 1440, height: 900 });
-  const cartella = mkdtempSync(join(tmpdir(), 'bc62-nuovo-'));
+  const chiave = await request.post(new URL('/api/v1/providers/openrouter/key', baseURL).href, { data: { key: 'sk-bc62-fixture' } });
+  expect(chiave.ok(), 'configurazione provider fittizia del banco BC-62').toBe(true);
+  const cartella = cartellaDiProva('bc62-nuovo-');
   const r = await request.post(new URL('/api/v1/sessions/custom', baseURL).href, { data: { cartellaLibera: cartella, consegna: 'prova BC-62 del pulsante Nuovo: non fare nulla', modello: 'z-ai/glm-5.3-flash' } });
   const id = (await r.json()).data.sessionId;
   await page.goto('/');
