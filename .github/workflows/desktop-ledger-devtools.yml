@@ -1,0 +1,44 @@
+name: desktop-ledger-devtools
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['.github/workflows/desktop-ledger-devtools.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  toolchain:
+    if: github.repository == 'Ninozzz95/talos' && github.ref == 'refs/heads/refactor/desktop-ledger-2026-09-17'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.18.0'
+      - name: Install only the existing locked build and verification dependencies
+        run: |
+          set -euo pipefail
+          npm ci --prefix harness-ui --no-audit --no-fund
+          npm ci --prefix harness-ui/frontend --no-audit --no-fund
+          npm ci --prefix context-engine --no-audit --no-fund
+      - name: Archive the reproducible development toolchain, not user data
+        run: |
+          set -euo pipefail
+          mkdir -p tools/node24/bin transfer
+          cp "$(command -v node)" tools/node24/bin/node
+          node --version > tools/NODE_VERSION.txt
+          git rev-parse HEAD > tools/SOURCE_COMMIT.txt
+          sha256sum harness-ui/package-lock.json harness-ui/frontend/package-lock.json context-engine/package-lock.json > tools/LOCK_SHA256SUMS.txt
+          tar -czf transfer/locked-linux-devtools.tar.gz tools harness-ui/node_modules harness-ui/frontend/node_modules context-engine/node_modules
+          sha256sum transfer/locked-linux-devtools.tar.gz > transfer/SHA256SUMS.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: talos-locked-linux-devtools-${{ github.sha }}
+          path: transfer/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3

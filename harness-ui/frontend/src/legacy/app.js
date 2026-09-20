@@ -1,3 +1,13 @@
+import { createCommandPalette } from '../features/navigation/command-palette.ts';
+import { commandById, commandDisabledReason } from '../services/commands/registry.ts';
+import { createOverlayManager } from '../design-system/overlays/manager.ts';
+import { createApiClient } from '../services/api-client.ts';
+import { createWorkspaceChrome } from '../features/navigation/workspace-chrome.ts';
+import { createWorkspacePreferences } from '../services/workspace-preferences.ts';
+import { createRevision } from '../app/lifecycle.ts';
+import { decideStartup, shouldCommitStartup } from '../app/startup-policy.ts';
+import { VIEW_BY_DESTINATION, DESTINATION_BY_VIEW } from '../domain/navigation.ts';
+import { ultimoSegmento as ultimoSegmentoWorkspace } from '../domain/workspace-path.ts';
 import {creaSceltaFallback} from '../components/fonti-modelli.js';
 import { AZIONE_ACCODA, AZIONE_BIVIO, AZIONE_COMANDO, ORIGINE_SCELTA_ESPLICITA, SELETTORE_SCELTA_PREDEFINITA, creaCronologiaComposer, decidiInvio, mostraPulsanteReindirizzo, reindirizzoConsentito } from './invio-durante-il-giro.js'; // Corsia 1 (13/09): il bivio accoda/reindirizza, e la freccia su
 import { colonnaConversazione, scorrevoleConversazione } from '../bridge/conversazione-dom.js';
@@ -28,6 +38,8 @@ import {
   aggiornaPaginaRicerca, aggiornaPaginaLibreria, aggiornaPaginaAttivita,
   aggiornaPaginaMemoria, montaNote, montaProgetti,
 } from '../components/sezioni-adattatori.js';
+import { creaDettaglioAgente } from '../components/dettaglio-agente.js'; // PO-30 fetta 2: il dettaglio di un agente col disegno del laboratorio
+import { montaGrafoAgenti, modelloGrafoAgenti } from '../components/grafo-agenti.js';
 import { renderizzaMarkdown } from '../components/markdown.js'; // BC-29 (12/09): il render Markdown della chat, uno solo per chat, note, libreria e ricerca
 import { confermaModale } from '../components/modale-td.js'; // 11/09 lotto G: al posto di window.confirm()
 import { montaScorciatoiaTemi } from '../components/theme-studio.js'; // 11/09 lotto F
@@ -36,40 +48,45 @@ import { creaPilaToast } from '../components/toast.js';
 import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione
 import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella, deveAvvisareFuoriDallaFinestra, testoNotificaSistema, statoConsensoNotifiche } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup; 06/9 G29: notifica di sistema
 import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab
-import { aggiornaHf, gruppiVarianti } from '../components/hf-catalogo.js'; // 06/9 B6.9: scheda «Hugging Face» del Model Lab
+import { aggiornaHf, filtriHfVuoti, gruppiVarianti } from '../components/hf-catalogo.js'; // 06/9 B6.9: scheda «Hugging Face» del Model Lab
 import { aggiornaCosti } from '../components/costi-consumo.js'; // 06/9 D21/D22: costi e consumo per giorno e per modello
 import { aggiornaContesto, ripartizioneContesto } from '../components/contesto.js'; // 06/9 D26: ripartizione della finestra di contesto
 import { montaHf } from '../components/hf-catalogo.js';
 import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
-import { aggiornaInspector, processiDagliEventi, schedaAgentiDaRileggere, titoloMessaggioUtente, titoloRispostaDaTurno } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento
+import { aggiornaInspector, contaAgentiAttivi, contaProcessiAttivi, processiDagliEventi, schedaAgentiDaRileggere, titoloMessaggioUtente, titoloRispostaDaTurno, uscitaDaTestoAttrezzo } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento; 16/09 P0-E: il codice di uscita si legge dal risultato dell'attrezzo
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
+import { nomeUmanoAttrezzo as nomeUmanoAttrezzoCondiviso, nomeDiRipiegoAttrezzo, origineAvvisoPlugin } from '../components/nomi-attrezzi.js'; // BC-59 (17/09): la mappa dei nomi umani vive in UN posto solo — qui c'era una copia, e si era fermata al 12/09
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
-import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
 import { LINGUE as LINGUE_MENU, risolviLingua, applicaLingua, etichettaLinguaRisolta, t as tr, EVENTO_LINGUA } from '../components/lingua.js'; // 06/9 B8 + P-i18n: la lingua dei menu e delle superfici
 import { ritraduciImpostazioni } from '../components/impostazioni.js'; // P-i18n
 import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSIMO_SCHEDE as MASSIMO_SCHEDE_BROWSER, localeAnnotabile, hostDaUrl } from '../components/browser.js'; // 06/9 K-I: il Browser a schede
 import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser con annotazione 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
-import { creaSessionItem, ordinaSessioniAdAlbero, statoSessione } from '../components/session-item.js';
+import { creaSessionItem, sessioniRadice, ordinaSessioniAdAlbero, statoSessione } from '../components/session-item.js';
 import { montaConversazioneFiglia } from '../components/conversazione-figlia.js'; // PO-08 (10/09): la conversazione di un sotto-agente, nel pannello
-import { leggiEsitoComando, rigaDiStatoComando } from '../components/esito-comando.js'; // PO-06 (10/09): l'esito di un comando, detto a una persona
+/* PO-06 (10/09): l'esito di un comando, detto a una persona.
+   ⛔ `rigaEsitoDaMostrare` e `senzaIntestazione` arrivano dallo STESSO contratto (20/09): la regola
+     «si dichiara l'eccezione» e la forma della riga stanno in un posto solo, non in una quarta
+     regex scritta qui — è il difetto che il revisore avversario ha misurato. */
+import { leggiEsitoComando, rigaDiStatoComando, rigaEsitoDaMostrare, senzaIntestazione } from '../components/esito-comando.js';
 import { raggruppaInHunk } from '../components/diff-hunk.js'; // PO-11 (10/09): i pezzi del diff
 import { leggiRisultatiRicerca, creaRisultatiRicerca, creaPillolaFonti, apriModaleFonti } from '../components/risultati-ricerca.js'; // 10/09: la ricerca web si legge come una ricerca
-import { creaDiffInChat, aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFileScaricabile, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
+import { creaDiffInChat, aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFileScaricabile, creaFileToccati, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio, TESTI_MESSAGGIO } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
 import { creaVistaViva } from '../components/browser-vivo.js'; // 07/9: lo schermo del browser pilotato dal server
 import { montaMiglioraPrompt } from '../components/migliora-prompt.js'; // 11/9 BC-15: «Migliora il prompt», il pannello del composer
 import { gestoPerIlServer } from '../components/browser-gesti.js'; // 07/9: la vista e il server parlano due lingue: qui si traducono
-import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
+import { montaScorciatoie, normalizzaTastiScritti, riconosci, suApple, etichettaTasto } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
+import { TIPO_FRAME_CONTROLLO, TIPO_FRAME_DATI, codificaFrameClient, collegaAppunti, creaTerminaleXterm, decodificaFrameServer } from '../components/terminale-xterm.js'; // P0/A 16/09: il corpo del terminale — xterm, appunti e menu — fuori dal monolite
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina (il montaggio è in sezioni-adattatori.js)
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
 import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, tonoDelTick, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
 import { ETICHETTA_INTERRUTTORE_RAGIONAMENTO, argomentoDelRagionamento, etichettaRagionamento, formattaDurataRagionamento, argomentoPuoCambiare } from '../components/ragionamento.js'; // 13/09 sera: il ragionamento si comprime invece di sparire, e mentre ragiona dice su cosa
-import { descriviCoda, normalizzaStatoCoda } from '../components/coda-messaggi.js'; // 14/09: la coda è della sessione — le sue parole in un posto solo
+import { descriviCoda, normalizzaStatoCoda, descriviRisultatoDelega } from '../components/coda-messaggi.js'; // 14/09: la coda è della sessione — le sue parole in un posto solo
 // 06/9 C24: la pagina delle Note — la monta `sezioni-adattatori.js`, che riusa `note.js`
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
@@ -83,12 +100,22 @@ import { aggiornaSeparatoreContesto } from '../components/context-separator.js';
 import { createContextClient } from '../services/context-client.js';
 import { createContextMonitor } from '../services/context-monitor.js';
 import { aggiornaAvanzamentoContesto } from '../components/context-progress.js';
-import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
+import { aggiornaDiffReview, aggiornaSommarioSchedeReview, chiaveFileReview, creaSchedeReview, etichettaFileReview, nascondiAzioniFase3, riassuntoReviewTestata as riassuntoReviewPerTestata } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno; 17/09 BC-75: `etichettaFileReview` è la regola del nome, e non si riscrive qui del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
-import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
-import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup
+import { montaGuscioLaboratorio } from '../components/lab-cornice-v3.js'; // 18/09 corsia 2: il guscio a quattro schede del Laboratorio modelli — monta i comandi legacy in una scheda sola
+import { montaSchedaModello } from '../components/scheda-modello.js'; // 18/09 corsia 4: la pagina del modello (scheda HF, file, compatibilità) — la monta `apriPaginaModello`
+import { aggiornaTopbar, impostaConteggioScheda } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati; 20/09: lo stesso scrittore di badge serve le schede della colonna destra
+import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup // 19/09 FASE 3: `fornitoreDelModello` serve alla banda del laboratorio, che deve dire «Locale» o «Cloud»
 
 (() => {
+  // BOOT-03/CORE-04: one navigation epoch and additive UI preferences.
+  const startupNavigation = createRevision();
+  const workspacePreferences = createWorkspacePreferences();
+  let workspaceUI = null;
+  let modalManager = null;
+  let centralApi = null;
+  let workspaceDisposed = false;
+
   'use strict';
 
   /*
@@ -448,7 +475,6 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   const commandDialog = $('#commandDialog');
   const commandSearch = $('#commandSearch');
   const sheetDialog = $('#sheetDialog');
-  const introDialog = $('#introDialog'); // ⭐ 04/9, R-02 — intro al primo avvio (modale nativa, vedi costruisciIntroPrimoAvvio)
   const harnessDialogBackdrop = $('#harnessDialogBackdrop');
   const sheetTitle = $('#sheetTitle');
   const sheetEyebrow = $('#sheetEyebrow');
@@ -528,6 +554,49 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   let streamingAutoFollow = true;
   let streamingLastTargetTop = null;
   const CONVERSATION_FOLLOW_EPSILON_PX = 24;
+  /*
+   * ⛔⛔⛔ 16/09/2026 (P0, punto 6) — UN SOLO SCRITTORE, UN SOLO FLAG.
+   *
+   * Il flag qui sopra era giusto e lo consultava UNA funzione sola (`scrollStreamingOutput`).
+   * Gli altri tre scrittori di scroll non lo guardavano affatto, e sono quelli che rubavano la
+   * posizione di lettura: `scorriAllaBollaAppesa` (chiamata da cinque eventi del MODELLO, con un
+   * `setTimeout(40)` e uno `scrollTo` a molla verso il fondo), la coda di `appendToolNote` (che
+   * decideva DA SOLA — vedi il commento lungo lì sotto: portava in fondo chi non era in fondo,
+   * senza mai chiedere a `streamingAutoFollow` se quella persona stesse leggendo) e il riarmo su
+   * `RunStarted`, che rimetteva `true` a ogni giro — compresi i giri interni di un attrezzo.
+   * ⛔ CORREZIONE del 16/09, giro di riparazione: nel primo rapporto quella guardia l'avevo chiamata
+   *   «capovolta rispetto alla sua stessa glossa». È FALSO — commento e codice dicevano la stessa
+   *   cosa, e l'ha smentito il controllore rileggendo il commit base. Il difetto vero è quello
+   *   scritto qui sopra: DUE scrittori di scroll in gara, non una condizione scritta al rovescio.
+   *
+   * ⭐ Ricerca 16/09/2026, prima di scrivere (regola zero):
+   *   · anthropics/claude-code#53382 (desktop, chiusa «not planned») e la sua gemella risolta
+   *     sull'estensione VSCode (#11092, 12/11/2025): «IF user_scroll_position == bottom THEN
+   *     auto_scroll ELSE preserve_scroll_position», più un pulsante per rientrare. È esattamente il
+   *     pattern che manca qui, e il concorrente più diretto ce l'ha ancora rotto sul desktop.
+   *   · kirodotdev/KiroCrew#9652, openclaw#37500: «scrolling up must disengage follow and hold the
+   *     view» — stessa regola su altre due interfacce di chat con modello.
+   *   · MDN «overflow-anchor» + caniuse (16/09/2026): `auto` è il default e serve a NON perdere la
+   *     posizione quando cambia il contenuto SOPRA il viewport; si dichiara come guardia, non come cura.
+   *
+   * ⇒ Da qui in avanti il flag lo cambiano DUE cose sole, ed è tutta la regola:
+   *   1. lo scorrimento vero della persona (`collegaSeguiFondoConversazione`): si segue se e solo se
+   *      il FONDO DEL CONTENUTO è in vista — la stessa condizione con cui sparisce il pulsante
+   *      «torna in fondo», così ciò che la persona vede e ciò che il codice decide coincidono;
+   *   2. un'AZIONE della persona (`riarmaSeguiConversazione`): invia un messaggio, scrive un comando,
+   *      preme «torna in fondo». Un evento del modello non riarma mai niente, `RunStarted` compreso.
+   */
+  function riarmaSeguiConversazione() {
+    streamingAutoFollow = true;
+    streamingLastTargetTop = null; // nessun bersaglio nostro da confrontare: il prossimo scroll umano decide da solo
+    fermaFondoRipristino?.(); // la persona ha preso in mano la conversazione: il custode del ripristino si fa da parte
+  }
+  /*
+   * Il custode del fondo durante il ripristino (`mantieniFondoDuranteRipristino`) pubblica qui il suo
+   * `smetti`: così un'azione della persona e il primo giro DAL VIVO possono staccarlo senza che
+   * nessuno debba tenersi un riferimento. Vale null quando non c'è nessun ripristino in corso.
+   */
+  let fermaFondoRipristino = null;
 
   /*
    * ⭐⭐⭐ 02/9 — owner dal vivo: "lo streaming ha lag sostanziali a meta
@@ -757,22 +826,56 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * Confronta lo scrollTop reale con l'ultimo bersaglio che abbiamo
    * scritto NOI (streamingLastTargetTop): se combaciano (entro
    * un'epsilon) lo scroll è stato nostro o l'utente non si è mosso — si
-   * continua a seguire; se non combaciano, è stato l'utente a spostarsi
-   * di sua iniziativa — si smette di inseguirlo (si riarma su
-   * RunStarted). Prima che uno stream sia mai partito
-   * (streamingLastTargetTop ancora nullo) non c'è nulla da confrontare:
-   * non tocca streamingAutoFollow. Passive: mai bloccare lo scroll nativo.
+   * continua a seguire. Passive: mai bloccare lo scroll nativo.
+   *
+   * ⛔⛔ 16/09/2026 (P0, punto 6) — QUANDO NON COMBACIANO, SI GUARDA DOVE È FINITA.
+   *   Prima qui c'era `streamingAutoFollow = false` e basta, e il riarmo lo faceva `RunStarted`:
+   *   cioè la persona rientrava nel seguito per un evento del MODELLO invece che per un suo gesto.
+   *   Ora è il contrario: uno scorrimento non nostro riaccende il seguito se e solo se porta il
+   *   FONDO DEL CONTENUTO in vista — la stessa `fondoConversazioneInVista()` che decide se mostrare
+   *   il pulsante «torna in fondo». Così la regola è visibile a schermo: finché quel pulsante c'è,
+   *   nessuno insegue; quando sparisce, il seguito è tornato.
+   * ⛔ `streamingLastTargetTop === null` (nessuno stream ancora partito, o appena riarmato) non è
+   *   più un'uscita muta: è il caso in cui l'unica cosa che conta è dove sta la persona.
    */
   function collegaSeguiFondoConversazione() {
     const conversation = $('#conversation');
     if (!conversation) return;
     const scroller = scrollerConversazione(conversation) || conversation;
+    /* ⛔ Idempotente: si può richiamare a ogni cambio di sessione senza raddoppiare gli ascoltatori.
+       Verificato il 16/09 che `.talos-conversation` NON viene mai ricreato (lo stato vuoto
+       sostituisce i figli della COLONNA, non il contenitore) — il marchio è la guardia che rende la
+       cosa vera per costruzione invece che per fortuna. */
+    if (scroller.dataset.seguiCollegato === 'si') return;
+    scroller.dataset.seguiCollegato = 'si';
     scroller.addEventListener('scroll', () => {
-      if (streamingLastTargetTop === null) return;
-      streamingAutoFollow = Math.abs(scroller.scrollTop - streamingLastTargetTop) <= CONVERSATION_FOLLOW_EPSILON_PX;
+      fondoInVistaRicordato = null;
+      if (streamingLastTargetTop !== null && Math.abs(scroller.scrollTop - streamingLastTargetTop) <= CONVERSATION_FOLLOW_EPSILON_PX) {
+        streamingAutoFollow = true; // siamo stati noi (o la persona non si è mossa): si continua
+        return;
+      }
+      streamingAutoFollow = fondoConversazioneInVista();
     }, { passive: true });
     // Lo spazio in coda è metà dell'altezza VISIBILE: se la finestra cambia, cambia anche lui.
-    if (typeof ResizeObserver === 'function') new ResizeObserver(() => aggiornaSpazioCodaConversazione(conversation)).observe(scroller);
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => {
+      const seguiva = streamingAutoFollow;
+      aggiornaSpazioCodaConversazione(conversation);
+      fondoInVistaRicordato = null;
+      if (seguiva) {
+        if (!runRealeAttivo()) {
+          // Il ritorno esplicito allo storico concluso resta al fondo anche quando la sua riga si chiude.
+          if (streamingScrollFrame !== null) window.cancelAnimationFrame?.(streamingScrollFrame);
+          streamingScrollFrame = null;
+          streamingScrollTarget = null;
+          scroller.scrollTop = scroller.scrollHeight;
+          streamingLastTargetTop = scroller.scrollTop;
+        } else {
+          const ultimo = conversation.lastElementChild;
+          if (ultimo) scrollStreamingOutput(ultimo);
+        }
+      }
+      aggiornaPiedeChatDaStato();
+    }).observe(scroller);
   }
   collegaSeguiFondoConversazione();
 
@@ -828,21 +931,67 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * la cadenza del paint; la preferenza sceglie l'effetto visivo, mai quanto
    * tempo trattenere contenuto che il provider ha già consegnato.
    */
+  /*
+   * ⭐⭐⭐ 20/09/2026 — IL RITMO NON ERA UN RITMO: RIVELAVA TUTTO, SUBITO.
+   *
+   * Owner: «ancora scattosa ma meglio, non c'è un'animazione o qualcosa di più smooth? guarda sempre
+   * hermes, l'ho provato io ed è molto più snappy e smooth allo stesso tempo».
+   *
+   * ⛔ LA MISURA, e non un'impressione: campionando la lunghezza del testo a OGNI fotogramma durante
+   *   uno stream, la crescita per fotogramma era **p50 = 0, p90 = 85, p99 = max = 120 caratteri, con
+   *   172 fotogrammi su 343 a ZERO**. Cioè: metà dei fotogrammi non mostrava niente e l'altra metà
+   *   ne mostrava fino a 120 in un colpo. **Il testo non scorreva: saltava.**
+   *   ⇒ E la misura dei fotogrammi non poteva vederlo: restano a 60 fps in tutti e due i casi. Lo
+   *     scatto era nel RITMO, non nel disegno.
+   *
+   * ⛔ LA CAUSA, una riga: `statoRender.mostrato = testo.length` — si rivelava tutto ciò che era
+   *   arrivato, subito. Il testo cresceva quindi seguendo gli SCATTI del fornitore: un burst da 200
+   *   caratteri era un salto di 200.
+   *
+   * ⇒ LA CURA È LA FORMULA DI HERMES, copiata:
+   *   `daRivelare = arretrato × dt / STREAM_DRENAGGIO_MS`, con un **tetto per flush** perché un dump
+   *   enorme non si disegni come una lastra sola. In parole: si tiene il testo arrivato IN ARRETRATO
+   *   e lo si rivela a cadenza, accelerando quando l'arretrato cresce — a regime la rivelazione
+   *   eguaglia l'arrivo, e il testo resta indietro di una frazione di secondo (il «buffer di
+   *   anticipo»), che è esattamente ciò che rende il flusso uniforme invece che a strappi.
+   *   Le costanti sono le sue: 500 ms di drenaggio, tetto 30 caratteri per flush.
+   *
+   * ⛔ TRE COSE CHE NON SI ROMPONO, e sono le ragioni per cui questa cura è piccola:
+   *   1. **il drenaggio esiste già**: `:1069-1071` richiede un altro render finché c'è arretrato, e
+   *      spegne `is-streaming` SOLO quando è in pari E il messaggio è finito;
+   *   2. **`none` non passa di qui**: con movimento ridotto o cronologia differita il chiamante
+   *      rivela tutto prima di entrare in questa funzione — l'animazione resta spenta;
+   *   3. **il testo non resta mai troncato**: l'arretrato si svuota sempre, perché il ciclo continua
+   *      finché non è zero.
+   */
+  const STREAM_DRENAGGIO_MS = 500;
+  const STREAM_TETTO_PER_FLUSH = 30;
+
   function avanzaRitmoStreaming(statoRender, testo, modalita, ora) {
     const ritmo = RITMO_STREAMING[modalita];
     const precedente = statoRender.mostrato;
-    const rivelati = testo.length - precedente;
+    const arretrato = testo.length - precedente;
+    const dtMs = statoRender.ultimoTickMs === null ? 0 : Math.max(0, ora - statoRender.ultimoTickMs);
     statoRender.ultimoTickMs = ora;
-    if (rivelati <= 0) return 0;
-    statoRender.mostrato = testo.length;
+    if (arretrato <= 0) return 0;
+    /*
+     * ⛔ IL PASSO. `Math.max(1, …)` perché un fotogramma deve pur muoversi: se il calcolo desse zero
+     *   il testo resterebbe fermo per sempre e il ciclo di drenaggio girerebbe a vuoto.
+     *   Il tetto evita la lastra unica su un dump; il `min` con l'arretrato evita di andare oltre.
+     */
+    const proposto = (arretrato * dtMs) / STREAM_DRENAGGIO_MS;
+    const passo = Math.max(1, Math.min(arretrato, Math.ceil(proposto), STREAM_TETTO_PER_FLUSH));
+    statoRender.mostrato = precedente + passo;
     if (ritmo.perParola) {
-      const nuoveParole = contaParole(testo.slice(precedente));
+      /* ⛔ Le parole «recenti» sono quelle del pezzo APPENA rivelato, non di tutto l'arretrato: con
+         il passo limitato le due cose non coincidono più. */
+      const nuoveParole = contaParole(testo.slice(precedente, statoRender.mostrato));
       for (let k = 0; k < nuoveParole; k += 1) statoRender.paroleRecenti.push(ora);
       const soglia = ora - ritmo.dissolvenzaMs;
       while (statoRender.paroleRecenti.length > 0 && statoRender.paroleRecenti[0] < soglia) statoRender.paroleRecenti.shift();
       if (statoRender.paroleRecenti.length > 400) statoRender.paroleRecenti.splice(0, statoRender.paroleRecenti.length - 400);
     }
-    return rivelati;
+    return passo;
   }
 
   /**
@@ -976,24 +1125,73 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     return true;
   }
 
+  /*
+   * ⭐⭐⭐ 20/09/2026 — IL PAVIMENTO FRA DUE FLUSH, ADATTIVO. **Portato da Hermes.**
+   *
+   * Owner: «lo streaming è ancora scattoso … guarda il codice di hermes, dobbiamo copiare esattamente
+   * i metodi che fa lui e adattarli al nostro codice».
+   *
+   * ⛔ IL DIFETTO, nelle parole di Hermes stessi (`apps/desktop/src/app/session/hooks/use-message-stream/index.ts`,
+   *   costanti `STREAM_DELTA_FLUSH_MS` e `MAX_STREAM_FLUSH_GAP_MS`): la schedulazione era «16 ms, solo
+   *   rAF», e a 30-80 token/s questo significava **un commit e una ri-parsata markdown per OGNI
+   *   token**, con un costo **lineare nella lunghezza dell'ultimo blocco**. Qui era **identico**:
+   *   `programmaRenderMessaggioStreaming` schedulava solo con rAF.
+   *
+   * ⇒ Le tre parti del metodo, copiate:
+   *   1. un **pavimento** di 33 ms fra due flush: a 60 token/s entrano ~2 token per commit, e il
+   *      testo cresce comunque a 30 fps — «grande guadagno percepito sulle risposte lunghe»;
+   *   2. il pavimento è **ADATTIVO**: `min(max(33, costoUltimoFlush × 3), 250)`. Si **misura** quanto è
+   *      costato l'ultimo flush e si lascia al thread ~75% di tempo libero per l'input: un flush
+   *      economico resta a 30 fps di testo, uno caro **cede fps di testo invece della reattività**;
+   *   3. il costo misurato **comprende il fotogramma in cui il commit avviene** — fermare il cronometro
+   *      alla fine della scrittura lo fisserebbe vicino a zero e il pavimento non si adatterebbe mai.
+   *
+   * ⛔ E si schedula con un **TIMER, mai con rAF**: Chromium **mette in pausa i rAF** di un renderer
+   *   che considera nascosto, e «nascosto» non è una cosa che questo codice possa verificare. Con i
+   *   rAF, una finestra ridotta a icona **non flusha mai**.
+   */
+  const STREAM_DELTA_FLUSH_MS = 33;
+  const MAX_STREAM_FLUSH_GAP_MS = 250;
+  let ultimoFlushMs = 0;
+  let costoUltimoFlushMs = 0;
+  let misuraFlushRaf = null;
+
   function flushMessaggiStreaming() {
     streamingRenderFrame = null;
+    const iniziatoMs = performance.now();
+    ultimoFlushMs = iniziatoMs;
     const messageIds = [...streamingRenderPending];
     for (const messageId of messageIds) renderizzaMessaggioStreamingOra(messageId);
+    const costoScrittura = performance.now() - iniziatoMs;
+    costoUltimoFlushMs = costoScrittura;
+    /* ⛔ La misura si completa nel fotogramma in cui il commit viene davvero dipinto. Se ne può
+       essere in attesa UNA sola: la misura di un flush più nuovo vince, e un renderer nascosto non
+       deve accumulare callback parcheggiate. */
+    if (typeof window.requestAnimationFrame !== 'function') return;
+    if (misuraFlushRaf !== null) window.cancelAnimationFrame?.(misuraFlushRaf);
+    misuraFlushRaf = window.requestAnimationFrame((inizioFrame) => {
+      misuraFlushRaf = null;
+      if (ultimoFlushMs !== iniziatoMs) return; /* un flush più nuovo sta già misurando il suo */
+      costoUltimoFlushMs = costoScrittura + Math.max(0, performance.now() - inizioFrame);
+    });
   }
 
   function programmaRenderMessaggioStreaming(messageId) {
     streamingRenderPending.add(messageId);
     if (streamingRenderFrame !== null) return;
-    const schedule = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 16));
-    streamingRenderFrame = schedule(flushMessaggiStreaming);
+    const pavimento = Math.min(Math.max(STREAM_DELTA_FLUSH_MS, costoUltimoFlushMs * 3), MAX_STREAM_FLUSH_GAP_MS);
+    const attesaMs = Math.max(0, pavimento - (performance.now() - ultimoFlushMs));
+    streamingRenderFrame = window.setTimeout(flushMessaggiStreaming, attesaMs);
   }
 
   function cancellaRenderMessaggiStreaming() {
-    if (streamingRenderFrame !== null) {
-      if (window.cancelAnimationFrame) window.cancelAnimationFrame(streamingRenderFrame);
-      else window.clearTimeout(streamingRenderFrame);
-    }
+    /* ⛔ UNO SOLO: le due versioni (la mia nuova e quella di prima) facevano cose diverse, e
+       tenerle tutte e due era il doppione che questo progetto ha già pagato con `#schermoHome`.
+       Questa fa l'unione: spegne il TIMER, annulla la misura del costo, azzera i riferimenti e
+       svuota la coda dei messaggi in attesa. */
+    if (streamingRenderFrame !== null) window.clearTimeout(streamingRenderFrame);
+    if (misuraFlushRaf !== null && typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(misuraFlushRaf);
+    misuraFlushRaf = null;
     streamingRenderFrame = null;
     streamingRenderPending.clear();
   }
@@ -1272,62 +1470,45 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     window.requestAnimationFrame(applica);
   }
 
-  /**
-   * ⛔ 02/09, owner: "quando clicchi su una riga sessione la chat deve
-   * trovarsi già in fondo senza animazioni". Le bolle appese durante il
-   * RIPRISTINO di una sessione (#conversation.is-restoring) non scorrono
-   * da sole: il fondo lo tiene mantieniFondoDuranteRipristino, istantaneo,
-   * e la conversazione si mostra solo quando è già tutta in fondo. Prima
-   * ognuna di queste sette chiamate faceva partire uno scrollIntoView
-   * "smooth" 40ms dopo l'inserimento — decine di animazioni in gara con
-   * lo scroll istantaneo. Fuori dal ripristino: comportamento di sempre.
+  /*
+   * ⛔⛔⛔ 16/09/2026 (P0, punto 6) — QUESTA FUNZIONE ERA IL SECONDO SCRITTORE DI SCROLL, E NON
+   * CHIEDEVA PERMESSO A NESSUNO.
+   *
+   * Otto chiamanti, di cui CINQUE sono eventi del modello (l'attesa a ogni fase, la card del batch
+   * di attrezzi, l'artefatto, la spiegazione, il permesso) e TRE sono la persona (il suo messaggio,
+   * il suo follow-up, il suo comando). Tutti e otto finivano in `scorriInFondoConversazione`, che
+   * porta al fondo con un'animazione: più in alto stavi a leggere, più lontano ti riportava.
+   * In mezzo c'era anche un `setTimeout(40)` — una corsa nascosta, non una cura.
+   *
+   * ⇒ Adesso la funzione non scrive più lo scroll da sola: lo chiede all'UNICO scrittore
+   *   (`scrollStreamingOutput`), che consulta `streamingAutoFollow`, coalesce su un fotogramma e va
+   *   istantaneo. L'unica differenza fra i due gruppi di chiamanti è `azioneDellaPersona`: un gesto
+   *   suo riarma il seguito (ha appena scritto lei: rivedere la propria frase è ciò che si aspetta),
+   *   un evento del modello no.
+   * ⛔ Durante il ripristino comanda `mantieniFondoDuranteRipristino`: qui non si tocca niente,
+   *   come prima.
    */
-  function scorriAllaBollaAppesa(article) {
-    window.setTimeout(() => {
-      const conversazione = $('#conversation');
-      if (!article.isConnected || conversazione?.classList.contains('is-restoring')) return;
-      /*
-       * ⛔⛔⛔ 02/9 — owner dal vivo: "quando invio un messaggio la chat
-       * non resta ferma ma sale sopra" + "gap senza nulla" — riprodotto e
-       * isolato con strumentazione diretta (Element.prototype.scrollTo/
-       * scrollIntoView patchati, scrollTop campionato ogni 30-50ms):
-       * `article.scrollIntoView({block:'end'})` non produceva ALCUN
-       * movimento qui — zero pixel in 3s — anche su un elemento connesso
-       * dentro un #conversation genuinamente overflowing
-       * (scrollHeight 1630+ contro clientHeight 1214, misurato). Causa
-       * nella gerarchia: #conversation sta dentro .chat-view/.view-pane,
-       * che ha un `overflow` proprio (hidden, vince su .view-pane per
-       * ordine di sorgente — vedi styles.css) ed è quindi ANCH'ESSO una
-       * "scrolling box" per l'algoritmo nativo di scrollIntoView, che
-       * cammina tutti gli antenati scrollabili — la doppia gerarchia lo
-       * confondeva. `conversazione.scrollTo({top:scrollHeight})`,
-       * chiamato DIRETTAMENTE sull'UNICO contenitore che sappiamo
-       * scrollabile per davvero, non cammina antenati e non ha questo
-       * problema — stessa tecnica (assegnazione diretta) già in uso e
-       * verificata in passaASessione per il riclic sessione. Misurato:
-       * scrollIntoView 0px mossi; scrollTo diretto, in ~60ms, esatto.
-       */
-      /*
-       * ⛔ 06/9, owner: «non far partire l'animazione di scroll se la conversazione è già scrollata
-       * alla fine». Strumentato prima di scrivere: qui si chiamava `scrollTo` su `#conversation`, che
-       * dopo il passaggio al mockup è la COLONNA (non scorre) — quindi la chiamata era inerte e
-       * l'animazione la faceva partire qualcun altro. Corretto il bersaglio, resta il punto vero:
-       * un'animazione che parte da fermo per arrivare dov'è già è un movimento senza informazione.
-       * Se il fondo è già in vista si aggiusta di scatto (o non si muove niente); si anima solo quando
-       * c'è davvero una distanza da percorrere, così il movimento significa «ti sto portando altrove».
-       * Ricerca 06/09/2026: shadcn/ui «Message scroller» e stackblitz-labs/use-stick-to-bottom — si
-       * segue solo mentre si sta già in fondo, e si distingue lo scorrimento della persona da quello
-       * dell'animazione senza debounce.
-       */
-      const scroller = scrollerConversazione(conversazione);
-      if (scroller) scorriInFondoConversazione(scroller);
-    }, 40);
+  function scorriAllaBollaAppesa(article, { azioneDellaPersona = false } = {}) {
+    if (azioneDellaPersona) riarmaSeguiConversazione();
+    const conversazione = $('#conversation');
+    if (!article?.isConnected || conversazione?.classList.contains('is-restoring')) return;
+    scrollStreamingOutput(article);
   }
 
-  /** Il fondo, con l'animazione solo se serve davvero. Soglia condivisa con fondoConversazioneInVista. */
+
+  /**
+   * Il fondo, con l'animazione solo se serve davvero. Soglia condivisa con fondoConversazioneInVista.
+   *
+   * ⛔ 16/09/2026 (P0, punto 6) — da oggi ha UN SOLO chiamante: il pulsante «torna in fondo»
+   *   (`talos-vai-in-fondo`). Cioè significa una cosa sola, «la persona ha CHIESTO il fondo» — e
+   *   allora il seguito si riarma qui, nel punto in cui la richiesta arriva, invece che su un
+   *   evento del modello. L'animazione resta: questa è una navigazione voluta, e un movimento
+   *   voluto si vede volentieri.
+   */
   const CONVERSAZIONE_FONDO_SOGLIA_PX = 24;
   function scorriInFondoConversazione(scroller) {
     if (!scroller) return;
+    riarmaSeguiConversazione();
     const distanza = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
     if (distanza <= CONVERSAZIONE_FONDO_SOGLIA_PX) { scroller.scrollTop = scroller.scrollHeight; return; } // già in fondo: nessuna animazione
     // BC-43: anche il sistema può chiedere movimento ridotto; 'auto' dipende dal CSS.
@@ -1536,6 +1717,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function setView(view, options = {}) {
     const target = $(`[data-view="${view}"]`);
     if (!target) return;
+    if (!options.paginaModello && $('#paginaModello:not([hidden])')) chiudiPaginaModello({ ripristina: false });
+    if (!options.startup) startupNavigation.next();
     const previous = views.find((pane) => pane.classList.contains('active'));
     // Una vista può diventare nuovamente il target mentre la sua precedente
     // animazione di uscita è ancora in corso. In quel caso la callback
@@ -1574,7 +1757,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      * fatto qui perché `setView` è il solo posto da cui si naviga.
      */
     views.forEach((pane) => { pane.hidden = pane !== target; });
-    const SCHERMO_PER_VISTA = { chat: 'chat', vuota: 'vuota', terminal: 'terminale', diff: 'review', capability: 'capability', dashboard: 'board', memoria: 'memoria', attivita: 'attivita', note: 'note', progetti: 'progetti', settings: 'impostazioni', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automations: 'automazioni', browser: 'browser' };
+    const SCHERMO_PER_VISTA = DESTINATION_BY_VIEW;
     const schermo = SCHERMO_PER_VISTA[view] || view;
     document.documentElement.setAttribute('data-vista', ['chat', 'vuota', 'terminale', 'review', 'browser'].includes(schermo) ? 'sessione' : 'pagina');
     document.documentElement.setAttribute('data-schermo', schermo);
@@ -1591,6 +1774,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     // Il cassetto della barra si chiude appena si naviga: è il `closeDrawer()` in coda a `navigate` del mockup (riga 6097).
     chiudiCassettoBarra({ restituisciFuoco: false });
     resetEmbeddedTopbarScroll(view === 'chat' ? chatConversation : target);
+    workspaceUI?.update(view);
     window.__talosHarnessHostViewChange?.(view);
     if (view === 'settings') inizializzaModelLab();
     if (view === 'dashboard') ensureSessionsBoard();
@@ -1605,6 +1789,11 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (view === 'progetti') void caricaPaginaProgetti(); // 06/9: stessa storia delle Note, trovata dal cancello
     if (view === 'automations') renderAutomationsReali();
     if (view === 'browser') renderizzaBrowser(); // 06/9 K-I
+    /* BC-67, 17/09: stessa riga del Browser e per la stessa ragione — entrando nella Revisione si
+       ridisegna dai FATTI della sessione corrente, altrimenti restano a schermo i file d'esempio del
+       template (o quelli della sessione di prima). ⛔ L'avvio da solo non basta: `aggiornaTestataSessione`
+       gira anche dopo, e il riassunto della testata tornava vuoto — misurato, non previsto. */
+    if (view === 'review') { renderRealReviewList(); aggiornaSommarioReviewReale(); }
     if (view === 'terminal') apriVistaTerminaleReale(); // ⭐ 28/8 — Terminale REALE: montaggio/connessione PIGRI, solo alla prima apertura del tab (LEDGER-TERMINALE-REALE.md)
   }
 
@@ -2091,7 +2280,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!dialog.dataset.dialogResizeKey) prepareResizableDialog(dialog, `dialog:${dialog.id}`);
     cancelMotionAnimationsFor(dialog);
     prossimaGenerazione(dialog);
+    const opener = ROOT().activeElement;
     if (!dialog.open) dialog.show();
+    modalManager?.activate(dialog, { opener, backdrop: harnessDialogBackdrop, requestClose: () => closeEmbeddedDialog(dialog) });
     markMotionEnter(dialog);
     harnessDialogBackdrop.style.pointerEvents = ''; // ⛔ vedi closeEmbeddedDialog sotto — un dialog che riapre deve annullare la disattivazione lasciata da una chiusura precedente
     syncEmbeddedDialogBackdrop();
@@ -2126,7 +2317,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       // contenuto nuovo (una prossimaGenerazione() più recente), questa
       // callback tardiva non deve richiuderlo — vedi cancelMotionAnimationsFor
       // sopra per l'altra metà della cura (ferma anche l'animazione visiva).
-      if (dialog.open && motionGenerazione.get(dialog) === generazioneAllaChiusura) dialog.close();
+      if (dialog.open && motionGenerazione.get(dialog) === generazioneAllaChiusura) { dialog.close(); modalManager?.deactivate(dialog); }
       syncEmbeddedDialogBackdrop();
       syncBackgroundDialogPause();
     });
@@ -2160,7 +2351,35 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     entra: (el) => markMotionEnter(el),
     fuocoDiRitorno: () => $('#campanella') || $('#composerInput'),
   });
+  /*
+   * ⛔⛔ BC-77 (a), 17/09/2026 — il pavimento della pila dei toast è l'ingombro VERO del piede
+   *   della chat, non un numero. Misurato prima della cura, a 1024×800: «Collegato di nuovo»
+   *   copriva cinque comandi, fra cui quello che ferma il giro. Dettaglio e ricerca in
+   *   `components/toast.js`; la prova è `tests/browser/toast-non-copre-i-comandi.spec.mjs`.
+   */
+  /*
+   * ⛔⛔⛔ 18/09/2026 — IL TETTO DEI TOAST È STATO TOLTO. ORDINE DELL'OWNER, ED È LA CONVENZIONE.
+   *
+   * Qui c'era `ancoraToastSopraIComandi($('#schermoChat .talos-chat-foot'), …)`, la cura BC-77 del
+   * 17/09: alzava la pila sopra tutto il piede della chat perché a 1024 copriva cinque comandi.
+   * Misurato il 18/09 sul 4174: con la chat viva i toast finivano a **324 px dal fondo**, col
+   * terminale aperto a **543**. Owner: «un toast si comporta come un toast, rendilo esattamente come
+   * prima sempre in fondo allo schermo e se ci sono più toast si stackano uno sopra l'altro».
+   * ⇒ La pila torna in fondo (`styles/index.css`: `bottom: var(--talos-space-lg)`) e impila verso
+   *   l'alto — che è anche la convenzione: in una pila ancorata in basso **il più recente sta in
+   *   fondo** e i precedenti salgono (Halstack «the newest toast will appear at the bottom of the
+   *   stack»; Salt «when you stack them from the bottom, the newest toast should be at the bottom»;
+   *   snora, «Bottom: new toasts appear above older ones»). Il nostro `creaPilaToast` fa esattamente
+   *   questo: accoda la scheda nuova, la griglia la disegna per ultima, cioè in basso.
+   * ⛔ Conseguenza dichiarata: a finestre strette il toast può coprire il tondo «torna in fondo» —
+   *   è il comportamento che l'owner vuole.
+   */
+  const ancoraggioToast = null;
   function toast(title, message = '', opzioni = {}) {
+    /* Si rimisura ANCHE qui: il `ResizeObserver` vede il piede cambiare misura, non la vista che si
+       apre o si chiude — e un toast che arriva mentre si torna in chat deve trovare il pavimento
+       giusto già al primo disegno, non dopo il primo sussulto. */
+    ancoraggioToast?.misura(); // ⛔ 18/09/2026: ora è `null` — il tetto è stato tolto (vedi sopra)
     return mostraToast(String(title), message == null ? '' : String(message?.message ?? message), opzioni);
   }
 
@@ -2212,16 +2431,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   window.addEventListener('online', () => sorveglianza.segnalaBrowser(true));
   barraStatoChat?.querySelector('[data-runtime-riprova]')?.addEventListener('click', () => sorveglianza.riprova());
   /** fetch delle API centrali: ogni esito informa la sorveglianza (T-15). */
-  async function fetchSorvegliata(url, init) {
-    try {
-      const risposta = await fetch(url, init);
-      sorveglianza?.segnalaRete(true);
-      return risposta;
-    } catch (error) {
-      sorveglianza?.segnalaRete(false, 'fetch');
-      throw error;
-    }
+  function apiCentrale() {
+    centralApi ??= createApiClient({ resolvePath: API,
+      network: (connected) => sorveglianza?.segnalaRete(connected, 'fetch'),
+    });
+    return centralApi;
   }
+  function fetchSorvegliata(url, init) { return apiCentrale().observedFetch(url, init); }
 
   // REAL_DATA_RENDER_START
   function textElement(tagName, className, value) {
@@ -2504,60 +2720,32 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * attrezzi». Questa è LA mappa nome-tecnico → nome-umano, in un posto solo
    * — mai una seconda copia sparsa in un template o in una stringa.
    * ⛔ Ripiego ONESTO: un attrezzo che non conosciamo (ne nascono, vedi
-   * `tool_create`) mostra il suo nome grezzo, mai un'etichetta inventata.
+   * `tool_create`) si dichiara senza nome, mai un'etichetta inventata e mai
+   * — dal 17/09, BC-59 — il suo id tecnico messo a schermo come se fosse un nome.
    * ⛔ I nomi che il MODELLO riceve non cambiano di una lettera: quelli sono
    * il contratto col kernel (ATTREZZI_OPENAI in talosHarness.mjs) e la loro
    * unica fonte resta il server. Qui si traduce solo ciò che si SCRIVE a
    * schermo; il nome tecnico resta come dettaglio secondario nel title.
    */
   function nomeUmanoAttrezzo(nome) {
-    const UMANI = {
-      elenca: 'elenco della cartella',
-      cerca: 'ricerca nei file',
-      leggi: 'lettura di un file',
-      scrivi: 'scrittura di un file',
-      prova: 'esecuzione dei test',
-      shell: 'comando nel terminale',
-      naviga: 'apertura di una pagina web',
-      web_search: 'ricerca sul web',
-      artifact_create: 'creazione di un artefatto',
-      document_create: 'creazione di un documento',
-      generate_image: 'generazione di un’immagine',
-      delega_sottotask: 'delega a un sotto-agente',
-      time_now: 'data e ora',
-      tool_create: 'creazione di un attrezzo nuovo',
-      library_list: 'elenco della Libreria',
-      library_search: 'ricerca in Libreria',
-      library_read: 'lettura di un file di Libreria',
-      library_file_origin: 'origine di un file di Libreria',
-      library_rename: 'rinomina di un file di Libreria',
-      library_delete: 'eliminazione di un file di Libreria',
-      library_export: 'copia di un file di Libreria nel workspace',
-      library_context_policy_update: 'regole d’uso della Libreria',
-      notes_list: 'elenco delle note',
-      notes_create: 'scrittura di una nota',
-      notes_update: 'modifica di una nota',
-      notes_delete: 'eliminazione di una nota',
-      tasks_list: 'elenco delle attività',
-      tasks_create: 'creazione di un’attività',
-      tasks_complete: 'chiusura di un’attività',
-      tasks_update: 'modifica di un’attività',
-      tasks_delete: 'eliminazione di un’attività',
-      memory_search: 'ricerca nella memoria',
-      memory_write: 'scrittura in memoria',
-      memory_update: 'correzione di una memoria',
-      memory_delete: 'eliminazione di una memoria',
-      research_list: 'elenco delle ricerche',
-      research_start: 'avvio di una ricerca approfondita',
-      research_read: 'lettura del rapporto di ricerca',
-      research_rename: 'rinomina di una ricerca',
-      research_pause: 'pausa di una ricerca',
-      research_resume: 'ripresa di una ricerca',
-      research_cancel: 'annullamento di una ricerca',
-      research_delete: 'eliminazione di una ricerca',
-      research_deposit: 'consegna del rapporto di ricerca', // 12/09: L8. ⛔ Copia della mappa di nomi-attrezzi.js: debito, la mappa deve vivere in UN posto solo
-    };
-    return UMANI[nome] || String(nome ?? '');
+    /*
+     * ⛔⛔ BC-59, 17/09/2026 — LA MAPPA ERA DUE, E LA SECONDA ERA VECCHIA.
+     *   Qui viveva una COPIA di NOMI_UMANI_ATTREZZI (45 righe), aggiunta il 12/09 con un commento
+     *   che già la chiamava «debito: la mappa deve vivere in UN posto solo». Il debito si è
+     *   riscosso da solo: `file_edit` è entrato nel kernel il 16/09 (`talosHarness.mjs:2768`), è
+     *   stato aggiunto alla mappa vera e NON a questa — e il ripiego `String(nome)` lo ha stampato
+     *   tale e quale nella riga attività della chat: un nome tecnico a schermo, vietato
+     *   dall’owner il 04/09.
+     * ⇒ La copia sparisce. Una mappa sola, quella di `nomi-attrezzi.js`, che è anche l’unica
+     *   coperta dal test di contratto contro gli attrezzi dichiarati dal kernel
+     *   (`tests/unit/nomi-attrezzi-copertura.test.mjs`).
+     * ⛔ E il ripiego NON è più l’id tecnico: un attrezzo che nessuno ha ancora etichettato (MCP,
+     *   skill, attrezzo costruito a runtime) si annuncia come tale, e il suo id resta dov’era —
+     *   nel `title`, come dettaglio secondario. Restituire l’id era comodo e rompeva la regola
+     *   in silenzio proprio nel caso in cui serviva rispettarla.
+     */
+    /* 17/09: né l'id grezzo né un'etichetta inventata — il nome stesso, reso leggibile (vedi `nomeDiRipiegoAttrezzo`). */
+    return nomeUmanoAttrezzoCondiviso(nome) || nomeDiRipiegoAttrezzo(nome);
   }
 
   /** Serializzazione stabile (chiavi ordinate, ricorsiva): due argomenti equivalenti scritti diversi devono dare la STESSA chiave. */
@@ -2675,12 +2863,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * zero meccanismo nuovo lato dati). Nessuna espansione/dettaglio: a
    * differenza della vecchia riga campagna, qui non c'è un'"evidenza" da
    * mostrare o nascondere, solo un riepilogo.
+   *
+   * ⛔⛔ BC-70, 17/09/2026 — QUI STAVA UNA SECONDA `formattaOraSessione`, e non lo sapeva nessuno.
+   *   Una identica per nome ne esiste un'altra più in basso (ora `oraDelGiorno`): due dichiarazioni
+   *   di funzione nello STESSO ambito non danno né errore né avviso — l'ultima vince, in silenzio.
+   *   ⇒ Questa, con la sua guardia su `NaN` e il formato data+ora, non è mai stata eseguita: era
+   *   codice morto che SEMBRAVA la funzione chiamata da due punti diversi. Tolta invece che
+   *   rinominata: non ha chiamanti, e in questo progetto un ramo morto che «tanto non scatta» è
+   *   esattamente ciò che torna a scattare (vedi il blocco poche righe più su).
    */
-  function formattaOraSessione(iso) {
-    const data = new Date(iso);
-    if (Number.isNaN(data.getTime())) return iso;
-    return data.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
-  }
 
   // 05/9 Fase 2: Board — righe e comandi nel DataTable approvato.
   function creaRigaSessioneBoard(sessione) {
@@ -2710,27 +2901,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (badge) badge.hidden = true;
   }
 
-  async function apiGet(pathname) {
-    const response = await fetchSorvegliata(API(pathname), {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-    });
-    let envelope;
-    try {
-      envelope = await response.json();
-    } catch {
-      const error = new Error('Risposta locale non valida');
-      error.code = 'INTERNAL_ERROR';
-      throw error;
-    }
-    if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
-      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
-      throw error;
-    }
-    return envelope.data;
-  }
+  function apiGet(pathname, options) { return apiCentrale().get(pathname, options); }
 
   function formattaByteModelLab(bytes) {
     const value = Number(bytes);
@@ -2843,6 +3014,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          `posizionamento` arriva come {ancora} dal clic sui «⋯» e come {x,y} dal tasto destro. */
       onMenu:(voci,dove)=>apriMenuAzioniLibreria(voci,Number.isFinite(dove?.x)&&Number.isFinite(dove?.y)?{x:dove.x,y:dove.y}:{ancoraEl:dove?.ancora??null})});
     const refresh=$('#providerRefresh');if(refresh)refresh.disabled=state.modelLab.loadingProviders;
+    /* Il velo «Fornitori e accessi», quando è aperto, è una seconda vista sullo STESSO
+       stato: si ridisegna qui, dove lo stato diventa DOM, e non da un punto suo. */
+    const velo=$('#veloFornitori');if(velo&&!velo.hidden)popolaVeloFornitori();
   }
 
   /**
@@ -3029,14 +3203,143 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     feedback.scrollIntoView({ block: 'nearest' });
   }
 
-  async function gestisciAzioneProvider(button) {
-    const card=button.closest('[data-provider-id]'),provider=card?.dataset.providerId,action=button.dataset.providerAction;
+  /*
+   * ⭐ 18/09 — IL VELO «FORNITORI E ACCESSI» AVEVA I PULSANTI MUTI.
+   * Il dialogo arriva dal mockup del Model Lab (`c66e2109`, 05/09) con una card
+   * d'esempio scritta a mano: OpenRouter, tre badge inventati («Chiave salvata»,
+   * «Indirizzo predefinito», «Mai provato») e cinque pulsanti che portano i nomi
+   * d'azione DEL MOCKUP (`salva`, `rimuovi`, `tutti`) invece di quelli che il
+   * gestore riconosce (`save-key`, `remove-key`). E l'ascolto era delegato solo su
+   * `#providerList`, che è un ALTRO nodo: il clic partiva, non arrivava a nessuno e
+   * non lasciava traccia — nessun errore, nessun messaggio.
+   *
+   * Qui il velo prende le card VERE dallo stesso renderer del pannello
+   * (`aggiornaProviderList`, che è anche quello che sa conservare fuoco e valore
+   * degli input attraverso i ridisegni) e delega i clic allo stesso gestore,
+   * traducendo i nomi in UN punto solo.
+   *
+   * Ricerca 18/09/2026 — vincoli, non conferme:
+   * · MDN «Event delegation»: l'ascolto si delega a un antenato che SOPRAVVIVE ai
+   *   ridisegni, perché i nodi ricreati perdono gli ascoltatori legati a mano.
+   * · W3C WAI-ARIA APG, «Dialog (Modal) Pattern»: si scambia il CORPO del dialogo, la
+   *   shell no — fuoco, Esc e ritorno al pulsante d'apertura restano quelli che
+   *   `apriVeloMockup` già gestisce.
+   * · «Non ri-renderizzare con un input attivo»: è il motivo per cui al renderer si
+   *   passa la riga del SOLO fornitore scelto e non l'elenco intero.
+   */
+  function popolaVeloFornitori() {
+    const velo = $('#veloFornitori'); if (!velo) return;
+    /* ⛔ 18/09 — la lista si cerca PRIMA dell'articolo d'esempio, e non il contrario:
+       l'articolo esiste solo la prima volta (poi è sostituito dalla lista), quindi
+       cercarlo per primo faceva uscire qui a ogni ridisegno successivo — la card
+       sparita dopo il primo caricamento, senza un errore. L'ha trovato la prova. */
+    let lista = velo.querySelector('[data-velo-lista]');
+    if (!lista) {
+      const statica = velo.querySelector('article[data-provider-id]');
+      if (!statica) return;
+      lista = document.createElement('div'); lista.dataset.veloLista = ''; statica.replaceWith(lista);
+    }
+    const stato = $('#providerStato');
+    const rows = Array.isArray(state.modelLab.providers) ? state.modelLab.providers : [];
+    const scelto = $('#providerLab')?.value || '';
+    const riga = rows.find((r) => r.id === scelto) || null;
+    if (!riga) {
+      /* Anche senza riga si passa dal renderer: sa dire «sto leggendo» e «nessun
+         fornitore dichiarato» — un vuoto, lì, sembra un guasto. */
+      aggiornaProviderList(lista, [], { caricamento: state.modelLab.loadingProviders, errore: state.modelLab.providerError });
+      if (stato) stato.textContent = state.modelLab.providerError ? 'Stato provider non disponibile' : (state.modelLab.loadingProviders ? 'Leggo gli accessi…' : 'Nessun accesso da mostrare per questo fornitore.');
+      return;
+    }
+    /* ⛔ `onMenu` NON è un optional: senza, il renderer non crea il «⋯» (`provider-card.js:234`)
+       e le azioni che vivono lì — fra cui «Rimuovi chiave» — restano `hidden` e
+       IRRAGGIUNGIBILI. Il velo avrebbe mostrato le card giuste con dei comandi morti dentro.
+       L'ha trovato la prova, cercando di cliccarne uno. */
+    aggiornaProviderList(lista, [riga], { aperte: state.modelLab.providerAperti, prove: state.modelLab.provePr, occupati: state.modelLab.providerOccupati, caricamento: state.modelLab.loadingProviders, errore: state.modelLab.providerError,
+      onMenu: (voci, dove) => apriMenuAzioniLibreria(voci, Number.isFinite(dove?.x) && Number.isFinite(dove?.y) ? { x: dove.x, y: dove.y } : { ancoraEl: dove?.ancora ?? null }) });
+    if (stato) {
+      const prova = state.modelLab.provePr?.get(riga.id);
+      const conChiave = riga.keyConfigured ? 'una chiave salvata' : 'nessuna chiave';
+      const ultima = !prova ? 'mai provato' : (prova.esito === 'in-corso' ? 'prova in corso' : prova.esito === 'collegato' ? 'collegato' : 'non collegato');
+      stato.textContent = `Questo fornitore ha ${conChiave} · ${ultima}.`;
+    }
+  }
+
+  /* Il fornitore che il velo mostra si apre da solo: il mockup lo disegna aperto
+     (`aria-expanded="true"`) e un fornitore appena scelto che resta chiuso sarebbe un
+     clic in più per vedere ciò che si è appena chiesto. La testata resta cliccabile
+     per richiuderlo, e lo stato è lo STESSO del pannello (`providerAperti`). */
+  function apriFornitoreDelVelo() {
+    const id = $('#providerLab')?.value; if (!id) return;
+    (state.modelLab.providerAperti ??= new Set()).add(id);
+  }
+
+  /*
+   * «Prova tutti»: una richiesta per provider, in parallelo — la macchina e la rete
+   * sono le stesse per tutti in questo istante. Sta a livello di file, e non dentro
+   * `inizializzaModelLab`, perché la chiama anche il velo: e il velo si apre SENZA
+   * passare dal Model Lab.
+   */
+  async function provaTuttiProvider(bottone) {
+    const prima = bottone?.textContent;
+    if (bottone) { bottone.disabled = true; bottone.textContent = 'Provo tutti…'; }
+    try {
+      await Promise.all((state.modelLab.providers || []).map((row) => provaProviderModelLab(row.id)));
+    } finally {
+      if (bottone) { bottone.disabled = false; bottone.textContent = prima; }
+    }
+  }
+
+  /*
+   * ⭐⭐ 18/09 — IL VELO «FORNITORI E ACCESSI», e i suoi due ascoltatori.
+   * ⛔ STANNO QUI, FUORI da `inizializzaModelLab`, e non è un dettaglio di stile: quel
+   * blocco viene eseguito quando si entra nel Model Lab, e la schermata del Model Lab
+   * oggi è RITIRATA (`157a87d2`) — quindi gli ascoltatori registrati là dentro non
+   * esistevano, e i clic del velo cadevano nel vuoto un'altra volta, per una ragione
+   * diversa da quella che li aveva già resi muti. L'ha trovato la prova: la card
+   * arrivava (la popola `apriVeloMockup`), il cambio della tendina no.
+   * Il gestore è lo STESSO del pannello — e le azioni arrivano già coi nomi canonici,
+   * perché la card che si vede è quella generata dal renderer, non quella d'esempio
+   * del mockup. (Avevo scritto una mappa `salva`→`save-key` e `rimuovi`→`remove-key`:
+   * era codice MORTO, perché la card statica viene sostituita alla prima apertura.
+   * L'ha mostrato la prova, cercando un pulsante che non esisteva più.) L'unica
+   * azione che il mockup porta FUORI dalla card è `tutti`, che non è un'azione di
+   * fornitore ma il «Prova tutti» del piede.
+   */
+  $('#veloFornitori')?.addEventListener('click', (event) => {
+    const toggle = event.target.closest('[data-provider-toggle]');
+    if (toggle) {
+      state.modelLab.providerAperti ??= new Set();
+      const id = toggle.dataset.providerToggle;
+      if (state.modelLab.providerAperti.has(id)) state.modelLab.providerAperti.delete(id);
+      else state.modelLab.providerAperti.add(id);
+      popolaVeloFornitori();
+      return;
+    }
+    const azione = event.target.closest('[data-provider-action]');
+    if (!azione) return;
+    const nome = azione.dataset.providerAction;
+    if (nome === 'tutti') { void provaTuttiProvider(azione); return; }
+    gestisciAzioneProvider(azione);
+  });
+  /*
+   * La tendina sceglie QUALE fornitore la card mostra: è la ragione per cui esiste.
+   * E lo mostra APERTO — il mockup lo disegna così (`aria-expanded="true"`), e un
+   * fornitore appena scelto che resta chiuso sarebbe un clic in più per vedere ciò che
+   * si è appena chiesto. La testata resta cliccabile per richiuderlo.
+   */
+  $('#providerLab')?.addEventListener('change', () => { apriFornitoreDelVelo(); popolaVeloFornitori(); });
+
+  async function gestisciAzioneProvider(button, azioneTradotta) {
+    const card=button.closest('[data-provider-id]'),provider=card?.dataset.providerId,action=azioneTradotta||button.dataset.providerAction;
     if(!provider||!action||state.modelLab.provePr?.get(provider)?.esito==='in-corso')return;
     state.modelLab.providerOccupati??=new Set();if(state.modelLab.providerOccupati.has(provider))return;
     if(action==='test'){await provaProviderModelLab(provider);return;}
     if(action==='oauth-start'){await avviaAccessoProvider(provider);return;}
     const key=card.querySelector('[data-provider-key]')?.value||'',endpoint=card.querySelector('[data-provider-endpoint]')?.value||'',timeoutSeconds=Number(card.querySelector('[data-provider-timeout]')?.value||60);
-    const corrente=()=>$('#providerList')?.querySelector('[data-provider-id="'+provider+'"]');
+    /* ⛔ 18/09 — la card da aggiornare non è per forza quella del pannello: il velo
+       «Fornitori e accessi» ha la sua. Se è ancora nel documento si usa quella (è la
+       stessa su cui l'owner ha appena cliccato), altrimenti si ricade sul pannello. */
+    const corrente=()=>card?.isConnected?card:$('#providerList')?.querySelector('[data-provider-id="'+provider+'"]');
     state.modelLab.providerOccupati.add(provider);renderizzaProviderModelLab();
     try {
       const base='/api/v1/providers/'+encodeURIComponent(provider);let messaggio;
@@ -3252,16 +3555,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /**
    * 06/9 B6.8: la scheda «Installati» è il pannello del
    * mockup (`components/modelli-installati.js`). Il modello caricato lo dice il motore locale
-   * (llama.cpp «ready» + il modello scelto); RAM da `state.modelLab.capacity`; il verdetto
+   * (llama.cpp «ready» + modelId osservato); RAM da `state.modelLab.capacity`; il verdetto
    * «Entra» da `state.modelLab.fit` (si chiede con «Verifica compatibilità», mai da solo).
    */
   function runtimeInstallati() {
     const llama = (state.modelLab.runtimes || []).find((r) => r.runtimeId === 'llama.cpp');
     const mem = state.modelLab.capacity?.memory;
-    const caricato = llama?.runtimeState === 'ready' ? (state.modelLab.selectedRuntimeModel || null) : null;
+    const caricato = llama?.state === 'observed' && llama.runtimeState === 'ready' ? (llama.modelId || null) : null;
     const fitCaricato = caricato ? state.modelLab.fit.get(caricato)?.esito?.memory?.requiredBytes : undefined;
     return {
       caricato,
+      unloading: Boolean(state.modelLab.unloading),
+      loading: Boolean(state.modelLab.loadingRuntime || !state.modelLab.runtimeMeasured),
+      error: state.modelLab.runtimeError || null,
       ramTotaleBytes: mem?.totalBytes,
       liberiBytes: mem?.freeBytes,
       usatiDalModelloBytes: Number.isFinite(fitCaricato) ? fitCaricato : undefined,
@@ -3285,10 +3591,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       nodoFit: (id) => nodoVerdettoFit(id),
       azioni: {
         verifica: (id) => { void verificaCompatibilitaModello(id); },
-        libera: () => { void liberaMemoriaModello(); },
+        libera: (id) => { void liberaMemoriaModello(id); },
         copia: async (id) => { const m = state.modelLab.installed.find((x) => x.id === id); try { await navigator.clipboard?.writeText(m?.path || ''); toast('Percorso copiato', m?.path || ''); } catch { toast('Percorso non copiato', 'Il browser non ha dato accesso agli appunti.'); } },
         rinomina: (id) => apriRinominaModelloLocale(id),
         elimina: (id) => apriEliminaModelloLocale(id),
+        pagina: (id) => apriPaginaModello(id, 'card'), // 18/09: la pagina del modello, con la rotta del mockup
       },
     });
   }
@@ -3413,6 +3720,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.modelLab.loadingRuntime = false;
       state.modelLab.runtimeMeasured = true;
       renderizzaRuntimeModelLab();
+      renderizzaModelliLocaliModelLab();
+      aggiornaPannelloMemoria();
     }
   }
 
@@ -3436,7 +3745,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const hfPanel = $('#modelLabHfPanel'); const installedPanel = $('#modelLabInstalledPanel');
     if (hfPanel && !hfPanel.dataset.hfMontato && !hfPanel.querySelector('[data-model-lab-enhanced="hf"]')) {
       const controls = document.createElement('div'); controls.dataset.modelLabEnhanced = 'hf'; controls.className = 'model-lab-enhanced-controls';
-      controls.innerHTML = '<label class="setting-control"><span>Ordina</span><select id="modelLabHfSortControl" aria-label="Ordina risultati Hugging Face"><option value="downloads">Download</option><option value="likes">Preferiti</option><option value="created">Più recenti</option><option value="lastModified">Aggiornati</option></select></label><label class="setting-control"><span>Autore</span><input id="modelLabHfAuthorControl" type="search" aria-label="Filtra per autore Hugging Face" placeholder="Organizzazione" /></label><label class="setting-control"><span>Filtri</span><input id="modelLabHfFiltersControl" type="search" aria-label="Filtra modelli Hugging Face" placeholder="q4, text-generation" /></label><button class="secondary-btn compact" id="modelLabHfNextButtonControl" type="button" hidden>Carica altri risultati</button>';
+      controls.innerHTML = '<label class="setting-control"><span>Ordina</span><select id="modelLabHfSortControl" aria-label="Ordina risultati Hugging Face"><option value="downloads">Download</option><option value="likes">Preferiti</option><option value="createdAt">Più recenti</option><option value="lastModified">Aggiornati</option></select></label><label class="setting-control"><span>Autore</span><input id="modelLabHfAuthorControl" type="search" aria-label="Filtra per autore Hugging Face" placeholder="Organizzazione" /></label><label class="setting-control"><span>Filtri</span><input id="modelLabHfFiltersControl" type="search" aria-label="Filtra modelli Hugging Face" placeholder="q4, text-generation" /></label><button class="secondary-btn compact" id="modelLabHfNextButtonControl" type="button" hidden>Carica altri risultati</button>';
       hfPanel.insertBefore(controls, hfPanel.querySelector('.model-lab-catalog-layout'));
     }
     if (installedPanel && !installedPanel.dataset.installatiMontato && !installedPanel.querySelector('[data-model-lab-enhanced="installed"]')) {
@@ -3599,8 +3908,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     else for (const [k, v] of state.modelLab.hfStima?.perVariante || []) stima.set(k, v);
     aggiornaHf(panel, state.modelLab.hfResults, {
       selezionato: state.modelLab.hfSelected, detail, stima, scelta: state.modelLab.hfVariante || null,
-      errore: state.modelLab.hfError, caricamento: state.modelLab.hfCaricamento === true, altri: Boolean(state.modelLab.hfCursor),
-      seleziona: (repo) => { void apriDettaglioHf(repo); },
+      errore: state.modelLab.hfError, errorePagina: state.modelLab.hfErrorePagina, caricamento: state.modelLab.hfCaricamento === true, altri: Boolean(state.modelLab.hfCursor),
+      seleziona: (repo) => apriPaginaHfDallaLista(repo),
       azioni: {
         scegli: (chiave) => { state.modelLab.hfVariante = chiave; renderizzaHfConMockup(); },
         misura: (gruppi) => { void misuraVariantiHfModelLab(gruppi.map((g) => ({ chiave: g.chiave, bytes: g.bytes }))); },
@@ -3609,6 +3918,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         scheda: (det, bottone) => mostraSchedaModelloHf(det, bottone),
       },
     });
+    aggiornaOsservazioneHf();
     return true;
   }
   async function apriDettaglioHf(repo) {
@@ -3926,7 +4236,33 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * pulsante che libera quella — l'unica memoria di cui siamo padroni.
    */
   function aggiornaPannelloMemoria() {
-    aggiornaMisuraMemoria($('#modelLabOverviewPanel [data-memory-meter]'), {
+    const osservato = (state.modelLab.runtimes || []).find(r => r.runtimeId === 'llama.cpp');
+    const pronto = osservato?.state === 'observed' && osservato.runtimeState === 'ready';
+    const bloccato = !pronto || state.modelLab.loadingRuntime || state.modelLab.unloading || state.modelLab.runtimeError;
+    const globale = $('#modelLabLiberaMemoria');
+    if (globale) {
+      globale.disabled = Boolean(bloccato);
+      globale.textContent = state.modelLab.unloading ? 'Liberazione…' : 'Libera memoria';
+      globale.title = state.modelLab.runtimeError ? 'Stato del runtime non disponibile: aggiorna Sistema'
+        : pronto ? 'Scarica dalla memoria il modello locale. I file restano sul disco.' : 'Nessun modello locale caricato';
+    }
+    const locale = $('#azioneModello[data-action="memoria"]');
+    if (locale) {
+      locale.disabled = Boolean(bloccato);
+      locale.textContent = state.modelLab.unloading ? 'Liberazione…' : 'Libera memoria';
+    }
+    montaggioPaginaModello?.aggiornaRuntime(runtimeInstallati());
+
+    /*
+     * ⛔ 18/09/2026 — IL NODO SI CERCA IN ENTRAMBE LE DESTINAZIONI, come le cinque funzioni di
+     *   montaggio (corsia 3). Segnalato dalla corsia 3 stessa come «una riga da cambiare, non è
+     *   mio file»: con la sola radice legacy, il giorno in cui il travaso verrà invertito questa
+     *   riga tornerebbe a mani vuote — e in SILENZIO, perché `aggiornaMisuraMemoria` con un nodo
+     *   nullo non lancia: la banda smetterebbe di aggiornarsi senza dirlo a nessuno.
+     *   Oggi la card è nel pannello legacy e la banda si aggiorna (misurato: «RAM libera … su …»
+     *   è a schermo nella foto del guscio); questa riga tiene anche domani.
+     */
+    aggiornaMisuraMemoria($('#modelLabOverviewPanel [data-memory-meter]') || $('#modelLabCard [data-memory-meter]') || $('[data-memory-meter]'), {
       capacita: state.modelLab.capacity, runtimes: state.modelLab.runtimes,
       caricamento: state.modelLab.loadingCapacity, caricamentoRuntime: state.modelLab.loadingRuntime,
       runtimeVerificato: Boolean(state.modelLab.runtimeMeasured), scaricamento: Boolean(state.modelLab.unloading),
@@ -3934,40 +4270,187 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     });
   }
 
-  async function liberaMemoriaModello() {
-    const bottone = $('#memoriaScarica');
-    if (state.modelLab.unloading || bottone?.disabled) return;
+  /*
+   * ⭐⭐ 18/09/2026 — LA PAGINA MODELLO, E LA SUA ROTTA (PO-30/PO-31, corsia 4).
+   *   Il componente esiste (`components/scheda-modello.js`, 9 prove verdi) ma NON lo montava
+   *   nessuno: la corsia 4 non poteva, perché la rotta vive in `app.js` e non era suo file.
+   *   Qui si monta, con la rotta del prototipo — `#/impostazioni/modelli/scheda/<id>/<card|files|compatibility>`
+   *   (`prototypes/calm-lab/src/model-navigation.mjs`).
+   * ⛔ Il contenitore porta le DUE cose che il componente dichiara di non avere: il padding e lo
+   *   scorrimento. Senza, le ultime righe finiscono fuori dal bordo — misurato dalla corsia 4
+   *   nelle sue foto («Ruolo di sistema» e la tabella dei Requisiti tagliate).
+   * ⛔ La rotta CONVIVE con l'hash che c'è già in questa app (`#open-workspace=…`, `#ui-lab`):
+   *   si riconosce solo il proprio prefisso e tutto il resto resta di chi era.
+   */
+  const ROTTA_PAGINA_MODELLO = /^#\/impostazioni\/modelli\/scheda\/([^/]+)\/(card|files|compatibility)$/;
+  function leggiRottaPaginaModello() {
+    const trovato = ROTTA_PAGINA_MODELLO.exec(window.location.hash || '');
+    if (!trovato) return null;
+    try { return { id: decodeURIComponent(trovato[1]), scheda: trovato[2] }; }
+    catch { return null; }
+  }
+  function contenitorePaginaModello() {
+    let pagina = $('#paginaModello');
+    if (!pagina) {
+      pagina = document.createElement('section');
+      pagina.id = 'paginaModello';
+      pagina.className = 'talos-pagina-modello';
+      pagina.dataset.c = 'ModelPage';
+      pagina.hidden = true;
+      pagina.setAttribute('aria-label', 'Pagina del modello');
+      /*
+       * ⛔ NON `ROOT()`: quello è il `document`, e un documento accetta UN solo elemento figlio.
+       *   Misurato: `HierarchyRequestError: Only one element on document allowed` — la pagina non
+       *   nasceva e l'errore restava in console, invisibile a chi guardava lo schermo. Si appende
+       *   al corpo (o all'host, quando la app gira dentro una cornice), dove stanno le schermate.
+       */
+      const ospite = $('#centro');
+      ospite?.appendChild(pagina);
+    }
+    return pagina;
+  }
+  let montaggioPaginaModello = null;
+  const RIPRESA_MODELLI_KEY = 'talos.harness.desktop.modelli.ripresa.v1';
+  const CAMPI_RICERCA_RIPRESA = ['modelLabHfSearch', 'modelLabHfSortControl', 'modelLabHfAuthorControl', 'modelLabHfFiltersControl'];
+  function leggiRipresaModelli() {
+    try {
+      const testo = window.sessionStorage.getItem(RIPRESA_MODELLI_KEY);
+      if (!testo || testo.length > 65536) return { pagine: [] };
+      const dati = JSON.parse(testo);
+      if (dati?.version !== 1) return { pagine: [] };
+      const pagine = (Array.isArray(dati.pagine) ? dati.pagine : []).slice(-20).filter(p =>
+        typeof p?.id === 'string' && p.id.length <= 1024 && /^[a-f0-9]{40,64}$/iu.test(p.revision)
+        && (p.scelta === null || (typeof p.scelta === 'string' && p.scelta.length <= 2048)));
+      const filtri = Object.fromEntries(CAMPI_RICERCA_RIPRESA.map(id => [id,
+        typeof dati.filtri?.[id] === 'string' ? dati.filtri[id].slice(0, 1024) : '']));
+      const faccette = Object.fromEntries(['accesso', 'licenza', 'parametri', 'popolarita', 'tipo', 'autore'].map(key => [key,
+        (Array.isArray(dati.faccette?.[key]) ? dati.faccette[key] : []).filter(v => typeof v === 'string' && v.length <= 200).slice(0, 20)]));
+      return { pagine, filtri, faccette };
+    } catch { return { pagine: [] }; }
+  }
+  function salvaRipresaModelli(dati) {
+    try { window.sessionStorage.setItem(RIPRESA_MODELLI_KEY, JSON.stringify({ ...dati, version: 1 })); }
+    catch { /* La navigazione resta utilizzabile anche con lo storage disabilitato. */ }
+  }
+  function salvaSceltaPaginaModello(id, scelta) {
+    if (!/^[a-f0-9]{40,64}$/iu.test(scelta?.revision)) return;
+    const dati = leggiRipresaModelli();
+    dati.pagine = [...dati.pagine.filter(p => p.id !== id), { id, revision: scelta.revision, scelta: scelta.scelta }].slice(-20);
+    salvaRipresaModelli(dati);
+  }
+  function apriPaginaHfDallaLista(repo) {
+    const item = state.modelLab.hfResults.find(r => (r.repo || r.id) === repo);
+    if (!item) return;
+    salvaRipresaModelli({ ...leggiRipresaModelli(),
+      filtri: Object.fromEntries(CAMPI_RICERCA_RIPRESA.map(id => [id, $('#' + id)?.value || ''])),
+      faccette: $('#modelLabHfPanel')?.__hfFiltri,
+    });
+    state.modelLab.hfSelected = repo;
+    apriPaginaModello(`hf:${repo}@${item.revision || 'main'}`, 'files');
+  }
+  async function ripristinaListaHf() {
+    setView('settings');
+    setSettingsSection('models');
+    const dati = leggiRipresaModelli();
+    const daRicaricare = !state.modelLab.hfCatalogoIniziale;
+    if (daRicaricare && dati.filtri) {
+      for (const id of CAMPI_RICERCA_RIPRESA) {
+        const input = $('#' + id);
+        if (input && dati.filtri[id]) input.value = dati.filtri[id];
+      }
+      state.modelLab.hfCatalogoIniziale = true;
+    }
+    setModelLabSection('huggingface');
+    if (daRicaricare && dati.filtri) {
+      await cercaHuggingFaceModelLab();
+      const panel = $('#modelLabHfPanel');
+      if (panel) panel.__hfFiltri = dati.faccette;
+      renderizzaHfConMockup();
+    }
+  }
+  function apriPaginaModello(id, scheda = 'card', { daRotta = false } = {}) {
+    if (!id) return;
+    setView('settings', { paginaModello: true });
+    const pagina = contenitorePaginaModello();
+    $('#centro')?.classList.add('talos-model-page-open');
+    if (montaggioPaginaModello?.stato.id === id && !montaggioPaginaModello.stato.distrutto) {
+      if (montaggioPaginaModello.stato.scheda !== scheda) montaggioPaginaModello.vaiA(scheda);
+      pagina.hidden = false;
+      if (!daRotta) scriviRottaPaginaModello(id, scheda);
+      return;
+    }
+    montaggioPaginaModello?.distruggi?.();
+    montaggioPaginaModello = montaSchedaModello(pagina, {
+      apiGet: (percorso) => apiGet(percorso),
+      apiPost: (percorso, corpo) => apiPost(percorso, corpo),
+      id,
+      scheda,
+      runtime: runtimeInstallati(),
+      onLiberaMemoria: modelId => liberaMemoriaModello(modelId),
+      inizio: leggiRipresaModelli().pagine.find(p => p.id === id) || null,
+      onScelta: scelta => salvaSceltaPaginaModello(id, scelta),
+      indietro: () => chiudiPaginaModello(),
+      onScheda: (nuova) => scriviRottaPaginaModello(id, nuova),
+      apriDownload: () => {
+        chiudiPaginaModello({ ripristina: false });
+        setView('settings');
+        setSettingsSection('models');
+        setModelLabSection('downloads');
+      },
+    });
+    pagina.hidden = false;
+    if (!daRotta) scriviRottaPaginaModello(id, scheda);
+  }
+  function chiudiPaginaModello({ daRotta = false, ripristina = true } = {}) {
+    const tornaHf = ripristina && montaggioPaginaModello?.stato.bersaglio.tipo === 'repo';
+    const pagina = $('#paginaModello');
+    if (pagina) pagina.hidden = true;
+    $('#centro')?.classList.remove('talos-model-page-open');
+    montaggioPaginaModello?.distruggi?.();
+    montaggioPaginaModello = null;
+    /* Uscendo dalla pagina la rotta non deve restare appesa: il prossimo «indietro» del
+       browser riaprirebbe una pagina che l'utente ha appena chiuso. */
+    if (!daRotta && leggiRottaPaginaModello()) window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`);
+    if (tornaHf) void ripristinaListaHf();
+  }
+  function scriviRottaPaginaModello(id, scheda) {
+    const nuova = `#/impostazioni/modelli/scheda/${encodeURIComponent(id)}/${scheda}`;
+    if (window.location.hash !== nuova) window.location.hash = nuova;
+  }
+  window.addEventListener('hashchange', () => {
+    const rotta = leggiRottaPaginaModello();
+    if (rotta) apriPaginaModello(rotta.id, rotta.scheda, { daRotta: true });
+    else chiudiPaginaModello({ daRotta: true });
+  });
+  /* ⭐ E se la app si apre CON la rotta già nell'indirizzo — un collegamento incollato, una
+     ricarica — la pagina si apre da sola. Il rinvio non è pigrizia: qui siamo ancora durante la
+     lettura del modulo, e il resto dell'app non ha finito di legarsi. */
+  window.setTimeout(() => {
+    const rottaIniziale = leggiRottaPaginaModello();
+    if (rottaIniziale) apriPaginaModello(rottaIniziale.id, rottaIniziale.scheda, { daRotta: true });
+  }, 0);
+
+  async function liberaMemoriaModello(modelId = null) {
+    const runtime = (state.modelLab.runtimes || []).find(r => r.runtimeId === 'llama.cpp');
+    if (state.modelLab.unloading || state.modelLab.loadingRuntime || state.modelLab.runtimeError
+      || runtime?.state !== 'observed' || runtime.runtimeState !== 'ready'
+      || (modelId && runtime.modelId !== modelId)) return;
     state.modelLab.unloading = true;
     aggiornaPannelloMemoria();
-    const originale = bottone?.textContent;
-    if (bottone) { bottone.disabled = true; bottone.textContent = 'Liberazione…'; }
-    const primaLiberi = state.modelLab.capacity?.memory?.freeBytes;
     try {
-      /*
-       * ⛔ 02/9 (notte) — il corpo era `{}` e la rotta rispondeva SEMPRE
-       * QUERY_INVALID: pretende `runtimeId`. Il pulsante non avrebbe mai
-       * funzionato. `modelId` non si manda perche' il server non espone
-       * quale modello sia caricato e l'implementazione lo ignora — la
-       * rotta e' stata corretta per non chiederlo piu' (vedi http-app.mjs).
-       */
       await apiPost('/api/v1/runtime/unload', { runtimeId: 'llama.cpp' });
-      // ⭐ Si RIMISURA subito: il risultato si dichiara con i byte veri
-      // liberati, non con un «fatto» generico.
       state.modelLab.capacity = null;
       await caricaCapacitaMacchina();
-      // ⛔ Anche lo stato del runtime va riletto: senza, il pulsante
-      // resterebbe abilitato su un runtime che ormai e' spento.
       await caricaRuntimeModelLab();
-      const dopoLiberi = state.modelLab.capacity?.memory?.freeBytes;
-      const guadagno = (Number.isFinite(primaLiberi) && Number.isFinite(dopoLiberi)) ? dopoLiberi - primaLiberi : null;
-      toast('Memoria liberata', guadagno && guadagno > 0
-        ? `${formattaByteModelLab(guadagno)} tornati disponibili.`
-        : 'Modello scaricato. La misura di sistema può aggiornarsi con qualche secondo di ritardo.');
+      if (state.modelLab.runtimeError) {
+        toast('Modello scaricato', 'Comando eseguito, ma non è stato possibile rileggere lo stato. Aggiorna Sistema.');
+      } else {
+        toast('Memoria liberata', 'Modello scaricato dalla memoria. I file installati restano sul disco.');
+      }
     } catch (error) {
       toast('Memoria non liberata', error.message || 'Il runtime locale non ha risposto.');
     } finally {
       state.modelLab.unloading = false;
-      if (bottone) { bottone.textContent = originale || 'Libera la memoria del modello'; }
       aggiornaPannelloMemoria();
     }
   }
@@ -4193,10 +4676,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const testo = await file.text();
         const letto = JSON.parse(testo);
         if (!letto || typeof letto !== 'object' || Array.isArray(letto)) throw new Error('il file non contiene un documento di preferenze');
-        salvaImpostazioniDesktop(letto); // normalizza: quello che non riconosce non entra
+        if (!salvaImpostazioniDesktop(letto)) throw new Error(t('Salvataggio delle preferenze non riuscito.')); // retain the validated import only after persistence
         const documento = leggiImpostazioniDesktop();
         applicaAspettoDesktop(documento.appearance);
-        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection });
+        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
         montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
         sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
         dillo(`Preferenze importate da «${file.name}».`);
@@ -4226,7 +4709,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         window.localStorage.removeItem(DESKTOP_SETTINGS_KEY);
         const documento = leggiImpostazioniDesktop();
         applicaAspettoDesktop(documento.appearance);
-        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection });
+        montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
         montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
         sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
         dillo('Preferenze riportate ai valori iniziali. Le conversazioni non sono state toccate.');
@@ -4378,7 +4861,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function inizializzaSettingsNavigation() {
-    montaImpostazioni($('#schermoImpostazioni'), leggiImpostazioniDesktop().appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection });
+    montaImpostazioni($('#schermoImpostazioni'), leggiImpostazioniDesktop().appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
     montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
     montaTrasferimentoImpostazioni(); // 06/9 D5: esporta · importa · ripristina
     sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(leggiImpostazioniDesktop().appearance)); // 06/9 B8
@@ -4405,26 +4888,51 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     setSettingsSection(saved || 'appearance', { persist: false });
   }
 
+  let hfGenerazione = 0;
+  let hfFirmaRicerca = '';
+  let hfCursoriLetti = new Set();
+  let hfOsservatore = null;
+  function aggiornaOsservazioneHf() {
+    hfOsservatore?.disconnect();
+    const next = $('#modelLabHfNextButtonControl');
+    if (!next || !state.modelLab.hfCursor || state.modelLab.hfCaricamento || state.modelLab.hfErrorePagina || !globalThis.IntersectionObserver) return;
+    hfOsservatore ||= new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting) && !document.hidden && state.view === 'settings' && !$('#paginaModello:not([hidden])')) void cercaHuggingFaceModelLab({ append: true });
+    }, { threshold: 0, rootMargin: '0px 0px 120px 0px' });
+    hfOsservatore.observe(next);
+  }
   async function cercaHuggingFaceModelLab({ append = false } = {}) {
     const search = $('#modelLabHfSearch', $('#modelLabCard'))?.value?.trim() || '';
-    state.modelLab.hfQuery = search;
-    if (!append) state.modelLab.hfCursor = null;
-    state.modelLab.hfError = null;
     const sort = $('#modelLabHfSortControl')?.value || 'downloads';
     const author = $('#modelLabHfAuthorControl')?.value?.trim() || '';
     const filters = ($('#modelLabHfFiltersControl')?.value || '').split(',').map((value) => value.trim()).filter(Boolean).slice(0, 8);
+    const firma = JSON.stringify([search, sort, author, filters]);
+    if (append && firma !== hfFirmaRicerca) append = false;
+    if (append && (state.modelLab.hfCaricamento || !state.modelLab.hfCursor)) return;
+    if (!append) { hfGenerazione++; hfCursoriLetti = new Set(); state.modelLab.hfCursor = null; state.modelLab.hfResults = []; hfFirmaRicerca = firma; }
+    const generazione = hfGenerazione, cursor = append ? state.modelLab.hfCursor : null;
+    state.modelLab.hfQuery = search;
+    state.modelLab.hfError = null; state.modelLab.hfErrorePagina = null;
     const status = $('#modelLabHfStatus'); if (status) status.textContent = 'Ricerca in corso...';
     state.modelLab.hfCaricamento = true; renderizzaHfConMockup();
     try {
       const params = new URLSearchParams({ query: state.modelLab.hfQuery, limit: '20', sort, direction: '-1' });
-      if (state.modelLab.hfCursor) params.set('cursor', state.modelLab.hfCursor);
+      if (cursor) params.set('cursor', cursor);
       if (author) params.set('author', author);
       for (const filter of filters) params.append('filter', filter);
       const data = await apiGet(`/api/v1/huggingface/search?${params}`);
-      state.modelLab.hfResults = append ? [...state.modelLab.hfResults, ...(data.items || [])] : (data.items || []);
-      state.modelLab.hfCursor = data.nextCursor || null;
+      if (generazione !== hfGenerazione) return;
+      const items = Array.isArray(data.items) ? data.items.filter(r => typeof r?.repo === 'string') : [];
+      state.modelLab.hfResults = [...new Map([...(append ? state.modelLab.hfResults : []), ...items].map(r => [r.repo, r])).values()];
+      if (cursor) hfCursoriLetti.add(cursor);
+      state.modelLab.hfCursor = typeof data.nextCursor === 'string' && data.nextCursor && !hfCursoriLetti.has(data.nextCursor) ? data.nextCursor : null;
       if (status) status.textContent = `${state.modelLab.hfResults.length} repository osservati`;
-    } catch (error) { state.modelLab.hfError = error; if (!append) state.modelLab.hfResults = []; if (status) status.textContent = 'Ricerca non disponibile'; }
+    } catch (error) {
+      if (generazione !== hfGenerazione) return;
+      if (append) state.modelLab.hfErrorePagina = error;
+      else { state.modelLab.hfError = error; state.modelLab.hfResults = []; }
+      if (status) status.textContent = 'Ricerca non disponibile';
+    }
     state.modelLab.hfCaricamento = false;
     const next = $('#modelLabHfNextButtonControl'); if (next) next.hidden = !state.modelLab.hfCursor;
     renderizzaHfRisultatiModelLab();
@@ -4434,6 +4942,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (state.modelLab.initialized) return;
     state.modelLab.initialized = true;
     montaCorniceModelLab($('#modelLabCardSettings') || $('#modelLabCard'));
+    /* ⭐⭐ 18/09 — IL GUSCIO A QUATTRO SCHEDE (corsia 2). Va DOPO la cornice: il guscio legge
+       l'interno del laboratorio, non lo possiede — le sei linguette legacy restano la verità, e
+       lui le sposta in un contenitore nascosto e le preme per conto suo. Stesso bersaglio della
+       riga qui sopra, e per la stessa ragione: `#modelLabCardSettings` non esiste, il vivo è
+       `#modelLabCard`. Senza questa riga il modulo non è montato da nessuno (misurato dalla
+       corsia: `grep -c montaGuscioLaboratorio dist/app.js` = 0). */
+    montaGuscioLaboratorio($('#modelLabCardSettings') || $('#modelLabCard'));
     montaCatalogoModelli($('#modelLabCatalogPanel'), $('#panel-catalogo'));
     montaInstallati($('#modelLabInstalledPanel'), $('#panel-installati')); // 06/9 B6.8
     montaHf($('#modelLabHfPanel'), $('#panel-hf')); // 06/9 B6.9
@@ -4452,12 +4967,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     // aggiornaPannelloMemoria per perché NON si uccidono processi).
     $('#memoriaRimisura')?.addEventListener('click', async () => { state.modelLab.capacity = null; await caricaCapacitaMacchina(); await caricaRuntimeModelLab(); });
     $('#memoriaScarica')?.addEventListener('click', () => { void liberaMemoriaModello(); });
+    $('#modelLabLiberaMemoria')?.addEventListener('click', () => { void liberaMemoriaModello(); });
     $('#modelLabRuntimeSelect')?.addEventListener('change', (event) => { state.modelLab.selectedRuntime = event.target.value; state.modelLab.selectedRuntimeModel = ''; renderizzaRuntimeModelLab(); });
     $('#modelLabModelSelect')?.addEventListener('change', (event) => { state.modelLab.selectedRuntimeModel = event.target.value; renderizzaRuntimeModelLab(); });
     $('#modelLabRunButton')?.addEventListener('click', () => avviaProvaRuntimeModelLab());
     $('#modelLabCancelButton')?.addEventListener('click', () => annullaProvaRuntimeModelLab());
-    $('#modelLabHfSearchButton')?.addEventListener('click', () => cercaHuggingFaceModelLab());
-    $('#modelLabHfSearch')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
+    $('#modelLabHfSearchButton')?.addEventListener('click', () => { clearTimeout(attesaRicercaHf); cercaHuggingFaceModelLab(); });
     /*
      * ⛔⛔ 06/09 — la ricerca si avvia anche SCRIVENDO, non solo con Invio.
      *
@@ -4474,18 +4989,36 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * ogni tasto. Sotto i due caratteri non si chiama: `q=z` non è una ricerca.
      */
     let attesaRicercaHf = null;
-    $('#modelLabHfSearch')?.addEventListener('input', (event) => {
+    function programmaRicercaHf(event) {
       clearTimeout(attesaRicercaHf);
-      const testo = event.target.value.trim();
-      if (testo.length > 0 && testo.length < 2) return;
+      hfGenerazione++; state.modelLab.hfCaricamento = false; state.modelLab.hfCursor = null; state.modelLab.hfErrorePagina = null; hfOsservatore?.disconnect(); renderizzaHfConMockup();
+      const testo = $('#modelLabHfSearch')?.value.trim() || '';
+      if (event?.isComposing || (testo.length > 0 && testo.length < 2)) return;
       attesaRicercaHf = setTimeout(() => cercaHuggingFaceModelLab(), 450);
-    });
+    }
+    for (const id of ['modelLabHfSearch', 'modelLabHfAuthorControl', 'modelLabHfFiltersControl']) {
+      const campo = $(`#${id}`);
+      campo?.addEventListener('input', programmaRicercaHf);
+      campo?.addEventListener('compositionend', programmaRicercaHf);
+      campo?.addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !event.isComposing) {
+          clearTimeout(attesaRicercaHf);
+          cercaHuggingFaceModelLab();
+        }
+      });
+    }
     $('#modelLabHfNextButtonControl')?.addEventListener('click', () => cercaHuggingFaceModelLab({ append: true }));
-    $('#modelLabHfSortControl')?.addEventListener('change', () => { if (state.modelLab.hfQuery) cercaHuggingFaceModelLab(); }); // 06/9 B6.9
-    for (const id of ['modelLabHfAuthorControl', 'modelLabHfFiltersControl']) $(`#${id}`)?.addEventListener('keydown', (event) => { if (event.key === 'Enter') cercaHuggingFaceModelLab(); });
+    $('#modelLabHfSortControl')?.addEventListener('change', () => { clearTimeout(attesaRicercaHf); cercaHuggingFaceModelLab(); });
     $('#modelLabDownloadsPanel [data-action="soloAttivi"]')?.addEventListener('click', () => { downloadSoloAttivi = !downloadSoloAttivi; renderizzaDownloadConMockup(); }); // 06/9 B6.10
     $('#veloAnnullaDownload [data-lab-dialog-action="annullaDownload"], #veloAnnullaDownload .talos-button--danger')?.addEventListener('click', async () => { const id = $('#veloAnnullaDownload')?.dataset.downloadId; if (!id) return; try { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id)}/cancel`, {}); toast('Download annullato', id); } catch (error) { toast('Annullamento non riuscito', error.message); } chiudiVeloMockup('veloAnnullaDownload'); caricaDownloadModelLab(); });
-    $('#modelLabHfPanel [data-clear="hf"]')?.addEventListener('click', () => { for (const id of ['modelLabHfSearch', 'modelLabHfAuthorControl', 'modelLabHfFiltersControl']) { const c = $(`#${id}`); if (c) c.value = ''; } state.modelLab.hfResults = []; state.modelLab.hfError = null; state.modelLab.hfCursor = null; renderizzaHfConMockup(); });
+    $('#modelLabHfPanel [data-clear="hf"]')?.addEventListener('click', () => {
+      clearTimeout(attesaRicercaHf); hfGenerazione++; hfFirmaRicerca = ''; hfCursoriLetti = new Set(); hfOsservatore?.disconnect();
+      for (const id of ['modelLabHfSearch', 'modelLabHfAuthorControl', 'modelLabHfFiltersControl']) { const c = $(`#${id}`); if (c) c.value = ''; }
+      const ordine = $('#modelLabHfSortControl'); if (ordine) ordine.value = 'downloads';
+      const panel = $('#modelLabHfPanel'); if (panel) panel.__hfFiltri = filtriHfVuoti();
+      Object.assign(state.modelLab, { hfQuery: '', hfResults: [], hfSelected: null, hfDetail: null, hfStima: null, hfVariante: null, hfError: null, hfErrorePagina: null, hfCursor: null, hfCaricamento: false });
+      renderizzaHfConMockup();
+    });
     $('#modelLabInstalledStateFilter')?.addEventListener('change', (event) => { state.modelLab.installedStateFilter = event.target.value; renderizzaModelliLocaliModelLab(); }); // 06/9 B6.8
     // 06/9 B6.8: i dialoghi del mockup — SOLO rinomina/elimina: «annulla» è del velo Annulla download (B6.10) e non deve mai toccare un modello
     $$('[data-lab-dialog-action="rinomina"], [data-lab-dialog-action="elimina"]').forEach((b) => b.addEventListener('click', () => { void confermaDialogoModelloLocale(b.dataset.labDialogAction); }));
@@ -4512,19 +5045,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (azione) gestisciAzioneProvider(azione);
     });
     /* «Prova tutti»: una richiesta per provider, in parallelo — la macchina e
-       la rete sono le stesse per tutti in questo istante. */
-    $('#providerTestAll')?.addEventListener('click', async (event) => {
-      const bottone = event.currentTarget;
-      bottone.disabled = true;
-      const prima = bottone.textContent;
-      bottone.textContent = 'Provo tutti…';
-      try {
-        await Promise.all((state.modelLab.providers || []).map((row) => provaProviderModelLab(row.id)));
-      } finally {
-        bottone.disabled = false;
-        bottone.textContent = prima;
-      }
-    });
+       la rete sono le stesse per tutti in questo istante. La funzione sta FUORI di
+       qui (vedi `provaTuttiProvider` più sopra) perché la usa anche il velo, che
+       si apre senza passare dal Model Lab. */
+    $('#providerTestAll')?.addEventListener('click', (event) => provaTuttiProvider(event.currentTarget));
     caricaCapacitaMacchina();
     caricaRuntimeModelLab();
     caricaModelliLocaliModelLab();
@@ -4535,27 +5059,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   /** ⭐ 26/8, riconciliazione desktop→mobile — stesso contratto envelope di apiGet, per POST /api/v1/sessions/*. */
-  async function apiPost(pathname, body) {
-    const response = await fetchSorvegliata(API(pathname), {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    let envelope;
-    try {
-      envelope = await response.json();
-    } catch {
-      const error = new Error('Risposta locale non valida');
-      error.code = 'INTERNAL_ERROR';
-      throw error;
-    }
-    if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
-      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
-      throw error;
-    }
-    return envelope.data;
-  }
+  function apiPost(pathname, body, options) { return apiCentrale().post(pathname, body, options); }
 
   /*
    * ⭐ 12/09 — LE DUE PORTE CHE MANCAVANO. Fino a ieri la app sapeva solo chiedere (`apiGet`) e
@@ -4567,27 +5071,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   sostituisce il messaggio): è su quello che il modulo sceglie cosa dire, quindi qui si
    *   conserva com'è invece di appiattirlo su un testo generico.
    */
-  async function apiScrivi(metodo, pathname, body) {
-    const response = await fetchSorvegliata(API(pathname), {
-      method: metodo,
-      headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    let envelope;
-    try {
-      envelope = await response.json();
-    } catch {
-      const error = new Error('Risposta locale non valida');
-      error.code = 'INTERNAL_ERROR';
-      throw error;
-    }
-    if (!response.ok || !envelope?.ok) {
-      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
-      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
-      throw error;
-    }
-    return envelope.data;
-  }
+  function apiScrivi(metodo, pathname, body, options) { return apiCentrale().request(metodo, pathname, body, options); }
   function apiPatch(pathname, body) { return apiScrivi('PATCH', pathname, body); }
   function apiDelete(pathname) { return apiScrivi('DELETE', pathname); }
 
@@ -4966,7 +5450,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** ⭐ O-01 — solo estetica: un nome senza icona nota ricade su quella della sua categoria, mai su una sbagliata. */
   const ICONA_ATTREZZO = {
-    elenca: 'i-list', cerca: 'i-search', leggi: 'i-eye', scrivi: 'i-code', prova: 'i-check',
+    // ⛔ BC-59 (17/09): `file_edit` mancava anche qui — stessa icona di `scrivi`.
+    elenca: 'i-list', cerca: 'i-search', leggi: 'i-eye', scrivi: 'i-code', file_edit: 'i-code', prova: 'i-check',
     shell: 'i-terminal', naviga: 'i-web', web_search: 'i-search', artifact_create: 'i-layout',
     document_create: 'i-files', time_now: 'i-history', delega_sottotask: 'i-branch',
     generate_image: 'i-image', tool_create: 'i-settings',
@@ -4996,7 +5481,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function mostraInventarioEstensioni(tipo) {
     const p = inventariEstensioni.get(tipo), panel = $('#capPanel-' + tipo);
     if (!p || !panel || p.sessionId !== state.realSession.id) return;
-    aggiornaEstensioni(panel, p.voci, { tipo, ambito: p.sessionId, errore: p.errore, erroreAzione: p.erroreAzione, caricamento: p.caricamento, salvataggio: Boolean(scritturaEstensione), onAggiorna: () => caricaEstensioniCapability(tipo), onFida: v => fidaEstensioneCapability(tipo, v, p.sessionId) });
+    /* 5-ter, 17/09: i pacchetti GUASTI arrivano dal server accanto ai plugin, e non si perdono qui. */
+    aggiornaEstensioni(panel, p.voci, { tipo, ambito: p.sessionId, errore: p.errore, erroreAzione: p.erroreAzione, caricamento: p.caricamento, falliti: p.falliti, salvataggio: Boolean(scritturaEstensione), onAggiorna: () => caricaEstensioniCapability(tipo), onFida: v => fidaEstensioneCapability(tipo, v, p.sessionId) });
   }
   async function caricaEstensioniCapability(tipo) {
     if (!['skills', 'mcp', 'plugins', 'hooks'].includes(tipo)) return;
@@ -5014,6 +5500,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const valida = v => v && typeof v.id === 'string' && v.id.length && (tipo === 'skills' ? typeof v.name === 'string' && typeof v.description === 'string' : typeof v.fidato === 'boolean') && (tipo !== 'mcp' || typeof v.comando === 'string' && stringhe(v.argomenti) && stringhe(v.allowlist)) && (tipo !== 'hooks' || stringhe(v.eventi)) && (tipo !== 'plugins' || typeof v.nome === 'string' && typeof v.descrizione === 'string' && Array.isArray(v.tools) && Array.isArray(v.hooks) && v.tools.every(t => t && typeof t.nome === 'string' && typeof t.descrizione === 'string' && typeof t.comando === 'string') && v.hooks.every(h => h && typeof h.id === 'string' && stringhe(h.eventi) && typeof h.comando === 'string') && Array.isArray(v.avvisi) && v.avvisi.every(a => a && typeof a.origine === 'string' && typeof a.avviso === 'string'));
       if (!Array.isArray(voci) || !voci.every(valida) || new Set(voci.map(v => v.id)).size !== voci.length) throw new Error('Inventario con voci non valide');
       p.voci = voci;
+      /* ⛔ 5-ter: solo `frase` (già scritta per una persona), MAI `motivo`/`codice` — è un nome tecnico. */
+      p.falliti = Array.isArray(dati.falliti) ? dati.falliti.filter(f => f && typeof f === 'object').map(f => ({ id: typeof f.pluginId === 'string' ? f.pluginId : null, nome: typeof f.pluginId === 'string' ? f.pluginId : null, frase: typeof f.frase === 'string' ? f.frase : null })) : [];
     } catch (e) { if (!attuale()) return; p.voci = []; p.errore = 'Inventario non disponibile: ' + e.message; }
     finally { if (attuale()) { p.caricamento = false; mostraInventarioEstensioni(tipo); } }
   }
@@ -5630,7 +6118,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!plugin.fidato && plugin.avvisi?.length > 0) {
       const avvisi = document.createElement('div');
       avvisi.className = 'plugin-panel-warnings';
-      avvisi.append(...plugin.avvisi.map((a) => textElement('span', 'status-chip error', `${a.origine}: ${a.avviso}`)));
+      /*
+       * ⛔ BC-78.4, 17/09/2026 — QUI SI LEGGEVA UN NOME TECNICO: «tool:check_notes: legge una
+       *   credenziale…». Il `tool:` e il nome col trattino basso arrivano dal server
+       *   (`session-registry.mjs`, `origine: tool:<nome>`), che è il contratto e non si tocca: la
+       *   traduzione sta dove si legge, in `components/nomi-attrezzi.js` — un posto solo, come per
+       *   ogni altro nome di attrezzo. L'origine grezza resta come dettaglio secondario nel `title`.
+       */
+      avvisi.append(...plugin.avvisi.map((a) => {
+        const chip = textElement('span', 'status-chip error', `${origineAvvisoPlugin(a.origine)}: ${a.avviso}`);
+        if (a.origine) chip.title = a.origine;
+        return chip;
+      }));
       wrapper.append(avvisi);
     }
     return wrapper;
@@ -6324,7 +6823,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     searchInput.addEventListener('input', renderLista);
     refreshBtn.addEventListener('click', (event) => { event.preventDefault(); carica({ forza: true }); });
     panel.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
+      // In the standalone model sheet this panel IS the surface, and its trigger is hidden.
+      // Escape belongs to the enclosing modal; only a real dropdown consumes it locally.
+      if (event.key === 'Escape' && !apriSubito) {
         event.preventDefault();
         event.stopPropagation();
         chiudi();
@@ -6692,7 +7193,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!pannello) return;
     if (chiudiPannelloNotifiche) { chiudiPannelloNotifiche(true); chiudiPannelloNotifiche = null; return; }
     const notifiche = state.notifiche || [];
-    const { righe, tutte } = aggiornaPannelloNotifiche(pannello, notifiche, { ora: (sessione) => formattaOraSessione(sessione) });
+    /*
+     * ⛔⛔ BC-70, 17/09/2026 — QUI NASCEVA «Invalid Date». Questa riga passava la SESSIONE a una
+     *   funzione che si aspetta una stringa ISO: `new Date({…})` non lancia, torna una data non
+     *   valida, e `toLocaleTimeString` di una data non valida stampa proprio la parola «Invalid
+     *   Date» dentro il sottotitolo della notifica. Misurato, non dedotto: «Aspetta te · aspetta la
+     *   tua approvazione · Invalid Date».
+     * ⇒ L'elenco delle sessioni porta UN solo istante, `avviataAlle`; qui si usa la regola dell'età
+     *   che il prodotto ha già (`formattaEta`), la stessa del toast della ripresa — e che davanti a
+     *   una data assente o rotta torna `null` invece di inventare, così il separatore sparisce con
+     *   lei.
+     */
+    const { righe, tutte } = aggiornaPannelloNotifiche(pannello, notifiche, {
+      ora: (sessione) => { const eta = formattaEta(sessione?.avviataAlle); return eta ? `avviata ${eta} fa` : ''; },
+    });
     righe.forEach((riga, indice) => {
       const { sessione } = notifiche[indice];
       riga.addEventListener('click', () => {
@@ -7731,6 +8245,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           <span class="sheet-label">Permesso per attrezzo · vince su quello della sessione qui sopra</span>
           ${[
             ['scrivi', 'Scrive un file — passa dal cancello semantico'],
+            /* ⛔ BC-59 (17/09) — il SESTO, mancante anche qui: vedi la nota lunga su ATTREZZI_COL_CANCELLO. */
+            ['file_edit', 'Cambia una parte di un file esistente — stesso cancello di «Scrivi un file»'],
             ['prova', 'Esegue la suite di test del progetto'],
             ['shell', 'Comando di shell nella cartella progetto'],
             ['document_create', 'Genera un documento (PDF, foglio, slide, report)'],
@@ -8132,7 +8648,27 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const label = piedeDelMockup() ? (nomeModelloBreve(state.model) || 'Scegli il modello') : (state.model || 'Seleziona modello'); // 05/9 Fase 2: il chip mostra il nome breve
     if (span) span.textContent = label;
     const activeModel = $('#modelLabActiveModel');
-    if (activeModel) activeModel.textContent = label;
+    /* ⛔ 19/09 — L'ID GREZZO E CHI LO SERVE, accanto al nome: è ciò che la banda del laboratorio
+       (FASE 3) deve dire, e da `label` non si può più sapere. `label` è il nome UMANO
+       (`nomeModelloBreve`): è proprio il prefisso `local:` che la traduzione toglie, quindi
+       dedurlo dal testo a schermo sarebbe una conclusione tratta da un nome — la lezione del
+       18/09 «una conclusione tratta da un nome, non da una misura».
+       La classificazione NON si riscrive qui: la fa `fornitoreDelModello` (`workspace-footer.js:63`),
+       che il prodotto usa già e che risponde `'locale'` per `local:<id>` e il fornitore per
+       `<fornitore>/<modello>`. Qui si riduce alle DUE destinazioni del catalogo
+       (`catalog-engine.ts:171`, la faccetta `destination`: `local` e `cloud`), perché è il
+       vocabolario con cui il prodotto parla di dove un modello viene eseguito.
+       Scritture additive, sullo stesso nodo che questa funzione già scrive: nessun comportamento
+       cambia e `state.model` resta l'unica fonte. */
+    if (activeModel) {
+      const grezzo = state.model || '';
+      activeModel.textContent = label;
+      activeModel.dataset.modelloId = grezzo;
+      // `''` = nessuna scelta. Non è «cloud» per esclusione: è «non lo so», e la banda non
+      // disegna una pastiglia sopra un modello che non c'è.
+      activeModel.dataset.modelloDestinazione = grezzo === '' ? '' : (fornitoreDelModello(grezzo) === 'locale' ? 'locale' : 'cloud');
+    }
+    aggiornaInvitoPrimoAvvio(); // 17/09, PO-27: il modello è metà di ciò che l'invito nomina
   }
 
   function aggiornaPillolaAmbiente() {
@@ -8209,6 +8745,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   const ATTREZZI_COL_CANCELLO = Object.freeze([
     ['scrivi', 'Scrive un file — passa dal cancello semantico', 'i-code'],
+    /*
+     * ⛔⛔ BC-59 (17/09) — IL SESTO. È la stessa forma di O-01, che questa lista aveva già pagato
+     *   il 04/09 col quinto: `ATTREZZI_CON_PERMESSO_PER_ATTREZZO` (config.mjs:307) ne dichiara SEI
+     *   dal 16/09 e qui ne comparivano cinque. Un attrezzo che ha un cancello vero e non ha la sua
+     *   riga nel foglio è un cancello che nessuno può chiudere: peggio di un permesso mancante,
+     *   perché la pagina sembra completa.
+     * ⇒ E perché non succeda una terza volta, la lista non si controlla più a occhio: il test
+     *   `tests/unit/nomi-attrezzi-copertura.test.mjs` la confronta con quella del server.
+     */
+    ['file_edit', 'Cambia una parte di un file esistente — passa dal cancello per-attrezzo come «Scrivi un file»', 'i-code'],
     ['prova', 'Esegue la suite di test del progetto', 'i-check'],
     ['shell', 'Comando di shell nella cartella progetto', 'i-terminal'],
     ['document_create', 'Genera un documento (PDF, foglio, slide, report)', 'i-files'],
@@ -9097,11 +9643,126 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⛔⛔ PO-08 — la conversazione di UNA figlia alla volta, nel pannello destro.
    */
   let figliaAperta = null;
+  let grafoAgenti = null;
+  let grafoTimer = null;
+  let figliLettura = 0;
+  let figliErrore = null;
+  let figliAggiornati = null;
+  const agentiInDiretta = new Map();
+  const risultatiDelegaMostrati = new Set();
+
+  function mostraRisultatoDelega(evento) {
+    if (evento?.origine !== 'delega') return false;
+    if (evento.codaId && risultatiDelegaMostrati.has(evento.codaId)) return true;
+    const risultato = descriviRisultatoDelega(evento.testo ?? evento.consegna, evento.childId);
+    appendStatusNote(risultato ? `${risultato.titolo}\n${risultato.testo}` : 'Un sotto-agente ha consegnato il risultato. È disponibile nel suo dettaglio.', false,
+      { meta: risultato?.errore ? 'Risultato del sotto-agente · non concluso' : 'Risultato del sotto-agente' });
+    if (evento.codaId) risultatiDelegaMostrati.add(evento.codaId);
+    return true;
+  }
+
+  let frameAgentiInDiretta = null;
+  let frameGrafoMadre = null;
+  let ultimoEventoGrafoMadre = null;
+  const GRAFO_APERTO_KEY = 'talos.grafo.aperto.v1';
+
+  function datiGrafoAgenti() {
+    const nota = state.sessionSelection.available.get(state.realSession.id) || {};
+    const operazione = [...state.realSession.toolCallNomi.values()].find(a => a.stato === 'running')?.nome || null;
+    const esitoMadre = ultimoEventoGrafoMadre;
+    const chiamate = new Set(state.realSession.eventiAttrezzi.filter(e => e.type === 'ToolCallStart').map(e => e.toolCallId)).size;
+    return {
+      corrente: { ...nota, ultimoEsito: esitoMadre ? (esitoMadre.type === 'RunError' ? 'errore' : esitoMadre.type === 'RunFinished' ? 'concluso' : null) : nota.ultimoEsito, interrotta: esitoMadre ? esitoMadre.type === 'RunError' && esitoMadre.code === 'fermato' : nota.interrotta, motivoChiusura: esitoMadre ? (esitoMadre.code === 'fermato' ? 'fermata' : null) : nota.motivoChiusura, attivita: { chiamate, attrezzoCorrente: operazione, passi: [] }, sessionId: state.realSession.id, nome: state.session || 'Sessione corrente', cartella: state.realSession.cartellaAssoluta || nota.cartella, conclusa: !runRealeAttivo(), inAttesaApprovazione: state.realSession.approvazioniPendenti.size, usageSessione: state.realSession.usageSessione || nota.usageSessione },
+      sessioni: [...state.sessionSelection.available.values(), ...agentiInDiretta.values()], figli: state.realSession.figli || [],
+      errore: figliErrore, aggiornato: figliAggiornati,
+    };
+  }
+  function agentiPerInspector() {
+    return modelloGrafoAgenti(datiGrafoAgenti()).nodi
+      .filter(n => n.id !== state.realSession.id)
+      .map(n => ({ ...n.dati, taskCorto: n.dati.taskCorto || n.nome, numeroFigli: n.figli }));
+  }
+  function applicaEventoAgenti(value) {
+    const id = state.realSession.id, agente = value?.agent;
+    if (value?.version !== 1 || (value.sessionId ?? value.parentId) !== id || typeof value.childId !== 'string' || agente?.sessionId !== value.childId) return;
+    if (typeof agente.padreId !== 'string' || agente.padreId !== value.parentId || agente.sessionId === id) return;
+    figliLettura++; // uno snapshot HTTP partito prima dell'evento non può cancellarlo
+    agentiInDiretta.set(agente.sessionId, agente);
+    if (agente.padreId === id) {
+      const indice = state.realSession.figli.findIndex(a => a.sessionId === agente.sessionId);
+      if (indice < 0) state.realSession.figli.push(agente); else state.realSession.figli[indice] = agente;
+    }
+    if (!figliErrore) figliAggiornati = new Date().toISOString();
+    if (frameAgentiInDiretta === null) {
+      const generazione = state.realSession.generation;
+      frameAgentiInDiretta = requestAnimationFrame(() => {
+        frameAgentiInDiretta = null;
+        if (generazione !== state.realSession.generation) return;
+        aggiornaGrafoAgenti(); aggiornaInspectorDaStato(); aggiornaPuntiniStatoAlbero();
+        if (figliaAperta?.dettaglio) { const fresca = agentiInDiretta.get(figliaAperta.sessionId); if (fresca) figliaAperta.dettaglio.aggiorna(fresca); }
+      });
+    }
+    if (value.reason === 'created' || value.reason === 'completed') programmaAggiornamentoElencoSessioniReali();
+  }
+  function aggiornaGrafoAgenti() { grafoAgenti?.aggiorna(datiGrafoAgenti()); }
+  function chiudiGrafoAgenti({ ricorda = false } = {}) {
+    clearInterval(grafoTimer); grafoTimer = null;
+    grafoAgenti?.distruggi(); grafoAgenti = null;
+    $('[data-view="chat"]')?.classList.remove('talos-grafo-aperto');
+    if (!ricorda) { try { sessionStorage.removeItem(GRAFO_APERTO_KEY); } catch { /* storage non disponibile */ } }
+  }
+  function apriGrafoAgenti(figlia = null) {
+    if (!state.realSession.id) return;
+    setView('chat');
+    closePanels();
+    const host = $('[data-view="chat"]');
+    if (!host) return;
+    if (!grafoAgenti) {
+      host.classList.add('talos-grafo-aperto');
+      grafoAgenti = montaGrafoAgenti(host, {
+        dati: datiGrafoAgenti(),
+        onLeggiCronologia: ((id) => query => apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/agent-timeline?${new URLSearchParams(query)}`))(state.realSession.id),
+        onChiudi: () => { chiudiGrafoAgenti(); $('#railAgenti button')?.focus(); },
+        onAggiorna: () => caricaFigliSessione(),
+        onLeggiFile: async (agente, percorso) => {
+          const risposta = await apiGet(`/api/v1/sessions/${encodeURIComponent(agente.sessionId)}/tree/file?percorso=${encodeURIComponent(percorso)}`);
+          return risposta.contenuto ?? risposta.testo ?? null;
+        },
+        onApri: async (voce) => {
+          const id = state.realSession.id, vista = grafoAgenti;
+          if (voce.sessionId === id) { $('#railTabs [data-rail="contesto"]')?.click(); openPanel('inspector'); return; }
+          let dati = state.realSession.figli.find(a => a.sessionId === voce.sessionId) || agentiInDiretta.get(voce.sessionId);
+          if (!dati && voce.padreId) {
+            try { dati = (await apiGet(`/api/v1/sessions/${encodeURIComponent(voce.padreId)}/children`))?.figli?.find(a => a.sessionId === voce.sessionId); }
+            catch (error) { if (state.realSession.id === id && grafoAgenti === vista) toast('Dettaglio non disponibile', error.message); return; }
+            if (state.realSession.id !== id || grafoAgenti !== vista) return;
+          }
+          if (!dati) { passaASessione(voce.sessionId, voce.taskId || voce.sessionId, voce.nome, voce.modello, voce); return; }
+          $('#railTabs [data-rail="agenti"]')?.click();
+          apriConversazioneFiglia(dati);
+          openPanel('inspector');
+        },
+      });
+      // Nessuna nuova connessione: la rilettura usa lo stesso contratto children dell'inspector.
+      grafoTimer = setInterval(() => { if (state.view === 'chat' && !document.hidden) void caricaFigliSessione(); }, 5000);
+    }
+    if (figlia?.sessionId) grafoAgenti.seleziona(figlia.sessionId);
+    try { sessionStorage.setItem(GRAFO_APERTO_KEY, state.realSession.id); } catch { /* storage non disponibile */ }
+    aggiornaGrafoAgenti();
+    host.querySelector('.talos-grafo button')?.focus();
+  }
 
   /** L'unico posto che sa come si ascolta una sessione figlia: il componente resta puro, e le sue
       prove non hanno bisogno di rete. Ritorna la funzione che stacca il flusso. */
-  function apriFlussoFiglia(sessionId, onEvento) {
+  function apriFlussoFiglia(sessionId, onEvento, ganci = {}) {
     const sorgente = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
+    /*
+     * ⛔ 16/09, P0-E punto 10 — `onopen` è l'UNICO momento in cui si sa che il collegamento c'è.
+     *   Senza, la vista non poteva distinguere «mi sto collegando» da «collegato e la figlia tace»,
+     *   e mostrava lo stato vuoto — che diceva «Il collegamento è aperto» — nell'istante del
+     *   montaggio, cioè prima di sapere se fosse vero. Due fatti diversi, due frasi diverse.
+     */
+    sorgente.onopen = () => { try { ganci.onAperto?.(); } catch { /* chi ascolta si arrangia */ } };
     sorgente.onmessage = (messaggio) => {
       try { onEvento(JSON.parse(messaggio.data)); }
       catch { /* un frammento illeggibile non deve buttare giù la vista: si scarta */ }
@@ -9112,15 +9773,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /** Torna all'elenco. ⛔ `distruggi()` chiude già il flusso, stacca l'elemento e ridià il fuoco:
       qui si rimette solo l'elenco al suo posto. Rifare quelle tre cose vorrebbe dire, per il
       fuoco, mandarlo su un nodo che non esiste più. */
+  /** PO-30 fetta 2: la sezione del dettaglio che la persona stava guardando, per figlia. Vive quanto la pagina. */
+  const sezioniAgenteRicordate = new Map();
+
   function chiudiConversazioneFiglia() {
     if (!figliaAperta) return;
     const aperta = figliaAperta;
     figliaAperta = null;
+    if (aperta.dettaglio) sezioniAgenteRicordate.set(aperta.sessionId, aperta.dettaglio.sezione());
     try { aperta.maniglia?.distruggi?.(); } catch { /* già smontata */ }
     aperta.contenitore?.remove();
     const elenco = $('#railAgenti');
     if (elenco) elenco.hidden = false;
-    aggiornaInspectorDaStato();
+    /* ⛔ `subito`: da oggi la colonna si disegna su un frame, ma qui l'elenco è appena tornato
+       visibile e dev'essere aggiornato nello stesso istante in cui ricompare — un frame di elenco
+       vecchio dopo un «Indietro» è esattamente lo sfarfallio che questa corsia toglie. */
+    aggiornaInspectorDaStato({ subito: true });
   }
 
   function apriConversazioneFiglia(figlia) {
@@ -9133,14 +9801,44 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     contenitore.dataset.c = 'PannelloFiglia';
     elenco.parentElement.insertBefore(contenitore, elenco.nextSibling);
     elenco.hidden = true;
-    const maniglia = montaConversazioneFiglia(contenitore, {
+    /*
+     * ⛔⛔ PO-30, fetta 2 (18/09/2026) — IL DETTAGLIO DELL'AGENTE, col disegno del laboratorio della PR #33 e i dati veri di
+     *   `GET …/children`. Prima qui si montava SOLO la conversazione della figlia; ora la conversazione è la quarta sezione di
+     *   un dettaglio che si apre sulla Panoramica, come nel laboratorio. Il pannello della conversazione è quello di sempre,
+     *   ospitato dentro: si monta SUBITO (così il flusso parte e la sezione è pronta quando la si apre), ma si vede solo lì.
+     *   La sezione scelta si RICORDA per figlia: tornare su un agente riapre dove lo si era lasciato.
+     */
+    const dettaglio = creaDettaglioAgente(figlia, {
+      document,
+      sezione: sezioniAgenteRicordate.get(figlia.sessionId) || 'panoramica',
+      eta: (iso) => formattaEta(iso),
+      azioni: {
+        indietro: chiudiConversazioneFiglia,
+        apriGrafo: apriGrafoAgenti,
+        apriFile: async (percorso) => {
+          $('#railTabs [data-rail="file"]')?.click();
+          const vista = $('#fileVista');
+          if (vista && vista.dataset.vista !== 'tutti') { vista.dataset.vista = 'tutti'; aggiornaVistaFile(); }
+          /* ⛔ Trovato dalla prova: la PRIMA volta che si apre la scheda File l'albero non è ancora disegnato, e il file non si
+             trovava — il collegamento portava alla scheda e basta. Si aspetta il disegno (se è già in corso, è la stessa promessa). */
+          await renderizzaAlberoReale();
+          await rivelaERivelaRigaAlbero(percorso);
+        },
+      },
+    });
+    /* ⛔ La guardia della PR #33 (`inspector-tab-visibility.css`) nasconde `.talos-figlia-ospite` quando la scheda scelta non è
+       Agenti. Prima quella classe la metteva il pannello della conversazione sul SUO contenitore, che era questo; ora il suo
+       contenitore è la quarta sezione, quindi la classe va messa anche qui — o cambiando scheda il dettaglio resterebbe a schermo. */
+    contenitore.classList.add('talos-figlia-ospite');
+    contenitore.appendChild(dettaglio.elemento);
+    const maniglia = montaConversazioneFiglia(dettaglio.slotConversazione, {
       sessionId: figlia.sessionId,
       nome: figlia.taskCorto || figlia.task || 'Delega senza compito registrato',
       apriFlusso: apriFlussoFiglia,
       onIndietro: chiudiConversazioneFiglia,
       document,
     });
-    figliaAperta = { sessionId: figlia.sessionId, contenitore, maniglia };
+    figliaAperta = { sessionId: figlia.sessionId, contenitore, maniglia, dettaglio };
   }
 
   /**
@@ -9238,10 +9936,38 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     })().finally(() => { if (richiestaCacheSessione === richiesta) richiestaCacheSessione = null; });
   }
 
-  function aggiornaInspectorDaStato() {
+  /*
+   * ⛔⛔⛔ 16/09, P0-E — LA COLONNA SI RIDISEGNAVA A OGNI EVENTO, SENZA COALESCENZA.
+   *   `aggiornaInspectorDaStato` è chiamata da 34 punti (quasi tutti via `syncRunComposerState`),
+   *   e ogni chiamata rifaceva TUTTO: `giriPerInspector()` scandisce ogni `.talos-turn` della chat,
+   *   `righeFile` rilegge i file toccati, `processiDagliEventi` ripercorre tutti gli eventi degli
+   *   attrezzi. Durante un giro vivo gli eventi arrivano a raffica: decine di ricostruzioni per
+   *   frame, tutte tranne l'ultima buttate via prima che il browser disegnasse.
+   * ⇒ Le chiamate si COALESCONO su un frame: chi chiama segna «sporco», e il disegno avviene una
+   *   volta sola prima del prossimo ridisegno del browser. Nessun `setTimeout` e nessun polling
+   *   nuovi: `requestAnimationFrame` è il battito che il browser ha già.
+   * ⛔ SENZA `requestAnimationFrame` (banchi Node, prove unitarie, pagina non ancora viva) si
+   *   disegna SUBITO: un ripiego che rimanda non è un ripiego, è una funzione che non fa niente.
+   * ⛔ `aggiornaInspectorDaStato({ subito: true })` resta per chi ha bisogno del DOM aggiornato
+   *   nella stessa battuta (una misura, una foto): il ritardo di un frame non deve diventare una
+   *   trappola per chi legge subito dopo aver scritto.
+   */
+  let inspectorProgrammato = 0;
+  let inspectorSporco = false;
+  function aggiornaInspectorDaStato({ subito = false } = {}) {
+    inspectorSporco = true;
+    if (subito || typeof window.requestAnimationFrame !== 'function') { disegnaInspectorAdesso(); return; }
+    if (inspectorProgrammato) return;
+    inspectorProgrammato = window.requestAnimationFrame(() => { inspectorProgrammato = 0; disegnaInspectorAdesso(); });
+  }
+  function disegnaInspectorAdesso() {
+    if (!inspectorSporco) return;
     const inspector = $('#inspectorSessione') || $('.talos-inspector');
-    if (!inspector) return;
+    if (!inspector) return; // ⛔ resta SPORCO: la colonna non c'è ancora, e il disegno va rifatto quando ci sarà
+    inspectorSporco = false;
     const file = [...(state.realSession.reviewFiles?.values?.() || [])].map((v) => { const c = contaDiff(v); return { path: v.path, aggiunte: c.aggiunte, rimozioni: c.rimozioni }; });
+    const processi = processiDagliEventi(state.realSession.eventiAttrezzi);
+    const agenti = agentiPerInspector();
     /*
      * ⛔⛔⛔ 09/09/2026, owner: «UNIFICA». La stessa chat, nello stesso istante, diceva due cose:
      * la colonna «Finestra del contesto 1310,7k · Conversazione 11k · 0,8%» e la modale «10.163 /
@@ -9275,12 +10001,35 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       ripartizione: finestra.perInspector.ripartizione,
       giri: giriPerInspector(),
       file,
-      processi: processiDagliEventi(state.realSession.eventiAttrezzi),
-      agenti: state.realSession.figli || [],
+      /* ⛔ Si calcolano UNA VOLTA: servono alla colonna E al numero sulla sua scheda (sotto). */
+      processi,
+      agenti,
       /* PO-08: la card diventa apribile solo perché qui c'è chi ascolta — senza questa funzione
          `disegnaAgenti` la lascia statica, e non promette niente che non può mantenere. */
-      azioniAgenti: { onApri: apriConversazioneFiglia, onMenu: menuDellaDelega },
+      azioniAgenti: { onApri: apriConversazioneFiglia, onMenu: menuDellaDelega, onGrafo: state.realSession.id ? apriGrafoAgenti : null, sessionId: state.realSession.id, errore: figliErrore },
     });
+    /*
+     * ⛔⛔ I NUMERI SULLE SCHEDE «AGENTI» E «PROCESSI» — owner, 20/09/2026.
+     *
+     *   Stanno QUI, e non dentro `aggiornaInspector`, per una ragione che si misura: la scheda
+     *   nascosta **non si ridisegna** (`schedaDaSaltare`, in `inspector.js`: una scheda `hidden` si
+     *   segna sporca e si rifà quando la si apre). Un numero scritto da là dentro resterebbe fermo
+     *   finché non apri la scheda — cioè ESATTAMENTE il contrario di «in tempo reale». Qui invece si
+     *   passa a ogni disegno della colonna, **anche a scheda chiusa**.
+     *   ⛔ E non c'è nessun timer nuovo: questo disegno è già coalescato su `requestAnimationFrame`
+     *     (`aggiornaInspectorDaStato`), quindi un numero non costa un giro di batteria in più.
+     *   ⛔ Lo scrittore è `impostaConteggioScheda` (`topbar.js`), quello che veste già le schede della
+     *     testata: crea, aggiorna e — **a zero — toglie** il badge, sparendo con lo spazio che lo
+     *     separa dall'etichetta. Un «0» accanto a «Processi» sarebbe rumore permanente.
+     *   ⛔ I criteri NON si scrivono qui: arrivano da `inspector.js` (`contaAgentiAttivi`,
+     *     `contaProcessiAttivi`), dove vivono già, così il numero e la lista che si apre cliccandolo
+     *     non possono divergere.
+     */
+    const schede = inspector.querySelector('#railTabs');
+    if (schede) {
+      impostaConteggioScheda(schede.querySelector('[data-rail="agenti"]'), contaAgentiAttivi(agenti));
+      impostaConteggioScheda(schede.querySelector('[data-rail="processi"]'), contaProcessiAttivi(processi));
+    }
   }
 
   /*
@@ -9289,17 +10038,54 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * sessione»): qui si leggono una volta all'apertura della sessione e a ogni fine giro, e finiscono
    * nella colonna. Mai un'invenzione: senza deleghe resta lo stato vuoto.
    */
-  async function caricaFigliSessione() {
+  let letturaFigliInCorso = null;
+  function caricaFigliSessione() {
+    const id = state.realSession.id, generation = state.realSession.generation;
+    if (letturaFigliInCorso?.id === id && letturaFigliInCorso.generation === generation) return letturaFigliInCorso.promise;
+    const richiesta = { id, generation, promise: null };
+    letturaFigliInCorso = richiesta;
+    richiesta.promise = leggiFigliSessione().finally(() => { if (letturaFigliInCorso === richiesta) letturaFigliInCorso = null; });
+    return richiesta.promise;
+  }
+  async function leggiFigliSessione() {
     const id = state.realSession.id;
+    const lettura = ++figliLettura;
     if (!id) { state.realSession.figli = []; aggiornaInspectorDaStato(); return; }
     try {
       const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/children`);
-      if (state.realSession.id !== id) return; // la sessione e' cambiata mentre la richiesta era in volo
-      state.realSession.figli = Array.isArray(dati?.figli) ? dati.figli : [];
-    } catch {
-      state.realSession.figli = []; // una delega non leggibile non inventa righe
+      if (state.realSession.id !== id || lettura !== figliLettura) return;
+      if (!Array.isArray(dati?.figli)) throw new Error('Risposta delle deleghe non valida');
+      // Gli eventi live sono effimeri: ricostruire anche i discendenti noti dopo una caduta.
+      const conosciuti = [...state.sessionSelection.available.values(), ...agentiInDiretta.values()];
+      const raggiungibili = new Set([id, ...dati.figli.map(a => a.sessionId)]);
+      let aggiunti;
+      do { aggiunti = false; for (const a of conosciuti) if (raggiungibili.has(a.padreId) && !raggiungibili.has(a.sessionId)) { raggiungibili.add(a.sessionId); aggiunti = true; } } while (aggiunti);
+      const genitori = [...new Set(conosciuti.filter(a => a.padreId !== id && raggiungibili.has(a.padreId)).map(a => a.padreId))];
+      const snapshot = [];
+      // Sequenziale: non creare una raffica di richieste mentre il runtime lavora.
+      for (const parentId of genitori) {
+        const risposta = await apiGet(`/api/v1/sessions/${encodeURIComponent(parentId)}/children`);
+        if (state.realSession.id !== id || lettura !== figliLettura) return;
+        if (!Array.isArray(risposta?.figli)) throw new Error('Risposta delle deleghe discendenti non valida');
+        snapshot.push({ parentId, figli: risposta.figli });
+      }
+      if (state.realSession.id !== id || lettura !== figliLettura) return;
+      for (const { parentId, figli } of [{ parentId: id, figli: dati.figli }, ...snapshot]) {
+        for (const [chiave, a] of agentiInDiretta) if (a.padreId === parentId) agentiInDiretta.delete(chiave);
+        for (const a of figli) agentiInDiretta.set(a.sessionId, { ...a, padreId: parentId });
+      }
+      state.realSession.figli = dati.figli;
+      figliErrore = null; figliAggiornati = new Date().toISOString();
+    } catch (error) {
+      if (state.realSession.id !== id || lettura !== figliLettura) return;
+      figliErrore = error?.message || 'Impossibile leggere le deleghe';
     }
+    if (!grafoAgenti) { try { if (sessionStorage.getItem(GRAFO_APERTO_KEY) === id && state.view === 'chat') apriGrafoAgenti(); } catch { /* storage non disponibile */ } }
+    aggiornaGrafoAgenti();
     aggiornaInspectorDaStato();
+    aggiornaPuntiniStatoAlbero(); // PO-30: chi sta toccando quale file cambia insieme alle figlie
+    /* PO-30 fetta 2: il dettaglio APERTO si aggiorna con i dati nuovi della sua figlia (stato, attrezzo in corso, file, passi). */
+    if (figliaAperta?.dettaglio) { const fresca = agentiPerInspector().find((x) => x.sessionId === figliaAperta.sessionId); if (fresca) figliaAperta.dettaglio.aggiorna(fresca); }
   }
   function syncRunComposerState() {
     aggiornaPiedeChatDaStato(); // 05/9 Fase 2: ChatFooter
@@ -9441,7 +10227,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const schermo = $('#schermoReview');
     if (!file || !schermo) return;
     state.reviewFileCorrente = file.path;
-    for (const scheda of schermo.querySelectorAll('.talos-review__scheda[role="tab"]')) { const attiva = scheda.dataset.reviewFile === key; scheda.setAttribute('aria-selected', String(attiva)); scheda.tabIndex = attiva ? 0 : -1; }
+    /* BC-63, 17/09: la selezione la fa il componente condiviso (roving tabindex + `aria-selected`
+       in un posto solo, lo stesso del Terminale).
+       ⛔ Qui c'era anche un giro a mano come «ripiego per il markup statico»: MISURATO il 17/09 su
+          segnalazione del revisore, quel ramo non poteva girare — `uiSchedeReview()` torna `null`
+          solo se `#schermoReview .talos-review__schede` non esiste, e due righe più su ci siamo già
+          fermati se `#schermoReview` manca; la striscia è dentro quella schermata, sempre. Un
+          ripiego che non può essere raggiunto non è una rete di sicurezza: è codice morto con un
+          commento che dice il falso. */
+    uiSchedeReview()?.seleziona(key);
     aggiornaDiffReview(schermo.querySelector('.talos-review__diff'), file);
     $$('[data-review-action]').forEach((b) => { b.disabled = false; });
   }
@@ -9694,7 +10488,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return correnti.length;
   }
 
-  function appendRealTaskStart(task, contesto = null) {
+  function appendRealTaskStart(task, contesto = null, sequenza = null) {
     const conversation = $('#conversation');
     /*
      * ⛔⛔ 27/8, trovato dalla pipeline QA visiva: per un comando diretto
@@ -9736,7 +10530,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     void conversation;
     markMotionEnter(article);
     /* ⛔ 28/8, owner: "auto centramento dello scroll dei messaggi appena se ne invia uno nuovo (meta schermo)" — questa era l'UNICA delle sei chiamate scrollIntoView di questo file con block:'center' invece di 'end': ogni messaggio inviato veniva centrato a metà schermo invece di scorrere in fondo come ogni altro elemento appeso alla conversazione. */
-    scorriAllaBollaAppesa(article);
+    scorriAllaBollaAppesa(article, { azioneDellaPersona: true }); // ⛔ 16/09: è la persona che ha scritto — il suo messaggio la riporta in fondo e riarma il seguito
+    collegaAzioniMessaggioUtente(article, { riferimento: Number.isSafeInteger(sequenza) ? `giro:${sequenza}` : null, testo: testoBolla });
     state.realSession.taskBubbleMostrata = true;
   }
 
@@ -9787,7 +10582,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return riga;
   }
 
-  function appendUserFollowUp(text, contesto = null, immagini = []) {
+  function appendUserFollowUp(text, contesto = null, immagini = [], sequenza = null) {
     /*
      * ⛔ 03/9 — si ricorda QUI, dove il testo passa per davvero, e non
      * rileggendolo dal DOM: una bolla può essere ridisegnata, tradotta o
@@ -9811,7 +10606,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const allegatiVisibili = daMostrare?.allegati?.length ? daMostrare.allegati : immagini;
     if (allegatiVisibili.length) disegnaChipAllegati(article, allegatiVisibili);
     markMotionEnter(article);
-    scorriAllaBollaAppesa(article);
+    scorriAllaBollaAppesa(article, { azioneDellaPersona: true }); // ⛔ 16/09: è la persona che ha scritto — il suo messaggio la riporta in fondo e riarma il seguito
+    collegaAzioniMessaggioUtente(article, { riferimento: Number.isSafeInteger(sequenza) ? `giro:${sequenza}` : null, testo: testoBolla });
   }
 
   /*
@@ -9858,7 +10654,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       paragrafo.classList.add('talos-mono'); // ripiego onesto: meglio monospazio che niente
     }
     markMotionEnter(article);
-    scorriAllaBollaAppesa(article);
+    scorriAllaBollaAppesa(article, { azioneDellaPersona: true }); // ⛔ 16/09: è la persona che ha scritto — il suo messaggio la riporta in fondo e riarma il seguito
     return article;
   }
 
@@ -10182,6 +10978,166 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.realSession.attesaBubble = null;
   }
 
+  /*
+   * ⭐⭐⭐ 17/09, secondo giro — ELIMINARE UN MESSAGGIO PASSA DAL SERVER, SEMPRE.
+   *
+   * Una sola funzione per la risposta del modello e per il messaggio della persona: cambia il
+   * `riferimento` (l'id dello stream, oppure `giro:<sequenza>`), non il modo.
+   *
+   * ⛔ Il DOM si tocca DOPO l'esito, mai prima. L'ordine inverso (togli e poi chiedi) fa vedere
+   *   un successo anche quando il server rifiuta — ed è esattamente la bugia che questo giro
+   *   toglie. Se il server dice di no, la bolla resta dov'è e il toast dice perché.
+   */
+  async function eliminaMessaggioReale({ riferimento, nodo, quale }) {
+    const sessionId = state.realSession.id;
+    if (!sessionId) { toast('Niente da eliminare', 'Questa conversazione non è ancora una sessione sul server.'); return false; }
+    let esito;
+    try {
+      esito = await apiDelete(`/api/v1/sessions/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(riferimento)}`);
+    } catch (errore) {
+      toast('Non l\'ho eliminato', messaggioErroreUtente(errore, 'Riprova fra un momento.'));
+      return false;
+    }
+    /* Un giro della persona porta via anche ciò che gli è seguito: si toglie il TURNO, non la bolla. */
+    const turnoDaTogliere = nodo?.closest('.talos-turn') || nodo?.closest('.talos-message') || nodo;
+    turnoDaTogliere?.remove();
+    if (quale === 'risposta') {
+      for (const [id, elemento] of state.realSession.messageElements) if (elemento === nodo) state.realSession.messageElements.delete(id);
+    }
+    /*
+     * ⛔⛔⛔ 17/09, dalla revisione — QUI SI DICEVA SEMPRE «ELIMINATA», E NON SEMPRE ERA VERO.
+     *
+     * Il server toglie il messaggio da ciò che il modello riceve solo se riesce a ritrovarlo nella
+     * conversazione canonica; dopo una compattazione, o se la posizione non torna, non ci riesce —
+     * e lo DICE (`toltoDalModello:false` + `motivo`). Un toast che annuncia comunque «eliminata»
+     * rimetterebbe in piedi la bugia che questa corsia toglie, spostata di un livello.
+     * ⛔ La frase non nomina il motivo tecnico: dice che cosa vale per chi legge, cioè che il
+     *   modello può ancora ricordarla.
+     */
+    const toltoDalModello = esito?.toltoDalModello !== false;
+    const cosa = quale === 'risposta' ? 'Risposta' : 'Messaggio';
+    if (!toltoDalModello) {
+      toast(`${cosa} tolt${quale === 'risposta' ? 'a' : 'o'} dalla conversazione`,
+        esito?.motivo === 'posizione-assente'
+          ? 'Sparisce da qui, ma il modello potrebbe ricordarla ancora: la conversazione che riceve è stata compattata e non la contiene più nella forma originale.'
+          : 'Sparisce da qui, ma non sono riuscito a toglierla dalla conversazione che il modello riceve: potrebbe ricordarla ancora.');
+      return true;
+    }
+    toast(quale === 'risposta' ? 'Risposta eliminata' : 'Messaggio eliminato',
+      quale === 'risposta'
+        ? 'Non è più nella conversazione, e dal prossimo giro il modello non la legge più.'
+        : 'Se n\'è andato con la risposta che gli era seguita: dal prossimo giro il modello non li legge più.');
+    return true;
+  }
+
+  /*
+   * ⭐⭐⭐ 17/09, secondo giro — L'ALTRA METÀ DI BC-60: IL MESSAGGIO DELLA PERSONA.
+   *
+   * Misurato dal revisore: il messaggio della persona non aveva NESSUNA azione e nessun tasto
+   * destro. La regola dell'owner del 13/09 — «una lista di azioni si giudica da ciò che manca» —
+   * era nata proprio su questa asimmetria, sul mobile.
+   *
+   * ⛔ Stesso menu condiviso, stessa forma: in riga le due azioni che non distruggono niente
+   *   (Copia · Riusa nel composer), nel «⋯» e nel tasto destro quella che distrugge. Intersezione
+   *   vuota, unione completa, come sulla risposta.
+   * ⛔ «Riusa nel composer» RIEMPIE il composer, non invia: è lo stesso gesto dei suggerimenti
+   *   dello stato vuoto, e il progetto non ha un secondo modo di rimettersi in bocca una domanda.
+   * ⛔ La conferma DICE che se ne va anche la risposta: toglierla di nascosto sarebbe la stessa
+   *   bugia di ieri, al contrario. Il server toglie il giro intero (`giro:<sequenza>`), perché una
+   *   risposta a una domanda che non esiste più confonde il modello più del buco.
+   */
+  function collegaAzioniMessaggioUtente(turno, { riferimento = null, testo = '' } = {}) {
+    if (!turno) return;
+    const messaggio = turno.querySelector?.('.talos-message--user');
+    if (!messaggio || messaggio.querySelector(':scope > .talos-message__actions')) return;
+    if (riferimento) messaggio.dataset.riferimentoMessaggio = riferimento;
+    const azioni = creaAzioniMessaggio({ ascolta: false }, {
+      radiceMenu: ROOT().body || ROOT(),
+      ospiteTastoDestro: messaggio,
+      etichetta: TESTI_MESSAGGIO.azioniTuo,
+      vociMenu: () => [
+        {
+          testo: TESTI_MESSAGGIO.eliminaMessaggio,
+          conferma: TESTI_MESSAGGIO.confermaEliminaMessaggio,
+          /* ⛔ Senza `riferimento` il server non sa ancora quale giro è: spenta, non finta. */
+          abilitato: Boolean(messaggio.dataset.riferimentoMessaggio) && !runRealeAttivo(),
+          fai: () => { void eliminaMessaggioReale({ riferimento: messaggio.dataset.riferimentoMessaggio, nodo: messaggio, quale: 'messaggio' }); },
+        },
+      ],
+    });
+    azioni.querySelector('[data-message-action="copy"]').setAttribute('aria-label', TESTI_MESSAGGIO.copiaTuo);
+    azioni.querySelector('[data-message-action="copy"]').title = TESTI_MESSAGGIO.copiaTuo;
+    azioni.querySelector('[data-message-action="copy"]').addEventListener('click', () => copyText(testo || messaggio.querySelector('.message-bubble')?.textContent || '', 'Messaggio copiato'));
+    const riusa = document.createElement('button');
+    riusa.type = 'button';
+    riusa.className = 'talos-button talos-button--ghost talos-icon-button talos-button--sm';
+    riusa.dataset.messageAction = 'riusa';
+    riusa.title = TESTI_MESSAGGIO.riusa;
+    riusa.setAttribute('aria-label', TESTI_MESSAGGIO.riusa);
+    /*
+     * ⛔⛔ 17/09 — TROVATO IN UNA FOTO, poi MISURATO: la riga d'azioni era alta **154 px** invece
+     *   di 30, e il menu — che si ancora al suo FONDO — compariva staccato dal messaggio, in mezzo
+     *   alla colonna di destra. La causa non era il menu: era QUESTA icona. `icon()` restituisce un
+     *   `<svg>` NUDO, senza la classe che gli dà una misura; dentro un flex un SVG senza misura si
+     *   allarga fino a riempire. Gli altri bottoni della riga usano `simbolo(…, 'i i--sm', …)` e
+     *   stanno a 30 px: qui mancava una classe, e il difetto si vedeva a tre elementi di distanza.
+     */
+    riusa.innerHTML = icon('i-edit').replace('<svg ', () => '<svg class="i i--sm" ');
+    riusa.addEventListener('click', () => {
+      composerInput.value = testo || messaggio.querySelector('.message-bubble')?.textContent || '';
+      composerInput.dispatchEvent(new Event('input', { bubbles: true }));
+      composerInput.focus();
+    });
+    azioni.querySelector('[data-message-action="piu"]')?.before(riusa);
+    messaggio.append(azioni);
+  }
+
+  /*
+   * ⭐⭐⭐ BC-75 (17/09/2026, owner con una foto di Claude Code) — A FINE GIRO, I FILE DI QUEL GIRO.
+   *
+   * «Come fa Claude Code a fine turno bisogna riportare lista file modificati in quel turno con
+   * link a review in quella scheda file.»
+   *
+   * ⛔ Non un componente nuovo: `creaFileToccati` esisteva dal 05/09 e non lo chiamava NESSUNO
+   *   (grep del 17/09: zero chiamanti). Qui si cabla.
+   * ⛔ I file di QUESTO giro, non della sessione: `reviewFiles` porta già `giro` su ogni voce, ed
+   *   è l'unica cosa che distingue «tre file, adesso» da «tre file, in mezz'ora di lavoro».
+   * ⛔ Si ricostruisce dal REPLAY e non da uno stato volatile: gli `StateDelta` delle scritture
+   *   arrivano prima del `RunFinished` anche quando la sessione si riapre, quindi riaprendo la
+   *   carta torna da sola. E non si duplica: una carta per giro, cercata nel DOM per numero —
+   *   contare sulle variabili vorrebbe dire ricordarsi di azzerarle, cioè dimenticarsene.
+   * ⛔ Niente carta nei giri senza scritture: una carta «0 file» è rumore che sembra un esito.
+   */
+  function appendCartaFileDelGiro() {
+    const giro = state.realSession.runCount || null;
+    const conversation = $('#conversation');
+    if (!conversation || giro === null) return;
+    if (conversation.querySelector(`[data-c="TouchedFiles"][data-giro="${giro}"]`)) return;
+    const voci = [...(state.realSession.reviewFiles?.values?.() || [])].filter((v) => v?.giro === giro);
+    if (voci.length === 0) return;
+    /* La regola di BC-63: il nome basta, la cartella madre solo se due file si chiamano uguale. */
+    const carta = creaFileToccati(voci.map((voce) => {
+      const conteggio = contaDiff(voce);
+      return {
+        percorso: voce.path,
+        etichetta: etichettaFileReview(voce, voci),
+        aggiunte: conteggio.aggiunte,
+        rimozioni: conteggio.rimozioni,
+        onApri: () => { setView('diff'); renderReviewFile(`real:${voce.path}`); },
+      };
+    }), { onVediTutto: () => { setView('diff'); renderReviewFile(`real:${voci[0].path}`); } });
+    carta.dataset.giro = String(giro);
+    nellaChat(carta);
+  }
+
+  /** Il «⋯» dice PERCHÉ una voce è spenta, invece di lasciarla grigia e muta. */
+  function aggiornaMotivoAzioniRisposta(bottone) {
+    const vivo = runRealeAttivo();
+    bottone.title = vivo
+      ? TESTI_MESSAGGIO.altreAzioniGiroVivo
+      : TESTI_MESSAGGIO.altreAzioni;
+  }
+
   function ensureAssistantMessageElement(messageId) {
     const existing = state.realSession.messageElements.get(messageId);
     if (existing) return existing;
@@ -10202,15 +11158,50 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     copy.className = 'assistant-copy';
     article.append(copy);
     nellaChat(article);
-    const azioni = creaAzioniMessaggio({ ascolta: sintesiVoceDisponibile });
+    /*
+     * ⭐⭐⭐ BC-60 (17/09) — in riga restano Copia e Ascolta; «Chiedi di nuovo» ed «Elimina»
+     *   vivono nel «⋯» e nel tasto destro sul messaggio. Le voci si calcolano A OGNI APERTURA
+     *   (`vociMenu` è una funzione, non un elenco): «Chiedi di nuovo» ha senso solo se questa
+     *   sessione ha registrato una domanda, e quello si sa quando il menu si apre, non quando
+     *   il messaggio nasce.
+     */
+    const azioni = creaAzioniMessaggio({ ascolta: sintesiVoceDisponibile }, {
+      radiceMenu: ROOT().body || ROOT(), // la stessa radice dei menu delle schede e del terminale
+      ospiteTastoDestro: messaggio,
+      vociMenu: () => [
+        {
+          testo: TESTI_MESSAGGIO.chiediDiNuovo,
+          abilitato: Boolean(state.realSession.ultimaDomanda),
+          fai: () => {
+            const domanda = state.realSession.ultimaDomanda;
+            if (!domanda) { toast('Nessuna domanda da rimandare', 'Questa risposta non ha una domanda registrata in questa sessione.'); return; }
+            void resumeSession(domanda);
+          },
+        },
+        {
+          testo: TESTI_MESSAGGIO.eliminaRisposta,
+          conferma: TESTI_MESSAGGIO.confermaEliminaRisposta,
+          /*
+           * ⛔⛔⛔ 17/09, secondo giro — ADESSO ELIMINA DAVVERO, e prima non era vero.
+           *   Ieri toglieva solo dallo schermo: ricaricando tornava, e — peggio — il MODELLO
+           *   continuava a leggerla, perché un follow-up manda solo il testo nuovo e la
+           *   conversazione ce l'ha il server. Owner 11/09: «non c'è la rotta» non è una risposta.
+           *   Ora la rotta c'è (`DELETE …/messages/:riferimento`), scrive una LAPIDE nel registro
+           *   a sola aggiunta e toglie il messaggio anche da `messaggiFinali`.
+           * ⛔ Il DOM si tocca DOPO la risposta del server, mai prima: togliere la bolla e poi
+           *   fallire lascerebbe la persona convinta di aver cancellato qualcosa che c'è ancora.
+           */
+          abilitato: !runRealeAttivo(),
+          fai: () => { void eliminaMessaggioReale({ riferimento: messageId, nodo: article, quale: 'risposta' }); },
+        },
+      ],
+    });
+    /* ⛔ Il motivo di una voce spenta si LEGGE: il `title` sul «⋯» lo dice mentre il giro è vivo. */
+    const bottonePiu = azioni.querySelector('[data-message-action="piu"]');
+    if (bottonePiu) aggiornaMotivoAzioniRisposta(bottonePiu);
     azioni.querySelector('[data-message-action="copy"]').addEventListener('click', () => copyText(copy.textContent || '', 'Risposta copiata'));
     const ascolta = azioni.querySelector('[data-message-action="listen"]');
     if (ascolta) ascolta.addEventListener('click', () => leggiVoceAlta(copy.textContent || '', ascolta));
-    azioni.querySelector('[data-message-action="ask-again"]').addEventListener('click', () => {
-      const domanda = state.realSession.ultimaDomanda;
-      if (!domanda) { toast('Nessuna domanda da rimandare', 'Questa risposta non ha una domanda registrata in questa sessione.'); return; }
-      void resumeSession(domanda);
-    });
     const vecchieAzioni = messaggio.querySelector(':scope > .talos-message__actions');
     if (vecchieAzioni) vecchieAzioni.remove();
     nellaChat(azioni);
@@ -10462,18 +11453,26 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       nellaChat(article);
     }
     markMotionEnter(article);
-    window.setTimeout(() => {
-      if (article.hidden) return;
-      if ($('#conversation')?.classList.contains('is-restoring')) return;
-      // 06/9 (owner): se il fondo è già in vista non c'è niente da raggiungere — nessuna animazione.
-      if (fondoConversazioneInVista()) return;
-      const scorrevole = scrollerConversazione();
-      if (!scorrevole || !article.isConnected) return;
-      const top = scorrevole.scrollTop + article.getBoundingClientRect().bottom
-        - scorrevole.getBoundingClientRect().top - scorrevole.clientTop - scorrevole.clientHeight;
-      const ridotto = movimentoRidottoDalSistema() || document.body.classList.contains('reduce-motion');
-      scorrevole.scrollTo({ top, behavior: ridotto ? 'instant' : 'smooth' });
-    }, 40);
+    /*
+     * ⛔⛔⛔ 16/09/2026 (P0, punto 6) — QUI LO SCROLL SI SCRIVEVA SENZA CHIEDERE A NESSUNO.
+     *
+     * C'era `if (fondoConversazioneInVista()) return;` dietro un `setTimeout(40)`, e poi uno
+     * `scrollTo` a molla verso la riga nuova.
+     * ⛔ CORREZIONE del 16/09, giro di riparazione: nel primo rapporto avevo scritto che quella
+     *   guardia era «capovolta rispetto alla sua stessa glossa». È FALSO, e l'ha smentito il
+     *   controllore rileggendo il commento al commit base: la glossa («se il fondo è già in vista
+     *   non c'è niente da raggiungere») descrive esattamente ciò che la condizione faceva. Commento
+     *   e codice dicevano la stessa cosa — una root cause sbagliata in un verbale è quello che
+     *   leggerà la prossima persona, quindi si corregge dove sta scritta.
+     * ⇒ Il difetto vero è un altro, e non si vede rileggendo il blocco da solo: questo pezzo
+     *   decideva per conto suo, senza consultare mai `streamingAutoFollow`. Trattava «non sono in
+     *   fondo» come «portami in fondo», mentre per chi ha scorso in su vuol dire l'opposto — sto
+     *   leggendo, non toccarmi la vista. Erano due scrittori di scroll in gara con quello vero, e
+     *   uno dei due arrivava con un timer.
+     *
+     * ⇒ Una riga nuova la si segue con l'unico scrittore, che consulta il flag. Nessun timer.
+     */
+    if (!article.hidden && !$('#conversation')?.classList.contains('is-restoring')) scrollStreamingOutput(article);
     return { article, summaryText, detail, dettaglio: riga.dettaglio }; // 05/9 Fase 2: anche il dettaglio mono della riga
   }
 
@@ -10498,12 +11497,114 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
   }
 
+  /*
+   * ⛔⛔⛔ 16/09/2026 (P0, punto 8) — IL CORPO DI UN RAGIONAMENTO COMPRESSO NON SI DISEGNA.
+   *
+   * Prima: `ReasoningMessageContent` chiamava `renderizzaMarkdownIncrementale` a OGNI delta, anche a
+   * scheda chiusa. E «incrementale» lì valeva poco: `confineBlocchiStabili` chiude un blocco solo su
+   * una riga VUOTA, e una traccia di pensiero è un elenco di righe senza righe vuote ⇒ nessun blocco
+   * stabile, tutto il testo ri-parsato e tutti i suoi nodi ricostruiti a ogni frammento.
+   * Misurato il 16/09 sul banco (Chrome vero, 3 giri, mediana): 240 delta a scheda chiusa = 29 ms di
+   * main thread e 241 elementi nel DOM che nessuno guardava; **480 delta = 112 ms, cioè 3,86×** —
+   * il costo è QUADRATICO, non lineare, e una traccia vera è molte volte più lunga di questa.
+   *
+   * ⭐ Ricerca 16/09/2026 (fonti citate per intero in `tests/browser/chat-lunga-p0.spec.mjs`):
+   *   mawentory/hermes-fastui#46 — «the collapsed header stays cheap (one line, Thinking…)», il
+   *   buffer del pensiero non entra nel nodo markdown vivo, «expanding is opt-in per block»;
+   *   vellum-ai/vellum-assistant#42658 — all'apertura si disegna «one markdown block at a time».
+   *
+   * ⇒ Tre stati, uno solo alla volta:
+   *   · CHIUSA e in corso  → non si tocca il DOM: il testo cresce solo in `voce.grezzo`;
+   *   · CHIUSA e finita    → si deposita il testo GREZZO come unico nodo di testo dentro il `<pre>`
+   *                          (zero elementi): la ricerca nella pagina lo trova, l'export lo trova,
+   *                          e i cancelli LAG che leggono `textContent` continuano a valere;
+   *   · APERTA             → markdown come sempre, ma montato A PEZZI, uno per fotogramma, così
+   *                          l'apertura di una traccia lunga non produce un fotogramma da 118 ms
+   *                          (misurato prima della cura).
+   * ⛔ Il testo vive in una `WeakMap` sulla SCHEDA, non solo nella mappa delle voci: `ReasoningMessageEnd`
+   *   toglie la voce dalla mappa, e senza questo una scheda finita non avrebbe più niente da montare
+   *   quando la persona la apre dieci minuti dopo.
+   */
+  const testoRagionamentoPerScheda = new WeakMap();
+  const montaggioRagionamentoPerScheda = new WeakMap();
+  const RAGIONAMENTO_PEZZO_CARATTERI = 4000;
+
+  /** Disegna il prossimo pezzo del pensiero dentro la scheda, e si riprenota finché non è in pari. */
+  function disegnaPezzoRagionamento(card) {
+    const stato = montaggioRagionamentoPerScheda.get(card);
+    if (!stato) return;
+    stato.frame = null;
+    const corpo = card.querySelector('.tool-note-detail');
+    const testo = testoRagionamentoPerScheda.get(card) || '';
+    if (!corpo || !corpo.isConnected || !ragionamentoAperto(card)) return; // richiusa (o staccata) nel frattempo: si riprende alla prossima apertura
+    const fine = Math.min(testo.length, stato.mostrato + RAGIONAMENTO_PEZZO_CARATTERI);
+    if (fine <= stato.mostrato) return;
+    stato.mostrato = fine;
+    renderizzaMarkdownIncrementale(corpo, stato.render, testo.slice(0, fine));
+    if (fine < testo.length) chiediDisegnoRagionamento(card);
+  }
+
+  /** Un pezzo per fotogramma, mai due prenotazioni per la stessa scheda. */
+  function chiediDisegnoRagionamento(card) {
+    if (!card) return;
+    let stato = montaggioRagionamentoPerScheda.get(card);
+    if (!stato) { stato = { mostrato: 0, frame: null, render: { prefisso: null, nodiCoda: [] } }; montaggioRagionamentoPerScheda.set(card, stato); }
+    if (stato.frame !== null) return;
+    stato.frame = window.requestAnimationFrame(() => disegnaPezzoRagionamento(card));
+  }
+
+  /**
+   * Il testo grezzo dentro il `<pre>`, una volta sola: un nodo di TESTO, nessun elemento.
+   * Serve a chi non ha mai aperto la scheda — la ricerca nella pagina e l'esportazione dal DOM.
+   *
+   * ⛔⛔⛔⛔ 16/09/2026, SECONDO GIRO DI RIPARAZIONE — QUI LA MIA CURA AVEVA APERTO UN BUCO NUOVO,
+   *   e non l'ho trovato io: l'ha riprodotto il controllore.
+   *   La riga di prima era `if (montaggio?.mostrato) return;` — «già disegnato in markdown: non si
+   *   torna indietro». Ma `mostrato` non dice «disegnato TUTTO»: dice «disegnato fin qui». Chi apre
+   *   il ragionamento mentre il modello scrive e lo RICHIUDE a metà montaggio lascia `mostrato` a
+   *   una fetta, e `ReasoningMessageEnd` trovava quella fetta e se ne andava ⇒ il corpo restava con
+   *   il primo pezzo e il resto del pensiero spariva dal documento. Misurato su 480 righe: 7.595
+   *   caratteri su 47.302, 84 nodi, ultima riga ASSENTE (al commit base c'erano tutte).
+   *   ⇒ Non era un dettaglio di disegno: la ricerca nella pagina, l'export dal DOM e i cancelli LAG
+   *   leggono `textContent`, e per loro quel pensiero non esisteva più (CHAT-LUNGA-P0-03).
+   *
+   * ⭐ Ricerca 16/09/2026, prima di scrivere (regola zero — «render on expand» senza perdere il
+   *   contenuto): Chrome for Developers, «Making collapsed content accessible with
+   *   hidden=until-found» (developer.chrome.com/docs/css-ui/hidden-until-found, letto 16/09/2026):
+   *   ciò che sta in una sezione collassata con `display:none` «becomes impossible to search using a
+   *   find-in-page search», e `hidden=until-found` usa `content-visibility:hidden` proprio perché
+   *   «skipped contents must be accessible to the find-in-page algorithm». Più TypeFox/baukasten#60
+   *   e mherod/swiz#857 (lazy mount di righe collassate, letti 16/09/2026): il montaggio pigro
+   *   regge solo se la SORGENTE DI VERITÀ sta nel DATO, non nel DOM parziale.
+   * ⇒ Qui la verità è `testoRagionamentoPerScheda`, non la fetta montata: un montaggio interrotto
+   *   si BUTTA e si riparte, non si conserva. Si rinuncia al deposito solo quando il markdown è già
+   *   in pari col grezzo — cioè quando sostituirlo con testo semplice sarebbe un passo indietro.
+   */
+  function depositaTestoRagionamento(card) {
+    const corpo = card?.querySelector('.tool-note-detail');
+    const testo = testoRagionamentoPerScheda.get(card);
+    if (!corpo || typeof testo !== 'string') return;
+    const montaggio = montaggioRagionamentoPerScheda.get(card);
+    if (montaggio && montaggio.mostrato >= testo.length) return; // markdown COMPLETO: quello sì che non si torna indietro
+    if (corpo.textContent === testo) return;
+    corpo.textContent = testo;
+    /* ⛔ Il grezzo ha appena sostituito i nodi del montaggio parziale: lo stato del render li nomina
+       ancora, e riprendere da lì appenderebbe la seconda fetta in coda al testo intero. Si riparte
+       da zero, così la prossima apertura rimonta tutto il markdown a pezzi (`prefisso: null` fa
+       `replaceChildren`, vedi `renderizzaMarkdownIncrementale`). */
+    if (montaggio) { montaggio.mostrato = 0; montaggio.render = { prefisso: null, nodiCoda: [] }; }
+  }
+
   /** Apre o chiude la scheda come fa la regia del mockup: `aria-expanded` sulla testa, `hidden` sul corpo. */
   function impostaAperturaRagionamento(card, aperto) {
     const testa = card?.querySelector(':scope > .talos-activity__head');
     const corpo = card?.querySelector(':scope > .talos-activity__body');
     if (!testa || !corpo) return;
     testa.setAttribute('aria-expanded', String(aperto));
+    /* ⛔ Si apre ⇒ il corpo va montato (a pezzi). `chiediDisegnoRagionamento` è idempotente e legge
+       lo stato VERO al fotogramma dopo, quindi un'apertura e una chiusura nello stesso giro non
+       lasciano niente a metà. */
+    if (aperto) chiediDisegnoRagionamento(card);
     corpo.hidden = !aperto;
   }
 
@@ -10806,6 +11907,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const a = argomenti || {};
     switch (nome) {
       case 'scrivi': return a.percorso ? `Scrittura di ${a.percorso}…` : 'Scrittura file…';
+      /* ⛔ BC-59 (17/09): senza questo ramo la riga cadeva nel ripiego e diceva «file_edit…». Il
+         percorso c'è già negli argomenti (`talosHarness.mjs:2768`): dirlo costa zero e vale molto. */
+      case 'file_edit': return a.percorso ? `Modifica di ${a.percorso}…` : 'Modifica di un file…';
       case 'leggi': return a.percorso ? `Lettura di ${a.percorso}…` : 'Lettura file…';
       case 'cerca': {
         const criteri = [a.nome, a.testo].filter(Boolean).map((v) => `"${v}"`).join(' · ');
@@ -10827,6 +11931,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const a = argomenti || {};
     switch (nome) {
       case 'scrivi': return a.percorso ? `Scritto ${a.percorso}` : 'Scrittura file…';
+      /* ⛔ BC-59 (17/09): il verbo al passato come per `scrivi` — l'azione tiene lo stesso nome
+         dall'inizio alla fine, «Modifica di x» mentre gira e «Modificato x» quando ha finito. */
+      case 'file_edit': return a.percorso ? `Modificato ${a.percorso}` : 'Modifica di un file…';
       case 'leggi': return a.percorso ? `Letto ${a.percorso}` : 'Lettura file…';
       case 'cerca': {
         const criteri = [a.nome, a.testo].filter(Boolean).map((v) => `"${v}"`).join(' · ');
@@ -10892,9 +11999,57 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function esitoAttrezzoFallito(nome, testoEsito) {
     const testo = String(testoEsito ?? '');
     if (nome === 'prova') return /ℹ?\s*fail\s+([1-9]\d*)/i.test(testo);
-    if (nome === 'shell') return /(?:^|\n)exit\s+([1-9]\d*)\b/i.test(testo);
+    if (nome === 'shell') {
+      /*
+       * ⛔ DAL CONTRATTO, non da una regex più stretta delle altre due. Trovato dal revisore
+       *   avversario il 20/09/2026 e **misurato sulla strada vera**: `/(?:^|\n)exit\s+([1-9]\d*)\b/`
+       *   non riconosce `exit null` — che il kernel scrive quando un comando è **fermato dal tempo
+       *   massimo** (misurato: oltre 120 s su WSL, `codice: null`, output parziale non vuoto) — né un
+       *   codice negativo. Conseguenza: la riga della scheda diventava **verde** su un comando ucciso
+       *   a metà. Un verde che coincide con il caso giusto: la forma peggiore, e questa casa la paga
+       *   da giorni.
+       *   `leggiEsitoComando` sa già tutto questo (`fermato`, `riuscito`) ed è lo stesso contratto che
+       *   disegna il comando della persona: una regola sola, non tre.
+       */
+      const esito = leggiEsitoComando(testo);
+      if (!esito.verdetto) return false; // nessuna intestazione: non è un esito di comando
+      return !esito.riuscito;
+    }
     return /^(?:REFUSED\.|ERROR\b|ERRORE\b|FAILED\b|FALLITO\b|NON RIUSCITO\b)/i.test(testo.trim());
   }
+
+  /*
+   * ⛔⛔ L'INTESTAZIONE DELL'ESITO SI MOSTRA SOLO QUANDO DICE QUALCOSA — owner 20/09/2026,
+   *   «applica la quarta strada», decisa dalla 5×5×5×5 in
+   *   `.claude/RICERCA-5x5x5x5-RIGA-ESITO-2026-09-20.md`.
+   *
+   *   La prima riga di un esito di shell è l'intestazione del kernel:
+   *   `exit 0 [sandbox: none]`. ⛔ Tre fonti indipendenti dicono la stessa cosa — **si dichiara
+   *   l'ECCEZIONE, non la regola**:
+   *   · Hermes, nel suo codice (`app/chat/composer/status-stack/status-row.tsx:143`, letto il
+   *     20/09/2026): il codice d'uscita compare **solo** se `failed && exitCode !== 0`. E accanto,
+   *     in `tool/fallback-model/index.ts:685`: «A non-zero exit code alone is a **weak failure
+   *     signal**: grep returns 1 on no-match, diff returns 1 on differences» ⇒ non si dipinge
+   *     d'allarme, e non si scrive quando è zero.
+   *   · Claude Code (documentazione ufficiale, letta il 20/09/2026): intitola il prompt
+   *     «Bash command **(unsandboxed)**» **quando il sandbox non si applica**, e riporta la
+   *     violazione **nel risultato del comando bloccato** — non su ogni comando riuscito.
+   *   · MCP, specifica 2026-07-28: `isError` è **solo** per gli errori di esecuzione, il resto va
+   *     «logged for audit purposes».
+   *
+   *   ⛔ Da noi `none` (cmd.exe, nessun isolamento) è la **regola**, non l'eccezione: timbrarlo su
+   *     ogni comando rende invisibile proprio il caso che conterebbe, perché diventa una costante
+   *     che nessuno legge più. Il fatto dell'isolamento resta nel **dettaglio della riga Processi**,
+   *     dove si va a cercarlo quando serve — è la stessa scelta del BLOCCO 6, che resta viva dove
+   *     serve invece di essere rumore ovunque.
+   *   ⇒ Uscita **0**: niente riga. Uscita **≠ 0**: la riga resta **intera**, `[sandbox: …]` compresa,
+   *     perché lì l'ambiente fa parte della spiegazione di cosa è andato storto.
+   */
+  /* ⛔ Le due funzioni che stavano qui sono state TOLTE: erano una QUARTA regola per la stessa riga
+     (`/^exit\s+(\d+)\b/`), più stretta delle due che il repo già aveva — e perdeva `exit null`
+     (comando fermato dal tempo massimo) e i codici negativi, cioè proprio le righe che dicevano
+     qualcosa. Ora si usa `rigaEsitoDaMostrare` / `senzaIntestazione` di `esito-comando.js`:
+     una regola sola, nel file che la possiede. */
 
   function riassuntoAttrezzoConcluso(nome, argomenti, testoEsito, fallito) {
     const descrizioneModello = typeof argomenti?.descrizione === 'string' ? argomenti.descrizione.trim() : '';
@@ -11021,6 +12176,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         badge: vestizione.badge,
         tono: vestizione.tono,
         spiegazione,
+      }, {
+        /*
+         * ⛔ CLI-REQ-03, metà a schermo: davanti a una chiave che manca il rimedio è UN CLIC, non
+         *   quattro passi da leggere. La porta è quella che esiste già — il velo «Fornitori e
+         *   accessi» —, non una schermata nuova.
+         */
+        azioni: spiegazione.famiglia === 'chiave-fornitore'
+          ? [[TESTI_MESSAGGIO.collegaModello, () => { setView('settings'); setSettingsSection('providers'); apriVeloMockup('veloFornitori'); }]]
+          : [],
       })
       : creaNotaSistema({ tipo: isError ? 'danger' : 'info', badge: isError ? 'Errore' : 'Nota', titolo: etichettaMeta || (isError ? 'TALOS · errore' : 'TALOS · concluso'), testo: text });
     article.classList.add('real-session-status');
@@ -11053,6 +12217,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     if (azione?.tipo === 'scrivi' && azione.fileDiControllo) return 'Vuole scrivere un file di controllo di TALOS: una regola dell’agente (hook, MCP, istruzioni, memoria), non un file del progetto.';
     if (azione?.tipo === 'scrivi') return 'Vuole scrivere questo file:';
+    /* ⛔ 17/09, F15 — `leggi` arriva davanti a un percorso segreto: senza questo ramo la carta
+       cadeva nel ripiego generico proprio nel caso in cui la persona deve capire in fretta. */
+    if (azione?.tipo === 'leggi') return 'Vuole leggere questo file:';
     if (azione?.tipo === 'shell') return 'Vuole eseguire questo comando nel terminale:';
     if (azione?.tipo === 'document_create') return `Vuole creare un documento (formato ${azione.formato || '?'})`;
     // ⭐⭐⭐ FASE B (28/8) — `prova` è il quarto attrezzo gated da verificaPermessoScrittura (trovato leggendo talosHarness.mjs): senza questo ramo, un permesso per-attrezzo `prova:'chiedi'` mostrava la card col fallback generico invece del comando VERO.
@@ -11082,7 +12249,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /** Il testo esatto da mettere nel blocco codice della carta: comando o percorso, mai una frase. */
   function codiceAzioneApprovazione(azione) {
     if (azione?.tipo === 'shell' || azione?.tipo === 'prova') return azione.comando || '';
-    if (azione?.tipo === 'scrivi') return azione.percorso || '';
+    /* ⛔ 17/09, F15 — `leggi` MANCAVA, e da oggi arriva: la shell chiede anche davanti a un
+       percorso segreto, e leggere un `.env` è una delle vie. Senza questa riga la carta chiedeva
+       «vuoi che legga?» senza dire CHE COSA. */
+    if (azione?.tipo === 'scrivi' || azione?.tipo === 'leggi') return azione.percorso || '';
     if (azione?.tipo === 'naviga') return azione.url || '';
     return '';
   }
@@ -11093,20 +12263,52 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *  1. un cancello per ATTREZZO su «chiedi» — sopravvive alla scelta della politica, e viene
    *     ereditato dalla sessione che stavi guardando quando hai premuto «Nuova» (misurato in T04);
    *  2. la politica della sessione è «Su richiesta»;
-   *  3. la sessione ha un canale di approvazione aperto per via di un ALTRO attrezzo: il kernel di
-   *     oggi, quando il canale c'è, chiede anche per gli attrezzi senza cancello (clausola
-   *     `vaChiesto` in talosHarness.mjs). È il costo dichiarato della cura del 06/9 al canale.
+   *  3. ⛔⛔ QUESTO PUNTO ERA FALSO, ed è stato falso per undici giorni. Diceva: «quando il canale
+   *     c'è, il kernel chiede anche per gli attrezzi senza cancello (clausola `vaChiesto`)». Quella
+   *     clausola — `(!haOverride && !richiestoDalLivello && Boolean(chiediApprovazioneFn))` — è
+   *     stata TOLTA il 06/09, e il commento del kernel che la rimuove lo dice per esteso
+   *     (`talosHarness.mjs`, sopra `const vaChiesto`): «chi decide è il LIVELLO, non l'esistenza
+   *     del canale». Dal 17/09 il canale esiste sempre, quindi quella frase avrebbe accusato ogni
+   *     sessione di un motivo inesistente. Un commento che invecchia male è una bugia che nessuno
+   *     rilegge.
+   *     ⇒ I motivi VERI per cui un'approvazione arriva senza un cancello per quell'attrezzo e
+   *     senza la politica «Su richiesta» sono, oggi (misurato su `vaChiesto`, riga per riga):
+   *       · un percorso SEGRETO toccato dalla shell o da `leggi` (F15, owner 16/09) — e in quel
+   *         caso l'evento porta `azione.segreto.frase`, che è il primo ramo qui sotto;
+   *       · un attrezzo che chiede SEMPRE per costruzione (`ATTREZZI_SEMPRE_DA_CONFERMARE`);
+   *       · la TRIFECTA che si chiude su questa chiamata.
+   *     ⛔ Il ramo che costruiva la frase falsa NON è stato cancellato a occhio: è REGGIUNGIBILE
+   *     (un'approvazione può arrivare in quello stato), quello che era sbagliato era il TESTO.
+   *     ⛔ E l'evento non porta il motivo: `approvalRequested({requestId, azione})` passa `azione`
+   *     così com'è dal kernel (`agui-events.mjs:236`), e `viaRichiesta` resta dentro il kernel.
+   *     Quindi qui non si indovina: si dice ciò che si sa, e il resto lo dice il kernel quando lo
+   *     manderà.
    * La carta lo dice in italiano invece di lasciarlo indovinare.
    */
   function motivoRichiestaApprovazione(azione) {
     const perAttrezzo = state.permessiPerAttrezzo || {};
     const regola = azione?.tipo ? perAttrezzo[azione.tipo] : null;
     const politica = etichettaPermesso(state.permissions);
+    /*
+     * ⛔⛔⛔ F15, 17/09 — IL MOTIVO VERO ARRIVA DAL KERNEL, E VA PRIMA DI TUTTO. Quando la richiesta
+     *   nasce da un percorso segreto, il kernel manda la frase già scritta per una persona («Il
+     *   comando tocca un file che può contenere chiavi o password (.env): vuoi che lo esegua?»).
+     *   Ogni altro ramo qui sotto parla di POLITICHE, cioè risponde a una domanda diversa e più
+     *   fredda: davanti a una chiave la persona deve sapere COSA sta per essere letto, non da quale
+     *   regola discende la domanda.
+     * ⛔ La frase è del kernel e si mostra com'è: riscriverla qui vorrebbe dire mantenere due
+     *   versioni della stessa spiegazione, e la nostra invecchierebbe per prima (vedi il punto 3).
+     */
+    const frasiVere = [];
+    if (typeof azione?.segreto?.frase === 'string' && azione.segreto.frase.trim()) frasiVere.push(azione.segreto.frase.trim());
+    /* ⛔ Se si chiude anche la trifecta sono DUE fatti, non uno: si mostrano tutti e due — una lista
+       di motivi si giudica da ciò che manca, e tacere il secondo sarebbe rassicurare a metà. */
+    const trifecta = typeof azione?.trifecta === 'string' ? azione.trifecta.trim() : (azione?.trifecta === true ? 'Questa chiamata chiude la trifecta: dati privati, contenuto non attendibile e un modo per farli uscire.' : '');
+    if (trifecta) frasiVere.push(trifecta);
+    if (frasiVere.length) return frasiVere.join(' ');
     if (regola === 'chiedi') return `Chiede perché «${nomeUmanoAttrezzo(azione.tipo)}» ha il cancello «Chiedi conferma», anche con la sessione su «${politica}».`;
     if (state.permissions === 'On request') return `Chiede perché la sessione è su «${politica}»: ogni azione che cambia qualcosa passa da te.`;
-    const altri = Object.entries(perAttrezzo).filter(([, v]) => v === 'chiedi').map(([k]) => nomeUmanoAttrezzo(k));
-    if (altri.length) return `Chiede perché questa sessione ha un canale di approvazione aperto per ${altri.join(' e ')}: finché c'è, il kernel chiede anche per gli altri attrezzi.`;
-    return `Chiede perché questa azione tocca qualcosa fuori dalla sola lettura, e la sessione è su «${politica}».`;
+    return `Chiede perché il kernel considera questa azione da confermare, anche con la sessione su «${politica}».`;
   }
 
   /**
@@ -11134,7 +12336,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * `assistant-copy`: ApprovalResolved li trova come prima.
      */
     const bersaglio = azione?.percorso || azione?.comando || azione?.question || azione?.title || '';
-    const badge = azione?.tipo === 'scrivi' ? 'Chiede di scrivere' : (azione?.tipo === 'shell' || azione?.tipo === 'prova') ? 'Chiede di eseguire' : azione?.tipo === 'research_start' ? 'Chiede di cercare' : 'Chiede il permesso';
+    /* ⛔ 17/09, F15 — `leggi` ha il suo badge: «Chiede il permesso» davanti a un `.env` non dice
+       niente, e la persona deve capire a colpo d'occhio se sta per LEGGERE o per CAMBIARE. */
+    const badge = azione?.tipo === 'scrivi' ? 'Chiede di scrivere' : azione?.tipo === 'leggi' ? 'Chiede di leggere' : (azione?.tipo === 'shell' || azione?.tipo === 'prova') ? 'Chiede di eseguire' : azione?.tipo === 'research_start' ? 'Chiede di cercare' : 'Chiede il permesso';
     const scheda = creaApprovazione({ badge, bersaglio, perche: descriviAzioneApprovazione(azione), codice: codiceAzioneApprovazione(azione), motivo: motivoRichiestaApprovazione(azione), nota: 'Vale solo per questa richiesta' });
     const article = scheda.scheda;
     article.classList.add('real-approval-card');
@@ -11144,6 +12348,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const approvaBtn = scheda.pulsanti.unaVolta;
     negaBtn.dataset.nega = ''; approvaBtn.dataset.approvaUnaVolta = ''; // 06/9 K-I: il Browser risponde alla stessa richiesta con gli stessi pulsanti
     const sessioneBtn = scheda.pulsanti.sessione;
+    /*
+     * ⛔⛔⛔ F15, 17/09 — DAVANTI A UN SEGRETO «Per questa sessione» SPARISCE, e non per prudenza:
+     *   perché sarebbe una PROMESSA FALSA. Quel pulsante scrive `permessiPerAttrezzo[tipo]='sempre'`,
+     *   ma il cancello dei percorsi segreti non guarda il permesso per-attrezzo — chiede lo stesso,
+     *   anche con «sempre», anche in «Accesso completo» (è esattamente la fase P0-bis chiesta
+     *   dall'owner il 16/09). Chi lo premesse vedrebbe la domanda ricomparire identica alla
+     *   chiamata dopo, e crederebbe che TALOS non ubbidisce. Un pulsante che non può fare la sua
+     *   cosa si toglie: è la stessa regola già scritta per «Ferma» col server irraggiungibile.
+     * ⛔ Restano DUE azioni — «Consenti una volta» e «Nega» — quindi la regola di casa «più di due
+     *   azioni ⇒ menu» qui non scatta. E non scatterebbe comunque su questa carta: sono la
+     *   DECISIONE che la carta chiede, non azioni secondarie su un oggetto; nasconderne una dietro
+     *   un «⋯» vorrebbe dire nascondere «Nega». Se l'owner la vede diversamente, si cambia — ma
+     *   questa è una scelta, non una dimenticanza.
+     */
+    const davantiAUnSegreto = Boolean(azione?.segreto);
+    if (davantiAUnSegreto) sessioneBtn.remove();
     let rispostaDataDaQuestaScheda = false;
     const rispondi = async (approvato, perSessione = false) => {
       negaBtn.disabled = true;
@@ -11248,8 +12468,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * il tab Terminale prima ancora di avviare un task dà comunque una
    * shell vera, mai un pannello vuoto in attesa di una sessione.
    */
-  const TIPO_FRAME_DATI_CLIENT = 0;
-  const TIPO_FRAME_CONTROLLO_CLIENT = 1;
+  /* ⛔ 16/09/2026, P0/A punto 3 — i due tipi di frame e il loro codificatore stanno adesso in
+     `components/terminale-xterm.js` insieme al resto del corpo del terminale: erano l'unica parte
+     del ponte scritta due volte (qui e in `src/terminal-ws.mjs`) e sono la prima cosa che serve per
+     provare il ponte senza un browser. Qui restano i nomi con cui il monolite li chiama. */
+  const TIPO_FRAME_DATI_CLIENT = TIPO_FRAME_DATI;
+  const TIPO_FRAME_CONTROLLO_CLIENT = TIPO_FRAME_CONTROLLO;
   const CHIAVE_SCHEDE_TERMINALE = 'talos-harness-terminali-v1';
 
   /*
@@ -11311,13 +12535,6 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     };
   }
 
-  function codificaFrameClient(tipo, testo) {
-    const corpo = new TextEncoder().encode(testo);
-    const frame = new Uint8Array(corpo.length + 1);
-    frame[0] = tipo;
-    frame.set(corpo, 1);
-    return frame;
-  }
 
   /* I nomi scelti dalla persona e la scheda attiva per sessione, nel browser. */
   function memoriaSchedeTerminale() { try { return JSON.parse(localStorage.getItem(CHIAVE_SCHEDE_TERMINALE) || '{}') || {}; } catch { return {}; } }
@@ -11366,7 +12583,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const conSessione = Boolean(state.realSession.id);
     // la cartella è quella che il server ha DICHIARATO per la scheda; per la scheda senza sessione la sceglie il server e qui non si inventa
     const cartella = attiva?.cartella || (attiva?.origine === 'standalone' ? '' : state.realSession.cartellaAssoluta) || '';
-    const segmento = cartella ? ultimoSegmentoIntro(cartella) : '';
+    const segmento = cartella ? ultimoSegmentoWorkspace(cartella) : '';
     const nomeCartella = segmento ? (/[\/]$/.test(segmento) ? segmento : `${segmento}/`) : '';
     const colori = t.enforcementColore && t.enforcementColore !== 'webgl' ? ` ${tr('Colori limitati ({motivo}).', { motivo: t.enforcementColore })}` : '';
     ui.aggiorna({
@@ -11410,7 +12627,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function impostaStatoScheda(record, stato) { record.stato = stato; renderizzaSchedeTerminale(); }
 
-  /** Monta la xterm.js di una scheda dentro il corpo — SOLO quando la scheda è visibile (xterm.js #3029). */
+  /**
+   * Monta la xterm.js di una scheda dentro il corpo — SOLO quando la scheda è visibile (xterm.js #3029).
+   *
+   * ⛔⛔ 16/09/2026, P0/A punto 3 — il cablaggio vero è in `components/terminale-xterm.js`. Qui
+   *   resta solo la CHIAMATA, con quello che il monolite sa e il componente no: dov'è il corpo,
+   *   che tema ha la app in questo momento, dove vanno i dati (la WebSocket della scheda) e come si
+   *   avvisa la persona. Non è un'estrazione per ordine: era l'unico modo di provare la decisione
+   *   sui tasti — «Ctrl+C senza selezione resta della shell» ora è un test, non una speranza.
+   */
   function montaSchedaTerminale(record) {
     if (record.term) return true;
     const corpo = $('#realTerminalMount');
@@ -11418,38 +12643,41 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       statoTerminale().enforcementColore = 'xterm.js non caricato'; // onesto: mai un pannello silenziosamente inerte
       return false;
     }
-    const mount = document.createElement('div');
-    mount.className = 'talos-terminal__mount';
-    mount.dataset.terminaleMount = record.terminalId;
-    corpo.append(mount);
-    record.mount = mount;
-    const term = new window.Terminal({
+    const pezzi = creaTerminaleXterm({
+      documento: document,
+      contenitore: corpo,
+      Terminal: window.Terminal,
+      FitAddon: window.FitAddon,
+      id: record.terminalId,
+      tema: temaTerminaleReale(),
       fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--talos-font-mono').trim() || 'Menlo, Consolas, monospace',
-      fontSize: 13,
-      cursorBlink: true,
-      scrollback: 5000,
-      theme: temaTerminaleReale(),
+      suDati: (dati) => {
+        if (record.ws?.readyState === WebSocket.OPEN) record.ws.send(codificaFrameClient(TIPO_FRAME_DATI_CLIENT, dati));
+      },
+      suMisura: () => inviaResizeTerminale(record),
     });
-    const fit = new window.FitAddon.FitAddon();
-    term.loadAddon(fit);
-    term.open(mount);
-    fit.fit();
-    term.onData((dati) => {
-      if (record.ws?.readyState === WebSocket.OPEN) record.ws.send(codificaFrameClient(TIPO_FRAME_DATI_CLIENT, dati));
-    });
+    if (!pezzi) {
+      statoTerminale().enforcementColore = 'xterm.js non caricato';
+      return false;
+    }
+    Object.assign(record, { term: pezzi.term, fit: pezzi.fit, mount: pezzi.mount, osservatore: pezzi.osservatore });
     /*
-     * ⛔ 28/8: xterm.js ridimensiona SE STESSO dentro l'elemento osservato — il resize alla PTY
-     * parte SOLO se cols/rows sono davvero cambiati (seconda difesa oltre all'altezza fissa in CSS).
+     * ⛔ Gli appunti si collegano QUI e non dentro `creaTerminaleXterm`: il menu contestuale vive
+     *   nella radice della app (la stessa degli altri menu) e l'avviso è il toast del monolite.
+     *   Il componente non deve conoscere né l'una né l'altro.
+     * ⛔ `scollegaAppunti` si tiene sul record ma oggi non lo chiama nessuno, e non è una
+     *   dimenticanza: l'unico ascoltatore che toglie sta sul montaggio, che `smontaSchedaTerminale`
+     *   rimuove dal documento — sparisce con lui. Resta il caso di bordo del menu aperto proprio
+     *   mentre la scheda si chiude; il posto dove chiuderlo è `smontaSchedaTerminale`, che è FUORI
+     *   dai confini di questa lavorazione (P0/A tocca 11415-11535). Dichiarato, non nascosto.
      */
-    const osservatore = new ResizeObserver(() => {
-      if (mount.hidden) return;
-      const primaCols = term.cols;
-      const primaRows = term.rows;
-      fit.fit();
-      if (term.cols !== primaCols || term.rows !== primaRows) inviaResizeTerminale(record);
+    record.scollegaAppunti = collegaAppunti(pezzi.term, {
+      documento: document,
+      ospite: pezzi.mount,
+      radiceMenu: ROOT().body || ROOT(), // la stessa radice del menu delle SCHEDE: un menu solo, una grammatica sola
+      apple: suApple(),
+      avvisa: (titolo, testo) => toast(tr(titolo), tr(testo)),
     });
-    osservatore.observe(mount);
-    Object.assign(record, { term, fit, osservatore });
     return true;
   }
 
@@ -11489,10 +12717,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     record.ws = ws;
     ws.onopen = () => { impostaStatoScheda(record, 'connesso'); inviaResizeTerminale(record); };
     ws.onmessage = (evento) => {
-      const buf = new Uint8Array(evento.data);
-      if (buf.length === 0) return;
-      const tipo = buf[0];
-      const corpo = new TextDecoder().decode(buf.subarray(1));
+      /* ⛔ 16/09: si decodifica con la stessa funzione che codifica (`terminale-xterm.js`), non con
+         una copia scritta qui: erano due letture dello stesso formato in due punti, e il giorno in
+         cui il formato cambia una delle due resta indietro in silenzio. Un frame vuoto torna
+         `null` — «niente», che non è «dati vuoti». */
+      const frame = decodificaFrameServer(new Uint8Array(evento.data));
+      if (!frame) return;
+      const { tipo, corpo } = frame;
       if (tipo === TIPO_FRAME_DATI_CLIENT) { record.term?.write(corpo); return; }
       try {
         const messaggio = JSON.parse(corpo);
@@ -11520,6 +12751,23 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const t = statoTerminale();
     const record = t.schede.get(id);
     if (!record) return;
+    /*
+     * ⛔⛔ BC-63/R1, 17/09/2026 — MISURATO con una sonda, non dedotto: il doppio clic sulla linguetta
+     *   apriva il campo di rinomina e il campo spariva da solo entro tre secondi. La sonda ha
+     *   contato cinque mutazioni della barra e ha trovato il fuoco su `xterm-helper-textarea`:
+     *   i due clic del doppio clic passano da qui, e il `record.term?.focus()` dentro il
+     *   `requestAnimationFrame` qui sotto arriva DOPO l'apertura del campo, gli porta via il fuoco,
+     *   il `blur` chiude la rinomina. Con F2 non succedeva — nessun clic, nessun furto — ed è per
+     *   questo che la prova col tasto funzionava e quella col mouse no.
+     * ⇒ Il fuoco va nel terminale quando la scheda CAMBIA o quando nasce adesso; ricliccare la
+     *   scheda già attiva non è un'azione e non deve spostare niente. È anche lo stato dell'arte:
+     *   microsoft/terminal#9886 «Clicking a tab triggers focus lose» descrive lo stesso difetto
+     *   proprio sulla scheda già attiva, e microsoft/vscode#166821 «Terminal Tabs: disable dragging
+     *   and clicking during renaming» dice che durante la rinomina clic e doppio clic non devono
+     *   fare il loro mestiere (qui è la guardia `inerte` di `schede.js`). Letti il 17/09/2026.
+     */
+    const cambiaScheda = t.attiva !== id;
+    const eraGiaMontata = Boolean(record.term);
     t.attiva = id;
     ricordaAttivaTerminale(t.sessioneId, id);
     for (const altra of t.schede.values()) {
@@ -11542,12 +12790,40 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (terminaleAschermo() && montaSchedaTerminale(record)) {
       accendiWebglTerminale(record);
       collegaWsScheda(record);
-      requestAnimationFrame(() => { record.fit?.fit(); inviaResizeTerminale(record); record.term?.focus(); });
+      requestAnimationFrame(() => { record.fit?.fit(); inviaResizeTerminale(record); if (cambiaScheda || !eraGiaMontata) record.term?.focus(); });
     }
     renderizzaSchedeTerminale();
   }
 
-  async function caricaSchedeTerminale() {
+  /*
+   * ⛔⛔ BC-62 (owner, 17/09/2026, dal vivo): «quando apro scheda terminale si apre una nuova tab terminale senza motivo».
+   *
+   * MISURATO su un banco con una sessione aperta: al PRIMO ingresso nella vista partivano due
+   * `GET …/terminals` nello stesso millisecondo e, 7 ms dopo, due `POST …/terminals`. Questa funzione
+   * è un «controlla poi agisci»: se il registro è vuoto fa una POST per farsi dare la prima scheda —
+   * e quella POST è idempotente SOLO a registro vuoto. Due chiamate insieme (l'ingresso nella vista e
+   * il riallineamento della sessione) vedono entrambe il vuoto: la prima POST restituisce la prima
+   * scheda, la seconda — a registro non più vuoto — ne CREA una vera. Risultato a schermo:
+   * «tu · Git Bash» e «tu · Git Bash 2» senza che nessuno abbia premuto «Nuovo».
+   *
+   * Cura: volo unico per sessione. Chi arriva mentre il caricamento è in corso riceve LA STESSA
+   * promessa, non ne fa partire un secondo (è il «single-flight» di Go, che in JS è condividere la
+   * promessa: nanw1103/dedup-async; «How to Prevent Cache Stampede in Node.js APIs with the
+   * Single-Flight Pattern», dev.to/1xapi — letti il 17/09/2026). ⛔ La chiave è la SESSIONE: un
+   * cambio di sessione a metà volo deve poter partire subito, e il vecchio volo si scarta da sé
+   * (`if (t.sessioneId !== sessioneId) return`, qui sotto).
+   */
+  let caricamentoSchedeInVolo = null;
+  function caricaSchedeTerminale() {
+    const sessioneId = state.realSession.id || null;
+    if (caricamentoSchedeInVolo && caricamentoSchedeInVolo.sessioneId === sessioneId) return caricamentoSchedeInVolo.promessa;
+    const volo = { sessioneId, promessa: null };
+    volo.promessa = caricaSchedeTerminaleUnaVolta().finally(() => { if (caricamentoSchedeInVolo === volo) caricamentoSchedeInVolo = null; });
+    caricamentoSchedeInVolo = volo;
+    return volo.promessa;
+  }
+
+  async function caricaSchedeTerminaleUnaVolta() {
     const t = statoTerminale();
     const sessioneId = state.realSession.id || null;
     t.sessioneId = sessioneId;
@@ -11686,7 +12962,30 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   function appendBrowserEntry(url, testo) {
     const pagine = state.realSession.browserPagine;
-    pagine.push({ url, testo, quando: new Date().toISOString() });
+    /*
+     * ⛔⛔⛔ 16/09/2026, P0 corsia B punto 4(a) — L'ID DI UNA SCHEDA NASCE CON LA SCHEDA.
+     *
+     * ⛔ RISCRITTO NEL GIRO DI RIPARAZIONE, perché la spiegazione che stava qui era FALSA e sarebbe
+     *   rimasta a ingannare chi la legge fra sei mesi. Diceva: «chiudo la seconda scheda e il modo
+     *   scelto per la terza diventa quello della quarta». Non poteva succedere: `browserPagine` si
+     *   riempie solo con `push` (qui sotto) e la chiusura non fa `splice` — aggiunge l'id a
+     *   `browserChiuse` (`chiudiSchedaBrowser`). Dentro UNA sessione gli indici non scivolano mai.
+     *
+     * ⭐ Il difetto vero era un altro, ed era peggiore. `browserPagine` si SVUOTA al cambio di
+     *   sessione (`state.realSession.browserPagine = []`, più in basso in questo file) mentre
+     *   `browserChiuse` NON si svuota: sopravvive. Con gli id posizionali, la prima lettura di una
+     *   sessione nuova si chiamava `lettura-0` — un nome che con ogni probabilità era già
+     *   nell'insieme delle chiuse, perché in una sessione precedente qualcuno aveva chiuso la sua
+     *   prima scheda. ⇒ La prima pagina letta dall'agente nella sessione nuova nasceva INVISIBILE,
+     *   senza un errore e senza una riga a schermo.
+     *
+     * ⇒ Due cure, non una: l'identità si assegna QUI, una volta, con un contatore che non torna mai
+     *   indietro (MDN «WebExtensions tabs»: gli id sono unici nella sessione e non si riusano); e
+     *   `schedeBrowser` pota `browserChiuse` contro le letture che esistono davvero, così un id
+     *   chiuso non può sopravvivere alla pagina che nominava.
+     */
+    const id = `lettura-${(state.realSession.browserProssimoId = (state.realSession.browserProssimoId || 0) + 1)}`;
+    pagine.push({ id, url, testo, quando: new Date().toISOString() });
     mostraPaginaBrowser(pagine.length - 1);
   }
 
@@ -11699,6 +12998,145 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   const CHIAVE_NOTE_BROWSER = 'talos-harness-browser-note-v1';
   let browserUi = null;
+  /*
+   * ⛔⛔⛔ 16/09/2026, P0 corsia B punto 4(c) — LE RICHIESTE IN VOLO SI ANNULLANO, E I RITENTATIVI
+   *   ASPETTANO UN TEMPO DICHIARATO.
+   *
+   * Che cosa c'era prima, misurato: NESSUN `AbortController` in tutta la catena del Browser (né in
+   * `app.js` né in `components/browser.js`) e nessun ritentativo. Conseguenze vere:
+   *   · chiudevi una scheda mentre stava aprendo e la risposta arrivava lo stesso, scrivendo su una
+   *     scheda che non c'era più (o su quella che nel frattempo aveva preso il suo posto);
+   *   · un sito che non rispondeva ti dava un guasto secco dopo 6 secondi, senza mai riprovare —
+   *     mentre il 90% di quei guasti sono transitori.
+   *
+   * Ricerca 16/09/2026:
+   *   · MDN «AbortController» / «AbortSignal.any()» — la cancellazione si propaga al `fetch`, e un
+   *     annullamento NON è un errore: si riconosce da `name === 'AbortError'` e non si racconta
+   *     come un guasto del sito;
+   *   · AWS Architecture Blog «Exponential Backoff And Jitter» (Marc Brooker) — attesa esponenziale
+   *     con jitter PIENO: `attesa = random() * min(tetto, base * 2^tentativo)`. Senza jitter tutte
+   *     le schede riprovano nello stesso istante; con il jitter pieno si distribuiscono.
+   *   · Google SRE, cap. «Handling Overload» — un tetto ai tentativi, sempre: un ritentativo senza
+   *     fine è un guasto che non si vede.
+   * ⛔ I numeri qui sotto sono quelli, non «a occhio»: base 400 ms (sotto, un ritentativo arriva
+   *   prima che la rete si sia ripresa), tetto 4 s (sopra, chi guarda crede che sia morto), DUE
+   *   ritentativi (il terzo, sul timeout del server di 6 s, porterebbe l'attesa totale oltre i 20 s).
+   */
+  const BROWSER_RITENTATIVI = 2;
+  const BROWSER_ATTESA_BASE_MS = 400;
+  const BROWSER_ATTESA_TETTO_MS = 4_000;
+  /** Attesa del tentativo `n` (1-based), jitter PIENO come da AWS: fra 0 e il tetto esponenziale. */
+  function attesaRitentativo(n) {
+    const tetto = Math.min(BROWSER_ATTESA_TETTO_MS, BROWSER_ATTESA_BASE_MS * (2 ** Math.max(0, n - 1)));
+    return Math.round(Math.random() * tetto);
+  }
+  /** id scheda → { controller, attesa } — ciò che è in volo per quella scheda, e niente di più. */
+  const richiesteBrowser = new Map();
+  /**
+   * Interrompe ciò che è in volo per una scheda: la richiesta al server e l'attesa del prossimo
+   * tentativo. ⛔ Chi scrive un esito controlla SEMPRE di essere ancora il titolare del volo: una
+   * risposta che arriva dopo un annullamento non tocca più niente.
+   */
+  function fermaRichiestaBrowser(id) {
+    const volo = richiesteBrowser.get(id);
+    if (!volo) return false;
+    richiesteBrowser.delete(id);
+    clearTimeout(volo.attesa);
+    try { volo.controller?.abort(); } catch { /* già interrotta */ }
+    return true;
+  }
+  /** Registra un volo per la scheda, interrompendo quello precedente (una scheda, una richiesta). */
+  function iniziaRichiestaBrowser(id) {
+    fermaRichiestaBrowser(id);
+    const volo = { controller: new AbortController(), attesa: null };
+    richiesteBrowser.set(id, volo);
+    return volo;
+  }
+  const voloCorrente = (id, volo) => richiesteBrowser.get(id) === volo;
+  /**
+   * `apiGet` con un `signal`. ⛔ Non è una seconda API: è la stessa busta (`ok`/`data`/`error`),
+   *   letta con lo stesso codice. Esiste perché `apiGet` (riga ~2713) non accetta opzioni e quel
+   *   file non è di questa corsia — e perché `fetchSorvegliata` segnerebbe «rete caduta» anche per
+   *   un annullamento NOSTRO, che rete caduta non è (MDN: `AbortError` non è un guasto di rete).
+   * @param {string} pathname @param {AbortSignal} signal
+   */
+  async function apiGetBrowser(pathname, signal) {
+    let risposta;
+    try {
+      risposta = await fetch(API(pathname), { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store', signal });
+      sorveglianza?.segnalaRete(true);
+    } catch (errore) {
+      if (errore?.name !== 'AbortError') sorveglianza?.segnalaRete(false, 'fetch');
+      throw errore;
+    }
+    let busta;
+    try { busta = await risposta.json(); } catch { const e = new Error('Risposta locale non valida'); e.code = 'INTERNAL_ERROR'; throw e; }
+    if (!risposta.ok || !busta?.ok) {
+      const e = new Error(busta?.error?.message || 'Richiesta locale non riuscita');
+      e.code = busta?.error?.code || 'INTERNAL_ERROR';
+      e.stato = risposta.status;
+      throw e;
+    }
+    return busta.data;
+  }
+  /**
+   * Chiede al server se un indirizzo si lascia incorniciare, RITENTANDO ciò che è transitorio.
+   * Lo stato della scheda si muove sotto gli occhi: loading → retrying → loaded | error | unreachable.
+   * @param {object} voce la scheda (lettura o viva) su cui scrivere lo stato
+   * @param {{onStato:()=>void}} opzioni `onStato` ridisegna (è `renderizzaBrowser`)
+   * @returns {Promise<object|null>} l'esito, o null se la scheda è stata chiusa/annullata nel frattempo
+   */
+  async function chiediIncorniciabileConRitentativi(voce, { onStato }) {
+    const id = voce.id;
+    voce.tentativi = 0;
+    voce.tentativiMassimi = BROWSER_RITENTATIVI + 1;
+    for (let tentativo = 1; tentativo <= BROWSER_RITENTATIVI + 1; tentativo += 1) {
+      const volo = iniziaRichiestaBrowser(id);
+      voce.tentativi = tentativo;
+      try {
+        const esito = await apiGetBrowser(`/api/v1/browser/incorniciabile?url=${encodeURIComponent(voce.url)}`, volo.controller.signal);
+        if (!voloCorrente(id, volo)) return null; // annullata mentre era in volo: nessuna scrittura tardiva
+        richiesteBrowser.delete(id);
+        /* ⛔ Un esito ARRIVATO non è un esito BUONO: il server risponde 200 anche quando dice «non
+           sono riuscito a raggiungere il sito», e il genere lo dichiara (browser-frame.mjs, 16/09). */
+        if (esito?.genere && CLIENT_RITENTA.has(esito.genere) && tentativo <= BROWSER_RITENTATIVI) {
+          voce.stato = 'ritento'; voce.motivo = esito.motivo || null;
+          voce.genere = esito.genere || null; voce.dettagli = esito.dettagli || null; onStato?.();
+          if (!await aspettaRitentativo(id, tentativo)) return null;
+          continue;
+        }
+        return esito;
+      } catch (errore) {
+        if (errore?.name === 'AbortError' || !voloCorrente(id, volo)) return null;
+        richiesteBrowser.delete(id);
+        if (tentativo > BROWSER_RITENTATIVI) throw errore;
+        voce.stato = 'ritento'; voce.motivo = messaggioErroreUtente(errore, 'Il server non ha risposto');
+        voce.genere = null; voce.dettagli = null; onStato?.();
+        if (!await aspettaRitentativo(id, tentativo)) return null;
+      }
+    }
+    return null;
+  }
+  /** I generi che vale la pena riprovare: gli stessi di `siRitenta` nel server, scritti una volta sola qui. */
+  const CLIENT_RITENTA = new Set(['timeout', 'rete', 'rifiuto']);
+  /*
+   * ⛔⛔ 16/09, GIRO DI RIPARAZIONE — i generi che vogliono dire «non ci sono arrivato». Gli stessi
+   *   di `eUnGuasto` in `src/browser-frame.mjs`, che è dove vengono assegnati. ⛔ Da quando anche i
+   *   RIFIUTI del sito portano un genere (`xfo-deny`, `xfo-sameorigin`, `frame-ancestors`, per
+   *   poterli dire in due lingue), leggere la PRESENZA del genere come «guasto» classificava un
+   *   sito perfettamente vivo come irraggiungibile, con «Riprova» acceso su una cosa che riprovare
+   *   non cambia. Un rifiuto si ripiega sul testo dell'agente, e non è un guasto.
+   */
+  const CLIENT_GUASTI = new Set(['timeout', 'dns', 'rifiuto', 'certificato', 'rete', 'indirizzo']);
+  /** Aspetta l'attesa del tentativo, restando annullabile. @returns {Promise<boolean>} false se annullata */
+  function aspettaRitentativo(id, tentativo) {
+    return new Promise((risolvi) => {
+      const volo = { controller: null, attesa: null };
+      richiesteBrowser.set(id, volo);
+      volo.attesa = setTimeout(() => { if (richiesteBrowser.get(id) === volo) { richiesteBrowser.delete(id); risolvi(true); } else risolvi(false); }, attesaRitentativo(tentativo));
+      volo.controller = { abort: () => risolvi(false) }; // chiudere la scheda ferma anche l'attesa
+    });
+  }
   function noteBrowser() { try { const tutte = JSON.parse(localStorage.getItem(CHIAVE_NOTE_BROWSER) || '{}') || {}; return tutte[state.realSession.id || '-'] || {}; } catch { return {}; } }
   function salvaNotaBrowser(url, testo) {
     let tutte = {}; try { tutte = JSON.parse(localStorage.getItem(CHIAVE_NOTE_BROWSER) || '{}') || {}; } catch { tutte = {}; }
@@ -11707,10 +13145,40 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (testo) tutte[chiave][url] = testo; else delete tutte[chiave][url];
     try { localStorage.setItem(CHIAVE_NOTE_BROWSER, JSON.stringify(tutte)); } catch { /* quota o finestra privata: la nota vive solo in memoria */ }
   }
+  /*
+   * ⛔⛔⛔ 16/09/2026, GIRO DI RIPARAZIONE — DUE FAMIGLIE DI NOMI CHE NON POSSONO INCONTRARSI.
+   *
+   * Bocciatura del controllore, verificata: il contatore delle letture nuove parte da 1
+   * (`lettura-1`) e il ripiego delle letture SENZA id partiva da 0 (`lettura-0`, `lettura-1`, …).
+   * In una sessione già aperta quando arriva una build nuova, la seconda lettura vecchia e la
+   * prima lettura nuova finivano con LO STESSO id: due schede con un modo solo, una chiusura che
+   * ne nasconde due, e `cornici.find(c => c.dataset.browserId === s.id)` che pesca la cornice
+   * dell'altra. Era PEGGIO del difetto che la cura doveva chiudere.
+   *
+   * ⇒ Il ripiego prende un prefisso suo, `lettura-e` («ereditata»), che il contatore non può
+   *   produrre: le due famiglie sono disgiunte per COSTRUZIONE, non per fortuna.
+   * ⛔ Resta dentro `lettura-`, perché `chiudiSchedaBrowser` distingue lettura e pagina viva dal
+   *   prefisso: cambiarlo del tutto avrebbe rotto la chiusura in silenzio.
+   * ⛔ E la decisione sta in UNA funzione, non in tre copie della stessa espressione: erano tre
+   *   (qui, in `renderizzaBrowser` e in `mostraPaginaBrowser`), e tre copie divergono.
+   * @param {{id?:string}} p @param {number} i
+   */
+  function idDiLettura(p, i) { return p?.id || `lettura-e${i}`; }
   function schedeBrowser() {
     const rs = state.realSession;
-    const letture = rs.browserPagine.map((p, i) => ({ ...p, id: `lettura-${i}`, tipo: 'lettura', origine: 'agente' })).filter((p) => !rs.browserChiuse.has(p.id));
-    return [...letture, ...rs.browserVive];
+    /*
+     * ⛔ 16/09 — l'id viene dalla lettura (assegnato alla nascita in `appendBrowserEntry`), non
+     *   dalla posizione; `idDiLettura` copre le letture arrivate PRIMA di questa cura dentro una
+     *   sessione già aperta, che un id non ce l'hanno.
+     * ⛔ E le chiuse non crescono più per sempre: `browserChiuse` teneva ogni id chiuso per tutta
+     *   la vita della sessione, anche quando quella lettura non esisteva più — ed è esattamente
+     *   così che la PRIMA lettura di una sessione nuova nasceva invisibile (vedi il commento in
+     *   `appendBrowserEntry`). Qui si potano contro ciò che esiste davvero.
+     */
+    const letture = rs.browserPagine.map((p, i) => ({ ...p, id: idDiLettura(p, i), tipo: 'lettura', origine: 'agente' }));
+    const vivi = new Set(letture.map((p) => p.id));
+    for (const id of [...rs.browserChiuse]) if (!vivi.has(id)) rs.browserChiuse.delete(id);
+    return [...letture.filter((p) => !rs.browserChiuse.has(p.id)), ...rs.browserVive];
   }
   function uiBrowser() {
     if (browserUi) return browserUi;
@@ -11740,21 +13208,86 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        *   rotta. Le pagine VIVE chiedevano già al server se il sito si lascia incorniciare; le letture
        *   dell'agente no, e partivano a testa bassa. Stessa domanda, stessa rotta, una volta per pagina.
        */
+      /*
+       * ⛔ 16/09 — la domanda al server per una LETTURA passa dalla stessa catena delle pagine vive:
+       *   annullabile, con due ritentativi su ciò che è transitorio, e con lo stato visibile mentre
+       *   succede (prima: nessun ritentativo, nessun annullamento, e uno schermo vuoto nell'attesa).
+       * ⛔ La pagina si cerca per ID, non per URL: due letture dello stesso indirizzo esistono
+       *   (l'agente rilegge), e `find((p) => p.url === s.url)` scriveva sulla PRIMA — cioè su una
+       *   scheda diversa da quella che stava chiedendo.
+       */
       chiediCornice: (s) => {
-        const pagina = state.realSession.browserPagine.find((p) => p.url === s.url);
+        const rs = state.realSession;
+        const pagina = rs.browserPagine.find((p) => (p.id || null) === s.id) || rs.browserPagine.find((p) => p.url === s.url);
         if (!pagina || pagina.incorniciabile !== undefined) return;
+        if (!pagina.id) pagina.id = s.id; // lettura nata prima della cura del 16/09: da qui in poi ha un id suo
         pagina.incorniciabile = null; // in volo: non si chiede due volte
-        apiGet(`/api/v1/browser/incorniciabile?url=${encodeURIComponent(s.url)}`)
+        pagina.stato = 'caricamento';
+        chiediIncorniciabileConRitentativi(pagina, { onStato: renderizzaBrowser })
           .then((esito) => {
+            /* ⛔ Annullata mentre era in volo: nessuna scrittura tardiva, e `incorniciabile` resta
+               `null` — se tornasse `undefined` il render successivo ricomincerebbe la domanda da
+               solo, cioè l'annullamento durerebbe un fotogramma. Ci ritorna solo «Riprova». */
+            if (esito === null) { pagina.stato = 'annullata'; return; }
+            /*
+             * ⛔ 16/09 — «il sito RIFIUTA la cornice» e «il sito non l'ho RAGGIUNTO» sono due esiti
+             *   diversi che arrivavano uguali (`incorniciabile: false`), e la differenza la dice il
+             *   `genere`: il server lo valorizza solo quando la richiesta è fallita (DNS, timeout,
+             *   certificato, rete — `browser-frame.mjs`), mentre un X-Frame-Options è un NO ricevuto.
+             *   Nel primo caso la scheda è «non raggiunta» e si può riprovare; nel secondo si ripiega
+             *   sul testo dell'agente, che è la cosa giusta da fare e non è un guasto.
+             */
+            pagina.stato = CLIENT_GUASTI.has(esito?.genere) ? 'irraggiungibile' : 'pronta';
             pagina.incorniciabile = Boolean(esito?.incorniciabile);
             pagina.motivoCornice = esito?.motivo || null;
+            pagina.motivo = esito?.incorniciabile ? null : (esito?.motivo || null);
+            /* ⛔⛔ 16/09, GIRO DI RIPARAZIONE — il `genere` e i suoi `dettagli` viaggiano fino alla
+               scheda, e sono ciò con cui il pannello SCRIVE la frase nella lingua di chi guarda.
+               Prima arrivava solo `motivo`, cioè una frase già composta dal server (con dentro un
+               numero), e il pannello provava a tradurla: da lì il titolo inglese sopra il motivo
+               italiano che si vede nelle foto della consegna precedente. */
+            pagina.genere = esito?.incorniciabile ? null : (esito?.genere || null);
+            pagina.dettagli = esito?.dettagli || null;
             // ⛔ 07/9 — la stessa risposta porta già il `<title>` della pagina (`browser-frame.mjs` lo
             //   legge quando è HTML) e nessuno lo usava: le schede scrivevano l'host. Un browser scrive
             //   il titolo. Se non c'è, `titoloScheda` ricade sul <title> nel testo e poi sull'host.
             if (esito?.titolo && !pagina.titolo) pagina.titolo = esito.titolo;
           })
-          .catch(() => { pagina.incorniciabile = false; pagina.motivoCornice = 'Non ho potuto controllare se questa pagina si lascia mostrare qui dentro.'; })
+          .catch((errore) => {
+            pagina.incorniciabile = false;
+            pagina.stato = 'irraggiungibile';
+            pagina.motivo = messaggioErroreUtente(errore, 'Non ho potuto controllare se questa pagina si lascia mostrare qui dentro.');
+            pagina.motivoCornice = pagina.motivo;
+            // il server non ha risposto affatto: nessun genere da nominare, il pannello mostra il messaggio così com'è
+            pagina.genere = null; pagina.dettagli = null;
+          })
           .finally(() => renderizzaBrowser());
+      },
+      /*
+       * ⛔ 16/09 — «Riprova» e «Annulla» del pannello di stato. Riprovare è ricominciare da capo la
+       *   catena di quella scheda (e solo di quella); annullare interrompe DAVVERO la richiesta in
+       *   volo — non la lascia correre sperando che nessuno legga la risposta.
+       */
+      riprova: (s) => {
+        const rs = state.realSession;
+        fermaRichiestaBrowser(s.id);
+        if (s.tipo === 'viva') {
+          apriPaginaVivaBrowser(s.url, s.id).catch((errore) => browserUi?.avvisa(messaggioErroreUtente(errore, 'Non sono riuscito ad aprire questo indirizzo.')));
+          return;
+        }
+        const pagina = rs.browserPagine.find((p) => (p.id || null) === s.id);
+        if (!pagina) return;
+        pagina.incorniciabile = undefined; pagina.stato = undefined; pagina.motivo = null; pagina.motivoCornice = null;
+        pagina.genere = null; pagina.dettagli = null;
+        renderizzaBrowser(); // il render successivo richiede la cornice (`chiediCornice`) da capo
+      },
+      annullaApertura: (s) => {
+        const rs = state.realSession;
+        const fermata = fermaRichiestaBrowser(s.id);
+        const voce = rs.browserVive.find((x) => x.id === s.id) || rs.browserPagine.find((p) => (p.id || null) === s.id);
+        if (voce) { voce.stato = 'annullata'; voce.motivo = null; voce.genere = null; voce.dettagli = null; }
+        if (!fermata && !voce) return;
+        renderizzaBrowser();
       },
       // ⛔ stesso motivo di `apri` qui sopra: una ricarica che si rompe deve dirlo, non sparire.
       rileggi: (s) => {
@@ -11798,8 +13331,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const rs = state.realSession;
     const schede = schedeBrowser();
     if (!schede.some((x) => x.id === rs.browserAttiva)) rs.browserAttiva = schede.length ? schede[schede.length - 1].id : null;
-    const m = /^lettura-(\d+)$/.exec(rs.browserAttiva || '');
-    rs.browserIndice = m ? Number(m[1]) : -1;
+    /* ⛔ 16/09 — l'indice si CERCA, non si legge dal nome: con gli id stabili il numero dentro
+       `lettura-7` è un numero di nascita, non più una posizione nell'elenco. Leggerlo come indice
+       avrebbe puntato alla pagina sbagliata appena una lettura viene chiusa. */
+    rs.browserIndice = rs.browserPagine.findIndex((p, i) => idDiLettura(p, i) === rs.browserAttiva);
     ui.aggiorna({ schede, attiva: rs.browserAttiva, note: noteBrowser(), richiesta: rs.browserRichiesta, annotazioni: rs.browserAnnotazioni, annotaAttivo: rs.browserAnnotaAttivo });
     /* ⛔ La vista viva si mostra SOLO sulla sua scheda. Senza questa riga restava incollata addosso
        a tutte le altre (owner, 08/9). Non si smonta: si nasconde, così tornando indietro la pagina
@@ -11811,7 +13346,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /** Compatibilità coi chiamanti di prima (appendBrowserEntry, il reset di sessione): mostra la lettura all'indice dato. */
   function mostraPaginaBrowser(indice) {
     const rs = state.realSession;
-    rs.browserAttiva = rs.browserPagine[indice] ? `lettura-${indice}` : rs.browserAttiva;
+    // ⛔ 16/09 — l'id lo porta la pagina (assegnato alla nascita); `idDiLettura` copre le letture vecchie
+    const pagina = rs.browserPagine[indice];
+    rs.browserAttiva = pagina ? idDiLettura(pagina, indice) : rs.browserAttiva;
     renderizzaBrowser();
   }
   function chiudiSchedaBrowser(id) {
@@ -11825,6 +13362,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   cose diverse, e finora solo la prima si chiudeva.
      */
     const chiusa = schedeBrowser().find((x) => x.id === id);
+    /* ⛔ 16/09 — chiudere una scheda INTERROMPE ciò che stava facendo: la richiesta al server e
+       l'attesa del prossimo tentativo. Prima la risposta arrivava lo stesso e scriveva su una
+       scheda che non c'era più (o su quella che aveva preso il suo posto, visto che gli id erano
+       posizionali). MDN «AbortController»: la cancellazione si fa dove la promessa nasce. */
+    fermaRichiestaBrowser(id);
     if (chiusa?.viaVista === 'vivo') smontaVistaViva();
     if (id.startsWith('lettura-')) rs.browserChiuse.add(id); else rs.browserVive = rs.browserVive.filter((x) => x.id !== id);
     if (rs.browserAttiva === id) rs.browserAttiva = prossima;
@@ -11879,6 +13421,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⇒ Chi smonta restituisce la sua promessa, e chi apre la aspetta.
    */
   function smontaVistaViva() {
+    /*
+     * ⛔⛔ 16/09, P0 corsia B punto 4(f) — LA PAGINA PILOTATA È UNA ALLA VOLTA (una sola scheda
+     *   Chromium sul server, `IDENTITA_BROWSER`: assunzione approvata dall'owner per questa fase).
+     *   Fin qui smontarla era MUTO: si tornava sulla scheda di prima e non c'era niente, senza una
+     *   riga che dicesse perché — e la scheda sembrava rotta. Adesso la scheda se lo ricorda e il
+     *   pannello lo dice, con «Riprova» per riaprirla dov'era. Lo stato delle ALTRE schede (modo,
+     *   cornici, commenti) non viene toccato: la vista viva se ne va, le schede restano.
+     */
+    if (vistaVivaDi) {
+      const suo = state.realSession.browserVive.find((x) => x.id === vistaVivaDi);
+      if (suo) suo.vivaARiposo = true;
+    }
     vistaVivaDi = null;
     if (flussoVivo) { try { flussoVivo.close(); } catch { /* già chiuso */ } flussoVivo = null; }
     if (vistaViva) { try { vistaViva.distruggi(); } catch { /* già andata */ } vistaViva = null; }
@@ -11938,6 +13492,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     await smontaVistaViva(); // ⛔ si ASPETTA: senza, la chiusura arriva dopo e uccide la scheda nuova
     contenitore.hidden = false;
     vistaVivaDi = voce.id; // da qui la tela appartiene a QUESTA scheda, e a nessun altra
+    voce.vivaARiposo = false; // ⭐ 16/09: questa è la viva; le altre lo sanno da `smontaVistaViva`
 
     vistaViva = creaVistaViva(contenitore, {
       onGesto: (gesto) => {
@@ -12095,8 +13650,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     rs.browserAttiva = voce.id;
     renderizzaBrowser();
     try {
-      const esito = await apiGet(`/api/v1/browser/incorniciabile?url=${encodeURIComponent(url)}`);
+      /* ⛔ 16/09 — la domanda al server è ANNULLABILE e si RITENTA (due volte, attesa esponenziale
+         con jitter pieno — vedi `chiediIncorniciabileConRitentativi`). Prima era una `apiGet` secca:
+         un singhiozzo di rete diventava una scheda «bloccata» per sempre, e chiudere la scheda non
+         fermava niente. */
+      const esito = await chiediIncorniciabileConRitentativi(voce, { onStato: renderizzaBrowser });
       if (!rs.browserVive.includes(voce)) return; // chiusa nel frattempo
+      if (esito === null) { voce.stato = 'annullata'; voce.motivo = null; voce.genere = null; voce.dettagli = null; renderizzaBrowser(); return; } // annullata: niente scritture tardive
       voce.url = esito?.url || url;
       voce.titolo = esito?.titolo || null;
       // un dev server locale passa dal proxy: la cornice è nostra anche se il sito vietasse l'incorniciatura
@@ -12137,11 +13697,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          *   VERO — quello che il server ha appena detto in italiano.
          */
         const conVista = esito?.via === 'cornice' ? false : await apriNelBrowserVivo(voce);
-        if (!conVista) { voce.stato = 'bloccata'; voce.motivo = esito?.motivo || 'Il sito non consente di essere mostrato dentro TALOS'; }
+        /* ⛔ 16/09 — «non ci sono arrivato» e «il sito dice di no» sono due stati diversi: il primo
+           si riprova (ed è `irraggiungibile`, col motivo classificato dal server), il secondo no. */
+        if (!conVista) {
+          voce.stato = CLIENT_GUASTI.has(esito?.genere) ? 'irraggiungibile' : 'bloccata';
+          voce.motivo = esito?.motivo || 'Il sito non consente di essere mostrato dentro TALOS';
+          voce.genere = esito?.genere || null; voce.dettagli = esito?.dettagli || null;
+        }
       }
       void dallaPaginaAgliOcchiDelModello(voce); // 06/9: quello che guardi tu, lo deve vedere anche lui
     } catch (error) {
-      voce.stato = 'bloccata'; voce.motivo = error.message || 'Il server non ha potuto controllare la pagina';
+      if (error?.name === 'AbortError') { voce.stato = 'annullata'; voce.motivo = null; voce.genere = null; voce.dettagli = null; } // annullare non è un guasto
+      else { voce.stato = 'irraggiungibile'; voce.motivo = messaggioErroreUtente(error, 'Il server non ha potuto controllare la pagina'); voce.genere = null; voce.dettagli = null; }
     }
     renderizzaBrowser();
   }
@@ -12693,13 +14260,50 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
   }
 
+  /** ⭐ 02/09 — il diff di UN file come testo semplice; ⭐ 17/09 BC-63: lo usa anche il menu della linguetta. */
+  function testoDiffDiUnFile(file) {
+    return [
+      `### ${file.path}${file.nuovo ? ' (nuovo)' : ''}`,
+      ...(file.code || []).map(([kind, text]) => text),
+      '',
+    ].join('\n');
+  }
+
   /** ⭐ 02/09 — il diff di TUTTI i file scritti in questa sessione come testo unificato semplice (per incollarlo in una PR, un messaggio, una nota). */
   function testoDiffCompleto() {
-    return [...state.realSession.reviewFiles.values()].map((file) => [
-      `### ${file.path}${file.nuovo ? ' (nuovo)' : ''}`,
-      ...file.code.map(([kind, text]) => text),
-      '',
-    ].join('\n')).join('\n');
+    return [...state.realSession.reviewFiles.values()].map(testoDiffDiUnFile).join('\n');
+  }
+
+  /*
+   * BC-63, owner 17/09/2026: «la scheda revisione deve avere lo stesso component tab di terminale
+   * (schede stile chrome)». Il componente si monta UNA volta sola (come `uiSchedeTerminale`), così
+   * i suoi ascoltatori — tastiera e menu contestuale — non si moltiplicano a ogni scrittura.
+   *
+   * ⛔ Le tre voci del menu sono le sole che hanno un comportamento VERO dietro:
+   *   · «Apri il file» è lo stesso visualizzatore dell'albero Files (`apriFileAlbero`), e si
+   *     spegne quando non c'è una sessione da cui leggerlo — non si offre e poi si nega;
+   *   · le due copie passano da `copyText`, che dice anche cosa ha copiato.
+   *   Non c'è «Chiudi le altre»: nella Revisione una linguetta NON si chiude — l'elenco è quello
+   *   dei file che la sessione ha scritto, e un comando che finge di toglierne uno sarebbe una
+   *   funzione senza niente dietro.
+   */
+  let uiReview = null;
+  function uiSchedeReview() {
+    if (uiReview) return uiReview;
+    const striscia = $('#schermoReview .talos-review__schede');
+    if (!striscia) return null;
+    const radice = ROOT();
+    uiReview = creaSchedeReview(striscia, {
+      root: radice.body || radice,
+      azioni: {
+        seleziona: (chiave) => renderReviewFile(chiave),
+        puoAprire: () => Boolean(state.realSession.id),
+        apri: (voce) => { void apriFileAlbero(voce.path, voce.path.split('/').pop()); },
+        copiaPercorso: (voce) => { void copyText(voce.path, 'Percorso copiato'); },
+        copiaDiff: (voce) => { void copyText(testoDiffDiUnFile(voce), `Diff di ${voce.path.split('/').pop()} copiato`); },
+      },
+    });
+    return uiReview;
   }
 
   /** ⭐ 02/09 — scrive nel composer (senza inviare) e porta il fuoco lì: è il gesto "Commenta"/"Annota" — la persona completa e decide se mandare. */
@@ -12727,47 +14331,41 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * che aspettano una rotta (Accetta/Scarta/Apri nell'editor) restano nascosti.
      */
     const schermo = $('#schermoReview');
-    const contenitore = schermo?.querySelector('.talos-review__schede .talos-tabs__list'); // owner 05/09: schede in alto, diff sotto
-    if (!contenitore) return;
+    const ui = uiSchedeReview(); // BC-63, 17/09: lo stesso componente del Terminale (owner 05/09: schede in alto, diff sotto)
+    const contenitore = schermo?.querySelector('.talos-review__schede .talos-schede__lista');
+    if (!ui || !contenitore) return;
     const voci = [...state.realSession.reviewFiles.values()];
     aggiornaTestataSessione(); // 05/9 Fase 2: Topbar — il badge della Review segue i file toccati
     const ultimoPercorso = state.reviewFileCorrente && state.realSession.reviewFiles.has(state.reviewFileCorrente) ? state.reviewFileCorrente : voci.at(-1)?.path;
-    contenitore.replaceChildren(...voci.map((file) => creaRigaFileReview(file, {
-      attiva: file.path === ultimoPercorso,
-      onApri: () => renderReviewFile(`real:${file.path}`),
-    })));
+    ui.aggiorna(voci, ultimoPercorso ? chiaveFileReview({ path: ultimoPercorso }) : null);
     // 06/09: stato vuoto ONESTO — una scheda EmptyState del mockup al posto della
     // finta scheda «−» con la stessa frase ripetuta nel diff; il DiffView si nasconde finché non c'è un file.
     const vuotoReview = schermo.querySelector('#vuotoReview');
     const cardDiff = schermo.querySelector('.talos-review__diff');
-    const schedeReview = contenitore.closest('.talos-tabs');
+    const schedeReview = contenitore.closest('.talos-schede');
     if (vuotoReview) vuotoReview.hidden = voci.length > 0;
     if (cardDiff) cardDiff.hidden = voci.length === 0;
     if (schedeReview) schedeReview.hidden = voci.length === 0;
     if (voci.length === 0) aggiornaDiffReview(cardDiff, null);
-    const percorsoTestata = schermo.querySelector('.talos-topbar__path');
-    if (percorsoTestata) percorsoTestata.textContent = riassuntoReview(voci);
-    const titoloTestata = schermo.querySelector('.talos-topbar__title h1');
-    if (titoloTestata && state.session) titoloTestata.textContent = state.session;
+    /* ⭐ BC-80, 17/09: il riassunto sta accanto alle linguette, dove si legge — la testata lo
+       nasconde sotto i 900 px di contenitore, cioè a tutte e due le misure del desktop. */
+    aggiornaSommarioSchedeReview(schermo.querySelector('.talos-review__schede'), voci);
+    /*
+     * ⛔⛔ BC-71 (b), 17/09/2026 — QUI C'ERANO DUE SCRITTORI PER LO STESSO POSTO.
+     *   Questa funzione scriveva `riassuntoReview(voci)` dentro `.talos-topbar__path` e il titolo
+     *   dentro `h1`; ma `aggiornaTestataSessione()` — chiamata dieci righe più su da questa stessa
+     *   funzione, e di nuovo da `aggiornaSommarioReviewReale()` subito dopo — ci scrive la regola
+     *   decisa il 06/09: «il terzo posto porta SEMPRE la cartella, e il riassunto della vista si
+     *   aggiunge dopo un separatore». Vinceva l'ultimo che passava, e le due forme non erano nemmeno
+     *   la stessa frase («Nessuna modifica in questa sessione» contro la cartella).
+     * ⇒ Uno scrittore solo: `aggiornaTestataSessione`. Le righe sono sparite, non commentate.
+     */
     nascondiAzioniFase3(schermo);
-    // tastiera sulle schede dei file (WAI-ARIA tabs, attivazione automatica: il diff e' gia' nel DOM)
-    if (!contenitore.dataset.tastiera) {
-      contenitore.dataset.tastiera = 'si';
-      contenitore.addEventListener('keydown', (event) => {
-        const schede = [...contenitore.querySelectorAll('[role="tab"]')];
-        const i = schede.indexOf(document.activeElement);
-        if (i < 0 || schede.length === 0) return;
-        let j = i;
-        if (event.key === 'ArrowRight') j = (i + 1) % schede.length;
-        else if (event.key === 'ArrowLeft') j = (i - 1 + schede.length) % schede.length;
-        else if (event.key === 'Home') j = 0;
-        else if (event.key === 'End') j = schede.length - 1;
-        else return;
-        event.preventDefault();
-        schede[j].focus();
-        schede[j].click();
-      });
-    }
+    /* ⛔ BC-63, 17/09: qui c'era una SECONDA tastiera, scritta a mano (frecce, Home/End,
+       `focus()` + `click()`), che faceva quello che il componente del Terminale già faceva. È
+       sparita insieme alla terza implementazione delle schede: adesso la tastiera è quella di
+       `schede.js`, la stessa per le due superfici, e in più c'è il menu contestuale da tastiera
+       (Maiusc+F10 e il tasto Menu) che qui non c'era. */
   }
 
   /**
@@ -12803,12 +14401,220 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return voce.nuovo ? 'new' : 'modified';
   }
 
+  /*
+   * ⛔⛔ PO-30, fetta 1 (17/09/2026) — LA LETTERA DI STATO, come nel laboratorio della PR #33: «M» e «A».
+   *   Ricerca del 17/09/2026 (VS Code, decorazioni dell'esploratore): le lettere sono un'abbreviazione che
+   *   chi programma riconosce, MA da sole non dicono niente a chi ascolta uno screen reader e, qui, mentirebbero
+   *   a chi le legge come stato di git: il nostro «M» vuol dire «modificato IN QUESTA SESSIONE», non «diverso
+   *   dall'ultimo commit». ⇒ la lettera si vede, il significato intero sta nel titolo e nel nome accessibile.
+   *   Un solo posto la scrive: prima la riga nuova portava la parola e l'aggiornamento successivo no.
+   */
+  function scriviStatoRigaAlbero(segno, stato) {
+    segno.className = `ft-status-dot ft-${stato} talos-file-row__state`;
+    segno.textContent = stato === 'new' ? 'A' : 'M';
+    const frase = stato === 'new' ? 'Creato in questa sessione' : 'Modificato in questa sessione';
+    segno.title = frase;
+    segno.setAttribute('aria-label', frase);
+    segno.setAttribute('role', 'img');
+  }
+
+  /*
+   * ⛔⛔ PO-30, fetta 1 (18/09/2026) — «CHI STA TOCCANDO QUESTO FILE», come nel laboratorio della PR #33, dai dati VERI.
+   *   Il dato esce da `GET …/children`: ogni figlia porta `attivita.file` (che cosa ha letto e scritto, ricavato dai suoi
+   *   eventi — `src/attivita-figlia.mjs`). Qui si legge e basta: nessuna fixture, nessuno stato «demo».
+   *   Il segno è un PULSANTE: porta alla scheda Agenti, sul dettaglio di quell'agente (il collegamento file → agente del
+   *   laboratorio). Con più agenti sullo stesso file apre il più recente ancora al lavoro, e il titolo li nomina tutti.
+   *   ⛔ Una figlia ferma resta elencata («lo ha toccato»), ma il segno si accende solo per chi è ANCORA al lavoro: un
+   *   indicatore sempre acceso non indica niente.
+   */
+  function agentiSulFile(percorsoCompleto) {
+    const figli = Array.isArray(state.realSession.figli) ? state.realSession.figli : [];
+    return figli
+      .map((figlia) => ({ figlia, voce: (figlia?.attivita?.file || []).find((x) => x.percorso === percorsoCompleto) }))
+      .filter((x) => x.voce)
+      .map(({ figlia, voce }) => ({ figlia, scritto: voce.scritto === true, alLavoro: figlia.conclusa !== true && figlia.interrotta !== true, nome: figlia.taskCorto || figlia.task || 'Agente' }));
+  }
+  function scriviSegnoAgentiRiga(row, percorsoCompleto) {
+    const agenti = agentiSulFile(percorsoCompleto);
+    let segno = $('.talos-file-row__agente', row);
+    if (agenti.length === 0) { segno?.remove(); return; }
+    if (!segno) {
+      segno = document.createElement('button');
+      segno.type = 'button';
+      segno.className = 'talos-file-row__agente talos-button talos-button--ghost talos-button--sm talos-icon-button';
+      segno.tabIndex = -1;
+      segno.appendChild(iconaSvgAlbero('i-robot'));
+      segno.addEventListener('click', (evento) => {
+        evento.stopPropagation(); // non selezionare né aprire il file sotto
+        const scelti = agentiSulFile(segno.dataset.percorso);
+        const scelto = scelti.find((x) => x.alLavoro) || scelti[0];
+        if (!scelto) return;
+        $('#railTabs [data-rail="agenti"]')?.click();
+        apriConversazioneFiglia(scelto.figlia);
+      });
+      row.insertBefore(segno, $('.ft-actions-btn', row));
+    }
+    segno.dataset.percorso = percorsoCompleto;
+    const alLavoro = agenti.filter((x) => x.alLavoro);
+    segno.classList.toggle('is-al-lavoro', alLavoro.length > 0);
+    const chi = (elenco) => elenco.map((x) => `«${String(x.nome).slice(0, 60)}»`).join(', ');
+    const frase = alLavoro.length > 0
+      ? `${alLavoro.some((x) => x.scritto) ? 'Lo sta modificando' : 'Lo sta leggendo'}: ${chi(alLavoro)}. Apri l'agente.`
+      : `Lo ha toccato: ${chi(agenti)}. Apri l'agente.`;
+    segno.title = frase;
+    segno.setAttribute('aria-label', frase);
+  }
+
+  /*
+   * ⭐⭐ PO-30, fetta 1 (18/09/2026) — LA SELEZIONE MULTIPLA DELLA SCHEDA FILE, come nel laboratorio
+   *   della PR #33 (`explorer-view.js:81` e `:96`).
+   * Lo stato vive in un Set di percorsi COMPLETI (`state.realSession.fileSelezionati`) e non in una
+   * classe del DOM: il primo ridisegno dell'albero — che arriva a ogni scrittura di un file — se la
+   * porterebbe via, e la selezione sparirebbe da sola senza un errore.
+   * Il piede esiste SOLO con almeno una selezione, come nel mockup (`selectedFiles.length ? … : ''`).
+   */
+  function fileSelezionati() {
+    return (state.realSession.fileSelezionati ??= new Set());
+  }
+  function commutaSelezioneFile(percorsoCompleto, acceso, li, row) {
+    const scelti = fileSelezionati();
+    if (acceso) scelti.add(percorsoCompleto); else scelti.delete(percorsoCompleto);
+    if (li) li.setAttribute('aria-selected', String(acceso));
+    row?.classList.toggle('is-selezionato', acceso);
+    aggiornaPiedeSelezioneFile();
+  }
+  /*
+   * ⭐⭐ PO-30, fetta 1 (18/09/2026) — LA RINOMINA IN RIGA, come nel laboratorio della PR #33
+   *   (`explorer-view.js:81`: `renaming === f.id ? <input id="renameInput"> : <span class="fname">`,
+   *   poi `focus()` e `select()`).
+   * I tasti vengono dalle convenzioni dei prodotti veri (ricerca 18/09/2026: Visual Studio UX
+   * guidelines «renaming should be done in place»; VS Code; React Complex Tree; headless-tree):
+   * **F2** avvia sulla riga col fuoco, **Invio** conferma, **Esc** annulla, e il fuoco entra nel
+   * campo col nome GIÀ selezionato — il solo nome, senza estensione, che è la parte che quasi mai
+   * si vuole cambiare.
+   * ⛔ La guardia `risolto` chiude la strada al DOPPIO commit: senza, un Invio seguito dalla perdita
+   *   del fuoco (che il ridisegno provoca da solo) farebbe partire due rinomine sullo stesso file.
+   * ⛔ E le frecce non escono dal campo: `stopPropagation` sul keydown, o mentre scrivi il nome la
+   *   selezione si sposterebbe nell'albero (la «navigazione soppressa durante la modifica» che i
+   *   prodotti citati fanno tutti).
+   */
+  function avviaRinominaInRiga(li, row, percorso, nome) {
+    if (!li || li.dataset.rinominaInCorso === 'si') return;
+    const etichetta = $(':scope > .ft-name', row);
+    if (!etichetta) return;
+    li.dataset.rinominaInCorso = 'si';
+    const campo = document.createElement('input');
+    campo.type = 'text';
+    campo.className = 'ft-rename talos-field__input';
+    campo.value = nome;
+    campo.setAttribute('aria-label', `Nuovo nome per ${nome}`);
+    let risolto = false;
+    const ripristina = () => { delete li.dataset.rinominaInCorso; campo.replaceWith(etichetta); row.focus({ preventScroll: true }); };
+    const conferma = async () => {
+      if (risolto) return;
+      const nuovo = campo.value.trim();
+      if (!nuovo || nuovo === nome) { risolto = true; ripristina(); return; }
+      risolto = true;
+      const precedente = state.alberoFileTarget;
+      state.alberoFileTarget = { percorso, nome };
+      const esito = await rinominaFileBersaglio(nuovo);
+      if (!esito.ok) { // l'errore l'ha già detto `rinominaFileBersaglio`; qui si torna indietro
+        state.alberoFileTarget = precedente;
+        risolto = false;
+        ripristina();
+      }
+      /* Riuscita: `rinominaFileBersaglio` invalida il livello e l'albero si ridisegna da solo. */
+    };
+    campo.addEventListener('keydown', (evento) => {
+      evento.stopPropagation();
+      if (evento.key === 'Enter') { evento.preventDefault(); void conferma(); }
+      else if (evento.key === 'Escape') { evento.preventDefault(); risolto = true; ripristina(); }
+    });
+    campo.addEventListener('blur', () => { void conferma(); }); // come VS Code: uscire dal campo conferma
+    etichetta.replaceWith(campo);
+    campo.focus();
+    const punto = nome.lastIndexOf('.');
+    if (punto > 0) campo.setSelectionRange(0, punto); else campo.select();
+  }
+
+  function aggiornaPiedeSelezioneFile() {
+    /* ⛔ Il contenitore è la scheda File VIVA (`#alberoCartella`, dentro `#railFile`), non la
+       sezione legacy `#inspector-files`: quella è la superficie d'esempio del frammento, e il
+       piede ci sarebbe finito invisibile. */
+    const sezione = $('#alberoCartella') || $('#inspector-files'); if (!sezione) return;
+    const scelti = [...fileSelezionati()];
+    let piede = $('.talos-file-selezione', sezione);
+    if (scelti.length === 0) { piede?.remove(); return; }
+    if (!piede) {
+      piede = document.createElement('div');
+      piede.className = 'talos-file-selezione';
+      piede.dataset.c = 'SelectionBar';
+      const conteggio = textElement('span', 'talos-file-selezione__conteggio talos-muted', '');
+      conteggio.setAttribute('role', 'status');
+      const allega = document.createElement('button');
+      allega.type = 'button';
+      allega.className = 'talos-button talos-button--primary talos-button--sm';
+      allega.dataset.c = 'Button';
+      allega.dataset.azioneSelezione = 'allega';
+      allega.textContent = 'Allega alla chat';
+      const menu = document.createElement('button');
+      menu.type = 'button';
+      menu.className = 'talos-button talos-button--ghost talos-button--sm talos-icon-button';
+      menu.dataset.c = 'Button';
+      menu.dataset.azioneSelezione = 'menu';
+      menu.setAttribute('aria-haspopup', 'menu');
+      menu.setAttribute('aria-label', 'Azioni sulla selezione');
+      menu.title = 'Azioni sulla selezione';
+      menu.appendChild(iconaSvgAlbero('i-more'));
+      allega.addEventListener('click', () => azioniSelezioneFile('allega'));
+      menu.addEventListener('click', () => apriMenuSelezioneFile(menu));
+      piede.append(conteggio, allega, menu);
+      sezione.appendChild(piede);
+    }
+    const n = scelti.length;
+    $('.talos-file-selezione__conteggio', piede).textContent = `${n} ${n === 1 ? 'selezionato' : 'selezionati'}`;
+  }
+  /** Le azioni della selezione: ognuna su TUTTI i file scelti. */
+  function azioniSelezioneFile(azione) {
+    const scelti = [...fileSelezionati()];
+    if (scelti.length === 0) return;
+    if (azione === 'allega') {
+      for (const percorso of scelti) allegaFileAllaChat(percorso);
+      return;
+    }
+    if (azione === 'copia') {
+      void navigator.clipboard?.writeText(scelti.join('\n'));
+      toast('Percorsi copiati', `${scelti.length} file`);
+      return;
+    }
+    if (azione === 'deseleziona') {
+      for (const percorso of scelti) {
+        fileSelezionati().delete(percorso);
+        const li = $(`.ft-node[data-percorso="${CSS.escape(percorso)}"]`);
+        if (li) { li.setAttribute('aria-selected', 'false'); $(':scope > .ft-row', li)?.classList.remove('is-selezionato'); $('.ft-check', li) && ($('.ft-check', li).checked = false); }
+      }
+      aggiornaPiedeSelezioneFile();
+      return;
+    }
+  }
+  function apriMenuSelezioneFile(ancoraEl) {
+    const scelti = [...fileSelezionati()];
+    if (scelti.length === 0) return;
+    apriMenuAzioniLibreria([
+      { chiave: 'allega', etichetta: 'Allega alla chat', icona: 'i-link', aziona: () => azioniSelezioneFile('allega') },
+      { chiave: 'copia', etichetta: 'Copia i percorsi', icona: 'i-code', aziona: () => azioniSelezioneFile('copia') },
+      { chiave: 'deseleziona', etichetta: 'Deseleziona tutto', icona: 'i-x', separaPrima: true, aziona: () => azioniSelezioneFile('deseleziona') },
+    ], { ancoraEl });
+  }
+
   function alberoInAnteprima() {
     return !state.realSession.id && Boolean(state.realSession.previewProjectId);
   }
 
   function syncFileTreeToolbar(enabled = Boolean(state.realSession.id) && !alberoInAnteprima()) {
-    for (const id of ['fileTreeNewFile', 'fileTreeNewFolder', 'fileTreeRefresh', 'fileTreeCollapse']) {
+    const nomeRadice = $('#alberoNomeRadice');
+    if (nomeRadice) { nomeRadice.textContent = nomeRadiceAlberoReale(); nomeRadice.title = state.realSession.cartellaAssoluta || ''; }
+    for (const id of ['fileTreeAdd', 'fileTreeMore', 'fileVista', 'fileTreeNewFile', 'fileTreeNewFolder', 'fileTreeRefresh', 'fileTreeCollapse']) {
       const button = $(`#${id}`);
       if (button) button.disabled = !enabled;
     }
@@ -12820,7 +14626,143 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       bottoneUp.setAttribute('aria-pressed', String(aperto));
       bottoneUp.title = aperto ? 'Chiudi, torna alla sessione' : 'Risali fuori dalla sessione';
       bottoneUp.setAttribute('aria-label', aperto ? 'Chiudi, torna alla sola cartella della sessione' : 'Risali fuori dalla sessione (sola lettura)');
+      const testoUp = $('span', bottoneUp);
+      if (testoUp) testoUp.textContent = aperto ? 'Torna alla sola cartella della sessione' : 'Guarda fuori dalla cartella, in sola lettura';
+      aggiornaVistaFile();
     }
+  }
+
+  /*
+   * ⛔⛔ PO-30, fetta 1 — LE VISTE DELLA SCHEDA FILE («Tutti i file ▾» del laboratorio), sui dati veri.
+   *   «Modificati in questa sessione» è la scheda che stava in cima al pannello: stessi dati, stesso scrittore
+   *   (`aggiornaInspector` la riempie da `reviewFiles`), ora si SCEGLIE invece di occupare sempre il primo posto.
+   *   ⛔ Il selettore è un menu NOSTRO (`apriMenuAzioni`), non un `<select>` nativo: nel laboratorio è un select
+   *   perché lì non c'è un sistema di componenti; qui i controlli nativi sono vietati.
+   *   ⛔ Il conteggio dice ciò che CONTA davvero: nell'albero i file si caricano cartella per cartella, quindi
+   *   «N file» sarebbe una bugia — è «N a vista». Nella vista dei modificati il numero è esatto, e lo dice.
+   */
+  /*
+   * ⛔⛔ PO-30, fetta 1 (18/09/2026) — IL CAMPO «CERCA FILE» CERCA IN TUTTA LA CARTELLA.
+   *   Prima filtrava «fra i file già caricati»: l'albero si carica cartella per cartella, quindi un file in una cartella mai
+   *   aperta non si trovava. Ora chiede al server (`GET …/tree/search?q=`, `workspace-search.mjs`) e mostra i risultati al
+   *   posto dell'albero; svuotato il campo, torna l'albero com'era. Il filtro locale resta come ripiego dove il server non può
+   *   cercare: l'anteprima di un progetto senza sessione.
+   *   ⛔ Una risposta in ritardo non deve sovrascrivere quella di una ricerca più recente: ogni richiesta porta un numero, e
+   *   vale solo l'ultima. ⛔ Ciò che il server ha SALTATO o TAGLIATO si dice a schermo, con parole sue: un elenco che sembra
+   *   completo e non lo è fa cercare il file altrove.
+   */
+  let ricercaFileNumero = 0;
+  let ricercaFileTimer = 0;
+  function mostraRisultatiRicercaFile(mostra) {
+    const risultati = $('#fileRisultati');
+    const albero = $('#alberoFile');
+    if (risultati) risultati.hidden = !mostra;
+    if (albero && vistaFileScelta() === 'tutti') albero.hidden = mostra;
+  }
+  function programmaRicercaFile(valore) {
+    const query = String(valore || '').trim();
+    window.clearTimeout(ricercaFileTimer);
+    ricercaFileNumero += 1;
+    const hint = $('#fileTreeFilterHint');
+    if (query.length < 2 || !state.realSession.id || alberoInAnteprima()) {
+      mostraRisultatiRicercaFile(false);
+      if (hint && query.length === 0) hint.hidden = true;
+      return;
+    }
+    const numero = ricercaFileNumero;
+    ricercaFileTimer = window.setTimeout(async () => {
+      let dati;
+      try {
+        dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/search?q=${encodeURIComponent(query)}`);
+      } catch (errore) {
+        if (numero !== ricercaFileNumero) return;
+        mostraRisultatiRicercaFile(false);
+        if (hint) { hint.hidden = false; hint.textContent = `Non sono riuscito a cercare in tutta la cartella: ${errore?.message || 'riprova'}. Qui sotto restano i file già aperti.`; }
+        return;
+      }
+      if (numero !== ricercaFileNumero) return; // è arrivata tardi: nel frattempo la persona ha scritto altro
+      disegnaRisultatiRicercaFile(dati, query);
+    }, 220);
+  }
+  function disegnaRisultatiRicercaFile(dati, query) {
+    const contenitore = $('#fileRisultati');
+    const hint = $('#fileTreeFilterHint');
+    if (!contenitore) return;
+    const risultati = Array.isArray(dati?.risultati) ? dati.risultati : [];
+    contenitore.replaceChildren(...risultati.map((voce) => {
+      const riga = document.createElement('button');
+      riga.type = 'button';
+      riga.className = 'talos-file-row talos-file-risultato';
+      riga.setAttribute('role', 'option');
+      riga.dataset.percorso = voce.percorso;
+      riga.dataset.cartella = String(voce.cartella === true);
+      const icona = document.createElement('span');
+      icona.className = 'ft-icon';
+      icona.appendChild(iconaSvgAlbero(voce.cartella ? 'i-folder' : categoriaFileAlbero(voce.nome) === 'code' ? 'i-code' : 'i-file'));
+      const dove = voce.percorso.includes('/') ? voce.percorso.slice(0, voce.percorso.lastIndexOf('/')) : '';
+      riga.append(icona, textElement('span', 'talos-file-row__name', voce.nome), textElement('span', 'talos-file-risultato__dove talos-muted', dove));
+      const stato = voce.cartella ? null : statoFileAlbero(voce.percorso);
+      if (stato) { const segno = document.createElement('span'); scriviStatoRigaAlbero(segno, stato); riga.appendChild(segno); }
+      riga.title = voce.percorso;
+      return riga;
+    }));
+    mostraRisultatiRicercaFile(true);
+    const conteggio = $('#fileConteggio');
+    if (conteggio) conteggio.textContent = risultati.length === 0 ? '' : `${risultati.length} trovat${risultati.length === 1 ? 'o' : 'i'}`;
+    if (!hint) return;
+    const pezzi = [];
+    if (risultati.length === 0) pezzi.push(`Nessun file con «${query}» in questa cartella.`);
+    if (dati?.troncato) pezzi.push(`L'elenco non è completo: ${dati.motivo || 'la ricerca si è fermata prima'}. Scrivi qualche lettera in più.`);
+    if (Array.isArray(dati?.saltate) && dati.saltate.length) pezzi.push(`Non ho guardato dentro ${dati.saltate.join(' e ')}.`);
+    hint.textContent = pezzi.join(' ');
+    hint.hidden = pezzi.length === 0;
+  }
+  async function apriRisultatoRicercaFile(percorso, cartella) {
+    if (!cartella) { await apriFileAlbero(percorso, percorso.split('/').pop()); return; }
+    /* Una CARTELLA trovata si apre nell'albero: si svuota la ricerca e la si porta in vista. */
+    const campo = $('#fileTreeFilter');
+    if (campo) campo.value = '';
+    filtraAlberoReale('');
+    programmaRicercaFile('');
+    aggiornaVistaFile();
+    await rivelaERivelaRigaAlbero(`${percorso}/.`); // apre lei e i suoi antenati
+    await rivelaERivelaRigaAlbero(percorso); // poi la seleziona e la porta in vista
+  }
+
+  const VISTE_FILE = Object.freeze({ tutti: 'Tutti i file', modificati: 'Modificati in questa sessione' });
+  function vistaFileScelta() { return $('#fileVista')?.dataset.vista === 'modificati' ? 'modificati' : 'tutti'; }
+  function aggiornaVistaFile() {
+    const vista = vistaFileScelta();
+    const albero = $('#alberoFile');
+    const modificati = $('#fileModificati');
+    const campo = $('#fileTreeFilter')?.closest('.talos-field');
+    if (albero) albero.hidden = vista !== 'tutti';
+    if (modificati) modificati.hidden = vista !== 'modificati';
+    if (campo) campo.hidden = vista !== 'tutti'; // la ricerca lavora sull'albero: fuori dall'albero non cercherebbe niente
+    const nome = $('#fileVistaNome');
+    if (nome) nome.textContent = VISTE_FILE[vista];
+    const conteggio = $('#fileConteggio');
+    if (!conteggio) return;
+    if (vista === 'modificati') {
+      const n = state.realSession.reviewFiles instanceof Map ? state.realSession.reviewFiles.size : 0;
+      conteggio.textContent = n === 0 ? '' : `${n} file`;
+    } else {
+      const n = albero ? albero.querySelectorAll('.ft-node:not([aria-expanded])').length : 0;
+      conteggio.textContent = n === 0 ? '' : `${n} a vista`;
+      conteggio.title = n === 0 ? '' : 'I file si caricano aprendo le cartelle: questo è il numero di quelli già a vista.';
+    }
+  }
+  function scegliVistaFile(ancora) {
+    const scelta = vistaFileScelta();
+    apriMenuAzioni({
+      etichetta: 'Quali file mostrare',
+      posizionamento: { ancoraEl: ancora },
+      voci: Object.entries(VISTE_FILE).map(([id, etichetta]) => ({
+        icona: id === scelta ? 'i-check' : (id === 'tutti' ? 'i-folder' : 'i-file'),
+        etichetta,
+        azione: () => { const b = $('#fileVista'); if (b) b.dataset.vista = id; aggiornaVistaFile(); },
+      })),
+    });
   }
 
   function cartellaSelezionataAlbero() {
@@ -13225,8 +15167,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         chat: normalizzaPreferenzeChatDesktop(safe.chat),
         workspaces: normalizzaWorkspaces(safe.workspaces),
       }));
+      document.dispatchEvent(new CustomEvent('talos:settings-persisted', { detail: { saved: true } }));
+      return true;
     } catch {
-      // Le preferenze perse non devono impedire la navigazione del workspace.
+      // Keep navigation available, but never announce an unsuccessful write as saved.
+      document.dispatchEvent(new CustomEvent('talos:settings-persisted', { detail: { saved: false } }));
+      return false;
     }
   }
   function aggiornaAspettoDesktop(patch) {
@@ -13419,7 +15365,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     avviaBackgroundDesktop();
   }
   function syncBackgroundDialogPause() {
-    setBackgroundInteractionPause('dialog', commandDialog.open || sheetDialog.open);
+    setBackgroundInteractionPause('dialog', commandDialog.open || sheetDialog.open || Boolean($('.overlay-layer:not([hidden])')));
   }
   function queueBackgroundScrollPause() {
     setBackgroundInteractionPause('scroll', true);
@@ -13462,7 +15408,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     host.classList.toggle('chat-full-width', safe.chatFullWidth);
     /* 06/9 B8 — densità: il mockup la esprime con `data-densita="compatta"` sulla radice (token delle righe); lingua: `lang` + i soli elementi marcati. */
     const root = document.documentElement;
-    if (safe.uiDensity === 'compatta') root.setAttribute('data-densita', 'compatta'); else root.removeAttribute('data-densita');
+    if (!host.classList.contains('talos-embedded')) workspacePreferences.adoptLegacyDensity(safe.uiDensity);
+    const density = host.classList.contains('talos-embedded') ? safe.uiDensity : (workspacePreferences.read().density === 'compact' ? 'compatta' : 'comoda');
+    if (density === 'compatta') root.setAttribute('data-densita', 'compatta'); else root.removeAttribute('data-densita');
+    if (!host.classList.contains('talos-embedded')) root.dataset.density = workspacePreferences.read().density;
     const linguaRisolta = risolviLingua(safe.uiLanguage, navigator.languages || [navigator.language]);
     applicaLingua(ROOT(), linguaRisolta);
     sincronizzaSelettoriDensitaLingua(safe);
@@ -13478,7 +15427,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   /** I due selettori nascono con la schermata Impostazioni (dopo il primo `applicaAspettoDesktop`): si allineano qui, e di nuovo dopo il montaggio. */
   function sincronizzaSelettoriDensitaLingua(safe) {
-    const selDensita = $('#setting-uiDensitySelect'); if (selDensita) selDensita.value = safe.uiDensity;
+    const selDensita = $('#setting-uiDensitySelect'); if (selDensita) selDensita.value = HOST().classList.contains('talos-embedded') ? safe.uiDensity : (workspacePreferences.read().density === 'compact' ? 'compatta' : 'comoda');
     const selLingua = $('#setting-uiLanguageSelect');
     if (!selLingua) return;
     selLingua.value = safe.uiLanguage;
@@ -13494,6 +15443,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     document.addEventListener('wheel', queueBackgroundScrollPause, { capture: true, passive: true });
     document.addEventListener('scroll', queueBackgroundScrollPause, { capture: true, passive: true });
     applicaAspettoDesktop(leggiImpostazioniDesktop().appearance);
+  }
+  function resettaAspettoDesktop() {
+    const documento = leggiImpostazioniDesktop();
+    documento.appearance = { ...DESKTOP_APPEARANCE_DEFAULTS };
+    if (!salvaImpostazioniDesktop(documento)) return;
+    const composerSaved = resetComposerSize();
+    workspacePreferences.update({ density: 'comfortable' });
+    applicaAspettoDesktop(documento.appearance);
+    const screen = $('#schermoImpostazioni');
+    montaImpostazioni(screen, documento.appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
+    montaScorciatoiaTemi(screen);
+    setSettingsSection('appearance');
+    screen.querySelector('[data-reset-appearance]')?.focus({ preventScroll: true });
+    document.dispatchEvent(new CustomEvent('talos:settings-persisted', { detail: { saved: composerSaved && workspacePreferences.persistent } }));
   }
   function resettaMotionDesktop() {
     const documento = leggiImpostazioniDesktop();
@@ -13662,6 +15625,35 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     chev.hidden = !cartella; // un file non si apre: niente freccia (il mockup la mette solo sulle cartelle)
     row.appendChild(chev);
 
+    /*
+     * ⭐⭐ PO-30, fetta 1 (18/09/2026) — LA CASELLA DI SELEZIONE, come nel laboratorio della PR #33.
+     *   Nel mockup (`explorer-view.js:81`) ogni riga di file porta un `<input type="checkbox">` con
+     *   `tabindex="-1"`, e il CSS lo tiene a `opacity:0` finché la riga non è sotto il mouse, non ha
+     *   il fuoco, non è selezionata, o l'albero non è in `.selection-mode` (`calm-files.css:63-72`):
+     *   la casella non sporca l'elenco, ma è lì quando serve.
+     *   ⛔ `tabindex="-1"` NON è una dimenticanza: il fuoco resta sull'albero (roving tabindex), e la
+     *   casella non è un secondo tab stop. La selezione si comanda da tastiera con la BARRA sulla riga
+     *   focalizzata (W3C ARIA APG, «Tree View Pattern», multi-select: «Space toggles selection»).
+     *   Ricerca 18/09/2026 (MDN `tree` role, `aria-multiselectable`): in un albero multi-selezione lo
+     *   stato sta in `aria-selected` sugli item, e una casella NATIVA non ha bisogno di `aria-checked`.
+     *   Le cartelle non si selezionano: si aprono.
+     */
+    if (!cartella) {
+      const selezionato = fileSelezionati().has(percorsoCompleto);
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.className = 'ft-check talos-file-row__check';
+      check.tabIndex = -1;
+      check.checked = selezionato;
+      check.dataset.selezionaFile = percorsoCompleto;
+      check.setAttribute('aria-label', `Seleziona ${nome}`);
+      check.addEventListener('click', (evento) => evento.stopPropagation()); // la casella non apre il file
+      check.addEventListener('change', () => { commutaSelezioneFile(percorsoCompleto, check.checked, li, row); });
+      row.appendChild(check);
+      li.setAttribute('aria-selected', String(selezionato));
+      row.classList.toggle('is-selezionato', selezionato);
+    }
+
     const icon = document.createElement('span');
     const categoria = cartella ? 'folder' : categoriaFileAlbero(nome);
     icon.className = `ft-icon ft-icon-${categoria}`;
@@ -13673,11 +15665,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const stato = !cartella ? statoFileAlbero(percorsoCompleto) : null;
     if (stato) {
       const dot = document.createElement('span');
-      dot.className = `ft-status-dot ft-${stato} talos-file-row__state`;
-      dot.title = stato === 'new' ? 'Nuovo' : 'Modificato';
-      dot.textContent = stato === 'new' ? 'nuovo' : 'mod.'; // 06/9 B2: la parola del mockup, non solo un pallino
+      scriviStatoRigaAlbero(dot, stato);
       row.appendChild(dot);
     }
+    const percorsoPerAgenti = cartella ? null : percorsoCompleto;
 
     /*
      * ⭐⭐⭐ 27/8, owner: "non ha nessun'opzione per rinominare i file, per
@@ -13705,6 +15696,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       });
       row.appendChild(azioniBtn);
     }
+    if (percorsoPerAgenti) scriviSegnoAgentiRiga(row, percorsoPerAgenti); // dopo il «⋯», così il segno gli si mette DAVANTI
     /*
      * ⭐⭐⭐ 28/8, owner: "voglio abilitare il tasto destro del mouse a
      * livello globale dato che siamo nel desktop, per esempio tasto
@@ -13848,7 +15840,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       btn.addEventListener('click', () => { chiudiMenuLibreria(); voce.aziona(); });
       menu.appendChild(btn);
     }
-    document.body.appendChild(menu);
+    /*
+     * ⛔⛔ 18/09/2026 — DENTRO IL VELO APERTO, NON SU `<body>`.
+     * Il gestore dei modali rende `inert` tutto ciò che sta FUORI dal dialogo aperto
+     * (`manager.ts:69-76`, `wanted` = i fratelli del layer): un menu appeso a `body`
+     * finisce in quell'insieme, e da lì i suoi comandi non si possono più cliccare —
+     * si vedono, e il clic lo prende l'elemento che sta sotto. Fuori dal dialogo non
+     * c'è nessun `inert`, ed è per questo che il menu funzionava nel pannello e non
+     * dentro il velo. Il layer (`.overlay-layer`) non ha `transform`, quindi il menu
+     * resta `position: fixed` rispetto alla finestra e le coordinate non cambiano.
+     * Ricerca 18/09/2026: è la stessa cura del caso Kendo UI / Angular Material
+     * (`appendTo: 'component'`) e di Chris’ Corner, «Layers of Layers» — quando un
+     * dialogo è aperto la pagina sotto è inerte, quindi un overlay appeso a `body`
+     * resta visibile ma inaccessibile.
+     */
+    const veloAperto = [...document.querySelectorAll('.overlay-layer')].filter((v) => !v.hidden).at(-1) || null;
+    (veloAperto || document.body).appendChild(menu);
 
     if (posizionamento.ancoraEl) {
       const rect = posizionamento.ancoraEl.getBoundingClientRect();
@@ -14182,6 +16189,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         treeRenderNeedsRerun = false;
         await renderizzaAlberoRealeUnaVolta();
       } while (treeRenderNeedsRerun);
+      aggiornaVistaFile();
     })().finally(() => {
       treeRenderInFlight = null;
     });
@@ -14210,8 +16218,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** Piano §1.3, riga "Contesto workspace" — l'albero file REALE, radice + tutto ciò che era già aperto (treeOpen), riscaricato dal vivo. */
   async function renderizzaAlberoRealeUnaVolta() {
-    if (!state.realSession.id && !state.realSession.previewProjectId) return;
     syncFileTreeToolbar();
+    if (!state.realSession.id && !state.realSession.previewProjectId) return;
     ripristinaImpostazioniAlbero();
     const generation = state.realSession.generation;
     const contenitore = $('#inspector-files .file-tree');
@@ -14274,7 +16282,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const ul = document.createElement('ul');
     ul.className = 'ft-tree';
     ul.setAttribute('role', 'group'); // 06/9 B2: il rientro del mockup vale per [role=group]
-    ul.setAttribute('role', 'tree');
+    /*
+     * ⛔⛔ 18/09/2026 — QUI C'ERA `ul.setAttribute('role', 'tree')`, e il `div#alberoFile` che la
+     *   contiene è GIÀ `role="tree"` (dal markup): due alberi annidati, con l'attributo che conta
+     *   — `aria-multiselectable` — messo su quello INTERNO, cioè invisibile a chi legge il ruolo
+     *   vero. Trovato perché la prova della selezione multipla leggeva `aria-multiselectable` sul
+     *   `div` e trovava `null`. Il contenitore dichiara il ruolo, la `ul` è il suo gruppo.
+     *   Ricerca 18/09/2026 (MDN `tree` role): «do not nest trees inside trees — all structure
+     *   should be `treeitem` elements within a single `tree`».
+     */
+    contenitore.setAttribute('aria-multiselectable', 'true');
     ul.setAttribute('aria-label', 'File del workspace');
     ul.addEventListener('keydown', (e) => {
       const righe = righeVisibiliAlbero(ul);
@@ -14283,6 +16300,27 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const row = righe[i];
       const li = row.closest('.ft-node');
       const eCartella = li.hasAttribute('aria-expanded');
+      /*
+       * ⭐ 18/09 — LA BARRA COMMUTA LA SELEZIONE della riga con il fuoco, come vuole il pattern
+       *   multi-selezione dell'APG («Tree View», Keyboard Interaction: «Space toggles selection of
+       *   the focused node»; W3C WAI-ARIA APG, letto il 18/09/2026). Le cartelle non si selezionano:
+       *   si aprono, e la barra su una cartella non fa niente invece di fare qualcosa di strano.
+       */
+      if (e.key === ' ' && !eCartella) {
+        e.preventDefault();
+        const casella = $(':scope > .ft-check', row);
+        const acceso = !fileSelezionati().has(li.dataset.percorso);
+        if (casella) casella.checked = acceso;
+        commutaSelezioneFile(li.dataset.percorso, acceso, li, row);
+        return;
+      }
+      /* ⭐ 18/09 — F2 rinomina in riga la riga col fuoco (convenzione di VS Code e di Visual Studio;
+         vedi `avviaRinominaInRiga`). Sulle cartelle non si rinomina: si aprono. */
+      if (e.key === 'F2' && !eCartella) {
+        e.preventDefault();
+        avviaRinominaInRiga(li, row, li.dataset.percorso, $(':scope > .ft-name', row)?.textContent || '');
+        return;
+      }
       if (e.key === 'ArrowDown') { e.preventDefault(); if (righe[i + 1]) impostaFocusRigaAlbero(ul, righe[i + 1]); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); if (righe[i - 1]) impostaFocusRigaAlbero(ul, righe[i - 1]); }
       else if (e.key === 'ArrowRight') {
@@ -14374,12 +16412,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const stato = statoFileAlbero(li.dataset.percorso);
       let dot = $('.ft-status-dot', row);
       if (stato) {
-        if (!dot) { dot = document.createElement('span'); row.appendChild(dot); }
-        dot.className = `ft-status-dot ft-${stato}`;
-        dot.title = stato === 'new' ? 'Nuovo' : 'Modificato';
+        if (!dot) { dot = document.createElement('span'); row.insertBefore(dot, $('.ft-actions-btn', row)); }
+        scriviStatoRigaAlbero(dot, stato);
       } else if (dot) {
         dot.remove();
       }
+      scriviSegnoAgentiRiga(row, li.dataset.percorso);
     }
   }
 
@@ -14668,6 +16706,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       return;
     }
     /* ⭐⭐ 14/09 — lo stato della coda, di solo trasporto: arriva a ogni finestra quando cambia, e a chi apre dopo la storia. */
+    if (evento.type === 'CUSTOM' && evento.name === 'talos.agenti') { applicaEventoAgenti(evento.value); return; }
     if (evento.type === 'CUSTOM' && evento.name === 'talos.coda') {
       applicaStatoCoda(evento.value);
       return;
@@ -14705,6 +16744,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (state.realSession.sequenzeViste.has(evento._sequenza)) return;
       state.realSession.sequenzeViste.add(evento._sequenza);
     }
+    if (['RunStarted', 'RunFinished', 'RunError'].includes(evento.type)) ultimoEventoGrafoMadre = { type: evento.type, code: evento.code };
+    if (grafoAgenti && ['ToolCallStart', 'ToolCallResult', 'StateDelta', 'ApprovalRequested', 'ApprovalResolved', 'RunStarted', 'RunFinished', 'RunError'].includes(evento.type) && frameGrafoMadre === null) {
+      frameGrafoMadre = requestAnimationFrame(() => { frameGrafoMadre = null; if (generation === state.realSession.generation) aggiornaGrafoAgenti(); });
+    }
     if ((evento.type === 'CUSTOM' && evento.name === 'consumo-fornitore') || ['RunStarted', 'RunFinished', 'RunError'].includes(evento.type)) caricaCacheSessioneDalRegistro();
     /*
      * ⭐⭐⭐ O-02 (04/9) — il registro degli attrezzi si riempie QUI, in un
@@ -14716,9 +16759,51 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * ⛔ Del ToolCallResult si copia solo l'id: il `content` può essere
      * enorme e per contare le chiamate non serve.
      */
-    if (evento.type === 'ToolCallStart') state.realSession.eventiAttrezzi.push({ type: 'ToolCallStart', toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), giro: state.realSession.runCount || null }); // 06/9 B2: ora e giro per «Processi»
+    /*
+     * ⛔⛔⛔ 17/09, OSS-1 — QUESTA LISTA È BIANCA, E UNA LISTA BIANCA SCARTA IN SILENZIO.
+     *   Il server (corsia B) manda da oggi `avviatoA` sul `ToolCallStart` e `durataMs`, `comando`,
+     *   `cwd` sul `ToolCallResult`. Qui si copiava un elenco FISSO di campi: i quattro nuovi
+     *   arrivavano al client e morivano su questa riga, senza un errore, senza un avviso, e la
+     *   colonna «Processi» continuava a calcolare la durata come differenza fra due tempi d'ARRIVO
+     *   — cioè zero alla rigiocata. ⇒ Una cura scritta a valle (in `inspector.js`) sarebbe stata
+     *   INERTE, e verde nei suoi test unitari: la lista bianca è il punto in cui il contratto entra
+     *   davvero in casa, ed è qui che va aperta.
+     *   ⛔ Resta bianca di proposito — il `content` può essere enorme e non si conserva (nota qui
+     *   sopra): si aggiungono QUATTRO campi nominati, non si passa l'evento intero.
+     */
+    if (evento.type === 'ToolCallStart') state.realSession.eventiAttrezzi.push({ type: 'ToolCallStart', toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), avviatoA: Number.isFinite(evento.avviatoA) ? evento.avviatoA : null, giro: state.realSession.runCount || null }); // 06/9 B2: ora e giro per «Processi» · 17/09 OSS-1: `avviatoA` è l'orologio del SERVER
     else if (evento.type === 'ToolCallArgs') state.realSession.eventiAttrezzi.push({ type: 'ToolCallArgs', toolCallId: evento.toolCallId, delta: evento.delta });
-    else if (evento.type === 'ToolCallResult') state.realSession.eventiAttrezzi.push({ type: 'ToolCallResult', toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error) });
+    /*
+     * ⭐ 16/09, P0-E punto 9 — si copia ANCHE il codice di uscita, e solo quello. È l'unico posto in
+     *   cui esiste: `ToolCallResult` non ha un campo «uscita» (vedi `agui-events.mjs`), e il kernel
+     *   lo scrive in testa al contenuto (`talosHarness.mjs:7812`, `exit ${p.codice} [sandbox: …]`).
+     *   ⛔ Resta vera la nota qui sopra: il `content` NON si conserva, perché può essere enorme —
+     *   `uscitaDaTestoAttrezzo` ne ricava un intero e butta il resto. Serve a distinguere
+     *   «annullato» (130) e «terminato a forza» (124) da «non riuscito», che prima erano la stessa
+     *   cosa: un pallino rosso su un comando che qualcuno aveva semplicemente fermato.
+     */
+    /* ⛔ 17/09, OSS-1/OSS-2 — i tre campi nuovi del risultato (vedi la nota lunga sul `ToolCallStart`).
+       `durataMs` è misurato dove il comando è GIRATO ed è l'unico che sopravvive alla rigiocata;
+       `comando` riempie il buco di `prova`, che non ha argomenti obbligatori; `cwd` è la cartella
+       vera, che fino a ieri la riga del dettaglio dichiarava assente per costruzione.
+       ⛔ Ognuno passa solo se è del tipo giusto: un campo storto non deve diventare un numero a
+       schermo — «non misurato» è un esito, «0» sarebbe una bugia. */
+    else if (evento.type === 'ToolCallResult') state.realSession.eventiAttrezzi.push({
+      type: 'ToolCallResult', toolCallId: evento.toolCallId, ricevutoA: Date.now(),
+      errore: Boolean(evento.isError || evento.error), uscita: uscitaDaTestoAttrezzo(evento.content),
+      durataMs: Number.isFinite(evento.durataMs) ? evento.durataMs : null,
+      comando: typeof evento.comando === 'string' ? evento.comando : null,
+      cwd: typeof evento.cwd === 'string' ? evento.cwd : null,
+      /*
+       * ⛔ 17/09 sera — UN COMANDO RIFIUTATO NON È UN COMANDO FALLITO. Una `shell` negata
+       *   all'approvazione torna con `content: 'REFUSED. …'` e SENZA `comando`, `cwd` e `durataMs`:
+       *   non è mai partita. Senza questa riga la scheda «Processi» le metteva il pallino rosso di
+       *   «Non riuscito», cioè accusava di un guasto una decisione presa dalla persona.
+       *   ⛔ Si porta un BOOLEANO, non il contenuto: il `content` può essere enorme (nota qui sopra)
+       *   e per sapere «è partito o no» basta il fatto.
+       */
+      rifiutato: typeof evento.content === 'string' && /^\s*REFUSED\b/u.test(evento.content),
+    });
     /*
      * ⛔ PO-06 (10/09) — il giro del comando scritto dalla persona finisce qui: da adesso le
      *   righe che arrivano sono di nuovo dell'agente e tornano al comportamento normale (card
@@ -14786,9 +16871,33 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         break;
       }
       case 'RunStarted': {
-        streamingAutoFollow = true; // un nuovo giro ri-arma il "segui il centro" — stesso principio visto in ricerca
+        /*
+         * ⛔⛔⛔ 16/09/2026 (P0, punto 6) — QUI C'ERA IL RIARMO, ED È STATO TOLTO.
+         *
+         * `streamingAutoFollow = true; streamingLastTargetTop = null;` rimetteva il seguito a ogni
+         * RunStarted. Sembra innocuo — «è un giro nuovo» — ma un giro nuovo è un evento del MODELLO,
+         * non un gesto della persona: chi stava leggendo trecento righe più su veniva riportato giù
+         * da qualcosa che non aveva chiesto. E i RunStarted non sono uno per conversazione: arrivano
+         * a ogni ripresa e a ogni giro interno, quindi la persona veniva strappata via di continuo.
+         * Misurato il 16/09 (SCROLL-P0-03, prima della cura): 5.334 px di salto su un solo RunStarted.
+         * ⇒ Il seguito si riarma SOLO da un gesto suo: `riarmaSeguiConversazione`, chiamato dal suo
+         *   messaggio, dal suo comando e dal pulsante «torna in fondo».
+         * ⛔ Ed è qui che il custode del fondo del RIPRISTINO si fa da parte: un giro DAL VIVO vuol
+         *   dire che la cronologia non si sta più ricostruendo, e un osservatore che riporta al fondo
+         *   a ogni mutazione non ha più niente da tenere (durante la rigiocata il flag è ancora vero,
+         *   quindi i RunStarted storici non lo staccano).
+         */
+        if (!state.realSession.deferHistoricalRendering) fermaFondoRipristino?.();
+        /*
+         * ⛔ 17/09, revisione — «CHIEDI DI NUOVO» DOPO UNA RICARICA. `ultimaDomanda` si scriveva
+         *   SOLO in `appendUserFollowUp`, cioè solo per una domanda mandata da questa finestra:
+         *   riaperta la sessione restava vuota, la voce del menu spenta, e non c'era niente di
+         *   rotto da vedere — la domanda era lì a schermo. Si ricostruisce dalla storia
+         *   rigiocata, che è la stessa fonte da cui la chat ridisegna le bolle.
+         */
+        const domandaDelGiro = typeof evento.input?.consegna === 'string' ? evento.input.consegna : evento.input?.consegnaCorta;
+        if (typeof domandaDelGiro === 'string' && domandaDelGiro.trim() !== '') state.realSession.ultimaDomanda = domandaDelGiro;
         contextMonitor?.setRunning(true);
-        streamingLastTargetTop = null;
         /*
          * ⛔⛔⛔ 06/9, CB-04 — QUI è il confine fra due invii: il consumo
          * dell'invio che si chiude entra nel totale della sessione, e il
@@ -14891,8 +17000,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          *   che Anthropic descrive per la shell mode («shows real-time progress and output»,
          *   «Interactive mode», letto il 10/09/2026).
          */
-        if (!state.realSession.taskBubbleMostrata && evento.input) {
-          appendRealTaskStart(evento.input, evento.contesto);
+        if (mostraRisultatoDelega(evento.input)) {
+          state.realSession.followUpBubbleInAttesa = false;
+        } else if (!state.realSession.taskBubbleMostrata && evento.input) {
+          appendRealTaskStart(evento.input, evento.contesto, evento._sequenza);
         } else if (state.realSession.taskBubbleMostrata && evento.input?.seguito) {
           if (state.realSession.followUpBubbleInAttesa) {
             const turnoInAttesa = state.realSession.attesaBubble?.closest('[data-turno="talos"]');
@@ -14906,10 +17017,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             const domandaInAttesa = [...($('#conversation')?.querySelectorAll('.talos-message--user') || [])].at(-1);
             const metaDomanda = domandaInAttesa?.querySelector('.talos-message__meta');
             if (metaDomanda && evento.contesto) metaDomanda.textContent = [domandaInAttesa.dataset.oraMessaggio, `Follow-up${etichettaPermessiGiro(evento.contesto)}`].filter(Boolean).join(' · ');
+            /*
+             * ⛔ 17/09: la bolla ottimista è nata PRIMA che il server dicesse quale giro è. Il suo
+             *   riferimento arriva adesso, con `RunStarted`: senza questa riga «Elimina» resterebbe
+             *   spenta per sempre proprio sul messaggio appena scritto.
+             */
+            if (domandaInAttesa && Number.isSafeInteger(evento._sequenza)) {
+              domandaInAttesa.dataset.riferimentoMessaggio = `giro:${evento._sequenza}`;
+            }
             state.realSession.followUpBubbleInAttesa = false; // già mostrato dal vivo, non duplicare
             allineaPilloleAlGiroVivo(evento.contesto);
           } else {
-            appendUserFollowUp(evento.input.consegna, evento.contesto, evento.input.immagini); // replay con allegati persistiti
+            appendUserFollowUp(evento.input.consegna, evento.contesto, evento.input.immagini, evento._sequenza); // replay con allegati persistiti
           }
         }
         /*
@@ -15009,11 +17128,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         bubble.article.dataset.ragionamentoId = evento.messageId; // ⭐ 13/09 sera: per darle la sua durata quando la sessione si riapre
         // ⛔ Solo `hidden`, non anche `aria-hidden`: toglie già la riga dall'albero dell'accessibilità, e ogni attributo in più è una modifica del DOM che LAG-REPLAY-REASONING-36 conta — misurato 22 contro un tetto di 20, mentre il pacchetto di prima passava.
         const testaRagionamento = bubble.article.querySelector(':scope > .talos-activity__head');
-        testaRagionamento?.addEventListener('click', () => { testaRagionamento.dataset.toccatoDaUtente = 'si'; });
+        /*
+         * ⛔ 16/09 (P0, punto 8) — il clic lo apre la regia generica dei disclosure, che ascolta più
+         *   in alto e quindi gira DOPO questo ascoltatore: qui `aria-expanded` è ancora quello di
+         *   prima. Non si indovina il valore nuovo — si guarda quello VERO al fotogramma dopo, che è
+         *   esattamente quello che fa `chiediDisegnoRagionamento` (e se nel frattempo è stata
+         *   richiusa, non disegna niente).
+         */
+        testaRagionamento?.addEventListener('click', () => {
+          testaRagionamento.dataset.toccatoDaUtente = 'si';
+          chiediDisegnoRagionamento(bubble.article);
+        });
+        testoRagionamentoPerScheda.set(bubble.article, '');
         state.realSession.ragionamentoBubble.set(evento.messageId, {
           ...bubble,
           grezzo: '',
-          renderStato: { prefisso: null, nodiCoda: [] },
+          /* ⛔ 16/09: lo stato del render NON sta più qui. Sta in `montaggioRagionamentoPerScheda`,
+             agganciato alla SCHEDA: `ReasoningMessageEnd` cancella questa voce dalla mappa, e il
+             corpo va montato anche dopo — quando la persona apre una scheda già finita. */
           inizio: inizioRagionamentoDaRegistrare(evento.messageId),
           apertaDaSola: false,
         });
@@ -15023,18 +17155,30 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const voce = state.realSession.ragionamentoBubble.get(evento.messageId);
         if (!voce) break; // difensivo: un Content senza il suo Start non deve far crashare la sessione
         voce.grezzo += evento.delta;
+        testoRagionamentoPerScheda.set(voce.article, voce.grezzo);
         if (voce.article.hidden && voce.grezzo.trim() !== '') mostraRagionamento(voce);
         else if (voce.vivo) aggiornaArgomentoRagionamento(voce); // l'argomento corrente, a passo lento: vedi `accendiRagionamentoVivo`
-        if (!state.realSession.deferHistoricalRendering) {
-          renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
-          if (ragionamentoAperto(voce.article)) scrollStreamingOutput(voce.article);
+        /*
+         * ⛔⛔⛔ 16/09 (P0, punto 8) — QUI C'ERA IL COSTO NASCOSTO: `renderizzaMarkdownIncrementale`
+         *   girava a ogni delta anche a scheda CHIUSA, cioè su testo che nessuno stava guardando, e
+         *   su una traccia senza righe vuote ri-parsava TUTTO ogni volta (misurato 16/09: 480 delta
+         *   costano 3,86× quello che costano 240 — quadratico). Adesso si disegna solo se è aperta;
+         *   se è chiusa il testo cresce e basta, e il DOM lo vedrà all'apertura o alla fine.
+         */
+        if (!state.realSession.deferHistoricalRendering && ragionamentoAperto(voce.article)) {
+          chiediDisegnoRagionamento(voce.article);
+          scrollStreamingOutput(voce.article);
         }
         break;
       }
       case 'ReasoningMessageEnd': {
         const voce = state.realSession.ragionamentoBubble.get(evento.messageId);
-        if (voce && state.realSession.deferHistoricalRendering) {
-          renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
+        if (voce) {
+          testoRagionamentoPerScheda.set(voce.article, voce.grezzo);
+          /* ⛔ Finita: o si finisce di disegnarla (è aperta), o si deposita il testo grezzo — un solo
+             nodo di TESTO, zero elementi — così la ricerca nella pagina e l'export lo trovano lo stesso. */
+          if (ragionamentoAperto(voce.article)) chiediDisegnoRagionamento(voce.article);
+          else depositaTestoRagionamento(voce.article);
         }
         /* ⛔ 13/09 notte: se era già concluso al primo testo, questa fine arriva a risposta SCRITTA — e un'attesa
            «TALOS sta preparando la risposta…» sotto una risposta finita direbbe il falso. */
@@ -15213,14 +17357,32 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           if (info.dettaglio && info.argomentiParsati && !info.comandoDellaPersona) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, info.argomentiParsati);
         }
         if (info?.detail) {
-          /* PO-06 — per un comando della persona l'etichetta «Esito:» è di troppo: la riga della
-             ToolRow porta già il verdetto, e sotto c'è solo l'output. */
-          if (!info.comandoDellaPersona) {
-            const separatore = document.createElement('div');
-            separatore.className = 'tool-arg-key';
-            separatore.textContent = 'Esito:';
-            info.detail.appendChild(separatore);
-          }
+          /*
+           * ⛔⛔ L'ETICHETTA «Esito:» NON SI DISEGNA PIÙ — nemmeno per un comando dell'AGENTE.
+           *   Owner 20/09/2026 notte: «per la decisione fai la solita ricerca 5×5×5×5 e proponi metodo
+           *   migliore»; la ricerca è in `.claude/RICERCA-5x5x5x5-ETICHETTA-ESITO-2026-09-20.md` e
+           *   dice di toglierla, per quattro ragioni:
+           *   1. **è un'etichetta sopra un'etichetta** — sta immediatamente sopra «USCITA» /
+           *      «DIAGNOSTICA», ed è il caso che una guida di sistema (Appian, «UX: Labels») e una
+           *      segnalazione vera (`dev.entrouvert.org`) chiamano **difetto**: lì la correzione è
+           *      «darle più rilievo **o non mostrarla**»;
+           *   2. **non introduce più niente**: era lì per la testata del kernel (`exit 0 [sandbox: …]`)
+           *      e con la «quarta strada» quella testata nel caso riuscito non si scrive. Le due
+           *      domande dell'audit — *aggiunge informazione nuova?* no — *togliendola si perde
+           *      qualcosa di critico?* no;
+           *   3. **la casa l'aveva già deciso** per il comando della PERSONA (PO-06, 10/09: «è di
+           *      troppo: la riga della ToolRow porta già il verdetto») con una ragione che vale
+           *      identica qui. Due regole per la stessa cosa sono il difetto che il revisore ha appena
+           *      trovato altrove (tre regole per la riga d'esito): non se ne aggiunge un'altra;
+           *   4. **il concorrente etichetta i FLUSSI, non il contenitore** — Hermes,
+           *      `tool/fallback.tsx:98-101`, «Used for "stdout", "stderr", "Search results"», col
+           *      commento che dice perché: deve leggersi come una **«quiet field label»**, non come una
+           *      **«chrome heading»**. Da noi i due livelli erano due; ora è uno.
+           *   ⛔ Le etichette delle SEZIONI restano: sono il punto del BLOCCO 7 e sono il livello che
+           *     anche Hermes ha. Se ne va solo quello in più.
+           *   ⛔ E il verdetto resta nel testo: `Non riuscito · codice 1 · su Windows, senza
+           *     isolamento` / `Fermato: ha superato il tempo massimo · …`, più lo stato della riga.
+           */
           /*
            * ⛔ 06/9, owner con lo screenshot: l'esito era «REFUSED. Empty html: nothing was created.»
            * — inglese e gergo. Un REFUSED non è un guasto: è il kernel che ha detto di no, e chi
@@ -15240,9 +17402,34 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            *   invece di lasciare un riquadro bianco: un comando può legittimamente non stampare
            *   niente, e «niente» è una risposta — ma va scritta.
            */
-          const daMostrare = esitoUmano
-            ? (esitoUmano.output.trim() === '' ? 'Nessun output.' : esitoUmano.output)
-            : testoEsito;
+          /*
+           * ⛔ «Quarta strada» (owner 20/09/2026, ricerca in `.claude/RICERCA-5x5x5x5-RIGA-ESITO-2026-09-20.md`):
+           *   per un comando dell'AGENTE l'intestazione `exit 0 [sandbox: …]` non si mostra più —
+           *   si mostra solo quando l'uscita è diversa da zero. E se l'esito ERA soltanto quella
+           *   riga, resta il vuoto: e il vuoto si DICE, con le stesse parole già usate per un
+           *   comando della persona («un comando può legittimamente non stampare niente, e "niente"
+           *   è una risposta — ma va scritta»).
+           */
+          /*
+           * ⛔⛔ LA CURA PARLA DI COMANDI SOLO QUANDO È UN COMANDO — 20/09/2026, terzo referto
+           *   avversario; il difetto l'ha introdotto il ramo unico di questo stesso giro.
+           *   `senzaIntestazione` e `rigaEsitoDaMostrare` tolgono e riscrivono una testata `exit N …`,
+           *   e la riconoscono in **qualunque** testo. Ma l'esito di un `leggi` è **il contenuto
+           *   grezzo del file** (`src/kernel/dist/kernelPerIlBanco.js:39`,
+           *   `return readFile(dentro(percorso), "utf8")`): un file che comincia con `exit 0` perdeva
+           *   la **prima riga**, e uno che comincia con `exit 1` faceva **dichiarare alla chat un
+           *   verdetto di comando su una lettura** — mentre il pallino della riga restava verde
+           *   (`esitoAttrezzoFallito` usa il contratto solo per `shell`): due affermazioni
+           *   contraddittorie nello stesso blocco.
+           *   ⇒ La testata la scrive il kernel, e la scrive **solo** per i comandi: il **nome
+           *     dell'attrezzo** è l'unico testimone affidabile, perché dal testo un file che comincia
+           *     con `exit` è indistinguibile da un esito. `prova` è incluso: anche il suo esito è
+           *     `exit 127\nnessuna suite trovata…`.
+           */
+          const attrezzoCheScriveLaTestata = info?.nome === 'shell' || info?.nome === 'prova';
+          const testoBlocco = esitoUmano ? esitoUmano.output
+            : (attrezzoCheScriveLaTestata ? senzaIntestazione(testoEsito) : testoEsito);
+          const daMostrare = testoBlocco.trim() === '' ? 'Nessun output.' : testoBlocco;
           /*
            * ⛔⛔ 10/09 — UN ESITO LUNGO NON SI ROVESCIA NELLA CHAT.
            *
@@ -15282,14 +17469,102 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             const pillola = creaPillolaFonti(fonti, { onApri: () => apriModaleFonti(fonti) });
             if (pillola && info.detail.parentNode) info.detail.parentNode.insertBefore(pillola, info.detail.nextSibling);
           }
-          const righeEsito = String(daMostrare).split('\n');
-          const tagliato = righeEsito.length > RIGHE_ESITO_IN_CHAT;
-          pre.appendChild(textElement('code', '', tagliato ? righeEsito.slice(0, RIGHE_ESITO_IN_CHAT).join('\n') : daMostrare));
-          info.detail.appendChild(pre);
-          if (tagliato) {
-            const quante = righeEsito.length - RIGHE_ESITO_IN_CHAT;
-            info.detail.appendChild(textElement('p', 'tool-result-tagliato',
-              `Altre ${quante} righe non sono mostrate qui (in tutto ${righeEsito.length}).`));
+          /*
+           * ⛔⛔⛔ BLOCCO 7 (B4) — I DUE FLUSSI, QUANDO ESISTONO. Owner: «B4: separare».
+           *
+           *   Oggi l'esito di una shell è UNA riga fusa: un avviso di `npm` (che scrive
+           *   l'avanzamento su stderr) e un errore di `git` si leggono identici. Quando l'evento
+           *   porta i due flussi separati — e li porta solo se il backend li ha davvero, vedi
+           *   `toolCallResult` — si disegnano come due sezioni etichettate.
+           *
+           * ⛔⛔ E **stderr NON si dipinge come un errore**. La fonte è nel codice di Hermes, letto il
+           *   20/09/2026: «Many CLIs use stderr for informational messages (npm progress, git
+           *   hints), so we deliberately don't paint stderr destructively even though it's tagged».
+           *   La specifica MCP (2026-07-28) dice lo stesso dal suo lato: il client **non deve
+           *   presumere che stderr sia un errore**. E la ricerca 2026 (AgentDebugX, TelemetrySuffBench)
+           *   aggiunge il perché: il SINTOMO non è la CAUSA, e un flusso rumoroso non è una prova.
+           *   ⇒ Nessun colore d'allarme: le due sezioni hanno lo stesso tono, e a distinguerle è la
+           *     PAROLA («Uscita», «Diagnostica»). **Solo un codice d'uscita diverso da zero è un
+           *     fallimento**, e la riga dell'attrezzo lo dice già col suo stato.
+           *   ⛔ Niente nomi tecnici: non `stdout`/`stderr`, ma due parole che si capiscono.
+           *   ⛔ I due flussi li ha già limitati il kernel (4.000 caratteri, la stessa regola del
+           *     fuso): qui non si taglia una seconda volta, e il fuso resta il ripiego per tutto ciò
+           *     che non li porta — cioè per le sessioni vecchie registrate.
+           */
+          /*
+           * ⛔ I DUE FLUSSI SI PRENDONO ANCHE PER UN COMANDO DELLA PERSONA — ed è una CURA, non un
+           *   allargamento. `agent-service.mjs` li manda proprio per `!comando`, col commento «Per un
+           *   comando scritto dalla PERSONA serve ancora di più»: il cancello `!esitoUmano` rendeva
+           *   quella funzione **morta** sulla strada che la motivava. Misurato dal revisore avversario
+           *   il 20/09/2026 (prova RV5): **0 sezioni** su un evento che portava i due campi.
+           * ⛔ E un campo VUOTO non è un flusso: `''` conta come assente, o si disegna un riquadro
+           *   etichettato e VUOTO — e se sono vuoti tutti e due, il contenuto sparisce del tutto
+           *   (RV4: due scatole vuote al posto dell'output). Il commento qui sotto lo prometteva già;
+           *   il codice no. Ora lo fa.
+           */
+          const haFlusso = (v) => typeof v === 'string' && v !== '';
+          const flussiSeparati = haFlusso(evento.stdout) || haFlusso(evento.stderr);
+          /*
+           * ⛔⛔ LA RIGA DELL'ESITO SI DISEGNA **UNA VOLTA, PER ENTRAMBI I RAMI** — 20/09/2026, trovato
+           *   dal revisore avversario. Prima viveva DENTRO il ramo a due flussi, e poiché
+           *   `senzaIntestazione` toglie la testata a **ogni** attrezzo, un `prova` con uscita ≠ 0
+           *   perdeva `exit 127` **senza rimpiazzo**: informazione tolta e non ridata, che è peggio di
+           *   un'etichetta di troppo.
+           * ⛔ E questo NON l'aveva trovato il codice: l'aveva trovato la FOTO — con i due flussi
+           *   disegnati `daMostrare` non si stampa più, e con lui spariva la dichiarazione del BLOCCO 6.
+           * ⛔ «QUARTA STRADA» (owner 20/09/2026, ricerca in
+           *   `.claude/RICERCA-5x5x5x5-RIGA-ESITO-2026-09-20.md`): si mostra **solo se l'uscita è
+           *   diversa da zero** — `exit 0` non aggiunge niente che la riga dell'attrezzo non dica già,
+           *   e timbrato su ogni comando rende invisibile il caso che conta. Si prende **solo** una
+           *   riga d'esito: se la forma cambia, non si stampa una riga qualunque.
+           * ⛔ Per un comando della PERSONA non si mostra: la sua riga porta già il verdetto in
+           *   italiano (`rigaDiStatoComando`, PO-06), e ripeterlo qui sarebbe il doppione che quella
+           *   regola è nata per togliere. Per l'agente la riga arriva dal contratto, nelle parole di
+           *   casa — `exit 1` e `[sandbox: none]` sono nomi tecnici, vietati a schermo dal 04/09.
+           */
+          /* ⛔ Lo stesso cancello di `testoBlocco`: una testata si legge e si riscrive solo per un
+             attrezzo che la scrive davvero, o su un `leggi` si dichiara un esito di comando su un file. */
+          const rigaEsito = (esitoUmano || !attrezzoCheScriveLaTestata) ? null : rigaEsitoDaMostrare(testoEsito);
+          if (rigaEsito) {
+            const intestazione = document.createElement('pre');
+            intestazione.className = 'tool-result-block';
+            intestazione.appendChild(textElement('code', '', rigaEsito));
+            info.detail.appendChild(intestazione);
+          }
+          if (flussiSeparati) {
+            for (const [etichetta, testo] of [['Uscita', evento.stdout], ['Diagnostica', evento.stderr]]) {
+              if (!haFlusso(testo)) continue; // assente NON è vuoto: non si disegna un riquadro bianco
+              const sezione = document.createElement('div');
+              sezione.className = 'tool-stream';
+              sezione.appendChild(textElement('span', 'tool-stream__etichetta', etichetta));
+              const corpo = document.createElement('pre');
+              corpo.className = 'tool-result-block';
+              /*
+               * ⛔ LO STESSO TETTO DEL FUSO (200 righe, che dichiara quante ne mancano). Senza, questa
+               *   strada lo SCAVALCA: il kernel limita a 4.000 CARATTERI, e 4.000 caratteri di a-capo
+               *   sono quattromila righe — la chat allagata che il tetto del 10/09 esiste per impedire.
+               */
+              const righe = testo.split('\n');
+              const tagliato = righe.length > RIGHE_ESITO_IN_CHAT;
+              corpo.appendChild(textElement('code', '', tagliato ? righe.slice(0, RIGHE_ESITO_IN_CHAT).join('\n') : testo));
+              sezione.appendChild(corpo);
+              if (tagliato) {
+                const quante = righe.length - RIGHE_ESITO_IN_CHAT;
+                sezione.appendChild(textElement('p', 'tool-result-tagliato',
+                  `Altre ${quante} righe non sono mostrate qui (in tutto ${righe.length}).`));
+              }
+              info.detail.appendChild(sezione);
+            }
+          } else {
+            const righeEsito = String(daMostrare).split('\n');
+            const tagliato = righeEsito.length > RIGHE_ESITO_IN_CHAT;
+            pre.appendChild(textElement('code', '', tagliato ? righeEsito.slice(0, RIGHE_ESITO_IN_CHAT).join('\n') : daMostrare));
+            info.detail.appendChild(pre);
+            if (tagliato) {
+              const quante = righeEsito.length - RIGHE_ESITO_IN_CHAT;
+              info.detail.appendChild(textElement('p', 'tool-result-tagliato',
+                `Altre ${quante} righe non sono mostrate qui (in tutto ${righeEsito.length}).`));
+            }
           }
         }
         if (info?.batch && info.stato === 'running') {
@@ -15317,6 +17592,25 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         // ⭐ 3/9 — item 10: preso ORA, non dopo — fra un attimo l'entry sparisce.
         if (info?.nome) state.realSession.ultimoBersaglioAttrezzo = { nome: info.nome, argomenti: info.argomentiParsati };
         state.realSession.toolCallNomi.delete(evento.toolCallId);
+        /*
+         * ⛔⛔ LA COLONNA DESTRA VA RIDISEGNATA QUI — e fino al 20/09/2026 non lo era.
+         *
+         *   Misurato sulla pagina vera: un processo che FINISCE non cambiava riga. Dopo il
+         *   `ToolCallResult` la card restava `in-corso` — `dataset.stato` compreso — per tutti e
+         *   cinque i secondi di un `expect`, mentre il registro degli eventi aveva già il risultato
+         *   in coda. Con un `RunFinished` (che di sicuro ridisegna) la riga diventava `riuscito`:
+         *   ⇒ il DATO era giusto, mancava il RIDISEGNO.
+         *   ⛔ La causa, misurata col grep e non dedotta: i tre rami `ToolCallStart`, `ToolCallArgs` e
+         *     `ToolCallResult` **non chiamano nessuno** dei tre aggiornatori (`syncRunComposerState`,
+         *     `aggiornaInspectorDaStato`, `aggiornaPiedeChatDaStato`). La colonna si aggiornava solo
+         *     di rimbalzo, dal refresh periodico della sessione — che gira **mentre un giro è
+         *     attivo**. Fuori da un giro (o per l'ultimo risultato che arriva a giro finito, o in una
+         *     rigiocata) la riga resta ferma.
+         *   ⇒ Una riga, nella forma che il resto del file usa già: `aggiornaInspectorDaStato` è
+         *     **coalescata su `requestAnimationFrame`** (vedi la sua nota), quindi una raffica di
+         *     risultati costa UN disegno per fotogramma, non uno per evento.
+         */
+        aggiornaInspectorDaStato();
         break;
       }
       case 'StateDelta': {
@@ -15384,6 +17678,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         break;
       }
       case 'QueuedMessageDelivered': {
+        if (mostraRisultatoDelega(evento)) break;
+
         /*
          * ⭐⭐⭐ FASE D (28/8) — il kernel ha DAVVERO consumato un messaggio
          * dalla coda (session-registry.mjs, codaMessaggiFn) — il SOLO
@@ -15426,8 +17722,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          *   (`codex-rs/tui/src/bottom_pane/mod.rs:252`), mai dentro un blocco vecchio.
          */
         nascondiAttesaRisposta();
-        appendUserFollowUp(evento.testo, null, evento.immagini);
-        state.realSession.followUpBubbleInAttesa = true;
+        const risultatoDelega = mostraRisultatoDelega(evento);
+        if (!risultatoDelega) appendUserFollowUp(evento.testo, null, evento.immagini);
+        state.realSession.followUpBubbleInAttesa = !risultatoDelega;
         mostraAttesaRisposta();
         syncRunComposerState();
         break;
@@ -15453,6 +17750,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       case 'RunFinished': {
         segnaGiroVivo(false); // ⭐ il marchio smette di respirare quando il giro finisce DAVVERO
         contextMonitor?.setRunning(false); void contextMonitor?.refresh({ afterPending: true });
+        appendCartaFileDelGiro(); // ⭐ BC-75: i file di QUESTO giro, sotto la risposta
         /*
          * ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col
          * modello" — la causa PRINCIPALE della "risposta duplicata" non era
@@ -15667,7 +17965,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.realSession.inRigiocata = true;
     const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
     segnaTappaLatenza('sseCollegato');
-    source.onopen = () => { if (generation === state.realSession.generation) state.realSession.inRigiocata = true; };
+    source.onopen = () => { if (generation === state.realSession.generation) { state.realSession.inRigiocata = true; void aggiornaElencoSessioniReali().then(() => { if (generation === state.realSession.generation) void caricaFigliSessione(); }); } };
     state.realSession.eventSource = source;
     source.onmessage = (message) => {
       sorveglianza?.segnalaEventoVivo(); // T-15: il canale è vivo
@@ -15691,7 +17989,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     source.onerror = () => {
       if (generation !== state.realSession.generation) return;
-      if (state.realSession.eventoTerminaleVisto) {
+      const figliAttivi = [...(state.realSession.figli || []), ...agentiInDiretta.values()].some(a => a.conclusa === false && !a.interrotta);
+      if (state.realSession.eventoTerminaleVisto && !figliAttivi) {
         source.close();
         state.realSession.eventSource = null;
         return;
@@ -15705,6 +18004,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** Chiude l'EventSource corrente (se c'è) e apre una nuova generazione. */
   function nuovaGenerazioneSessione({ continua = false } = {}) {
+    if (!continua) { risultatiDelegaMostrati.clear(); ultimoEventoGrafoMadre = null; if (frameGrafoMadre !== null) cancelAnimationFrame(frameGrafoMadre); frameGrafoMadre = null; agentiInDiretta.clear(); if (frameAgentiInDiretta !== null) cancelAnimationFrame(frameAgentiInDiretta); frameAgentiInDiretta = null; chiudiGrafoAgenti({ ricorda: true }); figliLettura++; figliErrore = null; figliAggiornati = null; state.realSession.figli = []; chiudiConversazioneFiglia(); }
     if (!continua) { contextCompactor?.close(); contextCompactor?.setSession(null); contextMonitor?.stop(); contextChatSnapshot = null; aggiornaAvanzamentoContesto($('#conversation'), null); }
     nascondiAttesaRisposta();
     cancellaRenderMessaggiStreaming();
@@ -15735,6 +18035,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.realSession.reviewFiles = new Map();
       state.realSession.treeCache = new Map();
       state.realSession.treeOpen = new Set();
+      /* ⭐ 18/09 — la selezione dei file muore con la sessione: i percorsi di un'altra cartella
+         non vogliono dire niente qui, e un piede «3 selezionati» su file che non esistono più
+         sarebbe una bugia che resta a schermo. */
+      state.realSession.fileSelezionati = new Set();
+      $('.talos-file-selezione')?.remove();
       state.realSession.treeWorkspaceKey = null;
       state.realSession.treeUiRestored = false;
       state.realSession.previewProjectId = null;
@@ -15937,6 +18242,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       ? { sessionId: state.realSession.id, taskId: state.realSession.taskId, nome: state.session }
       : null);
     if (!origine?.sessionId) {
+      if (!embeddedDemoOnly()) { toast('Ramo non creato', tr('Apri prima una sessione.')); return; }
       toast('Fork creato', 'Nuovo ramo di conversazione da questo punto.');
       return;
     }
@@ -16162,7 +18468,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const sessionId = state.realSession.id;
     const snapshot = contextChatSnapshot?.sessionId === sessionId ? contextChatSnapshot : null;
     if (!contextCompactor) contextCompactor = montaContextCompactor(root, {
-      client: contextClient, sessionId, state: snapshot,
+      client: contextClient, sessionId, state: snapshot, modalManager,
       onState: next => contextMonitor?.update(next),
     });
     else contextCompactor.setSession(sessionId, snapshot);
@@ -16221,7 +18527,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function aggiornaToolbarSelezioneSessioni() {
-    const totale = state.sessionSelection.available.size;
+    const totale = sessioniRadice([...state.sessionSelection.available.values()]).length;
     const selezionate = state.sessionSelection.selected.size;
     /*
      * ⛔⛔ 07/9 — provato dal vivo, e la prova ha trovato quello che l'occhio non vedeva: le caselle
@@ -16290,7 +18596,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function toggleSessionSelection(sessionId, checked) {
-    if (!sessionId) return;
+    if (!sessionId || !sessioniRadice([state.sessionSelection.available.get(sessionId)]).length) return;
     if (checked) state.sessionSelection.selected.add(sessionId);
     else state.sessionSelection.selected.delete(sessionId);
     aggiornaStatoRigheSelezione();
@@ -16298,7 +18604,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** Gli id davvero selezionati, filtrati su quelli che esistono ancora nell'elenco. */
   function sessioniSelezionate() {
-    return [...state.sessionSelection.selected].filter((id) => state.sessionSelection.available.has(id));
+    return [...state.sessionSelection.selected].filter((id) => sessioniRadice([state.sessionSelection.available.get(id)]).length > 0);
   }
 
   /*
@@ -16376,7 +18682,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   async function eliminaSessioniSelezionate() {
-    const ids = [...state.sessionSelection.selected].filter((id) => state.sessionSelection.available.has(id));
+    const ids = sessioniSelezionate();
     if (ids.length === 0 || state.sessionSelection.deleting) return;
     state.sessionSelection.deleting = true;
     aggiornaToolbarSelezioneSessioni();
@@ -16471,7 +18777,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       window.clearInterval(fermaSeFinito);
       conversation.classList.remove('is-restoring'); // mai lasciare la conversazione nascosta perché la persona ha scorso
       scroller?.removeEventListener('scroll', suScroll);
+      if (fermaFondoRipristino === smetti) fermaFondoRipristino = null;
     };
+    /*
+     * ⛔ 16/09/2026 (P0, punto 6) — il custode si fa TROVARE. Prima l'unico modo di fermarlo era da
+     *   dentro: uno scorrimento della persona, l'evento terminale, o la rete di sicurezza a 30 s.
+     *   Restava quindi in piedi fino a mezzo minuto dopo l'apertura, e nel frattempo riportava in
+     *   fondo a ogni mutazione — `class` e `style` compresi. ⇒ Pubblicando il suo `smetti` qui, anche
+     *   un'AZIONE della persona (`riarmaSeguiConversazione`) e il primo giro DAL VIVO (`RunStarted`)
+     *   possono staccarlo nell'istante in cui succedono, invece di aspettare un timeout.
+     * ⛔ Un ripristino nuovo sostituisce il precedente: prima lo si ferma, così non restano due
+     *   osservatori a contendersi lo stesso scorrevole.
+     */
     function suScroll() {
       if (nostro || smesso || !scroller) return;
       const distanza = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
@@ -16492,6 +18809,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (generation === state.realSession.generation) { scopri(); window.requestAnimationFrame(inFondo); window.setTimeout(inFondo, 250); }
       }
     }, 200);
+    fermaFondoRipristino?.(); fermaFondoRipristino = smetti; // ⛔ dopo `fermaSeFinito`: `smetti` lo legge, e prima di qui sarebbe nella sua zona morta
     // Rete di sicurezza per la VISIBILITÀ: una sessione conclusa senza evento terminale nel replay (interrotta) non resta nascosta per sempre — 8s bastano a qualunque cronologia vista finora (1.235 righe in ~1s).
     /* ⛔ 11/09 — gli 8 s erano tarati su «1.235 righe in ~1s» (il commento sopra lo dichiara):
        su 34.026 righe scoprire a 8 s vuol dire scoprire una cronologia a METÀ. Il tetto non è più
@@ -16524,6 +18842,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * ⇒ Prima di inventare un default si legge l'elenco che il client HA GIÀ in memoria — la stessa
      *   mappa che disegna la barra, e la stessa fonte da cui BC-37 prende il nome.
      */
+    workspacePreferences.update({ lastSession: sessionId });
     const dallElencoSubito = state.sessionSelection.available?.get?.(sessionId) ?? null;
     const contrattoSessione = impostazioniSessione || dallElencoSubito || { modello };
     if (sessionId === state.realSession.id) {
@@ -16601,6 +18920,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     setView('chat');
     closePanels();
+    /* ⛔ 16/09 (P0, punto 6) — il «segui» vive su un ascoltatore attaccato allo scorrevole. Verificato
+       che `.talos-conversation` non viene mai ricreato (lo stato vuoto tocca i figli della COLONNA),
+       ma affidare una regola a quella verifica vuol dire rifarla ogni volta che qualcuno cambia il
+       guscio: la funzione è idempotente e qui la si richiama, così se un giorno lo scorrevole cambia
+       identità l'ascoltatore ci sarà comunque — e se non cambia, questa riga non fa niente. */
+    collegaSeguiFondoConversazione();
     collegaEventiSessione(sessionId, generation);
     void caricaFigliSessione(); // 06/9: la scheda «Agenti» della colonna si riempie dalle deleghe vere
     if (state.realSession.deferHistoricalRendering) mantieniFondoDuranteRipristino(generation);
@@ -16663,6 +18988,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       tema: document.documentElement.dataset.talosTheme, // il preset applicato (applicaThemeDesktop lo scrive sulla radice)
       modello: state.model,
     });
+    aggiornaInvitoPrimoAvvio(); // 17/09, PO-27: qui passa OGNI cambio di cartella e di sessione
   }
 
   /*
@@ -16672,14 +18998,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * (`reviewFiles`); Terminale = le schede aperte — le schede (W1-01) non hanno
    * ancora una UI (B1): finché non c'è, il badge non si scrive.
    */
-  /** «3 file modificati · +112 −2» per la testata della Review, o stringa vuota se non c'e' niente. */
+  /**
+   * «3 file modificati · +112 −2» per la testata della Review, o stringa vuota se non c'e' niente.
+   *
+   * ⛔ BC-71 (b), 17/09/2026 — la regola di conteggio è UNA, e sta in `components/review.js`
+   *   (`riassuntoReviewTestata` → `riassuntoReview` → `contaDiff`). Qui ce n'era una seconda, scritta
+   *   a mano, che leggeva `v.aggiunte`/`v.rimozioni`: campi che una scrittura normale NON porta,
+   *   perché il diff lo calcola il browser e la voce porta `code`. Misurato prima della cura, con due
+   *   file scritti davvero: testata «2 file modificati», senza `+` e senza `−`.
+   */
   function riassuntoReviewTestata() {
-    const n = state.realSession.reviewFiles instanceof Map ? state.realSession.reviewFiles.size : 0;
-    if (!n) return '';
-    let piu = 0; let meno = 0;
-    for (const v of state.realSession.reviewFiles.values()) { piu += Number(v?.aggiunte || 0); meno += Number(v?.rimozioni || 0); }
-    const conteggio = `${n} file modificat${n === 1 ? 'o' : 'i'}`;
-    return piu || meno ? `${conteggio} · +${piu} −${meno}` : conteggio;
+    const voci = state.realSession.reviewFiles instanceof Map ? [...state.realSession.reviewFiles.values()] : [];
+    return riassuntoReviewPerTestata(voci);
   }
   function aggiornaTestataSessione() {
     const dati = {
@@ -16756,12 +19086,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return `circa ${totale >= 1000 ? `${(totale / 1000).toFixed(1)}k` : totale} token (stima)`;
   }
 
-  function formattaOraSessione(iso) {
-    try {
-      return new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return '';
-    }
+  /**
+   * L'ora del giorno di un istante ISO («14:30»). La usa il riepilogo delle automazioni
+   * («Prossima esecuzione 14:30»).
+   *
+   * ⛔ BC-70, 17/09/2026 — si chiamava `formattaOraSessione`, come un'ALTRA funzione dichiarata
+   *   quindicimila righe più su: due dichiarazioni nello stesso ambito, l'ultima vince e la prima
+   *   diventa codice morto senza che niente protesti. Rinominata per quello che fa davvero.
+   * ⛔ E non basta il `try`: `new Date({...}).toLocaleTimeString()` NON lancia — torna la stringa
+   *   «Invalid Date», che è come quella parola è finita nel pannello delle notifiche. Un `catch`
+   *   non protegge da un argomento del tipo sbagliato: la data si controlla.
+   */
+  function oraDelGiorno(iso) {
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return '';
+    return new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
   }
 
   /*
@@ -16859,7 +19198,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
     aggiornaNotifiche(elenco);
     const pendente = rigaSessionePendente(); // W1-12
-    $('#noSessionsPlaceholder')?.toggleAttribute('hidden', (Array.isArray(elenco) && elenco.length > 0) || pendente.length > 0); // 02/09 — il riquadro "Nessuna sessione ancora" stava sotto quattro sessioni reali
+    $('#noSessionsPlaceholder')?.toggleAttribute('hidden', sessioniRadice(elenco).length > 0 || pendente.length > 0); // 02/09 — il riquadro "Nessuna sessione ancora" stava sotto quattro sessioni reali
     /*
      * ⭐ 27/8, trovato analizzando quali badge non si spengono MAI: questa
      * funzione aggiungeva sessioni vere in un blocco separato senza mai
@@ -16869,11 +19208,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * riferimento (non è quello il bug), ma l'etichetta in cima deve
      * smettere di mentire appena ne esiste almeno una vera.
      */
-    if (elenco.length > 0) {
+    if (Array.isArray(elenco) && elenco.length > 0) {
       const demoBadge = $('.demo-surface-badge', $('#sessionsPanel'));
       if (demoBadge) demoBadge.hidden = true;
     }
     elenco = Array.isArray(elenco) ? elenco.map((sessione) => ({ ...sessione, modello: normalizzaModelloSessione(sessione) })) : [];
+    workspaceUI?.acceptSessions(elenco);
     /*
      * ⛔⛔⛔ 07/9, owner con lo screenshot: «Su 4174 ancora quel problema della sessione. Non
      * riesco a riprendere». Nella sua pagina il pulsante era ROSSO («Interrompi al prossimo punto
@@ -16914,16 +19254,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       void caricaFigliSessione();
     }
     state.sessionSelection.available = new Map(elenco.map((sessione) => [sessione.sessionId, sessione]));
+    const radici = sessioniRadice(elenco);
+    const radiciIds = new Set(radici.map(s => s.sessionId));
     void aggiornaContatoriLuoghi(elenco.length); // 05/9 Fase 2: NavItem
     for (const id of [...state.sessionSelection.selected]) {
-      if (!state.sessionSelection.available.has(id)) state.sessionSelection.selected.delete(id);
+      if (!radiciIds.has(id)) state.sessionSelection.selected.delete(id);
     }
-    if (elenco.length === 0) {
+    if (radici.length === 0) {
       state.sessionSelection.active = false;
       state.sessionSelection.selected.clear();
       const conteggioVuoto = $('#sessionList .talos-sidebar__block-head .talos-nav-item__count');
       if (conteggioVuoto) conteggioVuoto.textContent = '0'; // 05/9 Fase 2
       contenitore.replaceChildren(...pendente);
+      applicaFiltroSessioniSidebar();
       aggiornaToolbarSelezioneSessioni();
       aggiornaSottotitoloSessione();
       return;
@@ -16937,15 +19280,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * reali» non c'è più: la testata del mockup («Sessioni · N») dice il conteggio.
      */
     const conteggio = $('#sessionList .talos-sidebar__block-head .talos-nav-item__count');
-    if (conteggio) conteggio.textContent = String(elenco.length);
+    if (conteggio) conteggio.textContent = String(radici.length);
     const pezzi = [...pendente];
-    /*
-     * ⛔⛔⛔ 08/09 — le figlie di una delega comparivano SCIOLTE accanto alla madre, come tre lavori
-     * indipendenti (visto dal vivo dall'owner). Ora escono annidate sotto di lei: `ordinaSessioniAdAlbero`
-     * fa il lavoro puro (ordine + rientro) ed è provata a parte; qui resta solo il rientro a schermo.
-     * ⛔ Non si NASCONDONO: sono sessioni vere, con un costo e una storia — vedi la doc della funzione.
-     */
-    for (const { sessione, profondita, ultima, nomeDistintivo } of ordinaSessioniAdAlbero(elenco)) {
+    // Owner 19/09: solo sessioni iniziali nella lista; catalogo completo per destra/grafo.
+    for (const { sessione, profondita, ultima, nomeDistintivo } of ordinaSessioniAdAlbero(elenco).filter(riga => radiciIds.has(riga.sessione.sessionId))) {
       const etichetta = sessione.nome || sessione.taskId; // ⭐ un nome scelto dall'owner vince sempre sul taskId
       const button = creaSessionItem(sessione, {
         corrente: sessione.sessionId === state.realSession.id,
@@ -17032,7 +19370,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!contenitore.dataset.tastiera) {
       contenitore.dataset.tastiera = 'si';
       contenitore.addEventListener('keydown', (event) => {
-        const tutte = [...contenitore.querySelectorAll('.talos-session-item')];
+        const tutte = [...contenitore.querySelectorAll('.talos-session-item')].filter(r => !r.hidden && !r.closest('.td-session-row')?.hidden);
         const i = tutte.indexOf(document.activeElement);
         if (i < 0 || tutte.length === 0) return;
         let j = i;
@@ -17048,6 +19386,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       });
     }
     contenitore.replaceChildren(...pezzi);
+    applicaFiltroSessioniSidebar();
     aggiornaToolbarSelezioneSessioni();
     aggiornaSottotitoloSessione(); // W1-12 — l'elenco si ridisegna a ogni transizione: il sottotitolo lo segue
   }
@@ -17079,7 +19418,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (titolo) titolo.textContent = `${elenco.length} automazion${elenco.length === 1 ? 'e' : 'i'}`;
     if (sottotitolo) {
       const prossime = elenco.filter((a) => a.attiva && a.prossimaEsecuzione).map((a) => a.prossimaEsecuzione).sort();
-      sottotitolo.textContent = prossime.length > 0 ? `Prossima esecuzione ${formattaOraSessione(prossime[0])}` : 'Nessuna attiva';
+      sottotitolo.textContent = prossime.length > 0 ? `Prossima esecuzione ${oraDelGiorno(prossime[0])}` : 'Nessuna attiva';
     }
   }
 
@@ -17517,6 +19856,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     submit.type = 'submit';
     submit.id = 'workspaceChooserSubmit';
     submit.className = 'primary-btn compact';
+    /* ⛔ Stessa frase dell'invito del primo avvio, ma NON la stessa voce: questo è il bottone del
+       foglio «Nuova sessione», e legarlo alla tabella dell'invito farebbe cambiare due superfici
+       insieme al primo ritocco di copia. Due frasi uguali non sono una frase sola. */
     submit.textContent = 'Scegli una cartella';
     /*
      * ⛔⛔⛔ BC-14 — LA RAGIONE VERA ERA FUORI DALLO SCHERMO, e il bottone ne diceva una falsa.
@@ -18067,11 +20409,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * esporlo. La policy corrente viene conservata e non diventa mai
    * implicitamente Full access.
    */
-  async function apriWorkspaceDaLauncher() {
+  async function apriWorkspaceDaLauncher(isCurrent = () => true) {
     const workspaceLaunchId = leggiWorkspaceLaunchId();
     if (!workspaceLaunchId) return false;
     try {
       const launch = await apiGet(`/api/v1/workspace-launches/${encodeURIComponent(workspaceLaunchId)}`);
+      if (!isCurrent()) return false;
       rimuoviWorkspaceLaunchFragment();
       /*
        * ⛔⛔⛔ 10/09, owner: «il tasto destro su una cartella non fa partire TALOS con la modale
@@ -18085,6 +20428,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       await openRealTaskSheet({ launch: { id: workspaceLaunchId, nome: launch.nome } });
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       rimuoviWorkspaceLaunchFragment();
       toast('Cartella non aperta', messaggioErroreUtente(error, 'Apri di nuovo la cartella dal menu di Windows e riprova.'));
       return false;
@@ -18092,327 +20436,91 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   /*
-   * ⭐⭐⭐ 04/9, R-02 — INTRO AL PRIMO AVVIO, stile mobile.
+   * ⭐⭐⭐ 17/09, PO-27 — LO STATO VUOTO ONESTO, AL POSTO DELLA MODALE «PRIMO AVVIO».
    *
-   * Owner 03/09: «abbia un intro stile mobile». Il telefono
-   * (`TalosMobileSetupIntro.vue`, `setupProgress.ts`) ha già deciso come si
-   * fa, e qui si copia il METODO, non solo l'aspetto:
+   * Qui sopra c'erano 324 righe: il velo del primo avvio a quattro passi (cartella, fornitore +
+   * chiave, modello, permessi, riepilogo), la chiave dello store del browser che lo ricordava
+   * («completata» o «saltata»), il dialogo nativo legacy che non si apriva più da settembre, e la
+   * voce «Ripeti il primo avvio» nelle Impostazioni. Sono andate via tutte insieme.
    *
-   * 1. Un passo è «fatto» quando la cosa che chiede ESISTE — letto dalla
-   *    realtà (portachiavi via `/api/v1/setup/stato`, preferenze chat), mai
-   *    da un cursore salvato che può invecchiare e rimandare qualcuno su un
-   *    passo già finito.
-   * 2. Una decisione per schermata, con accanto la conseguenza.
-   * 3. NIENTE seconda casa per la stessa impostazione: la chiave si salva con
-   *    la STESSA rotta del Laboratorio modelli (`POST /providers/:id/key`),
-   *    il modello con lo STESSO `creaModelPicker`, l'autonomia con lo STESSO
-   *    `impostaPermesso` del foglio Permessi. L'intro presenta, non duplica.
-   * 4. «Scelto» è un GESTO, non un valore (lezione mobile `haDecisoAutonomia`):
-   *    `state.autonomiaScelta` diventa true solo toccando una scheda, mai
-   *    passando oltre con «Avanti» — altrimenti il default del giorno
-   *    dell'installazione resterebbe congelato per sempre come «scelta».
+   * ⛔ Perché: quella modale non insegnava niente che il prodotto non avesse già. La cartella si
+   *   sceglie dal «+» e da Esplora file, il modello dalla pillola del composer e dalle
+   *   Impostazioni, i permessi dalla pillola dei permessi — l'intro non faceva che ripetere tre
+   *   porte esistenti, e per farlo si metteva DAVANTI a chiunque arrivasse.
    *
-   * Passi desktop ↔ mobile: accesso (identity+model) · modello · autonomia
-   * (autonomy) · cartella (al posto di pin/background, che sul desktop non
-   * hanno senso: l'ultimo passo apre il foglio «Nuova sessione» vero).
+   * Ricerca 17/09/2026: UserOnboard «Empty States»
+   * (https://www.useronboard.com/onboarding-ux-patterns/empty-states/) e 72Technologies «Empty
+   * States as Onboarding» (https://www.72technologies.com/blog/empty-states-as-onboarding-surface)
+   * — lo schermo vuoto è l'unica superficie che TUTTI i nuovi vedono (le modali si chiudono, i
+   * suggerimenti si saltano) e il suo lavoro è portare alla prima azione utile, nello spazio di
+   * lavoro; Fluent 2 «Onboarding» (https://fluent2.microsoft.design/onboarding) — rivelazione
+   * progressiva, niente interruzioni al primo avvio. Appcues «Onboarding UX patterns» e
+   * Pencil&Paper «Empty State UX» (letti lo stesso giorno) aggiungono la GERARCHIA: un solo
+   * invito primario, più al massimo una via secondaria — due bottoni pari non sono una scelta.
    *
-   * ⛔ La chiave non passa MAI da qui a un log, al JSONL o a una risposta
-   * HTTP: viene mandata una volta alla rotta e il campo si svuota.
-   * ⛔ Non si ripresenta: `INTRO_STORAGE_KEY` ricorda «completata» o
-   * «saltata» finché esiste lo store del browser. `TALOS_INTRO=0` sul server
-   * la spegne del tutto (rollback del ledger).
+   * ⇒ Cosa resta: una riga che dice **che cosa manca davvero**, e le porte che esistono già.
+   *   Niente passi, niente memoria di «saltata» da ricordare per sempre, niente rotta nuova: la
+   *   riga si spegne da sola appena la cosa che nominava c'è. Non è uno stato salvato — è una
+   *   LETTURA dello stato, e per questo non può invecchiare come faceva la chiave salvata.
+   *
+   * ⛔ `/api/v1/setup/stato` RESTA: `scripts/avvia-talos.mjs:123` la legge per decidere se aprire
+   *   il Doctor al doppio clic. Non era una rotta dell'intro, era una rotta che l'intro usava.
    */
-  const INTRO_STORAGE_KEY = 'talos.harness.desktop.intro.v1';
-  const INTRO_PASSI = Object.freeze([
-    { id: 'provider', etichetta: 'Accesso' },
-    { id: 'modello', etichetta: 'Modello' },
-    { id: 'autonomia', etichetta: 'Autonomia' },
-    { id: 'cartella', etichetta: 'Cartella' },
-  ]);
-  // ⛔ 07/9 — la stessa tabella viveva in tre posti. Qui resta la FORMA che l'intro usa, ma i
-  //    contenuti vengono dall'unica mappa: cambiarne uno li cambia tutti e tre.
-  const INTRO_POLICY = Object.freeze(POLITICHE.map((p) => Object.freeze([p.valore, p.nome, p.descrizione, p.nota])));
+  /*
+   * ⛔ 17/09, PO-27 — questa viveva in `components/intro.js`, che se n'è andato con la modale.
+   *   La usa la striscia delle schede del Terminale per il nome della cartella, e NON è
+   *   `nomeDaPercorso` di `workspace-footer.js`: quella su «C:» risponde «C:», questa «C:\» —
+   *   e chi la chiama controlla proprio la barra finale per non scrivere «C:/» due volte.
+   *   Copiata qui verbatim invece che «riusata da lì»: due comportamenti diversi con lo stesso
+   *   nome sarebbero peggio di due funzioni.
+   */
+  const ultimoSegmentoPercorso = (percorso) => {
+    const normale = String(percorso ?? '').replace(/\//g, '\\').replace(/[\\]+$/, '').replace(/^([a-z]):$/i, (m, d) => `${d.toUpperCase()}:\\`);
+    const pezzi = normale.split('\\').filter(Boolean);
+    const ultimo = pezzi.length ? pezzi[pezzi.length - 1] : normale;
+    return /^[a-z]:$/i.test(ultimo) ? `${ultimo}\\` : ultimo;
+  };
 
-  function leggiIntroLocale() {
-    try {
-      const raw = JSON.parse(window.localStorage.getItem(INTRO_STORAGE_KEY) || 'null');
-      return raw && typeof raw === 'object' && typeof raw.esito === 'string' ? raw : null;
-    } catch { return null; }
+  /** Che cosa manca prima del primo messaggio, letto dallo stato vero e da niente altro. */
+  function cosaMancaPerIniziare() {
+    /*
+     * ⛔⛔ 17/09, secondo giro, dalla revisione — QUESTA FUNZIONE GUARDAVA UNA COSA SOLA, E ERA
+     *   QUELLA SBAGLIATA. Leggeva `cartellaAssoluta`, che resta vuota finché non arriva
+     *   `RunStarted`: l'invito lampeggiava a ogni cambio di sessione, e su una sessione CONCLUSA
+     *   riaperta (che un `RunStarted` nuovo non ce l'ha) restava acceso SOPRA la conversazione.
+     * ⇒ L'invito è uno stato di PRIMO AVVIO, non «manca un dato». Se una sessione è aperta, o se
+     *   in chat c'è anche solo un turno, il primo avvio è passato — punto, senza guardare altro.
+     */
+    const sessioneAperta = Boolean(state.realSession.id) || Boolean(state.pendingCustomSession);
+    const conversazionePiena = ($('#conversation')?.childElementCount ?? 0) > 0;
+    if (sessioneAperta || conversazionePiena) return { primoAvvio: false, cartella: true, modello: true };
+    const modello = typeof state.model === 'string' && state.model !== '';
+    return { primoAvvio: true, cartella: false, modello };
   }
-  function salvaIntroLocale(esito) {
-    try { window.localStorage.setItem(INTRO_STORAGE_KEY, JSON.stringify({ esito, quando: new Date().toISOString() })); } catch { /* senza storage l'intro tornerà: meglio che sparire per sempre */ }
-  }
-
-  /** Come `talosSetupProgress` sul telefono: i passi fatti, il primo non fatto, se è tutto a posto. */
-  function progressoIntro(stato) {
-    const fatti = {
-      provider: Boolean(stato?.provider?.pronto),
-      modello: typeof state.model === 'string' && state.model !== '',
-      autonomia: state.autonomiaScelta === true,
-      cartella: false, // si «fa» aprendo il foglio Nuova sessione: non è un fatto persistito
-    };
-    const passi = INTRO_PASSI.map((passo) => ({ ...passo, fatto: fatti[passo.id] }));
-    const primo = passi.findIndex((passo) => !passo.fatto);
-    return { passi, indiceIniziale: primo === -1 ? passi.length - 1 : primo, tuttoPronto: passi.slice(0, 3).every((passo) => passo.fatto) };
-  }
-
   /**
-   * Chiamata all'avvio (solo standalone). Apre l'intro SOLO se manca una
-   * delle tre cose senza cui TALOS non parte, e solo se non è già stata
-   * completata o saltata in questo browser. Un server che non espone lo
-   * stato (versione vecchia, non raggiungibile) non produce un intro
-   * fantasma: si tace.
+   * Accende, spegne e riscrive l'invito dello schermo vuoto. Si chiama a ogni cambio di modello,
+   * di cartella e di sessione: costa una lettura di due booleani, e il costo di NON chiamarla è
+   * una riga che dice «manca il modello» dopo che il modello è stato scelto.
    */
-  /**
-   * 06/9 B7b — l'Intro è il velo del mockup (`#veloIntro`, components/intro.js): cartella con
-   * l'albero compatto del computer, fornitore e chiave, modello, permessi, riepilogo. I dati
-   * arrivano dalle API del server; le scelte tornano allo stato del monolite. Il dialogo nativo
-   * legacy (`#introDialog`) non si apre più.
-   */
-  let introMockup = null;
-  function apiIntro() {
-    return {
-      cartelle: (path) => apiGet(`/api/v1/workspace-browser${path ? `?path=${encodeURIComponent(path)}` : ''}`),
-      luoghi: async () => {
-        const [radice, frequenti] = await Promise.all([apiGet('/api/v1/workspace-browser'), apiGet('/api/v1/frequent-dirs').catch(() => ({ items: [] }))]);
-        const rec = Array.isArray(radice?.recommended) ? radice.recommended : [];
-        const voce = (x) => ({ nome: x.label || x.etichetta || ultimoSegmentoIntro(x.path || x.percorso), path: normalizzaCartellaIntro(x.path || x.percorso), projectId: x.projectId ?? null });
-        return {
-          radice: radice?.root || null,
-          progetti: rec.filter((r) => r.kind === 'project').map(voce),
-          gruppi: {
-            recenti: (frequenti?.items || []).map(voce),
-            progetti: rec.filter((r) => r.kind === 'project').map(voce),
-            rapide: rec.filter((r) => r.kind === 'known').map(voce),
-          },
-        };
-      },
-      creaCartella: (parentPath, name) => apiPost('/api/v1/workspace-browser/folders', { parentPath, name }),
-      providers: async () => (await apiGet('/api/v1/providers'))?.items ?? [],
-      salvaChiave: (id, key) => apiPost(`/api/v1/providers/${encodeURIComponent(id)}/key`, { key }),
-      provaProvider: (id) => apiPost(`/api/v1/providers/${encodeURIComponent(id)}/test`, {}),
-      modelli: async () => {
-        const [catalogo, locali] = await Promise.all([apiGet('/api/v1/models').catch(() => null), apiGet('/api/v1/local-models').catch(() => null)]);
-        if (catalogo?.modelli) state.modelLab.catalogoModelli = catalogo; // serve anche alla «Finestra del contesto» (B2)
-        return [
-          ...((locali?.items || []).map((m) => ({ id: m.id, nome: m.name || m.id, provider: 'local', locale: true }))),
-          ...((catalogo?.modelli || []).map((m) => ({ id: m.id, nome: m.nome || m.id, provider: m.provider }))),
-        ];
-      },
-    };
-  }
-  function apriIntroMockup(indice = 0, statoSetup = null) {
-    const velo = $('#veloIntro'); if (!velo) return false;
-    if (!introMockup) {
-      introMockup = creaIntro(velo, {
-        api: apiIntro(),
-        iniziale: { cartella: '', modello: state.model || '', politica: state.autonomiaScelta ? state.permissions : null, localeConfigurato: statoSetup?.provider?.localeConfigurato === true },
-        azioni: {
-          impostaPermesso: (valore, nome) => { impostaPermesso(valore, nome); state.autonomiaScelta = true; salvaPreferenzeChatDesktop(); },
-          impostaModello: (id) => { if (!id) return; state.model = id; aggiornaPiedeSidebar(); salvaPreferenzeChatDesktop(); aggiornaPillolaModello(); },
-          concludi: (esito, scelte) => {
-            salvaIntroLocale(esito);
-            chiudiVeloMockup('veloIntro');
-            if (esito !== 'completata' || !scelte.cartella) return;
-            const progetto = (introMockup?.progetti || []).find((p) => normalizzaCartellaIntro(p.path) === normalizzaCartellaIntro(scelte.cartella));
-            avviaSessionePendente({ cartellaId: progetto?.projectId || undefined, cartellaLibera: progetto?.projectId ? undefined : scelte.cartella, nomeCartella: ultimoSegmentoIntro(scelte.cartella), modello: state.model, effort: state.effort, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
-            toast('Prima sessione pronta', `${ultimoSegmentoIntro(scelte.cartella)} · scrivi il primo messaggio`);
-          },
-        },
-      });
+  function aggiornaInvitoPrimoAvvio() {
+    const invito = $('#invitoPrimoAvvio');
+    if (!invito) return;
+    const { primoAvvio, modello } = cosaMancaPerIniziare();
+    invito.hidden = !primoAvvio;
+    if (invito.hidden) return;
+    /*
+     * ⛔ UNA porta per cosa, e il modello ce l'ha già: la pillola del composer, due centimetri più
+     *   in basso, dice «Scegli il modello». Qui si NOMINA, non si disegna un secondo bottone che
+     *   apre esattamente lo stesso foglio nella stessa schermata.
+     */
+    const riga = $('#invitoPrimoAvvioRiga', invito);
+    if (riga) riga.textContent = TESTI_MESSAGGIO.invitoRiga;
+    const nota = $('#invitoPrimoAvvioNota', invito);
+    if (nota) {
+      nota.textContent = modello
+        ? `Il modello è pronto: ${nomeModelloBreve(state.model)}.`
+        : TESTI_MESSAGGIO.invitoNotaSenzaModello;
     }
-    apriVeloMockup('veloIntro');
-    void introMockup.apri(indice).then(() => { /* i progetti per riconoscere una cartella-progetto */ });
-    return true;
-  }
-  async function apriIntroSeServe() {
-    if (leggiIntroLocale()) return false;
-    let stato;
-    try { stato = await apiGet('/api/v1/setup/stato'); } catch { return false; }
-    if (!stato || stato.introDisattivato) return false;
-    const progresso = progressoIntro(stato);
-    if (progresso.tuttoPronto) return false;
-    // passi del mockup: 0 cartella · 1 modello (con fornitore e chiave) · 2 permessi · 3 pronto
-    const primo = progresso.passi.find((p) => !p.fatto)?.id;
-    const indice = primo === 'provider' || primo === 'modello' ? 1 : primo === 'autonomia' ? 2 : 0;
-    return apriIntroMockup(indice, stato);
-  }
-
-  function apriIntroPrimoAvvio(statoIniziale, indiceIniziale = 0) {
-    if (!introDialog) return;
-    const intro = { stato: statoIniziale, indice: Math.max(0, Math.min(INTRO_PASSI.length - 1, indiceIniziale)), provider: null, chiaveEsiti: new Map() };
-    const rail = $('#introRail', introDialog);
-    const body = $('#introBody', introDialog);
-    const back = $('#introBack', introDialog);
-    const next = $('#introNext', introDialog);
-    const skip = $('#introSkip', introDialog);
-
-    function chiudi(esito) {
-      salvaIntroLocale(esito);
-      if (introDialog.open) introDialog.close();
-    }
-    async function ricaricaStato() {
-      try { intro.stato = await apiGet('/api/v1/setup/stato'); } catch { /* lo stato resta quello che avevamo: mai inventarne uno */ }
-    }
-    function disegnaRail() {
-      const { passi } = progressoIntro(intro.stato);
-      rail.replaceChildren(...passi.map((passo, posizione) => {
-        const li = document.createElement('li');
-        li.dataset.fatto = String(passo.fatto);
-        if (posizione === intro.indice) li.setAttribute('aria-current', 'step');
-        const linea = document.createElement('span'); linea.className = 'intro-rail-line'; linea.setAttribute('aria-hidden', 'true');
-        li.append(linea, textElement('span', 'intro-rail-label', passo.etichetta));
-        return li;
-      }));
-    }
-    function titolo(testo, sottotitolo) {
-      const h = document.createElement('h2'); h.className = 'intro-title'; h.id = 'introTitle'; h.textContent = testo;
-      const p = document.createElement('p'); p.className = 'intro-copy'; p.textContent = sottotitolo;
-      return [h, p];
-    }
-    function segnaEsito(nodo, esito, testo) { nodo.dataset.esito = esito; nodo.textContent = testo; }
-
-    // ---- passo 1: accesso (provider con chiave, o motore locale) ----
-    async function disegnaProvider() {
-      body.replaceChildren(...titolo('Da dove pensa TALOS', 'Serve un accesso a un modello: la chiave di un provider, salvata nel portachiavi di questo computer e mai nel browser, oppure un motore locale sul disco.'));
-      const lista = document.createElement('ul'); lista.className = 'intro-list';
-      lista.append(textElement('li', 'muted-copy', 'Leggo i provider…'));
-      body.append(lista);
-      let righe = [];
-      try { righe = (await apiGet('/api/v1/providers'))?.items ?? []; } catch (error) { lista.replaceChildren(textElement('li', 'muted-copy', messaggioErroreUtente(error, 'Il server locale non risponde: riprova fra un momento.'))); return; }
-      const locale = intro.stato?.provider?.localeConfigurato === true;
-      lista.replaceChildren(...righe.map((riga) => {
-        const li = document.createElement('li');
-        const scelta = document.createElement('button'); scelta.type = 'button'; scelta.className = 'intro-choice'; scelta.dataset.introProvider = riga.id;
-        const prova = intro.chiaveEsiti.get(riga.id);
-        const statoRiga = prova?.esito ?? (riga.requiresKey ? (riga.keyConfigured ? 'ok' : 'mancante') : 'ok');
-        scelta.dataset.stato = statoRiga === 'collegato' ? 'ok' : statoRiga === 'ok' || statoRiga === 'mancante' ? statoRiga : 'rotto';
-        const mark = textElement('span', 'intro-mark', (riga.label || riga.id).slice(0, 2).toUpperCase()); mark.setAttribute('aria-hidden', 'true');
-        const centro = document.createElement('span');
-        centro.append(textElement('strong', '', riga.label || riga.id), textElement('small', '', riga.requiresKey ? (riga.keyConfigured ? 'Chiave nel portachiavi' : 'Serve una chiave') : 'Nessuna chiave richiesta'));
-        const statoTesto = prova ? (prova.esito === 'collegato' ? (prova.modelli === null ? 'collegato' : `${prova.modelli} modelli`) : prova.esito === 'in-corso' ? 'sto chiedendo…' : prova.esito === 'non-autorizzato' ? 'chiave rifiutata' : 'non raggiungibile')
-          : riga.requiresKey ? (riga.keyConfigured ? 'chiave presente' : 'chiave mancante') : 'pronto';
-        scelta.append(mark, centro, textElement('span', 'intro-state', statoTesto));
-        scelta.addEventListener('click', () => { intro.provider = intro.provider === riga.id ? null : riga.id; disegnaProvider(); });
-        if (intro.provider === riga.id) scelta.classList.add('active');
-        li.append(scelta);
-        if (intro.provider === riga.id && riga.requiresKey) li.append(campoChiave(riga));
-        return li;
-      }));
-      const liLocale = document.createElement('li');
-      const localeBtn = document.createElement('button'); localeBtn.type = 'button'; localeBtn.className = 'intro-choice'; localeBtn.dataset.introProvider = 'local'; localeBtn.dataset.stato = locale ? 'ok' : 'mancante';
-      const markL = textElement('span', 'intro-mark', 'GP'); markL.setAttribute('aria-hidden', 'true');
-      const centroL = document.createElement('span');
-      centroL.append(textElement('strong', '', 'Motore locale (llama.cpp)'), textElement('small', '', locale ? 'Configurato su questo computer: i modelli sul disco si scelgono al passo successivo.' : 'Non configurato: si imposta dal Laboratorio modelli, dopo. Puoi continuare con un provider.'));
-      localeBtn.append(markL, centroL, textElement('span', 'intro-state', locale ? 'pronto' : 'assente'));
-      localeBtn.disabled = true;
-      liLocale.append(localeBtn);
-      lista.append(liLocale);
-      body.append(textElement('p', 'intro-note', 'Tutte le chiavi si possono cambiare dopo, da Impostazioni → Laboratorio modelli → Provider e accessi.'));
-    }
-    function campoChiave(riga) {
-      const wrap = document.createElement('div'); wrap.className = 'intro-key';
-      const label = document.createElement('label'); label.className = 'sheet-label'; label.textContent = `Chiave ${riga.label || riga.id}`; label.htmlFor = `introKey-${riga.id}`;
-      const input = document.createElement('input'); input.type = 'password'; input.id = `introKey-${riga.id}`; input.autocomplete = 'off'; input.spellcheck = false; input.placeholder = riga.keyConfigured ? 'Chiave già salvata: incollane una nuova per sostituirla' : 'Incolla la chiave'; input.dataset.introKeyInput = riga.id;
-      const rowBtn = document.createElement('div'); rowBtn.className = 'intro-key-row';
-      const salva = document.createElement('button'); salva.type = 'button'; salva.className = 'primary-btn'; salva.textContent = 'Salva e prova'; salva.dataset.introKeySave = riga.id;
-      const esito = textElement('span', 'intro-key-esito', riga.keyConfigured ? 'La chiave salvata resta finché non ne incolli un\'altra.' : 'Resta sul server locale, nel portachiavi del sistema.');
-      rowBtn.append(salva, esito);
-      wrap.append(label, input, rowBtn);
-      salva.addEventListener('click', async () => {
-        const valore = input.value;
-        if (!valore.trim()) { segnaEsito(esito, 'rotto', 'Incolla prima una chiave.'); input.focus(); return; }
-        salva.disabled = true; segnaEsito(esito, '', 'Salvo nel portachiavi…');
-        try {
-          await apiPost(`/api/v1/providers/${encodeURIComponent(riga.id)}/key`, { key: valore });
-          input.value = ''; // ⛔ il campo si svuota subito: la chiave è già dove deve stare, non resta nel DOM
-          segnaEsito(esito, '', 'Salvata. Chiedo al provider se la accetta…');
-          intro.chiaveEsiti.set(riga.id, { esito: 'in-corso' });
-          const prova = await apiPost(`/api/v1/providers/${encodeURIComponent(riga.id)}/test`, {});
-          intro.chiaveEsiti.set(riga.id, prova);
-          await ricaricaStato();
-          disegnaRail();
-          disegnaProvider();
-          if (prova?.esito === 'collegato') toast('Accesso pronto', `${riga.label || riga.id} accetta la chiave.`);
-        } catch (error) {
-          segnaEsito(esito, 'rotto', messaggioErroreUtente(error, 'Non sono riuscito a salvare la chiave.'));
-          salva.disabled = false;
-        }
-      });
-      input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); salva.click(); } });
-      queueMicrotask(() => input.focus());
-      return wrap;
-    }
-
-    // ---- passo 2: modello di default ----
-    function disegnaModello() {
-      body.replaceChildren(...titolo('Con quale modello, di solito', 'È il modello con cui parte una sessione nuova. Lo cambi quando vuoi dalla pillola sopra alla chat, anche a metà lavoro.'));
-      const mount = document.createElement('div'); mount.className = 'intro-picker';
-      const picker = creaModelPicker({
-        valoreIniziale: state.model || '',
-        aggiornaModelloPrincipale: true,
-        sincronizzaSessione: false,
-        alSelezionato: () => { salvaPreferenzeChatDesktop(); aggiornaPillolaModello(); disegnaRail(); },
-      });
-      mount.append(picker.elemento);
-      body.append(mount, textElement('p', 'intro-note', state.model ? `Oggi: ${state.model}.` : 'Nessun modello scelto ancora: senza, la prima sessione te lo chiede.'));
-    }
-
-    // ---- passo 3: autonomia (una decisione, la stessa del foglio Permessi) ----
-    function disegnaAutonomia() {
-      body.replaceChildren(...titolo('Cosa può fare da solo', 'Una scelta sola, che vale per ogni sessione nuova. Il permesso per singolo attrezzo si regola dopo, dal foglio Permessi.'));
-      const lista = document.createElement('ul'); lista.className = 'intro-list';
-      lista.append(...INTRO_POLICY.map(([valore, nome, descrizione, nota]) => {
-        const li = document.createElement('li');
-        const scelta = document.createElement('button'); scelta.type = 'button'; scelta.className = 'intro-choice'; scelta.dataset.introPolicy = valore;
-        if (state.permissions === valore && state.autonomiaScelta) scelta.classList.add('active');
-        const mark = document.createElement('span'); mark.className = 'intro-mark'; mark.innerHTML = icon('i-shield'); mark.setAttribute('aria-hidden', 'true');
-        const centro = document.createElement('span'); centro.append(textElement('strong', '', nome), textElement('small', '', descrizione));
-        scelta.append(mark, centro, textElement('span', 'intro-state', nota));
-        scelta.addEventListener('click', () => {
-          impostaPermesso(valore, nome);
-          state.autonomiaScelta = true; // il gesto sulla scheda è la decisione
-          salvaPreferenzeChatDesktop();
-          disegnaRail();
-          disegnaAutonomia();
-        });
-        li.append(scelta);
-        return li;
-      }));
-      const nomeScelto = INTRO_POLICY.find(([valore]) => valore === state.permissions)?.[1] ?? state.permissions;
-      body.append(lista, textElement('p', 'intro-note', state.autonomiaScelta ? `Scelto: ${nomeScelto}. «Chiedi prima» resta una risposta legittima.` : 'Finché non tocchi una scheda vale il valore predefinito di oggi, che può cambiare con gli aggiornamenti: toccarla lo rende una tua scelta.'));
-    }
-
-    // ---- passo 4: la prima cartella (apre il foglio Nuova sessione vero) ----
-    function disegnaCartella() {
-      body.replaceChildren(...titolo('La prima cartella', 'TALOS lavora dentro una cartella per volta: la scegli a ogni sessione nuova, e i permessi di sopra valgono lì dentro. Nient\'altro viene toccato.'));
-      body.append(textElement('p', 'intro-note', 'Puoi anche aprire una cartella con il tasto destro in Esplora file, «Apri cartella con TALOS».'));
-    }
-
-    function disegnaPasso() {
-      const passo = INTRO_PASSI[intro.indice];
-      disegnaRail();
-      back.hidden = intro.indice === 0;
-      const ultimo = intro.indice === INTRO_PASSI.length - 1;
-      next.textContent = ultimo ? 'Scegli la cartella e inizia' : 'Avanti';
-      if (passo.id === 'provider') disegnaProvider();
-      else if (passo.id === 'modello') disegnaModello();
-      else if (passo.id === 'autonomia') disegnaAutonomia();
-      else disegnaCartella();
-      queueMicrotask(() => next.focus());
-    }
-
-    back.onclick = () => { if (intro.indice > 0) { intro.indice -= 1; disegnaPasso(); } };
-    next.onclick = () => {
-      if (intro.indice < INTRO_PASSI.length - 1) { intro.indice += 1; disegnaPasso(); return; }
-      chiudi('completata');
-      openRealTaskSheet();
-    };
-    skip.onclick = () => chiudi('saltata');
-    introDialog.oncancel = (event) => { event.preventDefault(); chiudi('saltata'); }; // Escape = salta, registrato come tale
-
-    disegnaPasso();
-    if (!introDialog.open) introDialog.showModal();
   }
 
   /*
@@ -18513,6 +20621,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     svuotaSuggerimentoComposer(); // 05/9 Fase 2: un suggerimento della sessione PRECEDENTE non ha senso su una nuova
     syncRunComposerState();
     void montaStatoVuoto({ nomeCartella, cartellaLibera }); // 05/9 Fase 2: EmptyState al posto dell'hero
+    aggiornaInvitoPrimoAvvio(); // 17/09, PO-27: la cartella c'è — se l'invito la chiedeva, qui si spegne o resta il solo modello
     // ⭐ 30/8 — stesso principio di sopra, sul tab Files: nuovaGenerazioneSessione() (dentro resettaSuperficiRealiDedicate) ha già scritto il placeholder GENERICO "nessuna cartella ancora scelta" — ma qui la cartella è già nota, prima ancora del primo messaggio. Nessuna nuova sorgente di verità: nomeCartella è lo stesso valore che finisce nel titolo sessione qui sopra.
     window.setTimeout(() => composerInput.focus(), 0);
   }
@@ -19110,21 +21219,29 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *
    * ⇒ La cura non è raddrizzare la direzione a mano: è non lasciare MAI
    * che la larghezza superi lo spazio vero fra le sidebar
-   * (`.composer-wrap`, che le esclude già per costruzione — misurato:
-   * 792px disponibili su 1440 di finestra con entrambe le sidebar aperte).
+   * (`.talos-chat-foot`, misurato al netto del proprio padding).
    * Dentro quel limite, `margin-inline:auto` ricentra correttamente da
    * solo: il difetto spariva insieme alla causa, non richiedeva una
    * seconda cura sulla direzione.
    */
   function spazioDisponibileComposer() {
-    const wrap = $('.composer-wrap');
+    const wrap = composerForm.closest('.talos-chat-foot') || composerForm.parentElement;
     const rect = wrap?.getBoundingClientRect();
-    return rect && rect.width > 0 ? rect.width : window.innerWidth;
+    if (!rect || rect.width <= 0) return window.innerWidth;
+    const style = getComputedStyle(wrap);
+    return rect.width - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
   }
 
-  function clampComposerSize(width, height) {
+  /*
+   * ⛔ `disponibile` è un parametro, e non una lettura interna, per una ragione MISURATA: durante il
+   *   trascinamento il tetto non cambia (cambia se si apre una sidebar o si ridimensiona la finestra,
+   *   e per quelli ci sono già `riclampaComposerUserSized` e il resize della finestra). Leggerlo a
+   *   ogni movimento costava `getBoundingClientRect` + `getComputedStyle` **dopo** una scrittura su
+   *   `:root`, cioè il layout thrashing che faceva scattare il gesto.
+   */
+  function clampComposerSize(width, height, disponibile = spazioDisponibileComposer()) {
     const margine = 24; // stesso respiro che aveva prima verso i bordi, ora verso le sidebar
-    const maxWidth = Math.min(COMPOSER_RESIZE_MAX.width, Math.max(COMPOSER_RESIZE_MIN.width, spazioDisponibileComposer() - margine));
+    const maxWidth = Math.min(COMPOSER_RESIZE_MAX.width, Math.max(COMPOSER_RESIZE_MIN.width, disponibile - margine));
     const maxHeight = Math.min(COMPOSER_RESIZE_MAX.height, Math.max(160, window.innerHeight - 160));
     return {
       width: Math.min(maxWidth, Math.max(COMPOSER_RESIZE_MIN.width, Math.round(Number(width) || COMPOSER_RESIZE_MIN.width))),
@@ -19138,43 +21255,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     document.documentElement.style.setProperty('--composer-canonical-h', `${size.height}px`);
     document.documentElement.style.setProperty('--composer-textarea-max-h', `${size.height + 4}px`);
     document.documentElement.style.setProperty('--composer-max-w', `${size.width}px`);
-    /*
-     * ⭐⭐⭐ 3/9 — owner: "resta bloccata [sul sinistro]... si estende
-     * all'infinito dal lato destro". `margin-inline:auto` centra SOLO
-     * finché la larghezza sta dentro il CONTENT-box del genitore
-     * (`.composer-wrap` meno il SUO proprio padding, 752px in questa
-     * finestra) — non dentro il suo bordo esterno (792px). Appena la
-     * supera, per specifica CSS gli auto-margin collassano a 0 e il
-     * riquadro cresce ancorato a sinistra: MISURATO, non presunto (lo
-     * stesso comportamento restava identico anche dopo aver corretto
-     * SOLO il tetto). La cura vera: centrare col margine calcolato a
-     * mano, non affidarsi a `auto` oltre il punto in cui smette di
-     * funzionare per definizione.
-     */
-    const wrap = $('.composer-wrap');
-    if (wrap) {
-      /*
-       * ⛔ Il primo tentativo calcolava il margine sul bordo ESTERNO del
-       * wrap, ma un `margin-left` su `.composer` è relativo al CONTENT-BOX
-       * del suo genitore (cioè il wrap MENO il suo stesso padding, ~20px
-       * per lato in questa finestra) — misurato: il composer finiva 12px
-       * più a destra di dove doveva. Si legge il padding vero del wrap,
-       * non lo si assume.
-       */
-      const wrapRect = wrap.getBoundingClientRect();
-      const wrapStyle = getComputedStyle(wrap);
-      const wrapPaddingLeft = parseFloat(wrapStyle.paddingLeft) || 0;
-      const wrapContentLeft = wrapRect.x + wrapPaddingLeft;
-      const targetLeft = wrapRect.x + (wrapRect.width - size.width) / 2; // centrato sul bordo ESTERNO del wrap, non sul suo content-box: e' quello lo spazio "quasi al massimo" che puo' usare
-      // ⛔ Un margine NEGATIVO è corretto qui, non un errore da bloccare: è
-      // così che il composer invade il padding del wrap invece di restare
-      // confinato al suo content-box — esattamente "estendersi quasi al
-      // massimo della sezione". Un Math.max(0,…) qui annullava la metà
-      // sinistra della crescita, la stessa causa del difetto originale.
-      const marginLeft = Math.round(targetLeft - wrapContentLeft);
-      composerForm.style.marginLeft = `${marginLeft}px`;
-      composerForm.style.marginRight = '0px'; // la larghezza esplicita + il margine sinistro bastano a posizionare il riquadro: un margine destro fisso lotterebbe con `width` per lo spazio residuo
-    }
+    // Il CSS centra sulla colonna reale, anche quando cambiano le sidebar.
     composerForm.classList.add('composer-user-sized');
     return size;
   }
@@ -19186,7 +21267,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     composerForm.style.removeProperty('margin-left'); // ⭐ 3/9 — la centratura calcolata a mano va tolta insieme al resto, o resterebbe un residuo asimmetrico
     composerForm.style.removeProperty('margin-right');
     composerForm.classList.remove('composer-user-sized');
-    try { window.localStorage.removeItem(COMPOSER_RESIZE_STORAGE_KEY); } catch { /* niente da pulire se lo storage non risponde */ }
+    try { window.localStorage.removeItem(COMPOSER_RESIZE_STORAGE_KEY); return true; } catch { return false; }
   }
 
   /**
@@ -19196,7 +21277,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * compare/sparisce), non necessariamente un resize della FINESTRA — va
    * ri-agganciata anche ai due toggle delle sidebar, non solo a un
    * eventuale ridimensionamento della finestra. `spazioDisponibileComposer()`
-   * rimisura `.composer-wrap` dal vivo ad ogni chiamata: qui basta
+   * rimisura `.talos-chat-foot` dal vivo ad ogni chiamata: qui basta
    * richiamare `applyComposerSize` con la taglia attuale perché il nuovo
    * tetto (più stretto, se una sidebar si è appena aperta) la corregga da solo.
    */
@@ -19224,20 +21305,73 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const start = composerForm.getBoundingClientRect();
       const startX = event.clientX;
       const startY = event.clientY;
-      composerForm.classList.add('composer-resizing');
+      /*
+       * ⛔⛔⛔ IL GESTO DI RIDIMENSIONAMENTO NON DEVE COSTARE UN LAYOUT PER OGNI MOVIMENTO.
+       *
+       *   Owner, 20/09/2026: «quando faccio resize del composer lagga un sacco, indaga». Misurato
+       *   sulla pagina vera con una sonda che CONTA (4174, colonna destra aperta, conversazione
+       *   caricata): un trascinamento di 31 movimenti faceva **18,6 letture di layout per movimento**
+       *   (`getBoundingClientRect` + `getComputedStyle`) e **3 scritture su `:root` per movimento** —
+       *   e ogni scrittura su `:root` invalida lo stile calcolato di TUTTO il documento, mentre la
+       *   lettura che segue lo costringe a rifarlo subito. È il *layout thrashing*: scrivo → leggo →
+       *   scrivo → leggo, e il browser non può fondere niente.
+       *
+       *   ⭐ E il costo non è un'opinione: nel codice di HERMES, che ha la stessa malattia e la stessa
+       *   cura, il commento accanto alla soppressione porta la misura —
+       *   `apps/desktop/src/components/pane-shell/geometry.ts:160-168`, letto il 20/09/2026:
+       *   «Measured live (LoAF, real session): drag frames of **~68ms** with **style+layout=67ms** and
+       *   no script ≥5ms; suppressing the writes recovered **14fps → 51fps**. The vars only align
+       *   titlebar chrome — republishing once on release is visually identical.»
+       *   E l'helper `apps/desktop/src/lib/raf-coalesce.ts:6`: «Coalesce a stream of values
+       *   (pointermove positions, resize deltas) to one `apply` per animation frame, so a drag can't
+       *   drive several layouts per frame.»
+       *
+       *   ⇒ La cura sono le tre cose che loro fanno, adattate alla nostra struttura:
+       *   1. **si legge UNA volta**, qui: il tetto non cambia mentre si trascina;
+       *   2. **durante il gesto si scrive SOLO SUL COMPOSER** (le stesse tre variabili, ma inline
+       *      sull'elemento invece che su `:root`): invalida il suo sottoalbero, non il documento.
+       *      È il loro «preview», e funziona perché tutte e tre si leggono **sul composer o sotto**
+       *      (`index.css` — le regole `.talos-chat-foot > *` e `.talos-composer`, e la textarea che
+       *      eredita);
+       *   3. **al rilascio si pubblicano su `:root` UNA volta sola** e si toglie l'anteprima.
+       *   In più il valore si applica **una volta per fotogramma** (`requestAnimationFrame`): fra due
+       *   fotogrammi il sistema consegna decine di `pointermove`, e ognuno rifarebbe il lavoro.
+       */
+      const disponibile = spazioDisponibileComposer();
+      composerForm.classList.add('composer-resizing', 'composer-user-sized');
       handle.setPointerCapture(event.pointerId);
+
+      let ultimo = null;
+      let frame = null;
+      /** L'ANTEPRIMA: le tre variabili sul composer, non sulla radice. */
+      const disegnaAnteprima = () => {
+        frame = null;
+        if (!ultimo) return;
+        composerForm.style.setProperty('--composer-canonical-h', `${ultimo.height}px`);
+        composerForm.style.setProperty('--composer-textarea-max-h', `${ultimo.height + 4}px`);
+        composerForm.style.setProperty('--composer-max-w', `${ultimo.width}px`);
+      };
 
       // ⛔ La maniglia è in ALTO A SINISTRA: trascinare verso l'ALTO o verso SINISTRA (fuori dal riquadro) deve INGRANDIRE in entrambi gli assi — il contrario sembrerebbe al rovescio di quello che si vede muoversi sotto il dito/il cursore.
       const onMove = (moveEvent) => {
         const width = start.width + (startX - moveEvent.clientX);
         const height = start.height + (startY - moveEvent.clientY);
-        applyComposerSize(width, height);
+        ultimo = clampComposerSize(width, height, disponibile);
+        if (frame === null) frame = window.requestAnimationFrame(disegnaAnteprima);
       };
       const onEnd = () => {
+        if (frame !== null) { window.cancelAnimationFrame(frame); frame = null; }
         composerForm.classList.remove('composer-resizing');
         if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+        /* ⛔ Si toglie l'anteprima e si PUBBLICA una volta sola: da qui in poi valgono le variabili
+           sulla radice, e il valore è quello che l'utente ha appena scelto. */
+        composerForm.style.removeProperty('--composer-canonical-h');
+        composerForm.style.removeProperty('--composer-textarea-max-h');
+        composerForm.style.removeProperty('--composer-max-w');
+        if (ultimo) applyComposerSize(ultimo.width, ultimo.height);
+        else { const rect = composerForm.getBoundingClientRect(); applyComposerSize(rect.width, rect.height); }
         const rect = composerForm.getBoundingClientRect();
-        saveComposerSize(clampComposerSize(rect.width, rect.height));
+        saveComposerSize(clampComposerSize(rect.width, rect.height, disponibile));
         handle.removeEventListener('pointermove', onMove);
         handle.removeEventListener('pointerup', onEnd);
         handle.removeEventListener('pointercancel', onEnd);
@@ -19338,6 +21472,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function exportSession() {
     if (state.realSession.id) { openSheet('export'); return; }
+    if (!embeddedDemoOnly()) { toast('Esportazione non disponibile', tr('Apri prima una sessione.')); return; }
     const payload = {
       schema: 'talos_mock_session_v1',
       exported_at: new Date().toISOString(),
@@ -19352,16 +21487,6 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     toast('Sessione esportata', 'JSON pronto.');
   }
 
-  async function shareSession() {
-    const text = `TALOS · ${state.session} · feat/mobile-code`;
-    try {
-      if (navigator.share) await navigator.share({ title: state.session, text });
-      else if (navigator.clipboard) { await navigator.clipboard.writeText(text); toast('Snapshot copiato', 'Pronto da condividere.'); }
-      else toast('Snapshot pronto', text);
-    } catch (error) {
-      if (error?.name !== 'AbortError') toast('Condivisione non disponibile', text);
-    }
-  }
 
   /*
    * ⭐⭐⭐ 29/8 — FASE J, piano `elegant-spinning-dongarra.md`, design
@@ -19475,7 +21600,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function impostaStatoBottoneAscolto(bottone, inAscolto) {
     bottone.classList.toggle('speaking', inAscolto);
     bottone.setAttribute('aria-pressed', String(inAscolto));
-    bottone.setAttribute('aria-label', inAscolto ? 'Ferma la lettura' : 'Ascolta la risposta');
+    bottone.setAttribute('aria-label', inAscolto ? 'Ferma la lettura' : TESTI_MESSAGGIO.ascolta);
     const uso = bottone.querySelector('use');
     if (uso) uso.setAttribute('href', inAscolto ? '#i-stop' : '#i-play');
   }
@@ -19501,21 +21626,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     window.speechSynthesis.speak(utterance);
   }
 
-  /*
-   * ⛔⛔ 07/9 — LA PALETTE ITALIANA ESISTEVA E NESSUNO LA APRIVA. Nel template c'è `#veloComandi`:
-   * 15 comandi con descrizione e scorciatoia, i gruppi, il campo di ricerca, il piede — tutto in
-   * italiano e con gli STESSI `data-command` del monolite. L'unico riferimento in tutto il JS era
-   * la mappa delle misure dei dialoghi. Quella che si apriva era la palette del monolite, con tre
-   * voci ancora in inglese («Session board», «Skills, MCP, plugin e gateway», «Agents, hooks e
-   * doctor»): la traduzione era già stata fatta, e la persona non la vedeva.
-   * ⇒ Stessa disciplina dei veli: la logica NON si duplica, si punta a una radice diversa. Se il
-   *   velo c'è si usa quello; se non c'è (una pagina vecchia) resta il foglio, senza un ramo morto.
-   *
-   * Ricerca 07/09/2026 — W3C WAI-ARIA APG «Combobox» e MDN `combobox` role: il fuoco DOM resta sul
-   * campo, e l'opzione attiva si dichiara con `aria-activedescendant` che punta al suo `id`; la
-   * lista è `role="listbox"`, le voci `role="option"` con `aria-selected`. Il markup del velo è già
-   * scritto così (`#cercaComando` è `role="combobox"` con `aria-controls="risultatiComandi"`): qui
-   * si aggiunge la parte che mancava, cioè tenere `aria-activedescendant` allineato al movimento.
+  /** NAV-02: the registry owns labels and availability; existing handlers retain capabilities.
+   * The typed palette owns only search, option rendering and keyboard selection.
+   * Modal lifecycle remains with the shared overlay manager, including the embedded host.
    */
   function radiceComandi() {
     const velo = $('#veloComandi');
@@ -19523,91 +21636,38 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return { velo: null, elenco: $('#commandResults'), campo: commandSearch, vuoto: commandEmpty };
   }
 
-  function visibleCommandButtons() {
-    const { elenco } = radiceComandi();
-    return elenco ? $$('button[data-command]', elenco).filter((button) => !button.hidden) : [];
-  }
-
-  function setActiveCommand(button) {
-    const { elenco, campo } = radiceComandi();
-    if (!elenco) return;
-    $$('button[data-command]', elenco).forEach((item) => {
-      const attivo = item === button;
-      item.classList.toggle('command-active', attivo);
-      // ⛔ il velo dichiara le voci come `option`: lo stato si dice anche a chi non vede il colore
-      if (item.getAttribute('role') === 'option') item.setAttribute('aria-selected', String(attivo));
-    });
-    if (campo?.getAttribute('role') === 'combobox') {
-      if (button?.id) campo.setAttribute('aria-activedescendant', button.id);
-      else campo.removeAttribute('aria-activedescendant');
-    }
-    button?.scrollIntoView({ block: 'nearest' });
-  }
-
+  let commandPalette = null;
+  const commandContext = () => ({ sessionId: state.realSession.id || null, running: runRealeAttivo() });
   function openCommandPalette() {
-    const { velo, campo } = radiceComandi();
-    if (velo) {
-      apriVeloMockup('veloComandi');
-      if (campo) campo.value = '';
-      filterCommands('');
-      window.setTimeout(() => campo?.focus(), 20);
-      return;
-    }
-    prepareResizableDialog(commandDialog, 'command:palette');
-    showEmbeddedDialog(commandDialog);
-    commandSearch.value = '';
-    filterCommands('');
-    window.setTimeout(() => commandSearch.focus(), 20);
-  }
-
-  function filterCommands(query) {
-    const q = query.trim().toLowerCase();
-    const { elenco, vuoto } = radiceComandi();
-    if (!elenco) return;
-    for (const button of $$('button[data-command]', elenco)) {
-      // ⛔ anche gli ALIAS del velo entrano nella ricerca: «impostazioni» trova «Apri Doctor» se
-      //    quella voce lo dichiara. Cercare solo il testo visibile fa mancare i sinonimi.
-      const testo = `${button.textContent} ${button.dataset.commandAlias || ''}`.toLowerCase();
-      button.hidden = Boolean(q && !testo.includes(q));
-    }
-    // i gruppi senza nemmeno una voce visibile spariscono, o restano intestazioni sopra il vuoto
-    for (const gruppo of $$('[data-gruppo-comandi]', elenco)) {
-      gruppo.hidden = $$('button[data-command]', gruppo).every((b) => b.hidden);
-    }
-    const visible = visibleCommandButtons();
-    if (vuoto) vuoto.hidden = visible.length > 0;
-    setActiveCommand(visible[0] || null);
-  }
-
-  function moveActiveCommand(delta) {
-    const visible = visibleCommandButtons();
-    if (!visible.length) return;
-    const current = visible.findIndex((button) => button.classList.contains('command-active'));
-    const next = visible[(current + delta + visible.length) % visible.length];
-    setActiveCommand(next);
+    const { velo, campo, elenco, vuoto } = radiceComandi();
+    if (!campo || !elenco) return;
+    commandPalette ||= createCommandPalette({
+      field: campo, list: elenco, empty: vuoto, translate: tr, shortcutLabel: etichettaTasto,
+      context: commandContext, execute: executeCommand,
+      reportError: error => toast('Comando non eseguito', error?.message || String(error)),
+    });
+    commandPalette.prepare();
+    if (velo) apriVeloMockup('veloComandi');
+    else { prepareResizableDialog(commandDialog, 'command:palette'); showEmbeddedDialog(commandDialog); }
+    commandPalette.focus();
   }
 
   function executeCommand(command) {
+    const definition = commandById(command);
+    if (!definition) return;
+    const unavailable = commandDisabledReason(definition, commandContext());
+    if (unavailable) { toast('Comando non disponibile', tr(unavailable)); return; }
     // ⛔ si chiude quella che è aperta: il velo se c'è, il foglio altrimenti (mai tutt'e due)
     if ($('#veloComandi') && !$('#veloComandi').hidden) chiudiVeloMockup('veloComandi');
     else closeEmbeddedDialog(commandDialog);
+    if (definition.view) { setView(definition.view); return; }
     switch (command) {
+      case 'model': openSheet('model'); break;
+      case 'models': setView('settings'); setSettingsSection('models'); break;
+      case 'providers': setView('settings'); setSettingsSection('account'); break;
+      case 'shortcuts': montaScorciatoie($('#veloScorciatoie')); apriVeloMockup('veloScorciatoie'); break;
       case 'new': createNewSession(); break;
-      case 'review': setView('diff'); break;
-      case 'terminal': setView('terminal'); break;
-      case 'browser': setView('browser'); break;
       case 'permissions': openSheet('permissions'); break;
-      case 'dashboard': setView('dashboard'); break;
-      /*
-       * ⛔⛔⛔ Riconciliazione Fase 2 (piano procedi-col-generare-un-snoopy-neumann.md,
-       * 27/8) — trovato dal vivo: fino a qui il palette mostrava sempre lo
-       * stesso toast finto, ANCHE con una sessione reale in corso, invece
-       * di chiamare le funzioni vere già scritte e già cablate altrove
-       * (`forkSession()` sul bottone "Fork questa sessione", `compactSession()`
-       * esposta su `window.__talosHarnessUiRuntime` per i test automatici).
-       * Entrambe già ricadono da sole sullo stesso toast finto quando non
-       * c'è una sessione reale — zero duplicazione necessaria qui.
-       */
       case 'resume': resumeSession(); break;
       case 'fork': forkSession(); break;
       case 'compact': compactSession(); break;
@@ -19619,7 +21679,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       case 'control': eseguiDoctor(); break;
       case 'rename': openSheet('rename'); break;
       case 'export': exportSession(); break;
-      case 'share': shareSession(); break;
+      case 'share': exportSession(); break;
       default: break;
     }
   }
@@ -19659,6 +21719,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   });
 
   $$('[data-open-sheet]').forEach((button) => button.addEventListener('click', () => openSheet(button.dataset.openSheet)));
+  /* ⛔ 17/09, PO-27 — le due azioni dell'invito NON aprono niente di nuovo: passano dalle porte che
+     esistono già. «Scegli una cartella» è lo stesso foglio del «+» (`openRealTaskSheet`, che è
+     anche ciò che apre «Apri cartella con TALOS» dal menu di Windows); «Collega un modello» è la
+     stessa pillola del composer (`openSheet('model')`). Una terza via sarebbe una terza verità. */
+  $$('[data-invito-azione]').forEach((bottone) => bottone.addEventListener('click', () => {
+    void openRealTaskSheet();
+  }));
   $$('[data-session-action]').forEach((button) => button.addEventListener('click', () => {
     toast(button.dataset.sessionAction === 'fork' ? 'Fork creato' : 'Side thread creato', 'Contesto isolato, collegamento mantenuto nel grafo sessione.');
   }));
@@ -20133,12 +22200,25 @@ ${testo}`;
 
   runStateToggle?.addEventListener('click', () => setQueueMode(!state.queueMode, true));
 
-  $('#sessionSearch').addEventListener('input', (event) => {
-    const q = event.target.value.toLowerCase().trim();
-    // 06/09 (gruppo navigazione): la casella filtrava SOLO le righe demo
-    // `.session-item`; le sessioni vere (`.real-session-item`) restavano tutte a schermo — 74 su 74.
-    $$('.session-item, .real-session-item').forEach((item) => { item.hidden = Boolean(q) && !item.textContent.toLowerCase().includes(q); });
-  });
+  function applicaFiltroSessioniSidebar() {
+    const q = ($('#sessionSearch')?.value || '').toLowerCase().trim();
+    $$('.session-item, .real-session-item').forEach(item => {
+      const hidden = Boolean(q) && !item.textContent.toLowerCase().includes(q);
+      item.hidden = hidden;
+      const row = item.closest('.td-session-row');
+      if (row) row.hidden = hidden;
+    });
+    const righe = $$('.real-session-item');
+    const visibili = righe.filter(r => !r.hidden && !r.closest('.td-session-row')?.hidden);
+    const fermata = visibili.find(r => r === document.activeElement)
+      || visibili.find(r => r.getAttribute('aria-current') === 'true') || visibili[0];
+    for (const riga of righe) {
+      riga.tabIndex = riga === fermata ? 0 : -1;
+      const menu = riga.parentElement?.querySelector(':scope > .td-session-menu');
+      if (menu) menu.tabIndex = riga === fermata ? 0 : -1;
+    }
+  }
+  $('#sessionSearch').addEventListener('input', applicaFiltroSessioniSidebar);
 
   $$('.session-item').forEach((item) => {
     item.addEventListener('click', () => {
@@ -20166,6 +22246,9 @@ ${testo}`;
    * `data-apre-velo` non serve: e' gia' delegato dalla regia del mockup.
    */
   ROOT().addEventListener('click', (evento) => {
+    /* ⛔ 18/09/2026 — via la seconda metà del selettore: `[data-workspace-bar] [data-azione="comandi"]`
+       non esiste più, la barra della workspace è stata rimossa su ordine dell'owner. Resta il
+       pulsante «Comandi» della testata della CHAT, che è quello che l'owner continua a usare. */
     const b = evento.target.closest?.('.talos-topbar__actions [data-azione]');
     /*
      * ⛔ 06/9, owner: «non riesco ad aprire la sidebar di destra dopo averla collassata».
@@ -20188,54 +22271,13 @@ ${testo}`;
   });
   $('#commandPaletteBtn').addEventListener('click', openCommandPalette);
   $('#closeCommand')?.addEventListener('click', () => closeEmbeddedDialog(commandDialog));
-  harnessDialogBackdrop.addEventListener('click', dismissTransientLayers);
-  /*
-   * ⛔ 07/9 — gli ascoltatori erano legati SOLO al campo del monolite (`#commandSearch`): aprendo il
-   *   velo italiano la palette compariva e non faceva niente — non filtrava, le frecce non
-   *   muovevano, Invio non apriva. Provato dal vivo, ed è così che si è visto.
-   * ⇒ Gli stessi tre gesti si collegano a ENTRAMBI i campi, con una funzione sola. La ricerca
-   *   dell'elemento attivo passa da `radiceComandi()`, così non c'è un `#commandResults` scritto a
-   *   mano che punta alla palette sbagliata.
-   */
-  function collegaCampoComandi(campo) {
-    if (!campo || campo.dataset.comandiCollegati) return;
-    campo.dataset.comandiCollegati = 'si';
-    campo.addEventListener('input', () => filterCommands(campo.value));
-    campo.addEventListener('keydown', (event) => {
-      if (event.key === 'ArrowDown') { event.preventDefault(); moveActiveCommand(1); }
-      else if (event.key === 'ArrowUp') { event.preventDefault(); moveActiveCommand(-1); }
-      else if (event.key === 'Enter') {
-        const { elenco } = radiceComandi();
-        const active = elenco && $('.command-active[data-command]', elenco);
-        if (active) { event.preventDefault(); executeCommand(active.dataset.command); }
-      }
-    });
-  }
+  harnessDialogBackdrop.addEventListener('click', () => { if (!modalManager?.requestCloseTop()) dismissTransientLayers(); });
   /*
    * ⛔ 07/9 — la scia del cursore (la parte percorsa): un ascoltatore solo sulla radice, perché i
    *   cursori nascono e muoiono coi veli. Vedi `components/range-scia.js` per il perché non basta
    *   il CSS: Chrome e Safari non hanno lo pseudo-elemento che ce l'ha Firefox.
    */
   collegaScia(ROOT());
-  collegaCampoComandi(commandSearch);
-  collegaCampoComandi($('#cercaComando'));
-
-  /*
-   * ⛔ Le voci si ascoltano sulla RADICE, non una per una: nel velo sono 15 e nel foglio altre 15,
-   *   e un ascoltatore per bottone si moltiplica a ogni ridisegno.
-   */
-  for (const elenco of [$('#commandResults'), $('#risultatiComandi')]) {
-    if (!elenco || elenco.dataset.comandiCollegati) continue;
-    elenco.dataset.comandiCollegati = 'si';
-    elenco.addEventListener('mouseover', (event) => {
-      const button = event.target?.closest?.('button[data-command]');
-      if (button) setActiveCommand(button);
-    });
-    elenco.addEventListener('click', (event) => {
-      const button = event.target?.closest?.('button[data-command]');
-      if (button) executeCommand(button.dataset.command);
-    });
-  }
 
   composerInput.addEventListener('input', () => {
     autoGrowTextarea();
@@ -20517,6 +22559,7 @@ ${testo}`;
     const eventName = input.type === 'range' ? 'input' : 'change';
     input.addEventListener(eventName, () => {
       const value = input.type === 'checkbox' ? input.checked : input.value;
+      if (key === 'uiDensity' && !HOST().classList.contains('talos-embedded')) workspacePreferences.update({ density: value === 'compatta' ? 'compact' : 'comfortable' });
       aggiornaAspettoDesktop({ [key]: value });
     });
   }
@@ -20535,6 +22578,10 @@ ${testo}`;
    * col modificatore della piattaforma (⌘ su Apple, Ctrl altrove).
    */
   ROOT().addEventListener('keydown', (event) => {
+    if (event.isComposing || event.key === 'Process' || event.keyCode === 229) return;
+    if (modalManager?.handleKey(event)) return;
+    // A native modal owns the interaction until dismissed; global shortcuts must not open underneath it.
+    if (modalManager && ROOT().querySelector('dialog:modal')) return;
     const quale = riconosci(event);
     if (quale === 'comandi') { event.preventDefault(); openCommandPalette(); }
     else if (quale === 'nuova') { event.preventDefault(); createNewSession(); }
@@ -20559,6 +22606,10 @@ ${testo}`;
      * giro sta girando, Esc chiede se fermarlo. Mai prima: uno strato aperto si smonta
      * per primo (WAI-ARIA APG), altrimenti Esc diventerebbe imprevedibile.
      */
+    /* ⛔ PO-30 (17/09/2026), trovato dalla prova del menu dei file: un menu aperto come `popover` è anche lui uno STRATO.
+       Con un giro in corso, Esc sul menu «+» della scheda File chiedeva «Fermo il giro?» e il menu restava aperto.
+       Lo strato più alto si smonta per primo (è la regola scritta qui sopra): se c'è un popover aperto, Esc è suo. */
+    else if (event.key === 'Escape' && document.querySelector(':popover-open')) { /* lo chiude il browser */ }
     else if (event.key === 'Escape' && runRealeAttivo() && !$('.overlay-layer:not([hidden])') && !ROOT().querySelector('dialog[open]')) {
       event.preventDefault();
       /*
@@ -20668,6 +22719,10 @@ ${testo}`;
     // ⭐ 02/9 — funzione PURA dello stato riga: esposta per provare i cinque stati senza dover avere in casa una sessione per ciascuno.
     statoSessione,
     renderSettingsRiepiloghi,
+    /* ⭐ 18/09 — il velo «Fornitori e accessi» non ha una porta VISIBILE oggi: le due
+       che il mockup porta stanno nella schermata Model Lab, che è stata ritirata. Senza
+       esporre l'apertura, la sua unica prova possibile sarebbe guardarlo a mano. */
+    apriVeloMockup,
     // ⭐ 02/9, Fase 5 punto 4 — la funzione PURA che traduce la risposta di
     // /fit nel verdetto mostrato: esposta per provarla su tutti gli stati
     // senza dover avere in casa un modello per ciascuno (stesso schema già
@@ -20696,7 +22751,9 @@ ${testo}`;
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {
+    workspaceDisposed = true; startupNavigation.next(); workspaceUI?.dispose(); commandPalette?.dispose(); modalManager?.dispose();
     contextCompactor?.destroy(); contextCompactor = null;
+    ancoraggioToast?.ferma();
     contextMonitor?.stop(); contextMonitor = null;
     window.clearInterval(notificheTimer);
     document.querySelector('.notifications-menu')?.remove();
@@ -20745,6 +22802,30 @@ ${testo}`;
   $('#fileTreeFilter')?.addEventListener('input', (e) => {
     filtraAlberoReale(e.target.value);
     salvaImpostazioniAlbero();
+    programmaRicercaFile(e.target.value);
+  });
+  $('#fileRisultati')?.addEventListener('click', (evento) => {
+    const riga = evento.target.closest?.('[data-percorso]');
+    if (riga) apriRisultatoRicercaFile(riga.dataset.percorso, riga.dataset.cartella === 'true');
+  });
+  $('#fileVista')?.addEventListener('click', (evento) => scegliVistaFile(evento.currentTarget));
+  /* ⛔ Visto nella PRIMA foto: «2 a vista» restava 2 anche con le cartelle aperte e cinque file sullo schermo — il numero si
+     aggiornava solo quando l'albero si ridisegnava per intero. L'albero cambia in molti modi (si apre una cartella, arriva una
+     scrittura, si crea un file): invece di rincorrerli uno per uno si guarda l'albero, e si riconta al fotogramma dopo. */
+  if ($('#alberoFile') && typeof MutationObserver === 'function') {
+    let contaInAttesa = false;
+    new MutationObserver(() => {
+      if (contaInAttesa) return;
+      contaInAttesa = true;
+      requestAnimationFrame(() => { contaInAttesa = false; aggiornaVistaFile(); });
+    }).observe($('#alberoFile'), { childList: true, subtree: true });
+  }
+  /* Nella vista dei modificati una riga È un file: si apre come dall'albero. Il percorso è il testo della riga,
+     scritto da `righeFile`; una riga che non è un file (il «Nessun file scritto finora») non è in `reviewFiles`. */
+  $('#fileModificati')?.addEventListener('click', (evento) => {
+    const percorso = evento.target.closest?.('.talos-kv')?.querySelector('.talos-kv__k')?.textContent?.trim();
+    if (!percorso || !state.realSession.reviewFiles.has(percorso)) return;
+    apriFileAlbero(percorso, percorso.split('/').pop());
   });
   $('#fileTreeNewFile')?.addEventListener('click', () => avviaCreaVoce(cartellaSelezionataAlbero(), 'file'));
   $('#fileTreeNewFolder')?.addEventListener('click', () => avviaCreaVoce(cartellaSelezionataAlbero(), 'cartella'));
@@ -20761,11 +22842,9 @@ ${testo}`;
   $('#apriCassettoBarra')?.addEventListener('click', alternaCassettoBarra);
   sessionSelectionToggle?.addEventListener('click', () => { toggleSessionSelectionMode(); });
   sessionSelectionSelectAll?.addEventListener('click', () => {
-    const tutto = state.sessionSelection.available.size > 0
-      && state.sessionSelection.selected.size === state.sessionSelection.available.size;
-    state.sessionSelection.selected = tutto
-      ? new Set()
-      : new Set(state.sessionSelection.available.keys());
+    const radici = sessioniRadice([...state.sessionSelection.available.values()]);
+    const tutto = radici.length > 0 && radici.every(s => state.sessionSelection.selected.has(s.sessionId));
+    state.sessionSelection.selected = tutto ? new Set() : new Set(radici.map(s => s.sessionId));
     aggiornaStatoRigheSelezione();
   });
   sessionSelectionMore?.addEventListener('click', (event) => { event.stopPropagation(); apriMenuSelezioneSessioni(event); });
@@ -20913,19 +22992,51 @@ ${testo}`;
    * qui applicata alla lista sessioni: zero fetch fantasma su un bridge che
    * per costruzione non risponderà mai.
    */
+  // BOOT-03. The host owns embedded navigation. Standalone starts on the real
+  // home, then resolves only an explicit intent or the user's saved workspace.
   window.setTimeout(() => {
-    // ⛔ verificato al MOMENTO del fire, non alla schedulazione: un test (o
-    // un embed reale) può marcare talos-embedded fra i due istanti.
-    if (!HOST().classList.contains('talos-embedded')) {
-      const doctorDalLauncher = apriDoctorDaLauncher();
-      const cartellaDalLauncher = Boolean(leggiWorkspaceLaunchId());
-      apriWorkspaceDaLauncher();
-      // ⭐ 04/9, R-02 — l'intro cede il passo ai flussi del lanciatore (Doctor, «Apri cartella con TALOS»): chi arriva con un'intenzione precisa non deve trovare un modale davanti.
-      if (!doctorDalLauncher && !cartellaDalLauncher) apriIntroSeServe();
-      aggiornaElencoSessioniReali();
-      renderAutomationsReali(); // ⭐ 27/8 — la card automazioni della sidebar è live da subito, non solo dopo aver aperto la vista
-    }
+    if (HOST().classList.contains('talos-embedded') || workspaceDisposed) return;
+    void avviaWorkspaceDesktop();
+    /* ⛔ 17/09, PO-27 — l'invito nello schermo vuoto (al posto della modale «Primo avvio») si aggiorna SEMPRE: non copre niente
+       e non va chiuso; se il flusso d'avvio della PR #27 porta una cartella, la riga se ne accorge e sparisce. */
+    aggiornaInvitoPrimoAvvio();
+    void aggiornaElencoSessioniReali();
+    renderAutomationsReali();
   }, 0);
+
+  async function avviaWorkspaceDesktop() {
+    const issued = startupNavigation.current();
+    const current = () => shouldCommitStartup(issued, startupNavigation.current(), workspaceDisposed);
+    if (issued !== 0 || state.realSession.id) return;
+    if (apriDoctorDaLauncher()) return;
+    if (leggiWorkspaceLaunchId()) {
+      setView('home', { startup: true });
+      const opened = await apriWorkspaceDaLauncher(current);
+      if (current() && !opened) workspaceUI?.showNotice('La destinazione richiesta non è disponibile. Scegli un altro progetto.');
+      return;
+    }
+    const preferences = workspacePreferences.read();
+    const saved = preferences.restoreWorkspace ? preferences.lastSession : null;
+    if (saved) {
+      try {
+        const result = await apiGet('/api/v1/sessions');
+        if (!current()) return;
+        const row = Array.isArray(result.items) ? result.items.find((item) => item.sessionId === saved) : null;
+        const decision = decideStartup({ mode: 'standalone', restoreWorkspace: true,
+          lastWorkspace: row ? { status: 'available', target: { kind: 'workspace', id: row.sessionId } } : { status: 'missing' } });
+        if (decision.action === 'navigate' && decision.target.kind === 'workspace' && row) {
+          // Restore existing conversation only; passaASessione never starts a new run.
+          passaASessione(row.sessionId, row.taskId, row.nome, row.modello, row);
+          return;
+        }
+        workspaceUI?.showNotice('Il workspace precedente non è più disponibile. I tuoi altri lavori restano nella cronologia.');
+      } catch {
+        if (!current()) return;
+        workspaceUI?.showNotice('Non riesco a ripristinare il workspace. Puoi riprovare dalla cronologia.');
+      }
+    }
+    if (current()) setView('home', { startup: true });
+  }
   aggiornaPillolaModello(); // ⭐ 27/8 — sincronizza SUBITO la pillola con lo stato vero (state.model === ''), invece di lasciare "gpt-5.6-sol · high" scritto a mano nell'HTML statico
   aggiornaPillolaPermessi();
   aggiornaPillolaAmbiente();
@@ -20942,6 +23053,29 @@ ${testo}`;
   setQueueMode(false);
   setRunState(true);
   syncRunComposerState();
+  if (!HOST().classList.contains('talos-embedded') && $('#schermoHome')) {
+    modalManager = createOverlayManager(document);
+    workspaceUI = createWorkspaceChrome({
+      document, translate: tr, apiGet, navigate: setView,
+      openProject: () => { startupNavigation.next(); void openRealTaskSheet(); },
+      openModel: () => { startupNavigation.next(); openSheet('model'); },
+      openProviders: () => { setView('settings'); setSettingsSection('account'); },
+      openSession: (row) => {
+        if (state.sessionSelection.active) { state.sessionSelection.active = false; state.sessionSelection.selected.clear(); aggiornaToolbarSelezioneSessioni(); }
+        passaASessione(row.sessionId, row.taskId, row.nome, row.modello, row);
+      },
+      describeSession: (row) => statoSessione(row).testo,
+      currentSession: () => state.realSession.id,
+      currentWorkspace: () => state.realSession.cartellaAssoluta || state.sessionSelection.available?.get?.(state.realSession.id)?.cartella || null,
+      currentModel: () => state.model,
+      setInspectorVisible: (visible) => {
+        appShell.classList.toggle('inspector-collapsed', !visible);
+        syncInspectorToggle(); autoGrowTextarea();
+      },
+      preferences: workspacePreferences,
+    });
+    setView('home', { startup: true });
+  }
   /*
    * ⭐⭐⭐ 05/9, fase 1 del piano «il mockup diventa la app» — la REGIA del
    * mockup portata dentro app.js, tale e quale: i luoghi della sidebar e le
@@ -20951,7 +23085,7 @@ ${testo}`;
    * clic fuori chiudono; i `[aria-expanded][aria-controls]` sono disclosure.
    * Nessuna logica di prodotto: solo il comportamento che il mockup già ha.
    */
-  const VISTA_PER_VAIA = { chat: 'chat', vuota: 'vuota', terminale: 'terminal', review: 'diff', capability: 'capability', board: 'dashboard', memoria: 'memoria', attivita: 'attivita', note: 'note', progetti: 'progetti', impostazioni: 'settings', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automazioni: 'automations', browser: 'browser' };
+  const VISTA_PER_VAIA = VIEW_BY_DESTINATION;
   ROOT().addEventListener('click', (event) => {
     const vaia = event.target.closest?.('[data-vaia]');
     /*
@@ -20964,6 +23098,18 @@ ${testo}`;
      *   🔜 Quando la schermata avrà la sua riga nel ponte, questa eccezione sparisce.
      */
     if (vaia?.dataset.vaia === 'modelli') { setView('settings'); setSettingsSection('models'); return; }
+    /*
+     * ⛔⛔ 18/09/2026 — «IMPOSTAZIONI» DEVE PORTARE A IMPOSTAZIONI, NON ALL'ULTIMA SEZIONE GUARDATA.
+     * Misurato dalla revisione avversaria: da Impostazioni → «Modelli» → «Impostazioni», si RESTAVA
+     * sul Laboratorio modelli (`data-settings-section` = `models`) — due voci, due nomi, stesso posto,
+     * e la destinazione dipendeva dalla storia di chi cliccava. La sezione è una preferenza salvata
+     * (`setSettingsSection(saved || 'appearance')`), e questa voce non la toccava.
+     * ⇒ La porta generica atterra sulla PRIMA sezione, come il nome promette; «Modelli» continua ad
+     *   andare al Laboratorio modelli (la sua porta vera, vedi sopra). Ricerca 18/09/2026: la
+     *   convenzione è il deep link — «ogni porta atterra dove dice il suo nome», e senza ancora si
+     *   apre la scheda predefinita (ZURB Foundation, «Deep linking», letto il 18/09/2026).
+     */
+    if (vaia?.dataset.vaia === 'impostazioni') { setView('settings'); setSettingsSection('appearance'); return; }
     if (vaia && VISTA_PER_VAIA[vaia.dataset.vaia]) { setView(VISTA_PER_VAIA[vaia.dataset.vaia]); return; }
     const apre = event.target.closest?.('[data-apre-velo]');
     if (apre) { apriVeloMockup(apre.dataset.apreVelo); return; }
@@ -20986,9 +23132,15 @@ ${testo}`;
   function apriVeloMockup(id) {
     if (id === 'veloContesto') { void compactSession(); return; }
     const v = $(`#${id}`); if (!v) return;
-    if (id === 'veloIntro' && !introMockup) { void apiGet('/api/v1/setup/stato').catch(() => null).then((stato) => apriIntroMockup(0, stato)); return; } // 06/9 B7b: «Ripeti il primo avvio»
-    ultimoFuocoVelo = ROOT().activeElement;
+    const opener = ROOT().activeElement;
+    ultimoFuocoVelo = opener;
     v.hidden = false;
+    syncBackgroundDialogPause();
+    /* ⭐ 18/09 — il velo Fornitori mostra dati VERI: si popola all'apertura (e poi da
+       `renderizzaProviderModelLab`, che è dove lo stato diventa DOM). Se gli accessi non
+       sono ancora stati letti si chiedono adesso: la prima apertura non deve mostrare un
+       vuoto che sembra «nessun fornitore». */
+    if (id === 'veloFornitori') { apriFornitoreDelVelo(); popolaVeloFornitori(); if (!state.modelLab.providers?.length) void caricaProviderModelLab(); }
     preparaMisuraDialogo(v); // 06/9 B7: la misura ricordata di QUESTO dialogo, se c'è
     aggiornaTutteLeScie(v);   // ⛔ 07/9: un cursore appena montato ha la scia a zero finché non lo tocchi
     const corpo = v.querySelector('.talos-dialog__body');
@@ -21006,15 +23158,19 @@ ${testo}`;
       || (corpo && corpo.querySelector('input, button, select'))
       || v.querySelector('.talos-dialog__footer button, .talos-dialog__footer input, .talos-dialog__footer select')
       || v.querySelector('input, button, select');
-    primo?.focus();
+    if (modalManager) modalManager.activate(v, { content: v.querySelector('.talos-dialog') || v, opener, initialFocus: primo, requestClose: () => chiudiVeloMockup(id) });
+    else primo?.focus();
   }
   function chiudiVeloMockup(id) {
     if (id === 'veloContesto' && contextCompactor) { contextCompactor.close(); return; }
     const v = $(`#${id}`); if (!v || v.hidden) return;
     v.hidden = true;
-    if (ultimoFuocoVelo?.focus) ultimoFuocoVelo.focus();
+    syncBackgroundDialogPause();
+    if (modalManager) modalManager.deactivate(v);
+    else if (ultimoFuocoVelo?.focus) ultimoFuocoVelo.focus();
   }
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') $$('.overlay-layer').forEach((v) => chiudiVeloMockup(v.id)); });
+  // Embedded hosts retain their own interaction lifecycle. Standalone uses the modal stack.
+  document.addEventListener('keydown', (event) => { if (!modalManager && event.key === 'Escape' && !event.defaultPrevented) { const open = $$('.overlay-layer').filter(v => !v.hidden).at(-1); if (open) chiudiVeloMockup(open.id); } });
   collegaRidimensionamentoDialoghi(ROOT()); // 06/9 B7: le tre maniglie di ogni velo (trascina, frecce, doppio clic)
   (() => { // 06/9: la striscia compare solo scorrendo in alto — si ridisegna quando la conversazione scorre
     /*
@@ -21041,6 +23197,25 @@ ${testo}`;
   collegaScorciatoieTerminale(); // 06/9 B1: Ctrl+` e Ctrl+Shift+`, e la barra delle schede onesta da subito
   collegaRidisegnoLingua(); // P-i18n 06/9
   renderizzaBrowser(); // 06/9 K-I: via le letture dimostrative del mockup da subito
+  /*
+   * ⛔⛔ BC-67, 17/09/2026, misurato su un banco con «Nessuna sessione»: aprendo la Revisione si
+   *   vedevano TRE file che nessuno aveva scritto (`src/session-registry.mjs +18 −2`, …), il diff
+   *   di una `guardiaDiStallo` mai esistita, la pillola «Ricevuta a1f4…9c02», «giro 5» e i bottoni
+   *   «Accetta questo file · Apri nell'editor · Scarta» con la frase sul checkpoint del giro 4.
+   *   Tutto vero nel mockup, tutto FALSO nella app: è il markup dimostrativo del template, che
+   *   nessuno aveva mai sostituito perché `renderRealReviewList()` parte solo da una sessione o da
+   *   una scrittura — e una app appena aperta non ne ha né l'una né l'altra.
+   * ⇒ Si chiama qui, all'avvio, esattamente come il Browser fa dal 06/09 nella riga qui sopra e per
+   *   la stessa ragione. Con zero file le due funzioni rendono lo stato vuoto ONESTO che esiste già
+   *   (`#vuotoReview`), nascondono il diff e le schede, spengono «Copia i diff» e scrivono
+   *   «Nessuna modifica in questa sessione» nella testata.
+   * ⛔ Non basta togliere il markup dal template: se un domani qualcuno rimette dei dati d'esempio
+   *   lì dentro, questa riga li copre lo stesso. È il markup a essere un promemoria del disegno,
+   *   non la fonte di ciò che si vede.
+   */
+  renderRealReviewList();
+  aggiornaSommarioReviewReale();
+  syncFileTreeToolbar();
   setInspectorTab($('.inspector-tabs button.active'));
   renderReviewFile('composer');
   autoGrowTextarea();
@@ -21088,7 +23263,53 @@ ${testo}`;
     const chiama = (verbo) => async (id) => { try { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id)}/${verbo}`, {}); } catch (error) { toast('Comando non eseguito', error.message); } caricaDownloadModelLab(); };
     aggiornaCodaDownload(panel, state.modelLab.downloads, {
       soloAttivi: downloadSoloAttivi, stime: stimeDownload,
-      azioni: { pausa: chiama('pause'), riprendi: chiama('resume'), annulla: (id) => { const velo = $('#veloAnnullaDownload'); if (velo) velo.dataset.downloadId = id; }, vediModello: () => setModelLabSection('installed') },
+      azioni: {
+        pausa: chiama('pause'), riprendi: chiama('resume'),
+        annulla: (id) => { const velo = $('#veloAnnullaDownload'); if (velo) velo.dataset.downloadId = id; },
+        vediModello: () => setModelLabSection('installed'),
+        /*
+         * ⛔ 19/09/2026 — I DUE COMANDI NUOVI SULLA RIGA DEL DOWNLOAD, e le due trappole che la
+         * corsia D ha MISURATO eseguendo le rotte su un server suo (non leggendole):
+         *
+         * · `rename` cambia **solo il nome mostrato**: scrive `manifests/<id>.name.json`, mentre il
+         *   manifest, la cartella, i pesi e l'id **non si toccano**. Un nome vuoto o oltre 160
+         *   caratteri esce `MODEL_INVALID`, che **non ha una voce** in `STATUS_BY_CODE` ⇒ la persona
+         *   vedrebbe **500 «Errore interno · Apri Doctor»** per un campo suo: il campo lo impedisce
+         *   prima (`maxlength`), e qui si traduce comunque l'esito.
+         *
+         * · `delete` porta via i **file** (pesi, manifest, nome), non tocca mai niente fuori dalla
+         *   radice, e se il modello è **in uso** rifiuta **prima** di cancellare.
+         *   ⛔⛔ E risponde **200 `{deleted:true}` anche su un id che non esiste**, senza cambiare
+         *   niente sul disco. ⇒ **La rotta da sola non è una prova**: si legge **prima e dopo**,
+         *   perché «non c'è più» e «non c'è mai stato» si fotografano uguali. Un esito che non
+         *   dichiara nulla non vale come riuscita (la riga scrive «Esito non confermato»).
+         *   ⛔ E dopo un'eliminazione RIUSCITA il registro dei trasferimenti tiene ancora la riga
+         *   `ready`: senza ricaricare anche la coda, la riga direbbe «Disponibile nei modelli
+         *   installati» **per sempre** su un modello che non c'è più.
+         *
+         * Ricerca di questo passo, 19/09/2026 — è lo stesso vincolo, in generale: dopo una
+         * mutazione **la risposta non è la verità**, si riconcilia con lo stato vero rileggendo
+         * (`invalidateQueries` in `onSettled`, su successo E su fallimento), e l'eliminazione è
+         * fra le scritture che **non** si fanno in modo ottimistico — richiesta, attesa, rilettura.
+         * Fonti: <https://tanstack.com/query/v4/docs/framework/react/guides/optimistic-updates> ·
+         * <https://github.com/ciampo/expense-manager-v2/issues/135> ·
+         * <https://github.com/TanStack/query/discussions/10712> ·
+         * <https://skillsmp.com/creators/wbunker/skills-repo/optimistic-updates> (lette il 19/09/2026).
+         */
+        rinomina: (id, nome) => apiPost(`/api/v1/local-models/${encodeURIComponent(id)}/rename`, { name: nome })
+          .then((risposta) => ({ ok: true, nome: risposta?.name ?? nome }))
+          .catch((errore) => ({ ok: false, motivo: errore?.message ?? 'rinomina non riuscita' })),
+        elimina: async (id) => {
+          const cEra = state.modelLab.installed.some((modello) => modello.id === id);
+          try { await apiPost(`/api/v1/local-models/${encodeURIComponent(id)}/delete`, {}); }
+          catch (errore) { return { ok: false, motivo: errore?.message ?? 'eliminazione non riuscita' }; }
+          await caricaModelliLocaliModelLab();
+          caricaDownloadModelLab();
+          if (!cEra) return { ok: false, motivo: 'non risultava fra i modelli installati' };
+          if (state.modelLab.installed.some((modello) => modello.id === id)) return { ok: false, motivo: 'il modello risulta ancora installato' };
+          return { ok: true };
+        },
+      },
     });
     return true;
   }
@@ -21118,32 +23339,4 @@ ${testo}`;
    * la versione attiva ora è quella del ridisegno (card `.hf-repo-card`,
    * stessa logica di download/set-incompleto/hash-mancante inline). */
 
-  /*
-   * ⭐⭐⭐ 02/9 — owner dal vivo: "quando ricarico la pagina bisogna che si
-   * apra automaticamente ultima sessione disponibile". Non una chiamata
-   * sincrona al mount: il commento sopra ensureDownloadQueueBadge()
-   * documenta un vincolo TESTATO ("il boot non fa MAI una chiamata di
-   * rete propria" — CODE-COMPOSER-DEMO-SEND-01, HARNESS-BOARD-MOBILE-
-   * HONESTY-01) e quei test controllano fetchMock in modo SINCRONO
-   * (zero tick) subito dopo il mount — un setTimeout, anche a 0ms, non
-   * ha ancora girato in quel momento preciso, quindi resta compatibile:
-   * verificato leggendo entrambi i test riga per riga, non presunto.
-   * Mai nell'embedded mobile demo (nessun backend reale lì — stesso
-   * principio del vincolo che questo commento cita).
-   */
-  window.setTimeout(() => {
-    if (HOST().classList.contains('talos-embedded')) return;
-    if (state.realSession.id) return; // già una sessione attiva per altra via (es. deep-link)
-    apriUltimaSessioneDisponibileAllAvvio();
-  }, 0);
-
-  async function apriUltimaSessioneDisponibileAllAvvio() {
-    let elenco;
-    try { elenco = (await apiGet('/api/v1/sessions')).items; } catch { return; } // ⛔ un fallimento qui non è un'azione richiesta dall'utente, non merita un toast — resta lo stato vuoto onesto
-    if (state.realSession.id) return; // ri-controllo: potrebbe essere cambiata durante l'attesa della fetch
-    if (!Array.isArray(elenco) || elenco.length === 0) return;
-    const ultima = [...elenco].sort((a, b) => new Date(b.avviataAlle).getTime() - new Date(a.avviataAlle).getTime())[0];
-    if (!ultima) return;
-    passaASessione(ultima.sessionId, ultima.taskId, ultima.nome, ultima.modello, ultima);
-  }
 })();

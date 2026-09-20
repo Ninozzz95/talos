@@ -107,7 +107,16 @@ test('T-07: default npm test is replaced by an explicit no-suite diagnostic when
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fixture', scripts: {} }));
   const command = await comandoProvaDesktop({ cartella: dir, comandoProva: 'npm test' });
   assert.match(command, new RegExp(NO_TEST_SUITE_CODE));
-  assert.match(command, /process\.exit\(2\)/);
+  /*
+   * ⛔⛔ ERA `process.exit(2)` FINO AL 20/09/2026 — e il 2 era la cosa sbagliata.
+   *   Il canonico, per lo stesso fatto, esce **127** (`USCITA_NESSUNA_SUITE`, il cancello
+   *   `suiteMancante`): due codici per una condizione sola. E la riga dei Processi li distingue —
+   *   `statoDaUscita(2)` → «Non riuscito» col pallino **rosso**, `statoDaUscita(127)` →
+   *   «Non eseguito». Sul desktop una suite che non esiste veniva dipinta come un fallimento,
+   *   mentre il vero è che **non è partita**. Ora i due lati dicono lo stesso numero.
+   */
+  assert.match(command, /process\.exit\(127\)/, 'lo stesso codice della suite mancante del canonico');
+  assert.doesNotMatch(command, /process\.exit\(2\)/, 'un 2 qui ridipinge come FALLIMENTO una prova che non e partita');
 });
 
 test('T-07 contrary cases: a real test or malformed package.json keeps npm test and its truthful diagnostic', async (t) => {

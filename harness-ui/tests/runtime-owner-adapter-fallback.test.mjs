@@ -194,3 +194,30 @@ test('PH-FALLBACK-19 timeout del trasporto classificato da BC-44',async t=>{
   const f=creaFetchMultiProvider(async(url,init)=>{if(String(url).includes('/deepseek'))throw new DOMException('Tempo massimo','TimeoutError');return fetch(url,init);},b.opzioni);
   await esegui(f);assert.equal(b.eventi.find(e=>e.tipo==='cambio-fornitore').classe,'timeout-fornitore');
 });
+
+/*
+ * ⛔⛔⛔ CLI-REQ-03 (17/09/2026) — LA CHIAVE CHE MANCA NON È UN RIFIUTO DEL FORNITORE.
+ *
+ * La prova si scrive sulla strada VERA del runtime, `eseguiConFallback`, e non sulla fetch nuda:
+ * lì l'errore usciva già giusto (`PROVIDER_KEY_MISSING`, zero consumi), e una prova scritta su
+ * quella strada sarebbe passata PER COSTRUZIONE senza toccare il difetto.
+ * Misurato prima della cura, su questa stessa prova: `PROVIDER_REQUEST_ERROR` «Il fornitore non ha
+ * accettato la richiesta.» (classe `ignoto`) con **0 chiamate di rete** e **1 consumo scritto**
+ * (`esito: 'interrotto'`) — cioè una ricevuta per una chiamata mai partita, e una diagnosi che
+ * accusa il fornitore di una cosa che l'utente può risolvere in dieci secondi.
+ *
+ * ⛔ I due numeri della prova non sono decorazione: senza `richieste.length === 0` un domani
+ *   basterebbe partire davvero in rete per farla passare, e senza `consumi` vuoto la ricevuta
+ *   fantasma tornerebbe senza che nessuno se ne accorga.
+ */
+test('PH-FALLBACK-21 chiave mancante: errore PROVIDER_KEY_MISSING col nome umano, nessun consumo, nessuna chiamata (CLI-REQ-03)',async t=>{
+  const b=await banco(t,(_req,res)=>rispondiBene(res),{}); // ⛔ ambiente SENZA chiavi: è la condizione del difetto
+  const f=creaFetchMultiProvider(fetch,b.opzioni);
+  await assert.rejects(()=>esegui(f),(errore)=>{
+    assert.equal(errore.code,'PROVIDER_KEY_MISSING','la chiave che manca non si travveste da rifiuto del fornitore');
+    assert.match(errore.message,/Manca la chiave per DeepSeek./,'a schermo va il nome umano del fornitore, non il suo id');
+    return true;
+  });
+  assert.deepEqual(b.consumi,[],'nessuna ricevuta per una chiamata mai partita');
+  assert.equal(b.richieste.length,0,'e nessuna chiamata di rete, davvero');
+});

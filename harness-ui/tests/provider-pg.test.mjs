@@ -297,7 +297,9 @@ test('PG-11 — Hugging Face conserva gli alias e lo stesso account nel portachi
 test('PG-12 — uscite del banco conservate: OpenRouter invariato e SSE/errore non riscritti', async () => {
   const store = createProviderCredentialStore({ env: { GROQ_API_KEY: CHIAVE_FINTA, OPENROUTER_API_KEY: CHIAVE_FINTA } });
   for (const originale of [new Response('data: {"choices":[]}\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } }), Response.json({ error: { message: 'quota' } }, { status: 429 })]) {
-    const richiesta = creaFetchMultiProvider(async () => originale, { dipendenze: deps(store) });
+    /* 17/09: il guardiano dell'inattività (P0 · punto 7) rimonta la Response per costruzione (pipeThrough);
+       qui si prova il contratto dello STRATO CACHE, quindi il guardiano è l'identità — il vero si prova in P0-D-20. */
+    const richiesta = creaFetchMultiProvider(async () => originale, { dipendenze: deps(store), sorvegliaCorpo: r => r });
     const risposta = await richiesta('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', body: JSON.stringify({ ...corpoPer('groq'), model: `groq:${modelloPer('groq')}` }) });
     assert.equal(risposta, originale);
   }

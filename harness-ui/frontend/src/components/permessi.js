@@ -18,6 +18,14 @@
 
 /** Gli attrezzi che possono scrivere su disco anche quando `scrivi` è chiuso. */
 export const SCRIVONO_LO_STESSO = Object.freeze({
+  /*
+   * ⛔ BC-59 (17/09) — `file_edit` è entrato nel kernel il 16/09 e cambia i file del progetto con un
+   *   cancello SUO: chi chiude «Scrivi un file» credendo di aver chiuso la porta ai file la lascia
+   *   aperta esattamente come con `shell`. È lo stesso difetto di T03-D2, su un attrezzo nuovo.
+   *   ⛔ Sta per PRIMO perché è la via più vicina a quella che la persona crede di aver chiuso:
+   *   `shell` almeno è un altro mestiere, questo scrive file e basta.
+   */
+  file_edit: 'la modifica di una parte di un file',
   shell: 'un comando nel terminale',
   document_create: 'la creazione di un documento',
   generate_image: 'la generazione di un’immagine',

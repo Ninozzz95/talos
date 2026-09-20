@@ -39,7 +39,14 @@ test('PO-06, AL CONTRARIO: un comando fermato dal tempo massimo non passa per ri
   assert.equal(e.uscita, null);
   assert.equal(e.riuscito, false, '⛔ se questo diventa true, a schermo un comando troncato sembra andato bene');
   assert.equal(e.fermato, true);
-  assert.equal(e.verdetto, 'Fermato: ha superato il tempo massimo');
+  /*
+   * ⛔ 20/09/2026 — LA CAUSA NON SI NOMINA PIÙ, e la riga aveva torto. Diceva «ha superato il tempo
+   *   massimo», che sulla strada Windows è **falso per costruzione**: lì il kernel normalizza
+   *   (`talosHarness.mjs:4867`: `fermatoDalTempo ? 124 : codice`), quindi un codice nullo è un
+   *   processo ucciso da un segnale, non un tempo scaduto. Si dice il fatto che sappiamo.
+   */
+  assert.equal(e.verdetto, 'Fermato: il comando non ha restituito un codice d\'uscita');
+  assert.equal(e.verdetto.includes('tempo massimo'), false, '⛔ da qui la causa non è verificabile: non si inventa');
   assert.equal(e.output, '', 'e non c’è output da mostrare: è esattamente ciò che confonde');
 });
 
@@ -58,6 +65,27 @@ test('PO-06: senza il livello di isolamento non si inventa un posto', () => {
   assert.equal(e.livello, null);
   assert.equal(e.dove, null);
   assert.equal(rigaDiStatoComando(e), 'Riuscito', 'niente «su ignoto»: si tace');
+});
+
+/*
+ * ⛔⛔ LE FORME VERE, NON QUELLE COMODE — 20/09/2026, difetto misurato: il kernel **non** scrive
+ *   `[sandbox: none]`, scrive l'etichetta SPIEGATA (`etichettaSandbox`: `none (cmd.exe nativo: …)`),
+ *   e `dovEGirato` confrontava il livello esatto ⇒ restituiva `null` per **tutte e tre**. Il «dove»
+ *   è stato invisibile da quando esiste `etichettaSandbox`, cioè da una cura del BLOCCO 6 — e la
+ *   promessa centrale di PO-06 («quel comando non è girato su Windows: se non è così, si dice») era
+ *   **inerte**. Questa prova usa le stringhe che il kernel produce davvero: se qualcuno torna a
+ *   confrontare il livello intero, diventa rossa.
+ */
+test('⛔ il «dove» si legge ANCHE dall\'etichetta spiegata che scrive il kernel', () => {
+  assert.equal(dovEGirato('none (cmd.exe nativo: stesso utente e stessi privilegi del processo, nessun isolamento)'), 'su Windows, senza isolamento');
+  assert.equal(dovEGirato('wsl2 (namespace Linux: filesystem e processi separati)'), 'in Linux (WSL), non su Windows');
+  assert.equal(dovEGirato('adb-shell-on-device (shell sul dispositivo collegato, fuori da questa macchina)'), 'sul telefono collegato');
+  /* e le forme corte restano valide: chi le scrive sono le sessioni registrate prima di oggi */
+  assert.equal(dovEGirato('wsl2'), 'in Linux (WSL), non su Windows');
+  assert.equal(dovEGirato('none'), 'su Windows, senza isolamento');
+  /* ⛔ E la frase intera, com'è a schermo: è questa che una persona legge su un comando fallito. */
+  const e = leggiEsitoComando('exit 1 [sandbox: none (cmd.exe nativo: …)]\nERR\n');
+  assert.equal(rigaDiStatoComando(e), 'Non riuscito · codice 1 · su Windows, senza isolamento');
 });
 
 test('PO-06, AL CONTRARIO: un livello che non conosciamo NON si traduce a caso', () => {

@@ -27,7 +27,7 @@
  */
 import { createHash } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createProcessPolicy, parseProcessCommand } from './process-policy.mjs';
 
 export class HookRegistryError extends Error {
@@ -56,6 +56,57 @@ export const EVENTI_VALIDI = new Set(['pre_tool_call', 'post_tool_call', 'sessio
  * scritto a mano e sbagliato deve saperlo, non vedere l'hook
  * semplicemente non funzionare.
  */
+/*
+ * ⛔⛔⛔ 17/09/2026 — L'IMPRONTA DI UN HOOK COPRE ANCHE I FILE CHE IL SUO COMANDO NOMINA.
+ *
+ * Misurato prima di scrivere (sonda con le funzioni vere di questo file): un hook
+ * `node guardia.mjs`, approvato, restava APPROVATO dopo che `guardia.mjs` era stato riscritto —
+ * stessa impronta `b76e9d114849` prima e dopo — e `eseguiHook` faceva girare la versione
+ * sostituita. L'impronta era lo sha256 della sola STRINGA del comando: la fiducia era legata al
+ * nome del file, non al suo contenuto. `guardia.mjs` è un file qualunque del workspace, che
+ * l'agente può scrivere: bastava riscriverlo per far girare codice proprio alla chiamata dopo.
+ * È la stessa classe di CVE-2026-25725 (codice in sandbox che si inietta negli hook) e del worm
+ * CHAINDROP dell'agosto 2026 — letti il 17/09/2026 (karanb192/claude-code-hooks, thepromptshelf.dev
+ * «Claude Code Hooks: Complete Reference 2026»).
+ *
+ * ⇒ Nell'impronta entrano, oltre al comando, nome relativo e sha256 di OGNI argomento che cade su
+ *   un file regolare dentro la cartella del progetto. Un comando che non nomina file (`echo …`,
+ *   `node -e "…"`, dove il codice È la stringa) conserva l'impronta di prima, byte per byte: chi
+ *   l'aveva approvato non deve riapprovarlo. Chi aveva approvato un `node file.mjs` sì, una volta.
+ * ⇒ E si RICONTROLLA ALL'USO (`eseguiHook`): la sessione fotografa gli hook all'avvio, e una foto
+ *   senza ricontrollo eseguirebbe per ore un file sostituito a sessione viva.
+ * ⛔ Un collegamento non si segue e non si salta: si rifiuta (stessa regola dei pacchetti plugin).
+ * ⛔ DOVE NON ARRIVA, detto: copre i file NOMINATI nel comando, non ciò che quei file importano a
+ *   loro volta. Una guardia che fa `import './aiuto.mjs'` resta scoperta su `aiuto.mjs`.
+ */
+export const MAX_BYTE_FILE_HOOK = 8 * 1024 * 1024;
+
+export async function improntaHook({ comando, cartella }, deps = {}) {
+  const lstatFn = deps.lstatFn ?? fsp.lstat;
+  const leggiFn = deps.leggiFileHookFn ?? ((percorso) => fsp.readFile(percorso));
+  const base = createHash('sha256').update(comando).digest('hex');
+  if (typeof cartella !== 'string' || cartella.length === 0) return base;
+  let pezzi;
+  try { pezzi = parseProcessCommand(comando); } catch { return base; } // un comando che non si analizza non gira comunque
+  const radice = resolve(cartella);
+  const file = [];
+  for (const pezzo of pezzi) {
+    if (typeof pezzo !== 'string' || pezzo.length === 0 || pezzo.startsWith('-')) continue;
+    const assoluto = resolve(radice, pezzo);
+    const relativo = relative(radice, assoluto);
+    if (relativo === '' || relativo.startsWith('..') || isAbsolute(relativo)) continue; // fuori dal progetto: non è un file di questo hook
+    let stato;
+    try { stato = await lstatFn(assoluto); } catch { continue; } // non è un file: è un argomento qualunque
+    if (stato.isSymbolicLink()) throw new HookRegistryError(`il comando nomina un collegamento ("${pezzo}"): un hook deve nominare file veri`, 'HOOK_FILE_LINK');
+    if (!stato.isFile()) continue;
+    if (stato.size > MAX_BYTE_FILE_HOOK) throw new HookRegistryError(`il file "${pezzo}" è troppo grande per entrare nell'impronta dell'hook`, 'HOOK_FILE_TOO_LARGE');
+    const contenuto = await leggiFn(assoluto);
+    file.push(`${relativo.split('\\').join('/')}\0${createHash('sha256').update(contenuto).digest('hex')}`);
+  }
+  if (file.length === 0) return base;
+  return createHash('sha256').update(`${comando}\0file\0${file.sort().join('\0')}`).digest('hex');
+}
+
 export async function caricaHooks({ cartella }, deps = {}) {
   const readFileFn = deps.readFileFn ?? fsp.readFile;
   const percorso = join(cartella, NOME_FILE_HOOKS);
@@ -75,7 +126,7 @@ export async function caricaHooks({ cartella }, deps = {}) {
   if (!dati || !Array.isArray(dati.hooks)) {
     throw new HookRegistryError(`${NOME_FILE_HOOKS} deve avere un campo "hooks" (array)`, 'HOOK_MALFORMED');
   }
-  const hooks = dati.hooks.map((voce, indice) => {
+  const hooks = await Promise.all(dati.hooks.map(async (voce, indice) => {
     if (typeof voce?.id !== 'string' || voce.id.length === 0) {
       throw new HookRegistryError(`hooks[${indice}] manca di "id" (stringa non vuota)`, 'HOOK_MALFORMED');
     }
@@ -85,9 +136,9 @@ export async function caricaHooks({ cartella }, deps = {}) {
     if (typeof voce.comando !== 'string' || voce.comando.length === 0) {
       throw new HookRegistryError(`hooks[${indice}] ("${voce.id}") manca di "comando" (stringa non vuota)`, 'HOOK_MALFORMED');
     }
-    const hash = createHash('sha256').update(voce.comando).digest('hex');
+    const hash = await improntaHook({ comando: voce.comando, cartella }, deps);
     return { id: voce.id, eventi: voce.eventi, comando: voce.comando, hash };
-  });
+  }));
   return { hooks };
 }
 
@@ -155,6 +206,17 @@ export async function fidaHook({ cartellaTrust, hookId, hash }, deps = {}) {
  */
 export async function eseguiHook({ hook, evento, cartella }, deps = {}) {
   try {
+    /* ⛔ 17/09/2026 — IL RICONTROLLO ALL'USO. Gli hook si fotografano all'avvio della sessione; qui si
+       guarda che i file nominati dal comando siano ANCORA quelli dell'impronta approvata. Vale per chi
+       porta un'impronta (gli hook di `.harness-ui-hooks.json`); gli hook dei plugin hanno la loro,
+       sull'intero pacchetto, e non passano di qui con un `hash`. Chiuso per difetto: se non torna, la
+       guardia NON gira e nega — una guardia sostituita che «consente» sarebbe peggio di nessuna. */
+    if (typeof hook?.hash === 'string' && hook.hash.length > 0) {
+      const adesso = await improntaHook({ comando: hook.comando, cartella }, deps);
+      if (adesso !== hook.hash) {
+        return { consentito: false, motivo: 'Un file di questa guardia è cambiato dopo che l’avevi approvata: non la eseguo. Riapprovala dalle impostazioni delle guardie.', codice: 'HOOK_CHANGED_SINCE_TRUST' };
+      }
+    }
     const [executable, ...args] = parseProcessCommand(hook.comando);
     const policy = createProcessPolicy({
       allowedExecutables: deps.allowedExecutables ?? ['node', 'node.exe', 'echo', 'echo.exe'],

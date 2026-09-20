@@ -52,3 +52,12 @@ initTalosDesktopBackground();
  */
 const { montaAnimazioniMockup } = await import('./components/animazioni-mockup.js');
 montaAnimazioniMockup(document);
+
+/* CP14: custom rendering; existing preferences and event handlers remain the owners. */
+const { mountCalmControls } = await import('./components/calm-controls.js');
+const calmScope = '#schermoImpostazioni, .td-theme-studio, [data-calm-controls]';
+let calmControls = mountCalmControls(document, { scope: calmScope });
+window.addEventListener('pagehide', () => calmControls.dispose());
+window.addEventListener('pageshow', event => {
+  if (event.persisted) calmControls = mountCalmControls(document, { scope: calmScope });
+});

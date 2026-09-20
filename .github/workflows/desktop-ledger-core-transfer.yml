@@ -1,0 +1,91 @@
+name: desktop-ledger-core-transfer
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['docs/refactor/core-modal-slice/**', '.github/workflows/desktop-ledger-core-transfer.yml']
+permissions:
+  contents: read
+jobs:
+  source:
+    if: github.repository == 'Ninozzz95/talos' && github.ref == 'refs/heads/refactor/desktop-ledger-2026-09-17'
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.18.0'
+      - id: source
+        name: Validate every source byte before applying the reviewed edits
+        run: |
+          set -euo pipefail
+          node docs/refactor/core-modal-slice/apply.mjs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          node --input-type=module -e "import{readFileSync}from'node:fs';import{execFileSync}from'node:child_process';const paths=JSON.parse(readFileSync('/tmp/talos-core-paths.json'));execFileSync('git',['add','--',...paths]);"
+          if ! git diff --cached --quiet; then
+            git commit -m 'refactor(desktop): integrate canonical preferences, API lifecycle and modal focus ownership'
+            git push origin HEAD:refs/heads/refactor/desktop-ledger-2026-09-17
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  qualification:
+    needs: source
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.18.0'
+      - name: Dependencies from actual project locks
+        run: |
+          set -euo pipefail
+          npm ci --prefix harness-ui --no-audit --no-fund
+          npm ci --prefix harness-ui/frontend --no-audit --no-fund
+          npm ci --prefix context-engine --no-audit --no-fund
+          node harness-ui/frontend/node_modules/playwright/cli.js install --with-deps chromium chrome
+      - name: Compile and typecheck actual frontend
+        run: |
+          set -euo pipefail
+          npm --prefix harness-ui/frontend run build
+          node harness-ui/node_modules/typescript/bin/tsc -p harness-ui/frontend/tsconfig.refactor.json
+      - name: Targeted regression tests
+        run: node --test harness-ui/frontend/tests/refactor/*.test.mjs harness-ui/frontend/tests/unit/ui-experience-regression.test.mjs
+      - id: unit
+        name: Complete frontend unit suite
+        continue-on-error: true
+        run: npm --prefix harness-ui/frontend run test:unit
+      - id: journeys
+        name: Real application journeys and layered modal interactions
+        continue-on-error: true
+        run: GITHUB_SHA=$(git rev-parse HEAD) node harness-ui/frontend/tests/qualification/workspace-real.mjs
+      - name: Capture exact source and results
+        if: always()
+        run: |
+          mkdir -p recovery
+          git rev-parse HEAD > recovery/SOURCE_COMMIT.txt
+          git archive --format=zip --output=recovery/source.zip HEAD harness-ui context-engine docs .github README.md LICENSE NOTICE THIRD_PARTY_NOTICES.md
+          cp -r harness-ui/frontend/test-results recovery/evidence || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: talos-core-modal-${{ needs.source.outputs.sha }}
+          path: recovery/
+          retention-days: 14
+          if-no-files-found: error
+          compression-level: 6
+      - name: Every qualification remains blocking
+        if: always()
+        env:
+          UNIT: ${{ steps.unit.outcome }}
+          JOURNEYS: ${{ steps.journeys.outcome }}
+        run: test "$UNIT" = success && test "$JOURNEYS" = success

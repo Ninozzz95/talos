@@ -33,3 +33,26 @@ test('TOAST-DURATE: ricerca 05/09 — minimo 5 s, i guasti restano, al più tre'
   assert.equal(TONI.nota.ruolo, 'status');
   assert.equal(MASSIMO_IN_PILA, 3);
 });
+
+/*
+ * BC-77 (a) — il pavimento della pila: l'ingombro VERO della zona dei comandi.
+ * Qui si provano i due rami che la prova nel browser non puo' mettere in scena a comando: la vista
+ * chiusa (il piede c'e' nel DOM ma non si vede) e l'assenza del piede.
+ */
+function finestraFinta(altezza) {
+  return { innerHeight: altezza, addEventListener() {}, removeEventListener() {} };
+}
+function radiceFinta() {
+  const scritte = {};
+  return { scritte, style: { setProperty(k, v) { scritte[k] = v; } } };
+}
+
+/*
+ * 18/09/2026 - QUI C'ERANO LE DUE PROVE DI `ancoraToastSopraIComandi` (BC-77: il fondo della pila
+ * dei toast era l'ingombro del piede, misurato; e il suo verso contrario, piede piatto o assente).
+ * L'owner ha revocato quella cura - «un toast si comporta come un toast, sempre in fondo allo
+ * schermo, e se sono piu di uno si stackano uno sopra l'altro» - e la funzione e uscita con l'ordine
+ * (nessun chiamante). Le prove escono con lei: non si riscrivono per far numero. La prova della
+ * REGOLA NUOVA sta dove si vede: `tests/browser/toast-non-copre-i-comandi.spec.mjs`, che ora misura
+ * che la pila sta in fondo e impila.
+ */

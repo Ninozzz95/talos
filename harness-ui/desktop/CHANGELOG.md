@@ -6,6 +6,75 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.15 — 2026-09-20
+
+A day of fixes on what the chat *shows* you, and on one that was changing what it *told* you.
+
+### Added
+
+- A command's result keeps its two streams apart: **output** and **diagnostics** are drawn as two
+  labelled sections instead of one merged run, so an `npm` progress notice no longer reads like a
+  `git` error. The two sections are deliberately the same tone — **diagnostics are not a failure**, and
+  many tools write progress and hints there. Only a non-zero exit code is a failure, and the tool row
+  already says so.
+- A command's outcome now says **where it ran**, in words: `on Windows, without sandboxing`, or
+  `in Linux (WSL), not on Windows`. It had been silently dropped: the reader compared a short level
+  name against a label that had since grown an explanation around it.
+
+### Fixed
+
+- **A command stopped by the time limit is no longer shown as successful.** The exit code the kernel
+  writes when a command is killed halfway was not recognised, so the row's dot stayed green with
+  nothing to contradict it. The sub-agent panel told a different story from the chat about the same
+  call; they now read the same contract. The line also no longer claims *why* a command stopped: from
+  where it is read, the cause is not knowable, and it now states the fact it has.
+- **A test run that executed zero tests no longer reads as a passing test**, and the line that declares
+  it is written once instead of twice.
+- The outcome line **no longer appears on every command**. It was printed even on a plain success,
+  where it adds nothing the row above does not already say — and stamping it everywhere is exactly what
+  makes a real failure hard to notice. It now appears only when it has something to say, in Italian,
+  and the raw technical header is no longer shown. The "Esito:" label above it went with it: one
+  labelling level, not two.
+- A file whose first line happens to read like an exit code is no longer mistaken for a command result.
+- The sidebar footer stays at the bottom of the column on tall windows instead of floating up under
+  the last session.
+- "Reset" in Appearance no longer duplicates the preview panel.
+- Dragging the composer's resize handle no longer lags on a long conversation.
+- The commands list in the right-hand column leads with the description the model wrote, with the
+  technical command as the secondary line — the hierarchy the chat already used.
+
+### Verification
+
+- Server 3,540 tests, kernel 611, frontend unit 1,451, desktop pure 81, and the real Electron shell 3:
+  all green on this commit. The browser suite runs against the live server with the same known,
+  pre-existing reds as `desktop-v0.1.14`, attributed one by one rather than counted.
+- `kernel:controlla` still reports the declared divergence between the repository copy of the kernel
+  and the mobile source (10,451 lines against 6,260). It is the same debt as in `desktop-v0.1.14`, not
+  a regression, and it does not block this release.
+
+## desktop-v0.1.14 — 2026-09-20
+
+Release candidate assembled from the verified desktop worktree after the
+`desktop-v0.1.13` comparison. This entry is published only with the installer,
+runtime, and smoke gates from `.github/workflows/release.yml` green.
+
+### Fixed
+
+- Chat streaming keeps rendering smoothly while the conversation is scrolled;
+  the scroll position remains user-controlled and the live response does not
+  rebuild the entire message list on every token.
+- Model Lab and the agent graph retain their real navigation/replay contracts,
+  including model-page routes, download actions, persistent timeline state, and
+  the graph/sidebar hand-off.
+- The desktop package carries the same version in `package.json`, the lockfile,
+  installer names, and release metadata so a tag cannot publish a mismatched
+  binary.
+
+### Verification
+
+- Backend, kernel tests, frontend unit tests (1,447), desktop pure tests (81),
+  and real Electron shell tests (3) pass on the release candidate commit.
+
 ## desktop-v0.1.13 — 2026-09-16
 
 Same product as `desktop-v0.1.12`, which never published: its release job died building the

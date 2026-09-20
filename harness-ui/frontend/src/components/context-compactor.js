@@ -48,7 +48,7 @@ export function descriviContextCompactor(state, { translate = translateDefault }
 
 const MOUNTED = new WeakMap();
 /** Mount the canonical #veloContesto markup. Transport, session and snapshots are injected. */
-export function montaContextCompactor(root, { client, sessionId, state = null, document: doc = root?.ownerDocument ?? globalThis.document, onState, onClose, translate = translateDefault } = {}) {
+export function montaContextCompactor(root, { client, sessionId, state = null, document: doc = root?.ownerDocument ?? globalThis.document, onState, onClose, modalManager = null, translate = translateDefault } = {}) {
   if (MOUNTED.has(root)) return MOUNTED.get(root);
   if (!root?.querySelector('[data-context-body]') || !client) throw new TypeError('ContextCompactor richiede markup canonico e client.');
   const win = doc.defaultView ?? globalThis.window;
@@ -218,7 +218,7 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     if (!opened) return;
     ++epoch; ++sequence; busy = false; opened = false; root.hidden = true; clearTimeout(timer); requestController?.abort();
     for (const [node, old] of inertBefore) node.inert = old; inertBefore.clear();
-    trigger?.focus?.({ preventScroll: true }); onClose?.();
+    if (modalManager) modalManager.deactivate(root); else trigger?.focus?.({ preventScroll: true }); onClose?.();
   }
   function open() {
     if (destroyed) return;
@@ -226,15 +226,17 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     requestController?.abort(); requestController = new AbortController(); root.hidden = false;
     // Reuse the application's resize owner and persistence key, including keyboard handles.
     preparaMisuraDialogo(root, { finestra: win }); collegaRidimensionamentoDialoghi(root, { finestra: win });
-    for (let current = root; current?.parentElement; current = current.parentElement) for (const sibling of current.parentElement.children) {
+    if (!modalManager) for (let current = root; current?.parentElement; current = current.parentElement) for (const sibling of current.parentElement.children) {
       if (sibling === current || ['SCRIPT', 'STYLE', 'LINK'].includes(sibling.tagName)) continue;
       if (!inertBefore.has(sibling)) inertBefore.set(sibling, sibling.inert); sibling.inert = true;
     }
-    q('title').focus(); refresh();
+    if (modalManager) modalManager.activate(root, { content: root.querySelector('[role=dialog]') || root, opener: trigger, initialFocus: q('title'), requestClose: close });
+    else q('title').focus();
+    refresh();
   }
   listen(root, 'click', event => { if (event.target === root || event.target.closest('[data-context-close]')) close(); });
   listen(doc, 'keydown', event => {
-    if (!opened || destroyed) return;
+    if (!opened || destroyed || modalManager) return;
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
     if (event.key !== 'Tab') return;
     const items = [...root.querySelectorAll('button,input,textarea,select,summary,[tabindex="0"]')].filter(node => !node.disabled && !node.closest('[hidden]') && node.getClientRects().length);

@@ -1,0 +1,28 @@
+name: desktop-ledger-snapshot
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['.github/workflows/desktop-ledger-snapshot.yml']
+permissions:
+  contents: read
+jobs:
+  source:
+    if: github.repository == 'Ninozzz95/talos'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Capture exact tracked Desktop source
+        run: |
+          mkdir output
+          git archive --format=zip --output=output/desktop-source.zip HEAD harness-ui context-engine docs .github README.md LICENSE NOTICE THIRD_PARTY_NOTICES.md
+          git rev-parse HEAD > output/SOURCE_COMMIT.txt
+          sha256sum output/desktop-source.zip > output/SHA256SUMS.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: talos-desktop-recovery-source-${{ github.sha }}
+          path: output/
+          retention-days: 7
+          compression-level: 0

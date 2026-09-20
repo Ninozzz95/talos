@@ -15,7 +15,19 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
  */
 
 import { existsSync as esisteSync, realpathSync as realpathSyncNativa } from 'node:fs';
+import { homedir } from 'node:os';
 import { basename as nomeBase, dirname as cartellaDi, relative as relativoA, resolve as risolvi, sep as separatore } from 'node:path';
+
+/**
+ * La home della persona, letta una volta per chiamata e SEMPRE sovrascrivibile dal chiamante
+ * (`{ home }`): una prova che dipende dalla macchina su cui gira non è una prova.
+ * ⛔ Se il sistema non sa dirla, si torna stringa vuota invece di lanciare: `~` e `$HOME`
+ * restano allora testo qualunque — nessuna espansione, e nessuna eccezione da un modulo che
+ * sta dentro un cancello di sicurezza.
+ */
+function homeDiSistema() {
+  try { return homedir() ?? ''; } catch { return ''; }
+}
 
 /**
  * ⭐⭐⭐ 04/9 — W1-13, I FILE DI CONTROLLO DI TALOS (review 03/09). Sono i file che decidono COSA
@@ -79,6 +91,273 @@ export function ePercorsoDiControllo(cartella, percorso, { realpathFn = realpath
   if (cartelle.some((s) => FILE_DI_CONTROLLO.cartelleOvunque.includes(s))) return true;
   if (dentro && cartelle.length > 0 && FILE_DI_CONTROLLO.cartelleAllaRadice.includes(cartelle[0])) return true;
   return false;
+}
+
+/**
+ * ⛔⛔⛔⛔ F15, 17/09/2026 — LA CLASSE DEI PERCORSI SEGRETI. Owner, P0-bis corsia D:
+ * «entrambi stretto». È l'INNESCO di una domanda, non un confine.
+ *
+ * ⛔ LA DISTINZIONE CHE TIENE IN PIEDI TUTTO IL FILE, ed è la stessa che
+ * `custom-task.mjs` (28/8) dichiara nel verso opposto: una denylist usata come
+ * CONFINE («questi percorsi non si toccano») è la strategia che la ricerca 2026
+ * dà per fallita — gli escape documentati stanno proprio in quella categoria
+ * (Docker, «AI Coding Agent Horror Stories», 18/05/2026; Pillar, «The Week of
+ * Sandbox Escapes», 20/07/2026). Qui la lista NON è il confine: è l'innesco di
+ * una DOMANDA alla persona. Chi la aggira (offuscando il percorso, leggendolo
+ * da uno script, montandolo altrove) ottiene il comportamento di OGGI, non un
+ * permesso in più: un innesco incompleto perde una domanda, un confine
+ * incompleto perde una chiave. ⇒ Aggiungere una voce qui non può rompere
+ * niente; toglierla non può aprire niente che oggi sia chiuso.
+ *
+ * ⭐ Ricerca PRIMA di scrivere (fonte + data), per la FORMA dell'elenco, non per copiarlo:
+ *   - Claude Code, «Configure permissions» (code.claude.com/docs/en/permissions, letta il
+ *     17/09/2026): le regole sui file si scrivono con la sintassi **gitignore**, con quattro
+ *     ancoraggi distinti — `//assoluto`, `~/home`, `/relativo-alla-sorgente`, `relativo`; un
+ *     nome nudo (`Read(.env)`) equivale allo stesso nome preceduto da un doppio asterisco,
+ *     cioè vale a QUALUNQUE profondità; su
+ *     Windows i percorsi sono normalizzati in forma POSIX prima del confronto; e una regola
+ *     `!` (`Read(*.env)` poi `Read(!sample.env)`) ritaglia le eccezioni.
+ *     ⇒ da qui tre scelte di questo file: (a) il confronto si fa sui SEGMENTI, non sulla
+ *     stringa; (b) i separatori Windows si normalizzano PRIMA; (c) esistono le ESENZIONI
+ *     (`.env.example`, `id_rsa.pub`), perché una domanda inutile addestra a cliccare sì.
+ *     ⛔ Dalla stessa pagina, il vincolo che questo file eredita: le regole sui percorsi
+ *     valgono per i comandi di lettura che il nome del file lo DICONO (`cat`, `head`, `sed`,
+ *     e i bersagli di `>`/`<`), non per chi legge un file senza nominarlo (`grep -r` dalla
+ *     cartella che lo contiene, o uno script che lo apre da solo). Stesso limite qui, ed è
+ *     dichiarato: questo è un innesco, non una sandbox.
+ *
+ * ⛔ I LIMITI NOTI, scritti qui perché nessuno li riscopra credendoli difetti (17/09/2026, dal
+ * controllo avversariale — dichiarati, non curati, perché curarli vorrebbe dire smettere di
+ * essere un innesco lessicale e diventare una sandbox):
+ *   - **i link simbolici non si vedono.** L'innesco guarda il TESTO del comando, non il disco:
+ *     un `ln -s ~/.ssh/id_rsa ./chiave` e poi `cat ./chiave` non chiede. `ePercorsoDiControllo`
+ *     qui sopra risolve il realpath perché giudica UN percorso; qui i pezzi sono molti e
+ *     spesso non esistono affatto (glob, variabili, argomenti) — toccare il disco per ognuno
+ *     sarebbe un costo per ogni comando e comunque non chiuderebbe il buco lessicale.
+ *   - **falsi positivi plausibili e accettati**: `ls /usr/share/keyrings` (una cartella di
+ *     chiavi APT pubbliche, che chiede per via del segmento `keyrings`) e un file `.key` di
+ *     Keynote. Entrambi producono UNA domanda in più, mai un blocco: il prezzo dichiarato del
+ *     lato conservativo su due nomi che nella stragrande maggioranza dei casi sono segreti.
+ *   - **lo stato di `cd` non è modellato**: dopo un `cd ~/.ssh`, un `cat config` in un comando
+ *     SUCCESSIVO non chiede — il pezzo `config` da solo non nomina niente di dichiarato, e
+ *     questo modulo non sa dove la shell si trova. (Nello STESSO comando, `cd ~/.ssh && cat
+ *     config` chiede, perché `~/.ssh` è lì da leggere.)
+ *   - Il registro, sulla cosa da proteggere: la ricerca sulle credenziali degli agenti 2026
+ *     (GitGuardian, «State of Secrets Sprawl 2026» — 24.008 segreti unici nei file di
+ *     configurazione MCP pubblici, ~150 segreti per portatile di sviluppatore, e ~40% dentro
+ *     le cartelle degli strumenti AI; Amazon Q, credenziali AWS vive caricate da
+ *     `.amazonq/mcp.json` senza consenso) dice che il posto dove i segreti stanno DAVVERO
+ *     sono le cartelle prevedibili della home e i file di ambiente — che è esattamente
+ *     questa lista, e non un elenco di comandi pericolosi.
+ *
+ * `cartelle`: un segmento con questo nome, a QUALUNQUE profondità, rende segreto tutto ciò
+ * che sta dentro (e la cartella stessa: `ls ~/.ssh` chiede). `fileInCartella`: solo quel nome
+ * dentro quella cartella — `~/.docker/` contiene anche `daemon.json`, che segreto non è.
+ * `nomiFile`/`prefissiNome`/`estensioni`: il nome finale, a qualunque profondità.
+ * `esenzioni`: ciò che per CONVENZIONE è pubblico e non deve mai generare una domanda.
+ */
+export const PERCORSI_SEGRETI = Object.freeze({
+  cartelle: Object.freeze(['.ssh', '.aws', '.gnupg', '.password-store', 'keyrings']),
+  fileInCartella: Object.freeze({
+    '.docker': Object.freeze(['config.json']),
+    '.kube': Object.freeze(['config']),
+  }),
+  // ⛔ `.provider-runtime.json` è il file dove TALOS custodisce le chiavi dei fornitori
+  //   (`provider-credential-store.mjs`, `runtimeFile`): sta già in `FILE_DI_CONTROLLO.file`
+  //   qui sopra, ma quella lista guarda le SCRITTURE del modello — non `shell` né `leggi`.
+  //   Le due liste dicono due cose diverse sullo stesso file, e vanno tenute entrambe.
+  nomiFile: Object.freeze(['.netrc', '_netrc', '.npmrc', '.pypirc', '.pgpass', '.git-credentials', '.provider-runtime.json']),
+  prefissiNome: Object.freeze(['id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa']),
+  estensioni: Object.freeze(['.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.ppk']),
+  esenzioni: Object.freeze(['.pub', '.example', '.sample', '.template', '.dist']),
+  /*
+   * ⛔ Le esenzioni che valgono ANCHE dentro una cartella dichiarata segreta, E anche contro il
+   * CONFINE (l'unico posto in tutto il file dove un'esenzione scavalca il secondo innesco). È
+   * una sola, e per una ragione precisa: `~/.ssh/id_rsa.pub` è una chiave PUBBLICA — si incolla
+   * in un pannello di deploy, si stampa a schermo, ed è una delle cose che si chiedono più
+   * spesso dentro `~/.ssh`. Chiedere lì insegna a rispondere sì senza leggere, e la volta che
+   * conta (`id_rsa`, senza `.pub`) la persona clicca sì per abitudine.
+   * ⛔ Solo per il FILE, mai per la cartella: `ls ~/.ssh` resta un segreto — elenca anche ciò
+   *   che pubblico non è.
+   * ⛔ Le altre quattro NON valgono dentro una cartella segreta né contro il confine:
+   *   `credenziali.sample` dentro `~/.aws` è un file che qualcuno ha chiamato così, non una
+   *   convenzione pubblica.
+   * ⛔ 17/09: questa riga è nata INERTE sul proprio esempio — l'esenzione c'era per la classe e
+   *   il confine chiedeva lo stesso. Un'esenzione che non esenta il caso che il suo commento
+   *   cita non è un'esenzione: è una frase. Curata, e provata su entrambi gli inneschi.
+   */
+  esenzioniOvunque: Object.freeze(['.pub']),
+  // Il portachiavi del sistema, nei tre sistemi operativi: si nomina per percorso…
+  coppiePortachiavi: Object.freeze([['library', 'keychains'], ['microsoft', 'credentials'], ['microsoft', 'vault']]),
+  // …oppure per il comando che lo apre. ⛔ Deliberatamente CORTO e non ambiguo: `security` da
+  //   solo è una parola comune, quindi entra solo con il suo sottocomando vero.
+  comandiPortachiavi: Object.freeze(['cmdkey', 'vaultcmd', 'secret-tool']),
+  frasiPortachiavi: Object.freeze([/\bsecurity\s+(?:find-generic-password|find-internet-password|dump-keychain)\b/i]),
+});
+
+/** Le tre scritture della home, più `~`: un innesco che non le conosce non innesca quasi mai. */
+function conLaHomeEspansa(grezzo, home) {
+  let t = String(grezzo).trim().replace(/^["'`]+/, '').replace(/["'`]+$/, '');
+  if (t === '') return '';
+  if (typeof home === 'string' && home !== '') {
+    t = t.replace(/^~(?=$|[\\/])/, home);
+    t = t.replace(/%USERPROFILE%|%HOME%|\$\{HOME\}|\$env:USERPROFILE|\$HOME(?![A-Za-z0-9_])/gi, home);
+  }
+  return t.replace(/\\/g, '/');
+}
+
+/** I segmenti veri di un percorso: via i vuoti, via `.` e `..` (che non sono nomi). */
+function segmentiDi(normalizzato) {
+  return normalizzato.split('/').filter((s) => s !== '' && s !== '.' && s !== '..');
+}
+
+function eEsente(base) {
+  return PERCORSI_SEGRETI.esenzioni.some((e) => base.endsWith(e));
+}
+
+/** Il NOME finale, da solo, dice che è un segreto? (`.env`, `.env.local`, `prod.env`, `id_rsa`, `*.pem`…) */
+function eNomeSegreto(base) {
+  const b = base.toLowerCase();
+  if (b === '') return false;
+  if (eEsente(b)) return false;
+  if (b === '.env' || b.startsWith('.env.') || b.endsWith('.env')) return true;
+  if (PERCORSI_SEGRETI.nomiFile.includes(b)) return true;
+  if (PERCORSI_SEGRETI.prefissiNome.some((p) => b.startsWith(p))) return true;
+  if (PERCORSI_SEGRETI.estensioni.some((e) => b.endsWith(e))) return true;
+  return false;
+}
+
+/** Un solo pezzo di testo (un percorso, o un token di un comando): appartiene alla classe dichiarata? */
+function classeDelPezzo(pezzo, home) {
+  const normalizzato = conLaHomeEspansa(pezzo, home);
+  // Un indirizzo web non è un percorso: `https://x/.well-known/...` non deve chiedere niente.
+  if (normalizzato === '' || normalizzato.includes('://')) return null;
+  const segmenti = segmentiDi(normalizzato);
+  if (segmenti.length === 0) return null;
+  const bassi = segmenti.map((s) => s.toLowerCase());
+  const pubblicoOvunque = PERCORSI_SEGRETI.esenzioniOvunque.some((e) => bassi[bassi.length - 1].endsWith(e));
+  if (!pubblicoOvunque && bassi.some((s) => PERCORSI_SEGRETI.cartelle.includes(s))) return 'segreto';
+  for (const [primo, secondo] of PERCORSI_SEGRETI.coppiePortachiavi) {
+    for (let i = 0; i + 1 < bassi.length; i += 1) if (bassi[i] === primo && bassi[i + 1] === secondo) return 'portachiavi';
+  }
+  const base = segmenti[segmenti.length - 1];
+  const cartelle = bassi.slice(0, -1);
+  for (const [cartella, nomi] of Object.entries(PERCORSI_SEGRETI.fileInCartella)) {
+    if (cartelle.includes(cartella) && nomi.includes(base.toLowerCase())) return 'segreto';
+  }
+  if (eNomeSegreto(base)) return 'segreto';
+  if (PERCORSI_SEGRETI.comandiPortachiavi.includes(base.toLowerCase())) return 'portachiavi';
+  return null;
+}
+
+/**
+ * I pezzi di un comando di shell che possono essere un percorso. ⛔ Non è un parser di shell e
+ * non pretende di esserlo: si spezza su spazi e metacaratteri, perché quello che serve è
+ * ACCORGERSI di un nome, non capire il comando. Un percorso fra virgolette CON spazi dentro si
+ * spezza — dichiarato: è un innesco, e ciò che gli sfugge resta il comportamento di oggi.
+ */
+export function pezziDelComando(comando) {
+  return String(comando ?? '').split(/[\s;|&<>()`"'=,]+/u).filter(Boolean);
+}
+
+/**
+ * ⛔⛔⛔ CASO 1 — il testo NOMINA un percorso della classe dichiarata?
+ * Vale sia per un comando intero (`cat ~/.ssh/id_rsa`) sia per un percorso solo
+ * (`~/.aws/credentials`): un percorso è un comando di un pezzo solo.
+ *
+ * @returns {null | {classe: 'segreto'|'portachiavi', percorso: string}} `percorso` è il pezzo
+ * COME LA PERSONA LO VEDRÀ, non risolto: chi risponde deve riconoscere ciò che ha davanti.
+ */
+export function nominaUnSegreto(testo, { home = homeDiSistema() } = {}) {
+  const intero = String(testo ?? '');
+  if (intero.trim() === '') return null;
+  for (const frase of PERCORSI_SEGRETI.frasiPortachiavi) {
+    if (frase.test(intero)) return { classe: 'portachiavi', percorso: intero.trim() };
+  }
+  for (const pezzo of pezziDelComando(intero)) {
+    const classe = classeDelPezzo(pezzo, home);
+    if (classe) return { classe, percorso: pezzo.replace(/^["'`]+/, '').replace(/["'`]+$/, '') };
+  }
+  return null;
+}
+
+/**
+ * ⛔⛔⛔ CASO 2 — IL CONFINE STRETTO: il percorso esce dal workspace E finisce dentro qualcosa
+ * di NASCOSTO (un segmento che comincia con `.`).
+ *
+ * ⛔ Sono DUE condizioni, e servono entrambe. Non «tutto ciò che esce dal workspace» (un
+ * `cat ../fratello/note.txt` è lavoro normale) e non «tutto ciò che sta sotto la home»
+ * (`echo $HOME` non tocca niente). Ogni domanda in più addestra a rispondere sì senza
+ * leggere — e una domanda a cui si risponde sì senza leggere non protegge da niente.
+ */
+export function esceDalWorkspaceVersoUnNascosto(percorso, { cartella, home = homeDiSistema() } = {}) {
+  const normalizzato = conLaHomeEspansa(percorso, home);
+  if (normalizzato === '' || normalizzato.includes('://')) return null;
+  // Senza una radice non si può dire «fuori»: nessun innesco, mai un falso allarme.
+  if (typeof cartella !== 'string' || cartella === '') return null;
+  // Un pezzo che non porta un separatore non è un percorso: `$HOME` non espansa, `--flag`, `npm`.
+  if (!/[\\/]/u.test(String(percorso ?? '')) && !String(percorso ?? '').trim().startsWith('~')) return null;
+  let radice;
+  let assoluto;
+  try {
+    radice = risolvi(cartella);
+    assoluto = risolvi(radice, normalizzato);
+  } catch { return null; }
+  if (isPathInside(radice, assoluto)) return null;
+  const segmenti = segmentiDi(assoluto.replace(/\\/g, '/'));
+  /*
+   * ⛔⛔⛔ B3 (17/09/2026) — l'esenzione `.pub` vince ANCHE qui, non solo sulla classe.
+   * Prima no, e il risultato era una incoerenza: il commento di `esenzioniOvunque` portava come
+   * esempio `~/.ssh/id_rsa.pub`, e proprio lì l'esenzione era inerte perché il confine chiedeva
+   * lo stesso. Una chiave pubblica è pubblica ovunque stia; chiedere per lei insegna a cliccare
+   * sì, e la volta che conta (`id_rsa`, senza `.pub`) la persona clicca sì per abitudine.
+   * ⛔ Solo per il FILE, mai per la cartella: `ls ~/.ssh` elenca anche ciò che pubblico non è,
+   *   e infatti resta un segreto per via della classe, che corre prima di questo controllo.
+   */
+  const ultimo = segmenti[segmenti.length - 1] ?? '';
+  if (PERCORSI_SEGRETI.esenzioniOvunque.some((e) => ultimo.toLowerCase().endsWith(e))) return null;
+  const nascosto = segmenti.find((s) => s.startsWith('.'));
+  if (!nascosto) return null;
+  return { classe: 'fuori-workspace-nascosto', percorso: String(percorso).trim(), nascosto };
+}
+
+/** La copia per la persona: lingua naturale, nessun nome tecnico, e DICE quale file. */
+function frasePerLaPersona(segnalazione, tipo) {
+  const azione = tipo === 'leggi'
+    ? { soggetto: 'Questa lettura apre', coda: 'vuoi che la faccia?' }
+    : { soggetto: 'Il comando tocca', coda: 'vuoi che lo esegua?' };
+  if (segnalazione.classe === 'portachiavi') {
+    const apre = tipo === 'leggi' ? 'Questa lettura apre' : 'Il comando apre';
+    return `${apre} il portachiavi del sistema, dove sono custodite le password: ${azione.coda}`;
+  }
+  const cosa = segnalazione.classe === 'segreto'
+    ? 'un file che può contenere chiavi o password'
+    : 'una cartella nascosta fuori dalla cartella di lavoro';
+  return `${azione.soggetto} ${cosa} (${segnalazione.percorso}): ${azione.coda}`;
+}
+
+/**
+ * ⛔⛔⛔⛔ F15 — LA DOMANDA UNICA, quella che il kernel chiama: questo comando (o questa
+ * lettura) va sottoposto alla persona ANCHE se l'attrezzo è impostato a «sempre»?
+ *
+ * ⛔ È una funzione PURA e l'unica porta: il kernel non deve rifare nessuna di queste
+ * decisioni, e chiunque voglia provarle non ha bisogno di avviare una sessione.
+ * ⛔ Torna `null` quando non c'è niente da chiedere — e `null` significa «il comportamento di
+ * oggi, bit per bit»: questo modulo non nega mai niente e non consente mai niente, decide
+ * soltanto se vale la pena disturbare la persona.
+ *
+ * @returns {null | {classe: string, percorso: string, frase: string}}
+ */
+export function motivoDaChiedere({ tipo, comando, percorso, cartella, home = homeDiSistema() } = {}) {
+  const testo = tipo === 'leggi' ? percorso : comando;
+  if (typeof testo !== 'string' || testo.trim() === '') return null;
+  const nominato = nominaUnSegreto(testo, { home });
+  if (nominato) return { ...nominato, frase: frasePerLaPersona(nominato, tipo) };
+  for (const pezzo of pezziDelComando(testo)) {
+    const fuori = esceDalWorkspaceVersoUnNascosto(pezzo, { cartella, home });
+    if (fuori) return { ...fuori, frase: frasePerLaPersona(fuori, tipo) };
+  }
+  return null;
 }
 
 export class PathPolicyError extends Error {

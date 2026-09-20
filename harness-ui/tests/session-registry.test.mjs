@@ -4,8 +4,12 @@ import { tmpdir } from 'node:os';
 import { join, parse as parsePath } from 'node:path';
 import test from 'node:test';
 
-import { percorsoScrittoDaEvento, registraScritturaDiFiglia } from '../src/session-registry.mjs';
+import { eventiSenzaMessaggio, messaggiSenzaMessaggio, posizioneDelMessaggio, testoDelMessaggioAssistente, percorsoScrittoDaEvento, registraScritturaDiFiglia } from '../src/session-registry.mjs';
+import { creaFetchMultiProvider } from '../src/runtime-owner-adapter.mjs';
 import {
+  candidatiGiudice,
+  creaChiediAlModelloGiudice,
+  modelloDiSessionePerRete,
   createSessionRegistry as createSessionRegistryReale,
   guardiaDiStallo,
   metricheDaEventi,
@@ -15,6 +19,10 @@ import {
   SOGLIE_STALLO_PREDEFINITE,
 } from '../src/session-registry.mjs';
 import { CustomTaskError } from '../src/custom-task.mjs';
+// ⛔ F15 (17/09/2026) — il kernel VERO: da quando il canale di approvazione si costruisce sempre,
+//   le garanzie che prima si leggevano dalla sua ASSENZA («in sola lettura non scrive», «sempre e
+//   nega li decide il cancello da solo») vanno provate dove vivono davvero, cioè nel cancello.
+import { talosLavora as talosLavoraReale } from '../src/kernel/talosHarness.mjs';
 // BC-09 (13/09/2026): la copia locale dei ritentativi e diventata l'aiuto condiviso, uno solo per tutta la suite.
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
@@ -113,6 +121,30 @@ function sessioneControllabile() {
     get segnaleStop() { return inputCatturato?.segnaleStop; },
     get chiamate() { return chiamate; },
     get ultimoInput() { return inputCatturato; },
+  };
+}
+
+/** Più run davvero indipendenti: serve a provare madre e figlia vive nello stesso istante. */
+function sessioniControllabili() {
+  const run = [];
+  return {
+    avviaSessioneFn(input) {
+      let risolvi;
+      const promessa = new Promise((resolve) => { risolvi = resolve; });
+      const indice = run.length;
+      const voce = { input, risolvi, conclusa: false };
+      run.push(voce);
+      input.onEvento({ type: 'RunStarted', threadId: `t${indice + 1}`, runId: `r${indice + 1}` });
+      return promessa;
+    },
+    emetti(indice, evento) { run[indice].input.onEvento(evento); },
+    concludi(indice, evento, risultato = { ok: true }) {
+      run[indice].input.onEvento(evento);
+      run[indice].conclusa = true;
+      run[indice].risolvi(risultato);
+    },
+    run(indice) { return run[indice]; },
+    get chiamate() { return run.length; },
   };
 }
 
@@ -678,108 +710,124 @@ test('⛔ ferma() su un id inesistente torna false, non lancia', () => {
   assert.equal(registro.ferma('non-esiste'), false);
 });
 
-test('SESSION-LOCAL-START-01/STREAM-01: runtime locale avvia senza chiave e traduce lo stream in AG-UI', async () => {
-  const runtime = {
-    async *generateStream({ signal }) {
-      yield { type: 'text', value: 'ciao' };
-      yield { type: 'reasoning', value: 'motivo' };
-      yield { type: 'tool_call', id: 'tool-1', name: 'noop', arguments: '{}' };
-      if (signal?.aborted) return;
-      yield { type: 'done' };
-    },
-  };
+/*
+ * ⛔⛔⛔ BC-76 (17/09/2026) — LE QUATTRO PROVE QUI SOTTO SONO STATE RISCRITTE, NON INDEBOLITE.
+ *
+ * Provavano `eseguiRuntimeLocale`: una sessione `provider:'local'` che chiamava direttamente
+ * `localRuntimes[runtimeId].generateStream` e traduceva a mano il suo flusso in eventi AG-UI.
+ * Quella funzione non esiste più — faceva UNA chiamata senza `tools` e su una `tool_call` emetteva
+ * `ToolCallStart` + `ToolCallArgs` e si fermava, cioè mostrava un'attività mai avvenuta.
+ *
+ * ⇒ Una sessione locale adesso passa dal giro del kernel come tutte le altre, e il motore locale è
+ *   il TRASPORTO. Ciò che queste prove devono difendere non è più «come si traduce il flusso» (lo
+ *   fa il kernel, una volta sola per tutti i fornitori) ma l'INSTRADAMENTO: che una sessione locale
+ *   parta senza una chiave di rete, che il nome del modello esca col prefisso della sua fonte, che
+ *   stop e correzione la raggiungano, e che il ripiego sul cloud voglia un consenso esplicito.
+ *   Il comportamento di agente vero — attrezzi eseguiti, permessi, disco — sta in
+ *   `tests/bc76-sessione-locale-agente.test.mjs`, dalla strada vera con un motore su 127.0.0.1.
+ */
+test('SESSION-LOCAL-START-01/STREAM-01: una sessione locale parte SENZA chiave e va al kernel col nome prefissato dalla sua fonte', async () => {
+  const finta = sessioneControllabile();
+  const runtime = { async *generateStream() { throw new Error('⛔ nessuno deve più passare di qui'); } };
   const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn,
     preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', localRuntimes: { ollama: runtime },
   });
   const avvio = registro.avvia('task-vero', { provider: 'local', runtimeId: 'ollama', modelId: 'qwen3:8b' });
-  assert.equal(typeof avvio.sessionId, 'string');
+  assert.equal(typeof avvio.sessionId, 'string', '⛔ senza chiave di rete una sessione locale deve partire lo stesso');
   await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(finta.chiamate, 1, '⛔ il giro è quello del kernel, non una seconda strada');
+  assert.equal(finta.ultimoInput.modello, 'ollama:qwen3:8b',
+    '⛔ il prefisso è ciò che manda la richiesta al motore GIUSTO: `ollama:`, non `local:` (che è il ponte di llama-server)');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
   const eventi = registro.esporta(avvio.sessionId).eventi;
-  assert.deepEqual(eventi.map((evento) => evento.type), [
-    'RunStarted', 'TextMessageStart', 'TextMessageContent', 'ReasoningMessageStart',
-    'ReasoningMessageContent', 'ToolCallStart', 'ToolCallArgs', 'TextMessageEnd',
-    'ReasoningMessageEnd', 'RunFinished',
-  ]);
+  assert.deepEqual(eventi.map((evento) => evento.type), ['RunStarted', 'RunFinished']);
   assert.equal(registro.elenca()[0].provider, 'local');
   assert.equal(registro.elenca()[0].runtimeId, 'ollama');
   assert.equal(registro.elenca()[0].modelId, 'qwen3:8b');
-  assert.ok(eventi.every((evento) => evento.provider === 'local' && evento.runtimeId === 'ollama' && evento.modelId === 'qwen3:8b' && evento.backend === 'ollama' && Number.isFinite(Date.parse(evento.at))));
 });
 
-test('SESSION-LOCAL-CANCEL-01: ferma abortisce il runtime locale e chiude il giro', async () => {
-  let signal;
-  const runtime = {
-    async *generateStream(input) {
-      signal = input.signal;
-      yield { type: 'text', value: 'parziale' };
-      await new Promise((resolve) => input.signal.addEventListener('abort', resolve, { once: true }));
-    },
-  };
-  const registro = createSessionRegistry({ preparaEsecuzioneFn: preparaEsecuzioneFinta, localRuntimes: { llama: runtime } });
-  const { sessionId } = registro.avvia('task-vero', { provider: 'local', runtimeId: 'llama', modelId: 'model' });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(signal.aborted, false);
-  assert.equal(registro.ferma(sessionId), true);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  const eventi = registro.esporta(sessionId).eventi;
-  assert.equal(eventi.at(-1).type, 'RunFinished');
-  assert.equal(eventi.at(-1).outcome, 'fermato');
-});
-
-test('SESSION-LOCAL-REDIRECT-02 — il runtime locale conserva richiesta originale, risposta parziale e correzione', async () => {
-  const inputVisti = [];
-  let chiamata = 0;
-  const runtime = {
-    async *generateStream(input) {
-      inputVisti.push(input.messages);
-      chiamata += 1;
-      if (chiamata === 1) {
-        yield { type: 'text', value: 'parziale' };
-        await new Promise((resolve) => input.signal.addEventListener('abort', resolve, { once: true }));
-        return;
-      }
-      yield { type: 'text', value: 'OK' };
-      yield { type: 'done' };
-    },
-  };
+test('SESSION-LOCAL-CANCEL-01: ferma abortisce il giro di una sessione locale', async () => {
+  const finta = sessioneControllabile();
   const registro = createSessionRegistry({
-    preparaEsecuzioneFn: preparaEsecuzioneFinta,
-    localRuntimes: { llama: runtime },
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta, localRuntimes: { llama: {} },
   });
   const { sessionId } = registro.avvia('task-vero', { provider: 'local', runtimeId: 'llama', modelId: 'model' });
   await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(finta.segnaleStop.aborted, false);
+  assert.equal(registro.ferma(sessionId), true);
+  assert.equal(finta.segnaleStop.aborted, true, '⛔ lo stop deve arrivare al kernel, non a un secondo motore');
+  finta.concludi({ type: 'RunError', message: 'fermato', code: 'fermato' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
+
+test('SESSION-LOCAL-REDIRECT-02 — una sessione locale conserva richiesta originale, risposta parziale e correzione', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    localRuntimes: { llama: {} },
+  });
+  const { sessionId } = registro.avvia('task-vero', { provider: 'local', runtimeId: 'llama', modelId: 'model' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const primoInput = finta.ultimoInput.messaggiIniziali;
+
   assert.equal(registro.reindirizza(sessionId, 'correzione').ok, true);
+  finta.concludi({ type: 'RunError', message: 'fermato', code: 'fermato' }, {
+    ok: false,
+    esito: { comeFinita: 'fermato', messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'parziale' }] },
+  });
   await new Promise((resolve) => setTimeout(resolve, 0));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.deepEqual(inputVisti[0], [{ role: 'user', content: 'c' }]);
-  assert.deepEqual(inputVisti[1], [
+  assert.equal(primoInput, undefined, 'il primo giro parte dalla consegna, senza cronologia da ereditare');
+  assert.deepEqual(finta.ultimoInput.messaggiIniziali, [
     { role: 'user', content: 'c' },
     { role: 'assistant', content: 'parziale' },
     { role: 'user', content: 'correzione' },
   ]);
+  /* ⛔ `local:` e non `llama:` — `llama` non è un motore con un indirizzo suo (non è fra i
+     `ID_MOTORI_LOCALI_OPENAI` del registro), quindi passa dal ponte del supervisore. */
+  assert.equal(finta.ultimoInput.modello, 'local:model',
+    '⛔ anche il giro della correzione parte col nome prefissato: un id nudo finirebbe a openrouter.ai');
 });
 
 test('SESSION-LOCAL-FALLBACK-01: fallback cloud solo con consenso esplicito', async () => {
-  let chiamateCloud = 0;
-  const cloud = async ({ onEvento }) => {
-    chiamateCloud += 1;
+  /*
+   * ⛔ BC-76: il guasto del motore locale NON è più un'eccezione che risale — `avviaSessioneFn`
+   *   (cioè `agent-service.avviaSessione`) non lancia mai e torna `{ok:false, esito:null}` dopo
+   *   aver emesso il suo `RunError`. Il ripiego si decide su quel valore, ed è per questo che la
+   *   finta qui sotto lo riproduce alla lettera invece di lanciare.
+   */
+  const modelliVisti = [];
+  const cloud = async ({ onEvento, modello }) => {
+    modelliVisti.push(modello);
+    if (typeof modello === 'string' && modello.startsWith('ollama:')) {
+      onEvento({ type: 'RunError', message: 'motore locale irraggiungibile', code: 'RUNTIME_UNREACHABLE' });
+      return { ok: false, esito: null, erroreInterno: 'motore locale irraggiungibile', codiceErrore: 'RUNTIME_UNREACHABLE' };
+    }
     onEvento({ type: 'RunFinished', threadId: 't', runId: 'r' });
     return { ok: true, esito: { messaggiFinali: [] } };
   };
-  const runtime = { async *generateStream() { throw Object.assign(new Error('runtime down'), { code: 'RUNTIME_UNREACHABLE' }); } };
   const registro = createSessionRegistry({
-    avviaSessioneFn: cloud, preparaEsecuzioneFn: preparaEsecuzioneFinta, chiave: 'k', localRuntimes: { ollama: runtime },
+    avviaSessioneFn: cloud, preparaEsecuzioneFn: preparaEsecuzioneFinta, chiave: 'k', modello: 'vendor/di-serie',
+    localRuntimes: { ollama: {} },
   });
   const senza = registro.avvia('task-vero', { provider: 'local', runtimeId: 'ollama', modelId: 'm' });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(chiamateCloud, 0);
+  assert.deepEqual(modelliVisti, ['ollama:m'], '⛔ senza consenso non si esce di casa: nessun secondo giro');
   assert.equal(registro.esporta(senza.sessionId).eventi.at(-1).type, 'RunError');
   assert.equal(registro.esporta(senza.sessionId).eventi.at(-1).code, 'RUNTIME_UNREACHABLE');
 
   const con = registro.avvia('task-vero', { provider: 'local', runtimeId: 'ollama', modelId: 'm', fallbackConsent: true });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(chiamateCloud, 1);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(modelliVisti, ['ollama:m', 'ollama:m', 'vendor/di-serie'],
+    '⛔ col consenso il secondo giro parte col modello di SERIE del server, mai col nome del GGUF locale');
   assert.ok(registro.esporta(con.sessionId).eventi.some((evento) => evento.type === 'RuntimeFallback'));
 });
 
@@ -934,7 +982,10 @@ test('OPEN-WITH-TALOS-REGISTRY-01 — un launch id server-owned usa Workspace wr
   assert.ok(risultato.sessionId);
   assert.equal(finta.ultimoInput.cartella, '/tmp/workspace-da-shell');
   assert.equal(finta.ultimoInput.livelloAccesso, undefined);
-  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined);
+  // ⛔ F15 (17/09) — ciò che questa riga protegge è «Workspace write, non Full access», e lo dice
+  //   `livelloAccesso` qui sopra. Il canale ora c'è sempre (vedi la doc a :1031): la sua presenza
+  //   non concede niente — è solo il modo di CHIEDERE invece di negare.
+  assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function');
   assert.equal(registro.elenca().find((sessione) => sessione.sessionId === risultato.sessionId)?.permessi, 'Workspace write');
   assert.deepEqual(consumati, ['launch-vero']);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
@@ -1028,26 +1079,70 @@ test('⭐⭐ un resume eredita il modelloPlanner della voce originale, mai perso
  * assenza di un'approvazione interattiva è esattamente il gap che
  * "On request" qui sotto colma).
  */
-test('⭐ default: senza permessi espliciti, la voce è "Workspace write" — nessun livelloAccesso, nessun chiediApprovazioneFn', () => {
+/*
+ * ⛔⛔⛔⛔ F15, 17/09/2026 — QUESTI TEST FISSAVANO UN CONTRATTO CHE È CAMBIATO, di proposito.
+ *
+ * Fino a oggi il registro costruiva `chiediApprovazioneFn` SOLO per «Su richiesta» (o se un
+ * attrezzo era su «chiedi»), e questi test lo verificavano con `chiediApprovazioneFn ===
+ * undefined`. Quel canale assente faceva sì che un cancello che deve CHIEDERE finisse per
+ * NEGARE: il kernel, davanti a un `vaChiesto` vero senza canale, risponde `REFUSED … nessun
+ * canale di approvazione attivo`. Misurato su F15: `cat .env` dentro il workspace, che prima
+ * girava, diventava REFUSED nella configurazione PREDEFINITA.
+ *
+ * ⇒ Il canale ora si costruisce sempre. ⛔ Ma la GARANZIA che questi test proteggevano non è
+ *   «il canale non esiste»: è «una sessione in sola lettura non scrive, e una predefinita non
+ *   comincia a chiedere per ogni cosa». Quella garanzia vive nel LIVELLO, non nell'assenza del
+ *   canale — e infatti è ciò che questi test asseriscono adesso, insieme al fatto che il canale
+ *   c'è. `livelloAccesso` è rimasto identico in tutti e tre i casi: quello è il contratto vero.
+ */
+test('⭐ default: senza permessi espliciti, la voce è "Workspace write" — nessun livelloAccesso, e il canale c\'è (F15)', () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero');
 
   assert.equal(finta.ultimoInput.livelloAccesso, undefined);
-  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined);
+  assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function', 'il canale esiste sempre: senza, un cancello che deve chiedere nega');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
-test('⭐⭐⭐ "Read only" diventa livelloAccesso:\'lettura\' per il kernel, MAI chiediApprovazioneFn', () => {
+test('⭐⭐⭐ "Read only" diventa livelloAccesso:\'lettura\' per il kernel — è il LIVELLO a vietare la scrittura, non l\'assenza del canale', () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero', { permessiScelto: 'Read only' });
 
   assert.equal(finta.ultimoInput.livelloAccesso, 'lettura');
-  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined);
+  assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
+ * ⛔⛔⛔ E LA GARANZIA VERA, PROVATA INVECE DI ESSERE DEDOTTA: il test qui sopra prima diceva
+ * «niente canale ⇒ non può scrivere». Tolta quella premessa, la frase va PROVATA — altrimenti
+ * si è cambiato un contratto fidandosi di un ragionamento. Il kernel vero, in sola lettura, con
+ * un canale che direbbe SÌ a tutto: la scrittura resta negata e il file non compare.
+ */
+test('⛔⛔⛔ AL CONTRARIO (F15) — in sola lettura, un canale che approva TUTTO non fa passare una scrittura', async (t) => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-f15-lettura-'));
+  t.after(() => rimuoviCartellaDiProva(cartella));
+  const risposte = [
+    { role: 'assistant', content: null, tool_calls: [{ id: 'c1', function: { name: 'scrivi', arguments: '{"percorso":"nuovo.txt","contenuto":"ciao"}' } }] },
+    { role: 'assistant', content: 'fatto', tool_calls: [] },
+  ];
+  let indice = 0;
+  const fetchDiRete = async () => {
+    const scelta = risposte[Math.min(indice++, risposte.length - 1)];
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: scelta }], usage: { prompt_tokens: 1, completion_tokens: 1 } }), text: async () => '' };
+  };
+  let interpellato = 0;
+  await talosLavoraReale({
+    cartella, task: { consegna: 'prova' }, modello: 'x', chiave: 'y', fetchDiRete,
+    livelloAccesso: 'lettura',
+    chiediApprovazioneFn: async () => { interpellato += 1; return true; },
+  });
+  assert.equal(existsSync(join(cartella, 'nuovo.txt')), false, 'il livello «lettura» nega PRIMA di chiedere: il canale non lo scavalca');
+  assert.equal(interpellato, 0, 'e non viene nemmeno interpellato: non è una domanda a cui si può rispondere sì');
 });
 
 test('⭐⭐⭐ 06/9 — "On request" dichiara il LIVELLO al kernel, oltre al canale', () => {
@@ -1076,7 +1171,9 @@ test('FULL-ACCESS-REGISTRY-01 Full access arriva esplicito al kernel, Workspace 
     const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
     registro.avvia('task-vero', { permessiScelto });
     assert.equal(finta.ultimoInput.livelloAccesso, permessiScelto === 'Full access' ? 'accesso-pieno' : undefined, permessiScelto);
-    assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, permessiScelto);
+    // ⛔ F15 (17/09) — il contratto che questa riga fissa è il LIVELLO, e resta identico nei due casi.
+    //   Il canale c'è sempre (doc a :1031): serve a chiedere, non a permettere.
+    assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function', permessiScelto);
     finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
   }
 });
@@ -1374,14 +1471,37 @@ test('⭐⭐⭐ "Workspace write" con permessiPerAttrezzo:{shell:\'chiedi\'} COS
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
-test('⭐⭐ AL CONTRARIO — "Workspace write" con permessiPerAttrezzo SENZA alcun \'chiedi\' (solo sempre/nega) NON costruisce chiediApprovazioneFn', () => {
-  const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
-
-  registro.avvia('task-vero', { permessiScelto: 'Workspace write', permessiPerAttrezzoScelto: { scrivi: 'sempre', shell: 'nega' } });
-
-  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, 'sempre/nega non hanno bisogno di un canale interattivo: li decide il gate da solo');
-  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+/*
+ * ⛔ F15 (17/09/2026) — questo test provava «sempre/nega non costruiscono il canale» per dire
+ * «li decide il gate da solo». La premessa è caduta (il canale c'è sempre, doc a :1031), la
+ * frase che contava no — e adesso si prova quella, sul kernel VERO invece che su un proxy: con
+ * `scrivi:'sempre'` e `shell:'nega'`, un canale che direbbe sì a tutto non viene interpellato
+ * nemmeno una volta. È una prova più forte di quella di prima, non più debole.
+ */
+test('⭐⭐ AL CONTRARIO — "sempre"/"nega" li decide il cancello DA SOLO: con un canale che approverebbe tutto, ZERO domande', async (t) => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-f15-sempre-nega-'));
+  t.after(() => rimuoviCartellaDiProva(cartella));
+  const risposte = [
+    { role: 'assistant', content: null, tool_calls: [
+      { id: 'c1', function: { name: 'scrivi', arguments: '{"percorso":"nuovo.txt","contenuto":"ciao"}' } },
+      { id: 'c2', function: { name: 'shell', arguments: '{"comando":"echo segno>marker.txt"}' } },
+    ] },
+    { role: 'assistant', content: 'fatto', tool_calls: [] },
+  ];
+  let indice = 0;
+  const fetchDiRete = async () => {
+    const scelta = risposte[Math.min(indice++, risposte.length - 1)];
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: scelta }], usage: { prompt_tokens: 1, completion_tokens: 1 } }), text: async () => '' };
+  };
+  let interpellato = 0;
+  await talosLavoraReale({
+    cartella, task: { consegna: 'prova' }, modello: 'x', chiave: 'y', fetchDiRete,
+    permessiPerAttrezzo: { scrivi: 'sempre', shell: 'nega' },
+    chiediApprovazioneFn: async () => { interpellato += 1; return true; },
+  });
+  assert.equal(interpellato, 0, 'sempre/nega non hanno bisogno di un canale interattivo: li decide il cancello da solo');
+  assert.equal(existsSync(join(cartella, 'nuovo.txt')), true, '«sempre» scrive senza chiedere');
+  assert.equal(existsSync(join(cartella, 'marker.txt')), false, '«nega» resta «nega», e non diventa una domanda');
 });
 
 /*
@@ -1504,7 +1624,16 @@ test('⭐⭐⭐ W1-13 — il cancello chiede approvazione ANCHE in Full access, 
   });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
 
-  assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, 'Full access non costruisce mai il canale ordinario — è esattamente il buco che questa riga chiude');
+  /*
+   * ⛔ F15 (17/09/2026) — questa riga diceva «Full access non costruisce mai il canale
+   * ordinario». Non è più vero (vedi la doc a :1031: il canale c'è sempre, altrimenti un
+   * cancello che deve chiedere nega), e NON era comunque ciò che il test prova: W1-13 prova che
+   * il cancello dei file di controllo passa dal PROPRIO canale, quello dentro `hookFn`, e chiede
+   * anche dove `verificaPermessoScrittura` lascerebbe passare in silenzio. Quella prova è le
+   * venti righe qui sotto, ed è intatta — il livello di questa sessione resta `accesso-pieno`,
+   * cioè il caso in cui il kernel NON chiederebbe.
+   */
+  assert.equal(finta.ultimoInput.livelloAccesso, 'accesso-pieno', 'è il caso in cui il cancello ordinario del kernel non chiederebbe: il buco che questa riga chiude');
 
   const ricevuti = [];
   registro.iscriviti(sessionId, (e) => ricevuti.push(e));
@@ -2242,8 +2371,15 @@ test('⛔ verso contrario: se compattaSessioneFn torna compattato:false, un resu
     numeroChiamata += 1;
     return numeroChiamata === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input);
   };
+  /*
+   * ⛔ 17/09, quarto giro: qui c'era `modello: 'm'`. Dal controllo sulla FORMA (`fornitore:modello`
+   *   o `organizzazione/modello`) un nome giocattolo non è più attribuibile a nessun fornitore e
+   *   la compattazione lo RIFIUTA — che è il punto: un id nudo è la forma di un GGUF locale, e
+   *   ripiegarlo sul cloud era il difetto. Il nome qui diventa realistico invece di allargare la
+   *   regola; ciò che questa prova misura (il resume dopo `compattato:false`) non cambia.
+   */
   const registro = createSessionRegistry({
-    avviaSessioneFn: avviaSessioneFnCombinato, preparaEsecuzioneFn: preparaEsecuzioneFinta, compattaSessioneFn, modello: 'm', chiave: 'k',
+    avviaSessioneFn: avviaSessioneFnCombinato, preparaEsecuzioneFn: preparaEsecuzioneFinta, compattaSessioneFn, modello: 'z-ai/glm-4.7-flash', chiave: 'k',
   });
   const { sessionId } = registro.avvia('task-vero');
   primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: storiaFinale } });
@@ -2833,24 +2969,181 @@ test('⭐⭐⭐ onDelega è SEMPRE costruito su avvia() — una funzione vera, a
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
-test('⭐⭐⭐⭐ delega FILO INTERO: onDelega del padre avvia DAVVERO una seconda sessione isolata, e la Promise si sblocca quando la figlia conclude', async () => {
-  const finta = sessioneControllabile(); // STESSO fake per padre e figlio: avviaSessioneFn è iniettato una volta sola sul registro, la seconda avviaESegui() (per la delega) lo richiama identico
+test('⭐⭐⭐⭐ delega FILO INTERO: la madre riceve AVVIATO subito, continua viva e il terminale della figlia entra nella FIFO canonica', async () => {
+  const finta = sessioniControllabili();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId: padreId } = registro.avvia('task-vero');
-  const onDelegaDelPadre = finta.ultimoInput.onDelega;
+  const onDelegaDelPadre = finta.run(0).input.onDelega;
 
-  const promessaDelega = onDelegaDelPadre('scrivi un modulo di test', '/tmp/figlio-isolato');
-  // ⛔ dopo questa chiamata, finta.ultimoInput punta al FIGLIO (la seconda chiamata ad avviaSessioneFn) — è la prova che avviaESegui è stato richiamato per davvero, non solo che l'orchestratore ha fatto finta.
+  const esitoAvvio = await Promise.race([
+    onDelegaDelPadre('scrivi un modulo di test', '/tmp/figlio-isolato'),
+    new Promise((resolve) => setTimeout(() => resolve({ esito: 'timeout-test' }), 50)),
+  ]);
   assert.equal(finta.chiamate, 2, 'la delega deve aver richiamato avviaSessioneFn una SECONDA volta, per il figlio');
-  assert.equal(finta.ultimoInput.cartella, '/tmp/figlio-isolato', 'la figlia lavora nella SUA cartella, mai in quella del padre');
-  assert.notEqual(finta.ultimoInput.cartella, '/tmp/x', 'per chiarezza: /tmp/x è la cartella del padre in questo test');
+  assert.equal(finta.run(1).input.cartella, '/tmp/figlio-isolato', 'la figlia lavora nella SUA cartella, mai in quella del padre');
+  assert.equal(esitoAvvio.esito, 'avviato');
+  assert.equal(esitoAvvio.childId, [...registro.elenca()].find((s) => s.padreId === padreId).sessionId);
+  assert.equal(finta.run(0).conclusa, false, 'il giro della madre non è stato chiuso per aspettare la figlia');
 
-  finta.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'Modulo scritto e testato.', comeFinita: 'concluso', messaggiFinali: [] } });
-  const esitoDelega = await promessaDelega;
-  assert.deepEqual(esitoDelega, { riassunto: 'Modulo scritto e testato.', esito: 'concluso' });
+  finta.concludi(1, { type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'Modulo scritto e testato.', comeFinita: 'concluso', messaggiFinali: [] } });
+  await new Promise((r) => setImmediate(r));
+  const consegnaCanonica = finta.run(0).input.codaMessaggiFn();
+  assert.match(consegnaCanonica, /Modulo scritto e testato\./);
+  assert.match(consegnaCanonica, /sotto-agente/i);
 
   const figliDelPadre = registro.elencaFigli(padreId);
   assert.equal(figliDelPadre.figli.length, 1, 'il registro riconosce la figlia come figlia DI QUESTO padre, non una sessione slegata');
+  assert.equal(figliDelPadre.figli[0].esitoDelega, 'concluso');
+  finta.concludi(0, { type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { detto: 'madre conclusa', comeFinita: 'concluso', messaggiFinali: [] } });
+});
+
+test('AGENTI LIVE: created/updated/completed arrivano agli antenati, con stato reale e senza argomenti o output privati', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: radiceId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(radiceId, (evento) => ricevuti.push(evento));
+
+  const primo = await finta.run(0).input.onDelega('analizza il modulo senza mostrare segreti', '/tmp/figlio');
+  await new Promise((resolve) => setImmediate(resolve));
+  finta.emetti(1, { type: 'ReasoningStart', messageId: 'reason-1' });
+  finta.emetti(1, { type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: { prompt_tokens: 3, completion_tokens: 2, cached_tokens: 0, giri: 1 } }] });
+  finta.emetti(1, { type: 'ToolCallStart', toolCallId: 'tool-1', toolCallName: 'leggi' });
+  finta.emetti(1, { type: 'ToolCallArgs', toolCallId: 'tool-1', delta: '{"token":"SEGRETO-ARG"}' });
+  finta.emetti(1, { type: 'ToolCallOutput', toolCallId: 'tool-1', delta: 'SEGRETO-STREAM' });
+  finta.emetti(1, { type: 'ToolCallResult', toolCallId: 'tool-1', content: 'SEGRETO-OUTPUT' });
+
+  const eventiFiglio = [];
+  registro.iscriviti(primo.childId, (evento) => eventiFiglio.push(evento));
+  const attesaApprovazione = finta.run(1).input.chiediApprovazioneFn({ tipo: 'scrivi', percorso: '/tmp/figlio/a.txt' });
+  const richiesta = eventiFiglio.find((evento) => evento.type === 'ApprovalRequested');
+  assert.ok(richiesta);
+  assert.equal(registro.elencaFigli(radiceId).figli[0].approvalPendingCount, 1);
+  assert.equal(registro.rispondiApprovazione(primo.childId, richiesta.requestId, true).ok, true);
+  assert.equal(await attesaApprovazione, true);
+  finta.concludi(1, { type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'analisi conclusa', comeFinita: 'concluso', messaggiFinali: [] } });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const live = ricevuti.filter((evento) => evento.type === 'CUSTOM' && evento.name === 'talos.agenti');
+  assert.ok(live.some((evento) => evento.value.reason === 'created'));
+  assert.ok(live.some((evento) => evento.value.reason === 'updated' && evento.value.operation.kind === 'reasoning'));
+  assert.ok(live.some((evento) => evento.value.reason === 'updated' && evento.value.operation.kind === 'tool'));
+  assert.ok(live.some((evento) => evento.value.reason === 'completed'));
+  for (const evento of live) {
+    assert.equal(evento.value.version, 1);
+    assert.equal(evento.value.sessionId, radiceId);
+    assert.equal(evento.value.parentId, radiceId);
+    assert.equal(evento.value.childId, primo.childId);
+    assert.equal(evento.value.agent.sessionId, primo.childId);
+    assert.equal(evento.value.agent.padreId, radiceId);
+  }
+  const serializzato = JSON.stringify(live);
+  assert.doesNotMatch(serializzato, /SEGRETO-(?:ARG|STREAM|OUTPUT)/);
+  const snapshot = registro.elencaFigli(radiceId).figli[0];
+  assert.equal(snapshot.conclusa, true);
+  assert.equal(snapshot.approvalPendingCount, 0);
+  assert.equal(snapshot.ultimoEsito, 'successo');
+  assert.equal(snapshot.usageSessione.prompt_tokens, 3);
+  assert.equal(snapshot.operazioneCorrente, null);
+  assert.equal(typeof snapshot.conclusaAlle, 'string');
+  finta.concludi(0, { type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { detto: 'radice conclusa', comeFinita: 'concluso', messaggiFinali: [] } });
+});
+
+test('AGENTI LIVE: una nipote mantiene parentId reale ma viene notificata anche alla radice; fermare la radice non abortisce la discendenza', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: radiceId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(radiceId, (evento) => ricevuti.push(evento));
+  const figlio = await finta.run(0).input.onDelega('coordina una fase', '/tmp/figlio');
+  const nipote = await finta.run(1).input.onDelega('esegui il controllo isolato', '/tmp/nipote');
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const creazioneNipote = ricevuti.find((evento) => evento.type === 'CUSTOM' && evento.name === 'talos.agenti'
+    && evento.value.reason === 'created' && evento.value.childId === nipote.childId);
+  assert.ok(creazioneNipote);
+  assert.equal(creazioneNipote.value.sessionId, radiceId);
+  assert.equal(creazioneNipote.value.parentId, figlio.childId);
+  assert.equal(creazioneNipote.value.agent.padreId, figlio.childId);
+
+  assert.equal(registro.ferma(radiceId), true);
+  assert.equal(finta.run(0).input.segnaleStop.aborted, true);
+  assert.equal(finta.run(1).input.segnaleStop.aborted, false);
+  assert.equal(finta.run(2).input.segnaleStop.aborted, false);
+  finta.concludi(2, { type: 'RunFinished', threadId: 't3', runId: 'r3' }, { ok: true, esito: { detto: 'controllo finito', comeFinita: 'concluso', messaggiFinali: [] } });
+  finta.concludi(1, { type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'fase finita', comeFinita: 'concluso', messaggiFinali: [] } });
+  finta.concludi(0, { type: 'RunError', code: 'fermato', threadId: 't1', runId: 'r1' }, { ok: false, esito: { detto: 'fermata', comeFinita: 'fermato', messaggiFinali: [] } });
+});
+
+test('DELEGA DURABILE: se la madre conclude prima della figlia, il risultato entra nello storico una volta sola con provenienza persistita', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const finta = sessioniControllabili();
+  try {
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+    const { sessionId: padreId } = registro.avvia('task-vero');
+    const avvio = await finta.run(0).input.onDelega('raccogli il risultato in background', '/tmp/figlio');
+    finta.concludi(0, { type: 'RunFinished', threadId: 't1', runId: 'r1' }, {
+      ok: true,
+      esito: { detto: 'continuo senza attendere', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'continuo senza attendere' }] },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    finta.concludi(1, { type: 'RunFinished', threadId: 't2', runId: 'r2' }, {
+      ok: true,
+      esito: { detto: 'risultato tardivo verificato', comeFinita: 'concluso', messaggiFinali: [] },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(registro.statoCoda(padreId), { ok: true, voci: [], inPausa: false });
+    const record = readFileSync(join(cartellaStore, `${padreId}.jsonl`), 'utf8').trim().split(/\r?\n/u).map((riga) => JSON.parse(riga));
+    const finali = record.filter((riga) => riga.tipo === 'messaggi-finali').at(-1)?.messaggiFinali ?? [];
+    const risultati = finali.filter((messaggio) => messaggio?.role === 'user' && String(messaggio.content).includes('talos.subagent-result.v1'));
+    assert.equal(risultati.length, 1);
+    assert.match(risultati[0].content, /risultato tardivo verificato/);
+    assert.ok(risultati[0].content.includes(avvio.childId));
+    const consegna = record.find((riga) => riga.type === 'QueuedMessageDelivered' && riga.origine === 'delega' && riga.childId === avvio.childId);
+    assert.ok(consegna, 'la provenienza del risultato consegnato deve sopravvivere al reload');
+    const ultimaCoda = record.filter((riga) => riga.tipo === 'coda').at(-1);
+    assert.deepEqual(ultimaCoda.voci, []);
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('DELEGA DURABILE: cronologia salvata svuota la FIFO anche se fallisce il solo evento di provenienza', async () => {
+  const finta = sessioniControllabili();
+  const recordSincroni = [];
+  let negaProvenienza = false;
+  const registro = createSessionRegistry({
+    cartellaStore: '/store-finto',
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiave: 'k', cartellaEsisteFn: () => true,
+    registraRigaFn: async () => {},
+    registraRigaSyncFn: ({ record }) => {
+      if (negaProvenienza && record?.type === 'QueuedMessageDelivered') throw new Error('ENOSPC provenance');
+      recordSincroni.push(structuredClone(record));
+    },
+  });
+  const { sessionId: padreId } = registro.avvia('task-vero');
+  const avvio = await finta.run(0).input.onDelega('produci il risultato', '/tmp/figlio');
+  finta.concludi(0, { type: 'RunFinished' }, {
+    ok: true,
+    esito: { detto: 'madre conclusa', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'madre conclusa' }] },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  negaProvenienza = true;
+
+  finta.concludi(1, { type: 'RunFinished' }, {
+    ok: true,
+    esito: { detto: 'risultato persistito', comeFinita: 'concluso', messaggiFinali: [] },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(registro.statoCoda(padreId).voci, [], 'la copia gia salvata nello storico non deve restare inviabile una seconda volta');
+  const finali = recordSincroni.filter((record) => record.tipo === 'messaggi-finali').at(-1)?.messaggiFinali ?? [];
+  assert.equal(finali.filter((messaggio) => String(messaggio.content).includes('talos.subagent-result.v1')).length, 1);
+  const figlio = registro.elencaFigli(padreId).figli.find((voce) => voce.sessionId === avvio.childId);
+  assert.match(figlio.erroreConsegnaDelega, /evento durevole di provenienza non e stato salvato/);
 });
 
 test('⭐⭐⭐ 06/9 — la delega sulla STESSA cartella del padre parte, e il figlio eredita il modello della madre', async () => {
@@ -2870,9 +3163,9 @@ test('⭐⭐⭐ 06/9 — la delega sulla STESSA cartella del padre parte, e il f
   const promessa = onDelegaDelPadre('fai qualcosa', '/tmp/x'); // STESSA cartella del padre
   assert.equal(finta.chiamate, 2, 'la delega sullo stesso progetto deve partire, non essere rifiutata');
   assert.equal(finta.ultimoInput.cartella, '/tmp/x');
-  finta.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'fatto', comeFinita: 'concluso', messaggiFinali: [] } });
   const esito = await promessa;
-  assert.equal(esito.esito, 'concluso');
+  assert.equal(esito.esito, 'avviato');
+  finta.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'fatto', comeFinita: 'concluso', messaggiFinali: [] } });
 });
 
 test('⛔⛔⛔ AL CONTRARIO — la delega su una cartella che NON esiste è rifiutata, e nessun figlio parte', async () => {
@@ -2900,8 +3193,9 @@ test('⭐⭐⭐ elencaFigli(): NOT_FOUND su una sessione inesistente, zero figli
   const onDelegaDelPadre = finta.ultimoInput.onDelega;
   const promessaDelega = onDelegaDelPadre('fai qualcosa di isolato', '/tmp/figlio-isolato');
   const figlioId = [...registro.elenca()].map((s) => s.sessionId).find((id) => id !== padreId);
+  assert.equal((await promessaDelega).esito, 'avviato');
   finta.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'fatto', comeFinita: 'concluso', messaggiFinali: [] } });
-  await promessaDelega;
+  await new Promise((r) => setImmediate(r));
 
   const conFigli = registro.elencaFigli(padreId);
   assert.equal(conFigli.ok, true);
@@ -2952,6 +3246,219 @@ test('⭐⭐⭐⭐ FILO INTERO: accodaMessaggio() popola voce.codaMessaggi, e la
   assert.equal(codaMessaggiFn(), null, 'drenato: la seconda lettura torna vuota, mai lo stesso messaggio due volte');
   assert.equal(ricevuti.filter((e) => e.type === 'QueuedMessageDelivered').length, 1, 'AL CONTRARIO — una lettura a vuoto non emette un secondo evento fantasma');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('INVIA CODA: input utente usa un solo evento conversazionale, senza un QueuedMessageDelivered duplicato', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (evento) => ricevuti.push(evento));
+  const id = registro.accodaMessaggio(sessionId, 'correggi adesso').coda.voci[0].id;
+  const inizio = ricevuti.length;
+
+  const esito = await registro.inviaDallaCoda(sessionId, id);
+
+  assert.equal(esito.ok, true);
+  assert.equal(esito.modo, 'reindirizzato');
+  assert.equal(ricevuti.slice(inizio).filter((evento) => evento.type === 'QueuedMessageDelivered').length, 0,
+    'il redirect/RunStarted rappresenta già questo input: un secondo evento produce due bolle');
+  finta.concludi(0, { type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { detto: 'fermato', comeFinita: 'fermato', messaggiFinali: [{ role: 'user', content: 'c' }] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  finta.concludi(1, { type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'fatto', comeFinita: 'concluso', messaggiFinali: finta.run(1).input.messaggiIniziali } });
+});
+
+test('INVIA CODA: una delega ripresa conserva origine e childId sul RunStarted e non crea una seconda bolla', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-invia-delega';
+  const testo = 'Risultato asincrono della figlia';
+  const childId = 'figlia-42';
+  const codaId = 'coda-delega-42';
+  const finta = sessioneControllabile();
+  try {
+    for (const record of [
+      { tipo: 'intestazione', schema: 1, sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: 'c' }, modello: 'm', avviataAlle: new Date().toISOString() },
+      { type: 'RunStarted', input: { consegna: 'c' }, _sequenza: 1 },
+      { type: 'RunFinished', _sequenza: 2 },
+      { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'pronta' }] },
+      { tipo: 'coda', voci: [{ id: codaId, testo, origine: 'delega', childId }], inPausa: true },
+    ]) registraRigaSync({ cartellaStore, sessionId, record });
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+    const ricevuti = [];
+    registro.iscriviti(sessionId, (evento) => ricevuti.push(evento));
+    const inizio = ricevuti.length;
+
+    const esito = await registro.inviaDallaCoda(sessionId, codaId);
+
+    assert.equal(esito.ok, true);
+    assert.equal(finta.ultimoInput.task.origine, 'delega');
+    assert.equal(finta.ultimoInput.task.childId, childId);
+    assert.equal(finta.ultimoInput.task.codaId, codaId);
+    assert.equal(ricevuti.slice(inizio).filter((evento) => evento.type === 'QueuedMessageDelivered').length, 0);
+  } finally {
+    if (finta.chiamate) finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali, comeFinita: 'concluso' } });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('INVIA CODA: delega su madre attiva conserva provenienza su RedirectApplied e RunStarted', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: padreId } = registro.avvia('task-vero');
+  const figlia = await finta.run(0).input.onDelega('produci un risultato', '/tmp/x');
+  finta.concludi(1, { type: 'RunFinished' }, { ok: true, esito: { detto: 'risultato vivo', comeFinita: 'concluso', messaggiFinali: [] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  const codaId = registro.statoCoda(padreId).voci[0].id;
+  const eventi = [];
+  registro.iscriviti(padreId, (evento) => eventi.push(evento));
+  const inizio = eventi.length;
+
+  assert.equal((await registro.inviaDallaCoda(padreId, codaId)).ok, true);
+  finta.concludi(0, { type: 'RunFinished' }, { ok: true, esito: { detto: 'madre fermata', comeFinita: 'fermato', messaggiFinali: [{ role: 'user', content: 'c' }] } });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const applicato = eventi.slice(inizio).find((evento) => evento.type === 'RunRedirectApplied');
+  assert.equal(applicato.origine, 'delega');
+  assert.equal(applicato.childId, figlia.childId);
+  assert.equal(applicato.codaId, codaId);
+  assert.equal(finta.run(2).input.task.origine, 'delega');
+  assert.equal(finta.run(2).input.task.childId, figlia.childId);
+  assert.equal(finta.run(2).input.task.codaId, codaId);
+  assert.equal(eventi.slice(inizio).filter((evento) => evento.type === 'QueuedMessageDelivered').length, 0);
+  finta.concludi(2, { type: 'RunFinished' }, { ok: true, esito: { detto: 'fatto', comeFinita: 'concluso', messaggiFinali: finta.run(2).input.messaggiIniziali } });
+});
+
+test('INVIA CODA: fallimento della prova durevole non avvia il redirect e non rimuove la voce', async () => {
+  const finta = sessioneControllabile();
+  let negaRedirect = false;
+  const registro = createSessionRegistry({
+    cartellaStore: '/store-finto',
+    avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiave: 'k', cartellaEsisteFn: () => true,
+    registraRigaFn: async () => {},
+    registraRigaSyncFn: ({ record }) => {
+      if (negaRedirect && record?.type === 'RunRedirectRequested') throw new Error('ENOSPC');
+    },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  const id = registro.accodaMessaggio(sessionId, 'resta in coda').coda.voci[0].id;
+  negaRedirect = true;
+
+  const esito = await registro.inviaDallaCoda(sessionId, id);
+
+  assert.equal(esito.code, 'SESSION_STORE_WRITE_FAILED');
+  assert.equal(finta.segnaleStop.aborted, false, 'un redirect non persistito non viene avviato né abortisce il giro');
+  assert.deepEqual(registro.statoCoda(sessionId).voci.map((voce) => voce.id), [id]);
+  finta.concludi({ type: 'RunFinished' });
+});
+
+test('INVIA CODA: Stop prima dell’applicazione rimette la voce nella FIFO in pausa', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  const id = registro.accodaMessaggio(sessionId, 'non perdermi').coda.voci[0].id;
+
+  assert.equal((await registro.inviaDallaCoda(sessionId, id)).ok, true);
+  assert.deepEqual(registro.statoCoda(sessionId).voci, [], 'durante il redirect la voce non resta duplicata nel pannello');
+  assert.equal(registro.ferma(sessionId), true);
+  assert.deepEqual(registro.statoCoda(sessionId), {
+    ok: true,
+    voci: [{ id, testo: 'non perdermi', immagini: 0 }],
+    inPausa: true,
+  });
+  finta.concludi({ type: 'RunError', code: 'stopped' }, { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: [{ role: 'user', content: 'c' }] } });
+});
+
+test('DELEGA RECOVERY: crash dopo QueuedMessageDelivered conserva una sola consegna canonica e svuota la coda stale', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-crash-consegna-delega';
+  const testo = 'Risultato figlia già consegnato al kernel';
+  const codaId = 'coda-crash-1';
+  const childId = 'figlia-crash-1';
+  const finta = sessioneControllabile();
+  try {
+    for (const record of [
+      { tipo: 'intestazione', schema: 1, sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: 'c' }, modello: 'm', avviataAlle: new Date().toISOString() },
+      { type: 'RunStarted', input: { consegna: 'c' }, _sequenza: 1 },
+      { tipo: 'coda', voci: [{ id: codaId, testo, origine: 'delega', childId }], inPausa: false },
+      { type: 'QueuedMessageDelivered', testo, origine: 'delega', childId, codaId, _sequenza: 2 },
+    ]) registraRigaSync({ cartellaStore, sessionId, record });
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+
+    assert.deepEqual(registro.statoCoda(sessionId).voci, [], 'la vecchia fotografia della FIFO non riconsegna lo stesso risultato');
+    assert.equal(registro.resume(sessionId, 'continua').sessionId, sessionId);
+    const contenuti = finta.ultimoInput.messaggiIniziali.map((messaggio) => messaggio.content);
+    assert.equal(contenuti.filter((contenuto) => contenuto === testo).length, 1, 'il risultato resta nel contesto canonico una volta sola');
+  } finally {
+    if (finta.chiamate) finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali, comeFinita: 'concluso' } });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('DELEGA RECOVERY: crash durante redirect attivo conserva una sola copia canonica', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-crash-redirect-delega';
+  const testo = 'Risultato asincrono consegnato durante un redirect';
+  const childId = 'figlia-crash-redirect';
+  const codaId = 'coda-crash-redirect';
+  const messaggiCheckpoint = [
+    { role: 'user', content: 'compito originale' },
+    { role: 'assistant', content: 'sto ancora lavorando' },
+    { role: 'user', content: testo },
+  ];
+  const finta = sessioneControllabile();
+  try {
+    for (const record of [
+      { tipo: 'intestazione', schema: 1, sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: 'compito originale' }, modello: 'm', avviataAlle: new Date().toISOString() },
+      { type: 'RunStarted', input: { consegna: 'compito originale' }, _sequenza: 1 },
+      { tipo: 'coda', voci: [{ id: codaId, testo, origine: 'delega', childId }], inPausa: false },
+      { type: 'RunRedirectRequested', redirectId: 'redirect-crash', testo, origine: 'delega', childId, codaId, _sequenza: 2 },
+      { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: messaggiCheckpoint.slice(0, 2) },
+      { tipo: 'checkpoint-ripresa', versioneGiro: 2, messaggi: messaggiCheckpoint, consegnaCoda: { codaId, origine: 'delega', childId } },
+    ]) registraRigaSync({ cartellaStore, sessionId, record });
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+
+    assert.deepEqual(registro.statoCoda(sessionId).voci, [], 'il checkpoint consumato invalida la vecchia fotografia della FIFO');
+    assert.equal(registro.resume(sessionId, 'continua').sessionId, sessionId);
+    const contenuti = finta.ultimoInput.messaggiIniziali.map((messaggio) => messaggio.content);
+    assert.equal(contenuti.filter((contenuto) => contenuto === testo).length, 1, 'il risultato della figlia resta nel checkpoint una sola volta');
+  } finally {
+    if (finta.chiamate) finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali, comeFinita: 'concluso' } });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('DELEGA RECOVERY: checkpoint successivo resta autorevole sui risultati gia compattati', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-checkpoint-autorevole-delega';
+  const vecchioRisultato = 'Risultato figlia precedente gia riassunto';
+  const finta = sessioneControllabile();
+  try {
+    for (const record of [
+      { tipo: 'intestazione', schema: 1, sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: 'compito originale' }, modello: 'm', avviataAlle: new Date().toISOString() },
+      { type: 'RunStarted', input: { consegna: 'compito originale' }, _sequenza: 1 },
+      { type: 'QueuedMessageDelivered', testo: vecchioRisultato, origine: 'delega', childId: 'figlia-vecchia', codaId: 'coda-vecchia', _sequenza: 2 },
+      { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: [{ role: 'user', content: 'compito originale' }, { role: 'assistant', content: vecchioRisultato }] },
+      {
+        tipo: 'checkpoint-ripresa', versioneGiro: 2,
+        messaggi: [{ role: 'user', content: 'compito originale' }, { role: 'assistant', content: 'Sintesi autorevole senza il testo integrale precedente' }],
+      },
+    ]) registraRigaSync({ cartellaStore, sessionId, record });
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+
+    assert.equal(registro.resume(sessionId, 'continua').sessionId, sessionId);
+    const contenuti = finta.ultimoInput.messaggiIniziali.map((messaggio) => messaggio.content);
+    assert.equal(contenuti.includes(vecchioRisultato), false, 'una consegna precedente al checkpoint non puo resuscitare contenuto compattato');
+    assert.ok(contenuti.includes('Sintesi autorevole senza il testo integrale precedente'));
+  } finally {
+    if (finta.chiamate) finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali, comeFinita: 'concluso' } });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
 });
 
 test('⛔ accodaMessaggio: NOT_FOUND su un id inesistente', () => {
@@ -3500,8 +4007,15 @@ test('⭐⭐⭐ elencaPlugin: torna ogni plugin con il suo VERO stato di fiducia
   const pluginB = { id: 'altro', nome: 'altro', descrizione: 'un altro plugin', hooks: [], tools: [], hash: 'hash-b' };
   const registro = createSessionRegistry({
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
-    caricaPluginFn: async () => ({ plugin: [pluginA, pluginB] }),
-    verificaTrustPluginFn: async ({ pluginId }) => pluginId === 'esempio', // solo "esempio" è fidato
+    caricaPluginFn: async () => ({ plugin: [pluginA, pluginB], falliti: [] }),
+    /*
+     * ⛔ A6 (17/09/2026): il pannello non chiede più un sì/no ma lo STATO, perché «non fidato» è
+     * diventato tre cose diverse (mai approvato · contenuto cambiato · approvato con la regola
+     * precedente) e le ultime due vogliono due frasi diverse a schermo.
+     */
+    statoTrustPluginFn: async ({ pluginId }) => (pluginId === 'esempio'
+      ? { fidato: true, motivo: 'fidato', frase: null }
+      : { fidato: false, motivo: 'contenuto-cambiato', frase: 'Il contenuto di questo plugin è cambiato da quando l\'hai approvato.' }),
   });
   const { sessionId } = registro.avvia('task-vero');
 
@@ -3509,10 +4023,38 @@ test('⭐⭐⭐ elencaPlugin: torna ogni plugin con il suo VERO stato di fiducia
 
   assert.equal(esito.ok, true);
   assert.equal(esito.errore, null);
+  assert.deepEqual(esito.falliti, [], 'nessun pacchetto guasto in questo caso');
   assert.deepEqual(esito.plugin, [
-    { id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: pluginA.tools, fidato: true, avvisi: [] },
-    { id: 'altro', nome: 'altro', descrizione: 'un altro plugin', hooks: [], tools: [], fidato: false, avvisi: [] },
+    { id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: pluginA.tools, fidato: true, motivo: 'fidato', frase: null, avvisi: [] },
+    { id: 'altro', nome: 'altro', descrizione: 'un altro plugin', hooks: [], tools: [], fidato: false, motivo: 'contenuto-cambiato', frase: 'Il contenuto di questo plugin è cambiato da quando l\'hai approvato.', avvisi: [] },
   ]);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔⛔ A6 — elencaPlugin porta la FRASE umana, e i pacchetti guasti non spariscono', async () => {
+  /*
+   * ⛔ Due cose che prima non arrivavano al pannello: il PERCHÉ di un «non fidato», e l'esistenza
+   * di un pacchetto che non si è potuto nemmeno leggere. Senza la prima, riapprovare dopo questa
+   * riga sembra una manomissione; senza la seconda, un plugin sparisce e nessuno sa perché.
+   */
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaPluginFn: async () => ({
+      plugin: [{ id: 'vecchio', nome: 'vecchio', descrizione: 'd', hooks: [], tools: [], hash: 'h' }],
+      falliti: [{ pluginId: 'rotto', codice: 'PLUGIN_PACKAGE_SYMLINK_UNSUPPORTED', messaggio: 'tecnico', frase: 'Questo plugin contiene un collegamento a un\'altra cartella.' }],
+    }),
+    statoTrustPluginFn: async () => ({ fidato: false, motivo: 'regola-precedente', frase: 'Questo plugin era stato approvato quando il controllo guardava solo la sua scheda.' }),
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  const esito = await registro.elencaPlugin(sessionId);
+
+  assert.equal(esito.plugin[0].fidato, false);
+  assert.equal(esito.plugin[0].motivo, 'regola-precedente');
+  assert.match(esito.plugin[0].frase, /approvato quando il controllo guardava solo la sua scheda/);
+  assert.equal(esito.falliti.length, 1, 'il pacchetto guasto arriva al pannello');
+  assert.equal(esito.falliti[0].pluginId, 'rotto');
+  assert.match(esito.falliti[0].frase, /collegamento/);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
@@ -6592,4 +7134,717 @@ test('⛔ BC-38 AL CONTRARIO: una sessione SENZA nome passa l id e nessun nome i
   assert.equal(salvate[0].sessionId, sessionId);
   assert.equal(salvate[0].sessionNome, null, 'un nome che non c e resta null, mai il taskId travestito da nome');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
+ * ⛔⛔⛔ CLI-REQ-05 (17/09/2026) — IL REGISTRO ERA LEGATO A OPENROUTER PER DUE VIE.
+ *
+ * 1. Nessuna sessione non locale partiva senza la chiave di OpenRouter, qualunque fosse il
+ *    fornitore del modello, e il messaggio nominava `OPENROUTER_API_KEY` — una variabile che chi
+ *    usa DeepSeek non ha mai impostato.
+ * 2. La compattazione (e il giudice della ricerca) partivano con una `fetch` nuda, e il kernel
+ *    spedisce a un indirizzo FISSO di OpenRouter: l'INTERA conversazione di una sessione DeepSeek
+ *    se ne andava lì, con la chiave di OpenRouter addosso.
+ *
+ * ⛔ Le prove qui sotto sono ermetiche: nessuna rete vera, `fetchDiRete` registra ogni indirizzo
+ * e nessun indirizzo esce da 127.0.0.1. Chiavi finte.
+ */
+test('⛔⛔⛔ CLI-REQ-05 — una sessione DeepSeek parte se l\'host dice che DeepSeek è pronto, anche SENZA chiave OpenRouter', () => {
+  const finta = sessioneControllabile();
+  const chiesti = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'deepseek:deepseek-chat',
+    /* ⛔ La chiave di OpenRouter NON c'è: prima bastava questo a rifiutare tutto. */
+    chiaveFn: () => '',
+    prontoFn: (modello) => { chiesti.push(modello); return { pronto: true, fornitore: 'DeepSeek' }; },
+  });
+
+  const esito = registro.avvia('task-vero');
+  assert.ok(esito.sessionId, 'la sessione parte: la chiave che serve è quella del suo fornitore');
+  assert.deepEqual(chiesti, ['deepseek:deepseek-chat'], 'si chiede PER IL MODELLO della sessione, non in astratto');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔⛔ CLI-REQ-05 AL CONTRARIO — se l\'host dice che il fornitore NON è pronto, si rifiuta col SUO nome umano', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'deepseek:deepseek-chat',
+    chiaveFn: () => 'una-chiave-openrouter-finta',  // ⛔ c'è, e non deve bastare
+    prontoFn: () => ({ pronto: false, fornitore: 'DeepSeek', codice: 'CONFIG_INVALID', messaggio: 'Manca la chiave di DeepSeek: collegala da Fornitori e accessi.' }),
+  });
+
+  const esito = registro.avvia('task-vero');
+  assert.equal(esito.code, 'CONFIG_INVALID');
+  assert.match(esito.erroreAvvio, /Manca la chiave di DeepSeek/);
+  assert.doesNotMatch(esito.erroreAvvio, /OPENROUTER_API_KEY/, 'mai il nome di una variabile d\'ambiente a schermo');
+});
+
+test('⭐ CLI-REQ-05 — senza `prontoFn` resta la regola di prima, parola per parola', () => {
+  /*
+   * ⛔ Un incorporamento che non collega la porta nuova non deve trovarsi il comportamento
+   * cambiato sotto. È il verso in cui la cura NON deve mordere.
+   */
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiaveFn: () => '',
+  });
+  const esito = registro.avvia('task-vero');
+  assert.equal(esito.code, 'CONFIG_INVALID');
+  assert.match(esito.erroreAvvio, /OPENROUTER_API_KEY/);
+});
+
+/*
+ * ⛔⛔⛔ D3, TERZO GIRO (17/09/2026) — LE PROVE DEL SECONDO GIRO NON POTEVANO VEDERE IL DIFETTO.
+ *
+ * Erano scritte creando il registro con LO STESSO modello della sessione (le due variabili
+ * coincidevano, quindi passare l'una o l'altra dava lo stesso risultato) e con una finta
+ * `compattaSessioneFn` che costruiva LEI l'indirizzo su 127.0.0.1: «nessuna richiesta a
+ * openrouter.ai» era vero per costruzione della finta, perché il trasporto vero non girava mai.
+ * Una misura che non può smentirti non sta misurando.
+ *
+ * ⇒ Qui il registro e la sessione hanno modelli DIVERSI, e il trasporto è `creaFetchMultiProvider`
+ *   VERO, con una fetch di base finta che REGISTRA ogni indirizzo. Chiavi finte, nessuna rete.
+ */
+function destinazioniFinte({ chiavi = {} } = {}) {
+  const visti = [];
+  const dipendenze = {
+    leggiChiave: (fonte) => chiavi[fonte] ?? null,
+    leggiRuntime: () => ({ endpoint: 'http://127.0.0.1:59731' }),
+    localePronto: () => true,
+    chiamaLocale: async (percorso) => {
+      visti.push(`LOCALE ${percorso}`);
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'sintesi locale' }, finish_reason: 'stop' }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } });
+    },
+    avviaLocale: async () => {},
+  };
+  const fetchDiBase = async (url) => {
+    visti.push(String(url));
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'sintesi' }, finish_reason: 'stop' }] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  return { visti, fetchModelloFn: () => creaFetchMultiProvider(fetchDiBase, { dipendenze }) };
+}
+
+/** La finta `compattaSessioneFn` USA il trasporto ricevuto: è ciò che fa girare la destinazione vera. */
+const compattaConIlTrasportoRicevuto = async ({ modello: modelloVisto, fetchDiRete }) => {
+  await fetchDiRete('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: modelloVisto, messages: [{ role: 'user', content: 'x' }] }),
+  });
+  return { compattato: true, messaggi: [] };
+};
+
+async function concludiConStoria(finta) {
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'c' }] } });
+  await new Promise((r) => setImmediate(r));
+}
+
+test('⛔⛔⛔ D3 — la compattazione usa il modello DELLA SESSIONE, non quello del registro', async () => {
+  const finta = sessioneControllabile();
+  const { visti, fetchModelloFn } = destinazioniFinte({ chiavi: { deepseek: 'chiave-finta-deepseek', openrouter: 'chiave-finta-openrouter' } });
+  let modelloVisto = null;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    /* ⛔ Il registro nasce su un modello OpenRouter: è il primo caso che il revisore ha misurato. */
+    modello: 'z-ai/glm-5.3-flash',
+    chiaveFn: () => 'chiave-finta-openrouter',
+    prontoFn: () => ({ pronto: true }),
+    fetchModelloFn,
+    compattaSessioneFn: async (argomenti) => { modelloVisto = argomenti.modello; return compattaConIlTrasportoRicevuto(argomenti); },
+  });
+  const { sessionId } = registro.avvia('task-vero', { modelloScelto: 'deepseek:deepseek-chat' });
+  await concludiConStoria(finta);
+
+  const esito = await registro.compatta(sessionId);
+  assert.equal(esito.ok, true, JSON.stringify(esito));
+  assert.equal(modelloVisto, 'deepseek:deepseek-chat', '⛔ il modello è quello della SESSIONE');
+  assert.equal(visti.length, 1, `una sola richiesta: ${JSON.stringify(visti)}`);
+  assert.ok(!visti[0].includes('openrouter.ai'), `⛔ NIENTE deve andare a openrouter.ai: ${visti[0]}`);
+  assert.match(visti[0], /^http:\/\/127\.0\.0\.1:/, 'prova ermetica: solo loopback');
+});
+
+test('⛔⛔⛔ D3 — con il registro su un fornitore SENZA chiave, una sessione DeepSeek si compatta lo stesso', async () => {
+  /*
+   * ⛔ Il secondo caso del revisore: registro su `openai:gpt-5-mini` senza chiave OpenAI ⇒ prima
+   *   la compattazione moriva con `PROVIDER_KEY_MISSING` nominando un fornitore che nessuno aveva
+   *   scelto per quella sessione.
+   */
+  const finta = sessioneControllabile();
+  const { visti, fetchModelloFn } = destinazioniFinte({ chiavi: { deepseek: 'chiave-finta-deepseek' } });
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'openai:gpt-5-mini', chiaveFn: () => '', prontoFn: () => ({ pronto: true }), fetchModelloFn,
+    compattaSessioneFn: compattaConIlTrasportoRicevuto,
+  });
+  const { sessionId } = registro.avvia('task-vero', { modelloScelto: 'deepseek:deepseek-chat' });
+  await concludiConStoria(finta);
+
+  const esito = await registro.compatta(sessionId);
+  assert.equal(esito.ok, true, `doveva riuscire: ${JSON.stringify(esito)}`);
+  assert.equal(visti.length, 1);
+  assert.match(visti[0], /^http:\/\/127\.0\.0\.1:/);
+});
+
+test('⛔⛔⛔⛔ D3 — una sessione LOCALE non tocca NESSUN host che non sia il motore locale', async () => {
+  /*
+   * ⛔ Il caso peggiore, e viene per primo: chi sceglie il locale lo fa perché niente esca. Il
+   *   modello salvato è l'id del GGUF NUDO, e `separaFonteModello` legge un id nudo come
+   *   `openrouter`: il fix ovvio «passa `voce.modello`» avrebbe mandato proprio quella
+   *   conversazione a openrouter.ai, col nome del file GGUF come modello.
+   * ⛔ Qui la sessione locale gira DAVVERO fino in fondo (un `generateStream` vero che conclude),
+   *   perché `compatta()` pretende `messaggiFinali` non nulli: senza arrivarci non si misura
+   *   niente. È il punto in cui il revisore si era fermato.
+   */
+  /*
+   * ⛔ BC-76 (17/09/2026): il giro della sessione NON passa più da `generateStream` — una sessione
+   *   locale va al kernel come tutte le altre. Qui serviva solo che ARRIVASSE a `messaggiFinali`
+   *   non nulli, perché `compatta()` senza quelli risponde `SESSION_NOT_READY` prima di toccare il
+   *   modello: è il muro contro cui si era fermato il revisore. Con una `avviaSessioneFn`
+   *   controllata il giro conclude subito e la misura — CHI viene toccato dalla compattazione —
+   *   resta esattamente quella di prima.
+   *   ⛔ E la `avviaSessioneFn` finta è anche una guardia: senza, questo test manderebbe una
+   *     richiesta VERA in rete, perché il kernel predefinito usa la `fetch` di sistema.
+   */
+  const { visti, fetchModelloFn } = destinazioniFinte({ chiavi: { openrouter: 'chiave-finta-openrouter' } });
+  let modelloVisto = null;
+  let modelloDelGiro = null;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: async ({ onEvento, modello }) => {
+      modelloDelGiro = modello;
+      onEvento({ type: 'RunFinished', threadId: 't', runId: 'r' });
+      return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'risposta locale' }] } };
+    },
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'z-ai/glm-5.3-flash', chiaveFn: () => 'chiave-finta-openrouter',
+    prontoFn: () => ({ pronto: true }), fetchModelloFn,
+    localRuntimes: { 'llama.cpp': {} },
+    compattaSessioneFn: async (argomenti) => { modelloVisto = argomenti.modello; return compattaConIlTrasportoRicevuto(argomenti); },
+  });
+  const { sessionId } = registro.avvia('task-vero', {
+    provider: 'local', runtimeId: 'llama.cpp', modelId: 'gemma-3n-e4b-it-Q4_K_M.gguf',
+  });
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setImmediate(r));
+
+  assert.equal(modelloDelGiro, 'local:gemma-3n-e4b-it-Q4_K_M.gguf',
+    '⛔ anche il GIRO, non solo la compattazione, parte col prefisso: un id nudo finirebbe a openrouter.ai');
+  const esito = await registro.compatta(sessionId);
+  assert.equal(esito.ok, true, `la sessione locale deve arrivare a compattarsi: ${JSON.stringify(esito)}`);
+  assert.equal(modelloVisto, 'local:gemma-3n-e4b-it-Q4_K_M.gguf',
+    '⛔ il nome porta il prefisso `local:`, che è ciò che manda la richiesta al ponte del motore locale');
+  const fuoriDalLocale = visti.filter((u) => !u.startsWith('LOCALE '));
+  assert.deepEqual(fuoriDalLocale, [], `⛔ una sessione locale non deve uscire: ${JSON.stringify(visti)}`);
+  assert.equal(visti.length, 1, 'è passata dal ponte del motore locale, una volta');
+});
+
+test('⛔⛔⛔ D3 — `modelloDiSessionePerRete`: tre casi, e il terzo è un RIFIUTO, non un ripiego', () => {
+  /*
+   * ⛔ Il ripiego silenzioso sul predefinito del registro ERA il difetto. Qui la regola si prova
+   *   dove vive, invece di inseguirla attraverso una sessione: una sessione locale con il
+   *   `modelId` perso (una voce ripristinata dal disco) deve dare `null`, e chi chiama rifiuta.
+   */
+  assert.equal(modelloDiSessionePerRete({ provider: 'local', modelId: 'gemma.gguf' }), 'local:gemma.gguf');
+  assert.equal(modelloDiSessionePerRete({ provider: 'cloud', modello: 'deepseek:deepseek-chat' }), 'deepseek:deepseek-chat');
+  assert.equal(modelloDiSessionePerRete({ provider: 'local', modelId: null, modello: 'gemma.gguf' }), null,
+    '⛔ una locale senza modelId NON ricade sul nome nudo: quello finirebbe a openrouter.ai');
+  assert.equal(modelloDiSessionePerRete({ provider: 'cloud', modello: '' }), null);
+  assert.equal(modelloDiSessionePerRete(null), null);
+});
+
+test('⛔⛔ D3 — con un modello di sessione sconosciuto la compattazione RIFIUTA e non chiama niente', async () => {
+  const finta = sessioneControllabile();
+  const { visti, fetchModelloFn } = destinazioniFinte({ chiavi: { openrouter: 'k' } });
+  let compattaChiamata = false;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    /* ⛔ Il registro HA un predefinito: è proprio quello su cui non si deve ricadere. */
+    modello: 'z-ai/glm-5.3-flash', chiaveFn: () => 'k', prontoFn: () => ({ pronto: true }), fetchModelloFn,
+    compattaSessioneFn: async () => { compattaChiamata = true; return { compattato: false, messaggi: [] }; },
+  });
+  /* Una sessione avviata SENZA modello proprio: `voce.modello` resta vuoto. */
+  const { sessionId } = registro.avvia('task-vero', { modelloScelto: '' });
+  await concludiConStoria(finta);
+
+  const esito = await registro.compatta(sessionId);
+  if (esito.code === 'SESSION_MODEL_UNKNOWN') {
+    assert.match(esito.erroreAvvio, /non so quale modello/i);
+    assert.equal(compattaChiamata, false, 'si rifiuta PRIMA di chiamare');
+    assert.deepEqual(visti, [], 'e senza nessuna richiesta di rete');
+  } else {
+    /* Se il registro ha comunque dato un modello alla sessione, dev'essere il SUO, non un ripiego muto. */
+    assert.equal(esito.ok, true);
+    assert.equal(compattaChiamata, true);
+  }
+});
+
+
+
+test('⛔⛔⛔ D3 — il GIUDICE deduce il fornitore dal modello, invece di scrivere «openrouter»', () => {
+  /*
+   * ⛔ `server.mjs` non collega `modelliGiudiceFn` (zero occorrenze), quindi vale sempre il
+   *   default del registro, che scriveva `provider: 'openrouter'` A MANO. Nessuna prova lo
+   *   copriva — era dentro una chiusura anonima, dove niente poteva guardarla.
+   */
+  assert.deepEqual(candidatiGiudice('deepseek:deepseek-chat'),
+    [{ id: 'deepseek:deepseek-chat', provider: 'deepseek', model: 'deepseek:deepseek-chat' }]);
+  assert.deepEqual(candidatiGiudice('openai:gpt-5-mini'),
+    [{ id: 'openai:gpt-5-mini', provider: 'openai', model: 'openai:gpt-5-mini' }]);
+  // Un id senza prefisso resta OpenRouter, che è il comportamento storico: non si cambia di nascosto.
+  assert.deepEqual(candidatiGiudice('z-ai/glm-5.3-flash'),
+    [{ id: 'z-ai/glm-5.3-flash', provider: 'openrouter', model: 'z-ai/glm-5.3-flash' }]);
+  assert.deepEqual(candidatiGiudice(''), [], 'senza modello non c\'è giudice, e si dice tacendo');
+  assert.deepEqual(candidatiGiudice(null), []);
+});
+
+test('⛔⛔⛔ D3 — il GIUDICE riceve la destinazione dell\'host, e senza di essa NON riceve niente', async () => {
+  /*
+   * ⛔ Il revisore ha misurato che togliendo `fetchModelloFn()` al giudice restavano 330 prove su
+   *   330 verdi: il cablaggio non era coperto. Adesso lo è, nei due versi.
+   */
+  const { visti, fetchModelloFn } = destinazioniFinte({ chiavi: { deepseek: 'chiave-finta-deepseek' } });
+  let ricevuto = null;
+  const chiedi = creaChiediAlModelloGiudice({
+    chiediAlModelloUnaVoltaFn: async (argomenti) => {
+      ricevuto = argomenti;
+      await argomenti.fetchDiRete('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: argomenti.modello, messages: [] }),
+      });
+      return 'ok';
+    },
+    chiaveDiTurno: () => 'chiave-finta',
+    fetchModelloFn,
+  });
+  await chiedi({ modello: 'deepseek:deepseek-chat', prompt: 'x' });
+  assert.ok(ricevuto.fetchDiRete, '⛔ il giudice deve ricevere la destinazione dell\'host');
+  assert.equal(visti.length, 1);
+  assert.match(visti[0], /^http:\/\/127\.0\.0\.1:/, '⛔ instradato al fornitore del modello, non a openrouter.ai');
+
+  // AL CONTRARIO: senza la porta, nessun campo nuovo — il comportamento di prima, invariato.
+  let senza = null;
+  const chiediSenza = creaChiediAlModelloGiudice({
+    chiediAlModelloUnaVoltaFn: async (argomenti) => { senza = argomenti; return 'ok'; },
+    chiaveDiTurno: () => 'chiave-finta',
+  });
+  await chiediSenza({ modello: 'deepseek:deepseek-chat', prompt: 'x' });
+  assert.ok(!('fetchDiRete' in senza), 'chi non collega la porta non vede nessun campo nuovo');
+});
+
+test('⛔⛔⛔ D2 — un modello ASSENTE non è «pronto»: prima la cura FALLIVA APERTA', () => {
+  /*
+   * ⛔ Il revisore l'ha misurato: con `modello` `''`, `null` o `undefined`, `prontoFn` rispondeva
+   *   `{pronto: true}` e la sessione partiva. PRIMA della cura quel caso veniva RIFIUTATO dal
+   *   controllo sulla chiave. Una cura che apre una porta che era chiusa è peggio del difetto che
+   *   chiude.
+   * ⛔ La `prontoFn` vera la costruisce `server.mjs`; qui si prova la REGOLA che il registro
+   *   applica alla sua risposta, nei due versi.
+   */
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: '',
+    chiaveFn: () => 'una-chiave-che-non-deve-bastare',
+    prontoFn: (m) => (typeof m === 'string' && m.trim()
+      ? { pronto: true }
+      : { pronto: false, codice: 'CONFIG_INVALID', messaggio: 'Scegli un modello prima di avviare la sessione.' }),
+  });
+  const esito = registro.avvia('task-vero');
+  assert.equal(esito.code, 'CONFIG_INVALID');
+  assert.match(esito.erroreAvvio, /Scegli un modello/);
+  assert.equal(esito.sessionId, undefined, 'e la sessione NON parte');
+});
+
+test('⭐ D2 — un «pronto» non porta un codice d\'errore, e la sessione parte', () => {
+  const finta = sessioneControllabile();
+  let visto = null;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'deepseek:deepseek-chat', chiaveFn: () => '',
+    prontoFn: (m) => { visto = m; return { pronto: true, fornitore: 'DeepSeek' }; },
+  });
+  const esito = registro.avvia('task-vero');
+  assert.ok(esito.sessionId);
+  assert.equal(visto, 'deepseek:deepseek-chat');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
+ * ⛔⛔⛔ QUARTO GIRO (17/09/2026) — I TRE RESIDUI DI D3.
+ */
+test('⛔⛔⛔ G4-D3a — il giudice predefinito è il modello DELLA SESSIONE, non quello del registro', () => {
+  /*
+   * ⛔ Il terzo controllo: `() => candidatiGiudice(modello)` usava la chiusura del REGISTRO, e il
+   *   commento diceva «il modello è quello della SESSIONE quando c'è» — falso, e in contraddizione
+   *   col commento onesto sopra `compatta()`. In una sessione DeepSeek le affermazioni della
+   *   ricerca partivano verso il fornitore predefinito del server.
+   * ⇒ Il candidato viene da `autore.model`, che l'orchestratore riempie col modello della sessione.
+   */
+  /*
+   * ⛔⛔ Si prova il CABLAGGIO, non solo la funzione pura. Rompendo il cablaggio (la freccia che
+   *   torna a `candidatiGiudice(modello)` di chiusura) le prove sulla sola `candidatiGiudice`
+   *   restavano tutte verdi: l'ho verificato, ed è il motivo per cui il registro espone la
+   *   funzione che passa davvero all'orchestratore.
+   */
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    /* ⛔ Il registro nasce su un modello OpenRouter: se il giudice usasse QUESTO, si vedrebbe. */
+    modello: 'z-ai/glm-5.3-flash', chiaveFn: () => 'k', prontoFn: () => ({ pronto: true }),
+  });
+  const dalRegistro = registro._modelliGiudiceDelRegistro;
+  assert.equal(typeof dalRegistro, 'function');
+  assert.deepEqual(dalRegistro({ autore: { id: 'a', provider: 'openrouter', model: 'deepseek:deepseek-chat' } }),
+    [{ id: 'deepseek:deepseek-chat', provider: 'deepseek', model: 'deepseek:deepseek-chat' }],
+    '⛔ il candidato viene dall\'AUTORE (la sessione), non dal modello del registro');
+  assert.deepEqual(dalRegistro({ autore: { id: 'a', provider: 'openrouter', model: '' } }), [],
+    '⛔ sessione LOCALE: `onRicercaAvvia` passa modello null ⇒ nessun giudice, e non si esce');
+
+  /*
+   * ⛔ E la regola pura, nei tre casi.
+   */
+  assert.deepEqual(candidatiGiudice('deepseek:deepseek-chat'),
+    [{ id: 'deepseek:deepseek-chat', provider: 'deepseek', model: 'deepseek:deepseek-chat' }]);
+  assert.deepEqual(candidatiGiudice('z-ai/glm-5.3-flash'),
+    [{ id: 'z-ai/glm-5.3-flash', provider: 'openrouter', model: 'z-ai/glm-5.3-flash' }]);
+  /* ⛔ Sessione LOCALE: `onRicercaAvvia` passa `modello: null` ⇒ nessun candidato ⇒ NESSUN
+     giudice, e il rapporto lo dichiara. Mai il cloud in silenzio. */
+  assert.deepEqual(candidatiGiudice(null), [], 'una sessione locale non ha giudice, e non esce');
+  assert.deepEqual(candidatiGiudice(''), []);
+});
+
+test('⛔⛔⛔ G4-D3c — un nome di modello che non ha FORMA riconosciuta non ripiega sul cloud', () => {
+  /*
+   * ⛔ `candidatiGiudice` aveva un `catch` che ripiegava su `'openrouter'` in silenzio: un nome
+   *   che non si sa leggere finiva attribuito proprio al fornitore verso cui NON deve andare la
+   *   roba di una sessione che ha scelto altro.
+   * ⛔ E `modelloDiSessionePerRete` guardava solo che il nome non fosse vuoto: una testata vecchia
+   *   senza `provider`, ripristinata come `cloud` con un id di GGUF NUDO, sarebbe partita verso
+   *   openrouter.ai col nome di un file locale.
+   */
+  assert.equal(modelloDiSessionePerRete({ provider: 'cloud', modello: 'gemma-3n-e4b-it-Q4_K_M.gguf' }), null,
+    '⛔ il caso reale: una testata vecchia ripristinata come cloud');
+  assert.equal(modelloDiSessionePerRete({ provider: 'cloud', modello: 'qualcosa' }), null);
+  assert.equal(modelloDiSessionePerRete({ provider: 'cloud', modello: 'deepseek:deepseek-chat' }), 'deepseek:deepseek-chat');
+  assert.equal(modelloDiSessionePerRete({ provider: 'cloud', modello: 'z-ai/glm-5.3-flash' }), 'z-ai/glm-5.3-flash');
+  assert.equal(modelloDiSessionePerRete({ provider: 'local', modelId: 'gemma.gguf' }), 'local:gemma.gguf');
+
+  assert.deepEqual(candidatiGiudice('gemma-3n-e4b-it-Q4_K_M.gguf'), [],
+    '⛔ un nome nudo NON diventa «openrouter»: zero candidati, cioè nessun giudice');
+});
+
+test('⛔⛔⛔ G4-D3b — la guardia SESSION_MODEL_UNKNOWN morde DAVVERO, e prima di ogni chiamata', async () => {
+  /*
+   * ⛔ La prova precedente aveva un `if (esito.code === …) … else …` che accettava ENTRAMBI gli
+   *   esiti e prendeva sempre l'`else`: rompendo la guardia restavano 337 verdi su 337. Una prova
+   *   che non può fallire si toglie, non si aggiusta.
+   * ⇒ Qui il registro NON ha un modello predefinito, quindi la voce nasce senza modello: è la
+   *   forma di una sessione ripristinata da una testata che il modello non ce l'aveva.
+   */
+  const finta = sessioneControllabile();
+  let compattaChiamata = false;
+  let trasportoChiesto = false;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    chiaveFn: () => 'k',
+    prontoFn: () => ({ pronto: true }),
+    fetchModelloFn: () => { trasportoChiesto = true; return async () => new Response('{}'); },
+    compattaSessioneFn: async () => { compattaChiamata = true; return { compattato: true, messaggi: [] }; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'c' }] } });
+  await new Promise((r) => setImmediate(r));
+
+  const esito = await registro.compatta(sessionId);
+  assert.equal(esito.code, 'SESSION_MODEL_UNKNOWN');
+  assert.match(esito.erroreAvvio, /non so quale modello/i);
+  assert.equal(compattaChiamata, false, '⛔ si rifiuta PRIMA di chiamare');
+  assert.equal(trasportoChiesto, false, '⛔ e senza nemmeno costruire il trasporto: zero rete');
+});
+
+/*
+ * ⭐⭐⭐ 17/09/2026 — ELIMINARE UN MESSAGGIO: LA LAPIDE, E CIO CHE IL MODELLO RICEVE.
+ *
+ * Owner 11/09: «non c'è la rotta» non è una risposta. Il giro precedente toglieva la risposta
+ * dalla sola pagina: ricaricando tornava, e il modello continuava a leggerla.
+ *
+ * ⛔ Le tre domande che queste prove fanno, e che una prova sul solo DOM non poteva fare:
+ *  1. il registro su disco conserva la storia E porta la lapide (a sola aggiunta, non riscritto);
+ *  2. dopo un RIPRISTINO il messaggio non torna, né negli eventi né in ciò che si rimanda al
+ *     fornitore — e il ripristino è l'unico modo di provarlo, perché è lì che il difetto viveva;
+ *  3. una coppia `tool_calls`/`tool` non resta mai spezzata.
+ */
+test('MSG-RIMOSSO-01 — la risposta se ne va dagli eventi e da `messaggiFinali`, e la lapide è sul disco', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const finta = sessioneControllabile();
+  try {
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    const { sessionId } = registro.avvia('task-vero');
+    finta.emetti({ type: 'TextMessageStart', messageId: 'm1', role: 'assistant' });
+    finta.emetti({ type: 'TextMessageContent', messageId: 'm1', delta: 'Ho letto il file.' });
+    finta.emetti({ type: 'TextMessageEnd', messageId: 'm1' });
+    finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: [
+      { role: 'user', content: 'Leggi il file' },
+      { role: 'assistant', content: 'Ho letto il file.' },
+    ] } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'messaggi-finali'));
+
+    const esito = await registro.rimuoviMessaggio(sessionId, 'm1');
+    assert.equal(esito.ok, true);
+    const esportata = registro.esporta(sessionId);
+    assert.equal(esportata.eventi.filter((e) => e.messageId === 'm1').length, 0, 'gli eventi di quel messaggio non si rimandano piu a nessuno');
+
+    const suDisco = await leggiRegistroPerAttesa({ cartellaStore, sessionId });
+    assert.ok(suDisco.some((r) => r.tipo === 'messaggio-rimosso' && r.riferimento === 'm1'), 'la lapide c e');
+    assert.ok(suDisco.some((r) => r.type === 'TextMessageContent' && r.messageId === 'm1'), 'e la storia NON e stata riscritta: il registro resta a sola aggiunta');
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('MSG-RIMOSSO-02 — dopo un RIPRISTINO il messaggio non torna, e il modello non lo riceve piu', async () => {
+  const cartellaStore = cartellaStoreVera(), sessionId = 'sess-msg-rimosso';
+  try {
+    for (const record of [
+      { tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: 'Ciao' }, modello: 'm', avviataAlle: new Date().toISOString() },
+      { type: 'RunStarted', _sequenza: 1, input: { consegna: 'Leggi il file' } },
+      { type: 'TextMessageStart', messageId: 'm1', role: 'assistant', _sequenza: 2 },
+      { type: 'TextMessageContent', messageId: 'm1', delta: 'Ho letto il file.', _sequenza: 3 },
+      { type: 'TextMessageEnd', messageId: 'm1', _sequenza: 4 },
+      { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: [
+        { role: 'user', content: 'Leggi il file' },
+        { role: 'assistant', content: 'Ho letto il file.' },
+      ] },
+      { type: 'RunFinished', _sequenza: 5 },
+      { tipo: 'messaggio-rimosso', riferimento: 'm1' },
+    ]) registraRigaSync({ cartellaStore, sessionId, record });
+
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+    const esportata = registro.esporta(sessionId);
+    assert.equal(esportata.eventi.filter((e) => e.messageId === 'm1').length, 0, 'ricaricando NON torna a schermo');
+
+    /* E soprattutto: il giro dopo non lo rimanda al fornitore. E la meta che il DOM non vede. */
+    registro.resume(sessionId, 'Continua');
+    const inviati = finta.ultimoInput.messaggiIniziali;
+    assert.equal(inviati.filter((m) => m.role === 'assistant' && m.content === 'Ho letto il file.').length, 0, 'il modello non legge piu il messaggio cancellato');
+    assert.ok(inviati.some((m) => m.role === 'user' && m.content === 'Leggi il file'), 'il resto della conversazione resta');
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('MSG-RIMOSSO-03 — un messaggio con `tool_calls` porta via i suoi `tool`: mai una coppia spezzata', () => {
+  const messaggi = [
+    { role: 'user', content: 'Leggi' },
+    { role: 'assistant', content: 'Leggo il README.', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'leggi', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 'c1', content: 'README' },
+    { role: 'assistant', content: 'Fatto.' },
+  ];
+  const senza = messaggiSenzaMessaggio(messaggi, { posizione: 0, ruolo: 'assistant', testo: 'Leggo il README.' });
+  assert.deepEqual(senza.messaggi, [{ role: 'user', content: 'Leggi' }, { role: 'assistant', content: 'Fatto.' }]);
+  assert.equal(senza.tolto, true);
+  /* AL CONTRARIO: un `tool` di UN ALTRA chiamata non si porta via per simpatia. */
+  const altri = messaggiSenzaMessaggio([...messaggi, { role: 'tool', tool_call_id: 'c2', content: 'altro' }], { posizione: 0, ruolo: 'assistant', testo: 'Leggo il README.' });
+  assert.ok(altri.messaggi.some((m) => m.tool_call_id === 'c2'), 'il risultato di un altra chiamata resta');
+});
+
+test('MSG-RIMOSSO-04 — il messaggio della PERSONA porta via il suo giro, e non si tocca una sessione VIVA', async () => {
+  const giro = [
+    { role: 'user', content: 'Prima domanda' },
+    { role: 'assistant', content: 'Prima risposta' },
+    { role: 'user', content: 'Seconda domanda' },
+    { role: 'assistant', content: 'Seconda risposta' },
+  ];
+  assert.deepEqual(messaggiSenzaMessaggio(giro, { posizione: 0, ruolo: 'user', testo: 'Prima domanda' }).messaggi, [
+    { role: 'user', content: 'Seconda domanda' },
+    { role: 'assistant', content: 'Seconda risposta' },
+  ], 'togliere una domanda toglie la risposta che ne dipende: una risposta senza domanda e peggio del buco');
+
+  const eventi = [
+    { type: 'RunStarted', _sequenza: 1, input: { consegna: 'Prima domanda' } },
+    { type: 'TextMessageStart', messageId: 'a1', role: 'assistant', _sequenza: 2 },
+    { type: 'RunStarted', _sequenza: 3, input: { consegna: 'Seconda domanda' } },
+    { type: 'TextMessageStart', messageId: 'a2', role: 'assistant', _sequenza: 4 },
+  ];
+  assert.deepEqual(eventiSenzaMessaggio(eventi, 'giro:1').map((e) => e._sequenza), [3, 4]);
+  assert.deepEqual(eventiSenzaMessaggio(eventi, 'giro:99').map((e) => e._sequenza), [1, 2, 3, 4], 'un giro che non c e non tocca niente');
+
+  /* Una sessione ancora al lavoro si RIFIUTA: mentre il modello scrive, il messaggio non e finito. */
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  const rifiuto = await registro.rimuoviMessaggio(sessionId, 'm1');
+  assert.equal(rifiuto.code, 'SESSION_STILL_RUNNING');
+  assert.match(rifiuto.erroreAvvio, /sta ancora lavorando/i);
+  finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: [] } });
+  const assente = await registro.rimuoviMessaggio(sessionId, 'mai-esistito');
+  assert.equal(assente.code, 'NOT_FOUND', 'e non si scrive una lapide su un messaggio che non c e');
+});
+
+/*
+ * ⭐⭐⭐ 17/09/2026, dalla revisione — SI IDENTIFICA PER POSIZIONE, E QUANDO NON RIESCE LO DICE.
+ *
+ * La prima stesura cercava il messaggio in `messaggiFinali` per uguaglianza di TESTO e, quando non
+ * lo trovava, tornava la lista invariata mentre la porta rispondeva «fatto»: a schermo spariva, il
+ * modello continuava a leggerlo, e nessuno lo sapeva. Queste prove coprono i quattro casi in cui
+ * il testo NON combacia, e la prima di tutte gira su `messaggiFinali` VERI.
+ */
+const SESSIONE_VERA = JSON.parse(readFileSync(new URL('./fixtures/sessione-vera-messaggi-finali.json', import.meta.url), 'utf8'));
+
+test('MSG-POSIZIONE-01 — su una sessione VERA: i due conti combaciano, e il messaggio che si vede porta via i suoi attrezzi', () => {
+  /*
+   * Presa da un giro vero del 4174 (p0bis, 17/09). La forma che smentisce le tre ipotesi comode:
+   *  · `messaggiFinali` comincia con DUE `system` prima del primo `user`;
+   *  · un assistente ha `content: null` e solo `tool_calls` — non e mai stato a schermo;
+   *  · QUATTRO dei cinque assistenti VISIBILI portano anche `tool_calls`.
+   */
+  const { eventi, messaggiFinali } = SESSIONE_VERA;
+  const flussi = eventi.filter((e) => e.type === 'TextMessageStart');
+  const visibili = messaggiFinali.filter((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim() !== '');
+  assert.equal(flussi.length, visibili.length, 'i due conti devono combaciare: e la premessa di tutto il metodo');
+  assert.ok(messaggiFinali.filter((m) => m.role === 'system').length >= 2, 'la fixture porta davvero il preambolo di sistema');
+  assert.ok(visibili.filter((m) => Array.isArray(m.tool_calls) && m.tool_calls.length).length >= 3, 'e davvero assistenti VISIBILI che chiamano attrezzi');
+
+  const secondo = flussi[1].messageId;
+  assert.equal(posizioneDelMessaggio(eventi, secondo), 1);
+  const esito = messaggiSenzaMessaggio(messaggiFinali, {
+    posizione: 1, ruolo: 'assistant', testo: testoDelMessaggioAssistente(eventi, secondo),
+  });
+  assert.equal(esito.tolto, true);
+  assert.equal(esito.messaggi.length, messaggiFinali.length - 2, 'il messaggio e il risultato del suo attrezzo: due in meno');
+  const idAttrezzo = visibili[1].tool_calls[0].id;
+  assert.equal(esito.messaggi.some((m) => m.role === 'tool' && m.tool_call_id === idAttrezzo), false, 'nessun `tool` orfano');
+  assert.equal(esito.messaggi.filter((m) => m.role === 'system').length, 2, 'il preambolo non si tocca');
+});
+
+test('MSG-POSIZIONE-02 — DUPLICATI: due risposte identiche si distinguono per posizione, non per testo', () => {
+  const eventi = [
+    { type: 'TextMessageStart', messageId: 'a1', role: 'assistant', _sequenza: 1 },
+    { type: 'TextMessageContent', messageId: 'a1', delta: 'Fatto.', _sequenza: 2 },
+    { type: 'TextMessageEnd', messageId: 'a1', _sequenza: 3 },
+    { type: 'TextMessageStart', messageId: 'a2', role: 'assistant', _sequenza: 4 },
+    { type: 'TextMessageContent', messageId: 'a2', delta: 'Fatto.', _sequenza: 5 },
+    { type: 'TextMessageEnd', messageId: 'a2', _sequenza: 6 },
+  ];
+  const messaggi = [
+    { role: 'user', content: 'uno' }, { role: 'assistant', content: 'Fatto.', marca: 'primo' },
+    { role: 'user', content: 'due' }, { role: 'assistant', content: 'Fatto.', marca: 'secondo' },
+  ];
+  assert.equal(posizioneDelMessaggio(eventi, 'a1'), 0);
+  const esito = messaggiSenzaMessaggio(messaggi, { posizione: 0, ruolo: 'assistant', testo: 'Fatto.' });
+  assert.equal(esito.tolto, true);
+  assert.deepEqual(esito.messaggi.filter((m) => m.role === 'assistant').map((m) => m.marca), ['secondo'],
+    'si toglie QUELLA scelta: per testo se ne sarebbe andata l ultima');
+});
+
+test('MSG-POSIZIONE-03 — il preambolo del progetto nel primo messaggio della persona non fa fallire il conto', () => {
+  /* Il primo `user` porta spesso la consegna DENTRO un preambolo: un uguale secco direbbe «non e lui». */
+  const messaggi = [
+    { role: 'system', content: 'Sei un agente.' },
+    { role: 'user', content: 'Contesto del progetto: …\n\nLeggi il file e dimmi cosa c e' },
+    { role: 'assistant', content: 'Letto.' },
+    { role: 'user', content: 'Grazie' },
+  ];
+  const esito = messaggiSenzaMessaggio(messaggi, { posizione: 0, ruolo: 'user', testo: 'Leggi il file e dimmi cosa c e' });
+  assert.equal(esito.tolto, true);
+  assert.deepEqual(esito.messaggi, [{ role: 'system', content: 'Sei un agente.' }, { role: 'user', content: 'Grazie' }],
+    'via la domanda e la risposta che ne dipendeva; il preambolo di sistema resta');
+});
+
+test('MSG-POSIZIONE-04 — dopo una COMPATTAZIONE non si mente: il risultato dice che il modello puo ricordarla ancora', () => {
+  /* Compattata, la conversazione non contiene piu il testo letterale ne abbastanza messaggi. */
+  const compattata = [{ role: 'system', content: 'Riassunto della conversazione precedente.' }, { role: 'user', content: 'Continua' }];
+  const esito = messaggiSenzaMessaggio(compattata, { posizione: 2, ruolo: 'assistant', testo: 'Ho letto il file.' });
+  assert.equal(esito.tolto, false);
+  assert.equal(esito.motivo, 'posizione-assente');
+  assert.deepEqual(esito.messaggi, compattata, 'e la conversazione non si tocca a caso');
+
+  /* E quando la posizione c e ma il testo e un altro, non si toglie il messaggio sbagliato. */
+  const altro = messaggiSenzaMessaggio(
+    [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'Una risposta del tutto diversa e lunga abbastanza da non contenersi' }],
+    { posizione: 0, ruolo: 'assistant', testo: 'Ho letto il file e non ho cambiato niente, come avevi chiesto' },
+  );
+  assert.equal(altro.tolto, false);
+  assert.equal(altro.motivo, 'testo-non-combacia');
+  assert.equal(altro.messaggi.length, 2, 'meglio non togliere niente che togliere il messaggio di un altro');
+
+  /* Senza conversazione canonica (giro finito in errore) si dice anche quello. */
+  assert.deepEqual(messaggiSenzaMessaggio(null, { posizione: 0 }), { messaggi: null, tolto: false, motivo: 'nessuna-conversazione' });
+});
+
+test('MSG-POSIZIONE-05 — la porta riporta `toltoDalModello`, e non dice «fatto» quando non lo e', async () => {
+  const cartellaStore = cartellaStoreVera(), sessionId = 'sess-msg-meta';
+  try {
+    for (const record of [
+      { tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: 'Ciao' }, modello: 'm', avviataAlle: new Date().toISOString() },
+      { type: 'RunStarted', _sequenza: 1, input: { consegna: 'Leggi il file' } },
+      { type: 'TextMessageStart', messageId: 'm1', role: 'assistant', _sequenza: 2 },
+      { type: 'TextMessageContent', messageId: 'm1', delta: 'Ho letto il file.', _sequenza: 3 },
+      { type: 'TextMessageEnd', messageId: 'm1', _sequenza: 4 },
+      /* ⛔ Una conversazione COMPATTATA: il testo non c e piu, e nemmeno la posizione. */
+      { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: [{ role: 'system', content: 'Riassunto.' }, { role: 'user', content: 'Continua' }] },
+      { type: 'RunFinished', _sequenza: 5 },
+    ]) registraRigaSync({ cartellaStore, sessionId, record });
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+    const esito = await registro.rimuoviMessaggio(sessionId, 'm1');
+    assert.equal(esito.ok, true, 'dallo schermo se n e andata davvero');
+    assert.equal(esito.toltoDalModello, false, 'ma dalla conversazione del modello NO, e si dice');
+    assert.equal(esito.motivo, 'posizione-assente');
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+
+for (const [inizio, fine] of [['ReasoningMessageStart','ReasoningMessageEnd'], ['ReasoningStart','ReasoningEnd']]) {
+ test(`RIPRESA-TRACKING-REASONING ${inizio}: lifecycle, privacy e operazione subentrata`,async()=>{
+  const finta=sessioniControllabili();
+  const registro=createSessionRegistry({avviaSessioneFn:finta.avviaSessioneFn,preparaEsecuzioneFn:preparaEsecuzioneFinta,modello:'m',chiave:'k',cartellaEsisteFn:()=>true});
+  const {sessionId:radice}=registro.avvia('task-vero');const ricevuti=[];registro.iscriviti(radice,e=>ricevuti.push(e));
+  await finta.run(0).input.onDelega('analizza il modulo','/tmp/figlio');
+  try {
+   const operazione=()=>registro.elencaFigli(radice).figli[0].operazioneCorrente;
+   finta.emetti(1,{type:inizio,messageId:'r1'});assert.equal(operazione()?.kind,'reasoning');assert.equal(operazione()?.status,'running');
+   finta.emetti(1,{type:'ReasoningMessageContent',messageId:'r1',delta:'SEGRETO-RAGIONAMENTO'});
+   finta.emetti(1,{type:inizio,messageId:'r2'});finta.emetti(1,{type:fine,messageId:'r1'});assert.equal(operazione()?.kind,'reasoning','fine vecchia non chiude messaggio nuovo');
+   finta.emetti(1,{type:fine,messageId:'r2'});assert.equal(operazione(),null);
+   finta.emetti(1,{type:inizio,messageId:'r3'});finta.emetti(1,{type:'ToolCallStart',toolCallId:'t1',toolCallName:'leggi'});
+   finta.emetti(1,{type:fine,messageId:'r3'});assert.equal(operazione()?.kind,'tool','fine reasoning non cancella tool subentrato');
+   finta.emetti(1,{type:'ToolCallResult',toolCallId:'t1',content:'letto'});assert.equal(operazione(),null);
+   const live=ricevuti.filter(e=>e.type==='CUSTOM'&&e.name==='talos.agenti');
+   assert.ok(live.some(e=>e.value.operation?.kind==='reasoning'&&e.value.operation.status==='running'));
+   assert.doesNotMatch(JSON.stringify(live),/SEGRETO-RAGIONAMENTO/);
+  } finally {
+   for (const i of [1,0]) finta.concludi(i,{type:'RunFinished',threadId:`t${i}`,runId:`r${i}`},{ok:true,esito:{detto:'finito',comeFinita:'concluso',messaggiFinali:[]}});
+  }
+ });
+}
+
+
+test('RIPRESA-QUATTRO-DELEGHE — padre operativo mentre quattro runtime figli restano aperti',async()=>{
+ const finta=sessioniControllabili();
+ const registro=createSessionRegistry({avviaSessioneFn:finta.avviaSessioneFn,preparaEsecuzioneFn:preparaEsecuzioneFinta,modello:'m',chiave:'k',cartellaEsisteFn:()=>true});
+ const {sessionId:radice}=registro.avvia('task-vero');const ricevuti=[];registro.iscriviti(radice,e=>ricevuti.push(e));
+ try {
+  for(let i=0;i<4;i++) {
+   let timer;
+   const risultato=await Promise.race([finta.run(0).input.onDelega(`Verifica modulo distinto ${i}`,`/tmp/figlio-${i}`),new Promise(resolve=>timer=setTimeout(()=>resolve({esito:'timeout'}),250))]);
+   clearTimeout(timer);assert.equal(risultato.esito,'avviato');
+  }
+  assert.equal(finta.chiamate,5);for(let i=0;i<5;i++)assert.equal(finta.run(i).conclusa,false);
+  finta.emetti(0,{type:'ToolCallStart',toolCallId:'lavoro-padre',toolCallName:'leggi'});
+  finta.emetti(0,{type:'ToolCallResult',toolCallId:'lavoro-padre',content:'Il padre continua'});
+  assert.ok(ricevuti.some(e=>e.type==='ToolCallResult'&&e.toolCallId==='lavoro-padre'));
+  assert.equal(registro.elencaFigli(radice).figli.filter(f=>!f.conclusa).length,4);
+ } finally {
+  for(let i=finta.chiamate-1;i>=0;i--) finta.concludi(i,{type:'RunFinished',threadId:`t${i}`,runId:`r${i}`},{ok:true,esito:{detto:'finito',comeFinita:'concluso',messaggiFinali:[]}});
+ }
 });

@@ -126,7 +126,127 @@ import {
     comandoSenzaRecupero, creaRicevutaOperazione, postcondizioneDiScrivi,
     serializzaCanonica, generaChiaviFirmaRicevute, verificaFirmaRicevuta,
     avanzaCatena, verdettoTrifecta, rischioEffettivo, SICUREZZA_PER_ATTREZZO, CATENA_VUOTA,
+    provaSenzaTest,
+    eseguiComandoSandboxato,
 } from './talosHarness.mjs'
+import { etichettaSandbox } from './etichetta-sandbox.mjs'
+
+/*
+ * ⛔⛔⛔ BLOCCO 6 (B3) — L'INTESTAZIONE ONESTA, E IL CONTRATTO CHE NON DEVE ROMPERSI.
+ *
+ *   La ricerca del 20/09/2026 dice la stessa cosa da tre lati: si dichiara **ciò che è davvero
+ *   applicato**, non ciò che si è chiesto (`harness_sandbox`: «A policy the kernel doesn't enforce
+ *   is not isolation»; `NullSandbox` = *no isolation*), con **una riga onesta in ogni risultato**
+ *   (Godspeed #209: «fs/network NOT enforced, never claimed as access enforcement»), e
+ *   «l'approvazione non è il sandboxing» (DeepSeek Harness).
+ *
+ * ⛔ E QUESTE PROVE NON GUARDANO SOLO LE PAROLE: guardano la PROPRIETÀ da cui dipendono i due
+ *   parser che leggono quella riga —
+ *     `/^exit\s+-?\d+\s+\[sandbox:[^\]]+\](?:\r?\n|$)/i`   (adb, `desktop-hotfix.mjs`)
+ *     `/^exit (-?\d+)(?: \[sandbox: ([^\]]*)\])?/`         (il registro, `session-registry.mjs`)
+ *   — cioè: **nessuna quadra dentro l'etichetta**, e la riga che finisce subito dopo la quadra.
+ *   Un'etichetta più lunga è innocua per entrambe; una quadra dentro, o un testo dopo, no.
+ */
+/*
+ * ⛔⛔⛔ BLOCCO 7 (B4) — I DUE FLUSSI ESCONO SEPARATI DAL KERNEL.
+ *
+ *   Deciso dall'owner («B4: separare») e confermato stasera dopo la 5×5×5×5: **campi strutturati
+ *   per chi disegna**, una riga sola per il modello. La ragione sta nelle fonti — la specifica MCP
+ *   mette stdout/stderr nel TRASPORTO e dice di **non presumere che stderr sia un errore**; Hermes,
+ *   letto nel suo codice, allega i due flussi separati solo quando esistono, «otherwise the merged
+ *   detail already covers it and double-rendering would duplicate output», e **non dipinge stderr
+ *   come errore** perché «many CLIs use stderr for informational messages (npm progress, git
+ *   hints)».
+ *
+ * ⛔ Questa prova guarda la PROPRIETÀ che rende tutto il resto possibile: il kernel, che i flussi li
+ *   ha sempre tenuti distinti in memoria, ora li **restituisce** — e li restituisce SOLO quando non
+ *   sono vuoti, così chi non li usa (il modello, che legge il fuso) non vede un byte di differenza.
+ */
+describe('FLUSSI-SEPARATI — stdout e stderr escono distinti, e il fuso resta', () => {
+    it('un comando che scrive su entrambi i flussi li separa', async (t) => {
+        const cartella = mkdtempSync(join(tmpdir(), 'talos-flussi-'))
+        t.after(() => rmSync(cartella, { recursive: true, force: true }))
+        const esito = await eseguiComandoSandboxato(`node -e "console.log('avanti'); console.error('dietro')"`, cartella)
+        assert.equal(esito.codice, 0, 'il comando doveva riuscire')
+        assert.match(esito.fuori ?? '', /avanti/, 'stdout non e tornato separato')
+        assert.match(esito.errori ?? '', /dietro/, 'stderr non e tornato separato')
+        /* ⛔ E IL FUSO RESTA: è quello che il modello legge, e non deve cambiare di un byte. */
+        assert.match(esito.testo, /avanti/)
+        assert.match(esito.testo, /dietro/)
+        assert.equal(typeof esito.enforcement, 'string', 'la dichiarazione di dove ha girato resta')
+    })
+    it('⛔ E AL CONTRARIO: un comando che scrive solo su stdout NON porta un campo stderr vuoto', async (t) => {
+        const cartella = mkdtempSync(join(tmpdir(), 'talos-flussi-'))
+        t.after(() => rmSync(cartella, { recursive: true, force: true }))
+        const esito = await eseguiComandoSandboxato(`node -e "console.log('solo avanti')"`, cartella)
+        assert.equal(esito.codice, 0)
+        assert.match(esito.fuori ?? '', /solo avanti/)
+        assert.equal('errori' in esito, false, 'un flusso VUOTO non deve diventare un campo: e la guardia che evita il doppio disegno')
+    })
+})
+
+describe('ETICHETTA-SANDBOX — dire dove ha girato, e che cosa è vero lì', () => {
+    it('dichiara il fatto, non solo il valore: `none` non è una spiegazione', () => {
+        assert.match(etichettaSandbox('none'), /^none \(.*stessi privilegi.*\)$/)
+        assert.match(etichettaSandbox('none'), /nessun isolamento/)
+        assert.match(etichettaSandbox('wsl2'), /^wsl2 \(.*namespace Linux.*\)$/)
+        assert.match(etichettaSandbox('adb-shell-on-device'), /^adb-shell-on-device \(/)
+    })
+    it('⛔ un valore che non conosco NON si decora: si restituisce com\'è', () => {
+        assert.equal(etichettaSandbox('qualcosa-di-nuovo'), 'qualcosa-di-nuovo')
+        assert.equal(etichettaSandbox(''), 'non dichiarato')
+        assert.equal(etichettaSandbox(null), 'non dichiarato')
+    })
+    it('⛔ IL CONTRATTO DEI PARSER: nessuna quadra dentro, e la riga finisce dopo la quadra', () => {
+        for (const livello of ['none', 'wsl2', 'adb-shell-on-device', 'ignoto']) {
+            const etichetta = etichettaSandbox(livello)
+            assert.doesNotMatch(etichetta, /[\[\]]/, `l'etichetta di «${livello}» contiene una quadra: romperebbe entrambi i parser`)
+            const riga = `exit 0 [sandbox: ${etichetta}]\nuscita`
+            assert.match(riga, /^exit\s+-?\d+\s+\[sandbox:[^\]]+\](?:\r?\n|$)/i, 'il parser dell\'adapter non riconosce piu la riga')
+            const registro = /^exit (-?\d+)(?: \[sandbox: ([^\]]*)\])?/.exec(riga)
+            assert.equal(registro?.[1], '0', 'il registro non legge piu il codice d\'uscita')
+            assert.ok(registro?.[2]?.startsWith(livello), `il registro legge «${registro?.[2]}» invece di «${livello}…»`)
+        }
+    })
+})
+
+/*
+ * ⛔⛔⛔ BLOCCO 5 (B7) — UNA SUITE CHE GIRA **ZERO** TEST NON È UNA PROVA PASSATA.
+ *
+ *   Riprodotto il 20/09/2026 in una cartella con `"scripts": {"test": "node --test"}` e nessun file
+ *   di test: `ℹ tests 0`, `ℹ fail 0`, **uscita 0**. Cioè: «zero test eseguiti» e «tutti i test
+ *   passano» hanno lo stesso codice di uscita, e il modello legge `exit 0` credendo di aver
+ *   verificato. Il cancello statico (`suiteMancante`) non può vederla: il programma esiste, lo
+ *   script esiste, il comando è semplice.
+ *
+ * ⛔ Questi testi sono quelli VERI dei runner, presi dalle loro fonti e non inventati:
+ *   · Node   — `ℹ tests 0` (misurato qui; è la riga del suo reporter)
+ *   · Mocha  — `Error: No test files found` (mochajs/mocha #3650/#3654, «error and exit, dont warn»)
+ *   · Jest   — `No tests found`
+ *   · Vitest — `No test files found` (docs `passWithNoTests`: default `false`, senza il flag esce 1)
+ *   ⛔ **pytest NON c'è, di proposito**: la ricerca del 20/09/2026 non ha dato né il messaggio né il
+ *     codice d'uscita del caso «nessun test», e una regola inventata qui produce **falsi rossi**,
+ *     che sono peggio del difetto che cura.
+ */
+describe('PROVA-ZERO-TEST — la dichiarazione di zero test, e il suo verso contrario', () => {
+    it('riconosce la riga del reporter di Node, che è quella misurata', () => {
+        assert.equal(provaSenzaTest(0, 'ℹ tests 0\nℹ suites 0\nℹ pass 0\nℹ fail 0\nℹ duration_ms 6.1641'), true)
+    })
+    it('riconosce le frasi di Mocha, Jest e Vitest — ognuna con la sua fonte', () => {
+        assert.equal(provaSenzaTest(0, 'Error: No test files found: "test"\n'), true)
+        assert.equal(provaSenzaTest(0, 'No tests found, exiting with code 1'), true)
+    })
+    it('⛔ E IL VERSO CONTRARIO: una suite che ESEGUE i test NON viene toccata', () => {
+        assert.equal(provaSenzaTest(0, 'ℹ tests 1\nℹ suites 1\nℹ pass 1\nℹ fail 0'), false)
+        assert.equal(provaSenzaTest(0, 'ℹ tests 137\nℹ pass 137\nℹ fail 0'), false)
+        assert.equal(provaSenzaTest(0, '2 passed (1.2s)'), false)
+        assert.equal(provaSenzaTest(0, ''), false, 'un esito vuoto non è una dichiarazione di zero test')
+    })
+    it('⛔ E NON SI APPLICA A UN FALLIMENTO: con uscita diversa da zero la lettura del testo non serve', () => {
+        assert.equal(provaSenzaTest(1, 'ℹ tests 0\nℹ fail 1'), false)
+        assert.equal(provaSenzaTest(127, 'nessuna suite trovata'), false)
+    })
+})
 
 /** Uno sportello finto: torna in fila gli stati che gli si danno. */
 function reteChe(...stati) {
@@ -1114,6 +1234,14 @@ describe('ambienteSenzaCredenziali — lo scrub delle credenziali passate ai sot
  * limite già accettato per `eseguiProva`, mai testata a unità in questo file,
  * verificata invece dal vivo (vedi il piano, sezione verifica). Non un buco
  * silenzioso: una scelta, la stessa già fatta per `eseguiProva`.
+ *
+ * ⛔ 17/09/2026 — quel limite è costato tre difetti (BC-54/55/56): con `--` al posto
+ * di `--exec` la riga passava da DUE shell, il ripiego automatico spediva su cmd.exe
+ * ogni riga che non cominciava con un programma, e un comando vuoto lanciava un
+ * `TypeError`. Le prove d'integrazione che li coprono — con `wsl.exe` vero, saltate
+ * con un motivo dichiarato quando WSL non risponde — stanno in
+ * `harness-ui/tests/shell-wsl-p0bis.test.mjs`, insieme alle unità di
+ * `argomentiWslPerScript` e `rigaVuoleUnaShellPosix`. Questo file resta puro.
  */
 describe('primoProgramma — il primo token di un comando', () => {
     it('⭐ "npm test" -> "npm"', () => {
@@ -2882,6 +3010,96 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
     const CHIAMA_IMMAGINE = { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: 'generate_image', arguments: '{"prompt":"un gatto rosso"}' } }] }
     const CHIAMA_LEGGI = { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: 'leggi', arguments: '{"percorso":"gia-presente.txt"}' } }] }
     const CHIAMA_PROVA = { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: 'prova', arguments: '{}' } }] }
+
+    /*
+     * ⛔⛔⛔ LA PROVA DEL COLLEGAMENTO — il caso vero, col modello finto che chiama `prova` in una
+     *   cartella la cui suite ESISTE ma non trova nessun test. È la sola che prova che la cura è
+     *   **attaccata** al filo: la funzione pura può essere giusta e non essere chiamata da nessuno.
+     *   Il verso contrario sta sotto, ed è quello che impedisce di aver scritto un cancello che
+     *   dice «nessuna suite» a una suite che gira.
+     */
+    /*
+     * ⛔⛔⛔ PERCHÉ QUESTA PROVA NON USA UN VERO `node --test` — e la ragione è MISURATA.
+     *
+     *   La prima stesura di questa prova metteva in `package.json` `"test": "node --test"` e nessun
+     *   file di test, aspettandosi `ℹ tests 0`. È **fallita**, e non per colpa della cura: il
+     *   messaggio al modello conteneva
+     *       «(node:192124) Warning: node:test run() is being called recursively within a test file.
+     *        skipping running files.»
+     *   ⇒ **Node disabilita il runner annidato**: lanciato da dentro `node --test`, il figlio non gira
+     *     e non stampa nessun contatore. Il caso vero, quindi, NON è provabile da dentro la suite —
+     *     e sta in uno script che gira in un processo normale (vedi il commento della cura in
+     *     `talosHarness.mjs`): lì il verso «zero test» dà `exit 127` e il verso «un test» dà `exit 0`
+     *     con `pass 1`. **Provato.**
+     *
+     *   ⛔ Questa prova, allora, verifica una cosa DIVERSA e la dichiara: che il **collegamento** ci
+     *     sia — che una dichiarazione di zero test, quando arriva, produca l'esito giusto. La
+     *     dichiarazione è sintetica (uno `console.log`), perché il runner vero non è disponibile qui.
+     *     ⇒ Non è una scorciatoia taciuta: è la parte che questa sede può provare, e la parte che non
+     *       può sta nell'altra sede, col suo nome.
+     */
+    /*
+     * ⛔⛔⛔ LA FALLA 1 — che era cablata dal 17/09 (BC-57) e **non aveva una sola prova**.
+     *   Verificato col grep il 20/09/2026: `suiteMancante` non compariva in nessun test del kernel.
+     *   Una cura senza prova è una cura che nessuno sa se morde: qui si prova nei DUE versi.
+     */
+    it('⛔⛔⛔ FALLA 1 — senza nessun `package.json` il cancello rifiuta, col motivo e col 127', async () => {
+        const cartella = cartellaVuota(it)   // in %TEMP%, e sopra non c'è nessun package.json fino a C:\ (verificato)
+        const rete = reteDiRisposte(CHIAMA_PROVA, CONCLUSO_SUBITO)
+        await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch })
+        const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
+        assert.match(messaggioTool.content, /nessuna suite trovata in /, 'il cancello non ha parlato')
+        assert.match(messaggioTool.content, /nessun package\.json da qui fino alla radice del disco/, 'manca il MOTIVO: senza, il rifiuto non si puo capire')
+        assert.match(messaggioTool.content, /exit 127/, 'stesso codice della suite a zero test: non e partita, non e fallita')
+        assert.doesNotMatch(messaggioTool.content, /^exit 0/m, 'un cancello che rifiuta NON puo produrre un exit 0')
+    })
+
+    it('⛔ FALLA 1, AL CONTRARIO — con un `package.json` che dichiara lo script, la prova GIRA', async () => {
+        const cartella = cartellaVuota(it)
+        writeFileSync(join(cartella, 'package.json'), JSON.stringify({ name: 'vera', version: '1.0.0', scripts: { test: `node -e "console.log('suite girata davvero')"` } }))
+        const rete = reteDiRisposte(CHIAMA_PROVA, CONCLUSO_SUBITO)
+        await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch })
+        const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
+        assert.doesNotMatch(messaggioTool.content, /nessuna suite trovata/, 'una suite che ESISTE non deve essere rifiutata')
+        assert.match(messaggioTool.content, /suite girata davvero/, 'la prova non e girata: manca la sua uscita')
+        assert.match(messaggioTool.content, /exit 0/)
+    })
+
+    it('⛔⛔⛔ il COLLEGAMENTO: una dichiarazione di zero test diventa «nessuna suite» (uscita 127)', async () => {
+        const cartella = cartellaVuota(it)
+        writeFileSync(join(cartella, 'package.json'), JSON.stringify({
+            name: 'senza-test', version: '1.0.0',
+            scripts: { test: `node -e "console.log('ℹ tests 0'); console.log('ℹ fail 0')"` },
+        }))
+        const rete = reteDiRisposte(CHIAMA_PROVA, CONCLUSO_SUBITO)
+        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch })
+        assert.equal(esito.comeFinita, 'concluso')
+        const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
+        assert.match(messaggioTool.content, /nessuna suite trovata/, 'il modello deve leggere che NIENTE e stato verificato')
+        assert.match(messaggioTool.content, /ZERO test/)
+        assert.match(messaggioTool.content, /exit 127/, 'lo stesso codice della suite mancante: non e partita, non e fallita')
+        /*
+         * ⛔ UNA VOLTA SOLA — 20/09/2026, quarto referto avversario. `eseguiProva` scriveva la testata
+         *   dentro il proprio `testo` E il chiamante la riscriveva avvolgendolo: due `exit 127`, e lo
+         *   strip della chat ne toglie una ⇒ una riga tecnica restava a schermo. Il codice viaggia in
+         *   `codice`; la testata la mette chi avvolge, come per ogni altro esito.
+         */
+        assert.equal((messaggioTool.content.match(/exit 127/g) || []).length, 1, 'la testata si scrive UNA volta: era doppia')
+    })
+
+    it('⛔ E IL VERSO CONTRARIO: una prova che ESEGUE qualcosa non viene accusata di niente', async () => {
+        const cartella = cartellaVuota(it)
+        writeFileSync(join(cartella, 'package.json'), JSON.stringify({
+            name: 'con-test', version: '1.0.0',
+            scripts: { test: `node -e "console.log('ℹ tests 1'); console.log('ℹ pass 1'); console.log('ℹ fail 0')"` },
+        }))
+        const rete = reteDiRisposte(CHIAMA_PROVA, CONCLUSO_SUBITO)
+        await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch })
+        const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
+        assert.doesNotMatch(messaggioTool.content, /nessuna suite trovata/, 'una prova che gira NON deve essere accusata di non esistere')
+        assert.match(messaggioTool.content, /exit 0/)
+        assert.match(messaggioTool.content, /pass 1/)
+    })
 
     it('⭐⭐⭐ PARITÀ — livelloAccesso/chiediApprovazioneFn assenti, esito bit-per-bit identico a oggi', async () => {
         const cartella = cartellaVuota(it)

@@ -67,7 +67,7 @@ test('funzioniDichiarate non conta due volte lo stesso nome, e ignora i metodi',
   assert.ok(!nomi.includes('b'), 'un metodo abbreviato non è una funzione dichiarata');
 });
 
-test('⛔ sul monolite VERO: le sette funzioni morte del 06/9 sono ancora lì', () => {
+test('⛔ sul monolite VERO: debito residuo limitato e vecchia intro rimossa', () => {
   /*
    * Questa non è una prova sintetica: è il codice di produzione. Se un giorno qualcuno le rimuove,
    * questo test lo dice — e va aggiornato, non silenziato.
@@ -77,5 +77,12 @@ test('⛔ sul monolite VERO: le sette funzioni morte del 06/9 sono ancora lì', 
   const morte = funzioniMaiChiamate(app).map((m) => m.nome);
   assert.ok(morte.length < 20, `troppe funzioni morte (${morte.length}): o il monolite è peggiorato, o il controllo ha iniziato ad accusare i vivi`);
   assert.ok(morte.includes('costruisciConversationHero'), 'la schermata di benvenuto che nessuno costruisce');
-  assert.ok(morte.includes('apriIntroPrimoAvvio'), 'la vecchia intro, rimasta dopo il passaggio al mockup');
+  /*
+   * ⛔ 17/09, PO-27 — QUI C'ERA `apriIntroPrimoAvvio`, ED È IL CASO CHE QUESTO TEST PREVEDEVA:
+   *   «se un giorno qualcuno le rimuove, questo test lo dice — e va aggiornato, non silenziato».
+   *   La vecchia intro non è più morta: non c'è più. Il controllo si capovolge — non deve NASCERE
+   *   di nuovo, e un morto in meno non è un morto da dichiarare.
+   */
+  assert.ok(!morte.includes('apriIntroPrimoAvvio'), 'la vecchia intro è stata tolta il 17/09: se ricompare, qualcuno l\'ha rimessa');
+  assert.ok(!funzioniDichiarate(app).includes('apriIntroPrimoAvvio'), 'D21: il percorso introduttivo rimosso non deve rientrare');
 });

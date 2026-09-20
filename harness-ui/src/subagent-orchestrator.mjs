@@ -21,6 +21,7 @@
 
 /** Fonte: ricerca su un progetto open source dello stesso spazio, letto il 28/8. */
 import { existsSync, statSync } from 'node:fs';
+import { riassuntoAttivitaSessione } from './attivita-figlia.mjs';
 import { parse as parsePath } from 'node:path';
 
 export const LIMITE_FIGLI_CONCORRENTI = 10;
@@ -240,7 +241,45 @@ export function compitoDaPromptDiDelega(prompt) {
   return dopo || testo;
 }
 
-export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsisteFn = esisteCartella }) {
+/**
+ * ⛔⛔⛔⛔ BC-76, secondo giro (17/09/2026) — CON QUALE MODELLO NASCE UNA FIGLIA.
+ *
+ * Era `padre.modello ?? null`, scritto qui dentro. Reggeva finché una madre era per forza cloud;
+ * da quando una sessione `provider:'local'` esegue gli attrezzi, quella riga **mandava fuori casa**
+ * il compito delegato: `voce.modello` di una madre locale è il `modelId` NUDO del GGUF, e
+ * `separaFonteModello` legge un id nudo come OpenRouter.
+ *
+ * ⇒ La domanda «come si chiama in rete il modello di questa sessione» ha già una risposta sola, in
+ *   `session-registry.mjs` (`modelloDellaFiglia` → `modelloDiSessionePerRete`). Qui NON si ricopia:
+ *   si riceve. ⛔ E non si importa nemmeno — `session-registry` importa già questo file, e un ciclo
+ *   fra i due metterebbe una costante di modulo in zona morta a seconda di chi viene caricato prima.
+ *
+ * Il default riproduce il comportamento di prima **parola per parola**: un host che non passa questa
+ * dipendenza non cambia di un byte.
+ *
+ * @callback ModelloPerLaFiglia
+ * @param {object} padre la voce della sessione madre
+ * @returns {{ok: true, modello: string|null} | {ok: false, motivo: string}}
+ */
+export function creaSubagentOrchestrator({
+  sessioni, avviaESeguiFn, cartellaEsisteFn = esisteCartella,
+  modelloPerLaFigliaFn = (padre) => ({ ok: true, modello: padre?.modello ?? null }),
+  statisticheFiglioFn = () => ({}),
+  onFiglioCreatoFn = null,
+  onFiglioConclusoFn = null,
+}) {
+  function notificaSenzaBloccare(callback, payload, { onErrore = null } = {}) {
+    if (typeof callback !== 'function') return;
+    Promise.resolve()
+      .then(() => callback(payload))
+      .catch((errore) => {
+        if (typeof onErrore === 'function') {
+          try { onErrore(errore); } catch { /* la diagnosi non deve mascherare l'errore originale */ }
+        }
+        console.error('[subagent-orchestrator] notifica asincrona fallita:', errore instanceof Error ? errore.message : errore);
+      });
+  }
+
   function contaFigliAttivi(sessionPadreId) {
     let n = 0;
     for (const voce of sessioni.values()) {
@@ -249,13 +288,14 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
     return n;
   }
 
-  /** Per il foglio "Albero sessione" (C.3) — ordinati per avvio, il più vecchio prima. */
-  function elencaFigli(sessionPadreId) {
-    const figli = [];
-    for (const [sessionId, voce] of sessioni.entries()) {
-      if (voce.padreId === sessionPadreId) {
-        figli.push({
+  /** Proietta una sola figlia. Gli eventi live non devono ricalcolare tutte le sorelle. */
+  function snapshotFiglio(sessionId) {
+    const voce = sessioni.get(sessionId);
+    if (!voce?.padreId) return null;
+    const statistiche = statisticheFiglioFn(voce) ?? {};
+    return {
           sessionId,
+          parentId: voce.padreId,
           task: voce.task?.consegna ?? null,
           /*
            * ⛔ 09/09, visto nella FOTO della scheda «Agenti» dopo il giro vero della delega (D2): le due
@@ -288,15 +328,40 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
           esitoDelega: voce.esitoDelega ?? null,
           evidenzaDelega: voce.evidenzaDelega ?? null,
           avviataAlle: voce.avviataAlle ?? null,
-        });
-      }
+          conclusaAlle: statistiche.conclusaAlle ?? null,
+          ultimaAttivitaAlle: statistiche.ultimaAttivitaAlle ?? null,
+          approvalPendingCount: Number.isSafeInteger(statistiche.approvalPendingCount) ? statistiche.approvalPendingCount : 0,
+          ultimoEsito: statistiche.ultimoEsito ?? null,
+          motivoChiusura: statistiche.motivoChiusura ?? null,
+          usageSessione: statistiche.usageSessione ?? null,
+          operazioneCorrente: statistiche.operazioneCorrente ?? null,
+          erroreConsegnaDelega: voce.erroreConsegnaDelega ?? null,
+          /*
+           * ⛔⛔ PO-30 (18/09/2026) — ciò che serve al DETTAGLIO di un agente e alla scheda File («chi sta toccando questo
+           *   file»), come nel laboratorio dell'owner ma dai dati veri: il modello e i permessi con cui la figlia gira, e che
+           *   cosa ha LETTO e SCRITTO — ricavato dagli eventi che la figlia ha già emesso (`attivita-figlia.mjs`, pura, con un
+           *   tetto che dice quanti file ha tagliato). Niente di nuovo si raccoglie e niente si scrive sul disco.
+           */
+          modello: voce.modello ?? null,
+          permessi: voce.permessi ?? null,
+          attivita: riassuntoAttivitaSessione(voce.eventi),
+    };
+  }
+
+  /** Per il foglio "Albero sessione" (C.3) — ordinati per avvio, il più vecchio prima. */
+  function elencaFigli(sessionPadreId) {
+    const figli = [];
+    for (const [sessionId, voce] of sessioni.entries()) {
+      if (voce.padreId !== sessionPadreId) continue;
+      const snapshot = snapshotFiglio(sessionId);
+      if (snapshot) figli.push(snapshot);
     }
     figli.sort((a, b) => String(a.avviataAlle).localeCompare(String(b.avviataAlle)));
     return figli;
   }
 
   /**
-   * @returns {Promise<{riassunto?: string, esito: 'concluso'|'fallito'|'rifiutato', motivo?: string}>}
+   * @returns {Promise<{riassunto?: string, childId?: string, esito: 'avviato'|'rifiutato', motivo?: string}>}
    * Non lancia MAI — un rifiuto (cartella invalida, tetto raggiunto,
    * padre scomparso) è un `esito:'rifiutato'` con `motivo`, non
    * un'eccezione: il dispatcher del kernel lo traduce in un REFUSED
@@ -307,6 +372,19 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
       const padre = sessioni.get(sessionPadreId);
       if (!padre) {
         resolve({ esito: 'rifiutato', motivo: 'la sessione padre non esiste più' });
+        return;
+      }
+      /*
+       * ⛔⛔⛔⛔ BC-76, secondo giro — PRIMA di tutto il resto, perché è l'unico rifiuto che protegge
+       *   qualcosa che non si può disfare: una conversazione già uscita dal computer.
+       * ⛔ Se la madre è locale e il suo nome di rete non si sa costruire, si RIFIUTA con una frase.
+       *   Non si ripiega sul cloud e non si ripiega sul modello di serie del server: chi ha scelto
+       *   il locale l'ha scelto perché niente esca, e un ripiego silenzioso su quel punto è
+       *   esattamente il difetto misurato il 17/09 (`openrouter.ai`, corpo col testo della madre).
+       */
+      const modelloScelto = modelloPerLaFigliaFn(padre);
+      if (modelloScelto?.ok !== true) {
+        resolve({ esito: 'rifiutato', motivo: modelloScelto?.motivo ?? 'non si sa con quale modello far partire la sotto-sessione' });
         return;
       }
       /*
@@ -377,7 +455,18 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
           voceFiglia.esitoDelega = esito.esito;
           voceFiglia.evidenzaDelega = analizzaEvidenzaDelega(eventi);
         }
-        resolve(esito);
+        notificaSenzaBloccare(onFiglioConclusoFn, {
+          parentId: sessionPadreId,
+          childId: figlioId,
+          risultato: esito,
+          evidenza: voceFiglia?.evidenzaDelega ?? null,
+        }, {
+          onErrore: (errore) => {
+            if (!voceFiglia) return;
+            voceFiglia.erroreConsegnaDelega = errore instanceof Error ? errore.message : String(errore);
+            voceFiglia.esitoDelega = 'fallito';
+          },
+        });
       };
       /*
        * ⛔⛔⛔ 06/9, stessa misura: i figli partivano con `glm-4.7-flash` mentre la sessione madre
@@ -432,7 +521,10 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
         task: { consegna: task, consegnaCorta: compitoDaPromptDiDelega(task) },
         padreId: sessionPadreId,
         profonditaDelega: profonditaVoluta,
-        modelloRichiesta: padre.modello ?? null,
+        /* ⛔ BC-76: non `padre.modello` — vedi `modelloPerLaFigliaFn` in testa a questa funzione.
+           Per una madre cloud è lo stesso valore di prima; per una madre locale è il nome con il
+           prefisso della sua fonte, cioè l'unico che tiene la figlia sul motore di casa. */
+        modelloRichiesta: modelloScelto.modello,
         reasoningRichiesto: padre.reasoning ?? null,
         permessiRichiesti: padre.permessi ?? null,
         permessiPerAttrezzoRichiesti: padre.permessiPerAttrezzo ?? null,
@@ -441,13 +533,24 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
         },
       });
       figlioId = risultatoAvvio?.sessionId ?? null;
-      if (conclusioneRicevuta) completaConclusione(conclusioneRicevuta);
       // ⛔ AL CONTRARIO: avviaESeguiFn può rifiutare PRIMA di avviare (es. chiave API non configurata) — mai una Promise appesa in eterno se onConclusioneFn non scatterà mai.
-      if (!conclusioneGestita && !conclusioneRicevuta && risultatoAvvio?.erroreAvvio) {
+      if (risultatoAvvio?.erroreAvvio) {
         resolve({ esito: 'rifiutato', motivo: risultatoAvvio.erroreAvvio });
+        return;
       }
+      if (!figlioId) {
+        resolve({ esito: 'rifiutato', motivo: 'la sessione figlia non ha restituito un identificatore valido' });
+        return;
+      }
+      notificaSenzaBloccare(onFiglioCreatoFn, { parentId: sessionPadreId, childId: figlioId });
+      if (conclusioneRicevuta) completaConclusione(conclusioneRicevuta);
+      resolve({
+        esito: 'avviato',
+        childId: figlioId,
+        riassunto: `Sotto-agente ${figlioId} avviato in background. Continua il lavoro: il risultato finale verrà consegnato separatamente quando sarà disponibile.`,
+      });
     });
   }
 
-  return Object.freeze({ delegaSottoTask, contaFigliAttivi, elencaFigli });
+  return Object.freeze({ delegaSottoTask, contaFigliAttivi, elencaFigli, snapshotFiglio });
 }

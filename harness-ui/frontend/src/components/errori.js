@@ -201,6 +201,45 @@ function grezzoContesto(tecnico, codice) {
 const REGOLE = [
   {
     /*
+     * ⭐⭐⭐ CLI-REQ-03, metà A SCHERMO (17/09/2026) — LA CHIAVE CHE MANCA NON È UN GUASTO.
+     *
+     * Il primo giro ha curato il server: una chiave mancante non si travveste più da rifiuto del
+     * fornitore e non scrive un consumo. Ma a schermo non cambiava NIENTE, e il revisore l'ha
+     * misurato con un grep: `PROVIDER_KEY_MISSING` compariva zero volte in `frontend/src`. Chi
+     * apriva TALOS leggeva la frase generica dello sconosciuto — «questa forma di errore non è
+     * ancora tradotta» — davanti a una cosa che si risolve in dieci secondi.
+     *
+     * ⛔ È la prima regola dell'elenco perché è la sola che parla di una CONFIGURAZIONE e non di
+     *   un guasto: la persona non deve riprovare, deve collegare una chiave.
+     * ⛔ Il nome umano arriva dal server dentro il messaggio: qui non si mappa niente: la mappa
+     *   dei nomi è una sola (`fonti-modelli.js`) e sta dall'altra parte del muro. Se un giorno il
+     *   messaggio arrivasse senza nome, la frase resta vera e non inventa un fornitore.
+     */
+    id: 'chiave-fornitore-mancante',
+    famiglia: 'chiave-fornitore',
+    riconosce: (t) => /\bPROVIDER_KEY_MISSING\b/.test(t) || /Manca la chiave per\b/i.test(t),
+    spiega: (t) => {
+      /*
+       * ⛔⛔ 17/09 — TROVATO IN UNA FOTO: la carta diceva «Manca la chiave per Z.». Il nome era
+       *   «Z.AI», e un `[^.]+` si ferma al PRIMO punto — cioè proprio dentro il nome del
+       *   fornitore che questa regola esiste per mostrare. Si prende tutto fino alla fine della
+       *   riga e si toglie il punto finale, uno solo.
+       */
+      const nome = /Manca la chiave per\s+(.+)$/im.exec(t)?.[1]?.trim().replace(/\.$/u, '') || null;
+      return {
+        cosa: nome ? `Manca la chiave per ${nome}.` : 'Manca la chiave del fornitore scelto.',
+        perche: 'Il modello scelto passa da un fornitore che vuole una chiave, e in questo computer non ce n’è una collegata. La richiesta non è nemmeno partita: nessun consumo, nessuna attesa.',
+        rimedi: [
+          /* «per», non «di»: la stessa preposizione del messaggio del server (D18). */
+          nome ? `Collega la chiave per ${nome} da Impostazioni → Laboratorio modelli → Fornitori e accessi.` : 'Collega la chiave da Impostazioni → Laboratorio modelli → Fornitori e accessi.',
+          'Oppure scegli un altro modello dalla pillola del composer: uno locale non chiede nessuna chiave.',
+        ],
+        tecnico: t,
+      };
+    },
+  },
+  {
+    /*
      * Caso 1 dei tre veri: il modello della sintesi ha risposto senza il testo del riassunto o senza
      * dire se l'aveva finito. Non c'è niente da verificare, quindi il contesto scarta — e non è un
      * guasto del compito che stavi chiedendo.

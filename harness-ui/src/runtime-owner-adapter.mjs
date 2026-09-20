@@ -15,7 +15,7 @@ import { createParser } from 'eventsource-parser';
 import { eseguiFlowForgeLocale, FORGE_PREFISSO_NOME_TOOL, validaManifestForgeLocale } from './forge-contract.mjs';
 import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
 import { risolviDestinazioneModello, separaFonteModello, FONTI_MODELLO, validaFallbackProviders } from './model-destination.mjs';
-import { REGISTRO_FORNITORI } from './provider-registry.mjs';
+import { REGISTRO_FORNITORI, ID_MOTORI_LOCALI_OPENAI, idPerWire } from './provider-registry.mjs';
 import { classificaErroreDiCorsa } from './research-orchestrator.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
@@ -26,6 +26,14 @@ import { rispostaAgenteAcp } from './acp-agent.mjs';
 // BC-48 A · sezioni di progetto nel canale degli originali, prima della richiesta.
 import { trovaIstruzioniDiProgetto, trovaRadiceProgetto } from './istruzioni-di-progetto.mjs';
 import { collegaSezioniAiContextHooks } from './context-provider-adapter.mjs';
+// P0 · punto 7 (16/09): il failsafe di inattività e il dispatcher stanno in una porta sola.
+import {
+  SilenzioDelFornitoreError,
+  dispatcherDiGenerazione,
+  leggiInattivitaGenerazioneMs,
+  sorvegliaCorpoDiGenerazione,
+  sorvegliaInattivita,
+} from './generation-idle.mjs';
 
 const ENDPOINT_OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
 const RICHIESTA_DI_RIASSUNTO = 'Riassumi la conversazione mantenendo decisioni, file e risultati utili al lavoro.';
@@ -72,6 +80,98 @@ function rispostaRitentabile(status) {
   return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
 }
 
+/**
+ * ⛔⛔⛔ BC-79.2 (17/09/2026) — LE FONTI CHE GIRANO SU QUESTO COMPUTER, DERIVATE DAL REGISTRO.
+ *
+ * Non è un elenco: è una domanda fatta al registro dei fornitori. `idPerWire('locale')` è il ponte
+ * del supervisore llama-server (`local`, la cui `--api-key` non esce di lì), `ID_MOTORI_LOCALI_OPENAI`
+ * sono quelli che girano in casa e parlano il wire OpenAI (`ollama`, `lmstudio`). Misurato il
+ * 17/09/2026: `["local","ollama","lmstudio"]`.
+ *
+ * ⛔ Scriverli a mano sarebbe la quattordicesima copia dello stesso insieme — è il difetto che
+ *   `provider-registry.mjs` esiste per chiudere, e che `fonteLocaleDelRuntime` (BC-76) ha già
+ *   chiuso per il registro delle sessioni. Un motore locale aggiunto domani entra qui da solo.
+ */
+export const FONTI_DI_MOTORE_LOCALE = Object.freeze(new Set([...idPerWire('locale'), ...ID_MOTORI_LOCALI_OPENAI]));
+
+/**
+ * L'unica frase che chi legge vedrà: dice che cosa cambia per LEI, non che cosa è successo al
+ * protocollo. ⛔ Nessun nome tecnico (`tools`, `--jinja`, `HTTP`), nessun modello «consigliato» e
+ * nessun elenco di modelli che reggono gli attrezzi (owner 11/09: «non forziamo nulla»).
+ */
+const AVVISO_MOTORE_SENZA_ATTREZZI = 'Questo modello non usa gli attrezzi: qui resta una chat. Può rispondere, non può leggere file né eseguire comandi.';
+
+/**
+ * ⛔⛔⛔ BC-79.2 — LA RIPROVA SENZA ATTREZZI, E PERCHÉ NON SI LEGGE IL TESTO DELL'ERRORE.
+ *
+ * ## Il difetto, MISURATO sulla base `f29c8e91` prima di scrivere
+ *
+ * Un motore locale che risponde 400 a una richiesta con `tools` arrivava a schermo come
+ * `[internal-error] HTTP 400 dopo 4 tentativi: {…grezzo del server…}`. Misurato con una sonda
+ * sulla strada vera (registro, kernel, adattatore, motore finto su 127.0.0.1) contando le
+ * richieste che il motore riceve davvero: **1** per 400/401/404, **4** per 429/503.
+ * ⇒ I quattro tentativi NON ESISTEVANO: `siRitenta` (kernel) escludeva già i 4xx-risposta. A
+ *   mentire era il MESSAGGIO, che stampava la costante `tentativiMassimi` invece dei tentativi
+ *   fatti — «una misura che non può smentirti», corretta nel kernel nella sola riga del ritento.
+ *
+ * ## La cura, e i suoi confini
+ *
+ * Solo per una fonte di MOTORE LOCALE, solo su un **400**, solo se la richiesta portava `tools`:
+ * UNA riprova identica senza `tools` né `tool_choice`.
+ *  · riesce ⇒ il giro prosegue come chat, si dice UNA volta con una frase umana, e per il resto
+ *    del giro di sessione `tools` non si manda più. ⛔ Questa memoria non è un ottimizzazione: la
+ *    ricerca del 17/09 dice che *«simply retrying without changes will loop»* — senza memoria ogni
+ *    giro rifarebbe il suo 400 e la riprova diventerebbe il doppio delle chiamate, per sempre.
+ *  · fallisce anche senza ⇒ l'errore ORIGINALE con un codice SUO e una frase umana; il grezzo resta
+ *    sull'errore (`dettaglio`) e non arriva a schermo.
+ *
+ * ⛔ MAI sul cloud: un fornitore remoto che rifiuta gli attrezzi è un errore da dire, non da
+ *   aggirare togliendo metà del prodotto a chi non l'ha chiesto.
+ * ⛔ MAI dal TESTO dell'errore. Un 400 con `tools` nel corpo ha altre cause (una regex PCRE che
+ *   llama.cpp non compila in GBNF, un template che lancia sull'ordine dei messaggi, il formato
+ *   dell'esito di un attrezzo): un filtro sulla frase «does not support tools» riconoscerebbe la
+ *   MENZIONE invece della cosa, e lascerebbe morire tutti gli altri. Si riconosce dal
+ *   COMPORTAMENTO — la stessa richiesta senza `tools` riesce. Prova: BC79-03.
+ * ⛔ Nessun secondo esecutore di attrezzi, nessun modello «consigliato», nessun template forzato.
+ */
+class MotoreLocaleRifiutaError extends Error {
+  constructor(stato, dettaglio, tentativi = [{ stato, dettaglio }]) {
+    super('Il motore locale non ha accettato questa richiesta, nemmeno senza gli attrezzi.');
+    this.name = 'MotoreLocaleRifiutaError';
+    this.code = 'LOCAL_ENGINE_REJECTED_REQUEST';
+    this.stato = stato;
+    /* ⛔ Il grezzo del server si CONSERVA (serve a chi apre una segnalazione) ma non viaggia nel
+       messaggio: `agent-service` mette il solo `message` dentro `RunError`, e lì finisce a schermo. */
+    this.dettaglio = dettaglio;
+    // Diagnostica interna: non entra nella serializzazione pubblica dell'errore.
+    Object.defineProperty(this, 'tentativi', { value: Object.freeze(tentativi.map(t => Object.freeze({ ...t }))) });
+  }
+}
+
+/** Legge soltanto il prefisso diagnostico, poi rilascia il corpo della risposta. */
+async function leggiDettaglioRifiuto(risposta, limite = 2_000) {
+  const reader = risposta.body?.getReader();
+  if (!reader) return '';
+  const decoder = new TextDecoder();
+  let testo = '', letti = 0, concluso = false;
+  try {
+    while (letti < limite) {
+      const { done, value } = await reader.read();
+      if (done) { concluso = true; break; }
+      const parte = value.subarray(0, limite - letti);
+      testo += decoder.decode(parte, { stream: true });
+      letti += parte.byteLength;
+    }
+  } catch (error) {
+    if (error?.name === 'AbortError' || error?.name === 'TimeoutError' || error?.code === 'PROVIDER_SILENCE') throw error;
+    // Per un corpo danneggiato restano disponibili status e prefisso già letto.
+  } finally {
+    if (!concluso) await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+  return testo + decoder.decode();
+}
+
 function attesaEsponenziale(tentativo) {
   return Math.min(2_000, 200 * (2 ** tentativo));
 }
@@ -92,7 +192,13 @@ export async function chiamaConRitentaLocale({
       method: 'POST',
       headers: { Authorization: `Bearer ${chiave}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: modello, messages: messaggi, tools: attrezzi, tool_choice: 'auto' }),
-      signal: AbortSignal.timeout(180_000),
+      /*
+       * ⛔ P0 · punto 7 (16/09/2026) — anche il riassuntore locale aveva i suoi 180 s scritti a mano.
+       * Un riassunto è una chiamata al MODELLO come le altre: se il contesto da comprimere è enorme,
+       * il prefill può tacere per minuti (ggml-org/llama.cpp#22997). Il numero non si alza: si usa
+       * lo STESSO failsafe di tutto il resto, così esiste UNA soglia da conoscere invece di quattro.
+       */
+      signal: AbortSignal.timeout(leggiInattivitaGenerazioneMs() || 1_800_000),
     });
     if (risposta.ok) {
       const corpo = await risposta.json();
@@ -197,6 +303,25 @@ export function creaFetchConDescrizioneComando(fetchDiRete = fetch) {
   };
 }
 
+/**
+ * ⛔⛔ P0 · punto 7 (16/09/2026) — I 300 SECONDI CHE NESSUNO AVEVA DICHIARATO.
+ *
+ * Sotto `fetch` c'è undici, con `headersTimeout` e `bodyTimeout` a **300 s di serie**: togliere i
+ * tetti dal nostro codice senza toccare questo lascerebbe il muro dov'era, solo più difficile da
+ * vedere (è la firma di openai/codex#23807: stalli di ESATTAMENTE 300 s). Misurato con `grep`:
+ * `setGlobalDispatcher` non compare in nessun file del repository.
+ *
+ * ⛔ Si aggiunge SOLO sulle chiamate ai fornitori, mai globalmente: ricerca web, hub dei modelli,
+ *   proxy delle immagini e MCP devono restare impazienti. E il dispatcher globale avrebbe voluto
+ *   il pacchetto npm `undici`, che NON è una dipendenza dichiarata di harness-ui.
+ * ⭐ Un oggetto vuoto quando non si può costruire: la chiamata parte identica a prima, e il
+ *   `README` dice cosa resta in quel caso. Nessun silenzio.
+ */
+function dispatcherDiRichiesta(inattivitaMs) {
+  const dispatcher = dispatcherDiGenerazione({ limiteMs: inattivitaMs });
+  return dispatcher ? { dispatcher } : {};
+}
+
 function urlOpenRouterChat(url) {
   try {
     const parsed = new URL(typeof url === 'string' || url instanceof URL ? url : url?.url);
@@ -263,35 +388,21 @@ function rispostaErrore(status, error) {
   });
 }
 
-function promessaConInattivita(promise, { timeoutMs, controller, userSignal }) {
-  return new Promise((resolve, reject) => {
-    let conclusa = false;
-    const pulisci = () => {
-      clearTimeout(timer);
-      userSignal?.removeEventListener('abort', fermaUtente);
-    };
-    const chiudi = (azione, valore) => {
-      if (conclusa) return;
-      conclusa = true;
-      pulisci();
-      azione(valore);
-    };
-    const fermaUtente = () => {
-      const reason = userSignal.reason ?? new DOMException('Fermato dall’utente', 'AbortError');
-      controller.abort(reason);
-      chiudi(reject, reason);
-    };
-    const timer = setTimeout(() => {
-      const error = new OpenRouterIdleTimeoutError(timeoutMs);
-      controller.abort(error);
-      chiudi(reject, error);
-    }, timeoutMs);
-    if (userSignal?.aborted) {
-      fermaUtente();
-      return;
-    }
-    userSignal?.addEventListener('abort', fermaUtente, { once: true });
-    Promise.resolve(promise).then((value) => chiudi(resolve, value), (error) => chiudi(reject, error));
+/**
+ * ⛔ P0 · punto 7 (16/09/2026) — UNA SOLA IMPLEMENTAZIONE DEL GUARDIANO.
+ *
+ * Il corpo di questa funzione è diventato `sorvegliaInattivita` in `generation-idle.mjs`: era già
+ * il guardiano GIUSTO (inattività, non durata), ma esisteva solo per OpenRouter, e nessun altro
+ * fornitore — né il motore locale — poteva usarlo. Qui resta la firma che il trasporto OpenRouter
+ * usa già, con l'errore che QUESTO strato deve produrre (`OpenRouterIdleTimeoutError` → 408).
+ * ⛔ Due guardiani con due corpi diversi divergono al primo tocco: uno solo, e iniettabile.
+ */
+function promessaConInattivita(promise, { timeoutMs, controller, userSignal, creaErrore }) {
+  return sorvegliaInattivita(promise, {
+    limiteMs: timeoutMs,
+    controller,
+    userSignal,
+    creaErrore: creaErrore ?? ((ms) => new OpenRouterIdleTimeoutError(ms)),
   });
 }
 
@@ -301,7 +412,13 @@ function eventoConOutput(packet) {
   return Boolean(delta.content || delta.reasoning || delta.reasoning_content || (Array.isArray(delta.tool_calls) && delta.tool_calls.length > 0));
 }
 
-async function preparaRispostaSse(response, { timeoutMs, controller, userSignal }) {
+/*
+ * ⛔ P0 · punto 7 (16/09/2026): qui il limite NON è più `timeoutMs` (il tempo del fornitore) ma
+ * `inattivitaMs`, il failsafe di generazione. Dopo gli header il tempo del fornitore ha finito il
+ * suo mestiere; da lì in poi conta solo da quanto tempo il canale TACE. Il conteggio si azzera a
+ * ogni `reader.read()` che porta byte — commenti SSE compresi, che infatti il parser riemette.
+ */
+async function preparaRispostaSse(response, { inattivitaMs, controller, userSignal }) {
   if (!response.body || typeof response.body.getReader !== 'function') return response;
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -347,7 +464,10 @@ async function preparaRispostaSse(response, { timeoutMs, controller, userSignal 
   });
 
   const leggi = async () => {
-    const result = await promessaConInattivita(reader.read(), { timeoutMs, controller, userSignal });
+    const result = await promessaConInattivita(reader.read(), {
+      timeoutMs: inattivitaMs, controller, userSignal,
+      creaErrore: (ms) => new SilenzioDelFornitoreError(ms),
+    });
     if (result.done) {
       done = true;
       parser.reset({ consume: true });
@@ -361,6 +481,9 @@ async function preparaRispostaSse(response, { timeoutMs, controller, userSignal 
   } catch (error) {
     await reader.cancel(error).catch(() => {});
     if (userSignal?.aborted) throw userSignal.reason ?? error;
+    /* ⛔ Il silenzio NON si traveste da risposta HTTP: deve arrivare a `classificaGuasto` col suo
+       codice, o diventerebbe un «502» generico e perderebbe la classe `rete` che lo rende ripreso. */
+    if (error instanceof SilenzioDelFornitoreError) throw error;
     if (error instanceof OpenRouterIdleTimeoutError) return rispostaErrore(408, { message: 'OpenRouter è rimasto inattivo oltre il limite configurato.' });
     return rispostaErrore(502, { message: error instanceof Error ? error.message : String(error) });
   }
@@ -414,6 +537,13 @@ async function preparaRispostaSse(response, { timeoutMs, controller, userSignal 
  */
 export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
   timeoutMsFn = () => OPENROUTER_IDLE_MS_PREDEFINITO,
+  /*
+   * ⛔ P0 · punto 7 (16/09/2026) — DUE tempi, non uno. `timeoutMsFn` è il tempo del fornitore e
+   * vale fino agli header; `inattivitaMsFn` è il failsafe di generazione e vale sul flusso. Prima
+   * erano lo stesso numero, e bastava che l'operatore scrivesse 60 s nella scheda Fornitori perché
+   * un ragionamento lungo di OpenRouter morisse dopo un minuto di silenzio legittimo.
+   */
+  inattivitaMsFn = () => leggiInattivitaGenerazioneMs(),
   modelCapabilityFn = async () => null,
   userSignal = null,
 } = {}) {
@@ -424,6 +554,10 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
     const timeoutMs = Number.isFinite(timeoutCandidate) && timeoutCandidate > 0
       ? Math.max(1, Math.round(timeoutCandidate))
       : OPENROUTER_IDLE_MS_PREDEFINITO;
+    const inattivitaCandidata = Number(await inattivitaMsFn());
+    const inattivitaMs = Number.isFinite(inattivitaCandidata) && inattivitaCandidata >= 0
+      ? Math.round(inattivitaCandidata)
+      : leggiInattivitaGenerazioneMs();
     let nextInit = init;
     if (typeof init?.body === 'string') {
       try {
@@ -439,15 +573,17 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
     }
     const controller = new AbortController();
     try {
+      /* Fino agli header comanda il tempo del FORNITORE; dal corpo in poi, il failsafe. */
       const response = await promessaConInattivita(
-        fetchDiRete(url, { ...nextInit, signal: controller.signal }),
+        fetchDiRete(url, { ...nextInit, signal: controller.signal, ...dispatcherDiRichiesta(inattivitaMs) }),
         { timeoutMs, controller, userSignal },
       );
       const contentType = response.headers?.get?.('content-type') ?? '';
       if (!response.ok || !contentType.toLowerCase().includes('text/event-stream')) return response;
-      return preparaRispostaSse(response, { timeoutMs, controller, userSignal });
+      return preparaRispostaSse(response, { inattivitaMs, controller, userSignal });
     } catch (error) {
       if (userSignal?.aborted) throw userSignal.reason ?? error;
+      if (error instanceof SilenzioDelFornitoreError) throw error;
       if (error instanceof OpenRouterIdleTimeoutError) return rispostaErrore(408, { message: 'OpenRouter è rimasto inattivo oltre il limite configurato.' });
       return rispostaErrore(502, { message: error instanceof Error ? error.message : String(error) });
     }
@@ -495,7 +631,26 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
  * solleva l'errore con il motivo vero. Partire e prendersi un 404 farebbe
  * sembrare rotta una credenziale che è buona.
  */
-function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null, instradaOpenRouter = false } = {}) {
+/*
+ * ⛔ 17/09 — `sorvegliaCorpo` è INIETTABILE, e non per comodità: due contratti veri si contraddicono
+ *   per costruzione. Il guardiano dell'inattività (P0 · punto 7) deve VEDERE i byte che passano, e
+ *   l'unico modo che la piattaforma dà è `body.pipeThrough(...)` dentro una `Response` nuova — il
+ *   corpo è un getter di sola lettura e il piping «locks the stream for the duration of the pipe»
+ *   (MDN, «ReadableStream: pipeThrough() method» e «Using readable streams», lette il 17/09/2026).
+ *   Lo strato della cache (P-B) promette invece che un flusso SSE o un errore escano «LA STESSA
+ *   risposta, non una ricostruita» (PG-12, CACHE-08): quel contratto vale per la CACHE, che non deve
+ *   rimontare un flusso che non ha prodotto — non per il guardiano, che lo attraversa intatto
+ *   (P0-D-20: stessi byte, stesso stato, stessi header). ⇒ Le prove della cache iniettano il
+ *   guardiano identità e misurano il loro contratto; il guardiano vero si prova da solo (P0-D-15/16).
+ */
+function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null, instradaOpenRouter = false, inattivitaGenerazioneMs = null, sorvegliaCorpo = sorvegliaCorpoDiGenerazione,
+  /*
+   * BC-79.2 — la memoria del giro di sessione, CONDIVISA e non di questa chiusura: sulla strada del
+   * multi-provider `creaFetchInstradata` viene ricostruita a OGNI richiesta (`invia`), quindi una
+   * variabile locale ricorderebbe per un solo giro e il 400 tornerebbe a ogni turno. Chi non la
+   * passa (nessuno oggi, oltre ai test) ottiene il comportamento di prima, byte per byte.
+   */
+  memoriaAttrezzi = { rifiutati: false } } = {}) {
   if (!dipendenze) return fetchDiRete;
   return async function fetchMultiProvider(url, opzioni = {}) {
     let corpo = null;
@@ -541,10 +696,34 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       await dipendenze.avviaLocale(modelloRemoto); // ⛔ se l'avvio stesso fallisce, il SUO errore (non quello generico "non acceso") arriva a chi ha chiamato
       destinazione = risolvi(corpo.model, dipendenze); // dopo un avvio riuscito questo non deve più lanciare: se lancia ancora, è un errore vero da mostrare, non da inghiottire
     }
+    /*
+     * ⛔⛔⛔ P0 · punto 7 (16/09/2026) — IL FAILSAFE, IN UN PUNTO SOLO PER TUTTI I FORNITORI.
+     *
+     * Dichiarato QUI, sopra tutti i rami, perché è il solo confine che vede ogni destinazione di un
+     * completamento: gli SDK nativi, i cloud, deepseek/z.ai/openai, e soprattutto il motore LOCALE,
+     * che passa dal ponte del supervisore e non da una `fetch` nuda (quindi nessun `bodyTimeout` di
+     * undici lo coprirebbe). Una regola sola invece di cinque copie che divergono.
+     *
+     * ⛔ DUE eccezioni, ed è giusto dirle per nome invece di lasciar credere che non ci siano:
+     *   · **OpenRouter** — il suo trasporto resiliente sorveglia già il flusso e ne riemette i
+     *     commenti; una seconda guardia sopra la prima non aggiunge niente e raddoppierebbe i
+     *     lettori sullo stesso corpo.
+     *   · **l'agente esterno ACP** — non è un flusso di byte HTTP ma un protocollo a messaggi con
+     *     la sua cancellazione e la sua scadenza (`acp-agent.mjs`). Trasformarla in inattività
+     *     vuole toccare il ciclo delle notifiche, che è fuori da questa corsia.
+     *
+     * ⛔ Il conteggio si azzera sui BYTE, non sui token: i commenti SSE contano come vita.
+     */
+    const failsafe = Number.isFinite(inattivitaGenerazioneMs) ? inattivitaGenerazioneMs : leggiInattivitaGenerazioneMs();
+    const sorveglia = (risposta) => (destinazione.fonte === 'openrouter'
+      ? risposta
+      : sorvegliaCorpo(risposta, { limiteMs: failsafe, userSignal: opzioni.signal ?? null }));
+    const conDispatcher = dispatcherDiRichiesta(failsafe);
+
     // P-L · il corpo del kernel incontra ACP solo qui; stop e chiusura seguono la risposta.
     if (destinazione.esterno) return rispostaAgenteAcp({ runtime: destinazione.runtime, body: corpo, signal: opzioni.signal });
     // P-L · fine instradamento agente esterno.
-    if (destinazione.native) return nativeProviderResponse({ provider: destinazione.fonte, model: destinazione.modelloRemoto, apiKey: destinazione.apiKey, baseURL: destinazione.baseURL, body: corpo, fetchFn: fetchDiRete, signal: opzioni.signal });
+    if (destinazione.native) return sorveglia(await nativeProviderResponse({ provider: destinazione.fonte, model: destinazione.modelloRemoto, apiKey: destinazione.apiKey, baseURL: destinazione.baseURL, body: corpo, fetchFn: fetchDiRete, signal: opzioni.signal }));
     if (corpo.messages?.some(m => m.talos_provider_state)) {
       corpo = { ...corpo, messages: stripNativeMetadata(corpo.messages) };
       opzioni = { ...opzioni, body: JSON.stringify(corpo) };
@@ -563,7 +742,23 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       if (typeof onAvviso !== 'function') throw new OpenAiCompatibleRuntimeError(avviso, 'PROVIDER_REASONING_UNSUPPORTED');
       await onAvviso(avviso);
     }
-    const corpoRiscritto = JSON.stringify(adattata.corpo);
+    /*
+     * ⛔⛔⛔ BC-79.2 (17/09/2026) — LA RIPROVA SENZA ATTREZZI VIVE QUI, e il kernel non la conosce.
+     * La doc per esteso sta su `MotoreLocaleRifiutaError`, sopra: qui restano i tre fatti che
+     * decidono se questo blocco morde — la fonte gira su questo computer, la richiesta portava
+     * `tools`, la risposta è un 400. Manca uno dei tre ⇒ la riga qui sotto è quella di sempre.
+     */
+    const motoreLocale = FONTI_DI_MOTORE_LOCALE.has(destinazione.fonte);
+    const portavaAttrezzi = Array.isArray(adattata.corpo?.tools) && adattata.corpo.tools.length > 0;
+    const corpoSenzaAttrezzi = () => {
+      const { tools: _tools, tool_choice: _toolChoice, ...resto } = adattata.corpo;
+      return JSON.stringify(resto);
+    };
+    /* ⛔ Già saputo che questo motore li rifiuta: non si rimanda `tools` per poi riprendersi lo
+       stesso 400 — è il «retrying without changes will loop» della ricerca. */
+    const giaSenzaAttrezzi = motoreLocale && portavaAttrezzi && memoriaAttrezzi?.rifiutati === true;
+    const corpoRiscritto = giaSenzaAttrezzi ? corpoSenzaAttrezzi() : JSON.stringify(adattata.corpo);
+
     /*
      * ⛔ Il motore locale si chiama attraverso il SUO supervisore, non con una
      * fetch nuda: llama-server parte con `--api-key randomBytes(32)` e quella
@@ -571,24 +766,77 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
      * perché quella risposta arriva al browser). Misurato costruendo l'URL a
      * mano: HTTP 401 «Invalid API Key» in 4 ms.
      */
-    if (destinazione.locale) {
-      if (typeof dipendenze.chiamaLocale !== 'function') {
-        const errore = new Error('Il motore locale non è collegato a questo server.');
-        errore.code = 'LOCAL_RUNTIME_NOT_READY';
-        throw errore;
+    const spedisci = async (corpo) => {
+      if (destinazione.locale) {
+        if (typeof dipendenze.chiamaLocale !== 'function') {
+          const errore = new Error('Il motore locale non è collegato a questo server.');
+          errore.code = 'LOCAL_RUNTIME_NOT_READY';
+          throw errore;
+        }
+        return sorveglia(await dipendenze.chiamaLocale(destinazione.percorso, { ...opzioni, ...conDispatcher, headers: { 'Content-Type': 'application/json' }, body: corpo }));
       }
-      return dipendenze.chiamaLocale(destinazione.percorso, { ...opzioni, headers: { 'Content-Type': 'application/json' }, body: corpoRiscritto });
+      return spedisciAltrove(corpo);
+    };
+
+    /*
+     * ⛔ BC-79.2: la destinazione non locale resta ESATTAMENTE quella di prima, spostata dentro una
+     *   funzione perché la riprova senza attrezzi deve poter spedire due volte lo stesso corpo su
+     *   qualunque strada. `ollama:` e `lmstudio:` passano di qui — sono motori locali con un
+     *   indirizzo, non col ponte del supervisore — e quindi la cura li copre senza un secondo ramo.
+     */
+    async function spedisciAltrove(corpo) {
+      /*
+       * ⛔⛔⛔ 16/09/2026, GIRO DI RIPARAZIONE — L'ORDINE DI QUESTE DUE FUNZIONI È LA CURA.
+       *
+       * Prima era `sorveglia(conCacheDichiarata(await fetch(...)))`, e aveva DUE difetti in una riga:
+       *   1. `conCacheDichiarata` è `async` ⇒ `sorveglia` riceveva una **Promise**, non una
+       *      `Response`, e la restituiva intatta: il failsafe non era attaccato a niente su
+       *      deepseek / z.ai / openai / cloud, in streaming e non (ora `sorvegliaCorpoDiGenerazione`
+       *      LANCIA se gli si passa una Promise, così non può più succedere in silenzio);
+       *   2. anche con l'`await` al posto giusto, `conCacheDichiarata` legge il corpo
+       *      (`risposta.clone().text()`) per dichiarare la cache: sorvegliare DOPO vuol dire
+       *      sorvegliare un corpo già bevuto, e su una risposta `stream:false` che si pianta a metà
+       *      JSON quella lettura non finisce mai.
+       *
+       * ⇒ Si sorveglia PRIMA e si dichiara la cache DOPO: `conCacheDichiarata` clona un corpo già
+       *   sorvegliato, quindi anche la sua lettura è coperta. Misurato il 16/09/2026 con un fornitore
+       *   che manda gli header e poi tace: prima **1506 ms** e sempre `UND_ERR_BODY_TIMEOUT` (cioè il
+       *   trasporto a 1,2×, mai il guardiano) o nessuna uscita affatto senza dispatcher; dopo
+       *   `PROVIDER_SILENCE` al limite chiesto. Prove `P0-D-15`/`P0-D-16`/`P0-D-17`.
+       */
+      // P-K — nessun redirect con credenziali cloud, anche senza pool collegato.
+      if (destinazione.cloud) return conCacheDichiarata(sorveglia(await inviaCloudProtetta(fetchDiRete, destinazione.url, {
+        ...opzioni, ...conDispatcher, headers: { ...destinazione.headers }, body: corpo, redirect: 'error',
+      })), destinazione.fonte);
+      // P-K — fine
+      return conCacheDichiarata(sorveglia(await fetchDiRete(destinazione.url, {
+        ...opzioni,
+        ...conDispatcher,
+        headers: { ...destinazione.headers },
+        body: corpo,
+      })), destinazione.fonte);
     }
-    // P-K — nessun redirect con credenziali cloud, anche senza pool collegato.
-    if (destinazione.cloud) return conCacheDichiarata(await inviaCloudProtetta(fetchDiRete, destinazione.url, {
-      ...opzioni, headers: { ...destinazione.headers }, body: corpoRiscritto, redirect: 'error',
-    }), destinazione.fonte);
-    // P-K — fine
-    return conCacheDichiarata(await fetchDiRete(destinazione.url, {
-      ...opzioni,
-      headers: { ...destinazione.headers },
-      body: corpoRiscritto,
-    }), destinazione.fonte);
+
+    if (motoreLocale && portavaAttrezzi && !giaSenzaAttrezzi) {
+      const prima = await spedisci(corpoRiscritto);
+      if (prima.status !== 400) return prima;
+      /* Il grezzo si legge ORA: dopo la riprova questa risposta non serve più, e il suo corpo
+         resterebbe aperto. Serve solo come dettaglio dell'errore, mai a schermo. */
+      const dettaglio = await leggiDettaglioRifiuto(prima);
+      const seconda = await spedisci(corpoSenzaAttrezzi());
+      if (!seconda.ok) {
+        const dettaglioSecondo = await leggiDettaglioRifiuto(seconda);
+        throw new MotoreLocaleRifiutaError(prima.status, dettaglio, [
+          { stato: prima.status, dettaglio }, { stato: seconda.status, dettaglio: dettaglioSecondo },
+        ]);
+      }
+      /* ⛔ Prima la memoria, poi l'avviso: se `onAvviso` lancia, il giro deve comunque smettere di
+         mandare `tools` — altrimenti si tornerebbe a un 400 per giro con in più un'eccezione. */
+      if (memoriaAttrezzi) memoriaAttrezzi.rifiutati = true;
+      if (typeof onAvviso === 'function') await onAvviso(AVVISO_MOTORE_SENZA_ATTREZZI);
+      return seconda;
+    }
+    return spedisci(corpoRiscritto);
   };
 }
 
@@ -626,9 +874,75 @@ function erroreFornitorePubblico(classificazione, stato = null) {
   return Object.assign(e, { code: 'PROVIDER_REQUEST_ERROR', stato, ...classificazione, limitatoDalFornitore: classificazione.classe === 'traffico' });
 }
 
+/**
+ * ⛔⛔ P0 · punto 7 (16/09/2026) — LA SCADENZA ALLA PRIMA RISPOSTA.
+ *
+ * Un `AbortSignal.timeout` non si può disarmare: una volta acceso conta fino in fondo, e dopo gli
+ * header continua a contare sul corpo. Qui il timer è NOSTRO, e si spegne appena la risposta
+ * arriva — è la differenza fra «il fornitore non risponde» (un guasto vero) e «il modello sta
+ * pensando» (il lavoro).
+ *
+ * ⛔ Il segnale composto resta quello passato dal chiamante: lo STOP della persona continua ad
+ *   attraversare la fetch e il corpo, esattamente come prima.
+ * ⛔ Il motivo dell'aborto porta un `code` PROPRIO invece di affidarsi alla parola «timeout»
+ *   dentro un messaggio: un filtro che riconosce la menzione non riconosce la cosa.
+ *
+ * @param {number|undefined} timeoutSeconds
+ * @param {AbortSignal|undefined} segnaleUtente
+ */
+function scadenzaPrimaRisposta(timeoutSeconds, segnaleUtente) {
+  const ms = Number(timeoutSeconds) > 0 ? Math.round(Number(timeoutSeconds) * 1_000) : 0;
+  if (!ms) return { signal: segnaleUtente, disarma: () => {} };
+  const controllore = new AbortController();
+  const timer = setTimeout(() => controllore.abort(Object.assign(
+    new Error(`Il fornitore non ha risposto entro ${Math.round(ms / 1_000)} secondi.`),
+    { name: 'TimeoutError', code: 'PROVIDER_FIRST_RESPONSE_TIMEOUT' },
+  )), ms);
+  timer.unref?.();
+  return {
+    signal: segnaleUtente ? AbortSignal.any([segnaleUtente, controllore.signal]) : controllore.signal,
+    disarma: () => clearTimeout(timer),
+  };
+}
+
+/**
+ * ⛔ I guasti del TRASPORTO hanno un codice, e il codice si legge per primo.
+ *
+ * `classificaErroreDiCorsa` (BC-44) resta l'unica tabella, ma legge il MESSAGGIO: i suoi segni sono
+ * in inglese (`idle timeout`, `terminated`…) e non possono riconoscere né il nostro silenzio né i
+ * codici di undici. Indovinare dal testo sarebbe la «cura che passa da un filtro di menzione».
+ * ⭐ `PROVIDER_SILENCE` e `UND_ERR_BODY_TIMEOUT` sono `rete` — «la connessione con il fornitore è
+ *   caduta» — e NON `timeout-fornitore`: quando scattano il canale è morto, non lento.
+ */
+const CLASSI_PER_CODICE_DI_TRASPORTO = new Map([
+  ['PROVIDER_SILENCE', 'rete'],
+  ['UND_ERR_BODY_TIMEOUT', 'rete'],
+  ['UND_ERR_HEADERS_TIMEOUT', 'timeout-fornitore'],
+  ['PROVIDER_FIRST_RESPONSE_TIMEOUT', 'timeout-fornitore'],
+]);
+
+/**
+ * ⛔ 16/09/2026 — i due modi in cui un corpo può NON FINIRE MAI, per nome.
+ *
+ * `PROVIDER_SILENCE` è il nostro failsafe di inattività; `UND_ERR_BODY_TIMEOUT` è la rete di
+ * sicurezza del trasporto (undici: un timer fra un chunk e il successivo, 300 s di serie —
+ * documentazione `Client.md`, letta il 16/09/2026). Chi legge un corpo per misurarlo deve
+ * RILANCIARE questi due invece di degradare, o il guasto arriva senza il suo nome.
+ */
+const CODICI_DI_CORPO_MAI_FINITO = new Set(['PROVIDER_SILENCE', 'UND_ERR_BODY_TIMEOUT']);
+
 function classificaGuasto(error, stato = null) {
   // BC-44 rimane l'unica tabella. Si normalizzano solo i campi strutturati del trasporto.
   const codice = String(error?.code ?? error?.cause?.code ?? '');
+  /*
+   * ⛔ 16/09/2026 — `causaDiTrasporto` VIAGGIA fino all'errore pubblico, e non è un dettaglio da
+   *   collezionisti: `PROVIDER_SILENCE` e `UND_ERR_BODY_TIMEOUT` producono la stessa classe
+   *   (`rete`) e la stessa frase in chat, ma sono DUE STRATI diversi — il nostro guardiano a 1,0×
+   *   il failsafe, il trasporto a 1,2×. Senza questo campo, chi legge un registro (o un test) non
+   *   può distinguere «la mia guardia ha funzionato» da «la mia guardia era staccata e mi ha
+   *   salvato undici»: è esattamente l'inganno in cui questa corsia è caduta al primo giro.
+   */
+  if (CLASSI_PER_CODICE_DI_TRASPORTO.has(codice)) return { classe: CLASSI_PER_CODICE_DI_TRASPORTO.get(codice), transitorio: true, causaDiTrasporto: codice };
   const messaggio = `${codice} ${error?.name ?? ''} ${error?.message ?? ''} ${error?.cause?.message ?? ''} ${stato ? `HTTP ${stato}` : ''}`;
   const esito = classificaErroreDiCorsa({ codice, messaggio });
   if (esito.classe !== 'ignoto' || !(stato >= 500 && stato <= 599)) return esito;
@@ -655,9 +969,22 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
   risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null,
   providerStore = null, fallbackProviders = [], onCambioFornitore = null, onConsumoFornitore = null,
   modelloSessione = null,
+  /* P0 · punto 7 (16/09): iniettabile perché una prova non deve aspettare mezz'ora per provarla. */
+  inattivitaGenerazioneMs = null,
+  /* 17/09: il guardiano del corpo, iniettabile per le prove dello strato cache (vedi `creaFetchInstradata`). */
+  sorvegliaCorpo = sorvegliaCorpoDiGenerazione,
 } = {}) {
   const catena = validaFallbackProviders(fallbackProviders);
-  if (!providerStore && !catena.length) return creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso });
+  /*
+   * ⛔ BC-79.2 — la memoria «questo motore rifiuta gli attrezzi» nasce QUI, una per giro di
+   *   sessione (una chiamata a `talosLavora`), e non dentro `creaFetchInstradata`: là sotto, sulla
+   *   strada del multi-provider, la fetch instradata si ricostruisce a ogni richiesta.
+   * ⛔ Dichiarato e non risolto in silenzio: la memoria vive quanto il GIRO DI SESSIONE, non quanto
+   *   la sessione persistente. Una ripresa (`resume`) ricomincia da capo — un 400 e una riprova —
+   *   perché l'adattatore non riceve nessun handle di sessione. È il confine di questa riga.
+   */
+  const memoriaAttrezzi = { rifiutati: false };
+  if (!providerStore && !catena.length) return creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi });
   if (!dipendenze || (catena.length && (!providerStore || typeof onCambioFornitore !== 'function' || typeof onConsumoFornitore !== 'function'))) {
     throw new OwnerRuntimeUnavailableError('Per continuare con un altro fornitore occorrono accessi, avvisi in chat e registrazione dei consumi.', 'PROVIDER_FALLBACK_NOT_CONNECTED');
   }
@@ -672,7 +999,21 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     const record = REGISTRO_FORNITORI[fonte];
     const scelta = record.credenziale ? providerStore?.scegliChiave(fonte) : null;
     if (providerStore && !scelta && record.chiaveObbligatoria) {
-      if (!providerStore.hasKey(fonte)) throw new OwnerRuntimeUnavailableError('Manca la chiave del fornitore scelto.', 'PROVIDER_KEY_MISSING');
+      /*
+       * ⛔ CLI-REQ-03 (17/09): il NOME UMANO del fornitore, non il suo id — chi legge deve sapere
+       *   QUALE chiave collegare. «per», non «di»: è la preposizione che il progetto usa già in
+       *   tutti gli altri `PROVIDER_KEY_MISSING` (`model-destination.mjs`, `native-provider-adapter.mjs`,
+       *   `provider-auth-cloud.mjs`), e due frasi diverse per lo stesso guasto sono due guasti
+       *   diversi per chi legge.
+       * ⛔ E l'errore porta anche l'ID: il nome serve a chi legge, l'id serve alla UI per aprire
+       *   «Fornitori e accessi» SU QUEL fornitore invece che sull'elenco.
+       */
+      if (!providerStore.hasKey(fonte)) {
+        throw Object.assign(
+          new OwnerRuntimeUnavailableError(`Manca la chiave per ${record.etichetta}.`, 'PROVIDER_KEY_MISSING'),
+          { fornitore: fonte, etichettaFornitore: record.etichetta },
+        );
+      }
       const panchina = providerStore.elencaPool(fonte).find(v => v.causa);
       const classificazione = classificaErroreDiCorsa({ messaggio: ({traffico:'HTTP 429',credenziale:'HTTP 401',credito:'insufficient credit',rete:'network', 'timeout-fornitore':'timeout', 'guasto-fornitore':'upstream error', 'flusso-interrotto':'unexpected eof'})[panchina?.causa] ?? '' });
       contesto.errore = erroreFornitorePubblico(classificazione, classificazione.classe === 'traffico' ? 429 : classificazione.transitorio ? 503 : 401);
@@ -689,9 +1030,27 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     };
     const rete = async (target, init) => {
       try {
-        const timeout = providerStore?.getRuntime(fonte)?.timeoutSeconds;
-        const signal = timeout ? AbortSignal.any([...(init.signal ? [init.signal] : []), AbortSignal.timeout(timeout * 1000)]) : init.signal;
-        const response = await fetchDiRete(target, { ...init, signal });
+        /*
+         * ⛔⛔⛔ P0 · punto 7 (16/09/2026) — QUI C'ERA UNA DEADLINE TOTALE, ED È STATA TOLTA.
+         *
+         * Prima: `AbortSignal.timeout(timeoutSeconds * 1000)` composto con `init.signal` e passato
+         * alla fetch. Quel segnale non smette di contare quando la risposta arriva: continua
+         * mentre il modello STA PARLANDO, e al minuto esatto uccide lo stream.
+         * Misurato il 16/09/2026 con un fornitore finto che emette un token ogni 2 s per 90 s, col
+         * default di 60 s: **tagliata a 60.002 ms, ultimo token a 58.023 ms** — cioè il canale era
+         * vivo due secondi prima, e l'errore diceva «Il fornitore ha superato il tempo massimo».
+         * Verso OpenRouter non si vedeva (il trasporto resiliente scarta `init.signal`), verso
+         * deepseek / z.ai / openai / cloud / motore LOCALE sì.
+         *
+         * ⇒ `timeoutSeconds` CAMBIA SEMANTICA, non sparisce: è il tempo massimo alla **prima
+         *   risposta** — cioè fino agli header. Un valore salvato ieri continua a proteggere dal
+         *   fornitore che non risponde affatto, e non può più tagliare un ragionamento in corso.
+         *   Dopo gli header comanda il solo failsafe di INATTIVITÀ (`generation-idle.mjs`).
+         */
+        const scadenza = scadenzaPrimaRisposta(providerStore?.getRuntime(fonte)?.timeoutSeconds, init.signal);
+        let response;
+        try { response = await fetchDiRete(target, { ...init, signal: scadenza.signal }); }
+        finally { scadenza.disarma(); }
         if (response.ok) return response;
         // Il corpo originale non viene mai restituito al logger/kernel: può contenere la chiave.
         let testo = '';
@@ -709,9 +1068,17 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     };
     const instradata = creaFetchInstradata(rete, { risolvi, dipendenze: {
       ...dipendenze, leggiChiave: p => p === fonte && scelta ? scelta.chiave : dipendenze.leggiChiave(p),
-    }, onAvviso, instradaOpenRouter: true });
+    }, onAvviso, instradaOpenRouter: true, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi });
     try { return await instradata(url, opzioni); }
     catch (error) {
+      /*
+       * ⛔ BC-79.2 — un motore locale che rifiuta la richiesta ANCHE senza attrezzi non è un guasto
+       *   del fornitore da riclassificare: ha già il suo codice e la sua frase, ed è stato deciso
+       *   a valle con due misure (400 con attrezzi, 400 senza). Passarlo per `classificaGuasto`
+       *   lo trasformerebbe in «Il fornitore non ha accettato la richiesta» — la frase generica che
+       *   questa riga esiste per togliere. Stessa forma di `PROVIDER_KEY_MISSING` più sotto.
+       */
+      if (error?.code === 'LOCAL_ENGINE_REJECTED_REQUEST') throw error;
       // P-K — token scaduto o involucro malformato: panchina senza partire in rete.
       if (record.cloud && scelta && ['PROVIDER_CLOUD_TOKEN_EXPIRED', 'PROVIDER_CLOUD_CREDENTIAL_INVALID'].includes(error?.code)) {
         providerStore.mettiInPanchina(fonte, scelta.impronta, { classe: 'credenziale' });
@@ -763,6 +1130,28 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
             }
             throw error;
           }
+          /*
+           * ⛔⛔⛔ CLI-REQ-03 (17/09/2026) — LA CHIAVE CHE MANCA NON È UN RIFIUTO DEL FORNITORE.
+           *
+           * Misurato prima della cura, su questa strada (`eseguiConFallback`, store senza chiavi,
+           * modello `zai:glm-5.3-flash`): usciva `PROVIDER_REQUEST_ERROR` «Il fornitore non ha
+           * accettato la richiesta.» (classe `ignoto`) con **0 chiamate di rete** e **1 consumo
+           * scritto** (`esito: 'interrotto'`). Due bugie in una: si accusava il fornitore di aver
+           * rifiutato una richiesta che non gli è mai arrivata, e si depositava la ricevuta di una
+           * chiamata mai partita. Sulla fetch nuda l'errore usciva già giusto: il difetto era
+           * SOLO qui, nel catch del ripiego, che classifica ogni eccezione come un guasto di rete.
+           *
+           * ⇒ `PROVIDER_KEY_MISSING` nasce PRIMA della rete (`invia`, sopra), è una condizione di
+           *   configurazione e non un guasto: si rilancia com'è, senza classificarlo, senza
+           *   metterlo in panchina e senza scrivere consumi. Non è nemmeno transitorio, quindi non
+           *   ha senso cercargli un fornitore di riserva: la riserva vorrebbe la stessa chiave che
+           *   non c'è. È la «pre-validation» che la ricerca del 17/09 indica come cura standard
+           *   (aden-hive/hive #4391, OpenHands/software-agent-sdk #4867, DataQ #1849/#1853).
+           */
+          if (error?.code === 'PROVIDER_KEY_MISSING') throw error;
+          /* ⛔ BC-79.2 — e nemmeno il rifiuto di un motore locale: non è transitorio, non è colpa di
+             una chiave, e un fornitore di riserva non c'entra niente con un GGUF che sta in casa. */
+          if (error?.code === 'LOCAL_ENGINE_REJECTED_REQUEST') throw error;
           const classificazione = contesto.errore ?? classificaGuasto(error, error?.stato ?? error?.statusCode);
           const pulito = erroreFornitorePubblico(classificazione, error?.stato ?? contesto.errore?.stato);
           if (!contesto.errore && contesto.scelta) providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, { classe: classificazione.classe });
@@ -826,9 +1215,22 @@ async function conCacheDichiarata(risposta, fonte) {
     if (normalizzato === corpo?.usage && sconto === null) return risposta;
     const nuovo = { ...corpo, usage: { ...normalizzato, ...(sconto !== null ? { cache_discount: sconto } : {}) } };
     return new Response(JSON.stringify(nuovo), { status: risposta.status, statusText: risposta.statusText, headers: risposta.headers });
-  } catch {
-    /* ⛔ Una misura che non si scrive non rompe un giro: se il corpo non è quello che credevamo,
-       passa com'era. È la stessa disciplina di `persistiTempiDelGiro`. */
+  } catch (errore) {
+    /*
+     * ⛔⛔ 16/09/2026 — IL CATCH DICE QUALE GUASTO COPRE, E RILANCIA GLI ALTRI.
+     *
+     * Quello che copre: «il corpo non è quello che credevamo» (JSON malformato, campi assenti).
+     * Lì una misura che non si scrive non deve rompere un giro — è la disciplina di
+     * `persistiTempiDelGiro`.
+     *
+     * ⛔ Quello che NON deve coprire: un corpo che **non finisce mai**. Qui si sta leggendo
+     *   `risposta.clone().text()`: se il fornitore tace a metà JSON, a interrompere quella lettura
+     *   è il failsafe di inattività (o, dietro di lui, il `bodyTimeout` del trasporto). Ingoiare
+     *   quell'errore e restituire la risposta com'era vorrebbe dire consegnare al kernel un corpo
+     *   già rotto e far scoprire il guasto a qualcun altro, più tardi e senza il suo nome.
+     * ⇒ Gli errori di CONTRATTO si rilanciano: [[il-catch-giusto-nasconde-il-bug-sbagliato]].
+     */
+    if (CODICI_DI_CORPO_MAI_FINITO.has(String(errore?.code ?? errore?.cause?.code ?? ''))) throw errore;
     return risposta;
   }
 }
@@ -1007,6 +1409,8 @@ export function createOwnerRuntimeAdapter({
        * dirottata altrove.
        */
       const fetchInstradata = creaFetchMultiProvider(fetchResiliente, {
+        /* P0 · punto 7 (16/09): il failsafe della sessione, letto una volta e passato a valle. */
+        inattivitaGenerazioneMs: leggiInattivitaGenerazioneMs(),
         dipendenze: destinazioneModelloDeps, providerStore, fallbackProviders, modelloSessione: input?.modello,
         onAvviso: input?.onAvviso, onCambioFornitore: input?.onCambioFornitore, onConsumoFornitore: input?.onConsumoFornitore,
       });
@@ -1100,7 +1504,13 @@ export function createOwnerRuntimeAdapter({
       const response = await routed(ENDPOINT_OPENROUTER, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
         body: JSON.stringify({ model: provider === 'openrouter' ? model : `${provider}:${model}`, messages: structuredClone(messages), tools: [], max_tokens: maxOutputTokens, stream: false, ...(reasoning ? { reasoning } : {}), ...(provider === 'openrouter' ? { transforms: [], plugins: [{ id: 'context-compression', enabled: false }] } : {}) }),
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000),
+        /*
+         * ⛔ P0 · punto 7 (16/09/2026) — la compattazione del contesto aveva anch'essa 180 s fissi.
+         * È la chiamata che si fa proprio quando la conversazione è DIVENTATA GRANDE: il caso in cui
+         * il modello ci mette di più è esattamente quello per cui serve. Stesso failsafe del resto,
+         * e lo `signal` del chiamante (che porta lo Stop) resta il primo a poter chiudere.
+         */
+        signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(leggiInattivitaGenerazioneMs() || 1_800_000)]),
       });
       if (!response.ok) {
         await response.body?.cancel();

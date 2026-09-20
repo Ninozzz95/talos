@@ -26,6 +26,8 @@
 import { spawn as spawnPty } from 'node-pty';
 import { existsSync } from 'node:fs';
 
+import { ambienteSenzaVariabiliDelServer } from './ambiente-solo-server.mjs';
+
 /** ⛔ Solo win32: `existsFn` iniettabile per i test, mai una vera ricerca su disco lì. */
 const PERCORSI_GIT_BASH_WINDOWS = [
   'C:\\Program Files\\Git\\bin\\bash.exe',
@@ -74,6 +76,36 @@ function limitaBacklog(voce) {
 
 /** Una PTY disconnessa da più di così viene chiusa dal reaper — pulizia di schede mai più tornate, non un limite sulla shell viva. */
 export const MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA = 10;
+
+/*
+ * ⛔⛔⛔ CLI-REQ-04 (17/09/2026) — L'AMBIENTE DELLA SHELL DELLA PERSONA.
+ *
+ * Fino a oggi `apri` passava `env: process.env`, cioè l'ambiente INTERO del server. Dentro ci
+ * sono il token di loopback a 64 esadecimali che protegge TUTTA la nostra API locale e la chiave
+ * privata che firma le ricevute (`desktop/runtime.mjs:47-60`, `src/config.mjs:601` e `:625-627`).
+ * Un `npm install` con i suoi script di installazione, o un attrezzo scaricato, lanciato dalla
+ * persona in questa scheda poteva leggerli e usarli.
+ *
+ * ⛔ Ricerca prima di scrivere, 17/09/2026: la documentazione di `node:child_process`
+ * (nodejs.org/api/child_process.html) dichiara `env` con default `process.env`, cioè l'eredità
+ * INTERA è il comportamento predefinito e va disfatta a mano; lo stato dell'arte sui segreti in
+ * Node (nodejs-security.com/blog/do-not-use-secrets-in-environment-variables-and-here-is-how-to
+ * -do-it-better) chiama l'eredità automatica una violazione del minimo privilegio.
+ *
+ * ⛔ L'elenco e la funzione NON vivono più qui: stanno in `ambiente-solo-server.mjs`, perché dal
+ * secondo giro il browser di sistema (`browser-vivo.mjs`) ha lo stesso bisogno e due copie
+ * divergerebbero al primo segreto nuovo. Lì stanno anche il perché dell'elenco CHIUSO e la
+ * misura che mostra che D-10E NON copre già questi nomi.
+ *
+ * ⛔ L'ELENCO DEI PUNTI CHE AVVIANO PROCESSI CON L'AMBIENTE INTERO — cioè chi altri ha questo
+ * stesso difetto, quanto è coperto e quanto no — sta in
+ * `.claude/ELENCO-SPAWN-AMBIENTE-2026-09-17.md`, misurato il 17/09/2026. Chi tocca questa riga
+ * lo rilegga: una cura su una sola strada non chiude la classe.
+ */
+export { VARIABILI_DEL_SERVER_DICHIARATE_INNOCUE, VARIABILI_SOLO_DEL_SERVER } from './ambiente-solo-server.mjs';
+
+/** Il nome con cui questo modulo ha sempre esposto la funzione: una sola implementazione, due nomi. */
+export const ambienteDelTerminale = ambienteSenzaVariabiliDelServer;
 
 /**
  * Sceglie la shell reale da lanciare. Su Windows: Git Bash se esiste
@@ -138,6 +170,7 @@ export function decodificaFrame(dati) {
 export function creaRegistroTerminali(deps = {}) {
   const spawnPtyFn = deps.spawnPtyFn ?? spawnPty;
   const sceltaShellFn = deps.sceltaShellFn ?? sceltaShell;
+  const ambienteFn = deps.ambienteFn ?? ambienteDelTerminale; // ⛔ CLI-REQ-04: iniettabile per i test.
   const clock = deps.clock ?? (() => Date.now());
   /** @type {Map<string, any>} */
   const terminali = new Map();
@@ -154,7 +187,7 @@ export function creaRegistroTerminali(deps = {}) {
       cols,
       rows,
       cwd: cartella,
-      env: process.env,
+      env: ambienteFn(), // ⛔ CLI-REQ-04 (17/09/2026): mai `process.env` intero — vedi VARIABILI_SOLO_DEL_SERVER.
     });
     const voce = {
       id,

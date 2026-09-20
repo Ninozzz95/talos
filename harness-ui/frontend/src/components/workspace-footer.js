@@ -28,6 +28,10 @@
  * docs/configure/custom-layout): stessa disposizione del mockup — identità a sinistra, impostazioni a destra.
  */
 
+/* ⛔ BC-61, 17/09 — la mappa id → nome umano dei fornitori è UNA SOLA, ed è già in `fonti-modelli.js`
+   (la usa la striscia delle fonti del Laboratorio modelli). Qui si legge, non si ricopia. */
+import { nomeFornitore } from './fonti-modelli.js';
+
 /** I preset del tema, con il nome come lo scrive il mockup. */
 /*
  * ⛔ 10/09 — TROVATO GUARDANDO UNA FOTO, non cercandolo: con il tema **Violet** applicato (palette
@@ -65,11 +69,25 @@ export function fornitoreDelModello(modello) {
   return barra > 0 ? id.slice(0, barra) : null;
 }
 
+/*
+ * ⭐⭐⭐ BC-61 (17/09/2026) — IL PIEDE SCRIVEVA L'ID GREZZO DEL FORNITORE.
+ *
+ * Misurato: con `z-ai/glm-5.3-flash` in sessione il piede diceva «Tema Calm · z-ai». Il difetto
+ * non è il sottotitolo — «Tema <preset> · <chi serve il modello>» è una scelta del 05/09 — ma il
+ * fatto che `fornitoreDelModello` restituisce un ID TECNICO, e la regola dell'owner del 04/09 dice
+ * che i nomi tecnici non arrivano mai a schermo, con la mappa in UN POSTO SOLO.
+ *
+ * ⛔ Il nome NON si decide qui: lo dà `nomeFornitore` in `fonti-modelli.js`, dove sta la mappa che
+ *   la striscia delle fonti del Laboratorio modelli usa già. Il primo giro teneva il ponte fra le
+ *   grafie in questo file, cioè in casa di chi consuma: il revisore ha misurato che così i tre
+ *   fornitori fuori dall'elenco dei DIRETTI (`openrouter`, `ollama`, `local`) restavano senza nome.
+ *   Una mappa a metà in due case è peggio di una mappa sola, ed è la stessa lezione di NOMI_TEMA.
+ */
 /** Le due righe del piede dai dati del monolite. */
 export function testiPiede({ cartella, nomeAnteprima, tema, modello } = {}) {
   const titolo = nomeDaPercorso(cartella) || (typeof nomeAnteprima === 'string' && nomeAnteprima.trim()) || 'Workspace locale';
   const nomeTema = NOMI_TEMA[tema] || NOMI_TEMA.calm;
-  const fornitore = fornitoreDelModello(modello);
+  const fornitore = nomeFornitore(fornitoreDelModello(modello));
   return { titolo, sotto: fornitore ? `Tema ${nomeTema} · ${fornitore}` : `Tema ${nomeTema}` };
 }
 

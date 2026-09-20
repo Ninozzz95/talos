@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { spawnSync } from 'node:child_process';
+import { setTimeout as wait } from 'node:timers/promises';
+import { createLlamaBinaryProbe } from './llama-binary-probe.mjs';
 import { createServer } from 'node:net';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { createProcessPolicy } from './process-policy.mjs';
@@ -49,7 +50,6 @@ const DEFAULT_POLL_MS = 100;
  * risposta. Se il binario non sa rispondere, si resta esattamente al
  * comportamento di prima.
  */
-const TIMEOUT_SONDA_MS = 30_000;
 
 /**
  * Il fitter ufficiale di llama.cpp (`llama-fit-params`, lo stesso codice che
@@ -153,25 +153,6 @@ export function supportaSpeculativaNgram(testoAiuto) {
   return Boolean(riga && riga[0].includes('ngram-mod'));
 }
 
-/**
- * Sonda sincrona e volutamente povera: un eseguibile ACCANTO al binario del
- * server, nessuna shell, un tetto di tempo, e un `catch` che non nasconde
- * niente perché chi chiama tratta `null` come «non lo so».
- */
-function creaSondaBinario(spawnSyncImpl = spawnSync) {
-  return function sonda(eseguibile, argomenti, timeoutMs = TIMEOUT_SONDA_MS) {
-    try {
-      const esito = spawnSyncImpl(eseguibile, argomenti, {
-        shell: false, windowsHide: true, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024,
-      });
-      if (!esito || esito.error) return null;
-      return `${esito.stdout ?? ''}\n${esito.stderr ?? ''}`;
-    } catch {
-      return null;
-    }
-  };
-}
-
 /** `llama-fit-params` sta nella stessa cartella di `llama-server`, con la stessa estensione. */
 export function percorsoFitter(binaryPath) {
   if (typeof binaryPath !== 'string' || binaryPath.trim() === '') return null;
@@ -201,10 +182,6 @@ async function allocatePort() {
   return port;
 }
 
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export function createLlamaServerSupervisor({
   binaryPath,
   // R-03: il binario CPU di riserva e la descrizione del motore scelto dal guscio.
@@ -230,7 +207,9 @@ export function createLlamaServerSupervisor({
    * la prova al verso contrario («il binario NON offre la leva») si possa
    * scrivere senza procurarsi un binario vecchio.
    */
-  sondaBinario = creaSondaBinario(),
+  sondaBinario = null,
+  // Optional metadata-only observer: no model paths, arguments, output or keys.
+  onProbe = null,
   /**
    * ⛔ L'interruttore della speculativa, e il motivo per cui esiste: il
    * difetto aperto ggml-org/llama.cpp#25819 — «server : add stuck-loop escape
@@ -247,6 +226,10 @@ export function createLlamaServerSupervisor({
   if (typeof binaryPath !== 'string' || binaryPath.trim() === '') throw new LlamaServerSupervisorError('binaryPath is required', 'RUNTIME_MISCONFIGURED');
   if (fallbackBinaryPath !== null && (typeof fallbackBinaryPath !== 'string' || fallbackBinaryPath.trim() === '')) throw new LlamaServerSupervisorError('fallbackBinaryPath must be a non-empty string', 'RUNTIME_MISCONFIGURED');
   const processPolicy = createProcessPolicy({ allowedExecutables: [binaryPath, ...(fallbackBinaryPath ? [fallbackBinaryPath] : [])], spawnFn: spawnImpl });
+  const probeBinary = sondaBinario ?? createLlamaBinaryProbe({ onObservation: onProbe });
+  if (typeof probeBinary !== 'function') throw new LlamaServerSupervisorError('sondaBinario must be a function', 'RUNTIME_MISCONFIGURED');
+  let pendingStart = null;
+  let stopPromise = null;
   let current = null;
   let state = 'unavailable';
   const listeners = new Set();
@@ -261,9 +244,28 @@ export function createLlamaServerSupervisor({
   });
   let motore = { variante: motoreIniziale.variante, dispositivi: [...motoreIniziale.dispositivi], ripiego: null, proposta: null };
 
-  function speculativaDisponibile(binario = binaryPath) {
+  function cancelled() {
+    return new LlamaServerSupervisorError('runtime start cancelled', 'RUNTIME_START_CANCELLED');
+  }
+
+  function checkStart(operation) {
+    if (pendingStart !== operation || operation.controller.signal.aborted) throw cancelled();
+  }
+
+  async function unlock(operation) {
+    if (!operation?.locked) return;
+    operation.locked = false;
+    await Promise.resolve().then(() => modelStore.unlock(operation.modelId)).catch(() => {});
+  }
+
+  async function speculativaDisponibile(binario, operation) {
+    checkStart(operation);
     if (speculativaNgram === 'off') return false;
-    if (!aiutoPerBinario.has(binario)) aiutoPerBinario.set(binario, sondaBinario(binario, ['--help'], 10_000));
+    if (!aiutoPerBinario.has(binario)) {
+      const help = await probeBinary(binario, ['--help'], 10_000, { signal: operation.controller.signal });
+      checkStart(operation); // A cancelled observation must never populate the cache.
+      aiutoPerBinario.set(binario, help);
+    }
     return supportaSpeculativaNgram(aiutoPerBinario.get(binario) ?? '');
   }
 
@@ -272,20 +274,24 @@ export function createLlamaServerSupervisor({
    * build senza backend la domanda «ci sta nella scheda?» non ha oggetto, e
    * nessuno dei due argomenti verrebbe passato comunque.
    */
-  function leveVelocita(binario, modelPath, contextLength) {
+  async function leveVelocita(binario, modelPath, contextLength, operation) {
+    checkStart(operation);
     const chiave = `${binario}|${modelPath}|${contextLength ?? ''}`;
     if (leveMemorizzate.has(chiave)) return leveMemorizzate.get(chiave);
     const fitter = percorsoFitter(binario);
     const contesto = Number.isInteger(contextLength) && contextLength > 0 ? ['-c', String(contextLength)] : [];
     let kv = { tipo: 'q8_0', perche: 'il fitter del binario non è stato trovato: si resta sulla KV quantizzata di prima' };
     if (fitter) {
-      const conF16 = leggiNglDalFitter(sondaBinario(fitter, ['-m', modelPath, ...contesto, '-fa', '1']) ?? '');
+      const conF16 = leggiNglDalFitter(await probeBinary(fitter, ['-m', modelPath, ...contesto, '-fa', '1'], 30_000, { signal: operation.controller.signal }) ?? '');
+      checkStart(operation);
       const conQ8 = conF16 === 'tutto'
         ? null
-        : leggiNglDalFitter(sondaBinario(fitter, ['-m', modelPath, ...contesto, '-fa', '1', '-ctk', 'q8_0', '-ctv', 'q8_0']) ?? '');
+        : leggiNglDalFitter(await probeBinary(fitter, ['-m', modelPath, ...contesto, '-fa', '1', '-ctk', 'q8_0', '-ctv', 'q8_0'], 30_000, { signal: operation.controller.signal }) ?? '');
+      checkStart(operation);
       kv = decidiTipoKvCache({ nglConF16: conF16, nglConQ8: conQ8 });
     }
-    const leve = { kv, speculativa: speculativaDisponibile(binario) };
+    const leve = { kv, speculativa: await speculativaDisponibile(binario, operation) };
+    checkStart(operation);
     leveMemorizzate.set(chiave, leve);
     return leve;
   }
@@ -338,7 +344,7 @@ export function createLlamaServerSupervisor({
     const onError = (error) => {
       entry.failure = error;
       entry.state = 'failed';
-      state = 'failed';
+      if (current === entry) state = 'failed';
     };
     entry.child.once('close', onClose);
     entry.child.once('error', onError);
@@ -370,11 +376,13 @@ export function createLlamaServerSupervisor({
     });
   }
 
-  async function health() {
-    if (!current) return { ok: false, status: 0, code: 'RUNTIME_UNREACHABLE' };
+  async function health({ signal } = {}) {
+    const entry = current;
+    if (!entry?.child) return { ok: false, status: 0, code: 'RUNTIME_UNREACHABLE' };
     try {
-      const response = await fetchImpl(`${current.baseUrl}/health`, {
-        headers: { Accept: 'application/json', Authorization: `Bearer ${current.apiKey}` },
+      const response = await fetchImpl(`${entry.baseUrl}/health`, {
+        headers: { Accept: 'application/json', Authorization: `Bearer ${entry.apiKey}` },
+        ...(signal ? { signal } : {}),
       });
       return { ok: response.ok, status: response.status };
     } catch {
@@ -441,9 +449,11 @@ export function createLlamaServerSupervisor({
     return { variante, dispositivi: variante === motoreIniziale.variante ? [...motoreIniziale.dispositivi] : [], ripiego: null, proposta: null };
   }
 
-  async function lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario, ngl, apiKey }) {
+  async function lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario, ngl, apiKey, operation }) {
+    checkStart(operation);
     const entry = {
       child: null,
+      operation,
       apiKey,
       modelId: modelId ?? null,
       modelPath,
@@ -458,6 +468,7 @@ export function createLlamaServerSupervisor({
       binario,
     };
     current = entry;
+    operation.entry = entry;
     state = 'loading';
     const conOffload = Number.isInteger(ngl) && ngl > 0;
     /*
@@ -468,11 +479,13 @@ export function createLlamaServerSupervisor({
      * meno di 0,3 s; e si pagano una volta sola per (binario, modello, contesto).
      */
     const leve = conOffload
-      ? leveVelocita(binario, modelPath, contextLength)
-      : { kv: { tipo: 'q8_0', perche: 'nessun offload sul dispositivo: la KV cache non entra nella scelta' }, speculativa: speculativaDisponibile(binario) };
+      ? await leveVelocita(binario, modelPath, contextLength, operation)
+      : { kv: { tipo: 'q8_0', perche: 'nessun offload sul dispositivo: la KV cache non entra nella scelta' }, speculativa: await speculativaDisponibile(binario, operation) };
+    checkStart(operation);
     emitLog('stderr', `[talos] motore ${motore.variante}${motore.ripiego ? ` (ripiego da ${motore.ripiego.da})` : ''}: ${binario}\n`);
     emitLog('stderr', `[talos] KV cache ${leve.kv.tipo} — ${leve.kv.perche}\n`);
     emitLog('stderr', `[talos] decodifica speculativa a n-grammi: ${leve.speculativa ? 'accesa (--spec-type ngram-mod)' : 'non offerta da questo binario'}\n`);
+    checkStart(operation); // Log subscribers may have requested stop synchronously.
     entry.child = processPolicy.spawn(binario, [
       '-m', modelPath,
       ...(modelId ? ['--alias', modelId] : []),
@@ -525,6 +538,7 @@ export function createLlamaServerSupervisor({
     const attesa = attesaSaluteMs(byteModello, healthTimeoutMs);
     const deadline = Date.now() + attesa;
     while (Date.now() < deadline) {
+      checkStart(operation);
       if (entry.failure) throw new LlamaServerSupervisorError(`llama-server failed: ${entry.failure.message}`, 'RUNTIME_PROCESS_FAILED');
       /*
        * ⛔⛔⛔ BC-13, 12/09/2026 — UN PROCESSO GIÀ MORTO NON DIVENTA PRONTO:
@@ -541,13 +555,14 @@ export function createLlamaServerSupervisor({
         errore.righeMotore = [...entry.ultimeRighe];
         throw errore;
       }
-      const result = await health();
-      if (result.ok) {
+      const result = await health({ signal: AbortSignal.any([operation.controller.signal, AbortSignal.timeout(Math.max(1, deadline - Date.now()))]) });
+      checkStart(operation);
+      if (result.ok && !entry.closed && !entry.failure) {
         entry.state = 'ready';
         state = 'ready';
         return status();
       }
-      await wait(pollIntervalMs);
+      await wait(pollIntervalMs, undefined, { signal: operation.controller.signal });
     }
     entry.state = 'failed';
     state = 'failed';
@@ -556,24 +571,44 @@ export function createLlamaServerSupervisor({
     throw new LlamaServerSupervisorError(`llama-server non è diventato pronto entro ${Math.round(attesa / 1000)} s (modello di ${(byteModello / 1_000_000_000).toFixed(1)} GB)`, 'RUNTIME_HEALTH_TIMEOUT');
   }
 
-  async function start({ modelId, modelPath, port, contextLength } = {}) {
-    if (current && ['loading', 'ready', 'stopping'].includes(current.state)) throw new LlamaServerSupervisorError('runtime is already active', 'RUNTIME_ALREADY_RUNNING');
-    if (typeof modelPath !== 'string' || !isAbsolute(modelPath)) throw invalid('modelPath must be absolute');
-    const selectedPort = port ?? await portAllocator();
-    if (!Number.isInteger(selectedPort) || selectedPort < 1024 || selectedPort > 65535) throw invalid('port is invalid');
-    let locked = false;
-    if (modelStore && modelId) {
-      await modelStore.lock(modelId);
-      locked = true;
+  // Reserve the operation before the first await (port allocation/lock included).
+  // A stop drains this owner before a subsequent start may acquire the model lock.
+  async function start({ modelId, modelPath, port, contextLength, signal } = {}) {
+    if (pendingStart || stopPromise || (current && ['loading', 'ready', 'stopping'].includes(current.state))) {
+      throw new LlamaServerSupervisorError('runtime is already active', 'RUNTIME_ALREADY_RUNNING');
     }
-    const apiKey = randomBytes(32).toString('hex');
-    // Ogni caricamento riparte dal binario scelto dal guscio: il ripiego vale per un giro solo.
-    motore = nuovoMotore(motoreIniziale.variante);
-    const chiudi = (entry) => { if (entry?.child && !entry.closed) entry.child.kill('SIGTERM'); };
+    if (typeof modelPath !== 'string' || !isAbsolute(modelPath)) throw invalid('modelPath must be absolute');
+    if (signal?.aborted) throw cancelled();
+    let complete;
+    const operation = { controller: new AbortController(), modelId, locked: false, entry: null,
+      done: new Promise(resolve => { complete = resolve; }) };
+    const onAbort = () => operation.controller.abort(cancelled());
+    signal?.addEventListener('abort', onAbort, { once: true });
+    pendingStart = operation;
+    state = 'loading';
+    const chiudi = (entry) => {
+      if (!entry?.child || entry.closed) return;
+      entry.state = 'stopping';
+      try { entry.child.kill('SIGTERM'); } catch { /* process may already have exited */ }
+    };
     try {
+      // A prior failed process can still own its lock; do not acquire another one.
+      if (current) { chiudi(current); await unlock(current.operation); current = null; }
+      checkStart(operation);
+      const selectedPort = port ?? await portAllocator();
+      checkStart(operation);
+      if (!Number.isInteger(selectedPort) || selectedPort < 1024 || selectedPort > 65535) throw invalid('port is invalid');
+      if (modelStore && modelId) {
+        await modelStore.lock(modelId);
+        operation.locked = true;
+      }
+      checkStart(operation);
+      const apiKey = randomBytes(32).toString('hex');
+      motore = nuovoMotore(motoreIniziale.variante);
       try {
-        return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario: binaryPath, ngl: gpuLayers, apiKey });
+        return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario: binaryPath, ngl: gpuLayers, apiKey, operation });
       } catch (primo) {
+        checkStart(operation); // Stop is never a reason to start a CPU fallback.
         const guasto = motore.variante === 'vulkan' && primo.code === 'RUNTIME_PROCESS_FAILED' ? classificaGuastoVulkan(primo.righeMotore ?? []) : null;
         if (guasto?.classe === 'memoria') {
           motore.proposta = { a: 'cpu', motivo: `${guasto.motivo}; sul processore il modello può girare, più lento: la scelta è della persona` };
@@ -586,12 +621,12 @@ export function createLlamaServerSupervisor({
         const ripiego = { da: motore.variante, a: 'cpu', motivo: guasto.motivo, classe: guasto.classe, righe: (primo.righeMotore ?? []).slice(-4) };
         motore = { ...nuovoMotore('cpu'), ripiego };
         for (const listener of listeners) {
-          try { listener({ stream: 'stderr', text: `[talos] ${guasto.motivo}: il modello viene caricato sul processore.\n`, ripiego }); } catch { /* observer failure must not affect the process */ }
+          try { listener({ stream: 'stderr', text: `[talos] ${guasto.motivo}: il modello viene caricato sul processore.\n`, ripiego }); } catch { /* observer isolation */ }
         }
         try {
-          return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario: fallbackBinaryPath, ngl: 0, apiKey });
+          return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario: fallbackBinaryPath, ngl: 0, apiKey, operation });
         } catch (secondo) {
-          // ⛔ Le DUE code restano leggibili: chi legge deve sapere che sono morti entrambi, e come.
+          checkStart(operation);
           const codaGpu = ripiego.righe.join(' | ');
           const errore = new LlamaServerSupervisorError(`${secondo.message}${codaGpu ? ` [prima, sulla scheda grafica: ${codaGpu}]` : ''}`, secondo.code === 'RUNTIME_HEALTH_TIMEOUT' ? 'RUNTIME_HEALTH_TIMEOUT' : 'RUNTIME_PROCESS_FAILED');
           errore.righeMotore = secondo.righeMotore;
@@ -599,24 +634,40 @@ export function createLlamaServerSupervisor({
         }
       }
     } catch (error) {
-      chiudi(current);
-      current = null;
-      state = 'failed';
-      if (locked) await modelStore.unlock(modelId).catch(() => {});
-      throw error instanceof LlamaServerSupervisorError ? error : new LlamaServerSupervisorError(error.message, 'RUNTIME_PROCESS_FAILED');
+      chiudi(operation.entry);
+      if (current === operation.entry) current = null;
+      await unlock(operation);
+      state = operation.controller.signal.aborted ? 'unavailable' : 'failed';
+      if (operation.controller.signal.aborted) throw cancelled();
+      throw error instanceof LlamaServerSupervisorError ? error : new LlamaServerSupervisorError(error?.message ?? 'runtime failed', 'RUNTIME_PROCESS_FAILED');
+    } finally {
+      signal?.removeEventListener('abort', onAbort);
+      if (pendingStart === operation) pendingStart = null;
+      complete();
     }
   }
 
-  async function stop() {
+  function stop() {
+    if (stopPromise) return stopPromise;
+    const operation = pendingStart;
     const entry = current;
-    if (!entry) { state = 'unavailable'; return status(); }
-    entry.state = 'stopping';
+    operation?.controller.abort(cancelled());
+    if (entry) entry.state = 'stopping';
     state = 'stopping';
-    if (entry.child && !entry.closed) entry.child.kill('SIGTERM');
-    current = null;
-    state = 'unavailable';
-    if (modelStore && entry.modelId) await modelStore.unlock(entry.modelId).catch(() => {});
-    return status();
+    stopPromise = Promise.resolve().then(async () => {
+      if (operation) {
+        await operation.done; // The start owner releases its lock exactly once.
+      } else if (entry) {
+        if (entry.child && !entry.closed) {
+          try { entry.child.kill('SIGTERM'); } catch { /* already exited */ }
+        }
+        if (current === entry) current = null;
+        await unlock(entry.operation);
+      }
+      state = 'unavailable';
+      return status();
+    }).finally(() => { stopPromise = null; });
+    return stopPromise;
   }
 
   function subscribeLogs(listener) {

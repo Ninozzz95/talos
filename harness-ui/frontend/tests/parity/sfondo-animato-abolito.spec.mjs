@@ -53,8 +53,7 @@ async function apri(browser, modo) {
   /* ⛔ `evaluate` e non `click()`: il bottone dell'intro esiste nel DOM anche quando il suo velo
      è chiuso, e Playwright si ferma con «Element is not visible» — 12 rossi che non dicevano
      niente sulla scena. Qui l'intro è solo un ostacolo da togliere, non l'oggetto della prova. */
-  await pagina.evaluate(() => document.getElementById('introSalta')?.click());
-  await pagina.waitForTimeout(500);
+  /* ⛔ 17/09, PO-27: quella modale non esiste più, e con lei il clic che la chiudeva. */
   return { contesto, pagina };
 }
 

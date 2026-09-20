@@ -56,6 +56,28 @@ test('elencaFigli: elenco vero, ordinato per avvio, include task/conclusa/esitoD
   assert.equal(figli[1].esitoDelega, 'concluso');
 });
 
+test('snapshotFiglio calcola soltanto la figlia richiesta, senza statistiche delle sorelle', () => {
+  const sessioni = new Map([
+    ['padre-1', vocePadre()],
+    ['figlio-a', { marcatore: 'a', cartella: '/a', padreId: 'padre-1', conclusa: false, eventi: [], task: { consegna: 'A' } }],
+    ['figlio-b', { marcatore: 'b', cartella: '/b', padreId: 'padre-1', conclusa: false, eventi: [], task: { consegna: 'B' } }],
+  ]);
+  const statisticheCalcolate = [];
+  const orch = creaSubagentOrchestrator({
+    sessioni,
+    cartellaEsisteFn: () => true,
+    avviaESeguiFn: () => ({ sessionId: 'mai' }),
+    statisticheFiglioFn: (voce) => {
+      statisticheCalcolate.push(voce.marcatore);
+      return {};
+    },
+  });
+
+  assert.equal(orch.snapshotFiglio('figlio-a').sessionId, 'figlio-a');
+  assert.deepEqual(statisticheCalcolate, ['a'], 'un evento di A non ricalcola statistiche e attività di B');
+  assert.equal(orch.snapshotFiglio('padre-1'), null, 'una sessione senza padre non viene travestita da figlia');
+});
+
 test('⛔ T05-D3: un figlio ucciso dalla morte del processo esce con interrotta:true — non «in corso» per sempre', () => {
   /*
    * Senza questo campo la scheda Agenti e il foglio dell'albero dicevano «In corso» a un
@@ -104,11 +126,11 @@ test('⭐⭐⭐ 06/9 — delegaSottoTask: cartella UGUALE al padre, o assente, P
     },
   });
   const uguale = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/progetto' });
-  assert.equal(uguale.esito, 'concluso');
+  assert.equal(uguale.esito, 'avviato');
   assert.equal(viste[0].cartella, '/progetto');
   // e senza cartella si lavora dove lavora il padre
   const assente = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'y' });
-  assert.equal(assente.esito, 'concluso');
+  assert.equal(assente.esito, 'avviato');
   assert.equal(viste[1].cartella, '/progetto');
   // ⭐ il figlio EREDITA il modello della madre: prima partiva col modello di difetto, e nessuno lo diceva
   assert.equal(viste[0].modelloRichiesta, 'z-ai/glm-5.3-flash');
@@ -228,7 +250,7 @@ test(`⭐⭐ AL CONTRARIO — delegaSottoTask: profondità ESATTAMENTE al limite
     cartellaEsisteFn: () => true,
     avviaESeguiFn: (opzioni) => { profonditaRicevuta = opzioni.profonditaDelega; return { sessionId: 'figlio-vero' }; },
   });
-  orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/diversa' }); // non attesa: la Promise resta pending finché onConclusioneFn non scatta, non serve qui
+  void orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/diversa' });
   assert.equal(profonditaRicevuta, LIMITE_PROFONDITA_DELEGA, 'esattamente al tetto, non oltre — un errore di uno-di-troppo qui bloccherebbe metà della profondità concessa');
 });
 
@@ -245,28 +267,43 @@ test(`⛔⛔⛔ delegaSottoTask: ${LIMITE_FIGLI_CONCORRENTI}° figlio già attiv
   assert.equal(chiamata, false);
 });
 
-test('⭐⭐⭐ delegaSottoTask: avvio riuscito — avviaESeguiFn riceve task/cartella/padreId/profonditaDelega VERI', async () => {
+test('⭐⭐⭐ delegaSottoTask: avvio riuscito — torna AVVIATO subito e il terminale reale viaggia sul callback separato', async () => {
   const sessioni = new Map([['padre-1', vocePadre({ profonditaDelega: 0 })]]);
   let opzioniRicevute;
+  let concludiFiglio;
+  const terminali = [];
   const orch = creaSubagentOrchestrator({
     sessioni,
     cartellaEsisteFn: () => true,
     avviaESeguiFn: (opzioni) => {
       opzioniRicevute = opzioni;
-      opzioni.onConclusioneFn({ ok: true, esito: { detto: 'fatto per davvero', comeFinita: 'concluso' } });
+      sessioni.set('figlio-vero', { padreId: 'padre-1', conclusa: false, eventi: [] });
+      concludiFiglio = opzioni.onConclusioneFn;
       return { sessionId: 'figlio-vero' };
     },
+    onFiglioConclusoFn: (terminale) => terminali.push(terminale),
   });
-  const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'scrivi un modulo', cartella: '/figlio' });
+  const esito = await Promise.race([
+    orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'scrivi un modulo', cartella: '/figlio' }),
+    new Promise((resolve) => setTimeout(() => resolve({ esito: 'timeout-test' }), 50)),
+  ]);
   assert.equal(opzioniRicevute.cartella, '/figlio');
   assert.deepEqual(opzioniRicevute.task, { consegna: 'scrivi un modulo', consegnaCorta: 'scrivi un modulo' } /* 09/09: la forma corta nasce qui — senza il marcatore «Compito:» del kernel resta la stringa intera, che è giusto: non si indovina un preambolo che non c'è */);
   assert.equal(opzioniRicevute.padreId, 'padre-1');
   assert.equal(opzioniRicevute.profonditaDelega, 1);
-  assert.equal(esito.esito, 'concluso');
-  assert.equal(esito.riassunto, 'fatto per davvero');
+  assert.equal(esito.esito, 'avviato');
+  assert.equal(esito.childId, 'figlio-vero');
+  assert.match(esito.riassunto, /background/i);
+  assert.equal(terminali.length, 0, 'avvio accettato non è un successo finale inventato');
+
+  concludiFiglio({ ok: true, esito: { detto: 'fatto per davvero', comeFinita: 'concluso' } });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(terminali.length, 1);
+  assert.equal(terminali[0].childId, 'figlio-vero');
+  assert.deepEqual(terminali[0].risultato, { riassunto: 'fatto per davvero', esito: 'concluso' });
 });
 
-test('⛔⛔ AL CONTRARIO — la Promise resta PENDING finché onConclusioneFn non scatta, mai risolta subito da sola', async () => {
+test('⛔⛔ AL CONTRARIO — la Promise di delega NON resta pending fino alla figlia: la madre può proseguire mentre il figlio è vivo', async () => {
   const sessioni = new Map([['padre-1', vocePadre()]]);
   let onConclusioneCatturata;
   const orch = creaSubagentOrchestrator({
@@ -274,14 +311,14 @@ test('⛔⛔ AL CONTRARIO — la Promise resta PENDING finché onConclusioneFn n
     cartellaEsisteFn: () => true,
     avviaESeguiFn: (opzioni) => { onConclusioneCatturata = opzioni.onConclusioneFn; return { sessionId: 'figlio-vero' }; },
   });
-  let risolta = false;
-  const promessa = orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/figlio' }).then((e) => { risolta = true; return e; });
-  await new Promise((r) => setImmediate(r));
-  assert.equal(risolta, false, 'senza onConclusioneFn chiamata, la delega non deve MAI risolversi da sola');
+  const esito = await Promise.race([
+    orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/figlio' }),
+    new Promise((resolve) => setTimeout(() => resolve({ esito: 'timeout-test' }), 50)),
+  ]);
+  assert.equal(esito.esito, 'avviato');
+  assert.equal(esito.childId, 'figlio-vero');
+  assert.equal(typeof onConclusioneCatturata, 'function');
   onConclusioneCatturata({ ok: true, esito: { detto: 'ora sì', comeFinita: 'concluso' } });
-  const esito = await promessa;
-  assert.equal(risolta, true);
-  assert.equal(esito.riassunto, 'ora sì');
 });
 
 test('⛔⛔⛔ AL CONTRARIO — avviaESeguiFn che rifiuta SUBITO (es. chiave API assente): la delega si risolve, mai appesa in eterno', async () => {
@@ -360,8 +397,9 @@ test('⛔ J — una tool-call riuscita senza file non basta quando il task chied
   assert.match(r.motivo, /scritture o artefatti/i);
 });
 
-test('⭐⭐ J — il callback associa il verdetto e l evidenza alla figlia anche se arriva prima del return', async () => {
+test('⭐⭐ J — il callback associa e consegna il verdetto anche se arriva prima che avviaESeguiFn restituisca il sessionId', async () => {
   const sessioni = new Map([['padre-1', vocePadre()]]);
+  const terminali = [];
   const orch = creaSubagentOrchestrator({
     sessioni,
     cartellaEsisteFn: () => true,
@@ -377,11 +415,14 @@ test('⭐⭐ J — il callback associa il verdetto e l evidenza alla figlia anch
       opzioni.onConclusioneFn({ ok: true, esito: { detto: 'fatto', comeFinita: 'concluso' } });
       return { sessionId: 'figlio-vero' };
     },
+    onFiglioConclusoFn: (terminale) => terminali.push(terminale),
   });
   const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'scrivi un file', cartella: '/figlio' });
-  assert.equal(esito.esito, 'fallito');
+  assert.equal(esito.esito, 'avviato');
   assert.equal(sessioni.get('figlio-vero').esitoDelega, 'fallito');
   assert.equal(sessioni.get('figlio-vero').evidenzaDelega.toolCallsFalliti, 1);
+  assert.equal(terminali.length, 1);
+  assert.equal(terminali[0].risultato.esito, 'fallito');
 });
 
 test('⭐⭐ J — il ripristino da eventi distingue RunFinished senza prova operativa da una scrittura reale', () => {
@@ -433,7 +474,7 @@ test('DELEGA: la figlia dichiara cartellaGiaScelta, o il registro la allarga all
     cartellaEsisteFn: () => true,
     avviaESeguiFn: (argomenti) => { visto = argomenti; return { sessionId: 'figlia-1' }; },
   });
-  void orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'scrivi due righe' }); // la promessa si chiude a figlia conclusa: qui serve solo l'avvio
+  void orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'scrivi due righe' });
 
   assert.ok(visto, 'la delega non ha nemmeno provato ad avviare la figlia');
   assert.equal(visto.cartellaGiaScelta, true,

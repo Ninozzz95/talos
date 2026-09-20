@@ -205,7 +205,9 @@ test('CACHE-08 (verso contrario) — un flusso SSE e una risposta d’errore pas
   const dipendenze = { leggiChiave: () => 'k', leggiRuntime: () => ({ endpoint: 'https://api.deepseek.test' }) };
 
   for (const attesa of [sse, errore]) {
-    const fetchMulti = creaFetchMultiProvider(async () => attesa, { dipendenze });
+    /* 17/09: il guardiano dell'inattività (P0 · punto 7) rimonta la Response per costruzione (pipeThrough);
+       qui si prova il contratto della CACHE, quindi il guardiano è l'identità — il vero si prova in P0-D-20. */
+    const fetchMulti = creaFetchMultiProvider(async () => attesa, { dipendenze, sorvegliaCorpo: r => r });
     const risposta = await fetchMulti('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       body: JSON.stringify({ model: 'deepseek:deepseek-flash', messages: [], stream: true }),

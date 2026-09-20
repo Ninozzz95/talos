@@ -14,7 +14,9 @@ import {
   creaClientCdp,
   apriSchedaVuota,
   vaiA,
+  opzioniAvvioBrowser,
 } from '../src/browser-vivo.mjs';
+import { ambienteSenzaVariabiliDelServer } from '../src/ambiente-solo-server.mjs';
 
 // M1 (07/09) — il motore del browser vivo. ⛔ Nessuna prova qui avvia un browser
 // vero: `avvia` ed `esiste` sono finti, ed è per questo che stanno nel contratto.
@@ -399,4 +401,84 @@ test('RIPIEGO VERO, al contrario: su questa macchina un Chromium ESISTE e la fun
   assert.ok(trovato, 'su una Windows con Chrome o Edge installati non può rispondere «nessuno»');
   assert.ok(existsSync(trovato.percorso), 'e il percorso che dichiara deve esistere davvero');
   assert.ok(['chrome', 'edge', 'chromium'].includes(trovato.canale));
+});
+
+/*
+ * ⛔⛔⛔ D1 del secondo giro CLI-REQ (17/09/2026) — IL BROWSER PILOTATO NON EREDITA I SEGRETI
+ * DEL SERVER. Autorizzato dall'owner: «la stessa cura del terminale».
+ *
+ * `avviaDiSistema` non passava `env`, e il valore predefinito di `node:child_process` è
+ * `process.env` INTERO ⇒ il Chromium che TALOS avvia per la persona nasceva col token di
+ * loopback, con la chiave privata delle ricevute e con la chiave della ricerca web.
+ *
+ * ⛔ I nomi sono scritti QUI PER ESTESO e non iterando l'elenco del prodotto: una prova che
+ * scorre una lista passa per costruzione quando la lista è vuota.
+ */
+test('⛔⛔⛔ D1 — il browser pilotato NON riceve i segreti del server, e riceve tutto il resto', async () => {
+  const finti = {
+    TALOS_HARNESS_UI_TOKEN: 'a'.repeat(64),
+    TALOS_HARNESS_RECEIPT_KEY_ID: 'chiave-finta-di-prova',
+    TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64: 'b'.repeat(64),
+    TALOS_HARNESS_SEARCH_API_KEY: 'tvly-' + 'd'.repeat(32),
+    ELECTRON_RUN_AS_NODE: '1',
+    GH_TOKEN: 'ghp_' + 'c'.repeat(36),
+  };
+  const precedenti = Object.fromEntries(Object.keys(finti).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, finti);
+  try {
+    const p = processoFinto();
+    let opzioniViste = null;
+    const avvio = avviaBrowserVivo({
+      percorso: '/finto/chrome',
+      cartellaProfilo: '/tmp/p',
+      creaCartella: () => {},
+      avvia: (_percorso, _argomenti, opzioni) => { opzioniViste = opzioni; return p; },
+      graziaMs: 10,
+      terminaAlbero: () => true,
+    });
+    p.stderr.write('DevTools listening on ws://127.0.0.1:9222/devtools/browser/abc\n');
+    const vivo = await avvio;
+
+    assert.ok(opzioniViste, 'le opzioni dello spawn devono arrivare a chi lancia: è ciò che le rende misurabili');
+    const ambiente = opzioniViste.env;
+    assert.ok(ambiente && typeof ambiente === 'object', 'senza `env` esplicito Chromium eredita TUTTO process.env');
+
+    assert.equal(ambiente.TALOS_HARNESS_UI_TOKEN, undefined, 'il token di loopback non deve arrivare al browser');
+    assert.equal(ambiente.TALOS_HARNESS_RECEIPT_KEY_ID, undefined);
+    assert.equal(ambiente.TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64, undefined);
+    assert.equal(ambiente.TALOS_HARNESS_SEARCH_API_KEY, undefined);
+    assert.equal(ambiente.ELECTRON_RUN_AS_NODE, undefined);
+
+    // ⛔ «Zero» confermato al contrario: quei nomi erano DAVVERO addosso al processo.
+    assert.equal(process.env.TALOS_HARNESS_UI_TOKEN, finti.TALOS_HARNESS_UI_TOKEN);
+    assert.equal(process.env.ELECTRON_RUN_AS_NODE, '1');
+
+    // Il verso opposto: il browser è della persona, la sua roba resta.
+    assert.equal(ambiente.GH_TOKEN, finti.GH_TOKEN);
+    const percorso = ambiente.PATH ?? ambiente.Path;
+    assert.ok(typeof percorso === 'string' && percorso.length > 0, 'senza PATH il browser non troverebbe le sue DLL');
+
+    // E le altre opzioni non sono cambiate: stderr a tubo resta l'unica fonte per la porta.
+    assert.deepEqual(opzioniViste.stdio, ['ignore', 'pipe', 'pipe']);
+    assert.equal(opzioniViste.windowsHide, false);
+    await vivo.chiudi().catch(() => {});
+  } finally {
+    for (const [k, v] of Object.entries(precedenti)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+});
+
+test('⛔⛔ D1 — l\'ambiente del browser viene dalla FONTE UNICA, iniettabile e non ricopiata', () => {
+  /*
+   * ⛔ Il difetto che questa riga impedisce è una seconda lista che diverge in silenzio. Se
+   * qualcuno ricopiasse l'elenco dentro `browser-vivo.mjs`, `opzioniAvvioBrowser` smetterebbe di
+   * chiedere l'ambiente a chi glielo passa e questa riga diventerebbe rossa.
+   */
+  const iniettata = opzioniAvvioBrowser(() => ({ SEGNO: 'della-fonte-iniettata' })).env;
+  assert.deepEqual(iniettata, { SEGNO: 'della-fonte-iniettata' }, 'la fonte dell\'ambiente è iniettabile');
+
+  // E la fonte predefinita è esattamente quella del terminale, applicata allo stesso ingresso.
+  const condivisa = ambienteSenzaVariabiliDelServer({ TALOS_HARNESS_UI_TOKEN: 'a'.repeat(64), MIA: 'resta' });
+  assert.deepEqual(condivisa, { MIA: 'resta' });
 });

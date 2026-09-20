@@ -1,5 +1,7 @@
+import './src/difesa-ricerca-programmi.mjs'; // ⛔ PER PRIMO: su Windows un `git.exe` dentro il workspace non deve battere il git vero (misura e fonti nel file)
 import { writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { createLocalResumeDiagnostics } from './src/local-resume-diagnostics.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createAutomationScheduler } from './src/automation-scheduler.mjs';
@@ -34,13 +36,16 @@ import { createProviderCredentialStore } from './src/provider-credential-store.m
 import { leggiScopePortachiavi, avvolgiAdattatoreKeyring, creaAdattatorePortachiaviSistema } from './src/adattatore-keyring.mjs';
 import { migraChiaviLegacySuDesktop } from './src/migrazione-chiavi.mjs';
 import { createGeneratedImageStore } from './src/generated-image-store.mjs';
-import { createOwnerRuntimeAdapter } from './src/runtime-owner-adapter.mjs';
+import { createOwnerRuntimeAdapter, creaFetchMultiProvider } from './src/runtime-owner-adapter.mjs';
+/* ⛔ CLI-REQ-05: «di CHI è questo modello, e ha una chiave utilizzabile ADESSO» — la regola e le sue prove stanno lì. */
+import { creaProntoFn } from './src/sessione-pronta.mjs';
 import { createDesktopContextRuntime, resolveDesktopContextProfile } from './src/context-runtime.mjs';
 import { createContextTokenCounter, buildPreparedDesktopContextRequest } from './src/context-token-counters.mjs';
 import { createChatImageStore } from './src/chat-image-attachments.mjs';
 import { avviaSessione } from './src/agent-service.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA } from './src/runtime-contract.mjs';
-import { closeRuntimeResources } from './src/http-lifecycle.mjs';
+import { applicaTempiDelServer, closeRuntimeResources } from './src/http-lifecycle.mjs';
+import { leggiInattivitaGenerazioneMs } from './src/generation-idle.mjs';
 import { createWorkspaceLaunchStore } from './src/workspace-launch-store.mjs';
 import { cartelleConsigliate } from './src/frequent-dirs.mjs';
 import { createWorkspaceBrowser } from './src/workspace-browser.mjs';
@@ -70,7 +75,16 @@ async function startServer() {
    * l'app prende le chiavi SOLO dalla UI. Vedi `src/adattatore-keyring.mjs`.
    */
   const scopePortachiavi = leggiScopePortachiavi(process.env);
-  const ignoraSemiAmbiente = scopePortachiavi === 'desktop';
+  const ignoraSemiAmbiente = scopePortachiavi !== null; // PR #27: vale per OGNI scope (anche l'anteprima), non solo «desktop»
+  // Opt-in only: observe the real resumed turn without changing prompts or cache flags.
+  const resumeDiagnostics = await createLocalResumeDiagnostics({ sourceFiles: {
+    server: fileURLToPath(import.meta.url),
+    supervisor: new URL('./src/llama-server-supervisor.mjs', import.meta.url),
+    adapter: new URL('./src/local-runtime-llama-server.mjs', import.meta.url),
+    ownerAdapter: new URL('./src/runtime-owner-adapter.mjs', import.meta.url),
+    registry: new URL('./src/session-registry.mjs', import.meta.url),
+    ownerKernel: config.ownerRuntimeModule,
+  } });
   let providerKeyring = null;
   try {
     /* ⛔ (16/09/2026) — l'adattatore arriva dalla fabbrica unica di `src/adattatore-keyring.mjs`,
@@ -85,7 +99,8 @@ async function startServer() {
    * una volta sola (marcatore su disco). I servizi vecchi restano allo sviluppo; vedi
    * `src/migrazione-chiavi.mjs`.
    */
-  if (ignoraSemiAmbiente) {
+  // Preview never imports legacy or production credentials.
+  if (scopePortachiavi === 'desktop') {
     try {
       const migrazione = await migraChiaviLegacySuDesktop({ markerFile: percorsoDatiDesktop('.chiavi-migrate.json') });
       if (migrazione.migrati.length) {
@@ -196,49 +211,55 @@ async function startServer() {
       return modelli.find(modello => modello.id === modelId) ?? null;
     } catch { return null; }
   };
+  /*
+   * ⭐⭐⭐ 03/9 — da qui passano i modelli che NON sono di OpenRouter.
+   * La chiave viene dal portachiavi del computer e non tocca mai il
+   * browser; l'indirizzo è quello che la persona ha impostato nella scheda
+   * Provider, cioè lo stesso con cui il pulsante «Prova» l'ha verificato:
+   * instradare con parametri diversi da quelli provati renderebbe la prova
+   * una bugia.
+   *
+   * ⛔ 17/09 (CLI-REQ-05): estratto in una costante perché adesso serve DUE volte — all'adattatore
+   *   del runtime e alla destinazione che il registro delle sessioni usa per compattazione e
+   *   giudice. Una copia per cliente sarebbe due instradamenti che divergono.
+   */
+  const destinazioneModelloDeps = {
+    leggiChiave: (fonte) => { try { return providerStore.getKey(fonte); } catch { return null; } },
+    leggiRuntime: (fonte) => { try { return providerStore.getRuntime(fonte); } catch { return {}; } },
+    localePronto: () => supervisoreLocale?.status?.()?.state === 'ready',
+    /*
+     * ⛔ Si passa il PONTE, non la chiave: `request()` del supervisore
+     * aggiunge da sé l'`--api-key` generata all'avvio, che non deve essere
+     * copiata da nessuna parte — men che meno in una risposta HTTP.
+     */
+    chiamaLocale: (percorso, opzioni) => resumeDiagnostics.withRoute('owner-transport', () => supervisoreLocale.request(percorso, opzioni)),
+    /*
+     * ⭐⭐⭐ 3/9 — owner, dal vivo: "non è così che si deve fare... deve
+     * partire tutto in automatico". LM Studio/Ollama caricano il modello
+     * alla prima richiesta, nessun passo manuale — stesso principio qui:
+     * chi risolve la destinazione, se trova il motore spento, chiama
+     * QUESTA funzione invece di arrendersi. `localRuntimes['llama.cpp']`
+     * non esiste ancora in questo punto del file (viene costruito più
+     * sotto): la freccia qui sotto lo referenzia per closure, non lo usa
+     * subito — `avviaLocale` viene CHIAMATA solo durante una richiesta
+     * vera, ben dopo che il server ha finito di avviarsi. Se il runtime
+     * llama.cpp non è configurato affatto (nessun `TALOS_LLAMA_SERVER_PATH`),
+     * `localRuntimes['llama.cpp']` è `undefined` e l'errore che risale è
+     * quello vero — "non configurato", non un silenzio.
+     */
+    avviaLocale: (modelId) => {
+      const runtime = localRuntimes['llama.cpp'];
+      if (!runtime) { const errore = new Error('Il motore locale non è configurato su questo server.'); errore.code = 'LOCAL_RUNTIME_NOT_CONFIGURED'; throw errore; }
+      return runtime.load(modelId);
+    },
+  };
+
   const ownerRuntime = createOwnerRuntimeAdapter({
     providerStore,
     resolveImagesFn: messages => chatImageStore.resolveMessages(messages),
     modulePath: config.ownerRuntimeModule,
     openRouterRuntimeFn: () => providerStore.getRuntime('openrouter'),
-    /*
-     * ⭐⭐⭐ 03/9 — da qui passano i modelli che NON sono di OpenRouter.
-     * La chiave viene dal portachiavi del computer e non tocca mai il
-     * browser; l'indirizzo è quello che la persona ha impostato nella scheda
-     * Provider, cioè lo stesso con cui il pulsante «Prova» l'ha verificato:
-     * instradare con parametri diversi da quelli provati renderebbe la prova
-     * una bugia.
-     */
-    destinazioneModelloDeps: {
-      leggiChiave: (fonte) => { try { return providerStore.getKey(fonte); } catch { return null; } },
-      leggiRuntime: (fonte) => { try { return providerStore.getRuntime(fonte); } catch { return {}; } },
-      localePronto: () => supervisoreLocale?.status?.()?.state === 'ready',
-      /*
-       * ⛔ Si passa il PONTE, non la chiave: `request()` del supervisore
-       * aggiunge da sé l'`--api-key` generata all'avvio, che non deve essere
-       * copiata da nessuna parte — men che meno in una risposta HTTP.
-       */
-      chiamaLocale: (percorso, opzioni) => supervisoreLocale.request(percorso, opzioni),
-      /*
-       * ⭐⭐⭐ 3/9 — owner, dal vivo: "non è così che si deve fare... deve
-       * partire tutto in automatico". LM Studio/Ollama caricano il modello
-       * alla prima richiesta, nessun passo manuale — stesso principio qui:
-       * chi risolve la destinazione, se trova il motore spento, chiama
-       * QUESTA funzione invece di arrendersi. `localRuntimes['llama.cpp']`
-       * non esiste ancora in questo punto del file (viene costruito più
-       * sotto): la freccia qui sotto lo referenzia per closure, non lo usa
-       * subito — `avviaLocale` viene CHIAMATA solo durante una richiesta
-       * vera, ben dopo che il server ha finito di avviarsi. Se il runtime
-       * llama.cpp non è configurato affatto (nessun `TALOS_LLAMA_SERVER_PATH`),
-       * `localRuntimes['llama.cpp']` è `undefined` e l'errore che risale è
-       * quello vero — "non configurato", non un silenzio.
-       */
-      avviaLocale: (modelId) => {
-        const runtime = localRuntimes['llama.cpp'];
-        if (!runtime) { const errore = new Error('Il motore locale non è configurato su questo server.'); errore.code = 'LOCAL_RUNTIME_NOT_CONFIGURED'; throw errore; }
-        return runtime.load(modelId);
-      },
-    },
+    destinazioneModelloDeps,
     modelCapabilityFn: readModelCapabilities,
   });
   let taskCatalogProvider = null;
@@ -308,21 +329,21 @@ async function startServer() {
      * R-03, 13/09 — la riserva CPU (`TALOS_LLAMA_SERVER_FALLBACK_PATH`, messa dal guscio
      * quando sceglie Vulkan) e la descrizione del motore entrano nel supervisore: se la
      * scheda manca o si perde durante il caricamento, il modello riparte sul processore
-     * una volta sola e lo stato lo dichiara (`motore.ripiego`).
+     * una volta sola e lo stato dichiara (`motore.ripiego`).
      */
-    const supervisor = createLlamaServerSupervisor({
+    const supervisor = resumeDiagnostics.wrapSupervisor(createLlamaServerSupervisor(resumeDiagnostics.supervisorOptions({
       binaryPath: config.llamaServerPath,
       fallbackBinaryPath: config.llamaServerFallbackPath && config.llamaServerFallbackPath !== config.llamaServerPath ? config.llamaServerFallbackPath : null,
       motore: { variante: gpuLayers > 0 ? 'vulkan' : 'cpu', dispositivi },
       modelStore: localModelStore,
       gpuLayers,
-    });
+    })));
     // ⛔ Registrato SUBITO dopo la creazione: è l'unico punto in cui il
     // legame tardivo di sopra si chiude davvero. Senza questa riga i modelli
     // locali resterebbero irraggiungibili con un messaggio che dice
     // «il motore non è acceso» anche quando lo è.
     supervisoreLocale = supervisor;
-    const llama = createLlamaServerRuntime({ supervisor });
+    const llama = resumeDiagnostics.wrapRuntime(createLlamaServerRuntime({ supervisor }));
     localRuntimes['llama.cpp'] = {
       detect: async () => {
         const s = supervisor.status();
@@ -432,7 +453,7 @@ async function startServer() {
    * parte comunque — avviare una sessione fallisce per-richiesta con
    * CONFIG_INVALID, dichiarato al chiamante, non un rifiuto all'avvio.
    */
-  const sessionRegistry = createSessionRegistry({
+  const sessionRegistry = resumeDiagnostics.wrapRegistry(createSessionRegistry(resumeDiagnostics.registryOptions({
     contextHooksFn: config.contextTrial ? input => contextRuntime.service.createKernelHooks(input) : undefined,
     contextCompactFn: config.contextTrial ? input => contextRuntime.service.compact(input) : undefined,
     avviaSessioneFn: (input) => avviaSessione({
@@ -441,16 +462,39 @@ async function startServer() {
     }),
     modello: config.modello,
     /*
-     * ⛔ (16/09/2026, review) — la riserva `config.chiaveApi` è la OPENROUTER_API_KEY
-     *   dell'AMBIENTE: nello scope desktop NON deve raggiungere le sessioni nemmeno come
-     *   riserva (2c copre i semi dei NEGOZI, non questa via). Con lo scope desktop la UI dice
-     *   «non collegata» e una chiave che lavora e fattura senza dirlo è peggio di una che manca:
-     *   le sessioni prendono SOLO dal portachiavi dell'app (`-desktop`).
+     * ⛔ (16/09/2026, review — portato dal main pubblico il 18/09) — la riserva `config.chiaveApi` è la OPENROUTER_API_KEY
+     *   dell'AMBIENTE: nello scope desktop NON deve raggiungere le sessioni nemmeno come riserva. Con lo scope desktop la UI
+     *   dice «non collegata», e una chiave che lavora e fattura senza dirlo è peggio di una che manca: le sessioni prendono
+     *   SOLO dal portachiavi dell'app (`-desktop`). Vale anche per `prontoFn`, qui sotto: stessa riserva, stessa regola.
      */
     chiave: ignoraSemiAmbiente ? undefined : config.chiaveApi,
     chiaveFn: ignoraSemiAmbiente
       ? () => providerStore.getKey('openrouter')
       : () => providerStore.getKey('openrouter') ?? config.chiaveApi,
+    /*
+     * ⛔⛔⛔ CLI-REQ-05, punto 1 (17/09/2026) — CHI RISPONDE A «QUESTO MODELLO SI PUÒ USARE».
+     *
+     * Il registro non conosce i fornitori: conosceva solo `chiaveFn`, che è la chiave di
+     * OpenRouter, e rifiutava QUALUNQUE sessione non locale senza di essa — anche una sessione
+     * DeepSeek con la chiave DeepSeek già salvata, con un messaggio che nomina
+     * `OPENROUTER_API_KEY`, una variabile che quella persona non ha mai impostato.
+     * ⇒ La domanda la risponde l'host, che ha il portachiavi, e la risposta parla del fornitore
+     *   DEL MODELLO col suo nome umano. Sincrona: non serve rete, e `avviaESegui` non è `async`.
+     * ⛔ Un fornitore che non richiede credenziale (`chiaveObbligatoria: false`) è pronto per
+     *   costruzione: non gli si chiede una chiave che non esiste.
+     */
+    /* ⛔ 17/09, dopo la fusione: la regola vive in `src/sessione-pronta.mjs`, dove ha le sue prove. Qui dentro era una
+       chiusura che nessuno poteva chiamare, e per i fornitori diversi da OpenRouter contava come «pronta» anche una chiave
+       in PANCHINA (`hasKey` invece di `getKey`): la sessione partiva e il giro moriva senza una chiave utilizzabile. */
+    prontoFn: creaProntoFn({ providerStore, chiaveApi: ignoraSemiAmbiente ? null : config.chiaveApi }),
+    /*
+     * ⛔⛔⛔ CLI-REQ-05, punto 2 e 3 — LA STESSA DESTINAZIONE CHE USA UN GIRO NORMALE.
+     * Senza questa, la compattazione e il giudice della ricerca partivano con una `fetch` nuda, e
+     * il kernel spedisce a un indirizzo FISSO di OpenRouter: la conversazione intera di una
+     * sessione DeepSeek se ne andava lì. `destinazioneModelloDeps` è la stessa che sceglie
+     * fornitore, indirizzo e chiave per ogni turno — una fonte sola, non una seconda copia.
+     */
+    fetchModelloFn: () => creaFetchMultiProvider(fetch, { dipendenze: destinazioneModelloDeps }),
     cartelleProgetto: config.cartelleProgetto,
     taskCatalogProvider,
     ricercaWeb: config.ricercaWeb, // seme dell'ambiente: resta per compatibilità, ma è ricercaWebFn a valere a ogni giro
@@ -501,7 +545,7 @@ async function startServer() {
      * elencare zero attrezzi.
      */
     attrezziKernelFn: () => ownerRuntime.attrezziKernel(),
-  });
+  })));
   /*
    * ⭐⭐⭐ FASE L (30/8) — ricostruisce le sessioni persistite PRIMA di
    * accettare richieste: un riavvio del server (non solo un F5 del
@@ -535,7 +579,7 @@ async function startServer() {
       fetchFn: (url, options) => {
         if (String(url).startsWith(`${localCounterBase}/`)) {
           if (!supervisoreLocale) throw Object.assign(new Error('Motore locale non disponibile.'), { code: 'CTX_RUNTIME_PROFILE_MISMATCH' });
-          return supervisoreLocale.request(new URL(url).pathname, options);
+          return resumeDiagnostics.withRoute('context-counter', () => supervisoreLocale.request(new URL(url).pathname, options));
         }
         return fetch(url, options);
       },
@@ -668,6 +712,14 @@ async function startServer() {
 
   const app = createHttpApp({
     /*
+     * ⛔ 16/09 — il tetto sul corpo delle richieste (10 MiB di serie, vedi `MAX_REQUEST_BODY_BYTES` in http-app.mjs):
+     *   `TALOS_HTTP_BODY_MAX_BYTES` lo cambia; un valore storto (vuoto, non numerico, ≤ 0) NON deve impedire
+     *   l'avvio, quindi si ignora e resta il default — stessa disciplina di `TALOS_MCP_STARTUP_CONCURRENCY`.
+     */
+    ...(Number.isInteger(Number(process.env.TALOS_HTTP_BODY_MAX_BYTES)) && Number(process.env.TALOS_HTTP_BODY_MAX_BYTES) > 0
+      ? { limiteCorpoByte: Number(process.env.TALOS_HTTP_BODY_MAX_BYTES) }
+      : {}),
+    /*
      * ⛔⛔ PO-01 (10/09) — l'UNICO punto in cui la chiave ottenuta dall'accesso lascia il flusso
      *   OAuth. Va nel PORTACHIAVI DEL SISTEMA, da dove entrano già tutte le altre chiavi
      *   (`providerStore`, cablato sopra con `@napi-rs/keyring`): così «Rimuovi chiave», il Doctor,
@@ -754,6 +806,19 @@ async function startServer() {
     browserVivo,
   });
   const server = createServer(app);
+
+  /*
+   * ⛔⛔ P0 · punto 7 (16/09/2026) — I TEMPI DEL SERVER SI DICHIARANO, PRIMA DI `listen`.
+   *
+   * Fin qui questa riga era solo `createServer(app)`: nessuno dei quattro tempi era impostato, e
+   * quelli attivi erano i default di qualunque Node fosse installato (misurati su v24.18.0:
+   * timeout 0 · headersTimeout 60 s · keepAliveTimeout 5 s · requestTimeout 300 s — e
+   * `server.timeout` valeva 120 s fino a Node 13). La rotta `/events` deve reggere un
+   * ragionamento lungo: non può dipendere da questo.
+   * I numeri e le ragioni stanno in `src/http-lifecycle.mjs` (`TEMPI_SERVER_HTTP`), nello stesso
+   * posto da cui li legge la prova che il battito regge oltre il vecchio muro.
+   */
+  const tempiDelServer = applicaTempiDelServer(server);
 
   /*
    * ⭐⭐⭐ 03/9 — R-01 (lanciatore doppio-clic, owner: "porta libera scelta
@@ -853,11 +918,18 @@ async function startServer() {
       ],
       logger: console,
     });
+    await resumeDiagnostics.flush();
     server.close(() => process.exit(0));
   };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
   console.log(`Harness UI disponibile su http://${config.host}:${portaAscolto}`);
+  /*
+   * ⭐ P0 · punto 7: si stampa ciò che il server ha DAVVERO (rilettura, non ciò che gli abbiamo
+   * chiesto) più il failsafe attivo. Sono i due numeri che servono quando qualcuno segnala «si è
+   * fermato da solo»: senza, la diagnosi ricomincia dalla lettura del codice.
+   */
+  console.log(`[tempi] socket ${tempiDelServer.timeout === 0 ? 'senza scadenza' : `${tempiDelServer.timeout} ms`} · keep-alive ${tempiDelServer.keepAliveTimeout} ms · intestazioni ${tempiDelServer.headersTimeout} ms · richiesta ${tempiDelServer.requestTimeout} ms · silenzio del fornitore ${leggiInattivitaGenerazioneMs() === 0 ? 'nessun limite' : `${Math.round(leggiInattivitaGenerazioneMs() / 60_000)} min`}`);
   /*
    * ⭐⭐⭐ 02/09 — stesso principio di `hermes doctor`/`claude doctor`
    * (ricerca fatta lo stesso giorno, vedi

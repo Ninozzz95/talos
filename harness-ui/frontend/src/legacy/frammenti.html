@@ -36,8 +36,20 @@
                 <span class="settings-status" id="appearanceSettingsStatus" role="status">Preferenze locali · nessun segreto nel browser</span>
               </article>
               <article class="settings-card settings-card-wide model-lab-card" id="modelLabCard" data-model-lab data-settings-panel="models" hidden>
-                <div class="settings-card-heading"><div><span class="eyebrow">Laboratorio modelli</span><h3>Modelli, provider e runtime</h3><p class="muted-copy">Il laboratorio separa dati osservati, preferenze locali e funzioni che richiedono un runtime LLM. Nulla viene presentato come disponibile se non è verificato.</p></div><span class="runtime-gate" id="modelLabRuntimeBadge">Runtime locale · non scelto</span></div>
-                <div class="model-lab-ledger" aria-label="Stato laboratorio modelli"><div><strong id="machineCapacityStatus">Misurazione in corso…</strong><span>Capacità macchina</span></div><div><strong id="modelLabProviderStatus">Provider da verificare</strong><span>Accessi server</span></div><div><strong id="modelLabCatalogStatus">Catalogo non caricato</strong><span>Modelli osservati</span></div><div><strong>Gated</strong><span>Runtime locale</span></div></div>
+                <div class="settings-card-heading"><div><span class="eyebrow">Laboratorio modelli</span><h3>Modelli, provider e runtime</h3><p class="muted-copy">Il laboratorio separa dati osservati, preferenze locali e funzioni che richiedono un runtime LLM. Nulla viene presentato come disponibile se non è verificato.</p></div></div>
+                                <!-- ⛔⛔ 18/09/2026 — QUI C'È STATO UN RIMANDO ALLA SCHERMATA DEL LABORATORIO, ED È
+                     STATO TOLTO. L'owner aveva approvato il rimando («sì») e la pratica lo sostiene
+                     (screenpipe #2909: una superficie sola, mai contenuto duplicato; arc42,
+                     «Progressive Disclosure»); ma il rimando presuppone che il laboratorio VIVA nella
+                     schermata, e non ci vive ancora. L'accensione provata il 18/09 — invertire la
+                     destinazione del travaso in `app.js` — è stata RITIRATA dopo tre crolli misurati:
+                     `montaCatalogoModelli` due volte (`Cannot set properties of null`, poi
+                     `replaceChildren` su null) e `ensureModelLabControls` (`insertBefore`: il nodo di
+                     riferimento non è più figlio di quel genitore). Tre funzioni diverse, tutte che
+                     PRESUPPONGONO la destinazione legacy: il laboratorio si accende con i passi del
+                     port vero (memoria/fornitori, guscio a quattro schede, catalogo), non con una
+                     riga di rotta. Il rimando torna quando il laboratorio vive di là. -->
+
                 <div class="model-lab-tabs" role="tablist" aria-label="Sezioni laboratorio modelli"><button class="active" id="modelLabOverviewTab" role="tab" aria-selected="true" aria-controls="modelLabOverviewPanel" data-model-lab-tab="overview">Panoramica</button><button id="modelLabProvidersTab" role="tab" aria-selected="false" aria-controls="modelLabProvidersPanel" data-model-lab-tab="providers">Provider</button><button id="modelLabCatalogTab" role="tab" aria-selected="false" aria-controls="modelLabCatalogPanel" data-model-lab-tab="catalog">Catalogo API</button><button id="modelLabInstalledTab" role="tab" aria-selected="false" aria-controls="modelLabInstalledPanel" data-model-lab-tab="installed">Installati</button><button id="modelLabHfTab" role="tab" aria-selected="false" aria-controls="modelLabHfPanel" data-model-lab-tab="huggingface">Hugging Face</button><button id="modelLabDownloadsTab" role="tab" aria-selected="false" aria-controls="modelLabDownloadsPanel" data-model-lab-tab="downloads">Download</button></div>
                 <section class="model-lab-panel active" id="modelLabOverviewPanel" role="tabpanel" aria-labelledby="modelLabOverviewTab" data-model-lab-panel="overview"><div class="model-lab-layout"><div><h4>Capacità di questa macchina</h4><div class="model-lab-metrics"><div><span>RAM totale</span><strong id="machineMemoryMetric">—</strong></div><div><span>RAM libera</span><strong id="machineFreeMemoryMetric">—</strong></div><div><span>Spazio disponibile</span><strong id="machineStorageMetric">—</strong></div><div><span>Allocabile dopo riserva 1 GB</span><strong id="machineAllocatableMetric">—</strong></div></div><p class="settings-status" id="machineCapacityDetail">La misura usa solo le API del server locale.</p><div class="memoria-libera" id="memoriaLibera"><div class="memoria-barra" role="img" aria-labelledby="memoriaBarraEtichetta"><span class="memoria-barra-usata" id="memoriaBarraUsata"></span></div><p class="memoria-riga" id="memoriaBarraEtichetta">Misura non ancora eseguita.</p><p class="memoria-tenuta" id="memoriaTenuta" hidden></p><div class="memoria-azioni"><button class="secondary-btn compact" id="memoriaRimisura" type="button">Rimisura</button><button class="primary-btn compact" id="memoriaScarica" type="button" disabled>Libera la memoria del modello</button></div><p class="muted-copy memoria-nota">TALOS libera solo la memoria che tiene lui: il modello locale caricato. <strong>Non chiude processi di sistema o altre app</strong> — terminare un processo che non si riconosce è il modo più rapido per far cadere il computer, e nessuno dei runtime affermati lo fa: scaricano il modello, non uccidono processi.</p></div></div><div class="runtime-gate runtime-gate-large" id="modelLabRuntimeGate"><h4>Runtime locale</h4><p id="modelLabRuntimeStatus">Verifica in corso…</p><div id="modelLabRuntimeList" class="model-lab-runtime-list" aria-live="polite"><p class="model-lab-empty">Nessun runtime osservato.</p></div><div class="model-lab-runtime-controls"><label class="setting-control"><span>Backend</span><select id="modelLabRuntimeSelect" disabled><option value="">Nessun runtime pronto</option></select></label><label class="setting-control"><span>Modello</span><select id="modelLabModelSelect" disabled><option value="">Nessun modello osservato</option></select></label></div><div class="model-lab-runtime-actions"><button class="secondary-btn compact" id="modelLabRuntimeRefresh" type="button">Aggiorna runtime</button><button class="primary-btn compact" id="modelLabRunButton" type="button" disabled>Prova runtime</button><button class="secondary-btn compact" id="modelLabCancelButton" type="button" hidden>Ferma prova</button></div><label class="model-lab-prompt"><span>Prompt di prova</span><textarea id="modelLabPrompt" rows="2" placeholder="Scrivi una richiesta breve…" disabled></textarea></label><div id="modelLabStream" class="model-lab-stream" aria-live="polite"><p class="model-lab-empty">Nessuna prova avviata.</p></div></div></div><p class="model-lab-active-model">Modello attivo condiviso con Chat: <strong id="modelLabActiveModel">Nessun modello selezionato</strong></p></section>
                 <section class="model-lab-panel" id="modelLabProvidersPanel" role="tabpanel" aria-labelledby="modelLabProvidersTab" data-model-lab-panel="providers" hidden>
@@ -62,10 +74,16 @@
             </div>
           </div>
         </section>
-<!-- pannello diff del monolite -->
+<!-- pannello diff del monolite
+     ⛔ BC-71 (17/09/2026): il pulsante «Copia tutti i diff» qui sotto NON ha più `id="copyAllDiffs"`.
+     Quell'id vive nella testata della Revisione disegnata dal mockup (`index.template.html`), ed
+     esisteva due volte nello stesso documento: misurato sulla app viva, `document.querySelectorAll('[id="copyAllDiffs"]')`
+     tornava **2**. Un id doppio rende ambigui `getElementById`, `aria-controls` e `aria-labelledby`, e
+     il secondo nodo non riceve mai né l'ascoltatore né lo stato `disabled`. Il pulsante resta qui
+     perché questo frammento è un calco del monolite: quello che sparisce è la collisione. -->
 <section class="legacy-pane">
           <div class="review-shell">
-            <div class="view-heading"><div><span class="eyebrow">Review center</span><h2 id="reviewHeading">Nessuna modifica in questa sessione</h2><p>Ogni file che TALOS scrive compare qui, riga per riga, con ciò che c'era prima.</p></div><button class="secondary-btn compact" id="copyAllDiffs" type="button" disabled>Copia tutti i diff</button></div>
+            <div class="view-heading"><div><span class="eyebrow">Review center</span><h2 id="reviewHeading">Nessuna modifica in questa sessione</h2><p>Ogni file che TALOS scrive compare qui, riga per riga, con ciò che c'era prima.</p></div><button class="secondary-btn compact" type="button" disabled>Copia tutti i diff</button></div>
             <div class="review-summary">
               <div><span id="reviewSummaryNuovi">0</span><small>nuovi</small></div><div><span id="reviewSummaryModificati">0</span><small>modificati</small></div><div><span id="reviewSummaryTest">—</span><small>test</small></div><div><span id="reviewSummaryRischio">—</span><small>rischio</small></div>
             </div>
@@ -119,13 +137,18 @@
         <div><span class="eyebrow">Context rail</span><strong>Sessione</strong></div>
         <button class="icon-btn nav-close" data-close-panel="inspector" aria-label="Chiudi inspector"><svg><use href="#i-x"/></svg></button>
       </div>
+      <!-- ⛔ BC-71 (17/09/2026): `legacy-` davanti ai tre id. Gli id VIVI (`inspector-tab-context`,
+           `-files`, `-agents`) li assegna `bridge/legacy-dom.js` al rail del mockup; qui erano gli
+           stessi, e il documento li portava due volte ciascuno. Rinominati invece che tolti perché i
+           pannelli qui sotto li nominano in `aria-labelledby`: un id tolto lascerebbe un riferimento
+           che non punta a niente, cioè un secondo difetto al posto del primo. -->
       <div class="inspector-tabs" role="tablist" aria-label="Inspector sessione">
-        <button class="active" id="inspector-tab-context" role="tab" aria-selected="true" aria-controls="inspector-context" data-inspector-tab="context">Context</button>
-        <button id="inspector-tab-files" role="tab" aria-selected="false" aria-controls="inspector-files" data-inspector-tab="files">Files</button>
-        <button id="inspector-tab-agents" role="tab" aria-selected="false" aria-controls="inspector-agents" data-inspector-tab="agents">Agents</button>
+        <button class="active" id="legacy-inspector-tab-context" role="tab" aria-selected="true" aria-controls="inspector-context" data-inspector-tab="context">Context</button>
+        <button id="legacy-inspector-tab-files" role="tab" aria-selected="false" aria-controls="inspector-files" data-inspector-tab="files">Files</button>
+        <button id="legacy-inspector-tab-agents" role="tab" aria-selected="false" aria-controls="inspector-agents" data-inspector-tab="agents">Agents</button>
       </div>
       <div class="inspector-body">
-        <section class="inspector-section active" id="inspector-context" role="tabpanel" aria-labelledby="inspector-tab-context" data-inspector-section="context" data-demo-surface="inspector-context">
+        <section class="inspector-section active" id="inspector-context" role="tabpanel" aria-labelledby="legacy-inspector-tab-context" data-inspector-section="context" data-demo-surface="inspector-context">
           <div class="inspector-card">
             <div class="card-title"><span>Ambiente</span><svg><use href="#i-branch"/></svg></div>
             <dl><div><dt>Workspace</dt><dd id="envWorkspace">—</dd></div><div><dt>Branch</dt><dd id="envBranch">—</dd></div><div><dt>Worktree</dt><dd id="envWorktree">—</dd></div><div><dt>Root</dt><dd id="envRoot">—</dd></div><div><dt>Repo annidati</dt><dd id="envRepoAnnidati">—</dd></div></dl>
@@ -146,7 +169,7 @@
             <div class="topology-actions"><button class="secondary-btn compact" data-action="fork-session">Fork questa sessione</button></div>
           </div>
         </section>
-        <section class="inspector-section" id="inspector-files" role="tabpanel" aria-labelledby="inspector-tab-files" data-inspector-section="files" data-demo-surface="inspector-files">
+        <section class="inspector-section" id="inspector-files" role="tabpanel" aria-labelledby="legacy-inspector-tab-files" data-inspector-section="files" data-demo-surface="inspector-files">
           <div class="ft-search-row">
             <svg class="ft-search-icon" aria-hidden="true"><use href="#i-search"/></svg>
             <input type="text" id="fileTreeFilter" class="ft-search-input" placeholder="Filtra i file caricati…" aria-label="Filtra i file per nome" autocomplete="off" spellcheck="false">
@@ -170,7 +193,7 @@
           </div>
         </section>
         <!-- ⛔⛔⛔ 30/8, QA visiva (batch-fix): NIENTE data-demo-surface qui, a differenza di inspector-context/inspector-files. Trovato dal vivo con una sonda mirata: quei due hanno un vero "reale disponibile → nascondi" (renderizzaAlberoReale, ecc.); questo tab non ha mai avuto un contenuto condizionale — prima diceva "non ancora implementato" in modo statico, ora dice sempre il puntatore vero, ugualmente statico. Un badge "Demo UI" senza NESSUN codice che lo nasconda mai sarebbe rimasto acceso per sempre (verificato: hidden:false anche con una sessione reale aperta, mentre context/files erano già hidden:true). -->
-        <section class="inspector-section" id="inspector-agents" role="tabpanel" aria-labelledby="inspector-tab-agents" data-inspector-section="agents">
+        <section class="inspector-section" id="inspector-agents" role="tabpanel" aria-labelledby="legacy-inspector-tab-agents" data-inspector-section="agents">
           <p class="board-empty">Le deleghe a sotto-agenti isolati (attrezzo delega_sottotask) appaiono nella card "Session topology" del tab Context, e nel foglio "Albero sessione" — apri il titolo sessione in cima alla chat.</p>
         </section>
       </div>
@@ -234,18 +257,7 @@
     <div class="sheet-head"><div><span class="eyebrow" id="sheetEyebrow">Contesto</span><h2 id="sheetTitle">Capability</h2></div><button class="icon-btn" id="closeSheet" aria-label="Chiudi pannello"><svg><use href="#i-x"/></svg></button></div>
     <div class="sheet-body" id="sheetBody"></div>
   </dialog>
-<dialog class="intro-dialog" id="introDialog" aria-labelledby="introTitle" data-intro-dialog>
-    <header class="intro-head">
-      <span class="intro-brand" aria-hidden="true">TALOS</span>
-      <button type="button" class="intro-skip" id="introSkip" data-intro-skip>Salta per ora</button>
-    </header>
-    <ol class="intro-rail" id="introRail" aria-label="Passi del primo avvio"></ol>
-    <section class="intro-body" id="introBody"><h2 class="intro-title" id="introTitle">Primo avvio</h2></section>
-    <footer class="intro-foot">
-      <button type="button" class="secondary-btn intro-back" id="introBack" data-intro-back><svg><use href="#i-arrow-left"/></svg>Indietro</button>
-      <button type="button" class="primary-btn intro-next" id="introNext" data-intro-next>Avanti</button>
-    </footer>
-  </dialog>
+
 <button class="harness-dialog-backdrop" id="harnessDialogBackdrop" type="button" aria-label="Chiudi finestra Codice" hidden></button>
 <button class="overlay-backdrop" id="overlayBackdrop" aria-label="Chiudi pannelli"></button>
 <div class="toast-region" data-legacy-id="toastRegion" hidden></div>

@@ -38,9 +38,25 @@ const INTESTAZIONE = /^exit (-?\d+|null)(?: \[sandbox: ([^\]]*)\])?\n?/u;
  */
 export function dovEGirato(livello) {
   const l = String(livello ?? '').trim();
-  if (l === 'wsl2') return 'in Linux (WSL), non su Windows';
-  if (l === 'none') return 'su Windows, senza isolamento';
-  if (l === 'adb-shell-on-device') return 'sul telefono collegato';
+  /*
+   * ⛔⛔ IL KERNEL SCRIVE UN'ETICHETTA, NON UN LIVELLO — e questa funzione confrontava il livello
+   *   ESATTO. Misurato il 20/09/2026 (revisore avversario, poi rifatto da me in node):
+   *     `etichettaSandbox('none')` → `none (cmd.exe nativo: stesso utente e stessi privilegi…)`
+   *     `etichettaSandbox('wsl2')` → `wsl2 (namespace Linux: filesystem e processi separati)`
+   *   ⇒ `l === 'none'` non è mai vero, e **`dovEGirato` restituiva `null` per tutte e tre le forme
+   *     vere**: il «dove» non è arrivato a schermo da quando esiste `etichettaSandbox`, cioè dalla
+   *     cura del BLOCCO 6 — la stessa che ha reso l'etichetta esplicativa. Una cura che rompe il
+   *     lettore di un'altra.
+   *   ⛔ E la conseguenza era grossa: PO-06 esiste per dire che «quel comando NON è girato su Windows,
+   *     è girato dentro Linux… chi scrive un comando crede di parlare alla propria macchina: se non è
+   *     così, si dice». Quella frase era **inerte**.
+   *   ⇒ Si legge il livello **prima della parentesi**, che è la forma vera; e resta `null` per un
+   *     livello che non conosciamo, invece di inventare un posto.
+   */
+  const nome = l.split('(')[0].trim();
+  if (nome === 'wsl2') return 'in Linux (WSL), non su Windows';
+  if (nome === 'none') return 'su Windows, senza isolamento';
+  if (nome === 'adb-shell-on-device') return 'sul telefono collegato';
   return null;
 }
 
@@ -71,10 +87,66 @@ export function leggiEsitoComando(grezzo) {
    */
   const fermato = uscita === null;
   const riuscito = uscita === 0;
+  /*
+   * ⛔⛔ LA CAUSA NON SI INVENTA — 20/09/2026, trovato dal revisore avversario e riverificato da me
+   *   alle righe del kernel.
+   *   Qui c'era `'Fermato: ha superato il tempo massimo'`. È **falsa su una delle due strade**: sulla
+   *   strada Windows il kernel NORMALIZZA i suoi esiti prima di scriverli —
+   *   `talosHarness.mjs:4867`, `codiceFinale = fermatoSuRichiesta ? USCITA_FERMATO_SU_RICHIESTA :
+   *   fermatoDalTempo ? 124 : codice` — quindi un codice **nullo** da quella strada non può essere il
+   *   tempo massimo: è un `close(code = null)`, cioè un processo **ucciso da un segnale**. La riga
+   *   avrebbe detto «ha superato il tempo massimo» su un comando ammazzato.
+   *   ⇒ Si dice il fatto che sappiamo — **non ha restituito un codice** — e non la causa, che da qui
+   *     non si può distinguere. Se un domani il kernel dichiarerà la causa nel testo, si tornerà a
+   *     nominarla: `TALOS` la sa, questa funzione no.
+   */
   const verdetto = fermato
-    ? 'Fermato: ha superato il tempo massimo'
+    ? 'Fermato: il comando non ha restituito un codice d\'uscita'
     : riuscito ? 'Riuscito' : `Non riuscito · codice ${uscita}`;
   return { uscita, riuscito, fermato, dove: dovEGirato(livello), livello, output, verdetto };
+}
+
+/**
+ * La riga d'esito da MOSTRARE sotto il blocco di un comando, o `null` quando non dice niente.
+ *
+ * ⛔ «SI DICHIARA L'ECCEZIONE, NON LA REGOLA» — owner 20/09/2026, «applica la quarta strada»,
+ *   decisa dalla 5×5×5×5 in `.claude/RICERCA-5x5x5x5-RIGA-ESITO-2026-09-20.md`. Tre fonti dicono la
+ *   stessa cosa: Hermes mostra il codice **solo** se `failed && exitCode !== 0`
+ *   (`status-row.tsx:143`, letto il 20/09) e nel suo codice scrive che un codice ≠ 0 da solo è un
+ *   **segnale debole** (`grep` esce 1 quando non trova); Claude Code dichiara `(unsandboxed)` **solo
+ *   quando il sandbox non si applica**; MCP tiene `isError` per i soli errori di esecuzione.
+ *   ⇒ Un esito RIUSCITO non si scrive: non aggiunge niente che la riga dell'attrezzo non dica già,
+ *     e timbrato su ogni comando rende invisibile proprio il caso che conta.
+ *
+ * ⛔ E QUANDO SI SCRIVE, SI SCRIVE NELLE PAROLE DI CASA: `exit 1` e `[sandbox: none]` sono **nomi
+ *   tecnici**, vietati a schermo dal 04/09 (è la ragione per cui esiste `dovEGirato`). Il verdetto e
+ *   il posto sono già detti da `verdetto` e `dove`: qui si mettono insieme, e basta.
+ *
+ * ⛔⛔ E VALE SOLO PER UN **COMANDO** — chi chiama lo deve sapere, perché dal testo non si distingue.
+ *   La testata la scrive il kernel, ma la scrive per `shell` e `prova`; l'esito di un `leggi` è il
+ *   **contenuto grezzo del file**, e un file che comincia con `exit 1` è indistinguibile da un esito.
+ *   Il testimone affidabile è il **nome dell'attrezzo**, e sta al chiamante: questa funzione non può
+ *   indovinarlo. (Difetto misurato il 20/09/2026: su un `leggi` toglieva la prima riga del file e
+ *   dichiarava un verdetto di comando su una lettura, col pallino della riga che diceva il contrario.)
+ *
+ * ⛔ Passa dal CONTRATTO, non da una regex nuova: `(-?\d+|null)` è la forma vera — `exit null` esce
+ *   quando il comando è stato fermato dal tempo massimo e `exit -1` è un codice negativo legittimo.
+ *   Una quarta regola più stretta delle altre due (`qui` e `talosHarness.test.mjs`) perdeva
+ *   esattamente quei due casi, e con essi l'unica riga che li dichiarava.
+ */
+export function rigaEsitoDaMostrare(grezzo) {
+  const esito = leggiEsitoComando(grezzo);
+  if (!esito.verdetto || esito.riuscito) return null;
+  return rigaDiStatoComando(esito);
+}
+
+/**
+ * Il testo dell'esito SENZA l'intestazione del kernel — riuscito o no.
+ * ⛔ Una regola sola per il blocco: se la riga dell'esito si mostra a parte, il testo non la porta
+ *   più dentro, altrimenti lo stesso comando si legge in due modi a seconda del ramo che lo disegna.
+ */
+export function senzaIntestazione(grezzo) {
+  return leggiEsitoComando(grezzo).output;
 }
 
 /**

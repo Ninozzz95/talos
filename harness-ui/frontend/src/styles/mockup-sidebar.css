@@ -24,18 +24,156 @@
  * Community Design System «Side navigation»). Il chevron RUOTA invece di cambiare glifo: un solo
  * nodo, nessun salto di layout, e la rotazione dice da sola in che verso si apre.
  */
-/* ⛔ `max-height:50%` + scorrimento proprio è la regola del mockup (riga 4109), e serve: la barra
-   ha UN solo spazio verticale e le sessioni non devono sparire perché i luoghi sono tanti. Con
-   «Strumenti» chiuso — il default — il tetto non viene nemmeno toccato.
+/* ⛔ `max-height:50%` + scorrimento proprio ERA la regola del mockup (riga 4109), e serviva: la
+   barra ha UN solo spazio verticale e le sessioni non devono sparire perché i luoghi sono tanti.
+   ⛔⛔ 18/09/2026 — LA SECONDA FRASE ERA FALSA, E MISURATA FALSA: «con Strumenti chiuso il tetto non
+   viene nemmeno toccato» non regge — a 1024×800 il nav ha 423 px di contenuto in 400 di spazio, e
+   la testata «Strumenti» resta tagliata a metà per qualunque finestra sotto gli 846 px (misure del
+   revisore, due temi). Il tetto è uscito con la cura qui sotto: la difesa delle sessioni ora la fa
+   il piede appiccicato, non un tetto che taglia.
    ⛔ Le voci qui sono più basse che altrove (36 px invece di `--talos-row`, 44): è l'altezza del
    mockup per questa colonna (riga 4110), e su 13 voci sono 104 px restituiti alle sessioni. */
 /* ⛔ `flex: 0 0 auto` e NON `0 1 auto`: misurato sul banco a 1440×900 con la prima foto — col
    restringimento attivo il blocco stava in 310 px contro i 365 che gli servivano, e i 55 px tagliati
    erano ESATTAMENTE la testata «Strumenti», cioè la porta di cinque luoghi, sparita senza che nulla
    lo dicesse. Il tetto del 50% resta ed è la vera guardia contro una barra che si mangia le sessioni. */
-.td-sidebar-nav { flex: 0 0 auto; min-height: 0; max-height: 50%; overflow-y: auto; padding: 0 10px 8px; }
+/*
+ * ⭐⭐ BC-78.2, 17/09/2026 — IL TETTO TAGLIA UNA VOCE A METÀ, E IL TAGLIO SEMBRA UN GUASTO.
+ *
+ * Il difetto: `max-height:50%` cade dove capita — a 900 px di finestra sono 450, e i 450 cascano in
+ * mezzo a «Officina attrezzi». Non è una sovrapposizione: è metà riga, e metà riga letta da lontano
+ * è un errore di disegno, non un invito a scorrere.
+ *
+ * ⛔ Le due vie erano «tetto a passo di riga» e «sfumatura che dice continua». Il passo di riga qui
+ *   NON si può calcolare: le voci sono `height:auto` con `min-height:36px`, quindi una voce che va a
+ *   capo è più alta delle altre e un multiplo fisso taglierebbe lo stesso — indovinerebbe una sola
+ *   composizione della barra. ⇒ Si sceglie la seconda, che è anche la grammatica che il progetto ha
+ *   GIÀ: le linguette di BC-63 dicono «c'è dell'altro» con una sfumatura sul bordo che può ancora
+ *   scorrere (`.talos-schede__lista[data-bordi]`). Qui è la stessa cosa, in verticale.
+ *
+ * ⛔ E il tetto del 50% RESTA: è la guardia che impedisce ai luoghi di mangiarsi le sessioni, ed è
+ *   stata difesa con una misura (vedi il blocco qui sopra). Cambia che cosa si vede sul taglio, non
+ *   dove cade.
+ *
+ * ⭐ Ricerca del 17/09/2026 — Lea Verou «Pure CSS scrolling shadows with background-attachment:
+ *   local» (lea.verou.me/blog/2012/04/background-attachment-local) e CSS-Tricks «Scroll Shadows»:
+ *   due coppie di gradienti, una che scorre col contenuto (`local`) e una ferma (`scroll`), si
+ *   coprono a vicenda — l'ombra compare SOLO dal lato in cui si può ancora scorrere, e sparisce da
+ *   sola quando non c'è altro. Niente JavaScript, niente misure, niente da ricordare.
+ *   ⛔ È la ragione per cui non basta una sfumatura fissa in basso: con «Strumenti» chiuso (il
+ *   default) il tetto non viene nemmeno toccato, e un velo permanente smorzerebbe l'ultima voce
+ *   senza motivo — cioè un secondo difetto al posto del primo.
+ *
+ * I colori sono token: la maschera è lo sfondo della barra (`--talos-background`), l'ombra il suo
+ * bordo (`--talos-border`). Nessun valore scritto a mano, e i due temi si comportano uguale.
+ */
+/* ⛔⛔⛔ 18/09/2026 — UNA REGIONE DI SCORRIMENTO SOLA. IL TETTO DEL 50% NON C'È PIÙ.
+ *
+ * Owner, dal vivo: «la sidebar di sinistra è rotta», «ma anche nelle due sidebar, devi vedere tutto».
+ * Revisione avversaria del 18/09/2026 (misure sul 4174 con 18 sessioni vere, due temi, tre finestre):
+ *  · a **1024×800** il nav misurava **400 px visibili su 423 di contenuto** (23 nascosti): la testata
+ *    di gruppo **«Strumenti» è disegnata 508,5-543 contro un contenitore che chiude a 528** — 15 px
+ *    di 34,5 tagliati via (43%), in ENTRAMBI i temi, senza che l'utente tocchi niente;
+ *  · il taglio cade sulla testata per **qualunque altezza fra 762 e 830** e sotto gli 846 px c'è
+ *    sempre; a **1200×500** le voci tagliate sono **cinque**;
+ *  · ⛔ **il commento qui sopra era FALSO**: diceva che con «Strumenti» chiuso il tetto non viene
+ *    nemmeno toccato. Misurato: non toccato solo da 846 px in su;
+ *  · ⛔ e la cura di BC-78.2 non copriva proprio questo caso: la maschera `local` sta al fondo del
+ *    CONTENUTO (551) e non del riquadro (528), quindi **a scorrimento zero non può mascherare
+ *    niente** — funzionava solo ai limiti dello scorrimento, cioè quando non serve;
+ *  · a **1200×500** la lista sessioni era **61 px** contro una riga da **66**: nessuna posizione di
+ *    scorrimento poteva mostrarne una intera, e il «⋯» (28×28) aveva **8,7 px su 28** dentro la
+ *    lista — mirandolo un po' basso si aprivano le Impostazioni (l'ingranaggio del piede).
+ * ⇒ **Due regioni annidate diventano una.** Con una sola regione non esiste alcun confine interno
+ * che possa tagliare una riga: l'unico bordo è quello della barra, e l'applicazione ha sempre la
+ * sua testata e il suo piede a portata. Ricerca 18/09/2026 — è la pratica corrente: **un solo
+ * contenitore di scorrimento con `position: sticky` per testata e piede**, mai scorrimenti annidati
+ * («CSS position: sticky — How It Really Works», W3Tweaks; «CSS Sticky Sidebar: A Modern
+ * Implementation Guide», makeautomation; fwdtools «Sticky Split-Pane»: «a sidebar column that clips
+ * its own overflow avoids becoming a second, competing scroll container»).
+ */
+.td-sidebar-nav { flex: 0 0 auto; min-height: 0; overflow: visible; padding: 0 10px 8px; }
 .td-sidebar-nav .talos-nav-item { height: auto; min-height: 36px; font-size: 13px; }
 .td-sidebar-nav .talos-nav-item .i { width: 16px; height: 16px; }
+
+/* La regione UNICA: la barra scorre, e le quattro sfumature di BC-78.2 salgono qui — dove possono
+   davvero dire «c'è altro», perché ora sono ancorate al riquadro che scorre. */
+.talos-sidebar {
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  background:
+    linear-gradient(var(--talos-panel) 30%, transparent) top / 100% 18px no-repeat local,
+    linear-gradient(transparent, var(--talos-panel) 70%) bottom / 100% 18px no-repeat local,
+    linear-gradient(var(--talos-border), transparent) top / 100% 8px no-repeat scroll,
+    linear-gradient(transparent, var(--talos-border)) bottom / 100% 8px no-repeat scroll,
+    var(--talos-panel);
+}
+/* La testata funzionale (ricerca, «Nuova», comprimi) resta appiccicata in cima; il marchio no:
+   scorre via con il contenuto, perché è l'unica parte che non serve mentre si cerca una sessione. */
+.talos-sidebar__actions { position: sticky; top: 0; z-index: 3; background: var(--talos-panel); }
+/* Il piede appiccicato in fondo ha bisogno di uno sfondo SUO, o le righe gli passano sotto. */
+/*
+ * ⛔⛔ 20/09/2026 — E DEVE STARE IN FONDO ANCHE QUANDO NON C'È NIENTE DA SCORRERE.
+ *
+ * Owner, giro dei bug: «nella sidebar di sinistra il footer non sta in fondo». Misurato a
+ * 1440×1600 con poche sessioni: la barra finisce a **1600**, il piede a **685** — **915 px di
+ * vuoto sotto**. Lo sticky qui a fianco è INERTE in quel caso: se non c'è scorrimento non c'è
+ * niente da appiccicare, e il piede resta attaccato all'ultima riga di contenuto. L'altra metà
+ * della pinza è a `:150` — `flex: 0 0 auto` sull'elenco sessioni ha neutralizzato il vecchio
+ * `flex: 1 1 auto` di `index.css:310`, cioè l'unico elemento che assorbiva lo spazio libero ha
+ * smesso di farlo.
+ *
+ * Ricerca 20/09/2026 — le due sole soluzioni native sono flex + `margin-top: auto` e grid
+ * `auto 1fr auto` (CSS-Tricks «Flexbox and auto margins»; ModernCSS «Footer: Flexbox vs Grid»;
+ * MDN «Aligning items in a flex container»: «any positive free space is distributed to auto
+ * margins»; dev.to «I Cloned Linear's Sidebar in 50 Lines» per il pattern app-shell condiviso da
+ * Linear, Slack, Discord e VS Code).
+ * ⛔ Scartate `absolute`/`fixed` — staccano dal flusso e coprono il contenuto; e il div spaziatore
+ *   `.push`, che la letteratura chiama debito fragile.
+ * ⇒ Il margine automatico fa le DUE cose che servono: assorbe lo spazio libero **positivo** quando
+ *   il contenuto è corto, e vale **zero** quando lo spazio è negativo — cioè quando la barra
+ *   sborda, dove a comandare resta lo sticky e niente si sposta.
+ * ⛔ Provata nei DUE versi prima di scriverla (BC78-4a/4b in
+ *   `tests/browser/bc78-barra-e-dettaglio.spec.mjs`): il ramo corto è rosso senza questa riga
+ *   (915 px di vuoto), e il ramo che sborda ha già `scarto: 0` con l'altezza del piede ferma a
+ *   61 px — la cura non deve muoverlo.
+ */
+.talos-sidebar__foot { position: sticky; bottom: 0; z-index: 3; background: var(--talos-panel); margin-top: auto; }
+/*
+ * ⛔⛔ 18/09/2026 — IL TAGLIO SOTTO IL PIEDE DEVE DIRE «CONTINUA», NON SEMBRARE UN GUASTO.
+ *
+ * Una riga che scorre sotto il piede appiccicato resta tagliata a metà: è il bordo di una lista che
+ * scorre, e il progetto ha già deciso che questa classe è un difetto (BC-78.2 curò la sfumatura,
+ * BC-82.1 la reclama per l'elenco SESSIONI, BC-82.6 è la riga su cui l'owner ha detto «la sidebar
+ * è rotta»: «il taglio non dice "continua", si legge come un guasto»).
+ * ⛔ E la sfumatura di BC-78.2 qui NON basta, per lo stesso motivo per cui non bastava sul nav: la
+ *   maschera `local` sta al fondo del CONTENUTO e il piede copre proprio quel bordo.
+ *
+ * Ricerca 18/09/2026 — la cura è quella di una PR che ripara ESATTAMENTE questo difetto
+ * («Fix sidebar bottom fade cutting off the last row mid-glyph», unslothai/unsloth #7902):
+ *  · una rampa 0→100% è opaca **solo all'ultimo pixel**, quindi la riga resta leggibile dove il
+ *    contenitore taglia → **plateau opaco di ~16 px** attaccato al bordo del piede, che assorbe il
+ *    taglio netto;
+ *  · sopra il plateau una **rampa più lunga** (~24 px) che dissolve una riga intera invece di
+ *    lasciarla leggibile;
+ *  · e lo spazio in coda (`padding-bottom`) fa sì che **a fine corsa l'ultima riga si veda intera**
+ *    sopra il plateau — così la sfumatura non smorza l'ultima voce «senza motivo», che era la
+ *    lezione di BC-78.2.
+ * Nordhealth documenta lo stesso pattern come proprietà di prima classe per le navigazioni con
+ * piede appiccicato (`--n-navigation-scroll-mask`, `stickyFooter`), con la stessa geometria
+ * (24 px di dissolvenza per lato).
+ */
+/* ⛔ Lo spazio in coda va DENTRO la lista, non sul contenitore: misurato il 18/09 dalla foto —
+   con `padding-bottom` sulla barra, il piede appiccicato si ferma al bordo del content box e
+   **si stacca** di 40 px dal fondo, lasciando scorrere le righe nella fessura (una riga compariva
+   sotto il piede). Sulla lista, lo spazio è contenuto e l'appiccicatura resta al fondo vero. */
+.talos-sidebar__block.talos-sidebar__sessions { padding-bottom: 40px; }
+.talos-sidebar__foot::before {
+  content: ''; position: absolute; left: 0; right: 0; top: -40px; height: 40px; pointer-events: none;
+  background: linear-gradient(to bottom, transparent 0, var(--talos-panel) 24px, var(--talos-panel) 100%);
+}
+/* Le sessioni non hanno più uno scorrimento proprio: sono righe nel flusso della regione unica.
+   Nessuna altezza allocata ⇒ non possono più restare più basse di una riga. */
+.talos-sidebar__block.talos-sidebar__sessions { flex: 0 0 auto; min-height: 0; overflow: visible; }
 
 .td-nav-head {
   display: flex;

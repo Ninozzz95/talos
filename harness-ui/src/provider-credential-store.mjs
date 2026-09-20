@@ -51,6 +51,26 @@ export const PROVIDER_DEFINITIONS = Object.freeze(Object.fromEntries(PROVIDER_ID
 })));
 
 const KEYRING_SERVICE = 'talos-harness-provider';
+/*
+ * ⛔⛔ P0 · punto 7 (16/09/2026) — COSA MISURA `timeoutSeconds`, DA OGGI.
+ *
+ * Fino a ieri era una DEADLINE TOTALE sulla chiamata al fornitore: partiva con la richiesta e non
+ * si fermava quando la risposta cominciava ad arrivare. Misurato con un fornitore finto che emette
+ * un token ogni 2 s per 90 s, col default di 60: **tagliato a 60.002 ms, ultimo token a 58.023 ms**
+ * — cioè uccideva una generazione viva, e diceva «il fornitore ha superato il tempo massimo».
+ *
+ * ⇒ Da adesso è il **tempo massimo alla PRIMA RISPOSTA** (fino alle intestazioni HTTP). Dopo quel
+ *   momento non conta più niente: la generazione è sorvegliata dal solo failsafe di inattività
+ *   (`src/generation-idle.mjs`, `TALOS_GENERATION_IDLE_MS`).
+ *
+ * ⛔ **I valori salvati NON si migrano, e non devono.** Un 60 scritto ieri voleva dire «se il
+ *   fornitore non dà segno di vita entro un minuto, lascia perdere»: con la nuova semantica dice
+ *   esattamente quello, e per di più smette di fare il danno che nessuno aveva chiesto. Riscrivere
+ *   le preferenze di chi non ha chiesto niente sarebbe cambiargli la configurazione di nascosto.
+ * ⛔ Per questo i tre numeri qui sotto restano identici: 5 s è ancora un minimo sensato per «non
+ *   risponde proprio», e 300 s un massimo generoso. È la SEMANTICA a essere cambiata, non la scala
+ *   — e cambiare anche la scala renderebbe impossibile capire quale delle due ha causato cosa.
+ */
 const DEFAULT_TIMEOUT_SECONDS = 60;
 const MIN_TIMEOUT_SECONDS = 5;
 const MAX_TIMEOUT_SECONDS = 300;

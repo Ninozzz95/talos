@@ -1,0 +1,86 @@
+name: desktop-review-snapshot
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['.github/workflows/desktop-review-snapshot.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    if: github.repository == 'Ninozzz95/talos' && github.ref == 'refs/heads/refactor/desktop-ledger-2026-09-17'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export complete tracked source, exact diff and provenance
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib, subprocess, zipfile
+          root=pathlib.Path.cwd()
+          out=root/'review-snapshot'
+          out.mkdir()
+          head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          base='13f65c15cdeaf8986b882993a0773cdeafb867d2'
+          tree=subprocess.check_output(['git','ls-tree','-rz',head]).split(b'\0')
+          manifest=[]; fonts=[]; gitlinks=[]
+          cat=subprocess.Popen(['git','cat-file','--batch'],stdin=subprocess.PIPE,stdout=subprocess.PIPE)
+          def read_blob(blob):
+            cat.stdin.write(blob.encode()+b'\n'); cat.stdin.flush()
+            sha,kind,size=cat.stdout.readline().split()
+            if sha.decode()!=blob or kind!=b'blob': raise RuntimeError('Unexpected Git object')
+            remaining=int(size); data=bytearray()
+            while remaining:
+              part=cat.stdout.read(remaining)
+              if not part: raise RuntimeError('Truncated Git object')
+              data.extend(part); remaining-=len(part)
+            if cat.stdout.read(1)!=b'\n': raise RuntimeError('Invalid Git framing')
+            return bytes(data)
+          with zipfile.ZipFile(out/'source.zip','w',zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
+            for raw in tree:
+              if not raw: continue
+              meta,name=raw.split(b'\t',1)
+              mode,kind,blob=meta.decode().split()
+              rel=name.decode()
+              if kind=='commit':
+                gitlinks.append({'path':rel,'commit':blob,'status':'external-submodule-not-expanded','usedByDesktopLauncher':False})
+                continue
+              data=read_blob(blob)
+              actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+              if actual!=blob: raise RuntimeError('Invalid Git blob: '+rel)
+              entry={'path':rel,'mode':mode,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'gitBlob':blob}
+              if pathlib.PurePosixPath(rel).suffix.lower() in {'.woff','.woff2','.ttf','.otf','.ttc','.eot'}:
+                entry['url']='https://raw.githubusercontent.com/Ninozzz95/talos/'+head+'/'+rel
+                fonts.append(entry)
+                continue
+              info=zipfile.ZipInfo(rel)
+              info.create_system=3
+              info.external_attr=int(mode,8)<<16
+              info.compress_type=zipfile.ZIP_DEFLATED
+              archive.writestr(info,data)
+              manifest.append(entry)
+          cat.stdin.close()
+          if cat.wait()!=0: raise RuntimeError('Git object reader failed')
+          (out/'SOURCE_COMMIT.txt').write_text(head+'\n')
+          (out/'source-manifest.json').write_text(json.dumps({'commit':head,'base':base,'files':manifest,'excludedFontAssets':fonts,'externalGitlinks':gitlinks},indent=2))
+          (out/'all-changes.patch').write_bytes(subprocess.check_output(['git','diff','--no-ext-diff','--no-renames',base,head]))
+          (out/'commits.txt').write_bytes(subprocess.check_output(['git','log','--format=%H%x09%aI%x09%s',base+'..'+head]))
+          (out/'source-tree.txt').write_bytes(subprocess.check_output(['git','ls-tree','-r',head]))
+          (out/'changed-files.txt').write_bytes(subprocess.check_output(['git','diff','--stat',base,head]))
+          sums=[]
+          for path in sorted(out.iterdir()):
+            sums.append(hashlib.sha256(path.read_bytes()).hexdigest()+'  '+path.name)
+          (out/'SHA256SUMS.txt').write_text('\n'.join(sums)+'\n')
+          print('Exported commit',head,'source files',len(manifest),'separate font assets',len(fonts),'external gitlinks',len(gitlinks))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: talos-complete-review-snapshot-${{ github.sha }}
+          path: review-snapshot/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14

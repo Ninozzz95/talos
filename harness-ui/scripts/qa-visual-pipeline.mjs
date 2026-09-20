@@ -86,7 +86,17 @@ const RADICE_HARNESS_UI = dirname(QUI);
 
 const ARGV = process.argv.slice(2);
 const SCENARIO_NOME = ARGV.find((a) => !a.startsWith('--')) || 'nuova-sessione-compito-libero';
-const URL_BASE = (ARGV.find((a) => a.startsWith('--url='))?.slice(6)) || 'http://127.0.0.1:4174/';
+/*
+ * ⛔⛔⛔ BC-74 (17/09/2026) — QUI C'ERA UN RIPIEGO SUL 4174, E SE N'È ANDATO.
+ * Il 4174 è il server VIVO dell'owner: un ripiego lo rende il bersaglio di chiunque lanci questa
+ * pipeline senza leggerla, e questa pipeline CLICCA (apre veli, scrive nel composer, naviga).
+ * ⇒ Senza `--url=` non si parte. Il 4174 si può indicare, ma scrivendolo per nome.
+ * ⛔ Il rifiuto sta nell'AVVIO, non qui in cima: questo file esporta anche le costanti che un test
+ *   unitario importa (`VIEWPORT_DESKTOP`), e un `process.exit` a livello di modulo ucciderebbe quel
+ *   test. Misurato: la prima stesura l'ha fatto, e `viewport-desktop.test.mjs` è diventato rosso —
+ *   lo stesso errore commesso un'ora prima in `veli-sani.mjs`, che non mi aveva insegnato niente.
+ */
+const URL_BASE = ARGV.find((a) => a.startsWith('--url='))?.slice(6);
 const PORTA_CDP = Number(ARGV.find((a) => a.startsWith('--porta='))?.slice(8) || 9556);
 const CHROME_PATH = process.env.TALOS_QA_CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
@@ -972,20 +982,15 @@ const SCENARI = {
     await p.attendi(1800);
 
     /*
-     * ⛔⛔ Trovato GUARDANDO il primo screenshot di questo stesso scenario: il
-     * Chrome della pipeline parte con un profilo pulito, quindi l'intro del
-     * primo avvio (R-02) copre TUTTA la pagina — e `el.click()` funziona lo
-     * stesso sotto la modale, cioè le prove passavano fotografando una schermata
-     * in cui non si vedeva niente di ciò che dichiaravano di provare. Si chiude
-     * col suo controllo VERO («Salta per ora»), come farebbe una persona.
+     * ⛔⛔ Qui si chiudeva la modale del primo avvio, e non era una comodità: il Chrome della
+     * pipeline parte con un profilo pulito, quindi l'intro (R-02) copriva TUTTA la pagina — e
+     * `el.click()` funzionava lo stesso sotto la modale, cioè le prove passavano fotografando
+     * una schermata in cui non si vedeva niente di ciò che dichiaravano di provare.
+     * ⛔ 17/09, PO-27: la modale non esiste più. Al suo posto c'è una riga dentro la
+     *   conversazione, che non copre niente e non va chiusa — quindi qui non c'è più niente da
+     *   fare. La guardia se ne va con la cosa da cui guardava: tenerla vorrebbe dire aspettare
+     *   per sempre un dialogo che nessuno disegna più.
      */
-    const introAperta = await p.cdp.evaluate("document.querySelector('#introDialog')?.open === true");
-    p.nota(`intro del primo avvio aperta all'ingresso: ${introAperta}`);
-    if (introAperta) {
-      await p.click('#introSkip');
-      await p.attendiCondizione("document.querySelector('#introDialog')?.open !== true", { descrizione: 'intro chiusa con «Salta per ora»' });
-      await p.attendi(600);
-    }
 
     const idSessioni = await p.cdp.evaluate("[...document.querySelectorAll('.real-session-item')].map((el) => el.dataset.realSessionId)");
     p.nota(`sessioni seminate trovate nella sidebar: ${JSON.stringify(idSessioni)}`);
@@ -1492,48 +1497,36 @@ const SCENARI = {
    * quando il portachiavi della macchina non deve essere modificato.
    */
   /**
-   * ⭐⭐⭐ 04/9 — R-02, INTRO AL PRIMO AVVIO. Azzera nel browser ciò che
-   * rende l'intro «già fatta» (l'esito salvato e il modello di default), non
-   * le chiavi sul server: così sulla macchina dell'owner l'intro si apre al
-   * passo «Modello» con l'accesso già verde, e i quattro passi si
-   * fotografano tutti con Indietro/Avanti. Nessuna chiave viene scritta.
+   * ⭐⭐⭐ 17/09 — PO-27, LO STATO VUOTO ONESTO AL POSTO DELLA MODALE «PRIMO AVVIO».
+   *
+   * Qui c'era lo scenario dell'intro: azzerava la chiave salvata e il modello, riapriva la modale e
+   * ne fotografava i quattro passi. La modale non esiste più (PO-27), e con lei se ne va la sua
+   * prova visiva: quello che va fotografato adesso è che al primo avvio NON si apra niente, e
+   * che al suo posto ci sia una riga che dice cosa manca.
+   *
+   * ⛔ Si azzera solo il MODELLO nello store del browser, come faceva prima: le chiavi sul
+   *   server non si toccano, e la cartella non esiste finché non si apre una sessione — quindi
+   *   la condizione «manca tutto» si ottiene senza scrivere niente di reale.
    */
-  async 'qa-intro-primo-avvio'(p) {
-    const viewport = viewportRichiesta(URL_BASE);
+  async 'qa-stato-vuoto-primo-avvio'(p) {
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
-    await p.cdp.evaluate("(() => { localStorage.removeItem('talos.harness.desktop.intro.v1'); const k='talos.harness.desktop.settings.v1'; const d=JSON.parse(localStorage.getItem(k)||'{}'); d.chat={...(d.chat||{}), model:'', autonomiaScelta:false}; localStorage.setItem(k, JSON.stringify(d)); })()");
+    await p.cdp.evaluate("(() => { const k='talos.harness.desktop.settings.v1'; const d=JSON.parse(localStorage.getItem(k)||'{}'); d.chat={...(d.chat||{}), model:''}; localStorage.setItem(k, JSON.stringify(d)); })()");
     await p.cdp.evaluate('location.reload()');
-    await p.attendiCondizione("document.querySelector('#introDialog')?.open === true", { timeoutMs: 8000, descrizione: 'intro aperta al primo avvio' });
+    await p.attendiCondizione("document.querySelector('#invitoPrimoAvvio')?.hidden === false", { timeoutMs: 8000, descrizione: 'l\'invito si vede senza cartella e senza modello' });
     await p.attendi(400);
-    const passoIniziale = await p.cdp.evaluate("document.querySelector('#introRail [aria-current=\\\"step\\\"] .intro-rail-label')?.textContent");
-    p.nota(`passo iniziale: ${passoIniziale}`);
-    await p.screenshot('intro-passo-iniziale', { nota: 'l\'intro si apre sul primo passo NON fatto: l\'accesso è già verde nel binario, si parte dal modello' });
-    await p.click('#introBack');
-    await p.attendi(500);
-    await p.screenshot('intro-accesso', { nota: 'passo Accesso: provider con stato chiave, campo chiave solo per il provider toccato, motore locale dichiarato' });
-    await p.click('#introNext');
-    await p.attendi(400);
-    await p.click('#introNext');
-    await p.attendi(300);
-    await p.screenshot('intro-autonomia', { nota: 'passo Autonomia: quattro schede, nessuna attiva finché non si tocca (scelto = gesto)' });
-    await p.click('[data-intro-policy="Workspace write"]');
-    await p.attendi(300);
-    const scelta = await p.cdp.evaluate("JSON.parse(localStorage.getItem('talos.harness.desktop.settings.v1')).chat.autonomiaScelta");
-    if (scelta !== true) p.difetto('toccare una scheda di autonomia non registra la scelta', { severita: 'blocco' });
-    await p.screenshot('intro-autonomia-scelta', { nota: 'scheda toccata: attiva, binario verde, scelta persistita' });
-    await p.click('#introNext');
-    await p.attendi(300);
-    await p.screenshot('intro-cartella', { nota: 'ultimo passo: il bottone apre il foglio Nuova sessione vero' });
-    await p.click('#introNext');
+    /* ⛔ La prova che conta è una ASSENZA, e un'assenza si misura: nessun dialogo aperto, nessun velo modale. */
+    const modali = await p.cdp.evaluate("document.querySelectorAll('dialog[open]').length + document.querySelectorAll('.overlay-layer--modal:not([hidden])').length");
+    p.nota(`superfici modali aperte al primo avvio: ${modali}`);
+    if (modali > 0) p.difetto(`al primo avvio si apre ancora una superficie modale (${modali})`, { severita: 'blocco' });
+    const azioni = await p.cdp.evaluate("[...document.querySelectorAll('#invitoPrimoAvvio [data-invito-azione]')].filter((b) => !b.hidden).map((b) => b.textContent.trim())");
+    p.nota(`azioni offerte: ${JSON.stringify(azioni)}`);
+    if (azioni.length !== 2) p.difetto(`attese DUE azioni senza cartella e senza modello, trovate ${azioni.length}`, { severita: 'blocco' });
+    await p.screenshot('stato-vuoto-primo-avvio', { nota: 'niente modale: una riga dentro la conversazione e le due porte che esistono già' });
+    /* La porta del modello è quella vera: la stessa pillola del composer. */
+    await p.click('#invitoPrimoAvvio [data-invito-azione="modello"]');
     await p.attendi(600);
-    const chiusa = await p.cdp.evaluate("document.querySelector('#introDialog')?.open === false && document.querySelector('#sheetDialog')?.open === true");
-    if (!chiusa) p.difetto('«Scegli la cartella e inizia» non apre il foglio Nuova sessione', { severita: 'blocco' });
-    await p.screenshot('intro-foglio-nuova-sessione', { nota: 'intro chiusa e registrata come completata; il chooser vero è aperto' });
-    await p.cdp.evaluate('location.reload()');
-    await p.attendi(1200);
-    const riaperta = await p.cdp.evaluate("document.querySelector('#introDialog')?.open === true");
-    if (riaperta) p.difetto('l\'intro si ripresenta dopo essere stata completata', { severita: 'blocco' });
-    await p.screenshot('intro-non-si-ripresenta', { nota: 'seconda apertura: nessun intro' });
+    await p.screenshot('stato-vuoto-porta-modello', { nota: '«Collega un modello» apre il foglio Modello esistente, non una schermata nuova' });
   },
 
   async 'qa-settings-provider-access'(p) {
@@ -6057,6 +6050,12 @@ async function main() {
  */
 const eseguitoDirettamente = process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === import.meta.url;
 if (eseguitoDirettamente) {
+  if (!URL_BASE) {
+    console.error('⛔ Manca --url=: questa pipeline non sceglie un server da sola, e non fa solo letture.\n'
+      + '   Esempio: node scripts/qa-visual-pipeline.mjs <scenario> --url=http://127.0.0.1:4196/\n'
+      + '   ⛔ Il 4174 è il server vivo dell\'owner: si può indicare, ma va scritto per nome.');
+    process.exit(2);
+  }
   main().catch((error) => {
     console.error('Pipeline fallita:', error);
     process.exitCode = 1;

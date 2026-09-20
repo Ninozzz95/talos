@@ -23,6 +23,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, parse, sep } from 'node:path';
 import { spawn } from 'node:child_process';
+import { ambienteSenzaVariabiliDelServer } from './ambiente-solo-server.mjs';
 
 export const TETTO_FILE = 20_000;
 
@@ -92,7 +93,8 @@ function git(argomenti, cwd) {
     let uscita = '';
     let processo;
     try {
-      processo = spawn('git', argomenti, { cwd, windowsHide: true });
+      /* ⛔ 17/09/2026 (A-bis): `env` dichiarato — senza, il figlio eredita l'ambiente INTERO del server (token e chiavi compresi). */
+      processo = spawn('git', argomenti, { cwd, windowsHide: true, env: ambienteSenzaVariabiliDelServer() });
     } catch { risolvi(null); return; }
     const timer = setTimeout(() => { try { processo.kill(); } catch { /* già morto */ } risolvi(null); }, 4000);
     processo.stdout?.on('data', (pezzo) => { uscita += String(pezzo); });

@@ -42,6 +42,17 @@ const SHELL_ZERO_HEADER = /^exit\s+0\s+\[sandbox:[^\]]+\](?:\r?\n|$)/i;
 const DEFAULT_NPM_TEST = /^npm\s+test\s*$/i;
 const PLACEHOLDER_NPM_TEST = /^\s*echo\s+(?:["']?error:\s*)?no test specified["']?\s*(?:&&|;)\s*exit\s+1\s*$/i;
 const TEST_SENTINEL_MESSAGE = `${NO_TEST_SUITE_CODE}: workspace has no usable npm scripts.test; verification was not run.`;
+/*
+ * ⛔⛔ LO STESSO FATTO DEVE AVERE LO STESSO CODICE — 20/09/2026, BLOCCO 5.
+ *   L'adapter usciva **2**, il kernel canonico esce **127** (`USCITA_NESSUNA_SUITE`, il cancello
+ *   `suiteMancante`). Due codici per la stessa condizione, e la riga dei Processi li distingue:
+ *   `statoDaUscita(2)` → **«Non riuscito»** con il pallino rosso, `statoDaUscita(127)` →
+ *   **«Non eseguito»**. Cioè: sul desktop una suite che non esiste veniva dipinta come un
+ *   fallimento, mentre il vero è che **non è partita** — ed è la stessa bugia che il commento di
+ *   `suiteMancante` racconta per il caso `exit 127`, solo dall'altro lato.
+ *   ⇒ Si allinea al canonico: **127**, che è anche il codice che la UI già traduce bene.
+ */
+const USCITA_NESSUNA_SUITE_DESKTOP = 127;
 const PATH_SPECIAL = /^(?:[\\/]|[A-Za-z]:)|(?:^|[\\/])[^\\/]*:[^\\/]*(?:[\\/]|$)/u;
 
 function parseToolCall(call) {
@@ -176,7 +187,7 @@ export function correggiMessaggiDesktop(messages, { cartella } = {}) {
 
 function nodeCommandForNoTests() {
   const exe = `"${String(process.execPath).replace(/"/g, '""')}"`;
-  const script = `console.error('${TEST_SENTINEL_MESSAGE}'); process.exit(2)`;
+  const script = `console.error('${TEST_SENTINEL_MESSAGE}'); process.exit(${USCITA_NESSUNA_SUITE_DESKTOP})`;
   return `${exe} -e "${script}"`;
 }
 

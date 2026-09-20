@@ -169,7 +169,18 @@ export function createProcessPolicy({
   spawnFn = spawn,
   execFileFn = execFile,
   execFileSyncFn = execFileSync,
+  /*
+   * ⛔ BC-64 (17/09/2026) — `windowsHide: true` NON nasconde solo la console: libuv lo traduce in
+   *   STARTF_USESHOWWINDOW + SW_HIDE, e un programma con finestra che onora quell'avvio nasce INVISIBILE.
+   *   Misurato su questa macchina nei due versi con `explorer.exe /select,<file>`: con `true` la finestra di
+   *   Esplora esiste ma `Visible=False` (l'owner: «non apre nessuna finestra»), con `false` `Visible=True`.
+   *   È lo stesso motivo per cui Node ha revocato il default a `true` (nodejs/node PR #24034, letta il 17/09/2026).
+   * ⇒ Il default resta `true` — un processo di servizio non deve far lampeggiare una console — e chi lancia
+   *   apposta un programma CHE LA PERSONA DEVE VEDERE lo dichiara qui, per nome, alla nascita della politica.
+   */
+  finestreVisibili = false,
 } = {}) {
+  if (typeof finestreVisibili !== 'boolean') throw new ProcessPolicyError('finestreVisibili deve essere un booleano', 'POLICY_INVALID');
   const approved = new Set(allowedExecutables.map((value) => executableKey(value)));
   if (cwdRoot !== null && (typeof cwdRoot !== 'string' || !isAbsolute(cwdRoot))) {
     throw new ProcessPolicyError('Radice delle cartelle di lavoro non valida', 'CWD_ROOT_INVALID');
@@ -185,7 +196,7 @@ export function createProcessPolicy({
     return [name, resolve(root)];
   }));
 
-  function prepare(command, args, options = {}) {
+  function prepare(command, args, options = {}, effectiveEnvKeys = environmentKeys) {
     const key = executableKey(command);
     if (!approved.has(key)) throw new ProcessPolicyError('Eseguibile non autorizzato', 'EXECUTABLE_NOT_ALLOWED');
     validateArgs(args);
@@ -199,8 +210,8 @@ export function createProcessPolicy({
         ...options,
         cwd,
         shell: false,
-        env: buildEnvironment(options.env, environmentKeys),
-        windowsHide: true,
+        env: buildEnvironment(options.env, effectiveEnvKeys),
+        windowsHide: !finestreVisibili,
       },
     };
   }
@@ -222,7 +233,7 @@ export function createProcessPolicy({
     const allowedKeys = keys.filter((key) => environmentKeys.includes(key));
     const options = {
       cwd: requestedCwd,
-      env: buildEnvironment(env, allowedKeys),
+      env,
       timeout: timeoutMs,
       signal,
       captureLimitBytes: validateCaptureLimit(captureLimitBytes),
@@ -230,7 +241,9 @@ export function createProcessPolicy({
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     };
-    const prepared = prepare(executable, args, options);
+    // Costruire una sola volta: il default generale reintrodurrebbe chiavi
+    // del padre che questa richiesta ha escluso (PR23, RIPRESA-SEC23).
+    const prepared = prepare(executable, args, options, allowedKeys);
     return { ...prepared, capability };
   }
 

@@ -1033,6 +1033,23 @@ export function montaScorciatoiaTemi(schermo, { document: doc = globalThis.docum
   if (!riga) return null;
   migraRigheImpostazioni(schermo, { document: doc });
 
+  /*
+   * ⛔ 18/09/2026 — SE LA BANDA DEL TEMA C'È, QUESTO RIQUADRO NON SI DISEGNA.
+   *   La banda è quella del mockup (`settings-band`, portata da `settings-view.ts:325`): mostra
+   *   il tema attuale, la spiegazione e il bottone che apre lo studio. Questo riquadro diceva la
+   *   stessa cosa con parole diverse — «Temi e atmosfere» + «Le 14 atmosfere… si scelgono
+   *   guardandoli, in un pannello solo» + «Apri Temi e atmosfere» — e a schermo erano **DUE inviti
+   *   allo stesso posto, uno sopra l'altro**. Trovato guardando la foto del 4174 dopo la build
+   *   delle 19:54, non leggendo il codice.
+   * ⛔ E NON SI PERDE NIENTE: la ricerca delle Impostazioni legge il **contratto**
+   *   (`impostazioni-campi.js`), non questo DOM, quindi le preferenze migrate restano trovabili;
+   *   e la banda apre lo **stesso** studio, dove quelle preferenze stanno tutte. Si perde solo la
+   *   frase che le elencava a schermo — che è precisamente il doppione.
+   * ⛔ Il riquadro resta disegnato dove la banda NON c'è (l'app vecchia, i banchi di prova): la
+   *   funzione non si cancella, si usa solo dove serve.
+   */
+  if (schermo.querySelector('[data-settings-band]')) return null;
+
   const esistente = schermo.querySelector('[data-td-studio-temi]');
   if (esistente) { riga.before(esistente); return esistente; }
 

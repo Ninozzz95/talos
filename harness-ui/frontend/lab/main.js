@@ -401,7 +401,7 @@ const LABORATORI = {
   },
   Review() {
     const schermo = document.getElementById('schermoReview');
-    const elenco = schermo.querySelector('.talos-review__schede .talos-tabs__list');
+    const elenco = schermo.querySelector('.talos-review__schede .talos-schede__lista'); // BC-63, 17/09: il componente condiviso
     for (const finto of elenco.querySelectorAll('.talos-review__scheda')) finto.remove();
     for (const voce of REVIEW.voci) elenco.append(creaRigaFileReview(voce, { attiva: voce.path === REVIEW.corrente }));
     aggiornaDiffReview(schermo.querySelector('.talos-review__diff'), REVIEW.voci.find((v) => v.path === REVIEW.corrente));

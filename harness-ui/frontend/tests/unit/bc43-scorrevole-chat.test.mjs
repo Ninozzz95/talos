@@ -71,19 +71,69 @@ test('BC43-01 — colonna e scorrevole sono distinti, anche con radice incorpora
   assert.equal(scorrevoleConversazione(vecchioDom), vecchioDom);
 });
 
-test('BC43-02 — il chiamante della bolla appesa cambia scrollTop dello scorrevole soltanto', () => {
-  const b = banco();
+/*
+ * ⛔ 16/09/2026 (P0, corsia C, punto 6) — BC43-02 E BC43-07 SONO STATI RISCRITTI, E QUI C'È PERCHÉ.
+ *
+ * Quello che questo file difende è UN invariante: lo scroll si scrive sullo SCORREVOLE
+ * (`.talos-conversation`), mai sulla COLONNA (`#conversation`) — la causa di BC-08/BC-43.
+ * Quell'invariante non è cambiato e resta provato riga per riga.
+ *
+ * È cambiata la STRADA: `scorriAllaBollaAppesa` e la coda di `appendToolNote` non scrivono più lo
+ * scroll da sole (`scorriInFondoConversazione`, `scrollTo` a molla, `setTimeout(40)`), perché in
+ * quel modo cinque eventi del MODELLO riportavano in fondo una persona che stava leggendo più su.
+ * Adesso passano dall'unico scrittore, `scrollStreamingOutput`, che consulta `streamingAutoFollow`.
+ * ⇒ Le due prove ora fanno girare la CATENA VERA (chiamante → scrittore unico → scorrevole) invece
+ *   di fermarsi al primo anello: guardano più di prima, non meno.
+ */
+function contestoScrollReale(b, { autoFollow = true } = {}) {
   const contesto = {
     $: s => b.doc.querySelector(s), document: b.doc, window: b.finestra,
     CONVERSAZIONE_FONDO_SOGLIA_PX: 24,
+    CONVERSATION_FOLLOW_EPSILON_PX: 24,
     movimentoRidottoDalSistema: () => true,
     colonnaConversazione: () => b.colonna,
     scorrevoleConversazione: nodo => nodo.closest('.talos-conversation'), ROOT: () => b.doc,
+    // stato del modulo: il corpo della funzione li legge e li scrive come variabili libere
+    streamingAutoFollow: autoFollow,
+    streamingLastTargetTop: null,
+    streamingScrollFrame: null,
+    streamingScrollTarget: null,
+    riarmate: 0,
+    riarmaSeguiConversazione() { contesto.riarmate += 1; contesto.streamingAutoFollow = true; contesto.streamingLastTargetTop = null; },
+    // fuori dall'invariante di questo file: lo spazio in coda ha il suo test (SPAZIO-CODA-01)
+    aggiornaSpazioCodaConversazione() {},
+    logStreaming() {},
   };
   contesto.scrollerConversazione = funzione('scrollerConversazione', contesto);
-  contesto.scorriInFondoConversazione = funzione('scorriInFondoConversazione', contesto);
-  funzione('scorriAllaBollaAppesa', contesto)({ isConnected: true });
-  assert.equal(b.scorrevole.scrollTop, 1300);
+  contesto.scrollStreamingOutput = funzione('scrollStreamingOutput', contesto);
+  return contesto;
+}
+
+test('BC43-02 — la bolla appesa passa dallo scrittore unico e muove solo lo scorrevole', () => {
+  const b = banco();
+  const contesto = contestoScrollReale(b);
+  const article = { isConnected: true, getBoundingClientRect: () => ({ bottom: 1400 }) };
+  funzione('scorriAllaBollaAppesa', contesto)(article);
+  // fondo del contenuto 1300, metà viewport 250 ⇒ 1050: il bersaglio «a metà pagina» dell'owner
+  assert.equal(b.scorrevole.scrollTop, 1050);
+  assert.equal(b.colonna.scrollTop, 0);
+  assert.equal(contesto.riarmate, 0, 'un evento del modello non riarma il seguito');
+});
+
+test('BC43-02-bis AL CONTRARIO — con il seguito spento nessuno tocca lo scroll, nemmeno di un pixel', () => {
+  const b = banco();
+  const contesto = contestoScrollReale(b, { autoFollow: false });
+  funzione('scorriAllaBollaAppesa', contesto)({ isConnected: true, getBoundingClientRect: () => ({ bottom: 1400 }) });
+  assert.equal(b.scorrevole.scrollTop, 0, 'la persona si era spostata: la vista resta dov’è');
+  assert.equal(b.colonna.scrollTop, 0);
+});
+
+test('BC43-02-ter — il messaggio della PERSONA riarma il seguito e la riporta a schermo', () => {
+  const b = banco();
+  const contesto = contestoScrollReale(b, { autoFollow: false });
+  funzione('scorriAllaBollaAppesa', contesto)({ isConnected: true, getBoundingClientRect: () => ({ bottom: 1400 }) }, { azioneDellaPersona: true });
+  assert.equal(contesto.riarmate, 1);
+  assert.equal(b.scorrevole.scrollTop, 1050);
   assert.equal(b.colonna.scrollTop, 0);
 });
 
@@ -121,12 +171,18 @@ for (const ridotto of [false, true]) {
 for (const [sistema, applicazione, comportamento] of [[true, false, 'instant'], [false, true, 'instant'], [false, false, 'smooth']]) {
   test(`BC43-06 — ritorno in fondo: sistema ${sistema}, applicazione ${applicazione}, ${comportamento}`, () => {
     const b = banco({ ridotto: sistema, ridottoApp: applicazione });
+    let riarmate = 0;
     funzione('scorriInFondoConversazione', {
       document: b.doc, movimentoRidottoDalSistema: () => sistema,
       CONVERSAZIONE_FONDO_SOGLIA_PX: 24,
+      riarmaSeguiConversazione: () => { riarmate += 1; },
     })(b.scorrevole);
     assert.equal(b.misure.chiamate[0].behavior, comportamento);
     assert.equal(b.colonna.scrollTop, 0);
+    /* ⛔ 16/09 — questa funzione ha un chiamante solo, il pulsante «torna in fondo»: è la persona che
+       CHIEDE il fondo, quindi è qui che il «segui mentre scrive» si riaccende. Prima lo riaccendeva
+       `RunStarted`, cioè un evento del modello, e la persona rientrava nel seguito senza averlo chiesto. */
+    assert.equal(riarmate, 1, 'chiedere il fondo riaccende il seguito');
   });
 }
 
@@ -136,19 +192,32 @@ for (const collegato of [true, false]) {
     const article = {
       isConnected: collegato, hidden: false,
       getBoundingClientRect: () => ({ bottom: 1400 }),
-      scrollIntoView: () => b.misure.chiamate.push('scrollIntoView'),
       classList: { add() {} },
     };
     const detail = { classList: { add() {} } };
-    funzione('appendToolNote', {
-      creaRigaAttrezzo: () => ({ riga: article, corpo: detail }),
-      markMotionEnter() {}, window: b.finestra, document: b.doc,
-      $: s => b.doc.querySelector(s), fondoConversazioneInVista: () => false,
-      scrollerConversazione: () => b.scorrevole, movimentoRidottoDalSistema: () => true,
-    })('Nota di prova', { contenitore: { append() {} } });
-    assert.equal(b.scorrevole.scrollTop, collegato ? 798 : 0);
+    const contesto = contestoScrollReale(b);
+    contesto.creaRigaAttrezzo = () => ({ riga: article, corpo: detail });
+    contesto.markMotionEnter = () => {};
+    /*
+     * ⛔ 16/09 — `fondoConversazioneInVista` NON serve più a questa funzione, ed è il punto della
+     *   cura: la guardia che la usava era CAPOVOLTA («se sono in fondo non fare niente, se sto
+     *   leggendo più in su portami giù»). Resta qui come trappola: se qualcuno la rimettesse, la
+     *   chiamata farebbe fallire questa prova invece di passare in silenzio.
+     */
+    contesto.fondoConversazioneInVista = () => { throw new Error('la riga attrezzo non deve più decidere da sé dove sta la vista'); };
+    funzione('appendToolNote', contesto)('Nota di prova', { contenitore: { append() {} } });
+    assert.equal(b.scorrevole.scrollTop, collegato ? 1050 : 0);
     assert.equal(b.colonna.scrollTop, 0);
-    assert.equal(b.misure.chiamate.length, collegato ? 1 : 0);
-    if (collegato) assert.equal(b.misure.chiamate[0].behavior, 'instant');
   });
 }
+
+test('BC43-08 — una riga attrezzo NON riporta giù chi si è spostato (la guardia non è più capovolta)', () => {
+  const b = banco({ ridotto: true });
+  const article = { isConnected: true, hidden: false, getBoundingClientRect: () => ({ bottom: 1400 }), classList: { add() {} } };
+  const contesto = contestoScrollReale(b, { autoFollow: false });
+  contesto.creaRigaAttrezzo = () => ({ riga: article, corpo: { classList: { add() {} } } });
+  contesto.markMotionEnter = () => {};
+  contesto.fondoConversazioneInVista = () => { throw new Error('la riga attrezzo non deve più decidere da sé dove sta la vista'); };
+  funzione('appendToolNote', contesto)('Nota di prova', { contenitore: { append() {} } });
+  assert.equal(b.scorrevole.scrollTop, 0, 'la persona sta leggendo più in alto: una riga nuova non la sposta');
+});

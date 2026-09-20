@@ -1,0 +1,49 @@
+name: desktop-settings-transfer
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['docs/refactor/settings-polish.mjs', '.github/workflows/desktop-settings-transfer.yml']
+permissions:
+  contents: read
+concurrency:
+  group: settings-atomic-transfer-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  source:
+    if: github.repository == 'Ninozzz95/talos' && github.ref == 'refs/heads/refactor/desktop-ledger-2026-09-17'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.18.0'
+      - name: Require exact preimages and verify all applied source bytes
+        run: node docs/refactor/settings-polish.mjs
+      - name: Publish ordinary source changes only as a fast forward
+        id: commit
+        run: |
+          set -euo pipefail
+          git add -- harness-ui/frontend/src/components/impostazioni.js harness-ui/frontend/src/design-system/workspace.css harness-ui/frontend/src/features/settings harness-ui/frontend/tests/refactor/settings-schema.test.mjs
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'fix(settings): resolve copy and navigation defects found by visual inspection'
+            git push origin HEAD:refs/heads/refactor/desktop-ledger-2026-09-17
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  qualify:
+    needs: source
+    permissions:
+      contents: read
+    uses: ./.github/workflows/desktop-settings-models.yml
+    with:
+      source_sha: ${{ needs.source.outputs.sha }}

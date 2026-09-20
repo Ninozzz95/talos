@@ -43,8 +43,39 @@ export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
 const MAX_REQUEST_TARGET_BYTES = 4096;
 /** ⛔ Un corpo POST qui è solo `{taskId}` — poche decine di byte. 4096 è già generoso, stesso ordine di grandezza di MAX_REQUEST_TARGET_BYTES. */
-const MAX_REQUEST_BODY_BYTES = 4096;
-/** ⭐ 28/8 — vedi la doc sopra `res.on('close', ...)` nella rotta /events: abbastanza frequente da tenere il canale vivo, abbastanza raro da non essere rumore nei log/nel traffico. */
+/*
+ * ⛔⛔⛔ 16/09 — ERA 4.096 BYTE, E UN PROMPT INCOLLATO NELLA CHAT NON ARRIVAVA NEMMENO AL SERVER.
+ *   Owner, dal vivo: incolla un testo di ~12 KB, «Invio non riuscito: Failed to fetch». Il browser dice così quando
+ *   NESSUNA risposta HTTP arriva: `leggiCorpoJson` faceva `req.destroy()` al primo byte oltre il tetto, e il 413 con
+ *   la sua copia restava «non raggiungibile dall'esterno» — un commento in questo file lo confessava e un test lo
+ *   dichiarava «non provabile» invece di curarlo.
+ * ⛔ Il tetto RESTA, e non per pigrizia: un corpo senza tetto è un modo per far cadere il processo (`JSON.parse`
+ *   amplifica in memoria ~15× i byte ricevuti; il consiglio vale anche per un server di loopback, letto il
+ *   16/09/2026 su nodebestpractices «requestpayloadsizelimit» e sulle segnalazioni SecureBananaLabs #12441/#12426).
+ *   Ma la misura è quella di un messaggio di lavoro, non di un codice OAuth: Hermes Agent mette `MAX_REQUEST_BYTES`
+ *   a **10 MB** sul suo API server (docs «API Server», e la PR #58902 lo impone anche ai corpi chunked); l'API
+ *   Anthropic rifiuta sopra **32 MB** con un 413 «request too large» (docs Messages, 16/09/2026). Claude Code non
+ *   documenta un limite e sugli incolla lunghi TRONCA o si blocca in silenzio (issue anthropics/claude-code #65280,
+ *   #29375): è il difetto da non copiare. ⇒ 10 MiB di serie, configurabile con `TALOS_HTTP_BODY_MAX_BYTES`
+ *   (`server.mjs`) e iniettabile in `createHttpApp({ limiteCorpoByte })` per i test. Le rotte con un tetto
+ *   ESPLICITO piccolo (codice OAuth, batch) lo tengono: lì il corpo ha una forma fissa.
+ */
+const MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024;
+/** Oltre quante volte il limite si smette di DRENARE e si chiude davvero: un corpo che nessuno dovrebbe mandare. */
+const FATTORE_DRENAGGIO_OLTRE_IL_LIMITE = 4;
+const MAX_BATCH_BODY_BYTES = 64 * 1024;
+export const MAX_BATCH_ITEMS = 250;
+/**
+ * ⭐ 28/8 — vedi la doc sopra `res.on('close', ...)` nella rotta /events: abbastanza frequente da
+ * tenere il canale vivo, abbastanza raro da non essere rumore nei log/nel traffico.
+ *
+ * ⛔ P0 · punto 7 (16/09/2026) — questo battito è ciò che rende possibile un ragionamento LUNGO:
+ * finché scrive, il socket ha traffico e nessun guardiano lo considera abbandonato. Misurato con
+ * un client vero su porta effimera (`tests/aiuto/misura-sse-oltre-130s-corsia-d.mjs`): il canale
+ * regge oltre 135 s — cioè oltre i 60 s del fornitore, i 120 s del vecchio `server.timeout` di
+ * Node e i 180 s che il kernel aveva scritti a mano. I tempi del server che glielo permettono sono
+ * dichiarati in `src/http-lifecycle.mjs` (`TEMPI_SERVER_HTTP`), non più lasciati ai default.
+ */
 const INTERVALLO_BATTITO_SSE_MS = 15_000;
 const QA_STATES = new Set([
   'desktop',
@@ -438,7 +469,7 @@ const MESSAGE_BY_CODE = Object.freeze({
   GIT_STORE_UNAVAILABLE: 'Le funzioni git non sono disponibili su questo server',
   GIT_TIMEOUT: 'git non ha risposto entro il tempo massimo',
   GIT_OUTPUT_TOO_LARGE: 'L’uscita di git supera il limite consentito',
-  PAYLOAD_LIMIT: 'Contenuto oltre il limite consentito',
+  PAYLOAD_LIMIT: 'Il contenuto supera la misura che il server accetta: accorcia il messaggio, oppure metti il testo in un file e allegalo',
   METHOD_NOT_ALLOWED: 'Metodo non consentito',
   NOT_FOUND: 'Risorsa non trovata',
   TASK_NOT_ALLOWED: 'Task non ammesso',
@@ -825,11 +856,11 @@ export const COPIA_CONTESTO = Object.freeze({
    *   fuori le due che nascono DENTRO il `try`: `requireNoQuery` e `leggiCorpoJson` lanciano
    *   `QUERY_INVALID`, e un errore senza codice diventa `INTERNAL_ERROR`. Stessa famiglia di rotte,
    *   stessa promessa: o vale per tutte, o non vale.
-   * ⛔ `PAYLOAD_LIMIT` ha la sua riga ma NON è raggiungibile dall'esterno: `leggiCorpoJson` fa
-   *   `req.destroy()` appena il corpo supera i 4096 byte, e la misura col socket grezzo (corpo da
-   *   5.000 byte, `Content-Length` onesto, `Connection: close`) torna ZERO byte — la connessione
-   *   muore prima che una risposta parta. La copia c'è per il giorno in cui quel ramo imparerà a
-   *   rispondere; la prova lo DICHIARA invece di fingere di averlo visto.
+   * ⛔ `PAYLOAD_LIMIT` fino al 16/09 NON era raggiungibile dall'esterno: `leggiCorpoJson` faceva
+   *   `req.destroy()` appena il corpo superava i 4096 byte, e la misura col socket grezzo tornava ZERO
+   *   byte. ✅ Dal 16/09 quel ramo RISPONDE (413, drenando il corpo) e il tetto è 10 MiB: la prova in
+   *   `bc07-contesto-indisponibile.test.mjs` lo produce con una richiesta vera invece di dichiararlo
+   *   non provabile — vedi il commento a `MAX_REQUEST_BODY_BYTES`.
    */
   QUERY_INVALID: Object.freeze({
     title: 'Richiesta del contesto malformata',
@@ -1130,6 +1161,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/export$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/file$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/search$/, metodi: ['GET'] }, // PO-30: cerca un file in tutta la cartella
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/file$/, metodi: ['GET'] }, // PO-05: lo scarico di un file, in byte
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/hooks$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tools$/, metodi: ['GET'] },
@@ -1179,7 +1211,9 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)\/stato$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory$/, metodi: ['GET', 'POST'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory\/([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory\/(?!batch$)([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
+  /* 17/09 — un messaggio si toglie dalla conversazione: una lapide nel registro, non una riscrittura. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/messages\/([^/]+)$/, metodi: ['DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/research$/, metodi: ['GET'] },
   /*
    * ⭐⭐⭐⭐ 12/9, L5 — la Ricerca approfondita smette di essere di sola lettura. Fino a ieri qui
@@ -1207,6 +1241,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)$/, metodi: ['GET', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tool-forge$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/children$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/agent-timeline$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/terminals$/, metodi: ['GET', 'POST'] },
   { schema: /^\/api\/v1\/search-source(?:\/(key|key\/remove|test))?$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/providers\/([^/]+)\/test$/, metodi: ['POST'] },
@@ -1346,31 +1381,36 @@ export function origineDellaRichiesta(req) {
   };
 }
 
-function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES, { distruggiSuLimite = true } = {}) {
+/*
+ * ⛔ 16/09 — UN CORPO OLTRE IL LIMITE RICEVE UNA RISPOSTA, non una connessione morta. Prima si faceva `req.destroy()`
+ *   al primo byte di troppo: il client non riceveva mai il 413 e il browser diceva «Failed to fetch». Ora si rifiuta
+ *   SUBITO (chi chiama risponde 413 con la copia) e si continua a DRENARE il resto del corpo senza tenerlo in memoria,
+ *   così il client finisce di mandare e legge la risposta. Oltre `FATTORE_DRENAGGIO_OLTRE_IL_LIMITE` volte il limite
+ *   si chiude davvero: drenare senza fine sarebbe l'altro modo di farsi tenere occupati da un corpo infinito.
+ */
+function leggiCorpoJsonCon(req, limiteByte) {
   return new Promise((resolve, reject) => {
     let totale = 0;
-    let oltreLimite = false;
+    let respinto = false;
     const pezzi = [];
     req.on('data', (pezzo) => {
-      if (oltreLimite) return; // con socket vivo si drena il resto senza accumularlo
       totale += pezzo.length;
+      if (respinto) {
+        if (totale > limiteByte * FATTORE_DRENAGGIO_OLTRE_IL_LIMITE) req.destroy();
+        return;
+      }
       if (totale > limiteByte) {
-        oltreLimite = true;
+        respinto = true;
+        pezzi.length = 0;
         const errore = new Error('Corpo oltre il limite consentito');
         errore.code = 'PAYLOAD_LIMIT';
         reject(errore);
-        /*
-         * Il comportamento storico resta il default per tutte le rotte esistenti.
-         * FASE 3A opta invece per il drain: così può restituire la propria busta 413
-         * senza continuare ad accumulare il corpo oltre il limite.
-         */
-        if (distruggiSuLimite) req.destroy();
         return;
       }
       pezzi.push(pezzo);
     });
     req.on('end', () => {
-      if (oltreLimite) return;
+      if (respinto) return;
       try {
         const testo = Buffer.concat(pezzi).toString('utf8');
         resolve(testo.length ? JSON.parse(testo) : {});
@@ -1381,7 +1421,7 @@ function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES, { distruggiSuL
       }
     });
     req.on('error', () => {
-      if (oltreLimite) return;
+      if (respinto) return; // già respinta col suo 413: un errore del socket durante il drenaggio non la rifiuta una seconda volta
       const errore = new Error('Richiesta interrotta');
       errore.code = 'QUERY_INVALID';
       reject(errore);
@@ -2144,6 +2184,8 @@ export function leggiRispostaMiglioramento(contenuto) {
 }
 
 export function createHttpApp({
+  /** ⛔ 16/09 — il tetto sul corpo delle richieste: 10 MiB di serie, vedi `MAX_REQUEST_BODY_BYTES`. Iniettabile per i test. */
+  limiteCorpoByte = MAX_REQUEST_BODY_BYTES,
   staticHandler, sessionRegistry = null, contextService = null, listaTaskDisponibili = () => [],
   elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
   // ⭐ 04/9, R-02 — stato del primo avvio (src/setup-stato.mjs): quali passi dell'intro sono già fatti, letti dalla realtà, mai un segreto.
@@ -2246,6 +2288,9 @@ export function createHttpApp({
    */
   fetchMiglioraPromptFn = globalThis.fetch,
 }) {
+  /** Il lettore del corpo con il tetto di QUESTA app: le rotte che vogliono un tetto più stretto lo passano come secondo argomento. */
+  const leggiCorpoJson = (req, limiteByte = limiteCorpoByte) => leggiCorpoJsonCon(req, limiteByte);
+
   async function imageInput(body) {
     if (!body || !Object.hasOwn(body, 'immagini')) return { body, immagini: [] };
     if (!chatImageStore) throw Object.assign(new Error('Gli allegati immagine non sono configurati.'), { code: 'QUERY_INVALID' });
@@ -3226,6 +3271,46 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⭐⭐⭐ 17/09/2026 — TOGLIERE UN MESSAGGIO DALLA CONVERSAZIONE.
+     *
+     * Owner 11/09: «non c'è la rotta» non è una risposta. Fino a ieri «Elimina» toglieva la
+     * risposta dalla sola pagina: ricaricando tornava, e il modello continuava a leggerla.
+     *
+     * ⛔ La forma è quella delle altre DELETE di questo file (note, attività, memoria): l'oggetto
+     *   sta nell'indirizzo, nessun corpo da leggere, nessuna query. Un corpo qui sarebbe una
+     *   seconda verità su CHE COSA cancellare.
+     * ⛔ Il 404 sulla sessione arriva prima, come sopra: la persona guarda un elenco, e dirle
+     *   «fatto» su una sessione che non c'è le confermerebbe uno schermo vecchio.
+     */
+    const messaggioEliminaMatch = method === 'DELETE' && sessionRegistry?.rimuoviMessaggio
+      ? /^\/api\/v1\/sessions\/([^/]+)\/messages\/([^/]+)$/.exec(url.pathname)
+      : null;
+    if (messaggioEliminaMatch) {
+      const nomi = nomiDellaRichiesta(res, method, clock, messaggioEliminaMatch[1], messaggioEliminaMatch[2]);
+      if (!nomi) return;
+      const [sessionId, riferimento] = nomi;
+      try {
+        requireNoQuery(url);
+        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const esito = await sessionRegistry.rimuoviMessaggio(sessionId, riferimento);
+        if (req.aborted || res.destroyed) return;
+        if (esito && 'erroreAvvio' in esito) {
+          const stato = esito.code === 'NOT_FOUND' ? 404 : esito.code === 'SESSION_STILL_RUNNING' ? 409 : 400;
+          sendJson(res, stato, errorEnvelope(esito.code, clock, { errore: new Error(esito.erroreAvvio) }), method);
+          return;
+        }
+        sendJson(res, 200, successEnvelope({ rimosso: true, riferimento: esito.riferimento }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const attivitaStatoMatch = method === 'POST' && sessionRegistry
       ? /^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)\/stato$/.exec(url.pathname)
       : null;
@@ -3687,6 +3772,17 @@ export function createHttpApp({
             if (keys.length !== 0) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
             data = providerStore.resetEndpoint(provider);
           } else {
+            /*
+             * ⛔ P0 · punto 7 (16/09/2026) — `timeoutSeconds` arriva ancora da qui, con lo stesso
+             * nome e la stessa scala, ma da oggi significa **tempo massimo alla prima risposta**
+             * (fino alle intestazioni), non più deadline totale sulla chiamata: non può più
+             * tagliare una generazione in corso. Le ragioni e la misura stanno accanto ai limiti
+             * in `src/provider-credential-store.mjs`; la durata del ragionamento è governata dal
+             * solo failsafe di inattività (`TALOS_GENERATION_IDLE_MS`, README «Configuration»).
+             * ⛔ Nessuna migrazione dei valori salvati: un 60 scritto ieri vuole dire oggi la cosa
+             *   che chi l'ha scritto intendeva, e riscriverlo sarebbe cambiare la configurazione
+             *   di qualcuno senza chiederglielo.
+             */
             // P-K-bis: whitelist rigorosa e campi separati per agente e collegamenti cloud.
             const agente = provider === 'esterno';
             const cloud = Boolean(REGISTRO_FORNITORI[provider]?.cloud);
@@ -5516,6 +5612,7 @@ export function createHttpApp({
         const exportMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/export$/.exec(url.pathname);
         const treeMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree$/.exec(url.pathname);
         const treeFileMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree\/file$/.exec(url.pathname);
+        const treeSearchMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tree\/search$/.exec(url.pathname);
         // ⭐⭐⭐ 28/8 — FASE A (hook): il pannello Control-plane elenca gli hook dichiarati e il loro stato di fiducia vero — stesso principio di exportMatch sotto.
         const hooksMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/hooks$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE E: il Capability hub elenca i server MCP dichiarati e il loro stato di fiducia vero, stesso principio esatto di hooksMatch appena sopra.
@@ -5572,6 +5669,7 @@ export function createHttpApp({
         const forgeListMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tool-forge$/.exec(url.pathname);
         // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il foglio "Albero sessione" elenca i figli VERI di una sessione, stesso principio di hooksMatch sopra.
         const childrenMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/children$/.exec(url.pathname);
+        const timelineMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/agent-timeline$/.exec(url.pathname);
         // ⭐⭐⭐ 28/8 — non SESSION-scoped: un artefatto ha un id UUID già globalmente unico (agent-service.mjs), stesso principio di /api/v1/models.
         const artifactMatch = /^\/api\/v1\/artifacts\/([^/]+)$/.exec(url.pathname);
         // K-I 06/9 — la cornice del Browser: `?url=` e si risponde con le intestazioni lette, mai con la pagina
@@ -5709,6 +5807,25 @@ export function createHttpApp({
             throw errore;
           }
           data = { voci: esito.voci };
+        } else if (treeSearchMatch) {
+          /* ⛔ PO-30 (17/09/2026): un solo parametro ammesso, `q`. Tutto il resto è una query non valida — stessa
+             severità di `parseTreeQuery`: una rotta che ignora i parametri in più finisce per averne di non detti. */
+          let sessionId;
+          try { sessionId = decodeURIComponent(treeSearchMatch[1]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          const chiavi = [...url.searchParams.keys()];
+          const q = url.searchParams.get('q');
+          if (chiavi.length !== 1 || chiavi[0] !== 'q' || q === null) {
+            const errore = new Error('Query non valida');
+            errore.code = 'QUERY_INVALID';
+            throw errore;
+          }
+          const esito = await sessionRegistry.cercaFile(sessionId, q);
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = { risultati: esito.risultati, troncato: esito.troncato, motivo: esito.motivo, saltate: esito.saltate };
         } else if (treeFileMatch) {
           /* ⭐ 27/8 — "Apri" un file dell'albero: stessa forma di treeMatch, endpoint separato perché la risposta porta contenuto, non un elenco. */
           let sessionId;
@@ -5983,7 +6100,23 @@ export function createHttpApp({
             errore.code = esito.code;
             throw errore;
           }
-          data = { plugin: esito.plugin, errore: esito.errore };
+          /* ⛔ A-4 (17/09/2026): `falliti` moriva QUI. Un pacchetto guasto spariva dal pannello
+             senza che niente dicesse perché — vedi `caricaPlugin` e `elencaPlugin`. */
+          data = { plugin: esito.plugin, falliti: esito.falliti ?? [], errore: esito.errore };
+        } else if (timelineMatch) {
+          const query = {};
+          for (const [key, value] of url.searchParams) {
+            if (!['after', 'through', 'limit'].includes(key) || Object.hasOwn(query, key) || !/^(0|[1-9][0-9]*)$/u.test(value) || !Number.isSafeInteger(Number(value))) {
+              const error = new Error('Parametri della cronologia non validi'); error.code = 'QUERY_INVALID'; throw error;
+            }
+            query[key] = Number(value);
+          }
+          let sessionId;
+          try { sessionId = decodeURIComponent(timelineMatch[1]); }
+          catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          const esito = await sessionRegistry.timelineAgenti(sessionId, query);
+          if (esito.erroreAvvio) { const error = new Error(esito.erroreAvvio); error.code = esito.code; throw error; }
+          data = esito;
         } else if (childrenMatch) {
           requireNoQuery(url);
           let sessionId;

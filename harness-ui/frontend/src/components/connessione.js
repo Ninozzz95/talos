@@ -56,73 +56,91 @@ export function creaSorveglianzaConnessione({
   let timer = null;
   let timerRicollegato = null;
   let battitoInCorso = false;
+  let epoca = 0;
+  let sospesa = false;
+  const caduta = () => stato === 'riconnessione' || stato === 'caduto';
 
   const cambia = (nuovo, dettagli = {}) => {
     if (stato === nuovo && nuovo !== 'riconnessione') return;
     stato = nuovo;
     suCambio(nuovo, { tentativi, ...dettagli });
   };
-
-  const fermaBattito = () => { if (timer != null) { annulla(timer); timer = null; } };
-
-  const battito = async () => {
-    timer = null;
-    if (stato === 'collegato' || battitoInCorso) return;
-    battitoInCorso = true;
-    let vivo = false;
-    try { vivo = await ping() === true; } catch { vivo = false; }
-    battitoInCorso = false;
-    if (vivo) { tornato(); return; }
-    tentativi += 1;
-    if (tentativi >= RITMO.tentativiPrimaDiArrendersi) cambia('caduto', { tentativi });
-    else cambia('riconnessione', { tentativi });
-    pianificaBattito();
+  const fermaBattito = () => {
+    if (timer != null) { annulla(timer); timer = null; }
+  };
+  const fermaConferma = () => {
+    if (timerRicollegato != null) { annulla(timerRicollegato); timerRicollegato = null; }
   };
 
-  const pianificaBattito = () => {
+  const pianificaBattito = (subito = false) => {
     fermaBattito();
-    const ms = Math.min(RITMO.battitoMassimoMs, RITMO.battitoMinimoMs * 2 ** Math.max(0, tentativi - 1));
+    if (sospesa || !caduta() || battitoInCorso) return;
+    const ms = subito ? 0 : Math.min(RITMO.battitoMassimoMs,
+      RITMO.battitoMinimoMs * 2 ** Math.max(0, tentativi - 1));
     timer = pianifica(battito, ms);
   };
 
   const tornato = () => {
+    // Una ripresa appartiene a una caduta, non a ogni evento dello stream.
+    if (sospesa || !caduta()) return;
+    epoca += 1;
     fermaBattito();
-    const eraGiu = stato !== 'collegato';
+    fermaConferma();
     tentativi = 0;
-    if (!eraGiu) return;
     cambia('ricollegato');
+    if (sospesa || stato !== 'ricollegato') return;
+    timerRicollegato = pianifica(() => {
+      timerRicollegato = null;
+      if (!sospesa && stato === 'ricollegato') cambia('collegato');
+    }, RITMO.ricollegatoVisibileMs);
     suRicollegato();
-    if (timerRicollegato != null) annulla(timerRicollegato);
-    timerRicollegato = pianifica(() => { timerRicollegato = null; if (stato === 'ricollegato') cambia('collegato'); }, RITMO.ricollegatoVisibileMs);
   };
 
+  async function battito() {
+    timer = null;
+    if (sospesa || !caduta() || battitoInCorso) return;
+    const epocaRichiesta = epoca;
+    battitoInCorso = true;
+    let vivo = false;
+    try { vivo = await ping() === true; } catch { vivo = false; }
+    battitoInCorso = false;
+    if (sospesa) return;
+    // Un ping vecchio non può smentire una ripresa né certificare una nuova caduta.
+    if (epocaRichiesta !== epoca) { pianificaBattito(); return; }
+    if (vivo) { tornato(); return; }
+    tentativi += 1;
+    cambia(tentativi >= RITMO.tentativiPrimaDiArrendersi ? 'caduto' : 'riconnessione');
+    pianificaBattito();
+  }
+
   const sospetto = (motivo) => {
-    if (stato === 'collegato' || stato === 'ricollegato') {
-      if (timerRicollegato != null) { annulla(timerRicollegato); timerRicollegato = null; }
-      tentativi = 0;
-      cambia('riconnessione', { tentativi: 1, motivo });
+    if (!caduta()) {
+      epoca += 1;
+      fermaConferma();
       tentativi = 1;
+      cambia('riconnessione', { tentativi, motivo });
     }
     if (timer == null && !battitoInCorso) pianificaBattito();
   };
+  // Conserva il contratto esistente: un nuovo segnale esplicito può riattivare
+  // la sorveglianza dopo ferma(); una risposta pendente, da sola, non può farlo.
+  const riprendi = () => { sospesa = false; };
 
   return {
     stato: () => stato,
     tentativi: () => tentativi,
-    /** una fetch della app è andata (ok=true) o è caduta per rete (ok=false). */
-    segnalaRete(ok, motivo = 'fetch') { if (ok) { if (stato !== 'collegato') tornato(); } else sospetto(motivo); },
-    /** l'EventSource ha dato errore: `readyState` 0 = riprova da solo, 2 = ha rinunciato. */
-    segnalaSse(readyState) { sospetto(readyState === 2 ? 'sse-chiuso' : 'sse-riprova'); },
-    /** arriva un evento sullo stream: il canale è vivo. */
-    segnalaEventoVivo() { if (stato !== 'collegato') tornato(); },
-    /** il browser dice offline/online: si prende come sospetto, mai come verità. */
-    segnalaBrowser(online) { if (online) { if (stato !== 'collegato') pianificaBattitoSubito(); } else sospetto('browser-offline'); },
-    /** «Riprova» premuto: un battito adesso. */
-    riprova() { pianificaBattitoSubito(); },
-    ferma() { fermaBattito(); if (timerRicollegato != null) { annulla(timerRicollegato); timerRicollegato = null; } },
+    segnalaRete(ok, motivo = 'fetch') { riprendi(); if (ok) tornato(); else sospetto(motivo); },
+    segnalaSse(readyState) { riprendi(); sospetto(readyState === 2 ? 'sse-chiuso' : 'sse-riprova'); },
+    segnalaEventoVivo() { riprendi(); tornato(); },
+    segnalaBrowser(online) { riprendi(); if (online) pianificaBattito(true); else sospetto('browser-offline'); },
+    riprova() { riprendi(); pianificaBattito(true); },
+    ferma() {
+      sospesa = true;
+      epoca += 1;
+      fermaBattito();
+      fermaConferma();
+    },
   };
-
-  function pianificaBattitoSubito() { fermaBattito(); timer = pianifica(battito, 0); }
 }
 
 /**

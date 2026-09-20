@@ -13,6 +13,23 @@ const harness = fileURLToPath(new URL('../../../', import.meta.url));
 const sessionId = 'context-desktop-proof';
 const model = 'fixture/no-inference';
 let directory, child, base, token;
+
+/*
+ * ⛔ 18/09/2026 — `locale: 'it-IT'` NON è un vezzo: senza, il profilo di Playwright è `en-US`
+ * (documentazione Playwright, `/docs/api/class-testoptions#test-options-locale`, consultata il
+ * 18/09/2026: «Locale will affect `navigator.language` value…», valore predefinito `en-US`), e la
+ * app risolve la lingua NEGOZIANDO da `navigator.languages` con ripiego su `'en'`
+ * (`src/components/lingua.js:40-48`; `LINGUA_PREDEFINITA = 'it'` è la preferenza SALVATA, non la
+ * negoziazione — il commento in testa a quel file cita la ricerca del 06/09/2026). Misurato prima
+ * della cura: le due asserzioni su testo italiano ricevevano la stringa inglese —
+ * «Context Manager is not enabled for this conversation yet. No messages have been changed.»
+ * (`CTX-UI-DISABLED-OPEN`, riga 169) e «There are no earlier exchanges to compact while keeping the
+ * latest exchange intact. No messages were changed.» (`CTX-UI-DESKTOP-ROUNDTRIP`, riga 67).
+ * È la convenzione già usata dai fratelli: `bc78-barra-e-dettaglio.spec.mjs:10`,
+ * `p0bis-c.spec.mjs:55`, `foto-fase-a.spec.mjs:21`.
+ */
+test.use({ locale: 'it-IT' });
+
 test.beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), 'tcec-ui-'));
   const workspace = join(directory, 'workspace'); await mkdir(workspace);
@@ -46,7 +63,6 @@ test.afterAll(async () => {
 
 test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async ({ page, context }) => {
   await context.addCookies([{ name: 'talos_token', value: token, url: base, httpOnly: true, sameSite: 'Strict' }]);
-  await page.addInitScript(() => localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })));
   const inference = [];
   // Il percorso vietato e intercettato: la mutazione RED non deve fare inferenza.
   await page.route('**/api/v1/sessions/*/compact', route => route.fulfill({ json: { ok: true, compattato: false } }));
@@ -161,7 +177,6 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
 
 test('CTX-UI-DISABLED-OPEN opens Context Manager without a legacy compaction or inference', async ({ page, context }) => {
   await context.addCookies([{ name: 'talos_token', value: token, url: base, httpOnly: true, sameSite: 'Strict' }]);
-  await page.addInitScript(() => localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })));
   const mutations = [];
   page.on('request', request => { if (/\/compact$|\/context\//.test(request.url()) && request.method() !== 'GET') mutations.push(request.url()); });
   await page.goto(base); await page.waitForFunction(() => window.__talosHarnessUiRuntime);

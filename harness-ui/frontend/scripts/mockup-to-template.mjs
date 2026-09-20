@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,6 +38,10 @@ function taglia(html, inizio, fine) {
 }
 
 export async function generaTemplate() {
+  // BOOT-01: historical reference export only. Application template and styles
+  // are owned source after the workspace migration; never overwrite them.
+  const output = path.join(radice, 'dist-lab', 'historical-reference');
+  await mkdir(output, { recursive: true });
   const mockup = await readFile(MOCKUP, 'utf8');
   const stile = /<style[^>]*>([\s\S]*?)<\/style>/u.exec(mockup)?.[1];
   if (!stile) throw new Error('il mockup non ha il suo <style>');
@@ -103,8 +107,8 @@ export async function generaTemplate() {
   ].join('\n');
 
   const css = `/* Font locali: la app e' local-first, niente Google Fonts. */\n${FONT_LOCALI}\n\n/* ===== Il foglio del mockup approvato, byte per byte (fase 0). ===== */\n${stile}`;
-  await writeFile(path.join(radice, 'index.template.html'), documento, 'utf8');
-  await writeFile(path.join(radice, 'src/styles/index.css'), css, 'utf8');
+  await writeFile(path.join(output, 'index.html'), documento, 'utf8');
+  await writeFile(path.join(output, 'styles.css'), css, 'utf8');
   const blocchi = documento.match(/data-c="[^"]+"/gu) || [];
   return {
     blocchi: new Set(blocchi.map((b) => b.slice(8, -1))).size,
@@ -117,6 +121,6 @@ export async function generaTemplate() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  generaTemplate().then((esito) => console.log(`Template dal mockup: ${esito.schermate} schermate, ${esito.blocchi} blocchi (${esito.istanze} istanze), ${esito.script} script, regia=${esito.regia}, sprite=${esito.sprite}`))
+  generaTemplate().then((esito) => console.log(`Riferimento storico in dist-lab/historical-reference: ${esito.schermate} schermate, ${esito.blocchi} blocchi (${esito.istanze} istanze), ${esito.script} script, regia=${esito.regia}, sprite=${esito.sprite}`))
     .catch((errore) => { console.error(errore.message); process.exitCode = 1; });
 }

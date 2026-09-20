@@ -131,6 +131,7 @@ export function createLlamaServerRuntime({ supervisor, fetchImpl = fetch, now = 
     if (requestId) activeRequests.set(requestId, controller);
     let response;
     try {
+      combinedSignal.throwIfAborted();
       const body = { model: modelId, messages, stream: true, max_tokens: Number.isInteger(maxTokens) && maxTokens > 0 ? maxTokens : 512 };
       if (reasoning?.effort) body.reasoning_effort = reasoning.effort;
       if (reasoningFormat) body.reasoning_format = reasoningFormat;
@@ -146,7 +147,31 @@ export function createLlamaServerRuntime({ supervisor, fetchImpl = fetch, now = 
         : await fetchImpl(`${baseUrl()}/v1/chat/completions`, requestOptions);
       if (!response.ok) throw new LlamaServerRuntimeError(`runtime returned HTTP ${response.status}: ${await readText(response)}`, 'RUNTIME_HTTP_ERROR');
       let seq = 0;
-      const pendingTools = new Map();
+      const pendingTools = new Set();
+      const toolsByIndex = new Map();
+      const toolsById = new Map();
+      // A valid JSON prefix is not a completed call (e.g. "1" then "2").
+      // Join and validate once, at finish_reason or ordinary stream EOF.
+      // Aborted/failed readers never reach the final flush.
+      const flushNativeTools = function* () {
+        for (const tool of pendingTools) {
+          combinedSignal.throwIfAborted();
+          let event;
+          try {
+            event = envelope({ runId, turnId, seq, type: 'tool_call', id: tool.id,
+              name: tool.names.join(''), arguments: tool.arguments.join('') }, now);
+          } catch (error) {
+            if (error?.code !== 'LOCAL_RUNTIME_INVALID') throw error;
+            event = envelope({ runId, turnId, seq, type: 'error', code: 'TOOL_CALL_MALFORMED',
+              message: `malformed tool call ${tool.id}`, retryable: false }, now);
+          }
+          seq++;
+          yield event;
+        }
+        pendingTools.clear();
+        toolsByIndex.clear();
+        toolsById.clear();
+      };
       let taggedEvents = [];
       const taggedContent = createStreamPartitioner({
         onText: (value) => taggedEvents.push({ type: 'text', value }),
@@ -165,12 +190,17 @@ export function createLlamaServerRuntime({ supervisor, fetchImpl = fetch, now = 
         }
       };
       for await (const chunk of sseEvents(response)) {
+        combinedSignal.throwIfAborted();
         if (chunk.__invalid) {
           yield envelope({ runId, turnId, seq: seq++, type: 'error', code: 'RUNTIME_SSE_INVALID', message: 'runtime emitted malformed SSE JSON', retryable: false }, now);
           continue;
         }
-        const delta = chunk.choices?.[0]?.delta;
-        if (!delta) continue;
+        const choice = chunk.choices?.[0];
+        const delta = choice?.delta;
+        if (!delta) {
+          if (choice?.finish_reason != null) yield* flushNativeTools();
+          continue;
+        }
         const reasoningDelta = delta.reasoning_content ?? delta.reasoning;
         if (typeof reasoningDelta === 'string' && reasoningDelta !== '') yield envelope({ runId, turnId, seq: seq++, type: 'reasoning', value: reasoningDelta }, now);
         if (typeof delta.content === 'string' && delta.content !== '') {
@@ -178,26 +208,25 @@ export function createLlamaServerRuntime({ supervisor, fetchImpl = fetch, now = 
           yield* flushTaggedEvents();
         }
         for (const call of delta.tool_calls ?? []) {
-          const key = call.id ?? String(call.index ?? pendingTools.size);
-          const previous = pendingTools.get(key) ?? { id: key, name: '', arguments: '', emitted: false };
-          previous.name += call.function?.name ?? '';
-          previous.arguments += call.function?.arguments ?? '';
-          pendingTools.set(key, previous);
-          if (!previous.emitted) {
-            try {
-              JSON.parse(previous.arguments);
-              yield envelope({ runId, turnId, seq: seq++, type: 'tool_call', id: previous.id, name: previous.name, arguments: previous.arguments }, now);
-              previous.emitted = true;
-            } catch { /* stream fragments are completed at the end */ }
-          }
+          // OpenAI-style deltas normally supply id/name only in the first
+          // fragment; index remains stable. Keep id-only legacy streams too.
+          const index = Number.isInteger(call.index) && call.index >= 0 ? call.index : null;
+          const hasId = call.id !== undefined && call.id !== null;
+          const tool = (index !== null ? toolsByIndex.get(index) : undefined)
+            ?? (hasId ? toolsById.get(call.id) : undefined)
+            ?? { id: call.id ?? String(index ?? pendingTools.size), names: [], arguments: [] };
+          pendingTools.add(tool);
+          if (index !== null) toolsByIndex.set(index, tool);
+          if (hasId) { tool.id = call.id; toolsById.set(call.id, tool); }
+          if (call.function?.name != null) tool.names.push(call.function.name);
+          if (call.function?.arguments != null) tool.arguments.push(call.function.arguments);
         }
+        if (choice.finish_reason != null) yield* flushNativeTools();
       }
+      combinedSignal.throwIfAborted();
       taggedContent.finish();
       yield* flushTaggedEvents();
-      for (const tool of pendingTools.values()) {
-        if (tool.emitted) continue;
-        yield envelope({ runId, turnId, seq: seq++, type: 'error', code: 'TOOL_CALL_MALFORMED', message: `malformed tool call ${tool.id}`, retryable: false }, now);
-      }
+      yield* flushNativeTools();
       yield envelope({ runId, turnId, seq: seq++, type: 'done' }, now);
     } finally {
       if (requestId) activeRequests.delete(requestId);

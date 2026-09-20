@@ -497,7 +497,19 @@ button.talos-list-row:focus-visible {
    Fase 4 — la conversazione. Il contenitore e' `role="log"`; la spina e' una
    misura disegnata e resta nascosta alle tecnologie assistive.
    ========================================================================== */
-.talos-conversation { overflow-y: auto; }
+/*
+ * ⛔ 16/09/2026 (P0, punto 6) — `overflow-anchor: auto` è il DEFAULT, e si scrive lo stesso.
+ *   Serve a tenere ferma la posizione di lettura quando cambia il contenuto SOPRA il viewport
+ *   (MDN «overflow-anchor», CSS Scroll Anchoring L1, letti il 16/09/2026): è esattamente ciò su cui
+ *   si appoggia la regola «chi ha scorso in su resta dov'è». Misurato prima di scriverlo: il valore
+ *   calcolato era già `auto` e nessuna regola del progetto lo spegne ⇒ questa riga NON cura niente
+ *   oggi, è la guardia che impedisce a un `overflow-anchor: none` futuro di riaprire il difetto in
+ *   silenzio. SCROLL-P0-06 la controlla dal vivo.
+ *   ⛔ Non si mette `none`: quello è il valore per chi PREPENDE messaggi in cima (Slack, Discord) e
+ *   gestisce lo scroll a mano; qui il contenuto cresce in fondo, e `none` toglierebbe l'ancora
+ *   proprio a chi sta leggendo in alto.
+ */
+.talos-conversation { overflow-y: auto; overflow-anchor: auto; }
 .talos-conversation__column { max-width: calc(92px + var(--talos-measure-w, 78ch)); margin: 0 auto; width: 100%; }
 .talos-turn { display: grid; grid-template-columns: calc(var(--talos-primary-height) * 1.85) minmax(0, 1fr); align-items: stretch; }
 .talos-turn-spine {

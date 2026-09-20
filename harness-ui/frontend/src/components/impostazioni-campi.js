@@ -1,4 +1,4 @@
-/* Contratto dei 38 controlli originali. ID e opzioni restano compatibili. */
+/* Contratto dei controlli originali e delle preferenze di densità e lingua. ID e opzioni restano compatibili. */
 export const CAMPI_IMPOSTAZIONI = [
   {
     "id": "themePresetSelect",
@@ -233,7 +233,7 @@ export const CAMPI_IMPOSTAZIONI = [
     "chiave": "chatFontScale",
     "tipo": "select",
     "titolo": "Testo chat",
-    "sezione": "appearance",
+    "sezione": "chat",
     "gruppo": "design",
     "opzioni": [
       [
@@ -259,7 +259,7 @@ export const CAMPI_IMPOSTAZIONI = [
     "chiave": "composerShape",
     "tipo": "select",
     "titolo": "Forma del composer",
-    "sezione": "appearance",
+    "sezione": "chat",
     "gruppo": "design",
     "opzioni": [
       [
@@ -281,7 +281,7 @@ export const CAMPI_IMPOSTAZIONI = [
     "chiave": "composerPlus",
     "tipo": "select",
     "titolo": "Apertura del pulsante +",
-    "sezione": "appearance",
+    "sezione": "chat",
     "gruppo": "design",
     "opzioni": [
       [
@@ -299,7 +299,7 @@ export const CAMPI_IMPOSTAZIONI = [
     "chiave": "messageStyle",
     "tipo": "select",
     "titolo": "Stile dei messaggi",
-    "sezione": "appearance",
+    "sezione": "chat",
     "gruppo": "design",
     "opzioni": [
       [
@@ -317,7 +317,7 @@ export const CAMPI_IMPOSTAZIONI = [
     "chiave": "streamingAnimation",
     "tipo": "select",
     "titolo": "Animazione risposta",
-    "sezione": "appearance",
+    "sezione": "chat",
     "gruppo": "design",
     "opzioni": [
       [

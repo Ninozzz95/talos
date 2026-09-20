@@ -1,0 +1,52 @@
+name: desktop-ledger-log-diagnostic
+on:
+  push:
+    branches: ['refactor/desktop-ledger-2026-09-17']
+    paths: ['.github/workflows/desktop-ledger-log-diagnostic.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  evidence:
+    if: github.repository == 'Ninozzz95/talos'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - name: Read immutable packaged-launch evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p downloaded evidence
+          gh run download 35236243182 --repo Ninozzz95/talos --name TALOS-Refactor-Windows-evidence-09f35a3ed3dff16faf5c6d5ff586b7c85d7898cc --dir downloaded
+          python - <<'PY'
+          import pathlib, re, json, hashlib
+          root = pathlib.Path('downloaded')
+          evidence = pathlib.Path('evidence')
+          selected = []
+          for p in root.rglob('*'):
+              if not p.is_file():
+                  continue
+              relative = p.relative_to(root).as_posix()
+              if p.name not in {'electron-start.log', 'qualification.json', 'registro.log'} or 'ledger-preview' not in relative:
+                  continue
+              text = p.read_text(encoding='utf-8-sig', errors='replace')
+              text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', text)
+              text = re.sub(r'(?i)([?&]token=|talos_token=|Bearer\s+)[^\s&;\"<>]+', r'\1[redacted]', text)
+              text = re.sub(r'\b[a-fA-F0-9]{64}\b', '[hash-or-token-redacted]', text)
+              name = str(len(selected)) + '-' + p.name
+              (evidence / name).write_text(text, encoding='utf-8')
+              selected.append({'path': relative, 'redactedFile': name, 'size': p.stat().st_size})
+              print('\n===== ' + relative + ' =====\n' + text[-24000:])
+          (evidence/'inventory.json').write_text(json.dumps(selected, indent=2), encoding='utf-8')
+          if not selected:
+              print('\n'.join(str(p.relative_to(root)) for p in root.rglob('*') if p.is_file())[:15000])
+              raise SystemExit('Expected launch diagnostics were not present in this immutable artifact.')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: talos-packaged-launch-diagnostics-09f35a3
+          path: evidence/
+          retention-days: 14
+          if-no-files-found: error

@@ -2,10 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { suApple, etichettaTasto, montaScorciatoie, normalizzaTastiScritti, riconosci, SCORCIATOIE } from '../../src/components/scorciatoie.js';
 
-/** Radice finta: basta `querySelectorAll('kbd')` e `textContent` (le unit di questo repo non caricano un DOM). */
-function radiceFinta(testi) {
-  const nodi = testi.map((t) => ({ textContent: t }));
-  return { nodi, querySelectorAll: (sel) => (sel === 'kbd' ? nodi : []) };
+/**
+ * Radice finta: bastano `querySelectorAll` e `textContent` (le unit di questo repo non caricano un DOM).
+ * ⛔ 16/09: il selettore lo onora DAVVERO invece di rispondere sempre la stessa lista. Prima
+ *   rispondeva solo a `'kbd'`, e una radice così non poteva accorgersi che il progetto scrive le
+ *   combinazioni anche in `<span class="talos-kbd">` — cioè non poteva vedere il difetto che c'era.
+ * Un elemento è `{tag, classe, textContent}`; una stringa vale come `<kbd>`.
+ */
+function radiceFinta(voci) {
+  const nodi = voci.map((v) => (typeof v === 'string'
+    ? { tag: 'kbd', classe: 'talos-kbd', textContent: v }
+    : { tag: 'span', classe: '', ...v }));
+  const combacia = (nodo, pezzo) => (pezzo.startsWith('.') ? nodo.classe.split(/\s+/u).includes(pezzo.slice(1)) : nodo.tag === pezzo);
+  return {
+    nodi,
+    querySelectorAll: (sel) => {
+      const pezzi = sel.split(',').map((s) => s.trim());
+      return nodi.filter((nodo) => pezzi.some((pezzo) => combacia(nodo, pezzo)));
+    },
+  };
 }
 
 // 06/09 — audit delle decisioni: una scorciatoia scritta a schermo è una promessa.
@@ -31,6 +46,21 @@ test('SCORCIATOIE-KBD: riscrive solo i tasti col modificatore, lascia Esc e le f
   const mac = radiceFinta(['Ctrl K']);
   normalizzaTastiScritti(mac, { apple: true });
   assert.equal(mac.nodi[0].textContent, '⌘K');
+});
+
+test('SCORCIATOIE-KBD-SPAN: anche le combinazioni scritte in `<span class="talos-kbd">` cambiano col modificatore della piattaforma', () => {
+  /* ⛔ 16/09 — il progetto scrive le combinazioni in DUE markup: `<kbd class="talos-kbd">` nella
+     palette e `<span class="talos-kbd">` nella barra del composer (la pill del modello, «Ctrl ⇧ M»,
+     e «Ctrl ↵» del bivio). Il normalizzatore ne guardava UNO: su un Mac quelle due restavano
+     «Ctrl», cioè una promessa scritta col tasto sbagliato. */
+  const radice = radiceFinta([
+    { tag: 'span', classe: 'talos-kbd', textContent: 'Ctrl ⇧ M' },
+    { tag: 'span', classe: 'talos-badge', textContent: 'Ctrl B' }, // non è un tasto: non si tocca
+  ]);
+  const cambiati = normalizzaTastiScritti(radice, { apple: true });
+  assert.equal(radice.nodi[0].textContent, '⌘⇧M');
+  assert.equal(radice.nodi[1].textContent, 'Ctrl B');
+  assert.equal(cambiati, 1);
 });
 
 test('SCORCIATOIE-RICONOSCE: le sette combinazioni, e niente quando manca il modificatore', () => {

@@ -5,7 +5,17 @@ const el=(doc,tag,classe,testo)=>{const n=doc.createElement(tag);if(classe)n.cla
 const eventi=xs=>(xs||[]).map(e=>EVENTI[e]||e).join(' · ');
 export function datiEstensione(tipo,v){
  const skill=tipo==='skills',stato=skill?'Disponibile':v.fidato===true?'Fidato':v.fidato===false?'Da fidare':'Fiducia non osservata';
- const r={id:v.id,titolo:v.name||v.nome||v.id,descrizione:v.description||v.descrizione||(tipo==='mcp'?'Server MCP dichiarato nel progetto.':eventi(v.eventi)),stato,fidabile:!skill&&v.fidato===false,origine:ORIGINI[tipo]||'Origine non osservata',righe:[],avvisi:Array.isArray(v.avvisi)?v.avvisi:[]};
+ /*
+  * ⭐⭐⭐ 5-ter (17/09/2026) — LA FRASE DELLA FIDUCIA, che il backend calcola e lo schermo buttava.
+  *
+  * Da `ba420a95` `elencaPlugin` porta `motivo` (`mai-approvato` · `regola-precedente` ·
+  * `contenuto-cambiato`) e una `frase` già scritta per una persona. Qui arrivava solo il
+  * `fidato: boolean`, e il pannello disegnava un «Fida» nudo: un plugin GIÀ approvato che va
+  * riapprovato perché la regola è cambiata aveva lo stesso aspetto di uno MANOMESSO.
+  * ⛔ A schermo va `frase`, MAI `motivo`: il motivo è un nome tecnico (regola dell'owner 04/09).
+  * ⛔ Se la frase non c'è non si inventa: il pannello resta com'era, senza una riga vuota.
+  */
+ const r={id:v.id,titolo:v.name||v.nome||v.id,descrizione:v.description||v.descrizione||(tipo==='mcp'?'Server MCP dichiarato nel progetto.':eventi(v.eventi)),stato,fidabile:!skill&&v.fidato===false,frase:typeof v.frase==='string'&&v.frase.trim()?v.frase.trim():null,origine:ORIGINI[tipo]||'Origine non osservata',righe:[],avvisi:Array.isArray(v.avvisi)?v.avvisi:[]};
  if(tipo==='mcp')r.righe=[['Comando',v.comando],['Argomenti',v.argomenti?.length?v.argomenti.join(' · '):'Nessuno'],['Attrezzi ammessi',v.allowlist?.length?v.allowlist.join(' · '):'Non osservati'],['Connessione','Non osservata da questo inventario']];
  if(tipo==='plugins'){r.righe=[['Attrezzi',String(v.tools?.length??0)],['Hook',String(v.hooks?.length??0)]];for(const t of v.tools||[])r.righe.push([t.nome,t.descrizione+' · '+t.comando]);for(const h of v.hooks||[])r.righe.push([h.id,eventi(h.eventi)+' · '+h.comando]);}
  if(tipo==='hooks')r.righe=[['Quando',eventi(v.eventi)],['Comando','Non esposto dall’inventario. Verificalo nel file del progetto prima di fidarti.']];
@@ -32,8 +42,39 @@ function render(panel,p){
  lista.replaceChildren(...voci.map((v,i)=>{const r=creaExtensionRow(o.tipo,v,{document:doc,selezionata:v.id===p.scelto,onSeleziona:scegli});r.setAttribute('aria-controls',panel.querySelector('[data-ext-detail]').id);r.addEventListener('keydown',e=>{if(!['ArrowUp','ArrowDown','Home','End'].includes(e.key))return;e.preventDefault();const j=e.key==='Home'?0:e.key==='End'?voci.length-1:(i+(e.key==='ArrowDown'?1:-1)+voci.length)%voci.length;scegli(voci[j].id,true);});return r;}));
  if(!voci.length)lista.append(el(doc,'p','talos-list-row talos-muted',o.errore?'Inventario non disponibile.':o.caricamento?'Caricamento…':p.voci.length?'Nessuna voce corrisponde alla ricerca.':'Nessuna voce dichiarata nel progetto.'));
  if(focus)[...lista.children].find(n=>n.dataset.extId===focus)?.focus({preventScroll:true});
+ /*
+  * ⛔⛔ F3, 17/09/2026 — I PACCHETTI GUASTI STANNO NELLA COLONNA DELL'ELENCO, e si disegnano QUI,
+  *   PRIMA del `return` che esce quando non c'è niente di selezionato. Finché stavano nella scheda
+  *   erano due difetti in uno: col pulsante «Fida» sotto sembravano roba del plugin scelto, e con
+  *   ZERO plugin caricati non si vedevano affatto — cioè sparivano proprio quando l'elenco è vuoto
+  *   PERCHÉ i pacchetti sono guasti, che è il caso in cui contano di più.
+  * ⛔ Righe che non si scelgono: nessun bottone, nessun `role`, nessun `tabindex`. L'elenco vivo è
+  *   un `listbox`, e una voce che non si può selezionare non ci può stare dentro.
+  */
+ const nodoFalliti=panel.querySelector('[data-ext-falliti]');
+ if(nodoFalliti){
+  /* ⛔ A3: un pacchetto GUASTO non sparisce — arriva con la sua frase invece di lasciare un buco. */
+  /* ⛔ Trovato in una FOTO: senza un'intestazione la frase di un pacchetto guasto sembrava una
+     seconda riga della fiducia. Chi legge deve sapere che sta guardando un ALTRO pacchetto. */
+  const falliti=Array.isArray(o.falliti)?o.falliti:[];
+  nodoFalliti.replaceChildren(...falliti.map(f=>{
+   const li=el(doc,'li','talos-trust-fallito');
+   li.append(el(doc,'b','',f.nome||f.id||'Pacchetto senza nome'),el(doc,'span','talos-muted',f.frase||'Non caricato: il pacchetto non dichiara un motivo.'));
+   return li;
+  }));
+  const blocco=panel.querySelector('[data-ext-falliti-blocco]');
+  if(blocco)blocco.hidden=falliti.length===0;
+ }
  const v=voci.find(v=>v.id===p.scelto),detail=panel.querySelector('[data-ext-detail]');detail.hidden=!v;if(!v)return;const d=datiEstensione(o.tipo,v);detail.querySelector('h3').textContent=d.titolo;detail.querySelector('[data-ext-desc]').textContent=d.descrizione;detail.querySelector('[data-ext-stato]').textContent=d.stato;detail.querySelector('[data-ext-origine]').textContent=d.origine;detail.querySelector('[data-ext-meta]').replaceChildren(...d.righe.map(([k,v])=>{const r=el(doc,'div','talos-kv');r.append(el(doc,'span','talos-kv__k',k),el(doc,'span','talos-kv__v',v));return r;}));
  const avvisi=detail.querySelector('[data-ext-warnings]');avvisi.hidden=!d.avvisi.length;avvisi.replaceChildren(...d.avvisi.map(a=>el(doc,'p','talos-detail__desc',a.origine+': '+a.avviso)));if(d.avvisi.length)avvisi.append(el(doc,'p','talos-muted','La scansione segnala possibili rischi; non garantisce sicurezza.'));
+ /*
+  * 5-ter: la FRASE della fiducia, accanto allo stato che spiega (F3). Nodo che esiste solo nel
+  * pannello dei plugin — gli altri tre non ce l'hanno, e l'`if` lo dice senza rompere niente.
+  * ⛔ Il testo va in un figlio, non sul blocco: il blocco porta anche l'icona dell'avviso, e un
+  *   `textContent` sul padre la cancellerebbe al primo disegno.
+  */
+ const nodoFrase=detail.querySelector('[data-ext-frase]');
+ if(nodoFrase){nodoFrase.hidden=!d.frase;(nodoFrase.querySelector('[data-ext-frase-testo]')||nodoFrase).textContent=d.frase||'';}
  const b=detail.querySelector('[data-ext-trust]');b.hidden=!d.fidabile;b.disabled=Boolean(o.caricamento||o.salvataggio)||!o.ambito;b.textContent=o.salvataggio?'Salvataggio…':'Fida';detail.querySelector('[data-ext-nota]').hidden=o.tipo==='skills';
  if(p.fuoco&&!o.caricamento&&!o.salvataggio){const f=p.fuoco;p.fuoco=null;if(f.id===p.scelto&&f.ambito===p.ambito&&!panel.hidden&&doc.activeElement===doc.body){const target=d.fidabile?b:detail.querySelector('h3');if(target.tagName==='H3')target.tabIndex=-1;target.focus({preventScroll:true});}}
 }

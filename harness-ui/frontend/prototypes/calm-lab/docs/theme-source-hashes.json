@@ -1,0 +1,26 @@
+[
+  {
+    "path": "components/impostazioni-campi.js",
+    "sha256": "9c88529c9703fd5658de418411dfbceafa616370771cd3ee0bc4f7530a742154"
+  },
+  {
+    "path": "legacy/app.js",
+    "sha256": "226b66b96ce69cb39b8345ba86c6cd5b77e2ad501aa40d47f67cb7cfcecdb312"
+  },
+  {
+    "path": "styles/temi.css",
+    "sha256": "0cdc2dc64618176287136eeb8e8a94f1df96b3022f9452be3702c1c26472d51d"
+  },
+  {
+    "path": "motion/desktop-scenes.js",
+    "sha256": "ef794e3ea19c331356d6ab997e2ed586a36a54ee98cf7a79e76394942fa72ee3"
+  },
+  {
+    "path": "components/calm-controls.js",
+    "sha256": "525bc5147e544003f56f63dbc06ae414aaf8e66c08f49b52c78474ee690b18d9"
+  },
+  {
+    "path": "design-system/calm-controls.css",
+    "sha256": "9c72491bdfe98b585251d5d5f5708bafb26ce1ba35527dc9537b1f31aa6ba4e1"
+  }
+]

@@ -222,13 +222,19 @@ test('CORSIA2-ATTESA-CABLAGGIO — coda consegnata e reindirizzamento applicato 
    *   del server (`talos.coda`). La forma si cerca allora DENTRO il suo `case`, senza uscirne: senza quel confine la stessa
    *   coppia di righe del reindirizzamento farebbe passare la prova anche con la coda rotta.
    */
-  const dentroIlCase = (evento, dopo) => new RegExp(
-    `case '${evento}': \\{(?:(?!case ')[\\s\\S])*?nascondiAttesaRisposta\\(\\);\\s*appendUserFollowUp\\(evento\\.testo, null, evento\\.immagini\\);${dopo}`,
-  );
-  for (const [nome, forma] of [
-    ['coda consegnata', dentroIlCase('QueuedMessageDelivered', '')],
-    ['reindirizzamento applicato', dentroIlCase('RunRedirectApplied', '\\s*state\\.realSession\\.followUpBubbleInAttesa = true;')],
-  ]) {
-    assert.ok(forma.test(MONOLITE), `${nome}: l’attesa vecchia non viene tolta prima della bolla nuova, e resta sopra la domanda`);
+  for (const evento of ['QueuedMessageDelivered', 'RunRedirectApplied']) {
+    const rami = [...MONOLITE.matchAll(new RegExp(`case '${evento}': \\{(?:(?!case ')[\\s\\S])*`, 'g'))];
+    const ramo = rami.map(m => m[0]).find(testo => testo.includes('appendUserFollowUp(evento.testo'));
+    assert.ok(ramo, `${evento}: manca il percorso del messaggio utente`);
+    const nascondi = ramo.indexOf('nascondiAttesaRisposta();');
+    const appendi = ramo.indexOf('appendUserFollowUp(evento.testo, null, evento.immagini);');
+    const mostra = ramo.indexOf('mostraAttesaRisposta();', appendi);
+    assert.ok(nascondi >= 0 && appendi > nascondi && mostra > appendi,
+      `${evento}: l'attesa deve seguire il nuovo messaggio utente`);
+    assert.ok(ramo.includes('mostraRisultatoDelega(evento)'), `${evento}: la provenienza agente deve avere un percorso distinto`);
+    if (evento === 'RunRedirectApplied') {
+      assert.match(ramo, /if \(!risultatoDelega\) appendUserFollowUp/);
+      assert.match(ramo, /followUpBubbleInAttesa = !risultatoDelega;/);
+    }
   }
 });

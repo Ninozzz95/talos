@@ -28,6 +28,9 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   cerca: 'ricerca nei file',
   leggi: 'lettura di un file',
   scrivi: 'scrittura di un file',
+  // ⛔ BC-59 (owner 17/09): nella riga attività si leggeva «file_edit…». L'attrezzo esiste nel kernel
+  //    dal 16/09 (`talosHarness.mjs:2768`) e non era mai entrato qui: un nome tecnico a schermo.
+  file_edit: 'modifica di un file',
   prova: 'esecuzione dei test',
   shell: 'comando nel terminale',
   naviga: 'apertura di una pagina web',
@@ -87,6 +90,51 @@ export function nomeUmanoAttrezzo(id, catalogo = null) {
   return t(nomeUmanoAttrezzoItaliano(id, catalogo));
 }
 
+/**
+ * Il ripiego quando un attrezzo non ha ancora un nome nostro (attrezzo creato dalla persona, MCP, skill).
+ *
+ * ⛔ 17/09 — due regole dell'owner del 04/09 si toccano qui: «niente nomi tecnici a schermo» e «ripiego ONESTO:
+ *   mai un'etichetta inventata». Restituire l'id grezzo rompeva la prima; «attrezzo senza nome» rompeva la
+ *   seconda e nascondeva perfino il nome che la PERSONA ha dato a un attrezzo suo. ⇒ Il ripiego è il nome stesso,
+ *   reso leggibile e niente di più: `converti_pdf` → «converti pdf», `mcp__github__create_issue` →
+ *   «create issue (github)». L'id intero resta nel `title`, come dettaglio secondario.
+ */
+export function nomeDiRipiegoAttrezzo(id) {
+  const grezzo = typeof id === 'string' ? id.trim() : '';
+  if (!grezzo) return '';
+  const mcp = /^mcp__([^_](?:.*?[^_])?)__(.+)$/u.exec(grezzo);
+  const leggibile = (testo) => testo.replace(/[_-]+/gu, ' ').replace(/\s+/gu, ' ').trim();
+  return mcp ? `${leggibile(mcp[2])} (${leggibile(mcp[1])})` : leggibile(grezzo);
+}
+
+/**
+ * ⭐⭐ BC-78.4, 17/09/2026 — DA DOVE VIENE UN AVVISO DELLA SCANSIONE DEI PLUGIN, in parole.
+ *
+ * Il difetto: nel pannello Estensioni si leggeva «`tool:check_notes`: legge una credenziale e la
+ * manda in rete nello stesso comando». Quel `tool:` e quel nome col trattino basso arrivano dal
+ * server (`src/session-registry.mjs` costruisce `origine: \`tool:${t.nome}\``), che questa corsia non
+ * tocca e che NON deve cambiare: è il contratto, e il nome dell'attrezzo è quello che l'autore del
+ * plugin gli ha dato.
+ *
+ * ⇒ Si traduce QUI, dove si legge, con la stessa regola di tutto il resto di questo file: il
+ *   prefisso diventa una parola («attrezzo», «gancio») e il nome si rende leggibile con il ripiego
+ *   onesto che già esiste — mai inventato, mai nascosto. L'origine grezza resta come dettaglio
+ *   secondario nel `title`, come vuole la regola dell'owner del 04/09.
+ *
+ * @param {string} origine per esempio `tool:check_notes` o `hook:pre-commit`
+ * @returns {string} «attrezzo check notes», «gancio pre commit», o il testo reso leggibile
+ */
+export function origineAvvisoPlugin(origine) {
+  const grezzo = typeof origine === 'string' ? origine.trim() : '';
+  if (!grezzo) return '';
+  const diviso = /^(tool|hook):(.+)$/u.exec(grezzo);
+  if (!diviso) return nomeDiRipiegoAttrezzo(grezzo);
+  const nome = diviso[1] === 'tool'
+    ? (nomeUmanoAttrezzo(diviso[2]) || nomeDiRipiegoAttrezzo(diviso[2]))
+    : nomeDiRipiegoAttrezzo(diviso[2]);
+  return `${t(diviso[1] === 'tool' ? 'attrezzo' : 'gancio')} ${nome}`;
+}
+
 /** Gli id tecnici per cui non abbiamo ancora un nome: un debito che si misura. */
 export function attrezziSenzaNome(ids, catalogo = null) {
   return [...new Set(ids || [])].filter((id) => nomeUmanoAttrezzo(id, catalogo) === null);
@@ -133,6 +181,9 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   cerca: 'Trova file in tutto il progetto, anche in fondo, per nome o per il testo che contengono.',
   leggi: 'Legge un file del progetto.',
   scrivi: 'Riscrive un file del progetto per intero. È una modifica al tuo disco.',
+  // ⛔ BC-59 — la differenza con `scrivi` è la sola cosa che conta per chi legge: questo cambia un
+  //    pezzo e lascia il resto com'è. Se il pezzo non si trova, o si trova due volte, non scrive niente.
+  file_edit: 'Cambia una parte di un file che esiste già e lascia il resto com’è. Se il testo da sostituire non si trova, o compare più di una volta, non scrive niente e lo dice.',
   prova: 'Lancia la suite di test del progetto ed è il giudice: il compito è finito quando passa.',
   shell: 'Esegue un comando nel terminale, dentro la cartella del progetto. È l’attrezzo che può fare qualunque cosa: installare, spostare, cancellare.',
   naviga: 'Apre una pagina web pubblica e ne legge il contenuto. Solo lettura, solo http e https.',

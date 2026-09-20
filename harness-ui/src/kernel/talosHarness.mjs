@@ -48,11 +48,11 @@ SEGNAPOSTO **42.272 token di prompt di sistema a ogni giro**. Aider vince perch�
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash, generateKeyPairSync, randomUUID, sign as firmaCrypto, verify as verificaCrypto } from 'node:crypto'
 import { lookup as risolviDns } from 'node:dns'
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { request as richiestaHttp } from 'node:http'
 import { request as richiestaHttps } from 'node:https'
-import { basename, dirname, join, resolve, sep } from 'node:path'
+import { basename, delimiter as separatoreDiPath, dirname, join, resolve, sep } from 'node:path'
 /* ⛔ Vedi `dormi` in `chiamaConRitenta`: l'attesa fra un ritenta e l'altro deve poter essere SVEGLIATA dallo stop, e `Promise.race` non basta — il timer perdente resta pendente. */
 import { setTimeout as dormiConSegnale } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
@@ -62,6 +62,18 @@ import { imageMessageContent } from '../chat-image-attachments.mjs'
  * che la allowlist di `cerca` era. */
 import { ESTENSIONI_ESCLUSE_PREDEFINITE } from '../elenco-profondo.mjs'
 import { creaFiltroGitignore } from '../gitignore-elenco.mjs'
+/* BLOCCO 6 (B3), 20/09/2026 — l'intestazione onesta del risultato di una shell. Una fonte sola, in
+   un modulo che importano sia il kernel sia `agent-service.mjs` (che non passa di qui). */
+import { etichettaSandbox } from './etichetta-sandbox.mjs'
+/*
+ * ⛔ F15 (17/09/2026) — la GRAMMATICA DEI SEGRETI vive in `path-policy.mjs`, dove già vive
+ * quella dei file di controllo: sono la stessa domanda («questo percorso è speciale?») fatta su
+ * due classi diverse, e tenerle nello stesso posto è il motivo per cui `.provider-runtime.json`
+ * compare in entrambe senza che nessuno debba ricordarselo. Pura, senza dipendenze esterne
+ * (solo `node:fs`/`node:os`/`node:path`) come gli altri tre import qui sopra: il kernel resta
+ * trasportabile nel bundle del banco.
+ */
+import { motivoDaChiedere } from '../path-policy.mjs'
 /*
  * ⛔ L1 (11/09/2026) — TRE costanti pure, non una dipendenza: `CARTELLA_RICERCA`/`NOME_RAPPORTO`
  * sono il posto dove vive il rapporto di una ricerca, e `idRicercaValido` la forma di un id.
@@ -738,6 +750,15 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
                  * frammento di argomenti — stesso schema di 'testo'/'ragionamento'
                  * sopra, zero logica nuova inventata.
                  */
+                /*
+                 * ⭐ OSS-1 (17/09/2026) — `avviatoA` NON si aggiunge qui, ed e' una scelta misurata,
+                 * non una dimenticanza. Questo evento e' il verbale del PARSER («l'indice i e'
+                 * comparso»), e due prove in `talosHarness.test.mjs` (Fase 4) ne confrontano la
+                 * forma per intero: un campo in piu' le faceva rosse — misurato, 2 rosse su 598.
+                 * L'ora del server si timbra dove l'evento AG-UI nasce (`agent-service.mjs`,
+                 * `tool-inizio` → `toolCallStart`), che e' la stessa riga di esecuzione sincrona:
+                 * stesso millisecondo, contratto del parser intatto.
+                 */
                 if (eraNuova) onDelta?.({ tipo: 'tool-inizio', indice: i, toolCallId: toolCalls[i].id, nome: toolCalls[i].function.name })
                 if (pezzo.function?.arguments) onDelta?.({ tipo: 'tool-args', indice: i, toolCallId: toolCalls[i].id, delta: pezzo.function.arguments })
                 /* Comincia una chiamata nuova ⇒ tutte le altre sono chiuse: è qui che si contano le firme, e qui che la valanga si vede al terzo colpo invece che al 398°. */
@@ -1294,6 +1315,22 @@ async function chiamaConRitentaBase({
     const inStreaming = Boolean(onDelta)
     let ultimoStato = null
     let ultimoTesto = ''
+    /*
+     * ⛔⛔⛔ BC-79.2 (17/09/2026) — IL NUMERO CHE NON POTEVA SMENTIRTI.
+     *
+     * L'errore in fondo a questa funzione stampava `dopo ${tentativiMassimi} tentativi`, cioè la
+     * COSTANTE 4, qualunque cosa fosse successo. Ma `siRitenta` esce dal giro al primo colpo per
+     * ogni 4xx che è una RISPOSTA (400, 401, 403, 404, 422): quella frase diceva «dopo 4 tentativi»
+     * dopo UNO solo, e da anni.
+     * ⭐ Misurato sulla base `f29c8e91`, contando le richieste che un motore finto riceve DAVVERO
+     *   (`tests/bc79-2-motore-che-rifiuta-gli-attrezzi.test.mjs`, sonda del 17/09): **1** per
+     *   400/401/404, **4** per 429/503. Il ritento era già quello giusto; a mentire era il numero.
+     * ⛔ Costo del difetto: due diagnosi sbagliate in un giorno — l'agente di BC-76 e io — che
+     *   hanno letto «quattro tentativi» e sono andati a cercare un ritento inesistente. Una misura
+     *   che risponde sempre uguale non sta misurando.
+     * ⇒ Qui si conta il numero VERO, e basta. Nessuna regola di ritento è cambiata da questa riga.
+     */
+    let tentativiFatti = 0
     for (let tentativo = 0; tentativo < tentativiMassimi; tentativo += 1) {
         /*
          * ⛔ 08/09/2026 — chi ha premuto «Ferma» non aspetta il prossimo
@@ -1305,6 +1342,9 @@ async function chiamaConRitentaBase({
             fermata.fermatoSuRichiesta = true
             throw fermata
         }
+        /* ⛔ Si conta QUI e non in testa al giro: un tentativo fermato prima di chiamare non è un
+           tentativo, e conterebbe una richiesta che non è mai partita. */
+        tentativiFatti = tentativo + 1
         const r = await fetchDiRete('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: { Authorization: `Bearer ${chiave}`, 'Content-Type': 'application/json' },
@@ -1361,10 +1401,21 @@ async function chiamaConRitentaBase({
              * chiuso. `AbortSignal.any` (Node ≥ 20.3; qui gira v24.18.0)
              * compone i due: chiude chi arriva primo, e il timeout resta
              * intatto per chi non ha nessuno stop.
+             *
+             * ⛔⛔⛔ P0 · punto 7 (16/09/2026) — IL TIMEOUT SE N'È ANDATO, LO STOP È RIMASTO.
+             * `AbortSignal.timeout(180_000)` era una deadline TOTALE sulla fetch di ogni giro,
+             * streaming compreso: contava anche mentre il modello stava emettendo token, e a tre
+             * minuti esatti tagliava una risposta viva. È la stessa forma del tetto sui GIRI tolto
+             * l'11/09 («avevamo detto che non c'erano limiti»): un tetto sulla durata non protegge
+             * dal guasto, incontra per primo il compito lungo ma SANO.
+             * ⇒ Qui resta SOLO `segnaleStop`. Ciò che protegge dal canale morto è il failsafe di
+             *   INATTIVITÀ del trasporto (`src/generation-idle.mjs`, `TALOS_GENERATION_IDLE_MS`),
+             *   che si azzera a ogni byte — commenti SSE compresi — e vale per tutti i fornitori e
+             *   per il motore locale. Un tetto di durata punisce chi lavora; un tetto di inattività
+             *   punisce solo chi è morto.
+             * ⛔ Il kernel vive in DUE copie (desktop e mobile): questa riga va riportata anche là.
              */
-            signal: segnaleStop
-                ? AbortSignal.any([segnaleStop, AbortSignal.timeout(180_000)])
-                : AbortSignal.timeout(180_000),
+            signal: segnaleStop,
         })
         if (r.ok) {
             if (inStreaming) {
@@ -1406,7 +1457,7 @@ async function chiamaConRitentaBase({
             catch { /* lo stop ha cancellato il timer: il giro dopo dirà perché ci fermiamo */ }
         }
     }
-    const e = new Error(`HTTP ${ultimoStato} dopo ${tentativiMassimi} tentativi: ${ultimoTesto}`)
+    const e = new Error(`HTTP ${ultimoStato} dopo ${tentativiFatti} ${tentativiFatti === 1 ? 'tentativo' : 'tentativi'}: ${ultimoTesto}`)
     e.stato = ultimoStato
     e.limitatoDalFornitore = siRitenta(ultimoStato)
     throw e
@@ -3471,9 +3522,55 @@ export async function elencaDaCartella(disco, base) {
         /* ⛔ Una sottocartella illeggibile (permessi, link rotto) non fa cadere l'elenco INTERO:
            sparisce lei, non tutto il resto. Alla radice il caso non capitava mai; aprendo una
            cartella a scelta del modello capita. */
-        .map(async (v) => (await disco.elenca(`${prefisso}${v.nome}`).catch(() => []))
-            .map((f) => `${prefisso}${v.nome}/${f.nome}`)))
-    return [...voci.filter((v) => !v.cartella).map((v) => `${prefisso}${v.nome}`), ...dentro.flat()].join('\n')
+        .map(async (v) => {
+            const figli = await disco.elenca(`${prefisso}${v.nome}`).then((f) => f, () => null)
+            /*
+             * ⛔⛔⛔ CLI-REQ-07, punto 2 (17/09/2026) — UNA SOTTOCARTELLA SENZA FILE NON SPARISCE.
+             *   Una cartella qui si vede solo ATTRAVERSO i suoi figli, quindi una che non ne ha
+             *   non compariva affatto: il modello non poteva sapere che esiste. Misurato prima
+             *   della cura: una radice che contiene solo `sub/` vuota rispondeva `""`.
+             * ⛔ Si nomina SOLO la cartella LETTA e trovata vuota (`[]`), mai quella ILLEGGIBILE
+             *   (`null`): quella continua a sparire, ed è un comportamento voluto, provato e
+             *   commentato qui sopra. Sono due fatti diversi — «so che è vuota» e «non sono
+             *   riuscito a guardarci dentro» — e confonderli sarebbe la solita coppia di stati
+             *   fatta passare per uno.
+             * ⛔ La barra finale c'è perché è l'unico segno che quella riga è una CARTELLA. Resta
+             *   una differenza dichiarata con le cartelle di secondo livello (`src/kernel/motore`,
+             *   senza barra): quella forma è confrontata BYTE PER BYTE dal banco e non si tocca
+             *   per coerenza estetica.
+             */
+            if (figli === null) return []
+            if (figli.length === 0) return [`${prefisso}${v.nome}/`]
+            return figli.map((f) => `${prefisso}${v.nome}/${f.nome}`)
+        }))
+    const righe = [...voci.filter((v) => !v.cartella).map((v) => `${prefisso}${v.nome}`), ...dentro.flat()]
+    /*
+     * ⛔⛔⛔ CLI-REQ-07, punto 1 (17/09/2026) — UNA CARTELLA VUOTA NON RISPONDE IL VUOTO.
+     *
+     *   L'owner ha avviato TALOS in una cartella nuova e vuota: il modello ha chiamato `elenca`
+     *   QUATTRO volte (con `percorso` `""` e `"."`), ogni volta senza una riga di uscita, e poi
+     *   gli ha detto che l'elenco «non è arrivato», offrendosi di riprovare. Gli attrezzi
+     *   funzionavano: `scrivi` e `leggi` subito dopo sono andati. ⇒ Una stringa vuota non è una
+     *   risposta: è indistinguibile da un attrezzo che non ha risposto, ed è il caso in cui il
+     *   risultato giusto ha lo stesso aspetto di quello sbagliato.
+     *   Riprodotto qui prima di curare: `elencaDaCartella({elenca: async () => []}, '')` → `""`.
+     *
+     * ⛔ La forma segue quella che il kernel usa già per un esito vuoto, non una inventata:
+     *   `cerca` risponde `no file matches. Scanned N files. Try a shorter or different "testo".`
+     *   — minuscolo, in inglese come tutti i messaggi di questi attrezzi, il fatto negativo per
+     *   primo, e poi cosa farne. Qui: il fatto, QUALE cartella, e che è la risposta INTERA.
+     * ⛔ Il nome dell'attrezzo e i suoi parametri non cambiano, e nemmeno l'uscita di una cartella
+     *   che ha qualcosa: il banco confronta byte per byte, e questo ramo prima non produceva nulla
+     *   da confrontare.
+     * ⛔ Nessun preambolo si gonfia: `elencaDaCartella` ha UN solo chiamante di produzione, il
+     *   ramo `elenca` di questo file. `contestoDelProgetto` costruisce la mappa con
+     *   `mappa-cartelle.mjs`/`costo-elenco.mjs` e non passa di qui (verificato col grep, 17/09).
+     */
+    if (righe.length === 0) {
+        const quale = base ? `"${base}" is empty` : 'the workspace root is empty'
+        return `no files and no folders. ${quale} — this is the complete listing, not a failure.`
+    }
+    return righe.join('\n')
 }
 
 /**
@@ -3776,6 +3873,223 @@ const MOTIVO_FERMATO_CHIEDENDO = 'fermato su richiesta mentre aspettavo la tua a
  */
 const MARCA_FERMATO_MENTRE_GIRAVA = '⛔ Fermato su richiesta:'
 
+/**
+ * ⛔⛔⛔ BC-57 — «exit 0» E LA FORMA ESATTA DI «I TEST PASSANO».
+ *
+ * Segnalato sul trascritto dell'app installata 0.1.13 (sessione `4c3e1649`, cartella
+ * una cartella senza `package.json`, `comandoProva: 'npm test'`): `prova` ha risposto `exit 0` con
+ * uscita VUOTA su una cartella che non ha nemmeno un `package.json`. Il modello ci costruisce
+ * sopra il resto del task, e il promemoria «scritture senza prova» si azzera: il risultato
+ * sbagliato coincide con quello giusto, quindi nessuno lo guarda.
+ *
+ * ⛔ MISURATO il 17/09/2026 prima di scrivere questa funzione (Node v24.18.0, Windows 11), non
+ *   dedotto: lo stesso `spawn(comando, {cwd, shell:true})` su una cartella senza `package.json`
+ *   esce **4294963238** (`-4058` senza segno, l'ENOENT di libuv) con 436 byte su stderr, e npm
+ *   dichiara di aver cercato il file risalendo fino alla radice del disco (`npm error path
+ *   C:\package.json`). Identico passando dal kernel. ⇒ La forma «exit 0 + vuoto» NON e' stata
+ *   riprodotta su questo codice — l'unica via misurata per ottenerla e' un `comandoProva` che per
+ *   cmd.exe non fa niente (solo spazi, oppure `rem`: entrambi escono 0 muti). Verbale in
+ *   `tests/bc57-prova-senza-suite.test.mjs`.
+ *
+ * ⇒ La cura non aspetta la causa, perche' non dipende da quale sia: un attrezzo DEDICATO ai test
+ *   deve saper distinguere «la suite e' rossa» da «la suite non c'e'», e oggi non lo sapeva.
+ *
+ * ⛔ Ricerca 17/09/2026 su come lo trattano gli altri: ne' Claude Code ne' Codex CLI hanno un
+ *   attrezzo equivalente a `prova` — i test si lanciano con l'attrezzo di shell generico
+ *   (developers.openai.com/codex/cli, letto il 17/09/2026: Codex «can run shell commands
+ *   including build steps, test suites, and linters, and can react to the output»; per Claude
+ *   Code la stessa cosa passa da Bash). Non c'e' niente da copiare: da loro «il comando di test
+ *   non c'e'» e' semplicemente l'errore del comando. La garanzia in piu' e' nostra da scrivere.
+ *
+ * ⛔ CONSERVATIVA PER SCELTA: davanti a un comando che non sa leggere (operatori di shell,
+ *   variabili, sottoshell) questa funzione risponde `null`, cioe' «non blocco». Un falso rifiuto
+ *   costa una prova non lanciata; un falso via libera costa un `exit 0` inventato — e sono i due
+ *   errori che NON si equivalgono.
+ *
+ * ⛔⛔ E IL PREZZO DI QUELLA SCELTA, DETTO PER INTERO (misurato il 17/09, non dedotto):
+ *   `comandoProva: 'rem & rem'` esce **0 con uscita vuota** — cioe' la forma esatta di BC-57 —
+ *   e passa di qui indisturbata, perche' l'`&` fa rispondere «non giudico». ⇒ **BC-57 e' chiuso
+ *   per i comandi SEMPLICI, non per tutti**, e nessun changelog puo' scrivere altro.
+ * ⛔ Seconda falla della stessa famiglia, aperta: `node --test` in una cartella senza test esce
+ *   **0** stampando «tests 0». Qui il programma esiste e il comando e' semplice, quindi il cancello
+ *   lo lascia passare — giustamente, perche' il difetto non e' nel comando: e' che «zero test
+ *   eseguiti» e «tutti i test passano» hanno lo stesso codice di uscita. Curarlo vuole leggere
+ *   l'USCITA dei runner, non i loro argomenti: e' un'altra riga di lavoro, registrata.
+ *
+ * @returns {Promise<string|null>} il motivo, se una suite riconoscibile manca; `null` se c'e'.
+ */
+async function suiteMancante(comando, cartella) {
+    const testo = String(comando ?? '').trim()
+    if (testo === '') return 'il comando di prova e vuoto'
+    /* ⛔ Un comando composto ha piu' programmi dentro: leggerne uno solo direbbe una cosa falsa sugli altri. */
+    if (/[&|<>^%()"`$]/.test(testo)) return null
+    const pezzi = testo.split(/\s+/)
+    const programma = pezzi[0]
+    if (/^(?:npm|pnpm|yarn|bun)(?:\.cmd|\.exe)?$/i.test(programma)) {
+        const gestore = programma.replace(/\.(?:cmd|exe)$/i, '').toLowerCase()
+        const resto = pezzi.slice(1)
+        /*
+         * ⛔ WORKSPACE — lo script vive in un ALTRO manifesto. `npm run test --workspace=x` cerca
+         *   `scripts.test` in `x/package.json`, non nella radice (docs.npmjs.com/cli/v11/using-npm/
+         *   workspaces, letto il 17/09/2026: `-w`, `-ws`, `--workspace`, `--workspaces`). Risolvere
+         *   quale workspace sia vorrebbe leggere i glob della radice e i manifesti di ognuno: fuori
+         *   da cio' che questa funzione deve sapere ⇒ non si giudica, si esegue.
+         */
+        if (resto.some((a) => /^-w(?:=|$)|^-ws$|^--workspaces?(?:=|$)/i.test(a))) return null
+        const script = nomeDelloScript(resto, gestore)
+        if (script === null) {
+            /*
+             * Non nomina uno script: `npm ci`, `yarn --version`, e soprattutto `bun test`, che
+             * invoca il runner INCORPORATO di Bun e IGNORA `scripts.test` (bun.com/docs/test e
+             * oven-sh/bun discussion #26312, letti il 17/09/2026: «bun test» e' un namespace
+             * riservato al runner nativo). Resta l'unica domanda sensata: il programma esiste?
+             */
+            return programmaEseguibileEsiste(programma, cartella)
+                ? null
+                : `il programma "${programma}" non esiste (non e un eseguibile ne in questa cartella ne sul PATH)`
+        }
+        /*
+         * ⛔⛔⛔ B1, bocciatura del controllore avversariale (17/09, stesso giorno della cura).
+         *
+         * La prima versione guardava SOLO `join(cartella, 'package.json')`, e rifiutava cio' che
+         * npm ESEGUE: npm risale l'albero fino alla radice del disco (misurato — `npm error path
+         * C:\package.json` da una cartella in %TEMP%), quindi in un monorepo un `npm test` lanciato
+         * da una sottocartella fa girare la suite del GENITORE. Riprodotto: radice con
+         * `scripts.test`, sottocartella vuota ⇒ npm esce 0, il cancello diceva `exit 127`. Un falso
+         * «non provato» su una suite che gira: l'errore opposto a quello che questa funzione cura.
+         * ⛔ E la strettezza non serviva nemmeno al caso che l'ha fatta nascere: sopra il Desktop
+         *   non c'e' nessun `package.json` fino a `C:\`, quindi quel caso resta rifiutato lo stesso.
+         * ⇒ Si guarda DOVE GUARDA NPM, e la regola si applica a QUEL manifesto.
+         */
+        const manifesto = manifestoPiuVicino(cartella)
+        if (manifesto === null) return `nessun package.json da qui fino alla radice del disco (serve a "${testo}")`
+        let letto
+        try { letto = JSON.parse(await readFile(manifesto, 'utf8')) }
+        catch (e) { return `${manifesto} non e leggibile come JSON (${e.message})` }
+        const riga = letto?.scripts?.[script]
+        if (typeof riga !== 'string' || riga.trim() === '') return `${manifesto} non dichiara scripts.${script}`
+        return null
+    }
+    if (!programmaEseguibileEsiste(programma, cartella)) {
+        return `il programma "${programma}" non esiste (non e un eseguibile ne in questa cartella ne sul PATH)`
+    }
+    return null
+}
+
+/**
+ * Il primo `package.json` risalendo l'albero, come fa npm — e ci si ferma alla radice del disco,
+ * dove `dirname` smette di cambiare. ⛔ `null` quando non ce n'e' nessuno: e' il caso «Desktop» di
+ * BC-57, e resta un rifiuto.
+ */
+function manifestoPiuVicino(cartella) {
+    let corrente = resolve(cartella)
+    for (;;) {
+        const candidato = join(corrente, 'package.json')
+        if (existsSync(candidato)) return candidato
+        const sopra = dirname(corrente)
+        if (sopra === corrente) return null
+        corrente = sopra
+    }
+}
+
+/**
+ * Da `['run','test:kernel']` a `'test:kernel'`, da `['test']` (o `['t']`) a `'test'`.
+ * ⛔ `null` quando non e' un «lancia uno script» (`npm ci`, `npm install`, `yarn --version`…):
+ * in quel caso non c'e' nessun campo da cercare in `package.json`, e inventarne uno sarebbe la
+ * stessa cosa che questo file rifiuta di fare ovunque.
+ * ⛔ E `bun test` NON e' uno script: Bun riserva quel nome al proprio runner incorporato e ignora
+ *   `scripts.test` (bun.com/docs/test, oven-sh/bun #26312, 17/09/2026). `bun run test`, invece,
+ *   e' l'alias di sempre per lo script — la differenza la fa il gestore, non la parola.
+ */
+function nomeDelloScript(argomenti, gestore) {
+    const utili = argomenti.filter((a) => !a.startsWith('-'))
+    if (utili.length === 0) return null
+    if (utili[0] === 'run' || utili[0] === 'run-script') return utili[1] ?? null
+    if (utili[0] === 'test' || utili[0] === 't' || utili[0] === 'tst') return gestore === 'bun' ? null : 'test'
+    return null
+}
+
+/**
+ * ⛔ Il PATH si guarda a mano invece di lanciare `where`/`which`: lanciare un processo per
+ * scoprire se se ne puo' lanciare un altro costa un processo in piu' a ogni `prova`, e su Windows
+ * `where` stampa anche i file NON eseguibili. Qui si applica la stessa regola che applica la
+ * shell: un nome con un separatore e' un percorso, altrimenti si cerca sul PATH, e su Windows si
+ * provano le estensioni di `PATHEXT`.
+ */
+function programmaEseguibileEsiste(programma, cartella) {
+    const nudo = programma.replace(/^["']|["']$/g, '')
+    if (nudo === '') return false
+    const suWindows = process.platform === 'win32'
+    const estensioni = suWindows
+        ? ['', ...(process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)]
+        : ['']
+    const haGiaUnPercorso = nudo.includes('/') || nudo.includes('\\')
+    const cartelle = haGiaUnPercorso
+        ? [cartella]
+        : [...(suWindows ? [cartella] : []), ...(process.env.PATH ?? process.env.Path ?? '').split(separatoreDiPath).filter(Boolean)]
+    for (const dove of cartelle) {
+        for (const estensione of estensioni) {
+            const candidato = resolve(dove, `${nudo}${estensione}`)
+            try { if (existsSync(candidato)) return true }
+            catch { /* un percorso illegale non e' un eseguibile: si prova il prossimo */ }
+        }
+    }
+    return false
+}
+
+/** ⛔ 127 = «command not found», il codice che una shell usa da sempre. Non 0, mai 0: vedi BC-57. */
+const USCITA_NESSUNA_SUITE = 127
+
+/*
+ * ⛔⛔⛔ LA SECONDA FALLA DI `prova`: UNA SUITE CHE GIRA **ZERO** TEST ESCE 0.
+ *
+ *   Riprodotto il 20/09/2026 in una cartella con `"scripts": {"test": "node --test"}` e nessun file
+ *   di test:
+ *
+ *       ℹ tests 0
+ *       ℹ fail 0
+ *       USCITA: 0
+ *
+ *   ⇒ «zero test eseguiti» e «tutti i test passano» hanno **lo stesso codice di uscita**: il modello
+ *     scrive, lancia `prova`, legge `exit 0` e crede di aver verificato. È la forma peggiore di
+ *     falso verde, ed è quella registrata nel commento di `suiteMancante` come «seconda falla della
+ *     stessa famiglia». Il cancello statico NON la vede — e non può: il programma esiste, lo script
+ *     esiste, il comando è semplice. Come dice quel commento, **curarla vuole leggere l'USCITA dei
+ *     runner, non i loro argomenti**.
+ *
+ * ⛔ E SI LEGGE LA SUA DICHIARAZIONE, NON SI INDOVINA IL CODICE D'USCITA.
+ *   La ricerca del 20/09/2026 NON ha dato i codici d'uscita di Jest, Mocha e pytest per il caso
+ *   «nessun test» — solo Vitest è documentato (`passWithNoTests`, default `false`: senza il flag
+ *   esce 1). ⇒ Qui NON si scrive una mappa di codici che non ho verificato: si riconosce la
+ *   **frase con cui il runner dichiara di non aver trovato niente**, che è un'affermazione sua.
+ *     · **Node** — `ℹ tests 0` nella riga del suo reporter: misurato qui il 20/09/2026.
+ *     · **Mocha** — `Error: No test files found`: mochajs/mocha #3650/#3654, «error and exit, dont
+ *       warn» (l'esito del cambio è che ora è un errore con uscita, non un avviso).
+ *     · **Jest** — `No tests found` (il messaggio della sua scoperta dei file).
+ *     · **Vitest** — `No test files found` (il messaggio che accompagna l'uscita 1 di default,
+ *       docs `passWithNoTests`).
+ *     · **pytest** — **NON incluso di proposito**: nessuna fonte verificata né per il messaggio né
+ *       per il codice. Meglio un buco dichiarato che una regola inventata — una regola sbagliata
+ *       qui produce **falsi rossi**, che sono peggio del difetto che cura.
+ *
+ * ⛔ E LA GUARDIA È STRETTA DI PROPOSITO: si applica **solo con uscita 0**. Un'uscita diversa da
+ *   zero è già un fallimento e non ha bisogno di nessuna lettura del testo — così il rischio di
+ *   scambiare per «zero test» una suite che si limita a STAMPARE quelle parole resta confinato al
+ *   solo caso che vogliamo prendere.
+ */
+const DICHIARAZIONI_ZERO_TEST = Object.freeze([
+    /(?:^|\n)\s*(?:ℹ\s*)?tests\s+0\s*(?:\n|$)/i,   // Node — riga del reporter, misurata
+    /no test files found/i,                        // Mocha
+    /no tests found/i,                             // Jest
+]);
+
+/** `true` se l'esito dichiara che NON è stato eseguito nessun test. Vedi la nota sopra. */
+export function provaSenzaTest(codice, testo) {
+    if (codice !== 0) return false
+    const uscita = String(testo ?? '')
+    return DICHIARAZIONI_ZERO_TEST.some((r) => r.test(uscita))
+}
+
 function eseguiProva(comando, cartella, { segnaleStop } = {}) {
     return new Promise((risolvi) => {
         const p = spawn(comando, { cwd: cartella, shell: true, windowsHide: true, env: ambienteSenzaCredenziali() })
@@ -3793,10 +4107,41 @@ function eseguiProva(comando, cartella, { segnaleStop } = {}) {
         p.on('close', (codice) => {
             clearTimeout(timer)
             sciogli()
-            const uscita = uscitaUtile((insieme || `${fuori}\n${errori}`).trim(), 4_000, 0.25)
-            risolvi(fermatoSuRichiesta
-                ? { codice: USCITA_FERMATO_SU_RICHIESTA, fermatoSuRichiesta: true, testo: `${uscita}\n\n${MARCA_FERMATO_MENTRE_GIRAVA} la prova e stata interrotta mentre girava.`.trim() }
-                : { codice, testo: uscita })
+            /* ⛔ IL TESTO GREZZO, non quello troncato: `uscitaUtile` taglia a 4.000 caratteri, e su
+               una suite lunga le righe dei contatori stanno in FONDO. Leggendo il troncato, il
+               controllo qui sotto non vedrebbe proprio il caso che deve prendere. Vedi
+               `provaSenzaTest`. */
+            const grezzo = (insieme || `${fuori}\n${errori}`).trim()
+            const uscita = uscitaUtile(grezzo, 4_000, 0.25)
+            if (fermatoSuRichiesta) {
+                risolvi({ codice: USCITA_FERMATO_SU_RICHIESTA, fermatoSuRichiesta: true, testo: `${uscita}\n\n${MARCA_FERMATO_MENTRE_GIRAVA} la prova e stata interrotta mentre girava.`.trim() })
+                return
+            }
+            /*
+             * ⛔⛔ UNA PROVA CHE NON HA ESEGUITO NESSUN TEST NON È UNA PROVA PASSATA.
+             *   Il runner esce 0 dichiarando «tests 0»: senza questo controllo il modello legge
+             *   `exit 0` e crede di aver verificato. Si risponde col codice della suite mancante —
+             *   **127**, non un codice nuovo — perché è lo stesso fatto: *niente è stato verificato*.
+             *   È anche il codice che la riga dei Processi già traduce in «Non eseguito» invece che
+             *   in un pallino rosso: una prova che non è partita non è una prova fallita.
+             */
+            if (provaSenzaTest(codice, grezzo)) {
+                risolvi({
+                    codice: USCITA_NESSUNA_SUITE,
+                    /*
+                     * ⛔ Il conteggio dichiarato si CITA, non si parafrasa: è la prova di che cosa è successo.
+                     * ⛔⛔ E LA TESTATA NON SI SCRIVE QUI — 20/09/2026, quarto referto avversario: la
+                     *   scriveva anche il chiamante, che avvolge ogni esito come `exit ${codice}\n${testo}`
+                     *   (`:8659`, `:8669`, `:8771`), e il risultato era **due volte** `exit 127`: una
+                     *   resta a schermo come riga tecnica, perché lo strip ne toglie una sola.
+                     *   Il ramo fratello qui sotto (`testo: uscita`) non la scrive: era questo l'unico
+                     *   fuori posto. Il codice viaggia in `codice`, la testata la mette chi lo avvolge.
+                     */
+                    testo: `nessuna suite trovata: il runner ha eseguito ZERO test, quindi niente e stato verificato.\n${uscita}`,
+                })
+                return
+            }
+            risolvi({ codice, testo: uscita })
         })
         p.on('error', (e) => {
             clearTimeout(timer)
@@ -3933,6 +4278,138 @@ export function primoProgramma(comando) {
     return String(comando).trim().split(/\s+/)[0] || ''
 }
 
+/**
+ * ⛔⛔⛔ BC-54, 16/09/2026 — LA RIGA PASSAVA DA DUE SHELL, NON DA UNA.
+ *
+ * Il modello dell'audit aveva imparato a evitare `$` dappertutto per riuscire a finire il
+ * lavoro: `echo '$HOME'` stampava `/root` anche fra apici singoli, `false; echo $?` stampava
+ * `0`, e `X=42 sh -c '…'` arrivava al figlio con `X` vuota. Non era bash che sbagliava: era
+ * `wsl.exe -d <distro> -- bash -lc "<script>"`, dove `--` consegna la riga alla **shell
+ * predefinita della distro**, che la espande UNA VOLTA prima che il nostro `bash -lc` la veda.
+ * Per quella shell esterna gli apici singoli dello script stanno dentro le virgolette doppie
+ * dell'argomento, quindi non proteggono niente.
+ *
+ * Misurato di nuovo il 17/09/2026 sulla distro predefinita (Ubuntu, WSL 2.7.11.0), stesso
+ * script nei due modi:
+ *   `--`      → A:/root   B:/root   C:0   D:X=
+ *   `--exec`  → A:$HOME   B:/root   C:1   D:X=42
+ *
+ * Fonte: Microsoft Learn, «Basic commands for WSL» (pagina aggiornata 02/06/2026, letta il
+ * 17/09/2026) e `wsl.exe --help` di questa macchina (WSL 2.7.11.0, letto il 17/09/2026):
+ *   `--exec, -e <CommandLine>` — «Esegui il comando specificato senza usare la shell Linux
+ *   predefinita»; `--` — «Passa la riga di comando rimanente senza modifiche», cioè proprio
+ *   alla shell predefinita. Un solo token di differenza, uno strato di shell in meno.
+ *
+ * ⇒ L'argv si costruisce QUI, in un posto solo. Il difetto è sopravvissuto perché il
+ *   separatore era ricopiato in ogni chiamata: finché è una costante ripetuta, ricordarsene
+ *   è un compito di memoria, e quelli si perdono.
+ */
+export function argomentiWslPerScript(distro, script) {
+    return ['-d', distro, '--exec', 'bash', '-lc', script]
+}
+
+/**
+ * ⛔⛔⛔ BC-55, 16/09/2026 — IL RIPIEGO AUTOMATICO GUARDAVA IL PRIMO TOKEN NUDO.
+ *
+ * Con `dove: null` (il default finché l'interfaccia non espone la scelta) si decideva comando
+ * per comando chiedendo a WSL se il PRIMO TOKEN esisteva. Ma il primo token di
+ * `X=abc; echo "[$X]"` è `X=abc;`, quello di `(cd a && ls)` è `(cd`: nessuno dei due è un
+ * programma, quindi «non c'è in WSL» ⇒ cmd.exe, che risponde «"X" non è riconosciuto come
+ * comando interno o esterno» e non capisce né `;` né `printf`. Il modello vedeva due sistemi
+ * operativi diversi a seconda di come scriveva la riga, senza che nessuno l'avesse scelto.
+ *
+ * ⛔ Misurato il 17/09/2026, e CORREGGE la scheda: `export Y=7; …` finiva già in WSL —
+ *   `command -v export` risponde `export` (exit 0) perché in bash i builtin si risolvono. Il
+ *   suo `Y=` era BC-54, non l'instradamento. E `dir`, che sembra il controcaso ovvio, esiste
+ *   in Linux (`/usr/bin/dir`, coreutils): i veri assenti misurati sono `tasklist`, `findstr`,
+ *   `ipconfig`, `ver`, `reg`.
+ *
+ * Ricerca 17/09/2026 — la forma giusta è una scelta DICHIARATA, non un indovinello per riga:
+ * Codex CLI su Windows sceglie l'ambiente all'installazione (nativo con sandbox AppContainer
+ * in PowerShell, oppure WSL2) e nell'app lo si cambia dalle Impostazioni, mai comando per
+ * comando (codex.danielvaughan.com, «Codex CLI on Windows: Native Sandbox, WSL Integration»,
+ * 01/04/2026; developers.openai.com/codex/app/windows). È lo stesso commento D-10F qui sotto.
+ * ⇒ Questa euristica NON è la cura definitiva: è ciò che rende onesto il `null` finché la
+ *   scelta non è esposta. Quando `dove` sarà sempre valorizzato, questa funzione non serve più.
+ *
+ * L'euristica è dichiarata, non un parser: i caratteri sono quelli che POSIX chiama da citare
+ * («The application shall quote the following characters if they are to represent themselves:
+ * `| & ; < > ( ) $ ` \ " ' <space> <tab> <newline>`», The Open Group Base Specifications Issue 7,
+ * 2018 edition, §2.2 Quoting, letto il 17/09/2026), meno quelli che cmd.exe condivide e che
+ * comparirebbero in un comando Windows del tutto normale. Esistono parser veri (`mvdan-sh`,
+ * `bash-parser`): qui non entra una dipendenza nuova per una domanda a cui basta un sì/no,
+ * e il prezzo è dichiarato — l'euristica può solo MANDARE IN PIÙ roba a WSL, mai toglierne,
+ * perché resta in OR con la prova del programma vero.
+ *
+ * ⛔ Le tre esclusioni, ognuna con la sua ragione misurata:
+ *   · `"` — le virgolette doppie sono di casa anche su cmd (`findstr /C:"a b"`), e il loro
+ *     CONTENUTO non è sintassi: si toglie prima di guardare, altrimenti
+ *     `mio.exe "C:\Program Files (x86)\x"` verrebbe spedito in Linux.
+ *   · `<` `>` — cmd redirige con gli stessi segni: non distinguono niente.
+ *   · `\` — è il separatore di percorso di Windows, non una fuga.
+ *
+ * ⛔⛔⛔ LA TILDE IN TESTA, aggiunta il 17/09/2026 dopo una BOCCIATURA — ed è la parte che
+ *   spiega perché questa funzione e la sonda `command -v` sono due facce della stessa cosa.
+ *   Citare il token nella sonda (vedi `programmaDisponibileInWsl`) spegne l'espansione della
+ *   tilde: POSIX §2.6.1 vuole «an unquoted <tilde> character at the beginning of a word», e
+ *   §2.2.3 elenca ciò che sopravvive alle virgolette doppie — `$`, l'apice inverso, la barra
+ *   rovescia — e la tilde NON c'è (The Open Group Base Specifications Issue 7, 2018 edition,
+ *   letto il 17/09/2026). Misurato lo stesso giorno con lo script davvero presente in `~`:
+ *     `command -v ~/talos-p0bis-prova.sh`   → `/root/talos-p0bis-prova.sh`, exit 0
+ *     `command -v "~/talos-p0bis-prova.sh"` → niente, exit 1
+ *   ⇒ La sonda rispondeva «non c'è in WSL» e `~/script.sh` finiva su cmd.exe: «"~" non è
+ *     riconosciuto come comando interno o esterno». Regressione VERA, trovata da un revisore.
+ *   ⇒ La cura NON è togliere gli apici (servono davvero: senza, un primo token come `` `id` ``
+ *     lo esegue la sonda). È che una riga che comincia con `~` non è una domanda per la sonda:
+ *     cmd.exe non ha la home con la tilde, quindi `~` in testa è sintassi solo POSIX e decide
+ *     da solo. Vale per il PRIMO token e basta — `C:\~tmp\x.exe` e `dir~1` (il nome corto 8.3)
+ *     hanno la tilde ma non in testa, e restano su Windows.
+ *
+ * ⛔ IL PREZZO, dichiarato e NON curato in questo giro (deciso col coordinatore): un apostrofo
+ *   dentro un percorso Windows NON citato — `mio.exe C:\Users\D'Angelo\x.txt` — viene letto
+ *   come quoting POSIX, e quella riga va in WSL dove fallisce. Citato fra virgolette doppie,
+ *   che è la forma che quel percorso vuole su Windows comunque, sparisce col resto e la riga
+ *   resta su Windows. La strada per chiuderlo c'è — un numero DISPARI di apici non può essere
+ *   quoting, perché in bash sarebbe una citazione non chiusa — e aspetta un suo giro.
+ */
+
+/* ⛔ Un nome POSIX: lettera o `_`, poi lettere/cifre/`_` (§2.9.1, assegnazione come prefisso di comando). */
+const ASSEGNAZIONE_IN_TESTA = /^[A-Za-z_][A-Za-z0-9_]*=/
+
+/* ⛔ La tilde all'INIZIO della riga: `~/…`, `~`, `~utente/…`. Mai in mezzo (§2.6.1: inizio di parola). */
+const TILDE_IN_TESTA = /^~(\/|$|[A-Za-z0-9._-]*\/)/
+
+/* ⛔ I metacaratteri che cmd.exe NON condivide, o che qui significano «è uno script, non un programma». */
+const METACARATTERI_POSIX = /[;|&$`']|\n/
+
+/*
+ * I builtin e le parole chiave che una shell POSIX esegue senza che esista un file nel PATH.
+ * ⛔ In pratica quasi tutti passerebbero comunque (`command -v` risolve i builtin di bash,
+ * misurato), ma qui la risposta arriva SENZA un sottoprocesso e senza dipendere dal fatto che
+ * la prova riesca: una decisione che non ha bisogno di WSL per sapere che vuole WSL.
+ */
+const PRIME_PAROLE_POSIX = new Set([
+    '.', ':', '[[', '{', '!', 'alias', 'bg', 'break', 'case', 'cd', 'command', 'continue',
+    'declare', 'do', 'done', 'elif', 'else', 'esac', 'eval', 'exec', 'export', 'fg', 'fi',
+    'for', 'function', 'getopts', 'hash', 'if', 'jobs', 'local', 'read', 'readonly', 'return',
+    'select', 'set', 'shift', 'source', 'then', 'times', 'trap', 'type', 'typeset', 'ulimit',
+    'umask', 'unalias', 'unset', 'until', 'wait', 'while',
+])
+
+/** ⭐ Vera se la riga è uno SCRIPT di shell POSIX e non l'invocazione di un programma nudo. */
+export function rigaVuoleUnaShellPosix(comando) {
+    const riga = String(comando ?? '').trim()
+    if (riga === '') return false
+    /* Le virgolette doppie e ciò che contengono spariscono PRIMA di cercare la sintassi: dentro
+       sono argomenti, e cmd.exe le scrive uguali. Una virgoletta spaiata resta e vale come tale. */
+    const nuda = riga.replace(/"(?:[^"\\]|\\.)*"/g, '""')
+    if (ASSEGNAZIONE_IN_TESTA.test(nuda)) return true
+    if (TILDE_IN_TESTA.test(nuda)) return true
+    if (nuda.startsWith('(')) return true
+    if (METACARATTERI_POSIX.test(nuda)) return true
+    return PRIME_PAROLE_POSIX.has(primoProgramma(nuda))
+}
+
 export function convertiPercorsoWsl(percorsoWindows) {
     /*
      * ⛔⛔⛔ 11/09 — CONVERTIRE DUE VOLTE PRODUCE `/mnt/nt/c/…`, e l'owner l'ha visto a schermo:
@@ -3963,7 +4440,29 @@ export function percorsoMirrorDevice(cartella) {
 }
 
 async function programmaDisponibileInWsl(distro, programma) {
-    const { codice } = await eseguiComando('wsl.exe', ['-d', distro, '--', 'bash', '-lc', `command -v ${programma}`], { timeoutMs: 5_000 })
+    /*
+     * ⛔ BC-54 anche qui: `--` faceva passare pure QUESTA riga dalla shell predefinita della
+     *   distro. È lo stesso strato di troppo dell'esecuzione vera, in una funzione che nessuno
+     *   guarda perché «risponde solo sì o no» — e una sonda che mente sul sì o sul no decide
+     *   dove gira tutto il resto.
+     * ⛔ E il nome del programma si CITA. `primoProgramma` può tornare qualunque cosa (`(cd`,
+     *   `X=abc;`, un `` `id` `` con gli apici inversi): interpolato nudo dentro `command -v`
+     *   quel testo lo esegue la sonda, PRIMA di ogni controllo. Con gli apici, un token assurdo
+     *   dà semplicemente «no».
+     * ⛔⛔⛔ E QUESTA CITAZIONE HA ROTTO QUALCOSA — la prima stesura di questo commento diceva
+     *   «niente di rotto in produzione»: era FALSO, e un revisore l'ha dimostrato lo stesso
+     *   giorno. Gli apici doppi spengono anche l'espansione della TILDE (POSIX §2.6.1 la vuole
+     *   non citata, §2.2.3 non la elenca fra ciò che sopravvive alle virgolette; letto il
+     *   17/09/2026), quindi `command -v "~/x.sh"` esce 1 dove `command -v ~/x.sh` esce 0, e
+     *   `~/script.sh` finiva su cmd.exe. La cura sta in `rigaVuoleUnaShellPosix` (`~` in testa
+     *   = sintassi POSIX, la sonda non viene nemmeno interpellata), non qui: gli apici restano.
+     * ⇒ La lezione, scritta dove l'errore è stato fatto: un irrobustimento che NESSUNO ha
+     *   chiesto va misurato come una cura vera, e «niente di rotto» è un'affermazione di fatto
+     *   come le altre — o l'hai provata al contrario, o non la puoi scrivere.
+     */
+    const { codice } = await eseguiComando(
+        'wsl.exe', argomentiWslPerScript(distro, `command -v ${JSON.stringify(programma)}`), { timeoutMs: 5_000 },
+    )
     return codice === 0
 }
 
@@ -4078,8 +4577,60 @@ async function sondaRuntimeMobileNode(seriale) {
  */
 export const MARCATORE_CARTELLA = '__TALOS_CWD__'
 
-/** La coda che stampa la cartella finale, nella lingua della shell che esegue davvero. */
-export function codaCheStampaLaCartella(perWindows) {
+/*
+ * ⛔⛔⛔ CLI-REQ-01, secondo giro (17/09/2026) — UN MARCATORE NUOVO A OGNI ESECUZIONE.
+ *
+ * Il marcatore fisso era falsificabile da sempre (residuo noto, «B1 slice 12»), e la coda `&&`
+ * adottata stamattina ha reso la falsificazione SFRUTTABILE: al fallimento la coda non gira,
+ * quindi l'ultima occorrenza del marcatore nell'uscita e' quella che ha stampato il COMANDO.
+ * ⛔ RIPRODOTTO sull'albero curato il 17/09:
+ *   `cmd /c "echo __TALOS_CWD__& echo C:\\Windows& exit 1"` con `tracciaCartella` →
+ *   `cartellaFinale: 'C:\\Windows'`, che `session-registry.mjs:5134` prende come `cwd` del
+ *   comando SUCCESSIVO, senza nessuna validazione. Un comando sceglieva dove sarebbe girato
+ *   quello dopo.
+ *
+ * ⇒ Il marcatore non e' piu' una costante: sono 16 esadecimali casuali per esecuzione. Un
+ *   comando non puo' stamparne uno che non conosce. `MARCATORE_CARTELLA` resta come valore
+ *   predefinito, perche' e' esportato e alcune prove lo usano per costruire uscite finte.
+ *
+ * ⛔ Cio' che il nonce NON chiude, dichiarato invece che addolcito: in cmd un comando puo'
+ *   leggere la propria riga di comando (`%CMDCMDLINE%`) e quindi il nonce.
+ *
+ * ⛔⛔⛔⛔ IL MODELLO DI MINACCIA, dichiarato — e il commit `bff36712` diceva una cosa FALSA.
+ *
+ *   Lì c'era scritto «la difesa che regge da sola» a proposito della regola sul codice 0. Non
+ *   regge: il secondo revisore l'ha smontata in una riga, su cmd,
+ *   `echo %CMDCMDLINE:~-36,30%& echo C:\\Windows& exit 0` → `{codice: 0, cartellaFinale:
+ *   'C:\\Windows'}`. Con lo stdout condiviso fra il comando e la coda, QUALUNQUE difesa qui è
+ *   un'euristica: il comando scrive sullo stesso canale da cui leggiamo.
+ *
+ *   ⇒ E va detto per intero, perché cambia cosa si sta difendendo. Questa strada è quella del
+ *   `!comando` DIGITATO DALLA PERSONA — l'unico chiamante con `tracciaCartella: true` è
+ *   `agent-service.mjs:2060`, il comando che l'owner scrive nel compositore. Quel comando può
+ *   già fare `cd` dove vuole PER DISEGNO: falsificare il marcatore non gli dà nessuna autorità
+ *   che non abbia già. Non c'è un avversario da cui difendersi qui: c'è l'autorità della persona.
+ *
+ *   ⇒ Quindi il nonce esiste contro le COLLISIONI ACCIDENTALI — un `grep` su questo file, un
+ *   programma che stampa per caso quella stringa, un log — non contro un comando ostile. Chiamarlo
+ *   sicurezza sarebbe la stessa bugia di prima, scritta meglio.
+ *
+ * ⛔ Ciò che invece è un difetto vero, e si cura: che nella cartella di stato finisca una cosa che
+ *   NON è una cartella. `enable -n command 2>/dev/null ; false` faceva arrivare
+ *   `cartellaFinale: 'bash: line 1: command: command not found'`, cioè testo di stderr promosso a
+ *   `cwd` del comando successivo. Quello si chiude, e si chiude due volte: la coda POSIX emette il
+ *   percorso solo se è una cartella VERA, e chi legge accetta solo un percorso assoluto che
+ *   esiste. Vedi `cartellaFinaleValida`.
+ */
+export function nuovoMarcatoreCartella() {
+    return `__TALOS_CWD_${randomUUID().replace(/-/g, '').slice(0, 16)}__`
+}
+
+/**
+ * La coda che stampa la cartella finale, nella lingua della shell che esegue davvero.
+ * `marcatore` va passato da chi esegue (uno nuovo per esecuzione); il valore predefinito serve
+ * solo alle prove che lo confrontano per forma.
+ */
+export function codaCheStampaLaCartella(perWindows, marcatore = MARCATORE_CARTELLA) {
     /*
      * ⛔⛔ MISURATO il 10/09, e la prima versione sbagliava proprio qui: con `"$(pwd)"` (bash) e
      *   `%CD%` (cmd) la cartella tornava quella di PARTENZA anche dopo un `cd` riuscito — il
@@ -4087,24 +4638,184 @@ export function codaCheStampaLaCartella(perWindows) {
      *   Provato a mano in WSL: `… ; printf "MARCA%s" "$(pwd)"` → cartella iniziale;
      *   `… ; printf "MARCA" ; pwd` → **cartella giusta**. La sostituzione viene valutata prima
      *   che il `cd` abbia effetto; `pwd` come COMANDO, invece, chiede alla shell dov'e' adesso.
-     * ⛔ `;` e non `&&`: la cartella si vuole sapere ANCHE quando il comando fallisce — anzi
-     *   soprattutto allora, perche' e' il caso in cui si riprova da dove si era rimasti.
+     *
+     * ⛔⛔⛔ CLI-REQ-01, 17/09/2026 — E LA CODA MANGIAVA IL CODICE D'USCITA. La coda e' l'ULTIMA
+     *   cosa che la shell esegue, quindi il codice della shell era il codice della coda — e la
+     *   coda riesce sempre. ⇒ Un comando digitato che falliva arrivava alla persona come
+     *   `exit 0` (`agent-service.mjs:2069`), e col commutatore «comandi nella conversazione»
+     *   acceso anche al modello. Il commento che stava qui sceglieva `;` invece di `&&`
+     *   apposta, per sapere la cartella anche al fallimento: la scelta era consapevole, e il
+     *   prezzo non lo era.
+     *
+     * ⛔ Le DUE code non pagano lo stesso prezzo, perche' le due shell non sono simmetriche.
+     *
+     *   POSIX: nessun prezzo. Si cattura `$?` come PRIMA cosa dopo il comando — qualunque altro
+     *   comando in mezzo lo riscriverebbe — si stampa la cartella, e si esce con lo stato
+     *   catturato. Codice esatto E cartella, anche al fallimento.
+     *
+     *   cmd: il prezzo c'e', ed e' la CARTELLA AL FALLIMENTO. `&&` fa girare la coda solo dopo
+     *   un successo, quindi un comando fallito conserva il suo codice ma non riporta dove si e'
+     *   fermato. ⛔ Non e' pigrizia: in cmd il codice d'uscita del PROCESSO e `%ERRORLEVEL%`
+     *   sono due cose diverse («ERRORLEVEL is not %ERRORLEVEL%»,
+     *   devblogs.microsoft.com/oldnewthing/20080926-00, e ss64.com/nt/errorlevel.html —
+     *   entrambi letti il 17/09/2026: ERRORLEVEL si riscrive quasi a ogni comando, `set
+     *   errorlevel=` crea una variabile utente che SCHERMA quella interna, e dentro un blocco
+     *   fra parentesi `%ERRORLEVEL%` si espande al momento del PARSE, prima che il comando sia
+     *   girato). Ogni forma che prova a rileggerlo per restituirlo e' quindi inesatta per
+     *   costruzione, e la misura lo conferma.
+     *
+     * ⛔ MISURATO da me il 17/09/2026 (Windows 11, Node v24.18.0, `spawn(riga, {shell:true})`
+     *   cioe' lo stesso `cmd /d /s /c` del kernel), sui 15 comandi della tabella della corsia
+     *   della CLI, in una cartella pulita E in una ostile con `exit.bat/.cmd`, `set.bat/.cmd`,
+     *   `cd.bat/.cmd`, `echo.bat` e un file chiamato `echo` — 30 righe, confrontate col codice
+     *   di `cmd` nudo. Codici uguali a `cmd` nudo:
+     *     · coda di oggi ` & echo.MARCA& cd`                                   **12 / 30**
+     *     · coda adottata ` && (echo.MARCA& cd)`                               **30 / 30**
+     *     · `… || (echo.MARCA& cd& exit /b 1)`                                 26 / 30
+     *       (tiene la cartella su tutte e 18 le righe fallite, ma schiaccia ogni
+     *        fallimento a 1: `cmd /c exit 5` → 1, `node … exit(3)` → 1)
+     *     · `… || (echo.MARCA& cd& exit /b)` nudo                              12 / 30
+     *       (`cd` riesce e azzera ERRORLEVEL prima che `exit /b` lo legga)
+     *     · `& call set TALOS_RC=%%ERRORLEVEL%%& … & call exit /b %%TALOS_RC%%` 12 / 30
+     *   In nessuna delle 30 righe un file batch della cartella e' stato invocato: la coda non
+     *   apre una porta nuova alla cartella ostile.
+     *   Su WSL Ubuntu, 8 comandi: coda di oggi **4 / 8**, coda adottata **8 / 8**, con la
+     *   cartella ancora nota su 4 dei 5 fallimenti (il quinto e' `exit 3`, che uccide la shell
+     *   prima della coda — identico a prima).
+     *
+     * ⇒ Decisione dell'owner, 17/09/2026: se non si possono avere tutte e due, **vince il
+     *   codice d'uscita**. Si adotta ` && (echo.MARCA& cd)`.
+     * ⛔ E il prezzo non azzera niente: `session-registry.mjs:5134` scrive
+     *   `if (esito?.cartellaFinale) voce.cartellaComandi = esito.cartellaFinale`, quindi una
+     *   cartella assente lascia lo stato dov'era — il comando dopo riparte dall'ultima cartella
+     *   NOTA, non dalla radice della sessione. Verificato nel codice e asserito per nome in
+     *   `tests/kernel-cartella-finale-windows.test.mjs` (CWD-USCITA-WIN-04).
+     * ⛔ `&&` lega piu' stretto di `&`: in `a & b` la coda si attacca a `b`, ed e' proprio cio'
+     *   che fa `cmd` nudo — misurato su `type assente & echo ok` (0 in tutte e due).
+     * ⛔ Chi NON chiede `tracciaCartella` non vede nessuna differenza: l'attrezzo `shell` del
+     *   modello (`:8324`) non la chiede, quindi non e' toccato.
+     *
+     * ⛔⛔ SECONDO GIRO (17/09, dopo la bocciatura del revisore) — LA CODA POSIX NON ERA GRATIS.
+     *   Avevo scritto «POSIX pays nothing»: era falso. E la forma che avevo adottato per rimediare
+     *   — `command pwd` / `command exit` — il SECONDO revisore l'ha smontata: basta definire una
+     *   funzione chiamata `command`. Rimisurato da me su bash E su `sh` (dash) dentro WSL, con la
+     *   tabella ESTESA che il revisore chiede (`command()`, `builtin()`, `unset()`), 14 comandi per
+     *   shell, sempre contro la shell NUDA. Esito giusto = stesso codice della shell nuda E nessuna
+     *   cartella bugiarda. Punteggi bash / sh:
+     *     · coda di `bff36712` (`command pwd` / `command exit`)               **10/14 · 9/14**
+     *     · `unset -f pwd printf exit` + builtin nudi                          12/14 · 10/14
+     *     · **adottata**: `unset -f` + la cartella emessa SOLO se `[ -d ]`      12/14 · 10/14
+     *     · come l'adottata ma senza `unset -f`                                12/14 · 11/14
+     *   Le righe che la coda di `bff36712` sbagliava e che questa chiude:
+     *     · `command() { : ; } ; false`          → dava **0** (il difetto di partenza, di ritorno)
+     *     · `command() { echo /rubata ; } ; false` → dava 0 e cartella **`/rubata`**
+     *     · `enable -n command 2>/dev/null ; false` → dava **127** e
+     *       `cartellaFinale: 'bash: line 1: command: command not found'`
+     *
+     * ⛔⛔ E UNA CHE ERA COLPA MIA, trovata da questa misura: mettere il marcatore dentro il NOME
+     *   della variabile di stato faceva finire il marcatore dentro i messaggi d'errore della
+     *   shell che nominano quella variabile (`readonly ...: readonly variable`) ⇒ il lettore
+     *   trovava il marcatore NELL'ERRORE e leggeva il resto come cartella. I nomi di stato adesso
+     *   portano un nonce PROPRIO, che con il marcatore non c'entra niente.
+     *
+     * ⛔ Cosa resta aggirabile, per nome e senza addolcirlo — e ricordando che qui l'avversario
+     *   non esiste (vedi il modello di minaccia sopra: è il comando della PERSONA):
+     *     · `readonly <nome di stato>=…` uccide la shell prima della coda, se chi scrive il
+     *       comando indovina il nome (nella misura gliel'ho passato io);
+     *     · `[` o `test` ridefiniti fanno passare una cartella che non esiste — contro cui resta
+     *       il secondo controllo, quello di chi legge (`cartellaFinaleValida`);
+     *     · su `sh` (dash) `exit(){ }` e `unset(){ }` sono errori di sintassi della shell NUDA
+     *       (codice 2): non è un buco nostro, la shell nuda fa lo stesso.
+     *   ⛔ `printf() { : ; }` invece NON è più un problema: `unset -f printf` lo toglie, e la
+     *     cartella torna giusta — misurato, ed è meglio della coda di prima.
      */
+    /*
+     * ⛔ I nomi di stato hanno un nonce PROPRIO, mai il marcatore: un errore della shell che
+     *   nomina la variabile non deve poter contenere la stringa che il lettore cerca.
+     */
+    const nonceStato = randomUUID().replace(/-/g, '').slice(0, 12)
+    const rc = `talos_rc_${nonceStato}`
+    const dir = `talos_dir_${nonceStato}`
     return perWindows
-        ? ` & echo.${MARCATORE_CARTELLA}& cd`
-        : ` ; printf '\\n${MARCATORE_CARTELLA}' ; pwd`
+        ? ` && (echo.${marcatore}& cd)`
+        : ` ; ${rc}=$? ; unset -f pwd printf exit 2>/dev/null ; ${dir}=$(pwd) ; [ -d "$${dir}" ] && printf '\\n${marcatore}%s\\n' "$${dir}" ; exit $${rc}`
+}
+
+/**
+ * ⛔⛔⛔ C-3 (17/09/2026) — CIÒ CHE SI LEGGE DOPO IL MARCATORE NON È ANCORA UNA CARTELLA.
+ *
+ * Il secondo revisore l'ha riprodotto: `enable -n command 2>/dev/null ; false` faceva arrivare
+ * `cartellaFinale: 'bash: line 1: command: command not found'`. Quella stringa andava dritta in
+ * `voce.cartellaComandi` (`session-registry.mjs`) e diventava il `cwd` del comando successivo.
+ * ⇒ Testo di stderr promosso a cartella di lavoro. Questo NON è il modello di minaccia (vedi
+ * `codaCheStampaLaCartella`): è un difetto semplice, e si chiude semplicemente.
+ *
+ * Tre condizioni, tutte necessarie:
+ *   1. una riga sola, senza caratteri di controllo — un messaggio d'errore ne porta quasi sempre;
+ *   2. un percorso ASSOLUTO: `X:\…`, `\\server\share`, oppure `/…` per la strada POSIX;
+ *   3. che ESISTA e sia una cartella — chi chiama passa il modo di chiederlo al disco.
+ *
+ * ⛔ Il punto 3 è iniettabile perché le due strade non hanno lo stesso disco: sul ramo cmd il
+ *   percorso è di questa macchina e Node lo può guardare senza spendere un processo; sul ramo WSL
+ *   il percorso vive dentro la distro, e a chiederlo da qui servirebbe un `wsl.exe` in più PER
+ *   OGNI COMANDO. Lì il controllo lo fa la coda stessa (`[ -d "$dir" ]`, dentro la shell che ha
+ *   già quella cartella sotto i piedi) e qui restano i punti 1 e 2. È la stessa strada, come
+ *   chiesto, solo percorsa nel punto in cui non costa un processo.
+ *
+ * @param {string|null} percorso
+ * @param {{esisteCartellaFn?: (p:string)=>boolean}} [deps] assente = si controllano solo forma e assolutezza
+ */
+export function cartellaFinaleValida(percorso, { esisteCartellaFn } = {}) {
+    const p = typeof percorso === 'string' ? percorso.trim() : ''
+    if (!p || p.length > 4096) return null
+    /* eslint-disable-next-line no-control-regex -- un messaggio d'errore porta spesso caratteri di controllo */
+    if (/[\u0000-\u001f\u007f]/.test(p)) return null
+    const assoluto = /^[A-Za-z]:[\\/]/.test(p) || /^\\\\[^\\/]/.test(p) || p.startsWith('/')
+    if (!assoluto) return null
+    if (typeof esisteCartellaFn === 'function' && !esisteCartellaFn(p)) return null
+    return p
+}
+
+/** Il disco di QUESTA macchina: usato solo dal ramo cmd, dove il percorso è locale. */
+function eUnaCartellaLocale(percorso) {
+    try { return statSync(percorso).isDirectory() }
+    catch { return false }
 }
 
 /**
  * Stacca il marcatore dall'uscita: torna il testo pulito e la cartella finale (o `null`).
  * ⛔ Si guarda l'ULTIMA occorrenza: un comando puo' stampare quella stringa per conto suo (un
- *   `grep` su questo file, per dire), e la NOSTRA e' sempre in fondo.
+ *   `grep` su questo file, per dire).
+ *
+ * ⛔⛔⛔ 17/09, secondo giro — IL COMMENTO CHE STAVA QUI SI REGGEVA SU UN'INVARIANTE CHE NON
+ *   VALE PIU'. Diceva «e la NOSTRA e' sempre in fondo»: era vero finche' la coda girava SEMPRE
+ *   (` & …`). Con la coda `&& …` adottata oggi, su cmd la coda NON gira quando il comando
+ *   fallisce, quindi l'ultima occorrenza puo' essere quella stampata dal COMANDO. Riprodotto:
+ *   `cmd /c "echo __TALOS_CWD__& echo C:\\Windows& exit 1"` dava `cartellaFinale: 'C:\\Windows'`.
+ *   ⇒ Questa funzione resta «l'ultima occorrenza», che e' giusto, ma NON basta piu' da sola:
+ *   le due difese stanno in chi chiama — un marcatore NUOVO a ogni esecuzione
+ *   (`nuovoMarcatoreCartella`) e, sul ramo cmd, la cartella accettata SOLO con codice 0.
+ *   Chi aggiunge una terza strada che usa questa funzione deve portarsi dietro entrambe.
+ *
+ * @param {string} testo
+ * @param {string} [marcatore] il marcatore di QUELLA esecuzione; il predefinito serve alle prove.
  */
-export function staccaCartellaFinale(testo) {
+export function staccaCartellaFinale(testo, marcatore = MARCATORE_CARTELLA) {
     const t = String(testo ?? '')
-    const i = t.lastIndexOf(MARCATORE_CARTELLA)
+    const i = t.lastIndexOf(marcatore)
     if (i === -1) return { testo: t, cartella: null }
-    const cartella = t.slice(i + MARCATORE_CARTELLA.length).split('\n')[0].trim()
+    /*
+     * ⛔ 16/09 — SUL RAMO WINDOWS LA CARTELLA SI PERDEVA SEMPRE, e non per il CRLF. Misurato (segnalazione
+     *   della sessione «talos cli», riprodotta qui prima di curare): con la coda POSIX `printf '\n__TALOS_CWD__'; pwd`
+     *   il marcatore NON va a capo e il percorso sta sulla stessa riga; con la coda Windows `echo.__TALOS_CWD__& cd`
+     *   `echo.` va a capo PER COSTRUZIONE, quindi la «prima riga dopo il marcatore» era il resto vuoto di quella
+     *   riga e `cd` stampava sulla riga DOPO, che nessuno leggeva ⇒ `cartellaFinale: null`, e un `cd` della persona
+     *   non persisteva fra un comando e il successivo. Un solo LF perdeva uguale: la controprova che non era il \r.
+     *   ⇒ Si legge la prima riga NON VUOTA dopo il marcatore: regge le due forme di coda senza dipendere da `cmd`.
+     *   (La cura del 10/09 a `codaCheStampaLaCartella` — `%CD%` valutato prima del `cd` — resta giusta: guardava
+     *   QUALE cartella tornava, non SE tornava. Questo è il secondo difetto, indipendente.)
+     */
+    const cartella = t.slice(i + marcatore.length).split(/\r?\n/).map((riga) => riga.trim()).find(Boolean) ?? ''
     return { testo: t.slice(0, i).replace(/[\r\n]+$/, ''), cartella: cartella || null }
 }
 
@@ -4117,7 +4828,10 @@ export function staccaCartellaFinale(testo) {
 function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false, segnaleStop } = {}) {
     return new Promise((risolvi) => {
         /* ⛔ Su Windows la shell qui e' cmd: la coda parla la sua lingua, non quella di bash. */
-        const coda = tracciaCartella ? codaCheStampaLaCartella(process.platform === 'win32') : ''
+        const perWindows = process.platform === 'win32'
+        /* ⛔ CLI-REQ-01 (2º giro): un marcatore NUOVO per esecuzione — vedi `nuovoMarcatoreCartella`. */
+        const marcatore = nuovoMarcatoreCartella()
+        const coda = tracciaCartella ? codaCheStampaLaCartella(perWindows, marcatore) : ''
         const p = spawn(`${comando}${coda}`, { cwd: cartella, shell: true, windowsHide: true, env: ambienteSenzaCredenziali() })
         let fuori = ''
         let errori = ''
@@ -4134,7 +4848,7 @@ function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false, 
         const aggiungi = (dove, d) => (dove.length > TETTO_ACCUMULO ? dove : dove + d)
         /* ⛔ D-10B, come sopra: chi ascolta non puo' buttare giu' la lettura del flusso. */
         /* ⛔ Il marcatore non si vede mai, nemmeno nei pezzi che escono mentre escono (D-10B). */
-        const avvisa = (flusso, d) => { try { onPezzo?.({ flusso, testo: staccaCartellaFinale(String(d)).testo }) } catch { /* chi ascolta si arrangia */ } }
+        const avvisa = (flusso, d) => { try { onPezzo?.({ flusso, testo: staccaCartellaFinale(String(d), marcatore).testo }) } catch { /* chi ascolta si arrangia */ } }
         p.stdout?.on('data', (d) => { fuori = aggiungi(fuori, d); insieme = aggiungi(insieme, d); avvisa('fuori', d) })
         p.stderr?.on('data', (d) => { errori = aggiungi(errori, d); insieme = aggiungi(insieme, d); avvisa('errori', d) })
         /*
@@ -4158,10 +4872,37 @@ function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false, 
         p.on('close', (codice) => {
             clearTimeout(timer)
             sciogli()
-            const ripulito = staccaCartellaFinale((insieme || `${fuori}\n${errori}`).trim())
+            const ripulito = staccaCartellaFinale((insieme || `${fuori}\n${errori}`).trim(), marcatore)
             const uscita = uscitaUtile(ripulito.testo, 4_000, 0.25)
+            const codiceFinale = fermatoSuRichiesta ? USCITA_FERMATO_SU_RICHIESTA : fermatoDalTempo ? 124 : codice
+            /*
+             * ⛔⛔⛔ CLI-REQ-01 (2º giro) — SU cmd LA CARTELLA VALE SOLO SE IL CODICE E' 0.
+             *
+             *   Su cmd la coda e' attaccata con `&&`: gira SE E SOLO SE il comando e' riuscito.
+             *   ⇒ Con un codice diverso da zero nessun marcatore nell'uscita puo' essere nostro,
+             *   e quello che c'e' l'ha stampato il COMANDO. Riprodotto prima di scrivere questa
+             *   riga: `cmd /c "echo <marcatore>& echo C:\\Windows& exit 1"` restituiva
+             *   `cartellaFinale: 'C:\\Windows'`, che `session-registry.mjs:5134` avrebbe preso
+             *   come `cwd` del comando successivo — nessuno valida quel percorso.
+             *   La regola e' esatta perche' e' la stessa condizione che decide se la coda parte:
+             *   `a & b` e `a || b` che escono 0 riportano la cartella come prima (misurato), e
+             *   ogni riga che esce diversa da zero non ne riporta nessuna.
+             * ⛔ SOLO su cmd: altrove `eseguiSuWindows` usa la coda POSIX, che gira sempre e
+             *   riporta la cartella anche al fallimento.
+             * ⛔ Non e' l'unica difesa: il marcatore e' nuovo a ogni esecuzione. Questa regge da
+             *   sola anche se il comando riesce a leggere la propria riga di comando.
+             */
+            const cartellaAccettabile = !perWindows || codiceFinale === 0
+            /*
+             * ⛔ C-3: e comunque non basta che sia accettabile — dev'essere una CARTELLA. Su questa
+             *   strada il percorso è di questa macchina, quindi il controllo costa una `statSync`
+             *   e zero processi.
+             */
+            const cartellaSicura = cartellaAccettabile
+                ? cartellaFinaleValida(ripulito.cartella, { esisteCartellaFn: eUnaCartellaLocale })
+                : null
             risolvi({
-                codice: fermatoSuRichiesta ? USCITA_FERMATO_SU_RICHIESTA : fermatoDalTempo ? 124 : codice, // 124: il codice che `timeout(1)` usa da sempre per «tempo scaduto»
+                codice: codiceFinale, // 124: il codice che `timeout(1)` usa da sempre per «tempo scaduto»
                 fermatoDalTempo,
                 ...(fermatoSuRichiesta ? { fermatoSuRichiesta: true } : {}),
                 testo: fermatoSuRichiesta
@@ -4170,7 +4911,18 @@ function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false, 
                         ? `${uscita}\n\n⛔ Fermato allo scadere dei 120 secondi: non ha finito da solo.`.trim()
                         : uscita,
                 enforcement: 'none',
-                cartellaFinale: ripulito.cartella,
+                cartellaFinale: cartellaSicura,
+                /* ⛔⛔ BLOCCO 7 (B4) — I DUE FLUSSI TORNANO SEPARATI, e su questa strada non lo erano.
+                   `eseguiSuWindows` li teneva già distinti in memoria (`fuori`, `errori`) e poi
+                   restituiva solo il fuso: chi disegna non poteva più dire QUALE dei due aveva
+                   scritto una riga, e un avviso di `npm` e un errore di `git` si leggevano identici.
+                   ⇒ Si allegano QUI, e **solo se non sono vuoti** — chi non li usa (il modello, che
+                     continua a ricevere la riga fusa di `testo`) non vede un byte di differenza, e
+                     le sessioni vecchie si leggono come prima.
+                   ⛔ Truncati con la STESSA regola del fuso (`uscitaUtile`, 4.000 caratteri): il
+                     separato è una VISTA della stessa prova, mai una prova più grande. */
+                ...(fuori.trim() ? { fuori: uscitaUtile(fuori.trim(), 4_000, 0.25) } : {}),
+                ...(errori.trim() ? { errori: uscitaUtile(errori.trim(), 4_000, 0.25) } : {}),
             })
         })
         p.on('error', (e) => {
@@ -4182,6 +4934,25 @@ function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false, 
 }
 
 export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo, tracciaCartella = false, dove = null, segnaleStop } = {}) {
+    /*
+     * ⛔⛔ BC-56, 16/09/2026 — IL COMANDO VUOTO AVEVA TRE ESITI, TUTTI SBAGLIATI.
+     *   Misurato il 17/09 sul codice di ieri, prima di scrivere questa riga:
+     *     · `''` con dove='windows' → `TypeError [ERR_INVALID_ARG_VALUE]: The argument 'file'
+     *       cannot be empty`, lanciato DENTRO l'executor della Promise: chi chiama non riceve
+     *       un esito, riceve un'eccezione da un posto che non ne lancia mai;
+     *     · `'   '` con dove='windows' → codice 0 e testo vuoto, cioè un SUCCESSO che non ha
+     *       eseguito niente — la forma peggiore, perché il risultato sbagliato somiglia a
+     *       quello giusto e nessuno lo guarda;
+     *     · qualunque vuoto in WSL → `bash: syntax error near unexpected token ';'` su
+     *       `{  ; }`, onesto ma incomprensibile: parla della nostra impalcatura.
+     *   BC-17 (11/09) aveva curato l'alias `command`/`comando` che PRODUCEVA il vuoto, non il
+     *   vuoto in sé: la sorgente è stata chiusa, la porta no.
+     * ⇒ Prima di tutto il resto, mobile compreso: un comando vuoto non merita né un push adb
+     *   né una shell. Si risponde con una frase che dice cosa fare.
+     */
+    if (String(comando ?? '').trim() === '') {
+        return { codice: -1, testo: 'Il comando è vuoto: scrivi cosa eseguire.', enforcement: 'none' }
+    }
     if (mobile) {
         const seriale = await risolviSerialeAdbAttivo()
         if (!seriale) {
@@ -4221,7 +4992,16 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         const { codice, fuori, errori, insieme } = await eseguiComando(
             trovaAdbLocale(), ['-s', seriale, 'shell', comandoConCd], { timeoutMs: 120_000, onPezzo, segnaleStop },
         )
-        return { codice, testo: uscitaUtile((insieme ?? `${fuori}\n${errori}`).trim(), 4_000, 0.25), enforcement: 'adb-shell-on-device' }
+        return {
+            codice,
+            testo: uscitaUtile((insieme ?? `${fuori}\n${errori}`).trim(), 4_000, 0.25),
+            enforcement: 'adb-shell-on-device',
+            /* ⛔ BLOCCO 7 (B4) — i due flussi separati anche dalla shell sul TELEFONO, con la stessa
+               disciplina delle altre due strade: solo se non vuoti, e truncati con la stessa regola
+               del fuso. */
+            ...(fuori.trim() ? { fuori: uscitaUtile(fuori.trim(), 4_000, 0.25) } : {}),
+            ...(errori.trim() ? { errori: uscitaUtile(errori.trim(), 4_000, 0.25) } : {}),
+        }
     }
     /*
      * ⭐⭐⭐ D-10F — DOVE GIRA UN COMANDO: UNA SCELTA, NON UNA SORPRESA.
@@ -4251,14 +5031,37 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
             enforcement: 'none',
         }
     }
-    if (distro && (dove === 'wsl2' || (dove === null && await programmaDisponibileInWsl(distro, primoProgramma(comando))))) {
+    /*
+     * ⛔⛔⛔ BC-55 — il ripiego automatico non guarda più il PRIMO TOKEN NUDO (vedi
+     *   `rigaVuoleUnaShellPosix` sopra per la misura, le fonti e il prezzo dichiarato).
+     *   Resta in OR con la prova del programma vero: l'euristica può solo aggiungere righe
+     *   che vanno in WSL, mai toglierne — un programma nudo assente in Linux ripiega su
+     *   Windows esattamente come prima, e l'esito continua a dire dove ha girato
+     *   (`enforcement: 'wsl2'` contro `'none'`).
+     * ⭐ In più risparmia il sottoprocesso della sonda quando la risposta è già certa: una
+     *   riga che contiene `;` non ha bisogno che qualcuno chieda a WSL se `X=abc;` esiste.
+     */
+    const rigaEDaShellPosix = dove === null && rigaVuoleUnaShellPosix(comando)
+    if (distro && (dove === 'wsl2' || rigaEDaShellPosix
+        || (dove === null && await programmaDisponibileInWsl(distro, primoProgramma(comando))))) {
         const percorsoWsl = convertiPercorsoWsl(cartella)
+        /* ⛔ CLI-REQ-01 (2º giro): marcatore NUOVO per esecuzione anche qui — una sola fonte, `nuovoMarcatoreCartella`. */
+        const marcatoreWsl = nuovoMarcatoreCartella()
         const { codice, fuori, errori, insieme, fermatoSuRichiesta } = await eseguiComando(
-            'wsl.exe', ['-d', distro, '--', 'bash', '-lc', `cd ${JSON.stringify(percorsoWsl)} && { ${comando} ; }${tracciaCartella ? codaCheStampaLaCartella(false) : ''}`],
+            'wsl.exe', argomentiWslPerScript(distro, `cd ${JSON.stringify(percorsoWsl)} && { ${comando} ; }${tracciaCartella ? codaCheStampaLaCartella(false, marcatoreWsl) : ''}`),
             /* ⛔ Il marcatore non si vede nemmeno nei pezzi che escono mentre escono (D-10B). */
-            { timeoutMs: 120_000, segnaleStop, onPezzo: onPezzo && ((pezzo) => onPezzo({ ...pezzo, testo: staccaCartellaFinale(pezzo.testo).testo })) },
+            { timeoutMs: 120_000, segnaleStop, onPezzo: onPezzo && ((pezzo) => onPezzo({ ...pezzo, testo: staccaCartellaFinale(pezzo.testo, marcatoreWsl).testo })) },
         )
-        const ripulito = staccaCartellaFinale((insieme ?? `${fuori}\n${errori}`).trim())
+        /*
+         * ⛔ Qui NON si applica la regola «cartella solo con codice 0» del ramo cmd: la coda POSIX
+         *   gira sempre, quindi la cartella al fallimento e' NOSTRA e serve.
+         * ⛔ 17/09, CORRETTO: questa riga diceva ancora che la difesa e' «piu' `command pwd` nella
+         *   coda». Non lo e' piu' — C-2 ha tolto `command`, che e' un builtin ORDINARIO e si copre
+         *   con una funzione. Su questa strada le difese sono DUE: il marcatore nuovo a ogni
+         *   esecuzione, e la coda che emette il percorso SOLO se `[ -d ]` dice che e' una cartella
+         *   (piu' `cartellaFinaleValida` qui sotto, che pretende un percorso assoluto).
+         */
+        const ripulito = staccaCartellaFinale((insieme ?? `${fuori}\n${errori}`).trim(), marcatoreWsl)
         const uscitaWsl = uscitaUtile(ripulito.testo, 4_000, 0.25)
         /* ⛔ Un comando ucciso dallo stop deve DIRLO anche da qui, non solo dal ramo Windows: stessa marca, stesso lettore. */
         return {
@@ -4266,7 +5069,18 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
             ...(fermatoSuRichiesta ? { fermatoSuRichiesta: true } : {}),
             testo: fermatoSuRichiesta ? `${MARCA_FERMATO_MENTRE_GIRAVA} il comando e stato interrotto mentre girava.\n\n${uscitaWsl}`.trim() : uscitaWsl,
             enforcement: 'wsl2',
-            cartellaFinale: ripulito.cartella,
+            /* ⛔ BLOCCO 7 (B4) — anche qui i due flussi tornano separati, e il marcatore di cartella
+               si toglie da ENTRAMBI: vive in coda a stdout, e lasciarlo lì lo farebbe comparire nel
+               testo che si mostra. Solo se non vuoti: chi non li usa non vede differenze. */
+            ...(staccaCartellaFinale(fuori, marcatoreWsl).testo.trim() ? { fuori: uscitaUtile(staccaCartellaFinale(fuori, marcatoreWsl).testo.trim(), 4_000, 0.25) } : {}),
+            ...(errori.trim() ? { errori: uscitaUtile(errori.trim(), 4_000, 0.25) } : {}),
+            /*
+             * ⛔ C-3, ramo WSL: l'esistenza l'ha già controllata la coda dentro la distro
+             *   (`[ -d "$dir" ]`), che è l'unico posto dove quel disco si vede senza spendere un
+             *   `wsl.exe` in più per OGNI comando. Qui restano forma e assolutezza — che bastano a
+             *   tenere fuori il testo di stderr, che è il difetto misurato.
+             */
+            cartellaFinale: cartellaFinaleValida(ripulito.cartella),
         }
     }
     return eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella, segnaleStop })
@@ -4789,12 +5603,22 @@ async function premessaDellaScrittura(radice, percorso, contenuto) {
  * domande diverse, e la ricerca (vedi commento su `talosLavora`) sconsiglia
  * di fonderle in un giudizio solo.
  *
- * ⛔ Ricerca (28/8, prima di scrivere): la sicurezza degli harness di coding
- * nel 2026 converge su "le operazioni distruttive sono una CLASSE di
- * permesso a sé, separata dalle letture" (Docker/Developers Digest,
- * `AI Coding Agent Security Models Compared 2026`) — è perché
- * scrivi/shell/document_create sono gated qui, elenca/cerca/leggi/naviga
- * mai (sono letture, per costruzione non hanno bisogno di questo cancello).
+ * ⛔ 16/09 — CITAZIONE CORRETTA (verificata aprendo la fonte, dopo una
+ * segnalazione della lane CLI). Fino a oggi qui si leggeva che «la sicurezza
+ * degli harness converge su: le operazioni distruttive sono una classe di
+ * permesso a sé» attribuito a un inesistente «Docker/Developers Digest».
+ * La fonte vera è UNA: Developers Digest, «AI Coding Agent Security Models
+ * Compared 2026», 28 luglio 2026
+ * (developersdigest.tech/blog/ai-coding-agent-security-models-compared-2026),
+ * e dice una cosa più stretta: Claude Code ha le modalità `default` (chiede
+ * al primo uso), `acceptEdits` (approva da sé le modifiche ai file) e `plan`
+ * (sola lettura). ⇒ Che scrivi/shell/document_create siano gated qui e
+ * elenca/cerca/leggi/naviga no è una SCELTA DI DISEGNO NOSTRA, coerente
+ * con quelle modalità, non una «convergenza del settore». E ha un limite
+ * dichiarato: la stessa fonte raccomanda «deny rules for SSH keys and .env
+ * files», cioè un innesco anche su ciò che LEGGE un segreto — è la fase
+ * P0-bis (owner 16/09): la shell chiede davanti a un percorso segreto anche
+ * quando è su «sempre».
  *
  * `chiediApprovazioneFn` è opzionale: se assente, `livelloAccesso` da solo
  * decide (nega sempre in lettura, consente sempre altrimenti) — stesso
@@ -5742,6 +6566,42 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
     const sempreDaConfermare = ATTREZZI_SEMPRE_DA_CONFERMARE.includes(azione.tipo)
 
     /*
+     * ⛔⛔⛔⛔ F15, 17/09/2026 — LA SHELL CHIEDE DAVANTI A UN SEGRETO, ANCHE CON «SEMPRE».
+     * Owner, P0-bis corsia D: «entrambi stretto».
+     *
+     * Il difetto, misurato PRIMA della cura: con `permessiPerAttrezzo: { shell: 'sempre' }` —
+     * cioè la configurazione che una persona sceglie il primo giorno per non essere interrotta
+     * a ogni `ls` — un `cat ~/.ssh/id_rsa` girava senza che NESSUNO fosse interpellato:
+     * `chiediApprovazioneFn` non veniva chiamato nemmeno una volta. Quel «sempre» era stato
+     * dato per i comandi di lavoro, e si applicava anche alla chiave privata.
+     *
+     * ⇒ Due inneschi, e SOLO questi due (la grammatica sta in `path-policy.mjs`,
+     *   `motivoDaChiedere`, pura e provata da sola):
+     *   1. il testo del comando (o il percorso di `leggi`) NOMINA la classe dichiarata dei
+     *      segreti — `.env`, `~/.ssh`, `~/.aws`, `*.pem`, `id_rsa*`, il portachiavi di sistema,
+     *      il file delle chiavi di TALOS;
+     *   2. il percorso ESCE dal workspace E finisce in qualcosa di nascosto (segmento con `.`).
+     *   ⛔ Nient'altro. Nessuna euristica sul contenuto del comando: ogni «chiedi» in più
+     *   addestra a cliccare sì, e un sì cliccato senza leggere non protegge da niente.
+     *
+     * ⛔ E NARROWING PURO, mai il contrario: questo innesco può solo trasformare un «sempre»
+     *   in una domanda. Non scavalca `nega` (il ramo qui sotto resta il primo di tutti), non
+     *   apre un livello che negherebbe, non crea un permesso che prima non c'era. Se la
+     *   persona risponde no — o se non c'è nessuno a cui chiedere — l'azione non parte.
+     *
+     * ⛔ `leggi` è il caso speciale, e per costruzione: è l'UNICO attrezzo che arriva qui
+     *   senza passare da nessun altro motivo (il suo ramo chiama questo cancello soltanto
+     *   quando `motivoDaChiedere` ha già detto sì). Per questo `soloSegreto` salta i rami dei
+     *   livelli più sotto: un livello «lettura» deve poter LEGGERE — negarlo lì risponderebbe
+     *   «nessuna scrittura è permessa» a una lettura, che è falso e confonde chi lo riceve.
+     */
+    const segreto = (azione.tipo === 'shell' || azione.tipo === 'leggi')
+        ? motivoDaChiedere({ tipo: azione.tipo, comando: azione.comando, percorso: azione.percorso, cartella })
+        : null
+    const segretoForzaConferma = Boolean(segreto)
+    const soloSegreto = segretoForzaConferma && azione.tipo === 'leggi'
+
+    /*
      * ⭐⭐⭐ 29/8, continuazione FASE D — ENFORCEMENT della trifecta, non
      * più solo osservativa. Porta diretta del principio di `executor.ts`
      * (`forceConfirmation: tool.confirmation === 'always' || trifecta.closed`):
@@ -5779,10 +6639,10 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
     if (haOverride && override === 'nega') {
         return { consentito: false, via: 'permesso-per-attrezzo-nega', motivo: `l'attrezzo "${azione.tipo}" è disattivato per questa sessione (permesso per-attrezzo: nega).` }
     }
-    if (haOverride && override === 'sempre' && !trifectaChiude && !sempreDaConfermare) {
+    if (haOverride && override === 'sempre' && !trifectaChiude && !sempreDaConfermare && !segretoForzaConferma) {
         return { consentito: true, via: 'permesso-per-attrezzo-sempre' }
     }
-    if (!haOverride && livelloAccesso === 'lettura') {
+    if (!soloSegreto && !haOverride && livelloAccesso === 'lettura') {
         return { consentito: false, via: 'livello-lettura', motivo: 'la sessione è in sola lettura: nessuna scrittura, comando o documento è permesso in questo momento.' }
     }
     /*
@@ -5800,7 +6660,7 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
      *   senza `cartella`. Una ricerca senza una cartella propria non ha un posto dove
      *   depositare, e «non so dove» non è «ovunque».
      */
-    if (!haOverride && livelloAccesso === 'ricerca') {
+    if (!soloSegreto && !haOverride && livelloAccesso === 'ricerca') {
         if (azione.tipo !== 'research_deposit') {
             return {
                 consentito: false,
@@ -5819,7 +6679,7 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
             }
         }
     }
-    if (!haOverride && livelloAccesso === 'scrittura-area') {
+    if (!soloSegreto && !haOverride && livelloAccesso === 'scrittura-area') {
         /*
          * ⛔⛔⛔ PO-12, 13/09/2026 — LA TRAPPOLA TROVATA LEGGENDO QUESTO CANCELLO, non provandolo.
          * Questa riga elencava UN SOLO attrezzo (`scrivi`): un attrezzo di modifica appena nato
@@ -5866,13 +6726,24 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
      * ⛔ Il canale che manca resta un errore, non un permesso: il ramo `!chiediApprovazioneFn` qui
      * sotto continua a rifiutare chi avrebbe dovuto chiedere.
      */
-    const vaChiesto = sempreDaConfermare || (haOverride && override === 'chiedi') || trifectaForzaConferma || richiestoDalLivello
-    const viaRichiesta = sempreDaConfermare ? 'attrezzo-sempre-da-confermare' : trifectaForzaConferma ? 'trifecta-forza-conferma' : richiestoDalLivello ? 'livello-su-richiesta' : 'permesso-per-attrezzo-chiedi'
+    const vaChiesto = sempreDaConfermare || (haOverride && override === 'chiedi') || trifectaForzaConferma || richiestoDalLivello || segretoForzaConferma
+    /*
+     * ⛔ F15 — `segreto-forza-conferma` viene PRIMA di «trifecta» e di «per-attrezzo: chiedi»
+     * nella scelta della via: quando due meccanismi avrebbero chiesto la stessa cosa, la
+     * ricevuta deve nominare quello che dice di più a chi la rilegge. «C'era un segreto in
+     * mezzo» è un fatto sul comando; «l'attrezzo era su chiedi» è un fatto sulle impostazioni.
+     */
+    const viaRichiesta = segretoForzaConferma ? 'segreto-forza-conferma' : sempreDaConfermare ? 'attrezzo-sempre-da-confermare' : trifectaForzaConferma ? 'trifecta-forza-conferma' : richiestoDalLivello ? 'livello-su-richiesta' : 'permesso-per-attrezzo-chiedi'
     if (!vaChiesto) {
         return { consentito: true, via: 'nessun-vincolo' }
     }
     if (!chiediApprovazioneFn) {
-        const percheRichiesto = sempreDaConfermare
+        const percheRichiesto = segretoForzaConferma
+            // ⛔ F15 — al MODELLO si dice il fatto tecnico (è lui che legge questo testo e deve
+            //   capire cosa riprovare); la frase in lingua naturale è per la PERSONA, e viaggia
+            //   in `azione.segreto.frase` qui sotto. Due destinatari, due testi.
+            ? `il percorso "${segreto.percorso}" appartiene alla classe dei file riservati (chiavi, credenziali, portachiavi): serve una conferma umana anche con un permesso "sempre"`
+            : sempreDaConfermare
             ? 'questo attrezzo richiede sempre una conferma umana separata, per costruzione — mai un\'eccezione'
             : trifectaForzaConferma
                 ? 'la trifecta si chiude su questa chiamata (dati privati + contenuto non attendibile + un modo per farli uscire): il "sempre" concesso prima non basta più'
@@ -5910,7 +6781,19 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
          * `azione` originale intatta per ogni altro chiamante, PARITÀ
          * bit-per-bit già provata altrove per la sua forma.
          */
-        const domanda = chiediApprovazioneFn(trifectaForzaConferma ? { ...azione, trifecta: true } : azione)
+        /*
+         * ⛔ F15 — la RAGIONE viaggia con la domanda, come già per la trifecta: chi risponde
+         * deve vedere la frase in lingua naturale («Il comando tocca un file che può contenere
+         * chiavi o password (~/.ssh/id_rsa): vuoi che lo esegua?»), non dedurla dal comando.
+         * Campo ADDITIVO su un oggetto NUOVO (l'`azione` originale resta intatta per ogni altro
+         * chiamante), stessa forma già in uso qui sopra.
+         */
+        // ⛔ I due possono valere INSIEME, e allora la scheda deve portarli tutti e due: un `else`
+        //   qui avrebbe fatto sparire la trifecta ogni volta che un segreto la precedeva.
+        const azioneDaChiedere = (segretoForzaConferma || trifectaForzaConferma)
+            ? { ...azione, ...(trifectaForzaConferma ? { trifecta: true } : {}), ...(segretoForzaConferma ? { segreto } : {}) }
+            : azione
+        const domanda = chiediApprovazioneFn(azioneDaChiedere)
         approvato = gara ? await Promise.race([domanda, gara]) : await domanda
     }
     catch {
@@ -7279,6 +8162,16 @@ export async function talosLavora({
             try { argomenti = JSON.parse(c.function?.arguments || '{}') } catch { /* vuoto */ }
             let esito
             /*
+             * ⭐⭐ OSS-1/OSS-2 (17/09/2026) — CIO' CHE SOLO IL RAMO SA, e che l'evento di esito
+             * deve poter dire: quanto e' durata l'esecuzione (`durataMs`, misurata col
+             * `performance.now()` monotono INTORNO al comando) e che cosa e' girato dove
+             * (`comando`, `cwd`). Vive qui e non dentro l'`else` piu' sotto perche' l'unico posto
+             * che emette `tool-esito` sta fuori da quel blocco.
+             * ⛔ Resta `null` per gli attrezzi che non misuriamo, e un `null` non produce nessun
+             *   campo: uno zero sarebbe indistinguibile da «istantaneo» — vedi `agui-events.mjs`.
+             */
+            let processoPerEvento = null
+            /*
              * ⭐⭐⭐ FASE A (hook) — pre_tool_call, chiamato per OGNI attrezzo
              * (Hermes: "universale", vedi la doc su talosLavora sopra) MA il
              * suo rifiuto blocca SOLO le azioni mutanti (`AZIONI_MUTANTI_PER_HOOK`,
@@ -7358,9 +8251,40 @@ export async function talosLavora({
                      * messaggio che non nomina nessun campo e non dice cosa fare.
                      */
                     const percorso = percorsoDiFile(argomenti)
+                    /*
+                     * ⛔⛔⛔⛔ F15, 17/09/2026 — L'UNICO CANCELLO CHE `leggi` ATTRAVERSA, e solo
+                     * quando c'è qualcosa da chiedere.
+                     *
+                     * `leggi` è sola lettura e per questo non è mai passata da
+                     * `verificaPermessoScrittura` (vedi la sua doc: «elenca/cerca/leggi/naviga
+                     * non sono gated, per costruzione non mutano nulla»). Resta vero per ciò
+                     * che quel cancello giudica — il DANNO. Ma un segreto non si danneggia
+                     * leggendolo: si PORTA FUORI, e da lì in poi vive dentro la conversazione.
+                     * ⇒ Qui non si chiede il permesso di scrivere: si chiede se quel file
+                     *   specifico può entrare nel contesto.
+                     *
+                     * ⛔ La chiamata è CONDIZIONATA apposta: se `motivoDaChiedere` torna `null`
+                     *   — cioè in tutte le letture normali — il cancello non viene nemmeno
+                     *   sfiorato, e questo ramo è bit per bit quello di ieri. Non è un
+                     *   risparmio: è la garanzia che `leggi` non possa cominciare a essere
+                     *   negato da un livello di accesso che non l'ha mai riguardato.
+                     * ⛔ Il motivo si calcola due volte (qui e dentro il cancello) di
+                     *   proposito: è una funzione PURA sugli stessi dati, e il cancello deve
+                     *   restare vero anche se un giorno qualcun altro lo chiamerà con `leggi`
+                     *   senza aver fatto questo controllo.
+                     */
+                    const daChiedere = percorso === '' ? null : motivoDaChiedere({ tipo: 'leggi', percorso, cartella })
+                    const permessoLettura = daChiedere
+                        ? await verificaPermessoScrittura(
+                            { tipo: 'leggi', percorso },
+                            { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
+                        )
+                        : null
                     esito = percorso === ''
                         ? messaggioArgomentiAssenti('leggi', { troncati: argomentiTroncati.has(c.id) })
-                        : await disco.leggi(percorso)
+                        : permessoLettura && !permessoLettura.consentito
+                            ? `REFUSED. ${permessoLettura.motivo} The file was not read.`
+                            : await disco.leggi(percorso)
                 }
                 else if (nome === 'scrivi') {
                     /*
@@ -7730,9 +8654,28 @@ export async function talosLavora({
                         esito = `REFUSED. ${permesso.motivo} The test command was not run.`
                     }
                     else {
-                        scrittureSenzaProva = 0
-                        p = await eseguiProva(comandoProva, cartella, { segnaleStop })
-                        esito = `exit ${p.codice}\n${p.testo}`
+                        /*
+                         * ⛔⛔⛔ BC-57 — IL CANCELLO STA PRIMA, non dopo: vedi `suiteMancante`.
+                         * ⛔ E `scrittureSenzaProva` NON si azzera qui: una prova che non e' mai
+                         *   partita non e' una prova. Azzerare il contatore su un rifiuto
+                         *   spegnerebbe il promemoria «scritture senza prova» proprio nel caso in
+                         *   cui serve di piu' — il modello sta scrivendo e non sta provando niente.
+                         */
+                        const manca = await suiteMancante(comandoProva, cartella)
+                        if (manca) {
+                            p = { codice: USCITA_NESSUNA_SUITE, testo: `nessuna suite trovata in ${cartella}: ${manca}` }
+                            esito = `exit ${p.codice}\n${p.testo}`
+                            /* ⭐ OSS-2 — il comando si dichiara anche qui: e' cio' che spiega il rifiuto. Nessuna `durataMs`: non e' girato niente, e uno zero direbbe «istantaneo». */
+                            processoPerEvento = { comando: comandoProva, cwd: cartella }
+                        }
+                        else {
+                            scrittureSenzaProva = 0
+                            /* ⭐ OSS-1 — `performance.now()` e non `Date.now()`: un orologio monotono non torna indietro se l'ora di sistema cambia a meta' comando. */
+                            const primaDiProvare = performance.now()
+                            p = await eseguiProva(comandoProva, cartella, { segnaleStop })
+                            processoPerEvento = { durataMs: Math.round(performance.now() - primaDiProvare), comando: comandoProva, cwd: cartella }
+                            esito = `exit ${p.codice}\n${p.testo}`
+                        }
                     }
                     // ⭐ FASE D — 'prova' non produce un artefatto testuale: hashContenuto resta null, non un valore inventato.
                     ricevutaEmessa = true
@@ -7798,6 +8741,8 @@ export async function talosLavora({
                                 mandati += delta.length
                                 onGiro?.({ giro, tipo: 'tool-uscita', toolCallId: c.id, delta })
                             }
+                            /* ⭐ OSS-1 — stessa misura del ramo `prova`, stesso orologio monotono. */
+                            const primaDelComando = performance.now()
                             p = await eseguiComandoSandboxato(comandoDiShell(argomenti), cartella, {
                                 mobile,
                                 segnaleStop, // ⛔ 11/09 — senza questo, «Ferma» premuto durante un comando lungo lo lasciava girare fino in fondo: misurato 46 s di ritardo
@@ -7809,7 +8754,29 @@ export async function talosLavora({
                                 },
                             })
                             svuota() // ⛔ l'ultimo pezzo non resta in mano: il silenzio finale sarebbe il difetto di prima, in piccolo
-                            esito = `exit ${p.codice} [sandbox: ${p.enforcement}]\n${p.testo}`
+                            /*
+                             * ⭐ OSS-2 — la cartella del processo.
+                             *
+                             * ⛔ B2, correzione dopo la bocciatura del controllore (17/09): il
+                             *   commento che stava qui diceva che su WSL2 questo campo esce come
+                             *   `/mnt/c/…`. NON E' VERO su questa strada, e va detto. `cartellaFinale`
+                             *   la produce `staccaCartellaFinale` leggendo un marcatore che solo
+                             *   `tracciaCartella` fa stampare — e il ciclo degli attrezzi non passa
+                             *   quell'opzione, che vale `false` per difetto. ⇒ Qui `p.cartellaFinale`
+                             *   e' SEMPRE `null` e il valore che esce e' `cartella`, cioe' la cartella
+                             *   RICHIESTA, nella sua forma nativa (su Windows: `C:\…`). Misurato, e la
+                             *   prova lo asserisce per nome invece di accontentarsi di «e' una stringa».
+                             * ⛔ Il `|| cartella` resta perche' e' il verso giusto il giorno in cui
+                             *   qualcuno accendera' `tracciaCartella`; accenderlo ORA aggiungerebbe un
+                             *   marcatore in coda a OGNI comando del modello, e quel costo non e'
+                             *   stato misurato. Non si accende per far tornare un commento.
+                             */
+                            processoPerEvento = { durataMs: Math.round(performance.now() - primaDelComando), comando: comandoDiShell(argomenti), cwd: p.cartellaFinale || cartella }
+                            /* ⛔ BLOCCO 6 — l'intestazione dice DOVE ha girato e CHE COSA è vero lì:
+                               `none` da solo non dice che è cmd.exe con gli stessi privilegi. Vedi
+                               `etichetta-sandbox.mjs` per le fonti e per il perché la spiegazione sta
+                               dentro le quadre. */
+                            esito = `exit ${p.codice} [sandbox: ${etichettaSandbox(p.enforcement)}]\n${p.testo}`
                         }
                     }
                     esitoPermessoPerRicevuta = permessoShell
@@ -9274,7 +10241,10 @@ export async function talosLavora({
                 content: contenutoTool,
             })
             await contextHooks?.capture?.({ messages: messaggi, reason: 'tool-result' })
-            onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoTool })
+            /* ⭐ OSS-1/OSS-2 — i campi del processo, quando il ramo li ha misurati. Spread e non chiavi
+               fisse: chi non misura non manda `durataMs: undefined`, che in JSON diventerebbe una
+               chiave fantasma e romperebbe i `deepStrictEqual` gia' scritti altrove. */
+            onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoTool, ...(processoPerEvento ?? {}) })
         }
 
         if (fermatoDentroIlGiro) {

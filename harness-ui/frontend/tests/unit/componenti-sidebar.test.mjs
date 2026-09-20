@@ -30,6 +30,63 @@ test('WorkspaceFooter: cartella, tema e fornitore dai dati del monolite — e ni
 });
 
 /*
+ * ⭐⭐⭐ BC-61 (17/09/2026) — IL PIEDE SCRIVEVA L'ID GREZZO DEL FORNITORE.
+ *
+ * Misurato: con `z-ai/glm-5.3-flash` in sessione il piede diceva «Tema Calm · z-ai». Non è «il
+ * prefisso al posto del modello» (il sottotitolo è «Tema <preset> · <chi serve il modello>» per
+ * scelta, 05/09): è un ID TECNICO a schermo, e la regola dell'owner del 04/09 dice che i nomi
+ * tecnici non si mostrano mai, con la mappa id → nome umano in UN POSTO SOLO.
+ *
+ * ⛔ Il test passa TUTTI i fornitori del registro del frontend, non tre scelti a mano: se domani
+ *   ne nasce uno e nessuno gli dà un nome, questa riga lo dice invece di lasciar comparire il suo
+ *   id in fondo alla barra laterale.
+ * ⛔ E si confronta la stringa INTERA, non «non contiene l'id»: `esterno` è un pezzo di «Agente
+ *   esterno», quindi un `includes` negato passerebbe per costruzione proprio sul caso peggiore.
+ */
+test('BC-61 — il piede non scrive MAI l\'id del fornitore: ogni voce del registro ha il suo nome umano', async () => {
+  const { PROVIDER_DIRETTI } = await import('../../src/components/fonti-modelli.js');
+  assert.ok(PROVIDER_DIRETTI.length >= 20, `il registro dei fornitori si è svuotato: ${PROVIDER_DIRETTI.length} voci`);
+  for (const fornitore of PROVIDER_DIRETTI) {
+    const sotto = testiPiede({ cartella: null, tema: 'calm', modello: `${fornitore.id}/un-modello` }).sotto;
+    assert.equal(sotto, `Tema Calm · ${fornitore.etichetta}`, `⛔ il fornitore ${fornitore.id} arriva a schermo senza nome umano`);
+  }
+});
+
+test('BC-61, secondo giro — i tre fornitori FUORI dall\'elenco dei diretti hanno un nome, e la cassa non conta', () => {
+  /*
+   * ⛔ Misurato dal revisore: `openrouter`, `ollama` e `local` non stanno in `PROVIDER_DIRETTI`
+   *   (è l'elenco dei fornitori DIRETTI e loro non lo sono), quindi il piede restava MUTO proprio
+   *   per quelli che la app elenca per primi. Il buco era invisibile perché «niente» è anche la
+   *   risposta giusta per un fornitore ignoto: le due si distinguono solo nominandoli.
+   */
+  assert.equal(testiPiede({ cartella: null, tema: 'calm', modello: 'openrouter/qualcosa' }).sotto, 'Tema Calm · OpenRouter');
+  assert.equal(testiPiede({ cartella: null, tema: 'calm', modello: 'ollama/llama3' }).sotto, 'Tema Calm · Ollama');
+  assert.equal(testiPiede({ cartella: null, tema: 'calm', modello: 'local:qwen3-8b' }).sotto, 'Tema Calm · locale', 'la parola del 05/09 non cambia: non è un fornitore, è «gira qui»');
+  /* ⛔ D14 — la cassa: un id in maiuscolo è lo STESSO fornitore, non uno sconosciuto. */
+  assert.equal(testiPiede({ cartella: null, tema: 'calm', modello: 'Z-AI/glm-5.3-flash' }).sotto, 'Tema Calm · Z.AI');
+  assert.equal(testiPiede({ cartella: null, tema: 'calm', modello: 'OpenAI/gpt-5' }).sotto, 'Tema Calm · OpenAI');
+});
+
+test('BC-61 — i prefissi del catalogo (z-ai, x-ai, google, moonshotai, mistralai) arrivano al nome umano', () => {
+  /*
+   * Gli id del catalogo OpenRouter si scrivono in un altro modo dagli id delle API dirette: è la
+   * stessa azienda con due grafie, e il ponte NON inventa nomi — porta a una voce che il registro
+   * già ha. Il caso che ha fatto nascere BC-61 è il primo della lista.
+   */
+  for (const [prefisso, atteso] of [['z-ai', 'Z.AI'], ['x-ai', 'xAI'], ['google', 'Gemini'], ['moonshotai', 'Kimi'], ['mistralai', 'Mistral']]) {
+    assert.equal(testiPiede({ cartella: null, tema: 'calm', modello: `${prefisso}/un-modello` }).sotto, `Tema Calm · ${atteso}`, `⛔ ${prefisso} non arriva a un nome umano`);
+  }
+  /* Il modello LOCALE non ha un fornitore: la parola resta quella, ed è vera. */
+  assert.equal(testiPiede({ cartella: null, tema: 'calm', modello: 'local:qwen3-8b' }).sotto, 'Tema Calm · locale');
+  /*
+   * ⛔ AL CONTRARIO, e qui la scelta è deliberata: di un prefisso che NESSUNO sa nominare non si
+   *   scrive l'id — si tace la seconda metà. Inventare un nome sarebbe una bugia; stampare l'id è
+   *   il difetto che stiamo togliendo. Un buco visibile è l'unica terza via onesta.
+   */
+  assert.equal(testiPiede({ cartella: null, tema: 'calm', modello: 'fornitore-mai-visto/modello' }).sotto, 'Tema Calm');
+});
+
+/*
  * Le funzioni PURE dei componenti della sidebar (Fase 2, S-01 e S-02). Il
  * markup lo prova il cancello dei componenti contro il mockup; qui si provano
  * le derivazioni, anche al VERSO CONTRARIO (regola 5-bis).

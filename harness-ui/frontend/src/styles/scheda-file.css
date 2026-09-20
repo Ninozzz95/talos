@@ -1,0 +1,119 @@
+/*
+ * ⛔⛔ PO-30, fetta 1 (17/09/2026) — LA SCHEDA «FILE» DELLA COLONNA DESTRA, col disegno del laboratorio della PR #33.
+ *
+ * Dal laboratorio si prendono la GRAMMATICA e le MISURE (testata col nome della cartella e due soli comandi, ricerca,
+ * selettore delle viste col conteggio a destra, righe da 36 px, lettera di stato, «⋯» che compare sulla riga che si sta
+ * usando); colori, raggi, caratteri e ombre restano i token del tema Calm — nessun valore nuovo, nessun colore scritto a mano.
+ * I due menu della testata usano lo STESSO ancoraggio del menu «⋯» della barra in alto (`position-anchor`), con gli stessi
+ * valori di `.talos-menu`: non un terzo modo di aprire un menu.
+ */
+#railFile #alberoCartella{display:flex; flex-direction:column; gap:var(--talos-space-sm); min-height:0}
+
+.talos-file-head{display:flex; align-items:center; gap:var(--talos-space-sm); min-height:var(--talos-control-height)}
+.talos-file-head > .i{width:16px; height:16px; flex:none; color:var(--talos-muted)}
+.talos-file-head__nome{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600}
+#fileTreeAdd{anchor-name:--talos-file-nuovo}
+#fileTreeMore{anchor-name:--talos-file-altro}
+
+.talos-file-menu{display:none}
+.talos-file-menu:popover-open{
+  display:flex; flex-direction:column; gap:2px;
+  position:fixed; inset:auto; margin:6px 0 0; z-index:60;
+  min-width:15rem; max-width:min(22rem, calc(100vw - 16px)); padding:6px;
+  border:1px solid var(--talos-border-strong); border-radius:12px;
+  background:var(--talos-panel); color:var(--talos-text); box-shadow:var(--talos-shadow-card);
+  position-area:block-end span-inline-start;
+  position-try-fallbacks:flip-block;
+}
+#menuFileNuovo:popover-open{position-anchor:--talos-file-nuovo}
+#menuFileAltro:popover-open{position-anchor:--talos-file-altro}
+.talos-file-menu__voce{width:100%; min-width:0; justify-content:flex-start; gap:8px; padding:0 10px; border-color:transparent; background:transparent; text-align:start; white-space:normal; line-height:1.25; min-height:var(--talos-control-height)}
+.talos-file-menu__voce:hover:not(:disabled){background:var(--talos-card)}
+.talos-file-menu__voce[aria-pressed="true"]{color:var(--talos-accent-text, var(--talos-accent))}
+.talos-file-menu__voce .i{width:15px; height:15px; flex:none}
+
+.talos-file-viste{display:flex; align-items:center; justify-content:space-between; gap:var(--talos-space-sm)}
+.talos-file-viste__scelta{gap:6px; padding-inline:var(--talos-space-xs); font-size:var(--talos-font-size-xs); border-color:transparent; max-width:75%}
+.talos-file-viste__scelta > span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.talos-file-viste__scelta > .i{width:12px; height:12px; flex:none}
+.talos-file-viste__scelta:hover:not(:disabled){border-color:var(--talos-border)}
+.talos-file-viste__conteggio{font-size:var(--talos-font-size-xs); white-space:nowrap}
+
+/* La riga del laboratorio: 36 px, e la lettera di stato a larghezza fissa così le «M» e le «A» stanno in colonna. */
+#railFile .talos-file-row{min-height:36px; padding-block:3px}
+#railFile .talos-file-row__state{flex:none; inline-size:1.25rem; text-align:center; font-weight:600; font-size:var(--talos-font-size-xs); color:var(--talos-accent)}
+#railFile .talos-file-row__state.ft-new{color:var(--talos-success, var(--talos-accent))}
+
+/* La vista «Modificati in questa sessione»: le stesse righe chiave-valore della scheda, ma ogni riga È un file che si apre. */
+.talos-file-modificati .talos-kv{cursor:pointer; border-radius:var(--talos-radius-control); padding-inline:var(--talos-space-xs)}
+.talos-file-modificati .talos-kv:hover{background:var(--talos-card)}
+.talos-file-modificati .talos-kv__k{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+
+/* Il nome della cartella sta nella testata: la riga-radice dell'albero lo ripeterebbe subito sotto (visto nella prima foto).
+   Resta nel DOM — è il bersaglio del trascinamento sulla radice — ma non occupa una riga. */
+#railFile .talos-file-tree .tree-root{display:none}
+
+/* PO-30 (18/09/2026) — i risultati della ricerca in tutta la cartella: la stessa riga dell'albero, col percorso accanto al
+   nome in tono smorzato (è il percorso a distinguere due file con lo stesso nome). Una riga È un pulsante: prende il fuoco. */
+.talos-file-risultati{display:flex; flex-direction:column; min-height:0; overflow-y:auto}
+.talos-file-risultato{width:100%; border:0; background:transparent; color:inherit; font:inherit; text-align:start}
+.talos-file-risultato:focus-visible{outline:var(--talos-focus-width) solid var(--talos-accent); outline-offset:calc(-1 * var(--talos-focus-width))}
+.talos-file-risultato .talos-file-row__name{flex:0 1 auto}
+.talos-file-risultato__dove{flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--talos-font-size-xs)}
+
+/* PO-30 (18/09/2026) — chi sta toccando il file: il segno del laboratorio. Smorzato quando l'agente ha finito, acceso (tono
+   d'accento, nessun colore nuovo) quando è ancora al lavoro. È un pulsante: porta al dettaglio dell'agente. */
+#railFile .talos-file-row__agente{flex:none; min-width:24px; min-height:24px; width:24px; height:24px; padding:0; color:var(--talos-muted); background:transparent}
+#railFile .talos-file-row__agente .i, #railFile .talos-file-row__agente svg{width:14px; height:14px}
+#railFile .talos-file-row__agente:hover{background:var(--talos-accent-soft); color:var(--talos-accent-text, var(--talos-accent))}
+#railFile .talos-file-row__agente.is-al-lavoro{color:var(--talos-accent)}
+
+/*
+ * ⭐⭐ PO-30, fetta 1 (18/09/2026) — LA CASELLA DI SELEZIONE E IL PIEDE DELLA SELEZIONE.
+ * Le regole di visibilità sono quelle del laboratorio (`calm-files.css:63-72`): la casella sta a
+ * opacità zero e compare quando la riga è sotto il mouse, ha il fuoco dentro, è selezionata, o
+ * l'albero è in modalità selezione. Così l'elenco resta pulito ma il comando è dove serve.
+ * ⛔ `opacity` e non `display`: la casella resta NEL flusso e il nome del file non salta di lato
+ * a ogni passaggio del mouse; ed è raggiungibile dai lettori di schermo anche quando è trasparente
+ * (sparisce alla vista, non all'accessibilità — diverso da `visibility`, che la toglierebbe a tutti).
+ */
+/* ⛔ Il laboratorio dà 24x24 a TUTTI i bottoni della riga (`.file-row button`, `calm-files.css`),
+   non solo al segno dell'agente: senza, il «⋯» e la casella non hanno la stessa area di tocco. */
+#railFile .talos-file-row button{min-width:24px; min-height:24px}
+.talos-file-row__check{
+  flex:none; width:14px; height:14px; margin:0 2px 0 0; accent-color:var(--talos-accent);
+  opacity:0; transition:opacity var(--talos-motion-duration-control, 160ms) var(--talos-motion-ease, ease);
+}
+.ft-row:hover > .talos-file-row__check,
+.ft-row:focus-within > .talos-file-row__check,
+.ft-row.is-selezionato > .talos-file-row__check{opacity:1}
+.talos-file-row__check:focus-visible{opacity:1; outline:2px solid var(--talos-ring); outline-offset:2px}
+
+/* Una riga selezionata si vede senza il mouse addosso: tinta d'accento, non un bordo. */
+.ft-row.is-selezionato{background:var(--talos-accent-soft, color-mix(in srgb, var(--talos-accent) 14%, transparent))}
+
+/* Il piede: compare solo con una selezione attiva, in fondo alla scheda. */
+.talos-file-selezione{
+  display:flex; align-items:center; gap:var(--talos-space-sm); flex:none;
+  padding:var(--talos-space-sm) var(--talos-space-md); margin-top:auto;
+  border-top:1px solid var(--talos-border);
+}
+/*
+ * ⛔ Il conteggio spinge i pulsanti a destra con `margin-inline-end:auto`, che è lo SPAZIATORE che
+ *   il laboratorio mette fra i due (`explorer-view.js:96`: `<span class="grow">`). Senza, i comandi
+ *   si appoggiavano al testo e «2 selezionati» finiva schiacciato contro «Allega alla chat» — visto
+ *   nella foto a 1440, non da un test: il testo c'era tutto, ma mozzato dal pulsante accanto.
+ */
+.talos-file-selezione__conteggio{font-size:var(--talos-font-size-xs); white-space:nowrap; margin-inline-end:auto}
+
+/*
+ * ⭐ 18/09 — LA RINOMINA IN RIGA: il campo prende il POSTO del nome, non apre un dialogo.
+ * `flex:1; min-width:0` perché sta dove stava il nome (che è flessibile) e non deve far
+ * saltare di lato «⋯» e la lettera di stato quando compare.
+ */
+.ft-rename{
+  flex:1; min-width:0; height:24px; min-height:24px; padding:0 var(--talos-space-xs);
+  font:inherit; font-size:var(--talos-font-size-sm, inherit); color:inherit; background:var(--talos-background);
+  border:1px solid var(--talos-accent); border-radius:var(--talos-radius-control);
+}
+.ft-rename:focus-visible{outline:2px solid var(--talos-ring); outline-offset:1px}

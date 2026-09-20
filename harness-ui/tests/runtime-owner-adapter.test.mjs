@@ -209,17 +209,33 @@ test('OPENROUTER-IDLE-01 — keepalive SSE rinnova il limite di inattività oltr
   assert.match(await risposta.text(), /"content":"ok"/);
 });
 
-test('OPENROUTER-IDLE-01 contrario — silenzio vero produce 408 ritentabile, non attesa infinita', async () => {
+test('OPENROUTER-IDLE-01 contrario — silenzio vero è un errore di CONNESSIONE ritentabile, non attesa infinita', async () => {
+  /*
+   * ⛔ P0 · punto 7 (16/09/2026) — questa prova è stata aggiornata, non indebolita: l'invariante che
+   *   difende («silenzio vero ⇒ si esce, e si esce in modo ripetibile») è identica. Sono cambiati
+   *   la LEVA e il NOME dell'esito.
+   *   · La leva: sul flusso non comanda più `timeoutMsFn` (il tempo del FORNITORE, che ora vale solo
+   *     fino agli header) ma `inattivitaMsFn`, il failsafe di generazione. Col vecchio aggancio,
+   *     bastava scrivere 60 s nella scheda Fornitori per uccidere un ragionamento lungo legittimo.
+   *   · L'esito: non più un 408 travestito da risposta HTTP, ma l'errore con il suo codice
+   *     (`PROVIDER_SILENCE`) e la sua classe (`rete`, transitoria). Un 408 sarebbe stato riletto
+   *     dalla tabella BC-44 come «timeout del fornitore» — cioè avrebbe mandato a studiare il
+   *     modello invece del cavo, che è esattamente ciò che questo punto doveva smettere di fare.
+   */
   const { creaFetchOpenRouterResiliente } = await import('../src/runtime-owner-adapter.mjs');
   const upstream = async () => new Response(new ReadableStream({ start() {} }), {
     status: 200, headers: { 'content-type': 'text/event-stream' },
   });
-  const risposta = await creaFetchOpenRouterResiliente(upstream, { timeoutMsFn: () => 10 })(
+  const inizio = Date.now();
+  const errore = await creaFetchOpenRouterResiliente(upstream, { timeoutMsFn: () => 1_000, inattivitaMsFn: () => 10 })(
     'https://openrouter.ai/api/v1/chat/completions',
     { method: 'POST', body: JSON.stringify({ model: 'qwen/qwen3.8-flash', stream: true }) },
-  );
-  assert.equal(risposta.status, 408);
-  assert.match(await risposta.text(), /inattiv/i);
+  ).then(() => null, (e) => e);
+  assert.notEqual(errore, null, 'il silenzio vero non deve diventare un’attesa infinita');
+  assert.equal(errore.code, 'PROVIDER_SILENCE');
+  assert.equal(errore.classe, 'rete');
+  assert.equal(errore.transitorio, true, 'ritentabile come prima: è ciò che questa prova difende');
+  assert.ok(Date.now() - inizio < 5_000, 'si esce al limite di inattività, non al vecchio muro');
 });
 
 test('OPENROUTER-STOP-03 — stop utente interrompe subito e non viene trasformato in retry', async () => {
@@ -279,4 +295,40 @@ test('OPENROUTER-RETRY-02 contrario — errore dopo testo non riavvia il turno e
   );
   assert.equal(risposta.status, 200);
   await assert.rejects(risposta.text(), /provider disconnected/);
+});
+
+for (const finale of [400, 503]) test(`RIPRESA-LOCALE-DOPPIO-RIFIUTO 400→${finale}: conserva entrambi senza esporre diagnostica`, async () => {
+  let chiamate = 0;
+  const f = creaFetchMultiProvider(async () => new Response(++chiamate === 1 ? 'primo-rifiuto-riservato' : 'secondo-rifiuto-riservato', { status: chiamate === 1 ? 400 : finale }), {
+    dipendenze: {}, risolvi: () => ({ fonte: 'ollama', modelloRemoto: 'test', url: 'http://127.0.0.1/chat/completions', headers: {} }),
+  });
+  await assert.rejects(() => f('http://127.0.0.1/chat/completions', { body: JSON.stringify({ model: 'ollama:test', tools: [{ type: 'function', function: { name: 'leggi', parameters: { type: 'object' } } }] }) }), error => {
+    assert.equal(error.code, 'LOCAL_ENGINE_REJECTED_REQUEST');
+    assert.equal(error.stato, 400); assert.equal(error.dettaglio, 'primo-rifiuto-riservato');
+    assert.deepEqual(error.tentativi, [{ stato: 400, dettaglio: 'primo-rifiuto-riservato' }, { stato: finale, dettaglio: 'secondo-rifiuto-riservato' }]);
+    assert.equal(Object.keys(error).includes('tentativi'), false);
+    assert.doesNotMatch(error.message, /riservato/); return true;
+  });
+  assert.equal(chiamate, 2);
+});
+
+test('RIPRESA-LOCALE-DETTAGLIO-LIMITATO: legge prefisso e cancella entrambi i corpi', async () => {
+  const letti = [0, 0], cancellati = [false, false]; let chiamate = 0;
+  const f = creaFetchMultiProvider(async () => {
+    const i = chiamate++;
+    return new Response(new ReadableStream({ pull(c) { letti[i]++; if (letti[i] > 20) c.close(); else c.enqueue(new Uint8Array(1024).fill(65 + i)); }, cancel() { cancellati[i] = true; } }), { status: 400 });
+  }, { dipendenze: {}, risolvi: () => ({ fonte: 'ollama', modelloRemoto: 'test', url: 'http://127.0.0.1/chat/completions', headers: {} }) });
+  await assert.rejects(() => f('http://127.0.0.1/chat/completions', { body: JSON.stringify({ model: 'ollama:test', tools: [{}] }) }), error => {
+    assert.equal(error.dettaglio.length, 2000); assert.equal(error.tentativi[1].dettaglio.length, 2000); return true;
+  });
+  assert.deepEqual(cancellati, [true, true]); assert.ok(letti.every(n => n < 6), `Corpi consumati: ${letti}`);
+});
+
+test('RIPRESA-LOCALE-STOP-DIAGNOSI: abort durante errore HTTP resta abort e non avvia riprova', async () => {
+  let chiamate = 0;
+  const f = creaFetchMultiProvider(async () => { chiamate++; return new Response(new ReadableStream({ start(c) { c.error(new DOMException('Stop', 'AbortError')); } }), { status: 400 }); }, {
+    dipendenze: {}, risolvi: () => ({ fonte: 'ollama', modelloRemoto: 'test', url: 'http://127.0.0.1/chat/completions', headers: {} }),
+  });
+  await assert.rejects(() => f('http://127.0.0.1/chat/completions', { body: JSON.stringify({ model: 'ollama:test', tools: [{}] }) }), { name: 'AbortError' });
+  assert.equal(chiamate, 1);
 });

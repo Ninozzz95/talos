@@ -18,7 +18,10 @@ import { readFileSync } from 'node:fs';
  * vieta la cornice non è una richiesta impossibile, è il caso per cui esiste il browser pilotato.
  *
  * Si legge il sorgente perché la regia sta dentro `creaBrowser`, che vuole tutto il DOM del
- * mockup: la guardia sta sulle condizioni che, tolte, fanno tornare il difetto.
+ * mockup: la guardia sta sulle condizioni che, tolte, fanno tornare il difetto. Il comportamento
+ * vero — tre schede, tre modi, il ritorno sulla prima — si prova dal vivo in
+ * `tests/browser/browser-p0.spec.mjs`, sulla app vera: questo file tiene ferme le CONDIZIONI, quello
+ * misura il RISULTATO. Nessuno dei due basta da solo.
  */
 
 const SORGENTE = readFileSync(new URL('../../src/components/browser.js', import.meta.url), 'utf8');
@@ -27,74 +30,97 @@ const senzaCommenti = SORGENTE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\
 test('IL RIPIEGO AL TESTO non zittisce chi ha CHIESTO la pagina', () => {
   assert.match(
     senzaCommenti,
-    /if \(stato\.modo === 'pagina' && stato\.modoChiesto !== 'pagina'\) stato\.modo = 'testo';/,
+    /if \(modoDi\(s\.id\) === 'pagina' && stato\.modiChiesti\[s\.id\] !== 'pagina'\) impostaModo\(s\.id, 'testo'\);/,
     'senza la seconda condizione il render annulla il clic su «Pagina», per sempre',
   );
 });
 
 test('CHIEDERE LA PAGINA su un sito che vieta la cornice APRE la pagina viva', () => {
-  assert.match(senzaCommenti, /incorniciabile === false[\s\S]{0,160}azioni\.apri\?\./,
+  assert.match(senzaCommenti, /incorniciabile === false[\s\S]{0,260}azioni\.apri\?\./,
     'il clic deve chiamare l\'apertura viva quando la cornice non è possibile: il ripiego è trasparente');
 });
 
 /*
- * ⛔ 08/09/2026, owner: «se il pulsante pagina viene cliccato e cambio scheda mi va a
- *   visualizzazione sorgente, non deve succedere, deve ricordare la mia scelta».
- *   Questa prova diceva il CONTRARIO — l'avevo scritta io poche ore prima per difendere la mia
- *   decisione di azzerare la scelta al cambio scheda, che era sbagliata: è una PREFERENZA.
- *   La guardia non si cancella, si GIRA: adesso pretende il contrario e resta una guardia.
+ * ⛔⛔⛔ 16/09/2026 — QUESTA PROVA È STATA GIRATA UNA TERZA VOLTA, e va detto perché, perché la
+ * seconda volta l'ho scritta io per difendere una decisione che l'owner ha poi ribaltato.
+ *
+ * Le tre epoche, in ordine:
+ *   · 08/09 — «la scelta si RIPRENDE al cambio scheda» (`const suo = modiScelti[…]`);
+ *   · 11/09 — owner: «navigando nelle schede mi appare la visuale codice sorgente… voglio che di
+ *     default ci sia sempre la visuale a pagina, sempre, anche se cambio scheda mentre sono in
+ *     modalità sorgente» ⇒ la prova fu girata per pretendere il RIAZZERAMENTO a ogni cambio scheda;
+ *   · 16/09 — owner, P0 punto 5: «ogni tab deve mantenere indipendentemente il proprio stato…
+ *     Tab A → Pagina, B → Testo, C → Pagina; tornando su A deve restare Pagina; associato all'ID
+ *     della singola tab; sopravvive a switch, re-render, aggiornamento contenuto, navigazione nella
+ *     stessa tab, streaming, modifiche delle altre tab».
+ *
+ * ⛔ Il 16/09 non contraddice l'11/09: lo CHIUDE MEGLIO. Il difetto dell'11/09 era che `stato.modo`
+ *   era UNA VARIABILE SOLA per tutto il browser — si trascinava dietro l'ultimo valore, e la mappa
+ *   `modiScelti` copriva solo metà dei casi. Il riazzeramento toglieva il trascinamento *e* la
+ *   memoria. Tenere il modo PER ID toglie il trascinamento e basta: una scheda mai toccata nasce in
+ *   «pagina» (`modoPredefinito`), quindi il sorgente non segue più la navigazione — che è ciò che
+ *   l'owner chiedeva l'11/09 — e una scheda toccata si ricorda ciò che le hai chiesto.
+ *
+ * ⇒ Le guardie qui sotto pretendono il CONTRARIO di quelle dell'11/09, e la ragione sta scritta
+ *   sopra: chi le girerà una quarta volta deve poter leggere perché.
  */
-/*
- * ⛔⛔⛔ 11/09/2026 — QUESTA PROVA È STATA GIRATA UNA SECONDA VOLTA, e va detto perché.
- *
- * L'08/09 pretendeva che la scelta si RIPRENDESSE al cambio scheda (`const suo = modiScelti[…]`).
- * L'owner, 11/09, guardando il browser integrato dopo una ricerca web: «navigando nelle schede mi
- * appare la visuale codice sorgente. Voglio che di default ci sia sempre la visuale a pagina,
- * quella renderizzata, sempre, anche se cambio scheda mentre sono in modalità sorgente».
- *
- * ⛔ Non è un capriccio che ribalta l'08/09: è lo STESSO difetto, che quella cura non aveva
- *   chiuso. Riprendere la scelta della scheda di destinazione non bastava, perché quando quella
- *   scheda non ne aveva una (`suo` null) `stato.modo` non veniva toccato e restava quello della
- *   scheda di PARTENZA — cioè il sorgente si trascinava su una scheda che non l'aveva mai chiesto.
- *
- * ⇒ La regola nuova è più semplice e non ha casi scoperti: **al cambio scheda il modo torna
- *   sempre a 'pagina'**. Il sorgente resta a un clic e vale finché resti su quella scheda; non
- *   segue più la navigazione.
- */
-test('SEMPRE PAGINA: cambiando scheda il modo si riazzera, non si eredita dalla scheda di prima', () => {
+test('OGNI SCHEDA IL SUO MODO: la memoria è una mappa per id, non una variabile sola', () => {
+  assert.match(senzaCommenti, /modi: \{\}, modiChiesti: \{\}/, 'due mappe per id: ciò che si vede e ciò che è stato chiesto');
+  assert.match(senzaCommenti, /const modoDi = \(id\) => \(id && stato\.modi\[id\]\) \|\| stato\.modoPredefinito;/,
+    'il modo di una scheda si legge per id, col predefinito per chi non ne ha uno');
+  assert.ok(!/\bstato\.modo\b\s*=/.test(senzaCommenti),
+    '⛔ è tornata la variabile globale del modo: è la causa del trascinamento segnalato l’11/09');
+});
+
+test('AL CAMBIO SCHEDA NON SI RIAZZERA PIÙ NIENTE — ordine owner del 16/09', () => {
   const cambio = /nuovo\.attiva !== stato\.attiva\)\s*\{([\s\S]*?)\n {6}\}/.exec(senzaCommenti);
-  assert.ok(cambio, 'il ramo del cambio scheda deve esistere');
-  assert.match(cambio[1], /stato\.modo = 'pagina'/,
-    '⛔ al cambio scheda il modo deve tornare a pagina: è la richiesta dell’owner dell’11/09');
-  assert.ok(!/const suo = stato\.modiScelti\[nuovo\.attiva\]/.test(senzaCommenti),
-    '⛔ è tornata l’eredità del modo dalla scheda precedente: è esattamente il difetto segnalato');
+  assert.ok(cambio, 'il ramo del cambio scheda deve esistere: ci vive il freno delle riaperture');
+  assert.ok(!/stato\.modo\s*=\s*'pagina'/.test(cambio[1]),
+    '⛔ il riazzeramento dell’11/09 è tornato: cancella la scelta della persona, che il 16/09 deve sopravvivere');
+  assert.match(cambio[1], /stato\.riaperte\.delete\(nuovo\.attiva\)/,
+    'il freno anti-anello della riapertura resta: quello non c’entra col modo');
 });
 
 /*
- * ⛔ IL VERSO CONTRARIO, e non è una formalità: la via più pigra per «sempre pagina» sarebbe
- *   scrivere anche `modoChiesto = 'pagina'`, e sarebbe un danno — una richiesta ESPLICITA di
- *   pagina disattiva il ripiego al testo (`corniceDellaLettura`), e su un sito che vieta la
- *   cornice lascerebbe un riquadro vuoto al posto del testo che l'agente ha letto.
+ * ⛔ IL VERSO CONTRARIO, e non è una formalità: la via più pigra per «ogni scheda il suo modo»
+ *   sarebbe scrivere anche la richiesta esplicita (`modiChiesti`) a ogni cambio di modo automatico,
+ *   e sarebbe un danno — una richiesta ESPLICITA di pagina disattiva il ripiego al testo
+ *   (`corniceDellaLettura`), e su un sito che vieta la cornice lascerebbe un riquadro vuoto al posto
+ *   del testo che l'agente ha letto. Le due mappe restano due.
  */
-test('AL CONTRARIO — il riazzeramento non finge una richiesta della persona, o il ripiego al testo muore', () => {
-  const cambio = /nuovo\.attiva !== stato\.attiva\)\s*\{([\s\S]*?)\n {6}\}/.exec(senzaCommenti);
-  assert.match(cambio[1], /stato\.modoChiesto = null/,
-    'modoChiesto torna a null: nessuna richiesta esplicita, così il ripiego automatico resta libero di agire');
-  assert.match(senzaCommenti, /stato\.modo === 'pagina' && stato\.modoChiesto !== 'pagina'/,
-    'e il ripiego al testo per i siti che vietano la cornice deve essere ancora lì');
-});
-
-test('LA SCELTA PER SCHEDA resta solo dove porta ancora informazione: riaprire col browser pilotato', () => {
-  assert.match(senzaCommenti, /stato\.modiScelti\[[^\]]+\] = scelto/,
-    'la scelta va comunque messa via con l\'id della scheda a cui appartiene');
-  assert.match(senzaCommenti, /stato\.modiScelti\[s\.id\] === 'pagina'/,
+test('AL CONTRARIO — il ripiego automatico scrive il MODO, mai la richiesta della persona', () => {
+  const ripiego = /if \(modoDi\(s\.id\) === 'pagina' && stato\.modiChiesti\[s\.id\] !== 'pagina'\) ([^\n]*)/.exec(senzaCommenti);
+  assert.ok(ripiego, 'il ripiego deve esistere');
+  assert.ok(!/modiChiesti\[[^\]]+\]\s*=/.test(ripiego[1]),
+    '⛔ il ripiego automatico non deve fingere una richiesta della persona, o non scatterà mai più');
+  assert.match(senzaCommenti, /stato\.modiChiesti\[s\.id\] === 'pagina'/,
     'una scheda che aveva chiesto Pagina su un sito non incorniciabile si riapre pilotata: la cura dell\'08/09 resta intatta');
 });
 
-test('AL CONTRARIO — due schede restano indipendenti: non una scelta sola per tutte', () => {
-  assert.match(senzaCommenti, /modiScelti: \{\}/, 'una memoria per scheda, non un valore unico');
+/*
+ * ⛔ 16/09 — e il ripiego di UNA scheda non tocca le altre: il timeout della cornice cattura l'id
+ *   della scheda a cui appartiene (`idSuo`) invece di scrivere sulla variabile globale. Senza questa
+ *   riga, una cornice lenta buttava in «Testo» anche le schede che stavano benissimo.
+ */
+test('AL CONTRARIO — il ripiego a tempo scrive sulla SUA scheda, non su quella attiva in quel momento', () => {
+  assert.match(senzaCommenti, /const idSuo = s\.id;[\s\S]{0,400}impostaModo\(idSuo, 'testo'\)/,
+    'l’id si cattura alla creazione della cornice: quando l’attesa scade, l’attiva può essere un’altra');
 });
 
 test('LO STATO NASCE senza una scelta della persona: il ripiego automatico deve poter agire', () => {
-  assert.match(senzaCommenti, /modoChiesto: null/);
+  assert.match(senzaCommenti, /modiChiesti: \{\}/, 'nessuna richiesta esplicita alla nascita');
+  assert.match(senzaCommenti, /modoPredefinito: modoIniziale === 'testo' \? 'testo' : 'pagina'/,
+    'il predefinito resta dichiarato qui, non nascosto in una condizione');
+});
+
+/*
+ * ⛔ 16/09, punto 4(a) — LE MAPPE PER ID NON CRESCONO PER SEMPRE. Una memoria indicizzata da un id
+ *   che nessuno pota è una perdita lenta: dopo un pomeriggio di navigazione tiene le scelte di
+ *   schede che non esistono più. Si potano contro le schede vive, a ogni aggiornamento.
+ */
+test('LE MAPPE SI POTANO: ciò che riguarda una scheda chiusa se ne va con lei', () => {
+  assert.match(senzaCommenti, /const vivi = new Set\(stato\.schede\.map\(\(x\) => x\.id\)\);/);
+  assert.match(senzaCommenti, /for \(const mappa of \[stato\.modi, stato\.modiChiesti\]\)[^\n]*delete mappa\[k\]/);
+  assert.match(senzaCommenti, /for \(const c of el\.live\?\.querySelectorAll\('iframe'\) \|\| \[\]\) if \(!vivi\.has\(c\.dataset\.browserId\)\) c\.remove\(\);/,
+    'anche le cornici delle schede chiuse se ne vanno: sono documenti vivi, non nodi vuoti');
 });

@@ -31,7 +31,21 @@ test('PH-UI-BROWSER componenti reali: menu, azioni, tastiera, desktop, mobile e 
       if(relative(frontend,path).startsWith('..'))throw new Error('Sorgente fuori dal frontend: ' + path + '  (chiesto da ' + (args.importer || 'ingresso') + ' come ' + args.path + ')');
       return {path,namespace:'ph'};
     });
-    b.onLoad({filter:/.*/,namespace:'ph'},async args=>({contents:await readFile(args.path,'utf8'),resolveDir:dirname(args.path),loader:extname(args.path)==='.css'?'css':'js'}));
+    /*
+     * ⛔⛔ 18/09/2026 — IL CARICATORE SI SCEGLIE DALL'ESTENSIONE, NON «css oppure js».
+     *   Quando il contenuto lo dà un plugin (`onLoad`), esbuild NON applica i suoi caricatori
+     *   predefiniti: il `loader` del risultato vale `js` se non lo dici. Così un `.ts` veniva letto
+     *   come JavaScript, e `export type Destination = 'local' | 'cloud';` — sintassi TypeScript
+     *   legittima — usciva come `ERROR: Unexpected "type"`, rendendo rosso QUESTO cancello per un
+     *   file che nel build vero (`scripts/build.mjs`) passa benissimo, perché lì il caricatore lo
+     *   sceglie esbuild dall'estensione. Fonte: esbuild, «Plugins» (esbuild.github.io/plugins) e
+     *   «Content Types», letti il 18/09/2026 — «if omitted, the loader defaults to js».
+     */
+    b.onLoad({filter:/.*/,namespace:'ph'},async args=>{
+      const est=extname(args.path);
+      const loader=est==='.css'?'css':est==='.ts'||est==='.mts'||est==='.cts'?'ts':est==='.tsx'?'tsx':'js';
+      return {contents:await readFile(args.path,'utf8'),resolveDir:dirname(args.path),loader};
+    });
   }};
   const script = await build({ absWorkingDir:tmpdir(), plugins:[sorgenti], stdin:{contents:`
     import {creaProviderCard} from './src/components/provider-card.js';

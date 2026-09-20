@@ -1,35 +1,35 @@
 /* Font locali: la app e' local-first, niente Google Fonts. */
 @font-face {
-  font-family: 'Instrument Sans';
-  src: url('./fonts/instrument-sans-latin-400-normal.woff2') format('woff2');
+  font-family: "Instrument Sans";
+  src: url("./fonts/instrument-sans-latin-400-normal.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Instrument Sans';
-  src: url('./fonts/instrument-sans-latin-500-normal.woff2') format('woff2');
+  font-family: "Instrument Sans";
+  src: url("./fonts/instrument-sans-latin-500-normal.woff2") format("woff2");
   font-style: normal;
   font-weight: 500;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Instrument Sans';
-  src: url('./fonts/instrument-sans-latin-600-normal.woff2') format('woff2');
+  font-family: "Instrument Sans";
+  src: url("./fonts/instrument-sans-latin-600-normal.woff2") format("woff2");
   font-style: normal;
   font-weight: 600;
   font-display: swap;
 }
 @font-face {
-  font-family: 'JetBrains Mono';
-  src: url('./fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+  font-family: "JetBrains Mono";
+  src: url("./fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
-  font-family: 'JetBrains Mono';
-  src: url('./fonts/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+  font-family: "JetBrains Mono";
+  src: url("./fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
   font-style: normal;
   font-weight: 500;
   font-display: swap;
@@ -251,176 +251,7 @@ use[href="#glifo"],.talos-brand__mark .glyph,.talos-empty__mark .glyph,.talos-av
 .talos-stack{display:flex; flex-direction:column; gap:var(--talos-gap)}
 .talos-cluster{display:flex; align-items:center; gap:var(--talos-space-sm); flex-wrap:wrap}
 
-/* ---------- 3. PRIMITIVE (primitives.css, stesse classi) ---------- */
-.talos-button{min-height:var(--talos-control-height); display:inline-flex; align-items:center; justify-content:center; gap:var(--talos-space-inline); padding:0 var(--talos-space-md); border:var(--talos-focus-width) solid transparent; border-radius:10px; background:transparent; color:var(--talos-text); font:600 13.5px/1 var(--talos-font-ui); white-space:nowrap; cursor:pointer; transition:color var(--talos-motion-duration-control) var(--talos-motion-ease),background-color var(--talos-motion-duration-control) var(--talos-motion-ease),border-color var(--talos-motion-duration-control) var(--talos-motion-ease),transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
-.talos-button:hover:not(:disabled){transform:translateY(-1px)}
-.talos-button:active:not(:disabled){transform:translateY(0)}
-.talos-button:disabled{color:var(--talos-muted); cursor:not-allowed; opacity:.58}
-/* ⛔ 07/9, guardando gli screenshot: un pulsante PRIMARIO disabilitato restava oro pieno con il
-   testo scuro sopra — «Porta i commenti nella chat» sembrava il pulsante da premere e non si
-   leggeva. L'opacità da sola non basta su un fondo saturo: chi è spento si spegne davvero. */
-.talos-button--primary:disabled{background:var(--talos-panel-soft); border-color:var(--talos-border); color:var(--talos-muted); opacity:.75}
-.talos-button--primary{min-height:var(--talos-primary-height); background:var(--talos-accent); color:var(--talos-text-on-accent); box-shadow:inset 0 1px rgba(255,255,255,.14)}
-.talos-button--primary:hover:not(:disabled){background:var(--talos-accent-hover)}
-.talos-button--secondary{border-color:var(--talos-border); background:var(--talos-panel-soft)}
-.talos-button--secondary:hover:not(:disabled),.talos-button--ghost:hover:not(:disabled){border-color:var(--talos-border-strong); background:var(--talos-card-hover)}
-.talos-button--ghost{color:var(--talos-assistant-text)}
-.talos-button--danger{color:var(--talos-danger)}
-.talos-button--sm{min-height:30px; padding-inline:var(--talos-space-inline); font-size:var(--talos-font-size-xs); border-radius:8px}
-.talos-button--md{min-height:var(--talos-control-height)}
-.talos-button--lg{min-height:var(--talos-primary-height); padding-inline:var(--talos-space-lg); font-size:var(--talos-font-size-md)}
-.talos-button--block{width:100%}
-.talos-icon-button{width:var(--talos-touch-target); min-width:var(--talos-touch-target); padding:0}
-.talos-icon-button.talos-button--round{border-radius:var(--talos-radius-pill)}
-
-.talos-badge{min-height:26px; display:inline-flex; align-items:center; gap:var(--talos-space-sm); padding:0 10px; border:1px solid var(--talos-border-subtle); border-radius:var(--talos-radius-pill); background:var(--talos-card); color:var(--talos-assistant-text); font:500 12px/1 var(--talos-font-ui); white-space:nowrap}
-.talos-badge--dot::before{width:6px; height:6px; border-radius:var(--talos-radius-pill); background:currentColor; content:""}
-.talos-badge--accent{color:var(--talos-accent-text); border-color:var(--talos-accent-border); background:var(--talos-accent-soft)}
-.talos-badge--success{color:var(--talos-success); border-color:var(--talos-success-border); background:var(--talos-success-soft)}
-.talos-badge--warning{color:var(--talos-warning); border-color:var(--talos-warning-border); background:var(--talos-warning-soft)}
-.talos-badge--danger{color:var(--talos-danger); border-color:var(--talos-danger-border); background:var(--talos-danger-soft)}
-.talos-badge--info{color:var(--talos-info); border-color:var(--talos-info-border); background:var(--talos-info-soft)}
-.talos-badge--sm{min-height:22px; font-size:11px; padding:0 8px}
-.talos-badge--lg{min-height:34px; font-size:13px; padding:0 12px; border-color:var(--talos-border); background:var(--talos-panel-soft)}
-.talos-badge__kbd{font-family:var(--talos-font-mono); font-size:10.5px; opacity:.7}
-
-.talos-kbd{font-family:var(--talos-font-mono); font-size:11px; color:var(--talos-muted); border:1px solid var(--talos-border); border-radius:6px; padding:1px 6px; background:var(--talos-panel-soft)}
-
-.talos-tabs{min-width:0}
-.talos-tabs__list{display:inline-flex; gap:2px; padding:4px; border-radius:var(--talos-radius-control); background:var(--talos-panel-soft); border:1px solid var(--talos-border-subtle)}
-.talos-tabs__tab{min-height:32px; flex:0 0 auto; padding:0 14px; border:0; border-radius:9px; background:transparent; color:var(--talos-muted); font:500 13.5px/1 var(--talos-font-ui); display:inline-flex; align-items:center; gap:7px; cursor:pointer; transition:color var(--talos-motion-duration-tab-change) var(--talos-motion-ease),background-color var(--talos-motion-duration-tab-change) var(--talos-motion-ease)}
-.talos-tabs__tab:hover{color:var(--talos-text)}
-.talos-tabs__tab[aria-selected="true"]{background:var(--talos-card); color:var(--talos-text); box-shadow:0 1px 2px rgba(0,0,0,.2)}
-.talos-tabs__count{font-family:var(--talos-font-mono); font-size:11px; color:var(--talos-muted)}
-.talos-tabs--underline .talos-tabs__list{padding:0; gap:2px; background:transparent; border:0; border-radius:0}
-.talos-tabs--underline .talos-tabs__tab{min-height:38px; padding:0 10px; border-radius:0; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; font-size:13px}
-.talos-tabs--underline .talos-tabs__tab[aria-selected="true"]{background:transparent; box-shadow:none; border-bottom-color:var(--talos-accent)}
-.talos-tabs--pills .talos-tabs__list{background:transparent; border:0; padding:0; gap:var(--talos-space-sm); flex-wrap:wrap}
-.talos-tabs--pills .talos-tabs__tab{min-height:30px; padding:0 12px; border-radius:var(--talos-radius-pill); border:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-assistant-text); font-size:12.5px}
-.talos-tabs--pills .talos-tabs__tab[aria-selected="true"]{background:var(--talos-accent-soft); border-color:var(--talos-accent-border); color:var(--talos-accent-text); box-shadow:none}
-.talos-tabs--compact .talos-tabs__list{padding:3px}
-.talos-tabs--compact .talos-tabs__tab{min-height:26px; padding:0 10px; font-size:12px; border-radius:7px}
-
-/* ⛔⛔ 07/9 — owner, tre richieste in fila: «ricorda lo stile delle caselle e falle un po piu
-   piccole», «tutti i component devono essere stilizzati custom anche il dialog non legacy ma custom
-   nostro legato tutto ai temi». Il difetto era vero e si vedeva nello screenshot della sidebar: la
-   casella della riga di sessione e un `<input type="checkbox">` VERO, e `.talos-checkbox` rispondeva
-   solo a `[aria-checked="true"]` — un attributo che un input non ha mai. Lo stato «spuntata» lo
-   disegnava quindi CHROME, col suo blu di sistema, dentro un tema che non e il nostro.
-   Stessa forma per gli switch delle Impostazioni: `<input class="talos-switch" role="switch">`
-   prendeva la pillola, ma il pomello e un `<span>` figlio che un input non puo avere, e lo stato
-   vive su `:checked`, non su aria. ⇒ Ogni controllo qui sotto vale in DUE forme: il bottone del
-   mockup (`aria-checked`) e l'input vero (`:checked`). Nessuna delle due lascia un pixel al sistema.
-   ⛔ Le misure: la casella scende da 28 a 20 px (e la «grande» da 36 a 28) — nella riga di sessione,
-   alta 66, 28 px pesavano quanto il titolo.
-   Ricerca 07/09/2026 — Modern CSS «Pure CSS Custom Checkbox Style» (moderncss.dev) e Evinced
-   «Creating accessible styled checkboxes»: `appearance:none` toglie il disegno ma TIENE la semantica
-   (fuoco, barra spaziatrice, ruolo annunciato) e apre gli pseudo-elementi dell'input; non si nasconde
-   mai con `display:none`; il fuoco vuole `:focus-visible` con un `outline-offset` che scavalchi
-   l'angolo tondo; e in alto contrasto (`forced-colors`) lo stato si dice col FONDO, perche le ombre
-   vengono buttate via. */
-.talos-switch{width:calc(var(--talos-control-height) * 1.75); height:var(--talos-control-height); display:inline-flex; align-items:center; padding:var(--talos-space-xs); border:var(--talos-focus-width) solid var(--talos-border-strong); border-radius:var(--talos-radius-pill); background:var(--talos-panel-soft); cursor:pointer; transition:background-color var(--talos-motion-duration-control) var(--talos-motion-ease),border-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
-.talos-switch__thumb{width:calc(var(--talos-control-height) - 12px); height:calc(var(--talos-control-height) - 12px); border-radius:var(--talos-radius-pill); background:var(--talos-muted); transform:translateX(0); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease),background-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
-.talos-switch[aria-checked="true"]{border-color:var(--talos-accent-border); background:var(--talos-accent-soft)}
-.talos-switch[aria-checked="true"] .talos-switch__thumb{background:var(--talos-accent); transform:translateX(calc(var(--talos-control-height) * .75))}
-input.talos-switch{appearance:none; -webkit-appearance:none; margin:0; flex:none}
-input.talos-switch::after{content:""; width:calc(var(--talos-control-height) - 12px); height:calc(var(--talos-control-height) - 12px); border-radius:var(--talos-radius-pill); background:var(--talos-muted); transform:translateX(0); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease),background-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
-input.talos-switch:checked{border-color:var(--talos-accent-border); background:var(--talos-accent-soft)}
-input.talos-switch:checked::after{background:var(--talos-accent); transform:translateX(calc(var(--talos-control-height) * .75))}
-.talos-switch:focus-visible{outline:2px solid var(--talos-accent); outline-offset:2px}
-
-/* ⛔ 07/9 — «tutti i component custom»: valgono anche per le tredici caselle NUDE del monolite
-   (`frammenti.html`), che senza classe prendevano il quadratino blu di Windows. */
-.talos-checkbox,input[type="checkbox"]:not(.talos-switch){width:20px; height:20px; border-radius:6px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); display:grid; place-items:center; color:var(--talos-text-on-accent); flex:none; cursor:pointer; transition:background-color var(--talos-motion-duration-control) var(--talos-motion-ease),border-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
-.talos-checkbox[aria-checked="true"]{background:var(--talos-accent); border-color:var(--talos-accent)}
-.talos-checkbox--lg{width:28px; height:28px; border-radius:8px}
-.talos-checkbox .i{width:13px; height:13px}
-.talos-checkbox--lg .i{width:16px; height:16px}
-input.talos-checkbox,input[type="checkbox"]:not(.talos-switch){appearance:none; -webkit-appearance:none; margin:0}
-/* La spunta e disegnata, non un carattere: cosi eredita il colore del tema e non cambia col font.
-   Il triangolo di `clip-path` e la forma di Modern CSS, ridotta alla nostra casella da 20 px. */
-input.talos-checkbox::before,input[type="checkbox"]:not(.talos-switch)::before{content:""; width:11px; height:11px; background:var(--talos-text-on-accent); clip-path:polygon(14% 44%,0 65%,50% 100%,100% 16%,80% 0,43% 62%); transform:scale(0); transform-origin:center; transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
-input.talos-checkbox--lg::before{width:15px; height:15px}
-input.talos-checkbox:checked,input[type="checkbox"]:not(.talos-switch):checked{background:var(--talos-accent); border-color:var(--talos-accent)}
-input.talos-checkbox:checked::before,input[type="checkbox"]:not(.talos-switch):checked::before{transform:scale(1)}
-input.talos-checkbox:disabled,input[type="checkbox"]:not(.talos-switch):disabled{opacity:.5; cursor:not-allowed}
-.talos-checkbox:focus-visible,input[type="checkbox"]:not(.talos-switch):focus-visible{outline:2px solid var(--talos-accent); outline-offset:2px}
-@media (forced-colors: active){
-  input.talos-checkbox:checked,.talos-checkbox[aria-checked="true"]{background:SelectedItem; border-color:SelectedItem}
-  input.talos-checkbox::before{background:SelectedItemText}
-  input.talos-switch:checked::after,.talos-switch[aria-checked="true"] .talos-switch__thumb{background:SelectedItem}
-}
-
-.talos-field{position:relative}
-.talos-field__input{height:40px; width:100%; padding:0 12px 0 38px; border-radius:11px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-size:13.5px}
-.talos-field__input::placeholder{color:var(--talos-muted)}
-.talos-field__input:focus{outline:none; border-color:var(--talos-accent-border); box-shadow:0 0 0 3px var(--talos-accent-soft)}
-.talos-field__icon{position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--talos-muted); width:16px; height:16px}
-.talos-field--sm .talos-field__input{height:36px; padding-left:34px}
-/* ⛔ 07/9 — la regola vale per OGNI `select`, non solo per quelli che ricordano la classe. Nel
-   foglio Permessi del monolite i menu erano grigio chiaro col testo scuro, cioe' il disegno di
-   Windows dentro il tema Calm (foto `C02-fogli/permissions.png`). Vestire l'ELEMENTO invece della
-   classe chiude anche i quattordici del monolite e quelli che nasceranno domani. */
-select,.talos-select{height:36px; padding:0 32px 0 12px; border-radius:9px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-size:13px; appearance:none; -webkit-appearance:none; background-image:linear-gradient(45deg,transparent 50%,var(--talos-muted) 50%),linear-gradient(135deg,var(--talos-muted) 50%,transparent 50%); background-position:calc(100% - 16px) 15px,calc(100% - 11px) 15px; background-size:5px 5px; background-repeat:no-repeat}
-.talos-select--sm{height:32px}
-select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-accent); outline-offset:2px}
-/* ⭐ 07/9 — il bottone del select era già nostro (appearance:none + freccia disegnata), ma il MENU
-   che si apre lo disegnava ancora il sistema operativo: fondo bianco, font di sistema, angoli vivi
-   dentro un tema scuro. Con `appearance:base-select` il menu diventa un elemento come gli altri e
-   prende i token del tema; il ripiego resta quello di prima dove il motore non ce l'ha.
-   Ricerca 07/09/2026 — Chrome for Developers, «The <select> element can now be customized with CSS»
-   (Chrome 135+, Safari 27) e modern-css.com «Customizable selects without a JavaScript library»:
-   si adotta dentro `@supports`, e la freccia disegnata col gradiente va spenta o se ne vedono due. */
-@supports (appearance: base-select){
-  select,.talos-select{appearance:base-select; background-image:none; padding:0 12px; display:inline-flex; align-items:center; justify-content:space-between; gap:8px}
-  /* il segno del menu e un CHEVRON come tutti gli altri della app, non il triangolo pieno del motore */
-  select::picker-icon,.talos-select::picker-icon{content:""; width:8px; height:8px; border-right:1.6px solid var(--talos-muted); border-bottom:1.6px solid var(--talos-muted); transform:translateY(-2px) rotate(45deg); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
-  select:open::picker-icon,.talos-select:open::picker-icon{transform:translateY(1px) rotate(-135deg)}
-  select::picker(select),.talos-select::picker(select){appearance:base-select; margin-top:6px; padding:6px; border:1px solid var(--talos-border); border-radius:11px; background:var(--talos-panel); box-shadow:var(--talos-shadow-card); color:var(--talos-text)}
-  select option,.talos-select option{display:flex; align-items:center; gap:8px; padding:7px 10px 7px 28px; border-radius:8px; font-size:13px; color:var(--talos-text); background:transparent; position:relative}
-  select option:hover,select option:focus,.talos-select option:hover,.talos-select option:focus{background:var(--talos-panel-soft)}
-  select option:checked,.talos-select option:checked{background:var(--talos-accent-soft); color:var(--talos-accent-text)}
-  /* ⛔ lo spazio della spunta si riserva col PADDING, non nascondendo il segno: il motore genera
-     `::checkmark` SOLO sulla voce scelta, quindi «visibility:hidden» sulle altre non riserva niente
-     e le voci si spostano di 15 px quando la scelta cambia (visto nella foto `08-menu-select.png`). */
-  select option::checkmark,.talos-select option::checkmark{position:absolute; left:9px; color:var(--talos-accent)}
-}
-
-.talos-card{border:1px solid var(--talos-border); border-radius:var(--talos-radius-card); background:linear-gradient(180deg,var(--talos-card-subtle),var(--talos-card-faint))}
-.talos-card--pad{padding:var(--talos-space-control) 14px}
-.talos-dot{width:8px; height:8px; border-radius:50%; background:var(--talos-border-strong); flex:none}
-.talos-dot--sm{width:6px; height:6px}
-.talos-dot--success{background:var(--talos-success)} .talos-dot--danger{background:var(--talos-danger)} .talos-dot--warning{background:var(--talos-warning)}
-.talos-dot--live{background:var(--talos-accent-hover); box-shadow:0 0 0 4px var(--talos-accent-soft)}
-.talos-diff-num{font-family:var(--talos-font-mono); font-size:12px}
-.talos-diff-num--plus{color:var(--talos-success)} .talos-diff-num--minus{color:var(--talos-danger)}
-.talos-code{font-family:var(--talos-font-mono); font-size:11px; color:var(--talos-muted); border:1px solid var(--talos-border); border-radius:6px; padding:2px 7px; background:var(--talos-panel-soft)}
-
-/* scheletro (stato di caricamento 1-10 s, ricerca 04/09) */
-.talos-skeleton{display:block; height:12px; border-radius:6px; background:linear-gradient(90deg,var(--talos-card-hover),var(--talos-card-subtle),var(--talos-card-hover)); background-size:200% 100%; animation:talos-shimmer 1.4s var(--talos-motion-ease) infinite}
-.talos-skeleton--w40{width:40%} .talos-skeleton--w70{width:70%} .talos-skeleton--w90{width:90%}
-.talos-waiting{margin-top:6px}
-.talos-waiting__row{display:flex; align-items:center; gap:10px; min-height:22px; font-size:12.5px; color:var(--talos-muted)}
-.talos-waiting__label{flex:1 1 auto; min-width:0}
-/* ⛔ 10/09, owner: «non vedo il segnavia a tre nodi animato su 4174». MISURATO prima di toccarlo, in
-   un giro vero con glm-5.3-flash: il segnavia c'e' e si muove — a schermo 5.040 ms su un giro di
-   5.914, `talosSegnaviaScorre` in `running`, 41 valori di `stroke-dashoffset` distinti su 41
-   campioni. Non era fermo: era PICCOLO. 48x8 px con la traccia al 18% di opacita', accanto a
-   un'etichetta di testo che si prende tutta l'attenzione. Qui cresce a 72x12 e la traccia si vede. */
-.talos-line-loader{display:block; width:48px; height:8px; overflow:visible; flex:none}
-.talos-line-loader-track{stroke:var(--talos-accent); stroke-opacity:.28; stroke-width:2.5; stroke-linecap:round}
-/* ⛔ 10/09: il movimento dello sweep e' SMIL (`<animate>` dentro l'SVG, vedi creaAttesa). Una
-   dichiarazione CSS di `stroke-dashoffset` VINCE sull'attributo animato da SMIL e lo
-   inchioderebbe: qui non se ne dichiara nessuna, e nemmeno un'`animation` che farebbe a botte
-   con quella. Il dasharray lo mette diff-in-chat.css. */
-.talos-line-loader-sweep{stroke:var(--talos-accent); stroke-width:2.5; stroke-linecap:round}
-/* ⛔ 10/09: i nodi si accendono con SMIL (`fill-opacity`, vedi creaAttesa). Niente `fill` e
-   niente `animation` qui: una dichiarazione CSS vince sull'attributo che SMIL anima. */
-.talos-line-loader-node{stroke:var(--talos-accent); stroke-width:2.5}
-/* gli sfasamenti stanno negli attributi `begin` dell'SMIL, non qui */
-@keyframes talosLineSweep{0%{stroke-dashoffset:88} 70%,100%{stroke-dashoffset:0}}
-@keyframes talosLineNodeFill{0%,12%{fill:transparent} 22%,82%{fill:var(--talos-accent)} 100%{fill:transparent}}
-@keyframes talos-shimmer{0%{background-position:200% 0} 100%{background-position:-200% 0}}
+/* Primitive styles are owned by design-system/controls.css. */
 
 /* ---------- 4. REGIA DEL MOCKUP (non è prodotto) ---------- */
 .talos-regia{flex:none; display:flex; align-items:center; gap:14px; padding:8px 16px; background:var(--talos-window-bg); border-bottom:1px solid var(--talos-border); flex-wrap:wrap; row-gap:6px}
@@ -435,16 +266,33 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 .talos-screen{display:flex; flex-direction:column; flex:1 1 auto; min-height:0; min-width:0}
 
 /* ---------- 6. SIDEBAR (A1, A2, A7, A8, A9) ---------- */
-.talos-sidebar{position:relative; background:var(--talos-background); border-right:1px solid var(--talos-border); display:flex; flex-direction:column; min-height:0; overflow:hidden}
-.talos-brand{display:flex; align-items:center; gap:10px; padding:18px 18px 14px}
+.talos-sidebar{position:relative; background:var(--talos-panel); border-right:1px solid var(--talos-border); display:flex; flex-direction:column; min-height:0; overflow:hidden}
+.talos-brand{display:flex; align-items:center; gap:10px; padding:20px 14px 18px}
 .talos-brand__mark{width:30px; height:30px; display:grid; place-items:center; color:var(--talos-accent-hover)}
 .talos-brand__mark .glyph{width:22px; height:22px}
 /* ⛔ 10/09, owner, due volte e alla fine in maiuscolo: «aumenta la grandezza del logo TALOS brand
    mark SOLO NELLA SIDEBAR A SINISTRA … quello in alto a sinistra». Restretto a `.talos-brand`
    apposta: la stessa classe la porta anche il marchio dello stato vuoto (`.talos-empty__mark`,
    stato-vuoto.js), che ha misure sue e non c'entra con questa richiesta. */
-.talos-brand > .talos-brand__mark{width:42px; height:42px}
+.talos-brand > .talos-brand__mark{width:42px; height:42px; color:var(--talos-accent-text)}
 .talos-brand > .talos-brand__mark .glyph{width:40px; height:40px}
+/*
+ * ⛔⛔ 18/09/2026 — IL MARCHIO È QUELLO DEL MOCKUP, E IL COLORE ERA QUELLO SBAGLIATO.
+ * Owner: «il brand logo della sidebar di sinistra, quello accanto alla scritta TALOS, voglio quello
+ * identico esatto del mockup delle impostazioni, non negoziabile».
+ * Il DISEGNO ora è identico: nel simbolo `#glifo` l'esagono porta `opacity="0.18"` e i **cinque**
+ * pallini `fill="currentColor"` — prima l'esagono era a piena opacità e i pallini erano **anelli
+ * vuoti** (il simbolo dichiara `fill:none` per non farsi cancellare da `currentColor`).
+ * Il COLORE: il mockup usa `--talos-accent-text` (#704814 in tema chiaro, misurato `rgb(112,72,20)`,
+ * cioè il NOSTRO token), la sidebar usava `--talos-accent-hover` (#82551a) — l'accento dell'hover
+ * come tinta di base. Allineato al mockup; nei temi scuri i due token restano `color-mix` adattivi,
+ * quindi il marchio resta leggibile.
+ * ⛔ LA MISURA: 42×42, E L'HA DECISA L'OWNER. Il mockup disegna il marchio 32×38; la sidebar lo ha
+ * a 42×42 da un ordine precedente del 10/09 («aumenta la grandezza del logo TALOS brand mark SOLO
+ * NELLA SIDEBAR A SINISTRA», scritto due volte in maiuscolo). Le due ordinazioni si contraddicono, e
+ * il 18/09 l'owner ha sciolto la contraddizione: **«facciamo 42 x 42»** ⇒ «identico» significa il
+ * DISEGNO e il COLORE, non la misura. La misura resta la sua, e chi la ritocca lo dice nel commit.
+ */
 .talos-brand__copy{display:flex; flex-direction:column; line-height:1; margin-right:auto}
 .talos-brand__copy strong{font-size:18px; letter-spacing:.02em; font-weight:600}
 .talos-brand__copy span{font-size:10px; color:var(--talos-muted); margin-top:4px; text-transform:uppercase; letter-spacing:.16em}
@@ -646,7 +494,17 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
    massima, e il contenuto allineato al bordo SINISTRO come il testo, largo quanto il testo — cioè
    la colonna meno la spina. Così i due bordi coincidono a qualunque larghezza, e non c'è un numero
    magico da tenere aggiornato a mano: le misure vengono dalle stesse variabili. */
-.talos-chat-foot > *{--talos-colonna-chat:min(calc(92px + var(--talos-measure-w)), 100%); --talos-testo-chat:min(var(--talos-measure-w), calc(var(--talos-colonna-chat) - var(--talos-turno-coda))); --talos-larghezza-piede:min(var(--composer-max-w, var(--talos-testo-chat)), 100%); width:var(--talos-larghezza-piede); max-width:none; margin-left:max(calc(-1 * var(--talos-chat-gutter)), calc((100% - var(--talos-colonna-chat)) / 2 + (var(--talos-testo-chat) - var(--talos-larghezza-piede)) / 2)); margin-right:auto}
+/* ⛔⛔ 16/09/2026, P0/A punto 1 — `:not(#pannelloTerminale)`. Questa regola dà a OGNI figlio del
+   piede la misura del composer, e il pannello del terminale in basso (PO-09) è un figlio del piede:
+   ereditava 768 px su uno schermo da 1440, mentre la SUA sezione dedicata prende tutta l'area
+   principale. Un pannello agganciato in basso, alla VS Code, non è largo quanto la casella di testo
+   che gli sta sopra — e non è un caso da curare a valle: la larghezza gliela imponeva QUESTA riga.
+   L'esclusione è il pattern documentato per un elemento a piena larghezza dentro un contenitore con
+   respiro (CSS-Tricks, «Hassle-free Full Bleed with *:not()», riletto il 16/09/2026): il padding
+   vale per tutti tranne lui, e lui annulla il respiro con lo stesso token (`terminale-basso.css`).
+   ⛔ L'esclusione riguarda solo LARGHEZZA e MARGINE: le variabili qui sotto restano dichiarate
+   anche per il pannello, perché sono la misura della colonna e non gli fanno nulla. */
+.talos-chat-foot > *:not(#pannelloTerminale){--talos-colonna-chat:min(calc(92px + var(--talos-measure-w)), 100%); --talos-testo-chat:min(var(--talos-measure-w), calc(var(--talos-colonna-chat) - var(--talos-turno-coda))); --talos-larghezza-piede:min(var(--composer-max-w, var(--talos-testo-chat)), 100%); width:var(--talos-larghezza-piede); max-width:none; margin-left:max(calc(-1 * var(--talos-chat-gutter)), calc((100% - var(--talos-colonna-chat)) / 2 + (var(--talos-testo-chat) - var(--talos-larghezza-piede)) / 2)); margin-right:auto}
 /* ⛔ 07/9, owner, precisazione: «il chat composer deve rimanere estensibile oltre la larghezza della
    chat, ma i lati devono essere equidistanti da un bordo rispetto all'altro della chat». Cioè: la
    larghezza resta quella che gli dà il ridimensionamento (`--composer-max-w`), e il CENTRO è quello
@@ -672,6 +530,17 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 .talos-empty__title{font-size:26px; letter-spacing:-.02em}
 .talos-empty__project{color:var(--talos-accent-hover)}
 .talos-empty__lead{color:var(--talos-muted); margin:10px 0 20px; max-width:58ch; font-size:14.5px}
+/* ⛔ 17/09, PO-27 — l'invito che ha preso il posto della modale «Primo avvio». Nessun colore e
+   nessuna forma nuova: è una `.talos-card--pad` con i token del tema, larga quanto la riga guida
+   (58ch) perché è una frase, non un pannello. `[hidden]` la spegne davvero: `.talos-card` non
+   dichiara `display`, ma il giorno che lo facesse questa riga resterebbe vera. */
+/* ⛔ 17/09, secondo giro — l'invito del primo avvio NON è più una scheda accanto allo stato vuoto:
+   È lo stato vuoto (`.talos-empty`, con marchio, titolo e riga guida). Qui restano solo la
+   geometria della colonna — che non può ereditare da `.talos-conversation__column`, perché quella
+   classe è il gancio con cui il ponte battezza `#conversation` — e il respiro verticale. */
+.talos-empty--avvio[hidden]{display:none}
+.talos-empty--avvio{max-width:calc(92px + var(--talos-measure-w)); margin:0 auto; padding-top:clamp(24px,8vh,96px)}
+.talos-empty--avvio .talos-empty__foot{margin-top:20px; gap:var(--talos-space-md)}
 .talos-empty__foot{margin-top:14px}
 .talos-empty__hint{font-size:12px}
 /* Owner 06/09: «i numeri dei giri devono SPARIRE» e «fondi il componente dei giri nella navigation
@@ -708,6 +577,12 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
    badge d'accento e del lampeggio della cronologia, così la chat resta una cosa sola. Il testo tiene
    il colore normale: su un oro pieno perderebbe contrasto proprio dove si rilegge quello che hai chiesto. */
 .talos-message--user{display:flex; flex-direction:column; align-items:flex-end}
+/* ⛔⛔ 17/09 — TROVATO IN UNA FOTO, e poi MISURATO: la riga d'azioni nuova del messaggio della
+   persona era alta **154 px** (174→328) invece dei ~28 del suo contenuto, perché dentro una colonna
+   flex che avanza spazio l'ultimo figlio se lo prendeva tutto. Non si vedeva — la riga è
+   trasparente finché non ci passi sopra — ma il menu si ancora al suo FONDO, e compariva staccato
+   dal messaggio, in mezzo alla colonna di destra. ⇒ La riga vale il suo contenuto e basta. */
+.talos-message--user > .talos-message__actions{flex:0 0 auto; align-items:center; align-self:flex-end}
 /* 06/9, owner: «la bolla di domanda non deve avere larghezza al massimo, deve essere una bolla di chat
    con la codina e partire da destra». Così la domanda si riconosce dalla FORMA prima che dal colore:
    larghezza sul contenuto (tetto al 72% della colonna), ancorata a destra, e l'angolo in basso a destra
@@ -738,10 +613,21 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-system-note{display:flex; gap:12px; align-items:flex-start; margin:10px 0; padding:12px 14px; border-radius:var(--talos-radius-card); border:1px solid var(--talos-border); background:var(--talos-card-subtle); border-left:3px solid var(--talos-info)}
 .talos-system-note__title{font-weight:600}
 .talos-system-note p{color:var(--talos-muted); font-size:13px; margin-top:2px}
-.talos-approval{margin:12px 0; border:1px solid var(--talos-accent-border); border-radius:var(--talos-radius-card); background:var(--talos-panel); box-shadow:var(--talos-shadow-card); overflow:hidden}
-.talos-approval__head{display:flex; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid var(--talos-border)}
-.talos-approval__why{padding:10px 14px; color:var(--talos-assistant-text); font-size:13px; border-bottom:1px solid var(--talos-border)}
-.talos-approval__foot{display:flex; align-items:center; gap:8px; padding:12px 14px; border-top:1px solid var(--talos-border); flex-wrap:wrap}
+/*
+ * ⛔⛔⛔ D1, 17/09 sera — LA PRIMA LETTERA DELLA FRASE ERA TAGLIATA, e l'ha vista un giro vero.
+ *   Nella carta di approvazione la riga del motivo si leggeva «ll comando tocca un file…»: la «I»
+ *   iniziale mangiata dal bordo. La carta ha `overflow:hidden` e ogni sua riga porta il rientro
+ *   ADDOSSO — `padding:12px 14px`, scritto a mano tre volte. La riga del motivo è nata dopo
+ *   (`__motivo`, con `margin:8px 0 0`) e quel 14 nessuno gliel'ha dato: non c'era un posto da cui
+ *   prenderlo. ⇒ Il difetto non è una riga dimenticata, è un NUMERO RIPETUTO: finché il rientro
+ *   vive in tre copie, la quarta riga che qualcuno aggiunge nasce fuori squadra.
+ * ⇒ Il rientro diventa un token della carta, e tutte le righe lo leggono da lì. Chi ne aggiungerà
+ *   una quinta lo trova scritto sopra la sua testa invece di doverlo indovinare.
+ */
+.talos-approval{--talos-approval-gutter:14px; margin:12px 0; border:1px solid var(--talos-accent-border); border-radius:var(--talos-radius-card); background:var(--talos-panel); box-shadow:var(--talos-shadow-card); overflow:hidden}
+.talos-approval__head{display:flex; align-items:center; gap:10px; padding:12px var(--talos-approval-gutter); border-bottom:1px solid var(--talos-border)}
+.talos-approval__why{padding:10px var(--talos-approval-gutter); color:var(--talos-assistant-text); font-size:13px; border-bottom:1px solid var(--talos-border)}
+.talos-approval__foot{display:flex; align-items:center; gap:8px; padding:12px var(--talos-approval-gutter); border-top:1px solid var(--talos-border); flex-wrap:wrap}
 .talos-approval__foot-note{color:var(--talos-muted); font-size:12px}
 .talos-diff{font-family:var(--talos-font-mono); font-size:12px; line-height:1.7; overflow-x:auto; padding:8px 0; background:var(--talos-window-bg)}
 .talos-diff__line{padding:0 14px; white-space:pre}
@@ -756,6 +642,21 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-tool-row[role="button"]{cursor:pointer}
 .talos-tool-row__body{margin:0 6px 6px 50px; padding:8px 10px; border-radius:9px; background:var(--talos-panel-soft); border:1px solid var(--talos-border-subtle); font-family:var(--talos-font-mono); font-size:11.5px; line-height:1.55; color:var(--talos-muted); white-space:pre-wrap; overflow-wrap:anywhere; max-height:240px; overflow:auto}
 .talos-tool-row[aria-expanded="false"] + .talos-tool-row__body{display:none}
+/* ⛔⛔ BLOCCO 7 (B4) — IL TETTO DEL CORPO ERA IL BUDGET DI UN FLUSSO SOLO.
+    Misurato il 20/09/2026 sul 4174: con i due flussi separati il contenuto misura 316 px contro un
+    tetto di 240 — 78 oltre — e la sezione «Diagnostica» resta SOTTO il bordo: la cosa per cui la
+    separazione esiste non si vede. Il blocco fuso, con lo stesso testo, ne misurava 230 e ci stava
+    ⇒ era una REGRESSIONE, non una proprietà di prima. Il delta è tutto chrome (2 etichette, 2 margini,
+    la riga dell'esito), non contenuto: scomposto figlio per figlio, i corpi delle due sezioni pesano
+    quanto pesava il corpo fuso.
+    ⇒ Due flussi, due budget: 480 = 2 × 240. ⛔ E il tetto RESTA — a proteggere la chat è il tetto
+    stesso (la cura del 10/09 contro l'output che allaga), non il suo valore.
+    ⛔ `> .tool-stream`, non `.tool-stream`: la forma VINCOLATA, che è quella raccomandata per `:has()`
+    — MDN, `:has()`, «Baseline: widely available dal dicembre 2023», letto il 20/09/2026: evitare
+    l'ancoraggio largo (`body:has()`, `*:has()`) e restringere il sottoalbero con un figlio diretto.
+    Il soggetto qui è una classe sola, non un antenato largo. In casa `:has()` è già in uso
+    (`aspetto.css:441`, `immagini-chat.css:11`). */
+.talos-tool-row__body:has(> .tool-stream){max-height:480px}
 .talos-artifact{margin:10px 0; overflow:hidden}
 .talos-artifact__head{display:flex; align-items:center; gap:10px; padding:8px 8px 8px 14px; border-bottom:1px solid var(--talos-border-subtle)}
 .talos-artifact__title{font-weight:600; font-size:13.5px; color:var(--talos-text)}
@@ -814,7 +715,15 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 :root.chat-full-width{--talos-respiro-pieno:clamp(0px, calc((100% - var(--talos-cronologia-ingombro) - var(--talos-turno-coda) - min(calc(92px + var(--talos-measure-w)), calc(100% - 2 * var(--talos-chat-gutter)))) / 2), var(--talos-chat-gutter))}
 :root.chat-full-width .talos-conversation, :root.chat-full-width .talos-chat-foot{padding-left:calc(var(--talos-cronologia-ingombro) + var(--talos-turno-coda) + var(--talos-respiro-pieno)); padding-right:var(--talos-respiro-pieno)}
 :root.chat-full-width .talos-conversation__column{max-width:none}
-:root.chat-full-width .talos-chat-foot > *{--talos-colonna-chat:100%; width:calc(100% - var(--talos-turno-coda)); max-width:none; margin-left:0}
+/* ⛔ 16/09/2026 — stessa esclusione della riga sorella qui sopra, e per la stessa ragione: anche a
+   «tutta larghezza» il pannello del terminale non è un pezzo del composer. La sua misura in questa
+   modalità la dichiara `terminale-basso.css`, dove si spiega perché LÌ non si specchia il padding
+   (in `chat-full-width` il respiro del piede è una percentuale, e una percentuale in `margin` si
+   misura su una base diversa da quella del `padding` del padre). */
+:root.chat-full-width .talos-chat-foot > *:not(#pannelloTerminale){--talos-colonna-chat:100%; width:calc(100% - var(--talos-turno-coda)); max-width:none; margin-left:0}
+:root.chat-full-width .talos-chat-foot > #composerForm{width:min(var(--composer-max-w, var(--talos-measure-w)), calc(100% - var(--talos-turno-coda))); margin-left:max(0px, calc((100% - var(--talos-turno-coda) - var(--composer-max-w, var(--talos-measure-w))) / 2))}
+/* La riga del ritorno resta ancorata alla chat, indipendente dalla misura del composer. */
+.talos-chat-foot > .talos-chat-return:not(#pannelloTerminale){--talos-larghezza-piede:var(--talos-testo-chat)}
 /* ⛔ 07/9, misurato a 1920 px: «a tutta larghezza» allargava la colonna e il composer (1216 e
    1212) ma i MESSAGGI restavano a 768 — il tetto di `.talos-message` non veniva sciolto, e la
    modalita manteneva solo meta della sua promessa. Si vedeva poco finche la misura era `78ch`
@@ -822,15 +731,40 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 :root.chat-full-width .talos-message,:root.chat-full-width .talos-empty{max-width:none}
 :root.immersive-header .talos-topbar{border-bottom-color:transparent}
 .talos-touched{margin-top:10px; overflow:hidden}
-.talos-touched__head{padding:10px 14px; border-bottom:1px solid var(--talos-border-subtle)}
-.talos-touched__row{display:flex; align-items:center; gap:10px; min-height:var(--talos-row); padding:0 14px}
+/* BC-75, 17/09: la testa porta il conto e la porta per la Revisione; la riga È il bersaglio. */
+.talos-touched__head{display:flex; align-items:center; gap:10px; padding:8px 8px 8px 14px; border-bottom:1px solid var(--talos-border-subtle)}
+.talos-touched__titolo{font-size:13px; font-weight:600; color:var(--talos-text)}
+.talos-touched__row{display:flex; align-items:center; gap:10px; width:100%; min-height:var(--talos-row); padding:0 14px; border:0; background:none; color:inherit; font:inherit; text-align:left; cursor:pointer}
+.talos-touched__row:hover{background:var(--talos-card-subtle)}
+.talos-touched__freccia{flex:0 0 auto; color:var(--talos-muted)}
 .talos-touched__row + .talos-touched__row{border-top:1px solid var(--talos-border-subtle)}
 .talos-touched__name{flex:1; min-width:0; font-family:var(--talos-font-mono); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
 /* ---------- 9. PIEDE DELLA CHAT: striscia (B31), coda (B15), compositore ---------- */
 .talos-chat-foot{flex:none; padding:0 var(--talos-chat-gutter) 12px}   /* ⛔ lo STESSO respiro della conversazione, dallo stesso token: e cosi che le due colonne coincidono */
-.talos-chat-return{position:relative; height:0}
-.talos-chat-return__button{position:absolute; bottom:12px; left:50%; translate:-50% 0; width:36px; height:36px; min-width:36px; padding:0; border-radius:50%; box-shadow:var(--talos-shadow-card); z-index:3}
+/*
+ * ⛔⛔ 20/09/2026, sera — LA BANDA DI DISSOLVENZA SOPRA IL COMPOSER È STATA **TOLTA**.
+ *
+ *   Era stata chiesta dall'owner la sera stessa («lo sfondo dietro al composer non deve essere
+ *   solido ma avere un fade dall'alto verso il basso… il testo passi dietro invece di essere
+ *   tagliato di botto»), ed era stata costruita e misurata: `margin-top` negativo sul piede (lo
+ *   scroller cresce e scorre SOTTO il piede) + un `::before` sfumato che vive tutto sopra il bordo
+ *   del piede. Funzionava, e il profilo dei pixel lo diceva riga per riga.
+ *
+ *   ⛔ Poi l'owner, davanti a una **prova** che avevo colorato di rosso pieno per due minuti (per
+ *   vedere a colpo d'occhio se il testo stava sopra o sotto la banda): **«non devi usare nessuna
+ *   barra, levala immediatamente»**. Il rosso era mio ed è sparito nello stesso minuto, ma la
+ *   richiesta è chiara e vale per la banda stessa.
+ *   ⇒ Via il `::before`, via il `margin-top` negativo, via il token `--talos-fade-piede`: il piede
+ *     torna esattamente com'era, e la conversazione NON scorre più sotto di lui.
+ *   ⛔ Se la dissolvenza torna a servire, la ricetta è in questo commento e nel ledger del giorno —
+ *     non si reinventa. E la lezione: **una prova che cambia il COLORE del prodotto non si manda
+ *     sulla porta dell'owner.** Si prova in locale, o con una pagina finta.
+ */
+/* Il tondo galleggia sulla conversazione: nessuna fascia sottratta allo scorrimento. */
+.talos-chat-return{position:relative; height:0; background:transparent; border:0; box-shadow:none; pointer-events:none}
+.talos-conversation{scroll-padding-bottom:60px}
+.talos-chat-return__button{pointer-events:auto; position:absolute; bottom:12px; left:calc(50% - 18px); right:auto; width:36px; height:36px; min-width:36px; padding:0; border-radius:50%; box-shadow:var(--talos-shadow-card); z-index:3}
 .talos-chat-return__button:is(:hover,:active):not(:disabled){transform:none; background:var(--talos-panel-soft); border-color:var(--talos-border)}
 .talos-status-strip{display:flex; align-items:center; gap:12px; padding:9px 14px; margin-bottom:8px; border-radius:11px; border:1px solid var(--talos-border); background:var(--talos-panel)}
 .talos-status-strip__pulse{width:8px; height:8px; border-radius:50%; background:var(--talos-accent-hover); flex:none; animation:talos-pulse 1.6s var(--talos-motion-ease) infinite}
@@ -859,10 +793,36 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
    dice già che è un errore, e una parete rossa rende meno leggibile proprio ciò che va letto. */
 .talos-system-note__perche{margin:6px 0 0; font-size:13px; color:var(--talos-muted)}
 .talos-system-note__rimedi{margin:8px 0 0; padding-left:18px; font-size:13px; color:var(--talos-assistant-text); display:flex; flex-direction:column; gap:4px}
+/* 17/09, CLI-REQ-03: quando un guasto ha una PORTA, la porta sta sotto i rimedi, non fra le righe. */
+.talos-system-note__azioni{margin-top:12px}
+/* 5-ter, 17/09: la frase della fiducia e i pacchetti guasti, nel pannello dei plugin. */
+/* ⛔ F3, 17/09/2026 — la frase della fiducia è un AVVISO accanto allo stato, non un paragrafo in
+   fondo: riusa `talos-callout`, il blocco d'avviso che il progetto ha già (nove usi), invece di
+   inventare un secondo linguaggio per la stessa cosa. Qui restano solo i margini che servono a
+   incastrarla fra due righe `talos-kv`, e il colore dell'icona. */
+.talos-trust-frase{margin:8px 0; color:var(--talos-assistant-text)}
+.talos-trust-frase .i{flex:none; margin-top:1px; color:var(--talos-warning)}
+/* ⛔ Il callout resta quello del progetto, senza variante stretta: l'avevo scritta per recuperare
+   altezza (a 1024×800 la scheda dei plugin esce sotto il bordo e il pulsante «Fida» con lei), e
+   misurata valeva **2 px** — padding e corpo più piccoli mandano la frase a capo una riga in più e
+   si riprendono da soli quello che tolgono. Una regola che non compra niente si toglie.
+   ⛔ I numeri, per non rifarli: col riquadro d'avviso il pulsante sta a 899 su una finestra di 800,
+   con la frase vestita da paragrafo (com'era prima di F3) a 869 — quindi 69 px erano già fuori e
+   30 li aggiunge l'avviso. La causa vera è `.talos-detail` (`position:sticky; top:0`, senza uno
+   scorrimento suo) e vale per tutti e quattro i pannelli: si segnala, non si cura di nascosto in
+   un giro che parla d'altro. A 1440×900 non esce: 851 su 900. */
+/* ⛔ F3 — i guasti vivono nella colonna dell'elenco, sotto la scheda delle voci vive: stessa
+   ascissa, stesse righe, e nessun bordo per riga (sono righe di una lista, non schedine sparse). */
+.talos-ext-colonna{display:flex; flex-direction:column; gap:14px; min-width:0}
+.talos-falliti{padding:12px 14px 4px}
+.talos-trust-falliti-titolo{margin:0 0 4px}
+.talos-trust-falliti{margin:0; padding:0; list-style:none; display:flex; flex-direction:column}
+.talos-trust-fallito{display:flex; flex-direction:column; gap:2px; padding:8px 0; border-top:1px solid var(--talos-border-subtle); font-size:12.5px; text-align:left}
+.talos-trust-fallito:first-child{border-top:0}
 .talos-system-note__tecnico{margin:10px 0 0}
 .talos-system-note__tecnico > summary{cursor:pointer; font-size:12px; color:var(--talos-muted); list-style:none}
 .talos-system-note__tecnico > summary::-webkit-details-marker{display:none}
-.talos-system-note__tecnico > summary::before{content:'▸'; display:inline-block; margin-right:6px; transition:transform var(--talos-motion-duration-control,.15s) var(--talos-motion-ease)}
+.talos-system-note__tecnico > summary::before{content:"▸"; display:inline-block; margin-right:6px; transition:transform var(--talos-motion-duration-control,.15s) var(--talos-motion-ease)}
 .talos-system-note__tecnico[open] > summary::before{transform:rotate(90deg)}
 .talos-system-note__grezzo{margin:8px 0 0; padding:10px 12px; border-radius:10px; border:1px solid var(--talos-border); background:var(--talos-code-bg, rgba(0,0,0,.18)); font-family:var(--talos-font-mono); font-size:12px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; overflow:auto; max-height:12em}
 /* ⛔⛔ PO-05 — IL FILE GENERATO SI SCARICA CON UN CLIC. Owner: «ogni file generato deve avere un
@@ -1098,11 +1058,59 @@ a.talos-button{text-decoration:none}
 .talos-browser__quanto{margin-left:6px; padding:0 5px; border-radius:var(--talos-radius-pill); font-family:var(--talos-font-mono); font-size:10.5px; background:var(--talos-warning-soft); color:var(--talos-warning)}
 .talos-browser__quanto[hidden]{display:none}
 .talos-browser__tools [data-browser-modo][aria-pressed="true"]{border-color:var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-accent-text)}
+/* ⭐ 16/09/2026, P0 corsia B — il pannello dello stato DELLA SCHEDA (apertura, ritentativo, guasto,
+   annullata, a riposo). Vive dentro `#schermoBrowser`, sopra la cornice; è `hidden` quando la
+   scheda sta bene, quindi a regime la schermata è identica al disegno del mockup.
+   ⛔ Il colore lo decide lo STATO, mai il solo colore la sostanza: sotto il titolo c'è sempre la
+   frase (WCAG 1.4.1 «Use of Color», rivisto il 16/09/2026). I token sono quelli del tema, così il
+   pannello è giusto sia in chiaro sia in scuro senza una seconda tavolozza. */
+.talos-browser__stato{border-left:3px solid var(--talos-border)}
+.talos-browser__stato[data-stato="retrying"]{border-left-color:var(--talos-warning)}
+.talos-browser__stato[data-stato="error"],
+.talos-browser__stato[data-stato="unreachable"]{border-left-color:var(--talos-danger)}
+.talos-browser__stato[data-stato="cancelled"],
+.talos-browser__stato[data-stato="riposo"]{border-left-color:var(--talos-muted)}
+.talos-browser__stato [data-stato-titolo]{margin:0}
+.talos-browser__stato [hidden]{display:none}
+/* Lo stato sulla linguetta: solo dentro la striscia del Browser — `.talos-tabstrip` è condivisa col
+   Terminale e non si tocca da qui.
+   ⛔⛔ 16/09, GIRO DI RIPARAZIONE — il commento che stava qui diceva «un puntino, mai il colore da
+   solo: il fumetto porta l'indirizzo», e affermava il falso: il fumetto porta l'INDIRIZZO, non lo
+   stato, e l'icona colorata qui sotto è `aria-hidden`. Cioè lo stato di una scheda non attiva era
+   portato dal SOLO colore — la violazione esatta di WCAG 1.4.1 «Use of Color» (Livello A) che
+   questo blocco citava come sua fonte. Il colore RESTA, ma non è più solo: `components/browser.js`
+   cambia anche la FORMA dell'icona (`ICONA_PER_STATO`) e scrive la parola dello stato in un nodo
+   `.sr-only`, che un lettore di schermo annuncia e una ricerca nella pagina trova. Tre canali, e
+   due prove li tengono fermi (unità + `tests/browser/browser-p0.spec.mjs`). */
+#browserSchede [data-stato-scheda="loading"] .talos-tabstrip__icona,
+#browserSchede [data-stato-scheda="retrying"] .talos-tabstrip__icona{color:var(--talos-warning)}
+#browserSchede [data-stato-scheda="error"] .talos-tabstrip__icona,
+#browserSchede [data-stato-scheda="unreachable"] .talos-tabstrip__icona{color:var(--talos-danger)}
+#browserSchede [data-stato-scheda="cancelled"] .talos-tabstrip__titolo{opacity:.65}
 .talos-browser__testo-pulito{white-space:pre-wrap; overflow-wrap:anywhere}
 .talos-browser__sorgente{margin:12px 0 0}
 .talos-browser__sorgente > summary{cursor:pointer; font-size:12px; color:var(--talos-muted)}
-.talos-approval__codice{margin:8px 0 0; padding:10px 12px; border-radius:10px; border:1px solid var(--talos-border); background:var(--talos-code-bg, var(--talos-surface-sunken, rgba(0,0,0,.18))); color:var(--talos-text); font-family:var(--talos-font-mono); font-size:12.5px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; overflow-x:auto; overflow-y:auto; max-height:14em}
-.talos-approval__motivo{margin:8px 0 0; font-size:12.5px; color:var(--talos-muted)}
+/* ⛔⛔ 17/09, PO-27 punto 5 — DUE DIFETTI IN UNA RIGA SOLA, tutti e due misurati nel browser vero.
+   1. Il comando cominciava **1 px** più a sinistra delle altre righe della scheda (misurato:
+      `left + bordo + padding` del blocco meno lo stesso conto su `.talos-approval__why`, −1,00 px
+      nei due temi e alle due larghezze). La causa: `padding-inline:12px` + 1 px di bordo contro il
+      gutter della scheda, che è 14. Ora il padding È il gutter, e il bordo verticale se ne va: il
+      blocco diventa una RIGA della scheda come le sorelle, non una scatola appoggiata dentro.
+      ⭐ Il conto si fa sul bordo del TESTO, non su quello della scatola: due scatole con lo stesso
+      `left` mostrano il testo in due punti diversi se hanno bordi e padding diversi.
+   2. Nel tema chiaro il fondo era un grigio pieno sul crema. La causa non era una scelta di
+      colore: `--talos-code-bg` **non è definito in nessun `:root`** (cercato il 17/09: compare
+      solo dentro dei `var(...)` con ripiego, qui e in `.talos-system-note__grezzo`), quindi
+      vinceva sempre il ripiego `rgba(0,0,0,.18)` — che su un fondo scuro passa e su uno chiaro è
+      una macchia. Ora il fondo è `--talos-panel-soft`, che i due temi definiscono davvero
+      (#2b2c30 scuro, #e8e4db chiaro) ed è la superficie «incassata» che il progetto usa già.
+   ⛔ Resta fuori `.talos-system-note__grezzo`, che ha lo stesso identico difetto: non è di questa
+      corsia, ed è segnalato nel rapporto invece di essere corretto di straforo. */
+.talos-approval__codice{margin:8px 0 0; padding:10px var(--talos-approval-gutter); border-block:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-family:var(--talos-font-mono); font-size:12.5px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; overflow-x:auto; overflow-y:auto; max-height:14em}
+/* ⛔ D1 — la riga del motivo prende il rientro della carta, come tutte le altre. È la riga che dice
+   PERCHÉ ti si sta chiedendo il permesso: era l'unica a filo del bordo, e con `overflow:hidden`
+   la prima lettera spariva. Stesso token, nessun numero a mano. */
+.talos-approval__motivo{margin:8px 0 0; padding-inline:var(--talos-approval-gutter); font-size:12.5px; color:var(--talos-muted)}
 .talos-approval__esito{margin:8px 0 0; font-size:12.5px; font-weight:600}
 .talos-queue{display:flex; align-items:center; gap:10px; padding:8px 14px; margin-bottom:8px; border-radius:11px; border:1px dashed var(--talos-border-strong); color:var(--talos-assistant-text); font-size:13px}
 .talos-queue__text{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -1133,6 +1141,20 @@ a.talos-button{text-decoration:none}
 /* 06/9 — un REFUSED del kernel tradotto: si legge prima del testo originale, che resta sotto.
    E un argomento enorme (un `html` di duemila caratteri) non si stampa intero: si apre a richiesta. */
 .tool-rifiuto{margin:4px 0 0; color:var(--talos-text); font-size:12.5px}
+/*
+ * ⛔⛔ BLOCCO 7 (B4) — LE DUE SEZIONI DELL'ESITO DI UNA SHELL.
+ *   `Uscita` e `Diagnostica` hanno lo **stesso tono**: a distinguerle è la PAROLA, non il colore.
+ *   ⛔ E non è una scelta estetica. Hermes, nel suo codice (letto il 20/09/2026): «many CLIs use
+ *     stderr for informational messages (npm progress, git hints), so we **deliberately don't paint
+ *     stderr destructively** even though it's tagged». La specifica MCP (2026-07-28) dice al client
+ *     di **non presumere che stderr sia un errore**, e la ricerca 2026 (AgentDebugX) aggiunge che il
+ *     sintomo non è la causa. ⇒ **Nessun colore d'allarme qui**: un rosso su stderr dipingerebbe da
+ *     guasto l'avanzamento di `npm`. Solo un codice d'uscita diverso da zero è un fallimento, e lo
+ *     dice lo stato della riga.
+ *   ⛔ E niente nomi tecnici a schermo (owner 04/09): le etichette sono due parole italiane.
+ */
+.tool-stream{margin-top:6px}
+.tool-stream__etichetta{display:block; font-size:11px; letter-spacing:.02em; text-transform:uppercase; color:var(--talos-muted)}
 .tool-arg-lungo{margin:2px 0 0}
 .tool-arg-lungo > summary{cursor:pointer; color:var(--talos-muted); font-size:11.5px}
 /* 06/9 C24 — le note: una riga per nota, il titolo che si legge e il testo sotto in tono spento.
@@ -1216,7 +1238,10 @@ a.talos-button{text-decoration:none}
    `talos-approval__esito--si` e `--no` (conversazione.js) e nel foglio non esisteva NESSUNA regola
    per quei due nomi. Due esiti opposti, lo stesso grigio: chi rilegge la conversazione non sa cosa
    ha deciso. Il colore non e decorazione qui, e l'unica cosa che distingue un si da un no. */
-.talos-approval__esito{display:flex; align-items:center; gap:7px; margin:10px 0 0; padding:7px 10px; border-radius:9px; border:1px solid var(--talos-border); background:var(--talos-card-subtle); color:var(--talos-muted); font-size:12px; font-weight:600}
+/* ⛔ D1, stessa famiglia trovata guardando la carta intera: l'esito è una pillola con bordo e
+   angoli tondi, e con `margin:10px 0 0` i suoi angoli sbattevano contro il bordo della carta.
+   È la riga che compare DOPO ogni decisione, cioè quella che si vede più spesso di tutte. */
+.talos-approval__esito{display:flex; align-items:center; gap:7px; margin:10px var(--talos-approval-gutter) 0; padding:7px 10px; border-radius:9px; border:1px solid var(--talos-border); background:var(--talos-card-subtle); color:var(--talos-muted); font-size:12px; font-weight:600}
 .talos-approval__esito::before{content:''; width:7px; height:7px; border-radius:50%; background:currentColor; flex:0 0 auto}
 /* i token del tema, quelli VERI: si chiamano `success`, non `ok` — e ci sono gia in entrambi i temi */
 .talos-approval__esito--si{border-color:var(--talos-success-border); background:var(--talos-success-soft); color:var(--talos-success)}
@@ -1279,7 +1304,7 @@ a.talos-button{text-decoration:none}
 .talos-bivio__testo{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .talos-composer{border:1px solid var(--talos-border-strong); border-radius:18px; background:var(--talos-panel); padding:14px 14px 12px; box-shadow:var(--talos-shadow-card)}
 .talos-composer:focus-within{border-color:var(--talos-accent-border); box-shadow:0 0 0 3px var(--talos-accent-soft)}
-.talos-composer{position:relative; min-height:var(--composer-canonical-h, auto); display:flex; flex-direction:column}
+.talos-composer{position:relative; min-height:var(--composer-canonical-h, 120px); display:flex; flex-direction:column}
 .talos-composer .talos-composer__input{flex:1 1 auto}
 .talos-composer .talos-composer__bar{flex:none; margin-top:10px}
 /* ⛔ la larghezza del composer la decide la regola sopra, con `--composer-max-w`: una misura, un posto solo. */
@@ -1300,9 +1325,156 @@ a.talos-button{text-decoration:none}
 .talos-composer__bar{display:flex; align-items:center; gap:6px; flex-wrap:nowrap; min-width:0}
 .talos-composer__bar .talos-badge--lg{flex:0 1 auto; min-width:0; max-width:220px; overflow:hidden; white-space:nowrap; padding:0 10px}
 .talos-composer__bar .talos-badge--lg > :not(.i){overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+/*
+ * ⛔⛔⛔ BC-58, 17/09/2026 — UN NUMERO TAGLIATO È UN NUMERO SBAGLIATO.
+ *
+ * Il difetto, dalla foto del giro vero del 17/09 (`03-terminale-dal-composer-dark-1024.png`): a
+ * 1024 px la pillola diceva «Giri 1…». Non era illeggibile: era LEGGIBILE E FALSA — chi guardava
+ * leggeva «1» dove il kernel diceva «10». La causa è la riga qui sopra insieme al markup: dentro
+ * la pillola «Giri» era un nodo di TESTO (che non può ricevere `text-overflow`) e il numero era
+ * l'unico ELEMENTO figlio ⇒ `> :not(.i)` metteva l'ellissi esattamente sul dato, mai sull'etichetta.
+ * Il risultato sbagliato somigliava a quello giusto, ed è per questo che ci è arrivato davanti.
+ *
+ * ⇒ Due cure insieme, perché una sola non basta:
+ *   1. le pillole che portano una MISURA non si stringono più (`flex:0 0 auto`). Sono le più
+ *      strette della barra — «Giri 128/128» sta in ~110 px — mentre il nome del modello e il
+ *      permesso hanno etichette lunghe, variabili e già tagliate a 220 px: sono loro ad avere
+ *      spazio da cedere, ed è a loro che l'ellissi serve davvero;
+ *   2. una `.talos-measure` non riceve MAI l'ellissi, in nessuna pillola. È la regola generale:
+ *      un'etichetta abbreviata resta comprensibile («Scrive nel proget…»), un numero abbreviato
+ *      diventa un altro numero.
+ * ⛔ Non è una preferenza estetica, ed è per questo che vive nel CSS e non nella memoria di chi
+ *   scriverà la prossima pillola: la prova `p0bis-c.spec.mjs` misura `scrollWidth <= clientWidth`
+ *   del nodo della misura a 1024 px, nei due temi, con due e tre cifre.
+ *
+ * Ricerca 17/09/2026, prima di scrivere:
+ *  · PatternFly, «Toolbar · design guidelines» (patternfly.org/components/toolbar/design-guidelines,
+ *    letto 17/09/2026): quando lo spazio manca le azioni di priorità PIÙ BASSA passano dietro un
+ *    controllo di overflow, invece di stringere o mandare a capo — il rimpicciolimento uniforme
+ *    non è una strategia, è l'assenza di una strategia.
+ *  · Il pattern «Priority+» (github.com/SamrithaS/priority-plus; Kendo UI for Angular, «Responsive
+ *    ToolBar», telerik.com, letti 17/09/2026): si dichiara COSA resta visibile per primo, e il
+ *    resto scompare in ordine di priorità. ⇒ Qui la priorità è dichiarata in due righe di CSS:
+ *    le misure non cedono, le etichette sì.
+ *  · CSS-Tricks, «Flexbox and Truncated Text» (css-tricks.com/flexbox-truncated-text, letto
+ *    17/09/2026) e la nota di W3C www-style 2009Jul/0184 sul collasso per priorità in una toolbar:
+ *    l'ellissi in un contenitore flex vuole `min-width:0`, e il CSS standard non ha ancora un
+ *    «collassa per priorità» — va scritto a mano, scegliendo chi cede.
+ * ⛔ Nessun menu di overflow qui: la barra ha sei elementi e a 1024 px ci stanno tutti una volta
+ *   che a stringersi è chi deve. Un menu in più sarebbe un gesto in più per un problema che non c'è
+ *   (owner 10/09: l'overflow serve quando le AZIONI sono troppe, e queste non lo sono).
+ */
+.talos-composer__bar .talos-badge--lg[data-runtime-giri],
+.talos-composer__bar .talos-badge--lg[data-runtime-costo]{flex:0 0 auto; max-width:none}
+.talos-composer__bar .talos-badge--lg > .talos-measure,
+.talos-composer__bar .talos-badge--lg > .talos-measure--estimate{flex:0 0 auto; overflow:visible; text-overflow:clip}
 .talos-composer__bar .talos-composer__attach, .talos-composer__bar .talos-send{flex:none}
 .talos-composer{container-type:inline-size}
+/*
+ * ⛔⛔⛔ BC-58, SECONDA META — 17/09 sera. LA PRIMA CURA SPOSTAVA IL TAGLIO, NON LO TOGLIEVA.
+ *
+ * Bloccare le due pillole delle misure salvava i numeri e scaricava TUTTO il restringimento sui
+ * tre nomi. Misurato a 1024x800 (barra 584 px), larghezza visibile dell'etichetta, uguale nei due
+ * temi: `glm-5.3-flash` 80 px naturali ridotti a **27** («gl…»), «Scrive nel progetto» 115 → 44,
+ * «Terminale» 60 → 18; con «1024/1024 · $12.345,67» i tre nomi andavano a zero. Tre parole tagliate
+ * a una lettera non sono un'interfaccia piu stretta: sono tre parole in meno, decise dal caso.
+ *
+ * ⇒ Si DICHIARA CHI CEDE, e si cede per INTERO. Il file aveva gia il precedente giusto due righe
+ *   sotto — `@container (max-width:820px){ .talos-kbd{display:none} }`: una scorciatoia sparisce
+ *   tutta, non diventa «Ct…». Qui la stessa idea, in ordine di priorita crescente:
+ *
+ *     1. la scorciatoia da tastiera            (gia c'era, 820)
+ *     2. «Terminale»        -> sola icona      (900)
+ *     3. il permesso        -> sola icona      (760)
+ *     4. «Giri» e «Sessione» -> solo il numero (760)
+ *     5. il nome del modello -> ultimo, e MAI sotto 6 caratteri
+ *
+ *   L'ordine non e a gusto: e quanto ognuno di loro COSTA e quanto DICE. «Terminale» ha l'icona
+ *   piu riconoscibile della barra e apre un pannello che si vede subito; il permesso porta il suo
+ *   significato nel COLORE (il badge diventa ambra) prima che nella parola; «Giri» e «Sessione»
+ *   sono etichette di un numero che sta li accanto e non cambia mai posto. Il nome del modello e
+ *   l'unico che cambia da sessione a sessione e che nessun'altra cosa a schermo ripete: cede per
+ *   ultimo, e resta leggibile o non c'e.
+ *
+ * ⛔ SPARISCE DAGLI OCCHI, NON DALLA PAGINA. Non `display:none`: la parola resta il nome
+ *   accessibile del controllo (per chi legge con la voce non cambia NIENTE) e il `title` resta il
+ *   suggerimento per chi passa col mouse. `display:none` avrebbe tolto anche quelli, e un bottone
+ *   con la sola icona e senza nome e un bottone che meta delle persone non puo usare.
+ *
+ * ⛔ I NUMERI non entrano in questa scala in nessun punto: la regola di sopra resta intera.
+ *
+ * ⛔ QUESTO PARAGRAFO E' STATO RISCRITTO IL 17/09 SERA, e la versione di prima diceva una cosa che
+ *   suonava come una scelta ed era una perdita: «la soglia di 900 SCATTA SEMPRE, «Terminale» è di
+ *   fatto sola icona su tutto il desktop». Era vero, ed è esattamente il difetto D2 che il giro
+ *   vero ha fotografato. Dichiarare un danno non lo rende accettabile: la scala ora si accende solo
+ *   quando le pillole accese sono davvero troppe (vedi il `:has()` qui sotto), e quando c'è la sola
+ *   pillola dei giri le etichette restano intere a 1440 e leggibili a 1024.
+ *
+ * Misure che reggono la scelta delle soglie (composer 614 px a 1024, 690 px a 1440; barra 584/660;
+ * ingombro fisso dei quattro bottoni tondi + spazi = 204 px): con tutti i nomi interi servivano
+ * 572 px contro i 380 disponibili a 1024 — non ci stavano, e non ci stavano nemmeno a 1440
+ * (456 disponibili) — ma SOLO con tutte e due le pillole delle misure accese. Le soglie vere, e il
+ * perche di ciascuna, stanno nel blocco `:has()` qui sotto.
+ *
+ * Ricerca 17/09/2026: la scala per priorita e il pattern «Priority+» (PatternFly «Toolbar · design
+ * guidelines»; Kendo UI for Angular «Responsive ToolBar») — si dichiara cosa resta, non si stringe
+ * tutto insieme. La tecnica del nascondere-agli-occhi-e-non-alla-voce e quella di WebAIM
+ * «CSS in Action: Invisible Content Just for Screen Reader Users» (webaim.org, letta 17/09/2026):
+ * `clip-path` + 1px, MAI `display:none` ne `visibility:hidden`, che tolgono l'elemento anche alla
+ * voce. ⛔ E un controllo ridotto alla sola icona tiene nome accessibile e suggerimento — regola
+ * di casa, e qui li teneva gia entrambi: bastava non buttarli via.
+ */
+/* ⛔ Il nome del modello si stringe, ma non sotto la soglia della leggibilita: o sei caratteri, o
+   tanto vale non esserci. Sotto questa riga non puo scendere, quindi non diventa mai «g…». */
+.talos-composer__bar [data-open-sheet="model"] .talos-chip__label{min-width:6ch}
+/*
+ * ⛔⛔⛔ D2, 17/09 sera — LA SCALA SCATTAVA ANCHE QUANDO LO SPAZIO C'ERA, e l'ha visto un giro
+ *   vero. A 1440, con la sola pillola dei giri accesa («Giri 1»), il permesso era ridotto allo
+ *   scudo e «Terminale» all'icona con ~250 px VUOTI fra l'icona e il microfono. Il giorno prima,
+ *   stesso stato e stessa larghezza, si leggevano intere «Scrive nel progetto» e «Terminale»:
+ *   cioè avevo portato l'interfaccia SOTTO quella di prima per pagare un caso che in quel momento
+ *   non esisteva. L'avevo perfino dichiarato come prezzo («la soglia 900 scatta sempre»), che è il
+ *   modo in cui una perdita passa per una scelta.
+ *
+ * ⛔ LA CAUSA: la soglia guardava la larghezza del CONTENITORE, che non cambia mai, mentre il
+ *   bisogno dipende da QUANTE pillole sono accese — e la spesa compare solo quando un costo c'è
+ *   davvero (`chat-foot.js`: `costoChip.hidden = !dati.costo`). Misurato: con la sola pillola dei
+ *   giri servono 445 px di etichette+pillole contro i 462 disponibili a 1440 — ci stanno TUTTE.
+ *   Con anche la spesa ne servono 572 contro 456: non ci stanno, e lì la scala serve.
+ * ⇒ La scala si condiziona alla PRESENZA della spesa. `:has()` legge lo stato vero del DOM senza
+ *   una riga di JavaScript e senza un secondo posto in cui ricordarsene.
+ *   Ricerca 17/09/2026: `:has()` è in Chromium dalla **105** (Chrome for Developers, «:has(): the
+ *   family selector», developer.chrome.com/blog/has-m105) ed è attivo di serie in Chrome, Edge,
+ *   Firefox 121, Safari 15.4 e Opera 91 (caniuse.com/css-has, letta 17/09/2026). Electron porta un
+ *   Chromium molto più recente di 105, e il browser dell'owner è Chrome: il selettore è dentro il
+ *   perimetro. ⛔ E se un giorno non lo fosse, il ripiego è il comportamento di IERI (nessuna
+ *   scala, etichette che si stringono con l'ellissi): una regola `:has()` non riconosciuta viene
+ *   scartata, non applicata male.
+ *
+ * ⛔ LE SOGLIE ORA SONO MISURATE, non scelte: con tutte le etichette intere e la spesa accesa
+ *   servono ~776 px di barra, cioè ~806 px di composer — sopra quella misura non cede nessuno.
+ *   Ceduto «Terminale» (60 px) ne bastano ~746. Da qui 800 e 740, che a 1024 (composer 614) e a
+ *   1440 (690) scattano entrambe quando la spesa c'è, e con la chat a piena larghezza no.
+ */
+@container (max-width:800px){
+  .talos-composer__bar:has([data-runtime-costo]:not([hidden])) #pillTerminale .talos-chip__label{position:absolute; width:1px; height:1px; padding:0; margin:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0}
+}
 @container (max-width:820px){ .talos-composer__bar .talos-kbd{display:none} }
+/*
+ * ⛔⛔ 17/09 sera, TROVATO GUARDANDO LA MIA STESSA FOTO — «Giri» NON cede, e la prima stesura di
+ *   questa scala lo faceva cedere. Nello stato normale la pillola diventava un «10» NUDO dentro un
+ *   contorno: un numero senza la sua parola e senza un'icona non dice niente, e il suggerimento si
+ *   vede solo passandoci sopra col mouse. Tutto il resto che cede qui sopra tiene un SIMBOLO che lo
+ *   racconta — lo scudo del permesso, il terminale della sua pillola — e «Sessione» cede perché il
+ *   numero porta con sé `~$`, che dice da solo «spesa, stimata». «Giri» non aveva niente: costa
+ *   21 px ed è l'unica cosa che rende leggibile il suo numero. Resta.
+ * ⇒ La regola generale, che vale per la prossima pillola che qualcuno aggiungerà: **una parola può
+ *   cedere solo se qualcos'altro nella pillola continua a dire di che cosa si tratta.**
+ */
+@container (max-width:740px){
+  .talos-composer__bar:has([data-runtime-costo]:not([hidden])) [data-open-sheet="permissions"] .talos-chip__label,
+  .talos-composer__bar:has([data-runtime-costo]:not([hidden])) [data-runtime-costo] .talos-chip__label{position:absolute; width:1px; height:1px; padding:0; margin:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0}
+}
 @container (max-width:640px){ .talos-composer__bar .talos-badge--lg{max-width:190px; padding:0 8px} .talos-composer__bar{gap:4px} }
 .talos-composer__attach{width:38px; height:38px; border-radius:50%; border:1px solid var(--talos-border); background:var(--talos-panel-soft); display:grid; place-items:center; color:var(--talos-assistant-text)}
 .talos-composer__attach:hover{border-color:var(--talos-accent-border); color:var(--talos-accent-hover)}
@@ -1319,8 +1491,10 @@ a.talos-button{text-decoration:none}
 
 /* ---------- 10. COLONNA DI DESTRA (G11) ---------- */
 .talos-inspector{position:relative; background:var(--talos-background); border-left:1px solid var(--talos-border); display:flex; flex-direction:column; min-height:0}
-.talos-inspector__head{padding:16px 16px 0}
-.talos-inspector__head h2{font-size:14px; margin-top:2px}
+/* ⛔ 18/09/2026 — QUI STAVANO LE DUE REGOLE DI `.talos-inspector__head` (padding e h2). La testata
+   della colonna destra è stata rimossa su ordine dell'owner (`5df3fecd`: via il sopracciglio
+   «Sessione», il nome della sessione e la X): nel template non esiste più nessun nodo con quella
+   classe, quindi le regole erano orfane. Trovate dalla review avversaria del mio diff. */
 .talos-inspector__tabs{padding:12px 12px 0; border-bottom:1px solid var(--talos-border)}
 .talos-inspector__body{flex:1 1 auto; min-height:0; overflow-y:auto; padding:12px}
 .talos-inspector-card{padding:12px 14px; margin-bottom:10px}
@@ -1366,7 +1540,27 @@ a.talos-button{text-decoration:none}
 .talos-figlia__corpo{display:flex; flex-direction:column; gap:10px; flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain}
 .talos-figlia__corpo:focus-visible{outline:2px solid var(--talos-accent-border); outline-offset:-2px}
 .talos-figlia__turno{display:flex; flex-direction:column; gap:8px}
-.talos-figlia__vuoto,.talos-figlia__nota{color:var(--talos-muted); font-size:12px; line-height:1.5}
+.talos-figlia__vuoto,.talos-figlia__nota,.talos-figlia__scheletro{color:var(--talos-muted); font-size:12px; line-height:1.5}
+/* ---------- La figlia parla MARKDOWN (P0-E punto 10, 16/09/2026) ----------
+   ⛔ Il corpo della figlia è largo quanto la colonna (~300 px): tutto ciò che il renderer può
+     produrre deve starci dentro o avere il suo scorrevole. Senza queste righe una tabella o un
+     recinto di codice sfondano la colonna — e il difetto non si vede finché una figlia non scrive
+     una tabella. */
+.talos-figlia__corpo :is(h1,h2,h3,h4){font-size:13.5px; line-height:1.35; margin:6px 0 4px}
+.talos-figlia__corpo :is(p,ul,ol,blockquote,table){margin:4px 0}
+.talos-figlia__corpo :is(ul,ol){padding-left:18px}
+.talos-figlia__corpo blockquote{margin-left:0; padding-left:10px; border-left:2px solid var(--talos-border-strong); color:var(--talos-muted)}
+/* Una tabella più larga della colonna scorre DA SOLA, invece di allargare la colonna. */
+.talos-figlia__corpo table{display:block; width:max-content; max-width:100%; overflow-x:auto; border-collapse:collapse}
+.talos-figlia__corpo :is(th,td){border:1px solid var(--talos-border); padding:3px 6px; font-size:12px}
+/* ⛔ Il recinto di codice è lo STESSO componente della chat: qui si limita solo la sua larghezza e
+   si accorcia la misura, perché il vestito è già quello giusto e non va riscritto. */
+.talos-figlia__corpo .code-block{max-width:100%; margin:6px 0}
+.talos-figlia__corpo .code-block pre{max-height:320px; overflow:auto; font-size:11.5px; line-height:1.5}
+.talos-figlia__corpo .code-block-head{font-size:11px}
+.talos-figlia__corpo code{overflow-wrap:anywhere}
+/* Il ragionamento vive dentro la sua card richiudibile: più smorzato della risposta, come in chat. */
+.talos-figlia__ragionamento{color:var(--talos-muted); font-size:12px; line-height:1.55}
 .talos-figlia__errore{color:var(--talos-danger, var(--talos-text)); font-size:12px; line-height:1.5}
 /* ⛔ Niente layout mio su .talos-figlia__misure: le .talos-kv dentro sanno gia disporsi in coppia
    chiave-valore, e la mia regola le impilava CENTRATE su due righe (visto nella foto del 10/09).
@@ -1391,11 +1585,117 @@ a.talos-button{text-decoration:none}
 .talos-kv__k{color:var(--talos-muted); font-size:12.5px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .talos-kv__v{flex:none; white-space:nowrap; font-family:var(--talos-font-mono); font-size:12px; font-weight:500}
 .talos-kv__v--accent{color:var(--talos-accent-hover)}
+/* ---------- Processi (P0-E punto 9, 16/09/2026) ----------
+   ⛔ IL DIFETTO: `.talos-process__cmd` era `white-space:nowrap` + `text-overflow:ellipsis`, cioè il
+     comando si leggeva solo fino a dove arrivava la colonna (~300 px) e l'ellissi tagliava la CODA
+     — dove stanno bersaglio e opzioni: `npm run verify:all --work…`.
+   ⇒ La riga ora è: icona di famiglia · comando a segmenti che VA A CAPO · apri/chiudi. Il
+     linguaggio visivo non cambia (stessi token, stessa card, stessi badge): cambia la STRUTTURA,
+     che è la regola del 04/09 sul sistema di design esistente.
+   ⛔ Tutte le regole nuove partono da `.talos-process`: restano dentro la regione assegnata, e il
+     vestito dei segmenti è legato alla riga del processo, non globale. */
 .talos-process{padding:10px 12px}
 .talos-process + .talos-process{margin-top:8px}
-.talos-process__cmd{font-family:var(--talos-font-mono); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.talos-process__meta{display:flex; align-items:center; gap:8px; margin-top:6px; font-size:12px; color:var(--talos-muted)}
+.talos-process__testa{display:flex; align-items:flex-start; gap:8px}
+/*
+ * ⭐⭐⭐ BLOCCO 4 — 20/09/2026. IL TITOLO È LA DESCRIZIONE DEL MODELLO, IL COMANDO È IL DETTAGLIO.
+ *
+ * ⛔ Prima qui c'era una cosa sola: il comando. Una lista di processi che dice `git status --short`
+ *   dice COSA è stato eseguito e non PERCHÉ, e il perché è la sola cosa che si vuole sapere
+ *   guardando una lista. La descrizione il modello la manda già con ogni comando: non si vedeva.
+ * ⛔ Le due forme sono DUE, e le decide l'attributo `hidden` del comando (`inspector.js`):
+ *   · con la descrizione → **solo il titolo in chiaro**, e il comando non si disegna affatto;
+ *   · senza descrizione → il comando resta lì dov'era, col suo peso di prima. Una riga che perde
+ *     la descrizione non deve perdere anche la leggibilità: non si inventa niente al posto suo.
+ * ⛔ 20/09/2026, revisore: qui c'era scritto «comando mono **attenuato sotto**» e citato un
+ *   `data-descrizione` **che nessuno legge** — due frasi che descrivevano la versione precedente
+ *   della cura. Un commento che descrive il codice di ieri è un commento falso.
+ */
+.talos-process__testo{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px}
+.talos-process__titolo{font-size:13px; line-height:1.4; color:var(--talos-text); overflow-wrap:anywhere}
+.talos-process__titolo[hidden]{display:none}
+/*
+ * ⛔⛔ 20/09/2026 — IL «Comando» NELL'ESPANSA ERA ILLEGGIBILE, E DA OGGI È L'UNICA COPIA.
+ * Misurato dal revisore avversario sulla pagina vera: la riga `.talos-kv` «Comando» ha
+ * `clientWidth 289` e **`scrollWidth 3161`** — il valore sta su UNA riga da 3161 px, non va a capo,
+ * non scorre e non ha `title`: se ne leggono ~40 caratteri su 3161, il resto è fuori dalla card.
+ * ⛔ Il difetto è PREESISTENTE (`.talos-kv__v{flex:none; white-space:nowrap}`, e nessun antenato ha
+ *   `overflow`), ma è diventato **portante** adesso: la riga chiusa non mostra più il comando,
+ *   quindi l'espansa è l'unica copia che resta — e deve essere leggibile.
+ * ⇒ Nel dettaglio di un processo il valore prende la larghezza che avanza e va a capo.
+ * ⛔⛔ 20/09/2026, sera — QUI AVEVO SCRITTO DUE DICHIARAZIONI CHE NON SI APPLICAVANO MAI.
+ *   `white-space:pre-wrap` e `text-align:left` stavano in questa regola, ma le stesse due proprietà
+ *   erano dichiarate **dopo** e a **pari specificità** (`.talos-process__dettaglio .talos-kv__v`,
+ *   riga più sotto, 16/09) ⇒ vinceva quella, e il mio `pre-wrap` non è mai esistito.
+ *   Misurato: un comando con **6 interruzioni rendeva 72 px (4 righe) invece di 126 (7)**, e la
+ *   frase «conserva le interruzioni di riga» nel messaggio del commit `08a046c1` era **falsa**.
+ *   ⇒ Una proprietà, una regola. Il valore LUNGO ha una classe sua (`talos-kv__v--lungo`, più sotto)
+ *     che nessun'altra regola tocca; qui resta solo ciò che questa regola dà e nessun'altra:
+ *     la larghezza che avanza. I valori di una parola restano allineati a destra, com'erano.
+ */
+.talos-process__dettaglio .talos-kv{align-items:flex-start}
+.talos-process__dettaglio .talos-kv__v{flex:1 1 auto; min-width:0}
+/* ⛔ 20/09/2026, owner dalla foto: con la descrizione il comando NON si disegna (nascosto in
+   `inspector.js`), quindi non servono più due vestiti per la stessa riga. Restano le misure di
+   base, valide quando il comando È il titolo. */
+.talos-process__cmd{flex:none; min-width:0; font-family:var(--talos-font-mono); font-size:12px; line-height:1.55;
+  /* ⛔ `anywhere` e non `break-all`: un percorso lungo si spezza SOLO se non c'è altro modo, e
+     `overflow-wrap` rispetta gli spazi fra i segmenti, così `git commit` non diventa `gitcom‑mit`. */
+  overflow-wrap:anywhere; white-space:normal}
+.talos-process__cmd .talos-cmd__eseguibile{color:var(--talos-text); font-weight:600}
+.talos-process__cmd .talos-cmd__sottocomando{color:var(--talos-accent-text); font-weight:600}
+.talos-process__cmd .talos-cmd__flag{color:var(--talos-info)}
+.talos-process__cmd .talos-cmd__percorso{color:var(--talos-assistant-text)}
+.talos-process__cmd .talos-cmd__url{color:var(--talos-info); text-decoration:underline; text-underline-offset:2px}
+.talos-process__cmd .talos-cmd__argomento{color:var(--talos-assistant-text)}
+.talos-process__cmd .talos-cmd__operatore{color:var(--talos-accent); font-weight:600}
+.talos-process__cmd .talos-cmd__commento{color:var(--talos-muted); font-style:italic}
+.talos-process__cmd .talos-cmd__grezzo{color:var(--talos-assistant-text)}
+.talos-process .talos-cmd__icona{flex:none; margin-top:2px; color:var(--talos-muted)}
+.talos-process__apri{flex:none; padding:2px 6px; min-height:0}
+.talos-process__apri .i{transition:transform var(--talos-motion-duration-control,.14s) var(--talos-motion-ease)}
+.talos-process__apri[aria-expanded="true"] .i{transform:rotate(180deg)}
+@media (prefers-reduced-motion: reduce){ .talos-process__apri .i{transition:none} }
+.talos-process__meta{display:flex; align-items:center; gap:8px; margin-top:6px; font-size:12px; color:var(--talos-muted); flex-wrap:wrap}
+.talos-process__stato{display:inline-flex; align-items:center; gap:4px}
+.talos-process__misura{white-space:nowrap}
+.talos-process__ora{white-space:nowrap; font-size:11px; opacity:.8}
+/* ⛔ L'INDICATORE DI ATTIVITÀ non è decorazione: una riga viva e una finita devono distinguersi
+   anche col colore spento e a colpo d'occhio. È il badge stesso che respira, non un punto in
+   più: un secondo oggetto animato accanto a una parola è rumore. */
+@keyframes talos-process-battito{0%,100%{opacity:1}50%{opacity:.55}}
+.talos-process[data-stato="in-corso"] .talos-process__stato,
+.talos-process[data-stato="in-avvio"] .talos-process__stato{animation:talos-process-battito var(--talos-motion-duration-pulse,1.6s) var(--talos-motion-ease) infinite}
+/* ⛔ `body.reduce-motion` E la media query: la lezione del 10-11/09 dice che due regole universali
+   con `!important` spengono già tutto da monte — qui si dichiara comunque, perché una regola che
+   dipende da un'altra per essere corretta è corretta solo finché quell'altra resta. */
+@media (prefers-reduced-motion: reduce){ .talos-process .talos-process__stato{animation:none} }
+.talos-process__dettaglio{margin-top:8px; padding-top:8px; border-top:1px solid var(--talos-border)}
+.talos-process__dettaglio .talos-kv__v{white-space:normal; overflow-wrap:anywhere; text-align:right}
+/* ⛔ Il valore LUNGO — il `Comando` e la `Descrizione` del dettaglio (vedi `datiProcesso`,
+   `inspector.js`): va a capo **conservando le interruzioni di riga** del comando, così un `for` di
+   shell su sei righe torna com'è, ed è allineato a **sinistra**, perché a destra un blocco di sei
+   righe diventa frastagliato. `pre-wrap` qui è VIVO: questa classe non compare in nessun'altra
+   regola del foglio, quindi non c'è niente con cui competere — è la lezione del 20/09 (sopra). */
+.talos-process__dettaglio .talos-kv__v--lungo{white-space:pre-wrap; overflow-wrap:anywhere; text-align:left}
+.talos-process__dettaglio .talos-kv__k{flex:none}
+/* ⛔ L'ETICHETTA NON SI STRINGE. Misurato dal revisore: «Comando» rendeva `C..` con
+   `clientWidth 13 / scrollWidth 57`, «Descrizione» 58/67 — perché `.talos-kv__k` porta
+   `min-width:0; overflow:hidden; text-overflow:ellipsis` e in questa riga il valore prende tutto lo
+   spazio che avanza. Le etichette di questo dettaglio sono parole corte: prendono la loro larghezza. */
+
+
 .talos-process__stall{margin-top:8px; padding:8px 10px; border-radius:9px; background:var(--talos-warning-soft); color:var(--talos-warning); font-size:12.5px; border:1px solid var(--talos-warning-border)}
+/* ⛔ La selezione si vede con un BORDO e un fondo, non solo con un colore di testo: è la stessa
+   ragione per cui lo stato ha una parola accanto all'icona (WCAG 1.4.1). */
+.talos-process[data-selezionato="si"]{border-color:var(--talos-accent-border); background:var(--talos-panel-soft)}
+.talos-process:focus-visible{outline:var(--talos-focus-width) solid var(--talos-ring); outline-offset:2px}
+.talos-process-lista{display:block}
+.talos-process-filtro{margin-bottom:10px}
+.talos-process-altri{margin-top:10px}
+/* ⛔ Nascosto all'occhio ma NON all'albero di accessibilità: `display:none` toglierebbe anche
+   l'annuncio, ed è l'unica cosa che dice a chi non vede che l'elenco è cresciuto. */
+.talos-process-annuncio{position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0}
 
 /* ---------- 11. PAGINE (destinazioni) ---------- */
 .talos-page{flex:1 1 auto; min-height:0; overflow-y:auto; padding:22px 28px 32px}
@@ -1417,7 +1717,63 @@ a.talos-button{text-decoration:none}
 .talos-toolbar--hf .talos-toolbar__autore{flex:0 0 200px; width:200px}
 .talos-toolbar--hf .talos-toolbar__tag{flex:0 0 180px; width:180px}
 .talos-toolbar--hf .talos-select{flex:0 0 150px}
-@media (max-width:1100px){
+/* ⛔ IL SELETTORE DELL'ORDINE NON ERA COPERTO — misurato il 18/09/2026 sul 4174: la riga è
+   1912 px, il campo di ricerca sta schiacciato a 220 (il suo `min-width`) e il suo segnaposto
+   **non ci sta di 1 px** (171 px di testo in 170 utili), mentre il selettore dell'ordine si
+   prende **1288 px**, cioè due terzi della riga.
+   La causa è un selettore mancante: `.talos-select` sopra è il select NATIVO — che in pagina
+   resta largo 0 — e chi si vede è il componente `calm-control--select`, che non compariva in
+   nessuna regola di questa riga e quindi cresceva con lo spazio che avanza.
+   ⇒ Stessa misura del nativo: l'intenzione c'era, mancava il selettore. Così il campo di ricerca
+   riprende lo spazio (è quello in cui si scrive) e l'ordine torna un controllo largo 150. */
+/* ⛔ 220 È UN NUMERO NOSTRO, NON DEL MOCKUP — e questa nota corregge una attribuzione FALSA che
+   avevo scritto qui e nel messaggio di `a253687a`. Il terzo revisore l'ha misurata alla fonte: nel
+   mockup `.catalog-sorting .calm-control{max-width:220px}` **matcha ZERO elementi**; il suo
+   controllo dell'ordine è `.catalog-sort select{max-width:245px}`, e nella scena viva è largo
+   **158 px**. ⇒ Il 220 si tiene perché è **misurato giusto per noi** — con «Aggiornati di recente»
+   l'etichetta chiede **135 px** e a 220 ne ha 135 su 135, intera — non perché sia del mockup.
+ * ⛔ E la prima stesura diceva **150** (la misura scritta sopra per il select NATIVO) e **tagliava
+   l'etichetta**: 135 richiesti, 97 disponibili, cioè «Aggiornati di …».
+ * ⛔ `min-width: 0` resta: senza, un contenuto più largo del dovuto sfonderebbe la riga invece di
+   accorciarsi, e in `flex-wrap: nowrap` è la riga intera a pagare. */
+.talos-toolbar--hf .calm-control--select{flex:0 0 220px; min-width:0}
+/* ⛔ LA SOGLIA ERA 1100 E LASCIAVA UNA FASCIA SCOPERTA, 1101→1490 — misurata dal terzo revisore
+   con bisezione (`ultimaRotta 1490`, `primaSana 1491`). Sopra la soglia la riga è `nowrap` e i
+   quattro controlli non si comprimono: il minimo è **220 + 200 + 180 + 220 + 24 di gap = 844 px**.
+   Fra 1101 e 1490 la riga è più stretta di così e il controllo dell'ordine **usciva dal pannello**:
+   a 1440 di **52 px**, a 1280 (la viewport predefinita della suite) di **209 px**, con `.talos-page`
+   che diventava scorribile in orizzontale (`scrollWidth 1149` contro `client 1004`) e il campo di
+   ricerca schiacciato tanto da rimettere il segnaposto tagliato (171 in 168) — cioè il difetto
+   originale, riaperto dalla cura del difetto originale.
+   ⇒ La soglia si alza a **1500**: da lì in su la riga ci sta su una linea, sotto va a capo come già
+   faceva (misurato dal revisore da 1100 a 390: nessun trabocco, etichetta mai tagliata). */
+@media (max-width:1500px){
+  .talos-toolbar--hf{flex-wrap:wrap}
+  .talos-toolbar--hf .talos-field{flex:1 1 100%}
+  .talos-toolbar--hf .talos-toolbar__autore,
+  .talos-toolbar--hf .talos-toolbar__tag,
+  .talos-toolbar--hf .talos-select{flex:1 1 0; width:auto; min-width:0}
+}
+/* ⛔⛔ E LA STESSA COSA IN UNA CONTAINER QUERY, perché la media query guarda la FINESTRA e la riga
+   vive in uno SPAZIO SCALATO. `.talos-shell{zoom:var(--talos-ui-font-scale,1)}` (`index.css:651`)
+   scala tutto il contenuto, e la scala la scrive la persona da Impostazioni › Aspetto ›
+   «Dimensione interfaccia» (`.8/.9/1/1.15/1.3`): con scala > 1 il contenuto si stringe **senza che
+   `window.innerWidth` cambi**, quindi la media query NON scatta e la riga resta `nowrap` coi suoi
+   844 px di minimo dentro uno spazio più piccolo — il controllo dell'ordine esce dal pannello.
+   Misurato dal quarto revisore con la scala vera applicata dal selettore: a scala 1.3 e finestra
+   1501 il controllo esce di **377 px**, a 1920 di **19**, e il segnaposto torna tagliato.
+   ⭐ LA RICERCA DICE QUALE STRUMENTO VEDE QUESTO (18/09/2026): la media query risponde «quanto è
+   grande la **finestra**», la container query «quanto è grande **questo elemento**» — e per questo
+   i componenti riusabili vogliono la container query (fonte: `opendoordigital.dev/blog/
+   responsive-web-design-2026` e `dev.to/raxxostudios/css-container-queries-…`, letti il
+   18/09/2026). Il progetto la usa già qui accanto: `settings.css` ha
+   `@container settings (max-width: 660px)`.
+   ⛔ **1250 È MISURATO, NON SCELTO.** Sonda `artifacts/zoom-bar/scala.mjs` su 3 scale × 9 larghezze:
+   col contenitore ≥ ~1290 px di layout la riga **non trabocca mai**; sotto, sì (a scala 1.3 e
+   contenitore 1201 esce di 19 px). Le due cure «il controllo cede» sono state provate e **non
+   bastano**: `flex:0 1 220px; min-width:159px` lascia 8 combinazioni rotte e `min-width:0` ne
+   lascia 3 — mentre la container query a 1250 **le chiude tutte e 27**. */
+@container settings (max-width:1250px){
   .talos-toolbar--hf{flex-wrap:wrap}
   .talos-toolbar--hf .talos-field{flex:1 1 100%}
   .talos-toolbar--hf .talos-toolbar__autore,
@@ -1447,7 +1803,40 @@ a.talos-button{text-decoration:none}
 .talos-list-row__misure{display:flex; align-items:center; gap:10px; font-size:11.5px; color:var(--talos-muted); font-variant-numeric:tabular-nums}
 .talos-list-row__misura{white-space:nowrap}
 .talos-split{display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:14px; align-items:start}
-.talos-detail{padding:16px; position:sticky; top:0}
+/* ⛔ 19/09/2026 — IL DETTAGLIO CHIUSO NON TIENE LA SUA COLONNA. Un figlio `hidden` non si disegna,
+   ma la TRACCIA della griglia resta: misurato sulla lista Hugging Face, `#modelLabHfDetail` era
+   `hidden` a 0×0 e la griglia diceva ancora `508px 320px` ⇒ la lista perdeva 320 px di larghezza
+   per un pannello che non c'era (il mockup chiede 1122 px di riga). Specificità 0-2-1 contro lo
+   0-1-0 della regola sopra: vince senza `!important`. Fonte della misura: corsia A, FASE 4-bis. */
+.talos-split:has(> aside.talos-detail[hidden]){grid-template-columns:minmax(0,1fr)}
+/* ⛔⛔ BC-78.3, 17/09/2026 — UN PANNELLO APPICCICATO SENZA SCORRIMENTO PROPRIO NASCONDE IL SUO PIEDE.
+   `position:sticky; top:0` tiene il pannello incollato in cima allo scorrimento: se è più alto dello
+   spazio che ha, la sua parte bassa — dove stanno i pulsanti, «Fida» compreso — non si raggiunge
+   PIÙ, perché scorrendo il pannello resta fermo. Non è un caso di scuola: misurato a 1024×800 il
+   dettaglio arrivava a 1228 su una finestra di 800.
+   ⇒ Il pannello prende un tetto e uno scorrimento SUO. Il tetto è composto di token esistenti
+   (l'altezza della testata più un respiro), non è un numero: le testate cambiano altezza con la
+   scala dell'interfaccia. `overscroll-behavior:contain` impedisce che arrivato in fondo lo
+   scorrimento passi alla pagina dietro (ricerca 17/09/2026, MDN «overscroll-behavior»).
+   ⛔ Il tetto vale SOLO finché il pannello è appiccicato: sotto i 1100 px la colonna si impila e
+   torna `static`, e lì un tetto lo farebbe scorrere dentro una pagina che già scorre — due
+   scorrimenti annidati per lo stesso contenuto. Vedi il ripristino nelle due regole più in basso. */
+/* ⛔⛔ 18/09/2026 — BC-78.3, seconda misura: la formula sottraeva la TESTATA ma non la BARRA DELLA
+   WORKSPACE, che dal 18/09 (PR #27) sta sopra ogni schermo. Misurato a 1200×420 con una sonda: la
+   finestra è 420, lo scorrimento del pannello parte a 119 (barra 59 + testata 60) e ha 301 px di
+   spazio, mentre la formula ne dichiarava 336 ⇒ il piede del pannello (i pulsanti) restava fuori.
+   ⛔ Il numero non si scrive qui: `--talos-workspace-bar-h` lo MISURAVA `workspace-chrome.ts` dalla
+   barra vera (ResizeObserver) e il fallback `0px` copre le superfici dove la barra non c'è.
+   ⛔⛔ 18/09/2026, CORREZIONE DI QUESTO COMMENTO (review avversaria): la frase sopra è **falsa da
+   oggi**. La barra della workspace è stata RIMOSSA su ordine dell'owner, e con lei il
+   ResizeObserver che pubblicava il token: misurato, nel DOM `[data-workspace-bar]` = **0 nodi** e
+   `--talos-workspace-bar-h` = **(non impostato)** ⇒ la formula è corretta **per caso**, non per
+   costruzione. Se un giorno una barra tornasse, BC-78.3 tornerebbe in silenzio.
+   ⇒ Il termine resta perché è innocuo (`var(…, 0px)`) e perché è la traccia di cosa manca: chi
+   reintroduce una barra in cima deve reintrodurre anche la sua misura. */
+
+
+.talos-detail{padding:16px; position:sticky; top:0; max-height:calc(100dvh - var(--talos-workspace-bar-h, 0px) - var(--talos-topbar-h) - var(--talos-space-lg)); overflow-y:auto; overscroll-behavior:contain}
 .talos-detail h3{font-size:15px}
 .talos-detail__desc{color:var(--talos-muted); font-size:13px; margin:4px 0 12px}
 .talos-detail .talos-eyebrow{display:block; margin:14px 0 4px}
@@ -1495,8 +1884,49 @@ a.talos-button{text-decoration:none}
 .talos-setting__scope{display:block; font-size:12px; color:var(--talos-muted); margin-top:1px}
 
 /* Settings: controlli nativi, con gli stessi token del mockup. */
-#schermoImpostazioni .talos-settings__nav .talos-nav-item{height:auto;min-height:40px}
+/*
+ * ⭐⭐ 18/09/2026 — LE MISURE DELLA VOCE, dal mockup. FASE 1 della parità.
+ * ⛔ MISURATE dal DOM vivo del 4174, non lette dal CSS: `padding 10px 12px`, `radius 8px`,
+ *   `font-size 13px` e l'icona da `17px` erano GIÀ quelli del mockup (una regola più specifica
+ *   vince su `.talos-nav-item` di questo foglio). Restavano da un pixel in quattro punti e una
+ *   cosa del tutto assente — il punto tondo della voce attiva.
+ *   Mockup, regola `.nav-item`: `gap:11px`, `min-height:42px`, `margin:3px 0`,
+ *   `.nav-item .icon{17px}`, `.nav-item.active:after{5×5, margin-left:auto}`.
+ */
+/*
+ * ⛔ QUI SOLO CIÒ CHE NON C'È GIÀ ALTROVE. `min-height:42px`, `padding:10px 12px`, il raggio di
+ *   8px e i 13px dell'etichetta sono in `src/design-system/settings.css:28-29`, su
+ *   `#schermoImpostazioni .settings-nav__item` — e quella è la regola che VINCE. Ripeterli qui era
+ *   una **copia che ombreggiava la misura**: la review avversaria del 18/09 l'ha provato togliendo
+ *   la riga, e la prova restava verde — cioè non distingueva chi delle due comanda. Cancellata.
+ *   Restano il `gap` e il `margin`, che in `settings.css` non ci sono.
+ */
+#schermoImpostazioni .talos-settings__nav .talos-nav-item{height:auto;gap:11px;margin:3px 0}
+/*
+ * ⛔ IL PUNTO DELLA VOCE ATTIVA — nel mockup c'è (`.nav-item.active:after`), qui non c'era:
+ *   misurato `::after` → `content: none`. Si aggancia ad `aria-current="page"`, che la voce
+ *   attiva porta già (settings-view.ts:165), quindi non serve toccare il TypeScript.
+ * ⛔ IL COLORE È QUELLO DEL MOCKUP, non `currentColor`. Avevo scelto `currentColor` per non dover
+ *   tenere allineata una seconda regola — ma il mockup ha
+ *   `.nav-item.active:after{…background:var(--accent-text)}` (`TALOS-Calm-Lab-04.html:240`), cioè
+ *   **#704814**, e la review avversaria del 18/09 l'ha misurata come deviazione: punto dell'app
+ *   `rgb(35,36,39)` contro `#704814`. Owner, 18/09/2026: **il colore del mockup**.
+ *   ⛔ Effetto da conoscere: su **tema scuro** un oro scuro come #704814 ha poco contrasto sul
+ *   fondo `rgb(30,31,34)`. È la scelta del mockup e si tiene; se in foto risulta illeggibile, si
+ *   dice all'owner invece di cambiarla di nascosto.
+ */
+#schermoImpostazioni .talos-settings__nav .talos-nav-item[aria-current="page"]::after{content:'';width:5px;height:5px;border-radius:50%;background:var(--talos-accent-text,#704814);margin-left:auto;flex:none}
 #schermoImpostazioni .talos-nav-item__label{white-space:normal}
+/*
+ * ⛔ `flex:0 1 auto` E NON `flex:1` — trovato dalla prova, non da un'occhiata.
+ *   `.talos-nav-item__label` porta `flex:1` (riga 308): l'etichetta si prende TUTTO lo spazio
+ *   libero, e al punto della voce attiva non ne resta niente. Misurato: `margin-left:auto` sul
+ *   `::after` risolveva a `0`, cioè il punto restava appiccicato al testo invece di andare a
+ *   destra come nel mockup — che infatti NON dà `flex:1` all'etichetta.
+ *   Con `0 1 auto` l'etichetta non cresce (la crescita la fa il margine automatico) ma si
+ *   restringe ancora, quindi il troncamento sulle voci lunghe continua a funzionare.
+ */
+#schermoImpostazioni .talos-settings__nav .talos-nav-item__label{font-size:13px;flex:0 1 auto}
 #schermoImpostazioni .talos-setting>div:first-child{min-width:0}
 #schermoImpostazioni .talos-setting>.talos-select{width:220px;max-width:50%;flex-shrink:0}
 /* ⛔ 07/9 — qui viveva una copia LOCALE dell'interruttore (`#schermoImpostazioni input.talos-switch`
@@ -1519,21 +1949,31 @@ a.talos-button{text-decoration:none}
 #schermoImpostazioni li strong{display:block;margin-bottom:4px}
 
 .talos-terminal{flex:1 1 auto; min-height:0; margin:14px 18px; border-radius:var(--talos-radius-card); border:1px solid var(--talos-border); background:var(--talos-window-bg); display:flex; flex-direction:column; overflow:hidden}
-.talos-terminal__tabs{display:flex; align-items:center; gap:2px; padding:8px 10px; border-bottom:1px solid var(--talos-border); background:var(--talos-panel)}
-.talos-terminal__tab{height:32px; padding:0 12px; border-radius:8px; color:var(--talos-muted); font-size:13px; display:inline-flex; align-items:center; gap:8px}
-.talos-terminal__tab[aria-selected="true"]{background:var(--talos-card); color:var(--talos-text)}
+/* BC-63, 17/09 — `.talos-schede`/`.talos-schede__tab` sono le classi del componente CONDIVISO
+   (`src/components/schede.js`): le stesse dichiarazioni di sempre, con un secondo selettore
+   davanti, così il Terminale non cambia di un pixel e la Revisione eredita la STESSA linguetta
+   invece di una sua imitazione. Ciò che resta sotto `.talos-terminal__` più in basso è solo del
+   Terminale: i badge, la «×» in coda, il container query dell'isolamento. */
+.talos-terminal__tabs, .talos-schede{display:flex; align-items:center; gap:2px; padding:8px 10px; border-bottom:1px solid var(--talos-border); background:var(--talos-panel)}
+.talos-terminal__tab, .talos-schede__tab{height:32px; padding:0 12px; border-radius:8px; color:var(--talos-muted); font-size:13px; display:inline-flex; align-items:center; gap:8px}
+.talos-terminal__tab[aria-selected="true"], .talos-schede__tab[aria-selected="true"]{background:var(--talos-card); color:var(--talos-text)}
+/* il passaggio del mouse: `.talos-tabs__tab` (il gruppo generico che la Revisione usava prima) ce
+   l'aveva, queste no — senza, la Revisione avrebbe PERSO una risposta al gesto passando al
+   componente condiviso. Vale per tutte e due le superfici, così restano identiche. */
+.talos-terminal__tab:hover:not([aria-selected="true"]):not(:disabled), .talos-schede__tab:hover:not([aria-selected="true"]):not(:disabled){color:var(--talos-text)}
 .talos-terminal__body{flex:1; padding:14px 16px; font-family:var(--talos-font-mono); font-size:12.5px; line-height:1.7; color:var(--talos-assistant-text); overflow:auto; white-space:pre}
 .talos-terminal__body .p{color:var(--talos-accent-hover)} .talos-terminal__body .ok{color:var(--talos-success)} .talos-terminal__body .ko{color:var(--talos-danger)} .talos-terminal__body .dim{color:var(--talos-muted)}
 .talos-terminal__foot{display:flex; align-items:center; gap:10px; padding:8px 14px; border-top:1px solid var(--talos-border); font-size:12px; color:var(--talos-muted); background:var(--talos-panel)}
 /* B1 06/09 — Terminale A SCHEDE (K-G): il corpo ospita una xterm.js vera per scheda (una visibile, le altre montate e nascoste: xterm.js #3029 non si misura in display:none); le schede non si spezzano e la barra scorre quando sono tante; nel piede il percorso si tronca coi puntini (taccuino 06/09, terminale-2.png). */
 .talos-terminal__tabs{overflow:hidden; min-width:0}
+.talos-schede{min-width:0}
 .talos-terminal__tabs .talos-grow{flex:1 1 0; min-width:6px}
-.talos-terminal__tab{position:relative; flex:0 0 auto; white-space:nowrap}
+.talos-terminal__tab, .talos-schede__tab{position:relative; flex:0 0 auto; white-space:nowrap}
 .talos-terminal__tab[data-terminale-id]{flex:0 1 auto; min-width:96px; max-width:200px; padding-right:26px; overflow:hidden; text-overflow:ellipsis; display:block; line-height:32px; text-align:left}
 .talos-terminal__tab[data-terminale-id] .talos-dot{display:inline-block; margin-right:8px; vertical-align:middle}
-.talos-terminal__tab:disabled{opacity:.45; cursor:not-allowed}
+.talos-terminal__tab:disabled, .talos-schede__tab:disabled{opacity:.45; cursor:not-allowed}
 .talos-terminal__tabs .talos-badge{flex:0 6 auto; min-width:44px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap} /* i badge cedono spazio per primi (taccuino 06/09, terminale-5.png: le schede si troncavano con tre schede sole) */
-.talos-terminal__tab[data-terminale-id]::after{content:'×'; position:absolute; right:6px; top:50%; width:16px; height:16px; margin-top:-8px; border-radius:4px; line-height:16px; text-align:center; font-size:13px; color:var(--talos-muted); opacity:0; transition:opacity 120ms ease}
+.talos-terminal__tab[data-terminale-id]::after{content:"×"; position:absolute; right:6px; top:50%; width:16px; height:16px; margin-top:-8px; border-radius:4px; line-height:16px; text-align:center; font-size:13px; color:var(--talos-muted); opacity:0; transition:opacity 120ms ease}
 .talos-terminal__tab[data-terminale-id]:hover::after, .talos-terminal__tab[data-terminale-id]:focus-visible::after, .talos-terminal__tab[data-terminale-id][aria-selected="true"]::after{opacity:1}
 .talos-terminal__rinomina{height:22px; width:140px; padding:0 6px; font-size:12px}
 .talos-terminal__body.terminal-window{position:relative; padding:8px 12px; overflow:hidden; white-space:normal}
@@ -1547,13 +1987,56 @@ a.talos-button{text-decoration:none}
 .talos-terminal{container-type:inline-size}
 .talos-terminal__tabs:has([data-terminale-id]:nth-of-type(3)) [data-badge="isolamento"]{display:none} /* da tre schede in su il badge dell'isolamento lascia il posto alle schede: la frase intera resta nel title del badge della cartella (taccuino 06/09, terminale-7-laptop.png) */
 @container (max-width:720px){ .talos-terminal__tabs [data-badge="isolamento"]{display:none} } /* sul portatile (1024: riquadro ~712px) il badge lungo perdeva 2px e mostrava i puntini */
-.talos-review{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:10px; padding:12px 18px 14px}
-.talos-review__schede{flex:none; min-width:0}
-.talos-review__schede .talos-tabs__list{display:flex; max-width:100%; overflow-x:auto; scrollbar-width:thin}
-.talos-review__scheda{display:inline-flex; align-items:center; gap:8px; white-space:nowrap}
-.talos-review__scheda .talos-mono{font-size:12px}
+/* ---------- BC-63, 17/09 — la variante che SCORRE del componente condiviso ----------
+   Il Terminale tiene `overflow:hidden` e stringe le linguette fra 96 e 200 px: le schede di una
+   shell sono al massimo otto. La Revisione no — i file scritti in una sessione sono molti di più,
+   e la ricerca del 17/09/2026 (Eleken «Tabs UX Best Practices», Chrome «scrollable-tabstrip») dice
+   che quando non ci stanno la striscia SCORRE: mai una seconda riga (rende ambiguo quale riga sia
+   quella attiva) e mai linguette strizzate fino a due lettere. */
+.talos-schede--scorre{overflow:hidden}
+/* ⛔ NIENTE `scroll-behavior:smooth`: misurato il 17/09 — con lo scorrimento animato la linguetta
+   attiva non è ancora arrivata quando si guarda, e una prova che legge subito dopo la vede fuori
+   posto. Ma soprattutto il progetto spegne OGNI animazione sotto `prefers-reduced-motion` con
+   regole universali (lezione «misura l'oggetto, mai l'ambiente», 10/09): un'andatura dolce che
+   sopravvive a quel comando sarebbe una terza strada, non il linguaggio di casa. */
+.talos-schede__lista{display:flex; align-items:center; gap:2px; flex:1 1 auto; min-width:0; overflow-x:auto; overflow-y:hidden; scrollbar-width:thin}
+/* ⛔ 320 e non 280, e il numero è MISURATO (sonda del 17/09, Revisione a 1024): il nome più lungo
+   che questo repo produce davvero — `schede-condivise-di-revisione.js`, 32 caratteri — occupa 230 px
+   di testo, e con il padding, i due spazi e i contatori `+N` `−N` la linguetta arriva a ~310. A 280
+   veniva tagliato coi puntini pur avendo spazio attorno: la prova `BC63-OVERFLOW` lo ha visto solo
+   dopo che l'asserzione ha smesso di misurare la fixture (R8). Oltre questo tetto il taglio resta,
+   ed è una scelta: il percorso intero è nel `title`. */
+.talos-schede--scorre .talos-schede__tab{flex:0 0 auto; max-width:320px}
+/* ⛔ La sfumatura sul lato dove si può ancora scorrere. Trovata GUARDANDO una foto con dodici file:
+   la striscia scorreva e non lo diceva — su Windows la barra sottile compare solo al passaggio del
+   mouse, quindi chi guarda crede che i file siano i tre che vede. `data-bordi` lo scrive
+   `schede.js` sullo scorrimento e a ogni ridimensionamento. */
+.talos-schede__lista[data-bordi="destra"]{mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}
+.talos-schede__lista[data-bordi="sinistra"]{mask-image:linear-gradient(to right,transparent,#000 28px)}
+.talos-schede__lista[data-bordi="entrambi"]{mask-image:linear-gradient(to right,transparent,#000 28px,#000 calc(100% - 28px),transparent)}
+
+.talos-review{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:0; padding:12px 18px 14px}
+/* ⛔ `gap:0` e non 10px: la striscia è la TESTA della carta del diff, come nel Terminale, e uno
+   spazio in mezzo la farebbe leggere come un oggetto a sé. Gli altri due figli di `.talos-review`
+   non sono mai visibili insieme alle schede (`renderRealReviewList`: o lo stato vuoto, o le schede
+   più il diff), quindi nessuna coppia resta senza respiro. */
+.talos-review__schede{flex:none; min-width:0; border:1px solid var(--talos-border); border-bottom:0; border-radius:var(--talos-radius-card) var(--talos-radius-card) 0 0}
+/* ⛔⛔ BC-80, 17/09/2026 — il riassunto («2 file modificati · +4 −1») in fondo alla riga delle
+   linguette, a destra. `flex:0 0 auto` e `margin-left:auto`: sta FUORI dalla lista che scorre, così
+   con dodici file scorrono le linguette e lui resta dov'è — era il vincolo scritto nella scheda.
+   La misura e il colore sono quelli del terzo posto della testata (mono 11,5 px, `--talos-muted`):
+   stessa informazione, stesso peso visivo, nessuna grammatica nuova. Il `padding-left` lo stacca
+   dall'ultima linguetta senza una linea in più. */
+.talos-review__sommario{flex:0 0 auto; margin-left:auto; padding-left:var(--talos-space-sm); font-size:11.5px; white-space:nowrap; display:flex; align-items:center; align-self:stretch; border-left:1px solid var(--talos-border); margin-inline-start:var(--talos-space-sm)}
+/* ⛔ Il filetto NON è decorazione, ed è nato da una foto: con la striscia piena (tre file a 1024) il
+   riassunto finiva appiccicato all'ultima linguetta e si leggeva come una QUARTA scheda —
+   `margin-left:auto` non separa niente quando la lista occupa già tutto lo spazio. La riga verticale
+   dice, senza parole, che da lì in poi non si preme: è lo stesso `--talos-border` di ogni altro
+   confine della app, e non aggiunge un linguaggio nuovo. */
+.talos-review__scheda{display:inline-flex; align-items:center; gap:8px; white-space:nowrap; min-width:0}
+.talos-review__scheda .talos-mono{font-size:12px; overflow:hidden; text-overflow:ellipsis}
 .talos-review__diff{flex:1 1 auto; min-height:0}
-.talos-review__diff{overflow:auto; display:flex; flex-direction:column}
+.talos-review__diff{overflow:auto; display:flex; flex-direction:column; border-top-left-radius:0; border-top-right-radius:0}
 .talos-review__diff-head{display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--talos-border)}
 .talos-review__diff .talos-diff{flex:1; background:transparent}
 .talos-review__foot{display:flex; align-items:center; gap:8px; padding:10px 14px; border-top:1px solid var(--talos-border); flex-wrap:wrap}
@@ -1592,9 +2075,9 @@ a.talos-button{text-decoration:none}
  * dei permessi e i passi dell'intro, e un `display:flex` globale sul titolo
  * spezzerebbe quelle senza che nessuno se ne accorga.
  */
-#hfFileChoices .talos-choice__title{display:flex; align-items:baseline; justify-content:space-between; gap:8px}
-#hfFileChoices .talos-choice__glossa{display:block; font-size:11.5px; margin-bottom:4px}
-#hfFileChoices .talos-choice[aria-checked="true"] .talos-choice__glossa{color:var(--talos-assistant-text)}
+:is(#hfFileChoices,[data-hf-file-choices]) .talos-choice__title{display:flex; align-items:baseline; justify-content:space-between; gap:8px; flex-wrap:wrap}
+:is(#hfFileChoices,[data-hf-file-choices]) .talos-choice__glossa{display:block; font-size:11.5px; margin-bottom:4px}
+:is(#hfFileChoices,[data-hf-file-choices]) .talos-choice[aria-checked="true"] .talos-choice__glossa{color:var(--talos-assistant-text)}
 /* La barra che misura sta SOPRA la lista: sotto quindici varianti non la vedeva nessuno. */
 .talos-hf-misura{display:flex; align-items:baseline; gap:10px; margin:2px 0 10px; flex-wrap:wrap}
 .talos-hf-misura__quando{font-size:11.5px}
@@ -1625,7 +2108,7 @@ a.talos-button{text-decoration:none}
  * Con il tetto, il pulsante «Scarica» resta raggiungibile senza attraversare
  * tutta la scala delle quantizzazioni.
  */
-#hfFileChoices{max-height:min(46vh,420px); overflow-y:auto; padding-right:4px}
+:is(#hfFileChoices,[data-hf-file-choices]){max-height:min(46vh,420px); overflow-y:auto; padding-right:4px}
 .talos-picker{display:grid; grid-template-columns:190px minmax(0,1fr); gap:14px}
 .talos-picker__nav{position:static}
 .talos-callout{display:flex; gap:12px; align-items:flex-start; margin-top:12px; padding:12px 14px; border-radius:var(--talos-radius-card); border:1px solid var(--talos-warning-border); background:var(--talos-warning-soft); font-size:13px; color:var(--talos-assistant-text)}
@@ -1731,7 +2214,9 @@ a.talos-button{text-decoration:none}
    px di vuoto a lato — la barra si svuotava senza stringersi. Le due righe adesso sono due, e la
    modalita' a icone tiene i suoi 64 px a ogni misura (0-2-0 batte 0-1-0, stessa media query). */
 @media (max-width:1240px){ :root{--talos-inspector-flottante:1} .talos-shell{grid-template-columns:var(--talos-sidebar-w) minmax(0,1fr)} :root[data-sidebar="icone"] .talos-shell{grid-template-columns:64px minmax(0,1fr)} .talos-inspector{display:none} }
-@media (max-width:1100px){ .talos-split{grid-template-columns:minmax(0,1fr)} .talos-detail{position:static} }
+/* ⛔ BC-78.3: quando la colonna si impila il pannello torna `static`, e con lui se ne va il tetto —
+   un pannello che scorre dentro una pagina che già scorre è peggio del difetto che cura. */
+@media (max-width:1100px){ .talos-split{grid-template-columns:minmax(0,1fr)} .talos-detail{position:static; max-height:none; overflow-y:visible} }
 @media (max-width:980px){ .talos-settings{grid-template-columns:minmax(0,1fr)} .talos-review{grid-template-columns:minmax(0,1fr)} }
 /* ⛔ `:root[data-sidebar="icone"]` nell'elenco: senza, la regola a 64 px della media query qui sopra
    (0-2-0) batterebbe questa (0-1-0) e sotto gli 860 resterebbe una colonna di 64 px per una barra
@@ -1880,8 +2365,8 @@ a.talos-button{text-decoration:none}
    Shadows Using Scroll-Driven Animations», MDN «CSS scroll-driven animations» (Chrome 115+,
    Safari 18+, Firefox 132+). ⭐ Con una striscia che NON scorre la timeline e' inattiva e le due
    lunghezze restano al loro initial-value 0px: nessuna sfumatura dove non serve. */
-@property --talos-sfuma-sx{syntax:'<length>'; inherits:false; initial-value:0px}
-@property --talos-sfuma-dx{syntax:'<length>'; inherits:false; initial-value:0px}
+@property --talos-sfuma-sx{syntax:"<length>"; inherits:false; initial-value:0px}
+@property --talos-sfuma-dx{syntax:"<length>"; inherits:false; initial-value:0px}
 @supports (animation-timeline:scroll(self inline)){
   @keyframes talos-sfuma-schede{
     from{--talos-sfuma-sx:0px; --talos-sfuma-dx:22px}
@@ -1903,7 +2388,7 @@ a.talos-button{text-decoration:none}
 .talos-browser .talos-toolbar .talos-tabs{max-width:100%}
 .talos-browser .talos-tabs__list{flex-wrap:wrap}
 .talos-tabs__tab[data-browser-tab]{position:relative;max-width:220px;padding-right:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.talos-tabs__tab[data-browser-tab]::after{content:'×';position:absolute;right:6px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:4px;line-height:16px;text-align:center;font-size:13px;color:var(--talos-muted);opacity:0;transition:opacity 120ms ease}
+.talos-tabs__tab[data-browser-tab]::after{content:"×";position:absolute;right:6px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:4px;line-height:16px;text-align:center;font-size:13px;color:var(--talos-muted);opacity:0;transition:opacity 120ms ease}
 .talos-tabs__tab[data-browser-tab]:hover::after,.talos-tabs__tab[data-browser-tab]:focus-visible::after,.talos-tabs__tab[data-browser-tab][aria-selected="true"]::after{opacity:1}
 /* ⛔ 07/9, owner sullo screenshot: «l'altezza dello spazio della finestra browser deve essere alta
    quanto tutto il resto della pagina, quello spazio fra la fine della pagina e la parte inferiore
@@ -1946,6 +2431,10 @@ a.talos-button{text-decoration:none}
 /* la lettura testuale scorre dentro di sé invece di spingere fuori la finestra */
 .talos-browser #browserPagina{min-height:0}
 .talos-browser__live iframe{width:100%;height:100%;border:0;border-radius:var(--talos-radius-card);background:#fff}
+/* ⛔ 16/09 — dentro `#browserLive` convivono PIÙ cornici, una per scheda: quella attiva si vede, le
+   altre restano nel documento (nasconderle non le ricarica; spostarle sì — whatwg, thread «keepalive
+   attribute on iframe»). Senza questa riga la regola qui sopra le disegnerebbe tutte una sull'altra. */
+.talos-browser__live iframe[hidden]{display:none}
 /* Browser, 06/09 — i commenti sugli elementi della pagina viva */
 .talos-browser__annotazioni{padding:var(--talos-space-md);border-top:1px solid var(--talos-border-subtle)}
 .talos-browser__annotazioni-testa{gap:var(--talos-space-sm)}
@@ -2049,10 +2538,17 @@ a.talos-button{text-decoration:none}
    `flex` in una colonna flex l'elenco prende la sua altezza naturale e sborda invece di
    restringersi: `overflow-y:auto` non serve a niente su un elemento che non si stringe. */
 #risultatiComandi{flex:1 1 auto;overflow-y:auto;min-height:0}
-#veloIntro [data-intro-passo][aria-current="step"],#veloIntro [data-intro-policy][aria-checked="true"]{background:var(--talos-accent-soft);color:var(--talos-accent-text);box-shadow:inset var(--talos-focus-width) 0 var(--talos-accent)}
+
 .talos-lab__tabs{margin-bottom:var(--talos-space-md)}
 #labTabs{flex-wrap:wrap}
 .talos-lab__space{margin-top:var(--talos-space-md)}
+/* ⭐ 18/09/2026 — LA FRASE DI APERTURA DI UNA SCHEDA del Laboratorio modelli, dal mockup
+   (`prototypes/calm-lab`, foto in `artifacts/parita-mockup-2026-09-18/`): ogni scheda si apre con
+   un titolo-frase e una riga che dice a cosa serve. Misure del mockup: titolo piu' grande del
+   corpo e in grassetto, nota in tono smorzato, due righe attaccate. */
+.talos-lab__frase{display:flex;flex-direction:column;gap:2px;margin-bottom:var(--talos-space-sm)}
+.talos-lab__frase > h3{font-size:var(--talos-font-size-lg, 1.125rem);font-weight:600;margin:0}
+.talos-lab__frase > p{margin:0;font-size:var(--talos-font-size-sm)}
 .talos-lab__heading{font-size:var(--talos-font-size-md)}
 .talos-lab__rule{border:0;border-top:var(--talos-focus-width) solid var(--talos-border);margin-block:var(--talos-space-md)}
 .talos-lab__download{padding:var(--talos-space-md);border-bottom:var(--talos-focus-width) solid var(--talos-border)}
@@ -2061,6 +2557,19 @@ a.talos-button{text-decoration:none}
 #schermoModelLab .talos-toolbar>input{width:auto;min-width:0}
 #schermoModelLab .talos-kv__k{white-space:normal;overflow:visible;text-overflow:clip}
 #promptProva{min-height:calc(var(--talos-control-height) * 3);resize:vertical;padding:var(--talos-space-control)}
+/* ⛔⛔ BC-77 (a), 17/09/2026 — il `bottom` non è più solo un respiro: è il respiro PIÙ l'ingombro
+   vero della zona dei comandi (`--talos-toast-fondo`, scritta da `ancoraToastSopraIComandi` in
+   `components/toast.js` misurando il piede della chat). Misurato prima della cura, a 1024×800: il
+   toast «Collegato di nuovo» copriva cinque comandi, fra cui la riga che ferma il giro — 4.204,
+   3.410, 1.764, 1.444 e 1.176 px². Il valore predefinito `0px` tiene il comportamento di prima
+   ovunque il piede non si veda. */
+/* ⛔⛔ 18/09/2026 — LA PILA DEI TOAST STA IN FONDO ALLO SCHERMO, SEMPRE. Owner: «un toast si comporta
+   come un toast … sempre in fondo allo schermo, e se ci sono più toast si stackano uno sopra
+   l'altro». Il termine `--talos-toast-fondo` qui è uscito con la cura BC-77 che lo pubblicava
+   (`app.js`: `ancoraggioToast = null`): alzava la pila sopra il piede della chat — misurato a 324 px
+   dal fondo con la chat viva e 543 col terminale aperto. Convenzione confermata: in una pila
+   ancorata in basso il più recente sta in fondo e i precedenti salgono (Halstack, Salt, snora,
+   letti il 18/09/2026). */
 .talos-toast-region{position:fixed;right:var(--talos-space-md);bottom:var(--talos-space-lg);width:min(var(--talos-inspector-w),calc(100% - var(--talos-space-lg) - var(--talos-space-lg)));display:grid;gap:var(--talos-space-sm);z-index:calc(var(--talos-z-app-overlay) - 1)}
 .talos-toast{padding:var(--talos-space-md);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
 .talos-toast p{margin-block:var(--talos-space-sm);overflow-wrap:anywhere}
@@ -2081,10 +2590,21 @@ a.talos-button{text-decoration:none}
 .talos-file-row:hover{background:var(--talos-card)}
 .talos-file-tree [aria-expanded=false]>.talos-file-row>.talos-file-chevron{transform:rotate(-90deg)}
 .talos-file-tools{margin-block:var(--talos-space-sm);gap:var(--talos-space-xs)}
-.talos-context-menu{position:fixed;z-index:var(--talos-z-menu);width:var(--talos-inspector-w);max-width:calc(100vw - var(--talos-space-lg));padding:var(--talos-space-sm);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
+/* ⛔⛔ BC-68, 17/09/2026 — LA LARGHEZZA DEL MENU CONTESTUALE, DECISA UNA VOLTA PER TUTTI E TRE.
+   Era `width:var(--talos-inspector-w)`, cioè **340 px fissi**: la misura della COLONNA DEI DETTAGLI,
+   presa in prestito da un menu che non c'entra niente con quella colonna. Con due voci («Chiudi»,
+   «Copia l'indirizzo») restava un rettangolo mezzo vuoto, e con una voce sola peggio.
+   ⇒ `max-content` — larga quanto la voce più lunga — dentro due limiti: un minimo perché un menu di
+   due parole non diventi un francobollo difficile da centrare col mouse, e un massimo perché il
+   titolo (che porta il percorso di un file) non la faccia crescere fino a coprire la vista. Lo
+   usano il Terminale, la Revisione, il Browser e la chat: un valore solo, in un posto solo. */
+.talos-context-menu{position:fixed;z-index:var(--talos-z-menu);width:max-content;min-width:13rem;max-width:min(var(--talos-inspector-w),calc(100vw - var(--talos-space-lg)));padding:var(--talos-space-sm);background:var(--talos-panel);box-shadow:var(--talos-shadow-floating)}
 .talos-context-menu [role=menuitem]{justify-content:flex-start;width:100%;font-size:var(--talos-font-size-sm)}
 .talos-context-menu__title{padding:var(--talos-space-sm);overflow-wrap:anywhere;font-size:var(--talos-font-size-xs);color:var(--talos-muted)}
-.talos-inspector-close{display:none}
+/* ⛔ 18/09/2026 — `.talos-inspector-close{display:none}` viveva qui, e perdeva contro
+   `.talos-button{display:inline-flex}` a pari specificità: è la ragione per cui la X restava accesa
+   e, sopra i 1240 px (dove la testata non è un flex), cadeva su una riga sua. Con la testata
+   rimossa su ordine dell'owner, la classe non esiste più nel template e le sue regole sono uscite. */
 /* ⛔⛔ 11/9 — QUESTO BLOCCO NON SI E' MAI ACCESO. Era agganciato a `.talos-shell.details-open`, e
  * `details-open` non la scrive NESSUNA riga di JavaScript: cercata in tutto il repo, compariva solo
  * in queste quattro righe di CSS. Quello che il JavaScript scrive davvero e' `open` sul PANNELLO
@@ -2103,8 +2623,9 @@ a.talos-button{text-decoration:none}
  *   accende (vedi il blocco delle due bandierine alla sezione 14). Il numero resta uno solo, qui. */
 @media(max-width:1240px){
  :root:not([data-vista="pagina"]) .talos-inspector.open{display:flex;position:fixed;inset:0 0 0 auto;width:min(var(--talos-inspector-w),100vw);z-index:calc(var(--talos-z-app-overlay) - 1);box-shadow:var(--talos-shadow-floating)}
- :root:not([data-vista="pagina"]) .talos-inspector.open .talos-inspector-close{display:inline-flex}
- :root:not([data-vista="pagina"]) .talos-inspector.open .talos-inspector__head{display:flex;align-items:center;gap:var(--talos-space-sm)}
+ /* ⛔ 18/09/2026 — qui stavano l'accensione della X e il flex della testata: sono uscite con la
+    testata stessa (ordine dell'owner: via il sopracciglio «Sessione», il titolo e la X). La colonna
+    si chiude dal pulsante «Dettagli» della testata della chat, dal velo e da Esc. */
  :root:not([data-vista="pagina"]) .talos-inspector.open .talos-resizer--inspector{display:none}
 }
 
@@ -2152,29 +2673,13 @@ a.talos-button{text-decoration:none}
 .talos-dialog[data-user-sized] .talos-dialog__body{overflow:auto}
 #veloModello .talos-dialog[data-user-sized] .talos-dialog__body{display:block}
 
-.talos-intro-folders{max-height:calc(var(--talos-row)*5);overflow:auto}
-#passoIntroCartella .talos-stack{gap:var(--talos-space-sm)}
-#introCartellaSu .i{transform:rotate(90deg)}
 
-#introCartella{width:auto;min-width:0;flex:1 1 0;padding-inline:var(--talos-space-md)}
-#passoIntroCartella .talos-toolbar{flex-wrap:nowrap;margin-bottom:0}
-#passoIntroCartella .talos-field{min-width:0}
-.talos-intro-folders{max-height:calc(var(--talos-row)*4)}
 
-.talos-intro-folders:empty{display:none}
 /* Misura ricordata (06/09): la misura sta in due custom property, così il foglio decide dove vale. Nel primo avvio l'altezza
    ricordata vale solo sul passo Cartella, dove l'albero cresce per riempirla (è il motivo per cui si allarga); gli altri passi
    restano aderenti al contenuto, come da profilo pulito (PatternFly, wizard: «the modal adjusts to the body of each step»). */
 .talos-dialog[data-user-sized]{width:var(--talos-dialog-w);height:var(--talos-dialog-h)}
-#veloIntro:not([data-intro-passo-attivo="0"]) .talos-dialog[data-user-sized]{height:auto}
-#veloIntro:not([data-intro-passo-attivo="0"]) .talos-resizer--dialog-height,#veloIntro:not([data-intro-passo-attivo="0"]) .talos-resizer--dialog-both{display:none}
-#veloIntro .talos-dialog__body{display:flex;flex-direction:column}
-#veloIntro .talos-picker{flex:1 1 auto;min-height:0}
-#veloIntro .talos-picker>.talos-stack{min-height:0}
-#passoIntroCartella,#passoIntroCartella [data-c="FolderPicker"]{flex:1 1 auto;min-height:0}
-.talos-dialog[data-user-sized] .talos-intro-folders{flex:1 1 auto;min-height:calc(var(--talos-row)*4);max-height:none}
 
-#introMessaggio:empty{display:none}
 [data-c="TaskRow"][data-aperta="true"] .talos-list-row__sub,[data-c="TaskRow"][data-aperta="true"] .talos-list-row__title{white-space:pre-wrap;overflow-wrap:anywhere}
 [data-c="TaskRow"][data-aperta="true"]{opacity:1}
 [data-c="LibraryRow"][data-aperta="true"] .talos-list-row__title,[data-c="LibraryRow"][data-aperta="true"] .talos-list-row__sub{white-space:pre-wrap;overflow-wrap:anywhere}
@@ -2217,7 +2722,7 @@ a.talos-button{text-decoration:none}
 #schermoImpostazioni [data-catalog-detail] .talos-kv__v{max-width:none}
 [data-catalog-panel] .talos-list-row__title{white-space:normal;overflow-wrap:anywhere}
 [data-catalog-panel] [role=alert]{color:var(--talos-danger)}
-@container (max-width:700px){[data-catalog-panel] .talos-split{grid-template-columns:minmax(0,1fr)}[data-catalog-panel] .talos-detail{position:static}}
+@container (max-width:700px){[data-catalog-panel] .talos-split{grid-template-columns:minmax(0,1fr)}[data-catalog-panel] .talos-detail{position:static; max-height:none; overflow-y:visible}}
 .talos-model-lab>.talos-page__head{margin-bottom:var(--talos-space-md)}
 .talos-model-lab .model-lab-ledger{margin-bottom:var(--talos-space-md)}
 .talos-model-lab .model-lab-ledger .talos-kv{min-height:34px;align-items:baseline}
@@ -2231,6 +2736,11 @@ a.talos-button{text-decoration:none}
  */
 .talos-model-lab>.talos-tabs .talos-tabs__list{display:flex; max-width:100%; overflow-x:auto; scrollbar-width:thin}
 .talos-model-lab>.talos-tabs .talos-tabs__tab{white-space:nowrap; flex:none}
+/* ⛔⛔ 18/09/2026 — QUI C'ERANO LE REGOLE DEL RIMANDO ALLA SCHERMATA DEL LABORATORIO, E SONO USCITE
+   col rimando (vedi `frammenti.html`): il laboratorio non vive ancora di là, quindi nascondere
+   linguette e pannelli qui darebbe una sezione vuota al posto di una che funziona. Le linguette
+   restano visibili e i pannelli restano la destinazione vera. */
+
 .talos-model-lab .talos-tabs__list{display:flex;max-width:100%;overflow-x:auto;scrollbar-width:thin}
 [data-memory-level="critico"] [data-memory-label]{color:var(--talos-danger)}
 [data-memory-level="alto"] [data-memory-label]{color:var(--talos-warning)}
@@ -2251,8 +2761,8 @@ a.talos-button{text-decoration:none}
 .talos-provider-list{display:flex;flex-direction:column;gap:var(--talos-space-control)}
 .talos-provider{min-width:0;overflow:hidden}
 .talos-provider__head{display:flex;align-items:center;justify-content:space-between;gap:var(--talos-space-control);width:100%;padding:var(--talos-space-control) var(--talos-space-md);background:transparent;border:0;text-align:left;color:inherit;font:inherit;cursor:pointer}
-.talos-provider__head:after{content:'+';flex-shrink:0;color:var(--talos-muted)}
-.talos-provider__head[aria-expanded=true]:after{content:'−'}
+.talos-provider__head:after{content:"+";flex-shrink:0;color:var(--talos-muted)}
+.talos-provider__head[aria-expanded=true]:after{content:"−"}
 .talos-provider__head:focus-visible{outline:2px solid var(--talos-accent);outline-offset:-3px}
 .talos-provider__name{min-width:110px;margin-right:auto}
 .talos-provider__head .talos-cluster{justify-content:flex-end}
@@ -2331,3 +2841,8 @@ a.talos-button{text-decoration:none}
 .talos-context-separator{display:flex;align-items:center;gap:var(--talos-space-sm);color:var(--talos-muted);font-size:var(--talos-font-size-xs);margin-block:var(--talos-space-lg)}
 .talos-context-separator::before{content:"";height:1px;background:var(--talos-border);flex:1}
 @media(max-width:600px){.talos-context__metrics,.talos-context__form-grid{grid-template-columns:1fr}.talos-context-separator{flex-wrap:wrap}}
+
+/* Il comando del runtime è distinto dalle quattro schede del laboratorio. */
+.talos-lab-tabs-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.talos-lab-tabs-actions > [role=tablist]{flex:1 1 auto;min-width:0}
+#modelLabLiberaMemoria{flex:0 0 auto;margin-left:auto}

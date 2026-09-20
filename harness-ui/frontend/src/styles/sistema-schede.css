@@ -1,0 +1,130 @@
+/*
+ * LE DUE CARD DEL MOCKUP per la scheda «Sistema» — FASE 4, corsia 4,
+ * applicato dall'orchestratore il 19/09/2026.
+ *
+ * ⛔ MISURE DEL MOCKUP, COLORI DEI NOSTRI TOKEN. I valori vengono dal mockup
+ *   (`TALOS-Calm-Lab-04.html`, scheda `system`), misurati sul suo DOM vivo: card
+ *   `padding:22px` · raggio `12px` · eroe mono `2.75rem` con l'unità `1rem` ·
+ *   barra `7px` · righe dei fatti `padding:12px 0` a `.75rem` · griglia a due
+ *   colonne. Nessuno di questi era nel prodotto: la card aveva la **struttura**
+ *   giusta e nessun vestito.
+ *
+ * ⛔ SCOPED, e lo era già nella proposta della corsia: `#modelLabOverviewPanel`,
+ *   `#modelLabRuntimeGate` e l'aggancio `[data-sistema-schede="v1"]` che la corsia
+ *   ha timbrato su `.model-lab-layout`. La lezione dell'11/09 (una regola
+ *   universale vince da valle e non si batte) e quella del 18/09 (si misura
+ *   l'OGGETTO, non l'ambiente) valgono anche qui.
+ *
+ * ⛔ PERCHÉ IL FOGLIO STA QUI E NON DENTRO IL COMPONENTE: è la regola di casa — il
+ *   CSS sta in `src/styles/`, dove si cerca e lo trova chi arriva dopo. ⚠️ E non
+ *   per un limite del browser: `http-app.mjs:666` patcha
+ *   `Document.prototype.createElement` e timbra il nonce su ogni elemento creato,
+ *   quindi un `<style>` scritto dalla pagina **funzionerebbe**. La ragione del
+ *   commento precedente in `lab-cornice-v3.js` era falsa ed è stata corretta
+ *   (misurato dalla corsia 4 il 19/09/2026).
+ *
+ * Ricerca di questo passo, 19/09/2026 — i vincoli che queste regole rispettano:
+ *   · un dato vecchio si mostra **con la sua età**, e non si scrive **zero** dove la
+ *     misura non c'è: <https://github.com/hasso5703/neurodash> ·
+ *     <https://github.com/Forge-the-Kingdom/llm-serve-dashboard>;
+ *   · **degrado garbato** quando lo strumento non c'è: la sezione si spegne
+ *     spiegando, invece di disegnare numeri finti:
+ *     <https://github.com/Theohox/zmenu>;
+ *   · local-first, nessuna CDN e nessuna telefonata a casa — è già la regola del
+ *     prodotto e queste righe non la toccano.
+ */
+
+#modelLabOverviewPanel .system-card,
+#modelLabRuntimeGate.system-card {
+  border: 1px solid var(--talos-border);
+  border-radius: 12px;
+  background: var(--talos-panel);
+  padding: 22px;
+}
+
+#modelLabOverviewPanel .section-heading,
+#modelLabRuntimeGate .section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 20px;
+}
+
+#modelLabOverviewPanel .section-heading h3,
+#modelLabRuntimeGate .section-heading h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .9375rem;
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+
+#modelLabOverviewPanel .system-value {
+  font-family: var(--talos-font-mono);
+  font-size: 2.75rem;
+  line-height: 1.1;
+  letter-spacing: -.06em;
+  margin: 24px 0 6px;
+}
+
+#modelLabOverviewPanel .system-value small {
+  font-family: var(--talos-font-ui);
+  font-size: 1rem;
+  color: var(--talos-muted);
+}
+
+/* ⛔ La barra è un `<progress>` VERO: la si veste, non la si sostituisce — e
+   `appearance:none` è ciò che permette di darle l'altezza del mockup. */
+#modelLabOverviewPanel .budget-track {
+  height: 7px;
+  margin: 22px 0;
+  border-radius: 3px;
+  border: 0;
+  background: var(--talos-border);
+  accent-color: var(--talos-muted);
+  appearance: none;
+  overflow: hidden;
+}
+
+#modelLabOverviewPanel .model-facts { margin: 14px 0; padding: 0; }
+
+#modelLabOverviewPanel .model-facts > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0;
+  font-size: .75rem;
+}
+
+#modelLabOverviewPanel .model-facts dt { color: var(--talos-muted); }
+#modelLabOverviewPanel .model-facts dd { margin: 0; text-align: right; }
+
+#modelLabOverviewPanel .inline-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 13px 14px;
+  border: 1px solid var(--talos-border);
+  border-radius: 9px;
+  color: var(--talos-muted);
+  font-size: .75rem;
+  line-height: 1.65;
+}
+
+/* La griglia del mockup: due colonne in larga, una sola quando la colonna delle
+   Impostazioni si stringe (misurato: a 1024 la banda misura 430 px, quindi la
+   soglia sta a 1150 e non a un numero tondo inventato). */
+[data-sistema-schede="v1"] {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1150px) {
+  [data-sistema-schede="v1"] { grid-template-columns: 1fr; }
+}

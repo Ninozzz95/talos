@@ -290,3 +290,45 @@ test('⛔ AL CONTRARIO: eventoPerUsage non tocca mai il campo "prima" ne\' un pa
   assert.equal(evento.delta[0].path.startsWith('/file/'), false);
   assert.equal('prima' in evento.delta[0], false);
 });
+
+/*
+ * ⛔⛔⛔ BLOCCO 7 (B4) — I DUE FLUSSI SEPARATI NELL'EVENTO, E LA GUARDIA CHE LI TIENE INNOCUI.
+ *
+ *   L'owner ha deciso «B4: separare», e la 5×5×5×5 del 20/09/2026 ha scelto la forma: i flussi
+ *   diventano **campi strutturati per chi disegna**, mentre il modello continua a leggere il
+ *   `content` fuso di oggi. Le fonti: la specifica MCP (2026-07-28) mette stdout/stderr nel
+ *   **trasporto** e dice al client di **non presumere che stderr sia un errore**; l'SDK Anthropic
+ *   tiene `stdout`/`stderr`/`return_code` come campi distinti; e Hermes — letto nel suo codice —
+ *   allega i separati **solo quando il backend li ha davvero mandati**, «otherwise the merged
+ *   `detail` already covers it and **double-rendering would duplicate output**».
+ *
+ * ⛔ Queste prove difendono le DUE cose che rendono la mossa sicura:
+ *   1. i campi arrivano quando ci sono;
+ *   2. **quando non ci sono, l'evento è identico a prima, byte per byte** — ed è la condizione
+ *      della retrocompatibilità: le sessioni vecchie registrate fuse si leggono come oggi.
+ */
+test('B4 — l\'esito porta i due flussi e il codice d\'uscita quando ci sono', () => {
+  const evento = eventoPerEsitoTool({
+    messageId: 'm1', toolCallId: 't1', content: 'exit 0 [sandbox: none]\navanti\ndietro',
+    stdout: 'avanti', stderr: 'dietro', exitCode: 0,
+  });
+  assert.equal(evento.stdout, 'avanti');
+  assert.equal(evento.stderr, 'dietro');
+  assert.equal(evento.exitCode, 0);
+  assert.equal(evento.content, 'exit 0 [sandbox: none]\navanti\ndietro', 'il content fuso NON cambia: e quello che legge il modello');
+});
+
+test('⛔ B4 AL CONTRARIO — senza i flussi l\'evento è IDENTICO a prima, byte per byte', () => {
+  const senza = eventoPerEsitoTool({ messageId: 'm1', toolCallId: 't1', content: 'exit 0\nok' });
+  assert.deepStrictEqual(senza, { type: 'ToolCallResult', messageId: 'm1', toolCallId: 't1', content: 'exit 0\nok', role: 'tool' });
+  assert.equal('stdout' in senza, false);
+  assert.equal('stderr' in senza, false);
+  assert.equal('exitCode' in senza, false, 'nessun campo inventato: e la guardia che evita il doppio disegno');
+});
+
+test('⛔ B4 — un flusso VUOTO non diventa un campo, e un exitCode non numerico non entra', () => {
+  const evento = eventoPerEsitoTool({ messageId: 'm', toolCallId: 't', content: 'x', stdout: '', stderr: '', exitCode: null });
+  assert.equal('stdout' in evento, false, 'una stringa vuota non e un flusso da disegnare');
+  assert.equal('stderr' in evento, false);
+  assert.equal('exitCode' in evento, false);
+});

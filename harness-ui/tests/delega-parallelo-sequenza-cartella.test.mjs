@@ -121,8 +121,8 @@ test('TRE PROVE — 1/3 · DUE DELEGHE IN PARALLELO: partono entrambe, e nella c
 
     // ⭐ nessun await fra le due: la seconda parte MENTRE la prima è ancora viva. È il caso che
     //   l'owner ha chiesto, e che nessuna prova copriva.
-    const primaFinita = madre.onDelega('scrivi la PARTE 1');
-    const secondaFinita = madre.onDelega('scrivi la PARTE 2');
+    const primaRicevuta = madre.onDelega('scrivi la PARTE 1');
+    const secondaRicevuta = madre.onDelega('scrivi la PARTE 2');
 
     assert.equal(finto.avvii.length, 3, 'madre + due figlie: se sono 2, la seconda delega non è partita');
     const [figliaA, figliaB] = finto.avvii.slice(1);
@@ -140,11 +140,19 @@ test('TRE PROVE — 1/3 · DUE DELEGHE IN PARALLELO: partono entrambe, e nella c
     assert.notEqual(parsePath(cartellaMadre).root, cartellaMadre,
       'la cartella di prova deve stare sotto la radice, o la prova non morde');
 
-    // e le due promesse si chiudono ognuna sulla SUA figlia: concluse al contrario, non si scambiano
+    const [primaAvviata, secondaAvviata] = await Promise.all([primaRicevuta, secondaRicevuta]);
+    assert.equal(primaAvviata.esito, 'avviato', 'la madre riceve subito la ricevuta, senza attendere la figlia A');
+    assert.equal(secondaAvviata.esito, 'avviato', 'la madre riceve subito la ricevuta, senza attendere la figlia B');
+    assert.notEqual(primaAvviata.childId, secondaAvviata.childId, 'le due ricevute devono identificare figlie distinte');
+
+    // Il terminale viaggia separato dalla ricevuta: concluse al contrario, non si scambiano.
     figliaB.concludi({ ok: true });
     figliaA.concludi({ ok: true });
-    assert.equal((await primaFinita).esito, 'concluso');
-    assert.equal((await secondaFinita).esito, 'concluso');
+    await new Promise((resolve) => setImmediate(resolve));
+    const concluse = registro.elencaFigli(madreId).figli;
+    assert.deepEqual(new Set(concluse.map((figlia) => figlia.sessionId)), new Set([primaAvviata.childId, secondaAvviata.childId]));
+    assert.ok(concluse.every((figlia) => figlia.conclusa && figlia.esitoDelega === 'concluso'),
+      'dopo la conclusione esplicita entrambe le figlie devono avere il terminale reale');
   } finally {
     rimuoviCartellaDiProva(cartellaMadre);
   }
@@ -157,18 +165,26 @@ test('TRE PROVE — 2/3 · DUE DELEGHE UNA DOPO L\'ALTRA: la seconda parte a pri
     const { registro, madreId } = registroConMadre(cartellaMadre, finto);
     const madre = finto.avvii[0];
 
-    const prima = madre.onDelega('scrivi la PARTE 1');
+    const prima = await madre.onDelega('scrivi la PARTE 1');
+    assert.equal(prima.esito, 'avviato');
+    assert.ok(prima.childId);
     finto.avvii[1].concludi({ ok: true });
-    assert.equal((await prima).esito, 'concluso');
+    await new Promise((resolve) => setImmediate(resolve));
+    const primaConclusa = registro.elencaFigli(madreId).figli.find((figlia) => figlia.sessionId === prima.childId);
+    assert.equal(primaConclusa?.esitoDelega, 'concluso', 'la ricevuta avviato non sostituisce il terminale della prima figlia');
     assert.equal(registro.elencaFigli(madreId).figli.filter((f) => !f.conclusa).length, 0,
       'a prima conclusa non deve restare nessuna figlia viva');
 
-    const seconda = madre.onDelega('scrivi la PARTE 2');
+    const seconda = await madre.onDelega('scrivi la PARTE 2');
+    assert.equal(seconda.esito, 'avviato');
+    assert.notEqual(seconda.childId, prima.childId, 'la delega successiva deve avere un proprio childId');
     assert.equal(finto.avvii.length, 3, 'dopo una delega conclusa la successiva non riparte');
     assert.equal(finto.avvii[2].cartella, cartellaMadre,
       'la seconda figlia deve stare dove sta la prima: la stessa cartella della madre');
     finto.avvii[2].concludi({ ok: true });
-    assert.equal((await seconda).esito, 'concluso');
+    await new Promise((resolve) => setImmediate(resolve));
+    const secondaConclusa = registro.elencaFigli(madreId).figli.find((figlia) => figlia.sessionId === seconda.childId);
+    assert.equal(secondaConclusa?.esitoDelega, 'concluso', 'anche la seconda figlia deve pubblicare il terminale reale');
 
     const figli = registro.elencaFigli(madreId).figli;
     assert.deepEqual(figli.map((f) => f.task), ['scrivi la PARTE 1', 'scrivi la PARTE 2'],

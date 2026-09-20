@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { titoloScheda, nomeShell, prossimaAttivaDopoChiusura, cicla, nomeSchedaValido, SCHEDE_MASSIME, accorciaPercorso } from '../../src/components/terminale.js';
+import { titoloScheda, nomeShell, prossimaAttivaDopoChiusura, cicla, nomeSchedaValido, SCHEDE_MASSIME, accorciaPercorso, codaDelPiede, TESTI } from '../../src/components/terminale.js';
 
 // 06/09 B1 — le schede del Terminale: nomi, fuoco alla chiusura, ciclo, tetto.
 
@@ -66,4 +66,24 @@ test('AL CONTRARIO — un percorso che ci sta non si tocca', () => {
   assert.equal(accorciaPercorso(corto), corto);
   assert.equal(accorciaPercorso(''), '');
   assert.equal(accorciaPercorso(null), '');
+});
+
+/*
+ * BC-68, 17/09 — la coda del piede. La regola è del 07/09 e viveva dentro `renderizza`, dove
+ * nessuna prova poteva chiamarla; la scheda della coda la dava per rotta e la misura del 17/09 dice
+ * di no. Estratta e provata, così il prossimo giro non può romperla in silenzio.
+ */
+test('PIEDE-CODA: dove c’è un percorso, la frase generica NON si aggiunge', () => {
+  assert.equal(codaDelPiede({ dettaglio: String.raw`C:\progetti\AVM` }), '');
+  assert.equal(codaDelPiede({ dettaglio: '' }), TESTI.nota, 'senza percorso la spiegazione ha senso e resta');
+  assert.equal(codaDelPiede({}), TESTI.nota);
+  assert.equal(codaDelPiede(), TESTI.nota);
+});
+
+test('PIEDE-CODA al contrario: una nota esplicita comanda, anche vuota', () => {
+  assert.equal(codaDelPiede({ nota: 'Premi Nuovo per aprire una shell in questa cartella.', dettaglio: String.raw`C:\x` }), 'Premi Nuovo per aprire una shell in questa cartella.');
+  /* ⛔ La stringa vuota è una SCELTA di chi chiama, non un valore mancante: `??` la rispetta,
+     `||` l'avrebbe scambiata per «non passata» e avrebbe rimesso la frase generica accanto al
+     percorso — cioè esattamente il difetto che questa regola esiste per impedire. */
+  assert.equal(codaDelPiede({ nota: '', dettaglio: '' }), '');
 });

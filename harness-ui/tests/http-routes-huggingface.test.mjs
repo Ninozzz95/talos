@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import test from 'node:test';
 import { createHttpApp } from '../src/http-app.mjs';
+import { createHfHubClient } from '../src/hf-hub-client.mjs';
 
 async function listen(t, extra) {
   const server = createServer(createHttpApp({ staticHandler: async () => null, ...extra }));
@@ -87,4 +88,26 @@ test('HF-HTTP-IMAGE-01 serve le immagini delle model card solo dal proxy locale'
   assert.equal(response.headers.get('content-type'), 'image/png');
   assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [137, 80, 78, 71]);
   assert.deepEqual(seen, [source]);
+});
+
+
+test('RIPRESA-HF-ORDINAMENTI-HTTP — rotta e client reali accettano ogni ordinamento UI', async t => {
+  const calls = [];
+  const hfHubClient = createHfHubClient({ fetchImpl: async url => {
+    calls.push(new URL(url));
+    return new Response(JSON.stringify([{ id: 'org/model', gguf: { total: 8000000000 } }]), {
+      headers: { 'content-type': 'application/json', Link: '<https://huggingface.co/api/models?cursor=seconda>; rel="next"' },
+    });
+  } });
+  const base = await listen(t, { hfHubClient });
+  for (const sort of ['downloads', 'likes', 'createdAt', 'lastModified', 'created']) {
+    const response = await fetch(`${base}/api/v1/huggingface/search?query=qwen&sort=${sort}&cursor=prima&limit=1`);
+    assert.equal(response.status, 200, `ordinamento ${sort}`);
+    const body = await response.json();
+    assert.equal(body.data.items[0].parameterCount, 8000000000);
+    assert.equal(body.data.nextCursor, 'seconda');
+    assert.equal(calls.at(-1).searchParams.get('sort'), sort === 'created' ? 'createdAt' : sort);
+    assert.equal(calls.at(-1).searchParams.get('cursor'), 'prima');
+    assert.equal(calls.at(-1).searchParams.get('search'), 'qwen');
+  }
 });

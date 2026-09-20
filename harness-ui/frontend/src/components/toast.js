@@ -24,6 +24,16 @@ export const TONI = Object.freeze({
 
 export const MASSIMO_IN_PILA = 3;
 
+/*
+ * 18/09/2026 - QUI C'ERA `ancoraToastSopraIComandi`, USCITA CON L'ORDINE DELL'OWNER.
+ * Era la cura BC-77 del 17/09: misurava il piede della chat e pubblicava `--talos-toast-fondo` per
+ * alzare la pila dei toast sopra i comandi. L'owner l'ha revocata - «un toast si comporta come un
+ * toast, sempre in fondo allo schermo, e se sono piu di uno si stackano uno sopra l'altro» - e la
+ * misura non ha piu un chiamante: `app.js` ha `ancoraggioToast = null` e la regione e la tornata a
+ * `bottom: var(--talos-space-lg)`. In questo progetto una funzione senza chiamante e un difetto:
+ * esce, con la sua prova.
+ */
+
 /**
  * Il tono lo dice il titolo che il monolite passa già oggi («… non riuscito»,
  * «Copiato», «Ripresa della sessione»): così i 25 punti di chiamata non
