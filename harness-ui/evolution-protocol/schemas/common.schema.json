@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talos.local/evolution/schemas/common.schema.json",
+  "title": "TALOS Evolution Common Types v1",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "sha256": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "hex"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "hex": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 64
+    },
+    "semver": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?![A-Za-z]:)(?![\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"
+    },
+    "capability": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)+(?:/[a-z][a-z0-9-]*)*$"
+    },
+    "protocolCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "major",
+        "minMinor",
+        "maxMinor"
+      ],
+      "properties": {
+        "major": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "minMinor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "maxMinor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      }
+    }
+  }
+}

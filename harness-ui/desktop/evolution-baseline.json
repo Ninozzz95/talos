@@ -209,6 +209,32 @@
           "contains": "schema: 'talos.desktop.package.v1'"
         }
       ]
+    },
+    {
+      "id": "evolution.protocol-v1-contracts",
+      "category": "test",
+      "evidence": [
+        {
+          "path": "harness-ui/desktop/package.json",
+          "contains": "\"verify:evolution-contracts\": \"node scripts/verifica-contratti-evoluzione.mjs\""
+        },
+        {
+          "path": "harness-ui/desktop/tests/evolution-protocol.test.mjs",
+          "contains": "E0-2 — i contratti Evolution v1 reali sono coerenti e chiusi"
+        },
+        {
+          "path": "harness-ui/evolution-protocol/README.md",
+          "contains": "Serialized Protobuf bytes are never the canonical cryptographic identity"
+        },
+        {
+          "path": "harness-ui/evolution-protocol/proto/evolution.proto",
+          "contains": "package talos.evolution.v1;"
+        },
+        {
+          "path": "harness-ui/evolution-protocol/wit/talos-extension.wit",
+          "contains": "world extension"
+        }
+      ]
     }
   ]
 }

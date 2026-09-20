@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talos.local/evolution/schemas/verification-dossier.schema.json",
+  "title": "TALOS Verification Dossier v1",
+  "$comment": "The implementation must additionally enforce: verdict PASS implies every mandatory check is PASS.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "verificationDossierId",
+    "candidateId",
+    "candidateHash",
+    "featureContractHash",
+    "changeSetHash",
+    "mandatoryChecks",
+    "verifierFindings",
+    "resourceMeasurements",
+    "capabilityDelta",
+    "verdict",
+    "createdAt"
+  ],
+  "properties": {
+    "schema": {
+      "const": "talos.evolution.verification-dossier.v1"
+    },
+    "verificationDossierId": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "candidateId": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "candidateHash": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "featureContractHash": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "changeSetHash": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "mandatoryChecks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status",
+          "evidenceRef"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "status": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ]
+          },
+          "evidenceRef": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2048
+          }
+        }
+      }
+    },
+    "verifierFindings": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "severity",
+          "summary"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "blocking"
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "evidenceRef": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2048
+          }
+        }
+      }
+    },
+    "resourceMeasurements": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "metric",
+          "value",
+          "unit"
+        ],
+        "properties": {
+          "metric": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "value": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        }
+      }
+    },
+    "capabilityDelta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "declared",
+        "inferred"
+      ],
+      "properties": {
+        "declared": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/capability"
+          }
+        },
+        "inferred": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/capability"
+          }
+        }
+      }
+    },
+    "verdict": {
+      "enum": [
+        "PASS",
+        "REJECT"
+      ]
+    },
+    "createdAt": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    }
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talos.local/evolution/schemas/semantic-changeset.schema.json",
+  "title": "TALOS Semantic ChangeSet v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "changeSetId",
+    "featureContractId",
+    "parentRuntimeHash",
+    "operations",
+    "declaredCapabilityDelta",
+    "expectedEffects",
+    "touchedContracts",
+    "preconditionHashes",
+    "createdAt"
+  ],
+  "properties": {
+    "schema": {
+      "const": "talos.evolution.semantic-changeset.v1"
+    },
+    "changeSetId": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "featureContractId": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "parentRuntimeHash": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "description"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "type": {
+            "enum": [
+              "ADD_EXTENSION",
+              "ADD_TOOL",
+              "ADD_ACTION",
+              "ADD_UI_SURFACE",
+              "ADD_EXTENSION_STATE"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "contentHash": {
+            "$ref": "common.schema.json#/$defs/sha256"
+          }
+        }
+      }
+    },
+    "declaredCapabilityDelta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "add",
+        "remove"
+      ],
+      "properties": {
+        "add": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/capability"
+          }
+        },
+        "remove": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/capability"
+          }
+        }
+      }
+    },
+    "expectedEffects": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000
+      }
+    },
+    "touchedContracts": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "preconditionHashes": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "$ref": "common.schema.json#/$defs/sha256"
+      }
+    },
+    "createdAt": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    }
+  }
+}

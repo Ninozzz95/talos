@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talos.local/evolution/schemas/ui-contribution.schema.json",
+  "title": "TALOS Safe UI Contribution v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "extensionId",
+    "surfaces"
+  ],
+  "properties": {
+    "schema": {
+      "const": "talos.evolution.ui-contribution.v1"
+    },
+    "extensionId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9-]{2,63}$"
+    },
+    "surfaces": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "nodes"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "nodes": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "type"
+              ],
+              "properties": {
+                "id": {
+                  "$ref": "common.schema.json#/$defs/id"
+                },
+                "type": {
+                  "enum": [
+                    "section",
+                    "card",
+                    "text",
+                    "table",
+                    "badge",
+                    "diff",
+                    "progress",
+                    "button",
+                    "form"
+                  ]
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 20000
+                },
+                "action": {
+                  "type": "string",
+                  "maxLength": 80,
+                  "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+                },
+                "dataKey": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9._:-]+$"
+                },
+                "children": {
+                  "type": "array",
+                  "maxItems": 128,
+                  "items": {
+                    "$ref": "#/$defs/nodeRef"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nodeRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/id"
+        },
+        "type": {
+          "enum": [
+            "section",
+            "card",
+            "text",
+            "table",
+            "badge",
+            "diff",
+            "progress",
+            "button",
+            "form"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 20000
+        },
+        "action": {
+          "type": "string",
+          "maxLength": 80,
+          "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+        },
+        "dataKey": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        }
+      }
+    }
+  }
+}
