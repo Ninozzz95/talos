@@ -1,5 +1,12 @@
 # Candidata desktop — checkpoint ripresa 19/09/2026
 
+## Autorità rilascio 2026-09-20
+
+Vedere [RELEASE-READINESS-2026-09-20.md](RELEASE-READINESS-2026-09-20.md).
+Il ref remoto è `e7a7a796a94c82b84e097d1a2964e9adb68f3ffb`; la candidata resta
+**NON rilasciabile**: il full browser è 658/37/3/14 e mancano prove reali
+provider/installer.
+
 ## Gate aggiornato 2026-09-19T22:35Z
 
 Commit/push privato verificato: `904244abd5efb03962095d2fb32d2003dfb30f42` su `lane/harness-desktop`.

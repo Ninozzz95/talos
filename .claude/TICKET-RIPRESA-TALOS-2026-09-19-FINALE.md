@@ -1,5 +1,13 @@
 # Ripresa TALOS Desktop — ticket autosufficiente
 
+## Punto di ingresso rilascio 2026-09-20
+
+Il dossier unico è [RELEASE-READINESS-2026-09-20.md](RELEASE-READINESS-2026-09-20.md).
+Usarlo come autorità per il prossimo agente: checkpoint remoto
+`e7a7a796a94c82b84e097d1a2964e9adb68f3ffb`, server 4174 da mantenere vivo,
+full browser 658 pass / 37 fail / 3 skip / 14 non eseguiti, nessun tag o
+pubblicazione finché i blocchi nominativi non sono chiusi.
+
 ## Aggiornamento operativo 2026-09-19T22:35Z — regressione streaming/rotella chiusa
 
 Commit/push privato verificato: `904244abd5efb03962095d2fb32d2003dfb30f42` su `talos-private/lane/harness-desktop`.

@@ -1,5 +1,14 @@
 # Roadmap globale di ripresa — 19 settembre 2026
 
+## Autorità rilascio 2026-09-20
+
+Il dossier aggiornato è [RELEASE-READINESS-2026-09-20.md](RELEASE-READINESS-2026-09-20.md).
+Il checkpoint remoto corrente è `e7a7a796a94c82b84e097d1a2964e9adb68f3ffb`;
+il codice prodotto è quello del commit `904244abd5efb03962095d2fb32d2003dfb30f42`.
+Il full browser più recente resta rosso (658 pass, 37 fail, 3 skip, 14 non
+eseguiti); nessun tag o pubblicazione è autorizzato finché il dossier non
+riporta tutti i blocchi chiusi.
+
 ## Stato gate 2026-09-19T22:35Z
 
 Checkpoint remoto: commit `904244abd5efb03962095d2fb32d2003dfb30f42` pushato su `talos-private/lane/harness-desktop`.
