@@ -3,8 +3,9 @@
 ## Punto di ingresso rilascio 2026-09-20
 
 Il dossier unico è [RELEASE-READINESS-2026-09-20.md](RELEASE-READINESS-2026-09-20.md).
-Usarlo come autorità per il prossimo agente: checkpoint remoto
-`e7a7a796a94c82b84e097d1a2964e9adb68f3ffb`, server 4174 da mantenere vivo,
+Usarlo come autorità per il prossimo agente: codice candidato al checkpoint
+`e7a7a796a94c82b84e097d1a2964e9adb68f3ffb`, ref remoto complessivo
+`eca5a7366becb735229d35d441e0bf1f9ff2bbdd`, server 4174 da mantenere vivo,
 full browser 658 pass / 37 fail / 3 skip / 14 non eseguiti, nessun tag o
 pubblicazione finché i blocchi nominativi non sono chiusi.
 

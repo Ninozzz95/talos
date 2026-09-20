@@ -6,11 +6,11 @@ senza promuovere una spunta storica a prova corrente.
 
 ## Verdetto corrente
 
-Il ramo `lane/harness-desktop` è sincronizzato con
-`talos-private/lane/harness-desktop` al commit
-`e7a7a796a94c82b84e097d1a2964e9adb68f3ffb`. Il commit precedente contiene il
-fix prodotto `904244abd5efb03962095d2fb32d2003dfb30f42`; l'ultimo commit è
-documentazione di rilascio. Il worktree tracciato è pulito. I file non tracciati
+Il codice della candidata è al commit
+`e7a7a796a94c82b84e097d1a2964e9adb68f3ffb`; il ref remoto complessivo è ora
+`eca5a7366becb735229d35d441e0bf1f9ff2bbdd`, che contiene solo questo dossier e
+i suoi richiami. Il commit prodotto precedente è
+`904244abd5efb03962095d2fb32d2003dfb30f42`. Il worktree tracciato è pulito. I file non tracciati
 di archivio, sessioni e prove preesistenti restano intatti e non fanno parte
 della candidata.
 

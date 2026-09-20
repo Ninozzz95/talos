@@ -3,7 +3,8 @@
 ## Autorità rilascio 2026-09-20
 
 Vedere [RELEASE-READINESS-2026-09-20.md](RELEASE-READINESS-2026-09-20.md).
-Il ref remoto è `e7a7a796a94c82b84e097d1a2964e9adb68f3ffb`; la candidata resta
+Il codice candidato è `e7a7a796a94c82b84e097d1a2964e9adb68f3ffb`; il ref remoto
+complessivo è `eca5a7366becb735229d35d441e0bf1f9ff2bbdd`; la candidata resta
 **NON rilasciabile**: il full browser è 658/37/3/14 e mancano prove reali
 provider/installer.
 
