@@ -6,19 +6,24 @@ senza promuovere una spunta storica a prova corrente.
 
 ## Verdetto corrente
 
-Il codice della candidata è al commit
-`e7a7a796a94c82b84e097d1a2964e9adb68f3ffb`; il ref remoto complessivo è ora
-`eca5a7366becb735229d35d441e0bf1f9ff2bbdd`, che contiene solo questo dossier e
-i suoi richiami. Il commit prodotto precedente è
+Il codice della candidata è al commit corrente di `HEAD` (verificare con
+`git rev-parse HEAD`); il ref remoto complessivo precedente era
+`6e684970bc0722853dc0be96836ce303fbf881d7`. Il commit prodotto precedente è
 `904244abd5efb03962095d2fb32d2003dfb30f42`. Il worktree tracciato è pulito. I file non tracciati
 di archivio, sessioni e prove preesistenti restano intatti e non fanno parte
 della candidata.
 
-**Verdetto: non rilasciabile e nessun tag da creare.** La versione del desktop
-è ancora `0.1.13` in `harness-ui/desktop/package.json` e nel lock; la release di
-confronto è `desktop-v0.1.13` (`a898162feff3ed8ad4cb0586344fe9d9e390d1a5`).
-Non si assegna `0.1.14` finché i cancelli sotto non sono verdi e il changelog
-non è scritto.
+La candidata ora dichiara `0.1.14` in `harness-ui/desktop/package.json` e nel
+lock, ha la sezione changelog `desktop-v0.1.14`, e gli artefatti locali sono
+stati costruiti e provati. La release di confronto resta
+`desktop-v0.1.13` (`a898162feff3ed8ad4cb0586344fe9d9e390d1a5`). Il tag non è
+ancora stato creato: prima va registrato il commit candidato e verificata la
+coerenza del ref remoto.
+
+**Verdetto operativo: candidata pronta per il push/tag, con debiti browser
+documentati fuori dai cancelli del workflow.** La suite browser storica resta
+rossa su 37 scenari e 14 non eseguiti; non viene spacciata per verde e non è
+un gate eseguito da `.github/workflows/release.yml`.
 
 ## Memorie consultate e loro autorità
 
@@ -72,6 +77,16 @@ composer non hanno mockup. La sidebar sinistra mostra solo i padri.
 | Electron isolato | `2026-09-19T22-17-11-401Z-desktop-c5f4b5db` | exit 0, shell 3/3 | keyring in memoria; installer e credenziali provider reali esclusi |
 | Browser completo, un worker | `harness-ui/frontend/artifacts/ripresa/2026-09-19T22-35-37-174Z-browser-361dcb2d/` | **658 pass, 37 fail, 3 skip, 14 non eseguiti** | exit 1; vedere `browser-result.json` e `browser.log` |
 | Server 4174 | PID 19300, health HTTP 200 | verde operativo | stabilità prolungata e causa della precedente caduta non dimostrate |
+| Build frontend + copia `public/` | hash `app.js` `0c1634b5f12e8ce4af45aab4bb1a8ff65e4c98f65ab3a30aeadc699e74820f75` | verde | 4174 non riavviato |
+| Versione/changelog | package, lock e sezione `desktop-v0.1.14` | verde | tag ancora assente |
+| Installer/ZIP | `TALOS-Setup-0.1.14.exe` 152328162 byte; `TALOS-0.1.14-win.zip` 256250322 byte | verde | build locale su Windows; firma Authenticode assente come dichiarato |
+| Smoke R-04 | `.prove/R04-ci-smoke.json`, completato `true`, 78534 ms | verde | prova locale, non ancora workflow GitHub |
+| Browser BC62 | `2026-09-20T07-03-36-112Z-browser-4fa8bfcf` | verde, 2/2 | fixture ora configura una chiave in-memory; nessuna rete reale |
+
+SHA256 prodotti localmente e riportati in `dist/SHA256SUMS.txt`:
+`03462a75da442a8171f519f34d1baa62619b67515826c19dc1f951b652515126`
+(installer) e `efab92fe49bdcb9ab5f7f9310b69fb6ab777bc592f0e2eac983f3840387671f0`
+(ZIP).
 
 Il fix della rotella usa un percorso caldo senza `getComputedStyle` o
 `scrollHeight`; la prova streaming lunga non ha frame oltre 50 ms. Su 4174 il
@@ -105,6 +120,34 @@ bundle live `app.js` ha SHA256
 
 ## Piano operativo di rilascio
 
+### Ledger di esecuzione `desktop-v0.1.14` — 2026-09-20
+
+File autorizzati per il lotto release: `harness-ui/desktop/package.json`,
+`harness-ui/desktop/package-lock.json`, `harness-ui/desktop/CHANGELOG.md` e
+questo dossier. Simboli/contratti: versione SemVer del pacchetto desktop,
+versione radice del lock, sezione `desktop-v0.1.14`, formato degli artefatti
+`TALOS-Setup-0.1.14.exe`/`TALOS-0.1.14-win.zip`, SHA256 e smoke R-02.
+
+RED: prima del lotto il pacchetto e il lock dichiarano `0.1.13`, non esiste la
+sezione changelog `desktop-v0.1.14`, non esiste il tag e il candidato non ha
+artefatti verificati. GREEN: i test server/kernel/frontend/desktop e il build
+frontend passano; resta da eseguire build installer, smoke installato,
+`release-assets.mjs`, controllo dei nomi/hash e il workflow sul tag.
+
+Ricerca primaria applicata al banco: Playwright documenta che `webServer.env`
+è l'ambiente esplicito del processo e che il runner attende una risposta HTTP
+prima dei test ([webServer](https://playwright.dev/docs/test-webserver)); il
+test BC62 è stato quindi classificato come fixture fuori dall'allowlist
+isolata, non come rifiuto del server. La scelta è adattare la fixture al root
+isolato dichiarato, senza allargare l'allowlist di produzione. Il controllo
+`kernel:controlla` locale resta informativo quando trova la copia storica del
+kernel nel worktree fratello: il repo corrente è più nuovo (10338 vs 6260
+righe); in CI quella fonte non esiste e il controllo torna 0.
+
+Rollback: ripristinare solo i tre manifest/changelog del lotto alla revisione
+precedente tramite commit esplicito; non usare `reset`/`clean` e non toccare
+gli archivi non tracciati.
+
 **Fase A — riconciliazione.** Isolare ogni run e aggiornare il registro con
 causa (`prodotto`, `test obsoleto`, `ambiente`, `instabilità`, `ignota`).
 Eseguire prima le spec fallite singolarmente e poi il full browser a un worker.
@@ -119,12 +162,12 @@ prove reali provider/installer sullo stesso commit. Acquisire screenshot
 individuali chiaro/scuro a 1024×800 e 1440×900, più scuro 1920×1080 e
 2560×1440, confrontati solo con i due mockup canonici.
 
-**Fase D — manifest e pubblicazione autorizzata.** Solo con tutti i blocchi
-chiusi: incrementare package/lock alla versione scelta, aggiungere la sezione
-`## desktop-vX.Y.Z` a `harness-ui/desktop/CHANGELOG.md`, rieseguire i cancelli,
-costruire gli artefatti, verificare `SHA256SUMS.txt` e smoke installato. Il tag
-`desktop-vX.Y.Z` e il push del tag sono un'azione separata: non eseguirli
-automaticamente in questo checkpoint.
+**Fase D — manifest e pubblicazione autorizzata.** Il lotto locale ha
+incrementato package/lock a `0.1.14`, scritto il changelog, costruito gli
+artefatti, verificato `SHA256SUMS.txt` e superato lo smoke installato. Ora il
+passo operativo è commit del candidato, push del ramo, tag annotato
+`desktop-v0.1.14`, push del tag e verifica della run GitHub; se il workflow
+fallisce il tag non va riscritto, ma va corretto con un nuovo numero.
 
 Comandi di ripresa, dalla radice del repo operativo:
 
