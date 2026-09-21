@@ -410,6 +410,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          # Stessa cura di ci.yml: il cancello «Test frontend falliti» qui sotto
+          # lancia la stessa suite ripresa che aggancia `desktop-v0.1.13^{commit}`;
+          # senza i tag la run di release morirebbe sul re-tag dove ci.yml è
+          # appena guarita. Fonte: README actions/checkout, fetched 21/09/2026.
+          fetch-depth: 0
 
       - id: commit_tag
         name: stesso commit del tag, ramo locale per i cancelli esistenti

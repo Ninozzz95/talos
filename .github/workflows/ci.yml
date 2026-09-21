@@ -247,6 +247,15 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # I test unit del frontend portano la strumentazione ripresa, il cui
+          # manifest aggancia `desktop-v0.1.13^{commit}` con `git rev-parse`
+          # (ripresa-run.mjs, creaEsecuzione): il checkout predefinito (depth 1)
+          # non scarica i tag, e i 7 test RIPRESA-R0-* muoiono con
+          # «ambiguous argument» (run 35610784120; riprodotto in locale su
+          # clone depth-1: rossi senza tag, verdi dopo il fetch dei tag).
+          # Fonte: README actions/checkout, fetched 21/09/2026.
+          fetch-depth: 0
 
       - id: dove
         name: c'e il desktop in questo repo?
