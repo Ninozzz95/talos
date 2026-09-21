@@ -9,7 +9,7 @@
 
 **Your AI. Your devices. Your models. Your rules.**
 
-TALOS Mobile is a personal AI agent that reasons, remembers, researches and acts across your Android phone.
+TALOS is a personal AI agent that reasons, remembers, researches and acts across your Android phone.
 TALOS Desktop is a local coding workspace for Windows, with a terminal, file review and persistent agent sessions.
 
 [![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
