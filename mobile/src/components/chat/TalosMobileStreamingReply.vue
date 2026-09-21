@@ -310,12 +310,24 @@ function syncTail(): void {
         return
     }
     const target = tailTarget()
-    const lastTag = target?.lastElementChild?.tagName ?? ''
+    // DEBT-MOBILE-003 (run CI 35617154747): l'ultimo blocco si giudica
+    // ESCLUDENDO il tailHost, non con lastElementChild — quando una tabella è
+    // l'ultimo blocco il tailHost sta DENTRO il suo wrapper, quindi
+    // lastElementChild legge lo SPAN del tail stesso e disarma il controllo:
+    // fra due parse del throttle il caret rientra esattamente mentre la
+    // tabella è a schermo (riprodotto: si accende entro ~160 ms di stream).
+    // Forma dello stato dell'arte: il caret sta dopo l'ultimo blocco STABILE,
+    // mai adiacente a un blocco tabella (Streamdown, streamdown.ai/docs/carets;
+    // markedjs #3657 — fetched 21/09/2026).
+    const lastRealBlock = [...(target?.children ?? [])]
+        .filter((child) => child !== tailHost)
+        .at(-1) as HTMLElement | undefined
     // Tables and their sibling structural blocks own their layout. A caret
     // painted after one is read as a prompt inside the table, not as answer
     // progress. Structural fragments use the same fade ink as the selected
     // fade mode, while the Markdown parser remains the source of truth.
-    const structural = TAIL_REFUSED.has(lastTag) || /^\s*\|/.test(tail)
+    const structural = (lastRealBlock ? TAIL_REFUSED.has(lastRealBlock.tagName) : false)
+        || /^\s*\|/.test(tail)
     const host = ensureTail(structural)
     if (!host) return
     if (tail === paintedTail) return
