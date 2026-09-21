@@ -1,0 +1,147 @@
+/** ToolList nel mockup. WAI Listbox + ricerca sui cataloghi degli strumenti, 05/09/2026. */
+import {nomeUmanoAttrezzo,corrispondeARicerca,descrizioneAttrezzo} from './nomi-attrezzi.js';
+import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
+const PERMESSI={'':'Come la sessione',sempre:'Consenti sempre',chiedi:'Chiedi sempre',nega:'Nega'};
+export function permessoAttrezzo(a){return a.permessoConfigurabile?PERMESSI[a.permesso??'']||'Permesso non riconosciuto':'Politica della sessione';}
+export function stimaSchemaAttrezzi(attrezzi){return attrezzi.reduce((s,a)=>Number.isFinite(a.tokenSchemaStimati)&&a.tokenSchemaStimati>=0?{...s,totale:s.totale+a.tokenSchemaStimati}:{...s,mancanti:s.mancanti+1},{totale:0,mancanti:0});}
+export function filtraAttrezzi(attrezzi,{query='',filtro='tutti'}={}){const q=String(query).trim().toLocaleLowerCase('it');return attrezzi.filter(a=>(filtro==='tutti'||(filtro==='permessi'?a.permessoConfigurabile===true:filtro==='dipendenze'?a.dipendenza&&a.dipendenza.stato!=='pronta':false))&&(!q||corrispondeARicerca(a.nome,q)||String(a.descrizione||'').toLocaleLowerCase('it').includes(q)));}
+function el(doc,tag,classe,testo){const n=doc.createElement(tag);if(classe)n.className=classe;if(testo!==undefined)n.textContent=testo;return n;}
+function titolo(a){return nomeUmanoAttrezzo(a.nome)||'Attrezzo senza nome leggibile';}
+function stima(a){return Number.isFinite(a.tokenSchemaStimati)&&a.tokenSchemaStimati>=0?a.tokenSchemaStimati.toLocaleString('it-IT')+' token':'Stima non disponibile';}
+function icona(doc,a){const c=el(doc,'span','talos-list-row__icon'),s=doc.createElementNS('http://www.w3.org/2000/svg','svg'),u=doc.createElementNS('http://www.w3.org/2000/svg','use');s.setAttribute('class','i');s.setAttribute('aria-hidden','true');u.setAttribute('href','#'+({shell:'i-terminal',cerca:'i-search',leggi:'i-eye',scrivi:'i-code',web_search:'i-globe',document_create:'i-files'}[a.nome]||'i-code'));s.append(u);c.append(s);return c;}
+export function creaToolListRow(a,{document:doc=globalThis.document,selezionata=false,selezionabile=true,onSeleziona,uso=null}={}){
+ const r=el(doc,selezionabile?'button':'div','talos-list-row');r.dataset.toolName=a.nome;if(selezionabile){r.type='button';r.setAttribute('role','option');r.setAttribute('aria-selected',String(selezionata));r.setAttribute('aria-controls','capabilityDettaglio');r.tabIndex=selezionata?0:-1;r.addEventListener('click',()=>onSeleziona?.(a.nome));}else r.setAttribute('role','group');
+ /* C10 (06/09): la riga porta la descrizione NOSTRA, in italiano. Prima mostrava
+    il testo del kernel — scritto per il MODELLO, non per chi guarda l'elenco.
+    Se la nostra manca si mostra quello del kernel: mai una frase inventata. */
+ const t=el(doc,'span','talos-list-row__text');t.append(el(doc,'span','talos-list-row__title',titolo(a)),el(doc,'span','talos-list-row__sub',descrizioneAttrezzo(a.nome)||a.descrizione||'Descrizione non disponibile'));
+ if(a.dipendenza)t.append(el(doc,'span','talos-list-row__sub',a.dipendenza.dettaglio||'Dipendenza non osservata'));
+ const aside=el(doc,'span','talos-list-row__aside');aside.append(el(doc,'span',Number.isFinite(a.tokenSchemaStimati)&&a.tokenSchemaStimati>=0?'talos-mono talos-measure--estimate':'talos-muted',stima(a)),el(doc,'span','talos-badge'+(a.permesso==='chiedi'?' talos-badge--warning':''),permessoAttrezzo(a)));
+ if(uso?.chiamate>0)aside.append(el(doc,'span','talos-muted',uso.chiamate+' chiamate'+(uso.ripetute>0?' · '+uso.ripetute+' ripetute':'')));
+ r.append(icona(doc,a),t,aside);return r;
+}
+/*
+ * C10 — le DUE descrizioni, dichiarate per quello che sono.
+ *
+ * Owner: «Descrizione nostra in italiano; quella del kernel resta visibile come
+ * "testo inviato al modello"». Sono due testi con due destinatari: il nostro
+ * dice cosa fa l'attrezzo al tuo computer, quello del kernel dice al modello
+ * quando chiamarlo. ⛔ Il testo del kernel non si tocca e non si traduce: è il
+ * contratto col modello.
+ */
+function scriviDescrizioni(d,a){
+ const nostra=descrizioneAttrezzo(a.nome),doc=d.ownerDocument;
+ const nodo=d.querySelector('[data-cap-descrizione]');
+ nodo.textContent=nostra||a.descrizione||'Descrizione non disponibile';
+ /* ⛔ il <details> sta nel MOCKUP, non lo crea il JavaScript: il cancello dei
+    componenti confronta la struttura disegnata con quella del mockup, e un nodo
+    che nasce solo a runtime la fa divergere. Qui si riempie soltanto. */
+ const grezzo=d.querySelector('[data-cap-descrizione-kernel]');
+ if(!grezzo)return;
+ // ⛔ si mostra solo se la NOSTRA c'e': altrimenti il testo del kernel e' gia' quello sopra, e comparirebbe due volte.
+ grezzo.hidden=!nostra||!a.descrizione;
+ grezzo.querySelector('p').textContent=a.descrizione||'';
+ if(!grezzo.hidden)grezzo.open=false;
+}
+const PAGINE=new WeakMap();
+export function aggiornaPaginaCapability(schermo,attrezzi,opzioni={}){
+ let p=PAGINE.get(schermo);if(!p){p={attrezzi:[],opzioni:{},query:'',filtro:'tutti',scelto:null,ambito:undefined};PAGINE.set(schermo,p);
+ schermo.querySelector('[data-cap-query]').addEventListener('input',e=>{p.query=e.target.value;render(schermo,p);});
+ schermo.querySelector('[data-cap-refresh]').addEventListener('click',()=>p.opzioni.onAggiorna?.());
+ const tabs=[...schermo.querySelectorAll('[data-cap-filtro]')];for(const t of tabs){t.addEventListener('click',()=>{p.filtro=t.dataset.capFiltro;render(schermo,p);});t.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const i=tabs.indexOf(t),next=e.key==='Home'?tabs[0]:e.key==='End'?tabs.at(-1):tabs[(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length];next.click();next.focus();});}
+ schermo.querySelector('[data-cap-permesso]').addEventListener('change',e=>{const a=p.attrezzi.find(a=>a.nome===p.scelto),valore=e.target.value;e.target.value=a?.permesso??'';if(a?.permessoConfigurabile&&!p.opzioni.salvataggio){p.focusPermesso=schermo.ownerDocument.activeElement===e.target?{nome:a.nome,ambito:p.ambito}:null;p.opzioni.onPermesso?.(a,valore);}});
+ }
+ if(p.ambito!==opzioni.ambito){p.scelto=null;p.ambito=opzioni.ambito;}
+ p.attrezzi=attrezzi;p.opzioni={...p.opzioni,...opzioni};render(schermo,p);
+}
+function render(schermo,p){
+ const {attrezzi,opzioni:o}=p,doc=schermo.ownerDocument,visibili=filtraAttrezzi(attrezzi,p),uso=new Map((o.uso?.perAttrezzo||[]).map(a=>[a.nome,a]));
+ if(!o.caricamento&&!visibili.some(a=>a.nome===p.scelto))p.scelto=visibili[0]?.nome||null;
+ const resumo=schermo.querySelector('[data-cap-esito]');resumo.textContent=o.errore||(o.caricamento?'Caricamento degli attrezzi…':visibili.length+' di '+plurale(attrezzi.length,'attrezzo')+' offerti');resumo.setAttribute('role',o.errore?'alert':'status');
+ schermo.querySelector('[data-cap-count]').textContent=o.errore||o.caricamento?'—':attrezzi.length;
+/*
+  * C5 e C6 (06/09) — il totale in cima, e il totale come PERCENTUALE della
+  * finestra del modello scelto. Il totale c'era gia'; la percentuale no, ed e'
+  * la cifra che dice se quel numero e' tanto o poco: 7.454 token sono il 5,7%
+  * di una finestra da 131.072 e il 91% di una da 8.192.
+  * ⛔ Se la finestra non e' dichiarata NON si sceglie un valore di comodo:
+  * si scrive il totale e basta.
+  */
+ const sum=stimaSchemaAttrezzi(attrezzi);
+ const quota=Number.isFinite(o.finestraContesto)&&o.finestraContesto>0?' · '+new Intl.NumberFormat('it-IT',{maximumFractionDigits:1}).format((sum.totale/o.finestraContesto)*100)+'% della finestra da '+o.finestraContesto.toLocaleString('it-IT'):'';
+ schermo.querySelector('[data-cap-token]').textContent=o.errore||o.caricamento?'Schema non osservato':!attrezzi.length?'Nessuno schema offerto':sum.mancanti?'Stima parziale: ~'+sum.totale.toLocaleString('it-IT')+' token · '+sum.mancanti+' non disponibili'+quota:'~'+sum.totale.toLocaleString('it-IT')+' token di schema per giro (stima)'+quota;
+ schermo.querySelector('[data-cap-ambito]').textContent=o.ambito?'Permessi della sessione aperta. La scelta per attrezzo precede la politica generale.':'Nessuna sessione aperta. Il catalogo mostra gli attrezzi per la prossima sessione; scegli i permessi aprendo una sessione.';
+ schermo.querySelector('[data-cap-uso]').textContent=o.ambito?(o.uso?.registrato?'Uso registrato: '+o.uso.chiamate+' chiamate · '+o.uso.ripetute+' identiche a una precedente.':'Uso nella sessione non registrato.'):'Nessun uso di sessione da mostrare.';
+ const err=schermo.querySelector('[data-cap-errore-azione]');err.textContent=o.erroreAzione||'';err.hidden=!o.erroreAzione;
+ schermo.querySelector('[data-cap-refresh]').disabled=Boolean(o.caricamento||o.salvataggio);
+ for(const t of schermo.querySelectorAll('[data-cap-filtro]')){const active=t.dataset.capFiltro===p.filtro;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;}
+ const lista=schermo.querySelector('[data-cap-list]'),focus=doc.activeElement?.closest('[data-tool-name]')?.dataset.toolName;lista.setAttribute('role',visibili.length?'listbox':'group');
+ function seleziona(id,f=false){p.scelto=id;render(schermo,p);if(f)[...lista.querySelectorAll('[data-tool-name]')].find(n=>n.dataset.toolName===id)?.focus();}
+ lista.replaceChildren(...visibili.map((a,i)=>{const r=creaToolListRow(a,{document:doc,selezionata:a.nome===p.scelto,onSeleziona:seleziona,uso:uso.get(a.nome)});r.addEventListener('keydown',e=>{if(!['ArrowUp','ArrowDown','Home','End'].includes(e.key))return;e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?visibili.length-1:(i+(e.key==='ArrowDown'?1:-1)+visibili.length)%visibili.length;seleziona(visibili[next].nome,true);});return r;}));
+ if(!visibili.length)lista.append(el(doc,'p','talos-list-row talos-muted',o.errore?'Catalogo non disponibile.':o.caricamento?'Caricamento…':attrezzi.length?'Nessun attrezzo corrisponde ai filtri.':'Nessun attrezzo offerto in questa configurazione.'));
+ if(focus)[...lista.querySelectorAll('[data-tool-name]')].find(n=>n.dataset.toolName===focus)?.focus({preventScroll:true});
+ const a=visibili.find(a=>a.nome===p.scelto),d=schermo.querySelector('[data-cap-dettaglio]');d.hidden=!a;if(!a)return;
+ d.querySelector('h3').textContent=titolo(a);scriviDescrizioni(d,a);d.querySelector('[data-cap-stima]').textContent=(Number.isFinite(a.tokenSchemaStimati)&&a.tokenSchemaStimati>=0?'~':'')+stima(a);d.querySelector('[data-cap-disponibile]').textContent='Offerto al modello';d.querySelector('[data-cap-dipendenza]').textContent=a.dipendenza?.dettaglio||'Nessuna dipendenza esterna dichiarata';d.querySelector('[data-cap-categoria]').textContent=a.categoria==='base'?'Base':a.categoria==='esteso'?'Esteso':'Categoria non osservata';
+ const u=uso.get(a.nome);d.querySelector('[data-cap-uso-voce]').textContent=u?.chiamate>0?u.chiamate+' chiamate · '+u.ripetute+' identiche a una precedente':'Uso non registrato per questo attrezzo';
+ const select=d.querySelector('[data-cap-permesso]');select.value=Object.hasOwn(PERMESSI,a.permesso??'')?a.permesso??'':'';select.disabled=Boolean(o.caricamento||o.salvataggio)||!a.permessoConfigurabile||!o.ambito;
+ if(p.focusPermesso&&!o.salvataggio&&!o.caricamento){const prima=p.focusPermesso;p.focusPermesso=null;if(prima.nome===p.scelto&&prima.ambito===p.ambito&&!select.disabled&&!schermo.hidden&&doc.activeElement===doc.body)select.focus({preventScroll:true});}
+ d.querySelector('[data-cap-permesso-spiega]').textContent=o.salvataggio?'Salvataggio del permesso…':a.permessoConfigurabile?(o.ambito?permessoAttrezzo(a)+'. Vale per le prossime chiamate di questa sessione.':'Apri una sessione per scegliere il permesso.'):'Questo attrezzo segue la politica generale della sessione; non ha una scelta separata.';
+ rigaUscitaComandi(d,a,o,doc);
+}
+
+/*
+ * ⭐⭐⭐ D-10S — nel Capability, sull'attrezzo del terminale, la seconda meta' della stessa domanda.
+ *
+ * Owner 11/09: «e anche su capability visto che sono collegati». Sono collegati davvero, e la
+ * coppia si legge bene solo stando vicina:
+ *   · il menu qui sopra decide se il MODELLO puo' lanciare un comando;
+ *   · questo decide se il modello legge i comandi che lanci TU, col `!`.
+ * La stessa scelta vive anche nel foglio permessi, sezione «per attrezzo». Non e' un doppione: e'
+ * lo stesso stato di sessione raccontato dove la domanda nasce — e passa per la stessa rotta, per
+ * cui non possono divergere.
+ *
+ * ⛔ Compare SOLO su `shell`: su ogni altro attrezzo non vorrebbe dire niente, e una riga che
+ *   compare ovunque smette di essere letta.
+ * ⛔ Si disabilita senza una sessione aperta, come fa il menu del permesso: la scelta appartiene a
+ *   una sessione, e un controllo che finge di funzionare e' peggio di uno spento.
+ */
+function rigaUscitaComandi(d,a,o,doc){
+ let riga=d.querySelector('[data-cap-uscita-riga]');
+ if(a.nome!=='shell'){if(riga)riga.hidden=true;return;}
+ if(!riga){
+  /*
+   * ⛔ LA FORMA LA DETTA IL PANNELLO, non io: qui dentro una scelta si scrive
+   * `label.talos-stack` + `select.talos-select`, con la spiegazione in un `p.talos-muted` sotto —
+   * esattamente come vive «Permesso» tre righe più su.
+   * La prima versione usava `talos-list-row`, che è il pattern dell'ELENCO, non del DETTAGLIO: in
+   * un pannello da ~320 px il menu finiva strozzato su tre righe. Trovato GUARDANDO LA FOTO, non
+   * rileggendo il codice — il DOM diceva «presente e visibile» e sarebbe bastato a ingannarmi.
+   * Ricerca 11/09/2026 (UX Patterns for Developers «Sidebar Pattern»; alfdesigngroup «Sidebar
+   * Design for Web Apps 2026»): in una colonna stretta i controlli si IMPILANO, etichetta sopra e
+   * campo a piena larghezza, ed è la spaziatura a rendere scannabile l'elenco.
+   */
+  riga=el(doc,'div','');riga.setAttribute('data-cap-uscita-riga','');
+  const etichetta=el(doc,'label','talos-stack','Chi legge i comandi che lanci tu con !');
+  const menu=doc.createElement('select');menu.className='talos-select';menu.setAttribute('data-cap-uscita','');
+  menu.setAttribute('aria-label','Chi legge l’uscita dei comandi lanciati con il punto esclamativo');
+  const no=doc.createElement('option');no.value='no';no.textContent='Solo tu — come prima';
+  const si=doc.createElement('option');si.value='si';si.textContent='Anche il modello';
+  menu.append(no,si);
+  /* ⛔ Le opzioni vengono rifatte a ogni render: si legge quella VIVA, non quella catturata qui. */
+  menu.addEventListener('change',()=>{PAGINE.get(d.closest('#schermoCapability'))?.opzioni?.onUscitaComandi?.(menu.value==='si');});
+  etichetta.append(menu);
+  const spiega=el(doc,'p','talos-muted','');spiega.setAttribute('data-cap-uscita-spiega','');
+  riga.append(etichetta,spiega);
+  d.append(riga);
+ }
+ riga.hidden=false;
+ const menu=riga.querySelector('[data-cap-uscita]');
+ const acceso=o.comandiNellaConversazione===true;
+ menu.value=acceso?'si':'no';
+ menu.disabled=Boolean(o.caricamento||o.salvataggio)||!o.ambito;
+ riga.querySelector('[data-cap-uscita-spiega]').textContent=!o.ambito
+  ?'Apri una sessione per scegliere: la scelta vale per quella sessione.'
+  :acceso
+   ?'Comando e uscita entrano nella conversazione al giro dopo (~2.000 token). Il comando non fa mai rispondere TALOS: la risposta arriva al messaggio successivo.'
+   :'I comandi che lanci con «!» restano solo sul tuo schermo. Il modello non li vede.';
+}

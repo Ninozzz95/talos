@@ -1,0 +1,7 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {normalizzaFonteRicerca,normalizzaProvaRicerca} from '../../src/components/fonte-ricerca.js';
+import {FONTE_RICERCA} from '../../lab/fixtures/fonte-ricerca.js';
+test('FONTE-CONTRATTO: configurata non è una connessione verificata; tutte cinque le fonti restano disponibili',()=>{const s=normalizzaFonteRicerca(FONTE_RICERCA);assert.equal(s.fonti.length,5);assert.equal(s.source,'duckduckgo');assert.match(s.messaggio,/non ancora verificata/);assert.equal(normalizzaFonteRicerca({...FONTE_RICERCA,source:'off',readiness:'spenta'}).pronta,false);});
+test('FONTE-INVALIDA: dati malformati non accendono una fonte',()=>{for(const r of [null,{}, {...FONTE_RICERCA,source:'ignota'},{...FONTE_RICERCA,readiness:'va bene'},{...FONTE_RICERCA,fonti:[...FONTE_RICERCA.fonti,FONTE_RICERCA.fonti[0]]},{...FONTE_RICERCA,fonti:FONTE_RICERCA.fonti.map(f=>({...f,keyConfigured:'false'}))}])assert.throws(()=>normalizzaFonteRicerca(r),/risposta/i);});
+test('FONTE-PROVA-INVALIDA: esiti mancanti non diventano ricerca riuscita',()=>{assert.deepEqual(normalizzaProvaRicerca({fonte:'duckduckgo',risultati:0,titoli:[]}),{fonte:'duckduckgo',risultati:0,titoli:[]});for(const r of [null,{}, {fonte:'duckduckgo',risultati:'2',titoli:[]},{fonte:'duckduckgo',risultati:-1,titoli:[]},{fonte:'duckduckgo',risultati:1,titoli:[{}]}])assert.throws(()=>normalizzaProvaRicerca(r),/risposta/i);});

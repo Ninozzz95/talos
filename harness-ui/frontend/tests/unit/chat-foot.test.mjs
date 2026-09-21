@@ -1,0 +1,112 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { dettaglioUtile, statoGiri, etichettaPermesso, etichettaPermessoConEccezioni, tonoPermesso, nomeModelloUmano, fondoInVista, testoVelocitaLocale } from '../../src/components/chat-foot.js';
+
+// 06/09 — B12 (il contatore dei giri) e B11 (la pillola del permesso dice il vero, eccezioni comprese).
+
+test('PIEDE-GIRI: il contatore tace sotto metà del tetto, poi è quieto, poi si accende', () => {
+  assert.equal(statoGiri(9, 24), null); // 37%: un numero che non chiede niente a nessuno
+  assert.equal(statoGiri(12, 24), 'quieto'); // esattamente il 50%
+  assert.equal(statoGiri(19, 24), 'quieto'); // 79%
+  assert.equal(statoGiri(20, 24), 'vicino'); // 83%: il tetto è vicino
+  assert.equal(statoGiri(24, 24), 'vicino');
+  // AL CONTRARIO: senza numero non si mostra niente; senza tetto dichiarato non c'è percentuale
+  assert.equal(statoGiri(null, 24), null);
+  assert.equal(statoGiri('molti', 24), null);
+  assert.equal(statoGiri(0, null), null);
+  assert.equal(statoGiri(3, null), 'quieto');
+  assert.equal(statoGiri(3, 0), 'quieto');
+});
+
+test('PIEDE-PERMESSO: nome umano, mai il nome tecnico (H22)', () => {
+  assert.equal(etichettaPermesso('Full access'), 'Accesso pieno');
+  assert.equal(etichettaPermesso('On request'), 'Chiede prima');
+  assert.equal(etichettaPermesso(''), 'Permesso non scelto');
+  assert.equal(etichettaPermesso(undefined), 'Permesso non scelto');
+  assert.equal(tonoPermesso('Full access'), 'danger');
+  assert.equal(tonoPermesso('Workspace write'), 'warning');
+  assert.equal(tonoPermesso('Read only'), null);
+});
+
+test('PIEDE-ECCEZIONI: la pillola dichiara i cancelli per attrezzo, che il permesso non promette', () => {
+  // il caso misurato: «Accesso pieno» scelto, e due attrezzi su «chiedi» ereditati dal server
+  assert.equal(etichettaPermessoConEccezioni('Full access', { scrivi: 'chiedi', shell: 'chiedi' }), 'Accesso pieno · 2 eccezioni');
+  assert.equal(etichettaPermessoConEccezioni('Full access', { scrivi: 'nega' }), 'Accesso pieno · 1 eccezione');
+  // AL CONTRARIO: senza eccezioni la pillola resta quella di sempre, e un valore vuoto non conta
+  assert.equal(etichettaPermessoConEccezioni('Full access', {}), 'Accesso pieno');
+  assert.equal(etichettaPermessoConEccezioni('Full access', null), 'Accesso pieno');
+  assert.equal(etichettaPermessoConEccezioni('Full access', { scrivi: '', shell: null }), 'Accesso pieno');
+});
+
+test('PIEDE-MODELLO: un identificatore locale diventa un nome, non una targa (H22)', () => {
+  // il caso che l'owner ha visto a schermo, su due righe
+  assert.equal(
+    nomeModelloUmano('local:bartowski-nvidia_Nemotron-Cascade-2-30B-A3B-GGUF-931b595fc71b-nvidia-Nemotron-Cascade-2-30B-A3B-Q4-0-gguf'),
+    'nvidia Nemotron Cascade 2 · 30B (3B attivi) · Q4_0',
+  );
+  // MoE con quantizzazione a super-blocchi: i parametri attivi si dicono, non si nascondono
+  assert.equal(nomeModelloUmano('local:unsloth-Qwen3.5-35B-A3B-GGUF-abc123-Qwen3.5-35B-A3B-Q4_K_M-gguf'), 'Qwen3.5 · 35B (3B attivi) · Q4_K_M');
+  // AL CONTRARIO: un modello di rete resta com'era, senza inventare pezzi
+  assert.equal(nomeModelloUmano('z-ai/glm-5.3-flash'), 'glm-5.3-flash');
+  assert.equal(nomeModelloUmano('claude-opus-5'), 'claude-opus-5');
+  // e ciò che non si sa leggere non si butta: si mostra quel che c'è
+  assert.equal(nomeModelloUmano('local:strano'), 'strano');
+  assert.equal(nomeModelloUmano(''), '');
+  assert.equal(nomeModelloUmano(null), '');
+});
+
+test('PIEDE-FONDO: «sono in fondo» guarda la fine del CONTENUTO, non del contenitore', () => {
+  // il caso misurato: contenitore 684, contenuto + 342 di coda vuota, e la persona sta guardando la fine
+  assert.equal(fondoInVista({ scrollHeight: 2000, scrollTop: 974, clientHeight: 684, coda: 342 }), true);
+  // e appena sale davvero, la striscia deve tornare
+  assert.equal(fondoInVista({ scrollHeight: 2000, scrollTop: 500, clientHeight: 684, coda: 342 }), false);
+  /*
+   * ⛔ Il caso MISURATO il 06/9 durante un giro vero: salito di 320 px con coda 314. Con la vecchia
+   * tolleranza di 24 questo diceva «sono in fondo» mentre l'ultimo messaggio era già fuori schermo,
+   * e la striscia del ragionamento restava muta proprio quando serviva.
+   */
+  assert.equal(fondoInVista({ scrollHeight: 1731, scrollTop: 413, clientHeight: 998, coda: 314 }), false, 'salito di 320 con coda 314: NON sono in fondo');
+  /*
+   * ⛔ owner 06/9: in una chat appena iniziata la striscia non deve comparire finché non c'è
+   *    davvero uno scroll. Niente da scorrere = in fondo, senza far dipendere la risposta dalla
+   *    coda: qui la coda è ENORME apposta, e non deve cambiare l'esito.
+   */
+  assert.equal(fondoInVista({ scrollHeight: 400, scrollTop: 0, clientHeight: 560, coda: 999 }), true, 'chat nuova: niente da scorrere');
+  assert.equal(fondoInVista({ scrollHeight: 560, scrollTop: 0, clientHeight: 560, coda: 0 }), true, 'esattamente pieno: niente scroll');
+  // AL CONTRARIO — appena c'è un pelo da scorrere oltre la coda, la risposta torna a dipendere dal conto
+  assert.equal(fondoInVista({ scrollHeight: 900, scrollTop: 0, clientHeight: 560, coda: 100 }), false, 'si puo scorrere e sono in cima: non sono in fondo');
+  // AL CONTRARIO — davvero in fondo, con solo il rumore sub-pixel di mezzo: resta «in fondo»
+  assert.equal(fondoInVista({ scrollHeight: 1731, scrollTop: 733, clientHeight: 998, coda: 314 }), true, 'distanza 0: in fondo');
+  assert.equal(fondoInVista({ scrollHeight: 1731, scrollTop: 730, clientHeight: 998, coda: 314 }), true, 'distanza 3: rumore sub-pixel, ancora in fondo');
+  // senza spazio in coda vale il conto di sempre
+  assert.equal(fondoInVista({ scrollHeight: 1000, scrollTop: 980, clientHeight: 20, coda: 0 }), true);
+  assert.equal(fondoInVista({ scrollHeight: 1000, scrollTop: 100, clientHeight: 20, coda: 0 }), false);
+  // AL CONTRARIO: senza numeri non si finge di sapere — si assume «in fondo», che tace invece di gridare
+  assert.equal(fondoInVista({}), true);
+  assert.equal(fondoInVista({ scrollHeight: NaN }), true);
+});
+
+test('PIEDE-VELOCITA: la barra dice i token al secondo solo col modello locale, altrimenti tace', () => {
+  // owner 06/9: col locale la velocità è l'unica cosa che cambia da giro a giro — lì paghi in tempo
+  assert.equal(testoVelocitaLocale('local:unsloth-gpt-oss-20b-GGUF', '42 token/s'), '42 token/s');
+  // con un modello di rete la scritta sparisce del tutto: il tema lo vedi, non serve dirlo
+  assert.equal(testoVelocitaLocale('z-ai/glm-5.3-flash', '42 token/s'), '');
+  assert.equal(testoVelocitaLocale('claude-opus-5', '99 token/s'), '');
+  // AL CONTRARIO: locale ma senza il numero (giro appena partito, runtime che non lo dichiara) → niente, mai uno zero
+  assert.equal(testoVelocitaLocale('local:qualcosa', ''), '');
+  assert.equal(testoVelocitaLocale('local:qualcosa', null), '');
+  assert.equal(testoVelocitaLocale('', '42 token/s'), '');
+  assert.equal(testoVelocitaLocale(null, null), '');
+});
+
+test('⛔ la striscia non dice due volte la stessa cosa', () => {
+  // Il caso visto a schermo: il dettaglio era il nome, troncato.
+  assert.equal(dettaglioUtile('Legge la parte finale di config.mjs…', 'Legge la parte finale di co…'), '');
+  assert.equal(dettaglioUtile('Esegue un comando', 'Esegue un comando'), '');
+  // AL CONTRARIO — un dettaglio che aggiunge davvero resta
+  assert.equal(dettaglioUtile('Esegue un comando', 'npm run build'), 'npm run build');
+  assert.equal(dettaglioUtile('Legge un file', 'config.mjs · 420 righe'), 'config.mjs · 420 righe');
+  // niente dettaglio, niente da dire
+  assert.equal(dettaglioUtile('Qualcosa', ''), '');
+  assert.equal(dettaglioUtile('', 'solo il dettaglio'), 'solo il dettaglio');
+});

@@ -1,0 +1,19 @@
+# A whole-file CRLF rewrite made a 12-line change land as 430 lines and
+# reassigned blame for every line in two components. Line endings are LF in
+# the repository, whatever the editing platform does locally.
+* text=auto eol=lf
+
+# Batch files are read by cmd.exe, which is not reliable with LF around
+# multi-line constructs and labels. This is the Gradle wrapper: if it breaks,
+# the Android build breaks with it. Gradle ships the same rule for the same
+# reason.
+*.bat text eol=crlf
+
+# Capacitor generates these, and `mobile/tools/android-assets/generate.mjs`
+# hashes them ON DISK against `stock-res-checksums.txt` to tell a stock
+# resource from one we customised. Normalising them would change those hashes
+# on the next clean checkout and the asset gate would start calling stock files
+# modified. Their byte identity belongs to upstream, not to our line-ending
+# policy.
+mobile/android/app/src/main/res/** -text
+core/tests/fixtures/providers/stream/*.sse text eol=lf whitespace=-blank-at-eof

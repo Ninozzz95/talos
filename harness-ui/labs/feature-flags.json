@@ -1,0 +1,8 @@
+{
+  "electron-shell": false,
+  "execution-fabric": false,
+  "computer-use": false,
+  "code-intelligence": false,
+  "remote-node": false,
+  "memory-providers": false
+}

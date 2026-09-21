@@ -1,0 +1,39 @@
+/*
+ * ⭐⭐⭐ D-10B — L'USCITA DI UN COMANDO MENTRE ESCE.
+ *
+ * Prima: 2.091 ms di schermo fermo su un comando da 2.091 ms. Chi lancia `!npm test` guardava un
+ * riquadro vuoto senza sapere nemmeno se era partito.
+ *
+ * ⛔ Foglio a sé, e non una manciata di righe dentro `index.css`, per una ragione pratica: quello è
+ *   GENERATO dal mockup (`scripts/mockup-to-template.mjs`), e ciò che si scrive lì a mano sparisce
+ *   alla prima rigenerazione.
+ *
+ * ⛔ Nessun linguaggio visivo nuovo: il `<pre>` dell'esito, che esiste già dentro `.tool-detail`,
+ *   non ha classe e prende lo stile dei `pre` del progetto. Questo è LO STESSO `pre`, con addosso
+ *   solo ciò che lo distingue davvero — è provvisorio, e sarà sostituito dal testo definitivo.
+ *   (Regola dell'owner del 04/09: si rispetta il sistema di design che il progetto ha già; prima di
+ *   disegnare si guarda cosa c'è.)
+ */
+.tool-out--viva{
+  /* Una finestra su ciò che sta accadendo, non un archivio: scorre e resta alta quanto basta. */
+  max-height: 12.5em;
+  overflow-y: auto;
+  /* Attenuato, perché non è ancora la risposta: quella arriva dopo, con il suo peso pieno. */
+  color: var(--talos-muted);
+}
+/*
+ * Il segno «sta ancora arrivando»: una barretta che lampeggia in coda al testo, come in un
+ * terminale. È l'unico movimento, e sta dove guarda l'occhio — l'ultima riga.
+ */
+.tool-out--viva code::after{
+  content: "▌";
+  animation: talosUscitaVivaCursore 1.1s steps(2, start) infinite;
+}
+@keyframes talosUscitaVivaCursore { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: .15; } }
+/*
+ * ⛔ Chi ha chiesto meno movimento AL SISTEMA non riceve il lampeggio, ma nemmeno un cursore
+ *   spento che sembra un carattere di troppo: resta acceso e fermo (W3C WCAG 2.3.3).
+ */
+@media (prefers-reduced-motion: reduce){
+  .tool-out--viva code::after{ animation: none; opacity: .6; }
+}

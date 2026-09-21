@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="it" data-mode="dark" data-density="comfortable">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="color-scheme" content="dark light"><meta name="description" content="TALOS · mockup interattivo isolato di Impostazioni e Laboratorio modelli. Dati e operazioni di esempio, nessuna connessione a provider.">
+<title>TALOS — Impostazioni & Laboratorio modelli · Scheda a pagina intera</title>
+<style>/* INLINE_STYLES */</style>
+</head><body>
+<a class="skip-link" href="#page-title">Vai al contenuto</a>
+<div class="app" id="app">
+<aside class="sidebar" aria-label="Impostazioni TALOS">
+<div class="brand"><svg class="brand-mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
+  <g stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 218 123.5 L 121.9 179 A 21 21 0 0 0 111.5 197 L 111.5 333 A 21 21 0 0 0 121.9 351 L 239.6 419 A 21 21 0 0 0 260.4 419 L 378.1 351 A 21 21 0 0 0 388.5 333 L 388.5 197 A 21 21 0 0 0 378.1 179 L 282 123.5" stroke-width="12" opacity="0.18" />
+    <path d="M 250 140 L 250 195" stroke-width="9" />
+    <path d="M 250 255 L 250 315" stroke-width="9" />
+    <circle cx="250" cy="105" r="22" stroke-width="9" fill="currentColor" />
+    <circle cx="250" cy="225" r="18" stroke-width="9" fill="currentColor" />
+    <circle cx="250" cy="338" r="14" stroke-width="9" fill="currentColor" />
+    <g transform="translate(250, 225) rotate(45)">
+      <path d="M 0 32 L 0 95" stroke-width="9" />
+      <circle cx="0" cy="118" r="14" stroke-width="9" fill="currentColor" />
+    </g>
+    <g transform="translate(250, 225) rotate(-45)">
+      <path d="M 0 32 L 0 95" stroke-width="9" />
+      <circle cx="0" cy="118" r="14" stroke-width="9" fill="currentColor" />
+    </g>
+  </g>
+</svg>
+<div><div class="brand-name">TALOS</div><div class="brand-sub">WORKSPACE</div></div></div>
+<div class="sidebar-title">Impostazioni</div><button id="open-settings-search" class="settings-search" data-action="open-search"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><span>Cerca impostazioni</span><kbd>Ctrl K</kbd></button>
+<nav id="settings-nav" aria-label="Sezioni delle impostazioni"></nav>
+<div class="sidebar-bottom"><div class="scope-card"><div class="scope-avatar"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9Zm0 9 8-4.5M12 12 4 7.5M12 12v9"/></svg></div><div><strong>Spazio personale</strong><small>Calm · anteprima isolata</small></div></div></div>
+</aside>
+<header class="topbar"><div class="breadcrumbs"><button class="icon-button mobile-menu" data-action="mobile-nav" aria-label="Apri navigazione impostazioni"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><span>Impostazioni</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><span id="breadcrumb-current">Laboratorio modelli</span></div><div class="topbar-actions"><span class="prototype-tag">PROTOTIPO · 04</span><button class="icon-button" id="quick-theme" data-action="quick-theme" aria-label="Alterna tema chiaro e scuro" title="Cambia luce"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button><button class="button ghost" id="help-button" data-action="help">Guida al mockup</button></div></header>
+<main id="main" class="content"><div class="content-inner" id="main-content"></div><noscript>Per usare questo prototipo abilita JavaScript. Non sono richieste connessioni esterne.</noscript></main>
+<footer class="statusbar"><div class="statusbar-left"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/></svg><span>Nessuna chiamata reale · dati demo</span></div><label class="scenario-control" for="scenario-select"><span>Scenario</span><select id="scenario-select"><option value="ready">Configurato</option><option value="empty">Primo utilizzo</option><option value="offline">Rete assente</option><option value="error">Errore runtime</option><option value="denied">Accesso rifiutato</option></select></label></footer>
+</div>
+<dialog id="dialog" class="dialog" aria-labelledby="dialog-title"></dialog>
+<div id="toast" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
+<div id="catalog-live" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+<script>/* INLINE_APP */</script>
+</body></html>

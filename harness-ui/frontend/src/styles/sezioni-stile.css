@@ -1,0 +1,314 @@
+/*
+ * SEZIONI «MEMORIA», «COSTI», «STRUMENTI» — lo stile del mockup, portato sul contenuto VERO.
+ *
+ * ⛔ PERCHÉ QUESTO FOGLIO ESISTE, E PERCHÉ NON CONTIENE UNA STRUTTURA.
+ * Nel mockup `TALOS-Calm-Lab-04.html` queste tre sezioni NON ESISTONO: delle sue 10 voci di
+ * barra laterale, 7 sono attenuate (`disabled`, `opacity .58`, nessuna rotta le mostra) e il
+ * mockup stesso scrive «Le voci attenuate sono fuori da questo primo lotto». Qui non c'è quindi
+ * nessun disegno da copiare: c'è uno STILE da portare su ciò che il prodotto HA GIÀ. Non si
+ * inventa una struttura che il mockup non ha, non si copiano i suoi dati dimostrativi, non si
+ * aggiungono elementi che il prodotto non sa alimentare: si applicano le sue MISURE agli
+ * elementi veri, e ogni misura è stata letta dal suo DOM vivo il 18/09/2026 (viewport 1440×900,
+ * schermata «Aspetto e movimento», l'unica abilitata dove vivono `.settings-section`,
+ * `.setting-row`, `.section-heading`, `.text-caption`, `.badge`).
+ *
+ * ⛔ LE MISURE SONO DEL MOCKUP, I COLORI SONO DEL SISTEMA DI DESIGN.
+ * Ogni colore qui dentro passa da un token `--talos-…` e nessuno è scritto a mano: è la sola
+ * ragione per cui questa lane non si rompe in uno dei due temi, e per cui `forced-colors`
+ * continua a funzionare come già fa per il resto della app (il blocco `forced-colors` di
+ * `tokens.css` rimappa i token, non le regole). Un colore fisso qui sarebbe invisibile in uno
+ * dei due temi — e i due temi si guardano SEMPRE tutti e due (regola owner 11/09).
+ *
+ * ⛔ IL FOGLIO NON TOCCA ID, CLASSI O ROTTE. Non rinomina niente, non sostituisce niente:
+ * aggiunge solo regole con specificità più alta, tutte rinchiuse dentro
+ * `#schermoImpostazioni[data-settings-ui="v3"]` e dentro il pannello di competenza. Le classi
+ * che il resto del prodotto cerca per nome (`#contestoRipartizione`, `#contestoEtichetta`,
+ * `#contestoVoci`, `#costiRiepilogo`, `#costiPerGiorno`, `#costiPerModello`, `#fonte-chiave`,
+ * `#fonte-indirizzo`, `#fonte-query`, `data-search-*`, `data-settings-reuse`) restano tutte
+ * intatte: la spec `tests/browser/sezioni-stile.spec.mjs` confronta l'elenco degli id prima e
+ * dopo, ed è identico.
+ *
+ * ⛔ L'ORDINE CONTA, e non è un dettaglio. Questo foglio va importato in `main.css` IN CODA:
+ * con esbuild un `@import` relativo viene incollato sul posto, nell'ordine in cui è scritto
+ * (esbuild CHANGELOG «CSS import ordering», letto l'11/09/2026), ed è quell'ordine a decidere
+ * chi vince fra regole di pari specificità. Le regole qui dentro sono già più specifiche delle
+ * omonime di `index.css` e di `design-system/settings.css`, ma l'ordine resta la seconda rete.
+ * ⛔ Nessun `!important`: quando serve vincere, si vince per specificità.
+ *
+ * ⭐ RICERCA — fonte e data, per ogni decisione che il mockup NON poteva dettare:
+ *  · Allineamento delle cifre: **Adobe Spectrum — Table, Usage guidelines**
+ *    (https://spectrum.adobe.com/page/table/#Usage-guidelines): «numerical data should generally
+ *    be right-aligned for the ease of scanning and comparing», «Column headers follow the
+ *    alignment of the data», «When users need to compare numerical values, use tabular
+ *    (monospaced) and lining (not old style) numbers». Lettura del 18/09/2026.
+ *  · Stessa regola, fonte istituzionale: **NHS England — Data viz community of practice,
+ *    «Table design»** (https://nhsengland.github.io/data-viz-community-of-practice/dashboard_design/tables/):
+ *    «Right align column headings and numbers in data tables (the exception being the first
+ *    column category title which is left aligned)». Lettura del 18/09/2026.
+ *    ⇒ Per questo il primo th resta a sinistra e le quattro colonne di numeri — e le loro
+ *      intestazioni — vanno a destra. È l'unico punto in cui mi allontano dal mockup, che mette
+ *      `text-align:left` su TUTTA la tabella: la sua è una tabella di CONFRONTO fra testi, la
+ *      nostra è una tabella di NUMERI, e la ricerca dice che in quel caso l'allineamento cambia.
+ *  · Contrasto del testo: **W3C — Technique G18** (https://w3c.github.io/wcag/techniques/general/G18)
+ *    e **WCAG 2.1 SC 1.4.3**: 4.5:1 per il testo normale, 3:1 solo per il testo grande (≥24px,
+ *    oppure ≥18,5px in grassetto). Le intestazioni di colonna a 12px sono testo normale ⇒ 4.5:1.
+ *    Lettura del 18/09/2026.
+ *  · Pastiglie di stato: **WCAG 2.1 SC 1.4.1 (Uso del colore)** — lo stato non si comunica col
+ *    solo colore, e **SC 1.4.11** — 3:1 per i componenti non testuali. Le nostre pastiglie
+ *    portano SEMPRE la parola («3 giri fermati senza token»), e il bordo che il sistema di
+ *    design già disegna resta: è quello che tiene la pastiglia distinguibile dal fondo.
+ *    Lettura del 18/09/2026.
+ *
+ * ⭐ LE MISURE DEL MOCKUP — lette dal suo DOM vivo il 18/09/2026, 1440×900:
+ *   `.section-heading`            display:flex · gap:10px · margin:0 0 8px
+ *   `.section-heading h2`         18px · 600 · 27px · letter-spacing −0,45px
+ *   `.section-heading .text-caption`  11px · 400 · 16,5px · letter-spacing 0,77px (maiuscolo nel
+ *                                 contenuto, NON con `text-transform`: misurato `none`)
+ *   `.setting-row`                display:flex · align-items:center · justify-content:space-between
+ *                                 gap:24px · padding:21px 0 · border-top:1px solid var(--line)
+ *   `.setting-copy label`         14px · 550 · 21px
+ *   `.setting-copy p`             12px · 400 · 20,4px · margin-top:6px · colore tenue
+ *   `.badge`                      inline-flex · align-items:center · gap:5px · padding:4px 7px
+ *                                 border-radius:5px · 11px · 500 · line-height 1,4 → 23px di alto
+ *   `.comparison-table`           100% · border-collapse:collapse · font-size:12px
+ *   `.comparison-table th, td`    padding:14px 9px · border-bottom:1px solid var(--line)
+ *                                 text-align:left · vertical-align:top
+ *   `.comparison-table th`        font-weight:500 · colore tenue
+ *   `.provider-facts > div`       display:flex · justify-content:space-between · gap:10px
+ *                                 border-bottom:1px solid var(--line-soft) · padding:12px 0
+ *   `.settings-layout`            display:grid · gap:36px   ← il ritmo FRA i blocchi
+ *   `.theme-launcher`             padding:23px · border-radius:14px · border:1px solid var(--line)
+ *   `.settings-section`           padding:2px 0 0 · NIENTE sfondo · NIENTE bordo · raggio 0
+ *
+ * ⛔ MISURATO E NON APPLICATO, perché non esiste la cosa a cui applicarlo (lo dico invece di
+ *    inventarla): `padding:20px 24px` NON ESISTE nel mockup — `indexOf('20px 24px')` sul sorgente
+ *    intero dà −1, e il suo raggio di 14px appartiene a `.theme-launcher`, che ha `padding:23px`
+ *    uniforme. La card `20px 24px / 14px` che vediamo oggi nelle Impostazioni viene da
+ *    `design-system/settings.css`, non dal mockup. Quel foglio non è mio e non lo tocco: resta
+ *    com'è, e la differenza è dichiarata qui e nel resoconto.
+ *    Idem `min-height:111px` di `.setting-row`: è l'altezza di una riga del mockup con dentro un
+ *    controllo alto, non un'altezza da imporre a righe di testo.
+ */
+
+/* ------------------------------------------------------------------------------------------
+ * A. UNA SEZIONE NON È UNA CARD DENTRO UNA CARD.
+ *
+ * Il mockup ha UN solo livello di card (`.theme-launcher`); le sue `.settings-section` sono
+ * piatte: `padding:2px 0 0`, nessuno sfondo, nessun bordo, raggio 0.
+ * Qui invece `#contestoVoci` porta la classe `talos-settings__section` DENTRO una sezione che è
+ * già una card, e `design-system/settings.css` dà a quella classe `padding:20px 24px` + bordo +
+ * raggio: misurato il 18/09/2026 sulla app viva, `#contestoVoci` è 792px dentro una card di 842px,
+ * con la sua cornice e il suo fondo identici a quelli del contenitore — la classica scatola nella
+ * scatola. Non si tocca una classe (il resto del prodotto la cerca per nome): si annulla la
+ * decorazione, con la specificità.
+ * Stessa forma nella sezione Strumenti: il blocco del modulo di ricerca che `fonte-ricerca.js`
+ * costruisce (`[data-search-details]`) è una `talos-settings__section` dentro la card della
+ * sezione, e diventa piatto come il contenuto di sezione del mockup.
+ * ⛔ `[data-search-result]` NON si appiattisce: quello non è il contenuto della sezione, è un
+ *    pannello di risultato che deve staccarsi (e il mockup un livello di card ce l'ha). Scelta
+ *    dichiarata, non dimenticanza.
+ * ------------------------------------------------------------------------------------------ */
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-memoria #contestoVoci.talos-settings__section,
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-tools .talos-settings__section[data-search-details] {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+/* ------------------------------------------------------------------------------------------
+ * B. LA RIGA — le misure di `.setting-row`.
+ *
+ * `#contestoVoci` è la ripartizione del contesto: una riga per voce, col nome a sinistra e il
+ * valore a destra. È esattamente la forma di `.setting-row` del mockup (`.setting-copy` a
+ * sinistra, `.setting-control` a destra), quindi si porta la sua misura intera:
+ * `display:flex · align-items:center · justify-content:space-between · gap:24px · padding:21px 0
+ * · border-top:1px solid var(--line)`, con l'etichetta a `14px · 550` (`.setting-copy label`).
+ *
+ * ⛔ `border-top:0` SULLA PRIMA RIGA È VOLUTO, e non è una mia aggiunta: è la regola che il
+ *    prodotto ha già in `index.css:1954` (`.talos-contesto-voce:first-child`) e che la mia
+ *    `border-top` batterebbe per specificità in silenzio. La riscrivo qui apposta, identica,
+ *    perché resti una scelta e non un effetto collaterale.
+ * ------------------------------------------------------------------------------------------ */
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-memoria .talos-contesto-voce {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 21px 0;
+  border-top: 1px solid var(--talos-border);
+}
+/* ⛔ identica a `index.css:1954`: la prima riga non porta il filetto. Riscritta per vincere la
+   mia stessa regola qui sopra, non per cambiarla. */
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-memoria .talos-contesto-voce:first-child {
+  border-top: 0;
+}
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-memoria .talos-contesto-voce__k {
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 21px;
+}
+/*
+ * Il valore — «4.312 token · 14%» — è il lato del CONTROLLO, e nel mockup il lato del controllo
+ * non è mai tenue: `.provider-facts` mette il nome in `dt` tenue e il valore in `dd` normale
+ * (`text-align:right`), e `.setting-copy` tiene tenue la DESCRIZIONE, non il valore. Oggi qui il
+ * valore è tenue e il nome no: si riporta il verso del mockup, col token del testo.
+ * `tabular-nums` c'era già: le cifre non devono ballare da una riga all'altra (Adobe Spectrum,
+ * 18/09/2026, «use tabular (monospaced) numbers»).
+ */
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-memoria .talos-contesto-voce__v {
+  color: var(--talos-text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------------------------------
+ * C. LE PASTIGLIE DEL RIEPILOGO — le misure di `.badge`.
+ *
+ * Il mockup: `padding:4px 7px · border-radius:5px · 11px · 500 · line-height:1.4 · white-space:
+ * nowrap` (misurato 23px di alto a 1440). Il prodotto oggi ha una pillola `border-radius:999px`
+ * con `padding:0 8px`. Si porta la geometria del mockup; il BORDO del sistema di design resta,
+ * perché è quello che tiene la pastiglia staccata dal fondo (WCAG 2.1 SC 1.4.11, 3:1 per i
+ * componenti non testuali) e perché togliere un colore non è una misura.
+ * `min-height:23px` invece di `height:23px`: se una pastiglia va a capo, col `height` fisso il
+ * testo esce dal fondo.
+ * ------------------------------------------------------------------------------------------ */
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-costi #costiRiepilogo .talos-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  min-height: 23px;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------------------------------
+ * D. LE DUE TABELLE — le misure di `.comparison-table`.
+ *
+ * `#costiPerGiorno` e `#costiPerModello` sono le uniche tabelle del prodotto che nascano da uno
+ * dei tre componenti di questa lane, e il mockup ha UNA sola tabella (nel suo modale di
+ * confronto): `padding:14px 9px · border-bottom:1px solid var(--line) · vertical-align:top ·
+ * font-size:12px`, intestazione `font-weight:500` in tenue e NON maiuscola (`text-transform`
+ * assente), e nessuno sfondo sull'intestazione.
+ *
+ * ⛔ LA DIVERGENZA DICHIARATA, UNA SOLA: l'allineamento. Il mockup mette `text-align:left` su
+ * tutta la sua tabella — ma la sua confronta TESTI, la nostra conta NUMERI, e le due fonti
+ * citate in testa (Adobe Spectrum, NHS England, lette il 18/09/2026) dicono entrambe di
+ * allineare le cifre a destra INSIEME alla loro intestazione, lasciando a sinistra la prima
+ * colonna, che è quella che nomina la riga. Quindi: prima colonna a sinistra, quattro colonne
+ * numeriche a destra — dati e intestazioni.
+ *
+ * ⛔ `text-transform:none` SULL'INTESTAZIONE È UN CAMBIO VISIBILE, e va detto: oggi le
+ *    intestazioni sono `11px` MAIUSCOLE con `letter-spacing:1.32px`; nel mockup sono `12px`,
+ *    normali, solo in tenue e a peso 500. Il verso dell'intestazione non è decorazione: la
+ *    maiuscola spaziata è la forma del prodotto per le etichette di colonna, e il mockup per
+ *    quelle ha la sua. Si applica il mockup, ed è la seconda e ultima divergenza visibile.
+ *    Il contrasto resta dentro il minimo: `--talos-muted` su `--talos-panel` misura 5,39:1 nel
+ *    tema chiaro e 6,67:1 nello scuro (calcolato il 18/09/2026 con la formula di Technique G18),
+ *    sopra il 4,5:1 che SC 1.4.3 chiede a un testo di 12px. La spec lo rimisura a ogni giro nei
+ *    due temi, così non può scivolare in silenzio.
+ * ------------------------------------------------------------------------------------------ */
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-costi .talos-table {
+  font-size: 12px;
+}
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-costi .talos-table th,
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-costi .talos-table td {
+  padding: 14px 9px;
+  border-bottom: 1px solid var(--talos-border);
+  text-align: left;
+  vertical-align: top;
+}
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-costi .talos-table thead th {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--talos-muted);
+  text-transform: none;
+  letter-spacing: normal;
+  background: none;
+}
+/*
+ * La cella che nomina la riga (`<th scope="row">`: «oggi», «14 set», il nome del modello) NON è
+ * un'intestazione di colonna, è il dato più importante della riga. Con la regola di sopra
+ * erediterebbe `11px` maiuscolo in tenue — cioè oggi, misurato il 18/09/2026, «14 set» si legge
+ * MAIUSCOLO e piccolo, al posto di un nome. Le si dà la misura che il mockup usa per l'etichetta
+ * di riga (`.setting-copy label`: 14px · 550), col colore del testo.
+ */
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-costi .talos-table tbody th {
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 21px;
+  color: var(--talos-text);
+  text-transform: none;
+  letter-spacing: normal;
+}
+/* Le cifre a destra, con le loro intestazioni: prima colonna esclusa in entrambe le righe. */
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-costi .talos-table tbody td,
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-costi .talos-table thead th:not(:first-child) {
+  text-align: right;
+}
+
+/* ------------------------------------------------------------------------------------------
+ * E. L'INTESTAZIONE DI GRUPPO — le misure di `.section-heading`.
+ *
+ * «Per giorno» e «Per modello» sono le intestazioni che aprono i due blocchi, ed è la stessa
+ * forma dell'`.section-heading` del mockup: `display:flex · gap:10px · margin:0 0 8px`, con il
+ * titolo a `18px · 600 · 27px · letter-spacing −0,45px`.
+ * Il mockup non ha bisogno di un margine sopra l'intestazione perché la distanza fra un blocco e
+ * il successivo la dà `.settings-layout{gap:36px}` — il suo ritmo FRA i blocchi è 36px. Qui non
+ * c'è una griglia da usare, quindi lo stesso 36 si applica dove serve davvero: fra una tabella
+ * finita e l'intestazione che apre il blocco dopo. La prima intestazione non lo prende: `margin:0`
+ * come nel mockup, e sopra di lei c'è già il margine del riepilogo.
+ * ------------------------------------------------------------------------------------------ */
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-costi .talos-lab__heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 27px;
+  letter-spacing: -0.45px;
+}
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-costi .talos-table-wrap + .talos-lab__heading {
+  margin-block-start: 36px;
+}
+
+/* ------------------------------------------------------------------------------------------
+ * F. IL MODULO DELLA RICERCA — la riga, ancora `.setting-row`.
+ *
+ * In Strumenti, `fonte-ricerca.js` costruisce un `.talos-field` per ogni parametro (chiave,
+ * indirizzo, testo della prova) e una `.talos-settings__actions` per i suoi pulsanti. È la stessa
+ * sequenza del mockup — etichetta, controllo, pulsanti — quindi si porta la stessa misura di
+ * riga: `padding:21px 0` e `border-top:1px solid var(--line)`, con l'etichetta a `14px · 550`.
+ *
+ * ⛔ L'ASSE NON SI CAMBIA, e va detto: nel mockup `.setting-row` è una riga ORIZZONTALE (copia a
+ *    sinistra, controllo a destra, `gap:24px`, col controllo che non supera il 48% — misurato
+ *    `.setting-control{flex:0 0 auto; max-width:48%}`). Qui il campo resta IMPILATO
+ *    (etichetta sopra, campo sotto), che è la lingua dei moduli di questo prodotto in tutte le
+ *    sue schermate. Cambiare l'asse in una sezione sola non sarebbe «portare lo stile del
+ *    mockup»: sarebbe rompere il modulo in un punto e lasciarlo diverso dagli altri. Quindi
+ *    prendo dalla riga la SPAZIATURA e la TIPOGRAFIA DELL'ETICHETTA, non la direzione — ed è la
+ *    terza e ultima divergenza dichiarata.
+ * La `.talos-settings__actions` che segue un campo riceve la metà bassa dello stesso ritmo, così
+ * fra i pulsanti e il campo successivo c'è la stessa aria che il mockup mette fra due righe
+ * (21px sopra il filetto + 21px sotto).
+ * ------------------------------------------------------------------------------------------ */
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-tools .talos-settings__section[data-search-details] > .talos-field {
+  margin: 0;
+  padding: 21px 0;
+  border-top: 1px solid var(--talos-border);
+}
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-tools .talos-settings__section[data-search-details] .talos-setting__label {
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 21px;
+}
+#schermoImpostazioni[data-settings-ui="v3"] #setting-panel-tools .talos-settings__section[data-search-details] > .talos-settings__actions {
+  padding: 0 0 21px;
+}

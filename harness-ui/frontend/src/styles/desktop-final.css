@@ -1,0 +1,287 @@
+/*
+ * TALOS Desktop — rifinitura finale approvata.
+ *
+ * Regole: i token e il theme engine esistenti restano la fonte di verità;
+ * nessuna geometria della Chat viene ridefinita. Le sezioni non-chat possono
+ * assumere una propria grammatica visiva. Il Canvas motion è decorativo e non
+ * partecipa al layout.
+ */
+
+/* ---------------------- Canvas mobile portato sul desktop ----------------- */
+#schermoChat[data-talos-canvas-motion] {
+  isolation: isolate;
+  background: var(--talos-background);
+}
+#schermoChat[data-talos-canvas-motion]::before,
+#schermoChat[data-talos-canvas-motion]::after {
+  display: none !important; /* disattiva soltanto il vecchio surrogato CSS */
+}
+#schermoChat > .talos-motion-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  contain: strict;
+}
+/*
+ * ⛔⛔⛔ 11/09/2026, sera — LA BARRA DI NAVIGAZIONE VA ESCLUSA DA QUESTA REGOLA, e la prova è una chat
+ *   vuota. Questa regola mette `position: relative` su OGNI figlio di `#schermoChat` per tenerlo
+ *   sopra il canvas — compresa `nav.talos-cronologia`, che nel foglio base è `position: absolute`
+ *   (`index.css:548`, sovrapposta a sinistra, larga 36 px). Con la specificità di id + attributo +
+ *   `:not()` vince lei: la barra ENTRA NEL FLUSSO della colonna flex, e con una sessione lunga
+ *   (170 giri = 170 voci) si prende **630 px** dei 900: allo scroller della conversazione restano
+ *   **70 px**, con dentro una colonna da 9.201. La chat sembra vuota. Misurato sul 4174: sessione
+ *   corta 650 px, sessione lunga 70 px, stesso CSS, stesso canvas. Trovato dall'agente della
+ *   sessione lenta nelle sue foto («colonna alta 42 px»), verificato qui.
+ * ⇒ La barra resta `absolute` come nel foglio base; il suo `z-index: 20` è già sopra il canvas (0).
+ */
+#schermoChat[data-talos-canvas-motion] > :not(.talos-motion-canvas):not(.talos-cronologia) {
+  position: relative;
+  z-index: 1;
+}
+/* 12/09 — owner: «la sezione della chat deve essere trasparente». Il fondo pieno della colonna
+   (che qui sopra si voleva «in più» del mobile) è abolito: la scena si vede dietro i messaggi. */
+#schermoChat[data-talos-canvas-motion] .talos-conversation__column {
+  background: transparent;
+}
+#schermoChat[data-talos-canvas-motion] .talos-conversation--empty .talos-conversation__column,
+#schermoChat[data-talos-canvas-motion] .talos-empty.talos-conversation__column {
+  background: radial-gradient(ellipse at center,
+    color-mix(in srgb, var(--talos-background) 94%, transparent) 35%,
+    color-mix(in srgb, var(--talos-background) 62%, transparent) 78%,
+    transparent 100%);
+}
+
+/* La richiesta attuale riattiva il controllo che il ramo 11/09 aveva nascosto
+   temporaneamente. La logica rimane quella esistente; qui si ripristina solo
+   la superficie di controllo. */
+#schermoImpostazioni [data-settings-group="sfondo"] {
+  display: block !important;
+}
+
+.talos-motion-preview {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(180px, .82fr) minmax(280px, 1.5fr) auto;
+  gap: var(--talos-space-lg, 18px);
+  align-items: center;
+  min-height: 132px;
+  margin: 14px 0 8px;
+  padding: 14px;
+  overflow: hidden;
+  border: 1px solid var(--talos-border);
+  border-radius: var(--talos-radius-card);
+  background: var(--talos-panel-soft, var(--talos-panel));
+}
+.talos-motion-preview__copy { position: relative; z-index: 2; min-width: 0; }
+.talos-motion-preview__copy strong { display:block; margin-top:6px; font-size:15px; font-weight:600; color:var(--talos-text); }
+.talos-motion-preview__copy small { display:block; margin-top:7px; max-width:34ch; color:var(--talos-muted); font-size:10px; line-height:1.55; }
+.talos-motion-preview__stage {
+  position: relative;
+  height: 102px;
+  overflow: hidden;
+  border: 1px solid var(--talos-border);
+  border-radius: calc(var(--talos-radius-card) * .82);
+  background: var(--talos-background);
+  isolation: isolate;
+}
+.talos-motion-preview__stage > .talos-motion-canvas { position:absolute; inset:0; width:100%; height:100%; }
+.talos-motion-preview__status { align-self:start; justify-self:end; color:var(--talos-muted); font:10px/1.4 var(--talos-font-mono); }
+
+/* -------------------------- Identità delle sezioni ------------------------ */
+:root.talos-final-ui {
+  --talos-detail-shadow: 0 10px 30px color-mix(in srgb, var(--talos-background) 82%, transparent);
+  --talos-detail-edge: var(--talos-border);
+  --talos-detail-ink: var(--talos-accent);
+}
+
+/* Intestazioni: meno scatole, più ritmo editoriale. */
+:root.talos-final-ui :is(#schermoNote,#schermoMemoria,#schermoAttivita,#schermoRicerca,#schermoLibreria,#schermoImpostazioni) .talos-page__head {
+  max-width: 72ch;
+  margin-bottom: 22px;
+}
+:root.talos-final-ui :is(#schermoNote,#schermoMemoria,#schermoAttivita,#schermoRicerca,#schermoLibreria) .talos-page__head h2 {
+  letter-spacing: -.025em;
+  text-wrap: balance;
+}
+:root.talos-final-ui :is(#schermoNote,#schermoMemoria,#schermoAttivita,#schermoRicerca,#schermoLibreria) .talos-toolbar {
+  border-bottom: 1px solid var(--talos-border-subtle, var(--talos-border));
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+}
+
+/* Note — foglietti sobri, altezza guidata dal contenuto. */
+:root.talos-final-ui #schermoNote .talos-page > .talos-card { background:transparent; border:0; box-shadow:none; }
+:root.talos-final-ui #schermoNote .talos-note-lista { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px; align-items:start; }
+:root.talos-final-ui #schermoNote .talos-note {
+  position:relative;
+  min-height:182px;
+  padding:18px 19px 17px;
+  border:1px solid var(--talos-border);
+  border-radius:var(--talos-radius-card);
+  background:var(--talos-panel);
+  box-shadow:0 1px 0 color-mix(in srgb,var(--talos-text) 3%,transparent);
+  transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease), border-color var(--talos-motion-duration-control) var(--talos-motion-ease), background-color var(--talos-motion-duration-theme-transition) var(--talos-motion-ease);
+}
+:root.talos-final-ui #schermoNote .talos-note + .talos-note { border-top-color:var(--talos-border); }
+:root.talos-final-ui #schermoNote .talos-note::after { content:""; position:absolute; right:0; bottom:0; width:16px; height:16px; clip-path:polygon(100% 0,0 100%,100% 100%); background:var(--talos-border); }
+:root.talos-final-ui #schermoNote .talos-note:hover { transform:translateY(-1px); border-color:var(--talos-border-strong); background:var(--talos-panel); }
+:root.talos-final-ui #schermoNote .talos-note__testa { align-items:flex-start; }
+:root.talos-final-ui #schermoNote .talos-note__titolo { font-size:15px; line-height:1.45; letter-spacing:-.015em; }
+:root.talos-final-ui #schermoNote .talos-note__corpo { margin-top:11px; display:-webkit-box; -webkit-line-clamp:7; -webkit-box-orient:vertical; overflow:hidden; font-size:13px; line-height:1.7; }
+:root.talos-final-ui #schermoNote .talos-note__quando { font-size:10px; }
+
+/* Memoria — capsule semantiche: tipo, fatto, provenienza. */
+:root.talos-final-ui #schermoMemoria #memoriaRisultati { border:0; background:transparent; box-shadow:none; overflow:visible; }
+:root.talos-final-ui #schermoMemoria [data-memory-list] { display:grid; grid-template-columns:repeat(auto-fill,minmax(285px,1fr)); gap:14px; }
+:root.talos-final-ui #schermoMemoria [data-c="MemoryRow"] {
+  min-height:190px;
+  grid-template-columns:38px minmax(0,1fr);
+  grid-template-rows:auto 1fr auto;
+  align-content:start;
+  gap:10px 12px;
+  padding:18px;
+  border:1px solid var(--talos-border);
+  border-radius:var(--talos-radius-card);
+  background:var(--talos-panel);
+}
+:root.talos-final-ui #schermoMemoria [data-c="MemoryRow"] + [data-c="MemoryRow"] { border-top:1px solid var(--talos-border); }
+:root.talos-final-ui #schermoMemoria [data-c="MemoryRow"] .talos-list-row__icon { align-self:start; width:34px; height:34px; border-radius:var(--talos-radius-control); background:var(--talos-accent-soft); color:var(--talos-detail-ink); }
+:root.talos-final-ui #schermoMemoria [data-c="MemoryRow"] .talos-list-row__text { grid-column:2; min-width:0; }
+:root.talos-final-ui #schermoMemoria [data-c="MemoryRow"] .talos-list-row__title { font-size:15px; line-height:1.45; white-space:normal; }
+:root.talos-final-ui #schermoMemoria [data-c="MemoryRow"] .talos-list-row__sub { margin-top:10px; line-height:1.72; white-space:pre-wrap; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; }
+:root.talos-final-ui #schermoMemoria [data-c="MemoryRow"] .talos-list-row__aside { grid-column:1/-1; justify-content:space-between; border-top:1px solid var(--talos-border-subtle,var(--talos-border)); padding-top:12px; }
+:root.talos-final-ui #schermoMemoria [data-c="MemoryRow"][data-aperta="true"] { grid-column:span 2; }
+
+/* Attività — blocchi operativi, stato e prossimo passo ben separati. */
+:root.talos-final-ui #schermoAttivita #attivitaRisultati { border:0; background:transparent; box-shadow:none; overflow:visible; }
+:root.talos-final-ui #schermoAttivita [data-task-list] { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
+:root.talos-final-ui #schermoAttivita [data-c="TaskRow"] {
+  position:relative;
+  min-height:174px;
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr);
+  grid-template-rows:auto 1fr auto;
+  gap:9px 12px;
+  padding:18px;
+  border:1px solid var(--talos-border);
+  border-radius:var(--talos-radius-card);
+  background:var(--talos-panel);
+}
+:root.talos-final-ui #schermoAttivita [data-c="TaskRow"] + [data-c="TaskRow"] { border-top:1px solid var(--talos-border); }
+:root.talos-final-ui #schermoAttivita [data-c="TaskRow"] .talos-list-row__icon { align-self:start; width:32px; height:32px; border-radius:50%; border:1px solid var(--talos-border); background:transparent; }
+:root.talos-final-ui #schermoAttivita [data-c="TaskRow"] .talos-list-row__text { grid-column:2; }
+:root.talos-final-ui #schermoAttivita [data-c="TaskRow"] .talos-list-row__title { white-space:normal; font-size:15px; line-height:1.45; }
+:root.talos-final-ui #schermoAttivita [data-c="TaskRow"] .talos-list-row__sub { margin-top:9px; white-space:pre-wrap; line-height:1.65; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+:root.talos-final-ui #schermoAttivita [data-c="TaskRow"] .talos-list-row__aside { grid-column:1/-1; border-top:1px solid var(--talos-border-subtle,var(--talos-border)); padding-top:11px; justify-content:space-between; }
+:root.talos-final-ui #schermoAttivita .talos-list-row--done { opacity:.66; }
+:root.talos-final-ui #schermoAttivita .talos-list-row--done .talos-list-row__title { text-decoration:line-through; text-decoration-thickness:1px; }
+
+/* Ricerca — dossier: linguetta, fonti/stato e contenuto separati. */
+:root.talos-final-ui #schermoRicerca #ricercaRisultati { border:0; background:transparent; box-shadow:none; overflow:visible; }
+:root.talos-final-ui #schermoRicerca [data-research-list] { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; }
+:root.talos-final-ui #schermoRicerca [data-c="ReportRow"] {
+  position:relative;
+  min-height:190px;
+  display:grid;
+  grid-template-columns:36px minmax(0,1fr);
+  grid-template-rows:auto 1fr auto;
+  gap:10px 12px;
+  padding:20px 18px 17px;
+  border:1px solid var(--talos-border);
+  border-radius:var(--talos-radius-card);
+  background:var(--talos-panel);
+}
+:root.talos-final-ui #schermoRicerca [data-c="ReportRow"]::before { content:""; position:absolute; top:-5px; left:18px; width:52px; height:5px; border:1px solid var(--talos-border-strong); border-bottom:0; border-radius:4px 4px 0 0; background:var(--talos-panel); }
+:root.talos-final-ui #schermoRicerca [data-c="ReportRow"] + [data-c="ReportRow"] { border-top:1px solid var(--talos-border); }
+:root.talos-final-ui #schermoRicerca [data-c="ReportRow"] .talos-list-row__icon { align-self:start; color:var(--talos-detail-ink); }
+:root.talos-final-ui #schermoRicerca [data-c="ReportRow"] .talos-list-row__text { grid-column:2; }
+:root.talos-final-ui #schermoRicerca [data-c="ReportRow"] .talos-list-row__title { white-space:normal; font-size:15px; line-height:1.5; }
+:root.talos-final-ui #schermoRicerca [data-c="ReportRow"] .talos-list-row__sub { margin-top:11px; line-height:1.65; }
+:root.talos-final-ui #schermoRicerca [data-c="ReportRow"] .talos-list-row__aside { grid-column:1/-1; border-top:1px solid var(--talos-border-subtle,var(--talos-border)); padding-top:11px; justify-content:space-between; }
+
+/* Libreria — archivio: card con anteprima generata dai metadati disponibili. */
+:root.talos-final-ui #schermoLibreria #libreriaRisultati { border:0; background:transparent; box-shadow:none; overflow:visible; }
+:root.talos-final-ui #schermoLibreria [data-library-list] { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
+:root.talos-final-ui #schermoLibreria [data-c="LibraryRow"] {
+  min-height:154px;
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr);
+  grid-template-rows:1fr auto;
+  gap:12px;
+  padding:18px;
+  border:1px solid var(--talos-border);
+  border-radius:var(--talos-radius-card);
+  background:var(--talos-panel);
+}
+:root.talos-final-ui #schermoLibreria [data-c="LibraryRow"] + [data-c="LibraryRow"] { border-top:1px solid var(--talos-border); }
+:root.talos-final-ui #schermoLibreria [data-c="LibraryRow"] .talos-list-row__icon { align-self:start; width:38px; height:48px; border:1px solid var(--talos-border); border-radius:5px; background:var(--talos-window-bg); color:var(--talos-detail-ink); }
+:root.talos-final-ui #schermoLibreria [data-c="LibraryRow"] .talos-list-row__text { grid-column:2; min-width:0; }
+:root.talos-final-ui #schermoLibreria [data-c="LibraryRow"] .talos-list-row__title { white-space:normal; font-size:14px; line-height:1.5; }
+:root.talos-final-ui #schermoLibreria [data-c="LibraryRow"] .talos-list-row__sub { margin-top:10px; line-height:1.6; }
+:root.talos-final-ui #schermoLibreria [data-c="LibraryRow"] .talos-list-row__aside { grid-column:1/-1; border-top:1px solid var(--talos-border-subtle,var(--talos-border)); padding-top:11px; justify-content:space-between; }
+
+/* Impostazioni — navigazione chiara, sezioni meno annidate. */
+:root.talos-final-ui #schermoImpostazioni .talos-settings { gap:22px; }
+:root.talos-final-ui #schermoImpostazioni .talos-settings__nav { position:sticky; top:16px; align-self:start; box-shadow:none; }
+:root.talos-final-ui #schermoImpostazioni .talos-settings__section { box-shadow:none; }
+:root.talos-final-ui #schermoImpostazioni .talos-setting { min-height:54px; }
+:root.talos-final-ui #schermoImpostazioni .talos-setting + .talos-setting { border-top-color:var(--talos-border-subtle,var(--talos-border)); }
+
+/* ----------------------------- I 14 temi ----------------------------------
+   Il tema cambia il dettaglio, non il layout. Tutti i colori discendono dai
+   token semantici del tema in corso. */
+:root[data-talos-theme="forge"] { --talos-detail-edge:var(--talos-border-strong); --talos-detail-ink:var(--talos-warning); }
+:root[data-talos-theme="forge"].talos-final-ui :is(.talos-note,[data-c="TaskRow"],[data-c="MemoryRow"],[data-c="ReportRow"],[data-c="LibraryRow"]) { box-shadow:inset 2px 0 color-mix(in srgb,var(--talos-accent) 50%,transparent); }
+
+:root[data-talos-theme="paper"] { --talos-detail-ink:var(--talos-accent); }
+:root[data-talos-theme="paper"].talos-final-ui .talos-page__head h2 { font-family:var(--talos-font-display); }
+:root[data-talos-theme="paper"].talos-final-ui #schermoNote .talos-note { box-shadow:0 1px 0 var(--talos-border), 0 9px 22px color-mix(in srgb,var(--talos-background) 88%,transparent); }
+
+:root[data-talos-theme="terminal"].talos-final-ui :is(.talos-page__note,.talos-list-row__sub,.talos-note__quando,.talos-motion-preview__status) { font-family:var(--talos-font-mono); }
+:root[data-talos-theme="terminal"].talos-final-ui :is(.talos-note,[data-c="TaskRow"],[data-c="MemoryRow"],[data-c="ReportRow"],[data-c="LibraryRow"]) { border-style:solid; box-shadow:inset 0 1px color-mix(in srgb,var(--talos-accent) 16%,transparent); }
+
+:root[data-talos-theme="aurora"] { --talos-detail-ink:var(--talos-secondary); }
+:root[data-talos-theme="aurora"].talos-final-ui :is(.talos-note,[data-c="TaskRow"],[data-c="MemoryRow"],[data-c="ReportRow"],[data-c="LibraryRow"]) { box-shadow:0 10px 30px color-mix(in srgb,var(--talos-accent) 6%,transparent); }
+
+:root[data-talos-theme="glacier"].talos-final-ui :is(.talos-note,[data-c="TaskRow"],[data-c="MemoryRow"],[data-c="ReportRow"],[data-c="LibraryRow"]) { border-color:color-mix(in srgb,var(--talos-border-strong) 78%,transparent); box-shadow:inset 0 1px color-mix(in srgb,var(--talos-info) 11%,transparent); }
+
+:root[data-talos-theme="ember"] { --talos-detail-ink:var(--talos-warning); }
+:root[data-talos-theme="ember"].talos-final-ui :is(.talos-note,[data-c="TaskRow"],[data-c="MemoryRow"],[data-c="ReportRow"],[data-c="LibraryRow"]) { box-shadow:inset 0 2px color-mix(in srgb,var(--talos-warning) 22%,transparent); }
+
+:root[data-talos-theme="atlas"] { --talos-detail-ink:var(--talos-secondary); }
+:root[data-talos-theme="atlas"].talos-final-ui :is(.talos-page__head,.talos-motion-preview__copy) { background-image:linear-gradient(90deg,color-mix(in srgb,var(--talos-border) 45%,transparent) 1px,transparent 1px); background-size:38px 100%; }
+
+:root[data-talos-theme="noir"].talos-final-ui :is(.talos-note,[data-c="TaskRow"],[data-c="MemoryRow"],[data-c="ReportRow"],[data-c="LibraryRow"]) { box-shadow:6px 6px 0 color-mix(in srgb,var(--talos-border-strong) 34%,transparent); }
+
+:root[data-talos-theme="signal"].talos-final-ui :is(.talos-note,[data-c="TaskRow"],[data-c="MemoryRow"],[data-c="ReportRow"],[data-c="LibraryRow"]) { background-image:linear-gradient(90deg,transparent 0 84%,color-mix(in srgb,var(--talos-accent) 5%,transparent) 84% 85%,transparent 85%); }
+
+:root[data-talos-theme="violet"].talos-final-ui :is(.talos-note,[data-c="TaskRow"],[data-c="MemoryRow"],[data-c="ReportRow"],[data-c="LibraryRow"]) { box-shadow:0 8px 28px color-mix(in srgb,var(--talos-accent) 5%,transparent); }
+
+:root[data-talos-theme="claudius"].talos-final-ui :is(#schermoNote .talos-note__corpo,#schermoRicerca .talos-list-row__title) { line-height:1.8; }
+:root[data-talos-theme="claudius"].talos-final-ui .talos-page__head h2 { font-family:var(--talos-font-display); }
+
+:root[data-talos-theme="basicus"].talos-final-ui :is(.talos-note,[data-c="TaskRow"],[data-c="MemoryRow"],[data-c="ReportRow"],[data-c="LibraryRow"]) { box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--talos-border) 45%,transparent); }
+
+:root[data-talos-theme="telemetry"] { --talos-detail-ink:var(--talos-secondary); }
+:root[data-talos-theme="telemetry"].talos-final-ui :is(.talos-page__note,.talos-badge,.talos-motion-preview__status) { font-family:var(--talos-font-mono); font-variant-numeric:tabular-nums; }
+
+:root[data-talos-theme="calm"].talos-final-ui :is(.talos-note,[data-c="TaskRow"],[data-c="MemoryRow"],[data-c="ReportRow"],[data-c="LibraryRow"]) { box-shadow:none; }
+
+/* Finestre più strette: ritorno controllato alla lista, senza comprimere card
+   e controlli fino a renderli illeggibili. */
+@media (max-width: 1080px) {
+  :root.talos-final-ui :is(#schermoNote .talos-note-lista,#schermoMemoria [data-memory-list],#schermoAttivita [data-task-list],#schermoRicerca [data-research-list],#schermoLibreria [data-library-list]) { grid-template-columns:1fr; }
+  :root.talos-final-ui #schermoMemoria [data-c="MemoryRow"][data-aperta="true"] { grid-column:auto; }
+  .talos-motion-preview { grid-template-columns:1fr minmax(240px,1.2fr); }
+  .talos-motion-preview__status { display:none; }
+}
+@media (max-width: 760px) {
+  .talos-motion-preview { grid-template-columns:1fr; }
+  .talos-motion-preview__stage { height:88px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root.talos-final-ui #schermoNote .talos-note:hover { transform:none; }
+}

@@ -1,0 +1,341 @@
+/*
+ * LA COLONNA DELL'ANTEPRIMA VIVA — i vestiti della colonna destra di «Aspetto e movimento».
+ *
+ * Porta del mockup `TALOS-Calm-Lab-04.html` (md5 952fd467eff2cdd331f968c419fa1cc0). Le misure
+ * NON sono stimate: sono state lette dal vivo il 18/09/2026 con Playwright sulla pagina aperta
+ * (`file:///C:/Users/Antonino/Downloads/TALOS-Calm-Lab-04.html`, 1440x900, sezione «Aspetto e
+ * movimento»), `getBoundingClientRect` + `getComputedStyle`, e ogni riga qui sotto riporta il
+ * numero misurato. Dove il mockup dava `.4375rem` e poi lo correggeva, il valore scritto e' quello
+ * EFFETTIVO della catena a schermo, non quello del primo blocco.
+ *
+ * ⛔ I COLORI SONO DEL DESIGN SYSTEM, LE MISURE SONO DEL MOCKUP. La tavolozza del mockup
+ *   (`--line --soft --panel --muted --accent --on-accent --success`) e' la stessa del prodotto,
+ *   valore per valore in modo chiaro (`--line` #c8c3b9 = `--talos-border`; `--soft` #e8e4db =
+ *   `--talos-panel-soft`; `--panel` #f7f4ee = `--talos-panel`; `--muted` #63656b ≈ `--talos-muted`
+ *   #62646a; `--success` #31724d = `--talos-success`), quindi si usano i TOKEN: il tema scuro li
+ *   ridefinisce da solo e questa colonna lo segue senza una riga in piu'.
+ * ⛔ UNA SOLA ECCEZIONE DICHIARATA, l'ombra del riquadro: il mockup misura
+ *   `0 14px 36px rgb(0 0 0 / 9%)`, il prodotto ha `--talos-shadow-card: 0 8px 24px …` — geometria
+ *   diversa. «Identico al mockup» vince sulla somiglianza, quindi la ombra si scrive com'e'; il
+ *   colore del tema non si perde, perche' il riquadro ha comunque bordo `--talos-border` e fondo
+ *   `--talos-panel`, che in scuro cambiano da soli. Segnalato nel referto.
+ *
+ * ⛔ RICERCA (fatta il 18/09/2026, prima di scrivere, su QUESTA implementazione):
+ *  · Lo scorrimento: il mockup NON e' sticky. Misurato (`getComputedStyle` sull'aside): `position:
+ *    static`, altezza **2060 px** = l'altezza della riga della griglia — la colonna accompagna il
+ *    contenuto, non lo inseguono. La ricerca su `position:sticky` in una colonna di griglia
+ *    (LogRocket/DEV «Getting sticky with it — Troubleshooting CSS sticky positioning» e Stack
+ *    Overflow 66416972/50794795, letti il 18/09/2026: serve un offset non `auto`, `align-self:start`
+ *    perche' la cella stirata non ha spazio per viaggiare, e nessun antenato con `overflow`
+ *    diverso da `visible`) e' stata fatta comunque — e **non si applica**: si sarebbe aggiunta una
+ *    posizione che il mockup non ha, e nel prodotto lo scorrimento sta su un antenato
+ *    (`main.content`, `overflow:auto` misurato), che l'avrebbe anche rotta in silenzio.
+ *  · Movimento: `@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;
+ *    transition:none!important}}` esiste NEL MOCKUP (misurato: 4 occorrenze di
+ *    `prefers-reduced-motion` nelle sue pagine) e **NON nel prodotto** — nel bundle servito dal
+ *    4174 non c'e' nessuna regola `*` sotto `reduce-motion` (verificato il 18/09/2026 sul CSSOM
+ *    vivo), vive solo in `mockup-originale/styles.css:531-535`, che non e' importato. ⛔ Quel
+ *    blocco NON si porta qui: e' una regola di PAGINA, e da un foglio di componente spegnerebbe le
+ *    animazioni di tutta la app — un effetto collaterale che nessuno ha chiesto. La colonna, dal
+ *    canto suo, non dichiara NESSUNA transizione e NESSUNA animazione (verificato riga per riga sul
+ *    mockup): l'unico movimento della colonna e' il canvas, e quello si ferma in JavaScript
+ *    (`anteprima-tema.js`, con `matchMedia('(prefers-reduced-motion: reduce)')` — la media query
+ *    agisce sul CSS, non su un ciclo `requestAnimationFrame`: MDN «prefers-reduced-motion»,
+ *    W3Tweaks «requestAnimationFrame: Smooth 60fps Animation», letti il 18/09/2026).
+ *  · WCAG 2.2.2 Pause/Stop/Hide (playbook `ai-web-design-codex`, letto il 18/09/2026): un movimento
+ *    automatico oltre 5 s vuole un comando per fermarlo, «regardless of prefers-reduced-motion».
+ *    Nello studio dei temi c'e' («Ferma anteprima»), qui no — come nel mockup. Segnalato, decide
+ *    l'owner: e' una funzione in piu', non un port.
+ */
+
+/* La colonna. Misure: 300x2060 nella griglia del mockup (`minmax(0,1fr) 300px`, gap 36px),
+   `padding-top: 4px`. ⛔ La larghezza nel mockup viene dalla TRACCIA della griglia, non dall'aside:
+   qui non si fissa una `width`, si mette un tetto. In ogni stato in cui il mockup puo' stare la
+   colonna misura al massimo 300 px (300 sopra i 1250 px, 250 sotto), quindi il tetto non
+   contraddice nessuno stato — e se la corsia che monta la colonna la mette in una traccia larga,
+   il riquadro non si allarga a dismisura. */
+.appearance-preview {
+  display: block;
+  min-width: 0;
+  max-width: 300px;
+  padding-top: 4px;
+  font-family: var(--talos-font-ui);
+  color: var(--talos-text);
+}
+
+/* Misure: 300x15, 10px, peso 500, letter-spacing 1.7px (`.17em`), riga 15px, colore tenue,
+   `margin-bottom: 20px` (la regola `.appearance-preview>.eyebrow` del mockup).
+   ⛔ `text-transform: none` — misurato: l'occhiello E' scritto maiuscolo nel testo, non lo diventa.
+   ⛔ Il nome `.eyebrow` esiste gia' nel prodotto, ma SOLO dentro i dialoghi
+   (`foglio-monolite.css:95`, 14 usi, tutti con un antenato `dialog`/`.talos-dialog` o
+   `.ft-actions-menu`) e in una media query sotto i 780 px. Qui la regola e' ancorata all'aside
+   (0-2-1), quindi non tocca nessuno e nessuno tocca lei. */
+.appearance-preview > .eyebrow {
+  display: block;
+  color: var(--talos-muted);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 1.7px;
+  line-height: 15px;
+  text-transform: none;
+  margin-bottom: 20px;
+}
+
+/* Il riquadro. Misure: 300x423.08 = 33 (righe) + 352.08 (corpo) + 36 (didascalia) + 2 bordi;
+   bordo 1px `--line`, raggio 12px (= `--talos-radius-card`, stesso valore), `overflow: hidden`,
+   fondo `--panel`, ombra `0 14px 36px rgb(0 0 0/9%)` (vedi l'eccezione dichiarata in testa). */
+.preview-window {
+  border: 1px solid var(--talos-border);
+  border-radius: var(--talos-radius-card);
+  overflow: hidden;
+  background: var(--talos-panel);
+  /* ⛔ IL TOKEN DEL PRODOTTO, non l'ombra del mockup — owner, 18/09/2026.
+     La corsia aveva messo `0 14px 36px rgb(0 0 0/9%)` col mockup e l'aveva **dichiarato** come
+     eccezione («identico» vince sulla somiglianza): era una nota onesta, ma la decisione è del
+     proprietario e l'ha presa dall'altra parte. `--talos-shadow-card` è dichiarata **due volte**
+     in `index.css` — riga 86 per il tema scuro (`.18` d'alfa) e riga 137 per il chiaro (`.12`):
+     col token l'ombra segue il tema da sola, che è il motivo per cui il token esiste. */
+  box-shadow: var(--talos-shadow-card);
+}
+/* `position: relative` + `overflow: hidden` del mockup: e' cio' che tiene dentro il canvas
+   assoluto e da' il contesto di posizionamento alle tre fasce. */
+.theme-live-preview {
+  position: relative;
+  overflow: hidden;
+}
+
+/* IL CANVAS. Misure del mockup: 298x421.08 = il riquadro meno i due bordi, assoluto, `inset: 0`,
+   `pointer-events: none`, opacita' .7, `z-index: 0`.
+   ⛔ La classe e' `appearance-canvas` perche' e' QUELLA DEL MOCKUP, alla lettera: il suo script fa
+   `canvas.className='appearance-canvas'; … host.prepend(canvas)`
+   (`TALOS-Calm-Lab-04.html:1808`, letto il 18/09/2026). Il canvas del prodotto nasce invece con
+   `td-preview-canvas` (`theme-studio.js:472`), un nome che `mockup-td.css:272` veste gia' di suo
+   (`position:absolute; inset:0; width:100%; height:100%; z-index:0; display:block;
+   pointer-events:none`).
+   ⇒ Le stesse dichiarazioni sono RIPETUTE qui di proposito: questa colonna non si appoggia a un
+   foglio che parla di un'altra superficie (lo studio dei temi), e se domani quello cambia la colonna
+   non cade. ⛔ E QUI AVEVO SCRITTO UNA COSA FALSA, smontata dalla misura il 18/09/2026 (prova di
+   mutazione `MUT-02` in `tests/browser/anteprima-tema.spec.mjs`): avevo scritto che senza il rinomino
+   il canvas «perderebbe posizione, dimensione e trasparenza ai clic». NON e' vero — l'altro vestito
+   resta attaccato al nome dell'engine, quindi il canvas resta assoluto, a tutta larghezza, sotto e
+   trasparente ai clic. L'unica cosa che il rinomino cambia davvero e' l'**opacita': da 1 a .7**, che
+   e' il numero del mockup. La prova asserisce quello, non cio' che avevo dato per scontato. */
+.appearance-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .7;
+}
+
+/* Le tre fasce stanno SOPRA il canvas: misurato nel mockup, `z-index: 1`. */
+.preview-chrome,
+.preview-body,
+.scene-caption {
+  position: relative;
+  z-index: 1;
+}
+
+/* La barra del finto browser. Misure: 298x33, flex, `align-items: center`, gap 4, `padding: 0 12px`,
+   fondo `--soft`, bordo inferiore 1px `--line`. */
+.preview-chrome {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 33px;
+  padding: 0 12px;
+  background: var(--talos-panel-soft);
+  border-bottom: 1px solid var(--talos-border);
+}
+/* I tre tondi. Misure: 5x5, raggio 50%, fondo tenue, opacita' .5. */
+.preview-chrome > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--talos-muted);
+  opacity: .5;
+  flex: none;
+}
+/* Il marchio in coda. Misure: 7px, letter-spacing 1.26px (`.18em`), tenue, spinto a destra. */
+.preview-chrome small {
+  margin-left: auto;
+  color: var(--talos-muted);
+  font-size: 7px;
+  letter-spacing: 1.26px;
+}
+
+/* Il corpo. Misure: 298x352.08, `padding: 25px 19px 17px`; il fondo delle righe e' 14px con
+   interlinea 1.5 (21px), come il corpo della conversazione del prodotto. */
+.preview-body {
+  padding: 25px 19px 17px;
+  font-size: var(--talos-chat-font-size, .875rem);
+  line-height: 1.5;
+}
+
+/* La data. Misure: 260x15, 10px, letter-spacing 1px (`.1em`), tenue. */
+.preview-date {
+  color: var(--talos-muted);
+  font-size: 10px;
+  letter-spacing: 1px;
+  line-height: 15px;
+}
+
+/* Il titolo. Misure: 260x34.5, 23px, peso 500, letter-spacing -1.38px (`-.06em`), riga 1.5,
+   `margin: 12px 0 8px`. */
+.preview-body h3 {
+  margin: 12px 0 8px;
+  font-family: var(--talos-font-display);
+  font-size: 23px;
+  font-weight: 500;
+  letter-spacing: -1.38px;
+  line-height: 1.5;
+}
+
+/* Il sottotitolo. Misure: 260x20.39, 12px, tenue, riga 1.7. */
+.preview-body > p {
+  color: var(--talos-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* Il messaggio della persona. Misure: 215x43 (= 260 - 45 di margine sinistro), `background: --soft`,
+   bordo 1px `--line`, raggio `9px 9px 3px 9px`, `padding: 10px 12px`,
+   `margin: 23px 0 15px 45px`, testo 14px su riga 21 (1.5).
+   ⛔ Il 14px NON e' un numero scelto: nel mockup `.preview-message,.preview-answer` prendono
+   `font-size: var(--preview-chat-size) !important` con `--preview-chat-size: .875rem`, cioe' la
+   STESSA grandezza del prodotto (`--talos-chat-font-size`), che `foglio-monolite.css` dichiara
+   solo dentro i dialoghi. Si legge quindi con il ripiego, come fa il prodotto in
+   `.talos-message p`. */
+.appearance-preview .preview-message {
+  background: var(--talos-panel-soft);
+  border: 1px solid var(--talos-border);
+  border-radius: 9px 9px 3px 9px;
+  padding: 10px 12px;
+  margin: 23px 0 15px 45px;
+  font-size: var(--talos-chat-font-size, .875rem);
+  line-height: 1.5;
+}
+
+/* La risposta. Misure: 260x53.19 (due righe), bordo sinistro 2px d'accento, `padding-left: 10px`,
+   riga 1.9 (26.6px), testo 14px come sopra. */
+.appearance-preview .preview-answer {
+  border-left: 2px solid var(--talos-accent);
+  padding-left: 10px;
+  font-size: var(--talos-chat-font-size, .875rem);
+  line-height: 1.9;
+}
+
+/* Il compositore finto. Misure: 260x48 = 8+30+8 di padding piu' i due bordi, flex con gap 8,
+   `align-items: center`, bordo 1px `--line`, raggio 9px, testo 11px tenue, `padding: 8px 9px`,
+   `margin-top: 38px`. */
+.preview-composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  margin-top: 38px;
+  border: 1px solid var(--talos-border);
+  border-radius: 9px;
+  color: var(--talos-muted);
+  font-size: 11px;
+}
+
+/* Il «+». Misure: 23.69x30, 20px, tenue, `padding: 0 5px`, riga 30px: E' lui che da' al compositore
+   i suoi 48 px di altezza (30 + 16 + 2).
+   ⛔ Nel mockup e' un `<button>` che apre un cassetto (`.preview-tools`); nel prodotto quel cassetto
+   non esiste, quindi qui e' un `<span>` disegnato — un comando che non comanda e' peggio di un
+   disegno. Il cassetto non si inventa: elencato nel referto. */
+.preview-composer > .preview-plus {
+  flex: none;
+  padding: 0 5px;
+  font-size: 20px;
+  line-height: 30px;
+  text-align: center;
+  color: var(--talos-muted);
+}
+
+/* Il testo di invito. Misure: 186.31x24 — i 24 px vengono dalla regola base del mockup
+   (`height: 24px`), che la variante dell'aside NON annulla: annulla fondo, colore, raggio, padding,
+   flessione e allineamento del testo. Quindi: trasparente (non e' il chip d'accento del composer
+   centrale del mockup), tenue, senza raggio, `flex: 1 1 0%`.
+   ⛔ IL TESTO E' CENTRATO, e non e' una scelta: e' quello che il mockup FA. Misurato il 18/09/2026
+   sulla sua pagina vera (1440x900): il riquadro sta a x=1166 con larghezza 186, il testo misura
+   104 px e comincia a **x=1207** — cioe' 41 px dentro, esattamente `(186-104)/2`. Il mockup dichiara
+   `text-align:left` ma vince `justify-items:center` (`place-items:center`) sul testo anonimo del
+   grid, e il risultato a schermo e' centrato. Qui si scrive il risultato, non la dichiarazione:
+   `place-items: center` + `text-align: left`, come lui. ⛔ La riga di commento che stava qui prima
+   («testo a sinistra») era FALSA: l'ha smentita la misura del testo, non l'occhio. */
+.preview-composer > .preview-testo {
+  display: grid;
+  place-items: center;
+  flex: 1 1 0%;
+  min-width: 0;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  color: var(--talos-muted);
+  border-radius: 0;
+  text-align: left;
+}
+
+/* Il marchio d'invio. Misure: 14x14. `.i--sm` vale esattamente 14px nel prodotto (`index.css:234`),
+   quindi si usa la classe del design system invece di un numero. */
+.preview-composer .i--sm {
+  width: 14px;
+  height: 14px;
+  color: var(--talos-muted);
+}
+
+/* La didascalia della scena. Misure: 298x36, 10px, riga 15px, tenue, `padding: 10px 16px`,
+   bordo superiore 1px `--line`, fondo `--panel` (pieno: e' li' che il testo sta leggibile sopra il
+   canvas). */
+.scene-caption {
+  padding: 10px 16px;
+  background: var(--talos-panel);
+  border-top: 1px solid var(--talos-border);
+  color: var(--talos-muted);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+/* La nota sulla tavolozza. Misure: 298x16.5, flex, gap 7, 11px tenue,
+   `margin: 14px 0 0 2px`; la sua icona e' 13x13 e prende il colore di riuscita. */
+.preview-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 14px 0 0 2px;
+  color: var(--talos-muted);
+  font-size: 11px;
+}
+.preview-note .i--xs {
+  width: 13px;
+  height: 13px;
+  color: var(--talos-success);
+}
+
+/* ⛔ Sotto i 1080 px il mockup TOGLIE la colonna (misurato: `@media(max-width:1080px)` →
+   `.appearance-preview{display:none}`, e nella stessa fascia la sua griglia passa a una colonna
+   sola). Si porta com'e': senza questa riga la colonna resterebbe stretta e monca in una finestra
+   che non ha piu' posto per lei. ⛔ Chi monta la colonna deve saperlo: se la sua griglia tiene la
+   traccia da 300 px anche sotto i 1080, resta una colonna vuota — la traccia va chiusa con la
+   stessa soglia (nel mockup: `.settings-layout`, `grid-template-columns:minmax(0,1fr) 300px`, gap
+   36px; sotto i 1250 → 250px e gap 24; sotto i 1080 → una colonna). */
+@media (max-width: 1080px) {
+  .appearance-preview { display: none; }
+}
+
+/*
+ * ⛔ IL COMANDO DI PAUSA — WCAG 2.2.2, owner 18/09/2026: «si aggiunge il comando».
+ *   La scena disegna da sola e si muove oltre i 5 secondi; la norma chiede di poterla fermare.
+ *   Nel mockup non c'è: è una **deviazione voluta**, e va dichiarata come tale quando si confronta.
+ * ⛔ NON ha misure del mockup da rispettare, quindi usa i **token del prodotto** — è l'unico posto
+ *   di questa colonna dove non c'è un originale da copiare. Larghezza piena, allineato a sinistra,
+ *   e la stessa altezza minima degli altri comandi secondari del prodotto.
+ */
+.preview-stop { display: inline-flex; align-items: center; gap: 6px; width: 100%; margin-top: 10px; padding: 6px 10px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control, 8px); background: transparent; color: var(--talos-muted); font: inherit; font-size: .75rem; text-align: start; cursor: pointer; }
+.preview-stop:hover { color: var(--talos-text); background: var(--talos-card-hover); }
+.preview-stop[aria-pressed="true"] { color: var(--talos-text); border-color: var(--talos-accent-border); }

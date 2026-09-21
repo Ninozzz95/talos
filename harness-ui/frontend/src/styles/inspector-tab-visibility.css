@@ -1,0 +1,23 @@
+/* The child conversation is a sibling of #railAgenti. Visibility belongs to
+   the selected tab; keep the child DOM and scroll position intact. */
+.talos-inspector .talos-figlia-ospite[hidden] {
+  display: none !important;
+}
+
+/* Keep the plain [hidden] rule independent: unsupported :has() selectors must
+   not invalidate it. Older engines retain legacy behavior, not a fake fallback. */
+@supports selector(:has(*)) {
+  .talos-inspector:not(:has(#railTabs [data-rail="agenti"][aria-selected="true"]))
+    .talos-figlia-ospite,
+  .talos-inspector:has(#railTabs [data-rail]:not([data-rail="agenti"])[aria-selected="true"])
+    .talos-figlia-ospite {
+    display: none !important;
+  }
+
+  /* An empty/hidden detail must not suppress the list. Closing the visible
+     detail restores the legacy list without overriding its own hidden state. */
+  .talos-inspector:has(#railTabs [data-rail="agenti"][aria-selected="true"]):has(.talos-figlia-ospite:not([hidden]) .talos-figlia:not([hidden]))
+    #railAgenti {
+    display: none !important;
+  }
+}

@@ -1,0 +1,5 @@
+*, *::before, *::after { box-sizing: border-box; }
+html, body { min-height: 100%; margin: 0; }
+body, button, input, textarea, select { font: inherit; }
+button, input, textarea, select { color: inherit; }
+img, svg { display: block; max-width: 100%; }

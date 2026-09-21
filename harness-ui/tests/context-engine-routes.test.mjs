@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { createHttpApp } from '../src/http-app.mjs';
+import { createDesktopContextService } from '../src/context-desktop-service.mjs';
+import { createSqliteContextStore } from '../../context-engine/src/node/sqlite-store.mjs';
+import { createContextEngine } from '../../context-engine/src/engine.mjs';
+
+test('CTX-HTTP-ROUTES actual loopback routes preserve authorization, revisions and response shape', async t => {
+  const store = createSqliteContextStore({ databasePath: ':memory:' });
+  const engine = createContextEngine({ store, model: { resolveModel: async () => {}, summarize: async () => {} }, tokenCounter: { countPreparedContext: async () => {} } });
+  const service = createDesktopContextService({ store, engine, readSession: id => id === 's' ? { sessionId: id } : null, isSessionEnabled: () => true, resolveSessionModel: async () => {} });
+  const token = 'test-context-owner-token-0123456789';
+  const server = createServer(createHttpApp({ contextService: service, token }));
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { await new Promise(resolve => server.close(resolve)); await service.close(); await store.close(); });
+  const url = `http://127.0.0.1:${server.address().port}/api/v1/sessions/s/context`;
+  assert.equal((await fetch(url)).status, 401);
+  const headers = { Cookie: `talos_token=${token}`, 'Content-Type': 'application/json' };
+  const state = await fetch(url, { headers });
+  assert.equal(state.status, 200);
+  assert.equal((await state.json()).schema, 'talos.context.snapshot.v1');
+  const update = { patch: { auto: false }, expectedRevision: 0, idempotencyKey: 'request' };
+  const changed = await fetch(`${url}/settings`, { method: 'PATCH', headers, body: JSON.stringify(update) });
+  assert.equal(changed.status, 200);
+  assert.equal((await changed.json()).settings.auto, false);
+  const conflict = await fetch(`${url}/settings`, { method: 'PATCH', headers, body: JSON.stringify({ ...update, idempotencyKey: 'next' }) });
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).error.code, 'CTX_STALE_REVISION');
+  assert.equal((await fetch(`${url}/facts`, { headers, method: 'PUT' })).status, 405);
+  const facts = await fetch(`${url}/facts`, { method: 'POST', headers, body: JSON.stringify({ fact: { id: 'f', text: 'SQLite' }, expectedRevision: 1, idempotencyKey: 'fact' }) });
+  assert.equal(facts.status, 200);
+  assert.equal((await facts.json()).fact.text, 'SQLite');
+  const deleted = await fetch(`${url}/facts/f`, { method: 'DELETE', headers, body: JSON.stringify({ expectedRevision: 2, idempotencyKey: 'delete' }) });
+  assert.equal(deleted.status, 200);
+  assert.equal((await deleted.json()).fact.status, 'removed');
+  assert.equal((await fetch(url.replace('/s/context', '/unknown/context'), { headers })).status, 404);
+});

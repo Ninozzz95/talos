@@ -1,0 +1,6 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {normalizzaCatalogoModelli,filtraModelli,prezzoPerMilione} from '../../src/components/catalogo-modelli.js';
+import {CATALOGO_MODELLI} from '../../lab/fixtures/catalogo-modelli.js';
+test('CAT-CONTRATTO: distinguo risposta rotta da catalogo vuoto',()=>{assert.equal(normalizzaCatalogoModelli(CATALOGO_MODELLI).modelli.length,3);for(const v of [null,{}, {modelli:null},{...CATALOGO_MODELLI,modelli:[{}]}])assert.throws(()=>normalizzaCatalogoModelli(v));assert.equal(normalizzaCatalogoModelli({...CATALOGO_MODELLI,modelli:[]}).modelli.length,0);});
+test('CAT-PREZZO: USD per token diventa prezzo per milione, sconosciuto non è gratis',()=>{assert.equal(prezzoPerMilione('0.0000008'),'0,8 USD');assert.equal(prezzoPerMilione('0'),'0 USD');for(const p of [null,undefined,'',-1,'-1','NaN',Infinity])assert.equal(prezzoPerMilione(p),'Non dichiarato');});
+test('CAT-FILTRO: nome ID e fornitore, senza perdere i record oltre120',()=>{const records=Array.from({length:131},(_,i)=>({...CATALOGO_MODELLI.modelli[0],id:'provider/modello-'+i,nome:'Modello '+i,provider:'provider'}));assert.equal(filtraModelli(records,'','all').length,131);assert.equal(filtraModelli(records,'modello-130','all')[0].id,'provider/modello-130');assert.equal(filtraModelli(records,'','altro').length,0);});

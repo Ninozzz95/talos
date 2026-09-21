@@ -1,0 +1,150 @@
+{
+  "fonte": "https://models.dev/api.json",
+  "data": "2026-09-12",
+  "sha256": "f8c50427f9a7e5bd44ec1079a3db1899781b486e2b4e4da5f462ac6789ce19ee",
+  "fornitori": {
+    "groq": {
+      "api": null,
+      "env": [
+        "GROQ_API_KEY"
+      ],
+      "models": {
+        "openai/gpt-oss-20b": {
+          "id": "openai/gpt-oss-20b",
+          "name": "GPT OSS 20B",
+          "tool_call": true
+        }
+      }
+    },
+    "cerebras": {
+      "api": null,
+      "env": [
+        "CEREBRAS_API_KEY"
+      ],
+      "models": {
+        "gpt-oss-120b": {
+          "id": "gpt-oss-120b",
+          "name": "GPT OSS 120B",
+          "tool_call": true
+        }
+      }
+    },
+    "mistral": {
+      "api": null,
+      "env": [
+        "MISTRAL_API_KEY"
+      ],
+      "models": {
+        "mistral-small-latest": {
+          "id": "mistral-small-latest",
+          "name": "Mistral Small (latest)",
+          "tool_call": true
+        }
+      }
+    },
+    "togetherai": {
+      "api": null,
+      "env": [
+        "TOGETHER_API_KEY"
+      ],
+      "models": {
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
+          "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+          "name": "Llama 3.3 70B",
+          "tool_call": true
+        }
+      }
+    },
+    "fireworks-ai": {
+      "api": "https://api.fireworks.ai/inference/v1/",
+      "env": [
+        "FIREWORKS_API_KEY"
+      ],
+      "models": {
+        "accounts/fireworks/models/gpt-oss-120b": {
+          "id": "accounts/fireworks/models/gpt-oss-120b",
+          "name": "GPT OSS 120B",
+          "tool_call": true
+        }
+      }
+    },
+    "deepinfra": {
+      "api": null,
+      "env": [
+        "DEEPINFRA_API_KEY"
+      ],
+      "models": {
+        "openai/gpt-oss-20b": {
+          "id": "openai/gpt-oss-20b",
+          "name": "GPT OSS 20B",
+          "tool_call": true
+        }
+      }
+    },
+    "novita-ai": {
+      "api": "https://api.novita.ai/openai",
+      "env": [
+        "NOVITA_API_KEY"
+      ],
+      "models": {
+        "qwen/qwen3-coder-30b-a3b-instruct": {
+          "id": "qwen/qwen3-coder-30b-a3b-instruct",
+          "name": "Qwen3 Coder 30b A3B Instruct",
+          "tool_call": true
+        }
+      }
+    },
+    "nebius": {
+      "api": "https://api.tokenfactory.nebius.com/v1",
+      "env": [
+        "NEBIUS_API_KEY"
+      ],
+      "models": {
+        "openai/gpt-oss-120b": {
+          "id": "openai/gpt-oss-120b",
+          "name": "gpt-oss-120b",
+          "tool_call": true
+        }
+      }
+    },
+    "xai": {
+      "api": null,
+      "env": [
+        "XAI_API_KEY"
+      ],
+      "models": {
+        "grok-4.3": {
+          "id": "grok-4.3",
+          "name": "Grok 4.3",
+          "tool_call": true
+        }
+      }
+    },
+    "ollama-cloud": {
+      "api": "https://ollama.com/v1",
+      "env": [
+        "OLLAMA_API_KEY"
+      ],
+      "models": {
+        "gpt-oss:20b": {
+          "id": "gpt-oss:20b",
+          "name": "gpt-oss:20b",
+          "tool_call": true
+        }
+      }
+    },
+    "huggingface": {
+      "api": "https://router.huggingface.co/v1",
+      "env": [
+        "HF_TOKEN"
+      ],
+      "models": {
+        "openai/gpt-oss-20b": {
+          "id": "openai/gpt-oss-20b",
+          "name": "GPT OSS 20B",
+          "tool_call": true
+        }
+      }
+    }
+  }
+}

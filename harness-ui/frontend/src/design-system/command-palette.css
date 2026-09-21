@@ -1,0 +1,29 @@
+/* NAV-02. The real palette uses the same surface/focus tokens as the workspace. */
+#veloComandi .talos-dialog:not([data-user-sized="true"]) { width:min(720px, calc(100vw - 32px)); }
+#veloComandi .talos-dialog__body { padding:16px; min-height:0; }
+#veloComandi .talos-dialog__field { margin-bottom:12px; }
+.command-palette__results { max-height:min(56dvh, 500px); overflow:auto; overscroll-behavior:contain; border:0; background:transparent; }
+.command-palette__group + .command-palette__group { margin-top:14px; }
+.command-palette__group-label { color:var(--ui-secondary); font-size:.6875rem; text-transform:uppercase; letter-spacing:.1em; font-weight:600; padding:8px 12px; }
+.command-palette__item { width:100%; min-height:62px; display:flex; align-items:center; gap:12px; text-align:left; padding:10px 12px; border:1px solid transparent; border-radius:var(--ui-radius-control); color:var(--ui-text); background:transparent; }
+.command-palette__item > .i { flex:none; width:18px; height:18px; color:var(--ui-secondary); }
+.command-palette__copy { min-width:0; flex:1; display:grid; gap:4px; }
+.command-palette__label { font-size:.875rem; font-weight:550; line-height:1.35; }
+.command-palette__copy small { color:var(--ui-secondary); font-size:.75rem; line-height:1.45; overflow-wrap:anywhere; }
+.command-palette__item > kbd { flex:none; font-size:.625rem; }
+.command-palette__item.command-active { background:var(--talos-accent-soft); border-color:var(--talos-accent-border); }
+.command-palette__item.command-active > .i { color:var(--talos-accent-text); }
+.command-palette__item[aria-disabled='true'] { cursor:not-allowed; }
+.command-palette__item[aria-disabled='true'] .command-palette__label { color:var(--ui-secondary); }
+.command-palette__status { min-height:1.5em; padding:10px 12px 0; font-size:.75rem; line-height:1.5; color:var(--ui-secondary); }
+:root[data-density='compact'] .command-palette__item { min-height:52px; padding-block:7px; }
+@media(max-width:480px) {
+  #veloComandi .talos-dialog__body { padding:12px; }
+  .command-palette__item { gap:8px; padding-inline:8px; }
+  .command-palette__item > kbd { display:none; }
+  .command-palette__results { max-height:52dvh; }
+}
+@media(forced-colors:active) {
+  .command-palette__item.command-active { outline:2px solid Highlight; outline-offset:-2px; }
+  .command-palette__item[aria-disabled='true'] .command-palette__label { color:GrayText; }
+}

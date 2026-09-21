@@ -1,0 +1,235 @@
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+
+import { creaGestoreWorkspaceWatcher } from '../src/workspace-watcher.mjs';
+
+test('WATCHER-NATIVE-SINGLE-25 — un workspace profondo usa una sola registrazione nativa ricorsiva', () => {
+  const chiamate = [];
+  const watcher = {
+    on() { return watcher; },
+    close() {},
+  };
+  const gestore = creaGestoreWorkspaceWatcher({
+    watchFn(cartella, opzioni, listener) {
+      chiamate.push({ cartella, opzioni, listener });
+      return watcher;
+    },
+  });
+  const cartella = `C:\\workspace\\talos-native-${process.pid}`;
+  const stop = gestore.guardaWorkspace(cartella, () => {});
+  try {
+    assert.equal(chiamate.length, 1, 'la profondità del workspace non deve moltiplicare le registrazioni TALOS');
+    assert.equal(chiamate[0].cartella, cartella);
+    assert.equal(chiamate[0].opzioni.recursive, true);
+    assert.equal(chiamate[0].opzioni.persistent, false);
+    assert.equal(chiamate[0].opzioni.encoding, 'utf8');
+    assert.ok(Array.isArray(chiamate[0].opzioni.ignore), 'gli esclusi devono entrare nel watcher nativo, non solo nel callback');
+  } finally {
+    stop();
+  }
+});
+
+test('WATCHER-NATIVE-NULL-FILENAME-26 — un evento senza nome forza un refresh generico senza crash', async () => {
+  let listener;
+  const watcher = {
+    on() { return watcher; },
+    close() {},
+  };
+  const gestore = creaGestoreWorkspaceWatcher({
+    watchFn(_cartella, _opzioni, onChange) {
+      listener = onChange;
+      return watcher;
+    },
+  });
+  const ricevuti = [];
+  const stop = gestore.guardaWorkspace(`C:\\workspace\\talos-null-${process.pid}`, (percorsi) => ricevuti.push(percorsi));
+  try {
+    listener('rename', null);
+    await new Promise((r) => setTimeout(r, 500));
+    assert.deepEqual(ricevuti, [['.']]);
+  } finally {
+    stop();
+  }
+});
+
+// ⭐ Disco VERO, chokidar VERO — stesso principio di workspace-tree.test.mjs:
+// un watcher non si prova bene con un mock, il suo intero scopo è
+// reagire a eventi del filesystem reale. I tempi (attese fisse) sono
+// intenzionalmente generosi: un timer di test troppo stretto sarebbe
+// più fragile del codice che prova.
+function radiceVera() {
+  // 13/09: la radice di prova NON nasce nella cartella temporanea del sistema.
+  // Sui runner GitHub TEMP ha un nome CORTO 8.3 (RUNNER~1): libuv riceve da
+  // ReadDirectoryChangesW il nome LUNGO, in uv__relative_path (src/win/fs-event.c, riga 72)
+  // non riconosce piu il prefisso della cartella osservata, e ABORTISCE il processo. Non un
+  // test rosso: un processo morto, che porta giu' tutta la suite.
+  // 
+  // La prima cura provata era sbagliata: realpathSync NON espande le forme 8.3 su Windows.
+  // Misurato il 13/09 su questa macchina: realpathSync di 'C:/PROGRA~1' restituisce
+  // 'C:/PROGRA~1' identico. Risolveva i collegamenti, lasciava il nome corto, e il processo
+  // moriva uguale.
+  // 
+  // ⇒ La radice nasce dentro il repo, sotto `.talos/` (gia' ignorata da git a ogni
+  // profondita'), che ha sempre un nome lungo. Ancorata al FILE e non alla cwd, perche' la
+  // suite gira sia da harness-ui sia dalla radice del repo.
+  const casa = fileURLToPath(new URL('../.talos/', import.meta.url));
+  mkdirSync(casa, { recursive: true });
+  const radice = mkdtempSync(join(casa, 'watch-test-'));
+  mkdirSync(join(radice, '.git'));
+  mkdirSync(join(radice, 'node_modules'));
+  return radice;
+}
+
+test('⭐⭐⭐ un file nuovo genera un evento col suo percorso relativo, mai la scansione iniziale', async () => {
+  const radice = radiceVera();
+  writeFileSync(join(radice, 'esistente.txt'), 'x'); // PRIMA del watcher — ignoreInitial deve tacere su questo
+  const { guardaWorkspace } = creaGestoreWorkspaceWatcher();
+  const ricevuti = [];
+  const stop = guardaWorkspace(radice, (percorsi) => ricevuti.push(percorsi));
+  try {
+    await new Promise((r) => setTimeout(r, 800));
+    assert.equal(ricevuti.length, 0, 'la scansione iniziale non deve generare eventi');
+    writeFileSync(join(radice, 'nuovo.txt'), 'ciao');
+    await new Promise((r) => setTimeout(r, 700));
+    assert.equal(ricevuti.length, 1);
+    assert.deepEqual(ricevuti[0], ['nuovo.txt']);
+  } finally {
+    stop();
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐⭐ una raffica di scritture diventa UN solo evento (debounce), non uno per file', async () => {
+  const radice = radiceVera();
+  const { guardaWorkspace } = creaGestoreWorkspaceWatcher();
+  const ricevuti = [];
+  const stop = guardaWorkspace(radice, (percorsi) => ricevuti.push(percorsi));
+  try {
+    await new Promise((r) => setTimeout(r, 800));
+    for (let i = 0; i < 5; i++) writeFileSync(join(radice, `raffica-${i}.txt`), 'x');
+    await new Promise((r) => setTimeout(r, 700));
+    assert.equal(ricevuti.length, 1, 'una raffica deve coalescere in UN evento');
+    assert.equal(ricevuti[0].length, 5);
+  } finally {
+    stop();
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔⛔ AL CONTRARIO — .git e node_modules non generano MAI un evento, anche quando cambiano davvero', async () => {
+  const radice = radiceVera();
+  const { guardaWorkspace } = creaGestoreWorkspaceWatcher();
+  const ricevuti = [];
+  const stop = guardaWorkspace(radice, (percorsi) => ricevuti.push(percorsi));
+  try {
+    await new Promise((r) => setTimeout(r, 800));
+    writeFileSync(join(radice, '.git', 'HEAD'), 'ref: refs/heads/master');
+    writeFileSync(join(radice, 'node_modules', 'pacchetto.js'), 'x');
+    await new Promise((r) => setTimeout(r, 700));
+    assert.equal(ricevuti.length, 0);
+  } finally {
+    stop();
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔⛔ AL CONTRARIO — lo stato interno di Harness non riattiva il watcher e non crea un ciclo di eventi', async () => {
+  const radice = radiceVera();
+  mkdirSync(join(radice, '.sessions-store'));
+  mkdirSync(join(radice, '.automations'));
+  mkdirSync(join(radice, '.generated-images'));
+  const { guardaWorkspace } = creaGestoreWorkspaceWatcher();
+  const ricevuti = [];
+  const stop = guardaWorkspace(radice, (percorsi) => ricevuti.push(percorsi));
+  try {
+    await new Promise((r) => setTimeout(r, 800));
+    writeFileSync(join(radice, '.sessions-store', 'session.jsonl'), '{}');
+    writeFileSync(join(radice, '.automations', 'job.json'), '{}');
+    writeFileSync(join(radice, '.generated-images', 'image.png'), 'x');
+    await new Promise((r) => setTimeout(r, 700));
+    assert.equal(ricevuti.length, 0, 'i file interni non devono diventare eventi workspace');
+  } finally {
+    stop();
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐⭐ due sottoscrittori sulla stessa cartella condividono UN watcher, entrambi ricevono lo stesso evento', async () => {
+  const radice = radiceVera();
+  const { guardaWorkspace, quantiWatcherAttiviPerTest } = creaGestoreWorkspaceWatcher();
+  const ricevuti1 = [];
+  const ricevuti2 = [];
+  const stop1 = guardaWorkspace(radice, (p) => ricevuti1.push(p));
+  const stop2 = guardaWorkspace(radice, (p) => ricevuti2.push(p));
+  try {
+    assert.equal(quantiWatcherAttiviPerTest(), 1, 'deduplicato — un solo watcher per cartella');
+    await new Promise((r) => setTimeout(r, 800));
+    writeFileSync(join(radice, 'condiviso.txt'), 'x');
+    await new Promise((r) => setTimeout(r, 700));
+    assert.equal(ricevuti1.length, 1);
+    assert.equal(ricevuti2.length, 1);
+  } finally {
+    stop1();
+    stop2();
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ AL CONTRARIO — il watcher si chiude SOLO quando l\'ULTIMO sottoscrittore si disiscrive, non prima', async () => {
+  const radice = radiceVera();
+  const { guardaWorkspace, quantiWatcherAttiviPerTest } = creaGestoreWorkspaceWatcher();
+  const stop1 = guardaWorkspace(radice, () => {});
+  const stop2 = guardaWorkspace(radice, () => {});
+  try {
+    stop1();
+    assert.equal(quantiWatcherAttiviPerTest(), 1, 'un sottoscrittore in meno non chiude il watcher se un altro resta');
+    stop2();
+    assert.equal(quantiWatcherAttiviPerTest(), 0, 'l\'ultimo unsubscribe chiude davvero il watcher');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+/*
+ * ⛔⛔⛔ 28/8, trovato dal vivo (screenshot/CDP, non da un test — la
+ * causa vera del "il browser non vede mai i cambiamenti esterni" dopo
+ * ore di sessioni di prova sulla stessa cartella): un `for...of` senza
+ * try/catch abortiva l'INTERO giro al primo sottoscrittore che lancia
+ * — quelli iscritti DOPO (ordine di iscrizione = sessioni più recenti
+ * sulla stessa cartella) non venivano mai notificati. Con `guardati`
+ * come singleton di modulo che sopravvive a intere sessioni di test
+ * finché il processo non riavvia, un vecchio sottoscrittore rotto
+ * blocca silenziosamente ogni sessione nuova sulla stessa cartella.
+ */
+test('⛔⛔⛔ AL CONTRARIO — un sottoscrittore che lancia non blocca gli ALTRI, iscritti prima o dopo di lui', async () => {
+  const radice = radiceVera();
+  const { guardaWorkspace } = creaGestoreWorkspaceWatcher();
+  const ricevutiPrima = [];
+  const ricevutiDopo = [];
+  const stopPrima = guardaWorkspace(radice, (p) => ricevutiPrima.push(p));
+  const stopRotto = guardaWorkspace(radice, () => { throw new Error('sottoscrittore rotto, apposta'); });
+  const stopDopo = guardaWorkspace(radice, (p) => ricevutiDopo.push(p));
+  try {
+    await new Promise((r) => setTimeout(r, 800));
+    writeFileSync(join(radice, 'nuovo.txt'), 'x');
+    await new Promise((r) => setTimeout(r, 700));
+    assert.equal(ricevutiPrima.length, 1, 'il sottoscrittore PRIMA di quello rotto riceve comunque l\'evento');
+    assert.equal(ricevutiDopo.length, 1, 'il sottoscrittore DOPO quello rotto riceve comunque l\'evento — questo è il bug reale trovato');
+  } finally {
+    stopPrima();
+    stopRotto();
+    stopDopo();
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔ una cartella inesistente non lancia — degrada a "nessun refresh automatico"', () => {
+  const { guardaWorkspace } = creaGestoreWorkspaceWatcher();
+  assert.doesNotThrow(() => {
+    const stop = guardaWorkspace('C:\\questa\\cartella\\non\\esiste\\davvero\\mai', () => {});
+    stop();
+  });
+});
