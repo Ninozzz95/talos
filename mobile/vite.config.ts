@@ -133,11 +133,13 @@ export default defineConfig({
 
     resolve: {
 
-        alias: {
+        alias: [
 
-            '@': path.resolve(__dirname, './src'),
+            { find: /^zod$/, replacement: path.resolve(__dirname, './src/lib/zodCsp.ts') },
 
-        },
+            { find: '@', replacement: path.resolve(__dirname, './src') },
+
+        ],
 
     },
 

@@ -105,7 +105,7 @@ Serve a chiunque per rifare la verifica da zero, senza fidarsi di noi.
 | pacchetto | .deb | SHA-256 del .deb |
 |---|---|---|
 | libprotobuf | [libprotobuf_2:35.1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/libp/libprotobuf/libprotobuf_2:35.1_aarch64.deb) | `a1ba7c7f0e5903a2134662653d3e7b9ffceaa78bdd00e07ac985e2d313ebc738` |
-| android-tools | [android-tools_36.0.1+really35.0.2_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/a/android-tools/android-tools_36.0.1+really35.0.2_aarch64.deb) | `82e48bf8038250fb0997b1f2cf5f780730104f2544a5532298c453d94cfe1537` |
+| android-tools | [android-tools_36.0.1+really35.0.2-1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/a/android-tools/android-tools_36.0.1+really35.0.2-1_aarch64.deb) | `59710261c5cb614701943c19e7b18d074a84b5d16163844237d51e3e64c92773` |
 | libc++ | [libc++_29_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/libc/libc++/libc++_29_aarch64.deb) | `bb9f12113c137aa0e8513bb51cc49fe77a5ce3ca39ab9e92c57d228ecdf00222` |
 | zstd | [zstd_1.5.7-1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/z/zstd/zstd_1.5.7-1_aarch64.deb) | `e1b4a5113648da8de189620ba1fce74c48b2d0833d9043391b9a1c91fb606fd3` |
 | brotli | [brotli_1.2.0_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/b/brotli/brotli_1.2.0_aarch64.deb) | `db1502601d40fb44e6085ad8bfd9311a8b472e98db831ceec9d404c5708bb52c` |

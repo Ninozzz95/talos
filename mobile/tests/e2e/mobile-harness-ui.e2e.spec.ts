@@ -68,6 +68,15 @@ async function mountEmbeddedCodeFixture(page: import('@playwright/test').Page): 
             shadow.appendChild(script)
         })
         await runtimeLoaded
+        // La sessione distribuita è vuota: la fixture deve creare abbastanza
+        // transcript da produrre uno scroll reale in entrambe le viewport.
+        const conversation = shadow.querySelector('.conversation')!
+        for (let i = 0; i < 40; i++) {
+            const row = document.createElement('p')
+            row.textContent = `Geometry fixture transcript row ${i + 1}`
+            row.style.minHeight = '40px'
+            conversation.appendChild(row)
+        }
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
     })
 }
@@ -133,6 +142,7 @@ test('HARNESS-THEME-LIVE-01 inherits live TALOS tokens through Shadow DOM withou
 })
 
 test('CODE-THEME-INVERSE-STANDALONE-01 preserves the Calm fallback without a TALOS host', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' })
     await page.goto('/harness-ui/index.html')
 
     await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor))
@@ -154,7 +164,7 @@ for (const viewport of [
             const host = document.querySelector<HTMLElement>('[data-e2e-code-embedded-host]')
             const shell = host?.shadowRoot?.querySelector<HTMLElement>('.app-shell')
             const conversation = host?.shadowRoot?.querySelector<HTMLElement>('.conversation')
-            const mission = host?.shadowRoot?.querySelector<HTMLElement>('.mission-card')
+            const mission = host?.shadowRoot?.querySelector<HTMLElement>('.conversation-hero')
             const staticComposer = host?.shadowRoot?.querySelector<HTMLElement>('.composer-wrap')
             const panel = host?.shadowRoot?.querySelector<HTMLElement>('.sessions-panel')
             if (!host || !shell || !conversation || !mission || !staticComposer || !panel) {
@@ -167,11 +177,14 @@ for (const viewport of [
             const scrollTarget = Math.min(120, conversation.scrollHeight - conversation.clientHeight)
             conversation.scrollTop = scrollTarget
             return {
+                wideShort: host.classList.contains('talos-embedded-wide-short'),
                 hostBackground: getComputedStyle(host).backgroundColor,
                 shellBackground: getComputedStyle(shell).backgroundColor,
                 staticComposerDisplay: getComputedStyle(staticComposer).display,
                 conversationRightGap: hostRect.right - conversationRect.right,
-                missionRightGap: hostRect.right - missionRect.right,
+                missionRightGap: conversationRect.right - missionRect.right,
+                missionLeftGap: missionRect.left - conversationRect.left,
+                contentPadding: Number.parseFloat(conversationStyle.paddingRight),
                 scrollbarWidth: conversationStyle.scrollbarWidth,
                 scrollbarGutter: conversationStyle.scrollbarGutter,
                 scrollRange: conversation.scrollHeight - conversation.clientHeight,
@@ -188,10 +201,18 @@ for (const viewport of [
         expect(snapshot.scrollbarGutter).toBe('auto')
         expect(snapshot.scrollRange).toBeGreaterThan(0)
         expect(snapshot.scrollTop).toBeGreaterThan(0)
-        expect(snapshot.conversationRightGap).toBeGreaterThanOrEqual(11)
-        expect(snapshot.conversationRightGap).toBeLessThanOrEqual(13)
-        expect(snapshot.missionRightGap).toBeGreaterThanOrEqual(11)
-        expect(snapshot.missionRightGap).toBeLessThanOrEqual(13)
+        if (snapshot.wideShort) {
+            expect(snapshot.conversationRightGap).toBeGreaterThanOrEqual(11)
+            expect(snapshot.conversationRightGap).toBeLessThanOrEqual(13)
+            expect(snapshot.contentPadding).toBe(0)
+            expect(snapshot.missionRightGap).toBeGreaterThanOrEqual(12)
+            expect(Math.abs(snapshot.missionLeftGap - snapshot.missionRightGap)).toBeLessThanOrEqual(1)
+        } else {
+            expect(snapshot.conversationRightGap).toBeGreaterThanOrEqual(0)
+            expect(snapshot.contentPadding).toBeGreaterThanOrEqual(12)
+            expect(snapshot.missionRightGap).toBeGreaterThanOrEqual(12)
+            expect(Math.abs(snapshot.missionLeftGap - snapshot.missionRightGap)).toBeLessThanOrEqual(1)
+        }
         expect(snapshot.transcriptClearance).toBe('231px')
         expect(snapshot.panelTransition).toContain('0.777s')
     })
@@ -205,11 +226,11 @@ for (const viewport of [
             const host = document.querySelector<HTMLElement>('[data-e2e-code-embedded-host]')
             const root = host?.shadowRoot
             const topbar = root?.querySelector<HTMLElement>('.topbar')
-            const runStrip = root?.querySelector<HTMLElement>('.run-strip')
-            if (!topbar || !runStrip) throw new Error('Embedded Code topbar fixture unavailable')
+            const content = root?.querySelector<HTMLElement>('.content-stage')
+            if (!topbar || !content) throw new Error('Embedded Code topbar fixture unavailable')
             return {
                 height: topbar.getBoundingClientRect().height,
-                runTop: runStrip.getBoundingClientRect().top,
+                contentTop: content.getBoundingClientRect().top,
             }
         })
         await page.evaluate(() => {
@@ -223,16 +244,20 @@ for (const viewport of [
             .querySelector<HTMLElement>('[data-e2e-code-embedded-host]')
             ?.shadowRoot?.querySelector('.topbar')?.classList.contains('is-scroll-hidden')))
             .toBe(true)
-        await page.waitForTimeout(850)
+        await expect.poll(() => page.evaluate(() => {
+            const root = document.querySelector<HTMLElement>('[data-e2e-code-embedded-host]')?.shadowRoot
+            const topbar = root?.querySelector<HTMLElement>('.topbar')
+            return topbar ? getComputedStyle(topbar).maxHeight : null
+        })).toBe('0px')
         const hidden = await page.evaluate(() => {
             const root = document.querySelector<HTMLElement>('[data-e2e-code-embedded-host]')?.shadowRoot
             const topbar = root?.querySelector<HTMLElement>('.topbar')
-            const runStrip = root?.querySelector<HTMLElement>('.run-strip')
-            if (!topbar || !runStrip) throw new Error('Embedded Code hidden topbar unavailable')
+            const content = root?.querySelector<HTMLElement>('.content-stage')
+            if (!topbar || !content) throw new Error('Embedded Code hidden topbar unavailable')
             return {
                 className: topbar.className,
                 maxHeight: getComputedStyle(topbar).maxHeight,
-                runTop: runStrip.getBoundingClientRect().top,
+                contentTop: content.getBoundingClientRect().top,
             }
         })
         await page.evaluate(() => {
@@ -250,6 +275,6 @@ for (const viewport of [
         expect(shown.height).toBeGreaterThan(0)
         expect(hidden.className).toContain('is-scroll-hidden')
         expect(hidden.maxHeight).toBe('0px')
-        expect(hidden.runTop).toBeLessThan(shown.runTop)
+        expect(hidden.contentTop).toBeLessThan(shown.contentTop)
     })
 }

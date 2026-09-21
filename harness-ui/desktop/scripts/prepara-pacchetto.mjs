@@ -64,6 +64,14 @@ async function copiaAlberoProduzione(sorgente, destinazione) {
   }
 }
 
+export async function copiaAssistenza({ sorgente, destinazione }) {
+  if (lstatSync(sorgente).isSymbolicLink()) throw new Error(`Radice assistenza collegata non ammessa: ${sorgente}`);
+  for (const nome of await elenco(sorgente)) {
+    await mkdir(dirname(join(destinazione, nome)), { recursive: true });
+    await copyFile(join(sorgente, nome), join(destinazione, nome));
+  }
+}
+
 async function esegui(comando, args, cwd, env = process.env) {
   await new Promise((ok, no) => {
     const figlio = spawn(comando, args, { cwd, env, shell: false, windowsHide: true, stdio: 'inherit' });
@@ -139,6 +147,7 @@ export async function preparaPacchetto() {
   for (const nome of ['src', 'public']) await copiaAlberoProduzione(join(root, '..', nome), join(backend, nome));
   for (const nome of ['package.json', 'package-lock.json', 'THIRD_PARTY_NOTICES.md']) await copyFile(join(root, '../..', 'context-engine', nome), join(contesto, nome));
   await copiaAlberoProduzione(join(root, '../..', 'context-engine/src'), join(contesto, 'src'));
+  await copiaAssistenza({ sorgente: join(root, '../..', 'docs/assistenza'), destinazione: join(staging, 'docs/assistenza') });
   await dipendenzeProduzione(backend);
   await dipendenzeProduzione(contesto);
   // Segnaposto VCS ignorato anche da electron-builder: non è un file di runtime.

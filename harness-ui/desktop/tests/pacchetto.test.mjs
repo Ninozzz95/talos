@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileProduzione, verificaImpronta, inventario } from '../scripts/prepara-pacchetto.mjs';
+import { copiaAssistenza, fileProduzione, verificaImpronta, inventario } from '../scripts/prepara-pacchetto.mjs';
 
 test('R02-INTEGRITA — impronta alterata blocca il pacchetto', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'talos-r02-hash-'));
@@ -28,4 +29,31 @@ test('R02-MANIFEST — nomi ordinati, byte e impronte per ogni file', async () =
   assert.deepEqual(files.map(f => f.path), ['a.txt', 'z.txt']);
   assert.equal(files[1].bytes, 3);
   assert.equal(files[1].sha256, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+});
+
+test('R02-ASSISTENZA — corpus copiato, impronta inventariata e mapping runtime esatto', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'talos-r02-assistenza-'));
+  const sorgente = join(dir, 'sorgente');
+  const destinazione = join(dir, 'staging', 'docs', 'assistenza');
+  const contenuto = '# Accesso pieno\n\nLa sessione puo usare ogni strumento consentito.\n';
+  mkdirSync(join(sorgente, 'sezioni'), { recursive: true });
+  writeFileSync(join(sorgente, 'permessi-di-sessione.md'), contenuto);
+  writeFileSync(join(sorgente, 'sezioni', 'indice.md'), '# Indice\n');
+
+  await copiaAssistenza({ sorgente, destinazione });
+
+  assert.equal(readFileSync(join(destinazione, 'permessi-di-sessione.md'), 'utf8'), contenuto);
+  const files = await inventario(join(dir, 'staging'));
+  const noto = files.find(file => file.path === 'docs/assistenza/permessi-di-sessione.md');
+  assert.deepEqual(noto, {
+    path: 'docs/assistenza/permessi-di-sessione.md',
+    bytes: Buffer.byteLength(contenuto),
+    sha256: createHash('sha256').update(contenuto).digest('hex'),
+  });
+
+  const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.deepEqual(
+    packageJson.build.extraResources.filter(resource => resource.to === 'docs'),
+    [{ from: '.staging/docs', to: 'docs' }],
+  );
 });

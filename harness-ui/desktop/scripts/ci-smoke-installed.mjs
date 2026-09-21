@@ -39,6 +39,20 @@ export async function provaInstallato({ executablePath, dataDir }) {
     assert.equal(misure.healthSenzaCookie, 401);
     misure.healthConCookie = await pagina.evaluate(async () => (await fetch('/api/v1/health', { signal: AbortSignal.timeout(5000) })).status);
     assert.equal(misure.healthConCookie, 200);
+    const assistenza = await pagina.evaluate(async () => {
+      const risposta = await fetch('/api/v1/assistenza', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domanda: 'Cosa fa Accesso pieno?' }),
+        signal: AbortSignal.timeout(5000),
+      });
+      return { status: risposta.status, corpo: await risposta.json() };
+    });
+    assert.equal(assistenza.status, 200);
+    assert.match(assistenza.corpo?.data?.risposta ?? '', /Accesso pieno/i);
+    const fonteAssistenza = 'docs/assistenza/permessi-di-sessione.md#accesso-pieno-per-esteso';
+    assert.ok(assistenza.corpo?.data?.fonti?.some((fonte) => fonte.percorso === fonteAssistenza));
+    misure.assistenza = { status: assistenza.status, fonte: fonteAssistenza };
     await pagina.reload();
     misure.healthDopoReload = await pagina.evaluate(async () => (await fetch('/api/v1/health', { signal: AbortSignal.timeout(5000) })).status);
     assert.equal(misure.healthDopoReload, 200);

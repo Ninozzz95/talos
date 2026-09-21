@@ -41,6 +41,7 @@
       { "from": ".staging/context-engine", "to": "context-engine" },
       { "from": ".staging/context-engine/node_modules", "to": "context-engine/node_modules" },
       { "from": ".staging/local-runtime", "to": "local-runtime" },
+      { "from": ".staging/docs", "to": "docs" },
       { "from": ".staging/MANIFEST.json", "to": "MANIFEST.json" },
       { "from": ".staging/AVVISI.txt", "to": "AVVISI.txt" },
       { "from": ".staging/LICENZA-REPOSITORY.txt", "to": "LICENZA-REPOSITORY.txt" }
