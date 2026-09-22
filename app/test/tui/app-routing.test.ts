@@ -366,3 +366,25 @@ test('input-fast-path RED-I3 — ordinary composer text updates a dedicated subs
   assert.doesNotMatch(rootBlock,/\.\.\.visual\.map|\bvisual\.map/u,'root must no longer render composer segments from root shell-layout state');
 });
 
+test('local-editor-fast-path RED-L3 — eligible local cursor/delete actions update composer store before global coordinator fallback',async()=>{
+  const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
+  assert.match(source,/composerFastEditorAction/u,'app must import/use the local editor eligibility seam');
+  assert.match(source,/applyComposerFastEditorAction/u,'app must apply local editor actions through the pure existing-editor seam');
+
+  const inputStart=source.indexOf('Ink.useInput');
+  assert.ok(inputStart>=0);
+  const immediate=source.indexOf("coordinator.immediate('input'",inputStart);
+  const decision=source.indexOf('composerFastEditorAction',inputStart);
+  const apply=source.indexOf('applyComposerFastEditorAction',inputStart);
+  const update=source.indexOf('composerStore.update',decision);
+  assert.ok(immediate>inputStart,'semantic fallback coordinator must remain');
+  assert.ok(decision>inputStart&&decision<immediate,'local action eligibility must be decided before global invalidation');
+  assert.ok(apply>decision&&apply<immediate,'local action application must happen before global invalidation');
+  assert.ok(update>decision&&update<immediate,'eligible local action must update only the composer store before fallback');
+
+  const fastBlock=source.slice(decision,immediate);
+  assert.doesNotMatch(fastBlock,/word-left|word-right|select-left|select-right|history-prev|history-next|kill-start|kill-end|kill-word|yank|undo|redo/u,'deferred semantic actions must not leak into the local fast branch');
+  assert.match(source,/if\(action==='delete-forward'\)[\s\S]{0,180}currentEditor\(\)\.text\.length===0[\s\S]{0,180}inkApp\.exit/u,'empty Delete global exit fallback must remain intact');
+  assert.match(source,/const handleSemanticAction=/u,'compatibility fallback must remain');
+});
+
