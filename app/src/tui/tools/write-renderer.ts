@@ -1,0 +1,2 @@
+import type {ToolRenderer} from './registry.ts';import {parseArgs,result,safeTitle} from './shared.ts';
+export const renderWrite:ToolRenderer=(row,width)=>{const a=parseArgs(row);const path=String(a.path??a.file??a.filename??'').trim();const content=String(a.content??a.text??'');const bytes=Buffer.byteLength(content,'utf8');const lines=content?content.split(/\r?\n/u).length:0;return result(safeTitle('Write',path,width),row,[`${bytes} bytes · ${lines} lines`]);};

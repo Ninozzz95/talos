@@ -1,0 +1,30 @@
+{
+  "name": "talos-cli",
+  "version": "1.0.0",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.18.0 <25"
+  },
+  "bin": {
+    "talos": "dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --experimental-strip-types --test test/**/*.test.ts",
+    "test:local": "node --experimental-strip-types --test test/**/*.test.ts",
+    "test:tui": "node --experimental-strip-types --test test/tui/**/*.test.ts"
+  },
+  "dependencies": {
+    "@microsoft/mxc-sdk": "0.8.0",
+    "ink": "7.1.1",
+    "react": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.4",
+    "@types/react": "19.2.17",
+    "typescript": "5.9.2"
+  }
+}

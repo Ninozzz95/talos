@@ -1,0 +1,23 @@
+{
+  "schema": "talos.cli.owner-inspection.v1",
+  "sourceRepository": "talos-private/agent-virtual-machine",
+  "sourceBranch": "lane/talos-cli-competitive-upgrade",
+  "sourceHead": "0e47081febc0f6c3732aa96df8c11750fe94ea7f",
+  "publicRepository": "Ninozzz95/talos",
+  "purpose": "owner-pre-release-inspection",
+  "releaseArtifact": false,
+  "signingStatus": "not-a-release",
+  "contents": [
+    "cli source",
+    "harness-ui runtime source",
+    "context-engine runtime source",
+    "lockfiles",
+    "one-click launcher",
+    "owner checklist"
+  ],
+  "node": {
+    "version": "24.18.0",
+    "archive": "node-v24.18.0-win-x64.zip",
+    "sha256": "0ae68406b42d7725661da979b1403ec9926da205c6770827f33aac9d8f26e821"
+  }
+}

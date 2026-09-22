@@ -1,0 +1,2 @@
+import type {ToolRenderer} from './registry.ts';import {boundedLines,outputText,result,safeTitle} from './shared.ts';
+export const renderGeneric:ToolRenderer=(row,width,expanded)=>{const details:string[]=[];if(row.argsText)details.push(...boundedLines(`args ${row.argsText}`,width,expanded?6:2));details.push(...boundedLines(outputText(row),width,expanded?12:3));return result(safeTitle(row.name,'',width),row,details);};

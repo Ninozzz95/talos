@@ -1,0 +1,178 @@
+TALOS CLI — OWNER STEP-BY-STEP PRE-RELEASE INSPECTION
+Source HEAD: 0e47081febc0f6c3732aa96df8c11750fe94ea7f
+Status: INSPECTION BUILD ONLY — NOT A SIGNED RELEASE
+
+Use a disposable/test project where write/edit/tool actions are safe.
+Mark each item [PASS], [FAIL], or [SKIP] and write notes beside failures.
+
+A. BOOT / IDENTITY
+[ ] A1 Double-click START-TALOS-CLI.cmd.
+[ ] A2 Checklist opens and a project-folder picker appears.
+[ ] A3 Launcher reports source HEAD 0e47081febc0f6c3732aa96df8c11750fe94ea7f.
+[ ] A4 First launch completes dependency install + TypeScript build without an error.
+[ ] A5 TALOS starts in the selected project, not inside the inspection package folder.
+[ ] A6 Exit and relaunch: cached bootstrap is reused and TALOS still opens normally.
+
+B. FIRST-RUN TRUST / PROJECT
+[ ] B1 On an untrusted project, project trust appears before agent runtime use.
+[ ] B2 Review the project/resource inventory; no unrelated path is silently trusted.
+[ ] B3 Reject/cancel once: runtime/tool execution does not proceed as if trusted.
+[ ] B4 Trust the test project and confirm the prompt is not duplicated for the same decision.
+[ ] B5 Open the Trust Center and inspect project + executable-resource trust state.
+
+C. PROVIDER / MODEL CONTROL PLANE
+[ ] C1 Open provider setup with Alt+P or /provider.
+[ ] C2 Add/test a provider using your normal safe credential flow.
+[ ] C3 Confirm credential bytes are never echoed in the UI.
+[ ] C4 Open model picker with Ctrl+L or /model.
+[ ] C5 Select a model and verify it persists for the next turn.
+[ ] C6 Toggle reasoning with Ctrl+T and confirm the visible state changes truthfully.
+
+D. BASIC AGENT TURN / STREAMING
+[ ] D1 Send a harmless prompt asking TALOS to summarize the test project.
+[ ] D2 Streaming text renders incrementally without corrupting the terminal.
+[ ] D3 Thinking/activity state ends cleanly when the turn finishes.
+[ ] D4 Scroll transcript with PageUp/PageDown.
+[ ] D5 Use Ctrl+R / transcript search and find text from the completed turn.
+[ ] D6 Use /redraw and confirm the screen reconstructs cleanly.
+
+E. TOOLS / APPROVAL / DIFF
+[ ] E1 Ask TALOS to read a known text file; inspect compact + expanded tool rendering.
+[ ] E2 Toggle tool detail with Ctrl+O.
+[ ] E3 Ask for a harmless shell command (for example listing the project directory).
+[ ] E4 Confirm approval/policy messaging matches the requested action.
+[ ] E5 Ask TALOS to create a small disposable file.
+[ ] E6 Inspect the resulting diff.
+[ ] E7 Ask TALOS to edit that file and confirm before/after content is correct.
+[ ] E8 Trigger a denied action/policy case and confirm it fails closed with an intelligible reason.
+
+F. BUSY QUEUE / STEERING / INTERRUPT
+[ ] F1 Start a turn that takes long enough to remain busy.
+[ ] F2 While busy, enter a follow-up and confirm it is visibly queued.
+[ ] F3 Edit/reorder/remove a queued item if the queue editor exposes those operations.
+[ ] F4 Exercise steering on the active run and confirm state is visible.
+[ ] F5 Interrupt/cancel the active run; confirm the UI returns to a stable idle state.
+
+G. CHECKPOINT / UNDO / REDO
+[ ] G1 Make a controlled file mutation through TALOS.
+[ ] G2 Inspect the checkpoint/history surface.
+[ ] G3 Undo/restore the mutation and verify exact file contents.
+[ ] G4 Redo/reapply where offered and verify exact file contents again.
+[ ] G5 Confirm unrelated files were not changed.
+
+H. SESSION LIFECYCLE
+[ ] H1 Note the current session id/name.
+[ ] H2 Exit TALOS completely.
+[ ] H3 Relaunch with START-TALOS-CLI.cmd.
+[ ] H4 Use /resume and resume the prior session.
+[ ] H5 Verify prior transcript/state is present.
+[ ] H6 Use /fork and confirm the fork has distinct identity without corrupting the source session.
+
+I. SUBAGENTS
+[ ] I1 Ask for a task that legitimately delegates to a subagent.
+[ ] I2 Open the agent tree/roster.
+[ ] I3 Confirm parent, depth/task and lifecycle state correspond to the real delegated work.
+[ ] I4 Confirm completed/interrupted child state is reflected rather than fabricated.
+[ ] I5 Exercise child steering only if the selected provider/task path exposes it.
+
+J. CONTEXT
+[ ] J1 Open the context inspector.
+[ ] J2 Inspect token/context status and confirm unknown values are shown as unknown.
+[ ] J3 Run enough safe work to exercise compaction, or trigger the supported compaction path.
+[ ] J4 Confirm the conversation remains usable after compaction.
+[ ] J5 Exit/resume and confirm persisted context remains coherent.
+
+K. MCP
+[ ] K1 Open /mcp.
+[ ] K2 Inspect configured servers/status.
+[ ] K3 Connect/test a known safe MCP server if one is configured.
+[ ] K4 Invoke one safe MCP capability and confirm result/tool state appears in the transcript.
+[ ] K5 Exercise an unavailable/broken MCP endpoint and confirm bounded failure handling.
+
+L. HOOKS / PLUGINS / WORKFLOWS
+[ ] L1 Open /hooks and inspect registered hooks.
+[ ] L2 Exercise one safe hook if configured.
+[ ] L3 Open /plugins and inspect plugin trust/status.
+[ ] L4 Exercise one safe plugin if configured.
+[ ] L5 Verify an untrusted/invalid plugin is blocked rather than silently executed.
+[ ] L6 Open the workflow surface and inspect available workflows.
+[ ] L7 Run one harmless workflow end-to-end if configured.
+
+M. MEMORY / NOTES / TASKS / LIBRARY
+[ ] M1 Open /memory; create/read/update a disposable memory item if the product permits it.
+[ ] M2 Open /notes; create/read/update a disposable note.
+[ ] M3 Open /tasks; create/change/complete a disposable task.
+[ ] M4 Open /library; add/read/remove a disposable library item if supported.
+[ ] M5 Exit/resume and confirm expected persistence for the above items.
+
+N. RESEARCH
+[ ] N1 Open /research.
+[ ] N2 Run a small research job on a non-sensitive topic.
+[ ] N3 Inspect sources/citations/evidence cards.
+[ ] N4 Confirm a failed/unreachable source is represented as failure/uncertainty, not invented evidence.
+[ ] N5 Inspect/export the resulting report if the surface offers export.
+
+O. AUTOMATIONS
+[ ] O1 Open /automations.
+[ ] O2 Create a harmless test automation/schedule.
+[ ] O3 Inspect policy/history/state.
+[ ] O4 Disable/delete the test automation.
+[ ] O5 Confirm no unexpected command remains scheduled.
+
+P. FORGE
+[ ] P1 Open /forge.
+[ ] P2 Inspect tool/catalog state.
+[ ] P3 Create or exercise only a harmless disposable Forge item.
+[ ] P4 Confirm scanning/trust policy is shown and unsafe executable content is not silently accepted.
+[ ] P5 Remove the disposable item.
+
+Q. ATTACHMENTS / EDITOR / COMPLETION
+[ ] Q1 Exercise file/path completion from the composer.
+[ ] Q2 Attach/reference a safe project file if the active surface supports it.
+[ ] Q3 Open the configured external editor with Ctrl+G; save/cancel and return to TALOS.
+[ ] Q4 Enter multiline text with Shift+Enter or Ctrl+J fallback.
+[ ] Q5 Exercise editor history and Vim mode only if enabled/configured.
+
+R. DIAGNOSTICS / SUPPORT
+[ ] R1 Run /doctor (or equivalent doctor command) and inspect all reported domains.
+[ ] R2 Confirm provider/keyring diagnostics reveal state but no secret bytes.
+[ ] R3 Inspect terminal capabilities/render mode/runtime layout/trust/process-tree/context/session health.
+[ ] R4 Run profiled diagnostics only if you consent to the active provider probe.
+[ ] R5 Inspect logs with a bounded tail.
+[ ] R6 Create a support bundle and inspect it before sharing: no prompt/session content or raw secrets should be present.
+[ ] R7 Confirm local paths are pseudonymized/redacted as designed.
+
+S. HEADLESS / MACHINE OUTPUT
+[ ] S1 From a second terminal in the same test project run: talos.cmd -p "summarize this project" --json
+[ ] S2 Confirm stdout is valid machine-readable JSON and interactive TUI does not load.
+[ ] S3 Exercise JSONL if supported by the current command reference.
+[ ] S4 Trigger one harmless error and inspect the structured error envelope/exit behavior.
+
+T. TERMINAL MODES
+[ ] T1 Resize the terminal narrow and wide; no critical control becomes unreachable.
+[ ] T2 Exercise --no-color from terminal mode.
+[ ] T3 Set TALOS_REDUCED_MOTION=1 and launch; status remains intelligible without animation.
+[ ] T4 Exercise the normal main-screen terminal mode.
+[ ] T5 If your terminal supports alternate-screen behavior, check entry/exit restores the shell cleanly.
+
+U. UPDATE / RELEASE-ENGINEERING OBSERVATION
+[ ] U1 Inspect update/doctor state only; record what checksum/signature capability it reports.
+[ ] U2 Do NOT treat unsigned-update behavior as release acceptance.
+[ ] U3 M11-B signed-manifest/SBOM work is intentionally not complete in this snapshot.
+[ ] U4 Do not mark the product release-ready based on this inspection package.
+
+V. FINAL OWNER REVIEW
+[ ] V1 Repeat one real model turn after all feature tests.
+[ ] V2 Exit and resume once more after process termination.
+[ ] V3 Review the test project git diff/filesystem for unexpected mutations.
+[ ] V4 Record every FAIL with exact steps, terminal, provider/model and visible error text.
+[ ] V5 Keep this inspection result separate from CI/release signing evidence.
+
+OWNER RESULT
+[ ] ACCEPTED FOR NEXT ENGINEERING/RELEASE-GATE STEP
+[ ] CHANGES REQUIRED BEFORE CONTINUING
+
+Notes:
+______________________________________________________________________________
+______________________________________________________________________________
+______________________________________________________________________________

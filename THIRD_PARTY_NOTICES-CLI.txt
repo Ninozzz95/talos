@@ -1,0 +1,22 @@
+# TALOS CLI Third-Party Notices
+
+The package lock is the authoritative inventory for the complete dependency
+graph. The Windows runtime retains dependency package metadata and license
+files under `app/node_modules`.
+
+## Microsoft eXecution Containers SDK 0.8.0
+
+- Package: `@microsoft/mxc-sdk` `0.8.0`
+- Upstream: https://github.com/microsoft/mxc
+- Reviewed tag object: `c0ea508293705ddcc60baaf286aafd3776b42eb8`
+- npm integrity: `sha512-pnf5QsASwp+qtRi5uth2GDjwuyG0rHWRpxCf3RbAjQ4wDTNfBX/9l0A+RVZspU2agpF3/11uWB1JisIS7WrNYg==`
+- License: MIT
+
+MXC is distributed as a public preview and includes platform-specific native
+executables. TALOS checks host capability evidence before use and does not
+represent preview isolation as a security boundary unless the requested
+AppContainer, Bound File System, network, and process-tree controls have been
+verified on that host.
+
+The full upstream MIT license text is retained in
+`app/node_modules/@microsoft/mxc-sdk/LICENSE.md` in packaged runtimes.

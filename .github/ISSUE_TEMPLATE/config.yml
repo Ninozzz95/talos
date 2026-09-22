@@ -1,5 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: Security problem
-    url: https://github.com/security/advisories
-    about: ⛔ Do not open a public issue. See SECURITY.md — use private reporting.

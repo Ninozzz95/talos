@@ -1,0 +1,41 @@
+{
+  "schema": "talos.cli.compatibility-manifest.v1",
+  "protocolSchemas": [
+    "talos.cli.event.v1",
+    "talos.cli.result.v1"
+  ],
+  "exitCodes": [0, 2, 10, 11, 12, 13, 14, 15, 16, 70, 130],
+  "commands": [
+    "config",
+    "provider",
+    "model",
+    "session",
+    "mcp",
+    "hook",
+    "plugin",
+    "command",
+    "memory",
+    "notes",
+    "tasks",
+    "library",
+    "research",
+    "automation",
+    "forge",
+    "doctor",
+    "logs",
+    "diagnostic",
+    "update",
+    "init"
+  ],
+  "configPrecedence": ["default", "user", "project", "project-user", "cli"],
+  "sessionStore": {
+    "schema": "talos.harness-ui.session-export.v1",
+    "pendingApprovalsOnImport": "drop",
+    "importedSessionsRunnable": false
+  },
+  "launcherCwd": {
+    "policy": "preserve-caller-cwd",
+    "explicitProjectOverride": "--project"
+  },
+  "permissionModes": ["default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"]
+}

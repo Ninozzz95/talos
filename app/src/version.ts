@@ -1,0 +1,1 @@
+export const CLI_VERSION='1.0.0';export const TALOS_BASE_COMMIT='0c432153a288f64237e98403869d02d20d8fabc7';
