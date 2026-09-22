@@ -13,7 +13,7 @@ import {providerOfModel,screenChildEnvironment} from '../provider/environment-ke
 import {createBootSequenceComponent} from './boot/boot-sequence.ts';
 import {completeBoot,createBootState,markBootError,markBootReady,shouldRenderBootLogo,skipBoot,type BootState} from './boot/boot-sequence.ts';
 import {commandMenuItems,completeCommandSelection} from './components/command-menu.ts';
-import {applyComposerFastEditorAction,composerDisplay,composerFastEditorAction,composerFastTextInput,createComposerStore,reverseHistoryMatch,type ComposerStore} from './components/composer.ts';
+import {applyComposerFastEditorAction,composerDisplay,composerFastEditorAction,composerFastTextInput,createComposerStore,planComposerHistoryAction,reverseHistoryMatch,type ComposerStore} from './components/composer.ts';
 import {headerLine} from './components/header.ts';
 import {createMarkdownParseMemo,markdownBlockLines,markdownRenderPropsEqual,markdownSafeText,parseMarkdownInline,type MarkdownInlineToken} from './components/markdown.ts';
 import {renderDiffModel} from './components/diff.ts';
@@ -168,8 +168,8 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     const [vim,setVim]=React.useState(()=>createVimState() as VimState);
     const [boot,setBoot]=React.useState(()=>createBootState(Date.now()) as BootState);
     const [history,setHistory]=React.useState([] as string[]);
-    const [historyIndex,setHistoryIndex]=React.useState(-1);
-    const [reverseIndex,setReverseIndex]=React.useState(0);
+    const historyIndexRef:{current:number}=React.useRef(-1);
+    const reverseIndexRef:{current:number}=React.useRef(0);
     const [viewport,setViewport]=React.useState(()=>({offset:0,pageSize:12,unseen:0,followingTail:true}) as TranscriptViewport);
     const [pending,setPending]=React.useState(null as PendingTuiApproval|null);
     const [approvalExpanded,setApprovalExpanded]=React.useState(false);
@@ -782,7 +782,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       const text=currentEditor().text;if(!text.trim())return;developmentLog('ui.submit.begin',{text:developmentTextEvidence(text),model:controller.model(),running:state.running,mode:controller.mode()},'info','tui');
       const clearedEditor=createEditorState('');composerStore.replace(clearedEditor);setAppState((current:TuiAppState)=>({...current,editor:clearedEditor,focus:current.focus.current==='composer'?current.focus:createFocusState('composer'),overlay:null}));
       setVim((current:VimState)=>current.enabled?{...current,mode:'insert'}:current);
-      setHistory((rows:string[])=>[text,...rows.filter(row=>row!==text)].slice(0,MAX_HISTORY));setHistoryIndex(-1);setReverseIndex(0);setViewport((view:TranscriptViewport)=>({...view,offset:0,unseen:0,followingTail:true}));
+      setHistory((rows:string[])=>[text,...rows.filter(row=>row!==text)].slice(0,MAX_HISTORY));historyIndexRef.current=-1;reverseIndexRef.current=0;setViewport((view:TranscriptViewport)=>({...view,offset:0,unseen:0,followingTail:true}));
       if(text.trim().startsWith('/')){await executeSlash(text.trim());return;}
       if(!text.trim().startsWith('!')){const readiness=await readinessFor(controller.model());developmentLog('ui.readiness',{model:controller.model(),readiness},readiness.ready?'debug':'warning','tui');if(!readiness.ready){setEditorText(text);addLocal(readiness.message);return;}}
       const willQueue=state.running||controller.queue().length>0;
@@ -790,8 +790,8 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       try{const outcome=await controller.send(text,{model:controller.model(),running:state.running});developmentLog('ui.submit.accepted',{outcome},'info','tui');}catch(error:any){developmentLogError('ui.submit.failure',error,{model:controller.model()},'tui');addLocal(error instanceof TuiNotReadyError?error.message:`Error: ${error?.message??error}`);}
     };
 
-    const historyMove=(delta:number)=>{if(!history.length)return;const next=Math.max(-1,Math.min(history.length-1,historyIndex+delta));setHistoryIndex(next);setReverseIndex(0);setEditorText(next>=0?(history[next]??''):'');};
-    const reverseSearch=()=>{const found=reverseHistoryMatch(history,currentEditor().text,reverseIndex);if(!found){setReverseIndex(0);return;}setReverseIndex(found.index+1);setHistoryIndex(found.index);setEditorText(found.value);};
+    const historyMove=(delta:number)=>{if(!history.length)return;const next=Math.max(-1,Math.min(history.length-1,historyIndexRef.current+delta));historyIndexRef.current=next;reverseIndexRef.current=0;setEditorText(next>=0?(history[next]??''):'');};
+    const reverseSearch=()=>{const found=reverseHistoryMatch(history,currentEditor().text,reverseIndexRef.current);if(!found){reverseIndexRef.current=0;return;}reverseIndexRef.current=found.index+1;historyIndexRef.current=found.index;setEditorText(found.value);};
     const cycleMode=()=>{const next=cyclePermissionMode(controller.mode());controller.setMode(next);setState((current:TuiState)=>({...current,status:{...current.status,permissionMode:next}}));};
     const cancelActiveRun=()=>{void controller.cancel().then((dropped:TuiQueuedAction[])=>{if(dropped.length)addLocal(`Cancelled the active run; ${dropped.length} queued item${dropped.length===1?' was':'s were'} not sent. They remain in input history for recovery.`);}).catch((error:unknown)=>addLocal(`Cancel failed: ${error instanceof Error?error.message:String(error)}`));};
 
@@ -914,7 +914,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         void controller.steer(text,{running:state.running}).then((outcome:any)=>{
           if(outcome.status!=='requested')return;
           const clearedEditor=createEditorState('');composerStore.replace(clearedEditor);setAppState((current:TuiAppState)=>({...current,editor:clearedEditor}));
-          setHistory((rows:string[])=>text.trim()?[text,...rows.filter(row=>row!==text)].slice(0,MAX_HISTORY):rows);setHistoryIndex(-1);setReverseIndex(0);setAuxCompletions([]);
+          setHistory((rows:string[])=>text.trim()?[text,...rows.filter(row=>row!==text)].slice(0,MAX_HISTORY):rows);historyIndexRef.current=-1;reverseIndexRef.current=0;setAuxCompletions([]);
         }).catch((error:unknown)=>addLocal(`Steering rejected: ${error instanceof Error?error.message:String(error)}`));
         return;
       }
@@ -976,6 +976,16 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       if(fastText!==null){composerStore.update(editor=>editInsert(editor,fastText));return;}
       const fastEditorAction=composerFastEditorAction({bootPhase:boot.phase,focus:appState.focus.current,modalOwner,vimMode:vim.enabled?vim.mode:'disabled',auxCount:auxCompletions.length,routed:fastDecision.routed,editor:currentEditor()});
       if(fastEditorAction!==null){composerStore.update(editor=>applyComposerFastEditorAction(editor,fastEditorAction));return;}
+      const historyPlan=planComposerHistoryAction({
+        bootPhase:boot.phase,focus:appState.focus.current,modalOwner,vimMode:vim.enabled?vim.mode:'disabled',auxCount:auxCompletions.length,
+        routed:fastDecision.routed,key,editor:currentEditor(),history,historyIndex:historyIndexRef.current,reverseIndex:reverseIndexRef.current,
+      });
+      if(historyPlan!==null){
+        historyIndexRef.current=historyPlan.historyIndex;
+        reverseIndexRef.current=historyPlan.reverseIndex;
+        composerStore.replace(historyPlan.editor);
+        return;
+      }
       coordinator.immediate('input',()=>{
       if(forgeCenter){
         if(key.ctrl&&(ch==='c'||ch==='C')){setForgeCenter(null);return;}
