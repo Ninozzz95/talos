@@ -1,9 +1,9 @@
-name: TALOS CLI transcript virtualization RED validation
+name: TALOS CLI transcript virtualization pure-seam GREEN validation
 
 on:
   push:
     branches:
-      - owner-inspection/cli-transcript-virtualization-red-5c00161e
+      - owner-inspection/cli-transcript-virtualization-pure-green-8473c422
 
 permissions:
   contents: read
@@ -91,13 +91,14 @@ jobs:
           if (-not [string]::Equals($Expected,$Observed,[System.StringComparison]::OrdinalIgnoreCase)) {
             throw "CLI cwd mismatch. Expected $Expected, observed $Observed"
           }
-      - name: Verify exact private-source blobs staged for transcript virtualization RED
+      - name: Verify exact private-source blobs staged for transcript virtualization pure GREEN
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $Expected = @{
             'app/src/tui/app.ts' = 'cfff965c821d024b1cdf3b2715aa5b50d9487e17'
             'app/src/tui/components/transcript.ts' = '5109d0c45a83c8ea3ca6d9c4e84ea3c719b83c09'
+            'app/src/tui/components/transcript-virtualizer.ts' = '9f6cba0f032c0bb90a812cd52a640b9668a72390'
             'app/src/tui/transcript-model.ts' = 'f81a6a6ef6be4ff1dccd397be2753b4d6c806801'
             'app/src/tui/components/markdown.ts' = '7861253aa15913654b305180543018e085582615'
             'app/src/tui/components/tool-row.ts' = 'e753a1427355e7e51fd75c2d4e57cc1bb9af710b'
@@ -106,12 +107,12 @@ jobs:
           }
           foreach ($Path in $Expected.Keys) {
             $Observed = (git hash-object -- $Path).Trim()
-            if ($Observed -ne $Expected[$Path]) { throw "TRANSCRIPT_RED_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
+            if ($Observed -ne $Expected[$Path]) { throw "TRANSCRIPT_PURE_GREEN_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
           }
           $Snapshot = Get-Content -LiteralPath .\INSPECTION-SNAPSHOT.json -Raw | ConvertFrom-Json
-          if ($Snapshot.sourceHead -ne 'abbaa7d08e09651a9588f52f7a425c099ee4c4b4') { throw "TRANSCRIPT_RED_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
+          if ($Snapshot.sourceHead -ne '8473c422f6c94856f267f5b6fe7ff0c47358ab67') { throw "TRANSCRIPT_PURE_GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
 
-      - name: Execute exact transcript virtualization REDs on Node 24.18.0
+      - name: Execute transcript virtualization pure GREEN gates on Node 24.18.0
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -155,9 +156,18 @@ jobs:
             finally { Pop-Location }
           }
 
-          Assert-ExpectedRed 'transcript-virtualization RED-TV1' '.\test\tui\transcript-virtualizer.test.ts' 'dynamic-height transcript planner is missing' 'EXPECTED_TRANSCRIPT_RED_TV1_CONFIRMED'
-          Assert-ExpectedRed 'transcript-virtualization RED-TV2' '.\test\tui\transcript-virtualizer.test.ts' 'transcript measurement store is missing' 'EXPECTED_TRANSCRIPT_RED_TV2_CONFIRMED'
-          Assert-ExpectedRed 'transcript-virtualization RED-TV3' '.\test\tui\transcript-virtualizer.test.ts' 'estimate-to-measured transcript correction planner is missing' 'EXPECTED_TRANSCRIPT_RED_TV3_CONFIRMED'
-          Assert-ExpectedRed 'transcript-virtualization RED-TV4' '.\test\tui\app-routing.test.ts' 'measured transcript row boundary is missing' 'EXPECTED_TRANSCRIPT_RED_TV4_CONFIRMED'
-          Assert-ExpectedRed 'transcript-virtualization RED-TV5' '.\test\tui\app-routing.test.ts' 'dedicated virtualized transcript child is missing' 'EXPECTED_TRANSCRIPT_RED_TV5_CONFIRMED'
+          Assert-Green 'transcript-virtualization RED-TV1' '.\test\tui\transcript-virtualizer.test.ts' 'TRANSCRIPT_GREEN_TV1_CONFIRMED'
+          Assert-Green 'transcript-virtualization RED-TV2' '.\test\tui\transcript-virtualizer.test.ts' 'TRANSCRIPT_GREEN_TV2_CONFIRMED'
+          Assert-Green 'transcript-virtualization RED-TV3' '.\test\tui\transcript-virtualizer.test.ts' 'TRANSCRIPT_GREEN_TV3_CONFIRMED'
+
+          Push-Location (Join-Path $PWD.Path 'app')
+          try {
+            & $NodeExe --experimental-strip-types --test '.\test\tui\transcript-virtualizer.test.ts'
+            if ($LASTEXITCODE -ne 0) { throw "TRANSCRIPT_PURE_GREEN_SUITE_FAILED exit=$LASTEXITCODE" }
+            Write-Host 'TRANSCRIPT_PURE_SUITE_GREEN'
+          }
+          finally { Pop-Location }
+
+          Assert-ExpectedRed 'transcript-virtualization RED-TV4' '.\test\tui\app-routing.test.ts' 'measured transcript row boundary is missing' 'EXPECTED_TRANSCRIPT_RED_TV4_STILL_CONFIRMED'
+          Assert-ExpectedRed 'transcript-virtualization RED-TV5' '.\test\tui\app-routing.test.ts' 'dedicated virtualized transcript child is missing' 'EXPECTED_TRANSCRIPT_RED_TV5_STILL_CONFIRMED'
           Assert-Green 'transcript-virtualization RED-TV6' '.\test\tui\app-routing.test.ts' 'TRANSCRIPT_TV6_SEMANTIC_BASELINE_GREEN'
