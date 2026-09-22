@@ -1,0 +1,45 @@
+name: TALOS CLI owner inspection package
+
+on:
+  push:
+    branches:
+      - owner-inspection/cli-0e47081f
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout inspection snapshot
+        uses: actions/checkout@v4
+      - name: Verify inspection identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(jq -r .sourceHead INSPECTION-SNAPSHOT.json)" = "0e47081febc0f6c3732aa96df8c11750fe94ea7f"
+          test -f START-TALOS-CLI.cmd
+          test -f bootstrap.ps1
+          test -f OWNER-STEP-BY-STEP-CHECKLIST.txt
+          test -f app/src/main.ts
+          test -f app/vendor/harness-ui/src/kernel/talosHarness.mjs
+          test -f app/vendor/context-engine/src/engine.mjs
+      - name: Build ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/TALOS-CLI-owner-inspection-0e47081f
+          rsync -a --exclude='.git' --exclude='.github' --exclude='out' ./ out/TALOS-CLI-owner-inspection-0e47081f/
+          cd out
+          zip -r -9 TALOS-CLI-owner-inspection-0e47081f.zip TALOS-CLI-owner-inspection-0e47081f
+          sha256sum TALOS-CLI-owner-inspection-0e47081f.zip > TALOS-CLI-owner-inspection-0e47081f.zip.sha256
+      - name: Upload inspection package
+        uses: actions/upload-artifact@v4
+        with:
+          name: TALOS-CLI-owner-inspection-0e47081f
+          path: |
+            out/TALOS-CLI-owner-inspection-0e47081f.zip
+            out/TALOS-CLI-owner-inspection-0e47081f.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
