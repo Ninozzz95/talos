@@ -30,13 +30,13 @@ C. PROVIDER / MODEL CONTROL PLANE
 
 D. BASIC AGENT TURN / STREAMING
 [ ] D0 Verify the selected Workspace printed by the launcher is the separate disposable project, never the extracted inspection package.
-[ ] D0 After pressing Enter, if TALOS is preparing the safety checkpoint before the run starts, the status must show starting rather than idle. If it remains starting unusually long, record that exact state and duration.
-[ ] D1 Send a harmless prompt asking TALOS to summarize the test project.
-[ ] D2 Streaming text renders incrementally without corrupting the terminal.
-[ ] D3 Thinking/activity state ends cleanly when the turn finishes.
-[ ] D4 Scroll transcript with PageUp/PageDown.
-[ ] D5 Use Ctrl+R / transcript search and find text from the completed turn.
-[ ] D6 Use /redraw and confirm the screen reconstructs cleanly.
+[ ] D1 After pressing Enter, if TALOS is preparing the safety checkpoint before the run starts, the status must show starting rather than idle. If it remains starting unusually long, record that exact state and duration.
+[ ] D2 Send a harmless prompt asking TALOS to summarize the test project.
+[ ] D3 Streaming text renders incrementally without corrupting the terminal.
+[ ] D4 Thinking/activity state ends cleanly when the turn finishes.
+[ ] D5 Scroll transcript with PageUp/PageDown.
+[ ] D6 Use Ctrl+R / transcript search and find text from the completed turn.
+[ ] D7 Use /redraw and confirm the screen reconstructs cleanly.
 
 E. TOOLS / APPROVAL / DIFF
 [ ] E1 Ask TALOS to read a known text file; inspect compact + expanded tool rendering.

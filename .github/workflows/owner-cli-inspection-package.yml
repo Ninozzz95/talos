@@ -51,10 +51,27 @@ jobs:
           New-Item -ItemType Directory -Force -Path $Project | Out-Null
           Set-Content -LiteralPath (Join-Path $Project 'README.txt') -Value 'owner inspection disposable project' -Encoding UTF8
           $Before = @(Get-ChildItem -LiteralPath .\DEVELOPMENT-LOGS -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
-          $Output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1 -Project $Project -PrepareOnly 2>&1
-          $Code = $LASTEXITCODE
-          $Output | ForEach-Object { Write-Host $_ }
-          if ($Code -ne 0) { throw "Separate-project preparation failed with exit $Code." }
+          $Bootstrap = Join-Path $PWD.Path 'bootstrap.ps1'
+          $Psi = New-Object System.Diagnostics.ProcessStartInfo
+          $Psi.FileName = 'powershell.exe'
+          $Psi.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $Bootstrap + '" -Project "' + $Project + '" -PrepareOnly'
+          $Psi.WorkingDirectory = $PWD.Path
+          $Psi.UseShellExecute = $false
+          $Psi.RedirectStandardOutput = $true
+          $Psi.RedirectStandardError = $true
+          $Psi.CreateNoWindow = $true
+          $Process = New-Object System.Diagnostics.Process
+          $Process.StartInfo = $Psi
+          if (-not $Process.Start()) { throw 'Failed to start separate-project bootstrap child process.' }
+          $StdoutTask = $Process.StandardOutput.ReadToEndAsync()
+          $StderrTask = $Process.StandardError.ReadToEndAsync()
+          $Process.WaitForExit()
+          $Stdout = $StdoutTask.GetAwaiter().GetResult()
+          $Stderr = $StderrTask.GetAwaiter().GetResult()
+          $Code = $Process.ExitCode
+          if ($Stdout) { Write-Host $Stdout }
+          if ($Stderr) { Write-Host $Stderr }
+          if ($Code -ne 0) { throw "Separate-project preparation failed with exit $Code.`nSTDOUT:`n$Stdout`nSTDERR:`n$Stderr" }
 
           $Logs = Get-ChildItem -LiteralPath .\DEVELOPMENT-LOGS -File | Where-Object { $Before -notcontains $_.FullName }
           $Transcript = $Logs | Where-Object Name -Like 'bootstrap-*.log' | Sort-Object LastWriteTimeUtc | Select-Object -Last 1
