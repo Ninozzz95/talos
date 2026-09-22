@@ -1009,8 +1009,6 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         ch,key,focus:appState.focus.current,composerText:currentEditor().text,commandMenuOpen:appState.focus.current==='command-menu',
         trustCenterOpen:Boolean(trustCenter),approvalExpanded,boot,keymap:effectiveKeymap,
       });
-      const commandQuery=commandMenuFastTextInput({bootPhase:boot.phase,focus:appState.focus.current,modalOwner,key,routed:fastDecision.routed});
-      if(commandQuery!==null){commandMenuSelectionStore.reset();composerStore.update(editor=>editInsert(editor,commandQuery));return;}
       const fastText=composerFastTextInput({bootPhase:boot.phase,focus:appState.focus.current,modalOwner,vimMode:vim.enabled?vim.mode:'disabled',auxCount:auxCompletions.length,key,routed:fastDecision.routed});
       if(fastText!==null){composerStore.update(editor=>editInsert(editor,fastText));return;}
       const fastPaste=composerFastPasteInput({bootPhase:boot.phase,focus:appState.focus.current,modalOwner,vimMode:vim.enabled?vim.mode:'disabled',auxCount:auxCompletions.length,key,routed:fastDecision.routed});
@@ -1027,6 +1025,8 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         composerStore.replace(historyPlan.editor);
         return;
       }
+      const commandQuery=commandMenuFastTextInput({bootPhase:boot.phase,focus:appState.focus.current,modalOwner,key,routed:fastDecision.routed});
+      if(commandQuery!==null){commandMenuSelectionStore.reset();composerStore.update(editor=>editInsert(editor,commandQuery));return;}
       coordinator.immediate('input',()=>{
       if(forgeCenter){
         if(key.ctrl&&(ch==='c'||ch==='C')){setForgeCenter(null);return;}
