@@ -9,7 +9,18 @@ permissions:
   contents: read
 
 jobs:
+  validate-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout inspection snapshot
+        uses: actions/checkout@v4
+      - name: Exercise exact one-click bootstrap
+        shell: powershell
+        run: |
+          .\bootstrap.ps1 -Project $PWD.Path -PrepareOnly
+
   package:
+    needs: validate-windows
     runs-on: ubuntu-latest
     steps:
       - name: Checkout inspection snapshot

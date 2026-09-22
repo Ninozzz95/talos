@@ -1,5 +1,6 @@
 param(
-  [string]$Project = ''
+  [string]$Project = '',
+  [switch]$PrepareOnly
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3.0
@@ -139,6 +140,17 @@ Write-Host "Node        : $(& $NodeExe --version)"
 Write-Host ''
 Write-Host 'This is an inspection build, not a signed release.'
 Write-Host ''
+
+if ($PrepareOnly) {
+  Write-Host 'Prepare-only validation: checking CLI version entrypoint...'
+  Push-Location $Project
+  try {
+    & $NodeExe $Entry --version
+    if ($LASTEXITCODE -ne 0) { throw "TALOS CLI --version failed with exit code $LASTEXITCODE" }
+  } finally { Pop-Location }
+  Write-Host 'Prepare-only validation completed successfully.'
+  exit 0
+}
 
 Push-Location $Project
 try {
