@@ -14,6 +14,16 @@ export type MarkdownBlock=
 
 export type MarkdownBlockLayout={mode:'plain'|'wide'|'narrow';lines:string[]};
 
+export type MarkdownRenderProps={text:string;width:number};
+export function markdownRenderPropsEqual(previous:MarkdownRenderProps,next:MarkdownRenderProps){return previous.text===next.text&&previous.width===next.width;}
+export function createMarkdownParseMemo({parser=parseMarkdownBlocks}:{parser?:(text:string)=>MarkdownBlock[]}={}){
+  let cachedText:string|null=null,cachedBlocks:MarkdownBlock[]|null=null;
+  return{
+    get(text:string){const value=String(text);if(cachedBlocks!==null&&cachedText===value)return cachedBlocks;const blocks=parser(value);cachedText=value;cachedBlocks=blocks;return blocks;},
+    invalidate(){cachedText=null;cachedBlocks=null;},
+  };
+}
+
 export function markdownSafeText(text:string){return sanitizeTranscriptText(String(text));}
 function safeLinkDestination(value:string){
   const destination=markdownSafeText(value).trim();
