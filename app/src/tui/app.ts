@@ -12,7 +12,7 @@ import {benchedKeyText,unusableKeyRefusal} from './catalog-service.ts';
 import {providerOfModel,screenChildEnvironment} from '../provider/environment-keys.ts';
 import {createBootSequenceComponent} from './boot/boot-sequence.ts';
 import {completeBoot,createBootState,markBootError,markBootReady,shouldRenderBootLogo,skipBoot,type BootState} from './boot/boot-sequence.ts';
-import {commandMenuItems,completeCommandSelection} from './components/command-menu.ts';
+import {commandMenuFastTextInput,commandMenuItems,completeCommandSelection,createCommandMenuSelectionStore,type CommandMenuSelectionStore} from './components/command-menu.ts';
 import {applyComposerFastEditorAction,applyComposerFastPasteInput,composerDisplay,composerFastEditorAction,composerFastPasteInput,composerFastTextInput,composerOwnsPaste,createComposerStore,planComposerHistoryAction,reverseHistoryMatch,type ComposerStore} from './components/composer.ts';
 import {headerLine} from './components/header.ts';
 import {createMarkdownParseMemo,markdownBlockLines,markdownRenderPropsEqual,markdownSafeText,parseMarkdownInline,type MarkdownInlineToken} from './components/markdown.ts';
@@ -152,6 +152,16 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       editor.text.includes('\n')?h(Ink.Text,{dimColor:true},'Shift+Enter / Ctrl+J newline · Enter send'):null
     );
   },(previous:any,next:any)=>previous.store===next.store&&previous.vimHint===next.vimHint);
+  const CommandMenuView=React.memo(function CommandMenuView({composerStore,selectionStore,rowsLimit}:{composerStore:ComposerStore;selectionStore:CommandMenuSelectionStore;rowsLimit:number}){
+    const editor:EditorState=React.useSyncExternalStore(composerStore.subscribe,composerStore.getSnapshot,composerStore.getSnapshot);
+    const selection:SelectionState=React.useSyncExternalStore(selectionStore.subscribe,selectionStore.getSnapshot,selectionStore.getSnapshot);
+    const rows=commandMenuItems(editor.text);
+    const view=pickerWindow(rows,selection.selected,rowsLimit);
+    return h(Ink.Box,{borderStyle:'single',flexDirection:'column'},
+      h(Ink.Text,{bold:true},'Commands'),
+      ...view.rows.map((row,index)=>{const absolute=view.start+index;return h(Ink.Text,{key:absolute+'-'+row.command.name,inverse:absolute===selection.selected,color:pickerColor},(absolute===selection.selected?'›':' ')+' /'+row.command.name+' · '+row.command.description);})
+    );
+  },(previous:any,next:any)=>previous.composerStore===next.composerStore&&previous.selectionStore===next.selectionStore&&previous.rowsLimit===next.rowsLimit);
 
   return function TuiApp(props:TuiAppProps){
     const {runtime,registry,catalog,invocation,projectRoot,paths,permissionRules,autoClassifier,initialPrompt,initialReasoningEffort=null,renderCoordinator,keymap:effectiveKeymap=KEYBINDINGS,terminalSize}=props;
@@ -165,6 +175,9 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     if(!composerStoreRef.current)composerStoreRef.current=createComposerStore(appState.editor);
     const composerStore:ComposerStore=composerStoreRef.current;
     const currentEditor=()=>composerStore.getSnapshot();
+    const commandMenuSelectionStoreRef:{current:CommandMenuSelectionStore|null}=React.useRef(null);
+    if(!commandMenuSelectionStoreRef.current)commandMenuSelectionStoreRef.current=createCommandMenuSelectionStore();
+    const commandMenuSelectionStore:CommandMenuSelectionStore=commandMenuSelectionStoreRef.current;
     const [vim,setVim]=React.useState(()=>createVimState() as VimState);
     const [boot,setBoot]=React.useState(()=>createBootState(Date.now()) as BootState);
     const [history,setHistory]=React.useState([] as string[]);
@@ -798,24 +811,37 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     const filteredModels=modelItems(modelRows,pickerQuery);
     const effortRows=modelEffortStep?reasoningEffortChoices(modelEffortStep):[];
     const filteredProviders=providerItems(providerRows,pickerQuery);
-    const commandRows=commandMenuItems(currentEditor().text);
     const filteredSessions=filterSessions(sessionRows,pickerQuery);
-    const activePickerRows=appState.focus.current==='model-picker'?(modelEffortStep?effortRows:filteredModels):appState.focus.current==='provider-picker'?filteredProviders:appState.focus.current==='session-picker'?filteredSessions:appState.focus.current==='command-menu'?commandRows:[];
+    const activePickerRows=appState.focus.current==='model-picker'?(modelEffortStep?effortRows:filteredModels):appState.focus.current==='provider-picker'?filteredProviders:appState.focus.current==='session-picker'?filteredSessions:[];
 
-    const movePicker=(action:string)=>{const movement=pickerMove(action);if(!movement)return;setPickerSelection((current:SelectionState)=>moveSelection({...current,query:pickerQuery},activePickerRows.length,movement));};
+    const movePicker=(action:string)=>{
+      const movement=pickerMove(action);if(!movement)return;
+      if(appState.focus.current==='command-menu'){commandMenuSelectionStore.move(commandMenuItems(currentEditor().text).length,movement);return;}
+      setPickerSelection((current:SelectionState)=>moveSelection({...current,query:pickerQuery},activePickerRows.length,movement));
+    };
     const pickerBackspace=()=>{
       if(appState.focus.current==='model-picker'&&modelEffortStep){setModelEffortStep(null);setPickerSelection({query:'',selected:0,pageSize:10});return;}
-      if(appState.focus.current==='command-menu')updateEditor(editor=>{const next=deleteBackward(editor);if(next.text.length===0)setTimeout(()=>setAppState((current:TuiAppState)=>({...current,focus:closeFocus(current.focus)})),0);return next;});
-      else if(appState.focus.current==='provider-picker'&&providerStep.kind==='key')setProviderSecret((value:string)=>value.slice(0,-1));
+      if(appState.focus.current==='command-menu'){
+        updateEditor(editor=>{const next=deleteBackward(editor);if(next.text.length===0)setTimeout(()=>setAppState((current:TuiAppState)=>({...current,focus:closeFocus(current.focus)})),0);return next;});
+        commandMenuSelectionStore.reset();
+        return;
+      }
+      if(appState.focus.current==='provider-picker'&&providerStep.kind==='key')setProviderSecret((value:string)=>value.slice(0,-1));
       else if(appState.focus.current==='provider-picker'&&providerStep.kind==='consent'){/* nothing to erase */}
       else setPickerQuery((value:string)=>value.slice(0,-1));
       setPickerSelection((current:SelectionState)=>({...current,selected:0}));
     };
     const confirmPicker=async()=>{
-      const selected=pickerSelection.selected;
       if(appState.focus.current==='command-menu'){
-        const row=commandRows[selected];if(!row)return;setEditorText(completeCommandSelection(row.command));setAppState((current:TuiAppState)=>({...current,focus:closeFocus(current.focus)}));setPickerSelection({query:'',selected:0,pageSize:10});return;
+        const selected=commandMenuSelectionStore.getSnapshot().selected;
+        const row=commandMenuItems(currentEditor().text)[selected];if(!row)return;
+        setEditorText(completeCommandSelection(row.command));
+        setAppState((current:TuiAppState)=>({...current,focus:closeFocus(current.focus)}));
+        commandMenuSelectionStore.reset();
+        setPickerSelection({query:'',selected:0,pageSize:10});
+        return;
       }
+      const selected=pickerSelection.selected;
       if(appState.focus.current==='model-picker'){
         if(modelEffortStep){
           const row=modelEffortStep;const choice=effortRows[selected];if(!choice)return;const sameLiveModel=Boolean(state.sessionId&&state.status.model===row.id);
@@ -918,7 +944,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         }).catch((error:unknown)=>addLocal(`Steering rejected: ${error instanceof Error?error.message:String(error)}`));
         return;
       }
-      if(action==='command-menu'){const editor=composerStore.update(current=>editInsert(current,'/'));setAppState((current:TuiAppState)=>({...current,editor,focus:openFocus(current.focus,'command-menu')}));setPickerSelection({query:'',selected:0,pageSize:10});return;}
+      if(action==='command-menu'){const editor=composerStore.update(current=>editInsert(current,'/'));commandMenuSelectionStore.reset();setAppState((current:TuiAppState)=>({...current,editor,focus:openFocus(current.focus,'command-menu')}));setPickerSelection({query:'',selected:0,pageSize:10});return;}
       if(action==='model-picker'){void loadModels();return;}
       if(action==='provider-picker'){void loadProviders();return;}
       if(action==='help'){applyOverlay({kind:'help'});return;}
@@ -983,6 +1009,8 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         ch,key,focus:appState.focus.current,composerText:currentEditor().text,commandMenuOpen:appState.focus.current==='command-menu',
         trustCenterOpen:Boolean(trustCenter),approvalExpanded,boot,keymap:effectiveKeymap,
       });
+      const commandQuery=commandMenuFastTextInput({bootPhase:boot.phase,focus:appState.focus.current,modalOwner,key,routed:fastDecision.routed});
+      if(commandQuery!==null){commandMenuSelectionStore.reset();composerStore.update(editor=>editInsert(editor,commandQuery));return;}
       const fastText=composerFastTextInput({bootPhase:boot.phase,focus:appState.focus.current,modalOwner,vimMode:vim.enabled?vim.mode:'disabled',auxCount:auxCompletions.length,key,routed:fastDecision.routed});
       if(fastText!==null){composerStore.update(editor=>editInsert(editor,fastText));return;}
       const fastPaste=composerFastPasteInput({bootPhase:boot.phase,focus:appState.focus.current,modalOwner,vimMode:vim.enabled?vim.mode:'disabled',auxCount:auxCompletions.length,key,routed:fastDecision.routed});
@@ -1196,7 +1224,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         if(appState.focus.current==='provider-picker'&&providerStep.kind==='consent'){const letter=routed.text.trim().toLowerCase();if(letter==='y'||letter==='n')setProviderStep({...providerStep,choice:letter==='y'?'yes':'no'});return;}
         if(appState.focus.current==='model-picker'&&modelEffortStep)return;
         if(appState.focus.current==='model-picker'||appState.focus.current==='provider-picker'||appState.focus.current==='session-picker'){setPickerQuery((value:string)=>value+routed.text);setPickerSelection((current:SelectionState)=>({...current,selected:0}));return;}
-        if(appState.focus.current==='command-menu'){updateEditor(editor=>editInsert(editor,routed.text));setPickerSelection((current:SelectionState)=>({...current,selected:0}));return;}
+        if(appState.focus.current==='command-menu'){updateEditor(editor=>editInsert(editor,routed.text));commandMenuSelectionStore.reset();setPickerSelection((current:SelectionState)=>({...current,selected:0}));return;}
         setAuxCompletions([]);updateEditor(editor=>routed.text.length>1||routed.text.includes('\n')?insertPaste(editor,routed.text):editInsert(editor,routed.text));
       }
       });
@@ -1294,7 +1322,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       diffView?h(Ink.Box,{borderStyle:'round',flexDirection:'column'},h(Ink.Text,{bold:true},`Diff · ${diffView.mode}`),...diffView.lines.map((line,index)=>h(Ink.Text,{key:index,bold:line.kind==='file'||line.kind==='hunk'||line.kind==='add'||line.kind==='remove',dimColor:line.kind==='meta'||line.kind==='context'||line.kind==='no-newline'||line.kind==='plain'},line.text))):null,
       overlayNode,
       auxCompletions.length&&!appState.overlay&&!queueEditor&&!transcriptSearch&&!contextInspector&&!mcpCenter&&!hookCenter&&!pluginCenter&&!memoryCenter&&!notesCenter&&!tasksCenter&&!libraryCenter&&!researchCenter&&!automationCenter&&!forgeCenter?h(Ink.Box,{flexDirection:'column'},...auxCompletions.map((value:string)=>h(Ink.Text,{key:value,dimColor:true},`  ${value}`))):null,
-      appState.focus.current==='command-menu'?h(Ink.Box,{borderStyle:'single',flexDirection:'column'},h(Ink.Text,{bold:true},'Commands'),...renderPickerRows(commandRows,pickerSelection.selected,(row:any)=>`/${row.command.name} · ${row.command.description}`)):null,
+      appState.focus.current==='command-menu'?h(CommandMenuView,{composerStore,selectionStore:commandMenuSelectionStore,rowsLimit:pickerRowsLimit}):null,
       h(Ink.Text,{color:footerColor},statusText),
       h(ComposerView,{store:composerStore,vimHint}),
       h(Ink.Text,{dimColor:true,color:footerColor},shortcutLine),
