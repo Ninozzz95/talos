@@ -520,3 +520,48 @@ test('command-menu-fast-path RED-CM6 — movement backspace and confirm use late
   assert.match(confirmBlock,/completeCommandSelection/u,'completed command text must retain the existing completion helper');
   assert.match(confirmBlock,/const selected=pickerSelection\.selected/u,'non-command pickers must retain their existing pickerSelection authority');
 });
+
+test('transcript-virtualization RED-TV4 — mounted transcript rows report real Ink layout height only to a local measurement store',async()=>{
+  const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
+  assert.match(source,/const MeasuredTranscriptRow=React\.memo\(/u,'measured transcript row boundary is missing');
+  const start=source.indexOf('const MeasuredTranscriptRow=React.memo(');
+  const end=source.indexOf('const TranscriptView=React.memo(',start);
+  assert.ok(start>=0&&end>start);
+  const block=source.slice(start,end);
+  assert.match(block,/React\.useRef/u,'measured row must own a stable Ink Box ref');
+  assert.match(block,/Ink\.useBoxMetrics\(/u,'exact installed Ink useBoxMetrics must provide real layout height');
+  assert.match(block,/hasMeasured/u,'zero pre-layout metrics must not become measurement authority');
+  assert.match(block,/measurementStore\.measure/u,'measured height must be written only to the transcript-local store');
+  assert.doesNotMatch(block,/setState\(|setAppState\(|setViewport\(/u,'measurement reporting must not mutate application semantic state');
+});
+
+test('transcript-virtualization RED-TV5 — TranscriptView mounts only the dynamic-height planned window',async()=>{
+  const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
+  assert.match(source,/const TranscriptView=React\.memo\(/u,'dedicated virtualized transcript child is missing');
+  const start=source.indexOf('const TranscriptView=React.memo(');
+  const appStart=source.indexOf('return function TuiApp',start);
+  assert.ok(start>=0&&appStart>start);
+  const block=source.slice(start,appStart);
+  assert.match(block,/React\.useSyncExternalStore\(measurementStore\.subscribe/u,'TranscriptView must subscribe directly to measurement changes');
+  assert.match(block,/planTranscriptVirtualWindow/u,'TranscriptView must plan rows from terminal-height geometry');
+  assert.match(block,/MeasuredTranscriptRow/u,'only planned rows may enter expensive transcript rendering');
+
+  const root=source.lastIndexOf('return h(Ink.Box,{key:');
+  assert.ok(root>=0);
+  const rootBlock=source.slice(root);
+  assert.match(rootBlock,/h\(TranscriptView/u,'root must mount the virtualized transcript boundary');
+  assert.doesNotMatch(rootBlock,/\.\.\.transcriptRows\.map/u,'root must no longer directly mount the legacy item-count transcript window');
+});
+
+test('transcript-virtualization RED-TV6 — search copy and navigation remain semantic-full-transcript operations',async()=>{
+  const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
+  const semanticStart=source.indexOf('const transcriptItemsForCurrentView=');
+  assert.ok(semanticStart>=0);
+  const semanticBlock=source.slice(semanticStart,semanticStart+4200);
+  assert.match(semanticBlock,/state\.transcript\.items/u,'semantic transcript authority must remain the full transcript model');
+  assert.match(semanticBlock,/items\.find\(\(item:TranscriptItem\)=>item\.id===preferred\)/u,'copy/selection must resolve by semantic item id, not mounted row');
+  assert.match(semanticBlock,/transcriptViewportForIndex\(view,items\.length,index\)/u,'search jump/navigation must remain based on semantic indexes');
+  assert.match(source,/transcriptSearchMatches\(items,transcriptSearch\.query/u,'search must continue scanning semantic items');
+  assert.match(source,/if\(action==='page-up'\)[\s\S]{0,240}reduceViewport/u,'existing page navigation reducer must remain');
+  assert.match(source,/const \[transcriptRaw,setTranscriptRaw\]=React\.useState/u,'raw-mode authority must remain unchanged');
+});
