@@ -106,7 +106,7 @@ function Ensure-NpmTree([string]$Dir,[bool]$ProductionOnly) {
   $Args = @('ci')
   if ($ProductionOnly) { $Args += '--omit=dev' } else { $Args += '--include=dev' }
   $Args += @('--no-audit','--no-fund')
-  Invoke-Checked $script:NpmCmd $Args $Dir "npm ci ($Mode: $Dir)"
+  Invoke-Checked $script:NpmCmd $Args $Dir "npm ci (${Mode}: $Dir)"
   Set-Content -LiteralPath $Marker -Value "$Hash $Mode" -Encoding Ascii
 }
 function Get-NodeRealPath([string]$NodeExe,[string]$Path) {
