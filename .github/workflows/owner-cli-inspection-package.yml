@@ -3,7 +3,7 @@ name: TALOS CLI productization GREEN validation
 on:
   push:
     branches:
-      - owner-inspection/cli-productization-green-4172f72c
+      - owner-inspection/disabled-productization-green-sync
 
 permissions:
   contents: read
