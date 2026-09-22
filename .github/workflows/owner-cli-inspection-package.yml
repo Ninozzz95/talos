@@ -19,11 +19,26 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $Output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1 -Project $PWD.Path -PrepareOnly 2>&1
-          $Code = $LASTEXITCODE
-          $Output | ForEach-Object { Write-Host $_ }
+          $Bootstrap = Join-Path $PWD.Path 'bootstrap.ps1'
+          $Psi = New-Object System.Diagnostics.ProcessStartInfo
+          $Psi.FileName = 'powershell.exe'
+          $Psi.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $Bootstrap + '" -Project "' + $PWD.Path + '" -PrepareOnly'
+          $Psi.WorkingDirectory = $PWD.Path
+          $Psi.UseShellExecute = $false
+          $Psi.RedirectStandardOutput = $true
+          $Psi.RedirectStandardError = $true
+          $Psi.CreateNoWindow = $true
+          $Process = New-Object System.Diagnostics.Process
+          $Process.StartInfo = $Psi
+          if (-not $Process.Start()) { throw 'Failed to start overlap-rejection child process.' }
+          $Stdout = $Process.StandardOutput.ReadToEnd()
+          $Stderr = $Process.StandardError.ReadToEnd()
+          $Process.WaitForExit()
+          $Code = $Process.ExitCode
+          if ($Stdout) { Write-Host $Stdout }
+          if ($Stderr) { Write-Host $Stderr }
+          $Text = $Stdout + [Environment]::NewLine + $Stderr
           if ($Code -eq 0) { throw 'Package-root project selection unexpectedly succeeded.' }
-          $Text = ($Output | Out-String)
           if ($Text -notmatch 'INSPECTION_PROJECT_OVERLAP') { throw "Expected INSPECTION_PROJECT_OVERLAP, got exit $Code.`n$Text" }
           $Transcript = Get-ChildItem -LiteralPath .\DEVELOPMENT-LOGS -Filter 'bootstrap-*.log' | Sort-Object LastWriteTimeUtc | Select-Object -Last 1
           if (-not $Transcript) { throw 'Overlap rejection did not leave a bootstrap transcript.' }
