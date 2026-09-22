@@ -3,7 +3,7 @@ name: TALOS CLI productization GREEN validation
 on:
   push:
     branches:
-      - owner-inspection/disabled-productization-green-sync
+      - owner-inspection/cli-productization-green-4172f72c
 
 permissions:
   contents: read
@@ -97,7 +97,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $Expected = @{
             'app/src/tui/components/markdown.ts' = '7861253aa15913654b305180543018e085582615'
-            'app/src/tui/app.ts' = '51e7f048f3078a8f983ed0e576bf64737d0e0a2c'
+            'app/src/tui/app.ts' = '46c22428388ed2b5968f7a03f474934cff0f1c2a'
             'app/test/tui/markdown-rich.test.ts' = 'a6c70995796ca0f5982a084f5fdcce1cddaf7184'
             'app/test/tui/app-routing.test.ts' = '530f14d27575128aeb58b2cf62309491e01c536e'
           }
@@ -106,7 +106,7 @@ jobs:
             if ($Observed -ne $Expected[$Path]) { throw "GREEN_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
           }
           $Snapshot = Get-Content -LiteralPath .\INSPECTION-SNAPSHOT.json -Raw | ConvertFrom-Json
-          if ($Snapshot.sourceHead -ne '4172f72c9497df088eb6876023f49859a46d8eee') { throw "GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
+          if ($Snapshot.sourceHead -ne '083bc8e5b1474cb101f3f17b26a2d84d94565d93') { throw "GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
 
       - name: Execute focused productization GREEN tests on exact Node 24.18.0
         shell: powershell
