@@ -1,9 +1,9 @@
-name: TALOS CLI command-menu pure-seam GREEN validation
+name: TALOS CLI command-menu query fast-path final GREEN validation
 
 on:
   push:
     branches:
-      - owner-inspection/cli-command-menu-pure-green-499ad4dd
+      - owner-inspection/cli-command-menu-green-6de6d924
 
 permissions:
   contents: read
@@ -91,12 +91,12 @@ jobs:
           if (-not [string]::Equals($Expected,$Observed,[System.StringComparison]::OrdinalIgnoreCase)) {
             throw "CLI cwd mismatch. Expected $Expected, observed $Observed"
           }
-      - name: Verify exact private-source blobs staged for command-menu pure GREEN
+      - name: Verify exact private-source blobs staged for command-menu final GREEN
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $Expected = @{
-            'app/src/tui/app.ts' = 'c414db1f67825ca6f8b99388897998bfd05ba5b5'
+            'app/src/tui/app.ts' = 'f84c17cf2fe38d802cd7124b58b32cf80b14dbc7'
             'app/src/tui/components/composer.ts' = '2b11c32ba1d6fa7b237ccc447d3a9fa9ecce1207'
             'app/src/tui/components/command-menu.ts' = 'cc97f61f7c3203e9a8758574853102b0e7e4b57e'
             'app/test/tui/composer.test.ts' = 'e612c0d2839fd076125281898fcedc8b009577a1'
@@ -108,23 +108,29 @@ jobs:
           }
           foreach ($Path in $Expected.Keys) {
             $Observed = (git hash-object -- $Path).Trim()
-            if ($Observed -ne $Expected[$Path]) { throw "COMMAND_MENU_PURE_GREEN_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
+            if ($Observed -ne $Expected[$Path]) { throw "COMMAND_MENU_FINAL_GREEN_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
           }
           $Snapshot = Get-Content -LiteralPath .\INSPECTION-SNAPSHOT.json -Raw | ConvertFrom-Json
-          if ($Snapshot.sourceHead -ne '499ad4dd3b0b0b2ce5bf0272300bc6107cfa873b') { throw "COMMAND_MENU_PURE_GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
+          if ($Snapshot.sourceHead -ne '6de6d92492dc1cc56d8e7909b44b227c669d464f') { throw "COMMAND_MENU_FINAL_GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
 
-      - name: Execute command-menu pure GREEN gates on Node 24.18.0
+      - name: Execute command-menu final GREEN gates on Node 24.18.0
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $NodeExe = Join-Path $env:LOCALAPPDATA 'TALOS-CLI\inspection-bootstrap\node-24.18.0\node-v24.18.0-win-x64\node.exe'
-          if (-not (Test-Path -LiteralPath $NodeExe)) { throw "COMMAND_MENU_PURE_GREEN_NODE_RUNTIME_MISSING: $NodeExe" }
+          if (-not (Test-Path -LiteralPath $NodeExe)) { throw "COMMAND_MENU_FINAL_GREEN_NODE_RUNTIME_MISSING: $NodeExe" }
           $Version = & $NodeExe --version
-          if ($Version -ne 'v24.18.0') { throw "COMMAND_MENU_PURE_GREEN_NODE_VERSION_MISMATCH: $Version" }
+          if ($Version -ne 'v24.18.0') { throw "COMMAND_MENU_FINAL_GREEN_NODE_VERSION_MISMATCH: $Version" }
 
           function Assert-Green([string]$Pattern,[string]$File,[string]$Sentinel) {
             & $NodeExe --experimental-strip-types --test --test-name-pattern "$Pattern" "$File"
-            if ($LASTEXITCODE -ne 0) { throw "COMMAND_MENU_PURE_GREEN_TARGET_FAILED pattern=$Pattern exit=$LASTEXITCODE" }
+            if ($LASTEXITCODE -ne 0) { throw "COMMAND_MENU_FINAL_GREEN_TARGET_FAILED pattern=$Pattern exit=$LASTEXITCODE" }
+            Write-Host $Sentinel
+          }
+
+          function Assert-Suite([string]$File,[string]$Sentinel) {
+            & $NodeExe --experimental-strip-types --test "$File"
+            if ($LASTEXITCODE -ne 0) { throw "COMMAND_MENU_FINAL_GREEN_SUITE_FAILED file=$File exit=$LASTEXITCODE" }
             Write-Host $Sentinel
           }
 
@@ -133,9 +139,20 @@ jobs:
             Assert-Green 'command-menu-fast-path RED-CM1' '.\test\tui\command-menu.test.ts' 'COMMAND_MENU_GREEN_CM1_CONFIRMED'
             Assert-Green 'command-menu-fast-path RED-CM2' '.\test\tui\command-menu.test.ts' 'COMMAND_MENU_GREEN_CM2_CONFIRMED'
             Assert-Green 'command-menu-fast-path RED-CM3' '.\test\tui\command-menu.test.ts' 'COMMAND_MENU_GREEN_CM3_CONFIRMED'
+            Assert-Green 'command-menu-fast-path RED-CM4' '.\test\tui\app-routing.test.ts' 'COMMAND_MENU_GREEN_CM4_CONFIRMED'
+            Assert-Green 'command-menu-fast-path RED-CM5' '.\test\tui\app-routing.test.ts' 'COMMAND_MENU_GREEN_CM5_CONFIRMED'
+            Assert-Green 'command-menu-fast-path RED-CM6' '.\test\tui\app-routing.test.ts' 'COMMAND_MENU_GREEN_CM6_CONFIRMED'
 
-            & $NodeExe --experimental-strip-types --test '.\test\tui\command-menu.test.ts'
-            if ($LASTEXITCODE -ne 0) { throw "COMMAND_MENU_PURE_GREEN_SUITE_FAILED exit=$LASTEXITCODE" }
-            Write-Host 'COMMAND_MENU_PURE_SUITE_GREEN'
+            Assert-Green 'input-fast-path RED-I3' '.\test\tui\app-routing.test.ts' 'COMMAND_MENU_REGRESSION_I3_GREEN'
+            Assert-Green 'local-editor-fast-path RED-L3' '.\test\tui\app-routing.test.ts' 'COMMAND_MENU_REGRESSION_L3_GREEN'
+            Assert-Green 'history-fast-path RED-H4' '.\test\tui\app-routing.test.ts' 'COMMAND_MENU_REGRESSION_H4_GREEN'
+            Assert-Green 'paste-ime-fast-path RED-Paste3' '.\test\tui\app-routing.test.ts' 'COMMAND_MENU_REGRESSION_PASTE3_GREEN'
+            Assert-Green 'paste-ime-fast-path RED-Paste4' '.\test\tui\app-routing.test.ts' 'COMMAND_MENU_REGRESSION_PASTE4_GREEN'
+
+            Assert-Suite '.\test\tui\command-menu.test.ts' 'COMMAND_MENU_FOCUSED_SUITE_GREEN'
+            Assert-Suite '.\test\tui\composer.test.ts' 'COMMAND_MENU_COMPOSER_SUITE_GREEN'
+            Assert-Suite '.\test\tui\editor.test.ts' 'COMMAND_MENU_EDITOR_SUITE_GREEN'
+            Assert-Suite '.\test\tui\editor-history.test.ts' 'COMMAND_MENU_EDITOR_HISTORY_SUITE_GREEN'
+            Assert-Suite '.\test\tui\input-router.test.ts' 'COMMAND_MENU_INPUT_ROUTER_SUITE_GREEN'
           }
           finally { Pop-Location }
