@@ -15,7 +15,7 @@ import {completeBoot,createBootState,markBootError,markBootReady,shouldRenderBoo
 import {commandMenuItems,completeCommandSelection} from './components/command-menu.ts';
 import {reverseHistoryMatch} from './components/composer.ts';
 import {headerLine} from './components/header.ts';
-import {markdownBlockLines,markdownSafeText,parseMarkdownBlocks,parseMarkdownInline,type MarkdownInlineToken} from './components/markdown.ts';
+import {createMarkdownParseMemo,markdownBlockLines,markdownRenderPropsEqual,markdownSafeText,parseMarkdownInline,type MarkdownInlineToken} from './components/markdown.ts';
 import {renderDiffModel} from './components/diff.ts';
 import {parseUnifiedDiff} from './diff-model.ts';
 import {busyIndicatorText} from './components/status-indicator.ts';
@@ -130,8 +130,10 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     if(token.kind==='link')return h(React.Fragment,{key},h(Ink.Text,{underline:true,color:pickerColor},token.text),h(Ink.Text,{dimColor:true},` (${token.href})`));
     return h(Ink.Text,{key},token.text);
   });
-  function MarkdownView({text,width}:{text:string;width:number}){
-    const blocks=parseMarkdownBlocks(text);
+  const MarkdownView=React.memo(function MarkdownView({text,width}:{text:string;width:number}){
+    const parseMemoRef=React.useRef(null);
+    if(!parseMemoRef.current)parseMemoRef.current=createMarkdownParseMemo();
+    const blocks=parseMemoRef.current.get(text);
     return h(React.Fragment,null,...blocks.map((block,index)=>{
       if(block.kind==='heading')return h(Ink.Text,{key:index,bold:true},...renderInline(block.text,`h-${index}`));
       if(block.kind==='code')return h(Ink.Box,{key:index,flexDirection:'column'},...block.tokens.map((line:any[],lineIndex:number)=>h(Ink.Text,{key:lineIndex},...line.map((token:any,tokenIndex:number)=>h(Ink.Text,{key:tokenIndex,dimColor:token.kind==='comment',bold:token.kind==='keyword'||token.kind==='key'},markdownSafeText(token.text))))));
@@ -140,7 +142,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       if(block.kind==='table'){const layout=markdownBlockLines(block,width);return h(Ink.Box,{key:index,flexDirection:'column'},...layout.lines.map((line,lineIndex)=>h(Ink.Text,{key:lineIndex,bold:layout.mode==='wide'&&lineIndex===0,dimColor:lineIndex===1&&layout.mode==='wide'},line||' ')));}
       return h(Ink.Text,{key:index},...renderInline(block.text,`p-${index}`));
     }));
-  }
+  },markdownRenderPropsEqual);
 
   return function TuiApp(props:TuiAppProps){
     const {runtime,registry,catalog,invocation,projectRoot,paths,permissionRules,autoClassifier,initialPrompt,initialReasoningEffort=null,renderCoordinator,keymap:effectiveKeymap=KEYBINDINGS,terminalSize}=props;
