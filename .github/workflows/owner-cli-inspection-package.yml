@@ -1,9 +1,9 @@
-name: TALOS CLI local editor fast-path GREEN validation
+name: TALOS CLI word-selection fast-path RED validation
 
 on:
   push:
     branches:
-      - owner-inspection/cli-local-editor-green-9e20c5e9
+      - owner-inspection/cli-word-selection-red-b642f049
 
 permissions:
   contents: read
@@ -91,43 +91,58 @@ jobs:
           if (-not [string]::Equals($Expected,$Observed,[System.StringComparison]::OrdinalIgnoreCase)) {
             throw "CLI cwd mismatch. Expected $Expected, observed $Observed"
           }
-      - name: Verify exact private-source blobs staged for local-editor GREEN
+      - name: Verify exact private-source blobs staged for word-selection RED
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $Expected = @{
             'app/src/tui/app.ts' = 'd2d264c9640df91a90858e7c46da977b9c70849d'
             'app/src/tui/components/composer.ts' = '3ded2a79a07e6fa0e876875fe113e5a6a30ba3c5'
-            'app/test/tui/composer.test.ts' = '601c6d69f7e4156056cd7db77c001d0f8e5fd4cc'
+            'app/test/tui/composer.test.ts' = 'a348aa0687bef0fc5e29dee4202c526af46428f7'
             'app/test/tui/app-routing.test.ts' = '3946d45f54b525abf82fdf9a2c4af908ac2de48a'
             'app/test/tui/editor.test.ts' = 'ce00d9438ef285bb89186b79ee09bd19b155f2ec'
             'app/test/tui/input-router.test.ts' = '536a1ce4e0f7abaf505c314bf6ddd4c58b79ebd5'
           }
           foreach ($Path in $Expected.Keys) {
             $Observed = (git hash-object -- $Path).Trim()
-            if ($Observed -ne $Expected[$Path]) { throw "GREEN_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
+            if ($Observed -ne $Expected[$Path]) { throw "RED_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
           }
           $Snapshot = Get-Content -LiteralPath .\INSPECTION-SNAPSHOT.json -Raw | ConvertFrom-Json
-          if ($Snapshot.sourceHead -ne '9e20c5e9d21f27fd705a5f45b26ba2cd4be2c218') { throw "GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
+          if ($Snapshot.sourceHead -ne 'b642f04955bf8ac7cfc2ddfbccca756d4e4be102') { throw "RED_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
 
-      - name: Execute focused local-editor GREEN tests on exact Node 24.18.0
+      - name: Execute exact word-selection REDs on Node 24.18.0
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $NodeExe = Join-Path $env:LOCALAPPDATA 'TALOS-CLI\inspection-bootstrap\node-24.18.0\node-v24.18.0-win-x64\node.exe'
-          if (-not (Test-Path -LiteralPath $NodeExe)) { throw "GREEN_NODE_RUNTIME_MISSING: $NodeExe" }
+          if (-not (Test-Path -LiteralPath $NodeExe)) { throw "RED_NODE_RUNTIME_MISSING: $NodeExe" }
           $Version = & $NodeExe --version
-          if ($Version -ne 'v24.18.0') { throw "GREEN_NODE_VERSION_MISMATCH: $Version" }
-          Push-Location .\app
-          try {
-            & $NodeExe --experimental-strip-types --test .\test\tui\composer.test.ts
-            if ($LASTEXITCODE -ne 0) { throw "GREEN_COMPOSER_TESTS_FAILED: $LASTEXITCODE" }
-            & $NodeExe --experimental-strip-types --test --test-name-pattern "input-fast-path RED-I3|local-editor-fast-path RED-L3" .\test\tui\app-routing.test.ts
-            if ($LASTEXITCODE -ne 0) { throw "GREEN_WIRING_TESTS_FAILED: $LASTEXITCODE" }
-            & $NodeExe --experimental-strip-types --test .\test\tui\editor.test.ts
-            if ($LASTEXITCODE -ne 0) { throw "GREEN_EDITOR_TESTS_FAILED: $LASTEXITCODE" }
-            & $NodeExe --experimental-strip-types --test .\test\tui\input-router.test.ts
-            if ($LASTEXITCODE -ne 0) { throw "GREEN_INPUT_ROUTER_TESTS_FAILED: $LASTEXITCODE" }
-          } finally {
-            Pop-Location
+          if ($Version -ne 'v24.18.0') { throw "RED_NODE_VERSION_MISMATCH: $Version" }
+
+          function Assert-ExpectedRed([string]$Pattern,[string]$Expected,[string]$Sentinel) {
+            $Psi = New-Object System.Diagnostics.ProcessStartInfo
+            $Psi.FileName = $NodeExe
+            $Psi.Arguments = '--experimental-strip-types --test --test-name-pattern "' + $Pattern + '" .\test\tui\composer.test.ts'
+            $Psi.WorkingDirectory = (Join-Path $PWD.Path 'app')
+            $Psi.UseShellExecute = $false
+            $Psi.RedirectStandardOutput = $true
+            $Psi.RedirectStandardError = $true
+            $Psi.CreateNoWindow = $true
+            $Process = New-Object System.Diagnostics.Process
+            $Process.StartInfo = $Psi
+            if (-not $Process.Start()) { throw "RED_PROCESS_START_FAILED: $Pattern" }
+            $StdoutTask = $Process.StandardOutput.ReadToEndAsync()
+            $StderrTask = $Process.StandardError.ReadToEndAsync()
+            $Process.WaitForExit()
+            $Stdout = $StdoutTask.GetAwaiter().GetResult()
+            $Stderr = $StderrTask.GetAwaiter().GetResult()
+            if ($Stdout) { Write-Host $Stdout }
+            if ($Stderr) { Write-Host $Stderr }
+            if ($Process.ExitCode -eq 0) { throw "RED_UNEXPECTEDLY_GREEN: $Pattern" }
+            $Text = $Stdout + [Environment]::NewLine + $Stderr
+            if ($Text -notmatch [regex]::Escape($Expected)) { throw "RED_FAILED_FOR_UNEXPECTED_REASON: $Pattern exit=$($Process.ExitCode)" }
+            Write-Host $Sentinel
           }
+
+          Assert-ExpectedRed 'word-selection-fast-path RED-W1' 'word-left is now owner-authorized for the local fast path' 'EXPECTED_WORD_SELECTION_RED_W1_CONFIRMED'
+          Assert-ExpectedRed 'word-selection-fast-path RED-W2' 'word-left must be delegated to the existing moveWord helper' 'EXPECTED_WORD_SELECTION_RED_W2_CONFIRMED'
