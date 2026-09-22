@@ -38,8 +38,9 @@ export type TuiSteerState=
  | {status:'failed';redirectId:string;code:string;message:string}
  | {status:'rejected';code:string;message:string};
 export type TuiSteerOutcome={status:'requested';redirectId:string}|{status:'rejected';code:string;message:string};
+export type TuiPreparationState={active:boolean;operation:'start'|'resume'|'fork'};
 
-export function createTuiSessionController({runtime,projectRoot,model,mode,rules,paths,autoClassifier,readiness,onEvent,onApproval,onError=()=>{},onQueueChange,onQueueRestored,onQueuedDispatch,onSteerState}:{runtime:CliRuntime;projectRoot:string;model:string;mode:PermissionMode;rules:RuleSetInput;paths?:CliPaths;autoClassifier?:AutoClassifier;readiness?:(model:string)=>Promise<TuiSendReadiness>;onEvent:(e:TuiEvent)=>void;onApproval?:(p:PendingTuiApproval|null)=>void;onError?:(e:unknown)=>void;onQueueChange?:(queue:readonly TuiQueuedAction[])=>void;onQueueRestored?:(queue:readonly TuiQueueEntry[])=>void;onQueuedDispatch?:(action:TuiQueuedAction)=>void;onSteerState?:(state:TuiSteerState)=>void}){
+export function createTuiSessionController({runtime,projectRoot,model,mode,rules,paths,autoClassifier,readiness,onEvent,onApproval,onError=()=>{},onQueueChange,onQueueRestored,onQueuedDispatch,onSteerState,onPreparation}:{runtime:CliRuntime;projectRoot:string;model:string;mode:PermissionMode;rules:RuleSetInput;paths?:CliPaths;autoClassifier?:AutoClassifier;readiness?:(model:string)=>Promise<TuiSendReadiness>;onEvent:(e:TuiEvent)=>void;onApproval?:(p:PendingTuiApproval|null)=>void;onError?:(e:unknown)=>void;onQueueChange?:(queue:readonly TuiQueuedAction[])=>void;onQueueRestored?:(queue:readonly TuiQueueEntry[])=>void;onQueuedDispatch?:(action:TuiQueuedAction)=>void;onSteerState?:(state:TuiSteerState)=>void;onPreparation?:(state:TuiPreparationState)=>void}){
   let currentMode=mode;
   let currentModel=model;
   const engine=createPermissionEngine({projectRoot,rules,mode,...(autoClassifier?{classifier:autoClassifier}:{}),...(paths?{persistRule:async(effect,action)=>persistPermissionRule({paths,projectRoot,effect,action})}:{})});
@@ -75,12 +76,16 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
     checkpointBlockedError=blocked;queuePausedState=true;onError(blocked);return blocked;
   }
   function assertCheckpointReady(){if(checkpointBlockedError)throw checkpointBlockedError;}
+  function preparation(state:TuiPreparationState){try{onPreparation?.(state);}catch{/* UI observation cannot change send semantics. */}}
   async function runModelMutation(operation:'start'|'resume'|'fork',sessionId:string|null,invoke:()=>Promise<string>){
     assertCheckpointReady();
     if(!checkpointStore)return invoke();
     if(operation==='start'&&!checkpointMutationAllowed(currentMode))return invoke();
     if(modelCheckpoint)throw Object.assign(new Error('CHECKPOINT_TURN_ALREADY_OPEN'),{code:'CHECKPOINT_TURN_ALREADY_OPEN'});
-    const checkpoint=await checkpointStore.begin({operation,...(sessionId?{sessionId}:{})});modelCheckpoint=checkpoint;
+    let checkpoint:CheckpointHandle;preparation({active:true,operation});
+    try{checkpoint=await checkpointStore.begin({operation,...(sessionId?{sessionId}:{})});}
+    finally{preparation({active:false,operation});}
+    modelCheckpoint=checkpoint;
     try{const id=await invoke();checkpoint.bindSession(id);return id;}
     catch(error){if(modelCheckpoint===checkpoint)modelCheckpoint=null;try{await checkpoint.finalize();}catch(finalization){checkpointFailure('CHECKPOINT_FINALIZE_FAILED',finalization);}throw error;}
   }

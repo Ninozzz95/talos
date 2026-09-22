@@ -3,7 +3,7 @@ name: TALOS CLI owner inspection package
 on:
   push:
     branches:
-      - owner-inspection/cli-0e47081f
+      - owner-inspection/cli-33da96c7
 
 permissions:
   contents: read
@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(jq -r .sourceHead INSPECTION-SNAPSHOT.json)" = "0e47081febc0f6c3732aa96df8c11750fe94ea7f"
+          test "$(jq -r .sourceHead INSPECTION-SNAPSHOT.json)" = "33da96c7e3a2a0aa90ca9ac884095c08b5cc52bb"
           test -f START-TALOS-CLI.cmd
           test -f bootstrap.ps1
           test -f OWNER-STEP-BY-STEP-CHECKLIST.txt
@@ -40,17 +40,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p out/TALOS-CLI-owner-inspection-0e47081f
-          rsync -a --exclude='.git' --exclude='.github' --exclude='out' ./ out/TALOS-CLI-owner-inspection-0e47081f/
+          mkdir -p out/TALOS-CLI-owner-inspection-33da96c7
+          rsync -a --exclude='.git' --exclude='.github' --exclude='out' ./ out/TALOS-CLI-owner-inspection-33da96c7/
           cd out
-          zip -r -9 TALOS-CLI-owner-inspection-0e47081f.zip TALOS-CLI-owner-inspection-0e47081f
-          sha256sum TALOS-CLI-owner-inspection-0e47081f.zip > TALOS-CLI-owner-inspection-0e47081f.zip.sha256
+          zip -r -9 TALOS-CLI-owner-inspection-33da96c7.zip TALOS-CLI-owner-inspection-33da96c7
+          sha256sum TALOS-CLI-owner-inspection-33da96c7.zip > TALOS-CLI-owner-inspection-33da96c7.zip.sha256
       - name: Upload inspection package
         uses: actions/upload-artifact@v4
         with:
-          name: TALOS-CLI-owner-inspection-0e47081f
+          name: TALOS-CLI-owner-inspection-33da96c7
           path: |
-            out/TALOS-CLI-owner-inspection-0e47081f.zip
-            out/TALOS-CLI-owner-inspection-0e47081f.zip.sha256
+            out/TALOS-CLI-owner-inspection-33da96c7.zip
+            out/TALOS-CLI-owner-inspection-33da96c7.zip.sha256
           if-no-files-found: error
           retention-days: 7

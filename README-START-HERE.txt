@@ -2,7 +2,7 @@ TALOS CLI — OWNER INSPECTION PACKAGE
 ====================================
 
 SOURCE SNAPSHOT
-0e47081febc0f6c3732aa96df8c11750fe94ea7f
+33da96c7e3a2a0aa90ca9ac884095c08b5cc52bb
 branch: lane/talos-cli-competitive-upgrade
 
 PURPOSE
