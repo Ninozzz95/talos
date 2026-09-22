@@ -81,7 +81,7 @@ test('word-selection-fast-path RED-W1 — existing local seam expands only to au
   for(const action of ['word-left','word-right','select-left','select-right','select-home','select-end','select-up','select-down','select-word-left','select-word-right']){
     assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action}}),action,action+' is now owner-authorized for the local fast path');
   }
-  for(const action of ['copy-selection','history-prev','history-next','history-search']){
+  for(const action of ['history-prev','history-next','history-search']){
     assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action}}),null,action+' remains outside the authorized slice');
   }
   assert.equal(composer.composerFastEditorAction({...base,focus:'model-picker'}),null);
@@ -157,7 +157,7 @@ test('kill-undo-fast-path RED-K1 — existing local seam expands only to authori
       action+' is now owner-authorized for the local fast path',
     );
   }
-  for(const action of ['copy-selection','history-prev','history-next','history-search']){
+  for(const action of ['history-prev','history-next','history-search']){
     assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action}}),null,action+' stays on the semantic fallback path');
   }
   assert.equal(composer.composerFastEditorAction({...base,focus:'model-picker'}),null);
@@ -206,5 +206,50 @@ test('kill-undo-fast-path RED-K2 — application exactly reuses current kill yan
   const pastedRedo=composer.applyComposerFastEditorAction(pastedUndo,'redo');
   assert.deepEqual(pastedRedo,editor.redoEditor(pastedUndo));
   assert.equal(pastedRedo.collapsedPastes.length,1,'redo must restore collapsed-paste metadata through the existing history');
+});
+
+test('copy-selection-fast-path RED-C1 — existing local seam expands only to non-destructive copy-selection',async()=>{
+  const composer:any=await import('../../src/tui/components/composer.ts');
+  const base={
+    bootPhase:'ready',focus:'composer',modalOwner:false,vimMode:'insert',auxCount:0,
+    routed:{kind:'action',action:'copy-selection'},editor:createEditorState('alpha beta'),
+  };
+  assert.equal(
+    composer.composerFastEditorAction(base),
+    'copy-selection',
+    'copy-selection is now owner-authorized for the local fast path',
+  );
+  for(const action of ['history-prev','history-next','history-search']){
+    assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action}}),null,action+' remains outside this slice');
+  }
+  assert.equal(composer.composerFastEditorAction({...base,focus:'model-picker'}),null);
+  assert.equal(composer.composerFastEditorAction({...base,modalOwner:true}),null);
+  assert.equal(composer.composerFastEditorAction({...base,bootPhase:'starting'}),null);
+  assert.equal(composer.composerFastEditorAction({...base,vimMode:'normal'}),null);
+  assert.equal(composer.composerFastEditorAction({...base,auxCount:1}),null);
+});
+
+test('copy-selection-fast-path RED-C2 — application exactly reuses non-destructive editor copy semantics',async()=>{
+  const composer:any=await import('../../src/tui/components/composer.ts');
+  const editor:any=await import('../../src/tui/editor.ts');
+
+  const base=editor.createEditorState('alpha beta');
+  const atEnd=editor.moveCursor(base,'end');
+  const selected=editor.moveCursor(atEnd,'left',true);
+  const expected=editor.copySelection(selected);
+  const actual=composer.applyComposerFastEditorAction(selected,'copy-selection');
+  assert.deepEqual(actual,expected,'copy-selection must delegate to the existing copySelection helper');
+  assert.equal(actual.text,selected.text,'copy must not mutate text');
+  assert.equal(actual.cursor,selected.cursor,'copy must not move the cursor');
+  assert.equal(actual.selectionAnchor,selected.selectionAnchor,'copy must preserve the selection');
+  assert.deepEqual(actual.editHistory,selected.editHistory,'copy must not create an undo step');
+  assert.equal(actual.killBuffer,selected.text.slice(Math.min(selected.cursor,selected.selectionAnchor),Math.max(selected.cursor,selected.selectionAnchor)));
+
+  const noSelection=editor.createEditorState('abc');
+  assert.equal(
+    composer.applyComposerFastEditorAction(noSelection,'copy-selection'),
+    noSelection,
+    'copy without a selection must preserve exact object identity',
+  );
 });
 
