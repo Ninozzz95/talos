@@ -131,7 +131,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     return h(Ink.Text,{key},token.text);
   });
   const MarkdownView=React.memo(function MarkdownView({text,width}:{text:string;width:number}){
-    const parseMemoRef=React.useRef(null);
+    const parseMemoRef:{current:ReturnType<typeof createMarkdownParseMemo>|null}=React.useRef(null);
     if(!parseMemoRef.current)parseMemoRef.current=createMarkdownParseMemo();
     const blocks=parseMemoRef.current.get(text);
     return h(React.Fragment,null,...blocks.map((block,index)=>{
