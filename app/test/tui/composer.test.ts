@@ -66,7 +66,7 @@ test('input-fast-path RED-I2 — only one unambiguous ordinary composer characte
   assert.equal(composer.composerFastTextInput({...base,focus:'command-menu'}),null);
 });
 
-test('local-editor-fast-path RED-L1 — only fail-closed local cursor/delete actions are eligible',async()=>{
+test('word-selection-fast-path RED-W1 — existing local seam expands only to authorized word and selection actions',async()=>{
   const composer:any=await import('../../src/tui/components/composer.ts');
   assert.equal(typeof composer.composerFastEditorAction,'function','local editor fast-path needs an explicit fail-closed eligibility seam');
   const base={
@@ -78,8 +78,11 @@ test('local-editor-fast-path RED-L1 — only fail-closed local cursor/delete act
   }
   assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action:'delete-forward'}}),'delete-forward');
   assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action:'delete-forward'},editor:createEditorState('')}),null,'empty delete must preserve TALOS global exit/fallback semantics');
-  for(const action of ['word-left','word-right','select-left','select-right','history-prev','history-next','kill-start','kill-end','kill-word','yank','undo','redo']){
-    assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action}}),null,action+' stays outside this slice');
+  for(const action of ['word-left','word-right','select-left','select-right','select-home','select-end','select-up','select-down','select-word-left','select-word-right']){
+    assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action}}),action,action+' is now owner-authorized for the local fast path');
+  }
+  for(const action of ['history-prev','history-next','kill-start','kill-end','kill-word','yank','undo','redo']){
+    assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action}}),null,action+' remains outside the authorized slice');
   }
   assert.equal(composer.composerFastEditorAction({...base,focus:'model-picker'}),null);
   assert.equal(composer.composerFastEditorAction({...base,modalOwner:true}),null);
@@ -110,3 +113,33 @@ test('local-editor-fast-path RED-L2 — local application reuses existing immuta
   assert.deepEqual(composer.applyComposerFastEditorAction(createEditorState('a\nb'),'end'),moveCursor(createEditorState('a\nb'),'end'));
 });
 
+
+test('word-selection-fast-path RED-W2 — application exactly reuses current word and selection editor semantics',async()=>{
+  const composer:any=await import('../../src/tui/components/composer.ts');
+  const {moveCursor,moveVertical,moveWord}=await import('../../src/tui/editor.ts');
+
+  let wordBase=createEditorState('alpha beta gamma');
+  wordBase=moveCursor(wordBase,'end');
+  assert.deepEqual(composer.applyComposerFastEditorAction(wordBase,'word-left'),moveWord(wordBase,-1),'word-left must be delegated to the existing moveWord helper');
+  assert.deepEqual(composer.applyComposerFastEditorAction(wordBase,'word-right'),moveWord(wordBase,1));
+
+  const cursorBase=moveCursor(createEditorState('alpha beta'),'right');
+  for(const [action,direction] of [['select-left','left'],['select-right','right'],['select-home','home'],['select-end','end']] as const){
+    const actual=composer.applyComposerFastEditorAction(cursorBase,action);
+    const expected=moveCursor(cursorBase,direction,true);
+    assert.deepEqual(actual,expected,action+' must preserve selectionAnchor and cursor semantics exactly');
+  }
+
+  const verticalBase=moveCursor(createEditorState('abcdef\nxy\n123456'),'end');
+  const up=composer.applyComposerFastEditorAction(verticalBase,'select-up');
+  assert.deepEqual(up,moveVertical(verticalBase,-1,true));
+  assert.equal(up.selectionAnchor,verticalBase.cursor,'first extended vertical move must anchor at the original cursor');
+  assert.equal(up.preferredColumn,moveVertical(verticalBase,-1,true).preferredColumn,'vertical preferred column must be preserved');
+
+  const down=composer.applyComposerFastEditorAction(up,'select-down');
+  assert.deepEqual(down,moveVertical(up,1,true),'continued vertical selection must retain the existing anchor/preferred-column contract');
+
+  const wordSelectionBase=moveCursor(createEditorState('alpha beta gamma'),'end');
+  assert.deepEqual(composer.applyComposerFastEditorAction(wordSelectionBase,'select-word-left'),moveWord(wordSelectionBase,-1,true));
+  assert.deepEqual(composer.applyComposerFastEditorAction(wordSelectionBase,'select-word-right'),moveWord(wordSelectionBase,1,true));
+});
