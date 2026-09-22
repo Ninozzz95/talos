@@ -2,9 +2,9 @@
   "schema": "talos.cli.owner-inspection.v1",
   "sourceRepository": "talos-private/agent-virtual-machine",
   "sourceBranch": "lane/talos-cli-competitive-upgrade",
-  "sourceHead": "abbaa7d08e09651a9588f52f7a425c099ee4c4b4",
+  "sourceHead": "8473c422f6c94856f267f5b6fe7ff0c47358ab67",
   "publicRepository": "Ninozzz95/talos",
-  "purpose": "transcript-virtualization-red-validation",
+  "purpose": "transcript-virtualization-pure-green-validation",
   "releaseArtifact": false,
   "signingStatus": "not-a-release",
   "contents": [
