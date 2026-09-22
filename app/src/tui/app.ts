@@ -13,7 +13,7 @@ import {providerOfModel,screenChildEnvironment} from '../provider/environment-ke
 import {createBootSequenceComponent} from './boot/boot-sequence.ts';
 import {completeBoot,createBootState,markBootError,markBootReady,shouldRenderBootLogo,skipBoot,type BootState} from './boot/boot-sequence.ts';
 import {commandMenuItems,completeCommandSelection} from './components/command-menu.ts';
-import {reverseHistoryMatch} from './components/composer.ts';
+import {composerDisplay,composerFastTextInput,createComposerStore,reverseHistoryMatch,type ComposerStore} from './components/composer.ts';
 import {headerLine} from './components/header.ts';
 import {createMarkdownParseMemo,markdownBlockLines,markdownRenderPropsEqual,markdownSafeText,parseMarkdownInline,type MarkdownInlineToken} from './components/markdown.ts';
 import {renderDiffModel} from './components/diff.ts';
@@ -143,6 +143,15 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       return h(Ink.Text,{key:index},...renderInline(block.text,`p-${index}`));
     }));
   },markdownRenderPropsEqual);
+  const ComposerView=React.memo(function ComposerView({store,vimHint}:{store:ComposerStore;vimHint:string}){
+    const editor:EditorState=React.useSyncExternalStore(store.subscribe,store.getSnapshot,store.getSnapshot);
+    const visual=composerDisplay(editor);
+    return h(Ink.Box,{borderStyle:'single',flexDirection:'column'},
+      h(Ink.Text,null,'> ',...visual.map((segment:any,index:number)=>h(Ink.Text,{key:index,inverse:segment.kind==='cursor'||segment.selected,dimColor:segment.kind==='paste'},segment.text))),
+      vimHint?h(Ink.Text,{dimColor:true},vimHint):null,
+      editor.text.includes('\n')?h(Ink.Text,{dimColor:true},'Shift+Enter / Ctrl+J newline · Enter send'):null
+    );
+  },(previous:any,next:any)=>previous.store===next.store&&previous.vimHint===next.vimHint);
 
   return function TuiApp(props:TuiAppProps){
     const {runtime,registry,catalog,invocation,projectRoot,paths,permissionRules,autoClassifier,initialPrompt,initialReasoningEffort=null,renderCoordinator,keymap:effectiveKeymap=KEYBINDINGS,terminalSize}=props;
@@ -152,6 +161,10 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     const baseMode=(invocation.permissionMode??'default') as PermissionMode;
     const [state,setState]=React.useState(()=>initialTuiState({model:NO_PROVIDER_MODEL,permissionMode:baseMode}));
     const [appState,setAppState]=React.useState(()=>createTuiAppState());
+    const composerStoreRef:{current:ComposerStore|null}=React.useRef(null);
+    if(!composerStoreRef.current)composerStoreRef.current=createComposerStore(appState.editor);
+    const composerStore:ComposerStore=composerStoreRef.current;
+    const currentEditor=()=>composerStore.getSnapshot();
     const [vim,setVim]=React.useState(()=>createVimState() as VimState);
     const [boot,setBoot]=React.useState(()=>createBootState(Date.now()) as BootState);
     const [history,setHistory]=React.useState([] as string[]);
@@ -299,7 +312,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         return controller.initialize({resume:invocation.resume,fork:invocation.fork,initialPrompt:prompt}).then((id:string|null)=>{
         if(!alive)return;
         if(prompt?.trim())setState((current:TuiState)=>({...userMessage(current,prompt.trim(),`user-${Date.now()}`),sessionId:id??current.sessionId}));
-        if(readiness&&!readiness.ready){setAppState((current:TuiAppState)=>({...current,editor:replaceEditorText(current.editor,String(initialPrompt).trim())}));setState((current:TuiState)=>localMessage(current,readiness.message));}
+        if(readiness&&!readiness.ready){const editor=replaceEditorText(currentEditor(),String(initialPrompt).trim());composerStore.replace(editor);setAppState((current:TuiAppState)=>({...current,editor}));setState((current:TuiState)=>localMessage(current,readiness.message));}
         setBoot((current:BootState)=>markBootReady(current,Date.now()));
         void refreshAgentRows();
       });}).catch((error:unknown)=>{if(alive){setBoot((current:BootState)=>markBootError(current));setState((current:TuiState)=>localMessage(current,`Error: ${error instanceof Error?error.message:String(error)}`));}});
@@ -307,7 +320,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       return()=>{alive=false;controller.close();};
     },[]);
 
-    const updateEditor=(fn:(editor:EditorState)=>EditorState)=>setAppState((current:TuiAppState)=>({...current,editor:fn(current.editor)}));
+    const updateEditor=(fn:(editor:EditorState)=>EditorState)=>{const editor=composerStore.update(fn);setAppState((current:TuiAppState)=>current.editor===editor?current:{...current,editor});return editor;};
     const setEditorText=(text:string)=>updateEditor(editor=>replaceEditorText(editor,text));
     const addLocal=(text:string)=>setState((current:TuiState)=>localMessage(current,text));
     const transcriptItemsForCurrentView=():TranscriptItem[]=>appState.reasoningVisible?(state.transcript.items as TranscriptItem[]):(state.transcript.items as TranscriptItem[]).filter((item:TranscriptItem)=>item.kind!=='reasoning');
@@ -766,8 +779,8 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     };
 
     const submit=async()=>{
-      const text=appState.editor.text;if(!text.trim())return;developmentLog('ui.submit.begin',{text:developmentTextEvidence(text),model:controller.model(),running:state.running,mode:controller.mode()},'info','tui');
-      setAppState((current:TuiAppState)=>({...current,editor:createEditorState(''),focus:current.focus.current==='composer'?current.focus:createFocusState('composer'),overlay:null}));
+      const text=currentEditor().text;if(!text.trim())return;developmentLog('ui.submit.begin',{text:developmentTextEvidence(text),model:controller.model(),running:state.running,mode:controller.mode()},'info','tui');
+      const clearedEditor=createEditorState('');composerStore.replace(clearedEditor);setAppState((current:TuiAppState)=>({...current,editor:clearedEditor,focus:current.focus.current==='composer'?current.focus:createFocusState('composer'),overlay:null}));
       setVim((current:VimState)=>current.enabled?{...current,mode:'insert'}:current);
       setHistory((rows:string[])=>[text,...rows.filter(row=>row!==text)].slice(0,MAX_HISTORY));setHistoryIndex(-1);setReverseIndex(0);setViewport((view:TranscriptViewport)=>({...view,offset:0,unseen:0,followingTail:true}));
       if(text.trim().startsWith('/')){await executeSlash(text.trim());return;}
@@ -778,14 +791,14 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     };
 
     const historyMove=(delta:number)=>{if(!history.length)return;const next=Math.max(-1,Math.min(history.length-1,historyIndex+delta));setHistoryIndex(next);setReverseIndex(0);setEditorText(next>=0?(history[next]??''):'');};
-    const reverseSearch=()=>{const found=reverseHistoryMatch(history,appState.editor.text,reverseIndex);if(!found){setReverseIndex(0);return;}setReverseIndex(found.index+1);setHistoryIndex(found.index);setEditorText(found.value);};
+    const reverseSearch=()=>{const found=reverseHistoryMatch(history,currentEditor().text,reverseIndex);if(!found){setReverseIndex(0);return;}setReverseIndex(found.index+1);setHistoryIndex(found.index);setEditorText(found.value);};
     const cycleMode=()=>{const next=cyclePermissionMode(controller.mode());controller.setMode(next);setState((current:TuiState)=>({...current,status:{...current.status,permissionMode:next}}));};
     const cancelActiveRun=()=>{void controller.cancel().then((dropped:TuiQueuedAction[])=>{if(dropped.length)addLocal(`Cancelled the active run; ${dropped.length} queued item${dropped.length===1?' was':'s were'} not sent. They remain in input history for recovery.`);}).catch((error:unknown)=>addLocal(`Cancel failed: ${error instanceof Error?error.message:String(error)}`));};
 
     const filteredModels=modelItems(modelRows,pickerQuery);
     const effortRows=modelEffortStep?reasoningEffortChoices(modelEffortStep):[];
     const filteredProviders=providerItems(providerRows,pickerQuery);
-    const commandRows=commandMenuItems(appState.editor.text);
+    const commandRows=commandMenuItems(currentEditor().text);
     const filteredSessions=filterSessions(sessionRows,pickerQuery);
     const activePickerRows=appState.focus.current==='model-picker'?(modelEffortStep?effortRows:filteredModels):appState.focus.current==='provider-picker'?filteredProviders:appState.focus.current==='session-picker'?filteredSessions:appState.focus.current==='command-menu'?commandRows:[];
 
@@ -897,15 +910,15 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         return;
       }
       if(action==='steer'){
-        const text=appState.editor.text;
+        const text=currentEditor().text;
         void controller.steer(text,{running:state.running}).then((outcome:any)=>{
           if(outcome.status!=='requested')return;
-          setAppState((current:TuiAppState)=>({...current,editor:createEditorState('')}));
+          const clearedEditor=createEditorState('');composerStore.replace(clearedEditor);setAppState((current:TuiAppState)=>({...current,editor:clearedEditor}));
           setHistory((rows:string[])=>text.trim()?[text,...rows.filter(row=>row!==text)].slice(0,MAX_HISTORY):rows);setHistoryIndex(-1);setReverseIndex(0);setAuxCompletions([]);
         }).catch((error:unknown)=>addLocal(`Steering rejected: ${error instanceof Error?error.message:String(error)}`));
         return;
       }
-      if(action==='command-menu'){setAppState((current:TuiAppState)=>({...current,editor:editInsert(current.editor,'/'),focus:openFocus(current.focus,'command-menu')}));setPickerSelection({query:'',selected:0,pageSize:10});return;}
+      if(action==='command-menu'){const editor=composerStore.update(current=>editInsert(current,'/'));setAppState((current:TuiAppState)=>({...current,editor,focus:openFocus(current.focus,'command-menu')}));setPickerSelection({query:'',selected:0,pageSize:10});return;}
       if(action==='model-picker'){void loadModels();return;}
       if(action==='provider-picker'){void loadProviders();return;}
       if(action==='help'){applyOverlay({kind:'help'});return;}
@@ -919,10 +932,10 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       if(action==='history-search'){reverseSearch();return;}
       if(action==='history-prev'&&key?.ctrl){historyMove(1);return;}
       if(action==='history-next'&&key?.ctrl){historyMove(-1);return;}
-      if(action==='external-editor'){void editExternally({text:appState.editor.text,editor:process.env.VISUAL??process.env.EDITOR,tmpRoot:paths.cacheRoot}).then(setEditorText).catch(error=>addLocal(`External editor: ${error instanceof Error?error.message:String(error)}`));return;}
+      if(action==='external-editor'){void editExternally({text:currentEditor().text,editor:process.env.VISUAL??process.env.EDITOR,tmpRoot:paths.cacheRoot}).then(setEditorText).catch(error=>addLocal(`External editor: ${error instanceof Error?error.message:String(error)}`));return;}
       if(action==='palette'){
-        const token=lastProjectToken(appState.editor.text);if(token){void completeProjectPath(projectRoot,token).then(rows=>{setAuxCompletions(rows.map(row=>row.value));if(rows.length===1)updateEditor(editor=>replaceLastProjectToken(editor,token,rows[0]!.value));});return;}
-        const rows=commandMenuItems(appState.editor.text);setAuxCompletions(rows.slice(0,8).map(row=>`/${row.command.name}`));if(rows.length===1)setEditorText(completeCommandSelection(rows[0]!.command));return;
+        const token=lastProjectToken(currentEditor().text);if(token){void completeProjectPath(projectRoot,token).then(rows=>{setAuxCompletions(rows.map(row=>row.value));if(rows.length===1)updateEditor(editor=>replaceLastProjectToken(editor,token,rows[0]!.value));});return;}
+        const rows=commandMenuItems(currentEditor().text);setAuxCompletions(rows.slice(0,8).map(row=>`/${row.command.name}`));if(rows.length===1)setEditorText(completeCommandSelection(rows[0]!.command));return;
       }
       if(action==='newline'){updateEditor(editor=>editInsert(editor,'\n'));return;}
       if(action==='submit'){void submit();return;}
@@ -947,13 +960,21 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       if(action==='kill-end'){updateEditor(killToEnd);return;}
       if(action==='kill-word'){updateEditor(killWordBackward);return;}
       if(action==='yank'){updateEditor(yank);return;}
-      if(action==='delete-forward'){if(appState.editor.text.length===0&&!state.running)inkApp.exit();else updateEditor(deleteForward);return;}
+      if(action==='delete-forward'){if(currentEditor().text.length===0&&!state.running)inkApp.exit();else updateEditor(deleteForward);return;}
       if(action==='backspace'){updateEditor(deleteBackward);return;}
-      if(action==='history-prev'){const hadSelection=appState.editor.selectionAnchor!==undefined;const moved=moveVertical(appState.editor,-1);if(moved.cursor!==appState.editor.cursor||hadSelection)updateEditor(()=>moved);else historyMove(1);return;}
-      if(action==='history-next'){const hadSelection=appState.editor.selectionAnchor!==undefined;const moved=moveVertical(appState.editor,1);if(moved.cursor!==appState.editor.cursor||hadSelection)updateEditor(()=>moved);else historyMove(-1);return;}
+      if(action==='history-prev'){const editor=currentEditor();const hadSelection=editor.selectionAnchor!==undefined;const moved=moveVertical(editor,-1);if(moved.cursor!==editor.cursor||hadSelection)updateEditor(()=>moved);else historyMove(1);return;}
+      if(action==='history-next'){const editor=currentEditor();const hadSelection=editor.selectionAnchor!==undefined;const moved=moveVertical(editor,1);if(moved.cursor!==editor.cursor||hadSelection)updateEditor(()=>moved);else historyMove(-1);return;}
     };
 
-    Ink.useInput((ch:string,key:any)=>coordinator.immediate('input',()=>{
+    Ink.useInput((ch:string,key:any)=>{
+      const modalOwner=Boolean(appState.overlay||queueEditor||transcriptSearch||contextInspector||agentTreeOverlay||trustCenter||mcpCenter||hookCenter||pluginCenter||memoryCenter||notesCenter||tasksCenter||libraryCenter||researchCenter||automationCenter||forgeCenter||pending);
+      const fastDecision=decideShellInput({
+        ch,key,focus:appState.focus.current,composerText:currentEditor().text,commandMenuOpen:appState.focus.current==='command-menu',
+        trustCenterOpen:Boolean(trustCenter),approvalExpanded,boot,keymap:effectiveKeymap,
+      });
+      const fastText=composerFastTextInput({bootPhase:boot.phase,focus:appState.focus.current,modalOwner,vimMode:vim.enabled?vim.mode:'disabled',auxCount:auxCompletions.length,key,routed:fastDecision.routed});
+      if(fastText!==null){composerStore.update(editor=>editInsert(editor,fastText));return;}
+      coordinator.immediate('input',()=>{
       if(forgeCenter){
         if(key.ctrl&&(ch==='c'||ch==='C')){setForgeCenter(null);return;}
         if(key.escape||(ch==='q'&&!key.ctrl&&!key.meta)){setForgeCenter(null);return;}
@@ -1000,11 +1021,11 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         }
         if(ch==='a'){
           const row=selectedLibraryEntry(libraryCenter);if(!row)return;
-          void libraryFacade().prepareContextReference(row.id).then(reference=>{setEditorText(attachLibraryContextToken(appState.editor.text,reference.token));setLibraryCenter(null);}).catch((error:unknown)=>addLocal('Library attach failed: '+(error instanceof Error?error.message:String(error))));return;
+          void libraryFacade().prepareContextReference(row.id).then(reference=>{setEditorText(attachLibraryContextToken(currentEditor().text,reference.token));setLibraryCenter(null);}).catch((error:unknown)=>addLocal('Library attach failed: '+(error instanceof Error?error.message:String(error))));return;
         }
         if(ch==='d'){
           const row=selectedLibraryEntry(libraryCenter),token=row?.context.token;if(!token)return;
-          setEditorText(detachLibraryContextToken(appState.editor.text,token));setLibraryCenter(null);return;
+          setEditorText(detachLibraryContextToken(currentEditor().text,token));setLibraryCenter(null);return;
         }
         return;
       }
@@ -1024,7 +1045,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         if(ch==='r'){const row=selectedNote(notesCenter);void loadNotesCenter(row?.id);return;}
         if(ch==='c'){
           const row=selectedNote(notesCenter);if(!row)return;
-          void notesFacade().composerReference(row.id).then((reference:string)=>{const existing=appState.editor.text;setEditorText(existing.trim()?existing+'\n\n'+reference:reference);setNotesCenter(null);}).catch((error:unknown)=>addLocal('Note composer attach failed: '+(error instanceof Error?error.message:String(error))));return;
+          void notesFacade().composerReference(row.id).then((reference:string)=>{const existing=currentEditor().text;setEditorText(existing.trim()?existing+'\n\n'+reference:reference);setNotesCenter(null);}).catch((error:unknown)=>addLocal('Note composer attach failed: '+(error instanceof Error?error.message:String(error))));return;
         }
         return;
       }
@@ -1133,11 +1154,11 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       }
       const vimOwnsInput=boot.phase==='ready'&&!trustCenter&&!mcpCenter&&!hookCenter&&!pluginCenter&&!memoryCenter&&!notesCenter&&!tasksCenter&&!libraryCenter&&!researchCenter&&!automationCenter&&!forgeCenter&&appState.focus.current==='composer'&&vim.enabled&&(vim.mode==='normal'||Boolean(key.escape));
       if(vimOwnsInput){
-        const vimResult=handleVimInput({state:vim,editor:appState.editor,ch,key});
-        if(vimResult.handled){setVim(vimResult.state);if(vimResult.editor!==appState.editor)updateEditor(()=>vimResult.editor);setAuxCompletions([]);return;}
+        const vimResult=handleVimInput({state:vim,editor:currentEditor(),ch,key});
+        if(vimResult.handled){setVim(vimResult.state);if(vimResult.editor!==currentEditor())updateEditor(()=>vimResult.editor);setAuxCompletions([]);return;}
       }
       const decision=decideShellInput({
-        ch,key,focus:appState.focus.current,composerText:appState.editor.text,commandMenuOpen:appState.focus.current==='command-menu',
+        ch,key,focus:appState.focus.current,composerText:currentEditor().text,commandMenuOpen:appState.focus.current==='command-menu',
         trustCenterOpen:Boolean(trustCenter),approvalExpanded,boot,keymap:effectiveKeymap,
       });
       if(decision.closeTrustCenter){setTrustCenter(null);return;}
@@ -1153,7 +1174,8 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         if(appState.focus.current==='command-menu'){updateEditor(editor=>editInsert(editor,routed.text));setPickerSelection((current:SelectionState)=>({...current,selected:0}));return;}
         setAuxCompletions([]);updateEditor(editor=>routed.text.length>1||routed.text.includes('\n')?insertPaste(editor,routed.text):editInsert(editor,routed.text));
       }
-    }));
+      });
+    });
 
     const layoutState={...state,usage:contextStatus??state.usage};
     const layout=deriveShellLayout({
@@ -1249,7 +1271,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       auxCompletions.length&&!appState.overlay&&!queueEditor&&!transcriptSearch&&!contextInspector&&!mcpCenter&&!hookCenter&&!pluginCenter&&!memoryCenter&&!notesCenter&&!tasksCenter&&!libraryCenter&&!researchCenter&&!automationCenter&&!forgeCenter?h(Ink.Box,{flexDirection:'column'},...auxCompletions.map((value:string)=>h(Ink.Text,{key:value,dimColor:true},`  ${value}`))):null,
       appState.focus.current==='command-menu'?h(Ink.Box,{borderStyle:'single',flexDirection:'column'},h(Ink.Text,{bold:true},'Commands'),...renderPickerRows(commandRows,pickerSelection.selected,(row:any)=>`/${row.command.name} · ${row.command.description}`)):null,
       h(Ink.Text,{color:footerColor},statusText),
-      h(Ink.Box,{borderStyle:'single',flexDirection:'column'},h(Ink.Text,null,'> ',...visual.map((segment:any,index:number)=>h(Ink.Text,{key:index,inverse:segment.kind==='cursor'||segment.selected,dimColor:segment.kind==='paste'},segment.text))),vimHint?h(Ink.Text,{dimColor:true},vimHint):null,appState.editor.text.includes('\n')?h(Ink.Text,{dimColor:true},'Shift+Enter / Ctrl+J newline · Enter send'):null),
+      h(ComposerView,{store:composerStore,vimHint}),
       h(Ink.Text,{dimColor:true,color:footerColor},shortcutLine),
       ...(agentRows.length
         ?agentRows.map((row:AgentRosterRow)=>h(Ink.Text,{key:`agent-roster-${row.id}`,color:row.hasCollision?approvalColor:footerColor,bold:row.hasCollision},agentRosterLine({row,width:columns,nowMs:motionNow})))
