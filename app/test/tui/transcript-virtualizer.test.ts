@@ -80,8 +80,8 @@ test('transcript-virtualization RED-TV2 — measurement store is synchronous wid
 
 test('transcript-virtualization RED-TV3 — real measurements override estimates without changing the anchored end item',async()=>{
   const api=await virtualizerApi();
-  assert.equal(typeof api.planTranscriptVirtualWindow,'function');
-  assert.equal(typeof api.createTranscriptMeasurementStore,'function');
+  assert.equal(typeof api.planTranscriptVirtualWindow,'function','estimate-to-measured transcript correction planner is missing');
+  assert.equal(typeof api.createTranscriptMeasurementStore,'function','estimate-to-measured transcript measurement store is missing');
   assert.equal(typeof api.transcriptMeasurementKey,'function');
 
   const items=[{id:'a'},{id:'b'},{id:'c'},{id:'d'}];
