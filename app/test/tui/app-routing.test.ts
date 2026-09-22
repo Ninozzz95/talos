@@ -388,3 +388,34 @@ test('local-editor-fast-path RED-L3 — eligible local cursor/delete actions upd
   assert.match(source,/const handleSemanticAction=/u,'compatibility fallback must remain');
 });
 
+test('history-fast-path RED-H4 — invisible history cursors use refs and history planning bypasses the global coordinator',async()=>{
+  const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
+  assert.match(source,/planComposerHistoryAction/u,'app must use the pure history planner');
+  assert.match(source,/historyIndexRef/u,'history index must be retained synchronously without root state');
+  assert.match(source,/reverseIndexRef/u,'reverse-search index must be retained synchronously without root state');
+  assert.doesNotMatch(source,/const \[historyIndex,setHistoryIndex\]=React\.useState/u,'invisible history index must not remain root React state');
+  assert.doesNotMatch(source,/const \[reverseIndex,setReverseIndex\]=React\.useState/u,'invisible reverse-search index must not remain root React state');
+  assert.doesNotMatch(source,/setHistoryIndex\(|setReverseIndex\(/u,'history cursor writes must not schedule root renders');
+  assert.match(source,/const \[history,setHistory\]=React\.useState/u,'the retained prompt history rows remain ordinary app/session state');
+
+  const inputStart=source.indexOf('Ink.useInput');
+  assert.ok(inputStart>=0);
+  const immediate=source.indexOf("coordinator.immediate('input'",inputStart);
+  const planner=source.indexOf('planComposerHistoryAction',inputStart);
+  const historyRefWrite=source.indexOf('historyIndexRef.current=',planner);
+  const reverseRefWrite=source.indexOf('reverseIndexRef.current=',planner);
+  const storeWrite=source.indexOf('composerStore.replace',planner);
+  assert.ok(immediate>inputStart,'semantic coordinator fallback must remain');
+  assert.ok(planner>inputStart&&planner<immediate,'history planner must run before global coordinator invalidation');
+  assert.ok(historyRefWrite>planner&&historyRefWrite<immediate,'history index ref must update before fallback');
+  assert.ok(reverseRefWrite>planner&&reverseRefWrite<immediate,'reverse index ref must update before fallback');
+  assert.ok(storeWrite>planner&&storeWrite<immediate,'eligible history plan must update only the composer store before fallback');
+
+  const historyMove=source.indexOf('const historyMove=');
+  const reverseSearch=source.indexOf('const reverseSearch=');
+  assert.ok(historyMove>=0&&reverseSearch>historyMove);
+  assert.match(source.slice(historyMove,historyMove+1200),/historyIndexRef\.current/u,'fallback history movement must use the same history ref authority');
+  assert.match(source.slice(historyMove,historyMove+1200),/reverseIndexRef\.current/u,'fallback history movement must reset the same reverse-search ref');
+  assert.match(source.slice(reverseSearch,reverseSearch+900),/reverseIndexRef\.current/u,'fallback reverse search must use the same reverse-search ref');
+});
+
