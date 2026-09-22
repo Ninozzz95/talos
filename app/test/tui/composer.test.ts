@@ -81,7 +81,7 @@ test('word-selection-fast-path RED-W1 — existing local seam expands only to au
   for(const action of ['word-left','word-right','select-left','select-right','select-home','select-end','select-up','select-down','select-word-left','select-word-right']){
     assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action}}),action,action+' is now owner-authorized for the local fast path');
   }
-  for(const action of ['history-prev','history-next','kill-start','kill-end','kill-word','yank','undo','redo']){
+  for(const action of ['copy-selection','history-prev','history-next','history-search']){
     assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action}}),null,action+' remains outside the authorized slice');
   }
   assert.equal(composer.composerFastEditorAction({...base,focus:'model-picker'}),null);
@@ -143,3 +143,68 @@ test('word-selection-fast-path RED-W2 — application exactly reuses current wor
   assert.deepEqual(composer.applyComposerFastEditorAction(wordSelectionBase,'select-word-left'),moveWord(wordSelectionBase,-1,true));
   assert.deepEqual(composer.applyComposerFastEditorAction(wordSelectionBase,'select-word-right'),moveWord(wordSelectionBase,1,true));
 });
+
+test('kill-undo-fast-path RED-K1 — existing local seam expands only to authorized kill yank undo redo actions',async()=>{
+  const composer:any=await import('../../src/tui/components/composer.ts');
+  const base={
+    bootPhase:'ready',focus:'composer',modalOwner:false,vimMode:'insert',auxCount:0,
+    routed:{kind:'action',action:'kill-start'},editor:createEditorState('alpha beta'),
+  };
+  for(const action of ['kill-start','kill-end','kill-word','yank','undo','redo']){
+    assert.equal(
+      composer.composerFastEditorAction({...base,routed:{kind:'action',action}}),
+      action,
+      action+' is now owner-authorized for the local fast path',
+    );
+  }
+  for(const action of ['copy-selection','history-prev','history-next','history-search']){
+    assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action}}),null,action+' stays on the semantic fallback path');
+  }
+  assert.equal(composer.composerFastEditorAction({...base,focus:'model-picker'}),null);
+  assert.equal(composer.composerFastEditorAction({...base,modalOwner:true}),null);
+  assert.equal(composer.composerFastEditorAction({...base,bootPhase:'starting'}),null);
+  assert.equal(composer.composerFastEditorAction({...base,vimMode:'normal'}),null);
+  assert.equal(composer.composerFastEditorAction({...base,auxCount:1}),null);
+});
+
+test('kill-undo-fast-path RED-K2 — application exactly reuses current kill yank undo redo editor semantics',async()=>{
+  const composer:any=await import('../../src/tui/components/composer.ts');
+  const editor:any=await import('../../src/tui/editor.ts');
+
+  let killBase=editor.createEditorState('alpha beta');
+  killBase=editor.moveCursor(killBase,'end');
+  assert.deepEqual(composer.applyComposerFastEditorAction(killBase,'kill-word'),editor.killWordBackward(killBase));
+  assert.deepEqual(composer.applyComposerFastEditorAction(killBase,'kill-start'),editor.killToStart(killBase));
+
+  const middle=editor.moveCursor(editor.moveCursor(editor.createEditorState('alpha beta'),'home'),'right');
+  assert.deepEqual(composer.applyComposerFastEditorAction(middle,'kill-end'),editor.killToEnd(middle));
+
+  const selected=editor.moveCursor(editor.moveCursor(editor.createEditorState('alpha beta'),'end'),'left',true);
+  assert.deepEqual(
+    composer.applyComposerFastEditorAction(selected,'kill-start'),
+    editor.killToStart(selected),
+    'selection-aware kill must keep using the existing cut/kill-buffer contract',
+  );
+
+  const killed=editor.killWordBackward(editor.moveCursor(editor.createEditorState('alpha beta'),'end'));
+  assert.equal(killed.killBuffer,'beta');
+  assert.deepEqual(composer.applyComposerFastEditorAction(killed,'yank'),editor.yank(killed));
+
+  const edited=editor.editInsert(editor.createEditorState('abc'),'d');
+  const expectedUndo=editor.undoEditor(edited);
+  const actualUndo=composer.applyComposerFastEditorAction(edited,'undo');
+  assert.deepEqual(actualUndo,expectedUndo,'undo must restore the exact existing snapshot/history contract');
+
+  const expectedRedo=editor.redoEditor(expectedUndo);
+  const actualRedo=composer.applyComposerFastEditorAction(actualUndo,'redo');
+  assert.deepEqual(actualRedo,expectedRedo,'redo must restore the exact existing snapshot/history contract');
+
+  const pasted=editor.insertPaste(editor.createEditorState('seed'),'x'.repeat(4096));
+  const pastedUndo=composer.applyComposerFastEditorAction(pasted,'undo');
+  assert.deepEqual(pastedUndo,editor.undoEditor(pasted));
+  assert.deepEqual(pastedUndo.collapsedPastes,[],'undo must restore collapsed-paste metadata from the editor snapshot');
+  const pastedRedo=composer.applyComposerFastEditorAction(pastedUndo,'redo');
+  assert.deepEqual(pastedRedo,editor.redoEditor(pastedUndo));
+  assert.equal(pastedRedo.collapsedPastes.length,1,'redo must restore collapsed-paste metadata through the existing history');
+});
+
