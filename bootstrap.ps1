@@ -117,14 +117,24 @@ Ensure-NpmTree $HarnessRoot $true
 Ensure-NpmTree $ContextRoot $true
 
 $BuildMarker = Join-Path $AppRoot ".talos-inspection-build-$Snapshot"
+$BuildDebtMarker = Join-Path $AppRoot ".talos-inspection-typescript-diagnostics-$Snapshot"
 $Entry = Join-Path $AppRoot 'dist\main.js'
 if (-not (Test-Path -LiteralPath $BuildMarker) -or -not (Test-Path -LiteralPath $Entry)) {
   Write-Host "Building TALOS CLI inspection snapshot $Snapshot ..."
   Push-Location $AppRoot
   try {
     & $script:NpmCmd run build
-    if ($LASTEXITCODE -ne 0) { throw "TALOS CLI build failed with exit code $LASTEXITCODE" }
+    $BuildExit = $LASTEXITCODE
   } finally { Pop-Location }
+  if ($BuildExit -ne 0) {
+    if (-not (Test-Path -LiteralPath $Entry)) {
+      throw "TALOS CLI build reported diagnostics and did not emit $Entry (exit code $BuildExit)"
+    }
+    Write-Warning "TypeScript reported diagnostics (exit code $BuildExit). The compiler still emitted the inspection JS. This is owner-inspection evidence and MUST NOT be treated as a green typecheck/build gate."
+    Set-Content -LiteralPath $BuildDebtMarker -Value "tsc-exit=$BuildExit" -Encoding Ascii
+  } else {
+    Remove-Item -LiteralPath $BuildDebtMarker -Force -ErrorAction SilentlyContinue
+  }
   Set-Content -LiteralPath $BuildMarker -Value $Snapshot -Encoding Ascii
 }
 
@@ -139,6 +149,9 @@ Write-Host "Workspace   : $Project"
 Write-Host "Node        : $(& $NodeExe --version)"
 Write-Host ''
 Write-Host 'This is an inspection build, not a signed release.'
+if (Test-Path -LiteralPath $BuildDebtMarker) {
+  Write-Warning 'This snapshot has executable TypeScript diagnostics. The emitted JS is being used only so the owner can inspect runtime behavior before engineering continues.'
+}
 Write-Host ''
 
 if ($PrepareOnly) {
