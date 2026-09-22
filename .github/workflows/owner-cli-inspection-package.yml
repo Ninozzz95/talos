@@ -1,9 +1,9 @@
-name: TALOS CLI owner inspection package
+name: TALOS CLI productization GREEN validation
 
 on:
   push:
     branches:
-      - owner-inspection/cli-356c4b74
+      - owner-inspection/cli-productization-green-4172f72c
 
 permissions:
   contents: read
@@ -91,49 +91,38 @@ jobs:
           if (-not [string]::Equals($Expected,$Observed,[System.StringComparison]::OrdinalIgnoreCase)) {
             throw "CLI cwd mismatch. Expected $Expected, observed $Observed"
           }
+      - name: Verify exact private-source blobs staged for GREEN
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $Expected = @{
+            'app/src/tui/components/markdown.ts' = '7861253aa15913654b305180543018e085582615'
+            'app/src/tui/app.ts' = '51e7f048f3078a8f983ed0e576bf64737d0e0a2c'
+            'app/test/tui/markdown-rich.test.ts' = 'a6c70995796ca0f5982a084f5fdcce1cddaf7184'
+            'app/test/tui/app-routing.test.ts' = '530f14d27575128aeb58b2cf62309491e01c536e'
+          }
+          foreach ($Path in $Expected.Keys) {
+            $Observed = (git hash-object -- $Path).Trim()
+            if ($Observed -ne $Expected[$Path]) { throw "GREEN_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
+          }
+          $Snapshot = Get-Content -LiteralPath .\INSPECTION-SNAPSHOT.json -Raw | ConvertFrom-Json
+          if ($Snapshot.sourceHead -ne '4172f72c9497df088eb6876023f49859a46d8eee') { throw "GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
 
-  package:
-    needs: validate-windows
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout inspection snapshot
-        uses: actions/checkout@v4
-      - name: Verify inspection identity and fail-closed bootstrap contract
-        shell: bash
+      - name: Execute focused productization GREEN tests on exact Node 24.18.0
+        shell: powershell
         run: |
-          set -euo pipefail
-          test "$(jq -r .sourceHead INSPECTION-SNAPSHOT.json)" = "356c4b74e32d576f5418b19ff6bc7ee07bd3a613"
-          test -f START-TALOS-CLI.cmd
-          test -f bootstrap.ps1
-          test -f OWNER-STEP-BY-STEP-CHECKLIST.txt
-          test -f app/src/main.ts
-          test -f app/src/diagnostics/development-log.ts
-          test -f app/vendor/harness-ui/src/kernel/talosHarness.mjs
-          test -f app/vendor/context-engine/src/engine.mjs
-          grep -q 'INSPECTION_PROJECT_OVERLAP' bootstrap.ps1
-          grep -q "run','typecheck" bootstrap.ps1
-          grep -q 'TALOS_CLI_DEV_LOG_DIR' bootstrap.ps1
-          ! grep -q 'TypeScript reported diagnostics' bootstrap.ps1
-      - name: Build ZIP
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p out/TALOS-CLI-owner-inspection-356c4b74
-          rsync -a \
-            --exclude='.git' --exclude='.github' --exclude='out' \
-            --exclude='app/node_modules' --exclude='app/vendor/harness-ui/node_modules' --exclude='app/vendor/context-engine/node_modules' \
-            --exclude='app/dist' --exclude='.talos-inspection-*' \
-            --exclude='DEVELOPMENT-LOGS/bootstrap-*.log' --exclude='DEVELOPMENT-LOGS/talos-dev-*.jsonl' \
-            ./ out/TALOS-CLI-owner-inspection-356c4b74/
-          cd out
-          zip -r -9 TALOS-CLI-owner-inspection-356c4b74.zip TALOS-CLI-owner-inspection-356c4b74
-          sha256sum TALOS-CLI-owner-inspection-356c4b74.zip > TALOS-CLI-owner-inspection-356c4b74.zip.sha256
-      - name: Upload inspection package
-        uses: actions/upload-artifact@v4
-        with:
-          name: TALOS-CLI-owner-inspection-356c4b74
-          path: |
-            out/TALOS-CLI-owner-inspection-356c4b74.zip
-            out/TALOS-CLI-owner-inspection-356c4b74.zip.sha256
-          if-no-files-found: error
-          retention-days: 7
+          $ErrorActionPreference = 'Stop'
+          $NodeExe = Join-Path $env:LOCALAPPDATA 'TALOS-CLI\inspection-bootstrap\node-24.18.0\node-v24.18.0-win-x64\node.exe'
+          if (-not (Test-Path -LiteralPath $NodeExe)) { throw "GREEN_NODE_RUNTIME_MISSING: $NodeExe" }
+          $Version = & $NodeExe --version
+          if ($Version -ne 'v24.18.0') { throw "GREEN_NODE_VERSION_MISMATCH: $Version" }
+          Push-Location .\app
+          try {
+            & $NodeExe --experimental-strip-types --test .\test\tui\markdown-rich.test.ts
+            if ($LASTEXITCODE -ne 0) { throw "GREEN_MARKDOWN_TESTS_FAILED: $LASTEXITCODE" }
+            & $NodeExe --experimental-strip-types --test --test-name-pattern "productization RED-P6" .\test\tui\app-routing.test.ts
+            if ($LASTEXITCODE -ne 0) { throw "GREEN_WIRING_TEST_FAILED: $LASTEXITCODE" }
+          } finally {
+            Pop-Location
+          }
+
