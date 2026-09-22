@@ -1,0 +1,23 @@
+TALOS CLI — OWNER INSPECTION: KNOWN EXECUTABLE DEBT
+
+Source HEAD
+0e47081febc0f6c3732aa96df8c11750fe94ea7f
+
+Purpose
+This package exists so the owner can inspect the current CLI runtime before release engineering continues.
+It is NOT a signed release and MUST NOT be used as evidence that M11 or release gates are green.
+
+Windows executable validation on 2026-09-22 reached the real TypeScript compiler and reproduced current source diagnostics.
+The inspection launcher therefore permits TypeScript to emit JavaScript when the compiler reports diagnostics, but only if dist/main.js was actually emitted.
+The launcher then executes the emitted CLI with --version before the interactive inspection package is accepted by the packaging workflow.
+
+This behavior is intentionally limited to this owner-inspection branch/package. It does not waive:
+- focused tests;
+- typecheck;
+- hermetic CLI suite;
+- build;
+- Windows/release gates;
+- M11-B signing/SBOM requirements;
+- any competitive rating or release-ready gate.
+
+Owner review should record runtime failures independently from these compile diagnostics.
