@@ -1,5 +1,4 @@
-import type {EditorState} from '../editor.ts';
-import {composerSegments} from '../editor.ts';
+import {composerSegments,deleteBackward,deleteForward,moveCursor,type EditorState} from '../editor.ts';
 
 
 export type ComposerStore={
@@ -43,6 +42,35 @@ export function composerFastTextInput(input:ComposerFastTextInput):string|null{
   if(input.routed?.kind!=='text'||typeof input.routed.text!=='string'||input.routed.text.length!==1)return null;
   const code=input.routed.text.charCodeAt(0);
   return code<32||code===127?null:input.routed.text;
+}
+
+
+export type ComposerFastEditorAction='backspace'|'delete-forward'|'left'|'right'|'home'|'end';
+export type ComposerFastEditorActionInput={
+  bootPhase:string;
+  focus:string;
+  modalOwner:boolean;
+  vimMode:string;
+  auxCount:number;
+  routed:null|{kind:string;action?:string};
+  editor:EditorState;
+};
+
+export function composerFastEditorAction(input:ComposerFastEditorActionInput):ComposerFastEditorAction|null{
+  if(input.bootPhase!=='ready'||input.focus!=='composer'||input.modalOwner||input.auxCount!==0)return null;
+  if(input.vimMode!=='disabled'&&input.vimMode!=='insert')return null;
+  if(input.routed?.kind!=='action'||typeof input.routed.action!=='string')return null;
+  const action=input.routed.action as ComposerFastEditorAction;
+  if(action!=='backspace'&&action!=='delete-forward'&&action!=='left'&&action!=='right'&&action!=='home'&&action!=='end')return null;
+  if(action==='delete-forward'&&input.editor.text.length===0)return null;
+  return action;
+}
+
+export function applyComposerFastEditorAction(editor:EditorState,action:ComposerFastEditorAction):EditorState{
+  if(action==='backspace')return deleteBackward(editor);
+  if(action==='delete-forward')return deleteForward(editor);
+  if(action==='left'||action==='right'||action==='home'||action==='end')return moveCursor(editor,action);
+  return editor;
 }
 
 export type HistorySearchState={query:string;nextIndex:number;matchIndex:number|null};
