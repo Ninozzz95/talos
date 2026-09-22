@@ -419,3 +419,40 @@ test('history-fast-path RED-H4 — invisible history cursors use refs and histor
   assert.match(source.slice(reverseSearch,reverseSearch+900),/reverseIndexRef\.current/u,'fallback reverse search must use the same reverse-search ref');
 });
 
+test('paste-ime-fast-path RED-Paste3 — bracketed paste uses Ink usePaste only while composer owns paste',async()=>{
+  const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
+  assert.match(source,/composerOwnsPaste/u,'app must use the pure paste-ownership seam');
+  assert.match(source,/applyComposerFastPasteInput/u,'explicit paste must converge on the shared TALOS paste application seam');
+
+  const pasteStart=source.indexOf('Ink.usePaste');
+  assert.ok(pasteStart>=0,'Ink 7.1.1 usePaste must own explicit bracketed paste for the focused composer');
+  const pasteBlock=source.slice(pasteStart,pasteStart+2200);
+  assert.match(pasteBlock,/isActive:\s*pasteOwner/u,'usePaste must be active only under fail-closed composer ownership');
+  assert.match(pasteBlock,/composerStore\.update\([\s\S]{0,240}applyComposerFastPasteInput/u,'explicit paste must update only the focused composer store');
+  assert.doesNotMatch(pasteBlock,/\.trim\(|replace\([^\n]*\\r|replaceAll\([^\n]*\\r/u,'explicit paste fast path must not trim or normalize TALOS input');
+});
+
+test('paste-ime-fast-path RED-Paste4 — multi-char useInput paste or IME updates composer before global coordinator fallback',async()=>{
+  const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
+  assert.match(source,/composerFastPasteInput/u,'app must use the routed multi-character paste/IME eligibility seam');
+  assert.match(source,/applyComposerFastPasteInput/u);
+
+  const inputStart=source.indexOf('Ink.useInput');
+  assert.ok(inputStart>=0);
+  const immediate=source.indexOf("coordinator.immediate('input'",inputStart);
+  const single=source.indexOf('composerFastTextInput',inputStart);
+  const pasteDecision=source.indexOf('composerFastPasteInput',inputStart);
+  const pasteApply=source.indexOf('applyComposerFastPasteInput',inputStart);
+  const historyPlan=source.indexOf('planComposerHistoryAction',inputStart);
+  assert.ok(immediate>inputStart);
+  assert.ok(single>inputStart&&single<pasteDecision,'single-character fast path remains the first text fast path');
+  assert.ok(pasteDecision>single&&pasteDecision<immediate,'multi-char paste/IME eligibility must run before global coordinator invalidation');
+  assert.ok(pasteApply>pasteDecision&&pasteApply<immediate,'eligible multi-char input must use shared insertPaste semantics before global invalidation');
+  assert.ok(historyPlan>pasteApply&&historyPlan<immediate,'existing history fast path must remain after text/paste handling and before fallback');
+
+  const fastBlock=source.slice(pasteDecision,immediate);
+  assert.match(fastBlock,/composerStore\.update/u);
+  assert.doesNotMatch(fastBlock,/setAppState|\.trim\(|replace\([^\n]*\\r/u,'paste/IME fast path must not mutate root state or normalize input');
+  assert.match(source,/coordinator\.immediate\('input'/u,'semantic fallback must remain for rejected ownership cases');
+});
+
