@@ -13,7 +13,7 @@ import {providerOfModel,screenChildEnvironment} from '../provider/environment-ke
 import {createBootSequenceComponent} from './boot/boot-sequence.ts';
 import {completeBoot,createBootState,markBootError,markBootReady,shouldRenderBootLogo,skipBoot,type BootState} from './boot/boot-sequence.ts';
 import {commandMenuItems,completeCommandSelection} from './components/command-menu.ts';
-import {applyComposerFastEditorAction,composerDisplay,composerFastEditorAction,composerFastTextInput,createComposerStore,planComposerHistoryAction,reverseHistoryMatch,type ComposerStore} from './components/composer.ts';
+import {applyComposerFastEditorAction,applyComposerFastPasteInput,composerDisplay,composerFastEditorAction,composerFastPasteInput,composerFastTextInput,composerOwnsPaste,createComposerStore,planComposerHistoryAction,reverseHistoryMatch,type ComposerStore} from './components/composer.ts';
 import {headerLine} from './components/header.ts';
 import {createMarkdownParseMemo,markdownBlockLines,markdownRenderPropsEqual,markdownSafeText,parseMarkdownInline,type MarkdownInlineToken} from './components/markdown.ts';
 import {renderDiffModel} from './components/diff.ts';
@@ -966,6 +966,17 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       if(action==='history-next'){const editor=currentEditor();const hadSelection=editor.selectionAnchor!==undefined;const moved=moveVertical(editor,1);if(moved.cursor!==editor.cursor||hadSelection)updateEditor(()=>moved);else historyMove(-1);return;}
     };
 
+    const pasteOwner=composerOwnsPaste({
+      bootPhase:boot.phase,
+      focus:appState.focus.current,
+      modalOwner:Boolean(appState.overlay||queueEditor||transcriptSearch||contextInspector||agentTreeOverlay||trustCenter||mcpCenter||hookCenter||pluginCenter||memoryCenter||notesCenter||tasksCenter||libraryCenter||researchCenter||automationCenter||forgeCenter||pending),
+      vimMode:vim.enabled?vim.mode:'disabled',
+      auxCount:auxCompletions.length,
+    });
+    Ink.usePaste((pastedText:string)=>{
+      composerStore.update(editor=>applyComposerFastPasteInput(editor,pastedText));
+    },{isActive:pasteOwner});
+
     Ink.useInput((ch:string,key:any)=>{
       const modalOwner=Boolean(appState.overlay||queueEditor||transcriptSearch||contextInspector||agentTreeOverlay||trustCenter||mcpCenter||hookCenter||pluginCenter||memoryCenter||notesCenter||tasksCenter||libraryCenter||researchCenter||automationCenter||forgeCenter||pending);
       const fastDecision=decideShellInput({
@@ -974,6 +985,8 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       });
       const fastText=composerFastTextInput({bootPhase:boot.phase,focus:appState.focus.current,modalOwner,vimMode:vim.enabled?vim.mode:'disabled',auxCount:auxCompletions.length,key,routed:fastDecision.routed});
       if(fastText!==null){composerStore.update(editor=>editInsert(editor,fastText));return;}
+      const fastPaste=composerFastPasteInput({bootPhase:boot.phase,focus:appState.focus.current,modalOwner,vimMode:vim.enabled?vim.mode:'disabled',auxCount:auxCompletions.length,key,routed:fastDecision.routed});
+      if(fastPaste!==null){composerStore.update(editor=>applyComposerFastPasteInput(editor,fastPaste));return;}
       const fastEditorAction=composerFastEditorAction({bootPhase:boot.phase,focus:appState.focus.current,modalOwner,vimMode:vim.enabled?vim.mode:'disabled',auxCount:auxCompletions.length,routed:fastDecision.routed,editor:currentEditor()});
       if(fastEditorAction!==null){composerStore.update(editor=>applyComposerFastEditorAction(editor,fastEditorAction));return;}
       const historyPlan=planComposerHistoryAction({
