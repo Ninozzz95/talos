@@ -1,9 +1,9 @@
-name: TALOS CLI command-menu query fast-path RED validation
+name: TALOS CLI command-menu pure-seam GREEN validation
 
 on:
   push:
     branches:
-      - owner-inspection/cli-command-menu-red-ab2ba5ff
+      - owner-inspection/cli-command-menu-pure-green-499ad4dd
 
 permissions:
   contents: read
@@ -91,14 +91,14 @@ jobs:
           if (-not [string]::Equals($Expected,$Observed,[System.StringComparison]::OrdinalIgnoreCase)) {
             throw "CLI cwd mismatch. Expected $Expected, observed $Observed"
           }
-      - name: Verify exact private-source blobs staged for command-menu RED
+      - name: Verify exact private-source blobs staged for command-menu pure GREEN
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $Expected = @{
             'app/src/tui/app.ts' = 'c414db1f67825ca6f8b99388897998bfd05ba5b5'
             'app/src/tui/components/composer.ts' = '2b11c32ba1d6fa7b237ccc447d3a9fa9ecce1207'
-            'app/src/tui/components/command-menu.ts' = '5e9ba56b39cf12643bb9f4db52e1471afbcdfd62'
+            'app/src/tui/components/command-menu.ts' = 'cc97f61f7c3203e9a8758574853102b0e7e4b57e'
             'app/test/tui/composer.test.ts' = 'e612c0d2839fd076125281898fcedc8b009577a1'
             'app/test/tui/command-menu.test.ts' = 'e186db2d830b2c198144f17419f5840c1912b1fd'
             'app/test/tui/app-routing.test.ts' = '48e76dbdf7d2c493d50fc2274441082f17b841a9'
@@ -108,58 +108,38 @@ jobs:
           }
           foreach ($Path in $Expected.Keys) {
             $Observed = (git hash-object -- $Path).Trim()
-            if ($Observed -ne $Expected[$Path]) { throw "COMMAND_MENU_RED_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
+            if ($Observed -ne $Expected[$Path]) { throw "COMMAND_MENU_PURE_GREEN_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
           }
           $Snapshot = Get-Content -LiteralPath .\INSPECTION-SNAPSHOT.json -Raw | ConvertFrom-Json
-          if ($Snapshot.sourceHead -ne 'ab2ba5ffb68b48f3ed1d20bd8024287d5b2c16b3') { throw "COMMAND_MENU_RED_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
+          if ($Snapshot.sourceHead -ne '499ad4dd3b0b0b2ce5bf0272300bc6107cfa873b') { throw "COMMAND_MENU_PURE_GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
 
-      - name: Execute exact command-menu REDs on Node 24.18.0
+      - name: Execute command-menu pure GREEN gates on Node 24.18.0
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $NodeExe = Join-Path $env:LOCALAPPDATA 'TALOS-CLI\inspection-bootstrap\node-24.18.0\node-v24.18.0-win-x64\node.exe'
-          if (-not (Test-Path -LiteralPath $NodeExe)) { throw "COMMAND_MENU_RED_NODE_RUNTIME_MISSING: $NodeExe" }
+          if (-not (Test-Path -LiteralPath $NodeExe)) { throw "COMMAND_MENU_PURE_GREEN_NODE_RUNTIME_MISSING: $NodeExe" }
           $Version = & $NodeExe --version
-          if ($Version -ne 'v24.18.0') { throw "COMMAND_MENU_RED_NODE_VERSION_MISMATCH: $Version" }
-
-          function Assert-ExpectedRed([string]$Pattern,[string]$File,[string]$Expected,[string]$Sentinel) {
-            $Psi = New-Object System.Diagnostics.ProcessStartInfo
-            $Psi.FileName = $NodeExe
-            $Psi.Arguments = '--experimental-strip-types --test --test-name-pattern "' + $Pattern + '" "' + $File + '"'
-            $Psi.WorkingDirectory = (Join-Path $PWD.Path 'app')
-            $Psi.UseShellExecute = $false
-            $Psi.RedirectStandardOutput = $true
-            $Psi.RedirectStandardError = $true
-            $Psi.CreateNoWindow = $true
-            $Process = New-Object System.Diagnostics.Process
-            $Process.StartInfo = $Psi
-            if (-not $Process.Start()) { throw "COMMAND_MENU_RED_PROCESS_START_FAILED: $Pattern" }
-            $StdoutTask = $Process.StandardOutput.ReadToEndAsync()
-            $StderrTask = $Process.StandardError.ReadToEndAsync()
-            $Process.WaitForExit()
-            $Stdout = $StdoutTask.GetAwaiter().GetResult()
-            $Stderr = $StderrTask.GetAwaiter().GetResult()
-            if ($Stdout) { Write-Host $Stdout }
-            if ($Stderr) { Write-Host $Stderr }
-            if ($Process.ExitCode -eq 0) { throw "COMMAND_MENU_RED_UNEXPECTEDLY_GREEN: $Pattern" }
-            $Text = $Stdout + [Environment]::NewLine + $Stderr
-            if ($Text -notmatch [regex]::Escape($Expected)) { throw "COMMAND_MENU_RED_FAILED_FOR_UNEXPECTED_REASON: $Pattern exit=$($Process.ExitCode)" }
-            Write-Host $Sentinel
-          }
+          if ($Version -ne 'v24.18.0') { throw "COMMAND_MENU_PURE_GREEN_NODE_VERSION_MISMATCH: $Version" }
 
           function Assert-Green([string]$Pattern,[string]$File,[string]$Sentinel) {
             Push-Location (Join-Path $PWD.Path 'app')
             try {
               & $NodeExe --experimental-strip-types --test --test-name-pattern "$Pattern" "$File"
-              if ($LASTEXITCODE -ne 0) { throw "COMMAND_MENU_BASELINE_FAILED pattern=$Pattern exit=$LASTEXITCODE" }
+              if ($LASTEXITCODE -ne 0) { throw "COMMAND_MENU_PURE_GREEN_TARGET_FAILED pattern=$Pattern exit=$LASTEXITCODE" }
               Write-Host $Sentinel
             }
             finally { Pop-Location }
           }
 
-          Assert-ExpectedRed 'command-menu-fast-path RED-CM1' '.\test\tui\command-menu.test.ts' 'command-menu selection needs a dedicated synchronous local store before query typing can bypass root rendering' 'EXPECTED_COMMAND_MENU_RED_CM1_CONFIRMED'
-          Assert-ExpectedRed 'command-menu-fast-path RED-CM2' '.\test\tui\command-menu.test.ts' 'command-menu query input needs a pure fail-closed eligibility seam' 'EXPECTED_COMMAND_MENU_RED_CM2_CONFIRMED'
-          Assert-Green 'command-menu-fast-path RED-CM3' '.\test\tui\command-menu.test.ts' 'COMMAND_MENU_CM3_RANKING_BASELINE_GREEN'
-          Assert-ExpectedRed 'command-menu-fast-path RED-CM4' '.\test\tui\app-routing.test.ts' 'command-menu rendering needs its own memoized child boundary' 'EXPECTED_COMMAND_MENU_RED_CM4_CONFIRMED'
-          Assert-ExpectedRed 'command-menu-fast-path RED-CM5' '.\test\tui\app-routing.test.ts' 'app must import/use the fail-closed command-menu query seam' 'EXPECTED_COMMAND_MENU_RED_CM5_CONFIRMED'
-          Assert-ExpectedRed 'command-menu-fast-path RED-CM6' '.\test\tui\app-routing.test.ts' 'command-menu navigation must use the local selection store' 'EXPECTED_COMMAND_MENU_RED_CM6_CONFIRMED'
+          Push-Location (Join-Path $PWD.Path 'app')
+          try {
+            Assert-Green 'command-menu-fast-path RED-CM1' '.\test\tui\command-menu.test.ts' 'COMMAND_MENU_GREEN_CM1_CONFIRMED'
+            Assert-Green 'command-menu-fast-path RED-CM2' '.\test\tui\command-menu.test.ts' 'COMMAND_MENU_GREEN_CM2_CONFIRMED'
+            Assert-Green 'command-menu-fast-path RED-CM3' '.\test\tui\command-menu.test.ts' 'COMMAND_MENU_GREEN_CM3_CONFIRMED'
+
+            & $NodeExe --experimental-strip-types --test '.\test\tui\command-menu.test.ts'
+            if ($LASTEXITCODE -ne 0) { throw "COMMAND_MENU_PURE_GREEN_SUITE_FAILED exit=$LASTEXITCODE" }
+            Write-Host 'COMMAND_MENU_PURE_SUITE_GREEN'
+          }
+          finally { Pop-Location }
