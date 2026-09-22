@@ -1,9 +1,9 @@
-name: TALOS CLI history fast-path RED validation
+name: TALOS CLI history fast-path GREEN validation
 
 on:
   push:
     branches:
-      - owner-inspection/cli-history-red-3d758db9
+      - owner-inspection/cli-history-green-c7d51fc4
 
 permissions:
   contents: read
@@ -91,13 +91,13 @@ jobs:
           if (-not [string]::Equals($Expected,$Observed,[System.StringComparison]::OrdinalIgnoreCase)) {
             throw "CLI cwd mismatch. Expected $Expected, observed $Observed"
           }
-      - name: Verify exact private-source blobs staged for history RED
+      - name: Verify exact private-source blobs staged for history GREEN
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $Expected = @{
-            'app/src/tui/app.ts' = 'd2d264c9640df91a90858e7c46da977b9c70849d'
-            'app/src/tui/components/composer.ts' = '1a8e4209fd8666ffd1bd2d1d42c98adf3df84d5b'
+            'app/src/tui/app.ts' = 'be1567e5bae275ff14c3f2434310c916f400d95a'
+            'app/src/tui/components/composer.ts' = '4d2fb9e732fd4b586d2af691435c86ee74a68f87'
             'app/test/tui/composer.test.ts' = '9e557d1d304e52655c4d052b6503b02ea16ebf74'
             'app/test/tui/app-routing.test.ts' = '94786c86b7ac740f2b8a30b20d8b0926ce7a59dd'
             'app/test/tui/editor.test.ts' = 'ce00d9438ef285bb89186b79ee09bd19b155f2ec'
@@ -106,46 +106,31 @@ jobs:
           }
           foreach ($Path in $Expected.Keys) {
             $Observed = (git hash-object -- $Path).Trim()
-            if ($Observed -ne $Expected[$Path]) { throw "RED_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
+            if ($Observed -ne $Expected[$Path]) { throw "GREEN_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
           }
           $Snapshot = Get-Content -LiteralPath .\INSPECTION-SNAPSHOT.json -Raw | ConvertFrom-Json
-          if ($Snapshot.sourceHead -ne '3d758db9056c253d8e1f046b0fcb47eb9413c614') { throw "RED_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
+          if ($Snapshot.sourceHead -ne 'c7d51fc439b3292e6376eef4200fdf6bd621513d') { throw "GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
 
-      - name: Execute exact history REDs on Node 24.18.0
+      - name: Execute exact history GREEN tests on Node 24.18.0
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $NodeExe = Join-Path $env:LOCALAPPDATA 'TALOS-CLI\inspection-bootstrap\node-24.18.0\node-v24.18.0-win-x64\node.exe'
-          if (-not (Test-Path -LiteralPath $NodeExe)) { throw "RED_NODE_RUNTIME_MISSING: $NodeExe" }
+          if (-not (Test-Path -LiteralPath $NodeExe)) { throw "GREEN_NODE_RUNTIME_MISSING: $NodeExe" }
           $Version = & $NodeExe --version
-          if ($Version -ne 'v24.18.0') { throw "RED_NODE_VERSION_MISMATCH: $Version" }
-
-          function Assert-ExpectedRed([string]$Pattern,[string]$File,[string]$Expected,[string]$Sentinel) {
-            $Psi = New-Object System.Diagnostics.ProcessStartInfo
-            $Psi.FileName = $NodeExe
-            $Psi.Arguments = '--experimental-strip-types --test --test-name-pattern "' + $Pattern + '" "' + $File + '"'
-            $Psi.WorkingDirectory = (Join-Path $PWD.Path 'app')
-            $Psi.UseShellExecute = $false
-            $Psi.RedirectStandardOutput = $true
-            $Psi.RedirectStandardError = $true
-            $Psi.CreateNoWindow = $true
-            $Process = New-Object System.Diagnostics.Process
-            $Process.StartInfo = $Psi
-            if (-not $Process.Start()) { throw "RED_PROCESS_START_FAILED: $Pattern" }
-            $StdoutTask = $Process.StandardOutput.ReadToEndAsync()
-            $StderrTask = $Process.StandardError.ReadToEndAsync()
-            $Process.WaitForExit()
-            $Stdout = $StdoutTask.GetAwaiter().GetResult()
-            $Stderr = $StderrTask.GetAwaiter().GetResult()
-            if ($Stdout) { Write-Host $Stdout }
-            if ($Stderr) { Write-Host $Stderr }
-            if ($Process.ExitCode -eq 0) { throw "RED_UNEXPECTEDLY_GREEN: $Pattern" }
-            $Text = $Stdout + [Environment]::NewLine + $Stderr
-            if ($Text -notmatch [regex]::Escape($Expected)) { throw "RED_FAILED_FOR_UNEXPECTED_REASON: $Pattern exit=$($Process.ExitCode)" }
-            Write-Host $Sentinel
+          if ($Version -ne 'v24.18.0') { throw "GREEN_NODE_VERSION_MISMATCH: $Version" }
+          Push-Location .\app
+          try {
+            & $NodeExe --experimental-strip-types --test .\test\tui\composer.test.ts
+            if ($LASTEXITCODE -ne 0) { throw "GREEN_COMPOSER_TESTS_FAILED: $LASTEXITCODE" }
+            & $NodeExe --experimental-strip-types --test --test-name-pattern "input-fast-path RED-I3|local-editor-fast-path RED-L3|history-fast-path RED-H4" .\test\tui\app-routing.test.ts
+            if ($LASTEXITCODE -ne 0) { throw "GREEN_WIRING_REGRESSIONS_FAILED: $LASTEXITCODE" }
+            & $NodeExe --experimental-strip-types --test .\test\tui\editor.test.ts
+            if ($LASTEXITCODE -ne 0) { throw "GREEN_EDITOR_TESTS_FAILED: $LASTEXITCODE" }
+            & $NodeExe --experimental-strip-types --test .\test\tui\editor-history.test.ts
+            if ($LASTEXITCODE -ne 0) { throw "GREEN_EDITOR_HISTORY_TESTS_FAILED: $LASTEXITCODE" }
+            & $NodeExe --experimental-strip-types --test .\test\tui\input-router.test.ts
+            if ($LASTEXITCODE -ne 0) { throw "GREEN_INPUT_ROUTER_TESTS_FAILED: $LASTEXITCODE" }
+          } finally {
+            Pop-Location
           }
-
-          Assert-ExpectedRed 'history-fast-path RED-H1' '.\test\tui\composer.test.ts' 'history fast-path needs a pure synchronous planner before root-render bypass can be safe' 'EXPECTED_HISTORY_RED_H1_CONFIRMED'
-          Assert-ExpectedRed 'history-fast-path RED-H2' '.\test\tui\composer.test.ts' 'planComposerHistoryAction is not a function' 'EXPECTED_HISTORY_RED_H2_CONFIRMED'
-          Assert-ExpectedRed 'history-fast-path RED-H3' '.\test\tui\composer.test.ts' 'planComposerHistoryAction is not a function' 'EXPECTED_HISTORY_RED_H3_CONFIRMED'
-          Assert-ExpectedRed 'history-fast-path RED-H4' '.\test\tui\app-routing.test.ts' 'app must use the pure history planner' 'EXPECTED_HISTORY_RED_H4_CONFIRMED'
