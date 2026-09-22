@@ -253,3 +253,120 @@ test('copy-selection-fast-path RED-C2 — application exactly reuses non-destruc
   );
 });
 
+test('history-fast-path RED-H1 — direct history navigation preserves exact clamp blank and index semantics',async()=>{
+  const composer:any=await import('../../src/tui/components/composer.ts');
+  assert.equal(typeof composer.planComposerHistoryAction,'function','history fast-path needs a pure synchronous planner before root-render bypass can be safe');
+  const history=['newest command','older command'];
+  const base={
+    bootPhase:'ready',focus:'composer',modalOwner:false,vimMode:'insert',auxCount:0,
+    routed:{kind:'action',action:'history-prev'},key:{ctrl:true},
+    editor:createEditorState('draft'),history,historyIndex:-1,reverseIndex:7,
+  };
+
+  const first=composer.planComposerHistoryAction(base);
+  assert.equal(first.historyIndex,0);
+  assert.equal(first.reverseIndex,0);
+  assert.equal(first.editor.text,'newest command');
+  assert.deepEqual(first.editor.editHistory.past,[],'history substitution must keep using replaceEditorText semantics');
+
+  const older=composer.planComposerHistoryAction({...base,editor:first.editor,historyIndex:first.historyIndex,reverseIndex:first.reverseIndex});
+  assert.equal(older.historyIndex,1);
+  assert.equal(older.editor.text,'older command');
+
+  const clamped=composer.planComposerHistoryAction({...base,editor:older.editor,historyIndex:1,reverseIndex:4});
+  assert.equal(clamped.historyIndex,1,'previous-history must clamp at the oldest retained row');
+  assert.equal(clamped.editor.text,'older command');
+  assert.equal(clamped.reverseIndex,0);
+
+  const newer=composer.planComposerHistoryAction({...base,routed:{kind:'action',action:'history-next'},key:{ctrl:true},editor:older.editor,historyIndex:1,reverseIndex:9});
+  assert.equal(newer.historyIndex,0);
+  assert.equal(newer.editor.text,'newest command');
+  assert.equal(newer.reverseIndex,0);
+
+  const blank=composer.planComposerHistoryAction({...base,routed:{kind:'action',action:'history-next'},key:{ctrl:true},editor:newer.editor,historyIndex:0,reverseIndex:9});
+  assert.equal(blank.historyIndex,-1);
+  assert.equal(blank.editor.text,'','TALOS currently returns to a blank editor at history index -1; do not silently add draft restoration');
+  assert.equal(blank.reverseIndex,0);
+
+  const emptyEditor=createEditorState('keep');
+  const empty=composer.planComposerHistoryAction({...base,editor:emptyEditor,history:[],historyIndex:-1,reverseIndex:3});
+  assert.equal(empty.editor,emptyEditor,'empty history must be a semantic identity no-op');
+  assert.equal(empty.historyIndex,-1);
+  assert.equal(empty.reverseIndex,3,'no history means the current reverse index is untouched, matching the early return');
+
+  for(const patch of [
+    {focus:'model-picker'},
+    {modalOwner:true},
+    {vimMode:'normal'},
+    {auxCount:1},
+    {bootPhase:'starting'},
+  ]){
+    assert.equal(composer.planComposerHistoryAction({...base,...patch}),null,'ownership guards remain fail closed');
+  }
+});
+
+test('history-fast-path RED-H2 — ordinary Up Down preserve multiline and selection behavior before history fallback',async()=>{
+  const composer:any=await import('../../src/tui/components/composer.ts');
+  const editor:any=await import('../../src/tui/editor.ts');
+  const history=['history newest','history older'];
+  const base={
+    bootPhase:'ready',focus:'composer',modalOwner:false,vimMode:'insert',auxCount:0,key:{ctrl:false},
+    history,historyIndex:-1,reverseIndex:5,
+  };
+
+  const multiline=editor.createEditorState('abcdef\nxy');
+  const expectedUp=editor.moveVertical(multiline,-1);
+  const localUp=composer.planComposerHistoryAction({...base,routed:{kind:'action',action:'history-prev'},editor:multiline});
+  assert.deepEqual(localUp.editor,expectedUp,'Up inside multiline input must remain local cursor movement');
+  assert.equal(localUp.historyIndex,-1);
+  assert.equal(localUp.reverseIndex,5,'local cursor movement must not rewrite history-search cursors');
+
+  const selected=editor.moveCursor(editor.createEditorState('abc'),'left',true);
+  const collapsed=editor.moveVertical(selected,-1);
+  const localSelection=composer.planComposerHistoryAction({...base,routed:{kind:'action',action:'history-prev'},editor:selected});
+  assert.deepEqual(localSelection.editor,collapsed,'Up at the first line must collapse an existing selection before browsing history');
+  assert.equal(localSelection.historyIndex,-1);
+
+  const topBoundary=editor.createEditorState('draft');
+  const historyUp=composer.planComposerHistoryAction({...base,routed:{kind:'action',action:'history-prev'},editor:topBoundary});
+  assert.equal(historyUp.historyIndex,0,'Up at the top boundary falls through to history');
+  assert.equal(historyUp.editor.text,'history newest');
+  assert.equal(historyUp.reverseIndex,0);
+
+  const topOfMultiline=editor.moveVertical(editor.createEditorState('abcdef\nxy'),-1);
+  const expectedDown=editor.moveVertical(topOfMultiline,1);
+  const localDown=composer.planComposerHistoryAction({...base,routed:{kind:'action',action:'history-next'},editor:topOfMultiline});
+  assert.deepEqual(localDown.editor,expectedDown,'Down inside multiline input must remain local cursor movement');
+  assert.equal(localDown.historyIndex,-1);
+
+  const historyDown=composer.planComposerHistoryAction({...base,routed:{kind:'action',action:'history-next'},editor:createEditorState('history newest'),historyIndex:0,reverseIndex:6});
+  assert.equal(historyDown.historyIndex,-1,'Down at the bottom boundary leaves history browsing');
+  assert.equal(historyDown.editor.text,'');
+  assert.equal(historyDown.reverseIndex,0);
+});
+
+test('history-fast-path RED-H3 — reverse search preserves current TALOS query match and miss-reset behavior',async()=>{
+  const composer:any=await import('../../src/tui/components/composer.ts');
+  const history=['deploy prod','fix tests','deploy staging'];
+  const base={
+    bootPhase:'ready',focus:'composer',modalOwner:false,vimMode:'insert',auxCount:0,
+    routed:{kind:'action',action:'history-search'},key:{ctrl:true},history,historyIndex:-1,
+  };
+
+  const matched=composer.planComposerHistoryAction({...base,editor:createEditorState('deploy'),reverseIndex:0});
+  assert.equal(matched.historyIndex,0);
+  assert.equal(matched.reverseIndex,1);
+  assert.equal(matched.editor.text,'deploy prod');
+
+  const later=composer.planComposerHistoryAction({...base,editor:createEditorState('deploy'),reverseIndex:1});
+  assert.equal(later.historyIndex,2);
+  assert.equal(later.reverseIndex,3);
+  assert.equal(later.editor.text,'deploy staging');
+
+  const beforeMiss=createEditorState('missing');
+  const missed=composer.planComposerHistoryAction({...base,editor:beforeMiss,historyIndex:1,reverseIndex:2});
+  assert.equal(missed.editor,beforeMiss,'reverse-search miss must leave the editor untouched');
+  assert.equal(missed.historyIndex,1,'reverse-search miss must leave history index untouched');
+  assert.equal(missed.reverseIndex,0,'reverse-search miss resets only the reverse-search cursor');
+});
+
