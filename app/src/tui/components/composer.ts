@@ -1,4 +1,4 @@
-import {composerSegments,copySelection,deleteBackward,deleteForward,killToEnd,killToStart,killWordBackward,moveCursor,moveVertical,moveWord,redoEditor,undoEditor,yank,type EditorState} from '../editor.ts';
+import {composerSegments,copySelection,deleteBackward,deleteForward,killToEnd,killToStart,killWordBackward,moveCursor,moveVertical,moveWord,redoEditor,replaceEditorText,undoEditor,yank,type EditorState} from '../editor.ts';
 
 
 export type ComposerStore={
@@ -89,6 +89,53 @@ export function applyComposerFastEditorAction(editor:EditorState,action:Composer
   if(action==='redo')return redoEditor(editor);
   if(action==='copy-selection')return copySelection(editor);
   return editor;
+}
+
+
+export type ComposerHistoryActionInput={
+  bootPhase:string;
+  focus:string;
+  modalOwner:boolean;
+  vimMode:string;
+  auxCount:number;
+  routed:null|{kind:string;action?:string};
+  key:{ctrl?:boolean};
+  editor:EditorState;
+  history:readonly string[];
+  historyIndex:number;
+  reverseIndex:number;
+};
+export type ComposerHistoryPlan={editor:EditorState;historyIndex:number;reverseIndex:number};
+
+export function planComposerHistoryAction(input:ComposerHistoryActionInput):ComposerHistoryPlan|null{
+  if(input.bootPhase!=='ready'||input.focus!=='composer'||input.modalOwner||input.auxCount!==0)return null;
+  if(input.vimMode!=='disabled'&&input.vimMode!=='insert')return null;
+  if(input.routed?.kind!=='action'||typeof input.routed.action!=='string')return null;
+  const action=input.routed.action;
+  if(action!=='history-prev'&&action!=='history-next'&&action!=='history-search')return null;
+
+  if(action==='history-search'){
+    const found=reverseHistoryMatch(input.history,input.editor.text,input.reverseIndex);
+    if(!found)return{editor:input.editor,historyIndex:input.historyIndex,reverseIndex:0};
+    return{editor:replaceEditorText(input.editor,found.value),historyIndex:found.index,reverseIndex:found.index+1};
+  }
+
+  if(!input.key.ctrl){
+    const moved=moveVertical(input.editor,action==='history-prev'?-1:1);
+    const hadSelection=input.editor.selectionAnchor!==undefined;
+    if(moved.cursor!==input.editor.cursor||hadSelection){
+      return{editor:moved,historyIndex:input.historyIndex,reverseIndex:input.reverseIndex};
+    }
+  }
+
+  if(input.history.length===0)return{editor:input.editor,historyIndex:input.historyIndex,reverseIndex:input.reverseIndex};
+  const delta=action==='history-prev'?1:-1;
+  const next=Math.max(-1,Math.min(input.history.length-1,input.historyIndex+delta));
+  return{
+    editor:replaceEditorText(input.editor,next>=0?(input.history[next]??''):''),
+    historyIndex:next,
+    reverseIndex:0,
+  };
 }
 
 export type HistorySearchState={query:string;nextIndex:number;matchIndex:number|null};
