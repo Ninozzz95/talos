@@ -1,4 +1,4 @@
-import {composerSegments,deleteBackward,deleteForward,moveCursor,type EditorState} from '../editor.ts';
+import {composerSegments,deleteBackward,deleteForward,moveCursor,moveVertical,moveWord,type EditorState} from '../editor.ts';
 
 
 export type ComposerStore={
@@ -45,7 +45,7 @@ export function composerFastTextInput(input:ComposerFastTextInput):string|null{
 }
 
 
-export type ComposerFastEditorAction='backspace'|'delete-forward'|'left'|'right'|'home'|'end';
+export type ComposerFastEditorAction='backspace'|'delete-forward'|'left'|'right'|'home'|'end'|'word-left'|'word-right'|'select-left'|'select-right'|'select-home'|'select-end'|'select-up'|'select-down'|'select-word-left'|'select-word-right';
 export type ComposerFastEditorActionInput={
   bootPhase:string;
   focus:string;
@@ -61,7 +61,8 @@ export function composerFastEditorAction(input:ComposerFastEditorActionInput):Co
   if(input.vimMode!=='disabled'&&input.vimMode!=='insert')return null;
   if(input.routed?.kind!=='action'||typeof input.routed.action!=='string')return null;
   const action=input.routed.action as ComposerFastEditorAction;
-  if(action!=='backspace'&&action!=='delete-forward'&&action!=='left'&&action!=='right'&&action!=='home'&&action!=='end')return null;
+  const allowed:readonly ComposerFastEditorAction[]=['backspace','delete-forward','left','right','home','end','word-left','word-right','select-left','select-right','select-home','select-end','select-up','select-down','select-word-left','select-word-right'];
+  if(!allowed.includes(action))return null;
   if(action==='delete-forward'&&input.editor.text.length===0)return null;
   return action;
 }
@@ -70,6 +71,16 @@ export function applyComposerFastEditorAction(editor:EditorState,action:Composer
   if(action==='backspace')return deleteBackward(editor);
   if(action==='delete-forward')return deleteForward(editor);
   if(action==='left'||action==='right'||action==='home'||action==='end')return moveCursor(editor,action);
+  if(action==='word-left')return moveWord(editor,-1);
+  if(action==='word-right')return moveWord(editor,1);
+  if(action==='select-left')return moveCursor(editor,'left',true);
+  if(action==='select-right')return moveCursor(editor,'right',true);
+  if(action==='select-home')return moveCursor(editor,'home',true);
+  if(action==='select-end')return moveCursor(editor,'end',true);
+  if(action==='select-up')return moveVertical(editor,-1,true);
+  if(action==='select-down')return moveVertical(editor,1,true);
+  if(action==='select-word-left')return moveWord(editor,-1,true);
+  if(action==='select-word-right')return moveWord(editor,1,true);
   return editor;
 }
 
