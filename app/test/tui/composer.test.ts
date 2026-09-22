@@ -66,3 +66,47 @@ test('input-fast-path RED-I2 — only one unambiguous ordinary composer characte
   assert.equal(composer.composerFastTextInput({...base,focus:'command-menu'}),null);
 });
 
+test('local-editor-fast-path RED-L1 — only fail-closed local cursor/delete actions are eligible',async()=>{
+  const composer:any=await import('../../src/tui/components/composer.ts');
+  assert.equal(typeof composer.composerFastEditorAction,'function','local editor fast-path needs an explicit fail-closed eligibility seam');
+  const base={
+    bootPhase:'ready',focus:'composer',modalOwner:false,vimMode:'insert',auxCount:0,
+    routed:{kind:'action',action:'left'},editor:createEditorState('abc'),
+  };
+  for(const action of ['backspace','left','right','home','end']){
+    assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action}}),action);
+  }
+  assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action:'delete-forward'}}),'delete-forward');
+  assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action:'delete-forward'},editor:createEditorState('')}),null,'empty delete must preserve TALOS global exit/fallback semantics');
+  for(const action of ['word-left','word-right','select-left','select-right','history-prev','history-next','kill-start','kill-end','kill-word','yank','undo','redo']){
+    assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'action',action}}),null,action+' stays outside this slice');
+  }
+  assert.equal(composer.composerFastEditorAction({...base,focus:'model-picker'}),null);
+  assert.equal(composer.composerFastEditorAction({...base,modalOwner:true}),null);
+  assert.equal(composer.composerFastEditorAction({...base,bootPhase:'starting'}),null);
+  assert.equal(composer.composerFastEditorAction({...base,vimMode:'normal'}),null);
+  assert.equal(composer.composerFastEditorAction({...base,auxCount:1}),null);
+  assert.equal(composer.composerFastEditorAction({...base,routed:{kind:'text',text:'a'}}),null);
+});
+
+test('local-editor-fast-path RED-L2 — local application reuses existing immutable grapheme-safe editor semantics',async()=>{
+  const composer:any=await import('../../src/tui/components/composer.ts');
+  assert.equal(typeof composer.applyComposerFastEditorAction,'function','local action application must be a pure seam over the existing editor operations');
+
+  const {deleteBackward,deleteForward,moveCursor}=await import('../../src/tui/editor.ts');
+  const family=createEditorState('a👩‍💻b');
+  const beforeB=moveCursor(family,'left');
+  assert.deepEqual(
+    composer.applyComposerFastEditorAction(beforeB,'backspace'),
+    deleteBackward(beforeB),
+    'Backspace must preserve current grapheme/selection/history behavior exactly',
+  );
+
+  const forward=moveCursor(createEditorState('abc'),'home');
+  assert.deepEqual(composer.applyComposerFastEditorAction(forward,'delete-forward'),deleteForward(forward));
+  assert.deepEqual(composer.applyComposerFastEditorAction(createEditorState('abc'),'left'),moveCursor(createEditorState('abc'),'left'));
+  assert.deepEqual(composer.applyComposerFastEditorAction(createEditorState('abc'),'right'),moveCursor(createEditorState('abc'),'right'));
+  assert.deepEqual(composer.applyComposerFastEditorAction(createEditorState('a\nb'),'home'),moveCursor(createEditorState('a\nb'),'home'));
+  assert.deepEqual(composer.applyComposerFastEditorAction(createEditorState('a\nb'),'end'),moveCursor(createEditorState('a\nb'),'end'));
+});
+
