@@ -3,7 +3,7 @@ name: TALOS CLI owner inspection package
 on:
   push:
     branches:
-      - owner-inspection/cli-356c4b74
+      - owner-inspection/cli-productization-red-617f306d
 
 permissions:
   contents: read
@@ -91,6 +91,41 @@ jobs:
           if (-not [string]::Equals($Expected,$Observed,[System.StringComparison]::OrdinalIgnoreCase)) {
             throw "CLI cwd mismatch. Expected $Expected, observed $Observed"
           }
+
+      - name: Execute productization Markdown RED on exact Node 24.18.0
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $NodeExe = Join-Path $env:LOCALAPPDATA 'TALOS-CLI\inspection-bootstrap\node-24.18.0\node-v24.18.0-win-x64\node.exe'
+          if (-not (Test-Path -LiteralPath $NodeExe)) { throw "RED_NODE_RUNTIME_MISSING: $NodeExe" }
+          $Version = & $NodeExe --version
+          if ($Version -ne 'v24.18.0') { throw "RED_NODE_VERSION_MISMATCH: $Version" }
+          $AppRoot = Join-Path $PWD.Path 'app'
+          $Psi = New-Object System.Diagnostics.ProcessStartInfo
+          $Psi.FileName = $NodeExe
+          $Psi.Arguments = '--experimental-strip-types --test .\test\tui\markdown-rich.test.ts'
+          $Psi.WorkingDirectory = $AppRoot
+          $Psi.UseShellExecute = $false
+          $Psi.RedirectStandardOutput = $true
+          $Psi.RedirectStandardError = $true
+          $Psi.CreateNoWindow = $true
+          $Process = New-Object System.Diagnostics.Process
+          $Process.StartInfo = $Psi
+          if (-not $Process.Start()) { throw 'RED_TEST_PROCESS_START_FAILED' }
+          $StdoutTask = $Process.StandardOutput.ReadToEndAsync()
+          $StderrTask = $Process.StandardError.ReadToEndAsync()
+          $Process.WaitForExit()
+          $Stdout = $StdoutTask.GetAwaiter().GetResult()
+          $Stderr = $StderrTask.GetAwaiter().GetResult()
+          if ($Stdout) { Write-Host $Stdout }
+          if ($Stderr) { Write-Host $Stderr }
+          if ($Process.ExitCode -eq 0) { throw 'RED_UNEXPECTEDLY_GREEN' }
+          $Text = $Stdout + [Environment]::NewLine + $Stderr
+          $Expected = 'a per-view parse memo seam must exist before optimization can be proven deterministically'
+          if ($Text -notmatch [regex]::Escape($Expected)) {
+            throw "RED_FAILED_FOR_UNEXPECTED_REASON: exit=$($Process.ExitCode)"
+          }
+          throw 'EXPECTED_PRODUCTIZATION_RED_CONFIRMED: createMarkdownParseMemo is absent on production source'
 
   package:
     needs: validate-windows
