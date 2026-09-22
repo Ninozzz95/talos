@@ -1,5 +1,5 @@
 TALOS CLI — OWNER STEP-BY-STEP PRE-RELEASE INSPECTION
-Source HEAD: 58c103643a57ea49b5ffc3c6c1c1da9d5352d581
+Source HEAD: e1f7eb363bd60c92608c1863f1d592e7a81d83ac
 Status: INSPECTION BUILD ONLY — NOT A SIGNED RELEASE
 
 Use a disposable/test project where write/edit/tool actions are safe.
@@ -8,7 +8,7 @@ Mark each item [PASS], [FAIL], or [SKIP] and write notes beside failures.
 A. BOOT / IDENTITY
 [ ] A1 Double-click START-TALOS-CLI.cmd.
 [ ] A2 Checklist opens and a project-folder picker appears.
-[ ] A3 Launcher reports source HEAD 58c103643a57ea49b5ffc3c6c1c1da9d5352d581.
+[ ] A3 Launcher reports source HEAD e1f7eb363bd60c92608c1863f1d592e7a81d83ac.
 [ ] A4 First launch installs pinned dependencies and BOTH typecheck + build complete with zero errors. Any non-zero compiler/build exit is an immediate FAIL and must stop launch.
 [ ] A5 TALOS starts in the selected project, not inside the inspection package folder.
 [ ] A6 Exit and relaunch: cached bootstrap is reused and TALOS still opens normally.
@@ -30,7 +30,7 @@ C. PROVIDER / MODEL CONTROL PLANE
 
 D. BASIC AGENT TURN / STREAMING
 [ ] D0 Verify the selected Workspace printed by the launcher is the separate disposable project, never the extracted inspection package.
-[ ] D1 After pressing Enter, if TALOS is preparing the safety checkpoint before the run starts, the status must show starting rather than idle. If it remains starting unusually long, record that exact state and duration.
+[ ] D1 After pressing Enter, TALOS must NOT show a synthetic starting/checkpoint state. With provider/key/model ready, the model request dispatches immediately; the first busy state should come from the real RunStarted event (thinking/tool).
 [ ] D2 Send a harmless prompt asking TALOS to summarize the test project.
 [ ] D3 Streaming text renders incrementally without corrupting the terminal.
 [ ] D4 Thinking/activity state ends cleanly when the turn finishes.

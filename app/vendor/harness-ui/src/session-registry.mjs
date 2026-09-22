@@ -3342,6 +3342,8 @@ export function createSessionRegistry({
          comandi `!` lanciati dalla persona da quando il modello ha parlato l'ultima volta. Senza
          racconti in sospeso sono identici ai parametri, bit per bit. */
       cartella: voce.cartella, task: taskEffettivo, modello: modelloEffettivo, chiave: chiaveEffettiva, comandoProva, messaggiIniziali: messaggiInizialiEffettivi,
+      checkpointSessionId: sessionId,
+      checkpointOperation: voceNuova && forkDa ? 'fork' : voceEsistente ? 'resume' : 'start',
       /*
        * ⛔⛔⛔ 11/09/2026 — DOVE SI DEPOSITA UN FILE GENERATO: `cartellaBase`, non `cartella`.
        *

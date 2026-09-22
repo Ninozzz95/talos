@@ -166,7 +166,6 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     const [reasoningEffort,setReasoningEffort]=React.useState(initialReasoningEffort as ReasoningEffort|null);
     const [modelEffortStep,setModelEffortStep]=React.useState(null as TuiModel|null);
     const [busySince,setBusySince]=React.useState(()=>Date.now());
-    const [preparingTurn,setPreparingTurn]=React.useState(false);
     const [motionNow,setMotionNow]=React.useState(()=>Date.now());
     const [renderEpoch,setRenderEpoch]=React.useState(0);
     const [queuedActions,setQueuedActions]=React.useState([] as TuiQueuedAction[]);
@@ -227,12 +226,11 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     };
     if(!controllerRef.current)controllerRef.current=createTuiSessionController({
       runtime,projectRoot,model:baseModel,mode:baseMode,rules:permissionRules??{allow:[],ask:[],deny:[]},paths,...(autoClassifier?{autoClassifier}:{}),readiness:readinessFor,
-      onPreparation:(next)=>{developmentLog('ui.preparation',next,'debug','tui');coordinator.immediate('input',()=>{if(next.active)setBusySince(Date.now());setPreparingTurn(next.active);});},
       onEvent:(event:any)=>{
         developmentLog('ui.runtime_event',event,event?.type==='run.failed'?'error':'debug','tui');
         const eventId=`runtime-${++eventSequenceRef.current}-${String(event.type)}`;
         coordinator.enqueueEvent(eventId,()=>{
-          if(event.type==='run.started'){setPreparingTurn(false);setBusySince(Date.now());}
+          if(event.type==='run.started')setBusySince(Date.now());
           if(event.type==='run.completed'||event.type==='run.failed'||event.type==='run.cancelled')interruptRef.current.reset();
           if(transcriptEventAddsItem(event)&&(event.type!=='reasoning.started'||reasoningVisibleRef.current))setViewport((view:TranscriptViewport)=>reduceViewport(view,'new-content',0));
           setState((current:TuiState)=>reduceTuiEvent(current,event));
@@ -257,7 +255,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     });
     const controller=controllerRef.current;
 
-    React.useEffect(()=>{developmentLog('ui.state',{focus:appState.focus.current,overlay:appState.overlay?.kind??null,running:state.running,preparing:preparingTurn,sessionId:state.sessionId,model:state.status.model,permissionMode:state.status.permissionMode,queueCount:queuedActions.length},'debug','tui');},[appState.focus.current,appState.overlay?.kind,state.running,preparingTurn,state.sessionId,state.status.model,state.status.permissionMode,queuedActions.length]);
+    React.useEffect(()=>{developmentLog('ui.state',{focus:appState.focus.current,overlay:appState.overlay?.kind??null,running:state.running,sessionId:state.sessionId,model:state.status.model,permissionMode:state.status.permissionMode,queueCount:queuedActions.length},'debug','tui');},[appState.focus.current,appState.overlay?.kind,state.running,state.sessionId,state.status.model,state.status.permissionMode,queuedActions.length]);
 
     async function refreshContextStatus(){
       const id=state.sessionId??controller.current?.()??null;
@@ -1144,7 +1142,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       }
     }));
 
-    const layoutState={...state,preparing:preparingTurn,usage:contextStatus??state.usage};
+    const layoutState={...state,usage:contextStatus??state.usage};
     const layout=deriveShellLayout({
       state:layoutState,appState,viewport,
       terminalRows:Number(stdout?.rows??process.stdout.rows??30),terminalColumns:Number(stdout?.columns??process.stdout.columns??100),

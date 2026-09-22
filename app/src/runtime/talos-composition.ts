@@ -1,4 +1,4 @@
-import {AsyncLocalStorage} from 'node:async_hooks';import {randomUUID} from 'node:crypto';import {rm} from 'node:fs/promises';import {join} from 'node:path';import {pathToFileURL} from 'node:url';import type {CliPaths} from '../paths.ts';import {createSessionFacade} from './session-facade.ts';import {CliRuntimeError} from './types.ts';import {createTalosSystemKeyring} from '../provider/system-keyring.ts';import {configSet} from '../config/commands.ts';import {createTuiCatalogService,keyBench,unusableKeyRefusal} from '../tui/catalog-service.ts';import {createGuardedPluginTrustVerifier,pluginReviewFromSnapshot,scanPluginPackage} from '../security/plugin-guard.ts';import {createTrustAuthority} from '../security/trust-authority.ts';import {createBrokeredKernelExecutor,type KernelTextHelpers} from './brokered-executor.ts';import type {ExecutionBroker} from '../security/execution-broker.ts';import {attachKeyOrigin,createEnvironmentKeyConsent,describeKeyOrigin,providerOfModel,type EnvironmentKeyMode} from '../provider/environment-keys.ts';import {createProviderControlPlane} from '../provider/control-plane.ts';
+import {AsyncLocalStorage} from 'node:async_hooks';import {randomUUID} from 'node:crypto';import {rm} from 'node:fs/promises';import {join} from 'node:path';import {pathToFileURL} from 'node:url';import type {CliPaths} from '../paths.ts';import {createSessionFacade} from './session-facade.ts';import {CliRuntimeError} from './types.ts';import {createTalosSystemKeyring} from '../provider/system-keyring.ts';import {configSet} from '../config/commands.ts';import {createTuiCatalogService,keyBench,unusableKeyRefusal} from '../tui/catalog-service.ts';import {createGuardedPluginTrustVerifier,pluginReviewFromSnapshot,scanPluginPackage} from '../security/plugin-guard.ts';import {createTrustAuthority} from '../security/trust-authority.ts';import {createBrokeredKernelExecutor,type KernelTextHelpers} from './brokered-executor.ts';import type {ExecutionBroker} from '../security/execution-broker.ts';import {createCheckpointStore,type CheckpointHandle} from '../workspace/checkpoint-store.ts';import {developmentLog,developmentLogError} from '../diagnostics/development-log.ts';import {attachKeyOrigin,createEnvironmentKeyConsent,describeKeyOrigin,providerOfModel,type EnvironmentKeyMode} from '../provider/environment-keys.ts';import {createProviderControlPlane} from '../provider/control-plane.ts';
 type RawKeyring={get(service:string,account:string):any;set(service:string,account:string,value:string):any;remove(service:string,account:string):any};
 type Modules={
  createProviderCredentialStore:(x:any)=>any;createOwnerRuntimeAdapter:(x:any)=>any;creaFetchMultiProvider?:(fetchDiRete:any,options:any)=>any;compattaSessione?:(x:any)=>Promise<any>;chiediAlModelloUnaVolta?:(x:any)=>Promise<string>;avviaSessione:(x:any)=>Promise<any>;eseguiComandoDiretto?:(x:any)=>Promise<any>;createSessionRegistry:(x:any)=>any;
@@ -223,7 +223,41 @@ export async function composeTalosRuntime({repoRoot,projectRoot,paths,model,env=
  });
  /* M1-E: model-owned shell uses the same CLI broker as the direct-command path.
     Broker assignment is last so runtime input cannot replace the product-selected executor. */
- const talosLavoraConBroker=(runtimeInput:any)=>ownerRuntime.talosLavora({...runtimeInput,eseguiComandoSandboxatoFn:brokeredExecutor});
+ const modelCheckpointStore=paths.checkpointsRoot?createCheckpointStore({rootDir:paths.checkpointsRoot,projectRoot}):null;
+ let modelCheckpointBlockedError:unknown=null;
+ const talosLavoraConBroker=async(runtimeInput:any)=>{
+  const {checkpointSessionId,checkpointOperation,...kernelInput}=runtimeInput??{};
+  const operation=checkpointOperation==='resume'||checkpointOperation==='fork'?checkpointOperation:'start';
+  const checkpointState:{promise:Promise<CheckpointHandle>|null}={promise:null};
+  const beforeMutation=async(azione:any)=>{
+   if(modelCheckpointBlockedError)throw modelCheckpointBlockedError;
+   if(!modelCheckpointStore)return;
+   if(!checkpointState.promise){
+    const started=performance.now();
+    developmentLog('checkpoint.lazy.begin',{operation,sessionId:checkpointSessionId??null,actionType:azione?.tipo??null},'debug','runtime-composition');
+    checkpointState.promise=modelCheckpointStore.begin({operation,...(typeof checkpointSessionId==='string'&&checkpointSessionId?{sessionId:checkpointSessionId}:{})})
+     .then(handle=>{developmentLog('checkpoint.lazy.ready',{operation,sessionId:checkpointSessionId??null,checkpointId:handle.id,durationMs:performance.now()-started},'info','runtime-composition');return handle;})
+     .catch(error=>{modelCheckpointBlockedError=error;developmentLogError('checkpoint.lazy.failure',error,{operation,sessionId:checkpointSessionId??null,actionType:azione?.tipo??null,durationMs:performance.now()-started},'runtime-composition');throw error;});
+   }
+   await checkpointState.promise;
+  };
+  let result:any;let runError:unknown=null;
+  try{
+   result=await ownerRuntime.talosLavora({...kernelInput,primaDiMutazioneFn:beforeMutation,eseguiComandoSandboxatoFn:brokeredExecutor});
+  }catch(error){runError=error;}
+  const pendingCheckpoint=checkpointState.promise;
+  if(pendingCheckpoint){
+   let handle:CheckpointHandle|null=null;
+   try{handle=await pendingCheckpoint;}catch{/* begin failure was already logged/refused at the action boundary */}
+   if(handle){
+    const started=performance.now();
+    try{await handle.finalize();developmentLog('checkpoint.lazy.finalized',{operation,sessionId:checkpointSessionId??null,checkpointId:handle.id,durationMs:performance.now()-started},'info','runtime-composition');}
+    catch(error){modelCheckpointBlockedError=error;developmentLogError('checkpoint.lazy.finalize_failure',error,{operation,sessionId:checkpointSessionId??null,checkpointId:handle.id,durationMs:performance.now()-started},'runtime-composition');if(!runError)runError=error;}
+   }
+  }
+  if(runError)throw runError;
+  return result;
+ };
  /*
   * ⭐ B1 slice 24 — COMPACTION AND THE RESEARCH JUDGE REACH THE PROVIDER OF THE MODEL THEY NAME.
   *

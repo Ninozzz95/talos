@@ -14,7 +14,6 @@ import {EXECUTION_TEXT} from '../runtime/brokered-executor.ts';import {secretVal
 import {explainApproval,type ApprovalExplanationData} from './overlays/approval-dialog.ts';
 import {resolveProjectReferences} from './project-references.ts';
 import {createQueueStore,type QueueStoreEntry} from './queue-store.ts';
-import {checkpointMutationAllowed} from '../workspace/checkpoint.ts';
 import {createCheckpointStore,type CheckpointHandle} from '../workspace/checkpoint-store.ts';
 import {developmentLog,developmentLogError,developmentTextEvidence} from '../diagnostics/development-log.ts';
 
@@ -39,9 +38,8 @@ export type TuiSteerState=
  | {status:'failed';redirectId:string;code:string;message:string}
  | {status:'rejected';code:string;message:string};
 export type TuiSteerOutcome={status:'requested';redirectId:string}|{status:'rejected';code:string;message:string};
-export type TuiPreparationState={active:boolean;operation:'start'|'resume'|'fork'};
 
-export function createTuiSessionController({runtime,projectRoot,model,mode,rules,paths,autoClassifier,readiness,onEvent,onApproval,onError=()=>{},onQueueChange,onQueueRestored,onQueuedDispatch,onSteerState,onPreparation}:{runtime:CliRuntime;projectRoot:string;model:string;mode:PermissionMode;rules:RuleSetInput;paths?:CliPaths;autoClassifier?:AutoClassifier;readiness?:(model:string)=>Promise<TuiSendReadiness>;onEvent:(e:TuiEvent)=>void;onApproval?:(p:PendingTuiApproval|null)=>void;onError?:(e:unknown)=>void;onQueueChange?:(queue:readonly TuiQueuedAction[])=>void;onQueueRestored?:(queue:readonly TuiQueueEntry[])=>void;onQueuedDispatch?:(action:TuiQueuedAction)=>void;onSteerState?:(state:TuiSteerState)=>void;onPreparation?:(state:TuiPreparationState)=>void}){
+export function createTuiSessionController({runtime,projectRoot,model,mode,rules,paths,autoClassifier,readiness,onEvent,onApproval,onError=()=>{},onQueueChange,onQueueRestored,onQueuedDispatch,onSteerState}:{runtime:CliRuntime;projectRoot:string;model:string;mode:PermissionMode;rules:RuleSetInput;paths?:CliPaths;autoClassifier?:AutoClassifier;readiness?:(model:string)=>Promise<TuiSendReadiness>;onEvent:(e:TuiEvent)=>void;onApproval?:(p:PendingTuiApproval|null)=>void;onError?:(e:unknown)=>void;onQueueChange?:(queue:readonly TuiQueuedAction[])=>void;onQueueRestored?:(queue:readonly TuiQueueEntry[])=>void;onQueuedDispatch?:(action:TuiQueuedAction)=>void;onSteerState?:(state:TuiSteerState)=>void}){
   let currentMode=mode;
   let currentModel=model;
   const engine=createPermissionEngine({projectRoot,rules,mode,...(autoClassifier?{classifier:autoClassifier}:{}),...(paths?{persistRule:async(effect,action)=>persistPermissionRule({paths,projectRoot,effect,action})}:{})});
@@ -67,7 +65,6 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
   let steerInvocation:{text:string}|null=null;
   let cancelling=false;
   const checkpointStore=paths?.checkpointsRoot?createCheckpointStore({rootDir:paths.checkpointsRoot,projectRoot}):null;
-  let modelCheckpoint:CheckpointHandle|null=null;
   const shellAwaitingStart:CheckpointHandle[]=[];
   const shellByCommandId=new Map<string,CheckpointHandle>();
   const shellCommandForCheckpoint=new Map<CheckpointHandle,string>();
@@ -78,20 +75,10 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
     checkpointBlockedError=blocked;queuePausedState=true;developmentLogError('checkpoint.failure',blocked,{code},'tui-controller');if(!closed)onError(blocked);return blocked;
   }
   function assertCheckpointReady(){if(checkpointBlockedError)throw checkpointBlockedError;}
-  function preparation(state:TuiPreparationState){try{onPreparation?.(state);}catch{/* UI observation cannot change send semantics. */}}
   async function runModelMutation(operation:'start'|'resume'|'fork',sessionId:string|null,invoke:()=>Promise<string>){
-    assertCheckpointReady();
-    if(!checkpointStore)return invoke();
-    if(operation==='start'&&!checkpointMutationAllowed(currentMode))return invoke();
-    if(modelCheckpoint)throw Object.assign(new Error('CHECKPOINT_TURN_ALREADY_OPEN'),{code:'CHECKPOINT_TURN_ALREADY_OPEN'});
-    let checkpoint:CheckpointHandle;const checkpointStarted=performance.now();developmentLog('checkpoint.begin',{operation,sessionId,projectRoot},'debug','tui-controller');preparation({active:true,operation});
-    try{checkpoint=await checkpointStore.begin({operation,...(sessionId?{sessionId}:{})});}
-    catch(error){developmentLogError('checkpoint.begin.failure',error,{operation,sessionId,durationMs:performance.now()-checkpointStarted},'tui-controller');throw error;}
-    finally{preparation({active:false,operation});}
-    developmentLog('checkpoint.ready',{operation,sessionId,durationMs:performance.now()-checkpointStarted,checkpointId:checkpoint.id},'info','tui-controller');modelCheckpoint=checkpoint;
     const invokeStarted=performance.now();developmentLog('runtime.invoke.begin',{operation,sessionId},'debug','tui-controller');
-    try{const id=await invoke();checkpoint.bindSession(id);developmentLog('runtime.invoke.accepted',{operation,sessionId:id,durationMs:performance.now()-invokeStarted},'info','tui-controller');return id;}
-    catch(error){if(modelCheckpoint===checkpoint)modelCheckpoint=null;try{await checkpoint.finalize();}catch(finalization){checkpointFailure('CHECKPOINT_FINALIZE_FAILED',finalization);}throw error;}
+    try{const id=await invoke();developmentLog('runtime.invoke.accepted',{operation,sessionId:id,durationMs:performance.now()-invokeStarted},'info','tui-controller');return id;}
+    catch(error){developmentLogError('runtime.invoke.failure',error,{operation,sessionId,durationMs:performance.now()-invokeStarted},'tui-controller');throw error;}
   }
   async function runShellMutation(sessionId:string,command:string){
     assertCheckpointReady();
@@ -128,7 +115,6 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
   function handleCheckpointRaw(id:string,raw:unknown){
     if(!raw||typeof raw!=='object')return false;
     const row=raw as {type?:unknown;comandoId?:unknown};
-    modelCheckpoint?.observe(raw);
     if(row.type==='ComandoUtenteIniziato'){
       const checkpoint=shellAwaitingStart.shift();
       if(checkpoint&&typeof row.comandoId==='string'&&row.comandoId){checkpoint.bindCommand(row.comandoId);shellByCommandId.set(row.comandoId,checkpoint);shellCommandForCheckpoint.set(checkpoint,row.comandoId);}
@@ -141,11 +127,6 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
       if(checkpoint&&commandId){shellByCommandId.delete(commandId);shellCommandForCheckpoint.delete(checkpoint);void checkpoint.finalize().catch(error=>checkpointFailure('CHECKPOINT_FINALIZE_FAILED',error));}
       else if(commandId===null&&shellByCommandId.size>1)checkpointFailure('CHECKPOINT_SHELL_CORRELATION_FAILED',new Error('Multiple direct shell checkpoints are active and the terminal event has no command id.'));
       return false;
-    }
-    if((row.type==='RunFinished'||row.type==='RunError'||row.type==='RunCancelled')&&modelCheckpoint){
-      const checkpoint=modelCheckpoint;modelCheckpoint=null;
-      const finalizeStarted=performance.now();void checkpoint.finalize().then(()=>{developmentLog('checkpoint.finalized',{sessionId:id,checkpointId:checkpoint.id,durationMs:performance.now()-finalizeStarted},'info','tui-controller');processRawEvent(id,raw,true);}).catch(error=>{developmentLogError('checkpoint.finalize.failure',error,{sessionId:id,checkpointId:checkpoint.id,durationMs:performance.now()-finalizeStarted},'tui-controller');checkpointFailure('CHECKPOINT_FINALIZE_FAILED',error);processRawEvent(id,raw,false);});
-      return true;
     }
     return false;
   }

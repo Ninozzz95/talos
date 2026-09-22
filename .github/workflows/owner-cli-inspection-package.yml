@@ -3,7 +3,7 @@ name: TALOS CLI owner inspection package
 on:
   push:
     branches:
-      - owner-inspection/cli-58c10364
+      - owner-inspection/cli-e1f7eb36
 
 permissions:
   contents: read
@@ -102,7 +102,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(jq -r .sourceHead INSPECTION-SNAPSHOT.json)" = "58c103643a57ea49b5ffc3c6c1c1da9d5352d581"
+          test "$(jq -r .sourceHead INSPECTION-SNAPSHOT.json)" = "e1f7eb363bd60c92608c1863f1d592e7a81d83ac"
           test -f START-TALOS-CLI.cmd
           test -f bootstrap.ps1
           test -f OWNER-STEP-BY-STEP-CHECKLIST.txt
@@ -118,22 +118,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p out/TALOS-CLI-owner-inspection-58c10364
+          mkdir -p out/TALOS-CLI-owner-inspection-e1f7eb36
           rsync -a \
             --exclude='.git' --exclude='.github' --exclude='out' \
             --exclude='app/node_modules' --exclude='app/vendor/harness-ui/node_modules' --exclude='app/vendor/context-engine/node_modules' \
             --exclude='app/dist' --exclude='.talos-inspection-*' \
             --exclude='DEVELOPMENT-LOGS/bootstrap-*.log' --exclude='DEVELOPMENT-LOGS/talos-dev-*.jsonl' \
-            ./ out/TALOS-CLI-owner-inspection-58c10364/
+            ./ out/TALOS-CLI-owner-inspection-e1f7eb36/
           cd out
-          zip -r -9 TALOS-CLI-owner-inspection-58c10364.zip TALOS-CLI-owner-inspection-58c10364
-          sha256sum TALOS-CLI-owner-inspection-58c10364.zip > TALOS-CLI-owner-inspection-58c10364.zip.sha256
+          zip -r -9 TALOS-CLI-owner-inspection-e1f7eb36.zip TALOS-CLI-owner-inspection-e1f7eb36
+          sha256sum TALOS-CLI-owner-inspection-e1f7eb36.zip > TALOS-CLI-owner-inspection-e1f7eb36.zip.sha256
       - name: Upload inspection package
         uses: actions/upload-artifact@v4
         with:
-          name: TALOS-CLI-owner-inspection-58c10364
+          name: TALOS-CLI-owner-inspection-e1f7eb36
           path: |
-            out/TALOS-CLI-owner-inspection-58c10364.zip
-            out/TALOS-CLI-owner-inspection-58c10364.zip.sha256
+            out/TALOS-CLI-owner-inspection-e1f7eb36.zip
+            out/TALOS-CLI-owner-inspection-e1f7eb36.zip.sha256
           if-no-files-found: error
           retention-days: 7

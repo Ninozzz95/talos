@@ -7395,7 +7395,7 @@ export async function talosLavora({
      * `livelloAccesso`, per singolo attrezzo. Assente = comportamento di
      * oggi, invariato (TALOS-BANCO non lo passa mai).
      */
-    livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo,
+    livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, primaDiMutazioneFn,
     /*
      * ⭐⭐⭐ 28/8 — piano `elegant-spinning-dongarra.md`, FASE A (ricerca:
      * Hermes ha hook "universali e attivi di default" su OGNI tool —
@@ -7554,6 +7554,20 @@ export async function talosLavora({
      */
     _giriMassimiInterno,
 }) {
+    const verificaPermessoConBarriera = async (azione, opzioni) => {
+        const permesso = await verificaPermessoScrittura(azione, opzioni)
+        if (!permesso.consentito || typeof primaDiMutazioneFn !== 'function' || !AZIONI_MOBILE_PER_ATTREZZO[azione?.tipo]) return permesso
+        try {
+            await primaDiMutazioneFn(azione)
+            return permesso
+        }
+        catch (errore) {
+            const code = typeof errore?.code === 'string' && errore.code.trim() ? errore.code.trim() : 'PRE_MUTATION_GUARD_FAILED'
+            const message = errore instanceof Error ? errore.message : String(errore)
+            return { consentito: false, via: 'pre-mutation-guard', motivo: `${code}: ${message}` }
+        }
+    }
+
     /*
      * ⭐⭐⭐ L1 §6.4 (11/09/2026) — il filtro sul LIVELLO, vedi `attrezziNegatiDalLivello` per il
      * perché e per le fonti. Vuoto (quindi nessun cambiamento) per ogni livello che non sia
@@ -8148,7 +8162,7 @@ export async function talosLavora({
                      */
                     const daChiedere = percorso === '' ? null : motivoDaChiedere({ tipo: 'leggi', percorso, cartella })
                     const permessoLettura = daChiedere
-                        ? await verificaPermessoScrittura(
+                        ? await verificaPermessoConBarriera(
                             { tipo: 'leggi', toolCallId: c.id, percorso },
                             { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                         )
@@ -8235,7 +8249,7 @@ export async function talosLavora({
                      *   e' la lettura che questo ramo faceva gia' comunque.
                      */
                     const contenutoProiettato = accoda ? `${contenutoPrimaPerApprovazione ?? ''}${contenuto}` : contenuto
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         {
                             tipo: 'scrivi', toolCallId: c.id, percorso,
                             contenutoPrima: contenutoPrimaPerApprovazione,
@@ -8430,7 +8444,7 @@ export async function talosLavora({
                                 esito = messaggioSostituzioneRifiutata(percorso, sostituzione)
                             }
                             else {
-                                const permesso = await verificaPermessoScrittura(
+                                const permesso = await verificaPermessoConBarriera(
                                     {
                                         tipo: 'file_edit', toolCallId: c.id, percorso,
                                         contenutoPrima,
@@ -8514,7 +8528,7 @@ export async function talosLavora({
                      * `livelloAccesso:'lettura'` eseguiva comunque il comando di
                      * test, senza sandbox tiering. Stesso trattamento di `shell`.
                      */
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'prova', toolCallId: c.id, comando: comandoProva },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -8583,7 +8597,7 @@ export async function talosLavora({
                         permessoShell = { consentito: false, via: 'floor-comando-senza-recupero', motivo: motivoFloor }
                     }
                     else {
-                        permessoShell = await verificaPermessoScrittura(
+                        permessoShell = await verificaPermessoConBarriera(
                             { tipo: 'shell', toolCallId: c.id, comando: comandoDiShell(argomenti) },
                             { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                         )
@@ -8732,7 +8746,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'document_create') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'document_create', toolCallId: c.id, formato: argomenti.format },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -8791,7 +8805,7 @@ export async function talosLavora({
                  * due messaggi onesti.
                  */
                 else if (nome === 'generate_image') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'generate_image', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -8832,7 +8846,7 @@ export async function talosLavora({
                  * messaggi onesti.
                  */
                 else if (nome === 'library_rename') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'library_rename', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -8863,7 +8877,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'library_delete') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'library_delete', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -8894,7 +8908,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'library_export') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'library_export', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -8926,7 +8940,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'library_context_policy_update') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'library_context_policy_update', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -8964,7 +8978,7 @@ export async function talosLavora({
                  * testo dei messaggi onesti.
                  */
                 else if (nome === 'notes_create') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'notes_create', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -8995,7 +9009,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'notes_update') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'notes_update', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9026,7 +9040,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'notes_delete') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'notes_delete', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9063,7 +9077,7 @@ export async function talosLavora({
                  * il testo dei messaggi onesti.
                  */
                 else if (nome === 'tasks_create') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'tasks_create', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9094,7 +9108,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'tasks_complete') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'tasks_complete', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9125,7 +9139,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'tasks_update') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'tasks_update', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9156,7 +9170,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'tasks_delete') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'tasks_delete', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9192,7 +9206,7 @@ export async function talosLavora({
                  * Notes/Tasks appena sopra.
                  */
                 else if (nome === 'memory_write') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'memory_write', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9223,7 +9237,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'memory_update') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'memory_update', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9254,7 +9268,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'memory_delete') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'memory_delete', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9291,7 +9305,7 @@ export async function talosLavora({
                  * mirror 1:1 di memory_write/memory_delete sopra.
                  */
                 else if (nome === 'research_start') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'research_start', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9322,7 +9336,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'research_rename') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'research_rename', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9353,7 +9367,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'research_pause') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'research_pause', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9384,7 +9398,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'research_resume') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'research_resume', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9415,7 +9429,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'research_cancel') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'research_cancel', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9446,7 +9460,7 @@ export async function talosLavora({
                     }
                 }
                 else if (nome === 'research_delete') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'research_delete', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9503,7 +9517,7 @@ export async function talosLavora({
                     const percorsoRelativo = idBuono ? join(CARTELLA_RICERCA, ricercaId, NOME_RAPPORTO) : null
                     const radiceRicerca = idBuono ? join(cartella, CARTELLA_RICERCA, ricercaId) : null
                     const percorsoAssoluto = idBuono ? join(cartella, percorsoRelativo) : null
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'research_deposit', toolCallId: c.id, percorso: percorsoAssoluto, radice: radiceRicerca },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -9696,7 +9710,7 @@ export async function talosLavora({
                  * mirror 1:1 di research_start/memory_write sopra.
                  */
                 else if (nome === 'tool_create') {
-                    const permesso = await verificaPermessoScrittura(
+                    const permesso = await verificaPermessoConBarriera(
                         { tipo: 'tool_create', toolCallId: c.id },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )

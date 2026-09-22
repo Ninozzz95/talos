@@ -254,6 +254,7 @@ export async function avviaSessione({
    */
   cartellaCreazioni = null,
   onEvento, segnaleStop, messaggiIniziali, reasoning, contextHooks, mobile = false,
+  checkpointSessionId = null, checkpointOperation = 'start',
   fallbackProviders = [], onCambioFornitore: depositaCambioFornitore,
   /*
    * ⛔⛔⛔ 02/09 — LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md, §6/§7.
@@ -1916,6 +1917,7 @@ export async function avviaSessione({
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
+      checkpointSessionId, checkpointOperation,
       // ⭐ P-13 — il kernel lo mette in testa al prompt, subito dopo le istruzioni e PRIMA della
       // consegna: un contenuto stabile messo DOPO uno variabile non viene mai riusato dalla cache.
       contestoDelProgetto: testoContestoProgetto,
