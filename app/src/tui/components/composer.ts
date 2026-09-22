@@ -1,4 +1,4 @@
-import {composerSegments,deleteBackward,deleteForward,killToEnd,killToStart,killWordBackward,moveCursor,moveVertical,moveWord,redoEditor,undoEditor,yank,type EditorState} from '../editor.ts';
+import {composerSegments,copySelection,deleteBackward,deleteForward,killToEnd,killToStart,killWordBackward,moveCursor,moveVertical,moveWord,redoEditor,undoEditor,yank,type EditorState} from '../editor.ts';
 
 
 export type ComposerStore={
@@ -45,7 +45,7 @@ export function composerFastTextInput(input:ComposerFastTextInput):string|null{
 }
 
 
-export type ComposerFastEditorAction='backspace'|'delete-forward'|'left'|'right'|'home'|'end'|'word-left'|'word-right'|'select-left'|'select-right'|'select-home'|'select-end'|'select-up'|'select-down'|'select-word-left'|'select-word-right'|'kill-start'|'kill-end'|'kill-word'|'yank'|'undo'|'redo';
+export type ComposerFastEditorAction='backspace'|'delete-forward'|'left'|'right'|'home'|'end'|'word-left'|'word-right'|'select-left'|'select-right'|'select-home'|'select-end'|'select-up'|'select-down'|'select-word-left'|'select-word-right'|'kill-start'|'kill-end'|'kill-word'|'yank'|'undo'|'redo'|'copy-selection';
 export type ComposerFastEditorActionInput={
   bootPhase:string;
   focus:string;
@@ -61,7 +61,7 @@ export function composerFastEditorAction(input:ComposerFastEditorActionInput):Co
   if(input.vimMode!=='disabled'&&input.vimMode!=='insert')return null;
   if(input.routed?.kind!=='action'||typeof input.routed.action!=='string')return null;
   const action=input.routed.action as ComposerFastEditorAction;
-  const allowed:readonly ComposerFastEditorAction[]=['backspace','delete-forward','left','right','home','end','word-left','word-right','select-left','select-right','select-home','select-end','select-up','select-down','select-word-left','select-word-right','kill-start','kill-end','kill-word','yank','undo','redo'];
+  const allowed:readonly ComposerFastEditorAction[]=['backspace','delete-forward','left','right','home','end','word-left','word-right','select-left','select-right','select-home','select-end','select-up','select-down','select-word-left','select-word-right','kill-start','kill-end','kill-word','yank','undo','redo','copy-selection'];
   if(!allowed.includes(action))return null;
   if(action==='delete-forward'&&input.editor.text.length===0)return null;
   return action;
@@ -87,6 +87,7 @@ export function applyComposerFastEditorAction(editor:EditorState,action:Composer
   if(action==='yank')return yank(editor);
   if(action==='undo')return undoEditor(editor);
   if(action==='redo')return redoEditor(editor);
+  if(action==='copy-selection')return copySelection(editor);
   return editor;
 }
 
