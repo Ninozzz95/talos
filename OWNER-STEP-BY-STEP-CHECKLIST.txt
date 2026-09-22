@@ -1,5 +1,5 @@
 TALOS CLI — OWNER STEP-BY-STEP PRE-RELEASE INSPECTION
-Source HEAD: e1f7eb363bd60c92608c1863f1d592e7a81d83ac
+Source HEAD: 356c4b74e32d576f5418b19ff6bc7ee07bd3a613
 Status: INSPECTION BUILD ONLY — NOT A SIGNED RELEASE
 
 Use a disposable/test project where write/edit/tool actions are safe.
@@ -8,7 +8,7 @@ Mark each item [PASS], [FAIL], or [SKIP] and write notes beside failures.
 A. BOOT / IDENTITY
 [ ] A1 Double-click START-TALOS-CLI.cmd.
 [ ] A2 Checklist opens and a project-folder picker appears.
-[ ] A3 Launcher reports source HEAD e1f7eb363bd60c92608c1863f1d592e7a81d83ac.
+[ ] A3 Launcher reports source HEAD 356c4b74e32d576f5418b19ff6bc7ee07bd3a613.
 [ ] A4 First launch installs pinned dependencies and BOTH typecheck + build complete with zero errors. Any non-zero compiler/build exit is an immediate FAIL and must stop launch.
 [ ] A5 TALOS starts in the selected project, not inside the inspection package folder.
 [ ] A6 Exit and relaunch: cached bootstrap is reused and TALOS still opens normally.
@@ -36,7 +36,7 @@ D. BASIC AGENT TURN / STREAMING
 [ ] D4 Thinking/activity state ends cleanly when the turn finishes.
 [ ] D5 Scroll transcript with PageUp/PageDown.
 [ ] D6 Use Ctrl+R / transcript search and find text from the completed turn.
-[ ] D7 Use /redraw and confirm the screen reconstructs cleanly.
+[ ] D7 Use /redraw and confirm the screen reconstructs cleanly.\n[ ] D8 Ask for an answer containing headings, **bold**, *italic*, `inline code`, a blockquote, a list, a fenced code block, a link and a table. Confirm Markdown delimiters are rendered structurally rather than shown as ordinary syntax.
 
 E. TOOLS / APPROVAL / DIFF
 [ ] E1 Ask TALOS to read a known text file; inspect compact + expanded tool rendering.
@@ -53,7 +53,7 @@ F. BUSY QUEUE / STEERING / INTERRUPT
 [ ] F2 While busy, enter a follow-up and confirm it is visibly queued.
 [ ] F3 Edit/reorder/remove a queued item if the queue editor exposes those operations.
 [ ] F4 Exercise steering on the active run and confirm state is visible.
-[ ] F5 Interrupt/cancel the active run; confirm the UI returns to a stable idle state.
+[ ] F5 Queue at least two follow-ups, then press Esc during the active run. Confirm the current run stops, the queued items are NOT deleted, and only the next FIFO item starts after the runtime reports the interrupted turn as terminal.\n[ ] F6 Repeat with Ctrl+C and confirm aggressive cancel/clear behavior remains distinct from Esc.
 
 G. CHECKPOINT / UNDO / REDO
 [ ] G1 Make a controlled file mutation through TALOS.
@@ -151,7 +151,7 @@ S. HEADLESS / MACHINE OUTPUT
 [ ] S4 Trigger one harmless error and inspect the structured error envelope/exit behavior.
 
 T. TERMINAL MODES
-[ ] T1 Resize the terminal narrow and wide; no critical control becomes unreachable.
+[ ] T1 Resize the terminal repeatedly 120→60→140 columns and shrink/grow height while transcript/table content is visible. Confirm the entire frame, transcript, Markdown/table, footer and viewport reflow together with no stale geometry, corruption or unreachable controls.
 [ ] T2 Exercise --no-color from terminal mode.
 [ ] T3 Set TALOS_REDUCED_MOTION=1 and launch; status remains intelligible without animation.
 [ ] T4 Exercise the normal main-screen terminal mode.

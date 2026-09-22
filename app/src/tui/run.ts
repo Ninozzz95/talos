@@ -5,7 +5,8 @@ import {detectTerminalCapabilities} from './terminal-capabilities.ts';
 import {createTerminalSessionPlan} from './terminal-session.ts';
 import {createTuiTheme} from './theme.ts';
 import {DEFAULT_THEME_ACCENT,type ThemeAccentId} from './theme-catalog.ts';
-import {terminalFrameProps} from './components/terminal-shell.ts';
+import {createTerminalSizeStore,terminalFrameProps} from './components/terminal-shell.ts';
+import {developmentLogError} from '../diagnostics/development-log.ts';
 
 export async function runInkTui(props:TuiAppProps):Promise<void>{
   let React:any,Ink:any,createTuiAppComponent:any;
@@ -25,20 +26,20 @@ export async function runInkTui(props:TuiAppProps):Promise<void>{
   const collector=createTuiMetricsCollector();
   const coordinator=createRenderCoordinator({profiler:createTuiMetricsProfiler({sink:collector.sink})});
   const TuiApp=createTuiAppComponent(React,Ink,effectiveCapabilities,accentId);
-  const frameProps=terminalFrameProps({
-    session,
-    ...(theme.colors.background?{background:theme.colors.background}:{}),
-    rows:Number(process.stdout.rows??30),
-    columns:Number(process.stdout.columns??100),
-  });
-  const root=React.createElement(Ink.Box,frameProps,React.createElement(TuiApp,{...props,renderCoordinator:coordinator}));
-  const rendered=Ink.render(root,{
+  const terminalSize=createTerminalSizeStore(process.stdout,{rows:30,columns:100},error=>developmentLogError('tui.resize.failure',error,{},'tui-run'));
+  const Root=()=>{
+    const size=React.useSyncExternalStore(terminalSize.subscribe,terminalSize.getSnapshot,terminalSize.getSnapshot);
+    const frameProps=terminalFrameProps({session,...(theme.colors.background?{background:theme.colors.background}:{}),rows:size.rows,columns:size.columns});
+    return React.createElement(Ink.Box,frameProps,React.createElement(TuiApp,{...props,renderCoordinator:coordinator,terminalSize:size}));
+  };
+  const rendered=Ink.render(React.createElement(Root),{
     exitOnCtrlC:false,
     interactive:session.mode==='plain'?false:effectiveCapabilities.interactive,
     alternateScreen:session.alternateScreen,
   });
   try{await rendered.waitUntilExit();}
   finally{
+    terminalSize.dispose();
     coordinator.dispose();
     if(process.env.TALOS_TUI_RENDER_METRICS==='1'){
       process.stderr.write(`${JSON.stringify({schema:'talos.cli.tui-render-metrics.v1',...summarizeTuiMetrics(collector.snapshot())})}\n`);

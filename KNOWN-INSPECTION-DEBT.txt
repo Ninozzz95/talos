@@ -1,7 +1,7 @@
 TALOS CLI — OWNER INSPECTION: ENGINEERING STATUS
 
 Source HEAD
-e1f7eb363bd60c92608c1863f1d592e7a81d83ac
+356c4b74e32d576f5418b19ff6bc7ee07bd3a613
 
 This package is an owner-inspection build, NOT a signed release.
 
@@ -17,7 +17,7 @@ launcher now refuses package/project overlap before npm/build/runtime execution,
 and the runtime checkpoint preflight fails oversized non-Git workspaces before
 writing checkpoint blobs.
 
-Development diagnostics are written to DEVELOPMENT-LOGS. On any FAIL send the
+The TUI inspection snapshot also includes reactive terminal resize, structured terminal Markdown, and queue-preserving Esc interruption. Ctrl+C remains the aggressive cancel/clear control.\n\nDevelopment diagnostics are written to DEVELOPMENT-LOGS. On any FAIL send the
 whole directory together with the checklist note.
 
 This does not waive:

@@ -104,6 +104,7 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
     handleRawSteerEvent(raw);
     const event=adapter.translate(raw);if(!event)return;
     onEvent(event);
+    if((event.type==='run.completed'||event.type==='run.failed'||event.type==='run.cancelled')&&interruptTerminalSession===id){const resolve=interruptTerminalResolve;interruptTerminalResolve=null;resolve?.();}
     if(event.type==='approval.required'){
       const action=permissionActionFromApproval(event.payload);
       void coordinator.request(id,event.requestId,action).then(result=>{
@@ -263,5 +264,21 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
   async function deleteQueue(id:string){await queueHydration;if(!current)throw new Error('SESSION_NOT_FOUND');const index=queuedEntries.findIndex(row=>row.id===id);if(index<0)return null;const next=[...queuedEntries];const [removed]=next.splice(index,1);await replaceQueue(next,current);if(next.length===0)queuePausedState=false;return removed?publicEntry(removed):null;}
   async function clearQueue(){await queueHydration;const dropped=queueSnapshot();if(current)await replaceQueue([],current);else{queuedEntries.length=0;notifyQueue();}queuePausedState=false;return dropped;}
   async function dispatchQueue(){await queueHydration;if(!current)throw new Error('SESSION_NOT_FOUND');if(!queuedEntries.length){queuePausedState=false;return 0;}const normalized=queuedEntries.map(row=>row.status==='dispatching'?{...row,status:'pending' as const}:row);await replaceQueue(normalized,current);queuePausedState=false;await dispatchQueuedActions(current);return queuedEntries.length;}
-  return{initialize,attach,send,steer,listSessions,agentTree,resumeSession,forkSession,pendingCommands:()=>queuedEntries.filter(action=>action.kind==='command').length,pendingPrompts:()=>queuedEntries.filter(action=>action.kind==='prompt').length,queue:queueSnapshot,queueEntries:queueEntriesSnapshot,queuePaused:()=>queuePausedState,queueReady:()=>queueHydration,editQueue,moveQueue,deleteQueue,clearQueue,dispatchQueue,current:()=>current,mode:()=>currentMode,setMode(next:PermissionMode){currentMode=next;},model:()=>currentModel,setModel(next:string){if(typeof next!=='string'||!next.trim())throw new Error('MODEL_REQUIRED');currentModel=next.trim();},async compact(){if(!current)throw new Error('SESSION_NOT_FOUND');return runtime.compact(current);},async resolveApproval(requestId:string,choice:UserApprovalChoice){await coordinator.resolve(requestId,choice);onApproval?.(null);},async cancel(){if(!current)return[] as TuiQueuedAction[];const dropped=queueSnapshot();onEvent({type:'run.cancelled'});cancelling=true;try{await runtime.cancel(current);await clearQueue();return dropped;}catch(error){queuePausedState=true;onError(error);throw error;}finally{cancelling=false;}},close(){if(closed)return;closed=true;developmentLog('controller.close',{sessionId:current,queueCount:queuedEntries.length},'info','tui-controller');unsubscribe();}};
+  let interruptPromise:Promise<number>|null=null;
+  let interruptTerminalSession:string|null=null;
+  let interruptTerminalResolve:(()=>void)|null=null;
+  async function interrupt(){
+    await queueHydration;if(!current)return queuedEntries.length;if(interruptPromise)return interruptPromise;
+    const sessionId=current;cancelling=true;interruptTerminalSession=sessionId;
+    const terminal=new Promise<void>(resolve=>{interruptTerminalResolve=resolve;});
+    interruptPromise=(async()=>{
+      try{await runtime.cancel(sessionId);await terminal;}
+      catch(error){queuePausedState=true;onError(error);throw error;}
+      finally{cancelling=false;interruptTerminalSession=null;interruptTerminalResolve=null;}
+      if(current!==sessionId||queuedEntries.length===0)return queuedEntries.length;
+      const normalized=queuedEntries.map(row=>row.status==='dispatching'?{...row,status:'pending' as const}:row);await replaceQueue(normalized,sessionId);queuePausedState=false;await dispatchQueuedActions(sessionId);return queuedEntries.length;
+    })().finally(()=>{interruptPromise=null;});
+    return interruptPromise;
+  }
+  return{initialize,attach,send,steer,listSessions,agentTree,resumeSession,forkSession,pendingCommands:()=>queuedEntries.filter(action=>action.kind==='command').length,pendingPrompts:()=>queuedEntries.filter(action=>action.kind==='prompt').length,queue:queueSnapshot,queueEntries:queueEntriesSnapshot,queuePaused:()=>queuePausedState,queueReady:()=>queueHydration,editQueue,moveQueue,deleteQueue,clearQueue,dispatchQueue,interrupt,current:()=>current,mode:()=>currentMode,setMode(next:PermissionMode){currentMode=next;},model:()=>currentModel,setModel(next:string){if(typeof next!=='string'||!next.trim())throw new Error('MODEL_REQUIRED');currentModel=next.trim();},async compact(){if(!current)throw new Error('SESSION_NOT_FOUND');return runtime.compact(current);},async resolveApproval(requestId:string,choice:UserApprovalChoice){await coordinator.resolve(requestId,choice);onApproval?.(null);},async cancel(){if(!current)return[] as TuiQueuedAction[];const dropped=queueSnapshot();onEvent({type:'run.cancelled'});cancelling=true;try{await runtime.cancel(current);await clearQueue();return dropped;}catch(error){queuePausedState=true;onError(error);throw error;}finally{cancelling=false;}},close(){if(closed)return;closed=true;developmentLog('controller.close',{sessionId:current,queueCount:queuedEntries.length},'info','tui-controller');unsubscribe();}};
 }

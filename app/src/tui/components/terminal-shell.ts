@@ -3,6 +3,23 @@ import {sanitizeStatus} from './footer.ts';
 import type {BusyKind} from './status-indicator.ts';
 import type {AgentRosterRow} from '../agent-roster.ts';
 
+export type TerminalSize={rows:number;columns:number};
+type TerminalSizeStream={rows?:number;columns?:number;on?:(event:string,listener:()=>void)=>unknown;off?:(event:string,listener:()=>void)=>unknown;removeListener?:(event:string,listener:()=>void)=>unknown};
+function validTerminalDimension(value:unknown,fallback:number){const measured=Number(value);return Number.isFinite(measured)&&measured>0?Math.max(1,Math.floor(measured)):Math.max(1,Math.floor(fallback));}
+export function terminalSizeSnapshot(stream:TerminalSizeStream|undefined,fallback:TerminalSize):TerminalSize{
+  return{rows:validTerminalDimension(stream?.rows,fallback.rows),columns:validTerminalDimension(stream?.columns,fallback.columns)};
+}
+export function createTerminalSizeStore(stream:TerminalSizeStream|undefined,fallback:TerminalSize={rows:30,columns:100},onError?:(error:unknown)=>void){
+  let snapshot=terminalSizeSnapshot(stream,fallback),disposed=false;const listeners=new Set<(size:TerminalSize)=>void>();
+  const onResize=()=>{if(disposed)return;try{const next=terminalSizeSnapshot(stream,snapshot);if(next.rows===snapshot.rows&&next.columns===snapshot.columns)return;snapshot=next;for(const listener of [...listeners])listener(snapshot);}catch(error){try{onError?.(error);}catch{/* resize diagnostics cannot break rendering */}}};
+  try{stream?.on?.('resize',onResize);}catch(error){try{onError?.(error);}catch{/* best effort */}}
+  return{
+    getSnapshot:()=>snapshot,
+    subscribe(listener:(size:TerminalSize)=>void){if(disposed)return()=>{};listeners.add(listener);return()=>listeners.delete(listener);},
+    dispose(){if(disposed)return;disposed=true;listeners.clear();try{if(typeof stream?.off==='function')stream.off('resize',onResize);else stream?.removeListener?.('resize',onResize);}catch(error){try{onError?.(error);}catch{/* best effort */}}},
+  };
+}
+
 const TERMINAL_UNSAFE=/[\x00-\x1f\x7f-\x9f\u2028\u2029\p{Bidi_Control}\p{Default_Ignorable_Code_Point}]/gu;
 
 export function shellSafeText(value:unknown):string{

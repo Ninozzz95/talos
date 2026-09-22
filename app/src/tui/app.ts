@@ -15,7 +15,7 @@ import {completeBoot,createBootState,markBootError,markBootReady,shouldRenderBoo
 import {commandMenuItems,completeCommandSelection} from './components/command-menu.ts';
 import {reverseHistoryMatch} from './components/composer.ts';
 import {headerLine} from './components/header.ts';
-import {markdownBlockLines,markdownInlineText,markdownSafeText,parseMarkdownBlocks} from './components/markdown.ts';
+import {markdownBlockLines,markdownSafeText,parseMarkdownBlocks,parseMarkdownInline,type MarkdownInlineToken} from './components/markdown.ts';
 import {renderDiffModel} from './components/diff.ts';
 import {parseUnifiedDiff} from './diff-model.ts';
 import {busyIndicatorText} from './components/status-indicator.ts';
@@ -96,7 +96,7 @@ function errorCode(error:unknown){const code=(error as any)?.code;return typeof 
 export type TuiAppProps={
   runtime:CliRuntime;registry?:any;catalog:TuiCatalogService;invocation:CliInvocation;
   projectRoot:string;paths:CliPaths;permissionRules:RuleSetInput;
-  autoClassifier?:AutoClassifier;initialPrompt?:string;initialReasoningEffort?:ReasoningEffort|null;renderCoordinator?:RenderCoordinator;keymap?:ReadonlyArray<Keybinding>;uiTheme?:UiTheme;
+  autoClassifier?:AutoClassifier;initialPrompt?:string;initialReasoningEffort?:ReasoningEffort|null;renderCoordinator?:RenderCoordinator;keymap?:ReadonlyArray<Keybinding>;uiTheme?:UiTheme;terminalSize?:{rows:number;columns:number};
 };
 
 export type ReasoningEffortChoice=ReasoningEffort|'default';
@@ -121,18 +121,29 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
   const footerColor=themeColor(theme,'footer');
   const BootSequence=createBootSequenceComponent(React,Ink);
 
+  const renderInline=(text:string,keyPrefix:string)=>parseMarkdownInline(text).map((token:MarkdownInlineToken,index:number)=>{
+    const key=`${keyPrefix}-${index}`;
+    if(token.kind==='strong')return h(Ink.Text,{key,bold:true},token.text);
+    if(token.kind==='emphasis')return h(Ink.Text,{key,italic:true},token.text);
+    if(token.kind==='code')return h(Ink.Text,{key,color:toolColor},token.text);
+    if(token.kind==='strike')return h(Ink.Text,{key,strikethrough:true,dimColor:true},token.text);
+    if(token.kind==='link')return h(React.Fragment,{key},h(Ink.Text,{underline:true,color:pickerColor},token.text),h(Ink.Text,{dimColor:true},` (${token.href})`));
+    return h(Ink.Text,{key},token.text);
+  });
   function MarkdownView({text,width}:{text:string;width:number}){
     const blocks=parseMarkdownBlocks(text);
     return h(React.Fragment,null,...blocks.map((block,index)=>{
-      if(block.kind==='heading')return h(Ink.Text,{key:index,bold:true},markdownInlineText(block.text));
+      if(block.kind==='heading')return h(Ink.Text,{key:index,bold:true},...renderInline(block.text,`h-${index}`));
       if(block.kind==='code')return h(Ink.Box,{key:index,flexDirection:'column'},...block.tokens.map((line:any[],lineIndex:number)=>h(Ink.Text,{key:lineIndex},...line.map((token:any,tokenIndex:number)=>h(Ink.Text,{key:tokenIndex,dimColor:token.kind==='comment',bold:token.kind==='keyword'||token.kind==='key'},markdownSafeText(token.text))))));
-      if(block.kind==='list'||block.kind==='table'){const layout=markdownBlockLines(block,width);return h(Ink.Box,{key:index,flexDirection:'column'},...layout.lines.map((line,lineIndex)=>h(Ink.Text,{key:lineIndex,dimColor:block.kind==='table'&&lineIndex===1&&layout.mode==='wide'},line||' ')));}
-      return h(Ink.Text,{key:index},markdownInlineText(block.text)||' ');
+      if(block.kind==='blockquote')return h(Ink.Box,{key:index,flexDirection:'column',paddingLeft:1},...block.text.split('\n').map((line,lineIndex)=>h(Ink.Text,{key:lineIndex,dimColor:true},h(Ink.Text,{bold:true},'│ '),...renderInline(line,`q-${index}-${lineIndex}`))));
+      if(block.kind==='list')return h(Ink.Box,{key:index,flexDirection:'column'},...block.items.map((item,itemIndex)=>h(Ink.Text,{key:itemIndex},'  '.repeat(block.depths[itemIndex]??0)+(block.ordered?String(block.start+itemIndex)+'. ':'• '),...renderInline(item,`l-${index}-${itemIndex}`))));
+      if(block.kind==='table'){const layout=markdownBlockLines(block,width);return h(Ink.Box,{key:index,flexDirection:'column'},...layout.lines.map((line,lineIndex)=>h(Ink.Text,{key:lineIndex,bold:layout.mode==='wide'&&lineIndex===0,dimColor:lineIndex===1&&layout.mode==='wide'},line||' ')));}
+      return h(Ink.Text,{key:index},...renderInline(block.text,`p-${index}`));
     }));
   }
 
   return function TuiApp(props:TuiAppProps){
-    const {runtime,registry,catalog,invocation,projectRoot,paths,permissionRules,autoClassifier,initialPrompt,initialReasoningEffort=null,renderCoordinator,keymap:effectiveKeymap=KEYBINDINGS}=props;
+    const {runtime,registry,catalog,invocation,projectRoot,paths,permissionRules,autoClassifier,initialPrompt,initialReasoningEffort=null,renderCoordinator,keymap:effectiveKeymap=KEYBINDINGS,terminalSize}=props;
     const inkApp=Ink.useApp();
     const stdout=Ink.useStdout?.().stdout??process.stdout;
     const baseModel=invocation.model??'openai:gpt-5-mini';
@@ -871,7 +882,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       if(action==='picker-confirm'){void confirmPicker();return;}
       if(action==='command-complete'&&appState.focus.current==='command-menu'){void confirmPicker();return;}
       if(action==='interrupt'){
-        if(key?.escape){if(state.running)cancelActiveRun();else{setAuxCompletions([]);setViewport((view:TranscriptViewport)=>({...view,offset:0,unseen:0,followingTail:true}));}return;}
+        if(key?.escape){if(state.running){void controller.interrupt().catch((error:unknown)=>addLocal(`Interrupt failed: ${error instanceof Error?error.message:String(error)}`));}else{setAuxCompletions([]);setViewport((view:TranscriptViewport)=>({...view,offset:0,unseen:0,followingTail:true}));}return;}
         const result=interruptRef.current.ctrlC(state.running);if(result==='cancel')cancelActiveRun();else inkApp.exit();return;
       }
       if(action==='vim-toggle'){setVim((current:VimState)=>toggleVim(current));return;}
@@ -1145,7 +1156,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     const layoutState={...state,usage:contextStatus??state.usage};
     const layout=deriveShellLayout({
       state:layoutState,appState,viewport,
-      terminalRows:Number(stdout?.rows??process.stdout.rows??30),terminalColumns:Number(stdout?.columns??process.stdout.columns??100),
+      terminalRows:terminalSize?.rows??Number(stdout?.rows??process.stdout.rows??30),terminalColumns:terminalSize?.columns??Number(stdout?.columns??process.stdout.columns??100),
       projectRoot,currentModelContextWindow:null,queuedActions,busySince,
       bullet:theme.glyphs.bullet,branch:theme.glyphs.branch,
     });
@@ -1163,9 +1174,13 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     const statusFrame=frameIndex(statusElapsed,MOTION_FRAME_MS,theme.glyphs.spinner.length);
     const statusText=busyIndicatorText({kind:activity.kind,elapsedMs:statusElapsed,frame:statusFrame,unicode:capabilities.unicode,frames:theme.glyphs.spinner});
     React.useEffect(()=>{
-      if(viewport.pageSize===layout.desiredPageSize)return;
-      coordinator.immediate('resize',()=>setViewport((view:TranscriptViewport)=>view.pageSize===layout.desiredPageSize?view:{...view,pageSize:layout.desiredPageSize}));
-    },[coordinator,layout.desiredPageSize,viewport.pageSize]);
+      const total=visibleTranscriptItems.length;
+      coordinator.immediate('resize',()=>setViewport((view:TranscriptViewport)=>{
+        const pageSize=layout.desiredPageSize,maxOffset=Math.max(0,total-pageSize),offset=Math.min(view.offset,maxOffset);
+        if(view.pageSize===pageSize&&view.offset===offset)return view;
+        return{...view,pageSize,offset,followingTail:offset===0?true:view.followingTail,unseen:offset===0?0:view.unseen};
+      }));
+    },[coordinator,layout.desiredPageSize,visibleTranscriptItems.length]);
     if(boot.phase!=='ready'&&boot.phase!=='error')return h(Ink.Box,{key:`boot-${appState.redrawNonce}`,flexDirection:'column',paddingTop:1},h(BootSequence,{state:boot,logo:shouldRenderBootLogo(capabilities),motion:capabilities.motion,unicode:capabilities.unicode,width:columns,accentColor:bootColor,mutedColor:footerColor,onComplete:()=>setBoot((current:BootState)=>completeBoot(current,Date.now()))}),h(Ink.Text,{dimColor:true,color:footerColor},projectRoot));
 
     const renderPickerRows=(rowsToRender:any[],selected:number,label:(row:any)=>string)=>{const view=pickerWindow(rowsToRender,selected,pickerRowsLimit);return view.rows.map((row,index)=>{const absolute=view.start+index;return h(Ink.Text,{key:`${absolute}-${label(row)}`,inverse:absolute===selected,color:pickerColor},`${absolute===selected?'›':' '} ${label(row)}`);});};
