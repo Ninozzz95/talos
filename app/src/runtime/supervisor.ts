@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import type {ReasoningEffort} from '../config/types.ts';
 import {CliRuntimeError,type CliRuntime,type CliRuntimeSupervisorEvidence,type StartInput} from './types.ts';
+import {developmentLog,developmentLogError} from '../diagnostics/development-log.ts';
 import {createRuntimeReplayBuffer,createStartOperationJournal,startOperationFingerprint,type StartOperationJournal} from './replay-buffer.ts';
 
 export type RuntimeRetryRule={maxAttempts:number;backoffMs:number};
@@ -66,7 +67,7 @@ export function createRuntimeSupervisor(options:Options){
   let closed=false;
 
   function record(input:Omit<CliRuntimeSupervisorEvidence,'ts'>){
-    evidence.push({...input,ts:new Date().toISOString()});
+    const row={...input,ts:new Date().toISOString()};evidence.push(row);developmentLog('runtime.supervisor',row,input.outcome==='failed'?'error':input.outcome==='retrying'?'warning':'debug','runtime-supervisor');
     if(evidence.length>256)evidence.splice(0,evidence.length-256);
   }
   async function ensureRuntime(){
@@ -79,7 +80,7 @@ export function createRuntimeSupervisor(options:Options){
   }
   async function replaceRuntime(){
     const old=current;current=null;
-    try{await old?.close();}catch{}
+    try{await old?.close();}catch(error){developmentLogError('runtime.replace.close_failure',error,{},'runtime-supervisor');}
     const next=await ensureRuntime();
     next.setDefaultReasoningEffort(defaultReasoning);
     return next;

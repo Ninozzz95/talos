@@ -67,8 +67,8 @@ export function createResearchFacade(input:{projectRoot:string;repoRoot?:string}
         return{number:index+1,text:str(claim?.text)??'',source:sourceNumber>0?(sources?.[sourceNumber-1]??null):null,passage:str(claim?.passage)??'',quotePresent:typeof claim?.checks?.quotePresent==='boolean'?claim.checks.quotePresent:null,verification:verification(claim?.checks?.claimSupported),reason:str(claim?.checks?.supportReason),judge:str(claim?.checks?.judge),judgedAt:str(claim?.checks?.judgedAt),opposing:Array.isArray(claim?.checks?.opposing)?claim.checks.opposing:null};
       });
       summary=str(parsed.summary);
-      const count=(v:ResearchVerification)=>claims!.filter(c=>c.verification===v).length;
-      standing={total:claims.length,supported:count('yes'),partial:count('partial'),unsupported:count('no'),unchecked:count('unchecked'),contested:count('contested')};
+      const claimRows=claims as ResearchClaimView[];const count=(v:ResearchVerification)=>claimRows.filter(c=>c.verification===v).length;
+      standing={total:claimRows.length,supported:count('yes'),partial:count('partial'),unsupported:count('no'),unchecked:count('unchecked'),contested:count('contested')};
     }
     return{...base,phase,progress:x.live.progress,journal:{events:Array.isArray(x.live.journal.eventi)?x.live.journal.eventi.length:0,skippedRows:finite(x.live.journal.righeSaltate)},summary,verification:standing,sources,claims,plan:x.plan,steps:Array.isArray(x.live.state?.steps)?x.live.state.steps:null,spent:x.live.spent,expectedCost:null};
   };

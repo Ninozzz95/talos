@@ -27,7 +27,7 @@ export async function runInkTui(props:TuiAppProps):Promise<void>{
   const TuiApp=createTuiAppComponent(React,Ink,effectiveCapabilities,accentId);
   const frameProps=terminalFrameProps({
     session,
-    background:theme.colors.background,
+    ...(theme.colors.background?{background:theme.colors.background}:{}),
     rows:Number(process.stdout.rows??30),
     columns:Number(process.stdout.columns??100),
   });

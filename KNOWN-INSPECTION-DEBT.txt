@@ -1,23 +1,27 @@
-TALOS CLI — OWNER INSPECTION: KNOWN EXECUTABLE DEBT
+TALOS CLI — OWNER INSPECTION: ENGINEERING STATUS
 
 Source HEAD
-33da96c7e3a2a0aa90ca9ac884095c08b5cc52bb
+58c103643a57ea49b5ffc3c6c1c1da9d5352d581
 
-Purpose
-This package exists so the owner can inspect the current CLI runtime before release engineering continues.
-It is NOT a signed release and MUST NOT be used as evidence that M11 or release gates are green.
+This package is an owner-inspection build, NOT a signed release.
 
-Windows executable validation on 2026-09-22 reached the real TypeScript compiler and reproduced current source diagnostics.
-The inspection launcher therefore permits TypeScript to emit JavaScript when the compiler reports diagnostics, but only if dist/main.js was actually emitted.
-The launcher then executes the emitted CLI with --version before the interactive inspection package is accepted by the packaging workflow.
+The prior inspection packages were rejected and are not acceptance evidence.
+Their known 47-error TypeScript state has been corrected in this snapshot.
+A new inspection package is accepted for testing only if its Windows bootstrap
+runs both typecheck and build with exit code 0. There is no longer any
+"emit JavaScript despite TypeScript diagnostics" fallback.
 
-This behavior is intentionally limited to this owner-inspection branch/package. It does not waive:
-- focused tests;
-- typecheck;
-- hermetic CLI suite;
-- build;
-- Windows/release gates;
+The owner-reported infinite/long `starting` condition was reproduced as a
+pre-provider checkpoint of the extracted inspection package itself. This
+launcher now refuses package/project overlap before npm/build/runtime execution,
+and the runtime checkpoint preflight fails oversized non-Git workspaces before
+writing checkpoint blobs.
+
+Development diagnostics are written to DEVELOPMENT-LOGS. On any FAIL send the
+whole directory together with the checklist note.
+
+This does not waive:
+- full CI/release gates;
 - M11-B signing/SBOM requirements;
+- owner manual inspection;
 - any competitive rating or release-ready gate.
-
-Owner review should record runtime failures independently from these compile diagnostics.

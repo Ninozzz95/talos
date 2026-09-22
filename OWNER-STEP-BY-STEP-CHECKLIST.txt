@@ -1,5 +1,5 @@
 TALOS CLI — OWNER STEP-BY-STEP PRE-RELEASE INSPECTION
-Source HEAD: 33da96c7e3a2a0aa90ca9ac884095c08b5cc52bb
+Source HEAD: 58c103643a57ea49b5ffc3c6c1c1da9d5352d581
 Status: INSPECTION BUILD ONLY — NOT A SIGNED RELEASE
 
 Use a disposable/test project where write/edit/tool actions are safe.
@@ -8,8 +8,8 @@ Mark each item [PASS], [FAIL], or [SKIP] and write notes beside failures.
 A. BOOT / IDENTITY
 [ ] A1 Double-click START-TALOS-CLI.cmd.
 [ ] A2 Checklist opens and a project-folder picker appears.
-[ ] A3 Launcher reports source HEAD 33da96c7e3a2a0aa90ca9ac884095c08b5cc52bb.
-[ ] A4 First launch installs dependencies, reports any TypeScript diagnostics, emits the inspection JS, and continues to the runtime check. Record the diagnostics as engineering debt; do not treat this as a green build/typecheck gate.
+[ ] A3 Launcher reports source HEAD 58c103643a57ea49b5ffc3c6c1c1da9d5352d581.
+[ ] A4 First launch installs pinned dependencies and BOTH typecheck + build complete with zero errors. Any non-zero compiler/build exit is an immediate FAIL and must stop launch.
 [ ] A5 TALOS starts in the selected project, not inside the inspection package folder.
 [ ] A6 Exit and relaunch: cached bootstrap is reused and TALOS still opens normally.
 
@@ -29,6 +29,7 @@ C. PROVIDER / MODEL CONTROL PLANE
 [ ] C6 Toggle reasoning with Ctrl+T and confirm the visible state changes truthfully.
 
 D. BASIC AGENT TURN / STREAMING
+[ ] D0 Verify the selected Workspace printed by the launcher is the separate disposable project, never the extracted inspection package.
 [ ] D0 After pressing Enter, if TALOS is preparing the safety checkpoint before the run starts, the status must show starting rather than idle. If it remains starting unusually long, record that exact state and duration.
 [ ] D1 Send a harmless prompt asking TALOS to summarize the test project.
 [ ] D2 Streaming text renders incrementally without corrupting the terminal.
@@ -166,7 +167,7 @@ V. FINAL OWNER REVIEW
 [ ] V1 Repeat one real model turn after all feature tests.
 [ ] V2 Exit and resume once more after process termination.
 [ ] V3 Review the test project git diff/filesystem for unexpected mutations.
-[ ] V4 Record every FAIL with exact steps, terminal, provider/model and visible error text. Include the known TypeScript diagnostics shown by the launcher if they remain reproducible.
+[ ] V4 Record every FAIL with exact steps, terminal, provider/model and visible error text. Attach/copy the entire DEVELOPMENT-LOGS directory created beside START-TALOS-CLI.cmd.
 [ ] V5 Keep this inspection result separate from CI/release signing evidence.
 
 OWNER RESULT

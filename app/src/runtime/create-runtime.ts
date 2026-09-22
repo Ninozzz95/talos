@@ -9,6 +9,7 @@ import type {ExecutionBroker} from '../security/execution-broker.ts';
 import {createUnbuildableExecutionBroker} from './brokered-executor.ts';
 import {environmentKeyModeForEntry,type EnvironmentKeyMode} from '../provider/environment-keys.ts';
 import {createRuntimeSupervisor} from './supervisor.ts';
+import {developmentLog,developmentLogError} from '../diagnostics/development-log.ts';
 
 /** ⛔ La forma che `composeTalosRuntime` accetta: il CLI si conforma alla composizione, mai il contrario. */
 export type ExecutionBrokerFactory=(options:{paths:{cacheRoot:string};platform:NodeJS.Platform})=>ExecutionBroker;
@@ -52,7 +53,7 @@ export function resolveExecutionBrokerFactory(input:{brokerFactory?:ExecutionBro
       const built=factory(options);
       broker=built??createUnbuildableExecutionBroker(Object.assign(new TypeError('the broker factory returned no broker'),{code:'EXECUTION_BROKER_FACTORY_RETURNED_NOTHING'}));
     }catch(cause){
-      broker=createUnbuildableExecutionBroker(cause);
+      developmentLogError('runtime.broker.construct_failure',cause,{platform:options.platform},'runtime-create');broker=createUnbuildableExecutionBroker(cause);
     }
     return broker;
   }};
@@ -87,7 +88,8 @@ async function prepared(input:Input){
  */
 function entryMode(input:Input):EnvironmentKeyMode{return environmentKeyModeForEntry(input.environmentKeys??'consent',process.env);}
 async function composeRuntimeContext(input:Input){
-  return composeTalosRuntime({...await prepared(input),environmentKeys:entryMode(input)});
+  developmentLog('runtime.compose.begin',{projectRoot:input.projectRoot,model:input.model??null,environmentKeys:input.environmentKeys??'consent'},'debug','runtime-create');
+  const context=await composeTalosRuntime({...await prepared(input),environmentKeys:entryMode(input)});developmentLog('runtime.compose.ready',{projectRoot:input.projectRoot,model:input.model??null},'info','runtime-create');return context;
 }
 function supervisorRoot(input:Input){
   const paths=input.paths??resolveCliPaths(process.env,process.platform,homedir());

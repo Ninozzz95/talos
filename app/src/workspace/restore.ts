@@ -75,5 +75,5 @@ async function restore({store,id,direction}:{store:CheckpointStore;id?:string;di
     }finally{await rm(bundle.root,{recursive:true,force:true}).catch(()=>{});}
   });
 }
-export async function undoCheckpoint({store,id}:{store:CheckpointStore;id?:string}){return restore({store,id,direction:'undo'});}
-export async function redoCheckpoint({store,id}:{store:CheckpointStore;id?:string}){return restore({store,id,direction:'redo'});}
+export async function undoCheckpoint({store,id}:{store:CheckpointStore;id?:string}){return restore({store,...(id?{id}:{}),direction:'undo'});}
+export async function redoCheckpoint({store,id}:{store:CheckpointStore;id?:string}){return restore({store,...(id?{id}:{}),direction:'redo'});}

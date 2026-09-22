@@ -7,6 +7,8 @@ set "TALOS_EXIT=%ERRORLEVEL%"
 if not "%TALOS_EXIT%"=="0" (
   echo.
   echo TALOS CLI inspection launcher exited with code %TALOS_EXIT%.
+  echo Development logs: "%~dp0DEVELOPMENT-LOGS"
+  echo Send the entire DEVELOPMENT-LOGS folder with the failure report.
   pause
 )
 exit /b %TALOS_EXIT%

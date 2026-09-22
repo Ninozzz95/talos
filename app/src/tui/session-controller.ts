@@ -16,6 +16,7 @@ import {resolveProjectReferences} from './project-references.ts';
 import {createQueueStore,type QueueStoreEntry} from './queue-store.ts';
 import {checkpointMutationAllowed} from '../workspace/checkpoint.ts';
 import {createCheckpointStore,type CheckpointHandle} from '../workspace/checkpoint-store.ts';
+import {developmentLog,developmentLogError,developmentTextEvidence} from '../diagnostics/development-log.ts';
 
 // `explanation`, `alwaysSimulation` and `explanationError` (B1 slice 13) are the per-segment account
 // and the simulation of "allow always", computed once from the same rules the engine decided with.
@@ -47,6 +48,7 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
   const coordinator=createApprovalCoordinator({engine,answer:(sid,rid,approved)=>runtime.answerApproval(sid,rid,approved),interactive:true,mode:()=>currentMode});
   const adapter=createTuiEventAdapter(secretValuesFromEnvironment(process.env));
   let unsubscribe=()=>{};
+  let closed=false;
   let current:string|null=null;
   /*
    * ⭐⭐⭐ DECISIONE OWNER 16/09/2026 — UN COMANDO DIGITATO MENTRE UN GIRO E' IN CORSO SI ACCODA.
@@ -73,7 +75,7 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
   function checkpointFailure(code:string,error:unknown){
     const message=error instanceof Error?error.message:String(error);
     const blocked=Object.assign(new Error(`${code}: ${message}`),{code,cause:error});
-    checkpointBlockedError=blocked;queuePausedState=true;onError(blocked);return blocked;
+    checkpointBlockedError=blocked;queuePausedState=true;developmentLogError('checkpoint.failure',blocked,{code},'tui-controller');if(!closed)onError(blocked);return blocked;
   }
   function assertCheckpointReady(){if(checkpointBlockedError)throw checkpointBlockedError;}
   function preparation(state:TuiPreparationState){try{onPreparation?.(state);}catch{/* UI observation cannot change send semantics. */}}
@@ -82,11 +84,13 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
     if(!checkpointStore)return invoke();
     if(operation==='start'&&!checkpointMutationAllowed(currentMode))return invoke();
     if(modelCheckpoint)throw Object.assign(new Error('CHECKPOINT_TURN_ALREADY_OPEN'),{code:'CHECKPOINT_TURN_ALREADY_OPEN'});
-    let checkpoint:CheckpointHandle;preparation({active:true,operation});
+    let checkpoint:CheckpointHandle;const checkpointStarted=performance.now();developmentLog('checkpoint.begin',{operation,sessionId,projectRoot},'debug','tui-controller');preparation({active:true,operation});
     try{checkpoint=await checkpointStore.begin({operation,...(sessionId?{sessionId}:{})});}
+    catch(error){developmentLogError('checkpoint.begin.failure',error,{operation,sessionId,durationMs:performance.now()-checkpointStarted},'tui-controller');throw error;}
     finally{preparation({active:false,operation});}
-    modelCheckpoint=checkpoint;
-    try{const id=await invoke();checkpoint.bindSession(id);return id;}
+    developmentLog('checkpoint.ready',{operation,sessionId,durationMs:performance.now()-checkpointStarted,checkpointId:checkpoint.id},'info','tui-controller');modelCheckpoint=checkpoint;
+    const invokeStarted=performance.now();developmentLog('runtime.invoke.begin',{operation,sessionId},'debug','tui-controller');
+    try{const id=await invoke();checkpoint.bindSession(id);developmentLog('runtime.invoke.accepted',{operation,sessionId:id,durationMs:performance.now()-invokeStarted},'info','tui-controller');return id;}
     catch(error){if(modelCheckpoint===checkpoint)modelCheckpoint=null;try{await checkpoint.finalize();}catch(finalization){checkpointFailure('CHECKPOINT_FINALIZE_FAILED',finalization);}throw error;}
   }
   async function runShellMutation(sessionId:string,command:string){
@@ -109,6 +113,7 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
     }
   }
   function processRawEvent(id:string,raw:unknown,allowDrain=true){
+    if(closed)return;developmentLog('runtime.raw_event',{sessionId:id,raw},'debug','tui-controller');
     handleRawSteerEvent(raw);
     const event=adapter.translate(raw);if(!event)return;
     onEvent(event);
@@ -139,12 +144,13 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
     }
     if((row.type==='RunFinished'||row.type==='RunError'||row.type==='RunCancelled')&&modelCheckpoint){
       const checkpoint=modelCheckpoint;modelCheckpoint=null;
-      void checkpoint.finalize().then(()=>processRawEvent(id,raw,true)).catch(error=>{checkpointFailure('CHECKPOINT_FINALIZE_FAILED',error);processRawEvent(id,raw,false);});
+      const finalizeStarted=performance.now();void checkpoint.finalize().then(()=>{developmentLog('checkpoint.finalized',{sessionId:id,checkpointId:checkpoint.id,durationMs:performance.now()-finalizeStarted},'info','tui-controller');processRawEvent(id,raw,true);}).catch(error=>{developmentLogError('checkpoint.finalize.failure',error,{sessionId:id,checkpointId:checkpoint.id,durationMs:performance.now()-finalizeStarted},'tui-controller');checkpointFailure('CHECKPOINT_FINALIZE_FAILED',error);processRawEvent(id,raw,false);});
       return true;
     }
     return false;
   }
   function steerState(state:TuiSteerState){onSteerState?.(state);}
+  function pendingSteerNow(){return pendingSteer;}
   function rejectSteer(code:string,message:string):TuiSteerOutcome{const outcome={status:'rejected' as const,code,message};steerState(outcome);return outcome;}
   function handleRawSteerEvent(raw:unknown){
     if(!raw||typeof raw!=='object')return;
@@ -224,7 +230,7 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
    * ⛔ E senza sessione si RIFIUTA a voce alta: far sparire un comando digitato e' peggio che negarlo.
    */
   async function send(prompt:string,{running}:{model:string;running:boolean}):Promise<TuiSendOutcome>{
-    await queueHydration;const text=prompt.trim();
+    developmentLog('controller.send',{prompt:developmentTextEvidence(prompt),running,currentSessionId:current,model:currentModel,mode:currentMode,queueCount:queuedEntries.length},'debug','tui-controller');await queueHydration;const text=prompt.trim();
     if(!text)return{sessionId:current,kind:'none',queued:false,position:0};
     if(text.startsWith('!')){
       const command=text.slice(1).trim();
@@ -260,11 +266,11 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
     try{
       await assertReady();const attachments=await referencesFor(text);steerInvocation={text};
       const accepted=await runtime.steer(current,text,attachments);
-      if(pendingSteer&&pendingSteer.redirectId!==accepted.redirectId){
-        const stale=pendingSteer;pendingSteer=null;steerState({status:'failed',redirectId:stale.redirectId,code:'STEER_CORRELATION_FAILED',message:'The runtime returned a different steering correlation id.'});
+      const correlated=pendingSteerNow();if(correlated&&correlated.redirectId!==accepted.redirectId){
+        const stale=correlated;pendingSteer=null;steerState({status:'failed',redirectId:stale.redirectId,code:'STEER_CORRELATION_FAILED',message:'The runtime returned a different steering correlation id.'});
         return rejectSteer('STEER_CORRELATION_FAILED','The runtime returned a different steering correlation id.');
       }
-      if(!pendingSteer){pendingSteer={redirectId:accepted.redirectId,text};steerState({status:'requested',redirectId:accepted.redirectId});}
+      if(!pendingSteerNow()){pendingSteer={redirectId:accepted.redirectId,text};steerState({status:'requested',redirectId:accepted.redirectId});}
       return{status:'requested',redirectId:accepted.redirectId};
     }catch(error){
       pendingSteer=null;const code=typeof (error as any)?.code==='string'?(error as any).code:'SESSION_STEER_REJECTED',message=error instanceof Error?error.message:String(error);
@@ -276,5 +282,5 @@ export function createTuiSessionController({runtime,projectRoot,model,mode,rules
   async function deleteQueue(id:string){await queueHydration;if(!current)throw new Error('SESSION_NOT_FOUND');const index=queuedEntries.findIndex(row=>row.id===id);if(index<0)return null;const next=[...queuedEntries];const [removed]=next.splice(index,1);await replaceQueue(next,current);if(next.length===0)queuePausedState=false;return removed?publicEntry(removed):null;}
   async function clearQueue(){await queueHydration;const dropped=queueSnapshot();if(current)await replaceQueue([],current);else{queuedEntries.length=0;notifyQueue();}queuePausedState=false;return dropped;}
   async function dispatchQueue(){await queueHydration;if(!current)throw new Error('SESSION_NOT_FOUND');if(!queuedEntries.length){queuePausedState=false;return 0;}const normalized=queuedEntries.map(row=>row.status==='dispatching'?{...row,status:'pending' as const}:row);await replaceQueue(normalized,current);queuePausedState=false;await dispatchQueuedActions(current);return queuedEntries.length;}
-  return{initialize,attach,send,steer,listSessions,agentTree,resumeSession,forkSession,pendingCommands:()=>queuedEntries.filter(action=>action.kind==='command').length,pendingPrompts:()=>queuedEntries.filter(action=>action.kind==='prompt').length,queue:queueSnapshot,queueEntries:queueEntriesSnapshot,queuePaused:()=>queuePausedState,queueReady:()=>queueHydration,editQueue,moveQueue,deleteQueue,clearQueue,dispatchQueue,current:()=>current,mode:()=>currentMode,setMode(next:PermissionMode){currentMode=next;},model:()=>currentModel,setModel(next:string){if(typeof next!=='string'||!next.trim())throw new Error('MODEL_REQUIRED');currentModel=next.trim();},async compact(){if(!current)throw new Error('SESSION_NOT_FOUND');return runtime.compact(current);},async resolveApproval(requestId:string,choice:UserApprovalChoice){await coordinator.resolve(requestId,choice);onApproval?.(null);},async cancel(){if(!current)return[] as TuiQueuedAction[];const dropped=queueSnapshot();onEvent({type:'run.cancelled'});cancelling=true;try{await runtime.cancel(current);await clearQueue();return dropped;}catch(error){queuePausedState=true;onError(error);throw error;}finally{cancelling=false;}},close(){unsubscribe();}};
+  return{initialize,attach,send,steer,listSessions,agentTree,resumeSession,forkSession,pendingCommands:()=>queuedEntries.filter(action=>action.kind==='command').length,pendingPrompts:()=>queuedEntries.filter(action=>action.kind==='prompt').length,queue:queueSnapshot,queueEntries:queueEntriesSnapshot,queuePaused:()=>queuePausedState,queueReady:()=>queueHydration,editQueue,moveQueue,deleteQueue,clearQueue,dispatchQueue,current:()=>current,mode:()=>currentMode,setMode(next:PermissionMode){currentMode=next;},model:()=>currentModel,setModel(next:string){if(typeof next!=='string'||!next.trim())throw new Error('MODEL_REQUIRED');currentModel=next.trim();},async compact(){if(!current)throw new Error('SESSION_NOT_FOUND');return runtime.compact(current);},async resolveApproval(requestId:string,choice:UserApprovalChoice){await coordinator.resolve(requestId,choice);onApproval?.(null);},async cancel(){if(!current)return[] as TuiQueuedAction[];const dropped=queueSnapshot();onEvent({type:'run.cancelled'});cancelling=true;try{await runtime.cancel(current);await clearQueue();return dropped;}catch(error){queuePausedState=true;onError(error);throw error;}finally{cancelling=false;}},close(){if(closed)return;closed=true;developmentLog('controller.close',{sessionId:current,queueCount:queuedEntries.length},'info','tui-controller');unsubscribe();}};
 }

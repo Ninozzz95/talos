@@ -5,5 +5,8 @@ rmdir /s /q "%LOCALAPPDATA%\TALOS-CLI\inspection-bootstrap" 2>nul
 del /q "%~dp0app\.talos-inspection-*" 2>nul
 del /q "%~dp0app\vendor\harness-ui\.talos-inspection-*" 2>nul
 del /q "%~dp0app\vendor\context-engine\.talos-inspection-*" 2>nul
+rmdir /s /q "%~dp0DEVELOPMENT-LOGS" 2>nul
+mkdir "%~dp0DEVELOPMENT-LOGS" 2>nul
+echo TALOS owner-inspection development logs are written here.>"%~dp0DEVELOPMENT-LOGS\README.txt"
 echo Done. Product user data was not removed.
 pause

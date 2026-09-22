@@ -429,7 +429,7 @@ export async function composeTalosRuntime({repoRoot,projectRoot,paths,model,env=
   cartellaNote:join(paths.dataRoot,'notes'),cartellaAttivita:join(paths.dataRoot,'tasks'),cartellaMemoria:join(paths.dataRoot,'memory'),cartellaForge:join(paths.dataRoot,'forge'),attrezziKernelFn:()=>ownerRuntime.attrezziKernel(),
   eseguiComandoDirettoFn:(input:any)=>{if(typeof m.eseguiComandoDiretto!=='function')throw Object.assign(new Error('KERNEL_COMMAND_PATH_UNAVAILABLE'),{code:'KERNEL_COMMAND_PATH_UNAVAILABLE'});return m.eseguiComandoDiretto({...input,eseguiComandoSandboxatoFn:brokeredExecutor});}
  });
- contextBridge=createCliContextBridge({repoRoot,paths,registry,providerRegistry,providerStore,ownerRuntime,chatImageStore,separaFonteModello:m.separaFonteModello});
+ contextBridge=createCliContextBridge({repoRoot,paths,registry,providerRegistry,providerStore,ownerRuntime,chatImageStore,...(m.separaFonteModello?{separaFonteModello:m.separaFonteModello}:{})});
  /* C1 (see `compactionScope` above): the session's own row decides the model; one compaction at a time, in call order. */
  const compactionOf=(sessionId:string):{model:string|null;refusal:CliRuntimeError|null}=>{
   let rows:unknown=null;try{rows=registry.elenca?.();}catch{rows=null;}

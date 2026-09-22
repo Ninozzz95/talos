@@ -89,7 +89,7 @@ export function normalizeSessionSummary(row:any,evidence:SessionSummaryEvidence=
   const id=textOrNull(row?.sessionId,row?.id)??'';
   const child=evidence.child??null;
   const collisions=(Array.isArray(child?.collisioni)?child.collisioni:Array.isArray(row?.collisions)?row.collisions:[])
-    .map(collisionOf).filter((value):value is CliSessionCollision=>value!==null);
+    .map(collisionOf).filter((value:CliSessionCollision|null):value is CliSessionCollision=>value!==null);
   const startedAt=textOrNull(row?.avviataAlle,row?.startedAt);
   const updatedAt=textOrNull(row?.ultimaRispostaAlle,row?.aggiornataAlle,row?.updatedAt)??startedAt;
   return{

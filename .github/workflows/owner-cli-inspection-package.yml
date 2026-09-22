@@ -3,7 +3,7 @@ name: TALOS CLI owner inspection package
 on:
   push:
     branches:
-      - owner-inspection/cli-33da96c7
+      - owner-inspection/cli-58c10364
 
 permissions:
   contents: read
@@ -14,10 +14,51 @@ jobs:
     steps:
       - name: Checkout inspection snapshot
         uses: actions/checkout@v4
-      - name: Exercise exact one-click bootstrap
+
+      - name: Prove inspection package cannot be selected as project
         shell: powershell
         run: |
-          .\bootstrap.ps1 -Project $PWD.Path -PrepareOnly
+          $ErrorActionPreference = 'Stop'
+          $Output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1 -Project $PWD.Path -PrepareOnly 2>&1
+          $Code = $LASTEXITCODE
+          $Output | ForEach-Object { Write-Host $_ }
+          if ($Code -eq 0) { throw 'Package-root project selection unexpectedly succeeded.' }
+          $Text = ($Output | Out-String)
+          if ($Text -notmatch 'INSPECTION_PROJECT_OVERLAP') { throw "Expected INSPECTION_PROJECT_OVERLAP, got exit $Code.`n$Text" }
+          $Transcript = Get-ChildItem -LiteralPath .\DEVELOPMENT-LOGS -Filter 'bootstrap-*.log' | Sort-Object LastWriteTimeUtc | Select-Object -Last 1
+          if (-not $Transcript) { throw 'Overlap rejection did not leave a bootstrap transcript.' }
+
+      - name: Exercise exact one-click preparation in a separate project
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $Project = Join-Path $env:RUNNER_TEMP 'talos-owner-inspection-project'
+          New-Item -ItemType Directory -Force -Path $Project | Out-Null
+          Set-Content -LiteralPath (Join-Path $Project 'README.txt') -Value 'owner inspection disposable project' -Encoding UTF8
+          $Before = @(Get-ChildItem -LiteralPath .\DEVELOPMENT-LOGS -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
+          $Output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1 -Project $Project -PrepareOnly 2>&1
+          $Code = $LASTEXITCODE
+          $Output | ForEach-Object { Write-Host $_ }
+          if ($Code -ne 0) { throw "Separate-project preparation failed with exit $Code." }
+
+          $Logs = Get-ChildItem -LiteralPath .\DEVELOPMENT-LOGS -File | Where-Object { $Before -notcontains $_.FullName }
+          $Transcript = $Logs | Where-Object Name -Like 'bootstrap-*.log' | Sort-Object LastWriteTimeUtc | Select-Object -Last 1
+          $Jsonl = $Logs | Where-Object Name -Like 'talos-dev-*.jsonl' | Sort-Object LastWriteTimeUtc | Select-Object -Last 1
+          if (-not $Transcript) { throw 'Successful preparation did not create a bootstrap transcript.' }
+          if (-not $Jsonl) { throw 'Successful preparation did not create a structured TALOS development log.' }
+
+          $TranscriptText = Get-Content -LiteralPath $Transcript.FullName -Raw
+          foreach ($Required in @('TALOS CLI typecheck','TALOS CLI build','exit=0','Prepare-only validation completed successfully.')) {
+            if ($TranscriptText -notmatch [regex]::Escape($Required)) { throw "Bootstrap transcript missing: $Required" }
+          }
+
+          $Start = Get-Content -LiteralPath $Jsonl.FullName | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object event -EQ 'process.start' | Select-Object -First 1
+          if (-not $Start) { throw 'Structured development log has no process.start record.' }
+          $Expected = [System.IO.Path]::GetFullPath($Project).TrimEnd('\')
+          $Observed = [System.IO.Path]::GetFullPath([string]$Start.data.cwd).TrimEnd('\')
+          if (-not [string]::Equals($Expected,$Observed,[System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "CLI cwd mismatch. Expected $Expected, observed $Observed"
+          }
 
   package:
     needs: validate-windows
@@ -25,32 +66,42 @@ jobs:
     steps:
       - name: Checkout inspection snapshot
         uses: actions/checkout@v4
-      - name: Verify inspection identity
+      - name: Verify inspection identity and fail-closed bootstrap contract
         shell: bash
         run: |
           set -euo pipefail
-          test "$(jq -r .sourceHead INSPECTION-SNAPSHOT.json)" = "33da96c7e3a2a0aa90ca9ac884095c08b5cc52bb"
+          test "$(jq -r .sourceHead INSPECTION-SNAPSHOT.json)" = "58c103643a57ea49b5ffc3c6c1c1da9d5352d581"
           test -f START-TALOS-CLI.cmd
           test -f bootstrap.ps1
           test -f OWNER-STEP-BY-STEP-CHECKLIST.txt
           test -f app/src/main.ts
+          test -f app/src/diagnostics/development-log.ts
           test -f app/vendor/harness-ui/src/kernel/talosHarness.mjs
           test -f app/vendor/context-engine/src/engine.mjs
+          grep -q 'INSPECTION_PROJECT_OVERLAP' bootstrap.ps1
+          grep -q "run','typecheck" bootstrap.ps1
+          grep -q 'TALOS_CLI_DEV_LOG_DIR' bootstrap.ps1
+          ! grep -q 'TypeScript reported diagnostics' bootstrap.ps1
       - name: Build ZIP
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p out/TALOS-CLI-owner-inspection-33da96c7
-          rsync -a --exclude='.git' --exclude='.github' --exclude='out' ./ out/TALOS-CLI-owner-inspection-33da96c7/
+          mkdir -p out/TALOS-CLI-owner-inspection-58c10364
+          rsync -a \
+            --exclude='.git' --exclude='.github' --exclude='out' \
+            --exclude='app/node_modules' --exclude='app/vendor/harness-ui/node_modules' --exclude='app/vendor/context-engine/node_modules' \
+            --exclude='app/dist' --exclude='.talos-inspection-*' \
+            --exclude='DEVELOPMENT-LOGS/bootstrap-*.log' --exclude='DEVELOPMENT-LOGS/talos-dev-*.jsonl' \
+            ./ out/TALOS-CLI-owner-inspection-58c10364/
           cd out
-          zip -r -9 TALOS-CLI-owner-inspection-33da96c7.zip TALOS-CLI-owner-inspection-33da96c7
-          sha256sum TALOS-CLI-owner-inspection-33da96c7.zip > TALOS-CLI-owner-inspection-33da96c7.zip.sha256
+          zip -r -9 TALOS-CLI-owner-inspection-58c10364.zip TALOS-CLI-owner-inspection-58c10364
+          sha256sum TALOS-CLI-owner-inspection-58c10364.zip > TALOS-CLI-owner-inspection-58c10364.zip.sha256
       - name: Upload inspection package
         uses: actions/upload-artifact@v4
         with:
-          name: TALOS-CLI-owner-inspection-33da96c7
+          name: TALOS-CLI-owner-inspection-58c10364
           path: |
-            out/TALOS-CLI-owner-inspection-33da96c7.zip
-            out/TALOS-CLI-owner-inspection-33da96c7.zip.sha256
+            out/TALOS-CLI-owner-inspection-58c10364.zip
+            out/TALOS-CLI-owner-inspection-58c10364.zip.sha256
           if-no-files-found: error
           retention-days: 7

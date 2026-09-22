@@ -1,3 +1,4 @@
+import {developmentLog,developmentLogError,developmentTextEvidence} from '../diagnostics/development-log.ts';
 import {execFile} from 'node:child_process';
 import {join} from 'node:path';
 import {promisify} from 'node:util';
@@ -204,7 +205,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     const reasoningVisibleRef=React.useRef(appState.reasoningVisible);reasoningVisibleRef.current=appState.reasoningVisible;
     const renderCoordinatorRef=React.useRef(null as RenderCoordinator|null);
     if(!renderCoordinatorRef.current)renderCoordinatorRef.current=renderCoordinator??createRenderCoordinator();
-    const coordinator=renderCoordinatorRef.current;
+    const coordinator:RenderCoordinator=renderCoordinatorRef.current;
     const visibleEpochRef=React.useRef(0);
     const eventSequenceRef=React.useRef(0);
     const onboardingShownRef=React.useRef(false);
@@ -226,8 +227,9 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     };
     if(!controllerRef.current)controllerRef.current=createTuiSessionController({
       runtime,projectRoot,model:baseModel,mode:baseMode,rules:permissionRules??{allow:[],ask:[],deny:[]},paths,...(autoClassifier?{autoClassifier}:{}),readiness:readinessFor,
-      onPreparation:(next)=>coordinator.immediate('input',()=>{if(next.active)setBusySince(Date.now());setPreparingTurn(next.active);}),
+      onPreparation:(next)=>{developmentLog('ui.preparation',next,'debug','tui');coordinator.immediate('input',()=>{if(next.active)setBusySince(Date.now());setPreparingTurn(next.active);});},
       onEvent:(event:any)=>{
+        developmentLog('ui.runtime_event',event,event?.type==='run.failed'?'error':'debug','tui');
         const eventId=`runtime-${++eventSequenceRef.current}-${String(event.type)}`;
         coordinator.enqueueEvent(eventId,()=>{
           if(event.type==='run.started'){setPreparingTurn(false);setBusySince(Date.now());}
@@ -236,12 +238,12 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
           setState((current:TuiState)=>reduceTuiEvent(current,event));
         });
       },
-      onApproval:(next:PendingTuiApproval|null)=>coordinator.immediate('approval',()=>{
+      onApproval:(next:PendingTuiApproval|null)=>{developmentLog('ui.approval',{requestId:next?.requestId??null,action:next?.action??null,reason:next?.reason??null},'info','tui');return coordinator.immediate('approval',()=>{
         if(next)setTranscriptSearch(null);
         setPending(next);setApprovalExpanded(false);setApprovalScroll(0);
         setAppState((current:TuiAppState)=>next?openOverlay(current,{kind:'approval',requestId:next.requestId}):(current.overlay?.kind==='approval'?closeOverlay(current):current));
-      }),
-      onQueueChange:(next:readonly TuiQueuedAction[])=>coordinator.enqueueEvent(`queue-${++eventSequenceRef.current}`,()=>setQueuedActions([...next])),
+      });},
+      onQueueChange:(next:readonly TuiQueuedAction[])=>{developmentLog('ui.queue',{count:next.length,kinds:next.map(row=>row.kind)},'debug','tui');return coordinator.enqueueEvent(`queue-${++eventSequenceRef.current}`,()=>setQueuedActions([...next]));},
       onQueueRestored:(next:readonly TuiQueueEntry[])=>coordinator.enqueueEvent(`queue-restored-${++eventSequenceRef.current}`,()=>{setQueueEditor({selected:0,editing:false,draft:''});setState((current:TuiState)=>localMessage(current,`Restored ${next.length} queued item${next.length===1?'':'s'} in PAUSED state. Review with /queue; nothing will run until you explicitly resume it.`));}),
       onQueuedDispatch:(action:TuiQueuedAction)=>coordinator.enqueueEvent(`queue-dispatch-${++eventSequenceRef.current}`,()=>{setViewport((view:TranscriptViewport)=>reduceViewport(view,'new-content',0));setState((current:TuiState)=>userMessage(current,action.kind==='command'?`!${action.text}`:action.text));}),
       onSteerState:(next:TuiSteerState)=>coordinator.enqueueEvent(`steer-${++eventSequenceRef.current}-${next.status}`,()=>setState((current:TuiState)=>localMessage(current,
@@ -251,9 +253,11 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         :next.status==='failed'?`Steering failed (${next.code}): ${next.message}`
         :`Steering rejected (${next.code}): ${next.message}`
       ))),
-      onError:(error:unknown)=>coordinator.enqueueEvent(`error-${++eventSequenceRef.current}`,()=>setState((current:TuiState)=>localMessage(current,`Error: ${error instanceof Error?error.message:String(error)}`))),
+      onError:(error:unknown)=>{developmentLogError('ui.error',error,{},'tui');return coordinator.enqueueEvent(`error-${++eventSequenceRef.current}`,()=>setState((current:TuiState)=>localMessage(current,`Error: ${error instanceof Error?error.message:String(error)}`)));},
     });
     const controller=controllerRef.current;
+
+    React.useEffect(()=>{developmentLog('ui.state',{focus:appState.focus.current,overlay:appState.overlay?.kind??null,running:state.running,preparing:preparingTurn,sessionId:state.sessionId,model:state.status.model,permissionMode:state.status.permissionMode,queueCount:queuedActions.length},'debug','tui');},[appState.focus.current,appState.overlay?.kind,state.running,preparingTurn,state.sessionId,state.status.model,state.status.permissionMode,queuedActions.length]);
 
     async function refreshContextStatus(){
       const id=state.sessionId??controller.current?.()??null;
@@ -295,7 +299,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     const updateEditor=(fn:(editor:EditorState)=>EditorState)=>setAppState((current:TuiAppState)=>({...current,editor:fn(current.editor)}));
     const setEditorText=(text:string)=>updateEditor(editor=>replaceEditorText(editor,text));
     const addLocal=(text:string)=>setState((current:TuiState)=>localMessage(current,text));
-    const transcriptItemsForCurrentView=()=>appState.reasoningVisible?state.transcript.items:state.transcript.items.filter((item:TranscriptItem)=>item.kind!=='reasoning');
+    const transcriptItemsForCurrentView=():TranscriptItem[]=>appState.reasoningVisible?(state.transcript.items as TranscriptItem[]):(state.transcript.items as TranscriptItem[]).filter((item:TranscriptItem)=>item.kind!=='reasoning');
     const transcriptItemForSelection=(preferred:string|null=transcriptSelectedId)=>{
       const items=transcriptItemsForCurrentView();
       return items.find((item:TranscriptItem)=>item.id===preferred)??items.at(-1)??null;
@@ -372,7 +376,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       catch(error){addLocal(`${row.label} health check failed (${errorCode(error)}); nothing was changed.`);return;}
       const next=providerPickerEnter({selectedProvider:row.id,configured:row.configured,requiresKey:row.requiresKey,keySource:row.keySource,probe});
       if(next.kind==='provider-setup'){setProviderSecret('');setProviderStep({kind:'key',provider:row,testing:false,result:null,...(next.remediation?{remediation:next.remediation}:{})});return;}
-      if(next.kind==='provider-remediation'){addLocal(next.remediation?.message||probe.detail||`${row.label} is not ready.`);return;}
+      if(next.kind==='provider-remediation'){addLocal(next.remediation?.message||probe?.detail||`${row.label} is not ready.`);return;}
       if(next.kind==='environment-consent'){setProviderStep({kind:'consent',provider:row,choice:'no'});return;}
       if(next.remediation&&next.remediation.code!=='none')addLocal(next.remediation.message);
       await chooseProviderAndOpenModels(row);
@@ -388,7 +392,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         setTrustCenter(trustCenterModel(snapshot,{permissionMode:controller.mode()}));
       }catch(error){addLocal(`Trust center failed: ${error instanceof Error?error.message:String(error)}`);}
     };
-    const mcpFacade=()=>mcpFacadeRef.current??=(createMcpFacade({projectRoot,paths}));
+    const mcpFacade=():ReturnType<typeof createMcpFacade>=>mcpFacadeRef.current??=(createMcpFacade({projectRoot,paths}));
     const loadMcpCenter=async(selectedId?:string)=>{
       try{
         const rows=await mcpFacade().list();
@@ -408,7 +412,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         await loadMcpCenter(row.id);
       }catch(error){addLocal('MCP '+action+' failed: '+(error instanceof Error?error.message:String(error)));}
     };
-    const hookFacade=()=>hookFacadeRef.current??=(createHookFacade({projectRoot,paths}));
+    const hookFacade=():ReturnType<typeof createHookFacade>=>hookFacadeRef.current??=(createHookFacade({projectRoot,paths}));
     const loadHookCenter=async(selectedId?:string)=>{
       try{
         const rows=await hookFacade().list();
@@ -434,7 +438,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         await loadHookCenter(row.id);
       }catch(error){addLocal('Hook '+action+' failed: '+(error instanceof Error?error.message:String(error)));}
     };
-    const pluginFacade=()=>pluginFacadeRef.current??=(createPluginFacade({projectRoot,paths}));
+    const pluginFacade=():ReturnType<typeof createPluginFacade>=>pluginFacadeRef.current??=(createPluginFacade({projectRoot,paths}));
     const loadPluginCenter=async(selectedId?:string)=>{
       try{
         const rows=await pluginFacade().list();
@@ -453,7 +457,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         await loadPluginCenter(row.id);
       }catch(error){addLocal('Plugin '+action+' failed: '+(error instanceof Error?error.message:String(error)));}
     };
-    const memoryFacade=()=>memoryFacadeRef.current??=(createMemoryFacade({projectRoot,paths}));
+    const memoryFacade=():ReturnType<typeof createMemoryFacade>=>memoryFacadeRef.current??=(createMemoryFacade({projectRoot,paths}));
     const loadMemoryCenter=async(query?:string,selectedId?:string)=>{
       try{
         const snapshot=query===undefined?await memoryFacade().list():await memoryFacade().search(query);
@@ -462,7 +466,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         setMemoryCenter(createMemoryCenterModel(snapshot,selected));
       }catch(error){addLocal('Memory Center failed: '+(error instanceof Error?error.message:String(error)));}
     };
-    const notesFacade=()=>notesFacadeRef.current??=(createNotesFacade({projectRoot,paths}));
+    const notesFacade=():ReturnType<typeof createNotesFacade>=>notesFacadeRef.current??=(createNotesFacade({projectRoot,paths}));
     const loadNotesCenter=async(selectedId?:string)=>{
       try{
         const snapshot=await notesFacade().list();
@@ -471,7 +475,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         setNotesCenter(createNotesCenterModel(snapshot,selected));
       }catch(error){addLocal('Notes Center failed: '+(error instanceof Error?error.message:String(error)));}
     };
-    const tasksFacade=()=>tasksFacadeRef.current??=(createTaskBoardFacade({projectRoot,paths}));
+    const tasksFacade=():ReturnType<typeof createTaskBoardFacade>=>tasksFacadeRef.current??=(createTaskBoardFacade({projectRoot,paths}));
     const loadTasksCenter=async(selectedId?:string)=>{
       try{
         const snapshot=await tasksFacade().list();
@@ -480,7 +484,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         setTasksCenter(createTasksCenterModel(snapshot,selected));
       }catch(error){addLocal('Task Board failed: '+(error instanceof Error?error.message:String(error)));}
     };
-    const libraryFacade=()=>libraryFacadeRef.current??=(createLibraryFacade({projectRoot,paths}));
+    const libraryFacade=():ReturnType<typeof createLibraryFacade>=>libraryFacadeRef.current??=(createLibraryFacade({projectRoot,paths}));
     const loadLibraryCenter=async(selectedId?:string)=>{
       try{
         const snapshot=await libraryFacade().list();
@@ -489,17 +493,17 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         setLibraryCenter(createLibraryCenterModel(snapshot,selected));
       }catch(error){addLocal('Library Center failed: '+(error instanceof Error?error.message:String(error)));}
     };
-    const forgeFacade=()=>forgeFacadeRef.current??=createForgeFacade({forgeRoot:join(paths.dataRoot,'forge')},{registry});
+    const forgeFacade=():ReturnType<typeof createForgeFacade>=>forgeFacadeRef.current??=createForgeFacade({forgeRoot:join(paths.dataRoot,'forge')},{registry});
     const loadForgeCenter=async(selectedId?:string)=>{
       try{const snapshot=await forgeFacade().list();const found=selectedId?snapshot.rows.findIndex(row=>row.id===selectedId):-1;const selected=found>=0?found:forgeCenter?.selected??0;const base=createForgeCenterModel(snapshot,selected);setForgeCenter(base);const row=snapshot.rows[selected];if(row){const detail=await forgeFacade().read(row.id);setForgeCenter((current:ForgeCenterModel|null)=>current?setForgeCenterDetail(current,detail):current);}}
       catch(error){addLocal('Forge Center failed: '+(error instanceof Error?error.message:String(error)));}
     };
-    const automationFacade=()=>automationFacadeRef.current??=createAutomationFacade({projectRoot,dataRoot:paths.dataRoot});
+    const automationFacade=():ReturnType<typeof createAutomationFacade>=>automationFacadeRef.current??=createAutomationFacade({projectRoot,dataRoot:paths.dataRoot});
     const loadAutomationCenter=async(selectedId?:string)=>{
       try{const snapshot=await automationFacade().list();const found=selectedId?snapshot.rows.findIndex(row=>row.id===selectedId):-1;const selected=found>=0?found:automationCenter?.selected??0;const base=createAutomationCenterModel(snapshot,selected);setAutomationCenter(base);const row=snapshot.rows[selected];if(row){const detail=await automationFacade().read(row.id);setAutomationCenter((current:AutomationCenterModel|null)=>current?setAutomationCenterDetail(current,detail):current);}}
       catch(error){addLocal('Automation Center failed: '+(error instanceof Error?error.message:String(error)));}
     };
-    const researchFacade=()=>researchFacadeRef.current??=createResearchFacade({projectRoot},{registry});
+    const researchFacade=():ReturnType<typeof createResearchFacade>=>researchFacadeRef.current??=createResearchFacade({projectRoot},{registry});
     const loadResearchCenter=async(selectedId?:string)=>{
       try{
         const snapshot=await researchFacade().list();const found=selectedId?snapshot.rows.findIndex(row=>row.id===selectedId):-1;const selected=found>=0?found:researchCenter?.selected??0;const base=createResearchCenterModel(snapshot,selected);setResearchCenter(base);
@@ -751,15 +755,15 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     };
 
     const submit=async()=>{
-      const text=appState.editor.text;if(!text.trim())return;
+      const text=appState.editor.text;if(!text.trim())return;developmentLog('ui.submit.begin',{text:developmentTextEvidence(text),model:controller.model(),running:state.running,mode:controller.mode()},'info','tui');
       setAppState((current:TuiAppState)=>({...current,editor:createEditorState(''),focus:current.focus.current==='composer'?current.focus:createFocusState('composer'),overlay:null}));
       setVim((current:VimState)=>current.enabled?{...current,mode:'insert'}:current);
       setHistory((rows:string[])=>[text,...rows.filter(row=>row!==text)].slice(0,MAX_HISTORY));setHistoryIndex(-1);setReverseIndex(0);setViewport((view:TranscriptViewport)=>({...view,offset:0,unseen:0,followingTail:true}));
       if(text.trim().startsWith('/')){await executeSlash(text.trim());return;}
-      if(!text.trim().startsWith('!')){const readiness=await readinessFor(controller.model());if(!readiness.ready){setEditorText(text);addLocal(readiness.message);return;}}
+      if(!text.trim().startsWith('!')){const readiness=await readinessFor(controller.model());developmentLog('ui.readiness',{model:controller.model(),readiness},readiness.ready?'debug':'warning','tui');if(!readiness.ready){setEditorText(text);addLocal(readiness.message);return;}}
       const willQueue=state.running||controller.queue().length>0;
       if(!willQueue)setState((current:TuiState)=>userMessage(current,text.trim()));
-      try{await controller.send(text,{model:controller.model(),running:state.running});}catch(error:any){addLocal(error instanceof TuiNotReadyError?error.message:`Error: ${error?.message??error}`);}
+      try{const outcome=await controller.send(text,{model:controller.model(),running:state.running});developmentLog('ui.submit.accepted',{outcome},'info','tui');}catch(error:any){developmentLogError('ui.submit.failure',error,{model:controller.model()},'tui');addLocal(error instanceof TuiNotReadyError?error.message:`Error: ${error?.message??error}`);}
     };
 
     const historyMove=(delta:number)=>{if(!history.length)return;const next=Math.max(-1,Math.min(history.length-1,historyIndex+delta));setHistoryIndex(next);setReverseIndex(0);setEditorText(next>=0?(history[next]??''):'');};

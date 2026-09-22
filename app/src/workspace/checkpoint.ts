@@ -52,9 +52,10 @@ function consumeEntry(budget:CaptureBudget){budget.entries+=1;if(budget.entries>
 async function gitBytes(cwd:string,args:string[],maxBytes=64*1024*1024,allowedExitCodes:readonly number[]=[0],stdin?:Buffer):Promise<Buffer>{
   return new Promise((resolve,reject)=>{
     const child=spawn('git',['-c','core.quotepath=false',...args],{cwd,stdio:[stdin?'pipe':'ignore','pipe','pipe'],windowsHide:true});
-    const out:Buffer[]=[];const err:Buffer[]=[];let total=0;
-    child.stdout.on('data',(chunk:Buffer)=>{total+=chunk.length;if(total>maxBytes){child.kill();reject(coded('CHECKPOINT_GIT_OUTPUT_TOO_LARGE'));return;}out.push(chunk);});
-    child.stderr.on('data',(chunk:Buffer)=>err.push(chunk));
+    const out:Buffer[]=[];const err:Buffer[]=[];let total=0;const stdout=child.stdout,stderr=child.stderr;
+    if(!stdout||!stderr){reject(coded('CHECKPOINT_GIT_PIPE_UNAVAILABLE'));return;}
+    stdout.on('data',(chunk:Buffer)=>{total+=chunk.length;if(total>maxBytes){child.kill();reject(coded('CHECKPOINT_GIT_OUTPUT_TOO_LARGE'));return;}out.push(chunk);});
+    stderr.on('data',(chunk:Buffer)=>err.push(chunk));
     child.on('error',reject);if(stdin){child.stdin?.end(stdin);}
     child.on('close',code=>{if(code!==null&&allowedExitCodes.includes(code))resolve(Buffer.concat(out));else reject(coded('CHECKPOINT_GIT_READ_FAILED',Buffer.concat(err).toString('utf8').trim()||`git exited ${code}`));});
   });
@@ -105,7 +106,7 @@ async function captureGit(workspace:WorkspaceIdentity,blobRoot:string,budget:Cap
   for(const row of trackedRows){
     const tab=row.indexOf('\t');if(tab<0)throw coded('CHECKPOINT_GIT_INDEX_INVALID');const meta=row.slice(0,tab).split(' ');const gitPath=row.slice(tab+1);
     if(meta.length<3||meta[2]!=='0')throw coded('CHECKPOINT_GIT_UNMERGED','Unmerged Git index state is not checkpointable safely.');
-    const [mode,oid]=meta; if(seen.has(gitPath))throw coded('CHECKPOINT_GIT_UNMERGED');seen.add(gitPath);
+    const mode=meta[0]!,oid=meta[1]!; if(seen.has(gitPath))throw coded('CHECKPOINT_GIT_UNMERGED');seen.add(gitPath);
     if(mode==='160000')throw coded('CHECKPOINT_GITLINK_UNSUPPORTED',`Gitlink/submodule is outside checkpoint coverage: ${gitPath}`);
     const relGit=prefix?(gitPath===prefix?'':gitPath.startsWith(`${prefix}/`)?gitPath.slice(prefix.length+1):null):gitPath;if(!relGit)continue;
     const relative=safeRelative(relGit);const absolute=absoluteFromRelative(workspace.canonicalRoot,relative);
@@ -124,6 +125,23 @@ async function captureGit(workspace:WorkspaceIdentity,blobRoot:string,budget:Cap
 }
 async function captureNonGit(workspace:WorkspaceIdentity,blobRoot:string,budget:CaptureBudget):Promise<WorkspaceSnapshot>{
   const entries:Record<string,SnapshotEntry>={};
+  async function preflight(dirname:string,relativeDir:string){
+    const rows=await readdir(dirname,{withFileTypes:true});rows.sort((a,b)=>a.name.localeCompare(b.name));
+    for(const row of rows){const relative=safeRelative(relativeDir?`${relativeDir}/${row.name}`:row.name);const absolute=path.join(dirname,row.name);
+      if(row.isDirectory()){await assertExistingPathContained(workspace,absolute);await preflight(absolute,relative);continue;}
+      let stat;try{stat=await lstat(absolute);}catch(error:any){if(error?.code==='ENOENT')continue;throw error;}
+      consumeEntry(budget);
+      if(stat.isSymbolicLink()){
+        let canonical:string;try{canonical=await realpath(absolute);}catch{throw coded('CHECKPOINT_SYMLINK_ESCAPE',`Checkpoint symlink cannot be resolved safely: ${relative}`);}
+        if(!inside(workspace.canonicalRoot,canonical))throw coded('CHECKPOINT_SYMLINK_ESCAPE',`Checkpoint symlink escapes workspace: ${relative}`);
+        continue;
+      }
+      if(!stat.isFile())throw coded('CHECKPOINT_SPECIAL_FILE_UNSUPPORTED',`Unsupported workspace entry: ${relative}`);
+      await assertExistingPathContained(workspace,absolute);consumeFileBudget(budget,stat.size);
+    }
+  }
+  await preflight(workspace.canonicalRoot,'');
+  budget.entries=0;budget.storedBytes=0;
   async function walk(dirname:string,relativeDir:string){
     const rows=await readdir(dirname,{withFileTypes:true});rows.sort((a,b)=>a.name.localeCompare(b.name));
     for(const row of rows){const relative=safeRelative(relativeDir?`${relativeDir}/${row.name}`:row.name);const absolute=path.join(dirname,row.name);
