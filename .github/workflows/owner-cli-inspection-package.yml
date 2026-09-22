@@ -3,7 +3,7 @@ name: TALOS CLI command-menu query fast-path final GREEN validation
 on:
   push:
     branches:
-      - owner-inspection/cli-command-menu-green-6de6d924
+      - owner-inspection/cli-command-menu-green-f61a508d
 
 permissions:
   contents: read
@@ -96,7 +96,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $Expected = @{
-            'app/src/tui/app.ts' = 'f84c17cf2fe38d802cd7124b58b32cf80b14dbc7'
+            'app/src/tui/app.ts' = 'cfff965c821d024b1cdf3b2715aa5b50d9487e17'
             'app/src/tui/components/composer.ts' = '2b11c32ba1d6fa7b237ccc447d3a9fa9ecce1207'
             'app/src/tui/components/command-menu.ts' = 'cc97f61f7c3203e9a8758574853102b0e7e4b57e'
             'app/test/tui/composer.test.ts' = 'e612c0d2839fd076125281898fcedc8b009577a1'
@@ -111,7 +111,7 @@ jobs:
             if ($Observed -ne $Expected[$Path]) { throw "COMMAND_MENU_FINAL_GREEN_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
           }
           $Snapshot = Get-Content -LiteralPath .\INSPECTION-SNAPSHOT.json -Raw | ConvertFrom-Json
-          if ($Snapshot.sourceHead -ne '6de6d92492dc1cc56d8e7909b44b227c669d464f') { throw "COMMAND_MENU_FINAL_GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
+          if ($Snapshot.sourceHead -ne 'f61a508d48583c9d62968f45a2c6d132363dc6d2') { throw "COMMAND_MENU_FINAL_GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
 
       - name: Execute command-menu final GREEN gates on Node 24.18.0
         shell: powershell
