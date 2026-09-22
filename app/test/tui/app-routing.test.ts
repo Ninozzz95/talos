@@ -456,3 +456,67 @@ test('paste-ime-fast-path RED-Paste4 — multi-char useInput paste or IME update
   assert.match(source,/coordinator\.immediate\('input'/u,'semantic fallback must remain for rejected ownership cases');
 });
 
+
+test('command-menu-fast-path RED-CM4 — CommandMenuView subscribes locally instead of rendering transient rows in the root',async()=>{
+  const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
+  assert.match(source,/const CommandMenuView=React\.memo\(/u,'command-menu rendering needs its own memoized child boundary');
+
+  const viewStart=source.indexOf('const CommandMenuView=React.memo(');
+  const appStart=source.indexOf('return function TuiApp',viewStart);
+  assert.ok(viewStart>=0&&appStart>viewStart);
+  const view=source.slice(viewStart,appStart);
+  assert.match(view,/useSyncExternalStore\(composerStore\.subscribe/u,'CommandMenuView must subscribe to the existing authoritative composer/query store');
+  assert.match(view,/useSyncExternalStore\(selectionStore\.subscribe/u,'CommandMenuView must subscribe only to its local selection store');
+  assert.match(view,/commandMenuItems\(editor\.text\)/u,'rows must be derived locally through the existing TALOS ranking function');
+
+  assert.doesNotMatch(source,/const commandRows=commandMenuItems\(currentEditor\(\)\.text\)/u,'root TuiApp must no longer derive per-keystroke command rows');
+  const root=source.lastIndexOf('return h(Ink.Box,{key:');
+  assert.ok(root>=0);
+  assert.match(source.slice(root),/h\(CommandMenuView/u,'root must mount the dedicated command-menu child');
+});
+
+test('command-menu-fast-path RED-CM5 — eligible command query text updates local stores before global coordinator invalidation',async()=>{
+  const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
+  assert.match(source,/commandMenuFastTextInput/u,'app must import/use the fail-closed command-menu query seam');
+  assert.match(source,/commandMenuSelectionStore/u,'app must own a stable local command-menu selection store');
+
+  const inputStart=source.indexOf('Ink.useInput');
+  assert.ok(inputStart>=0);
+  const immediate=source.indexOf("coordinator.immediate('input'",inputStart);
+  const decision=source.indexOf('commandMenuFastTextInput',inputStart);
+  const editorUpdate=source.indexOf('composerStore.update',decision);
+  const reset=source.indexOf('commandMenuSelectionStore.reset',decision);
+  assert.ok(immediate>inputStart,'semantic coordinator fallback must remain');
+  assert.ok(decision>inputStart&&decision<immediate,'command-menu query eligibility must be decided before global invalidation');
+  assert.ok(editorUpdate>decision&&editorUpdate<immediate,'accepted query text must update the existing composerStore before fallback');
+  assert.ok(reset>decision&&reset<immediate,'accepted query text must reset only local command-menu selection before fallback');
+
+  const fastBlock=source.slice(decision,immediate);
+  assert.doesNotMatch(fastBlock,/setAppState|setPickerSelection/u,'accepted command-query text must not schedule root React state');
+  assert.match(fastBlock,/return;/u,'accepted command-query text must return before coordinator fallback');
+});
+
+test('command-menu-fast-path RED-CM6 — movement backspace and confirm use latest local command selection without changing other pickers',async()=>{
+  const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
+
+  const moveStart=source.indexOf('const movePicker=');
+  const backspaceStart=source.indexOf('const pickerBackspace=',moveStart);
+  const confirmStart=source.indexOf('const confirmPicker=',backspaceStart);
+  const semanticStart=source.indexOf('const handleSemanticAction=',confirmStart);
+  assert.ok(moveStart>=0&&backspaceStart>moveStart&&confirmStart>backspaceStart&&semanticStart>confirmStart);
+
+  const moveBlock=source.slice(moveStart,backspaceStart);
+  assert.match(moveBlock,/focus\.current==='command-menu'[\s\S]{0,500}commandMenuSelectionStore\.move/u,'command-menu navigation must use the local selection store');
+  assert.match(moveBlock,/setPickerSelection/u,'model/provider/session picker movement must retain the existing root state path');
+
+  const backspaceBlock=source.slice(backspaceStart,confirmStart);
+  assert.match(backspaceBlock,/focus\.current==='command-menu'[\s\S]{0,800}deleteBackward/u,'command-menu backspace must preserve existing editor deletion');
+  assert.match(backspaceBlock,/commandMenuSelectionStore\.reset/u,'query deletion must reset local selected row');
+  assert.match(backspaceBlock,/next\.text\.length===0[\s\S]{0,300}closeFocus/u,'deleting the final slash must preserve command-menu close behavior');
+
+  const confirmBlock=source.slice(confirmStart,semanticStart);
+  assert.match(confirmBlock,/commandMenuSelectionStore\.getSnapshot\(\)\.selected/u,'confirm must read the latest synchronous local selected index');
+  assert.match(confirmBlock,/commandMenuItems\(currentEditor\(\)\.text\)/u,'confirm must derive rows from the latest authoritative composer text');
+  assert.match(confirmBlock,/completeCommandSelection/u,'completed command text must retain the existing completion helper');
+  assert.match(confirmBlock,/const selected=pickerSelection\.selected/u,'non-command pickers must retain their existing pickerSelection authority');
+});
