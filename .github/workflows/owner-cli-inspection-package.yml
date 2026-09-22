@@ -123,13 +123,9 @@ jobs:
           if ($Version -ne 'v24.18.0') { throw "COMMAND_MENU_PURE_GREEN_NODE_VERSION_MISMATCH: $Version" }
 
           function Assert-Green([string]$Pattern,[string]$File,[string]$Sentinel) {
-            Push-Location (Join-Path $PWD.Path 'app')
-            try {
-              & $NodeExe --experimental-strip-types --test --test-name-pattern "$Pattern" "$File"
-              if ($LASTEXITCODE -ne 0) { throw "COMMAND_MENU_PURE_GREEN_TARGET_FAILED pattern=$Pattern exit=$LASTEXITCODE" }
-              Write-Host $Sentinel
-            }
-            finally { Pop-Location }
+            & $NodeExe --experimental-strip-types --test --test-name-pattern "$Pattern" "$File"
+            if ($LASTEXITCODE -ne 0) { throw "COMMAND_MENU_PURE_GREEN_TARGET_FAILED pattern=$Pattern exit=$LASTEXITCODE" }
+            Write-Host $Sentinel
           }
 
           Push-Location (Join-Path $PWD.Path 'app')
