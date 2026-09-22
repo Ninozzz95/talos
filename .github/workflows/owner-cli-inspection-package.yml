@@ -1,9 +1,9 @@
-name: TALOS CLI paste IME fast-path RED validation
+name: TALOS CLI paste IME pure-seam P1 P2 GREEN validation
 
 on:
   push:
     branches:
-      - owner-inspection/cli-paste-ime-red-aea9134c
+      - owner-inspection/cli-paste-ime-p12-green-71e34c8b
 
 permissions:
   contents: read
@@ -91,13 +91,13 @@ jobs:
           if (-not [string]::Equals($Expected,$Observed,[System.StringComparison]::OrdinalIgnoreCase)) {
             throw "CLI cwd mismatch. Expected $Expected, observed $Observed"
           }
-      - name: Verify exact private-source blobs staged for paste IME RED
+      - name: Verify exact private-source blobs staged for paste IME P1 P2 GREEN
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $Expected = @{
             'app/src/tui/app.ts' = 'be1567e5bae275ff14c3f2434310c916f400d95a'
-            'app/src/tui/components/composer.ts' = '4d2fb9e732fd4b586d2af691435c86ee74a68f87'
+            'app/src/tui/components/composer.ts' = '2b11c32ba1d6fa7b237ccc447d3a9fa9ecce1207'
             'app/test/tui/composer.test.ts' = 'e612c0d2839fd076125281898fcedc8b009577a1'
             'app/test/tui/app-routing.test.ts' = 'd941f0a172acb9f27904a3af58a24bfa5633555f'
             'app/test/tui/editor.test.ts' = 'ce00d9438ef285bb89186b79ee09bd19b155f2ec'
@@ -106,46 +106,34 @@ jobs:
           }
           foreach ($Path in $Expected.Keys) {
             $Observed = (git hash-object -- $Path).Trim()
-            if ($Observed -ne $Expected[$Path]) { throw "RED_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
+            if ($Observed -ne $Expected[$Path]) { throw "P12_GREEN_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
           }
           $Snapshot = Get-Content -LiteralPath .\INSPECTION-SNAPSHOT.json -Raw | ConvertFrom-Json
-          if ($Snapshot.sourceHead -ne 'aea9134c97fe3d23a469a12ead7ac31ed9e946e4') { throw "RED_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
+          if ($Snapshot.sourceHead -ne '71e34c8b96b11e25333878c76d043777f0082ea2') { throw "P12_GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
 
-      - name: Execute exact paste IME REDs on Node 24.18.0
+      - name: Execute paste IME P1 P2 GREEN on Node 24.18.0
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $NodeExe = Join-Path $env:LOCALAPPDATA 'TALOS-CLI\inspection-bootstrap\node-24.18.0\node-v24.18.0-win-x64\node.exe'
-          if (-not (Test-Path -LiteralPath $NodeExe)) { throw "RED_NODE_RUNTIME_MISSING: $NodeExe" }
+          if (-not (Test-Path -LiteralPath $NodeExe)) { throw "P12_GREEN_NODE_RUNTIME_MISSING: $NodeExe" }
           $Version = & $NodeExe --version
-          if ($Version -ne 'v24.18.0') { throw "RED_NODE_VERSION_MISMATCH: $Version" }
+          if ($Version -ne 'v24.18.0') { throw "P12_GREEN_NODE_VERSION_MISMATCH: $Version" }
 
-          function Assert-ExpectedRed([string]$Pattern,[string]$File,[string]$Expected,[string]$Sentinel) {
-            $Psi = New-Object System.Diagnostics.ProcessStartInfo
-            $Psi.FileName = $NodeExe
-            $Psi.Arguments = '--experimental-strip-types --test --test-name-pattern "' + $Pattern + '" "' + $File + '"'
-            $Psi.WorkingDirectory = (Join-Path $PWD.Path 'app')
-            $Psi.UseShellExecute = $false
-            $Psi.RedirectStandardOutput = $true
-            $Psi.RedirectStandardError = $true
-            $Psi.CreateNoWindow = $true
-            $Process = New-Object System.Diagnostics.Process
-            $Process.StartInfo = $Psi
-            if (-not $Process.Start()) { throw "RED_PROCESS_START_FAILED: $Pattern" }
-            $StdoutTask = $Process.StandardOutput.ReadToEndAsync()
-            $StderrTask = $Process.StandardError.ReadToEndAsync()
-            $Process.WaitForExit()
-            $Stdout = $StdoutTask.GetAwaiter().GetResult()
-            $Stderr = $StderrTask.GetAwaiter().GetResult()
-            if ($Stdout) { Write-Host $Stdout }
-            if ($Stderr) { Write-Host $Stderr }
-            if ($Process.ExitCode -eq 0) { throw "RED_UNEXPECTEDLY_GREEN: $Pattern" }
-            $Text = $Stdout + [Environment]::NewLine + $Stderr
-            if ($Text -notmatch [regex]::Escape($Expected)) { throw "RED_FAILED_FOR_UNEXPECTED_REASON: $Pattern exit=$($Process.ExitCode)" }
-            Write-Host $Sentinel
+          Push-Location (Join-Path $PWD.Path 'app')
+          try {
+            & $NodeExe --experimental-strip-types --test --test-name-pattern "paste-ime-fast-path RED-Paste1" ".\test\tui\composer.test.ts"
+            if ($LASTEXITCODE -ne 0) { throw "P12_GREEN_P1_FAILED exit=$LASTEXITCODE" }
+            Write-Host 'PASTE_IME_GREEN_P1_CONFIRMED'
+
+            & $NodeExe --experimental-strip-types --test --test-name-pattern "paste-ime-fast-path RED-Paste2" ".\test\tui\composer.test.ts"
+            if ($LASTEXITCODE -ne 0) { throw "P12_GREEN_P2_FAILED exit=$LASTEXITCODE" }
+            Write-Host 'PASTE_IME_GREEN_P2_CONFIRMED'
+
+            & $NodeExe --experimental-strip-types --test ".\test\tui\composer.test.ts"
+            if ($LASTEXITCODE -ne 0) { throw "P12_GREEN_COMPOSER_REGRESSION_FAILED exit=$LASTEXITCODE" }
+            Write-Host 'PASTE_IME_PURE_SEAM_COMPOSER_REGRESSION_GREEN'
           }
-
-          Assert-ExpectedRed 'paste-ime-fast-path RED-Paste1' '.\test\tui\composer.test.ts' 'explicit paste needs a pure ownership seam before bracketed-paste can bypass root rendering' 'EXPECTED_PASTE_IME_RED_P1_CONFIRMED'
-          Assert-ExpectedRed 'paste-ime-fast-path RED-Paste2' '.\test\tui\composer.test.ts' 'paste fast path must delegate to the existing insertPaste primitive' 'EXPECTED_PASTE_IME_RED_P2_CONFIRMED'
-          Assert-ExpectedRed 'paste-ime-fast-path RED-Paste3' '.\test\tui\app-routing.test.ts' 'app must use the pure paste-ownership seam' 'EXPECTED_PASTE_IME_RED_P3_CONFIRMED'
-          Assert-ExpectedRed 'paste-ime-fast-path RED-Paste4' '.\test\tui\app-routing.test.ts' 'app must use the routed multi-character paste/IME eligibility seam' 'EXPECTED_PASTE_IME_RED_P4_CONFIRMED'
+          finally {
+            Pop-Location
+          }
