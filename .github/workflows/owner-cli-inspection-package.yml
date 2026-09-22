@@ -1,9 +1,9 @@
-name: TALOS CLI productization GREEN validation
+name: TALOS CLI input fast-path GREEN validation
 
 on:
   push:
     branches:
-      - owner-inspection/cli-productization-green-4172f72c
+      - owner-inspection/cli-input-fast-green-eb3a2ae1
 
 permissions:
   contents: read
@@ -91,24 +91,26 @@ jobs:
           if (-not [string]::Equals($Expected,$Observed,[System.StringComparison]::OrdinalIgnoreCase)) {
             throw "CLI cwd mismatch. Expected $Expected, observed $Observed"
           }
-      - name: Verify exact private-source blobs staged for GREEN
+      - name: Verify exact private-source blobs staged for input fast-path GREEN
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $Expected = @{
-            'app/src/tui/components/markdown.ts' = '7861253aa15913654b305180543018e085582615'
-            'app/src/tui/app.ts' = '46c22428388ed2b5968f7a03f474934cff0f1c2a'
-            'app/test/tui/markdown-rich.test.ts' = 'a6c70995796ca0f5982a084f5fdcce1cddaf7184'
-            'app/test/tui/app-routing.test.ts' = '530f14d27575128aeb58b2cf62309491e01c536e'
+            'app/src/tui/app.ts' = 'cd197c6b8a1840ab77c02611871045c9ec52d4dc'
+            'app/src/tui/components/composer.ts' = '7c317bdcb94ba6113e9803ca7cbe0d81c3e7ba12'
+            'app/test/tui/composer.test.ts' = '4aaf2ad4c1372a5037d3b7ebc97f0e1e30882d30'
+            'app/test/tui/app-routing.test.ts' = 'b1af78badb6f684038452e436fb62ea76e74ad82'
+            'app/test/tui/editor.test.ts' = 'ce00d9438ef285bb89186b79ee09bd19b155f2ec'
+            'app/test/tui/input-router.test.ts' = '536a1ce4e0f7abaf505c314bf6ddd4c58b79ebd5'
           }
           foreach ($Path in $Expected.Keys) {
             $Observed = (git hash-object -- $Path).Trim()
             if ($Observed -ne $Expected[$Path]) { throw "GREEN_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
           }
           $Snapshot = Get-Content -LiteralPath .\INSPECTION-SNAPSHOT.json -Raw | ConvertFrom-Json
-          if ($Snapshot.sourceHead -ne '083bc8e5b1474cb101f3f17b26a2d84d94565d93') { throw "GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
+          if ($Snapshot.sourceHead -ne 'eb3a2ae101079fd87a11ca0caea5b61123a6d7d7') { throw "GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
 
-      - name: Execute focused productization GREEN tests on exact Node 24.18.0
+      - name: Execute focused input fast-path GREEN tests on exact Node 24.18.0
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -118,11 +120,14 @@ jobs:
           if ($Version -ne 'v24.18.0') { throw "GREEN_NODE_VERSION_MISMATCH: $Version" }
           Push-Location .\app
           try {
-            & $NodeExe --experimental-strip-types --test .\test\tui\markdown-rich.test.ts
-            if ($LASTEXITCODE -ne 0) { throw "GREEN_MARKDOWN_TESTS_FAILED: $LASTEXITCODE" }
-            & $NodeExe --experimental-strip-types --test --test-name-pattern "productization RED-P6" .\test\tui\app-routing.test.ts
+            & $NodeExe --experimental-strip-types --test .\test\tui\composer.test.ts
+            if ($LASTEXITCODE -ne 0) { throw "GREEN_COMPOSER_TESTS_FAILED: $LASTEXITCODE" }
+            & $NodeExe --experimental-strip-types --test --test-name-pattern "input-fast-path RED-I3" .\test\tui\app-routing.test.ts
             if ($LASTEXITCODE -ne 0) { throw "GREEN_WIRING_TEST_FAILED: $LASTEXITCODE" }
+            & $NodeExe --experimental-strip-types --test .\test\tui\editor.test.ts
+            if ($LASTEXITCODE -ne 0) { throw "GREEN_EDITOR_TESTS_FAILED: $LASTEXITCODE" }
+            & $NodeExe --experimental-strip-types --test .\test\tui\input-router.test.ts
+            if ($LASTEXITCODE -ne 0) { throw "GREEN_INPUT_ROUTER_TESTS_FAILED: $LASTEXITCODE" }
           } finally {
             Pop-Location
           }
-
