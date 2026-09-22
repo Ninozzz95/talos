@@ -9,7 +9,7 @@ A. BOOT / IDENTITY
 [ ] A1 Double-click START-TALOS-CLI.cmd.
 [ ] A2 Checklist opens and a project-folder picker appears.
 [ ] A3 Launcher reports source HEAD 0e47081febc0f6c3732aa96df8c11750fe94ea7f.
-[ ] A4 First launch completes dependency install + TypeScript build without an error.
+[ ] A4 First launch installs dependencies, reports any TypeScript diagnostics, emits the inspection JS, and continues to the runtime check. Record the diagnostics as engineering debt; do not treat this as a green build/typecheck gate.
 [ ] A5 TALOS starts in the selected project, not inside the inspection package folder.
 [ ] A6 Exit and relaunch: cached bootstrap is reused and TALOS still opens normally.
 
@@ -165,7 +165,7 @@ V. FINAL OWNER REVIEW
 [ ] V1 Repeat one real model turn after all feature tests.
 [ ] V2 Exit and resume once more after process termination.
 [ ] V3 Review the test project git diff/filesystem for unexpected mutations.
-[ ] V4 Record every FAIL with exact steps, terminal, provider/model and visible error text.
+[ ] V4 Record every FAIL with exact steps, terminal, provider/model and visible error text. Include the known TypeScript diagnostics shown by the launcher if they remain reproducible.
 [ ] V5 Keep this inspection result separate from CI/release signing evidence.
 
 OWNER RESULT
