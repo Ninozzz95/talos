@@ -370,3 +370,73 @@ test('history-fast-path RED-H3 — reverse search preserves current TALOS query 
   assert.equal(missed.reverseIndex,0,'reverse-search miss resets only the reverse-search cursor');
 });
 
+test('paste-ime-fast-path RED-Paste1 — ownership and routed multi-char eligibility are fail-closed',async()=>{
+  const composer:any=await import('../../src/tui/components/composer.ts');
+  assert.equal(typeof composer.composerOwnsPaste,'function','explicit paste needs a pure ownership seam before bracketed-paste can bypass root rendering');
+  assert.equal(typeof composer.composerFastPasteInput,'function','multi-character useInput needs a distinct fail-closed eligibility seam');
+
+  const context={bootPhase:'ready',focus:'composer',modalOwner:false,vimMode:'insert',auxCount:0};
+  assert.equal(composer.composerOwnsPaste(context),true);
+  assert.equal(composer.composerOwnsPaste({...context,bootPhase:'starting'}),false);
+  assert.equal(composer.composerOwnsPaste({...context,focus:'command-menu'}),false);
+  assert.equal(composer.composerOwnsPaste({...context,modalOwner:true}),false);
+  assert.equal(composer.composerOwnsPaste({...context,vimMode:'normal'}),false);
+  assert.equal(composer.composerOwnsPaste({...context,auxCount:1}),false);
+
+  const base={...context,key:{ctrl:false,meta:false},routed:{kind:'text',text:'hello'}};
+  assert.equal(composer.composerFastPasteInput(base),'hello');
+  assert.equal(composer.composerFastPasteInput({...base,routed:{kind:'text',text:'会丢失内容'}}),'会丢失内容');
+  assert.equal(composer.composerFastPasteInput({...base,routed:{kind:'text',text:'a\nb'}}),'a\nb');
+  assert.equal(composer.composerFastPasteInput({...base,routed:{kind:'text',text:'a'}}),null,'one ordinary character remains owned by the existing single-character fast path');
+  assert.equal(composer.composerFastPasteInput({...base,routed:{kind:'action',action:'left'}}),null);
+  assert.equal(composer.composerFastPasteInput({...base,key:{ctrl:true,meta:false}}),null);
+  assert.equal(composer.composerFastPasteInput({...base,key:{ctrl:false,meta:true}}),null);
+  assert.equal(composer.composerFastPasteInput({...base,focus:'model-picker'}),null);
+  assert.equal(composer.composerFastPasteInput({...base,modalOwner:true}),null);
+  assert.equal(composer.composerFastPasteInput({...base,vimMode:'normal'}),null);
+  assert.equal(composer.composerFastPasteInput({...base,auxCount:1}),null);
+});
+
+test('paste-ime-fast-path RED-Paste2 — paste application is exactly the existing insertPaste semantics',async()=>{
+  const composer:any=await import('../../src/tui/components/composer.ts');
+  const editor:any=await import('../../src/tui/editor.ts');
+  assert.equal(typeof composer.applyComposerFastPasteInput,'function','paste fast path must delegate to the existing insertPaste primitive');
+
+  const simple=editor.createEditorState('ab');
+  assert.deepEqual(composer.applyComposerFastPasteInput(simple,'XYZ'),editor.insertPaste(simple,'XYZ'));
+
+  const atEnd=editor.moveCursor(editor.createEditorState('alpha beta'),'end');
+  const selected=editor.moveWord(atEnd,-1,true);
+  assert.deepEqual(
+    composer.applyComposerFastPasteInput(selected,'Ω🙂'),
+    editor.insertPaste(selected,'Ω🙂'),
+    'selection replacement must preserve the exact current editor contract',
+  );
+
+  const multiline='one\ntwo\nthree';
+  assert.deepEqual(
+    composer.applyComposerFastPasteInput(editor.createEditorState(''),multiline),
+    editor.insertPaste(editor.createEditorState(''),multiline),
+  );
+
+  const large='x'.repeat(4096);
+  const actualLarge=composer.applyComposerFastPasteInput(editor.createEditorState('seed'),large);
+  const expectedLarge=editor.insertPaste(editor.createEditorState('seed'),large);
+  assert.deepEqual(actualLarge,expectedLarge);
+  assert.equal(actualLarge.collapsedPastes.length,1,'4096-char paste must retain collapsed-paste metadata');
+
+  const manyLines=Array.from({length:20},(_,i)=>'line '+i).join('\n');
+  const actualLines=composer.applyComposerFastPasteInput(editor.createEditorState(''),manyLines);
+  assert.deepEqual(actualLines,editor.insertPaste(editor.createEditorState(''),manyLines));
+  assert.equal(actualLines.collapsedPastes.length,1,'20-line paste must retain collapsed-paste metadata');
+
+  for(const exact of ['会丢失内容','A👩‍💻e\u0301界','a\r\nb\rc']){
+    const base=editor.createEditorState('>');
+    const actual=composer.applyComposerFastPasteInput(base,exact);
+    const expectedPaste=editor.insertPaste(base,exact);
+    assert.deepEqual(actual,expectedPaste);
+    assert.equal(actual.text,'>'+exact,'fast path must preserve the exact input string without trimming or newline normalization');
+    assert.deepEqual(actual.editHistory,expectedPaste.editHistory,'edit history must remain byte-for-byte structurally equivalent');
+  }
+});
+
