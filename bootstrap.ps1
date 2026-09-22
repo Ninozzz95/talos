@@ -98,15 +98,16 @@ function Ensure-NpmTree([string]$Dir,[bool]$ProductionOnly) {
   $Package = Join-Path $Dir 'package.json'
   if (-not (Test-Path -LiteralPath $Lock) -or -not (Test-Path -LiteralPath $Package)) { throw "Missing npm manifest/lockfile in $Dir" }
   $Hash = (Get-FileHash -LiteralPath $Lock -Algorithm SHA256).Hash.ToLowerInvariant()
-  $Marker = Join-Path $Dir ".talos-inspection-npm-$Hash"
+  $Mode = if ($ProductionOnly) { 'runtime' } else { 'builder' }
+  $Marker = Join-Path $Dir ".talos-inspection-npm-$Hash-$Mode"
   $Modules = Join-Path $Dir 'node_modules'
-  if ((Test-Path -LiteralPath $Marker) -and (Test-Path -LiteralPath $Modules)) { Write-Host "Pinned dependency cache valid: $Dir"; return }
+  if ((Test-Path -LiteralPath $Marker) -and (Test-Path -LiteralPath $Modules)) { Write-Host "Pinned dependency cache valid ($Mode): $Dir"; return }
   Get-ChildItem -LiteralPath $Dir -Filter '.talos-inspection-npm-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
   $Args = @('ci')
-  if ($ProductionOnly) { $Args += '--omit=dev' }
+  if ($ProductionOnly) { $Args += '--omit=dev' } else { $Args += '--include=dev' }
   $Args += @('--no-audit','--no-fund')
-  Invoke-Checked $script:NpmCmd $Args $Dir "npm ci ($Dir)"
-  Set-Content -LiteralPath $Marker -Value $Hash -Encoding Ascii
+  Invoke-Checked $script:NpmCmd $Args $Dir "npm ci ($Mode: $Dir)"
+  Set-Content -LiteralPath $Marker -Value "$Hash $Mode" -Encoding Ascii
 }
 function Get-NodeRealPath([string]$NodeExe,[string]$Path) {
   $Script = "console.log(require('node:fs').realpathSync.native(process.argv[1]))"
@@ -176,7 +177,7 @@ try {
   $env:TALOS_CLI_RUNTIME_ROOT = Join-Path $AppRoot 'vendor'
   $env:TALOS_CLI_INSPECTION_SNAPSHOT = $Snapshot
   $env:TALOS_CLI_DEV_LOG_DIR = $LogRoot
-  $env:NODE_ENV = 'production'
+  Remove-Item Env:NODE_ENV -ErrorAction SilentlyContinue
 
   Ensure-NpmTree $AppRoot $false
   Ensure-NpmTree $HarnessRoot $true
@@ -192,6 +193,9 @@ try {
     if (-not (Test-Path -LiteralPath $Entry)) { throw "Build exited zero but did not emit $Entry" }
     Set-Content -LiteralPath $BuildMarker -Value $Snapshot -Encoding Ascii
   } else { Write-Host "Build cache valid for snapshot $Snapshot" }
+
+  $env:NODE_ENV = 'production'
+  Write-Host "Runtime NODE_ENV: $env:NODE_ENV"
 
   Write-Host ''
   Write-Host 'TALOS CLI OWNER INSPECTION'
