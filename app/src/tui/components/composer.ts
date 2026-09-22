@@ -1,4 +1,4 @@
-import {composerSegments,copySelection,deleteBackward,deleteForward,killToEnd,killToStart,killWordBackward,moveCursor,moveVertical,moveWord,redoEditor,replaceEditorText,undoEditor,yank,type EditorState} from '../editor.ts';
+import {composerSegments,copySelection,deleteBackward,deleteForward,insertPaste,killToEnd,killToStart,killWordBackward,moveCursor,moveVertical,moveWord,redoEditor,replaceEditorText,undoEditor,yank,type EditorState} from '../editor.ts';
 
 
 export type ComposerStore={
@@ -42,6 +42,35 @@ export function composerFastTextInput(input:ComposerFastTextInput):string|null{
   if(input.routed?.kind!=='text'||typeof input.routed.text!=='string'||input.routed.text.length!==1)return null;
   const code=input.routed.text.charCodeAt(0);
   return code<32||code===127?null:input.routed.text;
+}
+
+export type ComposerPasteOwnership={
+  bootPhase:string;
+  focus:string;
+  modalOwner:boolean;
+  vimMode:string;
+  auxCount:number;
+};
+
+export function composerOwnsPaste(input:ComposerPasteOwnership):boolean{
+  if(input.bootPhase!=='ready'||input.focus!=='composer'||input.modalOwner||input.auxCount!==0)return false;
+  return input.vimMode==='disabled'||input.vimMode==='insert';
+}
+
+export type ComposerFastPasteInput=ComposerPasteOwnership&{
+  key:{ctrl?:boolean;meta?:boolean};
+  routed:null|{kind:string;text?:string};
+};
+
+export function composerFastPasteInput(input:ComposerFastPasteInput):string|null{
+  if(!composerOwnsPaste(input))return null;
+  if(input.key.ctrl||input.key.meta)return null;
+  if(input.routed?.kind!=='text'||typeof input.routed.text!=='string'||input.routed.text.length<=1)return null;
+  return input.routed.text;
+}
+
+export function applyComposerFastPasteInput(editor:EditorState,text:string):EditorState{
+  return insertPaste(editor,text);
 }
 
 
