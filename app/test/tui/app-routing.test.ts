@@ -338,3 +338,31 @@ test('productization RED-P6 — MarkdownView wires a per-view parse memo behind 
   assert.match(source,/parseMemoRef\.current\.get\(text\)/u,'Markdown blocks must come from the retained per-view memo');
 });
 
+test('input-fast-path RED-I3 — ordinary composer text updates a dedicated subscribed ComposerView before global coordinator invalidation',async()=>{
+  const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
+  assert.match(source,/createComposerStore/u,'TuiApp must own a stable composer store');
+  assert.match(source,/const ComposerView=React\.memo\(/u,'composer rendering must be isolated behind a memoized child');
+  assert.match(source,/useSyncExternalStore\(/u,'ComposerView must subscribe directly to the focused editor store');
+  assert.match(source,/composerStoreRef/u,'the composer store must survive root rerenders');
+
+  const inputStart=source.indexOf('Ink.useInput');
+  assert.ok(inputStart>=0,'input handler must exist');
+  const immediate=source.indexOf("coordinator.immediate('input'",inputStart);
+  const fastDecision=source.indexOf('composerFastTextInput',inputStart);
+  const fastUpdate=source.indexOf('composerStore.update',inputStart);
+  assert.ok(immediate>inputStart,'semantic coordinator fallback must remain');
+  assert.ok(fastDecision>inputStart&&fastDecision<immediate,'fast-path eligibility must be decided before global coordinator invalidation');
+  assert.ok(fastUpdate>fastDecision&&fastUpdate<immediate,'eligible text must update only the composer store before the fallback path');
+
+  const submitStart=source.indexOf('const submit=async');
+  assert.ok(submitStart>=0);
+  const submitBlock=source.slice(submitStart,submitStart+2200);
+  assert.match(submitBlock,/currentEditor\(\)\.text/u,'submit must read the synchronous store snapshot, not stale root editor state');
+
+  const root=source.indexOf('return h(Ink.Box,{key:\`main-');
+  assert.ok(root>=0);
+  const rootBlock=source.slice(root);
+  assert.match(rootBlock,/h\(ComposerView/u,'root must render the dedicated composer child');
+  assert.doesNotMatch(rootBlock,/\.\.\.visual\.map|\bvisual\.map/u,'root must no longer render composer segments from root shell-layout state');
+});
+
