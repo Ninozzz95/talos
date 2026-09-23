@@ -105,3 +105,51 @@ test('transcript-virtualization RED-TV3 — real measurements override estimates
   const otherWidthKey=api.transcriptMeasurementKey('d',120,variant);
   assert.equal(store.height(otherWidthKey),null,'measurements from another width must never become current geometry authority');
 });
+
+
+test('transcript-virtualization RED-TV6A — explicit reveal falls back to the exact legacy logical page only when geometry would hide the target',async()=>{
+  const api=await virtualizerApi();
+  assert.equal(typeof api.planTranscriptVirtualWindow,'function');
+
+  const items=[
+    {id:'a',height:1},
+    {id:'b',height:10},
+    {id:'c',height:10},
+    {id:'d',height:10},
+    {id:'e',height:10},
+  ];
+
+  const strict=api.planTranscriptVirtualWindow({
+    items,
+    offset:0,
+    rowBudget:3,
+    heightOf:(item:any)=>item.height,
+  });
+  assert.deepEqual(strict.rows.map((item:any)=>item.id),['e']);
+
+  const reveal=api.planTranscriptVirtualWindow({
+    items,
+    offset:0,
+    rowBudget:3,
+    heightOf:(item:any)=>item.height,
+    revealIndex:0,
+    legacyPageSize:5,
+  });
+  assert.deepEqual(
+    reveal.rows.map((item:any)=>item.id),
+    ['a','b','c','d','e'],
+    'OWNER policy A requires exact legacy-page fallback when strict geometry would hide an explicit search/jump target',
+  );
+  assert.equal(reveal.start,0);
+  assert.equal(reveal.end,5);
+
+  const alreadyVisible=api.planTranscriptVirtualWindow({
+    items,
+    offset:0,
+    rowBudget:3,
+    heightOf:(item:any)=>item.height,
+    revealIndex:4,
+    legacyPageSize:5,
+  });
+  assert.deepEqual(alreadyVisible.rows.map((item:any)=>item.id),['e'],'a reveal already inside strict geometry must not widen the window');
+});
