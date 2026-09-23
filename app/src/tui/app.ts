@@ -173,13 +173,16 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     return h(Ink.Box,{ref,flexDirection:'column'},renderItem(item));
   },(previous:any,next:any)=>previous.item===next.item&&previous.measurementKey===next.measurementKey&&previous.measurementStore===next.measurementStore&&previous.renderItem===next.renderItem);
 
-  const TranscriptView=React.memo(function TranscriptView({items,offset,rowBudget,width,raw,expandedTools,measurementStore,renderItem}:{items:readonly TranscriptItem[];offset:number;rowBudget:number;width:number;raw:boolean;expandedTools:boolean;measurementStore:TranscriptMeasurementStore;renderItem:(item:TranscriptItem)=>any}){
+  const TranscriptView=React.memo(function TranscriptView({items,offset,rowBudget,width,raw,expandedTools,revealId,legacyPageSize,measurementStore,renderItem}:{items:readonly TranscriptItem[];offset:number;rowBudget:number;width:number;raw:boolean;expandedTools:boolean;revealId:string|null;legacyPageSize:number;measurementStore:TranscriptMeasurementStore;renderItem:(item:TranscriptItem)=>any}){
     React.useSyncExternalStore(measurementStore.subscribe,measurementStore.getSnapshot,measurementStore.getSnapshot);
     const variant=raw?'raw':expandedTools?'pretty-expanded':'pretty-compact';
+    const revealIndex=revealId?items.findIndex((item:TranscriptItem)=>item.id===revealId):-1;
     const planned=planTranscriptVirtualWindow({
       items,
       offset,
       rowBudget,
+      revealIndex,
+      legacyPageSize,
       heightOf:(item:TranscriptItem)=>{
         const key=transcriptMeasurementKey(item.id,width,variant);
         return measurementStore.height(key)??estimateTranscriptItemRows(item,width,{raw,expandedTools});
@@ -189,7 +192,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       const measurementKey=transcriptMeasurementKey(item.id,width,variant);
       return h(MeasuredTranscriptRow,{key:item.id,item,measurementKey,measurementStore,renderItem});
     }));
-  },(previous:any,next:any)=>previous.items===next.items&&previous.offset===next.offset&&previous.rowBudget===next.rowBudget&&previous.width===next.width&&previous.raw===next.raw&&previous.expandedTools===next.expandedTools&&previous.measurementStore===next.measurementStore&&previous.renderItem===next.renderItem);
+  },(previous:any,next:any)=>previous.items===next.items&&previous.offset===next.offset&&previous.rowBudget===next.rowBudget&&previous.width===next.width&&previous.raw===next.raw&&previous.expandedTools===next.expandedTools&&previous.revealId===next.revealId&&previous.legacyPageSize===next.legacyPageSize&&previous.measurementStore===next.measurementStore&&previous.renderItem===next.renderItem);
 
   return function TuiApp(props:TuiAppProps){
     const {runtime,registry,catalog,invocation,projectRoot,paths,permissionRules,autoClassifier,initialPrompt,initialReasoningEffort=null,renderCoordinator,keymap:effectiveKeymap=KEYBINDINGS,terminalSize}=props;
@@ -242,6 +245,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     const [queueEditor,setQueueEditor]=React.useState(null as {selected:number;editing:boolean;draft:string}|null);
     const [transcriptSearch,setTranscriptSearch]=React.useState(null as TranscriptSearchState|null);
     const [transcriptSelectedId,setTranscriptSelectedId]=React.useState(null as string|null);
+    const [transcriptRevealId,setTranscriptRevealId]=React.useState(null as string|null);
     const [transcriptRaw,setTranscriptRaw]=React.useState(false);
     const [trustCenter,setTrustCenter]=React.useState(null as TrustCenterModel|null);
     const [mcpCenter,setMcpCenter]=React.useState(null as McpCenterModel|null);
@@ -374,7 +378,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     };
     const jumpTranscriptItem=(itemId:string)=>{
       const items=transcriptItemsForCurrentView(),index=items.findIndex((item:TranscriptItem)=>item.id===itemId);if(index<0)return;
-      setTranscriptSelectedId(itemId);setViewport((view:TranscriptViewport)=>transcriptViewportForIndex(view,items.length,index));
+      setTranscriptSelectedId(itemId);setTranscriptRevealId(itemId);setViewport((view:TranscriptViewport)=>transcriptViewportForIndex(view,items.length,index));
     };
     const copyTranscriptItem=(preferred:string|null=transcriptSelectedId)=>{
       const item=transcriptItemForSelection(preferred);
@@ -790,7 +794,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
         /* install/remove deliberately continue into the existing child CLI installer path below. */
       }
       if(parsed.name==='exit'){inkApp.exit();return;}
-      if(parsed.name==='clear'){setState((current:TuiState)=>({...current,messages:[],streamingAssistant:null,reasoning:null,tools:[],warnings:[],transcript:createTranscriptModel()}));setDiff('');setViewport((view:TranscriptViewport)=>({...view,offset:0,unseen:0,followingTail:true}));return;}
+      if(parsed.name==='clear'){setState((current:TuiState)=>({...current,messages:[],streamingAssistant:null,reasoning:null,tools:[],warnings:[],transcript:createTranscriptModel()}));setDiff('');setTranscriptRevealId(null);setViewport((view:TranscriptViewport)=>({...view,offset:0,unseen:0,followingTail:true}));return;}
       if(parsed.name==='status'){addLocal(`Session: ${state.sessionId??'none'}\nRunning: ${state.running?'yes':'no'}\nModel: ${state.status.model}\nMode: ${state.status.permissionMode}\nTools: ${state.tools.length}`);return;}
       if(parsed.name==='queue'){
         const operation=parsed.args[0]??'show';
@@ -826,7 +830,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       const text=currentEditor().text;if(!text.trim())return;developmentLog('ui.submit.begin',{text:developmentTextEvidence(text),model:controller.model(),running:state.running,mode:controller.mode()},'info','tui');
       const clearedEditor=createEditorState('');composerStore.replace(clearedEditor);setAppState((current:TuiAppState)=>({...current,editor:clearedEditor,focus:current.focus.current==='composer'?current.focus:createFocusState('composer'),overlay:null}));
       setVim((current:VimState)=>current.enabled?{...current,mode:'insert'}:current);
-      setHistory((rows:string[])=>[text,...rows.filter(row=>row!==text)].slice(0,MAX_HISTORY));historyIndexRef.current=-1;reverseIndexRef.current=0;setViewport((view:TranscriptViewport)=>({...view,offset:0,unseen:0,followingTail:true}));
+      setHistory((rows:string[])=>[text,...rows.filter(row=>row!==text)].slice(0,MAX_HISTORY));historyIndexRef.current=-1;reverseIndexRef.current=0;setTranscriptRevealId(null);setViewport((view:TranscriptViewport)=>({...view,offset:0,unseen:0,followingTail:true}));
       if(text.trim().startsWith('/')){await executeSlash(text.trim());return;}
       if(!text.trim().startsWith('!')){const readiness=await readinessFor(controller.model());developmentLog('ui.readiness',{model:controller.model(),readiness},readiness.ready?'debug':'warning','tui');if(!readiness.ready){setEditorText(text);addLocal(readiness.message);return;}}
       const willQueue=state.running||controller.queue().length>0;
@@ -954,7 +958,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       if(action==='picker-confirm'){void confirmPicker();return;}
       if(action==='command-complete'&&appState.focus.current==='command-menu'){void confirmPicker();return;}
       if(action==='interrupt'){
-        if(key?.escape){if(state.running){void controller.interrupt().catch((error:unknown)=>addLocal(`Interrupt failed: ${error instanceof Error?error.message:String(error)}`));}else{setAuxCompletions([]);setViewport((view:TranscriptViewport)=>({...view,offset:0,unseen:0,followingTail:true}));}return;}
+        if(key?.escape){if(state.running){void controller.interrupt().catch((error:unknown)=>addLocal(`Interrupt failed: ${error instanceof Error?error.message:String(error)}`));}else{setAuxCompletions([]);setTranscriptRevealId(null);setViewport((view:TranscriptViewport)=>({...view,offset:0,unseen:0,followingTail:true}));}return;}
         const result=interruptRef.current.ctrlC(state.running);if(result==='cancel')cancelActiveRun();else inkApp.exit();return;
       }
       if(action==='vim-toggle'){setVim((current:VimState)=>toggleVim(current));return;}
@@ -984,8 +988,8 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       if(action==='transcript-raw'){setTranscriptRaw((value:boolean)=>!value);setTranscriptSearch((current:TranscriptSearchState|null)=>current?{...current,raw:!transcriptRaw,notice:null}:current);return;}
       if(action==='transcript-copy'){copyTranscriptItem();return;}
       if(action==='permission-cycle'){cycleMode();return;}
-      if(action==='page-up'){setViewport((view:TranscriptViewport)=>reduceViewport(view,'page-up',transcriptItemsForCurrentView().length));return;}
-      if(action==='page-down'){setViewport((view:TranscriptViewport)=>reduceViewport(view,'page-down',transcriptItemsForCurrentView().length));return;}
+      if(action==='page-up'){setTranscriptRevealId(null);setViewport((view:TranscriptViewport)=>reduceViewport(view,'page-up',transcriptItemsForCurrentView().length));return;}
+      if(action==='page-down'){setTranscriptRevealId(null);setViewport((view:TranscriptViewport)=>reduceViewport(view,'page-down',transcriptItemsForCurrentView().length));return;}
       if(action==='history-search'){reverseSearch();return;}
       if(action==='history-prev'&&key?.ctrl){historyMove(1);return;}
       if(action==='history-next'&&key?.ctrl){historyMove(-1);return;}
@@ -1360,7 +1364,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
 
     return h(Ink.Box,{key:`main-${appState.redrawNonce}`,flexDirection:'column'},
       h(Ink.Text,{bold:true,color:bootColor},headerLine({workspace:projectRoot,status:boot.phase==='error'?'degraded':'interactive'})),
-      h(TranscriptView,{items:visibleTranscriptItems,offset:viewport.offset,rowBudget:rows,width:columns,raw:transcriptRaw,expandedTools:appState.expandedTools,measurementStore:transcriptMeasurementStore,renderItem:renderTranscriptItem}),
+      h(TranscriptView,{items:visibleTranscriptItems,offset:viewport.offset,rowBudget:rows,width:columns,raw:transcriptRaw,expandedTools:appState.expandedTools,revealId:transcriptRevealId,legacyPageSize:viewport.pageSize,measurementStore:transcriptMeasurementStore,renderItem:renderTranscriptItem}),
       diffView?h(Ink.Box,{borderStyle:'round',flexDirection:'column'},h(Ink.Text,{bold:true},`Diff · ${diffView.mode}`),...diffView.lines.map((line,index)=>h(Ink.Text,{key:index,bold:line.kind==='file'||line.kind==='hunk'||line.kind==='add'||line.kind==='remove',dimColor:line.kind==='meta'||line.kind==='context'||line.kind==='no-newline'||line.kind==='plain'},line.text))):null,
       overlayNode,
       auxCompletions.length&&!appState.overlay&&!queueEditor&&!transcriptSearch&&!contextInspector&&!mcpCenter&&!hookCenter&&!pluginCenter&&!memoryCenter&&!notesCenter&&!tasksCenter&&!libraryCenter&&!researchCenter&&!automationCenter&&!forgeCenter?h(Ink.Box,{flexDirection:'column'},...auxCompletions.map((value:string)=>h(Ink.Text,{key:value,dimColor:true},`  ${value}`))):null,
