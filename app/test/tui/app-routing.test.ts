@@ -565,3 +565,33 @@ test('transcript-virtualization RED-TV6 — search copy and navigation remain se
   assert.match(source,/if\(action==='page-up'\)[\s\S]{0,240}reduceViewport/u,'existing page navigation reducer must remain');
   assert.match(source,/const \[transcriptRaw,setTranscriptRaw\]=React\.useState/u,'raw-mode authority must remain unchanged');
 });
+
+
+test('transcript-virtualization RED-TV6B — reveal state is transient and manual transcript paging returns to strict geometry',async()=>{
+  const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
+  assert.match(source,/const \[transcriptRevealId,setTranscriptRevealId\]=React\.useState/u,'transcript reveal needs an explicit transient app-local identity');
+
+  const jumpStart=source.indexOf('const jumpTranscriptItem=');
+  const copyStart=source.indexOf('const copyTranscriptItem=',jumpStart);
+  assert.ok(jumpStart>=0&&copyStart>jumpStart);
+  const jumpBlock=source.slice(jumpStart,copyStart);
+  assert.match(jumpBlock,/setTranscriptRevealId\(itemId\)[\s\S]{0,300}transcriptViewportForIndex/u,'search/jump must arm reveal identity before applying the legacy semantic viewport');
+
+  const viewStart=source.indexOf('const TranscriptView=React.memo(');
+  const appStart=source.indexOf('return function TuiApp',viewStart);
+  assert.ok(viewStart>=0&&appStart>viewStart);
+  const viewBlock=source.slice(viewStart,appStart);
+  assert.match(viewBlock,/revealId/u,'TranscriptView must accept the transient reveal identity');
+  assert.match(viewBlock,/items\.findIndex\(\(item:TranscriptItem\)=>item\.id===revealId\)/u,'TranscriptView must resolve reveal identity against the full semantic presentation list');
+  assert.match(viewBlock,/revealIndex/u,'planner wiring must pass a semantic reveal index');
+  assert.match(viewBlock,/legacyPageSize/u,'planner wiring must pass the existing logical page size for exact fallback');
+
+  const pageStart=source.indexOf("if(action==='page-up')");
+  const pageEnd=source.indexOf("if(action==='history-search')",pageStart);
+  assert.ok(pageStart>=0&&pageEnd>pageStart);
+  const pageBlock=source.slice(pageStart,pageEnd);
+  assert.match(pageBlock,/page-up'[\s\S]{0,220}setTranscriptRevealId\(null\)[\s\S]{0,260}reduceViewport\(view,'page-up'/u,'page-up must clear reveal before manual paging');
+  assert.match(pageBlock,/page-down'[\s\S]{0,220}setTranscriptRevealId\(null\)[\s\S]{0,260}reduceViewport\(view,'page-down'/u,'page-down must clear reveal before manual paging');
+
+  assert.match(source,/h\(TranscriptView,\{[^}]*revealId:transcriptRevealId[^}]*legacyPageSize:viewport\.pageSize/u,'root must pass reveal identity and the unchanged legacy page size into TranscriptView');
+});
