@@ -1,9 +1,9 @@
-name: TALOS CLI transcript reveal-policy A RED validation
+name: TALOS CLI transcript reveal-policy A wiring RED validation
 
 on:
   push:
     branches:
-      - owner-inspection/cli-transcript-reveal-red-e160cef5
+      - owner-inspection/cli-transcript-reveal-red-6c553db9
 
 permissions:
   contents: read
@@ -103,14 +103,14 @@ jobs:
             'app/src/tui/components/markdown.ts' = '7861253aa15913654b305180543018e085582615'
             'app/src/tui/components/tool-row.ts' = 'e753a1427355e7e51fd75c2d4e57cc1bb9af710b'
             'app/test/tui/transcript-virtualizer.test.ts' = 'b46500755adddb57cf94e1ee68b3e549f5c6b76d'
-            'app/test/tui/app-routing.test.ts' = '3983480063d8b5b35c07d00ec40428dadeece2a2'
+            'app/test/tui/app-routing.test.ts' = '36c374e1ae553860fec63281c80b0b9c21c4c6fa'
           }
           foreach ($Path in $Expected.Keys) {
             $Observed = (git hash-object -- $Path).Trim()
             if ($Observed -ne $Expected[$Path]) { throw "TRANSCRIPT_REVEAL_RED_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
           }
           $Snapshot = Get-Content -LiteralPath .\INSPECTION-SNAPSHOT.json -Raw | ConvertFrom-Json
-          if ($Snapshot.sourceHead -ne 'e160cef5a72596dde4a9369b75d269cba60fa17e') { throw "TRANSCRIPT_REVEAL_RED_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
+          if ($Snapshot.sourceHead -ne '6c553db956a7f2e60ec5ab4cc9f4cb49bad11065') { throw "TRANSCRIPT_REVEAL_RED_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
 
       - name: Execute transcript reveal-policy A RED gate on Node 24.18.0
         shell: powershell
@@ -163,3 +163,4 @@ jobs:
           Assert-Green 'transcript-virtualization RED-TV5' '.\test\tui\app-routing.test.ts' 'TRANSCRIPT_GREEN_TV5_CONFIRMED'
           Assert-Green 'transcript-virtualization RED-TV6' '.\test\tui\app-routing.test.ts' 'TRANSCRIPT_TV6_SEMANTIC_BASELINE_GREEN'
           Assert-ExpectedRed 'transcript-virtualization RED-TV6A' '.\test\tui\transcript-virtualizer.test.ts' 'OWNER policy A requires exact legacy-page fallback when strict geometry would hide an explicit search/jump target' 'EXPECTED_TRANSCRIPT_RED_TV6A_CONFIRMED'
+          Assert-ExpectedRed 'transcript-virtualization RED-TV6B' '.\test\tui\app-routing.test.ts' 'transcript reveal needs an explicit transient app-local identity' 'EXPECTED_TRANSCRIPT_RED_TV6B_CONFIRMED'
