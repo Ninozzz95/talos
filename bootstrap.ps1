@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3.0
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$Snapshot = '6c553db956a7f2e60ec5ab4cc9f4cb49bad11065'
+$Snapshot = 'a65d211aaea6349b2f90317c1a1e9b202a7c89b0'
 $NodeVersion = '24.18.0'
 $NodeArchiveName = 'node-v24.18.0-win-x64.zip'
 $NodeUrl = "https://nodejs.org/dist/v$NodeVersion/$NodeArchiveName"
