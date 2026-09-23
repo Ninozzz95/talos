@@ -161,6 +161,6 @@ jobs:
           Assert-Green 'transcript-virtualization RED-TV3' '.\test\tui\transcript-virtualizer.test.ts' 'TRANSCRIPT_GREEN_TV3_CONFIRMED'
           Assert-Green 'transcript-virtualization RED-TV4' '.\test\tui\app-routing.test.ts' 'TRANSCRIPT_GREEN_TV4_CONFIRMED'
           Assert-Green 'transcript-virtualization RED-TV5' '.\test\tui\app-routing.test.ts' 'TRANSCRIPT_GREEN_TV5_CONFIRMED'
-          Assert-Green 'transcript-virtualization RED-TV6' '.\test\tui\app-routing.test.ts' 'TRANSCRIPT_TV6_SEMANTIC_BASELINE_GREEN'
+          Assert-Green 'transcript-virtualization RED-TV6 —' '.\test\tui\app-routing.test.ts' 'TRANSCRIPT_TV6_SEMANTIC_BASELINE_GREEN'
           Assert-ExpectedRed 'transcript-virtualization RED-TV6A' '.\test\tui\transcript-virtualizer.test.ts' 'OWNER policy A requires exact legacy-page fallback when strict geometry would hide an explicit search/jump target' 'EXPECTED_TRANSCRIPT_RED_TV6A_CONFIRMED'
           Assert-ExpectedRed 'transcript-virtualization RED-TV6B' '.\test\tui\app-routing.test.ts' 'transcript reveal needs an explicit transient app-local identity' 'EXPECTED_TRANSCRIPT_RED_TV6B_CONFIRMED'
