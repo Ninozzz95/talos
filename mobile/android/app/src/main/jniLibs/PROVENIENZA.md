@@ -104,14 +104,42 @@ Serve a chiunque per rifare la verifica da zero, senza fidarsi di noi.
 
 | pacchetto | .deb | SHA-256 del .deb |
 |---|---|---|
-| libprotobuf | [libprotobuf_2:35.1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/libp/libprotobuf/libprotobuf_2:35.1_aarch64.deb) | `a1ba7c7f0e5903a2134662653d3e7b9ffceaa78bdd00e07ac985e2d313ebc738` |
-| android-tools | [android-tools_36.0.1+really35.0.2-1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/a/android-tools/android-tools_36.0.1+really35.0.2-1_aarch64.deb) | `59710261c5cb614701943c19e7b18d074a84b5d16163844237d51e3e64c92773` |
-| libc++ | [libc++_29_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/libc/libc++/libc++_29_aarch64.deb) | `bb9f12113c137aa0e8513bb51cc49fe77a5ce3ca39ab9e92c57d228ecdf00222` |
-| zstd | [zstd_1.5.7-1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/z/zstd/zstd_1.5.7-1_aarch64.deb) | `e1b4a5113648da8de189620ba1fce74c48b2d0833d9043391b9a1c91fb606fd3` |
-| brotli | [brotli_1.2.0_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/b/brotli/brotli_1.2.0_aarch64.deb) | `db1502601d40fb44e6085ad8bfd9311a8b472e98db831ceec9d404c5708bb52c` |
-| liblz4 | [liblz4_1.10.0-1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/libl/liblz4/liblz4_1.10.0-1_aarch64.deb) | `09b9449418d5c2dc4f5c1c140ba8138d56be3e9ae5fd3be3318825ec9f8a0499` |
-| abseil-cpp | [abseil-cpp_20260526.0_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/a/abseil-cpp/abseil-cpp_20260526.0_aarch64.deb) | `e489fac652cddc39d9436141e627285f1034a545a06fbb19c420514a419ad877` |
-| zlib | [zlib_1.3.2_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/z/zlib/zlib_1.3.2_aarch64.deb) | `75e7d0af17fcc3b40004309fdc00a1ddb9ae08346dce5e269902c34ac3966ac9` |
+| libprotobuf | [libprotobuf_2:35.1_aarch64.deb](https://github.com/Ninozzz95/talos/releases/download/deps-ponte-adb-2026-09-23/libprotobuf_2-35.1_aarch64.deb) | `a1ba7c7f0e5903a2134662653d3e7b9ffceaa78bdd00e07ac985e2d313ebc738` |
+| android-tools | [android-tools_36.0.1+really35.0.2-1_aarch64.deb](https://github.com/Ninozzz95/talos/releases/download/deps-ponte-adb-2026-09-23/android-tools_36.0.1-really35.0.2-1_aarch64.deb) | `59710261c5cb614701943c19e7b18d074a84b5d16163844237d51e3e64c92773` |
+| libc++ | [libc++_29_aarch64.deb](https://github.com/Ninozzz95/talos/releases/download/deps-ponte-adb-2026-09-23/libcxx_29_aarch64.deb) | `bb9f12113c137aa0e8513bb51cc49fe77a5ce3ca39ab9e92c57d228ecdf00222` |
+| zstd | [zstd_1.5.7-1_aarch64.deb](https://github.com/Ninozzz95/talos/releases/download/deps-ponte-adb-2026-09-23/zstd_1.5.7-1_aarch64.deb) | `e1b4a5113648da8de189620ba1fce74c48b2d0833d9043391b9a1c91fb606fd3` |
+| brotli | [brotli_1.2.0_aarch64.deb](https://github.com/Ninozzz95/talos/releases/download/deps-ponte-adb-2026-09-23/brotli_1.2.0_aarch64.deb) | `db1502601d40fb44e6085ad8bfd9311a8b472e98db831ceec9d404c5708bb52c` |
+| liblz4 | [liblz4_1.10.0-1_aarch64.deb](https://github.com/Ninozzz95/talos/releases/download/deps-ponte-adb-2026-09-23/liblz4_1.10.0-1_aarch64.deb) | `09b9449418d5c2dc4f5c1c140ba8138d56be3e9ae5fd3be3318825ec9f8a0499` |
+| abseil-cpp | [abseil-cpp_20260526.0_aarch64.deb](https://github.com/Ninozzz95/talos/releases/download/deps-ponte-adb-2026-09-23/abseil-cpp_20260526.0_aarch64.deb) | `e489fac652cddc39d9436141e627285f1034a545a06fbb19c420514a419ad877` |
+| zlib | [zlib_1.3.2_aarch64.deb](https://github.com/Ninozzz95/talos/releases/download/deps-ponte-adb-2026-09-23/zlib_1.3.2_aarch64.deb) | `75e7d0af17fcc3b40004309fdc00a1ddb9ae08346dce5e269902c34ac3966ac9` |
+
+## 🔄 03/9 — `android-tools` ripubblicato, impronta del `.deb` cambiata
+
+Il pacchetto Termux `android-tools_36.0.1+really35.0.2_aarch64.deb` (senza
+suffisso) è sparito dal loro archivio: la CI ha risposto **404**. Termux lo
+aveva ripubblicato con una revisione Debian in più nel nome,
+`android-tools_36.0.1+really35.0.2-1_aarch64.deb` — stessa versione a monte,
+solo il pacchettamento è cambiato.
+
+⛔ La regola qui sopra dice **non si aggiorna il numero senza sapere
+perché**, quindi non ci si è fermati all'URL nuovo:
+
+1. scaricato il `.deb` nuovo, impronta calcolata: diversa da quella vecchia
+   (ovvio, il file è diverso — contiene la revisione `-1`);
+2. estratto `data.tar.xz` e dentro il binario `adb` (formato `ar`, nessun
+   comando `ar` disponibile: estratto a mano leggendo l'intestazione a 60
+   byte per voce — vedi `scratchpad/estrai-ar.py` nella sessione che ha
+   fatto la verifica);
+3. impronta di **quel binario**: `28c4569e95d5c0f69a64e004ae0e684d64551bf1f86236cf2ffd5235f6eeca16`
+   — **identica, byte per byte**, a quella già dichiarata nella tabella dei
+   file spediti (riga `libadb.so`, invariata).
+
+⇒ Il binario che finisce nell'APK non è cambiato di un byte: solo
+l'involucro Debian. Aggiornati URL e impronta del `.deb` nella tabella qui
+sopra; l'impronta di `libadb.so` nella tabella dei file spediti resta la
+stessa perché il file stesso è lo stesso. Controllati anche gli altri sette
+pacchetti (`abseil-cpp`, `brotli`, `libc++`, `liblz4`, `libprotobuf`,
+`zlib`, `zstd`): tutti ancora `200` sull'URL dichiarato, nessun altro tocco.
 
 ## ⛔ I tre nomi cambiati, e perché
 
@@ -131,3 +159,31 @@ Rinominarli basta per il confezionamento ma non per il caricamento: dentro
 ⭐ È la ragione per cui **non tocchiamo un byte dei binari**: le impronte qui
 sopra restano identiche a quelle di Termux, e chiunque può verificarlo. Un
 collegamento costa meno di una promessa persa.
+
+## 🔄 23/9 — i `.deb` si scaricano da una copia nostra, non più dal pool di Termux
+
+Il pool di Termux tiene **solo l'ultima versione** di ogni pacchetto: il 21/9 alle 17:48 è
+arrivato `android-tools_37.0.0` e la revisione `-1` qui sopra è sparita (HTTP 404), come era già
+successo il 3/9. Dal 22/9 il job `android` della CI si fermava su `preparaPonteAdb` con
+`FileNotFoundException`. Per le versioni vecchie i maintainer di Termux rimandano al repository
+comunitario TUR (termux-packages, discussione #13356, 23/11/2022); l'indice del pool, letto il
+23/9/2026, contiene soltanto `android-tools_37.0.0`.
+
+⇒ Gli otto `.deb` **identici** (stesse impronte della tabella) sono ospitati come asset della release
+di servizio `deps-ponte-adb-2026-09-23` del repository pubblico: il tag non comincia con `v` né con `desktop-v`, quindi non
+fa partire il workflow di rilascio. Nessun binario spedito cambia: `preparaPonteAdb` verifica la stessa
+impronta di prima, e un file diverso ferma la build come sempre. I nomi degli asset sostituiscono `+` e
+`:` perché GitHub rinomina i caratteri speciali (docs.github.com, «Upload a release asset», 23/9/2026).
+
+Le origini, per rifare la verifica da zero contro Termux finché il pacchetto resta pubblicato:
+
+| pacchetto | origine Termux |
+|---|---|
+| libprotobuf | [libprotobuf_2:35.1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/libp/libprotobuf/libprotobuf_2:35.1_aarch64.deb) |
+| android-tools | [android-tools_36.0.1+really35.0.2-1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/a/android-tools/android-tools_36.0.1+really35.0.2-1_aarch64.deb) |
+| libc++ | [libc++_29_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/libc/libc++/libc++_29_aarch64.deb) |
+| zstd | [zstd_1.5.7-1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/z/zstd/zstd_1.5.7-1_aarch64.deb) |
+| brotli | [brotli_1.2.0_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/b/brotli/brotli_1.2.0_aarch64.deb) |
+| liblz4 | [liblz4_1.10.0-1_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/libl/liblz4/liblz4_1.10.0-1_aarch64.deb) |
+| abseil-cpp | [abseil-cpp_20260526.0_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/a/abseil-cpp/abseil-cpp_20260526.0_aarch64.deb) |
+| zlib | [zlib_1.3.2_aarch64.deb](https://packages.termux.dev/apt/termux-main/pool/main/z/zlib/zlib_1.3.2_aarch64.deb) |

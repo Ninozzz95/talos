@@ -1,4 +1,9 @@
 /**
+ * Compatibilità dal 12/09/2026: la forma Calm ignora i tre flag restituiti
+ * qui. Valori salvati, validazione e migrazioni restano leggibili; i selettori
+ * in Impostazioni non cambiano più TalosMobileComposer (neppure il foglio +).
+ * Segue la documentazione del formato precedente, conservato per la lettura.
+ *
  * The composer, as TWO settings — because there are two questions.
  *
  * It began as three independent switches (bottom drawer, immersive collapse,

@@ -25,6 +25,7 @@ import {
 } from '@/lib/tools/tracciaAzione'
 import { talosTracciaFuori } from '@/lib/device/traccia'
 import { talosComposerBusy } from '@/lib/chat/composerBusy'
+import { talosImageSendDecision } from '@/lib/chat/consensoImmagini'
 import { talosRispostaVuotaDopoStrumenti, talosStrumentiPartiti } from '@/lib/chat/rispostaVuota'
 import {
     talosToolActivityDetail,
@@ -72,9 +73,8 @@ import {
 import { clampMobileEffort, mobileEffortLadderFromLevels, type TalosMobileEffortLevel } from '@/lib/mobileEffort'
 import { talosMobileModelProfileIsCallable, TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
 import { cloneJsonObject, type TalosChatRepository } from '@/repositories/chatRepository'
-import { createLazyChatRepository } from '@/repositories/lazyChatRepository'
-import { createTalosEphemeralRoutingRepository } from '@/repositories/ephemeralRoutingRepository'
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
+import { productionChatRepository } from '@/repositories/productionChatRepositorySingleton'
 import { talosAnonymousAgentTools } from '@/lib/chat/anonymousTools'
 import {
     clearProviderEndpoint as realClearEndpoint,
@@ -113,6 +113,7 @@ import {
     TALOS_DEFAULT_TOOL_PERMISSIONS,
     type TalosToolAction,
     type TalosToolPermissions,
+    TALOS_TOOL_ACTIONS,
 } from '@/lib/tools/permissionTypes'
 import {
     createTalosTraceRecorder,
@@ -252,18 +253,12 @@ function boundedTalosLibraryAnswerScore(score: number): number {
  *
  * Both halves stay lazy: the in-memory side costs nothing until a temporary
  * chat is actually started, and most installs will never start one.
+ *
+ * ⛔ 28/8: the instance itself now lives in `productionChatRepositorySingleton.ts`
+ * (imported above) — extracted so `@/lib/harness/codiceSessions.ts` can reach
+ * the SAME repository without importing `useChatController()`. Behaviour
+ * here is unchanged; only where the object is constructed moved.
  */
-const productionChatRepository = createTalosEphemeralRoutingRepository({
-    durable: createLazyChatRepository(async () => {
-        const { createProductionChatRepository } = await import('@/repositories/productionChatRepository')
-        return createProductionChatRepository()
-    }),
-    ephemeral: createLazyChatRepository(async () => {
-        const { createMemoryChatRepository } = await import('@/repositories/memoryChatRepository')
-        return createMemoryChatRepository()
-    }),
-    isEphemeral: talosIsEphemeralSessionId,
-})
 
 let productionVaultServicePromise: Promise<TalosVaultService> | null = null
 
@@ -367,6 +362,8 @@ interface TalosChatControllerSendRuntime {
     readonly timeoutMs: number | undefined
     readonly effort: TalosMobileEffortLevel
     readonly thinking: boolean
+    /** Assente nei checkpoint precedenti a Calm: equivale ad acceso. */
+    readonly agentToolsEnabled?: boolean
     readonly tone: TalosToneId
     readonly autosaveGenerated: boolean
     readonly debugDiagnostics: boolean
@@ -378,7 +375,7 @@ interface TalosChatControllerSendRuntime {
     readonly toolPermissions: Readonly<TalosToolPermissions>
     readonly agentTools: Readonly<TalosAgentToolEnabled>
     readonly search: Readonly<{
-        source: 'tavily' | 'brave' | 'searxng' | 'custom' | null
+        source: 'tavily' | 'brave' | 'searxng' | 'custom' | 'duckduckgo' | null
         endpoint: string | null
     }>
     readonly imageProvider: TalosImageProvider | null
@@ -403,20 +400,19 @@ function restrictiveToolPermissions(
     captured: Readonly<TalosToolPermissions>,
     live: Partial<TalosToolPermissions> | undefined,
 ): TalosToolPermissions {
-    return {
-        read: restrictivePermission(
-            captured.read,
-            live?.read ?? TALOS_DEFAULT_TOOL_PERMISSIONS.read,
-        ),
-        write: restrictivePermission(
-            captured.write,
-            live?.write ?? TALOS_DEFAULT_TOOL_PERMISSIONS.write,
-        ),
-        outbound: restrictivePermission(
-            captured.outbound,
-            live?.outbound ?? TALOS_DEFAULT_TOOL_PERMISSIONS.outbound,
-        ),
-    }
+    /*
+     * ⛔ Sul vocabolario, non su tre nomi scritti a mano.
+     *
+     * La forma a letterale ometteva in silenzio ogni potere aggiunto dopo, e
+     * un permesso assente si comporta come uno mai chiesto: `undefined` cade
+     * sul default e sembra tutto a posto. Il typecheck l'ha preso solo perche
+     * `TalosToolPermissions` e un `Record` completo — se fosse stato
+     * `Partial`, sarebbe passato.
+     */
+    return Object.fromEntries(TALOS_TOOL_ACTIONS.map((azione) => [
+        azione,
+        restrictivePermission(captured[azione], live?.[azione] ?? TALOS_DEFAULT_TOOL_PERMISSIONS[azione]),
+    ])) as TalosToolPermissions
 }
 
 function mergeTalosTurnLibraryPolicy(
@@ -462,6 +458,7 @@ function isControllerRuntime(value: unknown): value is TalosChatControllerSendRu
             typeof record.effort === 'string' ? record.effort : '',
         )
         && typeof record.thinking === 'boolean'
+        && (record.agentToolsEnabled === undefined || typeof record.agentToolsEnabled === 'boolean')
         && ['balanced', 'engineering', 'friendly', 'concise'].includes(
             typeof record.tone === 'string' ? record.tone : '',
         )
@@ -709,7 +706,7 @@ export interface ChatControllerDeps {
             readonly tool_authorizations: TalosToolAuthorizationGrantsV1
             /** F1: which web-search source is configured, if any (D3). */
             readonly search?: {
-                readonly source?: 'tavily' | 'brave' | 'searxng' | 'custom' | null
+                readonly source?: 'tavily' | 'brave' | 'searxng' | 'custom' | 'duckduckgo' | null
                 readonly endpoint?: string | null
             }
             /**
@@ -867,6 +864,7 @@ export interface ChatController {
      */
     readonly composerBusy: ComputedRef<import('@/lib/chat/composerBusy').TalosComposerBusy>
     readonly browseMode: ComputedRef<boolean>
+    readonly agentToolsEnabled: ComputedRef<boolean>
     readonly sendDisabledReason: ComputedRef<string>
     readonly preferenceError: Readonly<Ref<string | null>>
     readonly enhancingPrompt: Readonly<Ref<boolean>>
@@ -927,6 +925,7 @@ export interface ChatController {
     decideLocalEngineProbeConsent(decision: 'granted' | 'declined' | 'dismissed'): Promise<void>
     selectEffort(level: TalosMobileEffortLevel): Promise<void>
     setThinking(enabled: boolean): Promise<void>
+    setAgentToolsEnabled(enabled: boolean): void
     setBrowseMode(enabled: boolean): Promise<void>
     saveKey(provider: TalosMobileProviderId, key: string): Promise<void>
     removeKey(provider: TalosMobileProviderId): Promise<void>
@@ -945,6 +944,8 @@ export interface ChatController {
     clearTraces(): void
     /** R2-7 — single orchestration point for session actions (see impl). */
     sessionLifecycle: TalosSessionLifecycle
+    searchMessages: TalosChatRepository['searchMessages']
+    listSearchFiles: TalosChatRepository['listVaultFileSummaries']
     tasks: {
         list(): Promise<import('@/repositories/chatRepository').TalosLocalTask[]>
         create(input: {
@@ -973,8 +974,11 @@ export interface ChatController {
     notes: {
         list(): Promise<import('@/repositories/chatRepository').TalosLocalNote[]>
         create(input: { title: string; content: string }): Promise<import('@/repositories/chatRepository').TalosLocalNote>
-        /** Titolo e corpo si cambiano separatamente: assente = non toccare. */
-        update(input: { id: string; title?: string; content?: string }): Promise<import('@/repositories/chatRepository').TalosLocalNote>
+        /**
+         * Titolo, corpo ed evidenza si cambiano separatamente: assente = non
+         * toccare. U-10: la sola `pinned` non muove la data di modifica.
+         */
+        update(input: { id: string; title?: string; content?: string; pinned?: boolean }): Promise<import('@/repositories/chatRepository').TalosLocalNote>
         remove(noteId: string): Promise<void>
     }
     /**
@@ -1011,6 +1015,15 @@ export interface ChatController {
         list(): Promise<readonly import('@/lib/research/researchRun').TalosResearchRun[]>
         /** R-4 — the report read back as structure, verdicts included. Null when it will not parse. */
         report(fileId: string): Promise<import('@/lib/research/researchReport').TalosResearchReportRecord | null>
+        /**
+         * MB-1 — il rapporto come TESTO, prima di provare a capirlo.
+         *
+         * `report` torna `null` sia su un rapporto illeggibile sia su uno che
+         * non c'è, e da un `null` non si distingue «non si rilegge» da
+         * «bloccata da un permesso»: le due frasi che la scheda deve dire
+         * stanno nel testo, non nel record.
+         */
+        reportDocument(fileId: string): Promise<string | null>
         /** R11 — a further question, answered from the sources already paid for. */
         followUp(runId: string, question: string): Promise<string | null>
         /** R12 — are the sources still saying what they said? */
@@ -1054,6 +1067,26 @@ export interface ChatController {
             scope_type: 'global' | 'project' | 'session'
             scope_id: string | null
         }): Promise<import('@/repositories/chatRepository').TalosLocalMemory>
+        /**
+         * U-19 — correggere il TESTO di una memoria, senza toccare il resto.
+         *
+         * ⛔ Non è `create` con un id: `upsertMemory` rimette `status =
+         * 'active'` a ogni scrittura, quindi una correzione risveglierebbe una
+         * memoria che l'utente aveva spento. Passa da `updateMemory`, che tocca
+         * solo `title`, `content` e `kind` — e in particolare NON tocca
+         * `content_origin`: la provenienza è la storia della riga, e sistemarne
+         * il titolo non la cambia.
+         *
+         * La facciata aveva già questo metodo (lo usa il tool della chat dal
+         * 2026-08-07); mancava qui, cioè mancava alla superficie pubblica del
+         * controller — e la stazione non poteva chiamarlo.
+         */
+        update(input: {
+            id: string
+            title?: string
+            content?: string
+            kind?: 'preference' | 'project_fact' | 'procedure' | 'policy_note'
+        }): Promise<import('@/repositories/chatRepository').TalosLocalMemory>
         upsertDisplayName(displayName: string): Promise<import('@/repositories/chatRepository').TalosLocalMemory>
         setStatus(
             memoryId: string,
@@ -1062,6 +1095,7 @@ export interface ChatController {
         remove(memoryId: string): Promise<void>
     }
     resendMessage(messageId: string): Promise<void>
+    editUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string): Promise<void>
     retryAssistantMessage(messageId: string): Promise<void>
     /**
      * @param diVoce vero se il turno nasce dalla DETTATURA: marca il messaggio
@@ -1417,6 +1451,20 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
      */
     const imageConsentRequest = ref<{ count: number, provider: string } | null>(null)
     let imageConsentResolve: ((answer: 'allow' | 'once' | 'deny') => void) | null = null
+    /**
+     * ⛔ Il «sì» già dato per QUESTA bozza, e per nessun'altra.
+     *
+     * Serve a non chiedere due volte la stessa cosa. Chi ha appena scelto una
+     * foto dalla galleria ha già visto il cartellino e ha già risposto:
+     * richiederglielo un secondo dopo, premendo Invia, è il modo di insegnare a
+     * rispondere «sì» senza leggere — cioè di distruggere il valore della
+     * domanda proprio mentre si crede di rafforzarlo.
+     *
+     * Vale quanto il contenuto del compositore: si azzera quando la bozza parte
+     * (`clearSent`). Non è una preferenza — quella è
+     * `shell.image_attachment_consent`, e la sposta solo «Sempre».
+     */
+    const imageConsentGivenForDraft = ref(false)
 
     async function answerImageConsent(answer: 'allow' | 'once' | 'deny'): Promise<void> {
         imageConsentRequest.value = null
@@ -1425,7 +1473,35 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // «Sempre» si ricorda; «solo questa volta» e «no» non cambiano niente:
         // una scelta di questo tipo si alza, non si abbassa da sola.
         if (answer === 'allow') await deps.settings.setShell?.({ image_attachment_consent: 'allow' })
+        // Ma «solo questa volta» vale per TUTTA questa bozza: è la risposta a
+        // «queste immagini possono uscire?», e le immagini sono queste.
+        if (answer !== 'deny') imageConsentGivenForDraft.value = true
         resolve?.(answer)
+    }
+
+    /**
+     * La domanda sull'immagine, da una porta sola.
+     *
+     * La chiamano due strade — la scelta di un file nuovo dalla galleria e
+     * l'invio di un file che era GIÀ nel Vault — e devono chiedere la stessa
+     * cosa con le stesse parole. Due formulazioni della stessa domanda sono due
+     * domande diverse per chi le legge.
+     */
+    function askImageConsent(count: number): Promise<'allow' | 'once' | 'deny'> {
+        return new Promise((resolve) => {
+            // Se qualcuno sta gia' rispondendo, la seconda domanda non si
+            // accoda in silenzio: si nega, che e' l'esito prudente.
+            if (imageConsentResolve) { resolve('deny'); return }
+            imageConsentResolve = resolve
+            imageConsentRequest.value = {
+                count,
+                // Il NOME del provider, non il suo identificativo: «anthropic»
+                // in minuscolo e' una chiave interna, e in una frase rivolta
+                // a una persona si legge come un refuso.
+                provider: TALOS_MOBILE_PROVIDERS.find((entry) => entry.id === selectedProfile.value?.provider)?.label
+                    ?? deps.translate('chat.imageConsentProviderUnknown'),
+            }
+        })
     }
 
     /**
@@ -1465,20 +1541,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         translate: deps.translate,
         currentSessionId: () => chat.activeSession.value?.id ?? null,
         imageConsent: () => deps.settings.state.shell?.image_attachment_consent ?? 'ask',
-        askImageConsent: (count) => new Promise((resolve) => {
-            // Se qualcuno sta gia' rispondendo, la seconda domanda non si
-            // accoda in silenzio: si nega, che e' l'esito prudente.
-            if (imageConsentResolve) { resolve('deny'); return }
-            imageConsentResolve = resolve
-            imageConsentRequest.value = {
-                count,
-                // Il NOME del provider, non il suo identificativo: «anthropic»
-                // in minuscolo e' una chiave interna, e in una frase rivolta
-                // a una persona si legge come un refuso.
-                provider: TALOS_MOBILE_PROVIDERS.find((entry) => entry.id === selectedProfile.value?.provider)?.label
-                    ?? deps.translate('chat.imageConsentProviderUnknown'),
-            }
-        }),
+        askImageConsent,
     })
 
     const modelLabPreferences = computed(() =>
@@ -1589,10 +1652,20 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
      * `library_export` sa già esportare qualunque file della Libreria,
      * non serve una funzione di export dedicata per gli artefatti.
      *
-     * ⛔ `sessionId`/`model`/`provider` a `null`: non c'è un turno del
-     * modello in corso quando la persona tocca «salva» — `generatedOrigin`
-     * gestisce già questo caso (nessun profilo trovato ⇒ null), qui lo
-     * stesso, dichiarato esplicitamente invece di inventare un contesto.
+     * ⛔ `model`/`provider` a `null`: non c'è un turno del modello in
+     * corso quando la persona tocca «salva» — `generatedOrigin` gestisce
+     * già questo caso (nessun profilo trovato ⇒ null), qui lo stesso,
+     * dichiarato esplicitamente invece di inventare un contesto.
+     *
+     * ⛔⛔⛔ DEBT-MOBILE-017 (28/8) — `sessionId` NON è nella stessa
+     * situazione: "nessun turno in corso" non vuol dire "nessuna sessione
+     * nota". La chat aperta in quel momento è nota — `chat.activeSession`,
+     * lo stesso posto da cui gli altri cinque chiamanti di
+     * `generatedOrigin` in questo file la leggono. Passare `null` qui
+     * scartava un dato vero già disponibile: il file finiva nella
+     * Libreria globale ma restava per sempre scollegato dalla chat che
+     * l'aveva generato — trovato dall'owner guardando i puntini in alto
+     * a destra della chat, mai nella libreria di quella chat.
      */
     async function saveArtifactToLibrary(
         id: string,
@@ -1610,7 +1683,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             const saved = await attachments.saveGeneratedBinary(
                 { name: `${titolo}.html`, mediaType: 'text/html', bytes: new TextEncoder().encode(html) },
                 false,
-                generatedOrigin(null, null, { toolName: 'artifact_create' }),
+                generatedOrigin(chat.activeSession.value?.id ?? null, null, { toolName: 'artifact_create' }),
             )
             return { ok: true, fileId: saved.id }
         } catch {
@@ -1649,11 +1722,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // the authorization card asks, instead of a silent no that made the
         // settings panel say «ready» while the model had no such tool.
         const inForce = deps.settings.effectiveToolPermissions()
-        const toolPermissions: TalosToolPermissions = {
-            read: inForce?.read ?? TALOS_DEFAULT_TOOL_PERMISSIONS.read,
-            write: inForce?.write ?? TALOS_DEFAULT_TOOL_PERMISSIONS.write,
-            outbound: inForce?.outbound ?? TALOS_DEFAULT_TOOL_PERMISSIONS.outbound,
-        }
+        const toolPermissions = Object.fromEntries(TALOS_TOOL_ACTIONS.map((azione) => [
+            azione,
+            inForce?.[azione] ?? TALOS_DEFAULT_TOOL_PERMISSIONS[azione],
+        ])) as TalosToolPermissions
         const libraryMasterEnabled
             = deps.settings.state.shell?.library_context_enabled === true
         const globalLibraryPolicy = parseTalosLibraryContextPolicy(
@@ -1694,6 +1766,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             timeoutMs: timeoutSeconds ? timeoutSeconds * 1000 : undefined,
             effort: effort.value,
             thinking: thinking.value,
+            agentToolsEnabled: captureAgentTools(identity.sessionId),
             tone: deps.settings.state.tone.preset,
             autosaveGenerated: deps.settings.state.shell?.library_autosave_generated === true,
             debugDiagnostics: deps.settings.state.shell?.debug_diagnostics === true,
@@ -2473,6 +2546,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // exactly as `begin` pushed it — "ok, 0ms" for a send the user watched
         // fail, and one more on the recorded count.
         let trace: TalosSendTraceHandle | null = null
+        /*
+         * «Dettagli esecuzione» — owner 2026-09-13: token, costo e tempi del giro, sommati su
+         * tutti i passaggi. La traccia qui sopra esiste solo se la diagnostica la apre;
+         * questo cronometro c'e' sempre, e finisce nei metadati del messaggio.
+         */
+        const { createTalosRunMeter } = await import('@/lib/chat/runDetails')
+        const runMeter = createTalosRunMeter()
         /**
          * A "round" is the model call AND the tools it then asks for.
          *
@@ -2517,7 +2597,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     ?? profile?.model
                     ?? 'unknown',
             })
-            const autosaveGenerated = sendRuntime.autosaveGenerated
+            const toolsDisabledByPerson = sendRuntime.agentToolsEnabled === false
+            const autosaveGenerated = sendRuntime.autosaveGenerated && !toolsDisabledByPerson
             const baseTonePrompt = buildTalosSystemPrompt(
                 sendRuntime.tone,
                 profile ? { provider: profile.provider, model: providerModel?.displayName ?? profile.model } : null,
@@ -3574,7 +3655,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             const modelSupportsTools = providerModel
                 ? talosModelSupportsToolCalling(providerModel)
                 : false
-            const offeredTools = modelSupportsTools
+            const offeredTools = modelSupportsTools && !toolsDisabledByPerson
                 ? toolset.offer(
                     sendRuntime.toolPermissions,
                     sendRuntime.agentTools,
@@ -3732,6 +3813,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             const turnoDiretto = profile?.provider === 'local'
                 ? catalogo?.talosTurnoDiretto(acceptedTurns) ?? null
                 : null
+            const senzaTool = toolsDisabledByPerson || turnoDiretto?.senzaTool === true
             /*
              * ⛔ Vive quanto la CONVERSAZIONE, non quanto l'invio: uno
              * strumento gia' svelato resta chiamabile al messaggio dopo, e i
@@ -3760,7 +3842,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * rende chiamabile ciò che il modello ha appena chiesto.
              */
             const strumentiEsposti = (): typeof offeredTools => (
-                turnoDiretto?.senzaTool
+                senzaTool
                     ? []
                     : dettagliStrumento
                     ? [
@@ -3795,7 +3877,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * scritta accanto alla misura che l'ha corretta — non in mezzo a
              * duemila righe di controller, dove nessuno la rileggerebbe.
              */
-            const indiceNelPrompt = catalogo && !turnoDiretto?.senzaTool
+            const indiceNelPrompt = catalogo && !senzaTool
                 ? catalogo.talosIstruzioneCatalogo(offeredTools as never)
                 : ''
 
@@ -3889,14 +3971,18 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * fila. Chiedere di parallelizzare cose che si passano il risultato
              * l'una all'altra farebbe partire la seconda con le mani vuote.
              */
-            const parallelInstruction = modelSupportsTools && !turnoDiretto?.senzaTool
+            const parallelInstruction = modelSupportsTools && !senzaTool
                 ? '\nWhen a request needs several tools that do NOT depend on each other, '
                     + 'call them together in the same turn instead of one at a time: it is faster '
                     + 'for the user and cheaper. Around three at once is a good target. '
                     + 'Call them one after another only when a tool genuinely needs the result of '
                     + 'the previous one.'
                 : ''
-            const directAnswerInstruction = turnoDiretto?.istruzione ?? ''
+            const directAnswerInstruction = toolsDisabledByPerson
+                ? '\nThe person has disabled model tools for this chat. Answer directly without calling tools, '
+                    + 'requesting tool consent, or claiming to have used tools. If the task needs a tool, '
+                    + 'explain that it is disabled by the person. User-provided attachments remain available as context.'
+                : turnoDiretto?.istruzione ?? ''
             const tonePrompt = baseTonePrompt
                 + parallelInstruction
                 + (autosaveGenerated && modelSupportsTools && !documentToolOffered
@@ -4150,6 +4236,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     ...handlers,
                     onChunk: (text: string) => {
                         round.open?.firstChunk()
+                        runMeter.firstChunk()
                         grezzo += text
                         const visibile = talosSenzaEnvelopeToolResult(
                             talosVisibleWhileStreaming(grezzo),
@@ -4165,12 +4252,17 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     },
                     onReasoning: (text: string) => {
                         round.open?.firstChunk()
+                        runMeter.firstChunk()
                         handlers.onReasoning?.(text)
                     },
                 }
-                const result = await completeOnce(roundTurns, timed ?? handlers, tools)
+                const result = await completeOnce(roundTurns, timed ?? handlers, toolsDisabledByPerson ? [] : tools)
                 round.open?.cache?.(result.usage)
-                return result
+                runMeter.add(result.usage, result.callId)
+                // Anche una chiamata inattesa dal provider non arriva a preflight/consenso.
+                return toolsDisabledByPerson
+                    ? { ...result, toolCalls: undefined, finishReason: result.toolCalls?.length ? 'stop' : result.finishReason }
+                    : result
             }
             const agentDeps: TalosAgentLoopDeps = {
                 complete: async (turns, opzioni) => {
@@ -4933,6 +5025,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             : {}),
                         tool_authorization_pending_checkpoint_id: markerCheckpoint.id,
                         tool_authorization_pending_count: markerCheckpoint.requests.length,
+                        run: runMeter.finish({ provider: profile?.provider ?? 'unknown', model: providerModel?.id ?? 'unknown' }),
                     },
                     finishReason: 'tool_authorization',
                     reasoning: completion.reasoning,
@@ -5057,6 +5150,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     return [s.tipo + (s.tool ?? s.capacita ?? s.quando ?? ''), r.scheda] as const
                 })).values()]
             const answerMetadata = {
+                // «Dettagli esecuzione»: cio' che il giro e' costato e quanto e' durato.
+                run: runMeter.finish({ provider: profile?.provider ?? 'unknown', model: providerModel?.id ?? 'unknown' }),
                 ...(liveLibrary.receipt
                     ? { library_context_receipt: liveLibrary.receipt }
                     : {}),
@@ -5287,6 +5382,25 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         prepareSend: prepareControllerSend,
     })
     const browseMode = computed(() => chat.activeSession.value?.surface === 'browse')
+    // Solo memoria del controller, distinta dalle preferenze globali dei singoli strumenti.
+    const agentToolsBySession = reactive<Record<string, boolean>>({})
+    // All'avvio la home può non avere ancora un sessionId; il primo invio lo assegna.
+    const agentToolsBeforeSession = ref(true)
+    const agentToolsEnabled = computed(() => {
+        const id = chat.activeSession.value?.id
+        return id ? agentToolsBySession[id] ?? agentToolsBeforeSession.value : agentToolsBeforeSession.value
+    })
+    function setAgentToolsEnabled(enabled: boolean): void {
+        const id = chat.activeSession.value?.id
+        if (id) agentToolsBySession[id] = enabled
+        else agentToolsBeforeSession.value = enabled
+    }
+    function captureAgentTools(sessionId: string): boolean {
+        const enabled = agentToolsBySession[sessionId] ?? agentToolsBeforeSession.value
+        agentToolsBySession[sessionId] = enabled
+        agentToolsBeforeSession.value = true
+        return enabled
+    }
     const canSend = computed(() =>
         chat.state.persistenceStatus === 'ready'
         && chat.state.persistenceError === null
@@ -5303,7 +5417,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
      * app; nothing asked WHICH conversation it belonged to, though the store
      * knew.
      */
-    const composerBusy = computed(() => talosComposerBusy(
+    const composerBusy = computed(() => chat.state.editingMessage ? 'this-chat' : talosComposerBusy(
         chat.state.sending,
         chat.state.sendingSessionId,
         chat.activeSession.value?.id ?? null,
@@ -5383,7 +5497,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         return true
     }
 
-    function ensureSelection(preferredProvider?: TalosMobileProviderId): void {
+    /**
+     * Torna DA DOVE viene la selezione: `attesa` (il modello che aspettava il
+     * catalogo), `tenuto` (quello già selezionato), `preferenza` (composer_model
+     * dal deposito) o `ripiego` (il primo richiamabile, che NESSUNO ha scelto).
+     * D-M-1 (12/09): chi persiste guarda questo esito, e un ripiego non si scrive.
+     */
+    function ensureSelection(preferredProvider?: TalosMobileProviderId): 'attesa' | 'tenuto' | 'preferenza' | 'ripiego' {
         /*
          * ⛔⛔ PRIMA DI TUTTO: il modello che la persona aveva scelto e che non
          * si era potuto applicare perché il catalogo non si leggeva.
@@ -5396,13 +5516,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         if (modelloInAttesa && applyModelSelection(modelloInAttesa)) {
             talosTracciaFuori(`modello: riavuto=${modelloInAttesa}`)
             modelloInAttesa = null
-            return
+            return 'attesa'
         }
-        if (applyModelSelection(selectedModelId.value)) return
+        if (applyModelSelection(selectedModelId.value)) return 'tenuto'
         // ⛔ PRIMA la scelta della persona, poi qualunque automatismo. È la riga
         // che fa arrivare alla barra il modello scelto nella chat: senza, la
         // finestra nuova parte da `null` e si sceglie il modello da sola.
-        if (applyModelSelection(deps.settings.state.shell?.composer_model ?? null)) return
+        if (applyModelSelection(deps.settings.state.shell?.composer_model ?? null)) return 'preferenza'
         const preferred = preferredProvider
             ? profiles.value.find((profile) =>
                 profile.provider === preferredProvider
@@ -5414,9 +5534,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             profile.show_in_composer && talosMobileModelProfileIsCallable(profile),
         )
         const next = preferred ?? callable ?? null
+        // D-M-1 (12/09): il RIPIEGO lascia una riga — è la strada che mette un
+        // modello mai scelto nel compositore.
+        talosTracciaFuori(`modello: ripiego=${next?.id ?? '∅'} prima=${selectedModelId.value ?? '∅'} pref=${deps.settings.state.shell?.composer_model ?? '∅'} attesa=${modelloInAttesa ?? '∅'}`)
         selectedModelId.value = next?.id ?? null
         effort.value = clampMobileEffort(next?.effort_levels, effort.value)
         if (!next?.supports_thinking) thinking.value = false
+        return 'ripiego'
     }
 
     async function refreshSecrets(): Promise<void> {
@@ -5646,8 +5770,22 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     }
 
     async function persistSelectionAfterProjectionChange(previousModelId: string | null): Promise<void> {
-        ensureSelection()
+        const esito = ensureSelection()
         if (selectedModelId.value === previousModelId) return
+        /*
+         * D-M-1 (12/09, MISURATO sul Pad): la chat «Dimmi in una frase…» risposta da
+         * GLM si riapriva su «Sakana: Fugu Max», e all'avvio il diario diceva
+         * `ripreso=openrouter:sakana/fugu-max da=sessione`. Questa funzione
+         * scriveva nella SESSIONE e nei predefiniti anche un RIPIEGO — la stessa
+         * cosa che il 13/08 faceva `applyModelSelection` con composer_model.
+         * ⇒ Un ripiego resta a schermo (è giusto, lì per lì) ma non si scrive da
+         * nessuna parte; il modello di prima resta in attesa e torna da solo.
+         */
+        if (esito === 'ripiego') {
+            talosTracciaFuori(`modello: ripiego-non-scritto=${selectedModelId.value ?? '∅'} prima=${previousModelId ?? '∅'}`)
+            if (previousModelId && !modelloInAttesa) modelloInAttesa = previousModelId
+            return
+        }
         const operations: Promise<unknown>[] = [persistComposerDefaults()]
         if (chat.activeSession.value) operations.push(chat.setActiveModelProfile(selectedModelId.value))
         await Promise.all(operations)
@@ -6526,6 +6664,19 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
 
                     return { spend: collection.spend, resultRef: stored?.file.id ?? null }
                 },
+                /**
+                 * MB-1 · C20 — il cancello della consegna guarda il FILE.
+                 *
+                 * Restituisce il documento grezzo, non il record gia' letto:
+                 * chi decide se «conclusa» si e' guadagnata deve poter
+                 * distinguere «non si rilegge» da «si rilegge ed e' vuoto», e
+                 * un lettore che torna `null` per entrambi i casi cancella
+                 * proprio la differenza che serve.
+                 */
+                readReport: async (resultRef) => {
+                    const file = await deps.chatRepository.getVaultFile(resultRef).catch(() => null)
+                    return file?.extracted_text ?? null
+                },
             })
         }
         async function ready() {
@@ -6983,6 +7134,21 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             },
 
             /**
+             * Il rapporto COM'E' SCRITTO, prima che qualcuno provi a capirlo. (MB-1)
+             *
+             * Accanto a `report` e non al suo posto: quello torna il record
+             * ricostruito ed e' cio' che serve per disegnare i verdetti; questo
+             * torna il testo, ed e' cio' che serve per giudicare se un rapporto
+             * esiste davvero. Un rapporto che non si rilegge sparisce dal primo
+             * e resta intero nel secondo — ed e' esattamente il caso in cui c'e'
+             * qualcosa da dire a chi guarda.
+             */
+            async reportDocument(fileId: string): Promise<string | null> {
+                const file = await deps.chatRepository.getVaultFile(fileId).catch(() => null)
+                return file?.extracted_text ?? null
+            },
+
+            /**
              * Talk about a research in a chat — a REAL one.
              *
              * Owner 2026-08-03: «quando in fondo voglio fare partire un'altra
@@ -7029,6 +7195,66 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         }
     })()
 
+    /**
+     * ⛔⛔ IL CANCELLO STA SULL'INVIO, non sulla scelta del file.
+     *
+     * ## Il buco, e perché nessuno lo vedeva
+     *
+     * Il consenso sulle immagini esisteva da mesi, e stava in una strada sola:
+     * quella che sceglie un file NUOVO dalla galleria
+     * (`useTalosMobileAttachments.pick`). Ma nella chat un'immagine può entrare
+     * anche da un'altra porta — `attachExisting`, cioè un file **già nel
+     * Vault**, archiviato ieri, ripescato dalla Libreria. Quella porta non
+     * chiedeva niente: una foto messa da parte una settimana fa partiva verso
+     * OpenRouter senza che comparisse nessun cartellino.
+     *
+     * ⛔ Il difetto non era «manca una chiamata in `attachExisting`». Era che il
+     * cancello stava sul gesto SBAGLIATO: allegare non fa uscire niente dal
+     * telefono: **inviare** sì. Finché la guardia sta sull'allegare, ogni porta
+     * nuova verso il vassoio è un buco nuovo, e ce ne sarà una domani.
+     *
+     * ⇒ La guardia si sposta dove avviene la cosa di cui si chiede il permesso.
+     * È anche ciò che la piattaforma raccomanda: chiedere il consenso **nel
+     * momento in cui la funzione che ne ha bisogno viene usata**, non prima e
+     * non altrove — Android, *App permissions best practices*, letto
+     * 12/09/2026: https://developer.android.com/training/permissions/usage-notes
+     *
+     * ## Le tre risposte, e perché sono tre
+     *
+     * - **Modello locale** → nessuna domanda. Non esce niente: il modello è un
+     *   file su questo disco. Chiedere il permesso di fare una cosa che non si
+     *   sta facendo è il rumore che insegna a rispondere senza leggere.
+     * - **Consenso già dato per questa bozza** → nessuna domanda. La foto
+     *   appena scelta ha già avuto il suo cartellino un secondo fa.
+     * - **Tutto il resto** → si chiede, e un «no» **ferma l'invio**. Non lo
+     *   manda senza immagini: manderebbe una domanda priva della cosa di cui
+     *   parla, che è il modo peggiore di obbedire.
+     */
+    async function immaginiAutorizzateAUscire(): Promise<boolean> {
+        const immagini = attachments.items.filter((item) =>
+            item.status === 'authorized' && item.mediaType.startsWith('image/'))
+        const decisione = talosImageSendDecision({
+            imageCount: immagini.length,
+            // ⛔ Il provider DOPO l'eventuale passaggio a un modello che vede le
+            // immagini: è quello a cui la foto andrà davvero.
+            provider: selectedProfile.value?.provider ?? null,
+            alreadyAnsweredForDraft: imageConsentGivenForDraft.value,
+            stance: deps.settings.state.shell?.image_attachment_consent ?? 'ask',
+        })
+        if (decisione === 'send') return true
+        if (decisione === 'refuse') {
+            toasts.push({ message: deps.translate('chat.imageConsentDenied'), durationMs: 6000 })
+            return false
+        }
+
+        const answer = await askImageConsent(immagini.length)
+        if (answer === 'deny') {
+            toasts.push({ message: deps.translate('chat.imageConsentDenied'), durationMs: 6000 })
+            return false
+        }
+        return true
+    }
+
     async function send(
         text: string,
         turnPolicy: TalosLibraryTurnOverride | null = null,
@@ -7045,6 +7271,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     ): Promise<boolean> {
         clearPromptEnhancement()
         preferVisionProfileForAttachments()
+        // ⛔ DOPO la scelta del modello per le immagini, mai prima: quella riga
+        // può cambiare provider, e il cartellino deve nominare il provider a cui
+        // la foto andrà DAVVERO.
+        if (!await immaginiAutorizzateAUscire()) return false
         const accepted = await chat.send(
             text,
             selectedModelId.value,
@@ -7060,7 +7290,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // Owner 2026-07-24: clear the composer's attachments the instant the
             // user turn is COMMITTED — not after the whole generation, which left
             // the sent file lingering in the composer for the entire response.
-            () => attachments.clearSent(),
+            () => {
+                attachments.clearSent()
+                // La bozza è partita: il «sì» valeva per quelle immagini, non
+                // per le prossime. Un consenso che sopravvive al suo oggetto
+                // non è più un consenso, è un interruttore che nessuno ha
+                // acceso di proposito.
+                imageConsentGivenForDraft.value = false
+            },
             turnPolicy,
         )
         return accepted
@@ -7096,6 +7333,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // messaggio dell'utente resta visibile e confrontabile.
             return []
         }
+    }
+
+    async function editUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string): Promise<void> {
+        if (composerBusy.value !== 'idle' || pendingToolAuthorizations.value.length || toolAuthorizationRecoveries.value.length) {
+            throw new Error(deps.translate('chat.editMessageUnavailable'))
+        }
+        await chat.editUserMessage(sessionId, messageId, expectedLastMessageId)
+        clearPromptEnhancement()
     }
 
     async function resendMessage(messageId: string): Promise<void> {
@@ -7147,6 +7392,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
      */
     async function newSession(options: { ephemeral?: boolean } = {}): Promise<void> {
         clearPromptEnhancement()
+        agentToolsBeforeSession.value = true
         await chat.createSession(
             options.ephemeral ? deps.translate('chat.temporaryChat') : undefined,
             selectedModelId.value,
@@ -7156,9 +7402,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
 
     async function selectSession(sessionId: string): Promise<void> {
         clearPromptEnhancement()
+        agentToolsBeforeSession.value = true
         await chat.selectSession(sessionId)
         const restoredModel = chat.activeSession.value?.active_model_profile_id
-        if (restoredModel) applyModelSelection(restoredModel)
+        const applicato = restoredModel ? applyModelSelection(restoredModel) : false
+        // D-M-1 (12/09): la sonda che dice DA DOVE viene il modello mostrato
+        // riaprendo una chat — visto sul Pad «Sakana: Fugu Max» su una chat
+        // risposta da GLM. Parla anche quando va bene, come quella dell'avvio.
+        talosTracciaFuori(`modello: sessione=${sessionId.slice(0, 8)} salvato=${restoredModel ?? '∅'} applicato=${applicato} ora=${selectedModelId.value ?? '∅'}`)
     }
 
     async function renameSession(sessionId: string, title: string): Promise<void> {
@@ -7217,6 +7468,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
 
     return {
         sessionLifecycle,
+        searchMessages: (term: string, options?: { limit?: number }) => deps.chatRepository.searchMessages(term, options),
+        listSearchFiles: () => deps.chatRepository.listVaultFileSummaries(),
         catalogs: readonly(catalogs) as Readonly<Record<TalosMobileProviderId, ProviderCatalogState>>,
         endpoints: readonly(endpoints) as Readonly<Record<TalosMobileProviderId, string | null>>,
         modelLabPreferences,
@@ -7261,6 +7514,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         canSend,
         composerBusy,
         browseMode,
+        agentToolsEnabled,
+        setAgentToolsEnabled,
         sendDisabledReason,
         preferenceError: readonly(preferenceError),
         enhancingPrompt: readonly(enhancingPrompt),
@@ -7304,6 +7559,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         notes,
         research,
         resendMessage,
+        editUserMessage,
         retryAssistantMessage,
         send,
         enhancePrompt,

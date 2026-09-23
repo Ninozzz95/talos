@@ -70,6 +70,36 @@ public class TalosLlamaPlugin extends Plugin {
     private static final long CHIUSURA_MAX_MS = 1500L;
     private final AtomicReference<TalosLlamaEngine> openEngine = new AtomicReference<>(null);
     private final AtomicReference<String> openPath = new AtomicReference<>(null);
+
+    /**
+     * ⭐⭐⭐ CON QUALI MANOPOLE DI CARICAMENTO è aperto il modello che c'è ora.
+     *
+     * ⛔ Non è contabilità: senza questi due, chiedere un {@code loadMode}
+     * diverso sullo STESSO file finirebbe nella strada veloce qui sotto — che
+     * riusa i pesi già in memoria apposta per non ripagare i gigabyte — e la
+     * manopola non avrebbe alcun effetto, in silenzio, mentre chi misura crede
+     * di aver misurato. È lo stesso avviso che PocketPal mette sotto i suoi
+     * interruttori («Model reload needed for changes to take effect»), con la
+     * differenza che qui non lo si chiede all'utente: lo si applica.
+     */
+    private final AtomicReference<String> openLoadMode = new AtomicReference<>("default");
+    private volatile int openWeightRepack = -1;
+
+    /**
+     * ⭐⭐⭐ SU QUALE MOTORE sono stati caricati i pesi che ci sono ora.
+     *
+     * ⛔ Stessa ragione dei due qui sopra, e la stessa trappola: il bersaglio
+     * di offload vive in {@code llama_model_params.devices}, cioè in DOVE i
+     * tensori sono stati allocati. {@link TalosLlamaEngine#reopenContext}
+     * rifà il contesto e riusa i pesi apposta — quindi passare da CPU a GPU
+     * senza questo confronto tornerebbe {@code ok} e lascerebbe tutto dov'era.
+     *
+     * ⇒ È esattamente «backend selezionabile ≠ backend realmente utilizzato»,
+     * il difetto che l'owner ha chiesto di non ereditare (2026-09-10). Qui non
+     * lo si scrive in un avviso: lo si rende impossibile.
+     */
+    private final AtomicReference<String> openBackend = new AtomicReference<>("");
+    private final AtomicReference<String> openDevice = new AtomicReference<>("");
     /** True from the moment a generation is accepted until it has finished. */
     private final AtomicBoolean generating = new AtomicBoolean(false);
 
@@ -196,8 +226,36 @@ public class TalosLlamaPlugin extends Plugin {
                     result.put("microBatch", snapshot.getInt("microBatch"));
                     result.put("gpuLayersEffective", snapshot.getInt("gpuLayersEffective"));
                     result.put("flashAttnEffective", snapshot.getString("flashAttnEffective"));
+                    // Le manopole di caricamento, dallo schema 2 in poi.
+                    // ⛔ Si CHIEDE se il campo c'è invece di leggerlo con un
+                    // ripiego: una snapshot di schema 1 non ha `weightRepack`,
+                    // e un ripiego lo farebbe comparire come `false` — cioè
+                    // una risposta, e sbagliata. Non comparire affatto è la
+                    // sola cosa vera che si possa dire.
+                    if (snapshot.has("loadMode")) {
+                        result.put("loadMode", snapshot.getString("loadMode"));
+                        result.put("weightRepack", snapshot.getBoolean("weightRepack"));
+                        result.put("mmapSupported", snapshot.getBoolean("mmapSupported"));
+                        result.put("mlockSupported", snapshot.getBoolean("mlockSupported"));
+                    }
                     if (!snapshot.isNull("backendDevice")) {
                         result.put("backendDevice", snapshot.getString("backendDevice"));
+                    }
+                    /*
+                     * ⛔⛔ I due fatti che permettono di distinguere «gira su
+                     * CPU» da «non so dove gira». Schema 3 in poi, e si CHIEDE
+                     * se il campo c'è: un ripiego li farebbe comparire come 0
+                     * e false, cioè come due risposte, e sbagliate.
+                     *
+                     * {@code offloadDevices == 0} è l'unico modo per dire con
+                     * certezza che una richiesta di GPU non poteva essere
+                     * onorata in questa build — che è, oggi, il caso di ogni
+                     * build di DEBUG: in {@code app/build.gradle} GGML_OPENCL
+                     * entra solo nel blocco {@code release}.
+                     */
+                    if (snapshot.has("offloadDevices")) {
+                        result.put("offloadDevices", snapshot.getInt("offloadDevices"));
+                        result.put("threadPoolSplit", snapshot.getBoolean("threadPoolSplit"));
                     }
                 } catch (JSONException malformed) {
                     android.util.Log.w("TalosLlama", "runtimeSnapshot malformata", malformed);
@@ -279,12 +337,23 @@ public class TalosLlamaPlugin extends Plugin {
          * generazione vera, tempo e batteria — è una scelta di prodotto che
          * questa consegna non include.
          */
+        /*
+         * ⭐⭐⭐ L'ARBITRO ADESSO CONOSCE L'NPU, e sa su quale FILE sta decidendo.
+         *
+         * ⛔ Il permesso si legge dall'intestazione di QUESTO modello, non dal
+         * telefono: l'evidenza vive per driver, il formato dei pesi cambia a
+         * ogni modello. Costa un `open` e qualche kilobyte (`no_alloc`), e si
+         * paga prima di aprire — aprire per sapere dove aprire vorrebbe dire
+         * pagare i pesi due volte.
+         */
+        final TalosBackendChoice.Decision arbitro = TalosBackendChoice.choose(
+                android.os.Build.FINGERPRINT,
+                TalosThermal.read(getContext()),
+                TalosBackendEvidenceStore.load(getContext()),
+                formatoPerNpu(path));
         final int gpuLayers = call.getData().has("gpuLayers")
                 ? call.getInt("gpuLayers", 0)
-                : TalosBackendChoice.gpuLayers(TalosBackendChoice.choose(
-                        android.os.Build.FINGERPRINT,
-                        TalosThermal.read(getContext()),
-                        TalosBackendEvidenceStore.load(getContext())));
+                : TalosBackendChoice.gpuLayers(arbitro);
         // Zero significa «come prima»: stesso numero di thread per prefill e
         // generazione, microbatch implicito. Chi ha letto la forma della CPU
         // manda due numeri veri; il banco di prova continua a non mandarli,
@@ -296,6 +365,73 @@ public class TalosLlamaPlugin extends Plugin {
         // è la combinazione che regge sempre, e una chat che parte è meglio di
         // una che ha più contesto e non si apre.
         final String kvType = call.getString("kvCacheType", "f16");
+        /*
+         * ⭐⭐⭐ COME i pesi entrano in memoria — mmap, mlock, ripacchettamento.
+         *
+         * ⛔⛔ IL PREDEFINITO È «COME OGGI», E RESTA TALE FINCHÉ NON C'È LA
+         * MISURA. `"default"` vuol dire che nessuno tocca
+         * `llama_model_params.load_mode`, quindi vale il predefinito di
+         * llama.cpp — `LLAMA_LOAD_MODE_AUTO` — che è esattamente ciò che TALOS
+         * ha sempre fatto. La manopola diventa raggiungibile; il comportamento
+         * non cambia di un millesimo.
+         *
+         * ⇒ ⛔ QUANDO ARRIVA LA MISURA, LA RIGA DA CAMBIARE È QUESTA QUI SOTTO,
+         * e nessun'altra: il secondo argomento di `call.getString("loadMode", …)`.
+         * La matrice `auto/none/mmap/mmap+mlock` × CPU/GPU × Q4_0/Q4_K_M sul Pad
+         * vero sta girando adesso e finisce in
+         * `.claude/TACCUINO-VELOCITA-LOCALE-2026-09-10.md`.
+         *
+         * ⛔ E il valore giusto potrebbe non essere una costante. Un dispositivo
+         * con poca RAM libera e un modello grande non vuole lo stesso `mlock` di
+         * un tablet da 12 GB, e questo progetto ha già pagato una volta un numero
+         * unico per ogni dispositivo (vedi il commento su
+         * `TALOS_LOCAL_MAX_CONTEXT_TOKENS` in `src/lib/models/localContextPolicy.ts`,
+         * owner 2026-08-05: «TALOS è dinamico e adattabile a ogni modello — una
+         * cosa scritta a mano non potrebbe mai esistere»). Il posto dove quella
+         * scelta diventerà una FUNZIONE della RAM e della taglia del modello è il
+         * chiamante — `talosLocalEngineOpen` in TypeScript, che quei numeri già li
+         * ha. ⛔ Ma non si inventa una soglia senza un dato: oggi il buco è
+         * dichiarato, non riempito.
+         */
+        /*
+         * ⭐⭐⭐ DOVE far girare il modello — la scelta dell'utente, 2026-09-10.
+         *
+         * Owner: «LA SCELTA RESTA ALL UTENTE, SCEGLIE SEMPRE LUI, CPU GPU O
+         * HEXAGON, DI DEFAULT SCEGLIAMO QUELLO PIU VELOCE (DI SOLITO GPU)».
+         *
+         * ⛔ Vuoto = nessuna richiesta = come si è sempre fatto: llama.cpp
+         * sceglie da sé e {@link TalosBackendChoice} decide solo QUANTI strati.
+         * Il predefinito non cambia di un millesimo finché il chiamante non
+         * nomina qualcosa.
+         *
+         * ⛔ E chi nomina qualcosa lo ottiene o lo sa: un registry che non si
+         * risolve fa fallire l'apertura invece di ripiegare in silenzio sulla
+         * CPU. La differenza fra «l'ho scelto» e «sta girando» è tutta qui.
+         */
+        /*
+         * ⛔⛔ E SE NESSUNO NOMINA NIENTE, LO NOMINA L'ARBITRO.
+         *
+         * Con OpenCL e HTP entrambi registrati — da oggi, su questo Pad —
+         * `gpuLayers = -1` senza un nome lascia scegliere all'ordine di
+         * caricamento delle librerie. La chat chiederebbe «tutti gli strati» e
+         * finirebbe su uno dei due a sorte, con la misura dell'altro in mano.
+         *
+         * ⛔ Chi nomina qualcosa continua a vincere, invariato: questo entra
+         * solo nel caso «nessuna richiesta», dove prima c'era il sorteggio.
+         * E quando l'arbitro sceglie la CPU la stringa resta vuota, perche'
+         * con zero strati non c'e' niente da nominare.
+         */
+        final String backendChiesto = call.getString("backend", "");
+        final String backendName = !backendChiesto.isEmpty()
+                ? backendChiesto
+                : (call.getData().has("gpuLayers")
+                        ? "" : TalosBackendChoice.registryOf(arbitro));
+        final String deviceName = call.getString("device", "");
+        final String loadMode = call.getString("loadMode", "default");
+        final Boolean repackChiesto = call.getBoolean("weightRepack", null);
+        // Tri-stato: assente NON è «acceso». Solo così il predefinito resta
+        // quello di upstream anche il giorno in cui upstream lo cambia.
+        final int weightRepack = repackChiesto == null ? -1 : (repackChiesto ? 1 : 0);
         // Chiedibile, e falso per difetto: la chat vuole un campionamento vero,
         // il banco di prova vuole l'argmax perché confronta due backend e
         // pretende lo stesso testo da entrambi. Erano la stessa cosa, ed è da
@@ -328,7 +464,31 @@ public class TalosLlamaPlugin extends Plugin {
              * ma è quella che c'era prima e funziona.
              */
             TalosLlamaEngine aperto = openEngine.get();
-            if (aperto != null && path.equals(openPath.get())) {
+            /*
+             * ⛔⛔ LA STRADA VELOCE NON PUÒ INGHIOTTIRE UNA MANOPOLA DI
+             * CARICAMENTO. `reopenContext` rifà il contesto e RIUSA i pesi già
+             * in memoria — è tutto il suo valore, 111 s contro 195 ms —, ma
+             * `load_mode` e `use_extra_bufts` stanno in `llama_model_params`,
+             * cioè in come quei pesi sono stati LETTI dal disco. Riusarli vuol
+             * dire tenersi la vecchia modalità.
+             *
+             * Senza questo confronto la manopola sarebbe stata raggiungibile e
+             * inefficace insieme: il chiamante chiede `mmap+mlock`, la risposta
+             * torna `ok`, e i pesi sono ancora quelli caricati in `auto`. È il
+             * difetto peggiore di tutti — quello che non dà errore — e questo
+             * file ne ha già visti abbastanza.
+             */
+            /*
+             * ⛔ Il bersaglio entra in QUESTA guardia e non in una sua: è una
+             * proprietà di come i pesi sono stati allocati, esattamente come
+             * `load_mode` e `use_extra_bufts`. Un confronto separato sarebbe
+             * due guardie che possono divergere; una sola non può.
+             */
+            final boolean stesseManopoleDiCarico =
+                    loadMode.equals(openLoadMode.get()) && weightRepack == openWeightRepack
+                    && backendName.equals(openBackend.get())
+                    && deviceName.equals(openDevice.get());
+            if (aperto != null && path.equals(openPath.get()) && stesseManopoleDiCarico) {
                 int ottenuto = aperto.reopenContext(
                         threads, contextTokens, threadsBatch, microBatch, kvType, deterministic);
                 if (ottenuto > 0) {
@@ -351,7 +511,8 @@ public class TalosLlamaPlugin extends Plugin {
             closeOpenModel();
             TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
                     getContext(), path, threads, contextTokens, gpuLayers, deterministic,
-                    threadsBatch, microBatch, kvType);
+                    threadsBatch, microBatch, kvType, loadMode, weightRepack,
+                    backendName, deviceName);
             TalosLlamaEngine engine = attempt.engine();
             if (engine == null) {
                 JSObject failure = new JSObject();
@@ -368,6 +529,12 @@ public class TalosLlamaPlugin extends Plugin {
              */
             contrattoCaldo.ripreso();
             openPath.set(path);
+            // Con che cosa sono stati letti QUESTI pesi: è la domanda a cui il
+            // giro successivo deve poter rispondere prima di riusarli.
+            openLoadMode.set(loadMode);
+            openWeightRepack = weightRepack;
+            openBackend.set(backendName);
+            openDevice.set(deviceName);
             lastOpenMs = (System.nanoTime() - inizioApertura) / 1_000_000L;
             lastOpenReusedWeights = false;
             JSObject result = new JSObject();
@@ -464,6 +631,160 @@ public class TalosLlamaPlugin extends Plugin {
             result.put("ms", (System.nanoTime() - inizio) / 1_000_000L);
             call.resolve(result);
         });
+    }
+
+    /**
+     * ⭐⭐⭐ QUALI MOTORI ENTRANO DAVVERO, e per gli altri PERCHÉ no.
+     *
+     * ## Perché serve, misurato sul Pad il 2026-09-10
+     *
+     * Trenta strati su trenta assegnati alla CPU, e nel pacchetto installato
+     * c'erano **3,2 MB** di `libggml-opencl.so` che nessuno eseguiva. Il driver
+     * di sistema c'è (`/vendor/lib64/libOpenCL.so`) ed è nell'elenco delle
+     * librerie **pubbliche**, quindi un'app può caricarlo; la nostra libreria lo
+     * cerca davvero (`clGetPlatformIDs` fra i suoi simboli). Eppure nel logcat
+     * di un caricamento vero non c'era **nessuna** riga di registrazione.
+     *
+     * ⛔ E non poteva esserci: `ggml_backend_load_all_from_path` sceglie
+     * `silent = true` sotto `NDEBUG`, e la nostra è una build di rilascio. Un
+     * fallimento di caricamento è **muto per costruzione**. È un problema noto
+     * upstream con `GGML_BACKEND_DL`, dove «no backends are loaded» pur essendo
+     * i file al loro posto —
+     * https://github.com/ggml-org/llama.cpp/issues/22547 e
+     * https://github.com/ggml-org/llama.cpp/discussions/12821 (letti il
+     * 2026-09-10).
+     *
+     * ## Perché un metodo a parte e non l'inventario
+     *
+     * {@link TalosLlamaNative#nativeBackendInventory()} dice **chi c'è**.
+     * Questa dice **perché qualcuno manca**: prova ogni `libggml-*.so` della
+     * cartella una per una, con `silent = false`, e per ognuna riporta se è
+     * entrata. Sono le due metà della stessa domanda, e finora ne avevamo una.
+     *
+     * ⛔ Il nativo esisteva già, completo, dal giorno in cui è stato scritto —
+     * e **nessuno lo chiamava**: una sola riga in tutto il progetto, la
+     * dichiarazione `native`. Questo metodo è quella chiamata.
+     *
+     * ⛔ NON si esegue da sola all'avvio: caricare ogni libreria ha effetti
+     * (registra backend), e un effetto che nessuno ha chiesto non appartiene a
+     * un percorso automatico. È un'azione esplicita, come il sondaggio della
+     * GPU.
+     */
+    @PluginMethod
+    public void probeBackendLoad(PluginCall call) {
+        android.content.Context context = getContext();
+        String cartella = context == null ? "" : context.getApplicationInfo().nativeLibraryDir;
+        worker.execute(() -> {
+            long inizio = System.nanoTime();
+            TalosLlamaNative.ensureReady(context);
+            String report = TalosLlamaNative.nativeProbeBackendLoad(cartella);
+            JSObject result = new JSObject();
+            result.put("report", report == null ? "" : report);
+            result.put("ms", (System.nanoTime() - inizio) / 1_000_000L);
+            call.resolve(result);
+        });
+    }
+
+    /**
+     * ⭐⭐⭐ IL FORMATO DEI PESI, letto dal file PRIMA di aprirlo.
+     *
+     * Misurato sul Pad l'11/09/2026 — stesso modello, stesso giorno, cambia
+     * solo il formato:
+     *
+     * <pre>
+     *   Qwen3-4B  Q4_0     NPU  lettura 1126 t/s   scrittura 14,0
+     *   Qwen3-4B  Q4_K_M   NPU  lettura   55,7     scrittura  5,0
+     *                      GPU  lettura  206       scrittura 16,7
+     * </pre>
+     *
+     * ⛔ **Venti volte piu' lenta**, e quattro volte sotto la GPU: accendere
+     * l'NPU su un Q4_K_M rende l'app peggiore di non averla. E il catalogo e'
+     * 14 Q4_K_M contro 7 Q4_0.
+     *
+     * ⛔ PRIMA di aprire, non dopo: la scelta del motore si fa prima
+     * dell'apertura, e aprire per sapere dove aprire vorrebbe dire pagare i
+     * pesi due volte — difetto che questo progetto ha gia' pagato una volta.
+     *
+     * ⛔ Legge solo l'intestazione GGUF (`no_alloc`), non i pesi: costa un
+     * `open` e qualche kilobyte.
+     *
+     * ⛔ `fileType = -1` significa **non dichiarato**, e non e' `0` — che e'
+     * `F32`, un formato vero. Chi legge deve distinguere i due.
+     */
+    @PluginMethod
+    public void modelFormat(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null || path.isEmpty()) {
+            call.reject("TALOS_LLAMA_PATH_REQUIRED");
+            return;
+        }
+        worker.execute(() -> {
+            TalosLlamaNative.ensureReady(getContext());
+            String json = TalosLlamaNative.AVAILABLE
+                    ? TalosLlamaNative.nativeArchitectureOf(path)
+                    : null;
+            call.resolve(new JSObject().put("format", json == null ? "" : json));
+        });
+    }
+
+    /**
+     * ⭐⭐⭐ A CHE PUNTO E' IL CARICAMENTO — la meta' dell'attesa che finora
+     * nessun numero dichiarava.
+     *
+     * Misurato sul Pad il 10/09 (ledger §44): aprire `gemma-4-E2B-it-Q4_0`
+     * sulla GPU costa **50 secondi** di soli tensori, su 76 totali fino alla
+     * prima parola. La riga sotto la risposta ne dichiarava **24,2**, perche'
+     * il suo orologio parte a modello gia' aperto.
+     *
+     * ⛔ NON e' un evento che arriva da solo: si chiede. Il nativo tiene un
+     * contatore atomico e questa lo legge — stesso schema di
+     * {@code nativeTokensProduced}, e per lo stesso motivo scritto in testa al
+     * JNI: una callback per tensore attraverserebbe il confine 601 volte.
+     *
+     * ⛔ {@code permille == -1} vuol dire **«non sta caricando»**, e chi disegna
+     * la barra deve distinguerlo da {@code 0}. Il campo {@code loading} lo dice
+     * a parole, cosi' il lato JS non deve conoscere la convenzione del -1.
+     *
+     * ⛔ FUORI dal {@code worker}, apposta: e' la lettura di un intero atomico e
+     * viene chiesta ogni poche centinaia di millisecondi MENTRE il worker e'
+     * fermo dentro il caricamento. Metterla in coda sullo stesso executor
+     * significherebbe riceverne la risposta quando il caricamento e' finito —
+     * cioe' mai quando serve.
+     */
+    @PluginMethod
+    public void loadProgress(PluginCall call) {
+        int permille = TalosLlamaNative.nativeLoadProgressPermille();
+        // ⛔ Solo mentre carica DAVVERO: a -1 questa riga uscirebbe due volte al
+        // secondo per tutta la durata di qualunque attesa, e seppellirebbe il
+        // log proprio quando serve. La riga esiste perche' e' quella che ha
+        // provato che la catena funziona (ledger §46): il contatore passa da
+        // -1 a 0 quando il caricamento parte, e risale 0 → 70 → 566 → 951.
+        if (permille >= 0) {
+            android.util.Log.i("TalosCarico", "loadProgress: permille=" + permille);
+        }
+        JSObject result = new JSObject();
+        result.put("permille", permille);
+        result.put("loading", permille >= 0);
+        call.resolve(result);
+    }
+
+    /**
+     * Ferma il caricamento in corso — il pulsante «annulla» accanto alla barra.
+     *
+     * ⛔ Non e' un errore chiamarlo quando non sta caricando niente: il nativo
+     * azzera il flag all'inizio di ogni apertura, quindi una pressione fuori
+     * tempo non puo' uccidere il caricamento successivo.
+     *
+     * ⛔ Chi stava aprendo riceve {@code 0} da {@code nativeOpen} esattamente
+     * come per un errore: la differenza si legge in
+     * {@code nativeLastOpenError}, che dice {@code load-cancelled}. A schermo
+     * devono restare due frasi diverse — «l'hai fermato tu» non e' «non ce l'ha
+     * fatta».
+     */
+    @PluginMethod
+    public void cancelLoad(PluginCall call) {
+        TalosLlamaNative.nativeCancelLoad();
+        call.resolve(new JSObject().put("ok", true));
     }
 
     /**
@@ -1023,6 +1344,12 @@ public class TalosLlamaPlugin extends Plugin {
     private void closeOpenModel() {
         TalosLlamaEngine engine = openEngine.getAndSet(null);
         openPath.set(null);
+        // Insieme al percorso: un modello chiuso non è aperto «in default», è
+        // proprio non aperto, e il giro dopo non deve confrontarsi con residui.
+        openLoadMode.set("default");
+        openWeightRepack = -1;
+        openBackend.set("");
+        openDevice.set("");
         if (engine != null) engine.close();
     }
 
@@ -1228,6 +1555,8 @@ public class TalosLlamaPlugin extends Plugin {
                 row.put("outcome", profilo.outcome == TalosBackendChoice.Outcome.CORRECT ? "CORRECT" : "FAILED");
                 row.put("ttftMs", profilo.ttftMs);
                 row.put("decodeTokPerSec", profilo.decodeTokPerSec);
+                row.put("prefillTokPerSec", profilo.prefillTokPerSec);
+                row.put("openMs", profilo.openMs);
                 row.put("qualificationLevel", profilo.qualificationLevel.name());
                 row.put("measuredAtMs", profilo.measuredAtMs);
                 profiles.put(row);
@@ -1345,9 +1674,12 @@ public class TalosLlamaPlugin extends Plugin {
      */
     private JSObject runSmokeCheck(String path) {
         android.content.Context context = getContext();
+        // ⛔ Stessa domanda di `open()`, stessa risposta — compreso il
+        // permesso per l'NPU. Un fumo che apre su un motore diverso da quello
+        // della chat non sta provando la chat.
         int gpuLayers = TalosBackendChoice.gpuLayers(TalosBackendChoice.choose(
                 android.os.Build.FINGERPRINT, TalosThermal.read(context),
-                TalosBackendEvidenceStore.load(context)));
+                TalosBackendEvidenceStore.load(context), formatoPerNpu(path)));
 
         TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
                 context, path, 4, 4096, gpuLayers, true);
@@ -1449,8 +1781,103 @@ public class TalosLlamaPlugin extends Plugin {
         boolean gpuWanted = openclCompiled
                 && TalosBackendChoice.shouldProbe(TalosBackendChoice.OPENCL, driver, existing);
 
-        if (!cpuNeeded && !gpuWanted) {
+        /*
+         * ⭐⭐⭐ E L'NPU, dall'11/09/2026 — owner: «con automatico dovrebbe farlo
+         * automaticamente».
+         *
+         * ## Perche' «Automatico» non faceva niente
+         *
+         * `talosDecideLocalBackend` sceglie **il piu' veloce MISURATO**. Il
+         * sondaggio pero' misurava solo CPU e GPU: l'NPU non aveva un profilo,
+         * quindi non poteva vincere, quindi non veniva mai scelta. Non era una
+         * decisione — era un'assenza.
+         *
+         * ⛔ La cura NON e' una preferenza scritta a mano per l'NPU. Sarebbe
+         * sbagliata **per costruzione**: col numero di token in uscita che
+         * l'app si aspetta (1024) e un prompt da 2.900, l'aritmetica gia'
+         * scritta in `talosSelectBestProfile` dice che vince la GPU —
+         * 2900/361 + 1024/21,0 = 56,8 s contro 2900/1475 + 1024/16,8 = 63,0 s.
+         * L'NPU vince solo sotto ~510 token di risposta. ⇒ Chi deve decidere e'
+         * quella formula, e le serve **il terzo numero**.
+         *
+         * ## Le due condizioni, e sono entrambe misurate
+         *
+         * Il registry c'e' **e** il formato dei pesi e' uno dei tre che l'NPU
+         * mangia. Sul Q4_K_M misurato sul Pad: 55,7 t/s contro i 206 della GPU,
+         * venti volte sotto il Q4_0 dello stesso modello. Sondarla li' sarebbe
+         * spendere una generazione vera per registrare una sconfitta certa.
+         */
+        boolean hexagonCompiled = deviceOffersHexagon();
+        boolean npuWanted = hexagonCompiled
+                && formatoPerNpu(path)
+                && TalosBackendChoice.shouldProbe(TalosBackendChoice.HEXAGON, driver, existing);
+
+        /*
+         * ⛔⛔⛔ DUE ARCHIVI PER LA STESSA DOMANDA — e per questo la GPU non
+         * girava mai. Misurato sul Pad il 2026-09-10.
+         *
+         * ## La contraddizione, vista a schermo nello stesso minuto
+         *
+         * Premuto «Fallo girare ora» alle 16:13, questo metodo rispondeva
+         * **«già misurato su questo telefono»** — mentre la scelta del backend
+         * cadeva su `reason: 'unmeasured'` e prendeva la CPU. Due componenti
+         * che dicevano il contrario l'uno dell'altro.
+         *
+         * Perché: {@link TalosBackendEvidenceStore} è indicizzato sul
+         * **DISPOSITIVO** (`Build.FINGERPRINT`), mentre `talosDecideLocalBackend`
+         * legge i profili di {@link TalosLocalProfileStore}, indicizzati sul
+         * **MODELLO**. L'evidenza esisteva per il telefono; il profilo non
+         * esisteva per quel modello. ⇒ Per **ogni modello nuovo** la GPU era
+         * esclusa in partenza, e il sondaggio si rifiutava di rimediare.
+         *
+         * ## La cura, e perché sulla DIMENSIONE e non sull'hash
+         *
+         * Serve sapere «questo modello ha già un profilo?» **prima** del
+         * cancello. L'identità vera è lo sha256, ma calcolarlo qui vorrebbe
+         * dire leggere un gigabyte e mezzo **anche quando si sta per saltare** —
+         * il costo che P0-2 esiste per evitare, e che PocketPal evita a sua
+         * volta (`utils/index.ts:564`: *«Hash doesn't seem to be reliable, and
+         * expensive»*, controllano la dimensione con `stat`).
+         *
+         * La dimensione in byte è uno `stat`, e distingue due modelli
+         * praticamente sempre. ⛔ E sbaglia dalla parte giusta: due file della
+         * stessa identica lunghezza farebbero **saltare** un sondaggio che si
+         * poteva fare — si resta lenti, non si sbaglia. L'identità vera resta
+         * lo sha256 al momento di REGISTRARE, che è dove conta.
+         *
+         * ## ⛔ E non si accende la GPU per il fatto che esiste
+         *
+         * Il sondaggio misura, non presume. La ricerca è esplicita che su
+         * telefono la GPU **non è sempre più veloce** —
+         * https://arxiv.org/pdf/2505.06461 («Challenging GPU Dominance: When
+         * CPUs Outperform for On-Device LLM Inference», letto il 2026-09-10).
+         * ⇒ Il predefinito resta «il più veloce MISURATO», che è l'ordine
+         * dell'owner, non «la GPU perché c'è».
+         */
+        boolean profiloMancante = profiloAssentePerQuestoModello(context, path);
+        // ⛔ Una riga sola, e dice TUTTO cio' che decide: senza, «gia' misurato»
+        // e' un verdetto senza premesse — e per scoprire perche' non girava
+        // sarebbe servito indovinare.
+        android.util.Log.i("TalosQualify", "cancello: path=" + path
+                + " byte=" + (path == null ? -1L : new java.io.File(path).length())
+                + " cpuNeeded=" + cpuNeeded + " gpuWanted=" + gpuWanted
+                + " openclCompiled=" + openclCompiled
+                + " npuWanted=" + npuWanted + " hexagonCompiled=" + hexagonCompiled
+                + " profiloMancante=" + profiloMancante);
+
+        if (!cpuNeeded && !gpuWanted && !npuWanted && !profiloMancante) {
             return result.put("reason", "already-proven");
+        }
+        if (profiloMancante) {
+            // Il profilo di QUESTO modello non c'è: si misura, anche se il
+            // telefono era già stato qualificato con un altro modello. È
+            // limitato per costruzione — appena il sondaggio gira, il profilo
+            // nasce e questa condizione diventa falsa.
+            cpuNeeded = true;
+            gpuWanted = openclCompiled;
+            // ⛔ Stessa logica: un modello senza profilo va misurato su TUTTI i
+            // motori che hanno senso per lui, non solo sui due di prima.
+            npuWanted = hexagonCompiled && formatoPerNpu(path);
         }
 
         // P0-2: UNA sola lettura del file per l'intera qualificazione — CPU e
@@ -1492,11 +1919,27 @@ public class TalosLlamaPlugin extends Plugin {
         result.put("probedCpu", cpuRecorded);
         result.put("cpuInconclusive", cpuInconclusive);
 
+        /*
+         * ⛔⛔⛔ IL BERSAGLIO SI NOMINA ANCHE QUI — difetto trovato l'11/09/2026
+         * leggendo il codice accanto a quello che stavo curando.
+         *
+         * Questo braccio chiamava `runOne(path, -1)`, cioe' «tutti gli strati,
+         * dove ti pare». Finche' OpenCL era l'unico acceleratore spedito, dove
+         * gli pareva era OpenCL. Da quando HTP e' nell'APK **non e' piu' vero**:
+         * la riga registrata sotto il nome `opencl` poteva essere una misura
+         * dell'NPU, e l'automatico avrebbe scelto un motore leggendo il tempo
+         * di un altro.
+         *
+         * ⛔ Tre righe piu' sotto il braccio dell'NPU dichiarava gia' il
+         * problema («con OpenCL e HTP entrambi registrati, gpuLayers = -1
+         * lascia scegliere llama.cpp») e nominava `HTP`. La stessa frase valeva
+         * per la GPU, e nessuno l'aveva riletta guardando in su.
+         */
         boolean gpuRecorded = false;
         boolean gpuInconclusive = false;
         if (gpuWanted && cpuRecorded && TalosLlamaProbe.referenceIsUsable(cpuText)) {
             for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && !gpuRecorded; attempt += 1) {
-                ProbeRun gpuRun = runOne(path, -1);
+                ProbeRun gpuRun = runOneTargeted(path, "OpenCL");
                 if (gpuRun == null) break;
                 boolean gpuOk = TalosLlamaProbe.agreesWithReference(cpuText, gpuRun.text);
                 gpuRecorded = recordIfConclusive(
@@ -1507,11 +1950,65 @@ public class TalosLlamaPlugin extends Plugin {
         result.put("probedGpu", gpuRecorded);
         result.put("gpuInconclusive", gpuInconclusive);
 
+        /*
+         * ⛔ Stessa forma della GPU, e per le stesse ragioni: si misura solo se
+         * la CPU ha prodotto un testo di riferimento usabile, e la risposta
+         * dell'NPU deve ACCORDARSI con quella — una misura velocissima di una
+         * risposta sbagliata non e' una vittoria. E' il cancello che l'11/09 ha
+         * evitato di spedire un riuso della KV che rispondeva in coreano.
+         *
+         * ⛔ Il bersaglio si NOMINA (`HTP`): con OpenCL e HTP entrambi
+         * registrati, `gpuLayers = -1` lascia scegliere llama.cpp, e
+         * misureremmo «uno dei due» senza sapere quale.
+         */
+        boolean npuRecorded = false;
+        boolean npuInconclusive = false;
+        if (npuWanted && cpuRecorded && TalosLlamaProbe.referenceIsUsable(cpuText)) {
+            for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && !npuRecorded; attempt += 1) {
+                ProbeRun npuRun = runOneTargeted(path, "HTP");
+                if (npuRun == null) break;
+                boolean npuOk = TalosLlamaProbe.agreesWithReference(cpuText, npuRun.text);
+                npuRecorded = recordIfConclusive(
+                        context, TalosBackendChoice.HEXAGON, driver, npuRun, npuOk, identitaCorrente);
+                npuInconclusive = !npuRecorded;
+            }
+        }
+        result.put("probedNpu", npuRecorded);
+        result.put("npuInconclusive", npuInconclusive);
+
         TalosBackendChoice.Decision decision = TalosBackendChoice.choose(
-                driver, thermal, TalosBackendEvidenceStore.load(context));
+                driver, thermal, TalosBackendEvidenceStore.load(context),
+                formatoPerNpu(path));
         return result.put("ran", true)
                 .put("decisionBackend", decision.backend)
                 .put("decisionReason", decision.reason);
+    }
+
+    /**
+     * Vero quando NESSUN profilo registrato corrisponde alla dimensione di
+     * questo file.
+     *
+     * ⛔ `false` in caso di dubbio, sempre: un file che non si riesce a
+     * misurare (`length() == 0`) non deve far ripartire il sondaggio a ogni
+     * tocco. Un dubbio non è un «manca».
+     */
+    private static boolean profiloAssentePerQuestoModello(
+            android.content.Context context, String path) {
+        long dimensione = path == null ? 0L : new java.io.File(path).length();
+        if (dimensione <= 0L) return false;
+        for (TalosLocalProfile profilo : TalosLocalProfileStore.load(context)) {
+            if (profilo.identity == null || profilo.identity.modelBytes != dimensione) continue;
+            /*
+             * D-53 — un profilo SENZA la velocita' di lettura non basta piu'.
+             * Il selettore decide con tre termini (apertura + lettura +
+             * scrittura); un profilo scritto prima dell'11/09/2026 ne ha uno
+             * solo, e con quello sceglierebbe come prima. Non si cancella —
+             * vale ancora come prova di correttezza — ma conta come «manca»,
+             * cosi' il sondaggio lo rifa' e lo completa.
+             */
+            if (profilo.prefillTokPerSec > 0) return false;
+        }
+        return true;
     }
 
     /** Vero solo se QUESTA build ha davvero un dispositivo GPU registrato — mai dedotto dal nome del pacchetto. */
@@ -1527,6 +2024,103 @@ public class TalosLlamaPlugin extends Plugin {
             // e la regola su un dubbio è non offrire — mai inventare un sì.
         }
         return false;
+    }
+
+    /**
+     * Vero solo se QUESTA build ha davvero registrato l'NPU — mai dedotto dal
+     * nome del chip.
+     *
+     * ⛔ E' esattamente cio' che PocketPal sbaglia: sceglie il backend con una
+     * regex su {@code Build.SOC_MODEL}, e quando la regex manca si perde anche
+     * la GPU, in silenzio. Qui si CHIEDE al motore quali registry ha caricato.
+     *
+     * ⛔ Il registry si chiama {@code HTP}; i dispositivi {@code HTP0},
+     * {@code HTP1}. Il confronto e' sul PREFISSO perche' l'inventario elenca i
+     * dispositivi, non i registry — e un telefono con due NPU ne ha due.
+     */
+    private boolean deviceOffersHexagon() {
+        try {
+            String json = TalosLlamaNative.nativeBackendInventory();
+            for (ai.talos.research.TalosBackendInventory.Device device
+                    : ai.talos.research.TalosBackendInventory.parse(json).devices()) {
+                // ⛔ Il REGISTRY, non il nome del dispositivo: il registry e'
+                // `HTP` e non cambia, il nome del dispositivo e' `HTP0`/`HTP1`
+                // e dipende da quante NPU ha il chip.
+                String reg = device.registry == null ? "" : device.registry;
+                if (reg.toUpperCase(java.util.Locale.ROOT).startsWith("HTP")) return true;
+            }
+        } catch (RuntimeException illeggibile) {
+            // Stessa regola della GPU: un inventario che non si legge e' «non lo
+            // so», e su un dubbio non si offre.
+        }
+        return false;
+    }
+
+    /**
+     * ⛔⛔ Se i pesi di questo modello sono in un formato che l'NPU MANGIA.
+     *
+     * Misurato sul Pad l'11/09/2026, stesso modello e stesso giorno — cambia
+     * solo questo:
+     *
+     * <pre>
+     *   Qwen3-4B  Q4_0     NPU  lettura 1126 t/s
+     *   Qwen3-4B  Q4_K_M   NPU  lettura   55,7      ← venti volte piu' piano
+     *                      GPU  lettura  206
+     * </pre>
+     *
+     * ⛔ I numeri sono i valori di {@code general.file_type} nel GGUF, non
+     * nomi: 2 = Q4_0, 7 = Q8_0, 39 = MXFP4. Leggerli come numeri evita di
+     * dipendere da una tabella di stringhe che vive da un'altra parte.
+     *
+     * ⛔ In dubbio, NO: un file che non dichiara il formato, un'intestazione
+     * illeggibile, un motore assente — tutti no. Sbagliare in un verso spende
+     * una generazione vera per registrare una sconfitta; nell'altro verso non
+     * si misura un motore che avrebbe potuto vincere, e il sondaggio si puo'
+     * rifare.
+     */
+    private static boolean formatoPerNpu(String path) {
+        if (path == null || path.isEmpty() || !TalosLlamaNative.AVAILABLE) return false;
+        try {
+            String json = TalosLlamaNative.nativeArchitectureOf(path);
+            if (json == null) return false;
+            int ftype = new JSONObject(json).optInt("fileType", -1);
+            return ftype == 2 || ftype == 7 || ftype == 39;
+        } catch (JSONException illeggibile) {
+            return false;
+        }
+    }
+
+    /**
+     * Una corsa di sondaggio su un bersaglio NOMINATO.
+     *
+     * ⛔ Esiste perche' {@code gpuLayers = -1} non basta piu': con OpenCL e HTP
+     * entrambi registrati, llama.cpp sceglie da se' e misureremmo «uno dei
+     * due» senza sapere quale. Il nome del registry toglie l'ambiguita', e un
+     * nome che non si risolve fa FALLIRE l'apertura invece di ripiegare in
+     * silenzio — che e' esattamente la garanzia che serve a una misura.
+     */
+    private ProbeRun runOneTargeted(String path, String backendName) {
+        final long inizioApertura = System.nanoTime();
+        TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
+                getContext(), path, 4, 4096, -1, true, 0, 0, "f16",
+                "default", 0, backendName, "");
+        final long openMs = (System.nanoTime() - inizioApertura) / 1_000_000L;
+        TalosLlamaEngine engine = attempt.engine();
+        if (engine == null) return null;
+        try {
+            TalosLlamaEngine.Run run = engine.run(
+                    TalosLlamaProbe.PROMPT, TalosLlamaProbe.TOKENS,
+                    () -> TalosThermal.read(getContext()), TalosLlamaEngine.Mode.BENCHMARK);
+            if (run == null) return null;
+            return new ProbeRun(run.text, run.samples, run.ttftMs,
+                    backendDeviceDi(engine), engine.engineAborted(),
+                    openMs, velocitaDiLettura(engine));
+        } catch (InterruptedException interrotta) {
+            Thread.currentThread().interrupt();
+            return null;
+        } finally {
+            engine.close();
+        }
     }
 
     /**
@@ -1560,8 +2154,26 @@ public class TalosLlamaPlugin extends Plugin {
             ProbeRun run, boolean answerCorrect, TalosLocalProfileIdentity identitaCorrente) {
         TalosBenchmarkHarness.Result measured =
                 TalosBenchmarkHarness.judge(run.samples, answerCorrect, run.ttftMs);
+        /*
+         * ⛔⛔⛔ UNA CORSA CHE IL MOTORE HA MOLLATO NON E' UNA PROVA — 11/09/2026.
+         *
+         * Sul Pad, sondando l'NPU: `graph_compute … failed with error 1` →
+         * `llama_decode: failed to decode, ret = 2`, e verdetto **VALID**.
+         *
+         * ⛔ Rimisurato con lo strumento acceso, quel particolare `2` era **lo
+         * stop del banco a fine corsa** — compare anche sulla CPU. Ma il
+         * cancello resta, e non e' teorico: finche' le due interruzioni si
+         * somigliano, una corsa che il motore abbandona si registra da sola
+         * come prova che quel motore funziona.
+         *
+         * ⛔ Non si registra come FALLITO: `shouldProbe` non riprova
+         * un'evidenza gia' scritta, e un guasto occasionale diventerebbe
+         * permanente. Si tratta come una corsa INSTABILE — non conclusiva, si
+         * ritenta — che e' esattamente cio' che e'.
+         */
         boolean conclusive = measured.verdict == TalosBenchmarkHarness.Verdict.VALID
                 || measured.verdict == TalosBenchmarkHarness.Verdict.WRONG_ANSWER;
+        if (run.abortitaDalMotore) conclusive = false;
         // ⛔ Il dump di OGNI campione va in logcat SOLO quando il verdetto non
         // è duraturo: è la corsa strumentata il 21/8 che ha trovato il divario
         // di tempo zero in TalosLlamaEngine — sul percorso felice (VALID sul
@@ -1570,6 +2182,9 @@ public class TalosLlamaPlugin extends Plugin {
         String samplesDump = conclusive ? "" : dumpSamples(run.samples);
         android.util.Log.i("TalosQualify", backend + ": verdetto=" + measured.verdict
                 + " tps=" + measured.tokensPerSecond + " ttft=" + run.ttftMs
+                + (run.abortitaDalMotore ? " ABORTITA-DAL-MOTORE" : "")
+                + " pp=" + String.format(java.util.Locale.ROOT, "%.1f", run.prefillTokPerSec)
+                + " open=" + run.openMs
                 + " registrato=" + conclusive
                 + (conclusive ? "" : " campioni=" + samplesDump));
         if (!conclusive) return false;
@@ -1590,7 +2205,9 @@ public class TalosLlamaPlugin extends Plugin {
                     System.currentTimeMillis(), TalosLocalProfile.Level.Q1,
                     // P1-5: già calcolato da judge() poche righe sopra, solo
                     // loggato finora — mai una seconda misura per questo.
-                    measured.tokensPerSecond));
+                    measured.tokensPerSecond,
+                    // D-53: lettura come velocita', e costo dell'apertura.
+                    run.prefillTokPerSec, run.openMs));
         }
         return true;
     }
@@ -1632,9 +2249,31 @@ public class TalosLlamaPlugin extends Plugin {
     }
 
     /** Una corsa del sondaggio: il testo prodotto e le finestre con cui misurarlo. Null se il motore non si è aperto. */
+    /**
+     * D-53 — la velocita' di LETTURA di questa corsa, dai tempi che il motore
+     * espone gia' (`nativeLastTimings`: `prefillMs`, `newTokens`). Il sondaggio
+     * parte sempre a KV vuota, quindi `newTokens` e' l'intero prompt.
+     *
+     * ⛔ -1 in ogni dubbio: un JSON che non si legge, zero token, zero
+     * millisecondi. Una velocita' inventata sarebbe peggio di nessuna.
+     */
+    private static double velocitaDiLettura(TalosLlamaEngine engine) {
+        try {
+            JSONObject tempi = new JSONObject(engine.lastTimings());
+            long prefillMs = tempi.optLong("prefillMs", -1);
+            long nuovi = tempi.optLong("newTokens", -1);
+            if (prefillMs <= 0 || nuovi <= 0) return -1;
+            return nuovi * 1000.0 / prefillMs;
+        } catch (JSONException | RuntimeException illeggibile) {
+            return -1;
+        }
+    }
+
     private ProbeRun runOne(String path, int gpuLayers) {
+        final long inizioApertura = System.nanoTime();
         TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
                 getContext(), path, 4, 4096, gpuLayers, true);
+        final long openMs = (System.nanoTime() - inizioApertura) / 1_000_000L;
         TalosLlamaEngine engine = attempt.engine();
         if (engine == null) return null;
         try {
@@ -1645,7 +2284,9 @@ public class TalosLlamaPlugin extends Plugin {
             // P0-2: va letto ORA — l'handle nativo muore nel finally qui
             // sotto, e uno snapshot chiesto dopo troverebbe solo un motore
             // già chiuso.
-            return new ProbeRun(run.text, run.samples, run.ttftMs, backendDeviceDi(engine));
+            return new ProbeRun(run.text, run.samples, run.ttftMs,
+                    backendDeviceDi(engine), engine.engineAborted(),
+                    openMs, velocitaDiLettura(engine));
         } catch (InterruptedException interrotta) {
             Thread.currentThread().interrupt();
             return null;
@@ -1678,12 +2319,25 @@ public class TalosLlamaPlugin extends Plugin {
         final TalosBenchmarkHarness.Sample[] samples;
         final long ttftMs;
         final String backendDevice;
+        /**
+         * ⛔⛔ Il motore ha mollato a meta' corsa, senza che nessuno glielo
+         * chiedesse. Vedi {@link TalosLlamaEngine#engineAborted()}.
+         */
+        final boolean abortitaDalMotore;
+        /** D-53: quanto e' costato aprire, e a che velocita' ha letto il prompt. -1 = non misurato. */
+        final long openMs;
+        final double prefillTokPerSec;
 
-        ProbeRun(String text, TalosBenchmarkHarness.Sample[] samples, long ttftMs, String backendDevice) {
+        ProbeRun(String text, TalosBenchmarkHarness.Sample[] samples, long ttftMs,
+                 String backendDevice, boolean abortitaDalMotore,
+                 long openMs, double prefillTokPerSec) {
             this.text = text;
             this.samples = samples;
             this.ttftMs = ttftMs;
             this.backendDevice = backendDevice;
+            this.abortitaDalMotore = abortitaDalMotore;
+            this.openMs = openMs;
+            this.prefillTokPerSec = prefillTokPerSec;
         }
     }
 }

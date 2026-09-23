@@ -6,6 +6,555 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.36
+
+- The Library loads more files as you scroll, with search and filters covering the whole collection.
+  Item menus stay within the screen; phone headers and bottom spacing are corrected.
+- Download Center controls remain usable when opened from the navigation drawer.
+- Startup validation works with the existing strict Content Security Policy, without blocked
+  dynamic code compilation.
+- Restored browser regression coverage for attachments, message actions, saved reasoning,
+  chat persistence, appearance settings, and phone/tablet layouts.
+
+## v0.1.35
+
+- The Library loads more items as you scroll, starting with 24. Search, filters and the total count
+  still cover the whole collection; thumbnails and saved-link icons follow the displayed pages.
+- Item menus keep their full width inside the screen and open above their button when the actual
+  menu height does not fit below it. Long menus can scroll.
+- Phone station headers put the title and add button on one row, with the subtitle underneath.
+  The Library uses the same background as its enclosing sheet.
+- The last item in a station stays clear of the bottom edge. Model Lab categories and navigation
+  labels follow the selected language.
+
+## v0.1.34
+
+Every station now has one toolbar, one options sheet and a menu on each item; each chat keeps its own
+draft; and "Run details" shows what a reply cost and how long it took.
+
+### Messages
+
+- Long-press a message, or tap its ⋯, for one "Message actions" sheet. A reply offers Share, Run
+  details and Delete; your own message offers sending it again, Reuse prompt and Delete. Delete takes
+  the question and its answer together, with Undo for five seconds, and files the reply created stay
+  in the Library.
+- "Run details" lists the tools a reply used, what each one looked for and how it ended, the input and
+  output tokens, the time to the first word and in total, and the cost: the figure OpenRouter reports,
+  a marked estimate from its public price list when a provider reports none, and "Free, on this phone"
+  for a model running on the device.
+
+### Drafts
+
+- Every chat keeps its own draft, attachments included. A new chat no longer inherits the text of the
+  previous one, and a chat you started typing in stays in the history marked "Draft".
+- The composer keeps its space in an empty chat too, so the last line no longer slides under it.
+
+### Stations
+
+- Library, Memory, Notes, Research and Tasks lose the fixed bar at the top. The large title starts the
+  page and, as you scroll, folds into a slim bar that follows your finger; on a phone only the round menu
+  button stays.
+- One toolbar row everywhere: search, list or grid, options, and the main action ("Add file", "New
+  note", "New memory", "New task"), an icon only on a phone.
+- Sorting moved into an options sheet drawn by the app, instead of Android's own picker. In the Library
+  it also holds "Group by chat", and "Name (A–Z)" now sorts the files themselves, not only the groups.
+- Library: tabs All · Files · Images · Links. A card says the extension, or the site, and the chat only
+  when grouping is on — no dates, no group headings, and "Excluded from context" only on a file that is.
+  Every card has a ⋯ menu, links included: Open in browser, Attach, Save to phone, Delete. Long-press or
+  right-click a file to start selecting. A Markdown file opens formatted, with Text one tap away. Preview
+  titles stop at 35 characters and are cut at a word, so no line shows half its letters.
+- Research: four tabs — All, Running, Finished and To resume, which gathers the paused, the
+  interrupted, the ones blocked by a permission and the ones that never concluded. No readable report,
+  Cancelled and Failed are picked from the options sheet and show up as a fifth tab while chosen. Dates
+  read "12 Sep".
+- Tasks: a card's ⋯ sits bottom right, as in the other stations.
+
+### The "+" sheet
+
+- Every entry has a bare amber icon on the same vertical line as the four categories above it: 28–29 px
+  and 58 px from the sheet edge on tablet, phone and landscape. The entries used to sit 10 px and 23 px
+  further in, inside a tinted tile.
+
+### Fixed
+
+- A page that stopped scrolling — the Library after starting a selection — kept the folded bar on and
+  the large title hidden at the top.
+- "1 selected" in the Library read as a plural.
+
+## v0.1.33
+
+The composer no longer keeps an empty line under what you type.
+
+### The composer
+
+- With the field focused and empty, the box is one line tall instead of two.
+  The placeholder used to sit half a line above the "+" and the send button;
+  now it sits on the same line as they do.
+- Behind that was an arithmetic fault worth naming: the browser reports the
+  field's content height as a whole number, so a single 25.6 px line was
+  reported as 26 — and rounding that up produced two lines. A line now has to
+  be exceeded by more than a twentieth before the box grows, which is enough to
+  absorb the rounding and never enough to hide text.
+- The box stops shrinking at about 128 px: two rows of 48 px — the controls and
+  the tools beneath them — plus its padding. The field is no longer what
+  decides the height.
+
+## v0.1.32
+
+The composer lines up with what you type, and the sheet behind "+" follows your
+finger instead of jumping.
+
+### The composer
+
+- The "+" and the button on the right sit on the middle line of the message
+  field, whether the field holds one line or eight. They used to hang from the
+  first line: 16.8 px above centre with the field empty, 39.7 px above it once
+  a few lines were written, and at rest they overhung the top edge by 4 px.
+- The field is always a whole number of lines. It used to stop at 192 px with
+  lines of 25.6 px — seven and a half — so the last line you could see was cut
+  in half. It now holds seven whole lines and scrolls past them.
+- With the field empty the box is one line tall instead of three and a half.
+  The taller floor is there to keep the box steady while it grows, and nothing
+  grows when there is nothing in it.
+- The microphone and Send share a filled accent container again, with the same
+  corner radius as the composer around them.
+
+### The "+" sheet
+
+- Dragging right to left across the list of actions moves between Attach,
+  Create, Tools and Agent, and the actions underneath change with it.
+- The panel follows your finger as you drag, moving a little under half as far
+  as your thumb and fading slightly on the way. Let go past the threshold and
+  the new tab settles in over 230 ms; let go short of it and the panel springs
+  back over 250 ms. At the first and last tab it gives only a little, and stays.
+- A drag up or down still scrolls the sheet and changes nothing, and a drag too
+  short to be meant as one changes nothing either.
+
+## v0.1.31
+
+The composer has one button again, and it changes with what you are doing. The
+waiting mark is a single quiet orb.
+
+### The composer
+
+- The button beside the message field is the microphone while the field is
+  empty, and becomes Send the moment you type. While TALOS is answering, or
+  while you are dictating, it is Stop.
+- That button now sits next to the field itself, not in the row of tools
+  underneath it.
+- The Library-context pill is a single icon, next to the model pill. Its mode
+  and the number of sources it will use are still read out by screen readers,
+  and tapping it still opens the sheet where you choose them.
+- Where dictation is unavailable the microphone stays where it is, switched
+  off, with the line underneath that says why. A control that disappears
+  explains nothing.
+- One thing is gone on purpose: the second microphone that appended dictation
+  to text you had already written. With text in the field the button is Send.
+  Dictation started on an empty field still appends to itself as before.
+
+### While TALOS is thinking
+
+- The three animated dots are gone. The wait shows only the TALOS orb with its
+  turning ring, and it disappears at the first letter of the answer.
+
+## v0.1.30
+
+(Tagged as v0.1.30. A v0.1.29 tag exists on the repository but never
+produced a build: its CI run failed on a timing-dependent unit test, fixed
+here. There is no v0.1.29 release.)
+
+The chat is now on the same calm design as the rest of the app, Settings
+keep the sidebar beside them on a tablet, and one search box reaches
+everything you have in TALOS. Your own recorded voice reads replies again.
+
+### The chat, redesigned
+
+- An empty chat opens on "What shall we do today?", three prompt chips
+  (presentation, analyse a file, run a research) and the two most recent
+  conversations to pick up from, with the composer always docked at the
+  bottom.
+- The composer is one shape: a round "+", the model, a "Think" chip that
+  switches reasoning on and off, the microphone and a round send button
+  that becomes a stop button while a reply streams.
+- The "+" opens "What do you want to do?": a search box and four
+  categories (Attach, Create, Tools, Agent). Every entry does something
+  real: attach a file, pick an image, take a photo, use the Library,
+  improve the message, prefill a presentation, document or analysis, a
+  new note or memory, phone control, Tool Forge, Models, the switch for
+  the model's tools, a task, a research, and Code where the phone bridge
+  exists. The sheet springs up, the highlighted category slides, and the
+  entries glide in, with the mockup's timings.
+- Every reply carries a header with the TALOS orb (spinning while it
+  works) and the model and time on the right. Your question is an accent
+  bubble; the reply runs full width, or sits in a bubble if Appearance is
+  set to bubbles. Actions live under each message: copy, edit, more on
+  yours; copy, listen, regenerate, save to Library, more on the reply.
+- Edit a message: reopens your text in the composer and removes the turns
+  after it, after a confirmation.
+- Stopping a reply keeps the text and marks it "Interrupted. The text is
+  kept." Reasoning expands in place.
+- Web browsing left the chat: no link pill, no "Browse mode" banner, no
+  "/browse" command. The local browser stays available to the model's
+  tools. "Run a research" on the home opens Research, not a web search.
+
+### One search for everything
+
+"Search Talos" in the sidebar opens a dialog that searches chats (titles
+and the text of messages), notes, tasks, memories, Library files and
+Settings categories, sixteen results at most, ranked. Arrow keys, Enter
+and Escape work; on a phone it is a sheet. The chats list now finds a
+conversation by a word that appears only in its messages, and shows the
+excerpt.
+
+### Sidebar and chats list
+
+- Tool Forge is back in the sidebar (it had dropped out of the redesign).
+- Press and hold, or right-click, a recent chat in the sidebar or a row
+  in the chats list to get its menu: Open, Rename, Archive, Delete (and
+  Select in the list). The Account button opens the Account page.
+- Recent chats and "Pick up where you left off" no longer list archived
+  chats or Code sessions.
+- On a tablet the sidebar can be resized by dragging its edge, and a
+  conversation shows a back arrow to the chat list.
+
+### Settings on the calm design
+
+- On a tablet the sidebar stays beside Settings; categories sit in a
+  column with the detail next to them. "All settings" lists every
+  category with a subtitle.
+- New controls, each tied to something real: "Approval duration" and
+  "Revoke saved authorizations" under Agent Tools; a grid of the fourteen
+  themes; frame-rate and pixel-ratio caps under Motion; three consents
+  (Library access, memory writing, image attachments) under Privacy;
+  Reminders links to Tasks and System to Doctor. Reading controls come
+  before your personal voices. Two controls that no longer changed
+  anything (composer shape and "+" surface, link suggestions) were
+  removed. "Web search" is now called "Search engine".
+
+### Small things that now move, and a few that now work
+
+- Ticking a checklist item on a note, from the card or the note itself,
+  changes the note.
+- Research keeps its own list-or-cards choice; it no longer follows the
+  Library's.
+- Archiving a chat shows "Chat archived" with an Undo for eight seconds.
+- Confirmation dialogs grow out of the button that opened them (280 ms)
+  and shrink back (210 ms); persisted messages slide in (220 ms); the
+  groups under Agent Tools open and close by height (260 ms); the touch
+  ripple follows the "Transition duration" slider. All of it respects
+  "reduce motion".
+
+### Your recorded voice reads replies again
+
+Recording a voice worked, but playback in a chat was silent. Four causes
+in a row were fixed: the language was not passed, the real error was
+discarded, the start of speech was locked behind a check that never
+passed, and the audio buffer filled up and stopped. The recorded voice
+now follows the same speed slider as the synthetic voices, the first word
+arrives in about 2 seconds, and the long pause after a comma is gone.
+
+### Fixed
+
+- A model the app had fallen back to could be written into a chat as if
+  you had chosen it; reopening that chat then showed the wrong model.
+- The draft of a brand-new chat was lost if you left before sending.
+- A tool call that GLM wrote inside its text showed up as raw tags; it is
+  now executed like any other tool call.
+- The "Improve the message" entry no longer speaks of "prompt".
+
+## v0.1.28
+
+The interface has been rebuilt on one calm, consistent design across the
+whole app — the sidebar, every station (Notes, Tasks, Memory, Library,
+Research) and the motion that ties them together — and each station now
+lets you create, open, edit and delete its things from the app itself.
+
+### One sidebar, everywhere
+
+The sidebar is the same on every screen: search, the eight sections,
+recent chats, then Diagnostics and Settings. On a tablet it stays open
+beside the content instead of sliding in; on a phone it slides in with a
+spring that settles in about half a second and follows the "Transition
+duration" slider in Settings (measured on a tablet: 525 ms at the default
+setting, 961 ms at double). Models moved from Settings into the sidebar.
+Each station opens with its own icon and title in the header, and a back
+arrow only once you are inside it.
+
+### Notes, Tasks, Memory: complete, not read-only
+
+- Notes can be pinned, edited, exported as text and deleted. Markdown
+  renders as text, not as symbols.
+- Tasks have the states To do, In progress, Scheduled and Done, a
+  checkbox that completes in one tap, a checklist you can tick inside the
+  task, an edit screen, export, and a real pause for scheduled tasks: a
+  paused task does not run until you resume it.
+- Memory filters by type (Preference, Project fact, Procedure, Policy
+  note) plus a "To review" shelf for what the model proposed and you have
+  not confirmed. Each memory can be edited, paused, exported and deleted,
+  and shows where it came from.
+- Writing a note, a task or a memory yourself no longer rings the
+  notification bell. Only things the model did do.
+
+### Library: real previews, and adding a file no longer sends it anywhere
+
+Files in the Library show what they are: images as thumbnails, PDFs
+rendered from their first page on the device, text files as a typographic
+preview. Adding an image to the Library used to quietly queue it for your
+next chat message and ask the "this image leaves your phone" question at
+the wrong moment; adding is now just adding. The question is asked when
+you actually send an image to a remote model — including images that were
+already in your Library — and "No" keeps the message on the phone.
+
+### Research: a report is only "done" when it holds up
+
+A research now ends in one of four honest states: concluded with a
+readable report; blocked by a permission; stopped before the report was
+written; or finished with a report that cannot be read back. A run that
+stopped because a step failed says so, with the step's own error, instead
+of guessing. Cards use singular labels, say whether sources were already
+gathered, and update the moment a run finishes — no reopen needed. A quick
+research measured on a tablet with GLM 5.3 Flash writing and a local
+Qwen3-4B checking citations: 3 min 21 s, 8 sources, 26 claims verified.
+
+### Codice tells you when the phone bridge is off
+
+Entering Codice with the phone bridge switched off now shows one message
+saying what does not work (the terminal and session commands), the two
+steps to switch it back on, and a button that opens Settings → Phone
+control. It appears once per visit and closes by itself when the bridge
+comes back.
+
+### Errors in plain words
+
+Every error the chat can show now leads with a sentence about what
+happened and what to do; the technical code stays small, underneath, for
+diagnostics. Local models no longer show "unknown" in the model picker.
+
+### Plain words in the model picker and error cards
+
+Local models in the picker say "On this device" instead of showing the file
+path, a status nobody translated is omitted rather than printed raw, and an
+error card for a local model names the model, not its path, and suggests
+what to do with a local model rather than "check the provider".
+
+### Fixed
+
+- Row menus inside a station could open invisibly behind the sheet.
+- Tapping the dimmed area beside the sidebar did not close it.
+- A stopped research showed a running timer next to "Stopped".
+- The sessions list in Codice showed a raw label instead of "Last 30
+  days".
+- The "listen" action under a message had no accessible name.
+- Research plan chips read "5p" and "10 / 3m"; they now say "5 pages" and "10 pages · 3 min".
+- Codice's empty session and status strip spoke English inside an Italian app.
+- On a phone, the Codice bridge warning was drawn underneath the station.
+
+## v0.1.27
+
+The "+" menu is less cluttered: it no longer shows a second copy of the
+reasoning/effort control, and it no longer offers a web-browsing toggle
+that, on the default composer, had nowhere reliable left to live.
+
+### One fewer place to set reasoning effort
+
+The "+" menu's organized drawer showed its own reasoning/effort picker —
+the exact same control already reachable by tapping the model name, with
+no indication the two were connected. It's gone from the "+" menu now;
+the model name stays the one place to set it.
+
+### The "+" menu no longer offers web browsing
+
+Both the "+" menu's organized drawer and its dropdown listed a "Browse
+the web" toggle. Removed from both. On the classic composer it still has
+its own icon button in the toolbar, unchanged. On the default composer
+(the newer, Claude-style one) there is currently no way to turn browsing
+on or off from the "+" menu — a deliberate simplification, not an
+oversight, and not yet replaced with another way to reach it from that
+composer.
+
+## v0.1.26
+
+Codice's Terminal tab can now run a command itself, not just show one, its
+interface follows the app's language, and web search works without a key.
+
+### Codice's Terminal tab can run a command, not just show one
+
+The Terminal tab showed a live log of commands the agent ran, but had no
+way for a person to type one in themselves — that ability existed only
+one screen over, reachable by typing `!command` into the chat. The
+Terminal tab now has its own composer that runs a command directly on
+the device, with an honest note when a session is still busy instead of
+a field that quietly does nothing.
+
+### Codice follows the app's language
+
+Codice's interface — its tabs, its Running/Stopped state, the Terminal's
+own messages — stayed in English regardless of what language the rest of
+the app was set to. It now follows the app's language, falling back to
+English only where nothing has been translated yet. The Terminal's new
+composer (above) was also restyled to match the pill-shaped, glass
+composer used everywhere else in the app, instead of standing out with
+a look of its own.
+
+### DuckDuckGo: a fifth web search option that needs no key
+
+Every web search option until now — Tavily, Brave, SearXNG, a custom
+endpoint — needed a key or an address before the model could search the
+web at all. DuckDuckGo needs neither: it reads DuckDuckGo's own public
+results page. It isn't an official API, and under heavy use it can
+answer with a block instead of results — when that happens TALOS says so
+plainly, rather than reporting an empty web.
+
+### Fixed
+
+- The Terminal's composer could end up sitting partly behind the bottom
+  navigation bar on narrower screens, its send button cut in half.
+
+## v0.1.25
+
+The previous release corrected one bug by introducing its opposite:
+Codice stopped showing on a signed build entirely, instead of showing
+correctly. This release makes Codice real in the signed APK — visible,
+and able to run a command on the device it's installed on.
+
+### Codice ships in the signed build
+
+The native bridge behind Codice — the piece that lets a session run a
+sandboxed terminal, not just chat — lived in a part of the project
+that Android only compiles into development builds, since the day it
+shipped. Announcing Codice as a phone-hosted coding agent while that
+piece never reached the APK anyone could actually download was the
+root of both this release and the previous one. It now compiles into
+every build, signed release included, and was verified on one:
+opening Codice, starting a session, and running a real command all
+work on a production-shaped APK, not just a development one.
+
+### Fixed
+
+- A session hosted entirely on the phone — no computer involved —
+  couldn't run a single shell command: the run always failed as if no
+  device were reachable, even though the device running it was the
+  one right there. It now runs the command directly, the way it
+  always should have on a session that was never talking to a second
+  device in the first place.
+
+## v0.1.24
+
+The previous release could show "Codice" as available on a signed
+build — a debug-only feature with nothing behind it once you tapped
+in. This release makes sure that never happens again, and fixes the
+run-strip numbers, a composer draft that didn't survive leaving the
+screen, and a few smaller Codice surfaces found while verifying it.
+
+### Codice never shows on a build that can't run it
+
+Codice needs a native bridge that only compiles into development
+builds — that has been true since it shipped, but nothing enforced it
+everywhere. The tablet layout decided whether to show Codice's chrome
+by looking only at the current route's name, and Vue Router restores
+whatever route was open last — so a phone that had ever run a debug
+build could boot straight into a Codice screen on a signed one, with
+the native side simply absent. A single guard, checked before every
+way of reaching the screen — a direct link, a route restored at boot,
+or in-app navigation — now redirects to chat instead whenever the
+build can't run it. **Codice is not, and has never been, in the
+signed release APK** — v0.1.23's notes described it without saying
+that; consider this the correction.
+
+### Fixed
+
+- When the on-device bridge a session depends on isn't connected, the
+  app now says so in plain language instead of leaving the run stuck
+  or failing with a technical error.
+- The run strip's step count, context size, and error count always
+  showed a placeholder dash, even while a session was actively running
+  with real numbers behind them.
+- A failed tool call didn't say why in the run's summary; it now shows
+  the failure reason, and the warning icon on the affected step is
+  read by a screen reader instead of hidden from one.
+- A prompt typed into the composer and left unsent used to disappear
+  if you left the screen; it's restored when you come back.
+- The button that opens Codice from the tablet sidebar was below the
+  minimum touch-target size.
+- The executor-model list inside effort settings showed the same
+  "Models" label as the primary model picker, with nothing to tell
+  them apart.
+- A few remaining Italian strings in Codice's menus and toasts are now
+  in English, and the Hugging Face access status labels are sentence
+  case like the rest of the app.
+
+## v0.1.23
+
+The coding agent moved onto the phone. Until this release "Codice" was a
+screen that showed what a session would look like; it now opens real
+sessions, runs real commands in a sandboxed terminal on the device itself,
+and talks to five model providers instead of one. The personal voice engine
+was rebuilt on Pocket, and the Model Lab stopped guessing at what a model
+costs.
+
+### Codice: a real coding agent, on the phone
+
+- Sessions are real and they persist. They survive closing the app and
+  restarting it, and the list shows what each one is doing right now —
+  running, waiting for an approval, finished, or finished with an error —
+  instead of a static row.
+- A sandboxed terminal runs on the phone. No PC, no tunnel, no server on
+  the other side of the room: commands execute on the device, through the
+  ADB bridge, and their output comes back into the session.
+- Any model from OpenRouter can be picked live. OpenAI, DeepSeek and Ollama
+  are wired to real sessions now, not just stored; Anthropic and Gemini are
+  recognized and refused with an honest reason — their request shape isn't
+  translated yet — instead of either working silently or being hidden.
+- Tool calls collapse into groups with a per-file diff, so a long run reads
+  as a list of changes instead of a wall of output.
+- The permissions pill and the model pill act on a live session instead of
+  only looking like they do.
+- Long conversations are compacted, and now you can see it happen instead of
+  wondering why the run paused.
+- The composer got the rest of its work: a Planner picker, a real "improve
+  this prompt" that either rewrites it or says why it cannot, and an export
+  that produces the actual session report.
+- Automations, Doctor, hooks, sub-agent delegation, the review centre and
+  workspace files (drag and drop, copy, create file and folder) all came
+  across from the desktop build rather than being written twice.
+- Deep research, Activities, Memory and the Library are connected to the
+  kernel — read-only for research, on purpose.
+
+### Personal voice
+
+- The engine now runs on Pocket end to end: enrolment creates v2 profiles,
+  older profiles are migrated instead of being abandoned, and installation
+  is observable rather than silent when it fails.
+- A model is loaded on demand, when an intent needs it, instead of being
+  held resident.
+- The Doctor screen reports performance signals from the engine, so a slow
+  or stuttering read can be diagnosed from the report instead of guessed at.
+
+### Model Lab
+
+- The KV cache type (F16 or Q8_0) is a setting rather than whatever the
+  file's header happened to use, with the resolved type always shown.
+- A context-length slider with real reference points, and a provenance
+  ledger that says where each number in a memory estimate comes from.
+- Every quantization is checked against your device as soon as the page
+  opens, instead of waiting for a tap on each one.
+
+### Known, and not hidden
+
+- Local models cannot yet be used for a Codice session. The on-device
+  engine is reachable only from the app's web view, while the agent kernel
+  runs in a separate process, and the bridge between the two does not exist
+  yet. Choosing one is refused with that reason instead of failing halfway
+  through an answer.
+- Anthropic and Gemini models are recognized in the picker but refused for
+  Codice sessions: translating tool calls into their own request format
+  isn't done yet. Only OpenAI, DeepSeek, Ollama and OpenRouter route to a
+  real call today.
+- The "Agents" tab in the context rail is still a mock-up. Delegation
+  itself is real — the session tree reads actual child sessions — but that
+  one panel is static markup that no code fills in yet, so the names in it
+  are examples, not your sub-agents.
+
 ## v0.1.22
 
 Browsing models on Hugging Face got a rebuild, and the Doctor screen can

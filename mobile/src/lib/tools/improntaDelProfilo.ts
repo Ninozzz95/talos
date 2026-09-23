@@ -1,6 +1,6 @@
 import { TALOS_BYTE_PER_TOKEN } from '@/lib/tools/aperturaProgressiva'
 import type { TalosToolDefinition } from '@/lib/tools/registry'
-import type { TalosToolAction } from '@/lib/tools/permissionTypes'
+import { TALOS_TOOL_ACTIONS, type TalosToolAction } from '@/lib/tools/permissionTypes'
 
 /**
  * ⭐⭐⭐ L'IMPRONTA DEL PROFILO — Fase 1.1 del piano piattaforma.
@@ -143,7 +143,12 @@ export function talosProfiloCompilato(
 
     const attrezzi: string[] = []
     const differiti: string[] = []
-    const poteri: Record<TalosToolAction, number> = { read: 0, write: 0, outbound: 0 }
+    // ⛔ Dal vocabolario: un potere nuovo deve comparire col suo zero, non
+    // sparire dal conteggio. (Non tocca `impronta`, che e' l'hash dei byte
+    // spediti — questo e' un conteggio riportato a parte.)
+    const poteri = Object.fromEntries(
+        TALOS_TOOL_ACTIONS.map((azione) => [azione, 0]),
+    ) as Record<TalosToolAction, number>
     for (const riga of attrezziSpediti) {
         const nomeRiga = nomeDellaRiga(riga)
         if (nomeRiga === null) continue

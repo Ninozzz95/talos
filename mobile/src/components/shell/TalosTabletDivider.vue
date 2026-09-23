@@ -4,7 +4,6 @@ import {
     TALOS_TABLET_SIDEBAR_DEFAULT,
     TALOS_TABLET_SIDEBAR_MAX,
     TALOS_TABLET_SIDEBAR_MIN,
-    clampTalosTabletSidebarWidth,
 } from '@/lib/tabletLayout'
 
 /**
@@ -18,7 +17,20 @@ import {
  * Hit area 33px (SF6-F4 vs F14 trade: reliably grabbable without stealing
  * deep edge taps from the panels), visual footprint 1px.
  */
-const props = defineProps<{ width: number }>()
+const props = withDefaults(defineProps<{
+    width: number
+    /** Limiti e valore di ritorno del doppio tocco: la sidebar Calm ne ha di suoi (12/09). */
+    min?: number
+    max?: number
+    reset?: number
+}>(), {
+    min: TALOS_TABLET_SIDEBAR_MIN,
+    max: TALOS_TABLET_SIDEBAR_MAX,
+    reset: TALOS_TABLET_SIDEBAR_DEFAULT,
+})
+function clamp(value: number): number {
+    return Math.min(props.max, Math.max(props.min, Math.round(value)))
+}
 
 const emit = defineEmits<{
     resize: [width: number]
@@ -44,7 +56,7 @@ function onPointerDown(event: PointerEvent): void {
 
 function onPointerMove(event: PointerEvent): void {
     if (!dragging.value) return
-    const next = clampTalosTabletSidebarWidth(dragOriginWidth + (event.clientX - dragOriginX))
+    const next = clamp(dragOriginWidth + (event.clientX - dragOriginX))
     if (next === props.width && !moved) return
     moved = true
     emit('resize', next)
@@ -70,11 +82,11 @@ function onPointerEnd(): void {
 
 function onKeydown(event: KeyboardEvent): void {
     let next: number | null = null
-    if (event.key === 'ArrowRight') next = clampTalosTabletSidebarWidth(props.width + KEY_STEP)
-    else if (event.key === 'ArrowLeft') next = clampTalosTabletSidebarWidth(props.width - KEY_STEP)
-    else if (event.key === 'Home') next = TALOS_TABLET_SIDEBAR_MIN
-    else if (event.key === 'End') next = TALOS_TABLET_SIDEBAR_MAX
-    else if (event.key === 'Enter') next = TALOS_TABLET_SIDEBAR_DEFAULT
+    if (event.key === 'ArrowRight') next = clamp(props.width + KEY_STEP)
+    else if (event.key === 'ArrowLeft') next = clamp(props.width - KEY_STEP)
+    else if (event.key === 'Home') next = props.min
+    else if (event.key === 'End') next = props.max
+    else if (event.key === 'Enter') next = props.reset
     if (next === null) return
     event.preventDefault()
     emit('resize', next)
@@ -82,7 +94,7 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 function onReset(): void {
-    emit('resize', TALOS_TABLET_SIDEBAR_DEFAULT)
+    emit('resize', props.reset)
     emit('commit')
 }
 </script>
@@ -95,8 +107,8 @@ function onReset(): void {
         data-testid="talos-tablet-divider"
         tabindex="0"
         :aria-valuenow="props.width"
-        :aria-valuemin="TALOS_TABLET_SIDEBAR_MIN"
-        :aria-valuemax="TALOS_TABLET_SIDEBAR_MAX"
+        :aria-valuemin="props.min"
+        :aria-valuemax="props.max"
         class="group relative z-30 -mx-4 w-[33px] shrink-0 cursor-col-resize touch-none outline-none"
         :class="dragging ? 'select-none' : ''"
         @pointerdown="onPointerDown"

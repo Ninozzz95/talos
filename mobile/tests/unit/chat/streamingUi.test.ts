@@ -130,14 +130,15 @@ describe('TalosMobileStreamingReply (F2-T4 / R1-5)', () => {
         expect(wrapper.get('.talos-message-content').text().match(/Primo frammento/g)).toHaveLength(1)
     })
 
-    it('P10c: Fade paints the fade modifier and never creates the typewriter caret', async () => {
+    it('Fase 4: Fade conserva il ritmo e mostra il cursore Calm', async () => {
         mockSettings.state.shell.streaming_animation = 'fade'
         try {
             const wrapper = mountStreaming(true, 'Fade pulito senza il cursore da macchina da scrivere.')
             await vi.waitFor(() => {
                 expect(wrapper.find('.talos-stream-char--fade').exists()).toBe(true)
             }, { timeout: 4000 })
-            expect(wrapper.find('[data-testid="talos-stream-caret"]').exists()).toBe(false)
+            expect(wrapper.find('[data-testid="talos-stream-caret"]').exists()).toBe(true)
+        expect(wrapper.find('table [data-testid="talos-stream-caret"]').exists()).toBe(false)
         } finally {
             mockSettings.state.shell.streaming_animation = 'typewriter'
         }
@@ -162,7 +163,7 @@ describe('TalosMobileStreamingReply (F2-T4 / R1-5)', () => {
         }
     })
 
-    it('DEBT-MOBILE-003 RED: a streaming table never gets the prompt caret', async () => {
+    it('Fase 4: il cursore segue la tabella senza entrare nelle sue celle', async () => {
         const table = [
             '| Campo | Valore |',
             '| --- | --- |',
@@ -170,11 +171,19 @@ describe('TalosMobileStreamingReply (F2-T4 / R1-5)', () => {
         ].join(LF)
         const wrapper = mountStreaming(true, table)
 
+        /*
+         * ⛔ Il cursore arriva UN FOTOGRAMMA DOPO la tabella: il markdown si
+         * analizza con un timer, poi `syncTail` lo appende in un rAF + nextTick.
+         * Aspettare solo la tabella lasciava una finestra che sotto carico si
+         * apriva (rosso in CI il 13/09 sul tag v0.1.29, verde da solo 3 volte).
+         * Si aspetta cio' che si vuole leggere: tabella E cursore.
+         */
         await vi.waitFor(() => {
             expect(wrapper.get('.talos-message-table-scroll').exists()).toBe(true)
+            expect(wrapper.find('[data-testid="talos-stream-caret"]').exists()).toBe(true)
         }, { timeout: 4000 })
 
-        expect(wrapper.find('[data-testid="talos-stream-caret"]').exists()).toBe(false)
+        expect(wrapper.find('table [data-testid="talos-stream-caret"]').exists()).toBe(false)
     })
 
     it('owner 2026-07-25: waiting shows the mark ALONE — no bubble, no container', () => {
@@ -189,7 +198,8 @@ describe('TalosMobileStreamingReply (F2-T4 / R1-5)', () => {
             expect(utility, `waiting state must stay bare: ${utility}`)
                 .not.toMatch(/^(rounded|border|bg-|shadow|ring|backdrop)/)
         }
-        expect(waiting.find('svg').exists()).toBe(true)
+        // Owner 2026-09-13: il segno dell'attesa e' l'orb con l'anello che gira.
+        expect(waiting.find('[data-testid="talos-assistant-orb"]').exists()).toBe(true)
     })
 
     it('renders nothing at all when idle', () => {
@@ -219,8 +229,15 @@ describe('TalosMobileComposer stop control (F2-T4)', () => {
         expect(wrapper.find('button[aria-label="Send message"]').exists()).toBe(false)
     })
 
-    it('shows the Send button when idle', () => {
+    /**
+     * Owner 2026-09-13: a riposo il comando dipende dal testo — microfono
+     * finche' il campo e' vuoto, invio appena c'e' qualcosa da mandare.
+     */
+    it('a riposo mostra il microfono a campo vuoto, e l invio appena c e del testo', async () => {
         const wrapper = mountComposer(false)
+        expect(wrapper.find('button[aria-label="Dictate"]').exists()).toBe(true)
+        expect(wrapper.find('button[aria-label="Send message"]').exists()).toBe(false)
+        await wrapper.setProps({ prompt: 'una domanda' })
         expect(wrapper.find('button[aria-label="Send message"]').exists()).toBe(true)
         expect(wrapper.find('button[aria-label="Stop response"]').exists()).toBe(false)
     })

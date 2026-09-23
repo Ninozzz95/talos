@@ -65,8 +65,10 @@ async function configureVisionModel(page: Page): Promise<Array<Record<string, un
 }
 
 async function openFileChooser(page: Page): Promise<FileChooser> {
+    await page.getByLabel('Add to chat').click()
+    await expect(page.getByTestId('talos-composer-drawer')).toBeVisible()
     const chooser = page.waitForEvent('filechooser')
-    await page.getByLabel('Attach a file').click()
+    await page.getByTestId('talos-drawer-attach').click()
     return chooser
 }
 

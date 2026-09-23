@@ -303,6 +303,7 @@ internal class TalosVoiceHost(
         seed: Long? = null,
         diagnosticRoute: TalosVoiceDiagnosticRoute? = null,
         queueMode: TalosVoiceQueueMode = TalosVoiceQueueMode.FLUSH,
+        rate: Float = 1f,
         onComplete: (Result<TalosVoiceStreamResult>) -> Unit = {},
     ): Long {
         val ticket = queueGate.submit(queueMode)
@@ -322,6 +323,7 @@ internal class TalosVoiceHost(
                         seed = seed,
                         diagnosticRoute = diagnosticRoute,
                         playbackEpoch = ticket.playbackEpoch,
+                        rate = rate,
                         onPlaybackPending = { pending ->
                             enqueuePlaybackCompletion(pending, onComplete)
                             completionEnqueued = true
@@ -358,6 +360,16 @@ internal class TalosVoiceHost(
      * converted on this same owner lane and remain V1 until the requested
      * utterance has completed through Pocket without fallback.
      */
+    /**
+     * D-V-1 (rapporto Astra 12/09, §5 B; owner: «subito»): la rotta della
+     * richiesta VERA si controlla PRIMA di dire «accettata». Prima si
+     * accettava con la lingua del profilo, e una lettura con interfaccia in
+     * inglese e profilo Pocket italiano moriva DOPO l'accettazione — quando
+     * il chiamante non ha piu' un ripiego pulito verso la voce Android.
+     * `onRouteRejected` arriva sulla corsia del proprietario, senza toccare
+     * il thread UI (lo stato del modello puo' costare una verifica su disco);
+     * `onAccepted` arriva nello stesso posto, subito dopo la decisione.
+     */
     fun submitSpeakStreamingWithStoredProfile(
         text: String,
         locale: String,
@@ -367,11 +379,22 @@ internal class TalosVoiceHost(
         seed: Long? = null,
         diagnosticRoute: TalosVoiceDiagnosticRoute? = null,
         queueMode: TalosVoiceQueueMode = TalosVoiceQueueMode.FLUSH,
+        rate: Float = 1f,
+        onAccepted: (() -> Unit)? = null,
+        onRouteRejected: ((String) -> Unit)? = null,
         onComplete: (Result<TalosVoiceStreamResult>) -> Unit = {},
     ): Long {
         val ticket = queueGate.submit(queueMode)
         val id = ticket.id
         owner.execute {
+            if (storedProfile is TalosStoredVoiceProfile.Current) {
+                val rejection = routeRejectionFor(storedProfile.profile, locale)
+                if (rejection != null) {
+                    onRouteRejected?.invoke(rejection)
+                    return@execute
+                }
+            }
+            onAccepted?.invoke()
             var completionEnqueued = false
             val result = if (queueMode == TalosVoiceQueueMode.ADD && !queueGate.claim(ticket)) {
                 Result.success(cancelledBeforeStart())
@@ -387,6 +410,7 @@ internal class TalosVoiceHost(
                             seed = seed,
                             diagnosticRoute = diagnosticRoute,
                             playbackEpoch = ticket.playbackEpoch,
+                            rate = rate,
                             onPlaybackPending = { pending ->
                                 enqueuePlaybackCompletion(pending, onComplete)
                                 completionEnqueued = true
@@ -1080,6 +1104,19 @@ internal class TalosVoiceHost(
         }
     }
 
+    /** Il motivo per cui la richiesta (profilo + lingua CHIESTA) non ha una rotta, o null se ce l'ha. */
+    internal fun routeRejectionFor(profile: TalosVoiceProfileV2, locale: String): String? = try {
+        TalosVoiceEngineRouter.select(
+            profile = profile,
+            requestedLocale = locale,
+            pocketStatus = currentPocketModelStatus(),
+            mossCompatible = isMossCompatible(profile),
+        )
+        null
+    } catch (error: IllegalStateException) {
+        error.message ?: "no verified voice backend"
+    }
+
     private fun runSpeakStreamingWithProfile(
         id: Long,
         text: String,
@@ -1092,6 +1129,7 @@ internal class TalosVoiceHost(
         finishDiagnosticWhenComplete: Boolean = true,
         manageDiagnosticLifecycle: Boolean = true,
         playbackEpoch: Long? = null,
+        rate: Float = 1f,
         onPlaybackPending: ((TalosVoicePendingPlayback) -> Unit)? = null,
     ): TalosVoiceStreamResult {
         val diagnosticSession = diagnosticSessionOverride
@@ -1127,14 +1165,32 @@ internal class TalosVoiceHost(
                 callback = object : TalosVoiceEngineCallback {
                     override fun onStage(metric: TalosVoiceEngineStageMetric) {
                         diagnosticSession?.record(metric.toDiagnosticEvent())
+                        // Log permanente per frase (12/09, owner: «troppa pausa dopo la
+                        // virgola»): dove e' stato tagliato l'attacco di OGNI segmento.
+                        if (metric.stage == "onset_stabilized") {
+                            Log.i(
+                                "TalosVoiceHost",
+                                "onset: sentence=${metric.sentenceIndex} source=${metric.onsetBoundarySource} " +
+                                    "discarded=${metric.onsetDiscardedSamples} lead=${metric.onsetLeadingSilenceSamples} " +
+                                    "gap=${metric.onsetGapStartSamples}..${metric.onsetGapEndSamples} resume=${metric.onsetResumeStartSamples} " +
+                                    "elapsedMs=${(System.nanoTime() - startedAtNanos) / 1_000_000}",
+                            )
+                        }
                     }
-
                     override fun onPcm(frame: TalosVoiceEngineFrame): Boolean {
                         if (!queueGate.isActive(id)) return false
                         val activePlayer = ensurePlayer(frame.sampleRate, frame.channels)
                         if (runPlayer !== activePlayer) {
                             runPlayer = activePlayer
                             underrunBaseline = activePlayer.underrunCount()
+                            activePlayer.setPlaybackSpeed(rate)
+                        }
+                        if (frame.firstFrameIndex == 0) {
+                            Log.i(
+                                "TalosVoiceHost",
+                                "firstPcm: sentence=${frame.sentenceIndex} elapsedMs=${(System.nanoTime() - startedAtNanos) / 1_000_000} " +
+                                    "leadFrames=${activePlayer.framesWritten() - activePlayer.playbackHeadFrames()} samples=${frame.pcmFloat.size}",
+                            )
                         }
                         if (!activePlayer.prepareForWrite { !queueGate.isActive(id) }) return false
                         val requestedFrames = frame.pcmFloat.size / frame.channels
@@ -1169,6 +1225,13 @@ internal class TalosVoiceHost(
                         if (!accepted && queueGate.isActive(id)) writeFailures += 1
                         val underrunsAfter = activePlayer.underrunCount() - underrunBaseline
                         val leadFrames = activePlayer.framesWritten() - activePlayer.playbackHeadFrames()
+                        if (leadFrames < LOW_LEAD_FRAMES_TO_LOG && activePlayer.isPlaying()) {
+                            Log.i(
+                                "TalosVoiceHost",
+                                "lowLead: sentence=${frame.sentenceIndex} frame=${frame.firstFrameIndex} leadFrames=$leadFrames " +
+                                    "underruns=$underrunsAfter elapsedMs=${(System.nanoTime() - startedAtNanos) / 1_000_000}",
+                            )
+                        }
                         diagnosticSession?.record(
                             TalosVoiceDiagnosticEvent(
                                 kind = TalosVoiceDiagnosticEventKind.AUDIO_WRITE,
@@ -1245,6 +1308,17 @@ internal class TalosVoiceHost(
                 onsetDiscardedSamples = outcome.synthesis.onsetDiscardedSamples,
                 resolvedProfileSchemaVersion = TalosVoiceProfileHeaderV2.SCHEMA_VERSION,
                 profileMigrationCommitted = false,
+            )
+            // Log permanente (12/09/2026), stessa disciplina di driveStreamingSynthesis():
+            // sul Pad una lettura Pocket finiva «done» 18 ms dopo la nascita
+            // dell'AudioTrack, senza suono, e nessuna riga diceva perche'.
+            Log.i(
+                "TalosVoiceHost",
+                "pocketStreaming(): route=${route.backend} fallback=${route.fallbackReason} cancelled=$cancelled " +
+                    "ttfaMs=$ttfaMs writeFailures=$writeFailures framesWritten=${activePlayer?.framesWritten() ?: -1} " +
+                    "playing=${activePlayer?.isPlaying()} generatedFrames=${outcome.synthesis.generatedFrames} " +
+                    "onsetDiscarded=${outcome.synthesis.onsetDiscardedSamples} elapsedMs=${(System.nanoTime() - startedAtNanos) / 1_000_000} " +
+                    "hardwareUnderruns=${activePlayer?.underrunCount()?.minus(underrunBaseline) ?: 0} queueActive=${queueGate.isActive(id)}",
             )
             if (!cancelled && activePlayer != null && onPlaybackPending != null) {
                 val boundaryFrames = activePlayer.framesWritten()
@@ -1325,6 +1399,7 @@ internal class TalosVoiceHost(
             }
             return result
         } catch (error: Throwable) {
+            Log.w("TalosVoiceHost", "pocketStreaming() failed: route=${resolvedRoute?.backend} queueActive=${queueGate.isActive(id)}", error)
             player?.flush()
             if (
                 resolvedRoute?.backend == TalosPocketConditioningPayload.BACKEND ||
@@ -2170,6 +2245,8 @@ internal class TalosVoiceHost(
     companion object {
         private const val DEFAULT_MAX_FRAMES = 375
         private const val DRAIN_TIMEOUT_MS = 10_000L
+        /** Sotto 100 ms di anticipo nel buffer si annota: e' li' che una giuntura fra frasi puo' svuotarsi. */
+        private const val LOW_LEAD_FRAMES_TO_LOG = 2_400L
         private const val PLAYBACK_HEAD_COMPLETION_SOURCE = "PLAYBACK_HEAD"
         private const val POCKET_MANIFEST_ASSET = "voice/pocket-model-manifest.json"
 

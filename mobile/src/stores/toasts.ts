@@ -51,14 +51,15 @@ export function useTalosMobileToasts(): TalosMobileToastsStore {
         dismiss,
         act(id) {
             const toast = items.value.find((candidate) => candidate.id === id)
-            toast?.action?.run()
             dismiss(id)
+            toast?.action?.run()
         },
     }
     return singleton
 }
 
 export function __resetToastsForTests(): void {
+    for (const toast of singleton?.items.value ?? []) singleton?.dismiss(toast.id)
     singleton = null
     nextId = 1
 }

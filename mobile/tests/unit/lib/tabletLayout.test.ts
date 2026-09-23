@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+    TALOS_TABLET_CHAT_SIDEBAR_DEFAULT,
     TALOS_TABLET_HARNESS_RAIL_COLLAPSED,
     TALOS_TABLET_SIDEBAR_DEFAULT,
     TALOS_TABLET_SIDEBAR_MAX,
     TALOS_TABLET_SIDEBAR_MIN,
+    clampTalosTabletChatSidebarWidth,
     clampTalosTabletSidebarWidth,
     talosTabletSidebarEffectiveWidth,
     talosTabletLeavesHarnessListRoute,
@@ -91,6 +93,22 @@ describe('talosTabletLeavesHarnessListRoute (F6 sidebar refactor)', () => {
     it('a route name not yet resolved does not decide (first router tick)', () => {
         expect(talosTabletLeavesHarnessListRoute(true, null)).toBe(false)
         expect(talosTabletLeavesHarnessListRoute(true, undefined)).toBe(false)
+    })
+})
+
+describe('shell.tablet_chat_sidebar_width (sidebar Calm trascinabile, 12/09)', () => {
+    it('parte dai 14,5 rem del mockup e si tiene fra 232 e 480', () => {
+        expect(clampTalosTabletChatSidebarWidth(undefined)).toBe(TALOS_TABLET_CHAT_SIDEBAR_DEFAULT)
+        expect(TALOS_TABLET_CHAT_SIDEBAR_DEFAULT).toBe(232)
+        expect(clampTalosTabletChatSidebarWidth(100)).toBe(232)
+        expect(clampTalosTabletChatSidebarWidth(999)).toBe(TALOS_TABLET_SIDEBAR_MAX)
+        expect(clampTalosTabletChatSidebarWidth(300.4)).toBe(300)
+    })
+    it('si salva a parte dal pannello Codice', () => {
+        const parsed = parseTalosMobileSettings(JSON.stringify({ shell: { tablet_chat_sidebar_width: 360, tablet_sidebar_width: 400 } }))
+        expect(parsed.shell.tablet_chat_sidebar_width).toBe(360)
+        expect(parsed.shell.tablet_sidebar_width).toBe(400)
+        expect(parseTalosMobileSettings(null).shell.tablet_chat_sidebar_width).toBe(232)
     })
 })
 

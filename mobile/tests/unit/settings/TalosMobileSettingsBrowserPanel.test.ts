@@ -48,18 +48,17 @@ describe('TalosMobileSettingsBrowserPanel', () => {
         expect(wrapper.text()).not.toContain('Never confirm')
     })
 
-    it('persists interaction, presentation and suggestion preferences', async () => {
+    it('persists interaction and presentation preferences (the link-suggestion switch left with the composer pill, 12/09)', async () => {
         const wrapper = mount(TalosMobileSettingsBrowserPanel, { props: { developmentMode: false } })
         const selects = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
         selects.find((select) => select.props('ariaLabel') === 'Browser interaction policy')
             ?.vm.$emit('update:modelValue', 'confirm_every_interaction')
         selects.find((select) => select.props('ariaLabel') === 'Open browser links in')
             ?.vm.$emit('update:modelValue', 'system_browser')
-        await tapSwitch(wrapper, 'Suggest Browse for links')
+        expect(wrapper.find('[aria-label="Suggest Browse for links"]').exists()).toBe(false)
 
         expect(mockSettings.setBrowserPreferences).toHaveBeenCalledWith({ hmi_mode: 'confirm_every_interaction' })
         expect(mockSettings.setBrowserPreferences).toHaveBeenCalledWith({ presentation: 'system_browser' })
-        expect(mockSettings.setBrowserPreferences).toHaveBeenCalledWith({ suggest_for_urls: false })
     })
 
     it('renders raw untrusted evidence controls only in development', () => {

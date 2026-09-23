@@ -66,4 +66,11 @@ describe('streaming motion CSS contracts', () => {
         expect(baseAt).toBeGreaterThanOrEqual(0)
         expect(fadeAt).toBeGreaterThan(baseAt)
     })
+
+    it('loader regression: the waiting logo keeps an infinite sweep when motion is allowed', () => {
+        const loader = balancedBlock(css, '.talos-line-loader-sweep')
+        expect(loader).toMatch(/animation:\s*talosLineSweep\s+1\.6s\s+ease-in-out\s+infinite/)
+        const reduced = allBalancedBlocks(css, '@media (prefers-reduced-motion: reduce)').join('\n')
+        expect(reduced).toMatch(/\.talos-line-loader-sweep\s*\{[^}]*animation:\s*none/s)
+    })
 })

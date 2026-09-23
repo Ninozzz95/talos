@@ -124,7 +124,10 @@ final class TalosLocalProfileStore {
                     livelloDaTesto(riga.optString("qualificationLevel", "Q1")),
                     // ⛔ P1-5, stessa storia: optDouble con -1, mai un numero
                     // indovinato per le righe scritte prima di questo campo.
-                    riga.optDouble("decodeTokPerSec", -1));
+                    riga.optDouble("decodeTokPerSec", -1),
+                    // D-53: stessa regola, -1 = non misurato, mai zero.
+                    riga.optDouble("prefillTokPerSec", -1),
+                    riga.optLong("openMs", -1));
         } catch (JSONException rigaMalformata) {
             // Una riga sola corrotta non deve buttare via tutte le altre.
             return null;
@@ -155,6 +158,8 @@ final class TalosLocalProfileStore {
             o.put("measuredAtMs", riga.measuredAtMs);
             o.put("qualificationLevel", riga.qualificationLevel.name());
             o.put("decodeTokPerSec", riga.decodeTokPerSec);
+            o.put("prefillTokPerSec", riga.prefillTokPerSec);
+            o.put("openMs", riga.openMs);
         } catch (JSONException nonPuoAccadereConChiaviCostanti) {
             return null;
         }

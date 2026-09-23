@@ -317,3 +317,43 @@ describe('tool calls over the wire (tool block)', () => {
         ])
     })
 })
+
+/**
+ * Owner 2026-09-13 — «Dettagli esecuzione»: i token e il costo di OpenRouter e dei compatibili
+ * non arrivavano MAI in chat, perche' il lettore dello streaming prendeva solo il testo.
+ * OpenRouter manda l'uso (costo compreso) nell'ultimo messaggio SSE; Gemini in `usageMetadata`.
+ */
+describe('uso e id della chiamata in streaming', () => {
+    it('compatibile: l\'ultimo messaggio porta uso, costo, token in cache e ragionamento', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => streamResponse([
+            'data: {"id":"gen-123","choices":[{"delta":{"content":"Ciao"}}]}\n\n',
+            'data: {"id":"gen-123","choices":[],"usage":{"prompt_tokens":40,"completion_tokens":7,"total_tokens":47,"cost":0.0000095,"prompt_tokens_details":{"cached_tokens":12},"completion_tokens_details":{"reasoning_tokens":3}}}\n\n',
+            'data: [DONE]\n\n',
+        ])))
+        const result = await deepSeekAdapter.streamComplete!(inputFor('deepseek', 'deepseek-chat'), { apiKey: 'secret' }, { onChunk: () => {} })
+        expect(result.text).toBe('Ciao')
+        expect(result.callId).toBe('gen-123')
+        expect(result.usage).toMatchObject({ prompt_tokens: 40, completion_tokens: 7, cost: 0.0000095, cached_tokens: 12, reasoning_tokens: 3 })
+    })
+
+    it('compatibile: senza messaggio d\'uso l\'uso resta ASSENTE, non zero', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => streamResponse([
+            'data: {"choices":[{"delta":{"content":"Ciao"}}]}\n\n',
+            'data: [DONE]\n\n',
+        ])))
+        const result = await deepSeekAdapter.streamComplete!(inputFor('deepseek', 'deepseek-chat'), { apiKey: 'secret' }, { onChunk: () => {} })
+        expect(result.usage ?? null).toBeNull()
+        expect(result.callId ?? null).toBeNull()
+    })
+
+    it('gemini: vale l\'ULTIMO usageMetadata (cumulativo) e il responseId', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => streamResponse([
+            'data: {"responseId":"resp-9","candidates":[{"content":{"parts":[{"text":"Ci"}]}}],"usageMetadata":{"promptTokenCount":20,"candidatesTokenCount":1}}\n\n',
+            'data: {"responseId":"resp-9","candidates":[{"content":{"parts":[{"text":"ao"}]}}],"usageMetadata":{"promptTokenCount":20,"candidatesTokenCount":5,"thoughtsTokenCount":2,"totalTokenCount":27}}\n\n',
+        ])))
+        const result = await geminiAdapter.streamComplete!(inputFor('gemini', 'gemini-2.5-flash'), { apiKey: 'secret' }, { onChunk: () => {} })
+        expect(result.text).toBe('Ciao')
+        expect(result.callId).toBe('resp-9')
+        expect(result.usage).toEqual({ promptTokenCount: 20, candidatesTokenCount: 5, thoughtsTokenCount: 2, totalTokenCount: 27 })
+    })
+})

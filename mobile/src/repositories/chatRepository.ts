@@ -33,6 +33,29 @@ export interface TalosLocalChatSession {
      * `renameSession` makes no claim either way.
      */
     has_messages?: boolean
+    /**
+     * Owner 2026-09-13: una chat nuova con una bozza mai inviata RESTA in cronologia,
+     * marcata come bozza, finche' non la invii o la svuoti. Stessa regola di
+     * `has_messages`: riportato da `listSessions`, undefined = non chiesto.
+     */
+    has_draft?: boolean
+}
+
+/**
+ * Un allegato in attesa nel compositore, salvato con la sua chat — owner 2026-09-13:
+ * «gli allegati in attesa seguono la loro chat come il testo della bozza». Solo quelli
+ * gia' autorizzati: il grant resta attivo finche' la bozza vive, e l'invio lo verifica.
+ */
+export interface TalosComposerAttachmentDraft {
+    id: string
+    source: 'picker' | 'vault'
+    displayName: string
+    mediaType: string
+    sizeBytes: number
+    vaultFileId: string
+    grantId: string
+    bindingId: string
+    permissions: string[]
 }
 
 export interface TalosLocalChatMessage {
@@ -311,6 +334,21 @@ export interface TalosLocalTask {
     instruction: string | null
     /** Quando è partita l'ultima volta. Serve a NON rieseguire dopo un riavvio. */
     last_run_at: string | null
+    /**
+     * U-17 — la pianificazione c'è, e per ora non deve partire.
+     *
+     * ⛔ Non è `schedule_json: null`. Spegnere la pianificazione la CANCELLA —
+     * istruzione, giorni e ora compresi — e chi la riaccende ricomincia da
+     * zero; la pausa lascia tutto scritto e toglie solo il permesso di
+     * partire. «Fermala fino a lunedì» e «non deve più ripetersi» sono due
+     * richieste diverse, e finché ce n'era una sola la prima costava la
+     * seconda.
+     *
+     * Su un'attività senza pianificazione è vera ma senza effetto: non c'è
+     * niente da fermare. La stazione infatti offre «Metti in pausa» solo dove
+     * una ricorrenza esiste.
+     */
+    paused: boolean
     created_at: string
     updated_at: string
 }
@@ -322,6 +360,15 @@ export interface UpdateTaskPatch {
     priority?: TalosTaskPriority
     schedule_json?: string | null
     instruction?: string | null
+    /**
+     * U-17 — fermare o riprendere la ricorrenza. Assente = non toccarla.
+     *
+     * Sta qui e non in un `setTaskPaused()` suo perché è una correzione come le
+     * altre, fatta da chi ha l'attività davanti: il chiamante distratto che ha
+     * giustificato `setTaskStatus` separato — la chat che spunta cento volte al
+     * giorno — non mette mai niente in pausa.
+     */
+    paused?: boolean
 }
 
 export interface CreateTaskInput {
@@ -357,6 +404,15 @@ export interface TalosLocalNote {
     trust_level: 'untrusted'
     /** A8 — la provenienza registrata quando la riga e' nata. */
     content_origin: TalosContentOrigin
+    /**
+     * U-10 — «In evidenza»: la nota resta in cima all'elenco.
+     *
+     * È una decisione della persona sulla nota, non una proprietà del testo:
+     * per questo è un campo e non una convenzione dentro il titolo. L'elenco
+     * ordina per `pinned` PRIMA che per data, quindi un pin è l'unico modo per
+     * tenere ferma una nota mentre le altre si muovono.
+     */
+    pinned: boolean
     created_at: string
     updated_at: string
 }
@@ -366,6 +422,16 @@ export interface CreateNoteInput {
     title: string
     content: string
     created_at: string
+    /**
+     * Assente = non in evidenza, che è come nasce ogni nota scritta a mano.
+     *
+     * Esiste per un chiamante solo, e serve: il RIPRISTINO da backup
+     * (`backupWiring.ts`) rimette le righe passando a `createNote` la riga
+     * esportata per intero. Senza questo campo il ripristino riportava
+     * indietro le note e buttava via quali erano in evidenza — una perdita
+     * silenziosa, perché una nota tornata senza pin sembra una nota sana.
+     */
+    pinned?: boolean
     /**
      * ⛔ A8 — da dove viene il testo di questa riga.
      *
@@ -400,6 +466,21 @@ export interface UpdateNoteInput {
     id: string
     title?: string
     content?: string
+    /**
+     * U-10 — mettere o togliere l'evidenza, senza toccare il testo.
+     *
+     * Sta qui e non in un `setNotePinned()` suo perché è la stessa regola dei
+     * due campi sopra — assente vuol dire «non toccarlo» — e perché il gesto
+     * arriva sempre da una persona che ha la nota davanti: non c'è il
+     * chiamante distratto che ha giustificato `setTaskStatus` separato per le
+     * attività (là lo stato cambia cento volte più spesso di tutto il resto,
+     * qui no).
+     *
+     * ⛔ Cambiare solo il pin NON sposta `updated_at`: l'elenco si ordina su
+     * quella data, e mettere in evidenza una nota di marzo la farebbe
+     * apparire scritta oggi. Si veda l'implementazione.
+     */
+    pinned?: boolean
 }
 
 
@@ -432,6 +513,12 @@ export interface TalosResearchRunRow {
     updated_at: string
 }
 
+export interface TalosMessageSearchHit {
+    sessionId: string
+    messageId: string
+    excerpt: string
+}
+
 export interface TalosChatRepository {
     initialize(): Promise<void>
     listSessions(): Promise<TalosLocalChatSession[]>
@@ -454,7 +541,23 @@ export interface TalosChatRepository {
         sessionId: string,
         options?: { limit?: number; before?: { ordinal: number; id: string } },
     ): Promise<TalosLocalChatMessage[]>
+    /** Literal substring, using Library normalization. Empty terms return no hits.
+     * Newest first (created_at DESC, id DESC); omitted limit means all matches.
+     * Only user/assistant text: tool payloads and system instructions are not conversation text.
+     */
+    searchMessages(term: string, options?: { limit?: number }): Promise<TalosMessageSearchHit[]>
     appendMessage(input: AppendChatMessageInput): Promise<TalosLocalChatMessage>
+    /** Fase 4: salva la bozza e ritaglia da un messaggio utente, nella stessa transazione. */
+    rewindUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string): Promise<string>
+    /**
+     * Owner 2026-09-13: «Elimina» su un messaggio toglie la COPPIA domanda-risposta.
+     * La coppia e' il messaggio della persona piu' tutto cio' che lo segue fino al
+     * messaggio successivo della persona. Chiamata su una risposta, risale alla
+     * domanda che la precede. Le FK portano via legami e attivita' dei messaggi,
+     * mai i file della Libreria (vault_file_id ON DELETE RESTRICT). Restituisce gli
+     * id rimossi.
+     */
+    deleteMessageTurn(sessionId: string, messageId: string): Promise<string[]>
     appendToolActivity(input: CreateToolActivityInput): Promise<TalosLocalToolActivity>
     updateToolActivity(activityId: string, input: UpdateToolActivityInput): Promise<void>
     listMessageToolActivities(messageId: string): Promise<TalosLocalToolActivity[]>
@@ -508,6 +611,8 @@ export interface TalosChatRepository {
     listSessionAttachmentFileIds(sessionId: string): Promise<string[]>
     loadComposerDraft(scopeId: string): Promise<string>
     saveComposerDraft(scopeId: string, draft: string): Promise<void>
+    loadComposerAttachments(scopeId: string): Promise<TalosComposerAttachmentDraft[]>
+    saveComposerAttachments(scopeId: string, attachments: readonly TalosComposerAttachmentDraft[]): Promise<void>
     createTask(input: CreateTaskInput): Promise<TalosLocalTask>
     listTasks(): Promise<TalosLocalTask[]>
     setTaskStatus(taskId: string, status: TalosTaskStatus): Promise<TalosLocalTask>
@@ -663,6 +768,29 @@ export function normalizeComposerDraft(value: string): string {
         throw new Error('TALOS_COMPOSER_DRAFT_TOO_LARGE')
     }
     return value
+}
+
+export function normalizeComposerAttachments(value: unknown): TalosComposerAttachmentDraft[] {
+    if (!Array.isArray(value)) throw new Error('TALOS_COMPOSER_ATTACHMENTS_INVALID')
+    return value.map((raw) => {
+        const item = raw as Record<string, unknown> | null
+        const text = (key: string) => {
+            const field = item?.[key]
+            if (typeof field !== 'string' || field === '') throw new Error('TALOS_COMPOSER_ATTACHMENTS_INVALID')
+            return field
+        }
+        const source = text('source')
+        if (source !== 'picker' && source !== 'vault') throw new Error('TALOS_COMPOSER_ATTACHMENTS_INVALID')
+        const sizeBytes = item?.sizeBytes
+        if (typeof sizeBytes !== 'number' || !Number.isFinite(sizeBytes) || sizeBytes < 0) throw new Error('TALOS_COMPOSER_ATTACHMENTS_INVALID')
+        const permissions = item?.permissions
+        if (!Array.isArray(permissions) || permissions.some((p) => typeof p !== 'string')) throw new Error('TALOS_COMPOSER_ATTACHMENTS_INVALID')
+        return {
+            id: text('id'), source, displayName: text('displayName'), mediaType: text('mediaType'), sizeBytes,
+            vaultFileId: text('vaultFileId'), grantId: text('grantId'), bindingId: text('bindingId'),
+            permissions: [...permissions] as string[],
+        }
+    })
 }
 
 export function normalizeChatTitle(value: string): string {

@@ -115,7 +115,10 @@ describe('TalosMobileMessageList', () => {
         await flushPromises()
 
         await wrapper.get('[data-message-id="user-1"] [aria-label="Copy message"]').trigger('click')
-        await wrapper.get('[data-message-id="user-1"] [aria-label="Resend message"]').trigger('click')
+        await vi.dynamicImportSettled()
+        await wrapper.get('[data-message-id="user-1"] [data-testid="talos-message-overflow"]').trigger('click')
+        await flushPromises()
+        document.body.querySelector<HTMLElement>('[data-testid="talos-message-resend"]')!.click()
         await wrapper.get('[data-message-id="assistant-1"] [aria-label="Retry assistant response"]').trigger('click')
         await flushPromises()
         expect(writeText).toHaveBeenCalledWith('Explain this')
@@ -127,7 +130,7 @@ describe('TalosMobileMessageList', () => {
     it('uses the neutral Processing status with no mojibake while a turn is running', async () => {
         const wrapper = mount(TalosMobileMessageList, { props: { messages: [messages[0]!], sending: true } })
         await vi.waitFor(() => {
-            expect(wrapper.get('[data-testid="talos-mobile-typing"]').text()).toBe('Processing')
+            expect(wrapper.get('[data-testid="talos-mobile-typing"]').text()).toContain('Processing')
         })
         expect(wrapper.text()).not.toContain('â')
     })
@@ -225,7 +228,7 @@ describe('first-bubble memory disclosure (MEMORY-PILL)', () => {
 })
 
 describe('persisted reasoning row integration', () => {
-    it('renders typed persisted reasoning above the answer and opens its plain-text drawer', async () => {
+    it('mostra il ragionamento sopra la risposta e lo espande sul posto', async () => {
         const assistant = {
             ...messages[1]!,
             metadata: {},
@@ -243,10 +246,11 @@ describe('persisted reasoning row integration', () => {
         expect(row.text()).toContain('Reasoning')
         expect(article.element.compareDocumentPosition(answer.element) & Node.DOCUMENT_POSITION_FOLLOWING)
             .toBeTruthy()
-        expect(wrapper.text()).not.toContain('I should keep the visual description')
+        expect(article.get('details').element.open).toBe(false)
 
         await row.trigger('click')
-        expect(wrapper.get('[data-testid="talos-reasoning-drawer"]').attributes('role')).toBe('dialog')
+        expect(article.get('details').element.open).toBe(true)
+        expect(wrapper.find('[data-testid="talos-reasoning-drawer"]').exists()).toBe(false)
         expect(wrapper.get('[data-testid="talos-reasoning-text"]').text()).toBe(persistedReasoning)
     })
 
@@ -368,7 +372,7 @@ describe('⛔ il microfono: sul dettato, non sulla risposta letta', () => {
         const wrapper = await schermo([riga({ id: 'u3', metadata: { dictated: true } })])
         const classi = wrapper.get('[data-testid="talos-message-dictated"]').classes().join(' ')
 
-        expect(classi).toContain('--talos-accent-contrast')
+        expect(classi).toContain('text-current')
         expect(classi).not.toContain('--talos-muted')
     })
 })

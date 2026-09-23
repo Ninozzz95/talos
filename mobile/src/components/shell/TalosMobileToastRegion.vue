@@ -3,6 +3,14 @@
  * F3-T4 — calm toast region. Renders above the composer, announces politely,
  * one optional action per toast (e.g. tone suggestion "Switch"). Dismiss is
  * always available; nothing here ever mutates state on its own.
+ *
+ * Stacking: z-80 — above the station sheet (z-70, phone) and the composer
+ * sheet (z-75), below full-screen frames and media viewers (z-85/95).
+ * Measured on the Pad at phone size (12/09/2026): at z-60 the bridge toast
+ * was laid out and opaque but `elementFromPoint` returned the Codice list —
+ * the station sheet covered it, and the screenshot showed nothing. A
+ * snackbar sits above the page it comments on (Material, snackbars, read
+ * 12/09/2026), and a station is a page.
  */
 import { X } from '@lucide/vue'
 import { useTalosMobileToasts } from '@/stores/toasts'
@@ -14,7 +22,7 @@ const toasts = useTalosMobileToasts()
     <div
         data-testid="talos-mobile-toasts"
         aria-live="polite"
-        class="pointer-events-none fixed inset-x-0 bottom-[calc(var(--talos-composer-height,180px)+env(safe-area-inset-bottom)+1rem)] z-[60] flex flex-col items-center gap-2 px-4"
+        class="pointer-events-none fixed inset-x-0 bottom-[calc(var(--talos-composer-height,180px)+env(safe-area-inset-bottom)+1rem)] z-[80] flex flex-col items-center gap-2 px-4"
     >
         <TransitionGroup
             enter-active-class="transition duration-200 ease-out"

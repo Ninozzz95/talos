@@ -137,7 +137,7 @@ describe('TalosMobileSettingsAgentToolsPanel', () => {
 
         expect(settings.setAgentToolEnabled).toHaveBeenCalledWith('library_search', false)
         const policy = wrapper.get('[data-agent-tool="library_context_policy_update"]')
-        expect(policy.text()).toContain('Manage Library context policy')
+        expect(policy.text()).toContain('Manage Library context')
         // The one tool that ships off: announced off, not merely unchecked.
         expect(policy.get('[role="switch"]').attributes('aria-checked')).toBe('false')
     })

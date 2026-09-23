@@ -79,6 +79,33 @@ export type TalosNotificationWeight =
     /** Chiede una decisione: si vede comunque, dentro e fuori. */
     | 'demanding'
 
+/**
+ * Chi ha fatto la cosa che stiamo annunciando.
+ *
+ * ## ⛔ Perché l'origine cambia tutto
+ *
+ * Owner 2026-09-11, dal Pad: creando **tre note** dalla stazione Note compariva
+ * il numero **3** sul campanello. Ma una nota scritta dalla persona non è una
+ * notizia PER la persona: l'ha appena scritta, l'ha vista salvarsi, ed è tornata
+ * all'elenco dove c'è. Un campanello che conta i gesti di chi lo guarda diventa
+ * un debito che non si estingue, e insegna a ignorare anche gli avvisi veri.
+ *
+ * La ricerca dice la stessa cosa in modo netto: un *activity feed* (la traccia
+ * di cosa è successo) e una *notification* (il richiamo perché qualcuno sappia)
+ * sono due cose diverse, e **le proprie azioni non generano mai notifiche**
+ * — GetStream, *Notification Feeds* / *Activity Feeds vs In-App Notifications*,
+ * letto 12/09/2026:
+ *   https://getstream.io/activity-feeds/docs/node/notification-feeds/
+ *   https://getstream.io/blog/activity-feeds-app-notifications/
+ *
+ * ⇒ `'person'` non significa «non registrare»: la riga nel registro resta, ed è
+ * la traccia che l'owner ha chiesto il 2026-08-06. Significa «nasce già letta»:
+ * si può rileggere, non richiama. `'model'` — o l'assenza del campo, che è il
+ * comportamento di sempre — resta un richiamo a tutti gli effetti, perché una
+ * nota scritta da TALOS al posto tuo è una cosa che NON hai visto succedere.
+ */
+export type TalosNotificationOrigin = 'person' | 'model'
+
 export interface TalosNotificationEvent {
     /**
      * Identifica la COSA, non l'istante.
@@ -103,6 +130,12 @@ export interface TalosNotificationEvent {
      * superficie, e allora vale la regola generale.
      */
     surface?: string
+    /**
+     * Chi l'ha fatta. Assente = come prima: un evento del sistema, che richiama.
+     * Solo `'person'` cambia il comportamento, e lo cambia in una direzione
+     * sola — verso il silenzio.
+     */
+    origin?: TalosNotificationOrigin
     at: number
 }
 
@@ -170,6 +203,17 @@ export function talosRouteNotification(
     event: TalosNotificationEvent,
     context: TalosNotificationContext,
 ): TalosNotificationRouting {
+    /*
+     * ⛔ Quello che ha fatto la persona non le si annuncia. MAI.
+     *
+     * Prima di ogni altra considerazione, perché non è un peso più leggero: è
+     * un'altra categoria. `log` era già «non interrompere», e non bastava — il
+     * campanello contava lo stesso, e tre note diventavano un «3». Chi ha appena
+     * premuto Crea non ha bisogno che glielo si dica in nessuna delle tre
+     * superfici.
+     */
+    if (event.origin === 'person') return { feed: true, toast: false, android: false }
+
     // `away` non interrompe MAI chi sta guardando: la sua ragione d'essere è
     // esattamente il caso in cui chi guarda vedrebbe la cosa da sé.
     const puoInterrompere = event.weight === 'notable' || event.weight === 'demanding'
@@ -243,7 +287,21 @@ export function talosAppendNotification(
     const aggiornata: TalosNotificationEntry = {
         ...event,
         repeats: (esistente?.repeats ?? 0) + 1,
-        read: false,
+        /*
+         * ⛔ Nasce GIÀ LETTA se l'ha fatta la persona.
+         *
+         * È qui e non nella regola di instradamento perché il numero sul
+         * campanello non lo decide l'instradamento: lo decide
+         * `talosUnreadCount`, che conta le voci non lette. Silenziare toast e
+         * notifica di sistema e lasciare la riga «non letta» avrebbe tolto
+         * l'avviso e lasciato il **numero** — cioè esattamente il difetto che
+         * l'owner ha visto (tre note, campanello «3»).
+         *
+         * La riga resta nel registro: la traccia è la richiesta del 2026-08-06,
+         * e rileggere «ho creato questa nota» è legittimo. Non è legittimo che
+         * lo chieda a gran voce.
+         */
+        read: event.origin === 'person',
     }
     const resto = feed.filter((voce) => voce.key !== event.key)
     return [aggiornata, ...resto].slice(0, Math.max(1, limit))

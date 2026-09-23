@@ -26,7 +26,9 @@ const deviceName = computed(() => device.value?.deviceModel?.trim() || t('models
 const engineLabel = computed(() => {
     if (!engine.value) return t('models.measurePending')
     if (!engine.value.available) return t('localModels.engineMissing')
-    return t('localModels.engineReady', { backends: engine.value.backends || '—' })
+    // «OpenCL,CPU» arriva cosi' dal motore: a schermo si legge «OpenCL, CPU» (Pad, 14/09).
+    const backends = String(engine.value.backends || '').split(',').map((b) => b.trim()).filter(Boolean).join(', ')
+    return t('localModels.engineReady', { backends: backends || '—' })
 })
 
 async function measure(): Promise<void> {
@@ -59,7 +61,7 @@ onMounted(async () => {
                 <Cpu class="size-[var(--talos-icon-size)]" aria-hidden="true" />
             </span>
             <span class="min-w-0 flex-1">
-                <span class="block text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('models.deviceCapacityTitle') }}</span>
+                <span data-testid="talos-device-capacity-eyebrow" class="block text-2xs font-semibold text-[var(--talos-muted)]">{{ t('models.deviceCapacityTitle') }}</span>
                 <strong class="block truncate text-sm">{{ deviceName }}</strong>
             </span>
             <button

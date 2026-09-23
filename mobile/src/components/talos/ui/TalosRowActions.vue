@@ -27,6 +27,7 @@
  */
 import { computed, nextTick, ref } from 'vue'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
+import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
 import { Check, MoreVertical } from '@lucide/vue'
 
 export interface TalosRowAction {
@@ -74,6 +75,17 @@ const props = defineProps<{
     label: string
     items: readonly TalosRowAction[]
     testId?: string
+    /**
+     * Dove vive il menu. Di serie `body`; ma dentro un `<dialog>` MODALE il
+     * body sta SOTTO il top layer e il menu, pur aperto, resta invisibile e
+     * inerte — visto sul Pad l'11/09/2026 nella sidebar (U-1): il tocco sui tre
+     * puntini «non faceva niente», e il primo Indietro chiudeva un menu che
+     * nessuno vedeva. Chi apre il menu da un dialog modale passa il dialog.
+     * (MDN, «showModal(): … displayed in the top layer, above any other
+     * elements», letto l'11/09/2026:
+     * https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement/showModal)
+     */
+    teleportTo?: string | HTMLElement
 }>()
 
 const emit = defineEmits<{ (event: 'select', id: string, checked?: boolean): void }>()
@@ -121,7 +133,34 @@ async function show(index = 0): Promise<void> {
     // behind an open panel is how a screen reader user ends up driving a menu
     // they were never told had opened.
     await nextTick()
+    tieniDentroLoSchermo()
     focusActive()
+}
+
+/**
+ * ⛔ Il pannello non esce dallo schermo a sinistra.
+ *
+ * Misurato sul Pad il 14/09 a 360 px (owner, dalla foto del telefono): il ⋯ della scheda di SINISTRA ha il
+ * bordo destro a 167, il pannello largo 176 si ancorava a destra e finiva col bordo sinistro a −9 — «Allega al
+ * messaggio», «Elimina file» tagliati. `place()` conosce solo il pulsante; la larghezza vera del pannello si
+ * sa dopo che è comparso. Come lo «shift» di Floating UI (https://floating-ui.com/docs/shift, letto il
+ * 2026-09-14): si misura, e si scorre lungo lo stesso asse fino a lasciare `GAP` dal bordo.
+ */
+function tieniDentroLoSchermo(): void {
+    // The entrance scales the painted bounds; position using the final layout width.
+    // MDN: CSSOM / Determining the dimensions of elements (2026-09-14).
+    const larghezza = panel.value?.offsetWidth ?? 0
+    if (larghezza <= 0) return
+    const box = trigger.value?.getBoundingClientRect()
+    const altezza = panel.value?.offsetHeight ?? 0
+    const below = box ? window.innerHeight - box.bottom - GAP : 0
+    const flipped = box ? below < altezza && box.top > below : at.value.flipped
+    const top = box ? (flipped ? box.top - altezza - GAP : box.bottom + GAP) : at.value.top
+    at.value = {
+        top: Math.max(GAP, Math.min(top, window.innerHeight - altezza - GAP)),
+        right: Math.max(GAP, Math.min(at.value.right, window.innerWidth - GAP - larghezza)),
+        flipped,
+    }
 }
 
 function focusActive(): void {
@@ -205,7 +244,24 @@ function onMenuKey(event: KeyboardEvent): void {
  */
 useTalosOverlayBack(() => close(), () => open.value)
 
-defineExpose({ close })
+/**
+ * U-14: l'onda che parte dal dito, sul grilletto e su ogni voce.
+ *
+ * Il mockup la mette esattamente qui (`app.js:2210` elenca `.row-main,.btn,
+ * .icon-btn,...` fra i bersagli): e' il riscontro che dice «ti ho sentito»
+ * prima ancora che il menu si apra o l'azione parta. Categoria Feedback: se
+ * l'utente la spegne, il cerchio non nasce nemmeno.
+ */
+const onda = useTalosTouchWave()
+
+/**
+ * `show` esce insieme a `close` dal 12/09: la pressione lunga e il tasto
+ * destro su una chat recente (owner: «tipo press sulle chat recenti» — e il
+ * mockup, righe 3943 e 4128) aprono QUESTO menu, non un secondo. Il bottone
+ * visibile resta la via principale, per le ragioni scritte in testa al file:
+ * tenere il gesto non toglie niente a chi il gesto non lo puo' fare.
+ */
+defineExpose({ close, show })
 </script>
 
 <template>
@@ -217,16 +273,28 @@ defineExpose({ close })
         aria-haspopup="menu"
         :aria-expanded="open"
         :aria-controls="open ? menuId : undefined"
-                class="talos-pressable inline-flex size-12 shrink-0 items-center justify-center rounded-full text-[var(--talos-muted)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="talos-pressable talos-wave-host inline-flex size-12 shrink-0 items-center justify-center rounded-full text-[var(--talos-muted)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
         @click.stop.prevent="open ? close() : show()"
         @keydown="onTriggerKey"
+        @pointerdown="onda.onPointerDown"
     >
         <MoreVertical class="size-5" aria-hidden="true" />
     </button>
 
+    <!-- U-14: il menu SALE, non compare di scatto.
+         Il mockup, misurato, ci mette dentro un foglio dal basso
+         (`overlay motion-sheet`, molla 440 ms): quella forma non la copiamo —
+         il menu ancorato alla riga resta la scelta giusta su tablet, e l'owner
+         l'ha già approvata. Quello che si porta è il PRINCIPIO: una superficie
+         che arriva dice da dove.
+         L'intento `menu-open` esiste già nel motore ed è quello del ventaglio
+         della sidebar, quindi eredita durata, curva, categoria Superfici e
+         `prefers-reduced-motion` senza una riga in piu'.
+         ⭐ L'unica aggiunta è il verso: un menu ribaltato verso l'alto deve
+         scendere, non salire, o il movimento contraddice la posizione. -->
     <!-- Teleported so no ancestor's `overflow: hidden` can clip it — a card is
          a clipping box by definition, and the menu belongs to the screen. -->
-    <Teleport to="body">
+    <Teleport :to="props.teleportTo ?? 'body'">
         <div
             v-if="open"
             class="fixed inset-0 z-[110]"
@@ -243,8 +311,10 @@ defineExpose({ close })
                 role="menu"
                 :aria-label="props.label"
                 data-testid="talos-row-actions-menu"
-                class="talos-holdable absolute min-w-44 max-w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.28)]"
-                :style="{ top: `${at.top}px`, right: `${at.right}px` }"
+                class="talos-holdable absolute w-max min-w-44 max-w-[min(20rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-12px)] overflow-y-auto rounded-xl border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.28)]"
+                data-talos-motion-intent="menu-open"
+                data-talos-calm-menu
+                :style="{ top: `${at.top}px`, right: `${at.right}px`, '--talos-motion-surface-rise': at.flipped ? '-8px' : '8px' }"
                 @click.stop
                 @keydown="onMenuKey"
             >
@@ -270,12 +340,13 @@ defineExpose({ close })
                         :disabled="item.disabled === true"
                         :role="item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'"
                         :aria-checked="item.checked === undefined ? undefined : item.checked"
-                        class="talos-pressable flex min-h-12 w-full items-center gap-2 rounded-lg px-3 text-left text-sm focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:opacity-50"
+                        class="talos-pressable talos-wave-host flex min-h-12 w-full items-center gap-2 rounded-lg px-3 text-left text-sm focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:opacity-50"
                         :class="item.danger
                             ? 'bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]'
                             : 'text-[var(--talos-text)] hover:bg-[var(--talos-active)]'"
                         @click="choose(item)"
                         @focus="active = index"
+                        @pointerdown="onda.onPointerDown"
                     >
                         <component :is="item.icon" v-if="item.icon" class="size-4 shrink-0" :class="item.danger ? '' : 'text-[var(--talos-accent)]'" aria-hidden="true" />
                         <span class="min-w-0 flex-1">{{ item.label }}</span>

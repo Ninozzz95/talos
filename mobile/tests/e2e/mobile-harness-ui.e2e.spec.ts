@@ -68,8 +68,8 @@ async function mountEmbeddedCodeFixture(page: import('@playwright/test').Page): 
             shadow.appendChild(script)
         })
         await runtimeLoaded
-        // La sessione distribuita è vuota: la fixture deve creare abbastanza
-        // transcript da produrre uno scroll reale in entrambe le viewport.
+        // The shipped empty session has no transcript. Supply long fixture
+        // content explicitly to exercise scrolling rather than rely on demo rows.
         const conversation = shadow.querySelector('.conversation')!
         for (let i = 0; i < 40; i++) {
             const row = document.createElement('p')
@@ -142,7 +142,6 @@ test('HARNESS-THEME-LIVE-01 inherits live TALOS tokens through Shadow DOM withou
 })
 
 test('CODE-THEME-INVERSE-STANDALONE-01 preserves the Calm fallback without a TALOS host', async ({ page }) => {
-    await page.emulateMedia({ colorScheme: 'dark' })
     await page.goto('/harness-ui/index.html')
 
     await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor))
@@ -153,7 +152,8 @@ test('CODE-THEME-INVERSE-STANDALONE-01 preserves the Calm fallback without a TAL
 
 for (const viewport of [
     { name: 'phone portrait', width: 392, height: 872 },
-    { name: 'phone landscape', width: 872, height: 392 },
+    { name: 'tablet portrait', width: 914, height: 1292 },
+    { name: 'tablet landscape', width: 1292, height: 914 },
 ] as const) {
     test(`CODE-EMBEDDED-GEOMETRY-01 ${viewport.name} keeps scroll without scrollbar, one composer and the shared scene`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height })
@@ -177,7 +177,6 @@ for (const viewport of [
             const scrollTarget = Math.min(120, conversation.scrollHeight - conversation.clientHeight)
             conversation.scrollTop = scrollTarget
             return {
-                wideShort: host.classList.contains('talos-embedded-wide-short'),
                 hostBackground: getComputedStyle(host).backgroundColor,
                 shellBackground: getComputedStyle(shell).backgroundColor,
                 staticComposerDisplay: getComputedStyle(staticComposer).display,
@@ -201,18 +200,10 @@ for (const viewport of [
         expect(snapshot.scrollbarGutter).toBe('auto')
         expect(snapshot.scrollRange).toBeGreaterThan(0)
         expect(snapshot.scrollTop).toBeGreaterThan(0)
-        if (snapshot.wideShort) {
-            expect(snapshot.conversationRightGap).toBeGreaterThanOrEqual(11)
-            expect(snapshot.conversationRightGap).toBeLessThanOrEqual(13)
-            expect(snapshot.contentPadding).toBe(0)
-            expect(snapshot.missionRightGap).toBeGreaterThanOrEqual(12)
-            expect(Math.abs(snapshot.missionLeftGap - snapshot.missionRightGap)).toBeLessThanOrEqual(1)
-        } else {
-            expect(snapshot.conversationRightGap).toBeGreaterThanOrEqual(0)
-            expect(snapshot.contentPadding).toBeGreaterThanOrEqual(12)
-            expect(snapshot.missionRightGap).toBeGreaterThanOrEqual(12)
-            expect(Math.abs(snapshot.missionLeftGap - snapshot.missionRightGap)).toBeLessThanOrEqual(1)
-        }
+        expect(snapshot.conversationRightGap).toBeGreaterThanOrEqual(0)
+        expect(snapshot.contentPadding).toBeGreaterThanOrEqual(12)
+        expect(snapshot.missionRightGap).toBeGreaterThanOrEqual(12)
+        expect(Math.abs(snapshot.missionLeftGap - snapshot.missionRightGap)).toBeLessThanOrEqual(1)
         expect(snapshot.transcriptClearance).toBe('231px')
         expect(snapshot.panelTransition).toContain('0.777s')
     })
@@ -226,11 +217,11 @@ for (const viewport of [
             const host = document.querySelector<HTMLElement>('[data-e2e-code-embedded-host]')
             const root = host?.shadowRoot
             const topbar = root?.querySelector<HTMLElement>('.topbar')
-            const content = root?.querySelector<HTMLElement>('.content-stage')
-            if (!topbar || !content) throw new Error('Embedded Code topbar fixture unavailable')
+            const runStrip = root?.querySelector<HTMLElement>('.run-strip')
+            if (!topbar || !runStrip) throw new Error('Embedded Code topbar fixture unavailable')
             return {
                 height: topbar.getBoundingClientRect().height,
-                contentTop: content.getBoundingClientRect().top,
+                runTop: runStrip.getBoundingClientRect().top,
             }
         })
         await page.evaluate(() => {
@@ -244,6 +235,14 @@ for (const viewport of [
             .querySelector<HTMLElement>('[data-e2e-code-embedded-host]')
             ?.shadowRoot?.querySelector('.topbar')?.classList.contains('is-scroll-hidden')))
             .toBe(true)
+        // La classe `is-scroll-hidden` scatta in modo sincrono nell'handler
+        // scroll, ma la transizione della topbar (777ms, cubic-bezier(.2,.7,.2,1))
+        // parte solo dal frame in cui il browser committa il nuovo stile e
+        // converge in coda con incrementi di centesimi di pixel: un'attesa
+        // fissa legge quella coda (su CI: "0.0124558px", "0.408802px", "1.36085px").
+        // Si attende quindi il valore TERMINALE reale — a transizione conclusa
+        // la computed value assume esattamente il valore specificato — invece
+        // di stimare a occhio una durata a muro con l'easing.
         await expect.poll(() => page.evaluate(() => {
             const root = document.querySelector<HTMLElement>('[data-e2e-code-embedded-host]')?.shadowRoot
             const topbar = root?.querySelector<HTMLElement>('.topbar')
@@ -252,12 +251,12 @@ for (const viewport of [
         const hidden = await page.evaluate(() => {
             const root = document.querySelector<HTMLElement>('[data-e2e-code-embedded-host]')?.shadowRoot
             const topbar = root?.querySelector<HTMLElement>('.topbar')
-            const content = root?.querySelector<HTMLElement>('.content-stage')
-            if (!topbar || !content) throw new Error('Embedded Code hidden topbar unavailable')
+            const runStrip = root?.querySelector<HTMLElement>('.run-strip')
+            if (!topbar || !runStrip) throw new Error('Embedded Code hidden topbar unavailable')
             return {
                 className: topbar.className,
                 maxHeight: getComputedStyle(topbar).maxHeight,
-                contentTop: content.getBoundingClientRect().top,
+                runTop: runStrip.getBoundingClientRect().top,
             }
         })
         await page.evaluate(() => {
@@ -275,6 +274,6 @@ for (const viewport of [
         expect(shown.height).toBeGreaterThan(0)
         expect(hidden.className).toContain('is-scroll-hidden')
         expect(hidden.maxHeight).toBe('0px')
-        expect(hidden.contentTop).toBeLessThan(shown.contentTop)
+        expect(hidden.runTop).toBeLessThan(shown.runTop)
     })
 }

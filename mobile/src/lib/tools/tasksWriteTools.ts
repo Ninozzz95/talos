@@ -206,6 +206,24 @@ export function createTalosTasksWriteTools(
                 priority: z.enum(PRIORITIES).optional()
                     .describe('Use high only when the user said it is urgent — do not infer urgency from tone.'),
             }),
+            /**
+             * ⛔ Solo i campi mandati — la descrizione del tool lo promette
+             * («Send only the fields that change. What you omit stays as it
+             * is.»), e una verifica che pretendesse anche il resto smentirebbe
+             * la promessa invece dell'effetto.
+             */
+            async verify(input) {
+                const adesso = await sources.find(input.id)
+                if (!adesso) return { held: false, reason: 'that task no longer exists' }
+                if (input.title !== undefined
+                    && adesso.title !== talosStripPromptEnvelope(input.title).trim()) {
+                    return { held: false, reason: 'the title is still the old one' }
+                }
+                if (input.priority !== undefined && adesso.priority !== input.priority) {
+                    return { held: false, reason: 'the priority is still the old one' }
+                }
+                return { held: true }
+            },
             async run(input) {
                 /*
                  * Una chiamata che non cambia niente si rifiuta invece di

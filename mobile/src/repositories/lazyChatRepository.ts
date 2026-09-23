@@ -1,3 +1,4 @@
+import type { TalosComposerAttachmentDraft } from '@/repositories/chatRepository'
 import type {
     AppendChatMessageInput,
     CreateChatSessionInput,
@@ -92,8 +93,17 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
             // time and sending the model each message twice.
             return (await ready()).listMessages(sessionId, options)
         },
+        async searchMessages(term, options) {
+            return (await ready()).searchMessages(term, options)
+        },
         async appendMessage(input: AppendChatMessageInput) {
             return (await ready()).appendMessage(input)
+        },
+        async rewindUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string) {
+            return (await ready()).rewindUserMessage(sessionId, messageId, expectedLastMessageId)
+        },
+        async deleteMessageTurn(sessionId: string, messageId: string) {
+            return (await ready()).deleteMessageTurn(sessionId, messageId)
         },
         async appendToolActivity(input: CreateToolActivityInput) {
             return (await ready()).appendToolActivity(input)
@@ -214,6 +224,12 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         },
         async saveComposerDraft(scopeId: string, draft: string) {
             return (await ready()).saveComposerDraft(scopeId, draft)
+        },
+        async loadComposerAttachments(scopeId: string) {
+            return (await ready()).loadComposerAttachments(scopeId)
+        },
+        async saveComposerAttachments(scopeId: string, attachments: readonly TalosComposerAttachmentDraft[]) {
+            return (await ready()).saveComposerAttachments(scopeId, attachments)
         },
         async close() {
             if (initialization) {

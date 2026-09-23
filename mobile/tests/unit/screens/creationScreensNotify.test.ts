@@ -102,3 +102,38 @@ describe('le creazioni a mano lasciano traccia senza interrompere', () => {
         expect(android).not.toHaveBeenCalled()
     })
 })
+
+/**
+ * ⛔ E il CAMPANELLO resta a zero.
+ *
+ * Owner 2026-09-11 dal Pad: tre note create dalla stazione Note e il badge
+ * diceva «3». Il test qui sopra era verde lo stesso, perché guardava toast e
+ * notifica di sistema — le due superfici che interrompono — e non il numero,
+ * che nasce da un terzo posto: `talosUnreadCount`, cioè le righe non lette.
+ *
+ * Una nota scritta dalla persona nasce quindi già letta (`origin: 'person'`).
+ *
+ * Memoria e attività avevano lo stesso difetto e la stessa cura da una riga
+ * (`origin: 'person'` accanto a `weight: 'log'`): curate il 12/09/2026, e il
+ * test le copre tutte e tre con la stessa tabella del blocco sopra — se una
+ * quarta superficie nasce senza `origin`, va aggiunta qui.
+ */
+describe('una cosa scritta a mano non alza il numero sul campanello', () => {
+    it.each(casi)('$nome: registro sì, campanello zero', async ({ modulo, titolo, corpo, salva, chiave }) => {
+        const r = router()
+        await r.push('/')
+        await r.isReady()
+        const { default: Screen } = await modulo()
+        const wrapper = mount(Screen, { global: { plugins: [r] } })
+
+        await wrapper.find(`[data-testid="${titolo}"]`).setValue('Una cosa nuova')
+        await wrapper.find(`[data-testid="${corpo}"]`).setValue('Pane e latte.')
+        const bottone = wrapper.find(`[data-testid="${salva}"]`)
+        if (bottone.exists() && bottone.element.tagName === 'BUTTON' && (bottone.element as HTMLButtonElement).type !== 'submit') await bottone.trigger('click')
+        else await wrapper.find('form').trigger('submit')
+        await flushPromises()
+
+        expect(talosNotifications.entries.some((e) => e.key === chiave)).toBe(true)
+        expect(talosNotifications.unread).toBe(0)
+    })
+})

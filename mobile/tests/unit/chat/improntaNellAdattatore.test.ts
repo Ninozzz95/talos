@@ -69,7 +69,7 @@ describe('l impronta del profilo, dentro l adattatore', () => {
         const profilo = talosUltimoProfilo()
         expect(profilo).not.toBeNull()
         expect(profilo?.attrezzi).toEqual(['time_now', 'send_message'])
-        expect(profilo?.poteri).toEqual({ read: 1, write: 0, outbound: 1 })
+        expect(profilo?.poteri).toEqual({ read: 1, write: 0, outbound: 1, execute: 0 })
         expect(profilo?.impronta).toMatch(/^[0-9a-f]{8}$/)
         expect(profilo?.tokenStimati).toBeGreaterThan(0)
     })

@@ -1,7 +1,7 @@
 import type { capSQLiteVersionUpgrade } from '@capacitor-community/sqlite'
 
 export const TALOS_CHAT_DATABASE_NAME = 'talos_mobile'
-export const TALOS_CHAT_DATABASE_VERSION = 8
+export const TALOS_CHAT_DATABASE_VERSION = 10
 
 const VERSION_1_STATEMENTS = [
     `CREATE TABLE IF NOT EXISTS talos_chat_sessions (
@@ -401,6 +401,89 @@ const VERSION_8_STATEMENTS = [
         ON talos_forge_audit(tool_id, at DESC);`,
 ] as const
 
+/**
+ * U-10 — «In evidenza»: una nota che resta in cima finché la persona lo vuole.
+ *
+ * ## Perché una colonna e non un titolo con una stellina davanti
+ *
+ * Perché la lista si ORDINA su questo, e un ordinamento che legge dentro il
+ * testo è un ordinamento che cambia da solo quando qualcuno corregge un
+ * refuso. Il pin è una decisione dell'utente sulla nota, non una proprietà del
+ * suo contenuto: sta accanto a `updated_at`, che è l'altro campo su cui si
+ * ordina.
+ *
+ * ## Perché `INTEGER NOT NULL DEFAULT 0` e non `INTEGER NULL`
+ *
+ * SQLite non ha un tipo booleano: la convenzione del file è già `INTEGER …
+ * CHECK (x IN (0, 1))` (vedi `talos_forge_tools.enabled`). Qui non serve il
+ * CHECK — un `ALTER TABLE` che aggiunge un vincolo CHECK obbliga SQLite a
+ * rileggere tutta la tabella, mentre senza vincoli l'aggiunta è a costo
+ * costante: «No changes are made to table content for … column addition
+ * without constraints … the execution time of such ALTER TABLE commands is
+ * independent of the amount of data in the table»
+ * (https://www.sqlite.org/lang_altertable.html, letto l'11/09/2026).
+ *
+ * `NOT NULL` vuole per forza un default diverso da NULL — «If a NOT NULL
+ * constraint is specified, then the column must have a default value other
+ * than NULL» (stessa fonte, stessa data) — e `0` è la risposta giusta per le
+ * righe che esistevano prima: nessuno le aveva messe in evidenza.
+ *
+ * ⛔ Questa istruzione NON è idempotente da sola: rilanciarla su una tabella
+ * che ha già la colonna fallisce con «duplicate column name: pinned». A
+ * renderla sicura è il cancello `toVersion` di `capSQLiteVersionUpgrade`, che
+ * esegue ogni scalino una volta sola — esattamente il meccanismo già usato dal
+ * v7 per `content_origin`. C'è una prova che lo dice al verso contrario in
+ * `sqliteChatRepository.engine.test.ts`.
+ */
+const VERSION_9_STATEMENTS = [
+    `ALTER TABLE talos_notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;`,
+    // L'elenco ordina per `pinned DESC, updated_at DESC, id DESC`: l'indice
+    // vecchio (updated_at, id) non copre più la prima colonna dell'ordinamento.
+    `CREATE INDEX IF NOT EXISTS talos_notes_pinned_idx
+        ON talos_notes(pinned DESC, updated_at DESC, id DESC);`,
+] as const
+
+/**
+ * U-17 — «Metti in pausa»: una pianificazione che resta scritta e non parte.
+ *
+ * ## Perché una colonna e non «spegnere la pianificazione»
+ *
+ * Perché sono due cose diverse, e il file lo dice già da sé: il modulo di
+ * creazione documenta che «spenta significa NON pianificata, non "pianificata e
+ * ferma"» — chi riaccende l'interruttore ricomincia da zero, e la ricorrenza
+ * scritta prima è persa. La pausa è esattamente il concetto che quella nota
+ * aveva rinunciato a dare: l'istruzione, i giorni e l'ora restano dove sono, e
+ * l'unica cosa che cambia è che nessun lavoro viene programmato. Senza la
+ * colonna, «mettila in pausa fino a lunedì» costerebbe riscrivere tutto lunedì.
+ *
+ * ## Perché `INTEGER NOT NULL DEFAULT 0` (e senza CHECK)
+ *
+ * È la stessa forma di `talos_notes.pinned` alla v9, per la stessa ragione, con
+ * la stessa fonte — riletta il 12/09/2026:
+ * «No changes are made to table content for renames or column addition without
+ * constraints … the execution time of such ALTER TABLE commands is independent
+ * of the amount of data in the table» e «If a NOT NULL constraint is specified,
+ * then the column must have a default value other than NULL»
+ * (https://www.sqlite.org/lang_altertable.html).
+ * `0` è la risposta giusta per le righe che esistevano prima: nessuno le aveva
+ * messe in pausa.
+ *
+ * ## ⛔ Perché NON si tocca `talos_tasks_scheduled_idx`
+ *
+ * Quell'indice (v6, su `schedule_json`) risponde a «quali attività hanno una
+ * ricorrenza», e la risposta non cambia quando una è in pausa: una pausa è
+ * revocabile, la riga resta pianificata. Metterci dentro `paused` renderebbe
+ * l'indice inutile il giorno in cui serve l'elenco completo per mostrarlo.
+ *
+ * ⛔ Questa istruzione NON è idempotente: rilanciata su una tabella che ha già
+ * la colonna fallisce con «duplicate column name: paused». A renderla sicura è
+ * il cancello `toVersion` di `capSQLiteVersionUpgrade`, che esegue ogni scalino
+ * una volta sola — lo stesso meccanismo di v6, v7 e v9.
+ */
+const VERSION_10_STATEMENTS = [
+    `ALTER TABLE talos_tasks ADD COLUMN paused INTEGER NOT NULL DEFAULT 0;`,
+] as const
+
 export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = Object.freeze([
     Object.freeze({
         toVersion: 1,
@@ -433,5 +516,13 @@ export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = 
     Object.freeze({
         toVersion: 8,
         statements: [...VERSION_8_STATEMENTS],
+    }),
+    Object.freeze({
+        toVersion: 9,
+        statements: [...VERSION_9_STATEMENTS],
+    }),
+    Object.freeze({
+        toVersion: 10,
+        statements: [...VERSION_10_STATEMENTS],
     }),
 ])

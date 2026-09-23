@@ -47,7 +47,7 @@ import {
     TALOS_MOBILE_EFFORT_ORDER,
     type TalosMobileEffortLevel,
 } from '@/lib/mobileEffort'
-import { TALOS_TABLET_SIDEBAR_DEFAULT, clampTalosTabletSidebarWidth } from '@/lib/tabletLayout'
+import { TALOS_TABLET_CHAT_SIDEBAR_DEFAULT, TALOS_TABLET_SIDEBAR_DEFAULT, clampTalosTabletChatSidebarWidth, clampTalosTabletSidebarWidth } from '@/lib/tabletLayout'
 import {
     parseTalosFontScale,
     TALOS_DEFAULT_FONT_SCALE,
@@ -256,6 +256,7 @@ export interface TalosMobileShellPreferences {
      */
     image_attachment_consent: 'allow' | 'ask' | 'deny'
     library_view: 'grid' | 'list'
+    research_view: 'grid' | 'list'
     /**
      * Le note, in lista o a schede.
      *
@@ -342,6 +343,8 @@ export interface TalosMobileShellPreferences {
     debug_diagnostics: boolean
     /** F6 — persisted tablet split-view sidebar width (px, clamped 260–480). */
     tablet_sidebar_width: number
+    /** U-5 — la sidebar Calm del tablet, trascinata dal bordo (px, 232–480; 12/09). */
+    tablet_chat_sidebar_width: number
     /** Harness-only rail state, stored locally with the rest of the shell. */
     tablet_harness_sidebar_collapsed: boolean
 }
@@ -377,6 +380,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     plan_scope: 'turn',
     image_attachment_consent: 'ask',
     library_view: 'list',
+    research_view: 'list',
     notes_view: 'list',
     // Owner 2026-07-25 set grouping on; it just never survived a reopen.
     library_group_by_chat: true,
@@ -396,6 +400,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     streaming_animation: 'typewriter',
     debug_diagnostics: false,
     tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,
+    tablet_chat_sidebar_width: TALOS_TABLET_CHAT_SIDEBAR_DEFAULT,
     tablet_harness_sidebar_collapsed: false,
 }
 
@@ -452,6 +457,7 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
             ? record.library_access
             : (record.library_context_enabled === true ? 'allow' : DEFAULT_SHELL_PREFERENCES.library_access),
         library_view: record.library_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.library_view,
+        research_view: record.research_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.research_view,
         notes_view: record.notes_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.notes_view,
         library_group_by_chat: typeof record.library_group_by_chat === 'boolean'
             ? record.library_group_by_chat
@@ -493,6 +499,7 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         // cannot start showing internals to a user who never asked.
         debug_diagnostics: record.debug_diagnostics === true,
         tablet_sidebar_width: clampTalosTabletSidebarWidth(record.tablet_sidebar_width),
+        tablet_chat_sidebar_width: clampTalosTabletChatSidebarWidth(record.tablet_chat_sidebar_width),
         tablet_harness_sidebar_collapsed: typeof record.tablet_harness_sidebar_collapsed === 'boolean'
             ? record.tablet_harness_sidebar_collapsed
             : DEFAULT_SHELL_PREFERENCES.tablet_harness_sidebar_collapsed,
@@ -566,7 +573,15 @@ function parseToolPermissions(value: unknown): TalosToolPermissions {
             ? candidate
             : TALOS_DEFAULT_TOOL_PERMISSIONS[key]
     }
-    return { read: read('read'), write: read('write'), outbound: read('outbound') }
+    /*
+     * ⛔ Si deriva dal vocabolario invece di elencare le chiavi a mano: il
+     * giorno in cui `execute` e' entrata, un letterale a tre voci avrebbe
+     * silenziosamente omesso il quarto potere — e un permesso assente vale
+     * quanto uno non chiesto.
+     */
+    return Object.fromEntries(
+        TALOS_TOOL_ACTIONS.map((azione) => [azione, read(azione)]),
+    ) as TalosToolPermissions
 }
 
 /**
@@ -577,16 +592,30 @@ function parseToolPermissions(value: unknown): TalosToolPermissions {
  * which source is selected. D3 then hangs off `source === null`: with nothing
  * chosen the web tools are not offered to the model at all, so it cannot
  * promise a search it will not perform.
+ *
+ * R-03 (2026-09-04) changes what a null `source` DEFAULTS to, not what it
+ * means: `touched` is the seam. The desktop's fresh store defaults straight
+ * to `'duckduckgo'` (`search-source-store.mjs`) because it has no history —
+ * mobile's `source` has ALSO been the "off" switch since D3
+ * (`TalosMobileSearchSourcePanel.vue`'s "Turn web search off"/"Forget the
+ * key" both write `source: null` on purpose), so a blanket "null defaults to
+ * DuckDuckGo" would silently turn search back on for anyone who deliberately
+ * turned it off. `touched` is false ONLY for an install that has never once
+ * called `setSearchPreferences`; that setter stamps it true on every call,
+ * including a deliberate `source: null` — see `parseSearchPreferences` below.
  */
 export interface TalosMobileSearchPreferences {
     source: TalosSearchSourceId | null
     /** SearXNG and custom: the instance the user runs or trusts. */
     endpoint: string | null
+    /** R-03 bookkeeping only — see the class comment. Never patched directly. */
+    touched: boolean
 }
 
 const TALOS_DEFAULT_SEARCH_PREFERENCES: TalosMobileSearchPreferences = {
     source: null,
     endpoint: null,
+    touched: false,
 }
 
 /**
@@ -625,14 +654,33 @@ function parseResearchModels(value: unknown): TalosResearchModelPreferences {
 function parseSearchPreferences(value: unknown): TalosMobileSearchPreferences {
     const record = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
     const source = record.source
-    const known = source === 'tavily' || source === 'brave' || source === 'searxng' || source === 'custom'
+    const known = source === 'tavily' || source === 'brave' || source === 'searxng'
+        || source === 'custom' || source === 'duckduckgo'
     const endpoint = typeof record.endpoint === 'string' && record.endpoint.trim() !== ''
         ? record.endpoint.trim()
         : TALOS_DEFAULT_SEARCH_PREFERENCES.endpoint
-    // Fail closed: anything unrecognised reads as "no source chosen", which by
-    // D3 means the web tools are not offered at all — never as a half-configured
-    // source the model would try and fail to use.
-    return { source: known ? source : TALOS_DEFAULT_SEARCH_PREFERENCES.source, endpoint }
+    const touched = record.touched === true
+    // Fail closed for anything unrecognised: it reads as "no explicit source",
+    // which by D3 means the web tools are not offered at all — never as a
+    // half-configured source the model would try and fail to use. Choosing a
+    // REAL source is unambiguously an act of touching this control.
+    if (known) return { source: source as TalosSearchSourceId, endpoint, touched: true }
+    /*
+     * R-03 parity with the desktop (`search-source-store.mjs`): an install
+     * that has NEVER touched this control starts on DuckDuckGo, so the model
+     * can search before anyone opens a settings screen. One that has —
+     * even down to explicitly "Turn web search off" — keeps null meaning
+     * OFF: resurrecting a deliberate refusal is worse than never shipping
+     * the keyless default.
+     *
+     * ⛔ Known gap, accepted rather than hidden: an install saved BEFORE this
+     * field existed reads back `touched: undefined` regardless of whether it
+     * had ever opened this panel, so it also gets the new default. There is
+     * no bit in that old file that can tell "never opened this screen" apart
+     * from "opened it and turned search off" — this can only mis-fire once,
+     * for a file that predates today, and never again afterwards.
+     */
+    return { source: touched ? null : 'duckduckgo', endpoint, touched }
 }
 
 function parseSecurityPreferences(value: unknown): TalosMobileSecurityPreferences {
@@ -1055,7 +1103,7 @@ export interface SettingsStore {
         actions: readonly TalosToolAction[],
     ): Promise<void>
     revokeToolAuthorization(tool: string): Promise<void>
-    setSearchPreferences(patch: Partial<TalosMobileSearchPreferences>): Promise<void>
+    setSearchPreferences(patch: Partial<Omit<TalosMobileSearchPreferences, 'touched'>>): Promise<void>
     setResearchModels(patch: Partial<TalosResearchModelPreferences>): Promise<void>
     setTone(preset: TalosToneId): Promise<void>
     setAiDefaults(patch: Partial<TalosAiDefaults>): Promise<void>
@@ -1296,8 +1344,33 @@ export function useSettingsStore(): SettingsStore {
             }))
         },
         setToolPermissions(patch) {
-            // Touching a permission is choosing it. From here on the app must
-            // not revise it, whatever it is configured elsewhere.
+            /*
+             * Touching a permission is choosing it. From here on the app must
+             * not revise it, whatever it is configured elsewhere.
+             *
+             * ⛔⛔ MA SOLO SU CIO CHE LE E STATO MOSTRATO — e questa mezza riga
+             * e costata un difetto vero il 2026-08-20.
+             *
+             * Quando `execute` e entrata nel vocabolario, la scheda dei permessi
+             * continuava a emettere il record INTERO: `execute: 'ask'` finiva nel
+             * patch, e questo giro la marcava come **scelta della persona**. Ma
+             * quella riga non era nemmeno a schermo — nessun attrezzo dichiara
+             * ancora quel potere. ⇒ Una decisione registrata su una domanda mai
+             * posta, che e esattamente il difetto che `tools_chosen` esiste per
+             * impedire, commesso dal lato opposto.
+             *
+             * ⇒ «Toccare» vuol dire ESSERE NEL PATCH, e chi il patch lo
+             * costruisce e la schermata — che sa quali poteri ha davvero
+             * mostrato. Il filtro sta in `applica()` dentro
+             * `TalosToolPermissionsBoard.vue`, che emette solo i governati.
+             *
+             * ⛔ Sta LA e non qui per una ragione MISURATA: importare il
+             * catalogo degli attrezzi in questo file costa **4.241 byte** di
+             * grafo d'avvio e sfonda il tetto del pezzo iniziale — 612.073
+             * contro 609.000. La schermata il catalogo ce l'ha gia, e non paga
+             * niente. I VALORI intanto si salvano tutti: `execute` resta `ask`
+             * nei dati, e' solo la SCELTA che non si inventa.
+             */
             const chosen = [...state.tools_chosen]
             for (const action of TALOS_TOOL_ACTIONS) {
                 const value = patch?.[action]
@@ -1352,7 +1425,13 @@ export function useSettingsStore(): SettingsStore {
         },
         setSearchPreferences(patch) {
             return commit(() => ({
-                overrides: { search: parseSearchPreferences({ ...state.search, ...patch }) },
+                // R-03: `touched: true` wins regardless of `patch` (it is
+                // excluded from the patch type above, but this is the line
+                // that actually matters) — every call here, including one
+                // that deliberately writes `source: null`, is the seam that
+                // stops `parseSearchPreferences` from re-defaulting an
+                // explicit "off" back to DuckDuckGo on its own round trip.
+                overrides: { search: parseSearchPreferences({ ...state.search, ...patch, touched: true }) },
             }))
         },
         setResearchModels(patch) {

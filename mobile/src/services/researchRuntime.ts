@@ -6,7 +6,6 @@ import {
     talosResearchIsTerminal,
     talosResearchProgressOf,
     talosResearchRecover,
-    talosResearchReplay,
     talosResearchSpent,
     talosResearchStepIdFor,
     talosResearchWorkLeft,
@@ -17,6 +16,9 @@ import {
     type TalosResearchRun,
     type TalosResearchSpend,
 } from '@/lib/research/researchRun'
+import { talosResearchLoadJournal } from '@/lib/research/researchJournal'
+import { talosResearchMayFinish } from '@/lib/research/researchCompletion'
+import { talosResearchReportRefOf } from '@/lib/research/researchCard'
 
 /**
  * The thing that actually runs a research run, and survives being killed.
@@ -56,6 +58,16 @@ export interface TalosResearchRuntimeDeps {
      * one that finished is never paid for twice.
      */
     readonly synthesise?: (run: TalosResearchRun) => Promise<TalosResearchStepOutcome>
+    /**
+     * Rileggere il rapporto appena scritto, dal magazzino. (MB-1 · C20)
+     *
+     * Serve al cancello della consegna: «conclusa» si concede solo se
+     * l'artefatto si rilegge davvero. Opzionale perche' le fasi che non
+     * scrivono rapporti devono continuare a funzionare senza — e un cancello
+     * che non puo' guardare NON blocca: rifiutare una conclusione perche' non si
+     * e' potuto controllare sarebbe la stessa bugia al contrario.
+     */
+    readonly readReport?: (resultRef: string) => Promise<string | null>
 }
 
 export interface TalosResearchProgress {
@@ -100,13 +112,21 @@ async function append(
     return next
 }
 
+/**
+ * §3.1 — il giornale si carica ANCHE se il telefono l'ha troncato a meta' riga.
+ *
+ * Qui c'era un `entries.map(JSON.parse)`: una riga sola scritta a meta' faceva
+ * lanciare tutta la lettura, e una corsa che non si rilegge e' una corsa il cui
+ * lavoro pagato e' perso — il guasto che `researchRun.ts` dichiara in testa di
+ * voler rendere impossibile. Il come si rilegge sta in `lib/research`, con le
+ * fonti: qui resta solo la chiamata.
+ */
 async function journalOf(
     deps: TalosResearchRuntimeDeps,
     runId: string,
-): Promise<{ run: TalosResearchRun | null, length: number }> {
+): Promise<{ run: TalosResearchRun | null, length: number, torn: number }> {
     const entries = await deps.repository.readResearchJournal(runId)
-    const events = entries.map((entry) => JSON.parse(entry.payload_json) as TalosResearchEvent)
-    return { run: talosResearchReplay(events), length: entries.length }
+    return talosResearchLoadJournal(entries)
 }
 
 /** What was asked of a running research: keep it, or end it. */
@@ -133,6 +153,30 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
      */
     const driving = new Set<string>()
     const stopping = new Map<string, TalosResearchStop>()
+
+    /**
+     * Il cancello della consegna, con la sua unica scusante dichiarata.
+     *
+     * Due casi passano senza guardare, e sono due casi diversi:
+     *  - non c'e' nessun `readReport`: questo motore non e' attrezzato per
+     *    controllare, e un controllo assente non e' un controllo fallito;
+     *  - non c'e' nessun passo di sintesi nel piano: la corsa non doveva
+     *    scrivere un rapporto, quindi non si misura su uno che non esiste.
+     * Tutto il resto passa dall'artefatto.
+     */
+    async function mayFinish(run: TalosResearchRun): Promise<boolean> {
+        if (!deps.readReport || !deps.synthesise) return true
+        const reportRef = talosResearchReportRefOf(run)
+        const report = reportRef ? await deps.readReport(reportRef).catch(() => null) : null
+        return talosResearchMayFinish({
+            reportRef,
+            report,
+            // Gli errori dei passi sono le uniche parole che la corsa ha
+            // lasciato scritte oltre al rapporto: e' li' che si vede un permesso
+            // negato quando il rapporto tace.
+            evidence: run.steps.map((step) => step.error),
+        })
+    }
 
     /**
      * Works through whatever the plan still owes, holding the service while it does.
@@ -302,6 +346,25 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
                         return run
                     }
                 }
+            }
+            /**
+             * MB-1 · C20 — «Conclusa» solo con un artefatto che si rilegge.
+             *
+             * Il difetto visto sul desktop: una corsa `done` con un rapporto di
+             * 290 byte che era la scusa del modello. Lo stato lo scriveva il
+             * motore su propria parola, e nessuno metteva a confronto la parola
+             * col file. Adesso la parola si guadagna.
+             *
+             * ⛔ Se il cancello dice di no NON si scrive `run_finished` e non si
+             * tocca niente altro: il passo di sintesi resta `done` col suo
+             * `spend` e il suo `resultRef`, perche' quel giro e' stato pagato e
+             * cio' che e' costato denaro non si cancella per far tornare uno
+             * stato. La corsa resta non terminale, e la scheda dice in che modo
+             * non ha concluso.
+             */
+            if (!(await mayFinish(run))) {
+                onProgress?.({ run, ...talosResearchProgressOf(run) })
+                return run
             }
             run = await append(deps, run, { kind: 'run_finished', at: deps.now() }, seq++)
             onProgress?.({ run, ...talosResearchProgressOf(run) })

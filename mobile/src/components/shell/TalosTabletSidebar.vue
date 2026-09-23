@@ -87,13 +87,27 @@ const harnessCollapsed = computed(() => props.variant === 'harness' && props.col
             >
                 <Menu aria-hidden="true" />
             </Button>
+            <!--
+              ⭐⭐⭐ 3/9 — avm-03, dal vivo (item 6): questo bottone e "Open menu"
+              sopra sembravano "due controlli affiancati senza separazione",
+              uno con "un fondo evidenziato permanente, come se fosse premuto".
+              Causa verificata via CDP sul device: il `Button` condiviso porta
+              di suo `aria-expanded:bg-muted` (per i VERI disclosure trigger,
+              es. un menu a tendina) — corretto lì, sbagliato qui: aria-expanded
+              descrive se il pannello sessioni e APERTO (stato di navigazione
+              che dura, non "ho appena premuto"), e il pannello e aperto per
+              DEFAULT — quindi il fondo restava acceso quasi sempre. Il verso
+              del chevron (ChevronRight/ChevronLeft, sotto) basta da solo a
+              dire lo stato; qui si spegne solo lo sfondo, non l'attributo
+              ARIA (resta corretto per l'accessibilita).
+            -->
             <Button
                 v-if="variant === 'harness'"
                 type="button"
                 size="icon-lg"
                 variant="ghost"
                 data-testid="talos-tablet-harness-toggle"
-                class="min-h-touch min-w-touch"
+                class="min-h-touch min-w-touch aria-expanded:!bg-transparent"
                 :aria-label="$t(harnessCollapsed ? 'accessibility.expandHarnessSessions' : 'accessibility.collapseHarnessSessions')"
                 :aria-expanded="String(!harnessCollapsed)"
                 @click="emit('toggleCollapsed')"

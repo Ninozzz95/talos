@@ -49,9 +49,9 @@ describe('la forma del compositore non toglie il selettore del modello', () => {
      * difetto viveva — un ramo lo aveva, l'altro no, e nessun test montava
      * entrambe le forme.
      */
-    it('entrambi i rami del template portano lo stesso identificativo', async () => {
+    it('la forma unica porta un solo selettore identificabile', async () => {
         const sorgente = await import('@/components/chat/TalosMobileComposer.vue?raw')
         const occorrenze = (sorgente.default.match(/talos-composer-model-chip/g) ?? []).length
-        expect(occorrenze).toBeGreaterThanOrEqual(2)
+        expect(occorrenze).toBe(1)
     })
 })

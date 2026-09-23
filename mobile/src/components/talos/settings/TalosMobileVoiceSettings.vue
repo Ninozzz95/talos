@@ -33,7 +33,7 @@ const TalosMobilePersonalVoiceEnrollment = defineAsyncComponent(
  */
 const settings = useSettingsStore()
 const toasts = useTalosMobileToasts()
-const { t } = useTalosI18n()
+const { t, locale } = useTalosI18n()
 const service = useTalosSpeechService()
 const supported = service.supported()
 const voices = ref<TalosSpeechVoice[]>([])
@@ -348,8 +348,9 @@ async function preview(): Promise<void> {
     const scelta = selectedVoice.value
     if (scelta.startsWith(PERSONAL_VOICE_PREFIX)) {
         const profileId = scelta.slice(PERSONAL_VOICE_PREFIX.length)
-        await talosPersonalVoiceSpeechAdapter(profileId).speak(t('voice.previewPhrase'), {
-            rate: settings.state.voice.personal_rate,
+        await talosPersonalVoiceSpeechAdapter(profileId, locale.value).speak(t('voice.previewPhrase'), {
+            // Owner 12/09: stessa slider «Velocita'» delle voci sintetiche.
+            rate: settings.state.voice.rate,
             pitch: settings.state.voice.personal_pitch,
             onerror: () => { toasts.push({ message: t('personalVoice.previewFailed') }) },
         })
@@ -475,8 +476,8 @@ async function previewPersonalProfile(profile: TalosPersonalVoiceProfileSummary)
     if (previewingProfileId.value) return
     previewingProfileId.value = profile.id
     const fine = (): void => { if (previewingProfileId.value === profile.id) previewingProfileId.value = null }
-    await talosPersonalVoiceSpeechAdapter(profile.id).speak(t('voice.previewPhrase'), {
-        rate: settings.state.voice.personal_rate,
+    await talosPersonalVoiceSpeechAdapter(profile.id, locale.value).speak(t('voice.previewPhrase'), {
+        rate: settings.state.voice.rate,
         pitch: settings.state.voice.personal_pitch,
         onend: fine,
         onerror: () => { fine(); toasts.push({ message: t('personalVoice.previewFailed') }) },
@@ -525,6 +526,58 @@ function onEnrollmentCommitted(): void {
                 :items="dictationLanguageItems"
                 :aria-label="t('voice.dictationTitle')"
             />
+        </div>
+
+        <div v-if="supported" data-testid="talos-tts-controls" class="mt-4 border-t border-[var(--talos-border)] pt-3">
+            <h5 class="text-xs font-semibold text-[var(--talos-text)]">{{ t('voice.readAloudTitle') }}</h5>
+            <p class="mt-0.5 text-xs leading-5 text-[var(--talos-muted)]">{{ t('voice.readAloudBody') }}</p>
+
+            <label class="mt-3 block">
+                <span class="mb-1 block text-xs font-medium text-[var(--talos-muted)]">{{ t('voice.readAloudVoice') }}</span>
+                <!-- Cleanup 2026-07-24: the shared themed select (not a raw
+                     native <select>) keeps every Settings picker coherent. -->
+                <TalosThemedSelect
+                    v-model="selectedVoice"
+                    :items="voiceItems"
+                    :aria-label="t('voice.readAloudVoice')"
+                />
+            </label>
+
+            <!-- ⛔ Le altre lingue esistono ma non le paga chi non le usa:
+                 senza questo interruttore il selettore offriva 474 righe di
+                 473 lingue mescolate, misurato sul Pad. -->
+            <!-- ⛔ Il testid sta sulla LABEL, non sull'input: un <input> non ha
+                 testo, quindi un comando cercato per etichetta risultava
+                 «assente» su uno schermo dove si legge benissimo. Misurato. -->
+            <label
+                data-testid="talos-voice-all-languages"
+                class="mt-2 flex min-h-touch items-center gap-2 text-xs text-[var(--talos-muted)]"
+            >
+                <input
+                    v-model="tutteLeLingue"
+                    type="checkbox"
+                    class="size-4 accent-[var(--talos-accent)]"
+                >
+                <span>{{ t('voice.allLanguages') }}</span>
+            </label>
+
+            <label class="mt-3 block">
+                <span class="mb-1 flex items-center justify-between text-xs font-medium text-[var(--talos-muted)]">
+                    <span>{{ t('voice.rate') }}</span><span>{{ settings.state.voice.rate.toFixed(1) }}×</span>
+                </span>
+                <input type="range" min="0.5" max="2" step="0.1" :value="settings.state.voice.rate" :aria-label="t('voice.rateAria')" class="w-full accent-[var(--talos-accent)]" @input="setRate">
+            </label>
+
+            <label class="mt-3 block">
+                <span class="mb-1 flex items-center justify-between text-xs font-medium text-[var(--talos-muted)]">
+                    <span>{{ t('voice.pitch') }}</span><span>{{ settings.state.voice.pitch.toFixed(1) }}</span>
+                </span>
+                <input type="range" min="0" max="2" step="0.1" :value="settings.state.voice.pitch" :aria-label="t('voice.pitchAria')" class="w-full accent-[var(--talos-accent)]" @input="setPitch">
+            </label>
+
+            <Button type="button" variant="outline" data-testid="talos-voice-preview" class="talos-pressable mt-3 min-h-touch gap-2 rounded-xl" @click="preview">
+                <Volume2 class="size-4" aria-hidden="true" /> {{ t('voice.preview') }}
+            </Button>
         </div>
 
         <div v-if="personalVoiceSupported && personalVoiceModelInstalled" data-testid="talos-personal-voice" class="mt-4 border-t border-[var(--talos-border)] pt-3">
@@ -698,56 +751,5 @@ function onEnrollmentCommitted(): void {
             @committed="onEnrollmentCommitted"
         />
 
-        <div v-if="supported" data-testid="talos-tts-controls" class="mt-4 border-t border-[var(--talos-border)] pt-3">
-            <h5 class="text-xs font-semibold text-[var(--talos-text)]">{{ t('voice.readAloudTitle') }}</h5>
-            <p class="mt-0.5 text-xs leading-5 text-[var(--talos-muted)]">{{ t('voice.readAloudBody') }}</p>
-
-            <label class="mt-3 block">
-                <span class="mb-1 block text-xs font-medium text-[var(--talos-muted)]">{{ t('voice.readAloudVoice') }}</span>
-                <!-- Cleanup 2026-07-24: the shared themed select (not a raw
-                     native <select>) keeps every Settings picker coherent. -->
-                <TalosThemedSelect
-                    v-model="selectedVoice"
-                    :items="voiceItems"
-                    :aria-label="t('voice.readAloudVoice')"
-                />
-            </label>
-
-            <!-- ⛔ Le altre lingue esistono ma non le paga chi non le usa:
-                 senza questo interruttore il selettore offriva 474 righe di
-                 473 lingue mescolate, misurato sul Pad. -->
-            <!-- ⛔ Il testid sta sulla LABEL, non sull'input: un <input> non ha
-                 testo, quindi un comando cercato per etichetta risultava
-                 «assente» su uno schermo dove si legge benissimo. Misurato. -->
-            <label
-                data-testid="talos-voice-all-languages"
-                class="mt-2 flex min-h-touch items-center gap-2 text-xs text-[var(--talos-muted)]"
-            >
-                <input
-                    v-model="tutteLeLingue"
-                    type="checkbox"
-                    class="size-4 accent-[var(--talos-accent)]"
-                >
-                <span>{{ t('voice.allLanguages') }}</span>
-            </label>
-
-            <label class="mt-3 block">
-                <span class="mb-1 flex items-center justify-between text-xs font-medium text-[var(--talos-muted)]">
-                    <span>{{ t('voice.rate') }}</span><span>{{ settings.state.voice.rate.toFixed(1) }}×</span>
-                </span>
-                <input type="range" min="0.5" max="2" step="0.1" :value="settings.state.voice.rate" :aria-label="t('voice.rateAria')" class="w-full accent-[var(--talos-accent)]" @input="setRate">
-            </label>
-
-            <label class="mt-3 block">
-                <span class="mb-1 flex items-center justify-between text-xs font-medium text-[var(--talos-muted)]">
-                    <span>{{ t('voice.pitch') }}</span><span>{{ settings.state.voice.pitch.toFixed(1) }}</span>
-                </span>
-                <input type="range" min="0" max="2" step="0.1" :value="settings.state.voice.pitch" :aria-label="t('voice.pitchAria')" class="w-full accent-[var(--talos-accent)]" @input="setPitch">
-            </label>
-
-            <Button type="button" variant="outline" data-testid="talos-voice-preview" class="talos-pressable mt-3 min-h-touch gap-2 rounded-xl" @click="preview">
-                <Volume2 class="size-4" aria-hidden="true" /> {{ t('voice.preview') }}
-            </Button>
-        </div>
     </section>
 </template>

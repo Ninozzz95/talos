@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { Button } from '@/components/ui/button'
+import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import { ChevronRight, ShieldCheck } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import { useSettingsStore } from '@/stores/settings'
@@ -12,6 +14,9 @@ import {
 } from '@/lib/tools/toolControlCatalog'
 import type { TalosAgentToolControl } from '@/lib/tools/toolControlCatalog'
 import type { TalosAgentToolId } from '@/lib/tools/toolControls'
+import { useTalosHeightDisclosure } from '@/composables/useTalosHeightDisclosure'
+
+const vHeightDisclosure = useTalosHeightDisclosure()
 
 const { t } = useTalosI18n()
 const settings = useSettingsStore()
@@ -138,8 +143,47 @@ function setToolPermission(action: 'read' | 'write' | 'outbound', value: string)
     void settings.setToolPermissions({ [action]: value as 'allow' | 'ask' | 'deny' })
 }
 
+const scopeChoices = computed<TalosThemedSelectItem[]>(() => [
+    { value: 'turn', label: t('agentTools.scopeTurn') },
+    { value: 'conversation', label: t('agentTools.scopeConversation') },
+])
+const scopeSaving = ref(false)
+async function setPlanScope(value: string): Promise<void> {
+    if (scopeSaving.value || (value !== 'turn' && value !== 'conversation')) return
+    scopeSaving.value = true
+    saveError.value = null
+    try {
+        await settings.setShell({ plan_scope: value })
+    } catch {
+        saveError.value = t('agentTools.scopeSaveFailed')
+    } finally {
+        scopeSaving.value = false
+    }
+}
+
+const revokingAll = ref(false)
+const confirmRevokeAll = ref(false)
+// Saved grants can also belong to user-created tools outside the built-in catalog.
+const savedTools = computed(() => Object.keys(settings.state.tool_authorizations.grants))
+async function revokeAllAuthorizations(): Promise<void> {
+    if (revokingAll.value || savingTool.value !== null || revokingTool.value !== null) return
+    const tools = [...savedTools.value]
+    if (!tools.length) return
+    revokingAll.value = true
+    let failed = false
+    try {
+        for (const tool of tools) {
+            if (!await revokeAuthorization(tool)) failed = true
+        }
+        saveError.value = failed ? t('agentTools.revokeAllFailed') : null
+        confirmRevokeAll.value = false
+    } finally {
+        revokingAll.value = false
+    }
+}
+
 const savingTool = ref<TalosAgentToolId | null>(null)
-const revokingTool = ref<TalosAgentToolId | null>(null)
+const revokingTool = ref<string | null>(null)
 const saveError = ref<string | null>(null)
 
 function title(tool: AgentToolControl): string {
@@ -155,7 +199,7 @@ async function setEnabled(tool: AgentToolControl, enabled: boolean): Promise<voi
     // moves on its own, so there is nothing to put back when a save fails.
     // What used to be three assignments to `input.checked` is now the absence
     // of one — the control cannot show something that was never persisted.
-    if (savingTool.value !== null) return
+    if (savingTool.value !== null || revokingTool.value !== null || revokingAll.value) return
 
     savingTool.value = tool.id
     saveError.value = null
@@ -172,14 +216,19 @@ function hasSavedAuthorization(tool: AgentToolControl): boolean {
     return settings.state.tool_authorizations.grants[tool.id] !== undefined
 }
 
-async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
-    if (revokingTool.value !== null || savingTool.value !== null) return
-    revokingTool.value = tool.id
+async function revokeAuthorization(tool: AgentToolControl | string): Promise<boolean> {
+    if (revokingTool.value !== null || savingTool.value !== null) return false
+    const id = typeof tool === 'string' ? tool : tool.id
+    revokingTool.value = id
     saveError.value = null
     try {
-        await settings.revokeToolAuthorization(tool.id)
+        await settings.revokeToolAuthorization(id)
+        return true
     } catch {
-        saveError.value = t('agentTools.revokeFailed', { tool: title(tool) })
+        saveError.value = typeof tool === 'string'
+            ? t('agentTools.revokeAllFailed')
+            : t('agentTools.revokeFailed', { tool: title(tool) })
+        return false
     } finally {
         revokingTool.value = null
     }
@@ -190,7 +239,7 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
     <section
         data-testid="talos-settings-agent-tools"
         class="flex flex-col gap-4"
-        :aria-busy="savingTool !== null || revokingTool !== null"
+        :aria-busy="savingTool !== null || revokingTool !== null || revokingAll || scopeSaving"
     >
         <div class="flex items-start gap-2">
             <ShieldCheck class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
@@ -248,9 +297,49 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
             </label>
         </section>
 
-        <p class="text-xs font-medium text-[var(--talos-text)]" aria-live="polite">
-            {{ t('agentTools.enabledCount', { enabled: enabledCount, total: TALOS_AGENT_TOOL_CONTROLS.length }) }}
-        </p>
+        <label class="block">
+            <span class="block text-xs font-medium text-[var(--talos-text)]">{{ t('agentTools.approvalDuration') }}</span>
+            <TalosThemedSelect
+                data-testid="talos-plan-scope"
+                class="mt-2"
+                :model-value="settings.state.shell?.plan_scope ?? 'turn'"
+                :items="scopeChoices"
+                :aria-label="t('agentTools.approvalDuration')"
+                :disabled="scopeSaving"
+                @update:model-value="setPlanScope"
+            />
+            <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">{{ t('agentTools.scopeBody') }}</span>
+        </label>
+
+        <div data-testid="agent-tools-toolbar" class="flex flex-wrap items-center justify-between gap-2">
+            <p class="text-xs font-medium text-[var(--talos-text)]" aria-live="polite">
+                {{ t('agentTools.enabledCount', { enabled: enabledCount, total: TALOS_AGENT_TOOL_CONTROLS.length }) }}
+            </p>
+            <Button
+                type="button"
+                variant="outline"
+                data-testid="agent-tools-revoke-all"
+                :disabled="!savedTools.length || revokingAll || savingTool !== null || revokingTool !== null"
+                :aria-describedby="!savedTools.length ? 'agent-tools-no-authorizations' : undefined"
+                @click="confirmRevokeAll = true"
+            >{{ t('agentTools.revokeAll') }}</Button>
+            <!-- R1-1: la conferma e' la stessa di tutta l'app (TalosMobileConfirmDialog, z 85 sopra
+                 il foglio delle Impostazioni a 70), non il Dialog di reka in quarantena. Mentre
+                 revoca, la finestra non si chiude: la chiusura si ignora finche' non ha finito. -->
+            <TalosMobileConfirmDialog
+                v-if="confirmRevokeAll"
+                data-testid="agent-tools-revoke-dialog"
+                :title="t('agentTools.revokeAll')"
+                :description="t('agentTools.revokeAllBody', { count: savedTools.length })"
+                @close="revokingAll || (confirmRevokeAll = false)"
+            >
+                <template #footer>
+                    <Button type="button" variant="outline" data-testid="agent-tools-revoke-cancel" :disabled="revokingAll" @click="confirmRevokeAll = false">{{ t('common.cancel') }}</Button>
+                    <Button type="button" data-testid="agent-tools-revoke-confirm" :disabled="revokingAll || !savedTools.length" @click="revokeAllAuthorizations">{{ t('agentTools.revokeAllConfirm') }}</Button>
+                </template>
+            </TalosMobileConfirmDialog>
+            <p v-if="!savedTools.length" id="agent-tools-no-authorizations" data-testid="agent-tools-no-authorizations" class="w-full text-xs text-[var(--talos-muted)]">{{ t('agentTools.noSavedAuthorizations') }}</p>
+        </div>
 
         <p
             v-if="saveError"
@@ -296,7 +385,8 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
                 </span>
             </button>
             <div
-                v-show="aperte.has(group.id)"
+                v-height-disclosure="aperte.has(group.id)"
+                :aria-hidden="!aperte.has(group.id) || undefined"
                 :data-agent-tool-group-body="group.id"
                 class="divide-y divide-[var(--talos-border)] overflow-hidden rounded-xl rounded-t-none border border-t-0 border-[var(--talos-border)] bg-[var(--talos-panel)]/70">
                 <div
@@ -311,7 +401,7 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
                         tabindex="-1"
                         aria-hidden="true"
                         class="absolute inset-0 z-0 cursor-pointer"
-                        :disabled="savingTool !== null || revokingTool !== null"
+                        :disabled="savingTool !== null || revokingTool !== null || revokingAll"
                         @click="setEnabled(tool, !settings.state.agent_tools[tool.id])"
                     ></button>
                     <span class="pointer-events-none relative z-10 min-w-0 flex-1">
@@ -353,7 +443,7 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
                             type="button"
                             :data-agent-tool-revoke="tool.id"
                             class="talos-pressable min-h-8 rounded-full px-2 text-2xs font-medium text-[var(--talos-accent)]"
-                            :disabled="revokingTool !== null || savingTool !== null"
+                            :disabled="revokingTool !== null || savingTool !== null || revokingAll"
                             @click="revokeAuthorization(tool)"
                         >{{ t('agentTools.askAgain') }}</button>
                         <div class="flex min-h-touch items-center">
@@ -362,7 +452,7 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
                                 :data-agent-tool-switch="tool.id"
                                 :aria-label="t('agentTools.enableAria', { tool: title(tool) })"
                                 :model-value="settings.state.agent_tools[tool.id]"
-                                :disabled="savingTool !== null || revokingTool !== null"
+                                :disabled="savingTool !== null || revokingTool !== null || revokingAll"
                                 @update:model-value="setEnabled(tool, $event)"
                             />
                         </div>

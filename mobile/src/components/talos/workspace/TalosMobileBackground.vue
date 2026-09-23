@@ -15,6 +15,7 @@ import { useSettingsStore } from '@/stores/settings'
 // active preset/mode + device environment, build the browser scene registry, and
 // render the same TalosProceduralBackground. Motion preferences default until the
 // Appearance settings feed real `preferences.motion_v6` (they arrive with settings).
+const props = withDefaults(defineProps<{ paused?: boolean }>(), { paused: false })
 const theme = useThemeStore()
 const settings = useSettingsStore()
 const environment = useTalosMotionEnvironment()
@@ -49,6 +50,7 @@ const motion = computed(() => resolveTalosWorkspaceMotionV6({
     colorMode: resolvedMode.value,
     environment: runtimeEnvironment.value,
 }))
+const paused = computed(() => motion.value.decision.paused || props.paused)
 
 onMounted(() => {
     try {
@@ -68,7 +70,7 @@ onMounted(() => {
         :input="motion.sceneInput"
         :background-enabled="motion.decision.backgroundEnabled"
         :glow-intensity="motion.preferences.glow_intensity"
-        :paused="motion.decision.paused"
+        :paused="paused"
         :runtime-reason="motion.decision.reason"
         :degradation-stage="motion.decision.degradationStage"
         :recovery-locked="false"

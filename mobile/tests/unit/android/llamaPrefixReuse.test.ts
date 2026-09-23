@@ -93,9 +93,23 @@ describe('lo Stop del motore locale', () => {
         expect(rollback).toHaveLength(2)
     })
 
-    it('distingue l\'interruzione dal guasto: 2 non è un errore', () => {
-        expect(source).toContain('if (esito == 2) break;')
+    /**
+     * ⛔ `2 = aborted` (contratto upstream, `include/llama.h`), non un guasto:
+     * lo Stop della persona passa esattamente di li', e trattarlo come errore
+     * farebbe sembrare rotto un motore che ha solo obbedito.
+     *
+     * ⛔⛔ Ma dall'11/09/2026 `break` da solo non basta piu': lo stesso 2 arriva
+     * anche quando il **backend** abbandona il grafo, e quella corsa non deve
+     * potersi registrare come prova che quel motore funziona. La domanda che
+     * separa le due e' una sola — l'avevamo chiesto noi? — e il motore la
+     * risposta ce l'ha gia' in `cancelled`.
+     */
+    it('distingue l\'interruzione dal guasto: 2 non e un errore', () => {
         expect(source).toMatch(/if \(esito == 2\) \{[^]*prefill interrotto/)
+        // Il `break` c'e' ancora: 2 continua a NON essere un errore.
+        expect(source).toMatch(/if \(esito == 2\) \{[^]{0,700}break;/)
+        // E adesso porta con se' la domanda su chi l'ha chiesto.
+        expect(source).toMatch(/if \(esito == 2\) \{[^]{0,500}!session->cancelled\.load/)
     })
 })
 

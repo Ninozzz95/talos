@@ -40,6 +40,13 @@ setup('a provider on the classic shell', async ({ page }) => {
     // covering the composer — so the sheet is checked gone as well.
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toHaveCount(0)
     await expect(page.getByLabel('Message TALOS')).toBeEnabled()
+
+    // A saved state must also restore cleanly. This catches stale persisted
+    // navigation such as `last_route: settings` that is invisible until boot.
+    await page.reload()
+    await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toHaveCount(0)
+    await expect(page.getByLabel('Message TALOS')).toBeEnabled()
+
     await page.context().storageState({ path: TALOS_PROVIDER_STATE })
 })
 
@@ -52,6 +59,11 @@ setup.describe('immersive shell', () => {
         await configureChatProvider(page, 'e2e-shared-key')
         await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toHaveCount(0)
         await expect(page.getByLabel('Message TALOS')).toBeEnabled()
+
+        await page.reload()
+        await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toHaveCount(0)
+        await expect(page.getByLabel('Message TALOS')).toBeEnabled()
+
         await page.context().storageState({ path: TALOS_PROVIDER_IMMERSIVE_STATE })
     })
 })

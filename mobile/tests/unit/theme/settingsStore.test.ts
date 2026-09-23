@@ -219,8 +219,76 @@ describe('parseTalosMobileSettings', () => {
         expect(parsed.personal_rate).toBe(2) // clamp ceiling, same 0.5..2 range `rate` already uses
         expect(parsed.personal_pitch).toBe(0) // clamp floor, same 0..2 range `pitch` already uses
     })
+
+    /**
+     * R-03 (2026-09-04) — desktop parity: a store that has NEVER been
+     * touched defaults its search source to DuckDuckGo, so the model can
+     * search before anyone opens Settings. One that HAS been touched — even
+     * down to an explicit "off" — keeps null meaning off, never resurrected.
+     */
+    it('DDG-DEFAULT-01 a fresh install (no file at all) defaults search.source to duckduckgo', () => {
+        expect(parseTalosMobileSettings(null).search).toEqual({
+            source: 'duckduckgo', endpoint: null, touched: false,
+        })
+        expect(DEFAULT_SETTINGS_STATE.search.source).toBe('duckduckgo')
+    })
+
+    it('DDG-DEFAULT-02 AL CONTRARIO: an install that already turned search off (touched, null) stays off', () => {
+        const parsed = parseTalosMobileSettings(JSON.stringify({
+            search: { source: null, endpoint: null, touched: true },
+        }))
+        expect(parsed.search).toEqual({ source: null, endpoint: null, touched: true })
+    })
+
+    it('DDG-DEFAULT-03 choosing a real source is treated as touched even if the saved file never says so', () => {
+        const parsed = parseTalosMobileSettings(JSON.stringify({
+            search: { source: 'tavily', endpoint: null },
+        }))
+        expect(parsed.search).toEqual({ source: 'tavily', endpoint: null, touched: true })
+    })
+
+    it('DDG-DEFAULT-04 an install that predates this field (search present, no touched key, source null) also gets the default', () => {
+        // ⛔ Documented gap, not a fix: this is the one case that cannot be
+        // told apart from "explicitly turned off before today" — see the
+        // comment on `parseSearchPreferences` in settings.ts.
+        const parsed = parseTalosMobileSettings(JSON.stringify({
+            search: { source: null, endpoint: null },
+        }))
+        expect(parsed.search.source).toBe('duckduckgo')
+    })
 })
 describe('useSettingsStore', () => {
+
+    it('DDG-DEFAULT-05 a fresh store starts on duckduckgo, and turning it off STICKS across a save/reload round trip', async () => {
+        const store = useSettingsStore()
+        // Fresh: nobody has opened Settings → Search yet.
+        expect(store.state.search.source).toBe('duckduckgo')
+
+        // The exact bug this `touched` flag exists to prevent: `clearSource()`
+        // (TalosMobileSearchSourcePanel.vue's "Turn web search off") feeds the
+        // CURRENT state straight back through `setSearchPreferences`. Without
+        // the flag, `{ ...state.search, source: null }` would round-trip
+        // through the same defaulting logic and silently re-become
+        // 'duckduckgo' on the very call meant to turn it off.
+        await store.setSearchPreferences({ source: null })
+        expect(store.state.search.source).toBeNull()
+
+        // AL CONTRARIO of the fresh-install case: reloading from what was
+        // just persisted must not resurrect DuckDuckGo either.
+        const reloaded = parseTalosMobileSettings(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!)
+        expect(reloaded.search).toEqual({ source: null, endpoint: null, touched: true })
+    })
+
+    it('DDG-DEFAULT-06 AL CONTRARIO: an existing key-bearing choice is never degraded by the new default', async () => {
+        const store = useSettingsStore()
+        await store.setSearchPreferences({ source: 'tavily' })
+        expect(store.state.search.source).toBe('tavily')
+
+        // Some unrelated setting changes later — the search choice must not
+        // drift back to anything, duckduckgo included.
+        await store.setShell({ plan_scope: 'conversation' })
+        expect(store.state.search.source).toBe('tavily')
+    })
 
     it('PIANO — la porta nasce CHIUSA, e un valore inventato non la apre', async () => {
         const store = useSettingsStore()

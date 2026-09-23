@@ -73,6 +73,28 @@ const REPORT: TalosResearchReportRecord = {
     ],
 }
 
+/**
+ * Il rapporto come DOCUMENTO, che e' cio' che le pagine leggono dal 12/09.
+ *
+ * ⛔ MB-1: il record si ricava dal testo e non viceversa, perche' un `null` non
+ * distingue «non c'e'» da «non si rilegge» da «bloccata da un permesso». Qui il
+ * documento si costruisce dal record della fixture, cosi' le prove esistenti
+ * continuano a descrivere la stessa ricerca.
+ */
+function documentOf(record: TalosResearchReportRecord | null): string | null {
+    if (!record) return null
+    return [
+        `# ${record.question}`,
+        '',
+        record.summary,
+        '',
+        '```talos-research-report',
+        JSON.stringify(record),
+        '```',
+        '',
+    ].join('\n')
+}
+
 function controllerWith(report: TalosResearchReportRecord | null, runs: readonly TalosResearchRun[] = [RUN]) {
     return {
         catalogs: {},
@@ -90,6 +112,7 @@ function controllerWith(report: TalosResearchReportRecord | null, runs: readonly
             start: vi.fn(),
             resume: vi.fn(),
             report: vi.fn().mockResolvedValue(report),
+            reportDocument: vi.fn().mockResolvedValue(documentOf(report)),
             recheck: vi.fn(),
             followUp: vi.fn(),
             exportReport: vi.fn(),

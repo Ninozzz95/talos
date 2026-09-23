@@ -127,6 +127,8 @@ describe('runner reale di parità locale', () => {
         expect(report.toolTransport).toBe('prompt-json-v1')
         expect(report.templateCapabilities).toEqual({
             supportsTools: false, supportsToolCalls: false, supportsSystemRole: true,
+            grammarForTools: false,
+            thinkingCanBeDisabled: false,
         })
         expect(report.checks.find((entry) => entry.id === 'plain_text')).toMatchObject({
             status: 'fail', code: 'TALOS_LOCAL_PARITY_TEMPLATE_TRANSPORT_FAILED',

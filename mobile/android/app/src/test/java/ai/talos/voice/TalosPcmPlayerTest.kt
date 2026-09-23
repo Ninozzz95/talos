@@ -173,6 +173,56 @@ class TalosPcmPlayerTest {
         assertEquals(5L, player.framesWritten())
     }
 
+    /*
+     * 12/09/2026, misurato sul Pad: il primo blocco Pocket di una lettura in
+     * chat supera la capienza del buffer; il track fermo risponde 0 dopo averlo
+     * riempito. Prima: player morto, lettura muta. Ora: si avvia e si finisce
+     * di scrivere.
+     */
+    @Test
+    fun `a first block larger than the stopped track buffer starts playback on backpressure and finishes the write`() {
+        val track = FakeTrack(3, 0, 2)
+        val player = TalosPcmPlayer(24_000, 1, SingleTrackFactory(track))
+
+        assertTrue(player.write(floatArrayOf(0.1f, 0.2f, 0.3f, 0.4f, 0.5f)))
+
+        assertEquals(listOf("write:0:5", "write:3:2", "play", "write:3:2"), track.events)
+        assertEquals(5L, player.framesWritten())
+        assertTrue(player.isPlaying())
+        assertFalse(player.isDead)
+    }
+
+    @Test
+    fun `a second zero after starting on backpressure is a real fault`() {
+        val track = FakeTrack(3, 0, 0)
+        val player = TalosPcmPlayer(24_000, 1, SingleTrackFactory(track))
+
+        assertFalse(player.write(floatArrayOf(0.1f, 0.2f, 0.3f, 0.4f, 0.5f)))
+
+        assertEquals(listOf("write:0:5", "write:3:2", "play", "write:3:2"), track.events)
+        assertTrue(player.isDead)
+    }
+
+    @Test
+    fun `playback speed reaches the track before the first write and again on a recreated track`() {
+        val first = FakeTrack(-1)
+        val second = FakeTrack(2)
+        val player = TalosPcmPlayer(24_000, 1, SequenceTrackFactory(first, second))
+        player.setPlaybackSpeed(1.2f)
+
+        assertTrue(player.write(floatArrayOf(0.1f, 0.2f)))
+
+        assertEquals(listOf("speed:1.2", "write:0:2", "release"), first.events)
+        assertEquals(listOf("speed:1.2", "write:0:2", "play"), second.events)
+    }
+
+    @Test
+    fun `playback speed outside the slider range is refused`() {
+        val player = TalosPcmPlayer(24_000, 1, SingleTrackFactory(FakeTrack(2)))
+        assertThrows(IllegalArgumentException::class.java) { player.setPlaybackSpeed(2.5f) }
+        assertThrows(IllegalArgumentException::class.java) { player.setPlaybackSpeed(0.2f) }
+    }
+
     @Test
     fun `zero progress fails closed instead of spinning`() {
         val track = FakeTrack(0)
@@ -322,6 +372,9 @@ class TalosPcmPlayerTest {
             }
         }
 
+        override fun setPlaybackSpeed(speed: Float) {
+            events += "speed:$speed"
+        }
         override fun play() {
             events += "play"
             currentPlayState = 3

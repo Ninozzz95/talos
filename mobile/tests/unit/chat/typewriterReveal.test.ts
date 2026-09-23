@@ -13,6 +13,7 @@ import { useTalosTypewriterReveal } from '@/composables/useTalosTypewriterReveal
  */
 function harness(source: ReturnType<typeof ref<string>>, options: {
     reducedMotion?: boolean
+    enabled?: boolean
     pacing?: Record<string, number>
 } = {}) {
     const frames: Array<(time: number) => void> = []
@@ -26,6 +27,7 @@ function harness(source: ReturnType<typeof ref<string>>, options: {
                 raf: (callback) => { frames.push(callback); return frames.length },
                 cancel: () => { cancelled += 1 },
                 reducedMotion: () => options.reducedMotion === true,
+                enabled: () => options.enabled !== false,
                 pacing: options.pacing,
             })
             return () => h('span', reveal.revealed.value)
@@ -97,6 +99,15 @@ describe('useTalosTypewriterReveal', () => {
         await rig.wrapper.vm.$nextTick()
         expect(rig.text()).toBe(source.value)
         expect(rig.pendingFrames()).toBe(0)
+        rig.wrapper.unmount()
+    })
+
+    it('does not schedule frames while this reveal mode is inactive', async () => {
+        const source = ref('Modalita inattiva: nessun lavoro di animazione.')
+        const rig = harness(source, { enabled: false })
+        await rig.wrapper.vm.$nextTick()
+        expect(rig.pendingFrames()).toBe(0)
+        expect(rig.text()).toBe('')
         rig.wrapper.unmount()
     })
 

@@ -30,7 +30,7 @@ function mountBlock(props: Record<string, unknown> = {}) {
     })
 }
 
-describe('reasoning is a muted line that opens a drawer', () => {
+describe('il ragionamento Calm si espande sul posto', () => {
     it('REASONING-ICON-01 uses one decorative Brain icon and never Sparkles', () => {
         for (const live of [false, true]) {
             const row = mountBlock({ live }).get('[data-testid="talos-reasoning-toggle"]')
@@ -48,21 +48,22 @@ describe('reasoning is a muted line that opens a drawer', () => {
         // The card is the thing being removed: a border or a filled panel is
         // exactly what the owner asked to stop seeing.
         expect(classes).not.toMatch(/\bborder\b|\bbg-/)
-        expect(row.attributes('aria-haspopup')).toBe('dialog')
+        expect(row.element.tagName).toBe('SUMMARY')
+        expect(row.attributes('aria-haspopup')).toBeUndefined()
     })
 
-    it('keeps the trace OUT of the document until the row is tapped', async () => {
+    it('conserva il testo integrale in un details chiuso finché viene toccato', async () => {
         const wrapper = mountBlock()
-        expect(wrapper.text()).not.toContain(REASONING)
+        expect(wrapper.get('details').element.open).toBe(false)
         expect(wrapper.find('[data-testid="talos-reasoning-drawer"]').exists()).toBe(false)
 
         await wrapper.get('[data-testid="talos-reasoning-toggle"]').trigger('click')
 
-        expect(wrapper.find('[data-testid="talos-reasoning-drawer"]').exists()).toBe(true)
+        expect(wrapper.get('details').element.open).toBe(true)
         expect(wrapper.text()).toContain(REASONING)
     })
 
-    it('is a drawer, not an inline expansion: the row does not claim to expand', async () => {
+    it('usa la semantica nativa details senza attributi ARIA duplicati', async () => {
         const wrapper = mountBlock()
         await wrapper.get('[data-testid="talos-reasoning-toggle"]').trigger('click')
         // `aria-expanded` would promise in-place content to a screen reader.

@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
+import { useTalosMessageEntrance } from '@/composables/useTalosMessageEntrance'
+import './talosCalmMessages.css'
+import TalosMobileAssistantHeader from './TalosMobileAssistantHeader.vue'
 import { BookMarked, CheckCheck, ChevronRight, CircleAlert, FileText, Mic, ShieldQuestion } from '@lucide/vue'
 import { talosShortModelLabel } from '@/lib/models/modelLabel'
 import {
@@ -11,7 +14,12 @@ import {
 
 import { TALOS_TOOL_LABEL_KEYS, talosDynamicToolFallbackLabel } from '@/lib/tools/toolLabels'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
-import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
+// La chat vuota non ha azioni per messaggio: arrivano con il primo messaggio.
+const TalosMobileMessageActions = defineAsyncComponent(() => import('./TalosMobileMessageActions.vue'))
+import {
+    talosAggiornaMisureDeiMessaggi,
+    talosMisureDelMessaggio,
+} from '@/components/chat/useTalosLocalMetrics'
 /*
  * La bolla-immagine arriva col primo messaggio che ne ha una, non all'avvio.
  *
@@ -33,6 +41,34 @@ const TalosMobileMessageImage = defineAsyncComponent(
 const TalosMobileSchedaAzione = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileSchedaAzione.vue'),
 )
+/*
+ * ⭐ FASE 2 — la riga della velocità del motore locale, sotto le azioni.
+ *
+ * ⛔ PIGRA, e il commento che stava qui prima diceva il contrario: «un import
+ * dinamico costerebbe più byte di quelli che risparmia». Era una deduzione, non
+ * una misura, ed era sbagliata. Misurato il 2026-09-10 chiedendo a Rollup il
+ * `renderedLength` per modulo (non alla sourcemap — vedi la nota in
+ * `scripts/verify-initial-chunk.mjs`), il componente statico pesava **2.432
+ * byte** nel grafo d'avvio, e con lui il resto della funzione portava il pezzo
+ * a **623.424** contro un tetto di 622.500: `npm run build` rosso per 924 byte.
+ *
+ * La ragione per cui la deduzione sbagliava: il costo non è quello che il
+ * componente ESEGUE (un `<p>` con tre stringhe), è il TESTO del componente —
+ * il suo `<script setup>` compilato, il template reso funzione di render, e i
+ * commenti che spiegano perché ogni pezzo esiste. È la stessa cosa già scritta
+ * in testa a `lib/models/localWarmSelectedModel.ts`.
+ *
+ * E la pigrizia qui è vera pigrizia, non rinviata di un istante: la
+ * documentazione di Vue (vuejs.org/guide/components/async.html, letta il
+ * 2026-09-10) dice che il wrapper «only calls the loader function when it is
+ * actually rendered on the page». Insieme al `v-if` sulle misure — che sotto è
+ * stato stretto da «se il gruppo finisce» a «se ci sono misure» — il chunk
+ * arriva alla PRIMA risposta di un motore locale che ha misurato qualcosa, e
+ * mai in una chat a chiave.
+ */
+const TalosMobileLocalMetricsRow = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileLocalMetricsRow.vue'),
+)
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
 import TalosMobileSourcesChip from '@/components/chat/TalosMobileSourcesChip.vue'
@@ -40,6 +76,8 @@ import { writeTalosClipboardText } from '@/services/clipboard'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import { talosChatTextSize } from '@/lib/talosChatLayout'
 import type { TalosChatBubbleScale } from '@/lib/talosTypes'
+
+const vMessageEntrance = useTalosMessageEntrance()
 
 const props = defineProps<{
     messages: readonly TalosMobileMessageView[]
@@ -78,6 +116,9 @@ const emit = defineEmits<{
     resend: [messageId: string]
     retry: [messageId: string]
     saveToLibrary: [messageId: string]
+    share: [messageId: string]
+    details: [messageId: string]
+    delete: [messageId: string]
     /** La riga dell'attesa e' essa stessa il modo di rispondere. */
     reviewAuthorization: []
 }>()
@@ -117,6 +158,31 @@ function quanteInAttesa(message: TalosMobileMessageView): number {
 }
 
 const { t } = useTalosI18n()
+
+/**
+ * ⭐⭐⭐ FASE 2 — quando compare una risposta, si ritirano le misure del
+ * motore che l'ha prodotta.
+ *
+ * ⛔ Si guarda «lunghezza + id dell'ultimo» e non l'array: il negozio fa
+ * `messages.push(view)` sullo STESSO array, quindi il riferimento non cambia
+ * mai e un `watch` sull'array non scatterebbe una volta sola. È il genere di
+ * difetto che avrebbe passato build, typecheck e lettura, e si sarebbe visto
+ * solo come una riga che non compare mai.
+ *
+ * `immediate`: il primo giro serve a OSSERVARE gli id già a schermo, non ad
+ * assegnare — aprire una chat piena non deve regalare una misura all'ultimo
+ * messaggio di ieri (la guardia vera è dentro il composabile).
+ */
+watch(
+    () => `${props.messages.length}:${props.messages[props.messages.length - 1]?.id ?? ''}`,
+    () => talosAggiornaMisureDeiMessaggi(props.messages),
+    { immediate: true },
+)
+
+/** Le misure di questa risposta, se sono state prese. Quasi sempre `null`. */
+function misureDi(messaggio: TalosMobileMessageView) {
+    return talosMisureDelMessaggio(messaggio.id)
+}
 
 
 
@@ -166,6 +232,14 @@ const TalosMobileStreamingReply = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileStreamingReply.vue'),
 )
 const copyStatus = ref('')
+const TalosMobileMessageFile = defineAsyncComponent(() => import('./TalosMobileMessageFile.vue'))
+const TalosMobileMessageEdit = defineAsyncComponent(() => import('./TalosMobileMessageEdit.vue'))
+const editTarget = ref<{ messageId: string; lastMessageId: string; hasLater: boolean } | null>(null)
+function editMessage(message: TalosMobileMessageView): void {
+    if (props.sending) return
+    const last = props.messages.at(-1)
+    if (last) editTarget.value = { messageId: message.id, lastMessageId: last.id, hasLater: last.id !== message.id }
+}
 
 // R1-5 — the in-flight reply lives in TalosMobileStreamingReply, which alone
 // subscribes to streamingText: a token burst no longer re-diffs this list.
@@ -189,6 +263,7 @@ function clearMessageHold(): void {
 
 function onMessagePointerDown(event: PointerEvent): void {
     clearMessageHold()
+    if (event.target instanceof Element && event.target.closest('button, a, summary, input, textarea')) return
     messageHoldOrigin = { x: event.clientX, y: event.clientY }
     const article = event.currentTarget as HTMLElement
     messageHoldTimer = setTimeout(() => {
@@ -227,22 +302,19 @@ onMounted(() => {
     nowTicker = setInterval(() => { now.value = new Date() }, 30_000)
 })
 onBeforeUnmount(() => {
+    clearMessageHold()
     if (nowTicker) clearInterval(nowTicker)
 })
 
 // F2-T2 calm thread: consecutive same-sender messages group together —
-// tighter gap, tail radius and meta row only on the last of the group.
+// Il gruppo resta identificabile; ogni messaggio conserva meta, azioni e metriche.
 function isGrouped(index: number): boolean {
     const current = props.messages[index]
     const previous = props.messages[index - 1]
     return Boolean(previous && current.role !== 'system' && previous.role === current.role)
 }
 
-function isGroupEnd(index: number): boolean {
-    const current = props.messages[index]
-    const next = props.messages[index + 1]
-    return !next || next.role !== current.role
-}
+
 
 function modelLabel(message: TalosMobileMessageView): string {
     // Attribution is assistant-only: a human never answers "with" a model.
@@ -305,7 +377,7 @@ async function copyMessage(message: TalosMobileMessageView): Promise<void> {
 }
 
 /**
- * Images render as images; everything else keeps the chip.
+ * Immagini nel visore; file utente in chip e file assistente in schede ricche.
  *
  * Split here rather than branched inside one loop so the two have different
  * markup entirely — a thumbnail is not a chip with a different icon.
@@ -344,7 +416,7 @@ function messageStateLabel(state: string): string {
 
 <template>
     <div
-        class="mx-auto flex min-w-0 w-full max-w-[820px] flex-col overflow-x-hidden px-3 py-4"
+        class="talos-calm-thread mx-auto flex min-w-0 w-full max-w-[820px] flex-col overflow-x-hidden px-3 py-4"
         data-testid="talos-mobile-message-list"
         :data-text-scale="props.textScale ?? 'balanced'"
         :style="{ fontSize: talosChatTextSize(props.textScale) }"
@@ -365,13 +437,15 @@ function messageStateLabel(state: string): string {
         <article
             v-for="(message, index) in messages"
             :key="message.id"
+            v-message-entrance="message.state"
+            v-memo="[message, messages[index - 1]?.role, messages[index + 1]?.role, sending, modelLabels, messageStyle, textScale, hasOlderMessages, pendingAuthorizationIds, diagnostica, firstMemoryDisclosureMessageId, now]"
             :data-message-id="message.id"
             :data-message-kind="message.role"
             :data-state="message.state"
             :data-grouped="isGrouped(index) ? 'true' : undefined"
-            class="talos-chat-message flex min-w-0 max-w-full flex-col"
-            :class="[message.role === 'user' ? 'items-end' : 'items-start', isGrouped(index) ? 'mt-1' : 'mt-3 first:mt-0']"
-            @pointerdown="message.role === 'user' && onMessagePointerDown($event)"
+            class="chat-message talos-chat-message flex min-w-0 max-w-full flex-col"
+            :class="message.role === 'user' ? 'user-message items-end' : 'assistant-message items-start'"
+            @pointerdown="message.role !== 'system' && onMessagePointerDown($event)"
             @pointermove="onMessagePointerMove($event)"
             @pointerup="clearMessageHold()"
             @pointercancel="clearMessageHold()"
@@ -379,29 +453,21 @@ function messageStateLabel(state: string): string {
         >
             <TalosMobileStatusMessage v-if="message.role === 'system'" :message="message" />
             <template v-else>
+                <TalosMobileAssistantHeader v-if="message.role === 'assistant'">
+                    <span v-if="modelLabel(message)">{{ modelLabel(message) }} · </span>
+                    <span>{{ relativeTime(message.created_at) }}</span>
+                    <span v-if="message.state !== 'persisted'"> · {{ messageStateLabel(message.state) }}</span>
+                </TalosMobileAssistantHeader>
+                <TalosMobileReasoningBlock
+                    v-if="message.role === 'assistant' && message.reasoning"
+                    :reasoning="message.reasoning"
+                />
                 <div
-                    class="talos-message-bubble min-w-0 overflow-hidden leading-6"
-                    :class="[message.role === 'assistant' && (props.messageStyle ?? 'sections') === 'sections'
-                        ? 'w-full max-w-full px-1 py-1 text-[var(--talos-text,var(--foreground))]'
-                        : 'max-w-[92%] px-3.5 py-2', message.role === 'user'
-                        ? 'bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]'
-                        : ((props.messageStyle ?? 'sections') === 'sections'
-                            ? ''
-                            : 'border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))] text-[var(--talos-text,var(--foreground))]'),
-                    message.role === 'assistant' && (props.messageStyle ?? 'sections') === 'sections'
-                        ? ''
-                        : (isGroupEnd(index)
-                            ? (message.role === 'user' ? 'rounded-2xl rounded-br-sm' : 'rounded-2xl rounded-bl-sm')
-                            : 'rounded-2xl')]"
+                    class="talos-message-bubble min-w-0 overflow-hidden"
+                    data-testid="talos-message-surface"
+                    :class="message.role === 'user' ? 'user-bubble' : ['assistant-text', { 'assistant-bubble': props.messageStyle === 'bubbles' }]"
                     :data-message-kind="message.role"
                 >
-                    <!-- Defect #5: the model's own reasoning, collapsed, ABOVE
-                         the answer — it is how the answer was reached, so
-                         putting it after would read backwards. -->
-                    <TalosMobileReasoningBlock
-                        v-if="message.role === 'assistant' && message.reasoning"
-                        :reasoning="message.reasoning"
-                    />
                     <!--
                         ⛔ L'attesa si disegna da cio' che e' VERO ADESSO.
 
@@ -482,29 +548,11 @@ function messageStateLabel(state: string): string {
                          ⛔ E mentre TALOS legge non ci va NIENTE al suo posto:
                          il pulsante dell'audio diventa già «Interrompi», e un
                          secondo segno per lo stesso stato è rumore. -->
-                        <!--
-                            ⛔ IL COLORE DEL TESTO CHE ACCOMPAGNA, non quello
-                            della pagina. Owner 2026-08-12: «il colore dell'icona
-                            microfono nella bolla di domanda deve avere lo stesso
-                            colore del testo, adesso è bianco».
 
-                            Aveva ragione e la causa era `--talos-muted`: un
-                            token nato per il testo secondario **sul fondo della
-                            pagina**. Dentro la bolla dell'utente il fondo è
-                            l'accento e il testo è `--talos-accent-contrast`, così
-                            l'icona finiva quasi bianca su ambra — un colore che
-                            non appartiene a nessuna delle due parti.
-
-                            ⇒ Stesso token del testo che accompagna, e il grado
-                            di «secondario» lo dà l'OPACITÀ invece di un'altra
-                            tinta: resta più sommessa della frase senza smettere
-                            di essere dello stesso colore, e continua a funzionare
-                            se il tema cambia l'accento.
-                        -->
                         <span
                             v-if="message.role === 'user' && message.metadata?.dictated === true"
                             data-testid="talos-message-dictated"
-                            class="inline-flex shrink-0 translate-y-[0.15em] items-center text-[var(--talos-accent-contrast,var(--primary-foreground))] opacity-70"
+                            class="inline-flex shrink-0 translate-y-[0.15em] items-center text-current opacity-70"
                             :title="$t('chat.dictated')"
                             :aria-label="$t('chat.dictated')"
                         >
@@ -644,19 +692,8 @@ function messageStateLabel(state: string): string {
                         :metadata="message.metadata"
                         :diagnostica="diagnostica"
                     />
-                    <!-- F4 Memory: one calm-thread disclosure; every injected
-                         turn still retains its own auditable metadata. -->
-                    <div
-                        v-if="message.id === firstMemoryDisclosureMessageId"
-                        data-testid="talos-used-memories"
-                        class="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-2xs leading-4"
-                        :title="(message.metadata.used_memories as Array<{ title?: string }>).map((entry) => entry?.title ?? '').join(' · ')"
-                    >
-                        <BookMarked class="size-3.5 shrink-0" aria-hidden="true" />
-                        {{ (message.metadata.used_memories as unknown[]).length === 1
-                            ? $t('chat.memoryUsedOne')
-                            : $t('chat.memoryUsedMany', { count: (message.metadata.used_memories as unknown[]).length }) }}
-                    </div>
+
+
                     <!-- Owner 2026-07-25 Library: injected-doc disclosure stays
                          in metadata and is not repeated as visual chrome. -->
                     <div
@@ -677,7 +714,7 @@ function messageStateLabel(state: string): string {
                             :data-message-attachment-id="attachment.id"
                         />
                         <span
-                            v-for="attachment in fileAttachments(message)"
+                            v-for="attachment in fileAttachments(message).filter(() => message.role !== 'assistant')"
                             :key="attachment.id"
                             :data-message-attachment-id="attachment.id"
                             :title="attachment.media_type"
@@ -695,31 +732,56 @@ function messageStateLabel(state: string): string {
                         :activities="message.browserActivities"
                     />
                 </div>
-                <div v-if="isGroupEnd(index)" class="talos-message-meta mt-1 flex max-w-[92%] items-center gap-1.5 px-1 font-mono text-2xs text-[var(--talos-muted)]">
-                    <span>{{ message.role === 'user' ? $t('chat.you') : 'TALOS' }}</span>
-                    <template v-if="modelLabel(message)">
-                        <span aria-hidden="true">·</span>
-                        <span>{{ modelLabel(message) }}</span>
-                    </template>
-                    <span aria-hidden="true">·</span>
-                    <span>{{ relativeTime(message.created_at) }}</span>
-                    <template v-if="message.state !== 'persisted'">
-                        <span aria-hidden="true">·</span>
-                        <span>{{ messageStateLabel(message.state) }}</span>
-                    </template>
+                <p v-if="message.role === 'assistant' && message.metadata.interrupted === true"
+                    data-testid="talos-message-interrupted" class="mt-2 text-xs text-[var(--talos-muted)]" role="status"
+                >{{ $t('chat.messageInterrupted') }}</p>
+                <div v-if="message.role === 'assistant' && fileAttachments(message).length" role="list" :aria-label="$t('chat.attachedFiles')" class="mt-2 w-full max-w-[72ch] space-y-2">
+                    <TalosMobileMessageFile v-for="attachment in fileAttachments(message)" :key="attachment.id"
+                        :attachment="attachment" :data-message-attachment-id="attachment.id" />
                 </div>
-                <!-- SF-critic #7: the action row renders only where the group
-                     ends (next to the meta row) — calmer per-turn chrome. -->
+                <div v-if="message.role !== 'assistant' || message.id === firstMemoryDisclosureMessageId" data-testid="talos-message-meta" class="talos-message-meta mt-1 flex max-w-[92%] flex-wrap items-center justify-end gap-1.5 px-1 text-2xs text-[var(--talos-muted)]">
+                    <template v-if="message.role !== 'assistant'">
+                        <span>{{ message.role === 'user' ? $t('chat.you') : 'Talos' }} · {{ relativeTime(message.created_at) }}</span>
+                        <span v-if="message.state !== 'persisted'"> · {{ messageStateLabel(message.state) }}</span>
+                    </template>
+                    <div
+                        v-if="message.id === firstMemoryDisclosureMessageId"
+                        data-testid="talos-used-memories"
+                        class="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-2xs leading-4"
+                        :title="(message.metadata.used_memories as Array<{ title?: string }>).map((entry) => entry?.title ?? '').join(' · ')"
+                    >
+                        <BookMarked class="size-3.5 shrink-0" aria-hidden="true" />
+                        {{ (message.metadata.used_memories as unknown[]).length === 1
+                            ? $t('chat.memoryUsedOne')
+                            : $t('chat.memoryUsedMany', { count: (message.metadata.used_memories as unknown[]).length }) }}
+                    </div>
+                </div>
+
                 <TalosMobileMessageActions
-                    v-if="isGroupEnd(index)"
                     :message="message"
                     :busy="sending"
                     :can-retry="message.role === 'assistant' && hasPreviousUser(message.id)"
                     @copy="copyMessage"
+                    @edit="editMessage"
                     @reuse="emit('reuse', $event.id)"
                     @resend="emit('resend', $event.id)"
                     @retry="emit('retry', $event.id)"
                     @save-to-library="emit('saveToLibrary', $event.id)"
+                    @share="emit('share', $event.id)"
+                    @details="emit('details', $event.id)"
+                    @delete="emit('delete', $event.id)"
+                />
+                <!--
+                    ⛔ SOTTO le azioni, come nello screenshot di PocketPal che
+                    l'owner ha portato il 2026-09-10: prima ciò che si preme,
+                    poi il dato che si legge. Sopra le icone diventerebbe la
+                    prima cosa che l'occhio incontra dopo la risposta, e non è
+                    quello che conta di più in quel punto.
+                -->
+
+                <TalosMobileLocalMetricsRow
+                    v-if="misureDi(message) !== null"
+                    :misure="misureDi(message)"
                 />
             </template>
         </article>
@@ -727,6 +789,7 @@ function messageStateLabel(state: string): string {
         <!-- R1-5: the streaming tail subscribes to the store on its own — a
              token burst re-renders only that subtree, never this list. -->
         <TalosMobileStreamingReply />
+        <TalosMobileMessageEdit v-if="editTarget" v-bind="editTarget" @close="editTarget = null" />
         <span data-testid="talos-mobile-message-action-status" class="sr-only" role="status" aria-live="polite">{{ copyStatus }}</span>
     </div>
 </template>

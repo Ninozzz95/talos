@@ -429,6 +429,18 @@ export function createTalosToolAuthorizationCoordinator(deps: {
     authorizations(): TalosToolAuthorizationGrantsV1
     grant(tool: string, actions: readonly TalosToolAction[]): Promise<void>
     onReady(checkpoint: TalosToolAuthorizationCheckpointV1): Promise<void> | void
+    /**
+     * ⭐⭐⭐ 6.4 — ASSENTE: comportamento invariato, nessuna chiamata. Presente
+     * (in produzione: `contaDecisioneReale` di `toolAuthorizationFriction.ts`):
+     * chiamata SENZA `await` dopo ogni decisione vera andata a buon fine, col
+     * suo errore inghiottito qui — un contatore diagnostico non deve MAI
+     * rallentare né poter far fallire una decisione di autorizzazione reale.
+     */
+    registraDecisioneReale?: (
+        tool: string,
+        decisione: Exclude<TalosToolAuthorizationDecision, 'pending'>,
+        quando: string,
+    ) => Promise<void>
 }): TalosToolAuthorizationCoordinator {
     const now = deps.now ?? (() => new Date().toISOString())
     const open = new Map<string, {
@@ -757,6 +769,10 @@ export function createTalosToolAuthorizationCoordinator(deps: {
                 if (!checkpoint) throw new Error('TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID')
                 await persistCheckpoint(owner.activity, checkpoint)
                 result = true
+                // ⭐⭐⭐ 6.4 — vedi la doc su `deps.registraDecisioneReale` sopra:
+                // mai un `await`, mai un errore che risale a questa decisione.
+                void deps.registraDecisioneReale?.(target.tool, decision, decidedAt)
+                    .catch(() => { /* diagnostica: non deve mai rompere una decisione vera */ })
                 await announceReady(checkpoint)
             })
             mutationTail = operation.then(() => undefined, () => undefined)

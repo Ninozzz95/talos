@@ -36,7 +36,7 @@
  */
 import { computed, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { BookOpen, ChevronRight, Globe, PencilLine } from '@lucide/vue'
+import { BookOpen, ChevronRight, Globe, PencilLine, TerminalSquare } from '@lucide/vue'
 import {
     TALOS_TOOL_ACTIONS,
     type TalosToolAction,
@@ -46,6 +46,7 @@ import {
 import {
     TALOS_AGENT_TOOL_CONTROLS,
     TALOS_AGENT_TOOL_GROUP_ORDER,
+    TALOS_AZIONI_GOVERNATE,
 } from '@/lib/tools/toolControlCatalog'
 import { TALOS_TOOL_LABEL_KEYS } from '@/lib/tools/toolLabels'
 
@@ -60,7 +61,25 @@ const props = withDefaults(defineProps<{
 
 const STATI: readonly TalosToolPermission[] = ['allow', 'ask', 'deny']
 
-const ICONE = { read: BookOpen, write: PencilLine, outbound: Globe } as const
+/**
+ * ⭐⭐ I POTERI CHE SI GOVERNANO: quelli che almeno un attrezzo dichiara.
+ *
+ * ⛔ Non `TALOS_TOOL_ACTIONS`, che e il vocabolario COMPLETO e contiene anche
+ * cio che nessuno usa ancora. Il 2026-08-20, quando `execute` e entrata per
+ * l'esecuzione di codice, mostrarla qui avrebbe prodotto:
+ *
+ *   · una quarta riga senza attrezzi sotto, per un potere non esercitabile;
+ *   · e — misurato — `autonomiaGiaConcessa` FALSA per chiunque l'avesse gia
+ *     concessa, perche pretende che OGNI azione sia `allow` e scelta.
+ *
+ * ⇒ Si mostra cio che esiste. Il giorno che il primo attrezzo dichiara
+ * `execute`, la riga compare da se — con la sua icona e la sua domanda.
+ */
+const azioniGovernate = computed(() => TALOS_AZIONI_GOVERNATE)
+
+const ICONE: Record<TalosToolAction, typeof BookOpen> = {
+    read: BookOpen, write: PencilLine, outbound: Globe, execute: TerminalSquare,
+}
 
 /**
  * Quali strumenti ricadono in ciascun potere, presi dal catalogo VERO.
@@ -92,9 +111,9 @@ const strumentiPer = computed<Record<TalosToolAction, {
     gruppo: string
     nomi: string[]
 }[]>>(() => {
-    const per: Record<TalosToolAction, Map<string, string[]>> = {
-        read: new Map(), write: new Map(), outbound: new Map(),
-    }
+    const per = Object.fromEntries(
+        TALOS_TOOL_ACTIONS.map((azione) => [azione, new Map<string, string[]>()]),
+    ) as Record<TalosToolAction, Map<string, string[]>>
     for (const controllo of TALOS_AGENT_TOOL_CONTROLS) {
         for (const azione of controllo.actions) {
             const chiave = TALOS_TOOL_LABEL_KEYS[controllo.id]
@@ -142,7 +161,24 @@ watch(permissions, (valore) => { ultimo.value = { ...valore } })
 
 function applica(prossimo: TalosToolPermissions): void {
     ultimo.value = prossimo
-    permissions.value = prossimo
+    /*
+     * ⛔⛔ SI EMETTE SOLO CIO CHE SI E MOSTRATO.
+     *
+     * `setToolPermissions` registra come SCELTA ogni potere presente nel patch
+     * — e ha ragione: chi tocca la scheda sta decidendo. Ma la scheda mostra i
+     * poteri GOVERNATI, e mandare anche gli altri farebbe registrare una
+     * decisione su una domanda mai posta. Il 2026-08-20, con `execute` appena
+     * entrata nel vocabolario e nessun attrezzo a dichiararla, sarebbe stata
+     * marcata «scelta dalla persona» al primo tocco di un potere qualsiasi.
+     *
+     * ⛔ Cio che resta fuori NON si perde: lo store fonde sul valore salvato, e
+     * chi legge un potere assente cade sul default di oggi. Assente qui
+     * significa «non l'ho chiesto», non «vale zero» — la stessa distinzione di
+     * sempre, un piano piu in su.
+     */
+    permissions.value = Object.fromEntries(
+        azioniGovernate.value.map((azione) => [azione, prossimo[azione]]),
+    ) as TalosToolPermissions
 }
 
 function scegli(azione: TalosToolAction, stato: TalosToolPermission): void {
@@ -150,12 +186,21 @@ function scegli(azione: TalosToolAction, stato: TalosToolPermission): void {
 }
 
 function scegliTutto(stato: TalosToolPermission): void {
-    applica({ read: stato, write: stato, outbound: stato })
+    /*
+     * ⛔ Solo i poteri GOVERNATI. Applicare lo stato anche a un potere che
+     * nessun attrezzo dichiara scriverebbe una scelta su una domanda che non e
+     * mai stata posta — ed e esattamente cio che `tools_chosen` esiste per
+     * impedire.
+     */
+    applica({
+        ...ultimo.value,
+        ...Object.fromEntries(azioniGovernate.value.map((azione) => [azione, stato])),
+    })
 }
 
 /** Vero quando tutti e tre i poteri hanno già lo stesso stato. */
 function tuttoSu(stato: TalosToolPermission): boolean {
-    return TALOS_TOOL_ACTIONS.every((azione) => permissions.value[azione] === stato)
+    return azioniGovernate.value.every((azione) => permissions.value[azione] === stato)
 }
 </script>
 
@@ -186,7 +231,7 @@ function tuttoSu(stato: TalosToolPermission): boolean {
 
         <ul class="flex flex-col gap-3">
             <li
-                v-for="azione in TALOS_TOOL_ACTIONS"
+                v-for="azione in azioniGovernate"
                 :key="azione"
                 :data-testid="`talos-tool-permission-${azione}`"
                 class="flex flex-col gap-2 rounded-2xl border border-[var(--talos-border)] p-3"

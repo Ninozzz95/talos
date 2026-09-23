@@ -182,6 +182,21 @@ class TalosPocketOrtRuntime private constructor(
                         var decodedFirstFrame = 0
                         var decodedBatchFrames = 0
                         var onsetMetricEmitted = false
+                        // La coda della frase, per il log della giuntura (12/09).
+                        val seamTail = FloatArray(bundle.sampleRate * 3 / 2)
+                        var seamTailFilled = 0
+                        fun rememberTail(pcm: FloatArray) {
+                            if (pcm.isEmpty()) return
+                            if (pcm.size >= seamTail.size) {
+                                pcm.copyInto(seamTail, 0, pcm.size - seamTail.size, pcm.size)
+                                seamTailFilled = seamTail.size
+                                return
+                            }
+                            val keep = minOf(seamTailFilled, seamTail.size - pcm.size)
+                            if (keep > 0) seamTail.copyInto(seamTail, 0, seamTailFilled - keep, seamTailFilled)
+                            pcm.copyInto(seamTail, keep)
+                            seamTailFilled = keep + pcm.size
+                        }
                         val onsetStabilizer = if (config.stabilizeOnset) {
                             TalosPocketOnsetStabilizer(TalosPocketOnsetConfig(bundle.sampleRate))
                         } else {
@@ -293,6 +308,7 @@ class TalosPocketOrtRuntime private constructor(
                                 if (userPcm.isEmpty()) {
                                     true
                                 } else {
+                                    rememberTail(userPcm)
                                     emittedSamples += userPcm.size
                                     callback.onPcm(frame)
                                 }
@@ -322,6 +338,7 @@ class TalosPocketOrtRuntime private constructor(
                             )
                             if (completionRejected) cancellation.cancel()
                         }
+                        talosPocketSeamLog("tail sentence=${sentence.index} last ${seamTailFilled} samples (dBFS/10ms): " + talosPocketSeamContour(seamTail.copyOfRange(0, seamTailFilled), bundle.sampleRate))
                         generatedFrames += pipelineMetrics.producedFrames
                         producerBlockedNs += pipelineMetrics.producerBlockedNs
                         decoderNs += pipelineMetrics.decodeNs

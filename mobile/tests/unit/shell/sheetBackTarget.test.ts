@@ -92,15 +92,26 @@ describe('il pulsante indietro in alto', () => {
         expect(dentro.get('[data-testid="talos-sheet-back"]').attributes('aria-label'))
             .toContain('Note')
 
+        // U-7 (owner 11/09/2026): sulla CIMA di una stazione la freccia non c'è
+        // più — c'è il ☰ del mockup. Torna solo quando il guscio la chiede
+        // (`rootBack`: tablet dentro Impostazioni, senza sidebar), e allora
+        // dice ancora dove va.
         const cima = sheet()
-        expect(cima.get('[data-testid="talos-sheet-back"]').attributes('aria-label'))
+        expect(cima.find('[data-testid="talos-sheet-back"]').exists()).toBe(false)
+        const cimaSenzaSidebar = sheet({ hideMenu: true, rootBack: true })
+        expect(cimaSenzaSidebar.get('[data-testid="talos-sheet-back"]').attributes('aria-label'))
             .toMatch(/chat/i)
     })
 
-    it('dalla cima di una stazione chiude, come prima', async () => {
-        // Chi non è dentro niente non deve accorgersi che questa strada esiste.
+    it('dalla cima di una stazione, col ☰, apre il menu; con rootBack chiude come prima', async () => {
+        // Chi non è dentro niente non deve accorgersi che la strada del
+        // «padre» esiste: il ☰ apre la sidebar, la freccia (solo se chiesta) chiude.
         const wrapper = sheet()
-        await wrapper.get('[data-testid="talos-sheet-back"]').trigger('click')
-        expect(wrapper.emitted('close')).toHaveLength(1)
+        await wrapper.get('[data-testid="talos-sheet-menu"]').trigger('click')
+        expect(wrapper.emitted('openMenu')).toHaveLength(1)
+        expect(wrapper.emitted('close')).toBeUndefined()
+        const conFreccia = sheet({ rootBack: true })
+        await conFreccia.get('[data-testid="talos-sheet-back"]').trigger('click')
+        expect(conFreccia.emitted('close')).toHaveLength(1)
     })
 })

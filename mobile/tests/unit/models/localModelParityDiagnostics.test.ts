@@ -100,6 +100,8 @@ describe('LOCAL-PARITY-DIAGNOSTICS-03 verdetto fail-closed', () => {
         expect(native.toolTransport).toBe('native-template')
         expect(native.templateCapabilities).toEqual({
             supportsTools: true, supportsToolCalls: true, supportsSystemRole: true,
+            grammarForTools: false,
+            thinkingCanBeDisabled: false,
         })
         expect(prompted.fingerprint).not.toBe(native.fingerprint)
         expect(JSON.stringify(prompted)).not.toContain('/storage/emulated')

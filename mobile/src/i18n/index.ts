@@ -114,6 +114,11 @@ export function talosT(key: string, parameters?: TalosMessageParameters): string
     return plugin?.global.t(key, parameters) ?? key
 }
 
+/** La lingua dell'interfaccia adesso, per chi formatta numeri fuori da un componente. Senza plugin (test) e' l'inglese. */
+export function talosCurrentLocale(): string {
+    return plugin?.global.locale.value ?? 'en'
+}
+
 export interface TalosI18nAdapter {
     t(key: string, parameters?: TalosMessageParameters): string
     locale: ComputedRef<string>
