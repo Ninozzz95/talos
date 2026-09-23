@@ -21,6 +21,7 @@ import {parseUnifiedDiff} from './diff-model.ts';
 import {busyIndicatorText} from './components/status-indicator.ts';
 import {agentRosterLine} from './components/terminal-shell.ts';
 import {toolRowView} from './components/tool-row.ts';
+import {createTranscriptMeasurementStore,estimateTranscriptItemRows,planTranscriptVirtualWindow,transcriptMeasurementKey,type TranscriptMeasurementStore} from './components/transcript-virtualizer.ts';
 import {copySelection,createEditorState,deleteBackward,deleteForward,editInsert,insertPaste,killToEnd,killToStart,killWordBackward,moveCursor,moveVertical,moveWord,previousGraphemeBoundary,redoEditor,replaceEditorText,undoEditor,yank,type EditorState} from './editor.ts';
 import {editExternally} from './external-editor.ts';
 import {completeProjectPath} from './file-completion.ts';
@@ -71,7 +72,7 @@ import {createTuiTheme,themeColor} from './theme.ts';
 import type {ThemeAccentId} from './theme-catalog.ts';
 import type {ReasoningEffort,UiTheme} from '../config/types.ts';
 import {configSet,configUnset} from '../config/commands.ts';
-import {osc52CopySequence,reduceViewport,transcriptEventAddsItem,transcriptViewportForIndex,transcriptWindow,type TranscriptViewport} from './components/transcript.ts';
+import {osc52CopySequence,reduceViewport,transcriptEventAddsItem,transcriptViewportForIndex,type TranscriptViewport} from './components/transcript.ts';
 import {
   MODEL_ID,NO_MODEL,NO_PROVIDER_MODEL,
   closeOverlay,createTuiAppState,lastProjectToken,modelItems,openOverlay,permissionDryRunSlash,pickerMove,providerItems,queuedActionPreview,reduceAppAction,replaceLastProjectToken,slashCommandIntent,slashCommandToCliArgs,togglePlanMode,
@@ -163,6 +164,33 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     );
   },(previous:any,next:any)=>previous.composerStore===next.composerStore&&previous.selectionStore===next.selectionStore&&previous.rowsLimit===next.rowsLimit);
 
+  const MeasuredTranscriptRow=React.memo(function MeasuredTranscriptRow({item,measurementKey,measurementStore,renderItem}:{item:TranscriptItem;measurementKey:string;measurementStore:TranscriptMeasurementStore;renderItem:(item:TranscriptItem)=>any}){
+    const ref=React.useRef(null);
+    const {height,hasMeasured}=Ink.useBoxMetrics(ref);
+    React.useEffect(()=>{
+      if(hasMeasured)measurementStore.measure(measurementKey,height);
+    },[hasMeasured,height,measurementKey,measurementStore]);
+    return h(Ink.Box,{ref,flexDirection:'column'},renderItem(item));
+  },(previous:any,next:any)=>previous.item===next.item&&previous.measurementKey===next.measurementKey&&previous.measurementStore===next.measurementStore&&previous.renderItem===next.renderItem);
+
+  const TranscriptView=React.memo(function TranscriptView({items,offset,rowBudget,width,raw,expandedTools,measurementStore,renderItem}:{items:readonly TranscriptItem[];offset:number;rowBudget:number;width:number;raw:boolean;expandedTools:boolean;measurementStore:TranscriptMeasurementStore;renderItem:(item:TranscriptItem)=>any}){
+    React.useSyncExternalStore(measurementStore.subscribe,measurementStore.getSnapshot,measurementStore.getSnapshot);
+    const variant=raw?'raw':expandedTools?'pretty-expanded':'pretty-compact';
+    const planned=planTranscriptVirtualWindow({
+      items,
+      offset,
+      rowBudget,
+      heightOf:(item:TranscriptItem)=>{
+        const key=transcriptMeasurementKey(item.id,width,variant);
+        return measurementStore.height(key)??estimateTranscriptItemRows(item,width,{raw,expandedTools});
+      },
+    });
+    return h(React.Fragment,null,...planned.rows.map((item:TranscriptItem)=>{
+      const measurementKey=transcriptMeasurementKey(item.id,width,variant);
+      return h(MeasuredTranscriptRow,{key:item.id,item,measurementKey,measurementStore,renderItem});
+    }));
+  },(previous:any,next:any)=>previous.items===next.items&&previous.offset===next.offset&&previous.rowBudget===next.rowBudget&&previous.width===next.width&&previous.raw===next.raw&&previous.expandedTools===next.expandedTools&&previous.measurementStore===next.measurementStore&&previous.renderItem===next.renderItem);
+
   return function TuiApp(props:TuiAppProps){
     const {runtime,registry,catalog,invocation,projectRoot,paths,permissionRules,autoClassifier,initialPrompt,initialReasoningEffort=null,renderCoordinator,keymap:effectiveKeymap=KEYBINDINGS,terminalSize}=props;
     const inkApp=Ink.useApp();
@@ -178,6 +206,9 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     const commandMenuSelectionStoreRef:{current:CommandMenuSelectionStore|null}=React.useRef(null);
     if(!commandMenuSelectionStoreRef.current)commandMenuSelectionStoreRef.current=createCommandMenuSelectionStore();
     const commandMenuSelectionStore:CommandMenuSelectionStore=commandMenuSelectionStoreRef.current;
+    const transcriptMeasurementStoreRef:{current:TranscriptMeasurementStore|null}=React.useRef(null);
+    if(!transcriptMeasurementStoreRef.current)transcriptMeasurementStoreRef.current=createTranscriptMeasurementStore();
+    const transcriptMeasurementStore:TranscriptMeasurementStore=transcriptMeasurementStoreRef.current;
     const [vim,setVim]=React.useState(()=>createVimState() as VimState);
     const [boot,setBoot]=React.useState(()=>createBootState(Date.now()) as BootState);
     const [history,setHistory]=React.useState([] as string[]);
@@ -1238,8 +1269,20 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
       bullet:theme.glyphs.bullet,branch:theme.glyphs.branch,
     });
     const {rows,columns,activity,visual,shortcutLine,rosterLine,queueLine,pickerRowsLimit,footerLine}=layout;
-    const visibleTranscriptItems=transcriptItemsForCurrentView();
-    const transcriptRows=transcriptWindow(visibleTranscriptItems,viewport);
+    const visibleTranscriptItems:TranscriptItem[]=React.useMemo(
+      ()=>appState.reasoningVisible?(state.transcript.items as TranscriptItem[]):(state.transcript.items as TranscriptItem[]).filter((item:TranscriptItem)=>item.kind!=='reasoning'),
+      [state.transcript.items,appState.reasoningVisible],
+    );
+    const renderTranscriptItem=React.useCallback((item:TranscriptItem)=>{
+      const selected=item.id===transcriptSelectedId,prefix=selected?'› ':'';
+      if(transcriptRaw)return h(Ink.Text,{key:item.id,inverse:selected,dimColor:!selected},prefix+transcriptItemRaw(item));
+      if(item.kind==='message')return h(Ink.Box,{key:item.id,flexDirection:'column'},h(Ink.Text,{bold:item.role==='user',color:transcriptColor,inverse:selected},prefix+(item.role==='user'?'You':'TALOS')),h(MarkdownView,{text:item.text,width:columns}));
+      if(item.kind==='reasoning')return h(Ink.Box,{key:item.id,borderStyle:'single',flexDirection:'column'},h(Ink.Text,{dimColor:true,inverse:selected},prefix+'Reasoning'),h(Ink.Text,{dimColor:true},item.text||' '));
+      if(item.kind==='tool'){const rendered=toolRowView(item,columns,appState.expandedTools);return h(Ink.Box,{key:item.id,flexDirection:'column'},h(Ink.Text,{color:toolColor,inverse:selected},prefix+rendered.title+' · '+rendered.statusLabel),...rendered.detailLines.map((line,index)=>h(Ink.Text,{key:index,dimColor:true},line)));}
+      if(item.kind==='warning')return h(Ink.Text,{key:item.id,dimColor:true,inverse:selected},prefix+item.text);
+      const detail=item.message?' · '+item.message:'';
+      return h(Ink.Text,{key:item.id,dimColor:true,inverse:selected},prefix+'Run · '+item.status+detail);
+    },[transcriptSelectedId,transcriptRaw,columns,appState.expandedTools]);
     const diffView=diff?renderDiffModel(parseUnifiedDiff(diff),columns):null;
     const vimHint=vimModeHint(vim);
     React.useEffect(()=>{
@@ -1261,7 +1304,6 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
     if(boot.phase!=='ready'&&boot.phase!=='error')return h(Ink.Box,{key:`boot-${appState.redrawNonce}`,flexDirection:'column',paddingTop:1},h(BootSequence,{state:boot,logo:shouldRenderBootLogo(capabilities),motion:capabilities.motion,unicode:capabilities.unicode,width:columns,accentColor:bootColor,mutedColor:footerColor,onComplete:()=>setBoot((current:BootState)=>completeBoot(current,Date.now()))}),h(Ink.Text,{dimColor:true,color:footerColor},projectRoot));
 
     const renderPickerRows=(rowsToRender:any[],selected:number,label:(row:any)=>string)=>{const view=pickerWindow(rowsToRender,selected,pickerRowsLimit);return view.rows.map((row,index)=>{const absolute=view.start+index;return h(Ink.Text,{key:`${absolute}-${label(row)}`,inverse:absolute===selected,color:pickerColor},`${absolute===selected?'›':' '} ${label(row)}`);});};
-    const renderTranscriptItem=(item:TranscriptItem)=>{const selected=item.id===transcriptSelectedId,prefix=selected?'› ':'';if(transcriptRaw)return h(Ink.Text,{key:item.id,inverse:selected,dimColor:!selected},prefix+transcriptItemRaw(item));if(item.kind==='message')return h(Ink.Box,{key:item.id,flexDirection:'column'},h(Ink.Text,{bold:item.role==='user',color:transcriptColor,inverse:selected},prefix+(item.role==='user'?'You':'TALOS')),h(MarkdownView,{text:item.text,width:columns}));if(item.kind==='reasoning')return h(Ink.Box,{key:item.id,borderStyle:'single',flexDirection:'column'},h(Ink.Text,{dimColor:true,inverse:selected},prefix+'Reasoning'),h(Ink.Text,{dimColor:true},item.text||' '));if(item.kind==='tool'){const rendered=toolRowView(item,columns,appState.expandedTools);return h(Ink.Box,{key:item.id,flexDirection:'column'},h(Ink.Text,{color:toolColor,inverse:selected},prefix+rendered.title+' · '+rendered.statusLabel),...rendered.detailLines.map((line,index)=>h(Ink.Text,{key:index,dimColor:true},line)));}if(item.kind==='warning')return h(Ink.Text,{key:item.id,dimColor:true,inverse:selected},prefix+item.text);const detail=item.message?' · '+item.message:'';return h(Ink.Text,{key:item.id,dimColor:true,inverse:selected},prefix+'Run · '+item.status+detail);};
 
     let overlayNode:any=null;
     if(contextInspector)overlayNode=h(Ink.Box,{borderStyle:'round',flexDirection:'column'},...contextInspectorLines(contextInspector,{width:columns}).map((line,index)=>h(Ink.Text,{key:`context-${index}`,color:index===0?pickerColor:undefined,dimColor:index>0},line)));
@@ -1318,7 +1360,7 @@ export function createTuiAppComponent(React:any,Ink:any,capabilities:TerminalCap
 
     return h(Ink.Box,{key:`main-${appState.redrawNonce}`,flexDirection:'column'},
       h(Ink.Text,{bold:true,color:bootColor},headerLine({workspace:projectRoot,status:boot.phase==='error'?'degraded':'interactive'})),
-      ...transcriptRows.map((item:TranscriptItem)=>renderTranscriptItem(item)),
+      h(TranscriptView,{items:visibleTranscriptItems,offset:viewport.offset,rowBudget:rows,width:columns,raw:transcriptRaw,expandedTools:appState.expandedTools,measurementStore:transcriptMeasurementStore,renderItem:renderTranscriptItem}),
       diffView?h(Ink.Box,{borderStyle:'round',flexDirection:'column'},h(Ink.Text,{bold:true},`Diff · ${diffView.mode}`),...diffView.lines.map((line,index)=>h(Ink.Text,{key:index,bold:line.kind==='file'||line.kind==='hunk'||line.kind==='add'||line.kind==='remove',dimColor:line.kind==='meta'||line.kind==='context'||line.kind==='no-newline'||line.kind==='plain'},line.text))):null,
       overlayNode,
       auxCompletions.length&&!appState.overlay&&!queueEditor&&!transcriptSearch&&!contextInspector&&!mcpCenter&&!hookCenter&&!pluginCenter&&!memoryCenter&&!notesCenter&&!tasksCenter&&!libraryCenter&&!researchCenter&&!automationCenter&&!forgeCenter?h(Ink.Box,{flexDirection:'column'},...auxCompletions.map((value:string)=>h(Ink.Text,{key:value,dimColor:true},`  ${value}`))):null,
