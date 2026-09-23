@@ -3,7 +3,7 @@ name: TALOS CLI transcript virtualization final GREEN validation
 on:
   push:
     branches:
-      - owner-inspection/cli-transcript-virtualization-final-green-9e920f93
+      - owner-inspection/cli-transcript-virtualization-final-green-500158ec
 
 permissions:
   contents: read
@@ -103,7 +103,7 @@ jobs:
             'app/src/tui/components/markdown.ts' = '7861253aa15913654b305180543018e085582615'
             'app/src/tui/components/tool-row.ts' = 'e753a1427355e7e51fd75c2d4e57cc1bb9af710b'
             'app/test/tui/transcript-virtualizer.test.ts' = 'b46500755adddb57cf94e1ee68b3e549f5c6b76d'
-            'app/test/tui/app-routing.test.ts' = '36c374e1ae553860fec63281c80b0b9c21c4c6fa'
+            'app/test/tui/app-routing.test.ts' = 'dc943d56613a487ed1508630b58ff3019be9ec26'
             'app/test/tui/transcript.test.ts' = '58c5b2d8e6a2f561e31617dcdfaf4eb8846f0750'
             'app/test/tui/transcript-model.test.ts' = '528c83727aca982fa77572995d06a28ccac0dcd2'
             'app/test/tui/transcript-search.test.ts' = '2b4a9420738901e4e972e964c1ff4acf3337f320'
@@ -118,7 +118,7 @@ jobs:
             if ($Observed -ne $Expected[$Path]) { throw "TRANSCRIPT_FINAL_GREEN_BLOB_MISMATCH $Path expected=$($Expected[$Path]) observed=$Observed" }
           }
           $Snapshot = Get-Content -LiteralPath .\INSPECTION-SNAPSHOT.json -Raw | ConvertFrom-Json
-          if ($Snapshot.sourceHead -ne '9e920f936ab00389e380abf7927e2363e15fc210') { throw "TRANSCRIPT_FINAL_GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
+          if ($Snapshot.sourceHead -ne '500158ec3745ff8969fae8caa28c4e779d2ab8a5') { throw "TRANSCRIPT_FINAL_GREEN_SOURCE_HEAD_MISMATCH: $($Snapshot.sourceHead)" }
 
       - name: Execute transcript virtualization final GREEN gates on Node 24.18.0
         shell: powershell
