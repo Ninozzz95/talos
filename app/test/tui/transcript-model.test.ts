@@ -56,6 +56,7 @@ test('M4-A RED — unified bound evicts oldest finalized items but never active 
 
 test('M4-A RED — adapter retains stream starts roles run ids and persisted event identity',()=>{
   const adapter=createTuiEventAdapter([]);
+  adapter.bindSession('s1');
   assert.deepEqual(adapter.translate({type:'TextMessageStart',messageId:'m1',role:'assistant',_sequenza:11}),{
     type:'message.started',messageId:'m1',role:'assistant',eventId:'seq:11',
   });
@@ -86,8 +87,9 @@ test('M4-A RED — state keeps compatibility fields but transcript is the semant
 
 test('M4-A RED — app renders and navigates the semantic timeline instead of category buckets',async()=>{
   const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
-  assert.match(source,/transcriptWindow\(state\.transcript\.items,viewport\)/u);
-  assert.match(source,/state\.transcript\.items\.length/u);
+  assert.match(source,/state\.transcript\.items as TranscriptItem\[\]/u);
+  assert.match(source,/planTranscriptVirtualWindow/u);
+  assert.match(source,/items:visibleTranscriptItems/u);
   assert.match(source,/renderTranscriptItem/u);
   assert.doesNotMatch(source,/\.\.\.messages\.map\(/u);
   assert.doesNotMatch(source,/\.\.\.state\.tools\.slice\(/u);
