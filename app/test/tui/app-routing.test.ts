@@ -55,7 +55,7 @@ test('reasoning and tool expansion are semantic app state, not composer mutation
 });
 
 test('app component is created by dependency injection so importing app state never requires Ink',()=>{
-  const component=createTuiAppComponent({createElement(){return null;},Fragment:Symbol('Fragment')} as any,{Box(){},Text(){}} as any);
+  const component=createTuiAppComponent({createElement(){return null;},Fragment:Symbol('Fragment'),memo(component:any){return component;}} as any,{Box(){},Text(){}} as any);
   assert.equal(typeof component,'function');
 });
 
@@ -68,7 +68,7 @@ test('session overlay commits the React-selected row into the session picker mod
 
 test('app consumes the shared theme for every required visual surface',async()=>{
   const source=await readFile(new URL('../../src/tui/app.ts',import.meta.url),'utf8');
-  assert.match(source,/createTuiTheme\(capabilities\)/u);
+  assert.match(source,/createTuiTheme\(capabilities,accentId\)/u);
   for(const surface of ['boot','transcript','picker','approval','tool','footer'])assert.match(source,new RegExp(`themeColor\\(theme,'${surface}'\\)`,'u'));
 });
 
@@ -91,12 +91,12 @@ test('busy status indicator renders immediately above the composer instead of ab
   const root=source.indexOf("return h(Ink.Box,{key:`main-");
   assert.notEqual(root,-1);
   const view=source.slice(root);
-  const transcript=view.indexOf('...messages.map');
-  const status=view.indexOf('h(StatusIndicator');
-  const composer=view.indexOf("h(Ink.Box,{borderStyle:'single',flexDirection:'column'},h(Ink.Text,null,'> '");
+  const transcript=view.indexOf('h(TranscriptView');
+  const status=view.indexOf("h(Ink.Text,{color:footerColor},statusText)");
+  const composer=view.indexOf('h(ComposerView');
   assert.ok(transcript>=0&&status>=0&&composer>=0);
   assert.ok(status>transcript,'status indicator must come after transcript content');
-  assert.ok(status<composer,'status indicator must be immediately before the composer region');
+  assert.ok(status<composer,'status indicator must remain immediately before the composer region');
 });
 
 
@@ -133,9 +133,9 @@ test('terminal shell order follows transcript activity composer shortcuts and ma
   const root=source.indexOf("return h(Ink.Box,{key:`main-");
   assert.notEqual(root,-1);
   const view=source.slice(root);
-  const transcript=view.indexOf('...messages.map');
-  const status=view.indexOf('h(StatusIndicator');
-  const composer=view.indexOf("h(Ink.Box,{borderStyle:'single',flexDirection:'column'},h(Ink.Text,null,'> '");
+  const transcript=view.indexOf('h(TranscriptView');
+  const status=view.indexOf("h(Ink.Text,{color:footerColor},statusText)");
+  const composer=view.indexOf('h(ComposerView');
   const shortcuts=view.indexOf('shortcutLine');
   const roster=view.indexOf('rosterLine');
   assert.ok(transcript>=0&&status>=0&&composer>=0&&shortcuts>=0&&roster>=0);
