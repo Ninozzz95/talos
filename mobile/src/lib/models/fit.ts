@@ -24,8 +24,41 @@ export interface TalosModelShape {
      * metadata and, for a split model, means nothing at all.
      */
     weightBytes: number
+    /**
+     * ⛔⛔ The layers that actually HOLD a KV cache — not the block count.
+     *
+     * On a transformer the two are the same number and the distinction is
+     * invisible. On a HYBRID they are not: `LFM2.5-2.6B` has 30 blocks, and
+     * only the ones whose per-layer `attention.head_count_kv` is above zero
+     * allocate a cache; the rest are recurrent short convolutions whose state
+     * is small and CONSTANT in the context, not a per-token cost. Measured on
+     * the Pad on 2026-09-10: `lfm2.attention.head_count_kv arr[i32,30] =
+     * [0, 0, 8, 0, 0, 8, 0, 0, 0, 8, 0, 0, …]`.
+     *
+     * Reading the block count here would multiply the per-token cost by five
+     * and cut the context we offer; reading `llama_model_n_head_kv()` — which
+     * answers for layer 0, recurrent, hence ZERO — used to throw the whole
+     * shape away, and with it the frozen prefix: 31 s to the first token
+     * instead of 3.1, measured the same day.
+     *
+     * This field feeds exactly one formula, everywhere it is read
+     * (`talosKvCacheBytes` and `kvBytesPerToken` below,
+     * `talosKvBytesPerTokenOf` in `engineDiagnostics.ts`): the KV arithmetic.
+     * Nobody asks it how deep the model is.
+     *
+     * ⛔ A fully recurrent model (Mamba, RWKV) counts zero here, and a shape
+     * with zero is refused upstream rather than passed on. Deliberate: the
+     * per-token formula does not describe that model's memory at all, and a
+     * zero would make the context ceiling infinite.
+     */
     layers: number
-    /** Grouped-query attention: the KV heads, which are fewer than the heads. */
+    /**
+     * Grouped-query attention: the KV heads, which are fewer than the heads.
+     *
+     * On a hybrid, the largest count among the layers that have a cache — the
+     * max and not the mean, because overestimating the cache lowers the
+     * context ceiling and underestimating it raises one that memory cannot pay.
+     */
     kvHeads: number
     headDim: number
     trainedContext: number
@@ -156,11 +189,20 @@ const THERMAL_DERATING: Record<TalosThermalState, number> = {
 }
 
 /**
- * Per LAYER, and both K and V.
+ * Per CACHED LAYER, and both K and V.
  *
  * This is the fact that makes "it is a 4 GB file so I need 4 GB" wrong: at a
  * long context a 7B model's cache can exceed its own weights, so the same file
  * is comfortable at 4k and impossible at 128k.
+ *
+ * ⛔ `model.layers` is the count of layers that HOLD a cache, which on a hybrid
+ * is a fraction of the block count — see its own note on {@link TalosModelShape}.
+ * What this deliberately leaves out is the recurrent layers' state: on LFM2 it
+ * is `n_embd × (shortconv.l_cache − 1)` per layer and per sequence
+ * (`llama.cpp/src/llama-hparams.cpp:187-189`, read 2026-09-10), i.e. a fixed
+ * addend of some hundreds of KB. Folding it in here would multiply it by the
+ * context, which is exactly the error this formula exists to avoid — it is not
+ * a per-token cost. Not measured on a device.
  */
 export function talosKvCacheBytes(model: TalosModelShape, context: number): number {
     return model.layers * model.kvHeads * model.headDim * 2 * model.kvBytesPerElement * context

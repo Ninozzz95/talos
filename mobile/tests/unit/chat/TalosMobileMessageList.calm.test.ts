@@ -57,14 +57,14 @@ describe('TalosMobileMessageList calm thread (F2-T2)', () => {
         await vi.dynamicImportSettled()
         await flushPromises()
         const meta = wrapper.get('.talos-message-meta')
-        expect(meta.text()).toContain('TALOS')
+        expect(wrapper.get('[data-testid="talos-assistant-header"]').text()).toContain('Talos')
         expect(meta.text()).toContain('Claude Live')
         expect(meta.text()).not.toContain('anthropic:claude-live')
         expect(meta.text()).toMatch(/just now|m ago|h ago|d ago/)
         wrapper.unmount()
     })
 
-    it('groups consecutive same-sender messages: grouped articles marked, meta only on the last', async () => {
+    it('conserva il gruppo ma mostra meta e azioni su ogni messaggio', async () => {
         const wrapper = mount(TalosMobileMessageList, {
             props: {
                 messages: [
@@ -82,7 +82,8 @@ describe('TalosMobileMessageList calm thread (F2-T2)', () => {
         expect(articles[1].attributes('data-grouped')).toBe('true')
         expect(articles[2].attributes('data-grouped')).toBeUndefined()
         // meta row only where the group ends (u2 and a1, not u1)
-        expect(articles[0].find('.talos-message-meta').exists()).toBe(false)
+        expect(articles[0].find('.talos-message-meta').exists()).toBe(true)
+        for (const article of articles.slice(0, 3)) expect(article.find('[data-testid="talos-message-actions"]').exists()).toBe(true)
         expect(articles[1].find('.talos-message-meta').exists()).toBe(true)
         expect(articles[2].find('.talos-message-meta').exists()).toBe(true)
         wrapper.unmount()
@@ -106,13 +107,14 @@ describe('TalosMobileMessageList calm thread (F2-T2)', () => {
         wrapper.unmount()
     })
 
-    it('renders the boot-logo line loader (F4-#24): a sweep crossing 3 filling nodes', async () => {
+    it('owner 2026-09-13: in attesa c e SOLO l orb con l anello, niente tre pallini', async () => {
         const wrapper = mount(TalosMobileMessageList, { props: { messages: [], sending: true } })
         await vi.dynamicImportSettled()
         await flushPromises()
         const typing = wrapper.get('[data-testid="talos-mobile-typing"]')
-        expect(typing.find('.talos-line-loader-sweep').exists()).toBe(true)
-        expect(typing.findAll('.talos-line-loader-node')).toHaveLength(3)
+        expect(typing.get('[data-testid="talos-assistant-orb"]').classes()).toContain('working')
+        expect(typing.find('.talos-line-loader-sweep').exists()).toBe(false)
+        expect(typing.findAll('.talos-line-loader-node')).toHaveLength(0)
         expect(typing.findAll('.talos-typing-dot')).toHaveLength(0)
         expect(typing.attributes('role')).toBe('status')
         expect(typing.text()).toContain('Processing')

@@ -103,7 +103,8 @@ test('persists contextual chat sessions through reload, rename, switch and activ
     // F3-T3 (owner #12, Claude pattern): on phones the session list lives in
     // the dedicated Chats page reached from the sidebar entry.
     async function openChatsPage(): Promise<void> {
-        await page.getByLabel('Open menu').click()
+        const sheetOpen = await page.getByTestId('talos-mobile-tool-sheet').isVisible()
+        await page.getByTestId(sheetOpen ? 'talos-sheet-menu' : 'talos-shell-menu').click()
         await page.getByTestId('talos-sidebar-chats-entry').click()
         await expect(page.getByTestId('talos-chats-screen')).toBeVisible()
     }
@@ -130,9 +131,10 @@ test('persists contextual chat sessions through reload, rename, switch and activ
         await expect(page.locator('[data-testid="talos-row-actions-menu"]')).toBeVisible()
     }
     await openChatsPage()
-    await expect(page.getByTestId('talos-sidebar-chats-entry')).toHaveCount(0)
+    await expect(page.getByTestId('talos-mobile-sidebar')).not.toHaveAttribute('open')
     await expect(page.getByTestId('talos-chats-row')).toHaveCount(2)
     await page.getByTestId('talos-chats-row').filter({ hasText: firstTitle }).getByTestId('talos-chats-open').click()
+    await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
     await expect(page.getByText('Alpha is recorded.', { exact: true })).toBeVisible()
     await expect(page.getByText('The earlier value was alpha.', { exact: true })).toBeVisible()
     await expect(page.getByText('Secondary thread is isolated.', { exact: true })).toHaveCount(0)

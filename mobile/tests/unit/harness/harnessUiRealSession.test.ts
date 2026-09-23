@@ -24,47 +24,48 @@ function asset(name: string): string {
 type RuntimeGlobals = {
     __talosHarnessUiRuntime?: {
         startRealSession(task: { id: string, consegna?: string }): Promise<void>
+        startRealSessionFromMessage(text: string, modello?: string): Promise<void>
         stopRealSession(): Promise<void>
         handleRealEvent(evento: Record<string, unknown>, generation: number): void
         forkSession(): Promise<void>
         resumeSession(messaggioFollowUp?: string): Promise<void>
         compactSession(): Promise<void>
         passaASessione(sessionId: string, taskId: string, nome?: string): void
+        // ⭐ 29/8 — bug reale trovato sul dispositivo (vedi il describe dedicato in fondo al file)
+        selectSession(selection: { id: string, title: string }): boolean
+        // ⭐ 2/9 — esposta per la prova di de-dup (vedi il describe SELECT-SESSION-REAL-ID)
+        riprendiSessioneDalHost(): Promise<void>
         openRealTaskSheet(): Promise<void>
         aggiornaElencoSessioniReali(): Promise<void>
         runDirectShell(comando: string, silenzioso: boolean): Promise<void>
-        submitPrompt(text: string): boolean
+        // ⭐ 29/8, porta canonico (ledger §21, FASE D coda messaggi) — già esposto a runtime da tempo (blocco window.__talosHarnessUiRuntime), mancava solo dal tipo dei test.
+        submitPrompt(text: string, modello?: string): boolean
         executeCommand(command: string): void
         costruisciTrascrizioneMarkdown(esportato: Record<string, unknown>): string
         titoloDalPrimoMessaggio(testo: string): string
-        // ⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md).
-        apriVistaTerminaleReale(): void
-        apriFileAlbero(percorso: string, nome: string): Promise<void>
-        scollegaTerminaleReale(): void
-        statoTerminale(): {
-            ws: { close(): void, onclose?: unknown, readyState?: number } | null
-            idConnesso: string | null
-            term: { clear(): void, write(dati: string): void, writeln(dati: string): void, cols: number, rows: number } | null
-            fit: { fit(): void } | null
-            montato: boolean
-            standaloneId: string | null
-            resizeObserver: unknown
-        }
         realSessionState: {
             id: string | null
             taskId: string | null
             generation: number
             eventSource: FakeEventSource | null
             messageElements: Map<string, HTMLElement>
-            reviewFiles: Map<string, { path: string, nuovo: boolean, diffVero: boolean, code: [string, string][] }>
+            reviewFiles: Map<string, { path: string, nuovo: boolean, code: [string, string][] }>
+            ultimoEsitoProva: number | null
+            // ⭐ 29/8, porta canonico (ledger §21, FASE D)
             eventoTerminaleVisto: boolean
             followUpBubbleInAttesa: boolean
-            treeCache: Map<string, Array<{ nome: string, cartella: boolean }>>
-            treeOpen: Set<string>
-            previewProjectId: string | null
-            previewWorkspaceName: string | null
-            usage: { prompt_tokens: number, completion_tokens: number, prompt_tokens_details?: { cached_tokens: number }, giri: number } | null
+            codaMessaggi: string[]
         }
+        // ⭐ 29/8, porting dal bundle desktop (FASE A/C)
+        eseguiDoctor(): Promise<void>
+        refreshDoctorBadge(): Promise<void>
+        caricaPannelloHooks(): Promise<void>
+        caricaAlberoSessione(): Promise<void>
+        openSheet(type: string): void
+        // ⭐ 29/8, porting dal bundle desktop — Automazioni
+        renderAutomationsReali(): Promise<void>
+        openNewAutomationSheet(): Promise<void>
+        setView(view: string, options?: Record<string, unknown>): void
     }
 }
 
@@ -125,15 +126,13 @@ function mockFetch(regole: RegolaFetch[]) {
  * chiamate per livello — la prova che la cache NON ri-scarica un livello
  * già visto passa da questo conteggio, non da un'supposizione.
  */
-function mockFetchAlbero(livelli: Record<string, Array<{ nome: string, cartella: boolean }>>, extra: RegolaFetch[] = [], projectId?: string) {
+function mockFetchAlbero(livelli: Record<string, Array<{ nome: string, cartella: boolean }>>, extra: RegolaFetch[] = []) {
     const chiamatePerLivello: Record<string, number> = {}
     const spia = vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
         const url = typeof input === 'string' ? input : String(input)
         const metodo = (init?.method ?? 'GET').toUpperCase()
         const [percorsoBase, query] = url.split('?')
-        const treeMatch = projectId
-            ? percorsoBase === `/api/v1/projects/${projectId}/tree`
-            : /^\/api\/v1\/sessions\/[^/]+\/tree$/.test(percorsoBase)
+        const treeMatch = /^\/api\/v1\/sessions\/[^/]+\/tree$/.exec(percorsoBase)
         if (metodo === 'GET' && treeMatch) {
             const parametri = new URLSearchParams(query ?? '')
             const livello = parametri.get('percorso') ?? ''
@@ -173,7 +172,6 @@ function runtime() {
 describe('Harness UI — real session, la parte portata da lane/harness-ui', () => {
     beforeEach(() => {
         document.body.className = ''
-        window.localStorage.clear()
         FakeEventSource.instances = []
         vi.stubGlobal('EventSource', FakeEventSource)
         mountStaticRuntime()
@@ -235,6 +233,112 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(FakeEventSource.instances).toHaveLength(1)
         expect(FakeEventSource.instances[0].url).toBe('/api/v1/sessions/sess-abc123/events')
         expect(runtime().realSessionState.id).toBe('sess-abc123')
+    })
+
+    /**
+     * ⭐⭐⭐ 28/8, "procedi in ordine" punto 3 — un messaggio semplice (senza
+     * `!`) avvia ORA una sessione reale invece del copione scriptato
+     * (`appendUserMessage`, rimosso: rispondeva sempre "Ricevuto. Ho
+     * aggiunto il messaggio..." senza mai leggere `text`).
+     *
+     * ⛔⛔⛔ 29/8 — RISCRITTE dopo un bug reale trovato SUL DISPOSITIVO
+     * (owner: "non provare e verificare visivamente è una violazione
+     * delle regole vincolanti"): `POST /api/v1/sessions {messaggio}`
+     * falliva sempre con "Query non valida" — `requireMessaggioBody`
+     * (il contratto che queste prove verificavano) non esiste più in
+     * `http-app.mjs` (grep sul sorgente vero, zero corrispondenze); la
+     * rotta valida oggi con `requireTaskIdBody`, `taskId` obbligatorio.
+     * Il rimpiazzo è `avviaSessioneImplicitaSeUnaSolaCartella` (bundle
+     * desktop, mai portato prima): un messaggio senza cartella scelta
+     * chiede `/api/v1/projects` e, se ce n'è esattamente una, apre un
+     * compito libero su `/api/v1/sessions/custom` (contratto vero e
+     * tuttora esistente).
+     */
+    it('REAL-SESSION-MESSAGE-01 con una sola cartella progetto configurata, apre un compito libero su /api/v1/sessions/custom', async () => {
+        const fetchMock = mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'p1', nome: 'talos' }] } },
+            { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-msg-1' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+
+        await runtime().startRealSessionFromMessage('ciao')
+
+        // corpo verificato campo per campo (non una stringa JSON esatta): `modello` può comparire o no a seconda dello stato del picker in questo mount, non è materia di QUESTA prova.
+        const chiamataCustom = fetchMock.mock.calls.find((c) => c[0] === '/api/v1/sessions/custom')
+        const init = chiamataCustom?.[1] ?? {}
+        expect(chiamataCustom).toBeDefined()
+        expect(init).toMatchObject({ method: 'POST' })
+        expect(JSON.parse(String(init.body))).toMatchObject({ cartellaId: 'p1', consegna: 'ciao', client: 'desktop', permessi: 'Workspace write' })
+        expect(FakeEventSource.instances).toHaveLength(1)
+        expect(FakeEventSource.instances[0].url).toBe('/api/v1/sessions/sess-msg-1/events')
+        expect(runtime().realSessionState.id).toBe('sess-msg-1')
+    })
+
+    /**
+     * ⭐⭐⭐ AL CONTRARIO delle due prove sotto: `appendRealTaskStart` (app.js)
+     * leggeva SEMPRE `task.id` per l'etichetta — un messaggio senza `id`
+     * avrebbe mostrato "Task reale · undefined". Le due prove insieme
+     * coprono ENTRAMBI i versi: un task del corpus mantiene l'etichetta di
+     * sempre, un compito libero (id sintetico `libero:<cartella>`, MAI
+     * `undefined`) ne mostra una propria.
+     */
+    it('REAL-SESSION-MESSAGE-02 the plain-message bubble reads "Task reale · libero:<cartella>", never "Task reale · undefined"', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'p1', nome: 'talos' }] } },
+            { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-msg-2' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+
+        await runtime().startRealSessionFromMessage('ciao')
+
+        const meta = document.querySelector('.user-message .message-meta')
+        expect(meta?.textContent).toContain('Real task · libero:talos') // ⭐ 3/9 — etichetta tradotta in inglese (avm-03, commit 8398f860), asserzione aggiornata a pari passo
+        expect(meta?.textContent).not.toContain('undefined')
+        expect(document.querySelector('.user-message .message-bubble')?.textContent).toBe('ciao')
+    })
+
+    it('⛔ REAL-SESSION-MESSAGE-05 AL CONTRARIO: zero o più di una cartella configurata, nessun tentativo destinato a fallire — stato onesto', async () => {
+        const fetchMockZero = mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [] } }])
+        await runtime().startRealSessionFromMessage('ciao')
+        expect(fetchMockZero).toHaveBeenCalledTimes(1) // solo il GET di projects, mai un POST destinato a fallire
+        expect(runtime().realSessionState.id).toBeNull()
+
+        const fetchMockMolte = mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'a', nome: 'uno' }, { id: 'b', nome: 'due' }] } }])
+        await runtime().startRealSessionFromMessage('ciao')
+        expect(fetchMockMolte).toHaveBeenCalledTimes(2) // 1 (caso zero, sopra) + 1 (questo): mockFetch riusa lo stesso spy sottostante, la cronologia è cumulativa nello stesso test — vedi lo stesso pattern in AUTOMATIONS-07.
+        expect(runtime().realSessionState.id).toBeNull()
+    })
+
+    /**
+     * ⭐⭐⭐ 28/8, "procedi in ordine" punto 4 — il modello scelto nel
+     * composer di Codice arriva fino al corpo della POST (ora verso
+     * /api/v1/sessions/custom, non più /api/v1/sessions — vedi sopra).
+     */
+    it('REAL-SESSION-MESSAGE-04 con un modello scelto, il corpo del compito libero include modello', async () => {
+        const fetchMock = mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'p1', nome: 'talos' }] } },
+            { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-msg-modello' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+
+        await runtime().startRealSessionFromMessage('ciao', 'z-ai/glm-4.7-flash')
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/custom', expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({ cartellaId: 'p1', consegna: 'ciao', client: 'desktop', modello: 'z-ai/glm-4.7-flash', permessi: 'Workspace write' }),
+        }))
+    })
+
+    it('REAL-SESSION-MESSAGE-03 AL CONTRARIO: a real corpus task keeps its own "Task reale · <id>" label, unchanged', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-task-label' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+
+        await runtime().startRealSession({ id: 'storia-0b81c88', consegna: 'Sistema il test rosso.' })
+
+        const meta = document.querySelector('.user-message .message-meta')
+        expect(meta?.textContent).toContain('Real task · storia-0b81c88') // ⭐ 3/9 — vedi nota sopra, stessa etichetta tradotta
     })
 
     it('REAL-SESSION-AUTOMATION-01 "Esegui ora" su una riga con data-task-id avvia per davvero quel task (standalone)', async () => {
@@ -334,10 +438,15 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(runtime().realSessionState.id).toBeNull()
     })
 
-    it('REAL-SESSION-TEXT-01 TextMessageContent accumula il testo nella bolla assistente, non la sostituisce', () => {
+    it('REAL-SESSION-TEXT-01 TextMessageContent accumula il testo nella bolla assistente, non la sostituisce', async () => {
         const generation = runtime().realSessionState.generation
         runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm1', delta: 'Leggo ' }, generation)
         runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm1', delta: 'il file.' }, generation)
+        // ⭐ 2/9 — il render è ora coalescente/differito a un frame (§R4):
+        // jsdom non ha requestAnimationFrame (verificato), quindi
+        // programmaRenderMessaggioStreaming() usa sempre il ripiego
+        // setTimeout(...,16) — 20ms lo supera in sicurezza.
+        await new Promise((resolve) => setTimeout(resolve, 20))
 
         const bubble = document.querySelector('.real-session-status')
         expect(bubble).toBeNull() // nessuno stato/errore ancora — solo testo
@@ -345,30 +454,13 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(copies).toContain('Leggo il file.')
     })
 
-    /*
-     * ⭐⭐⭐ 29/8 — FASE J: il bottone "ascolta" (TTS) è costruito SOLO se
-     * `speechSynthesis` esiste — jsdom non la implementa affatto (zero
-     * polyfill in questo progetto, verificato prima di scrivere: `'speechSynthesis' in window` è `false` qui, esattamente come in un
-     * browser che non la supporta) — stessa disciplina "mai un bottone
-     * che sembra funzionare e non fa niente" già provata per il
-     * microfono. La verifica del percorso POSITIVO (bottone presente,
-     * click→speak/cancel) resta fuori da questo ambiente per lo stesso
-     * motivo — non testabile senza un vero motore di sintesi vocale.
-     */
-    it('⛔ REAL-SESSION-TTS-01 AL CONTRARIO: senza speechSynthesis, nessun bottone "ascolta" nella bolla assistente', () => {
-        expect('speechSynthesis' in window).toBe(false)
-        const generation = runtime().realSessionState.generation
-        runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm-tts', delta: 'Risposta senza sintesi vocale disponibile.' }, generation)
-
-        expect(document.querySelector('.assistant-listen-btn')).toBeNull()
-    })
-
     // ⛔⛔⛔ 27/8, owner: "le risposte non sono formattate, cioè le basi" — il
     // testo del modello arrivava con .textContent += : un elenco puntato
     // diventava una riga sola senza a-capo, nessun grassetto/corsivo/codice.
-    it('REAL-SESSION-TEXT-02 un elenco puntato del modello diventa una lista VERA (<li>), non una riga sola', () => {
+    it('REAL-SESSION-TEXT-02 un elenco puntato del modello diventa una lista VERA (<li>), non una riga sola', async () => {
         const generation = runtime().realSessionState.generation
         runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm-lista', delta: 'Posso:\n- Uno\n- Due\n- Tre' }, generation)
+        await new Promise((resolve) => setTimeout(resolve, 20))
 
         const elemento = document.querySelector('.assistant-copy ul')
         expect(elemento).not.toBeNull()
@@ -376,9 +468,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(voci).toEqual(['Uno', 'Due', 'Tre'])
     })
 
-    it('REAL-SESSION-TEXT-03 grassetto/corsivo/codice inline diventano nodi veri, non asterischi a schermo', () => {
+    it('REAL-SESSION-TEXT-03 grassetto/corsivo/codice inline diventano nodi veri, non asterischi a schermo', async () => {
         const generation = runtime().realSessionState.generation
         runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm-inline', delta: 'Uso **grassetto**, *corsivo* e `codice()`.' }, generation)
+        await new Promise((resolve) => setTimeout(resolve, 20))
 
         const copia = document.querySelector('.assistant-copy')
         expect(copia?.querySelector('strong')?.textContent).toBe('grassetto')
@@ -387,14 +480,87 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(copia?.textContent).not.toContain('**') // mai asterischi letterali a schermo
     })
 
-    it('⛔ REAL-SESSION-TEXT-04 AL CONTRARIO: testo del modello che sembra HTML resta testo letterale, mai eseguito', () => {
+    it('⛔ REAL-SESSION-TEXT-04 AL CONTRARIO: testo del modello che sembra HTML resta testo letterale, mai eseguito', async () => {
         const generation = runtime().realSessionState.generation
         runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm-xss', delta: '<img src=x onerror="window.__provaXss=true">' }, generation)
+        await new Promise((resolve) => setTimeout(resolve, 20))
 
         const copia = document.querySelector('.assistant-copy')
         expect(copia?.querySelector('img')).toBeNull() // mai un <img> VERO nel DOM
         expect(copia?.textContent).toContain('<img') // il testo letterale resta visibile
         expect((window as unknown as { __provaXss?: boolean }).__provaXss).toBeUndefined()
+    })
+
+    /*
+     * ⭐⭐⭐ 2/9 — review Fable R4: `renderizzaMarkdownSemplice()` veniva
+     * richiamato per INTERO a ogni delta, O(n²) sul testo (misurato dal
+     * desktop: 1,28s→0,35s con la cura). Questa prova il contratto
+     * osservabile, non l'implementazione: più delta nello stesso giro
+     * sincrono non toccano il DOM finché non arriva un frame — se
+     * rendesse ancora a ogni delta come prima, il primo `expect` sotto
+     * (PRIMA del flush) fallirebbe già.
+     */
+    it('⭐ STREAMING-COALESCE-01 più delta nello stesso giro producono UN SOLO render, non uno a delta', async () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm-coalesce', delta: 'Uno ' }, generation)
+        runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm-coalesce', delta: 'due ' }, generation)
+        runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm-coalesce', delta: 'tre.' }, generation)
+
+        // PRIMA del flush: il render è differito, il DOM non ha ancora niente.
+        const copiaPrima = document.querySelector('.assistant-copy')
+        expect(copiaPrima?.textContent ?? '').toBe('')
+
+        await new Promise((resolve) => setTimeout(resolve, 20))
+
+        // DOPO un solo flush: tutti e tre i delta sono a schermo insieme.
+        const copiaDopo = document.querySelector('.assistant-copy')
+        expect(copiaDopo?.textContent).toBe('Uno due tre.')
+    })
+
+    /*
+     * ⭐⭐⭐ 2/9 — review Fable R4, la prova di correttezza che l'ottimizzazione
+     * DEVE superare: il rendering incrementale (blocchi stabili riusati,
+     * solo la coda si ridisegna) deve produrre ESATTAMENTE lo stesso DOM
+     * di un rendering in un colpo solo — altrimenti la velocità sarebbe
+     * comprata con un difetto visivo. Caso scelto apposta: un blocco di
+     * codice ```fence``` che ATTRAVERSA una riga vuota (l'unico costrutto
+     * che lo fa, per costruzione dell'algoritmo) tagliato a metà da un
+     * delta, più un paragrafo dopo — se confineBlocchiStabili() lo
+     * trattasse come un blocco chiuso a metà fence, il fence si
+     * spezzerebbe in due `<pre>` invece di uno.
+     */
+    it('⭐ STREAMING-INCREMENTALE-PARITA-01 tanti delta piccoli producono lo STESSO DOM di un delta solo, anche con un fence che attraversa una riga vuota', async () => {
+        const testoCompleto = 'Ecco il codice:\n\n```js\nfunction somma(a, b) {\n\n  return a + b;\n}\n```\n\nFatto.'
+        const generation = runtime().realSessionState.generation
+
+        // Messaggio A: un delta solo, il testo intero in un colpo.
+        runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm-intero', delta: testoCompleto }, generation)
+
+        // Messaggio B: lo STESSO testo, spezzato in tanti delta piccoli —
+        // tagli scelti apposta a metà parola e a metà del fence.
+        const pezzi = [
+            'Ecco il ', 'codice:\n\n```js\nfun', 'ction somma(a, b) {\n', '\n  return a', ' + b;\n}\n', '```\n\nFat', 'to.',
+        ]
+        expect(pezzi.join('')).toBe(testoCompleto) // precondizione: i pezzi ricompongono esattamente il testo atteso
+        for (const delta of pezzi) {
+            runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm-a-pezzi', delta }, generation)
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 20))
+
+        // Due bolle distinte, create nell'ordine in cui gli eventi sono
+        // arrivati sopra: m-intero prima, m-a-pezzi dopo — .assistant-copy
+        // non porta un id proprio, l'ordine nel DOM è la fonte di verità.
+        const copie = [...document.querySelectorAll('.assistant-copy')]
+        expect(copie).toHaveLength(2)
+        const [interoEl, aPezziEl] = copie
+        // Un solo <pre> (il fence non si è spezzato in due) in ENTRAMBI.
+        expect(interoEl.querySelectorAll('pre').length).toBe(1)
+        expect(aPezziEl.querySelectorAll('pre').length).toBe(1)
+        // Stesso testo del blocco di codice, carattere per carattere.
+        expect(aPezziEl.querySelector('pre code')?.textContent).toBe(interoEl.querySelector('pre code')?.textContent)
+        // Stesso DOM finale, per intero — non solo il fence.
+        expect(aPezziEl.innerHTML).toBe(interoEl.innerHTML)
     })
 
     // ⛔⛔ 27/8, trovato dalla pipeline QA visiva: un RunStarted per un comando
@@ -407,7 +573,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         const conversationText = document.querySelector('#conversation')?.textContent ?? ''
         expect(conversationText).not.toContain('undefined')
-        expect(conversationText).toContain('Comando diretto')
+        expect(conversationText).toContain('Direct command') // ⭐ 3/9 — etichetta tradotta in inglese (avm-03, commit 8398f860), asserzione aggiornata a pari passo
     })
 
     // ⛔⛔⛔ 27/8, trovato ricaricando la pagina (F5) su una sessione VERA di
@@ -420,8 +586,8 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'Ciao, chi sei?', consegnaCorta: 'Ciao, chi sei?', progetto: 'talos-prova-harness' } }, generation)
 
         const conversationText = document.querySelector('#conversation')?.textContent ?? ''
-        expect(conversationText).not.toContain('Comando diretto')
-        expect(conversationText).toContain('Compito libero')
+        expect(conversationText).not.toContain('Direct command') // ⭐ 3/9 — vedi nota sopra, stesse etichette tradotte
+        expect(conversationText).toContain('Free task')
         expect(conversationText).toContain('talos-prova-harness')
     })
 
@@ -432,6 +598,48 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'scaduto', delta: 'fantasma' }, generazioneVecchia)
 
         expect(document.querySelector('.assistant-copy')?.textContent ?? '').not.toContain('fantasma')
+    })
+
+    /**
+     * ⭐⭐⭐ 2/9 — M1: Stadio A (talosHarness.mjs, 23/8) compatta la
+     * conversazione da sola da tempo, ma il giro che lo fa non emetteva mai
+     * un evento — un turno senza testo, indistinguibile da un modello
+     * bloccato (vedi il commento sopra CompactionStart/CompactionEnd in
+     * app.js). talosLavora ora chiama onGiro({tipo:'compattazione-inizio'})
+     * / ({tipo:'compattazione-fine'}), agent-service.mjs li traduce in
+     * CompactionStart/CompactionEnd (agui-events.mjs) — questa prova copre
+     * solo l'ultimo miglio, il consumo lato client, già coperto a monte dai
+     * 194/194 test del kernel e dal ciclo dedicato in agent-service.
+     * Anche il guardiano "non raddoppiare" (mostraCompattazioneInCorso
+     * ritorna subito se una bolla è già a schermo) è provato qui, non in un
+     * test a parte — un secondo CompactionStart può arrivare da un replay
+     * SSE dopo una riconnessione, come già successo per altri eventi in
+     * questo stesso file (vedi la nota su _sequenza sopra handleRealEvent).
+     */
+    it('REAL-SESSION-COMPACTION-01 CompactionStart mostra "Sto riassumendo…" (senza raddoppiare), CompactionEnd la rimuove', () => {
+        const generation = runtime().realSessionState.generation
+
+        // ⭐ 3/9 — bolla tradotta in inglese (avm-03, commit 8398f860), asserzioni aggiornate a pari passo
+        runtime().handleRealEvent({ type: 'CompactionStart' }, generation)
+        expect(document.querySelector('#conversation')?.textContent ?? '').toContain('Summarising the conversation so far…')
+        expect(document.querySelectorAll('.real-compaction-note')).toHaveLength(1)
+
+        runtime().handleRealEvent({ type: 'CompactionStart' }, generation) // replay SSE dopo una riconnessione: stessa bolla, non una seconda
+        expect(document.querySelectorAll('.real-compaction-note')).toHaveLength(1)
+
+        runtime().handleRealEvent({ type: 'CompactionEnd' }, generation)
+        expect(document.querySelector('.real-compaction-note')).toBeNull()
+        expect(document.querySelector('#conversation')?.textContent ?? '').not.toContain('Summarising')
+    })
+
+    it('⛔ REAL-SESSION-COMPACTION-02 AL CONTRARIO: un CompactionStart di una generazione VECCHIA non mostra mai la bolla', () => {
+        const generazioneAttuale = runtime().realSessionState.generation
+        const generazioneVecchia = generazioneAttuale - 1
+
+        runtime().handleRealEvent({ type: 'CompactionStart' }, generazioneVecchia)
+
+        expect(document.querySelector('.real-compaction-note')).toBeNull()
+        expect(document.querySelector('#conversation')?.textContent ?? '').not.toContain('Sto riassumendo')
     })
 
     it('REAL-SESSION-REVIEW-01 StateDelta popola state.realSession.reviewFiles con chiave "real:<percorso>"', () => {
@@ -446,110 +654,61 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(voce?.nuovo).toBe(true)
     })
 
-    it('REAL-SESSION-REVIEW-02 StateDelta con "prima" produce un diff VERO — righe rosse/verdi/neutre, non tutto "add" — 27/8, il formattatore diff', () => {
+    it('REAL-SESSION-REVIEW-02 con un file scritto ma NESSUNA prova ancora arrivata, i badge test/rischio restano "—" (ignoto, mai un verdetto finto)', () => {
         const generation = runtime().realSessionState.generation
         runtime().handleRealEvent({
             type: 'StateDelta',
-            delta: [{
-                op: 'replace', path: '/file/src/prezzo.mjs',
-                value: 'export const prezzo = 2\nexport const iva = 1\n',
-                prima: 'export const prezzo = 1\n',
-            }],
+            delta: [{ op: 'add', path: '/file/src/riga02.mjs', value: 'export const x = 1\n' }],
         }, generation)
 
-        const voce = runtime().realSessionState.reviewFiles.get('src/prezzo.mjs')
-        expect(voce?.diffVero).toBe(true)
-        // la riga invariata è testo diverso solo perché il valore è cambiato — qui
-        // NIENTE è invariato riga per riga (prezzo passa da 1 a 2), quindi la
-        // prova vera è: c'è almeno una riga marcata '-' (rimossa) e una '+' (aggiunta).
-        const tipi = voce!.code.map(([tipo]) => tipo)
-        expect(tipi).toContain('del')
-        expect(tipi).toContain('add')
-        expect(voce!.code.some(([, testo]) => testo.includes('- export const prezzo = 1'))).toBe(true)
-        expect(voce!.code.some(([, testo]) => testo.includes('+ export const prezzo = 2'))).toBe(true)
+        expect(runtime().realSessionState.ultimoEsitoProva).toBeNull()
+        const badgeTest = document.querySelector('[data-review-stat="test"] span')
+        const badgeRischio = document.querySelector('[data-review-stat="risk"] span')
+        expect(badgeTest?.textContent).toBe('—')
+        expect(badgeRischio?.textContent).toBe('—')
     })
 
-    /*
-     * ⭐⭐⭐ Riconciliazione Fase 3 (piano procedi-col-generare-un-snoopy-neumann.md,
-     * 27/8) — il contatore costo/token per una sessione VIVA, prima
-     * assente. path /usage è uno smistamento NUOVO nel case 'StateDelta':
-     * deve popolare realSessionState.usage, e MAI toccare reviewFiles
-     * (che REVIEW-01/02 sopra già provano per /file/*).
-     */
-    it('⭐⭐⭐ USAGE-01 StateDelta path /usage popola realSessionState.usage, non reviewFiles', () => {
-        const generation = runtime().realSessionState.generation
-        const totali = { prompt_tokens: 900, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 50 }, giri: 3 }
-        runtime().handleRealEvent({ type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: totali }] }, generation)
-
-        expect(runtime().realSessionState.usage).toEqual(totali)
-        expect(runtime().realSessionState.reviewFiles.size).toBe(0)
-    })
-
-    it('⛔ AL CONTRARIO: USAGE-02 uno StateDelta /file/* non tocca mai realSessionState.usage', () => {
+    it('REAL-SESSION-REVIEW-03 prova con exit 0, file piccolo, nessun percorso sensibile -> Verdi/Basso', () => {
         const generation = runtime().realSessionState.generation
         runtime().handleRealEvent({
             type: 'StateDelta',
-            delta: [{ op: 'add', path: '/file/altro.mjs', value: 'x' }],
+            delta: [{ op: 'add', path: '/file/src/riga03.mjs', value: 'export const x = 1\n' }],
         }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'p1', toolCallName: 'prova' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'p1', content: 'exit 0\n> test\n✔ tutto ok\n' }, generation)
 
-        expect(runtime().realSessionState.usage).toBeNull()
+        expect(runtime().realSessionState.ultimoEsitoProva).toBe(0)
+        expect(document.querySelector('[data-review-stat="test"] span')?.textContent).toBe('Verdi')
+        expect(document.querySelector('[data-review-stat="risk"] span')?.textContent).toBe('Basso')
     })
 
-    /*
-     * ⭐⭐⭐ 28/8 — owner: "tutti i tool come la generazione di artefatti".
-     * L'HTML entra SOLO come `srcdoc` di un iframe sandboxato: mai
-     * innerHTML sul documento reale, mai eseguito nel contesto della
-     * pagina — verificato leggendo gli attributi veri dell'elemento, non
-     * assunto dal solo fatto che la card compaia.
-     */
-    /*
-     * ⭐⭐⭐ 28/8, riscritto dopo la scoperta dal vivo: `srcdoc` EREDITA la
-     * CSP della pagina (script-src 'self' di questo bundle), quindi lo
-     * script di un artefatto non partiva mai — vedi la doc in
-     * artifact-store.mjs (harness-ui/src). La cura: `frame.src` punta a
-     * `/api/v1/artifacts/:id`, una risposta HTTP con la SUA CSP. Qui si
-     * prova SOLO che il frontend costruisca l'URL/gli attributi giusti —
-     * la risposta vera (e la sua CSP) è provata in http-app.test.mjs.
-     */
-    it('⭐⭐⭐ ARTIFACT-01 ArtifactCreated monta un iframe sandboxato con src verso /api/v1/artifacts/:id, MAI srcdoc', () => {
-        const generation = runtime().realSessionState.generation
-        runtime().handleRealEvent({ type: 'ArtifactCreated', messageId: 'm1', id: 'a1', titolo: 'Spirografo' }, generation)
-
-        const frame = document.querySelector<HTMLIFrameElement>('#conversation .artifact-card-frame')
-        expect(frame).not.toBeNull()
-        expect(frame!.getAttribute('sandbox')).toBe('allow-scripts')
-        // ⛔ AL CONTRARIO del confine giusto: allow-same-origin/allow-top-navigation/allow-popups NON devono mai comparire nel valore.
-        expect(frame!.getAttribute('sandbox')).not.toMatch(/allow-same-origin|allow-top-navigation|allow-popups|allow-forms/)
-        expect(frame!.getAttribute('src')).toBe('/api/v1/artifacts/a1')
-        expect(frame!.getAttribute('srcdoc')).toBeNull()
-        expect(document.querySelector('#conversation .artifact-card-title')?.textContent).toBe('Spirografo')
-    })
-
-    it('⛔ AL CONTRARIO: ARTIFACT-02 senza titolo, la card mostra comunque un\'etichetta onesta, mai vuota', () => {
-        const generation = runtime().realSessionState.generation
-        runtime().handleRealEvent({ type: 'ArtifactCreated', messageId: 'm2', id: 'a2', titolo: '' }, generation)
-
-        expect(document.querySelector('#conversation .artifact-card-title')?.textContent).toBe('Artefatto')
-    })
-
-    it('REAL-SESSION-REVIEW-03 StateDelta SENZA "prima" (chiamante vecchio) resta onesto: nessun diff inventato, diffVero:false — verso contrario del test sopra', () => {
+    it('⛔ REAL-SESSION-REVIEW-04 AL CONTRARIO: prova con exit 1 porta Rossi/Alto anche su un file piccolo e non sensibile', () => {
         const generation = runtime().realSessionState.generation
         runtime().handleRealEvent({
             type: 'StateDelta',
-            delta: [{ op: 'replace', path: '/file/src/senza-prima.mjs', value: 'x\n' }],
+            delta: [{ op: 'add', path: '/file/src/riga04.mjs', value: 'export const x = 1\n' }],
         }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'p2', toolCallName: 'prova' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'p2', content: 'exit 1\n✖ un test fallisce\n' }, generation)
 
-        const voce = runtime().realSessionState.reviewFiles.get('src/senza-prima.mjs')
-        expect(voce?.diffVero).toBe(false)
-        expect(voce!.code.every(([tipo]) => tipo !== 'del')).toBe(true)
+        expect(runtime().realSessionState.ultimoEsitoProva).toBe(1)
+        expect(document.querySelector('[data-review-stat="test"] span')?.textContent).toBe('Rossi')
+        expect(document.querySelector('[data-review-stat="risk"] span')?.textContent).toBe('Alto')
     })
 
-    /*
-     * ⭐⭐⭐ 27/8, owner: "un componente allo stato dell'arte" per Files,
-     * "renditelo funzionante" — il pannello Files reale: albero vero
-     * (più cartelle aperte insieme, non un livello con su/giù), stato
-     * git incrociato con reviewFiles, cache per livello, ricerca dal vivo.
-     */
+    it('⛔ REAL-SESSION-REVIEW-05 AL CONTRARIO: test verdi ma un percorso sensibile (.env) porta comunque ad Alto rischio', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({
+            type: 'StateDelta',
+            delta: [{ op: 'add', path: '/file/.env', value: 'SEGRETO=1\n' }],
+        }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'p3', toolCallName: 'prova' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'p3', content: 'exit 0\n✔ tutto ok\n' }, generation)
+
+        expect(document.querySelector('[data-review-stat="test"] span')?.textContent).toBe('Verdi')
+        expect(document.querySelector('[data-review-stat="risk"] span')?.textContent).toBe('Alto')
+    })
+
     describe('FILE-TREE — il pannello Files reale', () => {
         async function avviaSessioneConAlbero(livelli: Record<string, Array<{ nome: string, cartella: boolean }>>) {
             const { chiamatePerLivello } = mockFetchAlbero(livelli, [
@@ -684,6 +843,11 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
          * differenza di FILE-TREE-04 (un percorso preciso, dal MODELLO)
          * qui il backend non sa esattamente cosa è cambiato fuori
          * dall'app — quindi invalida TUTTA la cache, non solo un livello.
+         * ⭐ 29/8 — portato da e079bf3f DOPO 969b1a38 (che l'aveva
+         * dichiarato non portabile: il case 'WorkspaceChanged' lato
+         * client esisteva già su questa copia, verificato PRIMA di
+         * accettare, ma il commit che lo introduceva non era mai stato
+         * cherry-pickato per suo conto — trovato e chiuso qui).
          */
         it('FILE-TREE-07 WorkspaceChanged svuota TUTTA la cache dati e ri-scarica ogni livello aperto — "src" resta aperta, con dati freschi', async () => {
             const { chiamatePerLivello, generation } = await avviaSessioneConAlbero({ '': LIVELLO_RADICE, src: LIVELLO_SRC })
@@ -740,72 +904,6 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             expect(chiamatePerLivello['']).toBe(1) // MAI raddoppiato: la stessa corsa che FILE-TREE-07 aveva scoperto rotta
         })
 
-        it('FILE-TREE-PREVIEW-01 mostra il root allowlistato subito dopo la scelta, prima del primo messaggio, in sola lettura', async () => {
-            mockFetch([
-                { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'p1', nome: 'demo' }] } },
-                { metodo: 'GET', percorso: '/api/v1/projects/p1/tree', corpo: { voci: [{ nome: 'src', cartella: true }, { nome: 'README.md', cartella: false }] } },
-            ])
-            await runtime().openRealTaskSheet()
-            document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
-
-            await vi.waitFor(() => { expect(document.querySelector('.ft-tree .ft-row')).toBeTruthy() })
-            expect(runtime().realSessionState.previewProjectId).toBe('p1')
-            expect([...document.querySelectorAll('.ft-row .ft-name')].map((el) => el.textContent)).toEqual(['src', 'README.md'])
-            expect(document.querySelector('#inspector-tab-files')?.getAttribute('aria-selected')).toBe('true')
-            expect(document.querySelectorAll('.ft-actions-btn')).toHaveLength(0)
-            expect(document.querySelector('.ft-row[draggable="true"]')).toBeNull()
-        })
-
-        it('FILE-TREE-PREVIEW-02 persiste cartelle aperte e filtro per workspace, poi li ripristina alla nuova anteprima', async () => {
-            mockFetchAlbero({
-                '': [{ nome: 'src', cartella: true }, { nome: 'README.md', cartella: false }],
-                src: [{ nome: 'app.js', cartella: false }],
-            }, [
-                { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'p1', nome: 'demo' }] } },
-            ], 'p1')
-
-            await runtime().openRealTaskSheet()
-            document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
-            await vi.waitFor(() => { expect(document.querySelector('.ft-node[data-percorso="src"]')).toBeTruthy() })
-            document.querySelector<HTMLElement>('.ft-node[data-percorso="src"] > .ft-row')!.click()
-            await vi.waitFor(() => { expect(document.querySelector('.ft-node[data-percorso="src/app.js"]')).toBeTruthy() })
-            const filtro = document.getElementById('fileTreeFilter') as HTMLInputElement
-            filtro.value = 'app.js'
-            filtro.dispatchEvent(new Event('input', { bubbles: true }))
-
-            const salvato = JSON.parse(window.localStorage.getItem('talos.harness.desktop.settings.v1') || '{}')
-            expect(salvato.workspaces['project:p1']).toEqual({ expandedPaths: ['src'], filter: 'app.js' })
-
-            await runtime().openRealTaskSheet()
-            document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
-            await vi.waitFor(() => { expect(document.querySelector('.ft-node[data-percorso="src/app.js"]')).toBeTruthy() })
-            expect(document.querySelector('.ft-node[data-percorso="src"]')?.classList.contains('ft-open')).toBe(true)
-            expect((document.getElementById('fileTreeFilter') as HTMLInputElement).value).toBe('app.js')
-        })
-
-        it('FILE-TREE-REVEAL-01 aprire un file seleziona e porta a vista la riga attiva', async () => {
-            const { chiamatePerLivello } = mockFetchAlbero({ '': [{ nome: 'README.md', cartella: false }] }, [
-                { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-reveal' } },
-                { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
-                { metodo: 'GET', percorso: '/api/v1/sessions/sess-reveal/tree/file', corpo: { contenuto: '# README' } },
-            ])
-            await runtime().startRealSession({ id: 'talos-prova-harness', consegna: 'test reveal' })
-            const generation = runtime().realSessionState.generation
-            runtime().handleRealEvent({ type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'test reveal' } }, generation)
-            await vi.waitFor(() => { expect(document.querySelector('.ft-tree .ft-row')).toBeTruthy() })
-            const riga = document.querySelector<HTMLElement>('.ft-node[data-percorso="README.md"] > .ft-row')!
-            const scrollIntoView = vi.fn()
-            Object.defineProperty(riga, 'scrollIntoView', { value: scrollIntoView })
-
-            await runtime().apriFileAlbero('README.md', 'README.md')
-
-            expect(riga.classList.contains('ft-selected')).toBe(true)
-            expect(document.activeElement).toBe(riga)
-            expect(scrollIntoView).toHaveBeenCalled()
-            expect(chiamatePerLivello['']).toBe(1)
-            expect(document.querySelector('#fileViewerMount .tool-result-block code')?.textContent).toBe('# README')
-        })
-
         /*
          * ⭐⭐⭐ 28/8 — owner: "nella lista files devo poter draggare i
          * file... non esiste il comando copia... e comandi crud in
@@ -813,6 +911,12 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
          * (verificato: `undefined`) — un oggetto finto con
          * setData/getData/types basta per esercitare la logica reale di
          * app.js, che legge solo quei tre.
+         * ⭐ 29/8 — portato da 46940ae4 dopo che i suoi prerequisiti
+         * (b3df4e98: `cartella` threading su apriMenuAzioniFile,
+         * impostaPermesso, avviaSessionePendente esteso) sono stati
+         * chiusi — 969b1a38 lo aveva trovato per primo e correttamente
+         * NON portato, verificato allora con grep che nessuna rotta
+         * esisteva ancora su questa copia.
          */
         describe('Drag&drop, "Copia", "Nuovo file"/"Nuova cartella"', () => {
             function creaDataTransferFinto() {
@@ -837,9 +941,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
 
                 const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
-                expect(etichette.some((e) => e?.includes('Nuovo file'))).toBe(true)
-                expect(etichette.some((e) => e?.includes('Nuova cartella'))).toBe(true)
-                expect(etichette.some((e) => e?.includes('Copia'))).toBe(true)
+                // ⭐ 3/9 — etichette tradotte in inglese, apriMenuAzioniFile completata nello stesso giro
+                expect(etichette.some((e) => e?.includes('New file'))).toBe(true)
+                expect(etichette.some((e) => e?.includes('New folder'))).toBe(true)
+                expect(etichette.some((e) => e?.includes('Copy'))).toBe(true)
             })
 
             it('⭐⭐⭐ CRUD-02: il menu di un FILE mostra anche "Copia"', async () => {
@@ -848,7 +953,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 rigaFile.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
 
                 const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
-                expect(etichette.some((e) => e?.includes('Copia'))).toBe(true)
+                expect(etichette.some((e) => e?.includes('Copy'))).toBe(true)
             })
 
             it('⭐⭐⭐ CRUD-03: cliccare "Copia" chiama POST .../tree/copy col percorso VERO, mostra il nuovo nome nel toast', async () => {
@@ -864,7 +969,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
                 const rigaFile = [...document.querySelectorAll('.ft-row-leaf')].find((r) => r.querySelector('.ft-name')?.textContent === 'a.txt')!
                 rigaFile.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
-                const voceCopia = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Copia'))!
+                const voceCopia = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Copy'))! // ⭐ 3/9 — etichetta tradotta
                 voceCopia.click()
                 await new Promise((r) => setTimeout(r, 0))
 
@@ -886,10 +991,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
                 const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
                 rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
-                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'Nuovo file')!
+                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'New file')! // ⭐ 3/9 — etichetta tradotta
                 voceMenu.click()
 
-                expect(document.querySelector('#sheetTitle')?.textContent).toBe('Nuovo file')
+                expect(document.querySelector('#sheetTitle')?.textContent).toBe('New file')
                 const input = document.querySelector<HTMLInputElement>('#createFileInput')!
                 input.value = 'nuovo.txt'
                 document.querySelector<HTMLFormElement>('#createFileForm')!.requestSubmit()
@@ -913,10 +1018,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
                 const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
                 rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
-                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'Nuova cartella')!
+                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'New folder')! // ⭐ 3/9 — etichetta tradotta
                 voceMenu.click()
 
-                expect(document.querySelector('#sheetTitle')?.textContent).toBe('Nuova cartella')
+                expect(document.querySelector('#sheetTitle')?.textContent).toBe('New folder')
             })
 
             it('⭐⭐⭐ CRUD-06: trascinare un file su una cartella chiama POST .../tree/move con percorso e cartellaDestinazione VERI', async () => {
@@ -969,8 +1074,9 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 rigaFile.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
 
                 const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
-                expect(etichette.some((e) => e?.includes('Nuovo file'))).toBe(false)
-                expect(etichette.some((e) => e?.includes('Nuova cartella'))).toBe(false)
+                // ⭐ 3/9 — etichette tradotte in inglese, apriMenuAzioniFile completata nello stesso giro
+                expect(etichette.some((e) => e?.includes('New file'))).toBe(false)
+                expect(etichette.some((e) => e?.includes('New folder'))).toBe(false)
             })
 
             it('⭐⭐⭐ CRUD-09: tasto destro sulla RADICE dell\'albero apre un menu con SOLO "Nuovo file"/"Nuova cartella"', async () => {
@@ -979,7 +1085,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 radice.dispatchEvent(new Event('contextmenu', { bubbles: true, cancelable: true }))
 
                 const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
-                expect(etichette).toEqual(['Nuovo file', 'Nuova cartella'])
+                expect(etichette).toEqual(['New file', 'New folder']) // ⭐ 3/9 — etichette tradotte
             })
 
             /*
@@ -997,7 +1103,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 await avviaSessioneConAlbero({ '': [{ nome: 'src', cartella: true }] })
                 const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
                 rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
-                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'Nuovo file')!
+                const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent === 'New file')! // ⭐ 3/9 — etichetta tradotta
                 voceMenu.click()
 
                 const badge = document.querySelector<HTMLElement>('#sheetDialog .demo-surface-badge')
@@ -1010,6 +1116,93 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         const fetchMock = mockFetch([])
         await runtime().stopRealSession()
         expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('REAL-SESSION-STOP-02 il bottone Stop, con una sessione reale attiva, chiama la POST vera invece del solo toggle demo', async () => {
+        // ⭐ 29/8 — ledger §10: stopRealSession() esisteva già ma nessun bottone la chiamava mai — trovato leggendo il codice, non da un test che già passava.
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-stop' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: 'sess-stop', taskId: 'storia-x', conclusa: false, avviataAlle: '2026-08-26T10:00:00.000Z' }] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-x' })
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'x' } }, generation)
+
+        const fetchMock = mockFetch([{ metodo: 'POST', percorso: '/api/v1/sessions/sess-stop/stop', corpo: {} }])
+        document.querySelector('.stop-run')?.dispatchEvent(new Event('click', { bubbles: true }))
+        await Promise.resolve()
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining('/api/v1/sessions/sess-stop/stop'),
+            expect.objectContaining({ method: 'POST' }),
+        )
+    })
+
+    it('REAL-SESSION-RUNSTATE-01 RunStarted/RunFinished/RunError accendono e spengono DAVVERO la striscia "In esecuzione"', async () => {
+        // ⭐ 29/8 — ledger §10: nessuno di questi tre case chiamava mai setRunState — la striscia non ha MAI riflesso un giro vero, solo il default statico del modulo.
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-running' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: 'sess-running', taskId: 'storia-x', conclusa: false, avviataAlle: '2026-08-26T10:00:00.000Z' }] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-x' })
+        const generation = runtime().realSessionState.generation
+        const strip = () => document.querySelector('.run-strip')
+        const label = () => document.querySelector('#runStateToggle strong')?.textContent
+
+        // ⭐ 3/9 — etichette tradotte in inglese (avm-03, commit 8398f860): setRunState() ha solo due stati (Running/Stopped, mai un terzo "Interrotto" — RunFinished e RunError chiamano entrambi setRunState(false)), asserzione allineata al codice vero
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'x' } }, generation)
+        expect(strip()?.classList.contains('is-stopped')).toBe(false)
+        expect(label()).toBe('Running')
+
+        runtime().handleRealEvent({ type: 'RunFinished', result: { detto: 'Fatto.' } }, generation)
+        expect(strip()?.classList.contains('is-stopped')).toBe(true)
+        expect(label()).toBe('Stopped')
+
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'y' } }, generation)
+        expect(strip()?.classList.contains('is-stopped')).toBe(false)
+
+        runtime().handleRealEvent({ type: 'RunError', code: 'INTERNAL_ERROR', message: 'boom' }, generation)
+        expect(strip()?.classList.contains('is-stopped')).toBe(true)
+        expect(label()).toBe('Stopped') // ⭐ 3/9 — vedi nota sopra, stessa etichetta a due stati
+    })
+
+    /*
+     * ⛔⛔⛔ 3/9 — BUG REALE trovato SOLO dal dispositivo (CDP su un giro vero,
+     * tablet landscape): aggiornaRunKpis() (app.js) cercava i tre valori con
+     * $('[data-run-kpi="…"] b'), ma index.html non portava MAI quell'attributo
+     * — sempre null, sempre "—" a schermo, anche con state.realSession.usage
+     * (giri:4, token veri) e erroriStrumento (1) corretti nello stato interno.
+     * Nessun test l'aveva preso perché ognuno controllava lo STATO, mai il DOM
+     * che dovrebbe rifletterlo — esattamente il tipo di buco che [[screenshot-obbligatorio-e-fonte-di-anomalie]]
+     * descrive. Qui si controlla il DOM, non lo stato.
+     */
+    it('⭐⭐⭐ REAL-SESSION-RUNKPIS-01 step/ctx/errors del run-strip riflettono DAVVERO lo stato — mai il trattino statico', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-kpis' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: 'sess-kpis', taskId: 'storia-x', conclusa: false, avviataAlle: '2026-08-26T10:00:00.000Z' }] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-x' })
+        const generation = runtime().realSessionState.generation
+        const kpi = (nome: string) => document.querySelector(`[data-run-kpi="${nome}"] b`)?.textContent
+
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'x' } }, generation)
+        expect(kpi('step')).toBe('—') // nessun /usage ancora arrivato: onestamente ignoto
+        expect(kpi('ctx')).toBe('—')
+        expect(kpi('errors')).toBe('0') // gli errori si SANNO da subito (zero finora), non "ignoti" come i token
+
+        runtime().handleRealEvent({ type: 'StateDelta', delta: [{ path: '/usage', value: { prompt_tokens: 900, completion_tokens: 100, giri: 2 } }] }, generation)
+        expect(kpi('step')).toBe('2')
+        expect(kpi('ctx')).toBe('1.0k') // 900+100, stessa formattaKilo di formattaUsageBreve
+
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'tk1', toolCallName: 'leggi' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'tk1', content: "error: ENOENT: no such file or directory, open 'nonexistent-xyz.txt'" }, generation)
+        expect(kpi('errors')).toBe('1')
+
+        // ⭐ un giro NUOVO (follow-up sulla stessa sessione) riparte da zero — mai i numeri del giro precedente appesi a schermo
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'y', seguito: true } }, generation)
+        expect(kpi('step')).toBe('—')
+        expect(kpi('ctx')).toBe('—')
+        expect(kpi('errors')).toBe('0')
     })
 
     it('REAL-SESSION-FINISH-01 RunFinished NON chiude subito lo stream — solo quando la connessione cade DAVVERO, e senza avviso', async () => {
@@ -1051,7 +1244,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         source?.onerror?.()
 
-        expect(document.querySelector('#conversation')?.textContent).toContain('interrotta')
+        expect(document.querySelector('#conversation')?.textContent).toContain('Event connection lost.') // ⭐ 3/9 — testo tradotto in inglese
     })
 
     it('REAL-SESSION-LIST-01 aggiornaElencoSessioniReali popola #sessionList con un blocco "Sessioni reali"', async () => {
@@ -1137,11 +1330,31 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(runtime().realSessionState.id).toBe('sess-riprendi')
     })
 
+    // ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il
+    // refresh" — riprodotto: un F5 perdeva OGNI follow-up per sempre, e
+    // ripeteva il primo messaggio 3 volte — session-registry.mjs resume()
+    // annunciava SEMPRE il task ORIGINALE, mai il nuovo messaggio: un
+    // replay (nessun appendUserFollowUp ottimista l'ha già mostrato) non
+    // aveva NESSUN evento da cui ricostruire il follow-up.
+    it('REAL-SESSION-RESUME-04 un RunStarted di replay (seguito:true, MAI preceduto da un resumeSession ottimista) mostra il follow-up dal server', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'Primo messaggio' } }, generation)
+        expect(runtime().realSessionState.followUpBubbleInAttesa).toBe(false) // nessun resumeSession() l'ha mai impostato
+
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'Secondo messaggio dal server', seguito: true } }, generation)
+
+        expect(document.querySelector('#conversation')?.textContent).toContain('Secondo messaggio dal server')
+    })
+
     // ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col
     // modello" — submitPrompt() rifiutava SEMPRE un secondo messaggio con
     // una sessione reale avviata, anche a run CONCLUSO: il composer
     // diventava inutilizzabile dopo la primissima risposta.
-    it('REAL-SESSION-RESUME-02 un follow-up su una sessione CONCLUSA chiama /resume con il messaggio, e lo mostra subito in chat', async () => {
+    // ⛔ 29/8 — RESUME-06, non RESUME-02: quel numero appartiene già a un
+    // altro test (il bottone della palette, riga sotto in questo stesso
+    // file) portato prima, sotto lo stesso nome usato dal canonico per
+    // QUESTO test — mai due test con lo stesso identificatore.
+    it('REAL-SESSION-RESUME-06 un follow-up su una sessione CONCLUSA chiama /resume con il messaggio, e lo mostra subito in chat', async () => {
         mockFetch([
             { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-concluso' } },
             { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
@@ -1163,22 +1376,6 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         }))
         expect(document.querySelector('#conversation')?.textContent).toContain("Un'altra domanda")
         expect(runtime().realSessionState.id).toBe('sess-concluso') // STESSO id, non una sessione nuova
-    })
-
-    // ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il
-    // refresh" — riprodotto: un F5 perdeva OGNI follow-up per sempre, e
-    // ripeteva il primo messaggio 3 volte — session-registry.mjs resume()
-    // annunciava SEMPRE il task ORIGINALE, mai il nuovo messaggio: un
-    // replay (nessun appendUserFollowUp ottimista l'ha già mostrato) non
-    // aveva NESSUN evento da cui ricostruire il follow-up.
-    it('REAL-SESSION-RESUME-04 un RunStarted di replay (seguito:true, MAI preceduto da un resumeSession ottimista) mostra il follow-up dal server', () => {
-        const generation = runtime().realSessionState.generation
-        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'Primo messaggio' } }, generation)
-        expect(runtime().realSessionState.followUpBubbleInAttesa).toBe(false) // nessun resumeSession() l'ha mai impostato
-
-        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'Secondo messaggio dal server', seguito: true } }, generation)
-
-        expect(document.querySelector('#conversation')?.textContent).toContain('Secondo messaggio dal server')
     })
 
     it('⛔ REAL-SESSION-RESUME-05 AL CONTRARIO: un RunStarted di replay MAI mostra il follow-up due volte se resumeSession lo ha già mostrato dal vivo', async () => {
@@ -1314,76 +1511,42 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(runtime().realSessionState.id).toBe('sess-shell')
     })
 
-    // ⛔ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): la vista
-    // Terminale non è più uno specchio dei tool-call `shell` dell'agente —
-    // è una PTY vera, indipendente dal ciclo dell'agente, digitabile
-    // dall'utente. Queste due prove (SHELL-03/04, prima "il tool-call
-    // shell arriva anche nel Terminale") sono state RISCRITTE, non solo
-    // fatte passare: verificano ora il contratto opposto, deliberato.
-    it('⛔⛔ REAL-SESSION-SHELL-03 AL CONTRARIO: un tool-call "shell" dell\'AGENTE non monta/tocca più il Terminale REALE', () => {
+    it('REAL-SESSION-SHELL-03 il risultato di un tool-call "shell" arriva anche nella vista Terminale dedicata, non solo nella chat', () => {
         const generation = runtime().realSessionState.generation
-        const primaMontato = runtime().statoTerminale().montato
-        const primaWs = runtime().statoTerminale().ws
         runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'shell' }, generation)
         runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'c1', delta: JSON.stringify({ comando: 'echo prova' }) }, generation)
         runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'c1', content: 'exit 0 [sandbox: wsl2]\nprova\n' }, generation)
 
-        // niente xterm montata, niente WebSocket aperta a vuoto per un tool-call dell'agente — resta un evento di chat, invariato lì.
-        expect(runtime().statoTerminale().montato).toBe(primaMontato)
-        expect(runtime().statoTerminale().ws).toBe(primaWs)
-        expect(document.querySelector('#realTerminalMount')?.childElementCount ?? 0).toBe(0)
+        const terminale = document.querySelector('[data-view="terminal"] .terminal-window code')
+        expect(terminale?.textContent).toContain('echo prova')
+        expect(terminale?.textContent).toContain('exit 0 [sandbox: wsl2]')
+        const badge = document.querySelector('[data-view="terminal"] .demo-surface-badge') as HTMLElement | null
+        expect(badge?.hidden).toBe(true)
     })
 
-    it('⛔ REAL-SESSION-SHELL-04 AL CONTRARIO: un tool-call diverso ("leggi") non tocca il Terminale REALE nemmeno lui — stessa indifferenza', () => {
+    it('⛔ REAL-SESSION-SHELL-04 AL CONTRARIO: il risultato di un tool-call DIVERSO da "shell" (es. "leggi") NON tocca la vista Terminale', () => {
+        const contenutoPrima = document.querySelector('[data-view="terminal"] .terminal-window code')?.textContent
         const generation = runtime().realSessionState.generation
-        const primaMontato = runtime().statoTerminale().montato
         runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'c2', toolCallName: 'leggi' }, generation)
         runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'c2', content: 'contenuto del file' }, generation)
 
-        expect(runtime().statoTerminale().montato).toBe(primaMontato)
+        expect(document.querySelector('[data-view="terminal"] .terminal-window code')?.textContent).toBe(contenutoPrima)
     })
 
-    /*
-     * ⭐⭐⭐ 29/8 — owner, riferimento diretto al proprio Bash tool di
-     * Claude Code: `descrizione` (nuova, opzionale, schema in
-     * talosHarness.mjs) diventa la riga della bolla invece del comando
-     * grezzo, quando il modello la manda.
-     */
-    it('⭐⭐⭐ REAL-SESSION-SHELL-06 un tool-call "shell" con descrizione mostra la descrizione nella riga RIASSUNTO (collassata), non il comando grezzo', () => {
+    // ⛔⛔ 27/8, trovato dalla pipeline QA visiva (iniettando un ToolCallResult
+    // finto via handleRealEvent, zero costo — mai una chiamata vera al
+    // modello per una prova che deve solo verificare il reset del DOM):
+    // passando dalla sessione A (che aveva usato "shell") alla sessione B,
+    // il Terminale mostrava ANCORA l'output di A, concatenato con quello di
+    // B — nuovaGenerazioneSessione() resettava conversazione/reviewFiles/
+    // albero ma non il dataset.reale di Terminale/Browser, che vive nel DOM
+    // e non in state.realSession.
+    it('⛔⛔ REAL-SESSION-SHELL-05 AL CONTRARIO: una NUOVA sessione reale non eredita l\'output shell della sessione precedente nella vista Terminale', async () => {
         const generation = runtime().realSessionState.generation
-        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'c-descr', toolCallName: 'shell' }, generation)
-        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'c-descr', delta: JSON.stringify({ comando: 'git diff --stat', descrizione: 'Mostra i file cambiati' }) }, generation)
-        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'c-descr', content: 'exit 0 [sandbox: wsl2]\n' }, generation)
-
-        // ⭐ la riga RIASSUNTO (sempre visibile, collassata) mostra la descrizione — il comando grezzo resta comunque
-        // raggiungibile nel dettaglio espandibile (.tool-note-detail, hidden finché non si clicca): non sparisce,
-        // semplicemente non è più la prima cosa che si legge. Stesso equilibrio del Bash tool di Claude Code.
-        const righe = [...document.querySelectorAll('.tool-note-summary-text')].map((el) => el.textContent)
-        expect(righe.some((r) => r === 'Mostra i file cambiati')).toBe(true)
-        expect(righe.some((r) => (r ?? '').includes('git diff --stat'))).toBe(false)
-    })
-
-    it('⛔ AL CONTRARIO — REAL-SESSION-SHELL-07 senza descrizione: PARITÀ, il comando grezzo resta la riga RIASSUNTO come oggi', () => {
-        const generation = runtime().realSessionState.generation
-        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'c-senza-descr', toolCallName: 'shell' }, generation)
-        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'c-senza-descr', delta: JSON.stringify({ comando: 'echo prova-parita' }) }, generation)
-        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'c-senza-descr', content: 'exit 0 [sandbox: wsl2]\nprova-parita\n' }, generation)
-
-        const righe = [...document.querySelectorAll('.tool-note-summary-text')].map((el) => el.textContent)
-        expect(righe.some((r) => r === 'Comando: echo prova-parita')).toBe(true)
-    })
-
-    // ⛔⛔ 28/8 — Terminale REALE: il reset al cambio sessione oggi significa
-    // "chiudi la WebSocket della sessione precedente" (mai un output che
-    // sopravvive al cambio) — non più "ripulisci un log testuale". jsdom
-    // non ha una vera WebSocket: si inietta un finto oggetto con un
-    // .close() osservabile, stesso principio "mai una rete vera nei test
-    // unitari" già in uso in tutta questa suite (FakeEventSource sopra).
-    it('⛔⛔ REAL-SESSION-SHELL-05 AL CONTRARIO: avviare una sessione NUOVA disconnette il Terminale REALE della sessione precedente', async () => {
-        const t = runtime().statoTerminale()
-        const chiudiChiamato = vi.fn()
-        t.ws = { close: chiudiChiamato, readyState: 1 }
-        t.idConnesso = runtime().realSessionState.id
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'c3', toolCallName: 'shell' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'c3', delta: JSON.stringify({ comando: 'echo marcatore-sessione-precedente' }) }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 'c3', content: 'marcatore-sessione-precedente-output' }, generation)
+        expect(document.querySelector('[data-view="terminal"] .terminal-window code')?.textContent).toContain('marcatore-sessione-precedente')
 
         mockFetch([
             { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-nuova-pulita' } },
@@ -1391,9 +1554,38 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         ])
         await runtime().startRealSession({ id: 'storia-nuova-pulita' })
 
-        expect(chiudiChiamato).toHaveBeenCalledTimes(1)
-        expect(runtime().statoTerminale().ws).toBeNull()
-        expect(runtime().statoTerminale().idConnesso).toBeNull()
+        const terminaleDopo = document.querySelector('[data-view="terminal"] .terminal-window code') as HTMLElement | null
+        expect(terminaleDopo?.textContent).not.toContain('marcatore-sessione-precedente')
+        expect(terminaleDopo?.dataset.reale).toBeUndefined()
+        // ⛔ 27/8, seconda passata: il reset mostra uno stato ONESTO E VUOTO
+        // ("Nessun comando eseguito..."), non più il demo originale — il
+        // badge resta nascosto perché non è un dato finto da segnalare.
+        expect(terminaleDopo?.textContent).toContain('No command run in this session.') // ⭐ 3/9 — testo tradotto in inglese
+        const badge = document.querySelector('[data-view="terminal"] .demo-surface-badge') as HTMLElement | null
+        expect(badge?.hidden).toBe(true)
+    })
+
+    // ⛔⛔⛔ 27/8, trovato nell'ispezione visiva finale (owner: "IMPORTANTISSIMA"):
+    // una sessione VERA senza nessuna scrittura mostrava ANCORA "3 file
+    // modificati" con un diff rosso/verde — il markup demo di index.html,
+    // mai sostituito perché renderRealReviewList()/aggiornaSommarioReviewReale()
+    // partono solo da un vero StateDelta (una scrittura), mai da una sessione
+    // che non ne fa nessuna. Stessa famiglia del difetto Terminale/Browser.
+    it('⛔⛔ REAL-SESSION-REVIEW-01 AL CONTRARIO: una sessione senza nessuna scrittura mostra "0 file modificati", mai il demo mai ripulito', async () => {
+        const delta = [{ op: 'add', path: '/file/src/nuovo.mjs', value: 'export const x = 1;' }]
+        runtime().handleRealEvent({ type: 'StateDelta', delta }, runtime().realSessionState.generation)
+        expect(document.querySelector('[data-view="diff"] h2')?.textContent).toContain('1 file')
+
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-solo-domanda' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-solo-domanda' })
+
+        expect(document.querySelector('[data-view="diff"] h2')?.textContent).toContain('0 file')
+        expect(document.querySelector('[data-view="diff"] .file-review-list')?.children.length).toBe(0)
+        expect(document.querySelector('#reviewSummaryNuovi')?.textContent).toBe('0')
+        expect(document.querySelector('#reviewSummaryModificati')?.textContent).toBe('0')
     })
 
     // ⛔⛔⛔ 27/8, trovato nell'ispezione visiva finale (owner: "IMPORTANTISSIMA"):
@@ -1636,7 +1828,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 conclusa: false, forkDa: null, eventi: [],
             })
             expect(md.trim().length).toBeGreaterThan(0)
-            expect(md).toContain('Nessun evento')
+            expect(md).toContain('No event recorded') // ⭐ 3/9 — testo tradotto in inglese
         })
 
         it('⭐⭐⭐ EXPORT-MD-05: ApprovalRequested/ApprovalResolved (permesso "On request") sono eventi CONOSCIUTI nella trascrizione, con l\'azione vera', () => {
@@ -1722,7 +1914,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 expect(clickSpy).toHaveBeenCalled()
                 expect(JSON.parse(String(blobParts[0][0]))).toEqual(payloadVero)
                 expect(sheetDialog.hasAttribute('open')).toBe(false) // il foglio si chiude dopo un export riuscito
-                expect(document.querySelector('#toastRegion')?.textContent).toContain('esportata')
+                expect(document.querySelector('#toastRegion')?.textContent).toContain('exported') // ⭐ 3/9 — testo tradotto in inglese
             } finally {
                 URL.createObjectURL = origCreate
                 URL.revokeObjectURL = origRevoke
@@ -1751,7 +1943,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             await new Promise((r) => setTimeout(r, 0))
 
             expect(clickSpy).not.toHaveBeenCalled()
-            expect(document.querySelector('#toastRegion')?.textContent).toContain('non riuscita')
+            expect(document.querySelector('#toastRegion')?.textContent).toContain('failed') // ⭐ 3/9 — testo tradotto in inglese ("Export failed")
         })
     })
 
@@ -1770,7 +1962,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         })
 
         it('⭐⭐⭐ TITOLO-02: avviare un compito libero rinomina DAVVERO la sessione col primo messaggio — POST .../rename con la consegna pulita', async () => {
-            mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } }])
+            mockFetch([
+                { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+                { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+            ])
             const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
             sheetDialog.showModal = vi.fn()
             await runtime().openRealTaskSheet()
@@ -1795,7 +1990,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         })
 
         it('⛔⛔ TITOLO-03 AL CONTRARIO: un rename fallito NON rompe la sessione — nessun toast, nessun errore, resta usabile', async () => {
-            mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } }])
+            mockFetch([
+                { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+                { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+            ])
             const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
             sheetDialog.showModal = vi.fn()
             await runtime().openRealTaskSheet()
@@ -1818,7 +2016,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         })
 
         it('⛔⛔⛔ TITOLO-04 AL CONTRARIO: se una sessione NUOVA parte prima che il rename della vecchia risponda, il titolo vecchio non si applica MAI alla nuova', async () => {
-            mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } }])
+            mockFetch([
+                { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+                { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+            ])
             const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
             sheetDialog.showModal = vi.fn()
             await runtime().openRealTaskSheet()
@@ -1847,7 +2048,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             await new Promise((r) => setTimeout(r, 0))
             // ⛔ il rename della sessione VECCHIA è ancora in sospeso qui (risolviRename non ancora chiamato) — esattamente il momento in cui una NUOVA sessione può partire. Aprire "Nuova sessione" di nuovo chiama nuovaGenerazioneSessione() DA SOLO, dentro startCustomSession (prima riga della funzione) — non serve toccarla a mano.
             fetchMock.mockRestore()
-            mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } }])
+            mockFetch([
+                { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+                { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+            ])
             await runtime().openRealTaskSheet()
             document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
             await new Promise((r) => setTimeout(r, 0))
@@ -1915,30 +2119,79 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
     })
 
     /**
+     * ⭐⭐⭐ 28/8, ledger Fase 1/resume-compact §3.A — a differenza del test
+     * sopra (che chiama `runtime().compactSession()` direttamente, e quindi
+     * NON esercita mai il dispatcher), questo clicca il bottone VERO della
+     * palette comandi (`data-command="compact"`) — lo stesso percorso che una
+     * persona userebbe. Prima del fix chiamava un toast con un numero finto
+     * e fisso, mai l'endpoint reale: questo test sarebbe passato ANCHE col
+     * difetto (il toast non lancia), quindi verifica il FETCH, non solo
+     * l'assenza di un errore.
+     */
+    it('REAL-SESSION-COMPACT-02 il bottone VERO della palette (data-command="compact") chiama /compact, non un toast finto', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-compatta-bottone' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-compact-bottone' })
+
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-compatta-bottone/compact', corpo: { compattato: true } },
+        ])
+        ;(document.querySelector('[data-command="compact"]') as HTMLButtonElement).click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/v1/sessions/sess-compatta-bottone/compact',
+            expect.objectContaining({ method: 'POST' }),
+        )
+    })
+
+    /**
+     * ⭐⭐⭐ 28/8, stesso ledger §3.B: 'resume' non era nemmeno un comando
+     * riconosciuto — data-command="resume" non esisteva in index.html prima
+     * di questo fix. Stesso principio del test sopra: clicca il bottone
+     * vero, non la funzione sottostante.
+     */
+    it('REAL-SESSION-RESUME-02 il bottone VERO della palette (data-command="resume") chiama /resume, non ignora il click', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-riprendi-bottone' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-resume-bottone' })
+
+        const fetchMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-riprendi-bottone/resume', corpo: {} },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        const bottone = document.querySelector('[data-command="resume"]')
+        expect(bottone, 'il bottone "Riprendi sessione" deve esistere in index.html').not.toBeNull()
+        ;(bottone as HTMLButtonElement).click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/v1/sessions/sess-riprendi-bottone/resume',
+            expect.objectContaining({ method: 'POST' }),
+        )
+    })
+
+    /**
      * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 — lo
      * stesso cancello di REAL-SESSION-AUTOMATION-03, ma sul bottone "Nuova
      * sessione" vero (#newSessionBtn -> createNewSession()): col tunnel
      * attivo apre il foglio dei task veri, non più il reset demo.
-     *
-     * ⛔ Riconciliazione Fase 1 (branch merge, 27/8): l'endpoint atteso qui
-     * era `/api/v1/tasks`, scritto PRIMA che l'owner chiedesse di togliere
-     * l'elenco corpus dalla modale "Nuova sessione" (vedi il commento sopra
-     * REAL-SESSION-TASKSHEET-01 sotto). `createNewSession()` chiama
-     * `openRealTaskSheet()`, che oggi fetcha `/api/v1/projects` — corretto
-     * qui per restare vero contro il codice attuale, non contro quello di
-     * quando l'ho scritto.
      */
-    it('NEWSESSION-EMBEDDED-01 col tunnel attivo, "Nuova sessione" apre il foglio dei task veri (GET /api/v1/projects), non il reset demo', async () => {
+    it('NEWSESSION-EMBEDDED-01 col tunnel attivo, "Nuova sessione" apre il foglio dei task veri (GET /api/v1/tasks), non il reset demo', async () => {
         document.documentElement.classList.add('talos-embedded')
         ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = 'http://localhost:4174'
         const fetchMock = mockFetch([
-            { metodo: 'GET', percorso: 'http://localhost:4174/api/v1/projects', corpo: { items: [] } },
+            { metodo: 'GET', percorso: 'http://localhost:4174/api/v1/tasks', corpo: { items: [] } },
         ])
 
         ;(document.querySelector('#newSessionBtn') as HTMLButtonElement).click()
         await new Promise((r) => setTimeout(r, 0))
 
-        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/projects', expect.objectContaining({ method: 'GET' }))
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/tasks', expect.objectContaining({ method: 'GET' }))
     })
 
     it('⛔ NEWSESSION-EMBEDDED-02 AL CONTRARIO: stesso bottone, embedded SENZA tunnel resta il reset demo, zero fetch', async () => {
@@ -1951,18 +2204,9 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(fetchMock).not.toHaveBeenCalled()
     })
 
-    // ⛔ 27/8 — owner: "quando faccio nuova dalla modale devi levare tutte
-    // le prove per banco". openRealTaskSheet() non elenca più i task del
-    // corpus (rimossi da app.js): fetcha SOLO /api/v1/projects e mostra
-    // il form "Compito libero" — stesso pattern di Claude Code/Codex/
-    // Cline (nessun elenco predefinito, testo libero).
-    // ⛔⛔ 27/8, secondo giro — owner: "nella modale nuova sessione non deve
-    // esserci il campo text per cosa chiedere, quello si fa direttamente da
-    // interfaccia chat". La modale ora chiede SOLO cartella+modello; il
-    // compito si scrive nel composer normale, che avvia la sessione vera.
-    it('REAL-SESSION-TASKSHEET-01 openRealTaskSheet chiede SOLO cartella+modello (non i task del banco, non un campo compito) e il primo messaggio in chat avvia la sessione vera', async () => {
+    it('REAL-SESSION-TASKSHEET-01 openRealTaskSheet elenca i task e li avvia SENZA .showModal() nativo', async () => {
         mockFetch([
-            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+            { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [{ id: 'storia-t1', consegnaCorta: 'Sistema il test', difficolta: 2 }] } },
         ])
         const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
         const showModalSpy = vi.fn()
@@ -1972,13 +2216,43 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         expect(showModalSpy).not.toHaveBeenCalled()
         expect(sheetDialog.hasAttribute('open')).toBe(true)
-        expect(document.querySelector('[data-start-task]')).toBeNull() // nessuna prova per banco
+        const bottone = document.querySelector<HTMLButtonElement>('[data-start-task="storia-t1"]')
+        expect(bottone).not.toBeNull()
+
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-da-sheet' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        bottone!.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(sheetDialog.hasAttribute('open')).toBe(false)
+        expect(FakeEventSource.instances.at(-1)?.url).toBe('/api/v1/sessions/sess-da-sheet/events')
+    })
+
+    /*
+     * ⭐⭐⭐ 28/8 — adattato da REAL-SESSION-TASKSHEET-01 del canonico
+     * (b3df4e98): lì questo ERA lo stesso test di sopra, perché il
+     * redesign desktop toglie del tutto la sezione 'task del banco' dalla
+     * modale 'Nuova sessione'. Su questa copia i due flussi COESISTONO
+     * (deciso durante il cherry-pick: il corpus resta secondario, mai il
+     * default, ma reale) — quindi restano due test separati, non uno
+     * fuso: il primo prova il compito del banco, questo prova il compito
+     * libero (cartella+modello, poi il testo nel composer).
+     */
+    it('REAL-SESSION-TASKSHEET-01-BIS un compito libero (cartella+modello) avvia una sessione pendente, e il primo messaggio in chat la avvia per davvero', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+        ])
+        const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+        sheetDialog.showModal = vi.fn()
+        await runtime().openRealTaskSheet()
+
         const form = document.querySelector<HTMLFormElement>('#customTaskForm')
         expect(form).not.toBeNull()
-        const cartellaSelect = document.querySelector<HTMLSelectElement>('#customTaskCartella')
-        expect(cartellaSelect?.options.length).toBe(1)
-        expect(document.querySelector('.model-picker')).not.toBeNull() // il picker del modello è nella modale
-        expect(document.querySelector('#customTaskConsegna')).toBeNull() // niente campo compito qui
+        expect(document.querySelector<HTMLSelectElement>('#customTaskCartella')?.options.length).toBe(1)
+        expect(document.querySelector('.model-picker')).not.toBeNull()
 
         form!.requestSubmit()
         await new Promise((r) => setTimeout(r, 0))
@@ -2025,7 +2299,11 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
         sheetDialog.showModal = vi.fn()
         // ⭐ 28/8 — NON più "nessuna chiamata": /api/v1/frequent-dirs (le scorciatoie Desktop/Download) è l'UNICA, best-effort — mai /api/v1/projects, "Full access" non usa l'allowlist. Vedi FREQUENTI-01/02/03 per quella funzione nello specifico.
-        const fetchMock = mockFetch([{ metodo: 'GET', percorso: '/api/v1/frequent-dirs', corpo: { items: [] } }])
+        // ⭐ 29/8 — /api/v1/tasks aggiunto: su questa copia i task del banco restano una sezione secondaria SEMPRE scaricata (vedi ledger §26/nota su REAL-SESSION-TASKSHEET-01-BIS), in entrambe le modalità.
+        const fetchMock = mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+            { metodo: 'GET', percorso: '/api/v1/frequent-dirs', corpo: { items: [] } },
+        ])
 
         await runtime().openRealTaskSheet()
 
@@ -2040,7 +2318,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         sceglierPermesso('Full access')
         const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
         sheetDialog.showModal = vi.fn()
-        mockFetch([])
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } }])
         await runtime().openRealTaskSheet()
 
         const input = document.querySelector<HTMLInputElement>('#customTaskCartellaLibera')!
@@ -2065,6 +2343,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
     it('⭐⭐ PERMESSI-03: senza scegliere "Full access", il corpo porta comunque permessi ("Workspace write", il default)', async () => {
         mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
             { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
         ])
         const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
@@ -2097,7 +2376,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         sceglierPermesso('Full access')
         const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
         sheetDialog.showModal = vi.fn()
-        mockFetch([{ metodo: 'GET', percorso: '/api/v1/frequent-dirs', corpo: { items: [{ etichetta: 'Desktop', percorso: 'C:/Users/prova/Desktop' }, { etichetta: 'Download', percorso: 'C:/Users/prova/Downloads' }] } }])
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+            { metodo: 'GET', percorso: '/api/v1/frequent-dirs', corpo: { items: [{ etichetta: 'Desktop', percorso: 'C:/Users/prova/Desktop' }, { etichetta: 'Download', percorso: 'C:/Users/prova/Downloads' }] } },
+        ])
 
         await runtime().openRealTaskSheet()
 
@@ -2108,7 +2390,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
     })
 
     it('⛔⛔ FREQUENTI-02 AL CONTRARIO: SENZA "Full access", nessuna chiamata a /frequent-dirs — non serve, il campo non esiste nemmeno', async () => {
-        const fetchMock = mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } }])
+        const fetchMock = mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+        ])
         const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
         sheetDialog.showModal = vi.fn()
 
@@ -2122,7 +2407,8 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         sceglierPermesso('Full access')
         const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
         sheetDialog.showModal = vi.fn()
-        mockFetch([]) // nessuna risposta finta per /frequent-dirs: mockFetch lancia, come una rete giù per davvero
+        // nessuna risposta finta per /frequent-dirs: mockFetch lancia, come una rete giù per davvero — catturato localmente, non blocca il resto.
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } }])
 
         await runtime().openRealTaskSheet()
 
@@ -2187,7 +2473,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         })
 
         try {
-            mockFetch([{ metodo: 'GET', percorso: '/api/v1/frequent-dirs', corpo: { items: [] } }])
+            mockFetch([
+                { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+                { metodo: 'GET', percorso: '/api/v1/frequent-dirs', corpo: { items: [] } },
+            ])
             sceglierPermesso('Full access') // apre il foglio permessi, poi lo chiude scegliendo Full access — closeEmbeddedDialog avvia QUI l'animazione mockata, mai ancora risolta
             const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
             sheetDialog.showModal = vi.fn()
@@ -2238,7 +2527,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             expect(bottoneAzioni).toBeTruthy() // il bottone "···" ora esiste ANCHE per le cartelle, non solo per i file
 
             bottoneAzioni.click()
-            const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Imposta come radice'))!
+            const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Set as root'))! // ⭐ 3/9 — etichetta tradotta
             expect(voceMenu).toBeTruthy()
             voceMenu.click()
 
@@ -2255,8 +2544,9 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             rigaFile.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
 
             const etichette = [...document.querySelectorAll('.ft-actions-menu-item')].map((b) => b.textContent)
-            expect(etichette.some((e) => e?.includes('Imposta come radice'))).toBe(false)
-            expect(etichette.some((e) => e?.includes('Apri'))).toBe(true) // il menu file resta quello di sempre
+            // ⭐ 3/9 — etichette tradotte in inglese (stesso giro: apriMenuAzioniFile completata, non solo le due voci già inglesi)
+            expect(etichette.some((e) => e?.includes('Set as root'))).toBe(false)
+            expect(etichette.some((e) => e?.includes('Open'))).toBe(true) // il menu file resta quello di sempre
         })
 
         it('⛔⛔⛔ RADICE-03 AL CONTRARIO: senza ancora una cartellaAssoluta nota (nessun RunStarted con contesto), "Imposta come radice" avvisa e NON avvia nulla', async () => {
@@ -2272,16 +2562,18 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
             const rigaSrc = [...document.querySelectorAll('.ft-row-folder')].find((r) => r.querySelector('.ft-name')?.textContent === 'src')!
             rigaSrc.querySelector<HTMLButtonElement>('.ft-actions-btn')!.click()
-            const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Imposta come radice'))!
+            const voceMenu = [...document.querySelectorAll<HTMLButtonElement>('.ft-actions-menu-item')].find((b) => b.textContent?.includes('Set as root'))! // ⭐ 3/9 — etichetta tradotta
             voceMenu.click()
 
-            expect(document.querySelector('#toastRegion')?.textContent).toContain('sconosciuta')
+            expect(document.querySelector('#toastRegion')?.textContent).toContain('Unknown root') // ⭐ 3/9 — testo tradotto in inglese
             expect(document.querySelector('[data-open-sheet="permissions"] span')?.textContent).not.toBe('Full access')
         })
     })
 
     /*
-     * ⭐⭐⭐ 28/8 — la card interattiva del permesso "On request":
+     * ⭐⭐⭐ 28/8 — la card interattiva del permesso "On request", ORA
+     * REALMENTE PORTATA (29/8, cherry-pick di 6c37f8d5): la nota qui sotto
+     * diceva "NON portati, fase dedicata" — quella fase è arrivata.
      * talosHarness.mjs è DAVVERO in pausa (session-registry.mjs tiene la
      * Promise), l'evento ApprovalRequested lo rende visibile — verificato
      * che il click POSTI per davvero, non solo che l'evento sia gestito.
@@ -2402,7 +2694,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
      * sono configurate prima di rifiutare (GET /api/v1/projects,
      * asincrono) — con zero configurate (nessun mockFetch qui, stesso
      * setup di prima) il rifiuto onesto resta identico, solo dopo un
-     * giro di eventi invece che subito.
+     * giro di eventi invece che subito. ⭐ 29/8 — sostituisce la versione
+     * di 68ad2ad6 con lo stesso nome, NON portata allora perché assumeva
+     * un rifiuto sincrono ormai superato: questa versione, di f053d8c1,
+     * è quella davvero allineata al comportamento asincrono attuale.
      */
     it('REAL-SESSION-TASKSHEET-03 senza una sessione pendente, il composer resta onesto (nessun campo compito nella modale a cui affidarsi)', async () => {
         const composerInput = document.querySelector<HTMLTextAreaElement>('#composerInput')!
@@ -2410,7 +2705,8 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
         await new Promise((resolve) => setTimeout(resolve, 0))
 
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione attiva')
+        // ⭐ 29/8 — testo vero di startRealSessionFromMessage (toast('No session started', ...)), non 'Nessuna sessione attiva' come assunto dal canonico in questo punto.
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('No session started')
         expect(FakeEventSource.instances.length).toBe(0)
     })
 
@@ -2433,7 +2729,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         await new Promise((resolve) => setTimeout(resolve, 0))
 
         expect(FakeEventSource.instances.at(-1)?.url).toBe('/api/v1/sessions/sess-implicita/events')
-        expect(document.querySelector('#toastRegion')?.textContent ?? '').not.toContain('Nessuna sessione attiva')
+        expect(document.querySelector('#toastRegion')?.textContent ?? '').not.toContain('No session started')
     })
 
     /*
@@ -2449,148 +2745,947 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
         await new Promise((resolve) => setTimeout(resolve, 0))
 
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione attiva')
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('No session started')
         expect(FakeEventSource.instances.length).toBe(0)
     })
 
+    /*
+     * ⛔ 29/8 — la versione di REAL-SESSION-TASKSHEET-03 di 68ad2ad6
+     * (canonico) NON è stata portata quel giorno: provava un rifiuto
+     * SINCRONO ("Nessuna sessione attiva", zero fetch), comportamento già
+     * sostituito da 80295fa5. f053d8c1 (sopra) ha portato la sua STESSA
+     * versione con lo stesso nome, riallineata al flusso asincrono vero —
+     * quel buco è chiuso, non più aperto.
+     *
+     * MODEL-PICKER-01/02 di 68ad2ad6 restano NON portati, ma per un motivo
+     * diverso da quello scritto qui il 29/8 mattina: f053d8c1 (sopra) HA
+     * portato un selettore modello dentro #customTaskForm
+     * (creaModelPicker/creaEffortPicker) — la premessa "questa copia non
+     * ha un model-picker qui" non vale più. Il motivo vero ora è che
+     * MODEL-PICKER-01/02 assumevano il VECCHIO submit sincrono
+     * (#customTaskForm → POST /api/v1/sessions/custom diretto); col nuovo
+     * flusso (submit → pendingCustomSession → il POST vero parte dal
+     * composer, stesso schema di EFFORT-PICKER-01/02/03 sopra) andrebbero
+     * riscritti, non semplicemente riportati. 🔜 EFFORT-PICKER-01 prova
+     * già che il valore del picker raggiunge la POST per `effort`; lo
+     * stesso per `modello` in questo flusso resta un buco di copertura
+     * dichiarato, non un comportamento mancante (il codice lo fa: vedi
+     * `modelPicker.getValore()` in avviaSessionePendente).
+     */
     it('REAL-SESSION-TASKSHEET-02 senza cartelle configurate, mostra un messaggio onesto invece di un form rotto', async () => {
-        mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [] } }])
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [] } },
+        ])
 
         await runtime().openRealTaskSheet()
 
         expect(document.querySelector('#customTaskCartella')).toBeNull()
-        const body = document.querySelector('#sheetBody')
-        expect(body?.textContent).toContain('cartella di progetto disponibile')
-        expect(body?.textContent).not.toContain('TALOS_HARNESS_UI_PROJECT_DIRS')
-        expect(body?.textContent).not.toMatch(/riavvia il server|percorsi assoluti/i)
-        const doctor = body?.querySelector<HTMLButtonElement>('[data-open-doctor]')
-        expect(doctor).toBeTruthy()
-        doctor?.click()
-        expect(document.querySelector('#sheetBody')?.textContent).toContain('Doctor')
+        expect(document.querySelector('#sheetBody')?.textContent).toContain('TALOS_HARNESS_UI_PROJECT_DIRS')
+    })
+})
+
+/**
+ * ⭐⭐⭐ 29/8 — porting dal bundle desktop (FASE A/C del ledger basso livello,
+ * chiuse 28/8 su desktop, vedi LEDGER-MOBILE-PAREGGIO-DESKTOP-CODICE.md). Il
+ * foglio "control" (Doctor/Hooks) e "sessionTree" (deleghe sub-agenti)
+ * mostravano lo stesso bluff che desktop aveva PRIMA della FASE A: contatori
+ * inventati, zero fetch. Stesso schema di mock del blocco sopra.
+ */
+describe('Harness UI — Doctor, Hooks, deleghe sub-agenti (porting FASE A/C dal desktop)', () => {
+    beforeEach(() => {
+        document.body.className = ''
+        // ⛔ jsdom persiste UN documento per file: un test embedded altrove nel file (NEWSESSION-EMBEDDED-*) può lasciare la classe qui — pulita per isolamento, anche se questo blocco non la legge oggi.
+        document.documentElement.classList.remove('talos-embedded')
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mountStaticRuntime()
     })
 
-    it('REAL-SESSION-CONTEXT-MENU-01 il tasto destro apre un menu azioni condiviso, non la conferma elimina', async () => {
-        mockFetch([{
-            metodo: 'GET',
-            percorso: '/api/v1/sessions',
-            corpo: { items: [{ sessionId: 'sess-menu', taskId: 'task-menu', nome: 'Sessione menu', avviataAlle: '2026-08-31T10:00:00.000Z', conclusa: true }] },
-        }])
-
-        await runtime().aggiornaElencoSessioniReali()
-        const riga = document.querySelector<HTMLElement>('[data-real-session-id="sess-menu"]')
-        expect(riga).toBeTruthy()
-        riga!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 140 }))
-
-        const menu = document.querySelector<HTMLElement>('[role="menu"].session-actions-menu')
-        expect(menu).toBeTruthy()
-        expect(menu?.textContent).toContain('Apri')
-        expect(menu?.textContent).toContain('Rinomina')
-        expect(menu?.textContent).toContain('Fork')
-        expect(menu?.textContent).toContain('Copia identificativo')
-        expect(menu?.textContent).toContain('Elimina')
-        expect(document.querySelector('#deleteSessionConfirm')).toBeNull()
+    afterEach(() => {
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
     })
 
-    it('REAL-SESSION-CONTEXT-MENU-02 Elimina dal menu apre la conferma esplicita', async () => {
-        mockFetch([{
-            metodo: 'GET',
-            percorso: '/api/v1/sessions',
-            corpo: { items: [{ sessionId: 'sess-delete-menu', taskId: 'task-delete-menu', nome: 'Da eliminare', avviataAlle: '2026-08-31T10:00:00.000Z', conclusa: true }] },
-        }])
-
-        await runtime().aggiornaElencoSessioniReali()
-        const riga = document.querySelector<HTMLElement>('[data-real-session-id="sess-delete-menu"]')!
-        riga.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 140 }))
-        const elimina = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((button) => button.textContent?.includes('Elimina'))
-        expect(elimina).toBeTruthy()
-        elimina!.click()
-
-        expect(document.querySelector('#deleteSessionConfirm')).toBeTruthy()
-    })
-
-    it('REAL-SESSION-CONTEXT-MENU-03 Rinomina usa il target scelto e il relativo endpoint', async () => {
+    it('DOCTOR-01 il foglio control mostra "Verifica…" finché la fetch non torna, poi il badge reale', async () => {
         mockFetch([
-            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: 'sess-rename-menu', taskId: 'task-rename-menu', nome: 'Titolo precedente', avviataAlle: '2026-08-31T10:00:00.000Z', conclusa: true }] } },
+            { metodo: 'GET', percorso: '/api/v1/doctor', corpo: { chiaveApi: true, shell: 'wsl2', git: true, naviga: true } },
         ])
-        await runtime().aggiornaElencoSessioniReali()
-        const riga = document.querySelector<HTMLElement>('[data-real-session-id="sess-rename-menu"]')!
-        riga.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 140 }))
-        const rinomina = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((button) => button.textContent?.includes('Rinomina'))
-        rinomina!.click()
-        expect((document.querySelector('#renameSessionInput') as HTMLInputElement).value).toBe('Titolo precedente')
 
-        const fetchMock = vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
-            const url = typeof input === 'string' ? input : String(input)
-            const metodo = (init?.method ?? 'GET').toUpperCase()
-            if (metodo === 'POST' && url === '/api/v1/sessions/sess-rename-menu/rename') return new Response(JSON.stringify({ ok: true, data: {} }), { status: 200 })
-            if (metodo === 'GET' && url === '/api/v1/sessions') return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
-            throw new Error(`nessuna risposta per ${metodo} ${url}`)
-        })
-        const input = document.querySelector<HTMLInputElement>('#renameSessionInput')!
-        input.value = 'Titolo nuovo'
-        document.querySelector<HTMLFormElement>('#renameSessionForm')!.requestSubmit()
-        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-rename-menu/rename', expect.objectContaining({ method: 'POST' })))
+        runtime().openSheet('control')
+        const badge = document.querySelector('[data-doctor-status]')
+        expect(badge?.textContent).toBe('Verifica…')
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(document.querySelector('[data-doctor-status]')?.textContent).toBe('Healthy')
     })
 
-    it('MODEL-PICKER-01 apre il catalogo vero (GET /api/v1/models), raggruppato per provider, e la scelta viaggia nella POST', async () => {
+    it('DOCTOR-02 problemi reali (shell non wsl2, git assente) contano nel badge, non un booleano solo', async () => {
         mockFetch([
-            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+            { metodo: 'GET', percorso: '/api/v1/doctor', corpo: { chiaveApi: true, shell: 'none', git: false, naviga: true } },
         ])
-        await runtime().openRealTaskSheet()
 
+        runtime().openSheet('control')
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(document.querySelector('[data-doctor-status]')?.textContent).toBe('2 da rivedere')
+    })
+
+    it('⛔ DOCTOR-03 AL CONTRARIO: /api/v1/doctor fallisce, il badge dice "Non disponibile", nessun crash', async () => {
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/doctor', corpo: { message: 'offline' }, ok: false, status: 500 }])
+
+        runtime().openSheet('control')
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(document.querySelector('[data-doctor-status]')?.textContent).toBe('Not available') // ⭐ 3/9 — testo tradotto in inglese
+    })
+
+    it('⛔ DOCTOR-04 AL CONTRARIO: refreshDoctorBadge() senza il foglio aperto non lancia e non chiama fetch', async () => {
+        const fetchMock = mockFetch([])
+        await expect(runtime().refreshDoctorBadge()).resolves.toBeUndefined()
+        expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('DOCTOR-05 il SECONDO bottone Doctor (card "Control plane" di Impostazioni) chiama /api/v1/doctor per davvero, non il toast finto', async () => {
+        /*
+         * ⭐ 30/8 — porta canonico (b84e61df, dimenticato dal 27/8): questo
+         * bottone (fuori dal foglio "control", vive nella card "Control
+         * plane" di Impostazioni) mostrava ANCORA `toast('Doctor:
+         * Healthy', ...)` hardcoded — un SECONDO punto d'ingresso mai
+         * riallineato quando il primo (dentro il foglio, DOCTOR-01/02/03)
+         * era già diventato reale. Stesso principio di HOOKS-05: si clicca
+         * il bottone VERO, non si chiama eseguiDoctor() direttamente.
+         */
+        const fetchMock = mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/doctor', corpo: { chiaveApi: true, shell: 'none', git: false, naviga: true } },
+        ])
+        const bottone = document.querySelector('[data-control-action="doctor"]') as HTMLButtonElement | null
+        expect(bottone).not.toBeNull()
+        bottone?.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/v1/doctor'), expect.anything())
+    })
+
+    it('⛔ DOCTOR-06 AL CONTRARIO: se /api/v1/doctor fallisce dal SECONDO bottone, niente crash e niente più "Healthy" finto', async () => {
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/doctor', corpo: { message: 'offline' }, ok: false, status: 500 }])
+        const bottone = document.querySelector('[data-control-action="doctor"]') as HTMLButtonElement | null
+        expect(() => bottone?.click()).not.toThrow()
+        await new Promise((r) => setTimeout(r, 0))
+        // nessuna assert sul testo del toast qui (mockToast non è nello scope di questo describe) — la sola garanzia provata è che il fetch reale è stato tentato e il click non ha lanciato, mai più il ramo hardcoded che non chiamava nessuna API.
+    })
+
+    it('HOOKS-01 nessuna sessione attiva: stato onesto, ZERO fetch (fail-closed, non un elenco vuoto finto)', async () => {
+        const fetchMock = mockFetch([])
+        runtime().openSheet('control')
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/hooks'), expect.anything())
+        expect(document.querySelector('#hooksListMount')?.textContent).toContain('No active session') // ⭐ 3/9 — testo tradotto in inglese
+    })
+
+    it('HOOKS-02 con sessione attiva, elenca gli hook veri; un hook non fidato mostra "Fida", uno fidato mostra "attivo"', async () => {
         mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/doctor', corpo: { chiaveApi: true, shell: 'wsl2', git: true, naviga: true } },
             {
-                metodo: 'GET',
-                percorso: '/api/v1/models',
-                corpo: {
-                    modelli: [
-                        { id: 'deepseek/deepseek-chat', provider: 'deepseek', nome: 'DeepSeek: Chat', contextLength: 64000, prezzoPrompt: '0.0000002', prezzoCompletion: '0.0000006' },
-                        { id: 'qwen/qwen3.8-flash', provider: 'qwen', nome: 'Qwen: Qwen3.8 Flash', contextLength: 1000000, prezzoPrompt: '0.00000015', prezzoCompletion: '0.00000047' },
-                    ],
-                    daCache: false,
-                    aggiornatoAlle: '2026-08-27T10:00:00.000Z',
-                },
+                metodo: 'GET', percorso: '/api/v1/sessions/sess-hooks/hooks',
+                corpo: { hooks: [{ id: 'pre-tool-lint', eventi: ['PreToolUse'], fidato: false }, { id: 'post-tool-log', eventi: ['PostToolUse'], fidato: true }] },
             },
         ])
-        document.querySelector<HTMLButtonElement>('.model-picker-trigger')!.click()
+        runtime().realSessionState.id = 'sess-hooks'
+
+        runtime().openSheet('control')
         await new Promise((r) => setTimeout(r, 0))
 
-        const gruppi = [...document.querySelectorAll('.model-picker-group-name')].map((el) => el.textContent)
-        expect(gruppi).toEqual(['deepseek', 'qwen']) // ordinati per provider
-
-        document.querySelector<HTMLButtonElement>('.model-picker-group-header')!.click() // apre il gruppo "deepseek"
-        const opzione = document.querySelector<HTMLButtonElement>('.model-picker-option')!
-        expect(opzione.textContent).toContain('deepseek/deepseek-chat')
-        opzione.click()
-
-        expect(document.querySelector('.model-picker-trigger-label')?.textContent).toBe('deepseek/deepseek-chat')
-        expect(document.querySelector('.model-picker-panel')?.hasAttribute('hidden')).toBe(true) // si chiude da solo
-
-        document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit() // conferma cartella+modello — il compito si scrive nel composer, non qui
-
-        mockFetch([
-            { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-modello' } },
-            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
-        ])
-        const postSpy = vi.spyOn(window, 'fetch')
-        document.querySelector<HTMLTextAreaElement>('#composerInput')!.value = 'usa questo modello'
-        document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
-        await new Promise((r) => setTimeout(r, 0))
-
-        const chiamataPost = postSpy.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
-        const corpoInviato = JSON.parse(String((chiamataPost?.[1] as RequestInit).body))
-        expect(corpoInviato.modello).toBe('deepseek/deepseek-chat')
+        const mount = document.querySelector('#hooksListMount')!
+        expect(mount.textContent).toContain('pre-tool-lint')
+        expect(mount.textContent).toContain('post-tool-log')
+        expect(mount.querySelectorAll('button').length).toBe(1) // solo l'hook non fidato ha un bottone "Fida"
+        expect(mount.textContent).toContain('attivo')
     })
 
-    it('MODEL-PICKER-02 un errore di rete sul catalogo è dichiarato, mai "zero modelli" silenzioso', async () => {
-        mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto' }] } }])
-        await runtime().openRealTaskSheet()
-
-        vi.spyOn(window, 'fetch').mockRejectedValueOnce(new Error('rete giù'))
-        document.querySelector<HTMLButtonElement>('.model-picker-trigger')!.click()
+    it('HOOKS-03 "Fida" chiama POST .../trust e ricarica l\'elenco: l\'hook risulta attivo', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/doctor', corpo: { chiaveApi: true, shell: 'wsl2', git: true, naviga: true } },
+            { metodo: 'GET', percorso: '/api/v1/sessions/sess-hooks/hooks', corpo: { hooks: [{ id: 'pre-tool-lint', eventi: ['PreToolUse'], fidato: false }] } },
+        ])
+        runtime().realSessionState.id = 'sess-hooks'
+        runtime().openSheet('control')
         await new Promise((r) => setTimeout(r, 0))
 
-        expect(document.querySelector('.model-picker-list')?.textContent).toContain('rete giù')
+        const fidaBtn = document.querySelector('#hooksListMount button') as HTMLButtonElement
+        const postMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-hooks/hooks/pre-tool-lint/trust', corpo: {} },
+            { metodo: 'GET', percorso: '/api/v1/sessions/sess-hooks/hooks', corpo: { hooks: [{ id: 'pre-tool-lint', eventi: ['PreToolUse'], fidato: true }] } },
+        ])
+        fidaBtn.click()
+        await new Promise((r) => setTimeout(r, 0))
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(postMock).toHaveBeenCalledWith('/api/v1/sessions/sess-hooks/hooks/pre-tool-lint/trust', expect.objectContaining({ method: 'POST' }))
+        expect(document.querySelector('#hooksListMount')?.textContent).toContain('attivo')
+        expect(document.querySelector('#hooksListMount button')).toBeNull()
+    })
+
+    it('⛔ HOOKS-04 AL CONTRARIO: "Fida" fallisce, il bottone torna cliccabile con lo stesso testo, l\'hook resta non fidato', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/doctor', corpo: { chiaveApi: true, shell: 'wsl2', git: true, naviga: true } },
+            { metodo: 'GET', percorso: '/api/v1/sessions/sess-hooks/hooks', corpo: { hooks: [{ id: 'pre-tool-lint', eventi: ['PreToolUse'], fidato: false }] } },
+        ])
+        runtime().realSessionState.id = 'sess-hooks'
+        runtime().openSheet('control')
+        await new Promise((r) => setTimeout(r, 0))
+
+        const fidaBtn = document.querySelector('#hooksListMount button') as HTMLButtonElement
+        mockFetch([{ metodo: 'POST', percorso: '/api/v1/sessions/sess-hooks/hooks/pre-tool-lint/trust', corpo: { message: 'negato' }, ok: false, status: 403 }])
+        fidaBtn.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fidaBtn.disabled).toBe(false)
+        expect(fidaBtn.textContent).toBe('Fida')
+    })
+
+    it('⛔ HOOKS-05 AL CONTRARIO: il bottone VERO che apre il foglio control resta raggiungibile per una sessione reale, non solo runtime().openSheet()', async () => {
+        // ⭐ 29/8 — ledger §13: ogni test DOCTOR-*/HOOKS-* sopra apre il foglio chiamando runtime().openSheet('control') direttamente — nessuno clicca il bottone vero. Trovato leggendo index.html: quel bottone viveva SOLO dentro .mission-card, il mockup che selectSession() (§9) sostituisce con l'hero per ogni sessione reale — irraggiungibile da quel momento, e questa intera batteria di test non se ne sarebbe mai accorta.
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/doctor', corpo: { chiaveApi: true, shell: 'wsl2', git: true, naviga: true } },
+        ])
+        runtime().selectSession({ id: '4d1136ce-e514-4e6e-944d-bd083bce224b', title: 'Sessione reale' })
+        expect(document.querySelector('.mission-card')).toBeNull() // precondizione: il mockup è sparito
+
+        const bottone = document.querySelector('[data-open-sheet="control"]') as HTMLButtonElement | null
+        expect(bottone).not.toBeNull()
+        expect(document.querySelector('.mission-card [data-open-sheet="control"]')).toBeNull() // mai dentro il mockup: vive in testata, persistente
+        bottone?.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(document.querySelector('#hooksListMount')).not.toBeNull()
+    })
+
+    /*
+     * ⛔ 29/8, ledger §22: "zero fetch" ridefinito come "zero fetch verso
+     * .../children" — 582dffcf (già portato) ha aggiunto un refresh al
+     * boot (aggiornaElencoSessioniReali/renderAutomationsReali,
+     * window.setTimeout(...,0) in mountStaticRuntime), che questo test
+     * (scritto prima) non anticipava: `await new Promise(...,0)` fa
+     * scattare ANCHE quel timer di boot, non solo l'azione del test.
+     * Le due chiamate innocue vanno soddisfatte, non più assunte
+     * assenti — l'assert vero di questo test resta sulla rotta
+     * children, mai chiamata senza una sessione attiva.
+     */
+    it('SUBAGENTI-01 nessuna sessione attiva: stato onesto nel foglio "Albero sessione", zero fetch verso .../children', async () => {
+        const fetchMock = mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+            { metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [] } },
+        ])
+        runtime().openSheet('sessionTree')
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/children'))).toBe(false)
+        expect(document.querySelector('#subagentTreeMount')?.textContent).toContain('No active session') // ⭐ 3/9 — testo tradotto in inglese
+    })
+
+    it('SUBAGENTI-02 con deleghe reali, ogni riga passa alla sessione figlia e chiude il foglio', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/sessions/sess-parent/children', corpo: { figli: [{ sessionId: 'sess-child-1', task: 'Rivedi il diff CSS', conclusa: true, esitoDelega: 'riuscita' }] } },
+        ])
+        runtime().realSessionState.id = 'sess-parent'
+
+        runtime().openSheet('sessionTree')
+        await new Promise((r) => setTimeout(r, 0))
+
+        const riga = document.querySelector('#subagentTreeMount button') as HTMLButtonElement
+        expect(riga.textContent).toContain('Rivedi il diff CSS')
+        expect(riga.textContent).toContain('riuscita')
+
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } }])
+        riga.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(runtime().realSessionState.id).toBe('sess-child-1')
+        expect(document.querySelector('#sheetDialog')?.hasAttribute('open')).toBe(false)
+    })
+
+    it('⛔ SUBAGENTI-03 AL CONTRARIO: nessuna delega ancora, messaggio onesto e nessuna riga cliccabile', async () => {
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/sessions/sess-parent/children', corpo: { figli: [] } }])
+        runtime().realSessionState.id = 'sess-parent'
+
+        runtime().openSheet('sessionTree')
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(document.querySelector('#subagentTreeMount')?.textContent).toContain('No delegation yet') // ⭐ 3/9 — testo tradotto in inglese
+        expect(document.querySelectorAll('#subagentTreeMount button').length).toBe(0)
+    })
+})
+
+/**
+ * ⭐⭐⭐ 29/8 — porting dal bundle desktop, blocco Automazioni (commit desktop
+ * `582dffcf`/27/8, vedi LEDGER-MOBILE-PAREGGIO-DESKTOP-CODICE.md). Stesso
+ * schema di mock del blocco sopra. Nota sul cancello: desktop usa un check
+ * grezzo `talos-embedded` per 'new' e per il boot (mai vero su desktop
+ * stesso, quindi mai esercitato lì) — qui porto `embeddedDemoOnly()`, già
+ * corretto e già in uso per 'run' nello stesso file, non il check grezzo:
+ * le prove AL CONTRARIO sotto provano ESATTAMENTE perché (con `talos-embedded`
+ * da solo, l'automazione non partirebbe mai nemmeno col tunnel attivo).
+ */
+describe('Harness UI — Automazioni (porting dal bundle desktop)', () => {
+    beforeEach(() => {
+        document.body.className = ''
+        // ⛔ CAUSA REALE trovata provando (non ipotizzata): NEWSESSION-EMBEDDED-01/02, altrove nel file, lasciano 'talos-embedded' su document.documentElement — jsdom persiste UN documento per file, la classe sopravvive fra describe diversi. embeddedDemoOnly() la legge per davvero qui (gate su 'new' e sul boot): senza questa riga, AUTOMATIONS-01/04/08 fallivano non per un difetto del porting ma per una fuga di stato del test precedente.
+        document.documentElement.classList.remove('talos-embedded')
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mountStaticRuntime()
+    })
+
+    afterEach(() => {
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+
+    it('AUTOMATIONS-01 renderAutomationsReali() aggiorna la card della sidebar col conteggio vero e la prossima esecuzione vera', async () => {
+        mockFetch([{
+            metodo: 'GET', percorso: '/api/v1/automations',
+            corpo: { items: [{ id: 'a1', nome: 'Weekly audit', attiva: true, intervalloMinuti: 60, limiteAlGiorno: 3, prossimaEsecuzione: '2026-08-29T10:00:00.000Z' }] },
+        }])
+
+        await runtime().renderAutomationsReali()
+
+        const card = document.querySelector('.attention-card')!
+        expect(card.hasAttribute('hidden')).toBe(false)
+        expect(card.querySelector('strong')?.textContent).toBe('1 automazione')
+    })
+
+    it('⛔ AUTOMATIONS-02 AL CONTRARIO: embedded SENZA tunnel, entrare nella vista Automazioni non fa nessuna fetch (zero fetch fantasma)', async () => {
+        document.documentElement.classList.add('talos-embedded')
+        const fetchMock = mockFetch([])
+
+        runtime().setView('automations')
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('AUTOMATIONS-03 zero automazioni: la card sparisce (hidden), non resta il testo scritto a mano', async () => {
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [] } }])
+
+        await runtime().renderAutomationsReali()
+
+        expect(document.querySelector('.attention-card')?.hasAttribute('hidden')).toBe(true)
+    })
+
+    it('AUTOMATIONS-04 setView("automations") carica l\'elenco vero nel mount point, in aggiunta alla riga reale già esistente', async () => {
+        mockFetch([{
+            metodo: 'GET', percorso: '/api/v1/automations',
+            corpo: { items: [{ id: 'a1', nome: 'Weekly audit', attiva: false, intervalloMinuti: 60, limiteAlGiorno: 3 }] },
+        }])
+
+        runtime().setView('automations')
+        await new Promise((r) => setTimeout(r, 0))
+
+        const mount = document.querySelector('#automationListReal')!
+        expect(mount.textContent).toContain('Weekly audit')
+        expect(mount.querySelector('.status-chip')?.textContent).toBe('Pausa')
+        // la riga statica reale (Sconto a scaglioni, avvio manuale) resta intatta accanto al mount point
+        expect(document.querySelector('[data-task-id="sconto-a-scaglioni"]')).not.toBeNull()
+    })
+
+    it('AUTOMATIONS-05 "Pausa"/"Attiva" chiama POST .../toggle e ricarica l\'elenco', async () => {
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [{ id: 'a1', nome: 'Weekly audit', attiva: true, intervalloMinuti: 60, limiteAlGiorno: 3 }] } }])
+        await runtime().renderAutomationsReali()
+
+        const toggleBtn = Array.from(document.querySelectorAll('#automationListReal button')).find((b) => b.textContent === 'Pausa') as HTMLButtonElement
+        const postMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/automations/a1/toggle', corpo: {} },
+            { metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [{ id: 'a1', nome: 'Weekly audit', attiva: false, intervalloMinuti: 60, limiteAlGiorno: 3 }] } },
+        ])
+        toggleBtn.click()
+        await new Promise((r) => setTimeout(r, 0))
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(postMock).toHaveBeenCalledWith('/api/v1/automations/a1/toggle', expect.objectContaining({ method: 'POST', body: JSON.stringify({ attiva: false }) }))
+        expect(document.querySelector('#automationListReal .status-chip')?.textContent).toBe('Pausa')
+    })
+
+    it('AUTOMATIONS-06 "Elimina" chiama POST .../elimina e la riga sparisce dopo il ricarico', async () => {
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [{ id: 'a1', nome: 'Weekly audit', attiva: false, intervalloMinuti: 60, limiteAlGiorno: 3 }] } }])
+        await runtime().renderAutomationsReali()
+
+        const eliminaBtn = Array.from(document.querySelectorAll('#automationListReal button')).find((b) => b.textContent === 'Delete') as HTMLButtonElement // ⭐ 3/9 — etichetta tradotta in inglese
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/automations/a1/elimina', corpo: {} },
+            { metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [] } },
+        ])
+        eliminaBtn.click()
+        await new Promise((r) => setTimeout(r, 0))
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(document.querySelector('#automationListReal')?.children.length).toBe(0)
+    })
+
+    /*
+     * ⛔ 29/8, ledger §22: 582dffcf (già portato) ha aggiunto un refresh
+     * al boot (window.setTimeout(...,0) in mountStaticRuntime chiama
+     * aggiornaElencoSessioniReali()/renderAutomationsReali() una volta
+     * sola per test) — questo test (scritto prima) non lo anticipava.
+     * Smaltito ESPLICITAMENTE con un primo giro di macrotask PRIMA di
+     * azzerare la cronologia della spy (mockClear): il conteggio/ultima
+     * chiamata che contano DAVVERO restano quelli del toggle, non
+     * mescolati col rumore del boot.
+     */
+    it('⛔ AUTOMATIONS-07 AL CONTRARIO: toggle fallito mostra un errore e NON ricarica (l\'elenco resta quello di prima)', async () => {
+        const fetchMock = mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [{ id: 'a1', nome: 'Weekly audit', attiva: true, intervalloMinuti: 60, limiteAlGiorno: 3 }] } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().renderAutomationsReali()
+        await new Promise((r) => setTimeout(r, 0)) // smaltisce il refresh al boot, se non era già passato
+        fetchMock.mockClear()
+
+        const toggleBtn = document.querySelector('#automationListReal button') as HTMLButtonElement
+        mockFetch([{ metodo: 'POST', percorso: '/api/v1/automations/a1/toggle', corpo: { message: 'negato' }, ok: false, status: 403 }])
+        toggleBtn.click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        // 1 = solo il POST fallito — NESSUN GET di ricarico dopo l'errore, quello è il punto della prova (la cronologia è stata azzerata sopra, il rumore del boot non conta più).
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+        expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/automations/a1/toggle', expect.objectContaining({ method: 'POST' }))
+        expect(document.querySelector('#automationListReal .status-chip')?.textContent).toBe('Attiva')
+    })
+
+    it('AUTOMATIONS-08 "Nuova automazione" (non embedded) apre il vero form coi task del corpus', async () => {
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [{ id: 'storia-t1', difficolta: 2 }] } }])
+
+        ;(document.querySelector('[data-automation-action="new"]') as HTMLButtonElement).click()
+        await new Promise((r) => setTimeout(r, 0))
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(document.querySelector('#sheetDialog')?.hasAttribute('open')).toBe(true)
+        expect(document.querySelector('#sheetTitle')?.textContent).toBe('Nuova automazione')
+        // scoped a #sheetBody: la pagina ha già un altro <select> (#campaignSelect, Board) con un <option> statico "Caricamento…" più in alto nel DOM.
+        expect(document.querySelector('#sheetBody select option')?.textContent).toContain('storia-t1')
+    })
+
+    it('⛔ AUTOMATIONS-09 AL CONTRARIO: stesso bottone, embedded SENZA tunnel, resta il toast finto — zero fetch, foglio non aperto', async () => {
+        document.documentElement.classList.add('talos-embedded')
+        const fetchMock = mockFetch([])
+
+        ;(document.querySelector('[data-automation-action="new"]') as HTMLButtonElement).click()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fetchMock).not.toHaveBeenCalled()
+        expect(document.querySelector('#sheetDialog')?.hasAttribute('open')).toBe(false)
+    })
+
+    it('AUTOMATIONS-10 inviare il form crea l\'automazione, chiude il foglio e ricarica l\'elenco', async () => {
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [{ id: 'storia-t1', difficolta: 2 }] } }])
+        await runtime().openNewAutomationSheet()
+
+        const postMock = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/automations', corpo: {} },
+            { metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [] } },
+        ])
+        document.querySelector('#sheetBody form')!.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))
+        await new Promise((r) => setTimeout(r, 0))
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(postMock).toHaveBeenCalledWith('/api/v1/automations', expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({ taskId: 'storia-t1', intervalloMinuti: 30, limiteAlGiorno: 3 }),
+        }))
+        expect(document.querySelector('#sheetDialog')?.hasAttribute('open')).toBe(false)
+    })
+})
+
+/**
+ * ⭐⭐⭐ 29/8 — porting dal bundle desktop, tool-call collassabile (commit
+ * desktop `09bcd0cb`/27/8, vedi LEDGER-MOBILE-PAREGGIO-DESKTOP-CODICE.md).
+ * Prima: appendToolNote(text) scriveva un blocco sempre aperto col testo
+ * grezzo, e ToolCallArgs aggiornava ".real-tool-note .assistant-copy" più
+ * in fondo alla pagina — fragile con più tool-call in corsa o altre card
+ * real-tool-note nel mezzo (Terminale/Browser). TOOLCALL-06 prova
+ * esattamente questa correzione.
+ */
+describe('Harness UI — gruppo di tool-call collassato, con diff per-file (owner 30/8, due screenshot di Claude Code come riferimento)', () => {
+    beforeEach(() => {
+        document.body.className = ''
+        document.documentElement.classList.remove('talos-embedded')
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mountStaticRuntime()
+    })
+
+    afterEach(() => {
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+
+    it('TOOLGROUP-01 ToolCallStart crea un GRUPPO (non più un bubble singolo), riassunto per categoria, avviso chiuso', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'shell' }, generation)
+
+        expect(document.querySelectorAll('.real-tool-group').length).toBe(1)
+        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Ran a command') // ⭐ 3/9 — testo tradotto in inglese
+        expect(document.querySelector('.tool-group-warn')?.hasAttribute('hidden')).toBe(true)
+    })
+
+    it('TOOLGROUP-02 tool-call CONSECUTIVI (categorie diverse) restano nello STESSO gruppo, riassunto nell\'ordine di comparsa', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'shell' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't2', toolCallName: 'scrivi' }, generation)
+
+        expect(document.querySelectorAll('.real-tool-group').length).toBe(1)
+        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Ran a command, modified a file') // ⭐ 3/9 — testo tradotto in inglese
+    })
+
+    it('TOOLGROUP-03 un messaggio di testo NUOVO chiude il gruppo: il prossimo tool-call ne apre uno SEPARATO', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'leggi' }, generation)
+        runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm1', delta: 'Ecco cosa faccio ora:' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't2', toolCallName: 'shell' }, generation)
+
+        expect(document.querySelectorAll('.real-tool-group').length).toBe(2)
+    })
+
+    it('⛔ TOOLGROUP-03B AL CONTRARIO: un SECONDO delta dello STESSO messaggio (messageId già visto) non apre un terzo gruppo', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'leggi' }, generation)
+        runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm1', delta: 'Ecco ' }, generation)
+        runtime().handleRealEvent({ type: 'TextMessageContent', messageId: 'm1', delta: 'cosa faccio:' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't2', toolCallName: 'shell' }, generation)
+
+        expect(document.querySelectorAll('.real-tool-group').length).toBe(2) // non 3: il secondo delta non ha richiuso un gruppo già chiuso/inesistente
+    })
+
+    it('TOOLGROUP-04 un tocco sul riassunto apre il foglio con la lista COMPLETA (comportamento attuale conservato) — icona+etichetta+bersaglio per riga', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'leggi' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 't1', delta: JSON.stringify({ percorso: 'README.md' }) }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't2', toolCallName: 'shell' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 't2', delta: JSON.stringify({ comando: 'npm test' }) }, generation)
+
+        document.querySelector<HTMLButtonElement>('.tool-group-summary')!.click()
+
+        expect(document.querySelector('#sheetTitle')?.textContent).toBe('Read a file, ran a command') // ⭐ 3/9 — testo tradotto in inglese
+        const righe = document.querySelectorAll('.tool-group-sheet-row')
+        expect(righe.length).toBe(2)
+        // ⭐ 3/9 — ETICHETTA_CATEGORIA tradotta in inglese
+        expect(righe[0].querySelector('strong')?.textContent).toBe('Read')
+        expect(righe[0].querySelector('.tool-group-sheet-target')?.textContent).toBe('README.md')
+        expect(righe[1].querySelector('strong')?.textContent).toBe('Ran')
+        expect(righe[1].querySelector('.tool-group-sheet-target')?.textContent).toBe('npm test')
+    })
+
+    it('TOOLGROUP-05 una scrittura su un file ESISTENTE calcola un diff VERO (+n/-n) — sul totale del gruppo E sulla riga del foglio', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'scrivi' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 't1', delta: JSON.stringify({ percorso: 'src/index.ts', contenuto: 'a\nb\nc\nd' }) }, generation)
+        runtime().handleRealEvent({ type: 'StateDelta', delta: [{ op: 'replace', path: '/file/src/index.ts', value: 'a\nb\nc\nd', previous: 'a\nx\nc' }] }, generation)
+
+        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Modified a file') // ⭐ 3/9 — tradotto; esisteva già: "modificato", non "creato"
+        const conteggi = document.querySelector('.tool-group-counts')!
+        expect(conteggi.querySelector('.diff-add')?.textContent).toBe('+2') // 'b' e 'd' sono nuove
+        expect(conteggi.querySelector('.diff-del')?.textContent).toBe('-1') // 'x' sparisce
+
+        document.querySelector<HTMLButtonElement>('.tool-group-summary')!.click()
+        const riga = document.querySelector('.tool-group-sheet-row')!
+        expect(riga.querySelector('.diff-add')?.textContent).toBe('+2')
+        expect(riga.querySelector('.diff-del')?.textContent).toBe('-1')
+    })
+
+    it('TOOLGROUP-06 una scrittura su un file NUOVO (op "add") dice "Creato", non "Modificato" — ogni riga è un\'aggiunta, zero rimozioni', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'scrivi' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 't1', delta: JSON.stringify({ percorso: 'nuovo.ts', contenuto: 'uno\ndue\ntre' }) }, generation)
+        runtime().handleRealEvent({ type: 'StateDelta', delta: [{ op: 'add', path: '/file/nuovo.ts', value: 'uno\ndue\ntre', previous: null }] }, generation)
+
+        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Created a file') // ⭐ 3/9 — testo tradotto in inglese
+        expect(document.querySelector('.diff-add')?.textContent).toBe('+3')
+        expect(document.querySelector('.diff-del')?.textContent).toBe('') // mai "-0": zero non si mostra, vedi aggiornaRiassuntoGruppoTool
+    })
+
+    it('⛔ TOOLGROUP-06B AL CONTRARIO: un file troppo grande per il diff (oltre RIGHE_MASSIME_DIFF) non mostra NESSUN numero, mai un "+0 -0" inventato', () => {
+        const generation = runtime().realSessionState.generation
+        const enorme = Array.from({ length: 1600 }, (_, i) => `riga ${i}`).join('\n')
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'scrivi' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 't1', delta: JSON.stringify({ percorso: 'grande.txt', contenuto: enorme }) }, generation)
+        runtime().handleRealEvent({ type: 'StateDelta', delta: [{ op: 'replace', path: '/file/grande.txt', value: enorme, previous: enorme.replace('riga 5', 'RIGA 5') }] }, generation)
+
+        const conteggi = document.querySelector('.tool-group-counts')!
+        expect(conteggi.querySelector('.diff-add')?.textContent).toBe('')
+        expect(conteggi.querySelector('.diff-del')?.textContent).toBe('')
+        expect(document.querySelector('.tool-note-summary-text')?.textContent).toBe('Modified a file') // ⭐ 3/9 — tradotto; esisteva già, anche se il diff non si può calcolare
+    })
+
+    it('TOOLGROUP-07 ⚠️ un esito che "pare fallito" (stesso vocabolario REFUSED./exit N≠0 del kernel, talosHarness.mjs) accende l\'avviso sul gruppo', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'shell' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 't1', content: 'exit 1 [sandbox: none]\ncomando non trovato' }, generation)
+
+        expect(document.querySelector('.tool-group-warn')?.hasAttribute('hidden')).toBe(false)
+    })
+
+    it('⛔ TOOLGROUP-08 AL CONTRARIO: un esito PULITO (exit 0) NON accende l\'avviso — non è acceso di default', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'shell' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 't1', content: 'exit 0 [sandbox: none]\ntutto ok' }, generation)
+
+        expect(document.querySelector('.tool-group-warn')?.hasAttribute('hidden')).toBe(true)
+    })
+
+    it('TOOLGROUP-09 due tool-call in corsa insieme aggiornano OGNUNO il proprio item, mai quello dell\'altro (prova la correzione della fragilità .at(-1))', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'a', toolCallName: 'leggi' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 'b', toolCallName: 'cerca' }, generation)
+        // gli argomenti di "b" (l'ULTIMO item creato) arrivano per "a" (il PRIMO) — indicizzare per posizione invece che per toolCallId finirebbe nell'item sbagliato.
+        runtime().handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'a', delta: JSON.stringify({ percorso: 'README.md' }) }, generation)
+
+        document.querySelector<HTMLButtonElement>('.tool-group-summary')!.click()
+        const bersagli = Array.from(document.querySelectorAll('.tool-group-sheet-target')).map((el) => el.textContent)
+        expect(bersagli).toEqual(['README.md', 'nel progetto'])
+    })
+
+    it('TOOLGROUP-10 un tocco su una riga del foglio apre il SUO dettaglio (argomenti+esito) — "comportamento attuale" conservato, niente va perso rispetto a prima', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'prova' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 't1', content: 'exit 0\nℹ pass 12\nℹ fail 0\n' }, generation)
+
+        document.querySelector<HTMLButtonElement>('.tool-group-summary')!.click()
+        const riga = document.querySelector<HTMLButtonElement>('.tool-group-sheet-row')!
+        expect(riga.querySelector('.tool-group-sheet-target')?.textContent).toBe('✓ Test verdi — 12/12')
+        expect(riga.getAttribute('aria-expanded')).toBe('false')
+
+        riga.click()
+
+        expect(riga.getAttribute('aria-expanded')).toBe('true')
+        const dettaglio = riga.nextElementSibling as HTMLElement
+        expect(dettaglio.hidden).toBe(false)
+        const chiavi = Array.from(dettaglio.querySelectorAll('.tool-arg-key')).map((el) => el.textContent)
+        expect(chiavi).toContain('Esito:')
+        expect(dettaglio.textContent).toContain('pass 12')
+    })
+
+    it('TOOLGROUP-11 QueuedMessageDelivered/ApprovalRequested/ArtifactCreated chiudono il gruppo corrente come un messaggio di testo', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'leggi' }, generation)
+        runtime().handleRealEvent({ type: 'ArtifactCreated', titolo: 'Grafico', id: 'art-1' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't2', toolCallName: 'shell' }, generation)
+
+        expect(document.querySelectorAll('.real-tool-group').length).toBe(2)
+    })
+})
+
+/**
+ * ⭐⭐⭐ 29/8 — BUG REALE trovato SUL DISPOSITIVO (owner: "nella schermata
+ * principale c'è ancora tutto il component mockup"), non da una grep.
+ * `selectSession()` usciva subito (`return false`, MAI aggiornando
+ * `state.session`/il titolo) quando l'id selezionato non corrispondeva a
+ * nessuna delle 5 righe statiche `.session-item` del mockup — cioè
+ * SEMPRE, per ogni sessione mobile vera (un UUID reale non può comparire
+ * in un elenco scritto a mano). Il chiamante (harnessUiBridge.ts) aveva
+ * un secondo difetto gemello che nascondeva il primo: ignorava il valore
+ * di ritorno e riportava sempre successo — coperto separatamente in
+ * harnessUiBridge.test.ts/harnessSessionScreen.test.ts. Qui solo il
+ * livello app.js: la funzione vera, non un mock.
+ */
+describe('Harness UI — selectSession con un id reale, senza una riga statica corrispondente (bug reale, 29/8)', () => {
+    beforeEach(() => {
+        document.body.className = ''
+        document.documentElement.classList.remove('talos-embedded')
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mountStaticRuntime()
+    })
+
+    afterEach(() => {
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+
+    it('SELECT-SESSION-REAL-ID-01 un id reale (nessuna riga statica corrispondente) aggiorna comunque il titolo e torna true', () => {
+        const esito = runtime().selectSession({ id: '4d1136ce-e514-4e6e-944d-bd083bce224b', title: 'Elenca i file del workspace' })
+
+        expect(esito).toBe(true)
+        expect(document.querySelector('#sessionTitle')?.textContent).toBe('Elenca i file del workspace')
+    })
+
+    /**
+     * ⛔⛔⛔ 29/8 — la seconda metà dello stesso bug, owner: "deve mostrare il
+     * logo, la scritta Talos, il messaggio di benvenuto, puoi usare
+     * esattamente lo stesso component [della chat]". Prima di questa prova,
+     * il titolo si aggiornava (dopo il primo fix) ma #conversation restava
+     * il Mission/Plan/Attività statico del mockup — mai reale per una
+     * sessione mobile vera, nemmeno un istante.
+     */
+    /*
+     * ⛔ 29/8, ledger §24 (cherry-pick 80295fa5, applicato retroattivamente):
+     * `.mission-card` e le 5 session-item statiche di "parità desktop" non
+     * esistono più — 80295fa5 le ha rimosse per intero da index.html
+     * (owner: "cancella tutte le sessioni mockup"). La precondizione di
+     * SELECT-SESSION-REAL-ID-04 aggiornata su #conversationEmptyState (il
+     * nuovo stato onesto che la sostituisce); SELECT-SESSION-REAL-ID-05 e
+     * -02 (entrambe sul "combacia con una riga demo") rimosse — lo
+     * scenario che provano non può più accadere, non esiste più nessuna
+     * riga demo con cui combaciare.
+     */
+    /*
+     * ⭐⭐⭐ 2/9 — riscritta: owner dal vivo, DUE segnalazioni sullo stesso
+     * hero nello stesso giro. (1) "quando clicco su una sessione i
+     * messaggi... non compaiono" — l'hero mostrato qui non era più
+     * "vuota, mai avviata" (quel caso resta a costruisciConversationHero,
+     * invariato) ma "sto CARICANDO la vera cronologia" — un `void
+     * caricaCronologiaSessione(...)` risolve l'hero con lo stream reale
+     * o un messaggio onesto di non-disponibilità (vedi il describe
+     * dedicato per quei due esiti). (2) "quando il loader è visibile
+     * devi nascondere il logo e la scritta talos" — quell'hero NON porta
+     * più `.hero-logo`/`.hero-wordmark`: non è un momento di marca, è
+     * un'attesa. Il vecchio nome/assert ("hero logo+TALOS+messaggio")
+     * descriveva ESATTAMENTE il difetto segnalato dall'owner.
+     */
+    it('SELECT-SESSION-REAL-ID-04 un id reale sostituisce SUBITO lo stato onesto vuoto con l\'hero di CARICAMENTO (niente logo/wordmark)', () => {
+        expect(document.querySelector('#conversationEmptyState')).not.toBeNull() // precondizione: lo stato vuoto onesto è ancora lì prima della selezione
+
+        const esito = runtime().selectSession({ id: '4d1136ce-e514-4e6e-944d-bd083bce224b', title: 'Elenca i file del workspace' })
+
+        expect(esito).toBe(true)
+        // ⛔ 29/8: costruisciConversationHero()/costruisciConversationHeroCaricamento() riusano DELIBERATAMENTE lo stesso id
+        // 'conversationEmptyState' sull'hero che generano (stesso id, classe diversa) —
+        // l'id non sparisce mai. Quello che cambia davvero è la classe e il contenuto:
+        // lo stato onesto statico portava class="board-empty conversation-empty" e il
+        // testo "Nessuna sessione attiva"; l'hero di caricamento porta class="conversation-hero conversation-hero-loading".
+        expect(document.querySelector('#conversationEmptyState')?.classList.contains('conversation-hero')).toBe(true)
+        expect(document.querySelector('#conversationEmptyState')?.classList.contains('conversation-hero-loading')).toBe(true)
+        expect(document.querySelector('#conversationEmptyState')?.textContent).not.toContain('No active session') // ⭐ 3/9 — testo tradotto in inglese
+        const hero = document.querySelector('#conversation .conversation-hero')
+        expect(hero).not.toBeNull()
+        // ⭐ 2/9 — niente logo/wordmark durante il caricamento (owner dal vivo).
+        expect(hero?.querySelector('.hero-logo')).toBeNull()
+        expect(hero?.querySelector('.hero-wordmark')).toBeNull()
+        expect(hero?.querySelector('.hero-welcome-title')?.textContent).toBe('Elenca i file del workspace')
+        expect(hero?.querySelector('.talos-line-loader')).not.toBeNull()
+        expect(hero?.querySelector('.hero-subtitle')?.textContent).toBe('Fetching the history…') // ⭐ 3/9 — testo tradotto in inglese
+        // ⭐ 29/8 — ledger §10: la striscia "In esecuzione" (default running:true del modulo) non deve restare appesa su una sessione appena selezionata di cui non sappiamo ancora lo stato vero.
+        expect(document.querySelector('.run-strip')?.classList.contains('is-stopped')).toBe(true)
+        expect(document.querySelector('#runStateToggle strong')?.textContent).toBe('Stopped') // ⭐ 3/9 — vedi nota su RUNSTATE-01, stessa etichetta a due stati
+    })
+
+    /*
+     * ⭐⭐⭐ 2/9 — la prova diretta del secondo bug dell'owner ("clicco su
+     * una sessione e i messaggi non compaiono"): l'hero di CARICAMENTO
+     * di SELECT-SESSION-REAL-ID-04 deve risolversi DAVVERO, non restare
+     * a girare. Trovata → stream reale (passaASessione); non trovata →
+     * messaggio onesto, mai il vecchio "scrivi qui sotto per continuare
+     * questa sessione" (quello mentiva: implicava che la cronologia ci
+     * fosse sempre stata).
+     */
+    it('SELECT-SESSION-REAL-ID-04B trovata: l\'hero di caricamento si risolve nello stream reale (SSE), non resta a girare', async () => {
+        const ID = '4d1136ce-e514-4e6e-944d-bd083bce224b'
+        FakeEventSource.instances = []
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: ID, taskId: 'elenca-file', nome: 'Elenca i file del workspace', forkDa: null, conclusa: false, avviataAlle: '2026-09-02T00:00:00.000Z' }] } }])
+
+        runtime().selectSession({ id: ID, title: 'Elenca i file del workspace' })
+        expect(document.querySelector('.conversation-hero-loading')).not.toBeNull() // subito dopo: ancora in caricamento
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(document.querySelector('.conversation-hero-loading')).toBeNull() // risolto: l'hero di caricamento è sparito
+        expect(runtime().realSessionState.id).toBe(ID)
+        expect(FakeEventSource.instances.at(-1)?.url).toContain(`/api/v1/sessions/${ID}/events`)
+    })
+
+    it('⛔ SELECT-SESSION-REAL-ID-04C AL CONTRARIO — non trovata: messaggio onesto, MAI il vecchio "scrivi qui sotto per continuare questa sessione"', async () => {
+        const ID = '4d1136ce-e514-4e6e-944d-bd083bce224b'
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } }])
+
+        runtime().selectSession({ id: ID, title: 'Elenca i file del workspace' })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(document.querySelector('.conversation-hero-loading')).toBeNull()
+        const hero = document.querySelector('#conversation .conversation-hero')
+        expect(hero?.querySelector('.hero-subtitle')?.textContent).not.toBe('Scrivi qui sotto per continuare questa sessione.')
+        expect(hero?.querySelector('.hero-subtitle')?.textContent).toContain('No history found') // ⭐ 3/9 — testo tradotto in inglese
+        expect(runtime().realSessionState.id).toBeNull() // mai finto un id che il server non ha
+    })
+
+    /*
+     * ⭐⭐⭐ 2/9 — SETTIMA causa dello stesso bug (§14.2.1), trovata dal
+     * vivo dopo un riavvio vero: aggiornaElencoSessioniReali popola
+     * `.session-item[data-real-session-id]` per OGNI sessione reale già
+     * vista in questo avvio (riga ~5534) — non solo per righe demo
+     * statiche. Il vecchio `if (item) {...} else { ricarica }` saltava
+     * l'INTERO ricaricamento appena una sessione era già "nota" alla
+     * sidebar interna: header/titolo si aggiornavano (fuori da quel
+     * blocco), il corpo restava quello della sessione PRECEDENTE,
+     * invariato — riprodotto dal vivo, non a tavolino.
+     */
+    it('⛔ SELECT-SESSION-REAL-ID-04D AL CONTRARIO — un .session-item[data-real-session-id] già noto NON deve saltare il ricaricamento', async () => {
+        const ID = '4d1136ce-e514-4e6e-944d-bd083bce224b'
+        // Simula aggiornaElencoSessioniReali(): questa sessione è già "nota" alla sidebar interna da un giro precedente in questo stesso avvio.
+        const rigaGiaNota = document.createElement('button')
+        rigaGiaNota.className = 'session-item real-session-item'
+        rigaGiaNota.dataset.realSessionId = ID
+        document.body.appendChild(rigaGiaNota)
+        FakeEventSource.instances = []
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: ID, taskId: 'elenca-file', nome: 'Elenca i file del workspace', forkDa: null, conclusa: false, avviataAlle: '2026-09-02T00:00:00.000Z' }] } }])
+
+        const esito = runtime().selectSession({ id: ID, title: 'Elenca i file del workspace' })
+
+        expect(esito).toBe(true)
+        expect(rigaGiaNota.classList.contains('active')).toBe(true) // il bonus di evidenziazione resta
+        expect(document.querySelector('.conversation-hero-loading')).not.toBeNull() // MA il ricaricamento è partito comunque
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(runtime().realSessionState.id).toBe(ID) // risolto: lo stream reale ha sostituito il caricamento
+        rigaGiaNota.remove()
+    })
+
+    /*
+     * ⭐⭐⭐ 2/9 — owner dal vivo: "c'è troppo caricamento se clicco su
+     * una, clicco su un'altra e ritorno su quelle precedenti... deve
+     * essere veloce, rimane bloccato". Ricerca fatta (owner: "ad ogni
+     * passo") — pattern standard di ogni chat: cache client per
+     * un'apertura istantanea di una conversazione già vista. Questa
+     * prova è la garanzia diretta: un SECONDO giro sullo STESSO id, in
+     * questo stesso avvio, non deve fare NESSUNA nuova fetch — niente
+     * spinner, contenuto già lì appena selectSession() torna.
+     */
+    it('⭐ cache: rivisitare una sessione già caricata è ISTANTANEO, zero fetch in più', async () => {
+        const ID = '4d1136ce-e514-4e6e-944d-bd083bce224b'
+        const ALTRA = '99999999-9999-9999-9999-999999999999'
+        FakeEventSource.instances = []
+        const spia = mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: ID, taskId: 'elenca-file', nome: 'Prima sessione', forkDa: null, conclusa: false, avviataAlle: '2026-09-02T00:00:00.000Z' }] } },
+        ])
+
+        // Primo giro: carica DAVVERO (fetch + EventSource), come un click reale.
+        runtime().selectSession({ id: ID, title: 'Prima sessione' })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(runtime().realSessionState.id).toBe(ID)
+        FakeEventSource.instances.at(-1)?.emit({ type: 'TextMessageContent', messageId: 'm1', delta: 'Ciao dal vivo', _sequenza: 1 })
+
+        // Navigo altrove (sessione mai vista: onestamente non trovata, non è quello che sto provando qui).
+        runtime().selectSession({ id: ALTRA, title: 'Altra sessione' })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        // Torno sulla PRIMA: deve essere istantanea, zero fetch aggiuntive.
+        const chiamateFinPrima = spia.mock.calls.length
+        const esito = runtime().selectSession({ id: ID, title: 'Prima sessione' })
+        // ⭐ 2/9 — il replay dalla cache passa DA handleRealEvent come un
+        // evento vero: il render del testo è ora coalescente/differito
+        // (§R4), quindi "istantaneo" per l'utente (zero fetch, zero
+        // spinner) non vuol dire "sincrono nel DOM" — un frame ci vuole
+        // comunque, qui simulato col ripiego setTimeout(...,16) di jsdom.
+        await new Promise((resolve) => setTimeout(resolve, 20))
+
+        expect(esito).toBe(true)
+        expect(spia.mock.calls.length).toBe(chiamateFinPrima) // nessuna fetch in più: rigiocato dalla cache
+        expect(document.querySelector('.conversation-hero-loading')).toBeNull() // niente spinner: già risolto
+        expect(runtime().realSessionState.id).toBe(ID)
+        expect(document.querySelector('#conversation')?.textContent).toContain('Ciao dal vivo')
+    })
+
+    /*
+     * ⭐⭐⭐ 2/9 — HarnessSessionScreen.vue chiama SEMPRE
+     * selectTalosHarnessUiSession subito dopo aver montato lo script:
+     * al boot, riprendiSessioneDalHost() (che legge lo STESSO id dal
+     * DOM) e selectSession corrono in parallelo per forza. Senza de-dup
+     * sarebbero DUE EventSource aperte per la stessa sessione (una
+     * scartata a metà da nuovaGenerazioneSessione() dell'altra) — non
+     * si conta il totale delle fetch (passaASessione ne innesca altre
+     * per conto suo, es. aggiornaElencoSessioniReali, non parte di
+     * questa garanzia): si conta quante EventSource si aprono DAVVERO.
+     */
+    it('⭐ de-dup: selectSession + riprendiSessioneDalHost per lo STESSO id in corsa aprono UNA EventSource sola', async () => {
+        const ID = '4d1136ce-e514-4e6e-944d-bd083bce224b'
+        document.documentElement.setAttribute('data-harness-session-id', ID)
+        FakeEventSource.instances = []
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: ID, taskId: 'elenca-file', nome: 'Elenca i file del workspace', forkDa: null, conclusa: false, avviataAlle: '2026-09-02T00:00:00.000Z' }] } }])
+
+        // selectSession (il bridge nativo) parte per primo, come dopo un mount reale.
+        runtime().selectSession({ id: ID, title: 'Elenca i file del workspace' })
+        // riprendiSessioneDalHost (il boot) parte a ruota, PRIMA che il primo fetch risolva.
+        await runtime().riprendiSessioneDalHost()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(FakeEventSource.instances).toHaveLength(1)
+        expect(runtime().realSessionState.id).toBe(ID)
+    })
+
+    /*
+     * ⭐⭐⭐ 2/9 — TERZA corsa, trovata dal vivo (owner, sullo stesso
+     * bug del click): sessione A cliccata, poi sessione B PRIMA che il
+     * fetch di A sia tornato — de-dup (sopra) non la vede, id diversi.
+     * Se la risposta di A arriva DOPO quella di B, sovrascriveva il
+     * body appena riempito da B — riprodotto dal vivo: header
+     * corretto (B), corpo ancora di A. Qui si controlla l'ordine di
+     * arrivo a mano (A resta pending finché B non ha già scritto),
+     * per provare esattamente quella sequenza, non solo "chiama due
+     * volte e spera".
+     */
+    it('⛔ AL CONTRARIO — click su A poi B, la risposta di A arriva DOPO quella di B: B vince, A non la sovrascrive', async () => {
+        const A = '11111111-1111-1111-1111-111111111111'
+        const B = '22222222-2222-2222-2222-222222222222'
+        let risolviA: (value: Response) => void = () => {}
+        const rispostaA = new Promise<Response>((resolve) => { risolviA = resolve })
+        const corpoB = { ok: true, data: { items: [{ sessionId: B, taskId: 'elenca-file', nome: 'Sessione B', forkDa: null, conclusa: false, avviataAlle: '2026-09-02T00:00:00.000Z' }] } }
+        // Stesso URL per A e B (entrambe leggono la LISTA, /api/v1/sessions —
+        // nessun id nel percorso): si distinguono per ORDINE di chiamata, non
+        // per url. La prima (A) resta pending, la seconda (B) risolve subito.
+        let chiamate = 0
+        vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+            const url = typeof input === 'string' ? input : String(input)
+            if (!url.includes('/api/v1/sessions')) throw new Error(`nessuna risposta finta per ${url}`)
+            chiamate += 1
+            if (chiamate === 1) return rispostaA
+            return new Response(JSON.stringify(corpoB), { status: 200 })
+        })
+        FakeEventSource.instances = []
+
+        runtime().selectSession({ id: A, title: 'Sessione A' }) // fetch di A parte e resta PENDING (rispostaA non ancora risolta)
+        runtime().selectSession({ id: B, title: 'Sessione B' }) // fetch di B parte e risolve subito (implementazione sopra, ramo else)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(document.querySelector('#sessionTitle')?.textContent).toBe('Sessione B') // precondizione: B ha già vinto la UI
+
+        risolviA(new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })) // ORA arriva la risposta (tardiva) di A: lista vuota, "non trovata"
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        // Se A avesse sovrascritto, qui ci sarebbe il messaggio onesto "non trovata" al posto dello stream di B.
+        expect(runtime().realSessionState.id).toBe(B)
+        expect(document.querySelector('.conversation-hero')).toBeNull()
+        expect(document.querySelector('#sessionTitle')?.textContent).toBe('Sessione B')
+    })
+
+    it('⛔ SELECT-SESSION-REAL-ID-03 AL CONTRARIO: id/title non validi tornano false e NON toccano il titolo esistente', () => {
+        runtime().selectSession({ id: 'audit-api-permissions', title: 'Audit API permissions' })
+        const titoloPrima = document.querySelector('#sessionTitle')?.textContent
+
+        // @ts-expect-error prova deliberata di un contratto rotto (title mancante)
+        const esito = runtime().selectSession({ id: 'qualunque' })
+
+        expect(esito).toBe(false)
+        expect(document.querySelector('#sessionTitle')?.textContent).toBe(titoloPrima)
     })
 
     /*
@@ -2601,6 +3696,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
      */
     it('⭐⭐⭐ EFFORT-PICKER-01 lo slider è nella modale accanto al model picker, e la scelta viaggia nella POST come reasoning.effort', async () => {
         mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
             { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
         ])
         await runtime().openRealTaskSheet()
@@ -2631,6 +3727,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
     it('⛔ AL CONTRARIO: EFFORT-PICKER-02 senza mai toccare lo slider, la POST non porta MAI il campo reasoning — comportamento di sempre', async () => {
         mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
             { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
         ])
         await runtime().openRealTaskSheet()
@@ -2652,6 +3749,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
     it('⭐ EFFORT-PICKER-03 lo stesso slider è ANCHE nella pill del modello (foglio aperto dal composer), non solo nella modale "Nuova sessione"', async () => {
         mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
             { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
         ])
         await runtime().openRealTaskSheet()
@@ -2660,5 +3758,273 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         document.querySelector<HTMLButtonElement>('[data-open-sheet="model"]')!.click()
 
         expect(document.querySelector('#modelPickerMount .effort-picker-range')).not.toBeNull()
+    })
+})
+
+/**
+ * ⭐⭐⭐ 30/8, ledger §25/§31 — chiude il SECONDO bug dell'owner: riaprire
+ * una sessione storica lasciava Files/Context/Ambiente sui dati mock
+ * statici per sempre. Riprodotto dal vivo via CDP prima della cura
+ * (Context panel: `talos`/`feat/mobile-code`/`~/dev/talos` — gli stessi
+ * valori di `index.html`, mai sostituiti). Causa: `HarnessSessionScreen.vue`
+ * pianta `data-harness-session-id` su un antenato di `HOST()`, ma
+ * nessuno lo leggeva al boot — `riprendiSessioneDalHost()` lo fa ora,
+ * SOLO quando l'attributo esiste ed è diverso da `'new'` (mai un fetch
+ * incondizionato: `mountStaticRuntime()` non pianta mai l'attributo,
+ * quindi non tocca `CODE-COMPOSER-DEMO-SEND-01`/`HARNESS-BOARD-MOBILE-
+ * HONESTY-01`, verificato eseguendo l'intera suite dopo la cura).
+ *
+ * `beforeEach` DEDICATO (non quello condiviso sopra): pianta l'attributo
+ * su `document.documentElement` PRIMA di `mountStaticRuntime()`, perché
+ * `riprendiSessioneDalHost()` parte SINCRONA dentro lo stesso giro in cui
+ * app.js viene eseguito (`window.eval`).
+ */
+describe('Harness UI — riprendiSessioneDalHost(), riapertura di una sessione storica dal boot (bug reale, 30/8)', () => {
+    const ID_SESSIONE = '933d97f7-9b65-4c0b-a9cd-8b8acf039545'
+
+    beforeEach(() => {
+        /*
+         * ⛔ Trovato eseguendo questo stesso test, non assunto: il boot ha
+         * ANCHE un window.setTimeout(...,0) differito che chiama
+         * aggiornaElencoSessioniReali()/renderAutomationsReali() quando
+         * HOST() NON porta la classe `talos-embedded` — un secondo fetch,
+         * indipendente da riprendiSessioneDalHost(), che il mio primo giro
+         * di test non aveva messo in conto (fetch inatteso su /api/v1/
+         * sessions e /api/v1/automations nei due casi AL CONTRARIO). La
+         * schermata reale (HarnessSessionScreen.vue) monta sempre con
+         * `embedded`, quindi questa classe è quella del contesto vero, non
+         * un aggiustamento per far passare il test.
+         */
+        document.documentElement.classList.add('talos-embedded')
+    })
+
+    afterEach(() => {
+        document.documentElement.classList.remove('talos-embedded')
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
+        document.documentElement.removeAttribute('data-harness-session-id')
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+
+    it('un id reale (presente fra le sessioni del server) riconnette DA SOLO al boot — Context panel esce dai dati mock', async () => {
+        document.documentElement.setAttribute('data-harness-session-id', ID_SESSIONE)
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mockFetch([
+            {
+                metodo: 'GET', percorso: '/api/v1/sessions',
+                corpo: { items: [{ sessionId: ID_SESSIONE, taskId: 'elenca-file', nome: 'Elenca i file di questa cartella', forkDa: null, conclusa: false, avviataAlle: '2026-08-29T00:00:00.000Z' }] },
+            },
+        ])
+        mountStaticRuntime()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(runtime().realSessionState.id).toBe(ID_SESSIONE)
+        expect(document.querySelector('#sessionTitle')?.textContent).toBe('Elenca i file di questa cartella')
+        expect(FakeEventSource.instances.at(-1)?.url).toContain(`/api/v1/sessions/${ID_SESSIONE}/events`)
+    })
+
+    it('⭐ i dati reali arrivano DAVVERO nel Context panel, non solo l\'id — RunStarted rimpiazza i valori statici di index.html', async () => {
+        document.documentElement.setAttribute('data-harness-session-id', ID_SESSIONE)
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mockFetch([
+            {
+                metodo: 'GET', percorso: '/api/v1/sessions',
+                corpo: { items: [{ sessionId: ID_SESSIONE, taskId: 'elenca-file', nome: 'Elenca i file di questa cartella', forkDa: null, conclusa: false, avviataAlle: '2026-08-29T00:00:00.000Z' }] },
+            },
+        ])
+        mountStaticRuntime()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        /*
+         * precondizione, AGGIORNATA 3/9 (avm-03, dal vivo — item 8): prima
+         * del RunStarted vero il pannello mostra un trattino onesto, non
+         * più un dato d'esempio verosimile ("feat/mobile-code") accanto a
+         * un badge che intanto dichiara "not connected" — vedi il commento
+         * in index.html sopra <dl id="envWorkspace">... per il resoconto
+         * completo. Il resto del test (RunStarted rimpiazza con dati veri)
+         * è invariato: solo il DEFAULT prima dell'evento è cambiato.
+         */
+        expect(document.querySelector('#envBranch')?.textContent).toBe('—')
+
+        FakeEventSource.instances.at(-1)?.emit({
+            type: 'RunStarted', threadId: 't1', runId: 'r1',
+            input: { consegna: 'elenca' },
+            contesto: { progetto: 'progetto-vero', branch: 'lane/vero', cartella: '/data/vero' },
+        })
+
+        expect(document.querySelector('#envWorkspace')?.textContent).toBe('progetto-vero')
+        expect(document.querySelector('#envBranch')?.textContent).toBe('lane/vero')
+        expect(document.querySelector('#envRoot')?.textContent).toBe('/data/vero')
+    })
+
+    it('⛔ AL CONTRARIO — id \'new\' (sessione mai avviata, isDraft lato Vue): nessun fetch, stato onesto vuoto invariato', async () => {
+        document.documentElement.setAttribute('data-harness-session-id', 'new')
+        const spia = mockFetch([])
+        mountStaticRuntime()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(spia).not.toHaveBeenCalled()
+        expect(runtime().realSessionState.id).toBeNull()
+    })
+
+    it('⛔ AL CONTRARIO — nessun attributo (mount standalone/test, come mountStaticRuntime senza Vue): nessun fetch', async () => {
+        // Nessun setAttribute qui apposta — replica esattamente CODE-COMPOSER-DEMO-SEND-01.
+        const spia = mockFetch([])
+        mountStaticRuntime()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(spia).not.toHaveBeenCalled()
+    })
+
+    it('⛔ AL CONTRARIO — id presente ma il server non lo conosce (creata lato nativo, mai avviata davvero): stato vuoto onesto, mai un errore', async () => {
+        document.documentElement.setAttribute('data-harness-session-id', ID_SESSIONE)
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } }])
+        mountStaticRuntime()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(runtime().realSessionState.id).toBeNull()
+    })
+
+    it('⛔ AL CONTRARIO — il server non risponde: fallisce in silenzio, mai un toast per un\'azione che l\'utente non ha chiesto', async () => {
+        document.documentElement.setAttribute('data-harness-session-id', ID_SESSIONE)
+        vi.spyOn(window, 'fetch').mockRejectedValue(new Error('rete assente'))
+        mountStaticRuntime()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(runtime().realSessionState.id).toBeNull()
+        expect(document.querySelector('#toastRegion')?.textContent ?? '').toBe('')
+    })
+})
+
+/**
+ * ⭐⭐⭐ 30/8, owner: "non riesco a vedere i messaggi di una sessione già
+ * iniziata... estremamente macchinoso" — riprodotto due volte,
+ * indipendentemente (owner e questa sessione), su una sessione che il
+ * server conferma intatta. Causa isolata in `passaASessione()`: il
+ * corto-circuito "stesso sessionId = non fare nulla" presumeva che un
+ * id già corrente implicasse contenuto già a schermo — falso quando
+ * quell'id è rimasto "corrente" da un tentativo PRECEDENTE che non ha
+ * mai renderizzato nulla di reale (una connessione caduta prima del
+ * replay, un secondo tentativo rapido superato dalla generation-guard
+ * in handleRealEvent): l'hero/stato vuoto restava a schermo per
+ * sempre, perché lo stesso id "già corrente" bloccava ogni riprova.
+ * Vedi ledger §43, piano procedi-col-generare-un-snoopy-neumann.md
+ * §14.2.1.
+ */
+describe('Harness UI — passaASessione() non si arrende più su un id già corrente ma senza contenuto reale (bug reale, 30/8)', () => {
+    beforeEach(() => {
+        document.body.className = ''
+        document.documentElement.classList.remove('talos-embedded')
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mountStaticRuntime()
+    })
+
+    afterEach(() => {
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+
+    it('PASSA-SESSIONE-RITENTA-01 stesso id, MA l\'hero è ancora a schermo (nessun replay mai arrivato): un secondo tentativo riapre davvero la connessione', () => {
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } }])
+
+        runtime().passaASessione('sess-vuota', 'task-vuota', 'Sessione senza replay')
+        expect(FakeEventSource.instances).toHaveLength(1)
+        expect(document.querySelector('#conversation')?.children.length).toBe(0) // precondizione del bug: nessun evento è mai arrivato, #conversation resta vuoto
+
+        runtime().passaASessione('sess-vuota', 'task-vuota', 'Sessione senza replay')
+
+        expect(FakeEventSource.instances).toHaveLength(2) // prima della cura restava 1 per sempre
+        expect(FakeEventSource.instances[1].url).toBe('/api/v1/sessions/sess-vuota/events')
+    })
+
+    it('⛔ PASSA-SESSIONE-RITENTA-02 AL CONTRARIO: stesso id, contenuto REALMENTE arrivato — il secondo tocco resta un no-op, nessuna riconnessione sprecata', () => {
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } }])
+
+        runtime().passaASessione('sess-piena', 'task-piena', 'Sessione con contenuto')
+        expect(FakeEventSource.instances).toHaveLength(1)
+        FakeEventSource.instances[0].emit({ type: 'TextMessageStart', messageId: 'm1' })
+        FakeEventSource.instances[0].emit({ type: 'TextMessageContent', messageId: 'm1', delta: 'Ecco il contenuto reale.' })
+        expect(document.querySelector('#conversation')?.children.length).toBeGreaterThan(0) // il testo vero è stato renderizzato davvero
+
+        runtime().passaASessione('sess-piena', 'task-piena', 'Sessione con contenuto')
+
+        expect(FakeEventSource.instances).toHaveLength(1) // nessuna seconda connessione: il contenuto c'era già
+    })
+})
+
+/*
+ * ⛔⛔⛔ 15/09/2026 — run CI del job `mobile`, due rossi "solo sotto carico" con la STESSA radice:
+ * una catena di caricaCronologiaSessione sospesa sul backoff (1s/2s/3s, app.js) sopravviveva allo
+ * smontaggio del runtime (window.__talosHarnessDestroy, onBeforeUnmount di HarnessSessionScreen.vue)
+ * e si risvegliava DENTRO il test successivo: retry fantasma di GET /api/v1/sessions (AUTOMATIONS-09,
+ * «zero fetch» al tocco embedded) e, se la regola di mock c'era, perfino una EventSource fantasma sul
+ * mount nuovo (de-dup, «toHaveLength(1)» riceveva 2). Il trigger reale DENTRO questo file era HOOKS-05:
+ * selectSession SENZA la regola GET /api/v1/sessions, test finito prima del risveglio del backoff.
+ * La cura sta in app.js (flag runtimeDistrutto alzato dal distruttore, controllato a ogni risveglio —
+ * stessa classe del difetto del timer di boot corretto il 12/09); questa prova lo chiude dall'altra
+ * parte, col rimontaggio vero.
+ */
+describe('Harness UI — le catene di retry di caricaCronologiaSessione muoiono col runtime smontato (CI 15/9/2026)', () => {
+    beforeEach(() => {
+        // ⛔ Stesso motivo del describe "riprendiSessioneDalHost" qui sopra: il boot ha un
+        // window.setTimeout(...,0) che chiama aggiornaElencoSessioniReali()/renderAutomationsReali()
+        // se HOST() NON porta `talos-embedded` — fetch che qui scombussolerebbe i conteggi del test.
+        document.documentElement.classList.add('talos-embedded')
+    })
+
+    afterEach(() => {
+        document.documentElement.classList.remove('talos-embedded')
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
+        document.documentElement.removeAttribute('data-harness-session-id')
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+
+    it('⛔ AL CONTRARIO — una catena in backoff di un runtime DISTRUTTO non rilancia la fetch né apre una EventSource nel mount dopo', async () => {
+        document.documentElement.removeAttribute('data-harness-session-id') // isolamento: nessun test precedente lascia il suo id al boot di QUESTO mount
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        const fetchMock = mockFetch([{ metodo: 'GET', percorso: '/api/v1/doctor', corpo: {} }]) // NIENTE regola per GET /api/v1/sessions, come HOOKS-05: la catena entra in backoff
+        mountStaticRuntime()
+        runtime().selectSession({ id: '4d1136ce-e514-4e6e-944d-bd083bce224b', title: 'Sessione reale' })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(fetchMock).toHaveBeenCalledTimes(1) // il primo tentativo è già fallito: la catena dorme sul backoff di 1s
+
+        // Smontaggio e rimontaggio — ciò che HarnessSessionScreen.vue fa in onBeforeUnmount + remount.
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        mountStaticRuntime()
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: '4d1136ce-e514-4e6e-944d-bd083bce224b', taskId: 'elenca-file', nome: 'Elenca i file del workspace', forkDa: null, conclusa: false, avviataAlle: '2026-09-02T00:00:00.000Z' }] } },
+            { metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [] } },
+        ])
+        await new Promise((resolve) => setTimeout(resolve, 0)) // il boot del mount NUOVO (timer 0ms, già tacitato da talos-embedded) viene assorbito
+
+        const chiamateDopoIlBoot = fetchMock.mock.calls.length
+        // Il risveglio del backoff (1s dal primo tentativo) cade DENTRO questa attesa: senza la cura,
+        // la catena del runtime VECCHIO rilanciava apiGet QUI (fetch fantasma) e, trovando la sessione
+        // nell'elenco, passava da passaASessione: scriveva nel DOM del mount NUOVO e apriva la SUA
+        // EventSource — esattamente la firma dei due rossi di CI.
+        await new Promise((resolve) => setTimeout(resolve, 1100)) // 1s di backoff + margine
+
+        expect(fetchMock.mock.calls.length).toBe(chiamateDopoIlBoot) // ZERO fetch nuove al risveglio
+        expect(FakeEventSource.instances).toHaveLength(0) // e nessuna EventSource fantasma sul mount nuovo
     })
 })

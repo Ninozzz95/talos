@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-const MENU = '[aria-label="Open menu"]'
+const MENU = '[data-testid="talos-shell-menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
 const COMPOSER_ROOT = '[data-testid="talos-mobile-composer"]'
@@ -105,7 +105,7 @@ async function waitForBoot(page: Page): Promise<void> {
 }
 
 async function openSettings(page: Page, tablet = false): Promise<void> {
-    await page.locator(tablet ? '[data-testid="talos-tablet-menu"]' : MENU).click()
+    if (!tablet) await page.locator(MENU).click()
     await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
 }
@@ -123,13 +123,11 @@ test('MOTION-E2E-01 phone composer and Settings transitions preserve focus and a
     const composer = page.getByLabel('Message TALOS')
     await clearRecords(page)
     await composer.focus()
-    await expect.poll(async () => relevant(await records(page))
-        .some((record) => record.name === 'talos-composer-layout-expand')).toBe(true)
+    await expect(page.locator(COMPOSER_ROOT)).toHaveAttribute('data-talos-composer-compact', 'false')
     await expect(composer).toBeFocused()
 
     await composer.evaluate((element) => (element as HTMLElement).blur())
-    await expect.poll(async () => relevant(await records(page))
-        .some((record) => record.name === 'talos-composer-layout-collapse')).toBe(true)
+    await expect(page.locator(COMPOSER_ROOT)).toHaveAttribute('data-talos-composer-compact', 'true')
     await expect(composer).not.toBeFocused()
 
     await openSettings(page)

@@ -200,3 +200,55 @@ describe('C45-RED-19I tasks write tools', () => {
         expect(result.evidence).toMatchObject({ error_code: 'TALOS_TASK_DELETE_FAILED' })
     })
 })
+
+/*
+ * ⭐⭐⭐ LA POSTCONDIZIONE su `tasks_update` — A5.
+ *
+ * ⛔ La descrizione del tool promette «Send only the fields that change. What
+ * you omit stays as it is.» Una verifica che pretendesse anche i campi omessi
+ * smentirebbe la promessa invece dell'effetto: e la stessa regola gia scritta
+ * per le note, e vale qui per la stessa ragione.
+ */
+describe('la postcondizione di tasks_update', () => {
+    const riga = (patch: Record<string, unknown> = {}) => ({
+        id: 't1', title: 'Vecchio', status: 'todo', priority: 'normal', description: null, ...patch,
+    })
+
+    it('⭐ se il titolo e cambiato davvero, la verifica regge', async () => {
+        const { update } = toolsOver({
+            create: vi.fn(), setStatus: vi.fn(), update: vi.fn(), remove: vi.fn(),
+            find: vi.fn(async () => riga({ title: 'Nuovo' })),
+        } as never)
+        const verdetto = await update.verify!({ id: 't1', title: 'Nuovo' } as never, null, {} as never)
+        expect(verdetto).toEqual({ held: true })
+    })
+
+    it('⛔⛔ se il titolo e ancora quello vecchio, verify BOCCIA', async () => {
+        const { update } = toolsOver({
+            create: vi.fn(), setStatus: vi.fn(), update: vi.fn(), remove: vi.fn(),
+            find: vi.fn(async () => riga()),
+        } as never)
+        const verdetto = await update.verify!({ id: 't1', title: 'Nuovo' } as never, null, {} as never)
+        expect(verdetto.held).toBe(false)
+    })
+
+    it('⛔ un campo NON mandato non fa fallire la verifica', async () => {
+        const { update } = toolsOver({
+            create: vi.fn(), setStatus: vi.fn(), update: vi.fn(), remove: vi.fn(),
+            find: vi.fn(async () => riga({ priority: 'high' })),
+        } as never)
+        // Si cambia solo la priorita: il titolo resta «Vecchio», e va bene cosi.
+        const verdetto = await update.verify!({ id: 't1', priority: 'high' } as never, null, {} as never)
+        expect(verdetto.held).toBe(true)
+    })
+
+    it('⛔⛔ e se l attivita e sparita, la verifica lo dice invece di tacere', async () => {
+        const { update } = toolsOver({
+            create: vi.fn(), setStatus: vi.fn(), update: vi.fn(), remove: vi.fn(),
+            find: vi.fn(async () => null),
+        } as never)
+        const verdetto = await update.verify!({ id: 't1', title: 'Nuovo' } as never, null, {} as never)
+        expect(verdetto.held).toBe(false)
+    })
+})
+

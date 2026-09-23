@@ -91,9 +91,29 @@ describe('provenienza dei binari del ponte ADB', () => {
         expect(pacchetti.size).toBe(8)
     })
 
-    it('gli URL puntano tutti al deposito Termux, e nessun altrove', () => {
-        for (const [pacchetto, riga] of pacchettiDichiarati()) {
-            expect(riga.url, pacchetto).toMatch(/^https:\/\/packages\.termux\.dev\/apt\/termux-main\//)
+    it('gli URL puntano alla sola release di servizio, e ogni pacchetto conserva la sua origine Termux', () => {
+        // ⛔ 23/09/2026 — fino al 22/09 la regola era «solo packages.termux.dev». Ma il pool
+        // di Termux tiene SOLO l'ultima versione: il 21/09 è arrivato android-tools 37.0.0,
+        // la revisione `-1` è sparita (404) e il job android della CI è rimasto rosso dal
+        // 22/09 (termux-packages, discussione #13356: per le versioni vecchie i maintainer
+        // rimandano a TUR). Gli otto .deb IDENTICI stanno negli asset della release
+        // `deps-ponte-adb-2026-09-23` del repository pubblico: asset e non storia git, quindi
+        // la ragione per cui i binari non stanno nella repo resta intatta, e l'impronta la
+        // verifica il build come prima.
+        // ⇒ Si accetta QUELLA release e nessun altro indirizzo, e l'origine Termux di ogni
+        // pacchetto resta scritta nella scheda: chiunque può rifare la verifica da zero.
+        const copia = /^https:\/\/github\.com\/Ninozzz95\/talos\/releases\/download\/deps-ponte-adb-2026-09-23\/[^/]+\.deb$/
+        const origini = new Map<string, string>()
+        for (const riga of TESTO.split('\n')) {
+            const t = /^\|\s*(\S+)\s*\|\s*\[[^\]]+\]\((https:\/\/packages\.termux\.dev\/apt\/termux-main\/\S+\.deb)\)\s*\|$/
+                .exec(riga.trim())
+            if (t) origini.set(t[1], t[2])
+        }
+        const pacchetti = pacchettiDichiarati()
+        expect(pacchetti.size).toBe(8)
+        for (const [pacchetto, riga] of pacchetti) {
+            expect(riga.url, pacchetto).toMatch(copia)
+            expect(origini.get(pacchetto), `origine Termux di ${pacchetto}`).toBeDefined()
         }
     })
 

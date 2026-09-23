@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
 import {
@@ -234,5 +234,75 @@ describe('the row actions button', () => {
         await wrapper.vm.$nextTick()
         expect(menu()).toBeNull()
         expect(talosOverlayBackActive()).toBe(false)
+    })
+})
+
+/**
+ * ⛔ Pad, 14/09, 360 px (foto dell'owner dal telefono): il ⋯ della scheda di SINISTRA aveva il bordo destro a
+ * 167 e il pannello, largo 176 e ancorato a destra, finiva col bordo sinistro a −9. jsdom non misura niente:
+ * le misure sono quelle del Pad, finte qui.
+ */
+describe('tiene il pannello dentro lo schermo', () => {
+    const larghezzaOriginale = window.innerWidth
+    const altezzaOriginale = window.innerHeight
+    afterEach(() => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: larghezzaOriginale })
+        Object.defineProperty(window, 'innerHeight', { configurable: true, value: altezzaOriginale })
+        vi.restoreAllMocks()
+    })
+
+    function misure(bordoDestroPulsante: number, top = 400) {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 })
+        vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+            const rett = (left: number, width: number, top: number, height: number) => ({ left, width, top, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect
+            if (this.getAttribute('data-testid') === 'talos-row-actions-menu') return rett(0, 172, 0, 200)
+            if (this.tagName === 'BUTTON' && this.getAttribute('aria-haspopup') === 'menu') return rett(bordoDestroPulsante - 44, 44, top, 48)
+            return rett(0, 0, 0, 0)
+        })
+        // The entrance scales the painted rectangle; the final layout is wider.
+        vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+            return this.getAttribute('data-testid') === 'talos-row-actions-menu' ? 176 : 0
+        })
+    }
+
+    it('MENU-BOUNDS-03 keeps the final menu inside the viewport while its entrance is scaled', async () => {
+        misure(167)
+        const wrapper = open()
+        await wrapper.get('button').trigger('click')
+        await wrapper.vm.$nextTick()
+        const destra = parseFloat((menu() as HTMLElement).style.right)
+        // 360 − destra − 176 = bordo sinistro: almeno i 6 px di margine, mai sotto zero.
+        expect(360 - destra - 176).toBeGreaterThanOrEqual(6)
+    })
+
+    it('MENU-BOUNDS-04 flips using the measured height when real rows exceed the estimate', async () => {
+        misure(167, 540)
+        Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+        vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(211)
+        const wrapper = open()
+        await wrapper.get('button').trigger('click')
+        await wrapper.vm.$nextTick()
+        const top = parseFloat((menu() as HTMLElement).style.top)
+        expect(top + 211).toBeLessThanOrEqual(794)
+        expect(top + 211).toBeLessThanOrEqual(540 - 6)
+    })
+
+    it('MENU-BOUNDS-05 makes intrinsic menu width independent of the anchor position', async () => {
+        misure(167)
+        const wrapper = open()
+        await wrapper.get('button').trigger('click')
+        await wrapper.vm.$nextTick()
+        // CSS width:auto shrinks to available space, then grows again after the
+        // horizontal shift. max-content keeps the measured width valid.
+        expect(menu()!.classList.contains('w-max')).toBe(true)
+        expect(menu()!.classList.contains('overflow-y-auto')).toBe(true)
+    })
+
+    it('al contrario: col ⋯ vicino al bordo destro il pannello resta ancorato al pulsante', async () => {
+        misure(340)
+        const wrapper = open()
+        await wrapper.get('button').trigger('click')
+        await wrapper.vm.$nextTick()
+        expect(parseFloat((menu() as HTMLElement).style.right)).toBe(20)
     })
 })

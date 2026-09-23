@@ -114,3 +114,42 @@ describe('talosAdvancePerformanceGovernor — isteresi asimmetrica', () => {
         expect(stato.state).toBe('balanced')
     })
 })
+
+
+/**
+ * ⛔⛔ IL CANCELLO CHE TIENE `burst` IRRAGGIUNGIBILE.
+ *
+ * Non è una prova di ciò che il codice fa: è una prova di ciò che NON deve
+ * cominciare a fare da solo. Il banco del 2026-09-10 sul OnePlus Pad 3 ha
+ * misurato che i segnali letti da questo modulo sono ciechi al derating vero
+ * — `Thermal Status: 0` in 35 celle su 36 mentre i core prime scendevano da
+ * 2.438 a 1.017 MHz — quindi una soglia d'ingresso costruita su di essi
+ * scatterebbe nel momento sbagliato.
+ *
+ * ⇒ Se un giorno questa prova diventa rossa, qualcuno ha reso `burst`
+ * raggiungibile: deve aver aggiunto prima il segnale che manca (la frequenza
+ * vera, o il throughput osservato che cala a parità di lavoro), e allora
+ * questa prova va riscritta insieme a quello — non cancellata perché dà
+ * fastidio.
+ */
+describe('burst resta irraggiungibile, e c è una misura che lo tiene tale', () => {
+    it('nemmeno cento campioni perfetti di fila lo fanno scattare', () => {
+        let tracker: TalosPerformanceGovernorTracker = TALOS_PERFORMANCE_GOVERNOR_INITIAL
+        for (let giro = 0; giro < 100; giro += 1) {
+            tracker = talosAdvancePerformanceGovernor(tracker, TRANQUILLO)
+            expect(tracker.state).not.toBe('burst')
+        }
+        expect(tracker.state).toBe('balanced')
+    })
+
+    it('nemmeno partendo da constrained e uscendone', () => {
+        let tracker: TalosPerformanceGovernorTracker = {
+            state: 'constrained', consecutiveBad: 9, consecutiveGood: 0,
+        }
+        for (let giro = 0; giro < 50; giro += 1) {
+            tracker = talosAdvancePerformanceGovernor(tracker, TRANQUILLO)
+            expect(tracker.state).not.toBe('burst')
+        }
+        expect(tracker.state).toBe('balanced')
+    })
+})

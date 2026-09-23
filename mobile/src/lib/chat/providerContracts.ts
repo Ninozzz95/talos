@@ -79,6 +79,12 @@ export interface TalosMobileCompletionResult {
     model: string
     finishReason?: string | null
     usage?: Record<string, number> | null
+    /**
+     * L'id che il fornitore da' a QUESTA chiamata (OpenRouter `gen-…`, Gemini
+     * `responseId`). Owner 2026-09-13, «Dettagli esecuzione»: serve a ritrovare la
+     * chiamata e, per OpenRouter, a chiederne il costo se lo streaming non l'ha portato.
+     */
+    callId?: string | null
     /** Defect #5: the model's own reasoning, when the provider streams it. */
     reasoning?: string
     /**

@@ -136,7 +136,9 @@ export function useTalosSpeech() {
             voiceUri: voice.voice_uri,
             systemRate: voice.rate,
             systemPitch: voice.pitch,
-            personalRate: voice.personal_rate,
+            // Owner 12/09: la velocita' della voce personale si regola con la
+            // STESSA slider delle voci sintetiche («Velocita'»), non con un valore a parte.
+            personalRate: voice.rate,
             personalPitch: voice.personal_pitch,
         })
     }

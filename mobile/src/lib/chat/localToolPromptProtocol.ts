@@ -123,6 +123,98 @@ function toolCallTranscript(
 }
 
 /**
+ * Il nome con cui il modello chiede la forma di uno strumento.
+ *
+ * ⛔ È una COPIA deliberata di `TALOS_DETTAGLI_STRUMENTO`
+ * (`@/lib/tools/catalogoCompatto`), non un import: `catalogoCompatto` è un
+ * modulo pesante che `chatController.ts` carica **a richiesta**
+ * (`await import`) proprio per tenerlo fuori dal grafo statico d'avvio, e
+ * questo file invece è importato staticamente da `localAdapter.ts`. Un import
+ * qui ce lo rimetterebbe dentro.
+ *
+ * ⇒ La copia non può scollarsi in silenzio: un test in
+ * `tests/unit/chat/prefissoStabile.test.ts` importa entrambi e pretende che
+ * siano la stessa stringa.
+ */
+const TALOS_NOME_DETTAGLI_STRUMENTO = 'tool_details'
+
+function nomeDiUnAttrezzoDiFilo(tool: unknown): string | null {
+    const funzione = (tool as { function?: { name?: unknown } } | null)?.function
+    return typeof funzione?.name === 'string' ? funzione.name : null
+}
+
+/** I nomi che il modello ha già chiesto, nell'ordine in cui li ha chiesti. */
+function nomiSvelatiNellaStoria(
+    turns: ReadonlyArray<TalosLocalEngineTurn>,
+): readonly string[] {
+    const ordine: string[] = []
+    for (const turn of turns) {
+        if (turn.role !== 'assistant' || !turn.tool_calls?.length) continue
+        for (const call of turn.tool_calls) {
+            if (call.function.name !== TALOS_NOME_DETTAGLI_STRUMENTO) continue
+            const argomenti = jsonValue(call.function.arguments)
+            const nomi = (argomenti as { names?: unknown } | null)?.names
+            if (!Array.isArray(nomi)) continue
+            for (const nome of nomi) {
+                if (typeof nome === 'string' && !ordine.includes(nome)) ordine.push(nome)
+            }
+        }
+    }
+    return ordine
+}
+
+/**
+ * ⛔⛔⛔ PREFISSO-STABILE-02 — gli attrezzi svelati si INSERIVANO in mezzo.
+ *
+ * L'elenco degli attrezzi esposti nasce come
+ * `[tool_details, ...offerti.filter(svelati)]` (`chatController.ts`): l'ordine
+ * è quello dell'offerta, che è fisso, quindi un attrezzo svelato dopo può
+ * finire **in mezzo** a due che c'erano già. Quel JSON sta in fondo al turno
+ * di sistema, cioè davanti a tutta la conversazione: un byte diverso lì dentro
+ * e tutto ciò che segue si ri-prefilla.
+ *
+ * MISURATO il 2026-09-10 (rapporto `TACCUINO-PROMPT-LOCALE`): fra il blocco
+ * attrezzi di un messaggio e quello del successivo restava prefisso comune
+ * solo il **72,3%**.
+ *
+ * ⇒ La cura è la regola in sola aggiunta della ricerca del 2026-09-10 (Modular
+ * / LLM Inference Handbook, «Prefix caching»: il contenuto volatile va in
+ * coda, e ciò che c'era prima non si riscrive). Chi c'era resta dov'era, chi
+ * arriva si **accoda**, nell'ordine in cui il modello l'ha chiesto — un ordine
+ * che la conversazione stessa porta con sé, nelle chiamate a `tool_details`,
+ * quindi non serve nessuno stato di sessione da tenere allineato.
+ *
+ * ⛔ Si applica UNA volta sola, in `localAdapter.ts`, e l'array riordinato va
+ * a **entrambi** i chiamanti — la generazione vera e il prefisso da congelare
+ * (CR-09: lo stesso projector, gli stessi identici argomenti). Se il riordino
+ * vivesse qui dentro, il testo congelato — che si proietta su una
+ * conversazione finta senza chiamate — uscirebbe in un ordine diverso da
+ * quello della generazione, e il prefisso su disco smetterebbe di combaciare.
+ *
+ * ⛔ Se qualcosa non torna — un attrezzo senza nome, una forma inattesa — si
+ * rende l'ordine di partenza: un prefisso peggiore è un costo, un elenco
+ * mutilato è un guasto.
+ */
+export function talosAttrezziInOrdineDiRivelazione(
+    tools: readonly unknown[] | undefined,
+    turns: ReadonlyArray<TalosLocalEngineTurn>,
+): readonly unknown[] | undefined {
+    if (!tools?.length) return tools
+    const svelati = nomiSvelatiNellaStoria(turns)
+    if (!svelati.length) return tools
+
+    const base = tools.filter((tool) => {
+        const nome = nomeDiUnAttrezzoDiFilo(tool)
+        return nome === null || !svelati.includes(nome)
+    })
+    const coda = svelati
+        .map((nome) => tools.find((tool) => nomeDiUnAttrezzoDiFilo(tool) === nome))
+        .filter((tool): tool is unknown => tool !== undefined)
+
+    return base.length + coda.length === tools.length ? [...base, ...coda] : tools
+}
+
+/**
  * ⛔⛔ LINGUA-DOPO-IL-TOOL-01 — perché il promemoria della lingua sta QUI.
  *
  * MISURATO sul Pad il 2026-08-19, `gemma-3-4b-it-Q4_K_M`:
@@ -263,12 +355,71 @@ function projectPromptJson(
     /*
      * ⛔ ANNUNCIA-INVECE-DI-CHIAMARE-01 — dopo la domanda, non prima.
      *
-     * Solo sull'ULTIMO turno utente: è quello che il modello legge per ultimo.
-     * Se non ce n'è nessuno — una trascrizione parziale che finisce con
-     * l'assistente — non si inventa un turno per ospitarlo.
+     * Il promemoria resta l'ultima cosa che il modello legge prima di
+     * generare: quella misura del 2026-08-20 non si tocca. Cambia solo che
+     * NON si toglie più dai turni precedenti — vedi qui sotto.
+     */
+    /*
+     * ⛔⛔⛔ PREFISSO-STABILE-01 — il promemoria MIGRAVA, e ri-prefillava.
+     *
+     * MISURATO il 2026-09-10 col tokenizer ufficiale di Gemma 3
+     * (`@lenml/tokenizer-gemma3`) e di Qwen 3, sulla proiezione vera di una
+     * conversazione di quattro messaggi con un giro di attrezzi in mezzo.
+     *
+     * Il promemoria stava sul SOLO ultimo turno utente. Conseguenza: lo stesso
+     * turno n. 1 veniva reso in **due modi diversi** — con il promemoria
+     * quando era l'ultimo, senza quando non lo era più. Il prefisso comune con
+     * la KV che il motore ha ancora in memoria si spezza esattamente lì, e
+     * tutto ciò che segue — compresa la risposta appena generata, che nella
+     * cache c'era già ed era gratis — va ri-prefillato.
+     *
+     * Misura, prefisso comune fra un prompt e il successivo (gemma3):
+     *
+     *   P2→P3  2.981/3.175 (93,9%)   194 token ri-prefillati
+     *   P3→P4  3.099/3.255 (95,2%)   156
+     *   P4→P5  3.179/3.349 (94,9%)   170
+     *
+     * e la divergenza cadeva **76 token prima della fine del prompt
+     * precedente**, cioè esattamente sul promemoria (70 token) che spariva.
+     * Con risposte vere da 300-500 token il conto sale con loro, perché il
+     * ri-prefill è «la risposta appena generata + la domanda nuova».
+     *
+     * ⇒ La cura è la regola dello stato dell'arte, e la ricerca web del
+     * 2026-09-10 la dice in tre righe: la storia si costruisce **in sola
+     * aggiunta**, e un turno già mandato non si riscrive mai. Il promemoria
+     * quindi resta attaccato a OGNI turno utente, non solo all'ultimo: è
+     * un'aggiunta a ciò che già c'era, mai una rimozione — la posizione che il
+     * 2026-08-20 aveva misurato buona (ultimo posto prima della generazione)
+     * ce l'ha ancora, identica.
+     *
+     * ⛔ Le tre strade scartate, e perché:
+     *  - **spostarlo nel turno di sistema**: è precisamente ciò che il
+     *    2026-08-20 ha misurato NON funzionare (annuncia invece di chiamare);
+     *  - **metterlo in un turno a sé, in coda**: due turni utente di fila, e
+     *    i template Gemma sollevano `Conversation roles must alternate`
+     *    ([[GEMMA-RUOLI-ALTERNATI-01]]). `alternati()` in `localAdapter.ts`
+     *    li rifonderebbe con `\n\n`, cioè in questo stesso identico testo;
+     *  - **toglierlo e basta**: non è una cura, è azzoppare le risposte per
+     *    far tornare un numero.
+     *
+     * ⛔ Il prezzo dichiarato, non nascosto: +70 token per turno utente. Sono
+     * token che entrano UNA volta nel prefisso e poi restano in cache; il
+     * costo residuo è una KV più grande, che va misurato sul Pad.
+     *
+     * Fonti (lette il 2026-09-10):
+     *  - Modular / LLM Inference Handbook, «Prefix caching»
+     *    (handbook.modular.com/inference-optimization/prefix-caching):
+     *    ordinare per stabilità, tenere il volatile in coda, preferire una
+     *    storia in sola aggiunta e non riscrivere i messaggi precedenti.
+     *  - ggml-org/llama.cpp, discussion #13606 «KV cache reuse with
+     *    llama-server»: il riuso è per-slot e si ferma al PRIMO token che
+     *    diverge.
+     *  - Pydantic AI, «System reminders» (pydantic.dev/docs/ai/harness/
+     *    system-reminders/): i promemoria non si iniettano nel sistema, e la
+     *    storia durevole si riproduce identica byte per byte.
      */
     if (tools?.length) {
-        for (let i = projected.length - 1; i >= 0; i -= 1) {
+        for (let i = 0; i < projected.length; i += 1) {
             const turno = projected[i]!
             if (turno.role !== 'user') continue
             projected[i] = {
@@ -277,7 +428,6 @@ function projectPromptJson(
                     ? `${turno.content}\n\n${PROMEMORIA_DOPO_LA_DOMANDA}`
                     : PROMEMORIA_DOPO_LA_DOMANDA,
             }
-            break
         }
     }
 

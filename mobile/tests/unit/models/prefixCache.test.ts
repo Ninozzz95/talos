@@ -28,7 +28,6 @@ const BASE: TalosPrefixIdentity = {
     modelPath: '/storage/emulated/0/Android/data/ai.talos/files/models/unsloth/Qwen3-1.7B-GGUF/main/Qwen3-1.7B-Q4_K_M.gguf',
     modelBytes: 1_107_409_472,
     modelModifiedAt: 1_786_000_000_000,
-    contextTokens: 16_384,
     kvCacheType: 'f16',
     engineBuild: 'b10218',
     prefixText: 'You are TALOS.\n[38 tool schemas…]',
@@ -44,7 +43,6 @@ describe('l’impronta distingue OGNI campo che la invaliderebbe', () => {
         { campo: 'modelPath', muta: (id) => ({ ...id, modelPath: id.modelPath + '.copia' }) },
         { campo: 'modelBytes', muta: (id) => ({ ...id, modelBytes: id.modelBytes + 1 }) },
         { campo: 'modelModifiedAt', muta: (id) => ({ ...id, modelModifiedAt: id.modelModifiedAt + 1 }) },
-        { campo: 'contextTokens', muta: (id) => ({ ...id, contextTokens: id.contextTokens * 2 }) },
         { campo: 'kvCacheType', muta: (id) => ({ ...id, kvCacheType: 'q8_0' }) },
         { campo: 'engineBuild', muta: (id) => ({ ...id, engineBuild: 'b10219' }) },
         { campo: 'prefixText', muta: (id) => ({ ...id, prefixText: id.prefixText + ' ' }) },
@@ -247,5 +245,34 @@ describe('quanto occupa, e quando NON vale la pena', () => {
                 tokens, kvBytesPerToken: 114_688, freeBytes: 3e9,
             }).bytes).toBe(114_688 * tokens)
         }
+    })
+})
+
+/**
+ * ⭐ D-51 — IL CONTESTO NON È PIÙ NELL'IMPRONTA, di proposito.
+ *
+ * Fino all'11/09/2026 `contextTokens` faceva parte del nome del file: la
+ * politica del contesto saliva da 4096 a 7168 con la conversazione, il nome
+ * cambiava, e il prefisso congelato spariva — un invio ripagava tutto il
+ * prefill («5 riusati su 2.941», ledger §35). Il motore non lo chiede: il
+ * sottomodulo pinnato controlla che i token ci STIANO, non che la capienza
+ * combaci (`state_seq_load_file`, `n_token_count > n_token_capacity` → 0), e
+ * upstream (#15569) non elenca `n_ctx` fra i parametri da far combaciare.
+ *
+ * ⛔ Questa prova legge il sorgente perché il campo non esiste più nel tipo:
+ * se qualcuno lo rimettesse nell'impronta «per prudenza», i test qui sopra
+ * resterebbero verdi e il prefill tornerebbe a ripagarsi in silenzio.
+ */
+describe('D-51 — il contesto allocato non entra nel nome del file', () => {
+    it('l’impronta non legge nessun contextTokens', async () => {
+        const { readFileSync } = await import('node:fs')
+        const { resolve } = await import('node:path')
+        const sorgente = readFileSync(resolve(process.cwd(), 'src/lib/models/prefixCache.ts'), 'utf8')
+        const impronta = sorgente.slice(sorgente.indexOf('export function talosPrefixFingerprint'))
+            .slice(0, 900)
+        expect(impronta).not.toContain('contextTokens')
+        // E la fonte del perché è citata, con la riga del motore che lo prova.
+        expect(sorgente).toContain('n_token_count >')
+        expect(sorgente).toContain('#15569')
     })
 })

@@ -15,6 +15,7 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push: mockState.routerPush })
 vi.mock('@/stores/chatController', () => ({ useChatController: () => mockState.controller }))
 
 import ChatsScreen from '@/screens/ChatsScreen.vue'
+import { __resetToastsForTests, useTalosMobileToasts } from '@/stores/toasts'
 
 function makeController() {
     const sessions = reactive([
@@ -22,6 +23,7 @@ function makeController() {
         { id: 's2', title: 'Streaming design', updated_at: '2026-07-23T09:00:00.000Z', metadata: {} as Record<string, unknown> },
     ])
     return {
+        searchMessages: vi.fn().mockResolvedValue([]),
         chat: {
             sessions,
             /**
@@ -64,6 +66,7 @@ function makeController() {
 }
 
 beforeEach(() => {
+    __resetToastsForTests()
     mockState.routerPush.mockReset()
     mockState.controller = makeController()
     document.body.innerHTML = ''
@@ -116,6 +119,49 @@ function menuItem(label: string): HTMLButtonElement {
 }
 
 describe('ChatsScreen (F3-T3)', () => {
+    it('B12 finds message-only matches, shows excerpts and preserves order and Archived', async () => {
+        const controller = mockState.controller as ReturnType<typeof makeController>
+        controller.chat.sessions.push({ id: 'archived', title: 'Old trip', updated_at: '2026-07-22T08:00:00.000Z', metadata: { archived: true } })
+        controller.searchMessages.mockResolvedValue([
+            { sessionId: 's1', messageId: 'm1', excerpt: 'Il treno per Catania.' },
+            { sessionId: 'archived', messageId: 'm3', excerpt: 'Una sera a Catania.' },
+            { sessionId: 's2', messageId: 'm2', excerpt: 'Partiamo da Catania.' },
+        ])
+        const wrapper = mountScreen()
+        await wrapper.get('[data-testid="talos-chats-search"]').setValue('Catania')
+        await flushPromises()
+        const rows = wrapper.findAll('[data-testid="talos-chats-row"]')
+        expect(rows.map((row) => row.text())).toEqual([
+            expect.stringContaining('Streaming design'), expect.stringContaining('Pancake recipe'),
+        ])
+        expect(rows[0].get('[data-testid="talos-chat-search-excerpt"]').text()).toBe('Partiamo da Catania.')
+        await wrapper.get('[data-testid="talos-chats-archived-toggle"]').trigger('click')
+        expect(wrapper.get('[data-testid="talos-chats-archived-row"]').text()).toContain('Una sera a Catania.')
+        await rows[0].get('[data-testid="talos-chats-open"]').trigger('click')
+        expect(controller.selectSession).toHaveBeenCalledWith('s2')
+        await wrapper.get('[data-testid="talos-chats-search"]').setValue('')
+        expect(wrapper.find('[data-testid="talos-chat-search-excerpt"]').exists()).toBe(false)
+        wrapper.unmount()
+    })
+    it('B12 ignores late results from the previous query and explains a failed read', async () => {
+        const controller = mockState.controller as ReturnType<typeof makeController>
+        let finish!: (hits: unknown[]) => void
+        controller.searchMessages.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+        const wrapper = mountScreen()
+        const field = wrapper.get('[data-testid="talos-chats-search"]')
+        await field.setValue('old')
+        await field.setValue('absent')
+        await flushPromises()
+        finish([{ sessionId: 's1', messageId: 'm1', excerpt: 'old' }])
+        await flushPromises()
+        expect(wrapper.findAll('[data-testid="talos-chats-row"]')).toHaveLength(0)
+        controller.searchMessages.mockRejectedValueOnce(new Error('SQLITE_INTERNAL_DETAILS'))
+        await field.setValue('failed')
+        await flushPromises()
+        expect(wrapper.get('[role="alert"]').text()).toContain('Messages could not be searched')
+        expect(wrapper.text()).not.toContain('SQLITE_INTERNAL_DETAILS')
+        wrapper.unmount()
+    })
     it('lists every session with the active one marked, most recent first', () => {
         const wrapper = mountScreen()
         const rows = wrapper.findAll('[data-testid="talos-chats-row"]')
@@ -209,13 +255,7 @@ describe('ChatsScreen embedded panel mode (F6)', () => {
 })
 
 describe('il gesto e il ⋮ — allineati alla Ricerca (2026-08-04)', () => {
-    it('il tieni-premuto ACCENDE la selezione; il dito che scorre no', async () => {
-        /**
-         * Decisione ribaltata. La ricerca sulle azioni di riga (2026-08-03)
-         * dice che ⋮ e' la via primaria per agire su UNA e il tieni-premuto e'
-         * la selezione. Qui era l'inverso, e le due liste della stessa app
-         * rispondevano in modo opposto allo stesso dito.
-         */
+    it('G02/G03 (mockup 12/09): il tieni-premuto (430 ms) e il tasto destro aprono il menu della riga; «Seleziona» accende la selezione; il dito che scorre no', async () => {
         const wrapper = mountScreen()
         // Dito che scorre: niente, era uno scorrimento della lista.
         vi.useFakeTimers()
@@ -228,11 +268,27 @@ describe('il gesto e il ⋮ — allineati alla Ricerca (2026-08-04)', () => {
             vi.useRealTimers()
         }
         expect(wrapper.find('[data-testid="talos-chats-selection-bar"]').exists()).toBe(false)
+        expect(document.querySelector('[role="menuitem"]')).toBeNull()
 
         await holdRow(wrapper, '[data-testid="talos-chats-row"]')
-        // La riga tenuta parte gia' spuntata: il dito era li' sopra.
+        // Il menu della riga, non la selezione.
+        expect(wrapper.find('[data-testid="talos-chats-selection-bar"]').exists()).toBe(false)
+        const voci = [...document.querySelectorAll('[role="menuitem"]')].map((v) => v.textContent?.trim())
+        expect(voci).toContain('Archive')
+        expect(voci).toContain('Select')
+        // «Seleziona» dal menu: la riga tenuta parte gia' spuntata.
+        menuItem('Select').click()
+        await flushPromises()
         expect(wrapper.get('[data-testid="talos-chats-selection-bar"]').text()).toContain('1')
         wrapper.unmount()
+
+        // Tasto destro: stesso menu, subito.
+        const w2 = mountScreen()
+        const riga = w2.findAll('[data-testid="talos-chats-row"]')[0].element
+        riga.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+        await flushPromises()
+        expect([...document.querySelectorAll('[role="menuitem"]')].map((v) => v.textContent?.trim())).toContain('Archive')
+        w2.unmount()
     })
 
     it('il ⋮ e visibile senza scoprirlo, e porta le stesse azioni', async () => {
@@ -260,6 +316,41 @@ describe('il gesto e il ⋮ — allineati alla Ricerca (2026-08-04)', () => {
         expect(controller.chat.setSessionArchived).toHaveBeenCalledWith('s1', false)
         expect(wrapper.findAll('[data-testid="talos-chats-row"]')).toHaveLength(2)
         wrapper.unmount()
+    })
+
+    it('undoes archiving while the toast is visible and expires the action after eight seconds', async () => {
+        vi.useFakeTimers()
+        const wrapper = mountScreen()
+        try {
+            const controller = mockState.controller as ReturnType<typeof makeController>
+            const toasts = useTalosMobileToasts()
+            await openRowMenu(wrapper, '[data-testid="talos-chats-row"]', 1)
+            menuItem('Archive').click()
+            await flushPromises()
+            const toast = toasts.items.value[0]!
+            expect(toast.message).toBe('Chat archived')
+            expect(toast.action?.label).toBe('Undo')
+            toasts.act(toast.id)
+            await flushPromises()
+            expect(controller.chat.setSessionArchived).toHaveBeenLastCalledWith('s1', false)
+            expect(wrapper.findAll('[data-testid="talos-chats-row"]')).toHaveLength(2)
+            expect(toasts.items.value).toHaveLength(0)
+            await openRowMenu(wrapper, '[data-testid="talos-chats-row"]', 1)
+            menuItem('Archive').click()
+            await flushPromises()
+            const expired = toasts.items.value[0]!.id
+            await vi.advanceTimersByTimeAsync(7999)
+            expect(toasts.items.value).toHaveLength(1)
+            await vi.advanceTimersByTimeAsync(1)
+            expect(toasts.items.value).toHaveLength(0)
+            controller.chat.setSessionArchived.mockClear()
+            toasts.act(expired)
+            expect(controller.chat.setSessionArchived).not.toHaveBeenCalled()
+        } finally {
+            wrapper.unmount()
+            __resetToastsForTests()
+            vi.useRealTimers()
+        }
     })
 
     it('renames through the menu and keeps the dialog open on failure', async () => {

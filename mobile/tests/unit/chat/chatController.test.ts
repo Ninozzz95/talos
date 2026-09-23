@@ -24,6 +24,15 @@ import {
     talosEffectiveToolPermissions,
 } from '@/lib/tools/permissionTypes'
 import { __resetToastsForTests, useTalosMobileToasts } from '@/stores/toasts'
+/*
+ * ⛔ Precaricato apposta (14/09/2026). `send()` fa `await import('@/lib/chat/runDetails')` prima
+ * di chiamare il modello: nel prodotto e' un frammento pigro, qui la PRIMA importazione aspetta che
+ * Vite risolva e trasformi il modulo (https://vitest.dev/guide/improving-performance, letto il
+ * 2026-09-14). Nella suite intera del rilascio v0.1.34 — import a 169 s — quella attesa ha mangiato
+ * i 10 s di `vi.waitFor` in TOOL-AUTH-02, verde 3 su 3 da solo. Caricarlo qui toglie dal test il
+ * tempo di trasformazione, non un comportamento dell'app.
+ */
+import '@/lib/chat/runDetails'
 
 const webSearchRuntime = vi.hoisted(() => ({
     runTalosSearch: vi.fn(),
@@ -104,7 +113,12 @@ const localEngine = vi.hoisted(() => ({
     // P3-1 — mai atteso da `selectModel` (fire-and-forget): un mock che
     // risolve subito basta a non far esplodere il modulo mockato per
     // intero, come già capitato al primo giro di questo file.
-    talosWarmLocalModel: vi.fn(async () => undefined),
+    // ⛔ L'ESITO, non `undefined`: dal 10/09 il riscaldamento DICE com'è
+    // andata, ed è quella risposta che l'avviso a schermo legge. Un mock che
+    // tace qui rimetterebbe in piedi il silenzio che stiamo togliendo.
+    talosWarmLocalModel: vi.fn(async () => ({
+        opened: true as const, ms: 120, withoutMeasuredProfiles: false,
+    })),
 }))
 vi.mock('@/services/localEngine', () => localEngine)
 
@@ -242,7 +256,7 @@ function makeDeps() {
             debug_diagnostics: false,
         },
         search: {
-            source: null as 'tavily' | 'brave' | 'searxng' | 'custom' | null,
+            source: null as 'tavily' | 'brave' | 'searxng' | 'custom' | 'duckduckgo' | null,
             endpoint: null as string | null,
         },
         tools: {
@@ -4498,6 +4512,23 @@ describe('chatController', () => {
         expect(controller.promptEnhancement.value?.enhanced_prompt).toBe('current result')
     })
 
+    it('Fase 4: Modifica ritaglia e salva la bozza senza invocare il provider; rifiuta una chat diversa', async () => {
+        const { deps, chatRepository, request } = makeDeps()
+        const controller = createChatController(deps)
+        await controller.chat.initialize()
+        const session = await controller.chat.createSession('Modifica')
+        for (let i = 0; i < 4; i++) await chatRepository.appendMessage({
+            id: `edit-${i}`, session_id: session.id, role: i % 2 ? 'assistant' : 'user', content: `testo ${i}`,
+            state: 'persisted', created_at: new Date().toISOString(),
+        })
+        await controller.chat.selectSession(session.id)
+        await expect(controller.editUserMessage('altra-chat', 'edit-2', 'edit-3')).rejects.toThrow()
+        await controller.editUserMessage(session.id, 'edit-2', 'edit-3')
+        expect(controller.chat.messages.map(message => message.id)).toEqual(['edit-0', 'edit-1'])
+        expect(await controller.chat.loadComposerDraft()).toBe('testo 2')
+        expect(request).not.toHaveBeenCalled()
+    })
+
     it('resends and retries messages as append-only contextual turns with provenance', async () => {
         const { deps, store, request } = makeDeps()
         store.set('anthropic', 'sk-ant')
@@ -4991,6 +5022,43 @@ describe('il sondaggio GPU della 0.1.17, agganciato alla PRIMA scelta locale', (
             .toEqual({ path: '/models/local-test/smollm2-135m.gguf' })
     })
 
+    /**
+     * ⛔⛔⛔ 2026-09-10 — LA PROVA CHE MANCAVA, ed è il motivo per cui la
+     * diagnosi dei 32 secondi è costata una giornata.
+     *
+     * Questo blocco provava il SONDAGGIO alla scelta locale in sette modi
+     * diversi, e non provava in nessun modo il RISCALDAMENTO — che parte dalla
+     * stessa riga, tre righe sotto. `talosWarmLocalModel` era mockato in cima
+     * al file (per non far esplodere il modulo) e **nessuno asseriva mai su di
+     * esso**: il classico mock che tace, esattamente come il cancello semantico
+     * spento da sempre (`il-cancello-semantico-era-spento-da-sempre`).
+     *
+     * ⇒ Con questo test, staccare il riscaldamento da `selectModel` diventa
+     * ROSSO. Senza, sarebbe tornato fra un mese senza che nessuno lo vedesse —
+     * ed è precisamente il difetto che stiamo curando, non un di più.
+     */
+    it('⛔ apre il modello IN ANTICIPO alla scelta esplicita, col percorso vero', async () => {
+        const { controller } = await withLocalModelDiscovered()
+        localEngine.talosWarmLocalModel.mockClear()
+
+        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+
+        await vi.waitFor(() => expect(localEngine.talosWarmLocalModel)
+            .toHaveBeenCalledWith('/models/local-test/smollm2-135m.gguf'))
+    })
+
+    it('AL CONTRARIO — non apre niente in anticipo per un modello di rete', async () => {
+        const { deps, controller } = await withLocalModelDiscovered()
+        await deps.setKey('anthropic', 'sk-ant')
+        await controller.refreshProvider('anthropic')
+        localEngine.talosWarmLocalModel.mockClear()
+
+        await controller.selectModel('anthropic:claude-live')
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(localEngine.talosWarmLocalModel).not.toHaveBeenCalled()
+    })
+
     it('non la offre affatto per un modello remoto', async () => {
         const { deps, controller } = await withLocalModelDiscovered()
         await deps.setKey('anthropic', 'sk-ant')
@@ -5079,4 +5147,35 @@ describe('il sondaggio GPU della 0.1.17, agganciato alla PRIMA scelta locale', (
     // `talosRunLocalEngineProbeAndEnsureGranted`, provato per conto suo in
     // `tests/unit/lib/localEngineProbeRun.test.ts`. Vedi il commento su
     // `decideLocalEngineProbeConsent` in `chatController.ts`.
+})
+
+/*
+ * D-M-1 (12/09, MISURATO sul Pad): una chat risposta da GLM si riapriva su
+ * «Sakana: Fugu Max» — `persistSelectionAfterProjectionChange` scriveva nella
+ * sessione e nei predefiniti anche un RIPIEGO. Stessa forma del difetto del
+ * 13/08 su composer_model, un'altra porta.
+ */
+describe('D-M-1 — un ripiego non si scrive nella sessione né nei predefiniti', () => {
+    it('nascosto il modello scelto, il ripiego resta a schermo ma la sessione tiene la scelta; riapparso, torna da solo', async () => {
+        const { deps, store, settings } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        store.set('gemini', 'gemini-key')
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.newSession()
+        await controller.selectModel('anthropic:claude-live')
+        expect(controller.chat.activeSession.value?.active_model_profile_id).toBe('anthropic:claude-live')
+        expect(settings.state.composer_defaults.model_profile_id).toBe('anthropic:claude-live')
+
+        await controller.setModelVisibility('anthropic:claude-live', false)
+        // Il ripiego c'è, ed è giusto che ci sia.
+        expect(controller.selectedModelId.value).toBe('gemini:gemini-live')
+        // ⛔ Ma non è finito né nella sessione né nei predefiniti.
+        expect(controller.chat.activeSession.value?.active_model_profile_id).toBe('anthropic:claude-live')
+        expect(settings.state.composer_defaults.model_profile_id).toBe('anthropic:claude-live')
+
+        // Al contrario: riapparso il modello scelto, torna da solo.
+        await controller.setModelVisibility('anthropic:claude-live', true)
+        expect(controller.selectedModelId.value).toBe('anthropic:claude-live')
+    })
 })

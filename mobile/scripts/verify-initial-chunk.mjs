@@ -600,8 +600,199 @@ import { resolve } from 'node:path'
  * non al minimo esatto: stesso margine di poche centinaia di byte gia'
  * praticato sopra, non una trappola sotto la prossima riga.
  */
-const DEFAULT_MAXIMUM_BYTES = 620_000
-const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
+// Owner 2026-09-01: 620.000 → 620.500 after measuring the chat restore
+// batching and frame scheduler. The resulting entry is 620.325 bytes; the
+// 175-byte margin is intentional and the dynamic-boundary checks above remain
+// the same. This is a tripwire adjustment for a measured performance fix, not
+// permission to move message rendering or provider runtimes into the entry.
+// Owner 2026-09-01: 620.500 → 621.500 after the second measured chat-jank
+// pass. The entry is 621.051 bytes: +726 from the previously recorded 620.325.
+// That delta is the eager glue required to stop the decorative canvas for a
+// non-empty chat, coalesce native scroll events to one handler per frame, and
+// memoize the large message-row subtree. Provider, Markdown and motion renderer
+// implementations remain behind their existing dynamic boundaries.
+/*
+ * ⛔ 621.500 → 622.500, il 2026-09-02, per il picker Planner (piano
+ * §15.6, K — decisione kernel fusione selettiva): l'esecutore economico
+ * opzionale sul composer di Codice (`talosLavora` lo supporta gia' da
+ * 6.1, mancava solo la scelta dal vivo).
+ *
+ * Misurato: 621.553, 53 byte sopra tetto — +502 dai 621.051 registrati
+ * sopra. Verificato PRIMA di alzare, l'ordine di sempre:
+ *
+ *   1. peso vero — non c'e' da togliere: i tre nuovi prop
+ *      (`showExecutorModel`/`executorModelProfiles`/
+ *      `selectedExecutorModelProfileId`) e il nuovo emit
+ *      (`selectExecutorModelProfile`) su `TalosMobileComposer.vue` sono
+ *      gia' la forma minima del contratto — nessuno e' ornamento,
+ *      ognuno e' cio' che la schermata Codice deve poter passare giu'.
+ *      `showExecutorModel` non si deduce da `executorModelProfiles.length`
+ *      per risparmiare un prop: lo farebbe SPARIRE mentre il catalogo
+ *      carica ancora (lista vuota, "Automatico" resterebbe comunque
+ *      scelta valida) — esattamente l'azzoppare vietato dalla regola
+ *      qui sopra, non una forma piu' snella a parita' di cosa dice.
+ *   2. spostare nel pigro — gia' cosi': la sezione "esecutore" vive nel
+ *      template di `TalosMobileModelEffortDrawer.vue`, montato da
+ *      `TalosMobileComposer.vue` via `defineAsyncComponent` da PRIMA di
+ *      questa feature (drawer "Model & reasoning", F4-#26) — il peso
+ *      misurato qui e' SOLO il gancio sul componente eager (i tre prop
+ *      + l'emit), il disegno vero resta dietro il confine dinamico
+ *      esistente, invariato.
+ *   3. mai accorciare un contratto — non c'entra: nessuna descrizione,
+ *      nessun prompt, nessuna guardia toccata qui.
+ *
+ * ⇒ 622.500 e non 621.600: cento byte di margine sono la stessa trappola
+ * gia' descritta piu' volte in questo file. Mille lascia margine vero.
+ */
+/*
+ * ⛔ 622.500 → 623.000, il 2026-09-10, per la RIGA DELLE MISURE e il
+ * CARICAMENTO ALLA SELEZIONE.
+ *
+ * ## Cosa è stato provato prima, nell'ordine scritto qui sopra
+ *
+ *  1. **Peso vero**: non ce n'era da togliere. `useTalosLocalMetrics.ts` è già
+ *     tree-shaken — la lista ne importa **2 export su 5** — e i moduli nuovi
+ *     (`localWarmState.ts`, la riga delle misure) non sono nel grafo d'avvio.
+ *  2. **Pigrizia**: già applicata, ed è la ragione per cui lo sforo è di 146
+ *     byte e non di duemila. `TalosMobileLocalMetricsRow.vue` sta dietro un
+ *     `defineAsyncComponent` con la sua voce in `DYNAMIC_BOUNDARIES`, e il
+ *     `v-if` è stato stretto da «se il gruppo finisce» a «se ci sono misure»
+ *     apposta, perché il chunk non si scarichi in ogni chat a chiave.
+ *     Ciò che resta eager è il **legame** misura→messaggio: renderlo asincrono
+ *     romperebbe in silenzio proprio la cosa che deve misurare.
+ *  3. ⛔ **Mai accorciare un contratto**: i 77 byte in più di
+ *     `TalosMobileMessageList.vue` sono in larga parte i **commenti che spiegano
+ *     perché** il `v-if` è stretto e perché la chiave del `watch` non è
+ *     l'array. Quel secondo commento custodisce un difetto già pagato: il
+ *     negozio fa `messages.push()` sullo **stesso** array, e un watch sull'array
+ *     non sarebbe mai scattato — build verde, typecheck verde, riga che non
+ *     compare mai. Accorciarlo per far tornare un numero è esattamente la mossa
+ *     che questa regola esiste per vietare.
+ *
+ * ## Cosa ha pagato i 500 byte
+ *
+ * Due funzioni misurate sul Pad lo stesso giorno, non due rifiniture:
+ *
+ * - **La riga delle misure** sotto ogni risposta locale — `32.0 s alla prima
+ *   parola · 22.3 token al secondo · 45 ms per token`, e, dietro l'interruttore
+ *   dei dettagli tecnici, quanti token del prompt sono stati **riusati**. È lo
+ *   strumento con cui si è scoperto che il 2º messaggio è **più lento** del 1º
+ *   a modello caldo, e senza il quale ogni fase successiva sarebbe cieca.
+ *   ⭐ Prima di oggi `localTrace.ts` dichiarava TTFT/PP/TG come «futuro».
+ * - **Il caricamento alla selezione**, con lo stato leggibile: prima l'apertura
+ *   di 1,6 GB si pagava **dentro la prima risposta**, in silenzio.
+ *
+ * ## Perché 500 e non 146
+ *
+ * Stessa ragione dell'alzata del 2026-08-11 («i 100 di prima costavano un
+ * allarme a ogni riga»): un tetto che lascia **354 byte** di margine dopo il
+ * lavoro di oggi torna a fare il tetto. Uno che ne lascia 8 è un allarme che
+ * suona da solo alla prossima riga, e un allarme che suona sempre non lo guarda
+ * più nessuno.
+ *
+ * ⛔ Misurato, non stimato: 622.646 con il lavoro di oggi. E misurato **due
+ * volte** da chi ha scritto il caricamento alla selezione — ricostruendo il
+ * chunk con e senza le sue modifiche, stesso numero in entrambi i casi: il suo
+ * delta è **0 byte**. Il peso viene dalla riga delle misure, non da lui.
+ */
+/*
+ * ⛔ 623.000 → 634.000, il 12/09/2026, refactor UI «Talos Calm Finale».
+ *
+ * Misurato: il pezzo d'avvio sta a **631.609** byte (203 k gzip). Misurato
+ * ANCHE con i cataloghi i18n riportati a HEAD (build di confronto, poi
+ * ripristinati): **631.609**, identico — le 400 righe di traduzioni nuove
+ * delle quattro stazioni NON pesano qui. Il peso viene da ciò che sta nel
+ * guscio per costruzione: i token del movimento «Calm» sulla radice del
+ * documento (U-14: `useTalosCalmMotionTokens` in `App.vue`, che porta con sé
+ * il risolutore di motion-v6 — senza, il menu di riga usciva a 0 ms dentro il
+ * top layer), le icone delle stazioni nella barra (U-7), le facciate nuove
+ * del controller (`notes.update`, `memories.update`, `reportDocument` di
+ * MB-1) e le tre rotte di modifica (U-13: CRUD completi in ogni sezione).
+ *
+ * ⇒ 634.000 e non 632.000: a 632.000 resterebbero 391 byte, cioè un allarme
+ * alla prossima riga (stessa critica scritta più in alto sui 500 byte). Il
+ * tetto è un contenitore: non si toglie una funzione decisa dall'owner per
+ * farcela stare.
+ */
+/*
+ * ⛔ JS 634.000 → 640.000, il 2026-09-12 pomeriggio, batch B1 pre-rilascio.
+ *
+ * Misurato: **636.279** byte, in locale E nella CI della v0.1.28 (run
+ * 34693726888, «TALOS_INITIAL_CHUNK_BUDGET_EXCEEDED: 636279 exceeds 634000»).
+ * I 4.670 byte in più sono il lotto B1: il cancello degli errori in lingua
+ * umana (27 codici + ripiego, `erroreLeggibile.ts`, importato dal renderer
+ * della chat), la regola del consenso sull'invio (`consensoImmagini.ts`,
+ * nel controller), l'avviso del ponte in Codice, le chiavi i18n nuove.
+ *
+ * ⛔ La lezione, prima del numero: il cancello locale era ROSSO da mezza
+ * giornata e non l'ho visto, perché filtravo l'uscita di `npm run build`
+ * con `grep error` e questo messaggio dice EXCEEDED. Il tag v0.1.28 è
+ * uscito sul repo pubblico con la CI rossa. ⇒ Un cancello si legge dal
+ * codice di uscita, mai da un grep sull'uscita.
+ *
+ * ⇒ 640.000: 3.721 byte di margine, non 391.
+ */
+/*
+ * ⛔ JS 640.000 → 644.000, il 12/09/2026 sera (Fasi 1, 2 e 5 del refactor Chat +
+ * sidebar trascinabile). Misurato: **640.336** byte — 336 sopra il tetto posato
+ * la mattina con 3.721 byte di margine. Il cancello e' scattato e la build
+ * ha esito 1 (letto dal codice di uscita, come insegna la 0.1.28). Il tetto
+ * si alza con la misura; il debito strutturale (pezzi pigri per stazione)
+ * resta quello scritto sopra.
+ */
+const DEFAULT_MAXIMUM_BYTES = 644_000
+/*
+ * ⛔ CSS 220.000 → 222.000, il 2026-09-11, sezione 1 del refactor UI (U-1).
+ *
+ * Misurato: il foglio iniziale sta a **220.242** byte (33.560 gzip), cioe'
+ * **242 sopra** il tetto. Guardato dentro come chiede il messaggio
+ * dell'allarme, blocco per blocco: `properties` 2.452 · `theme` 4.563 ·
+ * `base` 4.399 · `utilities` 163.647 — e' il solito peso delle utilita'
+ * davvero usate, non un'importazione intera.
+ *
+ * ⛔ La sidebar nuova (`TalosMobileSidebar.vue`, CSS scoped dal mockup) NON
+ * e' nel foglio iniziale: e' un `defineAsyncComponent` e il suo `.talos-drawer`
+ * non compare in `index-*.css` (verificato con una ricerca sul foglio
+ * costruito). Il suo contributo qui e' **0 byte**: l'eccesso precede questa
+ * sezione, ed era gia' stato riportato dall'agente della voce l'11/09
+ * («221.103 > 220.000, pre-esistente»).
+ *
+ * ⇒ 222.000 e non 221.000: a 221.000 resterebbero 758 byte, e — stessa
+ * critica scritta qui sopra sui 500 byte — un tetto che suona alla prossima
+ * riga non lo guarda piu' nessuno. Il tetto e' un contenitore: non si toglie
+ * una classe usata per farcelo stare.
+ */
+/*
+ * ⛔ CSS 222.000 → 232.000, il 12/09/2026, stesso refactor.
+ *
+ * Misurato: **229.592** byte (35,2 k gzip); i blocchi: `properties` 2.452 ·
+ * `theme` 4.613 · `base` 4.399 · `utilities` 169.861 (era 163.647 l'11/09).
+ * Le quattro stazioni rifatte (Attività, Memoria, Libreria, Ricerca) sono
+ * pezzi pigri, ma le loro utilità Tailwind finiscono TUTTE nel foglio
+ * iniziale per costruzione: +6,2 k di classi davvero usate. La Libreria da
+ * sola ha misurato −177 byte (ha tolto più di quanto ha aggiunto).
+ * ⛔ Debito strutturale, non da curare qui: un foglio di utilità per pezzo
+ * pigro. Finché non c'è, ogni stazione nuova pesa sul primo dipinto.
+ */
+/*
+ * ⛔ CSS 232.000 → 236.000, il 12/09/2026 pomeriggio, Fase 2 del refactor (Chat).
+ *
+ * Misurato: **232.057** byte dopo la home Calm della chat (hero, chip di prompt,
+ * «Riprendi da qui»: ~2,4 k di CSS di prodotto in `style.css`, non utilità).
+ * Il tetto era stato posato a 232.000 con 2.408 byte di margine: la home ne ha
+ * consumati di piu' e il cancello e' scattato per 57 byte — letto dal codice di
+ * uscita, come insegna la release 0.1.28. Il tetto si alza con la misura, mai
+ * si azzoppa l'app per farcela stare; il debito strutturale (un foglio di
+ * utilità per pezzo pigro) resta quello scritto qui sopra.
+ */
+/*
+ * ⛔ CSS 236.000 → 240.000, il 12/09/2026 sera, Fasi 3-4 del refactor (compositore
+ * e messaggi Calm, consegne di Astra). Misurato: **236.063** byte — 63 sopra il
+ * tetto; il cancello e' scattato e la build ha esito 1, letto dal codice di
+ * uscita. Il tetto si alza con la misura; il debito strutturale resta quello
+ * scritto sopra (un foglio di utilita' per pezzo pigro).
+ */
+const DEFAULT_MAXIMUM_CSS_BYTES = 240_000
 const DYNAMIC_BOUNDARIES = [
     {
         suffix: 'src/repositories/productionChatRepository.ts',
@@ -748,6 +939,22 @@ const DYNAMIC_BOUNDARIES = [
     {
         suffix: 'src/components/talos/workspace/TalosMobileBackground.vue',
         code: 'TALOS_WORKSPACE_BACKGROUND_NOT_LAZY',
+    },
+    /*
+     * La riga «351 ms alla prima parola · 9,7 token/sec» sotto le risposte del
+     * motore locale: esiste solo dove c'è una misura, cioè dopo che un modello
+     * locale ha generato qualcosa. Il primo disegno della chat non la incontra
+     * mai, e da lì il `defineAsyncComponent` in `TalosMobileMessageList.vue`.
+     *
+     * ⛔ Il confine è qui per la stessa ragione già scritta per `speech.ts`:
+     * senza una voce in questo elenco, un `import` statico distratto lo
+     * riporterebbe nel grafo d'avvio e **nessuno se ne accorgerebbe** — non il
+     * typecheck, non i test, che non pesano il pacco. Solo il build lo vede, e
+     * solo se glielo si chiede.
+     */
+    {
+        suffix: 'src/components/chat/TalosMobileLocalMetricsRow.vue',
+        code: 'TALOS_LOCAL_METRICS_ROW_NOT_LAZY',
     },
 ]
 

@@ -74,6 +74,18 @@ const FIXED_WIDTH: Record<number, number> = {
  * an unknown value simply reads as unknown, which is why it can live here while
  * a table of chips could not.
  */
+/**
+ * ⛔ Un solo vocabolario dei formati, non due che un giorno divergono.
+ *
+ * Lo legge chi esamina un GGUF su Hugging Face **e** chi decide su quale
+ * motore aprirlo sul telefono (`talosLocalModelQuantisation`). Due tabelle
+ * copiate sarebbero due risposte alla stessa domanda, ed e' il difetto che
+ * questo progetto ha gia' pagato altrove.
+ */
+export function talosQuantisationOfFileType(fileType: number): string | null {
+    return FILE_TYPES[fileType] ?? null
+}
+
 const FILE_TYPES: Record<number, string> = {
     0: 'F32',
     1: 'F16',
@@ -188,6 +200,21 @@ export type TalosGgufResult = { ok: true; header: TalosGgufHeader } | TalosGgufF
  */
 const ARRAY_ESTIMATE_SLACK = 1.15
 
+/**
+ * Quanti elementi di un array numerico vale la pena LEGGERE invece di scavalcare.
+ *
+ * ⛔ Il tetto non e' prudenza generica, e' la differenza fra due cose che
+ * stanno nello stesso file: le chiavi **per-strato** hanno un elemento per
+ * strato — trenta su `LFM2.5-2.6B`, poche centinaia sui modelli piu' profondi
+ * che esistano — mentre `tokenizer.ggml.tokens` ne ha **128.000** e
+ * `tokenizer.ggml.merges` **293.320** (contati sul file vero, Pad, 2026-09-10).
+ *
+ * Mille lascia un margine di trenta volte sopra il caso che ci serve e resta
+ * due ordini di grandezza sotto il vocabolario. Sopra il tetto si scavalca e si
+ * risponde `null`: **«non lo so»**, mai un array troncato.
+ */
+const TALOS_GGUF_MAX_READ_ARRAY = 1024
+
 /** Thrown internally the moment a read would run past the bytes we were given. */
 class Truncated extends Error {
     readonly needBytes: number
@@ -258,36 +285,7 @@ class Reader {
             return
         }
         if (type === ValueType.ARRAY) {
-            const elementType = this.u32()
-            const count = this.u64()
-            const elementWidth = FIXED_WIDTH[elementType]
-            if (elementWidth !== undefined) {
-                this.skip(elementWidth * count)
-                return
-            }
-            // Strings are variable-length, so the only way past a hundred
-            // thousand tokens is to walk them.
-            //
-            // And when the walk runs out of bytes, THIS is the one place in the
-            // parser that can do better than guessing. It knows how many
-            // strings there are and how long the ones it has read turned out to
-            // be: the remainder is arithmetic, not a doubling. The alternative
-            // was measured on a real file — a header of 10.969.337 bytes that
-            // three doublings from one mebibyte never reached, stopping at
-            // eight under a ceiling of thirty-two that was never approached.
-            const start = this.at
-            for (let index = 0; index < count; index += 1) {
-                try {
-                    this.skip(this.u64())
-                } catch (stopped) {
-                    // Nothing read yet means nothing to average: doubling is
-                    // still the honest answer there.
-                    if (!(stopped instanceof Truncated) || index === 0) throw stopped
-                    const perItem = (this.at - start) / index
-                    const estimate = Math.ceil(start + perItem * count * ARRAY_ESTIMATE_SLACK)
-                    throw new Truncated(Math.max(estimate, this.view.byteLength + 1))
-                }
-            }
+            this.skipArrayBody(this.u32(), this.u64())
             return
         }
         // A type this parser has never seen has an unknown width, so the
@@ -296,7 +294,48 @@ class Reader {
         throw new Truncated(this.view.byteLength * 2)
     }
 
-    value(type: number): number | string | null {
+    /**
+     * Scavalca il corpo di un array, con intestazione GIÀ letta.
+     *
+     * ⛔ Estratto da `skipValue` il 2026-09-10 perché ora ha **due** chiamanti:
+     * chi scavalca e chi ha provato a leggere e ha rinunciato
+     * ({@link Reader.shortNumericArray}). Se restassero due copie, un domani
+     * ne verrebbe corretta una sola — e la seconda lascerebbe la posizione a
+     * metà di un array, cioè leggerebbe i campi successivi da un punto
+     * qualunque del file, in silenzio.
+     */
+    private skipArrayBody(elementType: number, count: number): void {
+        const elementWidth = FIXED_WIDTH[elementType]
+        if (elementWidth !== undefined) {
+            this.skip(elementWidth * count)
+            return
+        }
+        // Strings are variable-length, so the only way past a hundred
+        // thousand tokens is to walk them.
+        //
+        // And when the walk runs out of bytes, THIS is the one place in the
+        // parser that can do better than guessing. It knows how many
+        // strings there are and how long the ones it has read turned out to
+        // be: the remainder is arithmetic, not a doubling. The alternative
+        // was measured on a real file — a header of 10.969.337 bytes that
+        // three doublings from one mebibyte never reached, stopping at
+        // eight under a ceiling of thirty-two that was never approached.
+        const start = this.at
+        for (let index = 0; index < count; index += 1) {
+            try {
+                this.skip(this.u64())
+            } catch (stopped) {
+                // Nothing read yet means nothing to average: doubling is
+                // still the honest answer there.
+                if (!(stopped instanceof Truncated) || index === 0) throw stopped
+                const perItem = (this.at - start) / index
+                const estimate = Math.ceil(start + perItem * count * ARRAY_ESTIMATE_SLACK)
+                throw new Truncated(Math.max(estimate, this.view.byteLength + 1))
+            }
+        }
+    }
+
+    value(type: number): number | string | readonly number[] | null {
         switch (type) {
             case ValueType.UINT32:
             case ValueType.INT32:
@@ -306,9 +345,93 @@ class Reader {
                 return this.u64()
             case ValueType.STRING:
                 return this.text()
+            case ValueType.ARRAY:
+                return this.shortNumericArray()
             default:
                 this.skipValue(type)
                 return null
+        }
+    }
+
+    /**
+     * ⭐⭐⭐ Un array CORTO di numeri si LEGGE; tutto il resto si scavalca.
+     *
+     * ## Perché è nato: una sovrastima di CINQUE VOLTE, misurata
+     *
+     * Le architetture ibride pubblicano `attention.head_count_kv` come **array
+     * per-strato**, non come scalare: su `LFM2.5-2.6B`, letto dal Pad il
+     * 2026-09-10 dai metadati del file stesso,
+     * `arr[i32,30] = [0, 0, 8, 0, 0, 8, 0, 0, 0, 8, 0, 0, …]` — zero dove lo
+     * strato è ricorrente, 8 dove c'è attenzione vera.
+     *
+     * Questo lettore scavalcava **ogni** array, quindi quella chiave tornava
+     * `undefined` e il conto ripiegava su `attention.head_count` = **32**,
+     * moltiplicato per **tutti e 30** gli strati:
+     *
+     *     30 × 32 × 64 × 2 × 2  =  245.760 byte/token   ← quello che dicevamo
+     *      6 ×  8 × 64 × 2 × 2  =   12.288 byte/token   ← quello vero
+     *
+     * **Venti volte.** ⛔ Questo numero l'ho sbagliato due volte scrivendolo a
+     * mano («cinque volte») prima che `ggufIbridi.test.ts` lo smentisse. Sbaglia dalla parte prudente — rifiuta contesti che il
+     * telefono reggerebbe — ma nel catalogo Hugging Face un modello ibrido
+     * appariva molto più pesante di com'è, e nessuno poteva accorgersene.
+     *
+     * ## Perché un TETTO, e perché così basso
+     *
+     * Nello stesso file c'è `tokenizer.ggml.tokens`, **128.000 stringhe**, e
+     * `tokenizer.ggml.merges`, **293.320**. Leggere gli array senza un tetto
+     * vorrebbe dire tenere in memoria l'intero vocabolario per ricavarne una
+     * moltiplicazione. Gli array che ci servono hanno **un elemento per
+     * strato**: qualche decina, mai più di qualche centinaio.
+     *
+     * ⇒ Sopra il tetto si scavalca **esattamente come prima**, e chi legge
+     * riceve `null`, cioè «non lo so» — mai un array troncato, che sarebbe una
+     * risposta e sarebbe sbagliata.
+     *
+     * ## La forma, alla fonte
+     *
+     * `[tipo elemento: u32][conteggio: u64][elementi]` —
+     * https://github.com/ggml-org/ggml/blob/master/docs/gguf.md (letto il
+     * 2026-09-10). L'array per-strato di LFM2 è documentato anche in
+     * https://github.com/ggml-org/llama.cpp/issues/16278 (letto il 2026-09-10).
+     */
+    private shortNumericArray(): readonly number[] | null {
+        const elementType = this.u32()
+        const count = this.u64()
+        const width = FIXED_WIDTH[elementType]
+        if (width === undefined || count > TALOS_GGUF_MAX_READ_ARRAY) {
+            this.skipArrayBody(elementType, count)
+            return null
+        }
+        const numbers: number[] = []
+        for (let index = 0; index < count; index += 1) {
+            this.need(width)
+            numbers.push(this.numberOfWidth(elementType, width))
+        }
+        return numbers
+    }
+
+    /**
+     * ⛔ Solo i tipi che servono a una geometria. Un `FLOAT64` o un `BOOL`
+     * dentro una chiave per-strato non è un caso che esista oggi, e inventargli
+     * una lettura vorrebbe dire scrivere codice che nessuna misura ha mai
+     * attraversato. Si scavalca e si dice «non lo so».
+     */
+    private numberOfWidth(elementType: number, width: number): number {
+        const at = this.at
+        this.at += width
+        switch (elementType) {
+            case ValueType.UINT8: return this.view.getUint8(at)
+            case ValueType.INT8: return this.view.getInt8(at)
+            case ValueType.UINT16: return this.view.getUint16(at, true)
+            case ValueType.INT16: return this.view.getInt16(at, true)
+            case ValueType.UINT32: return this.view.getUint32(at, true)
+            case ValueType.INT32: return this.view.getInt32(at, true)
+            case ValueType.FLOAT32: return this.view.getFloat32(at, true)
+            case ValueType.UINT64: return Number(this.view.getBigUint64(at, true))
+            case ValueType.INT64: return Number(this.view.getBigInt64(at, true))
+            case ValueType.FLOAT64: return this.view.getFloat64(at, true)
+            default: return Number.NaN
         }
     }
 }
@@ -337,7 +460,7 @@ export function talosReadGgufHeader(bytes: ArrayBuffer, fileBytes: number): Talo
         const tensorCount = reader.u64()
         const fieldCount = reader.u64()
 
-        const fields = new Map<string, number | string>()
+        const fields = new Map<string, number | string | readonly number[]>()
         for (let index = 0; index < fieldCount; index += 1) {
             const key = reader.text()
             const type = reader.u32()
@@ -388,7 +511,41 @@ export function talosReadGgufHeader(bytes: ArrayBuffer, fileBytes: number): Talo
         // KV cache four times smaller, and assuming the head count refuses
         // models that fit comfortably. Falls back to the head count for the
         // older architectures that genuinely have no separate figure.
-        const kvHeads = Number(fields.get(`${architecture}.attention.head_count_kv`) ?? heads)
+        const dichiarateKv = fields.get(`${architecture}.attention.head_count_kv`)
+        /**
+         * ⭐⭐⭐ LE ARCHITETTURE IBRIDE, e i due numeri che cambiano insieme.
+         *
+         * Quando `head_count_kv` e' un **array per-strato** — `LFM2.5-2.6B`:
+         * `[0, 0, 8, 0, 0, 8, 0, …]` su trenta strati, letto dal Pad il
+         * 2026-09-10 — gli zeri sono strati **ricorrenti**, che una cache KV non
+         * ce l'hanno affatto. Contarli vorrebbe dire fatturare memoria che non
+         * esiste.
+         *
+         * ⇒ Due letture dallo stesso array, e devono restare coerenti:
+         *   - **quanti strati** hanno davvero una cache (gli elementi `> 0`);
+         *   - **quante teste**, cioe' il **massimo** fra quelli — non la media:
+         *     sovrastimare abbassa il tetto del contesto (errore innocuo),
+         *     sottostimarlo lo **alza** e fa aprire modelli che non ci stanno.
+         *
+         * ⛔ E' la STESSA regola che il nativo applica sul dispositivo
+         * (`talos_geometria_kv_di` in `talos_llama_jni.cpp`): due risposte
+         * diverse alla stessa domanda sarebbero due schermate che si
+         * contraddicono, e nessun modo di sapere quale mente.
+         *
+         * ⛔ Un modello **interamente** ricorrente (Mamba, RWKV) qui conta zero
+         * strati con KV, e cade nel controllo `missing` piu' sotto: e'
+         * deliberato. Per quelle architetture un «byte per token» non descrive
+         * la memoria, e uno zero renderebbe il tetto del contesto infinito.
+         */
+        const perStrato = Array.isArray(dichiarateKv) ? dichiarateKv.filter((n) => n > 0) : null
+        const kvHeads = perStrato !== null
+            ? Math.max(0, ...perStrato)
+            : Number(dichiarateKv ?? heads)
+        /**
+         * Gli strati che pesano sulla cache. Per un transformer sono tutti, e
+         * questa riga vale `block_count` come e' sempre valso.
+         */
+        const kvLayers = perStrato !== null ? perStrato.length : layers
 
         /**
          * The head dimension, from the model's own word where it gives one.
@@ -413,12 +570,15 @@ export function talosReadGgufHeader(bytes: ArrayBuffer, fileBytes: number): Talo
         if (!Number.isFinite(embedding) || embedding <= 0) missing.push('embedding_length')
         if (!Number.isFinite(heads) || heads <= 0) missing.push('attention.head_count')
         if (!Number.isFinite(kvHeads) || kvHeads <= 0) missing.push('attention.head_count_kv')
+        // ⛔ Zero strati con cache = nessun modello di cui sappiamo dire il peso
+        // per token. Vedi il commento sugli ibridi sopra: e' un rifiuto voluto.
+        if (!Number.isFinite(kvLayers) || kvLayers <= 0) missing.push('attention.head_count_kv')
         // A header missing these must never become a model with zero layers,
         // which would pass every fit check ever written.
         if (missing.length > 0) return { ok: false, reason: 'incomplete', missing }
 
         const fileType = Number(fields.get('general.file_type'))
-        const quantisation = FILE_TYPES[fileType] ?? null
+        const quantisation = talosQuantisationOfFileType(fileType)
 
         const declaredQuantVersion = Number(fields.get('general.quantization_version'))
         const quantizationVersion = Number.isFinite(declaredQuantVersion) ? declaredQuantVersion : null
@@ -436,7 +596,11 @@ export function talosReadGgufHeader(bytes: ArrayBuffer, fileBytes: number): Talo
                 dataOffset,
                 shape: {
                     weightBytes: Math.max(0, fileBytes - dataOffset),
-                    layers,
+                    // ⛔ Gli strati che hanno una CACHE, non la profondita' del
+                    // modello: `layers` qui entra solo nella moltiplicazione
+                    // della KV (`talosKvBytesPerTokenOf`), e su un ibrido le due
+                    // cose sono numeri diversi. Stessa scelta del nativo.
+                    layers: kvLayers,
                     kvHeads,
                     headDim,
                     trainedContext,

@@ -1,10 +1,13 @@
 import { TALOS_CONTENT_ORIGIN_FALLBACK } from '@/lib/tools/security'
+import { normalizeTalosLibrarySearchText } from '@/lib/librarySearchText'
+import { talosMessageSearchExcerpt, talosMessageSearchLimit } from '@/lib/chat/messageSearch'
 import {
     cloneJsonObject,
     normalizeChatTitle,
     normalizeChatSurface,
     normalizeComposerDraft,
     normalizeComposerDraftScope,
+    normalizeComposerAttachments,
     normalizeFileAuthorityPermissions,
     normalizeRepositoryId,
     normalizeStationTitle,
@@ -14,6 +17,7 @@ import {
     normalizeVaultSha256,
     normalizeVaultSize,
     type AppendChatMessageInput,
+    type TalosComposerAttachmentDraft,
     type ChatRepositoryOptions,
     type CreateChatSessionInput,
     type CreateFileAuthorityGrantInput,
@@ -88,6 +92,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
     const sessions = new Map<string, TalosLocalChatSession>()
     const messages = new Map<string, TalosLocalChatMessage[]>()
     const composerDrafts = new Map<string, string>()
+    const composerAttachments = new Map<string, TalosComposerAttachmentDraft[]>()
     const vaultFiles = new Map<string, TalosLocalVaultFile>()
     const grants = new Map<string, TalosLocalFileAuthorityGrant>()
     const attachmentBindings = new Map<string, TalosChatAttachmentBinding[]>()
@@ -144,6 +149,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             return [...sessions.values()].sort(byMostRecent).map((session) => ({
                 ...copySession(session),
                 has_messages: (messages.get(session.id) ?? []).length > 0,
+                has_draft: composerDrafts.has(session.id) || composerAttachments.has(session.id),
             }))
         },
         async getActiveSessionId() {
@@ -202,10 +208,26 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 if (activity.session_id === sessionId) toolActivities.delete(activityId)
             }
             composerDrafts.delete(sessionId)
+            composerAttachments.delete(sessionId)
             if (activeSessionId === sessionId) {
                 activeSessionId = [...sessions.values()].sort(byMostRecent)[0]?.id ?? null
             }
             return activeSessionId
+        },
+        async searchMessages(term, options) {
+            const needle = normalizeTalosLibrarySearchText(term)
+            const limit = talosMessageSearchLimit(options?.limit)
+            if (!needle || limit === 0) return []
+            return [...messages.values()].flat()
+                .filter((message) => (message.role === 'user' || message.role === 'assistant')
+                    && normalizeTalosLibrarySearchText(message.content).includes(needle))
+                // Binary ordering, exactly like SQLite (localeCompare differs on punctuation).
+                .sort((a, b) => a.created_at === b.created_at
+                    ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)
+                    : (a.created_at < b.created_at ? 1 : -1))
+                .slice(0, limit)
+                .map((message) => ({ sessionId: message.session_id, messageId: message.id,
+                    excerpt: talosMessageSearchExcerpt(message.content, needle) }))
         },
         async listMessages(sessionId: string, options?: { limit?: number; before?: { ordinal: number; id: string } }) {
             const all = (messages.get(sessionId) ?? [])
@@ -222,6 +244,41 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 : all
             // Same contract as SQLite: the NEWEST `limit` of what remains.
             return older.slice(Math.max(0, older.length - options.limit))
+        },
+        async rewindUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string) {
+            const session = requireSession(sessionId)
+            const rows = messages.get(sessionId) ?? []
+            const index = rows.findIndex(row => row.id === messageId && row.role === 'user')
+            if (index < 0) throw new Error('TALOS_CHAT_MESSAGE_NOT_FOUND')
+            if (rows.at(-1)?.id !== expectedLastMessageId) throw new Error('TALOS_CHAT_EDIT_STALE')
+            const text = normalizeComposerDraft(rows[index]!.content)
+            const removed = new Set(rows.slice(index).map(row => row.id))
+            composerDrafts.set(sessionId, text)
+            messages.set(sessionId, rows.slice(0, index))
+            for (const id of removed) attachmentBindings.delete(id)
+            for (const [id, activity] of toolActivities) {
+                if (activity.message_id && removed.has(activity.message_id)) toolActivities.delete(id)
+            }
+            session.updated_at = now()
+            return text
+        },
+        async deleteMessageTurn(sessionId: string, messageId: string) {
+            const session = requireSession(sessionId)
+            const rows = messages.get(sessionId) ?? []
+            const index = rows.findIndex(row => row.id === messageId)
+            if (index < 0) throw new Error('TALOS_CHAT_MESSAGE_NOT_FOUND')
+            let start = index
+            for (let i = index; i >= 0; i--) if (rows[i]!.role === 'user') { start = i; break }
+            let end = rows.length
+            for (let i = start + 1; i < rows.length; i++) if (rows[i]!.role === 'user') { end = i; break }
+            const removed = new Set(rows.slice(start, end).map(row => row.id))
+            messages.set(sessionId, [...rows.slice(0, start), ...rows.slice(end)])
+            for (const id of removed) attachmentBindings.delete(id)
+            for (const [id, activity] of toolActivities) {
+                if (activity.message_id && removed.has(activity.message_id)) toolActivities.delete(id)
+            }
+            session.updated_at = now()
+            return [...removed]
         },
         async appendMessage(input: AppendChatMessageInput) {
             const session = requireSession(input.session_id)
@@ -443,6 +500,15 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             if (value === '') composerDrafts.delete(scope)
             else composerDrafts.set(scope, value)
         },
+        async loadComposerAttachments(scopeId: string) {
+            return (composerAttachments.get(normalizeComposerDraftScope(scopeId)) ?? []).map((item) => ({ ...item, permissions: [...item.permissions] }))
+        },
+        async saveComposerAttachments(scopeId: string, attachments: readonly TalosComposerAttachmentDraft[]) {
+            const scope = normalizeComposerDraftScope(scopeId)
+            const value = normalizeComposerAttachments(attachments)
+            if (value.length === 0) composerAttachments.delete(scope)
+            else composerAttachments.set(scope, value)
+        },
         async updateSessionMetadata(sessionId: string, metadata: Record<string, unknown>) {
             const session = sessions.get(sessionId)
             if (!session) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
@@ -462,6 +528,8 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 schedule_json: input.schedule_json ?? null,
                 instruction: input.instruction ?? null,
                 last_run_at: null,
+                // U-17 — un'attivita' nasce viva, come nel deposito vero.
+                paused: false,
                 created_at: input.created_at,
                 updated_at: input.created_at,
             }
@@ -490,6 +558,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 ...(patch.priority === undefined ? {} : { priority: patch.priority }),
                 ...(patch.schedule_json === undefined ? {} : { schedule_json: patch.schedule_json }),
                 ...(patch.instruction === undefined ? {} : { instruction: patch.instruction }),
+                ...(patch.paused === undefined ? {} : { paused: patch.paused }),
                 updated_at: now(),
             }
             tasks.set(taskId, updated)
@@ -505,6 +574,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 content: input.content,
                 trust_level: 'untrusted',
                 content_origin: input.content_origin ?? TALOS_CONTENT_ORIGIN_FALLBACK,
+                pinned: input.pinned === true,
                 created_at: input.created_at,
                 updated_at: input.created_at,
             }
@@ -563,8 +633,14 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 .map((row) => ({ ...row }))
         },
         async listNotes() {
+            // U-10 — le note in evidenza in cima, esattamente come
+            // `ORDER BY pinned DESC, updated_at DESC, id DESC` lato SQLite.
             return [...notes.values()]
-                .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.id.localeCompare(left.id))
+                .sort((left, right) => (
+                    Number(right.pinned) - Number(left.pinned)
+                    || right.updated_at.localeCompare(left.updated_at)
+                    || right.id.localeCompare(left.id)
+                ))
                 .map((note) => ({ ...note }))
         },
         async updateNote(input: UpdateNoteInput) {
@@ -573,11 +649,16 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             // Assente vuol dire «non toccarlo», non «svuotalo»: vedi la nota
             // sull'implementazione SQLite, che deve comportarsi allo stesso modo
             // o le prove passerebbero su un deposito e non sull'altro.
+            //
+            // ⛔ E come là, la sola evidenza NON muove `updated_at`: l'elenco si
+            // ordina su quella data, e una puntina non è una riscrittura.
+            const rewrote = input.title !== undefined || input.content !== undefined
             const updated = {
                 ...current,
                 title: input.title ?? current.title,
                 content: input.content ?? current.content,
-                updated_at: now(),
+                pinned: input.pinned ?? current.pinned,
+                updated_at: rewrote ? now() : current.updated_at,
             }
             notes.set(input.id, updated)
             return { ...updated }

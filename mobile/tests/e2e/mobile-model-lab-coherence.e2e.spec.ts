@@ -8,7 +8,7 @@ test.use({ storageState: TALOS_PROVIDER_STATE })
 
 async function openHub(page: Page): Promise<void> {
     await page.goto('/')
-    await page.getByLabel('Open menu').click()
+    await page.getByTestId('talos-shell-menu').click()
     await page.getByTestId('talos-mobile-sidebar').getByRole('button', { name: 'Open Settings' }).click()
     await page.getByTestId('settings-model-lab-link').click()
     await expect(page.getByTestId('talos-model-lab-hub')).toBeVisible()

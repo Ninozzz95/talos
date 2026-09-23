@@ -52,7 +52,7 @@ function localizedTab(tab: TalosMobileSettingsTab): TalosMobileSettingsTab {
     return {
         ...tab,
         label: t(`settingsCenter.tabs.${tab.id}.label`),
-        description: tab.id === 'appearance' ? '' : t(`settingsCenter.tabs.${tab.id}.description`),
+        description: t(`settingsCenter.tabs.${tab.id}.description`),
         gateReason: tab.gateReason ? t(`settingsCenter.tabs.${tab.id}.gate`) : undefined,
     }
 }
@@ -72,15 +72,9 @@ const resolvedGroups = computed(() => TALOS_MOBILE_SETTINGS_GROUPS.map((group) =
 })))
 const account = useTalosAccountStore()
 const developmentMode = import.meta.env.DEV
-// Owner 2026-07-24: drive the sheet header — in a detail pane the header shows
-// the subsection name and its Back returns to the categories list (ONE back,
-// no in-body second arrow). SF-critic M1: this must engage ONLY on the phone
-// master-detail. At the md breakpoint (≥768px) both panes are side-by-side
-// (md:block), so a sub-view there would show a spurious Back + wrong title.
-// Gate on the SAME 768px md media query that drives the layout (not the
-// tablet-split threshold, which adds a min-height and would leave a broken band).
+// Match the Calm phone breakpoint: one pane and one contextual Back through 860px.
 const sheetNav = useTalosSheetNav()
-const isMdLayout = useTalosMediaQuery('(min-width: 768px)')
+const isMdLayout = useTalosMediaQuery('(min-width: 861px)')
 const categoryRoot = ref<HTMLElement | null>(null)
 const detailRoot = ref<HTMLElement | null>(null)
 const mobileMotionPane = ref<'categories' | 'detail' | null>(null)
@@ -109,7 +103,7 @@ async function runMobilePaneMotion(pane: 'categories' | 'detail'): Promise<void>
     mobileMotionPane.value = null
     mobilePane.value = pane
     await nextTick()
-    if (revision !== mobileMotionRevision || isMdLayout.value) return
+    if (revision !== mobileMotionRevision || (isMdLayout.value && pane === 'detail')) return
 
     const target = pane === 'detail'
         ? detailRoot.value
@@ -117,6 +111,7 @@ async function runMobilePaneMotion(pane: 'categories' | 'detail'): Promise<void>
             `[data-settings-tab="${activeTab.value}"]`,
         ) ?? null
     target?.focus({ preventScroll: true })
+    if (isMdLayout.value) return
 
     const motionRoot = pane === 'detail' ? detailRoot.value : categoryRoot.value
     if (
@@ -155,17 +150,17 @@ watch([mobilePane, activeTab], async ([pane]) => {
 })
 onBeforeUnmount(() => { sheetNav.clear() })
 
-/**
- * On the tablet the panel is always beside the list, so a category is always
- * open. On the phone it is open only once the detail pane has taken the screen.
- */
+/** The overview has no open category at any width. */
 const openTab = computed<TalosMobileSettingsTabId | null>(
-    () => (isMdLayout.value || mobilePane.value === 'detail') ? activeTab.value : null,
+    () => mobilePane.value === 'detail' ? activeTab.value : null,
 )
 watch(openTab, (tab) => { emit('update:openTab', tab) })
 
 watch(() => props.requestedTab, (requested) => {
-    if (!requested) return
+    if (!requested) {
+        if (mobilePane.value !== 'categories') backToCategories()
+        return
+    }
     const match = TALOS_MOBILE_SETTINGS_TABS.find((tab) => tab.id === requested)
     if (!match) return
     activeTab.value = match.id
@@ -226,78 +221,66 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
 </script>
 
 <template>
-    <!-- Owner 2026-07-24: the framed card was redundant nesting inside the
-         sheet — on mobile the categories/detail go FULL-WIDTH with the coherent
-         parent padding; the framed side-by-side stays on tablet (md). -->
     <div
         data-testid="settings-list-detail"
-        class="flex flex-col md:h-full md:min-h-0 md:flex-row md:overflow-hidden md:rounded-none md:border-0 md:bg-[var(--talos-card)]"
+        class="settings-center"
+        :class="mobilePane === 'detail' ? 'settings-layout' : 'settings-home'"
     >
-        <!-- One navigation model at every width. Tablet changes only the
-             presentation to side-by-side; routed Model Lab and inline detail
-             destinations keep the same semantics and keyboard behavior. -->
         <nav
             ref="categoryRoot"
             data-testid="settings-category-pane"
+            class="settings-menu"
+            :class="mobilePane === 'detail' && !isMdLayout ? 'hidden' : ''"
             :data-talos-motion-intent="mobileMotionPane === 'categories' ? 'tab-change' : undefined"
-            class="md:flex md:min-h-0 md:w-[var(--talos-tablet-sidebar-width)] md:flex-none md:flex-col md:overflow-hidden md:border-r md:border-[var(--talos-border)] md:bg-[var(--talos-sidebar)]/80 md:p-3"
-            :class="mobilePane === 'detail' ? 'hidden' : 'block'"
             :aria-label="t('settingsCenter.talosCategories')"
             @animationend="clearMobilePaneMotion('categories', $event)"
         >
-            <!-- Owner 2026-07-24 (Claude-style): account summary card on top +
-                 grouped cards (icon · label · gated hint · chevron).
-                 Group geometry follows the active TALOS Theme Engine tokens. -->
-            <!-- Owner 2026-07-24: NO own horizontal padding on the phone — the
-                 parent TalosMobileScreen already provides the 16px gutter (Claude
-                 parity). Adding px here double-padded to 28px ("still too wide"). -->
-            <div
-                data-testid="settings-category-list"
-                class="flex max-h-none w-full flex-col gap-5 px-0 py-2 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain md:px-0 md:py-0"
-            >
+            <div data-testid="settings-category-list" class="settings-category-list">
+                <button
+                    v-if="mobilePane === 'detail'"
+                    type="button"
+                    data-testid="settings-all-link"
+                    class="settings-row settings-nav-row talos-pressable"
+                    @click="backToCategories"
+                >
+                    <Settings aria-hidden="true" />
+                    <span>{{ t('settingsCenter.allSettings') }}</span>
+                </button>
                 <button
                     type="button"
                     :id="rowId(TALOS_MOBILE_SETTINGS_ACCOUNT_TAB)"
-                    :aria-current="activeTab === TALOS_MOBILE_SETTINGS_ACCOUNT_TAB ? 'page' : undefined"
+                    :aria-current="openTab === TALOS_MOBILE_SETTINGS_ACCOUNT_TAB ? 'page' : undefined"
                     :data-settings-tab="TALOS_MOBILE_SETTINGS_ACCOUNT_TAB"
-                    :data-state="activeTab === TALOS_MOBILE_SETTINGS_ACCOUNT_TAB ? 'active' : 'inactive'"
-                    class="talos-pressable flex w-full items-center gap-3 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] data-[state=active]:border-[var(--talos-accent-border)] data-[state=active]:bg-[var(--talos-active)]"
+                    :data-state="openTab === TALOS_MOBILE_SETTINGS_ACCOUNT_TAB ? 'active' : 'inactive'"
+                    class="settings-row talos-pressable"
+                    :class="mobilePane === 'detail' ? 'settings-account-link settings-nav-row' : 'account-card'"
                     @click="selectRow(TALOS_MOBILE_SETTINGS_ACCOUNT_TAB)"
                 >
-                    <TalosAccountAvatar size="md" />
-                    <span class="min-w-0 flex-1">
-                        <span class="block truncate text-sm font-semibold text-[var(--talos-text)]">{{ account.state.display_name || accountTab.label }}</span>
-                        <span class="block truncate text-xs text-[var(--talos-muted)]">{{ t('settingsCenter.localIdentity') }}</span>
+                    <TalosAccountAvatar v-if="mobilePane === 'categories'" size="md" />
+                    <User v-else aria-hidden="true" />
+                    <span class="settings-row-copy">
+                        <strong>{{ mobilePane === 'categories' ? account.state.display_name || accountTab.label : accountTab.label }}</strong>
+                        <small v-if="mobilePane === 'categories'">{{ t('settingsCenter.localIdentity') }}</small>
                     </span>
-                    <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                    <ChevronRight aria-hidden="true" />
                 </button>
 
-                <!--
-                    ⭐ Il controllo del telefono, e sta QUI e non fra le stazioni.
-
-                    Non ci si va per fare qualcosa: ci si va per capire se si
-                    può. Offrirla come stazione la presenterebbe come una
-                    funzione, e finché il produttore del telefono blocca non è
-                    una funzione — è una spiegazione. Misurato sul Pad il
-                    2026-08-08: su ColorOS Shizuku non riesce nemmeno ad
-                    autorizzarci.
-                -->
-
-                <div v-for="group in resolvedGroups" :key="group.label" class="w-full">
-                    <p data-testid="settings-group-heading" class="mb-1.5 px-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ group.label }}</p>
-                    <div class="divide-y divide-[var(--talos-border)] overflow-hidden rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]">
-                            <RouterLink
-                                v-if="group.chiave === 'Intelligence'"
-                                :to="{ name: 'settings-privilege' }"
-                                data-testid="settings-privilege-link"
-                                class="talos-pressable flex min-h-touch w-full items-center gap-[var(--talos-space-inline)] px-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)]"
-                            >
-                                <Smartphone class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                                <span class="min-w-0 flex-1">
-                                    <span class="block truncate text-sm text-[var(--talos-text)]">{{ t('privilege.pageTitle') }}</span>
-                                </span>
-                                <ChevronRight class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
-                            </RouterLink>
+                <section v-for="group in resolvedGroups" :key="group.chiave" class="settings-group">
+                    <h3 data-testid="settings-group-heading">{{ group.label }}</h3>
+                    <div class="settings-group-list">
+                        <RouterLink
+                            v-if="group.chiave === 'Intelligence'"
+                            :to="{ name: 'settings-privilege' }"
+                            data-testid="settings-privilege-link"
+                            class="settings-row talos-pressable"
+                        >
+                            <Smartphone aria-hidden="true" />
+                            <span class="settings-row-copy">
+                                <strong>{{ t('privilege.pageTitle') }}</strong>
+                                <small v-if="mobilePane === 'categories'">{{ t('settingsCenter.phoneDescription') }}</small>
+                            </span>
+                            <ChevronRight aria-hidden="true" />
+                        </RouterLink>
                         <template v-for="tab in group.tabs" :key="tab.id">
                             <RouterLink
                                 v-if="tab.id === TALOS_MOBILE_SETTINGS_MODEL_LAB_TAB"
@@ -305,34 +288,36 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                                 :to="{ name: 'settings-models' }"
                                 data-testid="settings-model-lab-link"
                                 :data-settings-route="tab.id"
-                                class="talos-pressable flex min-h-touch w-full items-center gap-[var(--talos-space-inline)] px-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)]"
+                                class="settings-row talos-pressable"
                             >
-                                <component :is="ICONS[tab.id]" class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                                <span class="min-w-0 flex-1">
-                                    <span class="block truncate text-sm text-[var(--talos-text)]">{{ t('navigation.modelLab') }}</span>
+                                <component :is="ICONS[tab.id]" aria-hidden="true" />
+                                <span class="settings-row-copy">
+                                    <strong>{{ tab.label }}</strong>
+                                    <small v-if="mobilePane === 'categories'">{{ tab.description }}</small>
                                 </span>
-                                <ChevronRight class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                                <ChevronRight aria-hidden="true" />
                             </RouterLink>
                             <button
                                 v-else
                                 type="button"
                                 :id="rowId(tab.id)"
-                                :aria-current="activeTab === tab.id ? 'page' : undefined"
+                                :aria-current="openTab === tab.id ? 'page' : undefined"
                                 :data-settings-tab="tab.id"
-                                :data-state="activeTab === tab.id ? 'active' : 'inactive'"
-                                class="talos-pressable flex min-h-touch w-full items-center gap-[var(--talos-space-inline)] px-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)] data-[state=active]:bg-[var(--talos-active)]"
+                                :data-state="openTab === tab.id ? 'active' : 'inactive'"
+                                class="settings-row talos-pressable"
                                 @click="selectRow(tab.id)"
                             >
-                                <component :is="ICONS[tab.id]" class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                                <span class="min-w-0 flex-1">
-                                    <span class="block truncate text-sm text-[var(--talos-text)]">{{ tab.label }}</span>
-                                    <span v-if="tab.availability === 'gated'" class="block truncate text-xs text-[var(--talos-muted)]">{{ t('settingsCenter.notInstalled') }}</span>
+                                <component :is="ICONS[tab.id]" aria-hidden="true" />
+                                <span class="settings-row-copy">
+                                    <strong>{{ tab.label }}</strong>
+                                    <small v-if="mobilePane === 'categories'">{{ tab.description }}</small>
+                                    <small v-if="tab.availability === 'gated'">{{ t('settingsCenter.notInstalled') }}</small>
                                 </span>
-                                <ChevronRight class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                                <ChevronRight aria-hidden="true" />
                             </button>
                         </template>
                     </div>
-                </div>
+                </section>
             </div>
         </nav>
 
@@ -340,18 +325,16 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
             ref="detailRoot"
             data-testid="settings-detail-pane"
             tabindex="-1"
+            class="settings-detail"
+            :class="mobilePane === 'categories' ? 'hidden' : ''"
             :data-talos-motion-intent="mobileMotionPane === 'detail' ? 'tab-change' : undefined"
-            class="min-w-0 px-0 py-2 md:block md:flex-1 md:overflow-y-auto md:px-4 md:py-0"
-            :class="mobilePane === 'categories' ? 'hidden' : 'block'"
             :aria-label="t('settingsCenter.detailLabel', { tab: selectedTab.label })"
             @animationend="clearMobilePaneMotion('detail', $event)"
         >
-            <!-- Owner 2026-07-24: the in-body "Categories" back is GONE — the
-                 sheet header's single contextual Back now returns to the list. -->
             <div
                 v-for="tab in renderedTabs"
                 :key="tab.id"
-                id="talos-settings-panel"
+                :id="`talos-settings-panel-${tab.id}`"
                 role="region"
                 :aria-labelledby="rowId(tab.id)"
                 :hidden="tab.id !== activeTab"
@@ -359,28 +342,14 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                 :data-state="tab.id === activeTab ? 'active' : 'inactive'"
                 class="talos-motion-tab-panel outline-none"
             >
-                <!-- Owner: the sheet header already shows the subsection title on
-                     mobile — drop the duplicate eyebrow/title there, keep the
-                     one-line description; the md side-by-side keeps the full
-                     header (its sheet title stays "Settings Center"). -->
-                <!-- Owner 2026-07-24: on the phone the sheet header already titles
-                     the subsection, so the divider/eyebrow/title are md-only and
-                     the one-line description hides when empty (Appearance dropped
-                     its subtitle) — no stray bordered box above the content. -->
-                <header class="md:mb-4 md:border-b md:border-[var(--talos-border)] md:pb-3">
-                    <div class="hidden text-3xs font-semibold uppercase text-[var(--talos-muted)] md:block">{{ t('settingsCenter.protectedPreferences') }}</div>
-                    <h3 class="talos-title hidden text-md font-semibold text-[var(--talos-text)] md:mt-1 md:block">{{ tab.label }}</h3>
-                    <p v-if="tab.description" class="mb-3 text-xs leading-5 text-[var(--talos-muted)] md:mb-0 md:mt-1">{{ tab.description }}</p>
+                <header class="settings-detail-header">
+                    <h2 class="talos-title">{{ tab.label }}</h2>
+                    <p class="panel-intro">{{ tab.description }}</p>
                 </header>
-
                 <TalosMobileSettingsBrowserPanel
                     v-if="tab.id === 'browser'"
                     :development-mode="developmentMode"
                 />
-                <!-- ⛔ «Serve un motore di ricerca» deve PORTARE dove si
-                     aggiusta: un avviso che nomina una schermata e non la apre
-                     lascia la persona a cercarla, che è metà del difetto che
-                     l'avviso doveva chiudere. -->
                 <component
                     :is="LOCAL_PANELS[tab.id]"
                     v-else-if="tab.availability === 'available' && LOCAL_PANELS[tab.id]"
@@ -391,3 +360,78 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
         </section>
     </div>
 </template>
+
+<style scoped>
+.settings-center {
+    height: 100%;
+    min-height: 0;
+    padding-top: var(--talos-space-page);
+}
+.settings-home { max-width: 49rem; margin-inline: auto; }
+.settings-menu { height: 100%; min-height: 0; }
+.settings-category-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--talos-space-section);
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: var(--talos-space-page);
+}
+.settings-group h3 {
+    margin: 0 var(--talos-space-inline) var(--talos-space-inline);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--talos-muted);
+}
+.settings-group-list {
+    overflow: hidden;
+    border: 1px solid var(--talos-border);
+    border-radius: var(--talos-radius-card);
+}
+.settings-row {
+    display: flex;
+    align-items: center;
+    gap: var(--talos-space-inline);
+    width: 100%;
+    min-height: 4rem;
+    padding: var(--talos-space-inline) var(--talos-space-card);
+    text-align: left;
+    color: var(--talos-text);
+}
+.settings-row + .settings-row { border-top: 1px solid var(--talos-border); }
+.settings-row:hover, .settings-row[aria-current="page"] { background: var(--talos-active); }
+.settings-row:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: -2px; }
+.settings-row > :deep(svg) { width: var(--talos-icon-size); height: var(--talos-icon-size); flex-shrink: 0; color: var(--talos-muted); }
+.settings-row-copy { flex: 1; min-width: 0; }
+.settings-row strong { display: block; font-size: var(--text-sm); font-weight: 500; }
+.settings-row small { display: block; margin-top: .25rem; font-size: var(--text-xs); line-height: 1.5; color: var(--talos-muted); }
+.account-card { border: 1px solid var(--talos-border); border-radius: var(--talos-radius-card); background: var(--talos-panel); }
+.settings-account-link { order: 1; }
+.settings-detail {
+    height: 100%;
+    min-width: 0;
+    max-width: 49rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: var(--talos-space-page);
+}
+.settings-detail-header { margin-bottom: var(--talos-space-section); }
+.settings-detail h2 { display: none; font-size: calc(1.375rem * var(--talos-ui-scale, 1)); font-weight: 550; }
+.panel-intro { color: var(--talos-muted); font-size: var(--text-sm); line-height: 1.7; margin-top: var(--talos-space-inline); }
+@media (min-width: 768px) {
+    .settings-center { padding: var(--talos-space-page); }
+}
+@media (min-width: 861px) {
+    .settings-layout { display: grid; grid-template-columns: 16rem minmax(0, 1fr); gap: var(--talos-space-section); }
+    .settings-layout .settings-menu { border-right: 1px solid var(--talos-border); padding-right: var(--talos-space-page); }
+    .settings-layout .settings-group-list { border: 0; border-radius: 0; }
+    .settings-layout .settings-row { min-height: 2.75rem; border: 0; border-radius: var(--talos-radius-control); }
+    .settings-layout .settings-row > :deep(svg:last-child:not(:first-child)) { display: none; }
+    .settings-detail h2 { display: block; }
+}
+@media (min-width: 861px) and (max-width: 1150px) {
+    .settings-layout { grid-template-columns: 13rem minmax(0, 1fr); }
+}
+</style>

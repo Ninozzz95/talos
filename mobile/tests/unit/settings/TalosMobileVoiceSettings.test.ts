@@ -143,6 +143,19 @@ afterEach(() => {
 })
 
 describe('TalosMobileVoiceSettings', () => {
+    it.each([false, true])('keeps reading controls before personal voice, installed=%s', async (installed) => {
+        personalVoice.status.mockResolvedValue({ supported: true, installed, ready: installed, active: false })
+        personalVoice.profiles.mockResolvedValue(installed ? [personalProfile()] : [])
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+        const reading = wrapper.get('[data-testid="talos-tts-controls"]')
+        const personal = wrapper.get(installed ? '[data-testid="talos-personal-voice"]' : '[data-testid="talos-personal-voice-install"]')
+        expect(reading.element.compareDocumentPosition(personal.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(wrapper.get('[data-testid="talos-dictation-language"]').exists()).toBe(true)
+        expect(wrapper.get('[data-testid="talos-voice-preview"]').exists()).toBe(true)
+        wrapper.unmount()
+    })
+
     it('renders the voice section on a supported device with the shared themed select (no native <select>)', async () => {
         const wrapper = mount(TalosMobileVoiceSettings)
         await flushPromises()
@@ -376,7 +389,8 @@ describe('TalosMobileVoiceSettings — la voce personale nel selettore di lettur
     it('the shared "Anteprima voce" button speaks through the personal engine when a personal voice is the active choice', async () => {
         settings.state.voice.engine = 'personal'
         settings.state.voice.personal_profile_id = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
-        settings.state.voice.personal_rate = 1.1
+        // 12/09: stessa slider «Velocita'» delle voci sintetiche.
+        settings.state.voice.rate = 1.1
         settings.state.voice.personal_pitch = 0.9
         personalVoice.status.mockResolvedValue({ supported: true, installed: true, ready: true, active: false })
         personalVoice.profiles.mockResolvedValue([personalProfile()])
@@ -386,7 +400,8 @@ describe('TalosMobileVoiceSettings — la voce personale nel selettore di lettur
         await wrapper.get('[data-testid="talos-voice-preview"]').trigger('click')
         await flushPromises()
 
-        expect(personalVoice.speakAdapter).toHaveBeenCalledWith('a1b2c3d4-e5f6-4789-a012-3456789abcde')
+        // PVOICE-REG-01: la lingua dell'interfaccia viaggia con l'anteprima (il nativo la esige).
+        expect(personalVoice.speakAdapter).toHaveBeenCalledWith('a1b2c3d4-e5f6-4789-a012-3456789abcde', 'en')
         expect(personalVoice.speak).toHaveBeenCalledWith(
             'This is how TALOS will read replies aloud.',
             expect.objectContaining({ rate: 1.1, pitch: 0.9 }),
@@ -410,7 +425,7 @@ describe('TalosMobileVoiceSettings — la voce personale nel selettore di lettur
         await cards[1]!.get('[data-testid="talos-personal-voice-preview"]').trigger('click')
         await flushPromises()
 
-        expect(personalVoice.speakAdapter).toHaveBeenCalledWith('ffffffff-ffff-4fff-afff-ffffffffffff')
+        expect(personalVoice.speakAdapter).toHaveBeenCalledWith('ffffffff-ffff-4fff-afff-ffffffffffff', 'en')
     })
 
     it('an incompatible profile offers no preview button - the engine would refuse to speak it anyway', async () => {

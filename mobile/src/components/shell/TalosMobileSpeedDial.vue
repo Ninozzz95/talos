@@ -44,6 +44,7 @@
  * far cominciare in fretta.
  */
 import { computed, nextTick, ref } from 'vue'
+import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
 import { useRouter } from 'vue-router'
 import { BookMarked, ListTodo, MessageSquarePlus, Plus, Search, StickyNote } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
@@ -70,7 +71,14 @@ const props = withDefaults(defineProps<{
      * bloccherebbe il ventaglio intero per un lavoro che non le riguarda.
      */
     creatingChat?: boolean
-}>(), { creatingChat: false })
+    /**
+     * Solo l'icona «+», senza pillola ne' parola: e' la forma che il mockup
+     * «Talos Calm Finale» da' al pulsante nella riga del marchio della sidebar
+     * (U-1, 11/09/2026). Il ventaglio e' lo stesso; sta in alto, quindi si apre
+     * verso il BASSO e il fuoco entra sulla prima voce, la piu' vicina al dito.
+     */
+    iconOnly?: boolean
+}>(), { creatingChat: false, iconOnly: false })
 
 const open = ref(false)
 const fab = ref<HTMLButtonElement | null>(null)
@@ -105,8 +113,9 @@ async function apri(): Promise<void> {
     open.value = true
     await nextTick()
     // Il fuoco entra sulla voce PIÙ VICINA al FAB, che è l'ultima della colonna:
-    // è quella sotto il dito, e sarebbe strana da saltare.
-    voci.value[voci.value.length - 1]?.focus()
+    // è quella sotto il dito, e sarebbe strana da saltare. Col ventaglio che
+    // scende (icona sola, in alto) la più vicina è la prima.
+    ;(props.iconOnly ? voci.value[0] : voci.value[voci.value.length - 1])?.focus()
 }
 
 function chiudi(tornaAlFab = true): void {
@@ -131,6 +140,17 @@ function muovi(indice: number, passo: number): void {
     const prossimo = (indice + passo + voci.value.length) % voci.value.length
     voci.value[prossimo]?.focus()
 }
+
+/**
+ * U-14 — l'onda al tocco, sul ventaglio e sulle sue voci.
+ *
+ * Il ventaglio aveva già la parte migliore del movimento del mockup (le voci
+ * che SALGONO scaglionate, intento `menu-open`); gli mancava il riscontro
+ * immediato, che nel mockup ce l'hanno tutti i bottoni (`app.js:2228`).
+ * Categoria Feedback, quindi spegnibile separatamente da Superfici: sono due
+ * cose diverse e l'utente può volerne una sola.
+ */
+const onda = useTalosTouchWave()
 </script>
 
 <template>
@@ -184,7 +204,8 @@ function muovi(indice: number, passo: number): void {
             role="menu"
             aria-orientation="vertical"
             data-testid="talos-speed-dial-menu"
-            class="absolute bottom-full right-0 z-50 mb-[var(--talos-space-inline)] flex w-max min-w-full flex-col gap-[var(--talos-space-inline)]"
+            class="absolute right-0 z-50 flex w-max min-w-full flex-col gap-[var(--talos-space-inline)]"
+            :class="props.iconOnly ? 'top-full mt-[var(--talos-space-inline)]' : 'bottom-full mb-[var(--talos-space-inline)]'"
         >
             <button
                 v-for="(voce, indice) in azioni"
@@ -196,7 +217,8 @@ function muovi(indice: number, passo: number): void {
                 :disabled="voce.disabled === true"
                 data-talos-motion-intent="menu-open"
                 :style="{ animationDelay: `calc(var(--talos-motion-duration-surface-enter, 0ms) * ${indice * 0.12})` }"
-                class="talos-pressable flex min-h-touch w-full items-center gap-[var(--talos-space-inline)] rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[var(--talos-space-control)] text-left text-sm text-[var(--talos-text)] disabled:opacity-60"
+                class="talos-pressable talos-wave-host flex min-h-touch w-full items-center gap-[var(--talos-space-inline)] rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[var(--talos-space-control)] text-left text-sm text-[var(--talos-text)] disabled:opacity-60"
+                @pointerdown="onda.onPointerDown"
                 @click="scegli(voce)"
                 @keydown.down.prevent="muovi(indice, 1)"
                 @keydown.up.prevent="muovi(indice, -1)"
@@ -214,8 +236,12 @@ function muovi(indice: number, passo: number): void {
             aria-haspopup="menu"
             :aria-expanded="open"
             aria-controls="talos-speed-dial-menu"
-            :aria-label="open ? t('speedDial.close') : t('speedDial.open')"
-            class="talos-pressable relative z-50 flex min-h-touch w-full items-center justify-center gap-[var(--talos-space-inline)] rounded-full bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+            :aria-label="open ? t('speedDial.close') : (props.iconOnly ? t('shell.newChatOrSession') : t('speedDial.open'))"
+            class="talos-pressable talos-wave-host relative z-50 flex min-h-touch items-center justify-center gap-[var(--talos-space-inline)] rounded-full"
+            :class="props.iconOnly
+                ? 'min-w-touch text-[var(--talos-text)] hover:bg-[var(--talos-active)]'
+                : 'w-full bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-accent-contrast,var(--primary-foreground))]'"
+            @pointerdown="onda.onPointerDown"
             @click="alterna()"
             @keydown.esc.prevent="chiudi()"
         >
@@ -226,7 +252,7 @@ function muovi(indice: number, passo: number): void {
                 :class="open ? 'rotate-45' : ''"
                 aria-hidden="true"
             />
-            <span>{{ t('speedDial.new') }}</span>
+            <span v-if="!props.iconOnly">{{ t('speedDial.new') }}</span>
         </button>
     </div>
 </template>

@@ -46,6 +46,26 @@ const localEngine = vi.hoisted(() => {
         talosLocalEngineGenerate: vi.fn(),
         talosLocalEngineCancel: vi.fn(),
         talosLocalEngineClose: vi.fn(),
+        /*
+         * ⛔ I due fatti che dicono DOVE può girare il modello. Il caso
+         * normale di questa suite è quello di un telefono senza acceleratore
+         * e senza misure — cioè «non chiedere niente», il comportamento di
+         * sempre — e le prove che seguono lo cambiano una alla volta.
+         */
+        talosLocalEngineBackendFacts: vi.fn(async () => ({
+            backendDevice: null,
+            gpuLayersEffective: 0,
+            offloadDevices: null,
+            threadPoolSplit: null,
+        })),
+        talosLocalPerformanceProfiles: vi.fn(async () => [] as unknown[]),
+        /*
+         * ⛔ Il formato dei pesi entra nella decisione del backend dall'11/09:
+         * `Q4_0` e' il caso in cui l'NPU ha senso, e queste prove riguardano
+         * l'NPU e la GPU. Su `Q4_K_M` l'NPU misurava 55,7 t/s contro 206 della
+         * GPU, ed e' coperto da `localBackendPlan.test.ts`.
+         */
+        talosLocalModelQuantisation: vi.fn(async () => 'Q4_0' as string | null),
         // B1: chiamata dopo ogni generazione riuscita per tracciare i tempi
         // nativi. `null` e' l'esito onesto gia' definito dalla funzione vera
         // quando non c'e' niente da riportare - non un valore inventato per
@@ -57,6 +77,16 @@ vi.mock('@/services/localEngine', () => localEngine)
 
 const deviceCapacity = vi.hoisted(() => ({ talosMeasureDevice: vi.fn() }))
 vi.mock('@/services/deviceCapacity', () => deviceCapacity)
+
+/** La preferenza «CPU · GPU · Hexagon» vive nelle Preferences: qui, in memoria. */
+const prefs = vi.hoisted(() => new Map<string, string>())
+vi.mock('@capacitor/preferences', () => ({
+    Preferences: {
+        get: async ({ key }: { key: string }) => ({ value: prefs.get(key) ?? null }),
+        set: async ({ key, value }: { key: string, value: string }) => { prefs.set(key, value) },
+        remove: async ({ key }: { key: string }) => { prefs.delete(key) },
+    },
+}))
 
 const GIB = 1024 * 1024 * 1024
 
@@ -82,6 +112,10 @@ const SMALL_PHONE = {
 }
 
 const { localAdapter, prefissoResoDi, prefissoResoDiProiettato } = await import('@/lib/chat/providers/localAdapter')
+// ⛔ La chiave si importa, non si riscrive: due stringhe uguali a mano sono
+// due stringhe che possono divergere, e il test smetterebbe di parlare del
+// codice vero senza diventare rosso.
+const { TALOS_LOCAL_BACKEND_PREFERENCE_KEY } = await import('@/lib/models/localBackendPreferenceStore')
 const { talosProjectLocalToolConversation } = await import('@/lib/chat/localToolPromptProtocol')
 
 /**
@@ -189,6 +223,13 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
             supportsTools: true,
             supportsToolCalls: true,
             supportsSystemRole: true,
+            /*
+             * ⛔ Dall'11/09 sul trasporto NATIVO gli attrezzi si offrono solo
+             * se una grammatica puo' tenerli. Qui la fixture dichiara di si',
+             * perche' queste prove riguardano il round-trip degli attrezzi; il
+             * caso contrario ha le sue, sotto.
+             */
+            grammarForTools: true,
         })
         // Il lato nativo che NON sa contare prima di aprire: è la build più
         // vecchia, ed è il caso che deve continuare a funzionare com'era.
@@ -925,6 +966,82 @@ describe('LOCAL-PARITY-TOOL-RESULT-02 round-trip del risultato locale', () => {
         }
     })
 
+    /**
+     * ⭐⭐⭐ SENZA GRAMMATICA NON SI DANNO ATTREZZI — owner 11/09, «approvo».
+     *
+     * Misurato sul Pad lo stesso giorno: alla domanda «Come ti chiami»,
+     * `Llama-3.2-3B-Q4_0` ha emesso `{"name":"tool_details",...}` e
+     * `{"name":"library_list",...}`, ha scaricato sei documenti della Libreria
+     * e ha chiesto di aprire una pagina web. Nel log: `peg-native`,
+     * `grammatica: no`. In `common/chat.cpp` non esiste un handler per
+     * Llama 3.x, quindi nessuna grammatica vincola l'uscita — e l'istruzione
+     * contraria nel prompt c'e' gia' ed e' ignorata (When2Call, 2504.18851).
+     */
+    it('SENZA-GRAMMATICA-01 sul trasporto nativo gli attrezzi NON attraversano', async () => {
+        localEngine.talosLocalEngineTemplateCapabilities.mockResolvedValue({
+            supportsTools: true, supportsToolCalls: true, supportsSystemRole: true,
+            grammarForTools: false,
+        })
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue(null)
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'p', promptTokens: 10, contextTokens: 4096,
+        })
+        localEngine.talosLocalEngineGenerate.mockResolvedValue({ text: 'ok', tokens: 2 })
+
+        const attrezzo = {
+            name: 'talos_diagnostic_echo', title: 'Echo',
+            description: 'Return one diagnostic value.', action: 'read' as const,
+            input: z.object({ value: z.string() }), run: async () => ({ content: '' }),
+        }
+        await localAdapter.complete({
+            ...richiestaLocale(),
+            model: { ...richiestaLocale().model, id: '/models/llama32.gguf' },
+            turns: [{ role: 'user', content: 'Come ti chiami' }],
+            tools: [attrezzo],
+        } as never, { apiKey: null, endpoint: null }, (() => {
+            throw new Error('local must not use transport')
+        }) as never)
+
+        // ⛔ Il terzo argomento di planPrompt e' l'elenco degli attrezzi.
+        expect(localEngine.talosLocalEnginePlanPrompt.mock.calls.at(-1)?.[2]).toBeUndefined()
+        expect(localEngine.talosLocalEngineChatPlan.mock.calls.at(-1)?.[1]).toBeUndefined()
+    })
+
+    /**
+     * ⛔⛔ AL CONTRARIO, ed e' la prova che il cancello non e' sempre chiuso:
+     * lo stesso trasporto nativo, la stessa richiesta, ma la grammatica c'e' —
+     * e gli attrezzi passano.
+     */
+    it('SENZA-GRAMMATICA-02 con la grammatica, sullo stesso trasporto, PASSANO', async () => {
+        localEngine.talosLocalEngineTemplateCapabilities.mockResolvedValue({
+            supportsTools: true, supportsToolCalls: true, supportsSystemRole: true,
+            grammarForTools: true,
+        })
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue(null)
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'p', promptTokens: 10, contextTokens: 4096,
+        })
+        localEngine.talosLocalEngineGenerate.mockResolvedValue({ text: 'ok', tokens: 2 })
+
+        const attrezzo = {
+            name: 'talos_diagnostic_echo', title: 'Echo',
+            description: 'Return one diagnostic value.', action: 'read' as const,
+            input: z.object({ value: z.string() }), run: async () => ({ content: '' }),
+        }
+        await localAdapter.complete({
+            ...richiestaLocale(),
+            model: { ...richiestaLocale().model, id: '/models/gemma4.gguf' },
+            turns: [{ role: 'user', content: 'Come ti chiami' }],
+            tools: [attrezzo],
+        } as never, { apiKey: null, endpoint: null }, (() => {
+            throw new Error('local must not use transport')
+        }) as never)
+
+        expect(localEngine.talosLocalEnginePlanPrompt.mock.calls.at(-1)?.[2]).toBeDefined()
+    })
+
     it('LOCAL-PARITY-TEMPLATE-TRANSPORT-06 usa prompt-json-v1 per Gemma senza passare role tool al Jinja', async () => {
         localEngine.talosLocalEngineTemplateCapabilities.mockResolvedValue({
             supportsTools: false,
@@ -1465,5 +1582,254 @@ describe('P1-3 prefissoResoDi — stesso bug del turno solitario, trasporto nati
 
         expect(primo).not.toBe(secondo)
         expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(2)
+    })
+})
+
+/**
+ * ⭐⭐⭐ DOVE gira il modello — la direttiva dell'owner, provata sul percorso
+ * di apertura VERO.
+ *
+ * Owner 2026-09-10: «LA SCELTA RESTA ALL UTENTE, SCEGLIE SEMPRE LUI, CPU GPU O
+ * HEXAGON, DI DEFAULT SCEGLIAMO QUELLO PIU VELOCE (DI SOLITO GPU)».
+ *
+ * ⛔⛔ PERCHÉ QUESTE PROVE STANNO QUI E NON SOLO SUL MODULO PURO. Il modulo che
+ * decide (`lib/models/localBackendChoice.ts`) aveva già i suoi test verdi ed
+ * era **ORFANO**: zero import in tutto `src/`. Una prova che chiama la
+ * funzione direttamente sarebbe rimasta verde anche in quel mondo — cioè non
+ * avrebbe misurato niente di ciò che conta. Queste passano dall'unica porta
+ * che ogni messaggio attraversa, `localAdapter.complete`, e diventano ROSSE se
+ * quella porta smette di chiamare la decisione.
+ */
+describe('la scelta del backend attraversa l apertura, non resta un modulo', () => {
+    beforeEach(() => {
+        prefs.clear()
+        localEngine.talosLocalEngineStatus.mockReset()
+        localEngine.talosLocalEngineOpen.mockReset()
+        localEngine.talosLocalEngineOpenWithFallback.mockReset()
+        localEngine.talosLocalEngineChatPlan.mockReset()
+        localEngine.talosLocalEnginePlanPrompt.mockReset()
+        localEngine.talosLocalEngineTemplateCapabilities.mockReset()
+        localEngine.talosLocalEngineChatPrompt.mockReset()
+        localEngine.talosLocalEngineGenerate.mockReset()
+        localEngine.talosLocalPerformanceProfiles.mockReset()
+        localEngine.talosLocalEngineBackendFacts.mockReset()
+        deviceCapacity.talosMeasureDevice.mockReset()
+        deviceCapacity.talosMeasureDevice.mockResolvedValue(null)
+        localEngine.talosLocalEngineTemplateCapabilities.mockResolvedValue({
+            supportsTools: true, supportsToolCalls: true, supportsSystemRole: true,
+        })
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue(null)
+        localEngine.talosLocalPerformanceProfiles.mockResolvedValue([])
+        localEngine.talosLocalEngineBackendFacts.mockResolvedValue({
+            backendDevice: null, gpuLayersEffective: 0, offloadDevices: null, threadPoolSplit: null,
+        })
+        // Il telefono dell'owner in RELEASE: due registry, la CPU e l'Adreno.
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true, backends: 'CPU,OpenCL', loadedPath: null, shape: null,
+        })
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineChatPrompt.mockResolvedValue('templated prompt')
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'templated prompt', promptTokens: 120, contextTokens: 4096,
+        })
+        localEngine.talosLocalEngineGenerate.mockResolvedValue({ text: 'Ciao', tokens: 1 })
+    })
+
+    function messaggio(path = '/models/qwen.gguf') {
+        return {
+            model: {
+                id: path,
+                provider: 'local',
+                displayName: 'Qwen',
+                chatCompatibility: 'unknown',
+                supportedParameters: [],
+                inputModalities: ['text'],
+                outputModalities: ['text'],
+            },
+            turns: [{ role: 'user', content: 'Rispondi con ciao.' }],
+            effort: 'low',
+            thinking: false,
+        }
+    }
+
+    async function invia(path = '/models/qwen.gguf') {
+        await localAdapter.complete(
+            messaggio(path) as never,
+            { apiKey: null, endpoint: null },
+            (() => { throw new Error('local must not use transport') }) as never,
+        )
+    }
+
+    /** Un profilo misurato: quello che `qualifyBackend` scrive dopo un sondaggio vero. */
+    function profilo(registry: string, ttftMs: number, decodeTokPerSec: number) {
+        return {
+            backendRegistry: registry,
+            backendDevice: registry === 'CPU' ? null : 'Adreno',
+            outcome: 'CORRECT' as const,
+            ttftMs,
+            decodeTokPerSec,
+            qualificationLevel: 'Q1' as const,
+            measuredAtMs: 1_757_500_000_000,
+        }
+    }
+
+    /**
+     * ⛔⛔ LA PROVA CHE MORDE SULL'ORFANEZZA.
+     *
+     * Se qualcuno stacca l'aggancio — cioè se `localBackendChoice.ts` torna a
+     * essere un modulo che nessuno chiama — l'apertura torna a non nominare
+     * niente e questa riga diventa rossa. È l'unica prova del gruppo che non
+     * potrebbe restare verde in un mondo dove la decisione è di nuovo morta.
+     */
+    it('MORDE — la misura vince e il bersaglio viene NOMINATO all apertura', async () => {
+        localEngine.talosLocalPerformanceProfiles.mockResolvedValue([
+            profilo('CPU', 3_000, 9),
+            profilo('OpenCL', 1_200, 24),
+        ])
+
+        await invia()
+
+        expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
+            '/models/qwen.gguf',
+            expect.objectContaining({ gpuLayers: -1, backend: 'OpenCL' }),
+        )
+        // ⛔ E il modello viene interrogato sui SUOI profili, non su un elenco
+        // globale: una misura presa su un altro file non parla di questo.
+        expect(localEngine.talosLocalPerformanceProfiles).toHaveBeenCalledWith('/models/qwen.gguf')
+    })
+
+    /**
+     * ⛔⛔ SCELTO non è IN USO: dopo aver aperto si CHIEDE al motore che cosa ha
+     * risolto davvero, e non lo si deduce da ciò che gli era stato chiesto.
+     *
+     * «Backend selezionabile non equivale a backend realmente utilizzato» —
+     * la ricerca dell'owner sul difetto di PocketPal. Due letture dei fatti
+     * nativi per una apertura: una per decidere, una per verificare. Se la
+     * seconda sparisce, questa riga diventa rossa.
+     */
+    it('MORDE — dopo l apertura si verifica che cosa sta girando DAVVERO', async () => {
+        localEngine.talosLocalPerformanceProfiles.mockResolvedValue([
+            profilo('CPU', 3_000, 9),
+            profilo('OpenCL', 1_200, 24),
+        ])
+
+        await invia()
+
+        expect(localEngine.talosLocalEngineBackendFacts).toHaveBeenCalledTimes(2)
+    })
+
+    /**
+     * ⛔ (a) LA SCELTA MANUALE VINCE SEMPRE — anche quando la misura dice il
+     * contrario, e soprattutto allora: è il caso in cui un'euristica sarebbe
+     * tentata di «correggere» la persona.
+     */
+    it('AL CONTRARIO — la scelta manuale della persona batte la misura', async () => {
+        prefs.set(
+            TALOS_LOCAL_BACKEND_PREFERENCE_KEY,
+            JSON.stringify({ mode: 'manual', manual: 'cpu' }),
+        )
+        localEngine.talosLocalPerformanceProfiles.mockResolvedValue([
+            // La GPU è nettamente più veloce: l'euristica, da sola, la sceglierebbe.
+            profilo('CPU', 3_000, 9),
+            profilo('OpenCL', 1_200, 24),
+        ])
+
+        await invia()
+
+        const opzioni = localEngine.talosLocalEngineOpenWithFallback.mock.calls[0]![1] as Record<string, unknown>
+        expect(opzioni.gpuLayers).toBe(0)
+        // Nessun bersaglio nominato: la CPU non è un dispositivo di offload.
+        expect(opzioni).not.toHaveProperty('backend')
+    })
+
+    it('AL CONTRARIO — la persona chiede la GPU e la ottiene, senza misure', async () => {
+        prefs.set(
+            TALOS_LOCAL_BACKEND_PREFERENCE_KEY,
+            JSON.stringify({ mode: 'manual', manual: 'gpu' }),
+        )
+        localEngine.talosLocalPerformanceProfiles.mockResolvedValue([])
+
+        await invia()
+
+        expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
+            '/models/qwen.gguf',
+            expect.objectContaining({ gpuLayers: -1, backend: 'OpenCL' }),
+        )
+    })
+
+    /**
+     * ⛔ La persona chiede Hexagon, che oggi non è compilato: NON si sostituisce
+     * in silenzio. Si resta sul pavimento e lo si dichiara — «ho scelto Hexagon
+     * e giro su CPU senza saperlo» è il difetto che si sta battendo.
+     */
+    it('AL CONTRARIO — un backend chiesto e assente NON diventa un altro backend', async () => {
+        prefs.set(
+            TALOS_LOCAL_BACKEND_PREFERENCE_KEY,
+            JSON.stringify({ mode: 'manual', manual: 'hexagon' }),
+        )
+
+        await invia()
+
+        const opzioni = localEngine.talosLocalEngineOpenWithFallback.mock.calls[0]![1] as Record<string, unknown>
+        expect(opzioni.gpuLayers).toBe(0)
+        expect(opzioni).not.toHaveProperty('backend')
+    })
+
+    /**
+     * ⛔ (b) SENZA MISURA NON SI INVENTA UN PREDEFINITO — e «non inventare» qui
+     * vuol dire non passare NIENTE.
+     *
+     * Scrivere `gpuLayers: 0` sarebbe un default silenzioso con l'aria di una
+     * decisione, e spegnerebbe l'arbitro nativo (`TalosBackendChoice`) che
+     * legge l'evidenza del sondaggio. L'apertura resta identica a quella di
+     * ieri: contesto e cache, nient'altro.
+     */
+    it('AL CONTRARIO — nessuna scelta e nessuna misura: l apertura non chiede DOVE', async () => {
+        await invia()
+
+        expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
+            '/models/qwen.gguf',
+            { contextTokens: 4096, kvCacheType: 'f16' },
+        )
+    })
+
+    /**
+     * ⛔ Un registry che non si è registrato in questa build non esiste, per
+     * quanto la misura ne parli: sulle build di DEBUG l'acceleratore non è a
+     * bordo (§9 del ledger 2026-09-10) e una misura vecchia non lo riporta in
+     * vita.
+     */
+    it('AL CONTRARIO — una misura su un backend che questa build non ha non lo nomina', async () => {
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true, backends: 'CPU', loadedPath: null, shape: null,
+        })
+        localEngine.talosLocalPerformanceProfiles.mockResolvedValue([profilo('OpenCL', 1_200, 24)])
+
+        await invia()
+
+        expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
+            '/models/qwen.gguf',
+            { contextTokens: 4096, kvCacheType: 'f16' },
+        )
+    })
+
+    /**
+     * ⛔ E il motore che dichiara ZERO bersagli di offload chiude la questione:
+     * il registry c'è, i dispositivi no.
+     */
+    it('AL CONTRARIO — zero dispositivi di offload: la GPU chiesta non c e', async () => {
+        prefs.set(
+            TALOS_LOCAL_BACKEND_PREFERENCE_KEY,
+            JSON.stringify({ mode: 'manual', manual: 'gpu' }),
+        )
+        localEngine.talosLocalEngineBackendFacts.mockResolvedValue({
+            backendDevice: null, gpuLayersEffective: 0, offloadDevices: 0, threadPoolSplit: null,
+        })
+
+        await invia()
+
+        const opzioni = localEngine.talosLocalEngineOpenWithFallback.mock.calls[0]![1] as Record<string, unknown>
+        expect(opzioni.gpuLayers).toBe(0)
+        expect(opzioni).not.toHaveProperty('backend')
     })
 })

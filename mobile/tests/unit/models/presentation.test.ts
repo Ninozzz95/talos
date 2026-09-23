@@ -172,6 +172,9 @@ describe('sizes', () => {
         expect(talosFormatBytes(2.5 * 1024 ** 3)).toBe('2.5 GB')
         expect(talosFormatBytes(1024 ** 3)).toBe('1 GB')
         expect(talosFormatBytes(512 * 1024 ** 2)).toBe('512 MB')
+        // Pad, 14/09: in italiano il decimale e' la virgola, non il punto.
+        expect(talosFormatBytes(4.2 * 1024 ** 3, 'it')).toBe('4,2 GB')
+        expect(talosFormatBytes(14.44 * 1024 ** 3, 'it')).toBe('14 GB')
     })
 
     it('drops the decimal once it stops carrying information', () => {

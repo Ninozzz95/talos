@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import centerSource from '@/components/talos/settings/TalosMobileSettingsCenter.vue?raw'
 
 /**
  * Harness UI (Codex, 24/8) — solo il link, non un mock dell'intero
@@ -46,7 +47,7 @@ function mountCenter() {
  */
 function widenToTablet(): void {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-        matches: query.includes('768'),
+        matches: query.includes('861'),
         addEventListener: () => {},
         removeEventListener: () => {},
     })))
@@ -87,7 +88,7 @@ describe('TalosMobileSettingsCenter — on the phone, it is navigation', () => {
         // stazione sua. Vedi settingsTabs.test.ts per il perche'.
         expect(wrapper.findAll('[data-settings-tab]')).toHaveLength(14)
         expect(wrapper.findAll('[data-testid="settings-model-lab-link"]')).toHaveLength(1)
-        expect(wrapper.get('[data-testid="settings-model-lab-link"]').text()).toContain('Model Lab')
+        expect(wrapper.get('[data-testid="settings-model-lab-link"]').text()).toContain('Models')
 
         const destinations = Array.from(wrapper.get('[data-testid="settings-category-list"]').element
             .querySelectorAll<HTMLElement>('[data-settings-tab], [data-settings-route]'))
@@ -101,15 +102,11 @@ describe('TalosMobileSettingsCenter — on the phone, it is navigation', () => {
             ?.querySelector('[data-testid="settings-model-lab-link"]')).not.toBeNull()
 
         const modelLab = wrapper.get('[data-testid="settings-model-lab-link"]')
-        expect(modelLab.classes()).toEqual(expect.arrayContaining([
-            'min-h-touch',
-            'gap-[var(--talos-space-inline)]',
-            'px-[var(--talos-space-card)]',
-        ]))
-        expect(modelLab.element.parentElement?.classList)
-            .toContain('rounded-[var(--talos-radius-card)]')
-        expect(modelLab.findAll('svg').every((icon) => icon.classes()
-            .includes('size-[var(--talos-icon-size)]'))).toBe(true)
+        expect(modelLab.classes()).toContain('settings-row')
+        expect(modelLab.get('small').text()).toBe('Services, catalog and on-device models')
+        expect(centerSource).toMatch(/min-height: 4rem/)
+        expect(modelLab.element.parentElement?.classList).toContain('settings-group-list')
+        expect(wrapper.findAll('[data-testid="settings-group-heading"]').every((heading) => heading.element.tagName === 'H3')).toBe(true)
     })
 
     it('marks where you are with aria-current, and gives every row its own tab stop', async () => {
@@ -214,7 +211,7 @@ describe('TalosMobileSettingsCenter', () => {
         // uppercase because of CSS, not because the string is.
         const headings = wrapper.findAll('[data-testid="settings-group-heading"]').map((node) => node.text())
 
-        expect(headings.at(-1)).toBe('Not in this build')
+        expect(headings.at(-1)).toBe('Unavailable')
         // …and the live groups keep only live entries.
         const rows = wrapper.findAll('[data-settings-tab]').map((row) => row.attributes('data-settings-tab'))
         expect(rows.slice(-4)).toEqual(['integrations', 'email', 'reminders', 'system'])
@@ -328,7 +325,7 @@ describe('TalosMobileSettingsCenter', () => {
         expect(categories.attributes('data-talos-motion-intent')).toBe('tab-change')
         // aria-current, not aria-selected: coming back to the list is coming
         // back to a list of destinations.
-        expect(selected.attributes('aria-current')).toBe('page')
+        expect(selected.attributes('aria-current')).toBeUndefined()
         expect(document.activeElement).toBe(selected.element)
         expect(nav.subView.value).toBeNull()
     })
@@ -337,14 +334,31 @@ describe('TalosMobileSettingsCenter', () => {
 // SF-critic M1: at the md breakpoint (side-by-side) opening a category must NOT
 // push a sheet sub-view (no spurious contextual Back / wrong header on tablet).
 describe('TalosMobileSettingsCenter md breakpoint', () => {
+    it.each([768, 860, 861])('keeps one pane through 860px and preserves deep-link navigation at %spx', async (width) => {
+        vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+            matches: width >= Number(query.match(/min-width: (\d+)px/)?.[1] ?? Infinity),
+            addEventListener: () => {}, removeEventListener: () => {},
+        })))
+        const { useTalosSheetNav } = await import('@/composables/useTalosSheetNav')
+        const wrapper = mount(TalosMobileSettingsCenter, {
+            props: { requestedTab: 'appearance' }, attachTo: document.body, global: { stubs: panelStubs },
+        })
+        expect(wrapper.get('[data-settings-tab="appearance"]').attributes('aria-current')).toBe('page')
+        expect(wrapper.get('[data-testid="settings-category-pane"]').classes().includes('hidden')).toBe(width <= 860)
+        expect(useTalosSheetNav().subView.value !== null).toBe(width <= 860)
+        await wrapper.setProps({ requestedTab: null })
+        expect(wrapper.get('[data-testid="settings-list-detail"]').classes()).toContain('settings-home')
+        expect(wrapper.find('[aria-current="page"]').exists()).toBe(false)
+        wrapper.unmount()
+    })
+
     it('TABLET-SETTINGS-SCROLL-01 makes the category rail a bounded structural flex column', () => {
         const wrapper = mountCenter()
         const categories = wrapper.get('[data-testid="settings-category-pane"]')
 
-        expect(categories.classes()).toContain('md:flex')
-        expect(categories.classes()).toContain('md:flex-col')
-        expect(categories.classes()).toContain('md:overflow-hidden')
-        expect(categories.classes()).not.toContain('md:block')
+        expect(categories.classes()).toContain('settings-menu')
+        expect(centerSource).toMatch(/\.settings-menu \{ height: 100%; min-height: 0;/)
+        expect(centerSource).toMatch(/\.settings-category-list \{\s*display: flex;\s*flex-direction: column;/)
         wrapper.unmount()
     })
 
@@ -357,28 +371,29 @@ describe('TalosMobileSettingsCenter md breakpoint', () => {
 
         expect(categories.classes()).not.toContain('md:overflow-y-auto')
         expect(categories.classes()).not.toContain('md:overscroll-contain')
-        expect(tablist.classes()).toContain('md:min-h-0')
-        expect(tablist.classes()).toContain('md:flex-1')
-        expect(tablist.classes()).toContain('md:overflow-y-auto')
-        expect(tablist.classes()).toContain('md:overscroll-contain')
+        expect(tablist.classes()).toContain('settings-category-list')
+        expect(centerSource).toMatch(/\.settings-category-list \{[^}]*min-height: 0;[^}]*overflow-y: auto;[^}]*overscroll-behavior: contain;/)
         wrapper.unmount()
     })
 
-    it('TABLET-SETTINGS-04 owns the full list-detail height and reuses the shell rail width', () => {
+    it('TABLET-SETTINGS-04 owns its height and sizes categories independently of the global sidebar', () => {
         const wrapper = mountCenter()
         const scaffold = wrapper.get('[data-testid="settings-list-detail"]')
         const categories = wrapper.get('[data-testid="settings-category-pane"]')
 
-        expect(scaffold.classes()).toContain('md:h-full')
-        expect(scaffold.classes()).toContain('md:rounded-none')
-        expect(categories.classes()).toContain('md:w-[var(--talos-tablet-sidebar-width)]')
+        expect(scaffold.classes()).toContain('settings-center')
+        expect(categories.classes()).toContain('settings-menu')
+        expect(centerSource).toContain('grid-template-columns: 16rem minmax(0, 1fr)')
+        expect(centerSource).toContain('grid-template-columns: 13rem minmax(0, 1fr)')
+        expect(centerSource).toContain('max-width: 49rem')
+        expect(centerSource).not.toContain('--talos-tablet-sidebar-width')
         wrapper.unmount()
     })
 
     it('does not set a sheet sub-view when the md layout is side-by-side', async () => {
         const listeners: Array<(e: { matches: boolean }) => void> = []
         vi.stubGlobal('matchMedia', vi.fn((q: string) => ({
-            matches: q.includes('768'),
+            matches: q.includes('861'),
             addEventListener: (_: string, l: (e: { matches: boolean }) => void) => listeners.push(l),
             removeEventListener: () => {},
         })))
@@ -386,13 +401,19 @@ describe('TalosMobileSettingsCenter md breakpoint', () => {
         const nav = useTalosSheetNav()
         nav.clear()
         const wrapper = mount(TalosMobileSettingsCenter, { attachTo: document.body, global: { stubs: panelStubs } })
-        // `mobilePane` intentionally starts on categories. Both side-by-side
-        // panes therefore need an md display override over the phone `hidden`.
-        expect(wrapper.get('[data-testid="settings-category-pane"]').classes()).toContain('md:flex')
+        // The overview is a complete page at every width.
+        expect(wrapper.get('[data-testid="settings-category-pane"]').classes()).not.toContain('hidden')
         expect(wrapper.get('[data-testid="settings-detail-pane"]').classes()).toContain('hidden')
-        expect(wrapper.get('[data-testid="settings-detail-pane"]').classes()).toContain('md:block')
+        expect(wrapper.find('[aria-current="page"]').exists()).toBe(false)
         await activateTab(wrapper, 'account')
         expect(nav.subView.value).toBeNull()
+        expect(wrapper.get('[data-testid="settings-list-detail"]').classes()).toContain('settings-layout')
+        expect(wrapper.get('[data-testid="settings-category-pane"]').classes()).not.toContain('hidden')
+        expect(wrapper.get('[data-testid="settings-detail-pane"]').classes()).not.toContain('hidden')
+        expect(wrapper.get('[data-settings-tab="account"]').classes()).toContain('settings-account-link')
+        await wrapper.get('[data-testid="settings-all-link"]').trigger('click')
+        expect(wrapper.get('[data-testid="settings-list-detail"]').classes()).toContain('settings-home')
+        expect(wrapper.emitted('update:openTab')?.at(-1)).toEqual([null])
         wrapper.unmount()
         vi.unstubAllGlobals()
     })

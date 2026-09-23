@@ -14,6 +14,7 @@ import {
 } from '@lucide/vue'
 import { Capacitor } from '@capacitor/core'
 import { talosLocalEngineDoctorRows } from '@/services/localEngineDoctor'
+import { talosKernelDoctorRows } from '@/services/kernelDoctor'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import { talosDictationDiagnostics } from '@/services/dictationDiagnostica'
@@ -129,6 +130,53 @@ const localParityMessage = computed(() => {
 })
 
 /** Five real generations can take minutes; this is never an automatic probe. */
+/**
+ * ⭐⭐⭐ QUALI MOTORI ENTRANO DAVVERO.
+ *
+ * ⛔ Non è il sondaggio della GPU e non lo sostituisce: quello chiede «è più
+ * veloce?» e costa batteria e calore; questo chiede «entra?» e costa un
+ * caricamento. Il 2026-09-10 il sondaggio rispondeva «già misurato su questo
+ * telefono» mentre trenta strati su trenta giravano sulla CPU: due domande
+ * diverse che sembravano una, e nessuna delle due rispondeva a questa.
+ *
+ * Il nativo che risponde esisteva da mesi, completo, e non lo chiamava nessuno.
+ */
+interface TalosSondaCaricamento {
+    attempts: Array<{ library: string, loaded: boolean, registry?: string, deviceCount?: number }>
+    error?: string
+}
+
+const backendLoad = ref<TalosSondaCaricamento | null>(null)
+const backendLoadRunning = ref(false)
+const backendLoadDone = ref(false)
+
+/**
+ * ⛔ Import PIGRO, come tutto ciò che questa schermata tocca del motore: il
+ * grafo d'avvio ha 354 byte liberi su 623.000, e una schermata di diagnosi non
+ * è ciò che si paga all'apertura dell'app.
+ */
+async function runBackendLoad(): Promise<void> {
+    if (backendLoadRunning.value) return
+    backendLoadRunning.value = true
+    try {
+        const { talosProbeBackendLoad } = await import('@/services/localEngine')
+        backendLoad.value = await talosProbeBackendLoad()
+        backendLoadDone.value = true
+    } finally {
+        backendLoadRunning.value = false
+    }
+}
+
+/** Quanti sono entrati su quanti provati. `null` finché non si è chiesto. */
+const backendLoadSummary = computed<{ entrati: number, provati: number } | null>(() => {
+    const esito = backendLoad.value
+    if (esito === null) return null
+    return {
+        entrati: esito.attempts.filter((tentativo) => tentativo.loaded).length,
+        provati: esito.attempts.length,
+    }
+})
+
 async function runLocalParity(): Promise<void> {
     const model = selectedLocalModel.value
     if (!model || localParityRunning.value) return
@@ -402,6 +450,32 @@ async function scan(): Promise<void> {
     }
 
     /*
+     * ⛔ IL KERNEL DEL CODICE — l'unico pezzo che non era MAI girato su un
+     * telefono, e il commit che l'ha collegato lo dichiara: «NON VERIFICATO SU
+     * DISPOSITIVO».
+     *
+     * Non prova il kernel: prova il CONFINE. Tutto il resto è TypeScript puro su
+     * una porta iniettata e ha i suoi dodici file di prova in Node; qui si guarda
+     * se il filesystem vero si comporta come `discoCapacitor` presume — e la
+     * ricerca dice che su Android quell'API ha difetti dichiarati (`readdir` che
+     * torna solo cartelle, `capacitor-plugins#1940`).
+     *
+     * ⛔ Le etichette passano dal dizionario, come ogni riga vicina. La prima
+     * versione le scriveva in italiano dentro la sonda, con la scusa che
+     * «descrive fatti misurati, e ha senso solo per chi la legge adesso» — ma
+     * la sonda è **permanente**, sta nella piega che ogni persona può aprire, e
+     * `Copia diagnostica` la spedisce dentro un rapporto condivisibile. A chi
+     * usa l'app in inglese sarebbero arrivate quattro righe in italiano.
+     *
+     * ⇒ I VALORI invece restano crudi di proposito: sono cifre, oppure le
+     * parole del tipo del kernel — `completo`, `presente`, `assente` — che sono
+     * il **dato**. Tradurle nasconderebbe quale ramo ha risposto.
+     */
+    for (const row of await talosKernelDoctorRows().catch(() => [])) {
+        collected.push({ id: row.id, label: t(row.labelKey), value: row.value, ok: row.ok })
+    }
+
+    /*
      * ⛔ L'agente: la catena, il piano, e il conto che ha fatto nascere A8.
      *
      * Owner 2026-08-07, direttiva permanente: ogni cosa nuova si aggancia al
@@ -642,6 +716,78 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                     />
                 </div>
 
+                <!--
+                    ⭐ «Entra?» sta ACCANTO a «è più veloce?», e non dentro:
+                    sono due domande, con due costi e due risposte. Stessa forma
+                    della riga della parità qui sotto — nessuno stile nuovo, e
+                    un solo bottone per riga come vuole la regola sull'overflow.
+                -->
+                <section
+                    class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3"
+                    data-testid="talos-doctor-backend-load"
+                >
+                    <div class="flex min-w-0 items-start gap-3">
+                        <span class="min-w-0 flex-1">
+                            <span class="block text-sm font-semibold text-[var(--talos-text)]">
+                                {{ t('doctor.backendLoadTitle') }}
+                            </span>
+                        </span>
+                        <button
+                            type="button"
+                            data-testid="talos-doctor-backend-load-run"
+                            :disabled="backendLoadRunning"
+                            class="talos-pressable min-h-touch shrink-0 rounded-xl border border-[var(--talos-border)] px-3 text-xs font-semibold text-[var(--talos-text)] disabled:opacity-60"
+                            @click="runBackendLoad"
+                        >
+                            {{ t(backendLoadRunning
+                                ? 'doctor.backendLoadRunning'
+                                : 'doctor.backendLoadRun') }}
+                        </button>
+                    </div>
+                    <p class="mt-2 text-2xs leading-4 text-[var(--talos-muted)]">
+                        {{ t('doctor.backendLoadBody') }}
+                    </p>
+                    <p
+                        v-if="backendLoadDone"
+                        data-testid="talos-doctor-backend-load-result"
+                        role="status"
+                        class="mt-2 text-2xs leading-4 text-[var(--talos-text)]"
+                    >
+                        {{ backendLoadSummary === null
+                            ? t('doctor.backendLoadNone')
+                            : t('doctor.backendLoadResult', {
+                                entrati: String(backendLoadSummary.entrati),
+                                provati: String(backendLoadSummary.provati),
+                            }) }}
+                    </p>
+                    <!--
+                        ⛔ L'elenco per nome, non solo il conteggio: «due su nove»
+                        non dice QUALE manca, ed è esattamente la domanda per cui
+                        questa sonda esiste.
+                    -->
+                    <ul
+                        v-if="backendLoad"
+                        class="mt-1.5 space-y-0.5 font-mono text-3xs text-[var(--talos-muted)]"
+                    >
+                        <li
+                            v-for="tentativo in backendLoad.attempts"
+                            :key="tentativo.library"
+                            class="flex min-w-0 items-center gap-1.5"
+                        >
+                            <span
+                                aria-hidden="true"
+                                :class="tentativo.loaded
+                                    ? 'text-[var(--talos-success)]'
+                                    : 'text-[var(--talos-danger)]'"
+                            >{{ tentativo.loaded ? '✓' : '✗' }}</span>
+                            <span class="min-w-0 truncate">{{ tentativo.library }}</span>
+                            <span v-if="tentativo.deviceCount !== undefined" class="shrink-0">
+                                &#183; {{ tentativo.deviceCount }}
+                            </span>
+                        </li>
+                    </ul>
+                </section>
+
                 <!-- Five real model rounds, never an automatic startup tax. -->
                 <section
                     v-if="selectedLocalModel"
@@ -697,6 +843,51 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                         >
                             {{ t('doctor.localParityTransportLabel') }}:
                             {{ t(`doctor.localParityTransport.${localParity.toolTransport}`) }}
+                        </p>
+                        <!--
+                            ⛔⛔ SE LE RICHIESTE DI QUESTO MODELLO SI POSSONO TENERE.
+                            Misurato sul Pad l'11/09/2026: alla domanda «Come ti
+                            chiami», Llama-3.2-3B ha scaricato sei documenti della
+                            Libreria e ha chiesto di aprire una pagina web. Il log
+                            della stessa generazione diceva `grammatica: no`: per
+                            quel modello llama.cpp non produce nessuna grammatica,
+                            e niente tiene a freno cio' che chiede.
+
+                            ⛔ Fino a stasera questa differenza non si vedeva da
+                            nessuna parte: `supportsToolCalls` dice «si» per
+                            questo modello e per gemma-4 allo stesso modo. Una
+                            riga sola, accanto a quella del trasporto, perche' e'
+                            la stessa domanda — COME parla questo modello agli
+                            attrezzi — e non merita un riquadro suo.
+                        -->
+                        <p
+                            data-testid="talos-doctor-local-parity-grammar"
+                            class="mt-1 text-2xs leading-4"
+                            :class="localParity.templateCapabilities?.grammarForTools
+                                ? 'text-[var(--talos-muted)]'
+                                : 'text-[var(--talos-danger)]'"
+                        >
+                            {{ localParity.templateCapabilities?.grammarForTools
+                                ? t('doctor.localParityGrammarHeld')
+                                : t('doctor.localParityGrammarLoose') }}
+                        </p>
+                        <!--
+                            ⭐⭐⭐ E SE IL SUO RAGIONAMENTO SI PUO' SPEGNERE.
+                            ⛔ Non «questo modello ragiona» — quello e' gia'
+                            detto altrove, e per LFM2 llama.cpp lo dichiara vero
+                            senza guardare il file. Questa riga dice se
+                            l'interruttore ESISTE su questo template, e vale
+                            quanto una misura: sul Pad, LFM2.5 spende ~130 token
+                            di ragionamento prima di ogni risposta, cioe' 7,6
+                            secondi in cui la persona non legge niente.
+                        -->
+                        <p
+                            data-testid="talos-doctor-local-parity-thinking"
+                            class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]"
+                        >
+                            {{ localParity.templateCapabilities?.thinkingCanBeDisabled
+                                ? t('doctor.localParityThinkingOptional')
+                                : t('doctor.localParityThinkingAlways') }}
                         </p>
                         <ul class="mt-2 grid gap-1 sm:grid-cols-2">
                             <li

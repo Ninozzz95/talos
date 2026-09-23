@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { TALOS_AZIONI_GOVERNATE } from '@/lib/tools/toolControlCatalog'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { reactive, ref } from 'vue'
@@ -46,8 +47,17 @@ vi.mock('@/stores/settings', () => ({
         setSecurity: vi.fn(async () => {}),
         setToolPermissions: vi.fn(async (patch: Record<string, string>) => {
             state.toolPermissions.push(patch)
-            // Toccare un permesso e' sceglierlo: il magazzino vero fa lo stesso.
-            for (const action of Object.keys(patch)) {
+            /*
+             * Toccare un permesso e' sceglierlo — ⛔ ma solo fra i poteri
+             * GOVERNATI, come fa il magazzino vero.
+             *
+             * ⛔⛔ E si DERIVA dalla stessa costante invece di elencare tre nomi:
+             * un finto che non rispecchia il contratto e un finto che mente, e
+             * il 2026-08-20 questo avrebbe certificato come «scelta della
+             * persona» un potere che non era nemmeno a schermo.
+             */
+            for (const action of TALOS_AZIONI_GOVERNATE) {
+                if (patch[action] === undefined) continue
                 if (!state.toolsChosen.includes(action)) state.toolsChosen.push(action)
             }
         }),
@@ -458,7 +468,23 @@ describe('first-run setup', () => {
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         await flushPromises()
 
-        expect(state.toolPermissions).toEqual([{ read: 'allow', write: 'allow', outbound: 'allow' }])
+        /*
+         * ⭐⭐⭐ «Concedi tutto» non NOMINA nemmeno `execute`.
+         *
+         * Il bottone concede i poteri che la persona sta GUARDANDO — quelli che
+         * un attrezzo dichiara. `execute` e nel vocabolario dal 2026-08-20 ma
+         * nessun attrezzo la usa ancora, quindi non e a schermo e non entra nel
+         * patch: `setToolPermissions` registra come SCELTO cio che riceve, e un
+         * permesso spedito e un permesso deciso.
+         *
+         * ⛔ Assente, non `ask`: le due cose sono diverse. `ask` nel patch
+         * direbbe «la persona ha guardato e ha scelto di farsi chiedere»;
+         * l'assenza dice «non gliene abbiamo parlato». Il valore salvato resta
+         * `ask` lo stesso — ma come DEFAULT, che e revisionabile, non come sua
+         * decisione, che non lo e.
+         */
+        expect(state.toolPermissions)
+            .toEqual([{ read: 'allow', write: 'allow', outbound: 'allow' }])
         // E la scelta e' registrata COME scelta: «chiedimelo» sarebbe uguale al
         // predefinito, quindi senza questo elenco il passo non risulterebbe mai
         // fatto per chi sceglie la prudenza.
@@ -477,7 +503,8 @@ describe('first-run setup', () => {
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         await flushPromises()
 
-        expect(state.toolPermissions).toEqual([{ read: 'ask', write: 'ask', outbound: 'ask' }])
+        expect(state.toolPermissions)
+            .toEqual([{ read: 'ask', write: 'ask', outbound: 'ask' }])
         expect(state.toolsChosen.sort()).toEqual(['outbound', 'read', 'write'])
         wrapper.unmount()
     })

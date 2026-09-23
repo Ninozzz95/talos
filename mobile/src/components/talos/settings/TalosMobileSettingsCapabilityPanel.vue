@@ -24,5 +24,11 @@ const { t } = useTalosI18n()
         <p class="mt-3 text-xs leading-5 text-[var(--talos-muted)]">
             {{ tab.description }} {{ t('settingsCenter.gatedExplanation') }}
         </p>
+        <RouterLink
+            v-if="tab.id === 'reminders' || tab.id === 'system'"
+            :to="{ name: tab.id === 'reminders' ? 'tasks' : 'doctor' }"
+            :data-testid="tab.id === 'reminders' ? 'settings-reminders-tasks' : 'settings-system-doctor'"
+            class="talos-pressable mt-3 flex min-h-touch items-center rounded-md border border-[var(--talos-border)] px-3 text-sm text-[var(--talos-accent)]"
+        >{{ t(tab.id === 'reminders' ? 'settingsCenter.openTasks' : 'settingsCenter.openDoctor') }}</RouterLink>
     </section>
 </template>

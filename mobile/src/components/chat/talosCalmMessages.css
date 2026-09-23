@@ -1,0 +1,27 @@
+/* Fase 4: geometria del Calm Finale, colori e movimento della TALOS reale. */
+.talos-calm-thread { --talos-assistant: var(--talos-panel-soft); }
+.talos-calm-thread .chat-message { margin-bottom: 1.8rem; color: var(--talos-text); }
+/* Owner 12/09: la bolla della domanda è SEMPRE del colore dell'accento (il grigio `--talos-user` del mockup è stato visto e scartato). */
+.talos-calm-thread .user-bubble { margin-left: auto; width: fit-content; max-width: 83%; background: var(--talos-accent); color: var(--talos-accent-text); border: 1px solid transparent; border-radius: var(--talos-radius-card); padding: var(--talos-space-card) var(--talos-space-page); line-height: 1.65; }
+/* Owner 12/09: in Aspetto → «sezioni» la risposta NON sta in un contenitore: tutta larghezza, senza fondo né bordo. In «bolle» è una bolla (sotto). */
+.talos-calm-thread .assistant-text { width: 100%; background: transparent; padding: 0; border-radius: 0; line-height: 1.85; animation: talos-answer-fade var(--talos-motion-calm-answer, 184ms) ease-out; }
+.talos-calm-thread .assistant-bubble { max-width: 92%; background: var(--talos-assistant); padding: var(--talos-space-page); border-radius: var(--talos-radius-card); border: 1px solid var(--talos-border); }
+.talos-calm-thread .talos-message-content { line-height: inherit; }
+.assistant-header { display: flex; align-items: center; width: 100%; gap: .55rem; font-size: var(--text-xs); margin-bottom: .75rem; }
+.assistant-header small { margin-left: auto; min-width: 0; overflow-wrap: anywhere; text-align: right; opacity: .65; font-size: var(--text-3xs); }
+.talos-orb { position: relative; width: 2.25rem; height: 2.25rem; flex: none; border: 1px solid var(--talos-accent-soft); border-radius: 50%; display: grid; place-items: center; color: var(--talos-accent); }
+.talos-orb .talos-short-logo { width: 1.2rem; height: 1.2rem; }
+.talos-orb.working::after { content: ''; position: absolute; inset: -3px; border: 1px solid transparent; border-top-color: var(--talos-accent); border-radius: 50%; animation: talos-orb-spin max(1ms, var(--talos-motion-calm-orb, 1500ms)) linear infinite; animation-play-state: var(--talos-motion-calm-orb-state, running); }
+.message-actions { display: flex; gap: 0; margin-top: .25rem; }
+.message-actions.user-actions { justify-content: flex-end; }
+.advanced.reasoning { width: 100%; margin-bottom: .75rem; color: var(--talos-muted); font-size: var(--text-xs); }
+.advanced.reasoning summary { display: flex; align-items: center; gap: .5rem; cursor: pointer; border-radius: var(--talos-radius-control); }
+.advanced.reasoning summary::after { content: '›'; margin-left: auto; }
+.advanced.reasoning[open] summary::after { transform: rotate(90deg); }
+.advanced.reasoning summary:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+.advanced.reasoning .help { line-height: 1.65; padding: .5rem 0; }
+.talos-calm-thread .live-cursor { display: inline-block; width: 2px; height: 1em; margin-left: 2px; border-radius: 0; background: var(--talos-accent); animation: none; }
+@keyframes talos-answer-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes talos-orb-spin { to { transform: rotate(360deg); } }
+@media (max-width: 520px) { .talos-calm-thread .user-bubble { max-width: 92%; } }
+@media (prefers-reduced-motion: reduce) { .talos-calm-thread .assistant-text, .talos-orb.working::after { animation: none; } }

@@ -88,6 +88,10 @@ vi.mock('@/services/localEngine', () => ({
 import TalosMobileLocalModels from '@/components/talos/models/TalosMobileLocalModels.vue'
 import TalosMobileLocalRepoDetail from '@/components/talos/models/TalosMobileLocalRepoDetail.vue'
 import { useSettingsStore } from '@/stores/settings'
+import {
+    __resetTalosLocalWarmStateForTests,
+    talosSetLocalWarmState,
+} from '@/lib/models/localWarmState'
 
 const MODELS_ROOT = '/storage/emulated/0/Android/data/ai.talos.dev/files/models'
 
@@ -272,6 +276,9 @@ const montati: Array<{ unmount: () => void }> = []
 afterEach(() => {
     while (montati.length) montati.pop()?.unmount()
     document.body.innerHTML = ''
+    // Lo stato dell'apertura anticipata vive per processo, come il motore che
+    // descrive: senza questo, un test lo lascerebbe acceso per il successivo.
+    __resetTalosLocalWarmStateForTests()
 })
 
 async function screen(tab: 'installed' | 'hub' = 'hub') {
@@ -1043,6 +1050,50 @@ describe('dare un nome a un modello, e toglierlo', () => {
         const riga = wrapper.get('[data-testid="talos-models-installed-row"]')
         expect(riga.text()).toContain('Il piccolo veloce')
         expect(riga.text()).toContain('Qwen3-4B-Q4_K_M.gguf')
+    })
+
+    /**
+     * ⛔⛔ 2026-09-10 — QUALE MODELLO E' DAVVERO IN MEMORIA.
+     *
+     * L'apertura anticipata esisteva da agosto e non compariva da nessuna
+     * parte: il 10/09 il modello e' risultato freddo due minuti dopo essere
+     * stato scelto e nessuna schermata poteva dirlo. Questo test tiene il
+     * lettore attaccato allo stato — senza, `localWarmState.ts` sarebbe un
+     * modulo coi suoi test e nessun chiamante, la malattia che questo repo ha
+     * gia' pagato due volte nello stesso giorno.
+     */
+    it('la riga del file dice se quel modello sta caricando o e’ pronto', async () => {
+        const file = installed('Qwen3-4B-Q4_K_M.gguf', 'imported')
+        engine.installed = [file]
+        talosSetLocalWarmState({
+            phase: 'opening',
+            model: 'Qwen3-4B-Q4_K_M',
+            path: file.path,
+            openMs: null,
+            refusal: null,
+            withoutMeasuredProfiles: false,
+        })
+
+        const wrapper = await screen('installed')
+
+        expect(wrapper.get('[data-testid="talos-models-installed-warm"]').text())
+            .toBe('Loading…')
+    })
+
+    it('AL CONTRARIO — non dice niente sulla riga di un modello che non c’entra', async () => {
+        engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
+        talosSetLocalWarmState({
+            phase: 'ready',
+            model: 'un-altro',
+            path: '/un/altro/percorso.gguf',
+            openMs: 31_000,
+            refusal: null,
+            withoutMeasuredProfiles: false,
+        })
+
+        const wrapper = await screen('installed')
+
+        expect(wrapper.find('[data-testid="talos-models-installed-warm"]').exists()).toBe(false)
     })
 
     it('la conferma di eliminazione dice quanti GIGABYTE tornano', async () => {

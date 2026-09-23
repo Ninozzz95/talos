@@ -6,6 +6,10 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import { TALOS_MOBILE_ROUTES } from '@/lib/mobileRoutes'
 import { __resetSettingsStoreForTests, useSettingsStore } from '@/stores/settings'
+
+// This test checks route containment; the phone-control screen's native calls
+// belong to its own tests and must not run during a shell navigation check.
+vi.mock('@/screens/PrivilegeScreen.vue', () => ({ default: { template: '<div data-testid="privilege-screen-stub" />' } }))
 import { __resetPreferencesStoreForTests, usePreferencesStore } from '@/stores/preferences'
 import { createDefaultTalosMotionV6Preferences } from '@/motion-v6/defaults'
 
@@ -50,6 +54,8 @@ vi.mock('@/services/launcherIcon', () => ({
 }))
 
 import App from '@/App.vue'
+import Sidebar from '@/components/shell/TalosMobileSidebar.vue'
+import { __resetToastsForTests, useTalosMobileToasts } from '@/stores/toasts'
 
 function makeController() {
     const attachmentItems = reactive<Array<Record<string, unknown>>>([])
@@ -132,10 +138,15 @@ function makeController() {
             hydrateText: vi.fn().mockResolvedValue(null),
             setVaultFileShared: vi.fn().mockResolvedValue(undefined),
             discardAll: vi.fn().mockResolvedValue(undefined),
+            snapshot: vi.fn(() => []),
+            setAside: vi.fn(() => attachmentItems.splice(0, attachmentItems.length)),
+            restore: vi.fn(),
+            revokeSaved: vi.fn().mockResolvedValue(undefined),
             clearSent: vi.fn(() => attachmentItems.splice(0, attachmentItems.length)),
             clearError: vi.fn(() => { attachmentError.value = null }),
         },
         chat: {
+            setSessionArchived: vi.fn().mockResolvedValue(undefined),
             messages: reactive([]),
             sessionBrowserActivities: reactive([]),
             sessions: reactive([] as Array<Record<string, unknown>>),
@@ -149,6 +160,8 @@ function makeController() {
             retryPersistence: vi.fn().mockResolvedValue(undefined),
             loadComposerDraft: vi.fn().mockResolvedValue(''),
             saveComposerDraft: vi.fn().mockResolvedValue(undefined),
+            loadComposerAttachments: vi.fn().mockResolvedValue([]),
+            saveComposerAttachments: vi.fn().mockResolvedValue(undefined),
             setSessionLibraryContextPolicy: vi.fn().mockResolvedValue(undefined),
         },
         /**
@@ -222,6 +235,7 @@ function makeRouter(initialPath?: string): Router {
 
 describe('App shell (header/sidebar + chat base + station sheets)', () => {
     beforeEach(() => {
+        __resetToastsForTests()
         // Skip the native lifecycle listener in jsdom via the fail-closed switch.
         window.__TALOS_M1_DISABLE__ = ['lifecycle']
         mockState.controller = makeController()
@@ -238,9 +252,120 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         }))
     })
     afterEach(() => {
+        __resetToastsForTests()
         window.__TALOS_M1_DISABLE__ = undefined
         delete (window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime
         window.localStorage.clear()
+    })
+
+    /**
+     * ⛔⛔ OWNER 13/09, DAL PAD: «quando sono in Libreria e premo su una chat
+     * della sidebar in "Chat recenti", non mi cambia e non mi fa redirect:
+     * rimane nella pagina libreria. Questo è importante.»
+     *
+     * La regola esisteva già, scritta in inglese dentro `sidebarNewChat`
+     * («New Chat always LANDS in the chat — never leaves you on a station») e
+     * applicata in tre punti. In `sidebarSelect` mancava.
+     *
+     * ⛔ E sul tablet funzionava per un motivo che era esso stesso il difetto:
+     * `tabletSelect` chiamava `sidebarSelect()` e POI `onTabletActivated()` —
+     * la regola scritta ACCANTO alla funzione invece che DENTRO. Una regola in
+     * due posti è una regola che prima o poi si dimentica in uno dei due, ed è
+     * successo: il telefono è rimasto scoperto.
+     *
+     * ⛔ E nessuno se n'era accorto perché NESSUN test nominava `sidebarSelect`:
+     * i 196 test della shell erano verdi prima e dopo la cura. Un verde che non
+     * copre la cosa non dice «funziona», dice «non ho guardato lì».
+     */
+    it('una chat recente scelta da una stazione PORTA in chat', async () => {
+        const router = makeRouter('/context')
+        const wrapper = mount(App, { global: { plugins: [router] } })
+        try {
+            await router.isReady()
+            await flushPromises()
+            expect(router.currentRoute.value.name).toBe('context')
+            await wrapper.get('[aria-label="Open menu"]').trigger('click')
+            await vi.waitFor(() => expect(wrapper.findComponent(Sidebar).exists()).toBe(true))
+            wrapper.findComponent(Sidebar).vm.$emit('select', 's1')
+            await flushPromises()
+            const controller = mockState.controller as ReturnType<typeof makeController>
+            expect(controller.selectSession).toHaveBeenCalledWith('s1')
+            await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('chat'))
+        } finally {
+            wrapper.unmount()
+        }
+    })
+
+    /**
+     * ⛔ Il verso contrario, e serve quanto l'altro: stando GIÀ in chat non si
+     * deve navigare. Senza questa guardia avrei aggiunto una navigazione a ogni
+     * tocco — inutile, e invisibile finché qualcuno non nota la cronologia che
+     * si riempie o una transizione che sfarfalla.
+     */
+    it('stando già in chat, scegliere una recente non naviga', async () => {
+        const router = makeRouter('/')
+        const wrapper = mount(App, { global: { plugins: [router] } })
+        try {
+            await router.isReady()
+            await flushPromises()
+            expect(router.currentRoute.value.name).toBe('chat')
+            const prima = router.currentRoute.value.fullPath
+            await wrapper.get('[aria-label="Open menu"]').trigger('click')
+            await vi.waitFor(() => expect(wrapper.findComponent(Sidebar).exists()).toBe(true))
+            wrapper.findComponent(Sidebar).vm.$emit('select', 's1')
+            await flushPromises()
+            const controller = mockState.controller as ReturnType<typeof makeController>
+            expect(controller.selectSession).toHaveBeenCalledWith('s1')
+            expect(router.currentRoute.value.fullPath).toBe(prima)
+        } finally {
+            wrapper.unmount()
+        }
+    })
+
+    it('offers undo for a chat archived from the sidebar', async () => {
+        const router = makeRouter('/settings')
+        const wrapper = mount(App, { global: { plugins: [router] } })
+        try {
+            await router.isReady()
+            await flushPromises()
+            await wrapper.get('[aria-label="Open menu"]').trigger('click')
+            await vi.waitFor(() => expect(wrapper.findComponent(Sidebar).exists()).toBe(true))
+            wrapper.findComponent(Sidebar).vm.$emit('archive', 's1')
+            await flushPromises()
+            const controller = mockState.controller as ReturnType<typeof makeController>
+            expect(controller.chat.setSessionArchived).toHaveBeenLastCalledWith('s1', true)
+            const toasts = useTalosMobileToasts()
+            const toast = toasts.items.value.find((item) => item.message === 'Chat archived')!
+            expect(toast.durationMs).toBe(8000)
+            toasts.act(toast.id)
+            await flushPromises()
+            expect(controller.chat.setSessionArchived).toHaveBeenLastCalledWith('s1', false)
+            expect(toasts.items.value.find((item) => item.id === toast.id)).toBeUndefined()
+        } finally { wrapper.unmount() }
+    })
+
+    it('keeps global navigation and its divider beside every tablet Settings route', async () => {
+        const { useTalosTabletLayout, __resetTalosTabletLayoutForTests } = await import('@/composables/useTalosTabletLayout')
+        __resetTalosTabletLayoutForTests()
+        useTalosTabletLayout().isTablet.value = true
+        const router = makeRouter('/settings')
+        const wrapper = mount(App, { global: { plugins: [router] }, attachTo: document.body })
+        try {
+            for (const destination of ['/settings', '/settings?tab=appearance', '/settings/models', '/settings/privilege']) {
+                await router.push(destination)
+                await flushPromises()
+                await vi.waitFor(() => {
+                    expect(wrapper.find('[data-testid="talos-mobile-sidebar"]').exists()).toBe(true)
+                    expect(wrapper.find('[role="separator"]').exists()).toBe(true)
+                })
+                const rail = wrapper.get('[data-testid="talos-mobile-sidebar"]')
+                expect(rail.find('[data-testid="talos-sidebar-settings"]').exists()).toBe(true)
+                expect((wrapper.element as HTMLElement).style.getPropertyValue('--talos-tablet-rail')).toMatch(/^[1-9]\d*px$/)
+            }
+        } finally {
+            wrapper.unmount()
+            __resetTalosTabletLayoutForTests()
+        }
     })
 
     it('renders the header and the persistent chat base at /, with no sheet open', async () => {
@@ -507,7 +632,11 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         expect(w.find('[data-testid="talos-empty-brand"] h1').text().trim()).not.toBe('')
         expect(w.find('[data-testid="talos-mobile-composer"]').exists()).toBe(true)
 
-        await w.get('[aria-label="Back to chat"]').trigger('click')
+        // U-7: sulla radice della stazione non c'e' la freccia ma il ☰ (telefono);
+        // alla chat si torna dalla sidebar o col Back di sistema.
+        expect(w.find('[aria-label="Back to chat"]').exists()).toBe(false)
+        expect(w.find('[data-testid="talos-sheet-menu"]').exists()).toBe(true)
+        await router.push({ name: 'chat' })
         await flushPromises()
         expect(w.find('[data-testid="talos-mobile-tool-sheet"]').exists()).toBe(false)
         expect(router.currentRoute.value.name).toBe('chat')

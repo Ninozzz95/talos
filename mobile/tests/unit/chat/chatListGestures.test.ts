@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
     archivedChatSessions,
     orderChatSessions,
+    recentChatSessions,
 } from '@/lib/chatListGestures'
 
 // F4-#23 — swipe-to-reveal actions and hold-to-move ordering on the chat list.
@@ -29,6 +30,18 @@ describe('chat list ordering', () => {
         ]
         expect(orderChatSessions(sessions).map((entry) => entry.id)).toEqual(['a', 'c'])
         expect(archivedChatSessions(sessions).map((entry) => entry.id)).toEqual(['b'])
+    })
+
+    it('B07/C07: le recenti escludono archiviate e sessioni Codice, dalla più recente', () => {
+        const sessions = [
+            session('vecchia', '2026-07-23T08:00:00.000Z'),
+            session('archiviata', '2026-07-23T11:00:00.000Z', { archived: true }),
+            session('codice', '2026-07-23T12:00:00.000Z', { codice: true }),
+            session('nuova', '2026-07-23T10:00:00.000Z'),
+        ]
+        expect(recentChatSessions(sessions).map((entry) => entry.id)).toEqual(['nuova', 'vecchia'])
+        // al contrario: senza metadati nessuna esclusione
+        expect(recentChatSessions([session('sola', '2026-07-23T10:00:00.000Z')]).map((e) => e.id)).toEqual(['sola'])
     })
 
     it('orders un-indexed sessions first by recency, then indexed ones by sort_index', () => {

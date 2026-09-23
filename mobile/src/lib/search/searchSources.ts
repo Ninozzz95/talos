@@ -1,3 +1,5 @@
+import { DUCKDUCKGO_ENDPOINT, DUCKDUCKGO_USER_AGENT, parseDuckDuckGoHtml } from './duckduckgoSearch'
+
 /**
  * F1 — the web search sources.
  *
@@ -20,9 +22,14 @@
  *  - SearXNG: GET with `format=json` — **off by default on most instances**,
  *    which is why it must be asked for explicitly and why public instances were
  *    rejected (D2).
+ *
+ * R-03 (2026-09-04): a fifth source, **DuckDuckGo**, needs neither a key nor
+ * an endpoint — it reads DuckDuckGo's public, no-JavaScript results page
+ * (`duckduckgoSearch.ts`), the same solution the desktop already shipped the
+ * same day. It is what makes web search work with nothing configured at all.
  */
 
-export type TalosSearchSourceId = 'tavily' | 'brave' | 'searxng' | 'custom'
+export type TalosSearchSourceId = 'tavily' | 'brave' | 'searxng' | 'custom' | 'duckduckgo'
 
 export interface TalosSearchResult {
     url: string
@@ -242,7 +249,43 @@ const custom: TalosSearchSource = {
     },
 }
 
-export const TALOS_SEARCH_SOURCES: readonly TalosSearchSource[] = [tavily, brave, searxng, custom]
+/**
+ * R-03: the keyless fifth. `request` sends only the query, GET, to the fixed
+ * DuckDuckGo endpoint — there is no `count`/`max_results` parameter DuckDuckGo
+ * accepts, so (like the desktop port) truncation happens inside `parse`
+ * instead, defaulting to the same 8 the desktop uses.
+ *
+ * `parse` receives a STRING here, not a JSON object: DuckDuckGo answers with
+ * an HTML page, and `webSearchRuntime.ts` hands the raw response body
+ * straight through. That is also why block/CAPTCHA detection is NOT done in
+ * here — `parseTalosSearchResponse` wraps every `parse` in a try/catch that
+ * swallows exceptions into an empty list (by design: a parser must never take
+ * down a send), which would silently turn "DuckDuckGo refused us" into "no
+ * results". `looksLikeDuckDuckGoBlock` runs one layer up, in
+ * `webSearchRuntime.ts`, where a throw is allowed to reach the caller.
+ */
+const duckduckgo: TalosSearchSource = {
+    id: 'duckduckgo',
+    label: 'DuckDuckGo (no key)',
+    needsKey: false,
+    needsEndpoint: false,
+    request(query) {
+        const search = new URLSearchParams({ q: query.query })
+        return {
+            method: 'GET',
+            url: `${DUCKDUCKGO_ENDPOINT}?${search.toString()}`,
+            headers: {
+                'user-agent': DUCKDUCKGO_USER_AGENT,
+                accept: 'text/html',
+            },
+        }
+    },
+    parse(payload) {
+        return parseDuckDuckGoHtml(payload)
+    },
+}
+
+export const TALOS_SEARCH_SOURCES: readonly TalosSearchSource[] = [tavily, brave, searxng, custom, duckduckgo]
 
 export function talosSearchSourceById(id: TalosSearchSourceId): TalosSearchSource {
     const source = TALOS_SEARCH_SOURCES.find((entry) => entry.id === id)

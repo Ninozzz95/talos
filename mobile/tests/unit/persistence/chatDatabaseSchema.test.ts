@@ -12,8 +12,10 @@ import {
 describe('TALOS chat database schema', () => {
     it('AV-02 preserves version one and adds the independent Vault and authority schema in version two', () => {
         expect(TALOS_CHAT_DATABASE_NAME).toBe('talos_mobile')
-        expect(TALOS_CHAT_DATABASE_VERSION).toBe(8)
-        expect(TALOS_CHAT_DATABASE_UPGRADES).toHaveLength(8)
+        // U-17 (12/09/2026): la v10 aggiunge `talos_tasks.paused` — «metti in
+        // pausa» una ricorrenza senza cancellarla.
+        expect(TALOS_CHAT_DATABASE_VERSION).toBe(10)
+        expect(TALOS_CHAT_DATABASE_UPGRADES).toHaveLength(10)
         expect(TALOS_CHAT_DATABASE_UPGRADES[0]?.toVersion).toBe(1)
         expect(TALOS_CHAT_DATABASE_UPGRADES[1]?.toVersion).toBe(2)
         expect(TALOS_CHAT_DATABASE_UPGRADES[2]?.toVersion).toBe(3)
@@ -33,6 +35,19 @@ describe('TALOS chat database schema', () => {
         // l'audit — sostituisce un blob JSON in Preferences che non
         // garantiva niente sotto scritture concorrenti.
         expect(TALOS_CHAT_DATABASE_UPGRADES[7]?.toVersion).toBe(8)
+        // La 9 dà alle note «In evidenza» (U-10, owner 11/09/2026): una sola
+        // colonna `INTEGER NOT NULL DEFAULT 0`, nessuna tabella riscritta —
+        // un'aggiunta senza vincoli costa tempo indipendente dalla quantità di
+        // dati (https://www.sqlite.org/lang_altertable.html, letto l'11/09/2026),
+        // che è ciò che la rende sicura su un telefono con anni di appunti.
+        expect(TALOS_CHAT_DATABASE_UPGRADES[8]?.toVersion).toBe(9)
+        const v9 = TALOS_CHAT_DATABASE_UPGRADES[8]!.statements.join('\n')
+        expect(v9).toMatch(/ALTER\s+TABLE\s+talos_notes\s+ADD\s+COLUMN\s+pinned/i)
+        // ⛔ Nessuna riscrittura e nessuna perdita: chi aggiorna ha già le sue
+        // note, e l'unica cosa che deve succedere è che ne acquistino una
+        // colonna con un valore prudente.
+        expect(v9).not.toMatch(/DROP\s+TABLE/i)
+        expect(v9).not.toMatch(/DELETE\s+FROM\s+talos_notes/i)
 
         const sql = TALOS_CHAT_DATABASE_UPGRADES.flatMap((upgrade) => upgrade.statements).join('\n')
         for (const table of [
@@ -125,7 +140,7 @@ describe('TALOS chat database schema', () => {
 
     it('keeps upgrades incremental and free of destructive database deletion', () => {
         const versions = TALOS_CHAT_DATABASE_UPGRADES.map((upgrade) => upgrade.toVersion)
-        expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+        expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         const sql = TALOS_CHAT_DATABASE_UPGRADES.flatMap((upgrade) => upgrade.statements).join('\n')
         expect(sql).not.toMatch(/DROP\s+DATABASE/i)
         expect(sql).not.toMatch(/DELETE\s+FROM\s+talos_chat_sessions/i)

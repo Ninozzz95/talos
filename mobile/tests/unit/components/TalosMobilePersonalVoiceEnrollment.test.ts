@@ -435,6 +435,94 @@ describe('TalosMobilePersonalVoiceEnrollment', () => {
         )
     })
 
+    /**
+     * ⛔⛔⛔ Owner 11/09, QUARTA segnalazione dello stesso sintomo: «la
+     * codifico e non si sente nulla». Prima di questa prova, l'ascoltatore
+     * `talosOnPersonalVoiceError` faceva ESATTAMENTE quello che faceva
+     * `...Done` — spegnere lo spinner — e il motivo nativo finiva nel
+     * nulla: un'anteprima FALLITA era indistinguibile a schermo da una
+     * riuscita. Nessun suono, nessun messaggio, niente da segnalare: e'
+     * cosi' che lo stesso difetto si segnala quattro volte.
+     */
+    async function reachPreview(wrapper: ReturnType<typeof mount>) {
+        await flushPromises()
+        await advanceToWizard(wrapper)
+        for (let i = 0; i < 12; i++) {
+            await recordOnePhrase(wrapper)
+            await wrapper.get('[data-testid="talos-personal-voice-next"]').trigger('click')
+        }
+        await wrapper.get('[data-testid="talos-personal-voice-name"]').setValue('Antonino')
+        await wrapper.get('[data-testid="talos-personal-voice-encode"]').trigger('click')
+        await flushPromises()
+    }
+
+    it('PVOICE-UI-12 un errore nativo dell’anteprima si VEDE, invece di sembrare un successo muto', async () => {
+        bridge.buildVoiceEnrollmentProfile.mockResolvedValue({})
+        const wrapper = mount(TalosMobilePersonalVoiceEnrollment, {
+            props: { existingProfileCount: 0 },
+            global: { stubs: { teleport: true } },
+        })
+        await reachPreview(wrapper)
+
+        await wrapper.get('[data-testid="talos-personal-voice-play-preview"]').trigger('click')
+        await flushPromises()
+        // Nessun esito ancora: niente da accusare mentre la sintesi e' in volo.
+        expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+
+        // Il readingId vero e' quello con cui il componente ha chiamato il
+        // nativo: un errore su un ALTRO id non e' questo.
+        const readingId = bridge.previewVoiceEnrollmentProfile.mock.calls.at(-1)![1] as string
+        const onErrorListener = bridge.onError.mock.calls.at(-1)![0] as (id: string, error?: string) => void
+
+        onErrorListener('un-altra-lettura', 'no verified voice backend')
+        await flushPromises()
+        expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+
+        onErrorListener(readingId, 'no verified voice backend: pocket=pocketModelMissing')
+        await flushPromises()
+        const alert = wrapper.find('[role="alert"]')
+        expect(alert.exists()).toBe(true)
+        expect(alert.text().length).toBeGreaterThan(0)
+    })
+
+    /**
+     * ⛔ La prova AL VERSO CONTRARIO: un'anteprima RIUSCITA non deve
+     * mostrare nessun allarme — se la mostrasse, avremmo scambiato un
+     * silenzio muto con un allarme falso, che e' lo stesso danno al
+     * contrario. E un errore gia' a schermo deve sparire quando si
+     * ritenta.
+     */
+    it('PVOICE-UI-13 un’anteprima riuscita non accusa niente, e un nuovo tentativo pulisce l’errore precedente', async () => {
+        bridge.buildVoiceEnrollmentProfile.mockResolvedValue({})
+        const wrapper = mount(TalosMobilePersonalVoiceEnrollment, {
+            props: { existingProfileCount: 0 },
+            global: { stubs: { teleport: true } },
+        })
+        await reachPreview(wrapper)
+
+        await wrapper.get('[data-testid="talos-personal-voice-play-preview"]').trigger('click')
+        await flushPromises()
+        const readingId = bridge.previewVoiceEnrollmentProfile.mock.calls.at(-1)![1] as string
+        const onDoneListener = bridge.onDone.mock.calls.at(-1)![0] as (id: string) => void
+        const onErrorListener = bridge.onError.mock.calls.at(-1)![0] as (id: string, error?: string) => void
+
+        onDoneListener(readingId)
+        await flushPromises()
+        expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+
+        // Ora un fallimento, poi un nuovo tentativo: l'allarme vecchio va via.
+        await wrapper.get('[data-testid="talos-personal-voice-play-preview"]').trigger('click')
+        await flushPromises()
+        const secondo = bridge.previewVoiceEnrollmentProfile.mock.calls.at(-1)![1] as string
+        onErrorListener(secondo, 'preview failed')
+        await flushPromises()
+        expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+
+        await wrapper.get('[data-testid="talos-personal-voice-play-preview"]').trigger('click')
+        await flushPromises()
+        expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    })
+
     it('PVOICE-UI-05 saving commits the profile and closes, emitting the saved summary', async () => {
         const summary = {
             id: 'a1b2c3d4-e5f6-4789-a012-3456789abcde', name: 'Antonino', language: 'it', style: 'neutral',

@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
+import { useTalosConfirmMotion } from '@/composables/useTalosConfirmMotion'
 
 /**
  * F5.2 — device-proven dialog shell. reka-ui Dialogs never appear on the
@@ -17,6 +18,8 @@ defineProps<{
 const emit = defineEmits<{ close: [] }>()
 
 const root = ref<HTMLElement | null>(null)
+const veil = ref<HTMLElement | null>(null)
+useTalosConfirmMotion(root, veil)
 const { trapTab } = useTalosModalSurface(root)
 
 /**
@@ -38,7 +41,7 @@ useTalosOverlayBack(() => emit('close'))
          body{pointer-events:none}; without this the dialog was hit-test
          transparent and taps landed BLIND on drawer rows underneath. -->
     <div class="pointer-events-auto fixed inset-0 z-[85] flex items-center justify-center px-6" data-testid="talos-confirm-dialog">
-        <div class="absolute inset-0 bg-black/40 backdrop-blur-[2px]" aria-hidden="true" @click="emit('close')" />
+        <div ref="veil" class="absolute inset-0 bg-black/40 backdrop-blur-[2px]" aria-hidden="true" @click="emit('close')" />
         <div
             ref="root"
             role="dialog"

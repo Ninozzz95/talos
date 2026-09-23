@@ -31,7 +31,17 @@ export async function closeToolSheet(page: Page): Promise<void> {
         if (open === 0) return
         // A refusal here is the race itself, and the wait below is what
         // establishes the outcome either way.
-        await page.locator(BACK).first().click({ timeout: 5_000 }).catch(() => {})
+        // U-7 (2026-09-11): a station ROOT has no back arrow any more — the
+        // mockup gives it the phone menu button instead. Close it through the
+        // sheet's own Escape contract so App.vue handles @close with
+        // navigate('chat') and persists the matching last_route. Browser
+        // history would only make the sheet disappear visually and can leave
+        // the saved state pointing at the station we just left.
+        if (await page.locator(BACK).count() > 0) {
+            await page.locator(BACK).first().click({ timeout: 5_000 }).catch(() => {})
+        } else {
+            await sheet.first().press('Escape', { timeout: 5_000 }).catch(() => {})
+        }
         await page.waitForFunction(
             ([selector, before]) => document.querySelectorAll(selector as string).length < (before as number),
             [SHEET, open] as const,

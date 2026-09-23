@@ -20,6 +20,10 @@ import {
 
 const { t } = useTalosI18n()
 const open = ref(false)
+const trigger = ref<HTMLButtonElement | null>(null)
+// A body portal is inert behind a native modal. Keep the popup within its
+// owning dialog while retaining Reka's positioning and focus management.
+const portalTarget = computed(() => trigger.value?.closest('dialog') ?? 'body')
 const confirmingCancelId = ref<string | null>(null)
 const actingIds = ref(new Set<string>())
 
@@ -108,6 +112,7 @@ async function cancel(id: string): Promise<void> {
         <PopoverTrigger as-child>
             <button
                 type="button"
+                ref="trigger"
                 data-testid="talos-download-center-trigger"
                 :aria-label="triggerLabel"
                 class="talos-pressable pointer-events-auto relative inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--talos-radius-control)] text-[var(--talos-muted)] hover:bg-[var(--talos-active)] hover:text-[var(--talos-text)]"
@@ -121,7 +126,7 @@ async function cancel(id: string): Promise<void> {
             </button>
         </PopoverTrigger>
 
-        <PopoverPortal>
+        <PopoverPortal :to="portalTarget">
             <PopoverContent
                 data-testid="talos-download-center-content"
                 align="end"

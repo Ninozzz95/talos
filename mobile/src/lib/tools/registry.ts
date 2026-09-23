@@ -253,8 +253,56 @@ export interface TalosToolDefinition<Input = unknown> {
  * senza dire cosa non ha funzionato riprova identico.
  */
 export type TalosToolVerdict =
+    /** L'effetto c'è: l'ho guardato. */
     | { held: true }
+    /** ⛔ L'effetto NON c'è, e l'ho guardato. Un successo così si **degrada**. */
     | { held: false, reason: string }
+    /**
+     * ⭐⭐⭐ NON HO POTUTO GUARDARE — e non è la stessa cosa di «non c'è».
+     *
+     * ## Il difetto che questo terzo stato chiude
+     *
+     * Fino al 2026-08-20 il verdetto era un booleano, e una verifica che non
+     * poteva concludere aveva due sole uscite, **entrambe bugie**:
+     *
+     * ```
+     * held: true    dice che l'effetto c'è, e non lo sa      ⇒ la bugia che
+     *                                                          `verify` esiste per impedire
+     * held: false   degrada a fallimento un'operazione       ⇒ dice alla persona che la sua
+     *               probabilmente riuscita                      nota non è stata salvata
+     * ```
+     *
+     * L'unico modo di essere onesti era **lanciare un'eccezione** — cioè usare un
+     * errore come valore di ritorno, perché `ignota` nell'esecutore si
+     * raggiungeva solo dal `catch`.
+     *
+     * ⛔⛔ E venti righe più sotto, in questo stesso file, `TalosPremessaEsito` è
+     * a tre stati da sempre, con la sua ragione scritta: «"non l'ho trovato" e
+     * "non c'è" sono due affermazioni diverse: la prima è un fatto su di me, la
+     * seconda è un fatto sul mondo». La postcondizione aveva il difetto che la
+     * premessa esiste per impedire.
+     *
+     * ## Quando si usa
+     *
+     * Permesso negato, ponte caduto, timeout, il magazzino che non risponde,
+     * nessun modo di cercare ciò che si è appena scritto. ⛔ Mai per «non l'ho
+     * trovato»: quello è `held: false` e va detto.
+     *
+     * ## ⛔ Perché `null` e non una stringa
+     *
+     * Perché è **falso**. Se un lettore futuro scrivesse `verdetto.held ? … : …`
+     * dimenticando questo caso, `ignoto` cadrebbe sul ramo prudente invece che
+     * su quello che canta vittoria. Il ripiego di una svista dev'essere la
+     * risposta cauta, non quella comoda.
+     *
+     * ⇒ Lo stato dell'arte lo chiama `Unknown` e lo distingue da `False` per la
+     * stessa ragione (arXiv 2608.02645, *Verified Tool Calls Improve LLM Agent
+     * Reliability Under Non-Atomic Failures*). ⛔ Loro però su `Unknown`
+     * aspettano e ri-verificano, perché il loro caso è la consistenza
+     * eventuale. Il nostro no: un permesso negato non si risolve aspettando.
+     * Si prende lo stato, non il ciclo.
+     */
+    | { held: null, reason: string }
 
 /**
  * ⭐⭐⭐ L'esito di una PREMESSA — e gli stati sono **tre**, mai due.

@@ -116,6 +116,84 @@ describe('TalosMobileComposerModelPicker', () => {
         expect(option.text()).toContain('text + image')
     })
 
+    /**
+     * ⛔ A local GGUF has no chat_compatibility to report, and 'unknown' is the
+     * literal value localAdapter writes for it. Printing it put an English
+     * protocol word under every local model on the owner's Pad ("unknown -
+     * testo"). A field we do not have is omitted, not filled with a placeholder.
+     */
+    it('omits the compatibility word when the catalog does not know it', () => {
+        const view = mountPicker({
+            modelProfiles: [profile({
+                id: 'profile-local',
+                provider: 'local',
+                model: '/storage/emulated/0/models/gemma.gguf',
+                display_name: 'gemma-3-4b-it-Q4_K_M',
+                capabilities: {
+                    chat_compatibility: 'unknown',
+                    input_modalities: ['text'],
+                },
+            })],
+            routingProfiles: [],
+        })
+
+        const detail = view.get('[data-model-profile-id="profile-local"]')
+            .get('[data-testid="talos-mobile-model-option-detail"]')
+        expect(detail.text()).toBe('text')
+        expect(view.text()).not.toContain('unknown')
+        expect(view.text()).not.toContain('Unknown')
+        // Pad 12/09/2026: the second line was the file path. Now it says where
+        // the model lives; the path never reaches the screen.
+        const row = view.get('[data-model-profile-id="profile-local"]').text()
+        expect(row).toContain('On this device')
+        expect(view.text()).not.toContain('/storage/')
+        expect(view.text()).not.toContain('untested')
+    })
+
+    /** Same for a value nobody taught us to translate: jargon either way. */
+    it('omits a compatibility value it cannot say in words', () => {
+        const view = mountPicker({
+            modelProfiles: [profile({
+                capabilities: { chat_compatibility: 'partially_supported', context_length: 8192 },
+            })],
+            routingProfiles: [],
+        })
+
+        const detail = view.get('[data-model-profile-id="profile-openai"]')
+            .get('[data-testid="talos-mobile-model-option-detail"]')
+        expect(detail.text()).toBe('8k context')
+        expect(view.text()).not.toContain('partially_supported')
+    })
+
+    /** And the whole line disappears when there is nothing at all to say. */
+    it('draws no detail line for a model with no capabilities', () => {
+        const view = mountPicker({
+            modelProfiles: [profile({ capabilities: null })],
+            routingProfiles: [],
+        })
+
+        expect(view.get('[data-model-profile-id="profile-openai"]')
+            .find('[data-testid="talos-mobile-model-option-detail"]').exists()).toBe(false)
+    })
+
+    /** AL CONTRARIO: a compatibility we DO know still reads as before. */
+    it('still says supported when the catalog says supported', () => {
+        const view = mountPicker({
+            modelProfiles: [profile({
+                capabilities: {
+                    chat_compatibility: 'supported',
+                    context_length: 128000,
+                    input_modalities: ['text', 'image'],
+                },
+            })],
+            routingProfiles: [],
+        })
+
+        expect(view.get('[data-model-profile-id="profile-openai"]')
+            .get('[data-testid="talos-mobile-model-option-detail"]').text())
+            .toBe('supported - 128k context - text + image')
+    })
+
     it('marks the selected profile independently from DOM focus', () => {
         const view = mountPicker()
         expect(view.get('[data-model-profile-id="profile-openai"]').attributes('aria-selected')).toBe('true')

@@ -29,9 +29,15 @@ import { talosTabletLeavesChatsRoute } from '@/lib/tabletLayout'
  * mostrando.
  */
 
+/*
+ * ⛔ SUPERATA il 12/09/2026 (owner, B09): la barra laterale Calm mostra SEI
+ * recenti, non piu' l'elenco intero — la pagina «Chat» non e' piu' un doppione
+ * ma la sola via a ricerca, gruppi e selezione multipla su tablet. La domanda
+ * resta pura e provata qui, con la risposta nuova.
+ */
 describe('LISTA-DOPPIA-01', () => {
-    it('⛔ su TABLET la rotta «chats» va lasciata: il pannello la mostra già', () => {
-        expect(talosTabletLeavesChatsRoute(true, 'chats')).toBe(true)
+    it('12/09: su TABLET la rotta «chats» RESTA — la barra laterale mostra solo sei recenti', () => {
+        expect(talosTabletLeavesChatsRoute(true, 'chats')).toBe(false)
     })
 
     it('⛔ e al contrario, sul TELEFONO resta: lì la barra laterale non c\'è', () => {

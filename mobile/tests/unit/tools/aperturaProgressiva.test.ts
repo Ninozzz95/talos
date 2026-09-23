@@ -105,9 +105,35 @@ describe('apertura a gradi degli attrezzi', () => {
         expect(talosConvieneAprireAGradi(['a', 'b', 'c'].map(finto), 900)).toBe(false)
     })
 
+    /**
+     * ⛔⛔ QUESTO CASO FISSAVA LA COSTANTE, NON IL COMPORTAMENTO — 2026-09-10.
+     *
+     * Chiedeva `40_000` caratteri e pretendeva `true`. Regge solo con
+     * `TALOS_BYTE_PER_TOKEN = 3,7`: 40.000/3,7 = 10.811 token, sopra la
+     * soglia. Rimisurata la costante sui tokenizer veri (**4,13** con Gemma 3,
+     * 4,25 con Qwen 3), lo stesso testo vale 9.756 token — **sotto** — e il
+     * caso è diventato rosso senza che nessun comportamento fosse cambiato.
+     *
+     * ⇒ Un numero scelto per far passare un test diventa il test. Qui i due
+     * lati si mettono **lontani dalla soglia**, così il caso continua a
+     * misurare «sopra i 10k si apre, sotto no» anche quando la costante verrà
+     * rimisurata di nuovo — e non la ricopia.
+     */
     it('sopra i 10 attrezzi si apre, e anche sopra i 10k token di schemi', () => {
         expect(talosConvieneAprireAGradi(Array.from({ length: 12 }, (_, i) => finto(`t${i}`)), 100)).toBe(true)
-        expect(talosConvieneAprireAGradi(['a'].map(finto), 40_000)).toBe(true)
+        // ~14.600 token con 4,1 car./token: sopra i 10k con qualunque rapporto plausibile (3,5-4,5).
+        expect(talosConvieneAprireAGradi(['a'].map(finto), 60_000)).toBe(true)
+    })
+
+    /*
+     * ⛔ IL VERSO CONTRARIO della soglia dei token: un solo attrezzo pesante ma
+     * NON abbastanza da sfondare i 10k non deve aprire niente. Senza questo, un
+     * `talosConvieneAprireAGradi` che rendesse sempre `true` passerebbe il caso
+     * qui sopra e nessuno se ne accorgerebbe.
+     */
+    it('⛔ un attrezzo solo, pesante ma sotto i 10k token, NON apre', () => {
+        // ~4.900 token con 4,1 car./token: sotto i 10k con qualunque rapporto plausibile.
+        expect(talosConvieneAprireAGradi(['a'].map(finto), 20_000)).toBe(false)
     })
 
     /*

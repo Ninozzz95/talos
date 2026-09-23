@@ -76,20 +76,9 @@ function setBoolean(
             </p>
         </div>
 
-        <div class="flex min-h-14 cursor-pointer items-start justify-between gap-3 py-2">
-            <span>
-                <span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('browser.suggestBrowse') }}</span>
-                <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">{{ t('browser.suggestBrowseBody') }}</span>
-            </span>
-            <TalosThemedSwitch
-                class="mt-1"
-                :aria-label="t('browser.suggestBrowse')"
-                :model-value="settings.state.browser.suggest_for_urls"
-                @update:model-value="setBoolean('suggest_for_urls', $event)"
-                @click.stop
-            />
-        </div>
-
+        <!-- «Suggerisci Naviga per i link» e' uscito il 12/09: la pillola del link nel compositore
+             non c'e' piu' (owner: «via ricerca web dalla chat»), quindi l'interruttore non deciderebbe
+             niente. La chiave suggest_for_urls resta nel contratto per compatibilita'. -->
         <div v-if="developmentMode" class="flex min-h-14 items-start justify-between gap-3 border-t border-[var(--talos-border)] py-3">
             <span>
                 <span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('browser.untrustedBrowserEvidence') }}</span>

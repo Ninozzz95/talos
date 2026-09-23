@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue'
-import { Copy, Library, RefreshCcw, RotateCcw, Square, Volume2 } from '@lucide/vue'
+import { Copy, Library, Pencil, RotateCcw, Square, Volume2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import { useTalosSpeech } from '@/composables/useTalosSpeech'
@@ -15,10 +15,14 @@ const props = withDefaults(defineProps<{ message: TalosMobileMessageView; canRet
 })
 const emit = defineEmits<{
     copy: [message: TalosMobileMessageView]
+    edit: [message: TalosMobileMessageView]
     reuse: [message: TalosMobileMessageView]
     resend: [message: TalosMobileMessageView]
     retry: [message: TalosMobileMessageView]
     saveToLibrary: [message: TalosMobileMessageView]
+    share: [message: TalosMobileMessageView]
+    details: [message: TalosMobileMessageView]
+    delete: [message: TalosMobileMessageView]
 }>()
 
 const speech = useTalosSpeech()
@@ -31,12 +35,25 @@ function toggleSpeak(): void {
 </script>
 
 <template>
-    <div class="flex min-h-touch items-center gap-0.5" :aria-label="$t('chat.messageActions')">
-        <Button type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.copyMessage')" :title="$t('chat.copyMessage')" @click="emit('copy', message)">
+    <!--
+        ⛔ `role="group"` e non un `div` nudo.
+
+        Un `<div>` senza ruolo esplicito è `generic`, e **il ruolo generic non
+        supporta il nome**: `aria-label` su di esso è PROIBITO dalla specifica e
+        le tecnologie assistive lo scartano in silenzio — MDN, *ARIA: generic
+        role* e *aria-label*, letto 12/09/2026
+        (https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/generic_role).
+
+        Cioè: l'etichetta «Azioni messaggio» era scritta e non arrivava a
+        nessuno. Con `role="group"` il contenitore diventa nominabile, e sotto
+        ogni risposta il gruppo di comandi si annuncia per quello che è.
+    -->
+    <div role="group" class="message-actions min-h-touch items-center" data-testid="talos-message-actions" :class="{ 'user-actions': message.role === 'user' }" :aria-label="$t('chat.messageActions')">
+        <Button type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" data-testid="talos-message-copy" :aria-label="$t('chat.copyMessage')" :title="$t('chat.copyMessage')" @click="emit('copy', message)">
             <Copy class="size-3.5" aria-hidden="true" />
         </Button>
-        <Button v-if="message.role === 'user'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.resendMessage')" :title="$t('chat.resendMessage')" :disabled="busy" @click="emit('resend', message)">
-            <RefreshCcw class="size-3.5" aria-hidden="true" />
+        <Button v-if="message.role === 'user'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.editMessage')" :title="$t('chat.editMessage')" :disabled="busy" data-testid="talos-message-edit" @click="emit('edit', message)">
+            <Pencil class="size-3.5" aria-hidden="true" />
         </Button>
         <!--
             ⛔ IL COMANDO DELLA LETTURA STA QUI, accanto a «copia», SEMPRE.
@@ -64,6 +81,7 @@ function toggleSpeak(): void {
             variant="ghost"
             size="icon"
             class="min-h-touch min-w-touch"
+            data-testid="talos-message-speak"
             :aria-label="speech.speakingId.value === message.id ? $t('chat.stopSpeaking') : $t('chat.speakMessage')"
             :title="speech.speakingId.value === message.id ? $t('common.stop') : $t('chat.speak')"
             :aria-pressed="speech.speakingId.value === message.id"
@@ -72,14 +90,16 @@ function toggleSpeak(): void {
             <Square v-if="speech.speakingId.value === message.id" class="size-3.5" fill="currentColor" aria-hidden="true" />
             <Volume2 v-else class="size-3.5" aria-hidden="true" />
         </Button>
-        <Button v-if="message.role === 'assistant'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.retryAssistant')" :title="$t('chat.retryResponse')" :disabled="busy || !canRetry" @click="emit('retry', message)">
+        <Button v-if="message.role === 'assistant'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" data-testid="talos-message-retry" :aria-label="$t('chat.retryAssistant')" :title="$t('chat.retryResponse')" :disabled="busy || !canRetry" @click="emit('retry', message)">
             <RotateCcw class="size-3.5" aria-hidden="true" />
         </Button>
         <!-- Owner 2026-07-25: the chat can't hand out download links; instead save
              the generated reply straight into the Library (origin='generated'). -->
-        <Button v-if="message.role === 'assistant'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.saveToLibrary')" :title="$t('chat.saveToLibrary')" @click="emit('saveToLibrary', message)">
+        <Button v-if="message.role === 'assistant'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" data-testid="talos-message-save" :aria-label="$t('chat.saveToLibrary')" :title="$t('chat.saveToLibrary')" @click="emit('saveToLibrary', message)">
             <Library class="size-3.5" aria-hidden="true" />
         </Button>
-        <TalosMobileMessageOverflowMenu v-if="message.role === 'user'" :message="message" @reuse="emit('reuse', $event)" />
+        <TalosMobileMessageOverflowMenu :message="message" :busy="busy" :can-retry="canRetry"
+            @reuse="emit('reuse', $event)" @resend="emit('resend', $event)"
+            @share="emit('share', $event)" @details="emit('details', $event)" @delete="emit('delete', $event)" />
     </div>
 </template>

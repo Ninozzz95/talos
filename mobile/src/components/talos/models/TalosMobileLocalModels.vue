@@ -50,6 +50,15 @@ import {
     TALOS_INSTALLED_MODEL_SORTS,
     type TalosInstalledModelSort,
 } from '@/lib/models/installedModels'
+/**
+ * ⛔ QUALE MODELLO E' DAVVERO IN MEMORIA — 2026-09-10.
+ *
+ * L'apertura anticipata (P3-1) esisteva da agosto e non si vedeva da nessuna
+ * parte: il 10/09 il modello e' risultato freddo due minuti dopo essere stato
+ * scelto e nessuna schermata poteva dirlo. Questo elenco e' il posto giusto per
+ * la risposta duratura — l'avviso a schermo passa, la riga del file resta.
+ */
+import { talosLocalWarmState } from '@/lib/models/localWarmState'
 import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
 import { talosSortChipClass } from '@/lib/sortChip'
 import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
@@ -387,6 +396,19 @@ const refused = ref<string | null>(null)
  * listing already ranks judges for a research — and showed nobody. The panel
  * was entirely about ACQUIRING models and had nothing about HAVING them.
  */
+const warmState = talosLocalWarmState()
+/** Tre parole, e solo sulla riga del file che riguardano. Vuoto = niente da dire. */
+function warmLabel(path: string): string {
+    const stato = warmState.value
+    if (stato.path !== path) return ''
+    if (stato.phase === 'opening') return t('localModels.warmBadge.opening')
+    if (stato.phase === 'ready') return t('localModels.warmBadge.ready')
+    if (stato.phase === 'skipped' || stato.phase === 'failed') {
+        return t('localModels.warmBadge.notLoaded')
+    }
+    return ''
+}
+
 const installed = ref<readonly TalosLocalModelFile[]>([])
 const unreadable = ref<readonly { path: string, reason: string }[]>([])
 const installedQuery = computed({
@@ -1091,6 +1113,11 @@ function resultCountLabel(count: number): string {
                         />
                     </div>
                     <p class="truncate text-sm text-[var(--talos-text)]">{{ nameOf(file) }}</p>
+                    <p
+                        v-if="warmLabel(file.path)"
+                        data-testid="talos-models-installed-warm"
+                        class="mt-[calc(var(--talos-space-inline)/2)] inline-flex rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[calc(var(--talos-space-inline)/2)] text-2xs text-[var(--talos-muted)]"
+                    >{{ warmLabel(file.path) }}</p>
                     <!-- Il nome vero resta leggibile sotto quello scelto: un
                          alias che NASCONDE il file rende impossibile capire
                          quale GGUF si sta per cancellare. -->

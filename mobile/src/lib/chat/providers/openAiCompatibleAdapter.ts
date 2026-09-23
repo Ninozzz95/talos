@@ -23,14 +23,33 @@ import {
 } from '@/lib/chat/providers/openAiReasoningTools'
 import { talosToolsForOpenAi } from '@/lib/tools/registry'
 import { createOpenAiToolCallAccumulator, parseOpenAiToolCalls } from '@/lib/tools/wire'
+import { talosCreateThinkSplitter, talosSplitFinalThink } from '@/lib/chat/thinkStream'
+import { talosParseInlineToolCall } from '@/lib/chat/inlineToolCall'
+import type { TalosToolCall } from '@/stores/chat'
+
+/**
+ * D-F1-2 (12/09/2026): i blocchi `<tool_call>` che il modello scrive nel TESTO
+ * (GLM 5.3 Flash via OpenRouter lo fa, nella forma `nome<arg_key>…<arg_value>…`)
+ * non vanno a schermo: diventano chiamate vere, in coda a quelle arrivate nel
+ * campo `tool_calls`. Gli id sono nostri, perché il fornitore non ne ha dati.
+ */
+function chiamateDalTesto(blocchi: readonly string[] | undefined, giaPresenti: number): TalosToolCall[] {
+    const trovate: TalosToolCall[] = []
+    for (const blocco of blocchi ?? []) {
+        const letta = talosParseInlineToolCall(blocco)
+        if (letta) trovate.push({ id: `inline-${giaPresenti + trovate.length}`, name: letta.name, arguments: letta.arguments })
+    }
+    return trovate
+}
 import {
     emptyProviderResponse,
     malformedProviderResponse,
     normalizeHttpEndpoint,
     requireHttpSuccess,
     requireProviderApiKey,
+    sendWithProviderRetry,
 } from '@/lib/chat/providerErrors'
-import { talosNumericUsage } from '@/lib/chat/providers/usage'
+import { talosFlatUsage, talosNumericUsage } from '@/lib/chat/providers/usage'
 
 const modelSchema = z.object({
     id: z.string().min(1),
@@ -432,13 +451,16 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
              * proprio che il loro corpo non cambi.
              */
             if (config.provider === 'openai') {
-                const response = await transport.request({
+                // DEBT-MOBILE-016: un 429/408/5xx si ritenta con backoff (onora
+                // Retry-After se il fornitore lo manda) invece di lanciare al
+                // primo colpo — vedi la doc sopra `sendWithProviderRetry`.
+                const response = await sendWithProviderRetry(() => transport.request({
                     method: 'POST',
                     url: `${baseUrl}/responses`,
                     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
                     data: responsesCompletionData(input, false),
                     ...requestTimeouts(credential),
-                })
+                }))
                 requireHttpSuccess({ provider: 'openai', operation: 'complete', status: response.status, data: response.data })
                 const read = talosReadOpenAiResponse(response.data)
                 // Un turno che chiama un tool ha legittimamente zero testo: la
@@ -475,54 +497,69 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 data: payload,
                 ...requestTimeouts(credential),
             })
-            let response = await send(compatibleCompletionData(config, input, false))
             /**
-             * Si impara dal rifiuto invece di portarsi dietro un elenco.
-             *
-             * Owner 2026-08-03, con uno screenshot: `gpt-5.6-luna` rispondeva
-             * 400 a «Ciaoo», perche' TALOS offre i suoi tool a ogni messaggio e
-             * quel modello non li accetta insieme al ragionamento. Un elenco
-             * cablato invecchierebbe dentro l'APK e sbaglierebbe sul prossimo
-             * modello; il provider invece lo dice, e lo dice in modo
-             * riconoscibile. Un solo nuovo tentativo, e il modello resta
-             * segnato per il resto della sessione.
+             * DEBT-MOBILE-016: tutta la risoluzione qui sotto (il tentativo
+             * base, più i due auto-correttivi già esistenti) diventa UN
+             * `send()` solo agli occhi di `sendWithProviderRetry` — un 429/
+             * 408/5xx la rifà da capo con backoff (Retry-After onorato se
+             * c'è); un 400/401/402/404 esce al primo giro come sempre, ed è
+             * lì che i due rami sotto continuano a fare il loro lavoro.
              */
-            if (talosOpenAiRejectsToolsWithReasoning(response.status, response.data)) {
-                talosRememberReasoningConflict(input.model.id)
-                response = await send(compatibleCompletionData(config, input, false))
+            const resolveResponse = async () => {
+                let response = await send(compatibleCompletionData(config, input, false))
+                /**
+                 * Si impara dal rifiuto invece di portarsi dietro un elenco.
+                 *
+                 * Owner 2026-08-03, con uno screenshot: `gpt-5.6-luna` rispondeva
+                 * 400 a «Ciaoo», perche' TALOS offre i suoi tool a ogni messaggio e
+                 * quel modello non li accetta insieme al ragionamento. Un elenco
+                 * cablato invecchierebbe dentro l'APK e sbaglierebbe sul prossimo
+                 * modello; il provider invece lo dice, e lo dice in modo
+                 * riconoscibile. Un solo nuovo tentativo, e il modello resta
+                 * segnato per il resto della sessione.
+                 */
+                if (talosOpenAiRejectsToolsWithReasoning(response.status, response.data)) {
+                    talosRememberReasoningConflict(input.model.id)
+                    response = await send(compatibleCompletionData(config, input, false))
+                }
+                /*
+                 * ⛔⛔ IL RIPIEGO SUL CREDITO ESISTEVA E COPRIVA UNA STRADA SOLA.
+                 *
+                 * `conRipiegoSulCredito`, scritto il 2026-08-10, vive nel ramo in
+                 * STREAMING. Questo ramo — la chiamata secca — non l'ha mai avuto,
+                 * e chi passa di qui riceve il 402 in faccia.
+                 *
+                 * MISURATO sul Pad il 2026-08-13, dal pilota dello schermo:
+                 *
+                 * > `pilota: chiedi-in-errore TalosMobileProviderError: This request
+                 * > requires more credits, or fewer max_tokens. You requested up to
+                 * > 65536 tokens, but can only afford 5020`
+                 *
+                 * — e la corsa moriva a `passi=0 ms=175`, cioe' prima di guardare
+                 * lo schermo anche una sola volta. Da fuori sembrava che il modello
+                 * non capisse il compito; in realta' non era mai stato interrogato.
+                 *
+                 * ⇒ Stessa cura, stessa funzione, un solo ritentativo: il rifiuto
+                 * porta il numero, e il numero diventa il tetto. Il primo tentativo
+                 * non costa token — il 402 e' un controllo di budget e cade prima
+                 * della generazione.
+                 */
+                const tettoDalRifiuto = talosTettoDaiCrediti(JSON.stringify(response.data ?? ''))
+                if (tettoDalRifiuto !== null) {
+                    response = await send(compatibleCompletionData(config, input, false, tettoDalRifiuto))
+                }
+                return response
             }
-            /*
-             * ⛔⛔ IL RIPIEGO SUL CREDITO ESISTEVA E COPRIVA UNA STRADA SOLA.
-             *
-             * `conRipiegoSulCredito`, scritto il 2026-08-10, vive nel ramo in
-             * STREAMING. Questo ramo — la chiamata secca — non l'ha mai avuto,
-             * e chi passa di qui riceve il 402 in faccia.
-             *
-             * MISURATO sul Pad il 2026-08-13, dal pilota dello schermo:
-             *
-             * > `pilota: chiedi-in-errore TalosMobileProviderError: This request
-             * > requires more credits, or fewer max_tokens. You requested up to
-             * > 65536 tokens, but can only afford 5020`
-             *
-             * — e la corsa moriva a `passi=0 ms=175`, cioe' prima di guardare
-             * lo schermo anche una sola volta. Da fuori sembrava che il modello
-             * non capisse il compito; in realta' non era mai stato interrogato.
-             *
-             * ⇒ Stessa cura, stessa funzione, un solo ritentativo: il rifiuto
-             * porta il numero, e il numero diventa il tetto. Il primo tentativo
-             * non costa token — il 402 e' un controllo di budget e cade prima
-             * della generazione.
-             */
-            const tettoDalRifiuto = talosTettoDaiCrediti(JSON.stringify(response.data ?? ''))
-            if (tettoDalRifiuto !== null) {
-                response = await send(compatibleCompletionData(config, input, false, tettoDalRifiuto))
-            }
+            const response = await sendWithProviderRetry(resolveResponse)
             requireHttpSuccess({ provider: config.provider, operation: 'complete', status: response.status, data: response.data })
             const parsed = completionSchema.safeParse(response.data)
             if (!parsed.success) throw malformedProviderResponse(config.provider, 'complete', { received: response.data, issues: parsed.error.issues })
             const choice = parsed.data.choices[0]!
-            const text = answerText(choice.message)
-            const toolCalls = parseOpenAiToolCalls(choice.message)
+            // D-F1-2: una chiamata scritta nel testo si legge, non si mostra.
+            const ripulito = talosSplitFinalThink(answerText(choice.message), null)
+            const text = ripulito.text
+            const dalCampo = parseOpenAiToolCalls(choice.message)
+            const toolCalls = [...dalCampo, ...chiamateDalTesto(ripulito.calls, dalCampo.length)]
             // A tool-calling turn legitimately has NO text: refusing it as
             // malformed would break the loop before it started.
             //
@@ -593,6 +630,16 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
             }
 
             const toolCalls = createOpenAiToolCallAccumulator()
+            // D-F1-2: il testo passa dal separatore; i blocchi `<tool_call>`
+            // non scorrono a schermo e si raccolgono per diventare chiamate.
+            const separatore = talosCreateThinkSplitter()
+            let testoPulito = ''
+            const blocchiDalTesto: string[] = []
+            const accogli = (fetta: { text: string, reasoning: string, calls?: string[] }): void => {
+                if (fetta.text) { testoPulito += fetta.text; handlers.onChunk(fetta.text) }
+                if (fetta.reasoning) handlers.onReasoning?.(fetta.reasoning)
+                if (fetta.calls) blocchiDalTesto.push(...fetta.calls)
+            }
             /*
              * ⛔⛔ IL RIFIUTO PER CREDITI SI IMPARA, non si mostra.
              *
@@ -621,6 +668,15 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                     return await giro(tetto)
                 }
             }
+            /*
+             * ⛔ Owner 2026-09-13: in chat i token di OpenRouter e dei compatibili non erano
+             * MAI arrivati — questo lettore prendeva solo il testo. OpenRouter manda l'uso,
+             * costo compreso, sempre e nell'ultimo messaggio SSE, e `stream_options` non
+             * serve piu' (openrouter.ai/docs/use-cases/usage-accounting, letto il 2026-09-13).
+             * Stessa perdita trovata in Hermes Agent (NousResearch/hermes-agent#105215).
+             */
+            let usage: Record<string, number> | null = null
+            let callId: string | null = null
             const stream = await conRipiegoSulCredito(async (tetto) => await talosStreamText({
                 url: `${baseUrl}/chat/completions`,
                 headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
@@ -628,8 +684,14 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 signal: handlers.signal,
                 accumulator: createTalosSseAccumulator(),
                 extract: (payload) => {
-                    const event = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string | null } }> }
+                    const event = JSON.parse(payload) as {
+                        id?: unknown
+                        choices?: Array<{ delta?: { content?: string | null } }>
+                        usage?: Record<string, unknown> | null
+                    }
                     toolCalls.push(event)
+                    if (callId === null && typeof event.id === 'string' && event.id) callId = event.id
+                    if (event.usage) usage = talosFlatUsage(event.usage) ?? usage
                     return event.choices?.[0]?.delta?.content ?? ''
                 },
                 // Defect #5: DeepSeek streams `reasoning_content`, OpenRouter
@@ -645,14 +707,18 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                     // nullish-coalescing would take the empty one.
                     return delta?.reasoning_content || delta?.reasoning || ''
                 },
-                onChunk: handlers.onChunk,
+                onChunk: (pezzo) => accogli(separatore.push(pezzo)),
                 onReasoning: handlers.onReasoning,
             }))
-            const calls = toolCalls.calls()
-            if (!stream.text && calls.length === 0) throw malformedProviderResponse(config.provider, 'complete', { received: { text: stream.text, calls: calls.length }, note: 'stream ended with no text and no tool calls' })
+            accogli(separatore.flush())
+            const dalCampo = toolCalls.calls()
+            const calls = [...dalCampo, ...chiamateDalTesto(blocchiDalTesto, dalCampo.length)]
+            if (!testoPulito && calls.length === 0) throw malformedProviderResponse(config.provider, 'complete', { received: { text: stream.text, calls: calls.length }, note: 'stream ended with no text and no tool calls' })
             return {
-                text: stream.text,
+                text: testoPulito,
                 model: input.model.id,
+                usage,
+                callId,
                 reasoning: stream.reasoning || undefined,
                 ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : {}),
             }

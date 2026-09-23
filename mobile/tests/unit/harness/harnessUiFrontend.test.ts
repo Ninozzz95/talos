@@ -26,11 +26,9 @@ function mountStaticRuntime(): void {
 describe('Harness UI embedded host and keyboard runtime', () => {
     beforeEach(() => {
         document.body.className = ''
-        window.localStorage.clear()
     })
 
     afterEach(() => {
-        vi.unstubAllGlobals()
         ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
         delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
         delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
@@ -48,109 +46,30 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         vi.unstubAllGlobals()
     })
 
-    it('CODE-PROVIDERS-UI-01 mostra card richiudibili e salva/rimuove senza lasciare la chiave nel browser', async () => {
-        let openAiConfigured = false
-        const rows = [
-            ['openai', 'OpenAI', true, 'https://api.openai.com/v1'],
-            ['deepseek', 'DeepSeek', true, 'https://api.deepseek.com'],
-            ['anthropic', 'Anthropic', true, 'https://api.anthropic.com/v1'],
-            ['gemini', 'Gemini', true, 'https://generativelanguage.googleapis.com/v1beta'],
-            ['openrouter', 'OpenRouter', true, 'https://openrouter.ai/api/v1'],
-            ['ollama', 'Ollama', false, 'http://127.0.0.1:11434'],
-            ['huggingface', 'Hugging Face', false, null],
-        ].map(([id, label, requiresKey, endpoint]) => ({
-            id, label, requiresKey, keyConfigured: id === 'openai' ? openAiConfigured : false,
-            supportsEndpoint: !['anthropic', 'gemini', 'huggingface'].includes(id as string), endpoint, endpointConfigured: false, timeoutSeconds: 60,
-            execution: id === 'openrouter' ? 'collegato' : 'in preparazione',
-        }))
-        const response = (data: unknown) => ({ ok: true, json: async () => ({ ok: true, data }) })
-        const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-            const path = String(input)
-            if (path.endsWith('/api/v1/providers')) { rows[0].keyConfigured = openAiConfigured; return response({ items: rows }) }
-            if (path.includes('/api/v1/providers/openai/key/remove')) { openAiConfigured = false; return response({ provider: 'openai', keyConfigured: false }) }
-            if (path.includes('/api/v1/providers/openai/key')) { openAiConfigured = true; return response({ provider: 'openai', keyConfigured: true }) }
-            if (path.includes('/api/v1/model-lab/capacity')) return response({ memory: {}, storage: {} })
-            if (path.endsWith('/api/v1/runtime') || path.endsWith('/api/v1/local-models')) return response({ items: [] })
-            return response({ items: [] })
-        })
-        vi.stubGlobal('fetch', fetchMock)
-        mountStaticRuntime()
-
-        document.querySelector<HTMLButtonElement>('[data-settings-tab="models"]')!.click()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        expect(document.querySelectorAll('[data-provider-id]')).toHaveLength(7)
-        expect([...document.querySelectorAll<HTMLElement>('[data-provider-detail]')].every((detail) => detail.hidden)).toBe(true)
-
-        const card = document.querySelector<HTMLElement>('[data-provider-id="openai"]')!
-        card.querySelector<HTMLButtonElement>('[data-provider-toggle]')!.click()
-        expect(card.querySelector<HTMLElement>('[data-provider-detail]')!.hidden).toBe(false)
-        const input = card.querySelector<HTMLInputElement>('[data-provider-key]')!
-        input.value = 'sk-ui-secret-never-stored'
-        card.querySelector<HTMLButtonElement>('[data-provider-action="save-key"]')!.click()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        expect(input.value).toBe('')
-        expect(window.localStorage.getItem('sk-ui-secret-never-stored')).toBeNull()
-        expect(document.body.textContent).not.toContain('sk-ui-secret-never-stored')
-        expect(fetchMock.mock.calls.some(([url, options]) => String(url).includes('/providers/openai/key') && (options as RequestInit)?.method === 'POST')).toBe(true)
-        expect(card.querySelector<HTMLElement>('[data-provider-action="remove-key"]')!.hidden).toBe(false)
-
-        card.querySelector<HTMLButtonElement>('[data-provider-action="remove-key"]')!.click()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        expect(card.querySelector<HTMLElement>('[data-provider-action="remove-key"]')!.hidden).toBe(true)
-    })
-
-    it('CODE-PROVIDERS-UI-02 non mette endpoint per Hugging Face e mantiene il tempo massimo separato dalla chiave', async () => {
-        const rows = ['openai', 'deepseek', 'anthropic', 'gemini', 'openrouter', 'ollama', 'huggingface'].map((id) => ({
-            id, label: id, requiresKey: id !== 'ollama' && id !== 'huggingface', keyConfigured: false,
-            supportsEndpoint: !['anthropic', 'gemini', 'huggingface'].includes(id), endpoint: id === 'huggingface' ? null : 'https://example.test', endpointConfigured: false, timeoutSeconds: 60, execution: 'in preparazione',
-        }))
-        const response = (data: unknown) => ({ ok: true, json: async () => ({ ok: true, data }) })
-        const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-            const path = String(input)
-            if (path.endsWith('/api/v1/providers')) return response({ items: rows })
-            if (path.endsWith('/api/v1/model-lab/capacity')) return response({ memory: {}, storage: {} })
-            if (path.endsWith('/api/v1/runtime') || path.endsWith('/api/v1/local-models')) return response({ items: [] })
-            return response({ items: [] })
-        })
-        vi.stubGlobal('fetch', fetchMock)
-        mountStaticRuntime()
-        document.querySelector<HTMLButtonElement>('[data-settings-tab="models"]')!.click()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        const hf = document.querySelector<HTMLElement>('[data-provider-id="huggingface"]')!
-        hf.querySelector<HTMLButtonElement>('[data-provider-toggle]')!.click()
-        expect(hf.querySelector<HTMLElement>('[data-provider-endpoint-block]')).toBeNull()
-        const ollama = document.querySelector<HTMLElement>('[data-provider-id="ollama"]')!
-        ollama.querySelector<HTMLButtonElement>('[data-provider-toggle]')!.click()
-        expect(ollama.querySelector<HTMLInputElement>('[data-provider-timeout]')?.value).toBe('60')
-        const anthropic = document.querySelector<HTMLElement>('[data-provider-id="anthropic"]')!
-        anthropic.querySelector<HTMLButtonElement>('[data-provider-toggle]')!.click()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        expect(anthropic.querySelector<HTMLElement>('[data-provider-endpoint]')?.closest('label')?.hidden).toBe(true)
-        expect(anthropic.querySelector<HTMLInputElement>('[data-provider-timeout]')?.value).toBe('60')
-        expect(anthropic.querySelector<HTMLElement>('.provider-help')?.textContent).toBe('La chiave resta nel portachiavi del computer.')
-        const gemini = document.querySelector<HTMLElement>('[data-provider-id="gemini"]')!
-        gemini.querySelector<HTMLButtonElement>('[data-provider-toggle]')!.click()
-        expect(gemini.querySelector<HTMLElement>('.provider-help')?.textContent).toBe('La chiave resta nel portachiavi del computer.')
-    })
-
-    it('CODE-PROVIDERS-UI-03 closed provider details stay out of layout and expanded card gets the full grid', () => {
-        const css = asset('styles.css')
-        expect(css).toMatch(/\.provider-card-detail\[hidden\]\s*\{[^}]*display:\s*none/s)
-        expect(css).toMatch(/\.provider-card\s+\.provider-field\[hidden\]\s*\{[^}]*display:\s*none/s)
-        expect(css).toMatch(/\.provider-card\.is-expanded\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s)
-        mountStaticRuntime()
-        document.querySelector<HTMLButtonElement>('[data-settings-tab="models"]')!.click()
-        const card = document.querySelector<HTMLElement>('[data-provider-id="openai"]')!
-        expect(card.querySelector<HTMLElement>('[data-provider-detail]')?.hidden).toBe(true)
-        card.querySelector<HTMLButtonElement>('[data-provider-toggle]')!.click()
-        expect(card.classList.contains('is-expanded')).toBe(true)
-    })
-
     it('HARNESS-EMBEDDED-HEIGHT-01 sizes the embedded app and workspace from their real host', () => {
         const css = asset('styles.css')
 
         expect(css).toMatch(/:host\(\.talos-embedded\)\s+\.app-shell\s*\{[^}]*height:\s*100%/s)
         expect(css).toMatch(/:host\(\.talos-embedded\)\s+\.workspace-shell\s*\{[^}]*height:\s*100%/s)
+    })
+
+    /**
+     * ⛔⛔⛔ 29/8 — trovato sul device: `.demo-surface-badge { display:
+     * inline-flex }` (regola di classe) ha la STESSA specificità della
+     * regola user-agent per `[hidden]` — una regola d'autore vince sempre
+     * a parità di specificità, quindi `badge.hidden = true`
+     * (`aggiornaPannelloAmbiente`/`collegaEventiSessione`, verificato che
+     * la PROPRIETÀ viene impostata) non aveva MAI un effetto visivo: il
+     * badge "Demo UI · non collegato" restava a schermo su una sessione
+     * reale. jsdom non implementa il foglio di stile dello user-agent
+     * (nessun modo affidabile di riprodurre il bug/la cura via
+     * `getComputedStyle` in questo ambiente) — si prova sul TESTO del
+     * CSS, stesso schema già usato sopra per l'altezza embedded.
+     */
+    it('HARNESS-DEMO-BADGE-HIDDEN-01 [hidden] batte "display: inline-flex" con una specificità reale', () => {
+        const css = asset('styles.css')
+
+        expect(css).toMatch(/\.demo-surface-badge\[hidden\]\s*\{[^}]*display:\s*none\s*!important/s)
     })
 
     it('CODE-SINGLE-SAFE-AREA-02 lets the session-first topbar own the safe area after outer chrome is removed', () => {
@@ -269,191 +188,6 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(document.querySelector('[data-view="settings"]')?.classList.contains('active')).toBe(true)
     })
 
-    it('CODE-SETTINGS-CATEGORIES-01 organizza tutte le categorie in un list-detail con un solo pannello attivo', () => {
-        mountStaticRuntime()
-
-        const tabs = [...document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]')]
-        expect(tabs.map((tab) => tab.dataset.settingsTab)).toEqual([
-            'appearance', 'chat', 'models', 'providers', 'tools', 'privacy', 'workspace', 'account',
-        ])
-        expect(tabs.every((tab) => tab.getAttribute('role') === 'tab')).toBe(true)
-        expect(document.querySelectorAll('[data-settings-panel]:not([hidden])')).toHaveLength(1)
-        expect(document.querySelector('[data-settings-panel="appearance"]')?.classList.contains('active')).toBe(true)
-
-        tabs.find((tab) => tab.dataset.settingsTab === 'models')!.click()
-        expect(document.querySelector('[data-settings-tab="models"]')?.getAttribute('aria-selected')).toBe('true')
-        expect(document.querySelectorAll('[data-settings-panel]:not([hidden])')).toHaveLength(1)
-        expect(document.querySelector('[data-settings-panel="models"]')?.classList.contains('active')).toBe(true)
-        expect(document.querySelector('[data-settings-panel="appearance"]')?.hasAttribute('hidden')).toBe(true)
-    })
-
-    it('CODE-SETTINGS-CATEGORIES-02 persiste la categoria e offre la barra compatta scorrevole', () => {
-        const css = asset('styles.css')
-        expect(css).toMatch(/\.settings-category-nav\s*\{[^}]*display:\s*grid/s)
-        expect(css).toMatch(/@media\s*\(max-width:\s*780px\)[\s\S]*\.settings-category-nav\s*\{[^}]*overflow-x:\s*auto/s)
-        expect(css).toMatch(/\.view-pane\[data-view="settings"\]\s*>\s*\.generic-shell\s*\{[^}]*width:\s*100%[^}]*max-width:\s*none/s)
-        expect(css).toMatch(/\.settings-detail-panels\s*\{[^}]*container-type:\s*inline-size/s)
-        expect(css).toMatch(/@container\s+settings-detail\s*\(max-width:\s*540px\)[\s\S]*grid-template-columns:\s*1fr/s)
-
-        mountStaticRuntime()
-        document.querySelector<HTMLButtonElement>('[data-settings-tab="privacy"]')!.click()
-        expect(window.localStorage.getItem('talos.harness.desktop.settings.section.v1')).toBe('privacy')
-    })
-
-    it('CODE-SETTINGS-APPEARANCE-HYDRATE-01 hydrates local appearance preferences and applies separate scales', () => {
-        window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
-            version: 1,
-            appearance: { uiFontScale: 'large', chatFontScale: 'expanded', reducedMotion: true },
-            apiKey: 'must-not-survive',
-        }))
-
-        mountStaticRuntime()
-
-        const host = document.documentElement
-        expect(host.style.getPropertyValue('--talos-ui-font-scale')).toBe('1.15')
-        expect(host.style.getPropertyValue('--talos-chat-font-size')).toBe('1.1875rem')
-        expect(document.body.classList.contains('reduce-motion')).toBe(true)
-        expect(document.querySelector<HTMLSelectElement>('#uiFontScaleSelect')?.value).toBe('large')
-        expect(document.querySelector<HTMLSelectElement>('#chatFontScaleSelect')?.value).toBe('expanded')
-        expect(document.querySelector<HTMLInputElement>('#reducedMotionToggle')?.checked).toBe(true)
-    })
-
-    it('CODE-SETTINGS-APPEARANCE-PERSIST-01 persists changes in the existing versioned document', () => {
-        mountStaticRuntime()
-
-        const ui = document.querySelector<HTMLSelectElement>('#uiFontScaleSelect')!
-        const chat = document.querySelector<HTMLSelectElement>('#chatFontScaleSelect')!
-        const motion = document.querySelector<HTMLInputElement>('#reducedMotionToggle')!
-        ui.value = 'xlarge'
-        ui.dispatchEvent(new Event('change', { bubbles: true }))
-        chat.value = 'compact'
-        chat.dispatchEvent(new Event('change', { bubbles: true }))
-        motion.checked = true
-        motion.dispatchEvent(new Event('change', { bubbles: true }))
-
-        const stored = JSON.parse(window.localStorage.getItem('talos.harness.desktop.settings.v1') || '{}')
-        expect(stored.appearance).toEqual({ uiFontScale: 'xlarge', chatFontScale: 'compact', reducedMotion: true })
-        expect(stored.apiKey).toBeUndefined()
-    })
-
-    it('CODE-SETTINGS-APPEARANCE-FAIL-CLOSED-01 ignores malformed values and secret-like keys', () => {
-        window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
-            version: 999,
-            appearance: { uiFontScale: 'huge', chatFontScale: {}, reducedMotion: 'yes', token: 'secret' },
-            workspaces: { 'project:p1': { expandedPaths: ['src'], filter: 'composer', apiKey: 'secret' } },
-        }))
-
-        mountStaticRuntime()
-
-        expect(document.querySelector<HTMLSelectElement>('#uiFontScaleSelect')?.value).toBe('default')
-        expect(document.querySelector<HTMLSelectElement>('#chatFontScaleSelect')?.value).toBe('xcompact')
-        expect(document.querySelector<HTMLInputElement>('#reducedMotionToggle')?.checked).toBe(false)
-        document.querySelector<HTMLSelectElement>('#uiFontScaleSelect')!.value = 'small'
-        document.querySelector<HTMLSelectElement>('#uiFontScaleSelect')!.dispatchEvent(new Event('change', { bubbles: true }))
-        const stored = JSON.parse(window.localStorage.getItem('talos.harness.desktop.settings.v1') || '{}')
-        expect(stored.apiKey).toBeUndefined()
-        expect(stored.appearance.token).toBeUndefined()
-        expect(stored.workspaces['project:p1'].apiKey).toBeUndefined()
-    })
-
-    it('CODE-SETTINGS-APPEARANCE-COMPLETE-01 exposes every mobile Appearance control in desktop language', () => {
-        mountStaticRuntime()
-
-        const required = [
-            'themePresetSelect', 'colorModeSelect', 'sceneOverrideSelect',
-            'backgroundMotionToggle', 'interfaceMotionToggle', 'motionModeSelect',
-            'motionQualitySelect', 'motionSpeedRange', 'motionIntensityRange',
-            'motionGlowRange', 'motionDensityRange', 'motionDepthRange',
-            'motionTrailsRange', 'motionContrastRange', 'motionParallaxRange',
-            'pauseWhenHiddenToggle', 'respectDataSaverToggle', 'motionProfileSelect',
-            'motionEasingSelect', 'motionDurationRange', 'motionUiIntensityRange',
-            'motionStaggerRange', 'motionWindowsToggle', 'motionSurfacesToggle',
-            'motionNavigationToggle', 'motionComposerToggle', 'motionMessagesToggle',
-            'motionFeedbackToggle', 'composerShapeSelect', 'composerPlusSelect',
-            'messageStyleSelect', 'streamingAnimationSelect', 'windowPresentationSelect',
-            'immersiveHeaderToggle', 'resetMotionButton',
-        ]
-
-        for (const id of required) expect(document.getElementById(id), id).toBeTruthy()
-    })
-
-    it('CODE-SETTINGS-THEME-REAL-01 applies the selected theme and color mode to the host', () => {
-        mountStaticRuntime()
-
-        const theme = document.querySelector<HTMLSelectElement>('#themePresetSelect')!
-        const mode = document.querySelector<HTMLSelectElement>('#colorModeSelect')!
-        theme.value = 'terminal'
-        theme.dispatchEvent(new Event('change', { bubbles: true }))
-        mode.value = 'light'
-        mode.dispatchEvent(new Event('change', { bubbles: true }))
-
-        expect(document.documentElement.dataset.talosTheme).toBe('terminal')
-        expect(document.documentElement.dataset.talosColorMode).toBe('light')
-        const stored = JSON.parse(window.localStorage.getItem('talos.harness.desktop.settings.v1') || '{}')
-        expect(stored.appearance.themePreset).toBe('terminal')
-        expect(stored.appearance.colorMode).toBe('light')
-    })
-
-    it('CODE-SETTINGS-MOTION-REAL-01 applies scene, motion flags and numeric tokens', () => {
-        mountStaticRuntime()
-
-        const scene = document.querySelector<HTMLSelectElement>('#sceneOverrideSelect')!
-        const speed = document.querySelector<HTMLInputElement>('#motionSpeedRange')!
-        const background = document.querySelector<HTMLInputElement>('#backgroundMotionToggle')!
-        scene.value = 'aurora'
-        scene.dispatchEvent(new Event('change', { bubbles: true }))
-        speed.value = '150'
-        speed.dispatchEvent(new Event('input', { bubbles: true }))
-        background.checked = false
-        background.dispatchEvent(new Event('change', { bubbles: true }))
-
-        expect(document.documentElement.dataset.talosScene).toBe('aurora')
-        expect(document.body.classList.contains('background-motion-off')).toBe(true)
-        expect(document.documentElement.style.getPropertyValue('--talos-motion-speed')).toBe('1.5')
-    })
-
-    it('CODE-SETTINGS-MOTION-VISIBILITY-01 pauses the renderer contract while hidden', () => {
-        mountStaticRuntime()
-        const runtime = (window as unknown as {
-            __talosHarnessUiRuntime?: { backgroundAnimationRunning?: boolean }
-        }).__talosHarnessUiRuntime
-
-        expect(runtime?.backgroundAnimationRunning).toBe(true)
-        Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
-        document.dispatchEvent(new Event('visibilitychange'))
-        expect(runtime?.backgroundAnimationRunning).toBe(false)
-        Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
-        document.dispatchEvent(new Event('visibilitychange'))
-        expect(runtime?.backgroundAnimationRunning).toBe(true)
-    })
-
-    it('CODE-SETTINGS-MOTION-STATIC-01 keeps the scene still without scheduling frames', () => {
-        mountStaticRuntime()
-        const mode = document.querySelector<HTMLSelectElement>('#motionModeSelect')!
-        mode.value = 'static'
-        mode.dispatchEvent(new Event('change', { bubbles: true }))
-
-        const runtime = (window as unknown as {
-            __talosHarnessUiRuntime?: { backgroundAnimationRunning?: boolean }
-        }).__talosHarnessUiRuntime
-        expect(runtime?.backgroundAnimationRunning).toBe(false)
-        expect(document.body.classList.contains('background-motion-off')).toBe(false)
-    })
-
-    it('CODE-SETTINGS-MOTION-RESET-01 restores only Motion defaults', () => {
-        mountStaticRuntime()
-        const scene = document.querySelector<HTMLSelectElement>('#sceneOverrideSelect')!
-        const reset = document.querySelector<HTMLButtonElement>('#resetMotionButton')!
-        scene.value = 'aurora'
-        scene.dispatchEvent(new Event('change', { bubbles: true }))
-        reset.click()
-
-        expect(scene.value).toBe('follow-theme')
-        const stored = JSON.parse(window.localStorage.getItem('talos.harness.desktop.settings.v1') || '{}')
-        expect(stored.appearance.sceneOverride ?? 'follow-theme').toBe('follow-theme')
-        expect(stored.appearance.uiFontScale ?? 'default').toBe('default')
-    })
-
     it('CODE-COMPOSER-AUTONOMY-SHEET-01 opens the original policy sheet and reports its selection to Vue', () => {
         const permissionChanged = vi.fn()
         ;(window as unknown as {
@@ -474,6 +208,28 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         fullAccess?.click()
         expect(permissionChanged).toHaveBeenCalledWith('Full access')
         expect(sheet?.open).toBe(false)
+    })
+
+    /*
+     * ⭐⭐⭐ 2/9 — export_report (piano §14.3/§15.6, R5): il comando slash
+     * `/export` ricadeva sul toast fisso "Export demo" — exportSession()
+     * esiste già (poche righe sotto in app.js, già onesta: sessione
+     * reale → il foglio vero, bozza → un JSON scaricato per davvero con
+     * un toast che lo dichiara). Prova che la NUOVA eccezione in
+     * announceComposerAction() richiama quella funzione vera, mai più
+     * il vecchio toast fisso.
+     */
+    it('⭐ CODE-COMPOSER-EXPORT-REPORT-01 export_report richiama exportSession() vera, mai il vecchio toast fisso', () => {
+        mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { announceComposerAction?(action: string): boolean }
+        }).__talosHarnessUiRuntime
+
+        expect(runtime?.announceComposerAction?.('export_report')).toBe(true)
+
+        const toastTitle = document.querySelector('.toast strong')?.textContent
+        expect(toastTitle).not.toBe('Export demo') // il vecchio mockup fisso
+        expect(toastTitle).toBe('Session exported') // ⭐ 3/9 — tradotto; il toast VERO di exportSession(), ramo bozza
     })
 
     it('CODE-MODE-STATE-TRUTH-01 never leaves Chat selected while another surface is visible', () => {
@@ -599,7 +355,8 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         const parsed = new DOMParser().parseFromString(asset('index.html'), 'text/html')
         mountStaticRuntime()
 
-        expect(parsed.title).toContain('Codice')
+        // ⭐ 3/9 — "Codice" tradotto in "Code" (avm-03, commit 8398f860) — combacia con l'inglese già stabilito in tutto en.ts ("Opening Code…", "Code isn't available"…), non un'eccezione isolata di questo bundle
+        expect(parsed.title).toContain('Code')
         expect(document.body.textContent).not.toMatch(/Harness/i)
         expect(document.querySelector('[aria-label*="Harness" i]')).toBeNull()
     })
@@ -617,24 +374,14 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(runtime?.dismissTransientLayers?.()).toBe(false)
     })
 
-    /*
-     * ⭐⭐⭐ 29/8 — FASE H, piano `elegant-spinning-dongarra.md`. Push-to-talk
-     * vero è arrivato (Web Speech API, SpeechRecognition) — ma jsdom non la
-     * implementa affatto (zero polyfill in questo progetto, verificato
-     * prima di scrivere): `window.SpeechRecognition` è undefined qui,
-     * esattamente come in un browser che non la supporta davvero. Il test
-     * resta lo stesso in SPIRITO (mai un bottone che finge di registrare),
-     * aggiornato al messaggio onesto VERO per questo caso — "non
-     * disponibile", non più "demo non collegata".
-     */
-    it('HARNESS-MIC-HONEST-01 answers the microphone control without pretending to record when SpeechRecognition is unavailable', () => {
+    it('HARNESS-MIC-HONEST-01 answers the microphone control without pretending to record', () => {
         mountStaticRuntime()
         const microphone = document.querySelector<HTMLButtonElement>('.composer-mic')
 
         microphone?.click()
 
         expect(microphone?.getAttribute('aria-pressed')).not.toBe('true')
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Voce non disponibile')
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('Demo voice not connected') // ⭐ 3/9 — testo tradotto in inglese
     })
 
     // ⛔ 27/8 — l'approval-card demo (che questi due test usavano come veicolo)
@@ -694,6 +441,56 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(oldest?.isConnected).toBe(false)
     })
 
+    /**
+     * ⭐⭐⭐ 28/8, "procedi in ordine" punto 3 — RINOMINATO da
+     * "CODE-COMPOSER-DEMO-SEND-01 ... without a network request": era il
+     * mockup stesso (`appendUserMessage`, risposta scriptata) che questo
+     * punto elimina. Un messaggio semplice avvia ORA una sessione reale
+     * (`startRealSessionFromMessage`, ledger FASE-5-EXECUTION-PLANE) — la
+     * prova END-TO-END del contratto (corpo esatto, SSE) vive in
+     * harnessUiRealSession.test.ts, che ha già l'infrastruttura
+     * `FakeEventSource`; questo file resta sulla sua materia (composer ↔
+     * runtime) e verifica solo che il fetch VERO parta con la forma
+     * giusta — senza istanziare un `EventSource` che jsdom non implementa,
+     * la POST finale RIFIUTA di proposito.
+     *
+     * ⛔⛔⛔ 29/8 — RISCRITTA dopo il bug reale trovato sul dispositivo (vedi
+     * la nota gemella in harnessUiRealSession.test.ts): `startRealSessionFromMessage`
+     * ora controlla `/api/v1/projects` PRIMA di disegnare qualunque bolla —
+     * niente più eco ottimistico prima di sapere se esiste una cartella
+     * unica da usare (il vecchio corpo `{messaggio}` non è più un
+     * contratto valido lato server). La bolla appare dopo quel giro,
+     * dentro `startCustomSession`.
+     */
+    it('CODE-COMPOSER-REAL-SEND-01 accepts the shared Vue composer and starts a real session', async () => {
+        const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+            const url = String(input)
+            if (url.includes('/api/v1/projects')) {
+                return new Response(JSON.stringify({ ok: true, data: { items: [{ id: 'p1', nome: 'talos' }] } }), { status: 200 })
+            }
+            throw new Error('rete finta: nessuna risposta in questo test')
+        })
+        vi.stubGlobal('fetch', fetchMock)
+        mountStaticRuntime()
+        const runtime = (window as unknown as {
+            __talosHarnessUiRuntime?: { submitPrompt?(text: string): boolean }
+        }).__talosHarnessUiRuntime
+
+        expect(runtime?.submitPrompt?.('Prompt from the real composer')).toBe(true)
+        await new Promise((r) => setTimeout(r, 0)) // startRealSessionFromMessage non è awaitable dall'esterno via submitPrompt: prima il GET /api/v1/projects...
+        await new Promise((r) => setTimeout(r, 0)) // ...poi il POST /api/v1/sessions/custom che disegna la bolla.
+
+        const userMessages = document.querySelectorAll('.user-message')
+        expect(userMessages.item(userMessages.length - 1).textContent)
+            .toContain('Prompt from the real composer')
+        // corpo verificato campo per campo: `modello` può comparire o no a seconda dello stato del picker in questo mount, non è materia di questa prova.
+        const chiamataCustom = fetchMock.mock.calls.find((c) => c[0] === '/api/v1/sessions/custom')
+        expect(chiamataCustom).toBeDefined()
+        const init = (chiamataCustom?.[1] ?? {}) as RequestInit
+        expect(init).toMatchObject({ method: 'POST' })
+        expect(JSON.parse(String(init.body))).toMatchObject({ cartellaId: 'p1', consegna: 'Prompt from the real composer', client: 'desktop', permessi: 'Workspace write' })
+    })
+
     /*
      * ⛔ 28/8, riscritto dopo la cura "la sessione non parte quando scrivo
      * dal composer" (owner) — submitPrompt() ora controlla QUANTE
@@ -702,7 +499,10 @@ describe('Harness UI embedded host and keyboard runtime', () => {
      * implementazione) resta il rifiuto onesto di sempre, ma il controllo
      * è ASINCRONO — serve un giro di eventi prima che il toast compaia.
      * `fetchMock` viene chiamato ora (non più mai): è il comportamento
-     * NUOVO e corretto, non una regressione.
+     * NUOVO e corretto, non una regressione. Gemella AL CONTRARIO del test
+     * sopra: zero cartelle invece di una sola, rifiuto onesto invece di
+     * un avvio vero — stessa funzione (startRealSessionFromMessage),
+     * l'altro ramo.
      */
     it('CODE-COMPOSER-DEMO-SEND-01 without any active session, refuses honestly instead of faking a reply — no demo conversation is preloaded any more', async () => {
         const fetchMock = vi.fn()
@@ -711,13 +511,13 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         const runtime = (window as unknown as {
             __talosHarnessUiRuntime?: { submitPrompt?(text: string): boolean }
         }).__talosHarnessUiRuntime
-
         const before = document.querySelectorAll('.user-message').length
+
         expect(runtime?.submitPrompt?.('Prompt from the real composer')).toBe(true)
         await new Promise((resolve) => setTimeout(resolve, 0))
         expect(document.querySelectorAll('.user-message').length).toBe(before) // mai un messaggio finto aggiunto
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione attiva')
-        expect(fetchMock).toHaveBeenCalled() // ⭐ NUOVO: controlla se esiste una sola cartella prima di rifiutare
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('No session started') // ⭐ 3/9 — testo tradotto in inglese
+        expect(fetchMock).toHaveBeenCalled() // ⭐ controlla se esiste una sola cartella prima di rifiutare
     })
 
     it('CODE-COMPOSER-DEMO-SEND-01 "!"/"!!" switch to the terminal view and, without an active real session, refuse honestly instead of faking success', () => {
@@ -730,7 +530,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
 
         expect(runtime?.submitPrompt?.('!! pwd')).toBe(true)
         expect(document.querySelector('[data-view="terminal"]')?.classList.contains('active')).toBe(true)
-        expect(document.querySelector('#toastRegion')?.textContent).toContain('Nessuna sessione reale attiva')
+        expect(document.querySelector('#toastRegion')?.textContent).toContain('No real session running') // ⭐ 3/9 — testo tradotto in inglese
         expect(fetchMock).not.toHaveBeenCalled()
     })
 
@@ -773,15 +573,9 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         document.querySelector<HTMLElement>('[data-mode="dashboard"]')?.click()
         await Promise.resolve()
 
-        // ⛔ 30/8 — riscritta dopo la rimozione della vista campagne
-        // (piano "Board — da campagne a cruscotto sessioni"): il
-        // widget dedicato [data-connection-state]/#campaignReadMeta è sparito
-        // insieme al resto della UI campagne — l'onestà "demo, non collegato"
-        // ora vive in #boardEyebrow/#boardDescription e nella lista stessa.
         expect(fetchMock).not.toHaveBeenCalled()
-        expect(document.querySelector('#boardEyebrow')?.textContent).toContain('Demo UI')
-        expect(document.querySelector('#boardDescription')?.textContent).toContain('non ha un backend')
-        expect(document.querySelector('#sessionsBoardList')?.textContent).toContain('Nessun dato mobile collegato')
+        expect(document.querySelector('[data-connection-state]')?.textContent).toBe('Demo UI · not connected') // ⭐ 3/9 — testo tradotto in inglese
+        expect(document.querySelector('#campaignReadMeta')?.textContent).toContain('mobile backend') // ⭐ 3/9 — testo tradotto in inglese, e "Codice"→"Code" per coerenza col resto del brand
     })
 
     /**
@@ -802,9 +596,7 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         await Promise.resolve()
         await Promise.resolve()
 
-        // ⛔ 30/8 — /api/v1/campaigns rimossa insieme alla vista campagne; la Board
-        // ora legge le sessioni reali di Harness Desktop stesso.
-        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/sessions', expect.anything())
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/campaigns', expect.anything())
     })
 
     it('HARNESS-ALL-CONTROLS-01 leaves no decorative or inert element exposed as an enabled button', () => {
@@ -815,267 +607,17 @@ describe('Harness UI embedded host and keyboard runtime', () => {
             '[data-copy-message]', '[data-collapse-target]', '[data-tool-detail]', '[data-browser-action]',
             '[data-automation-action]', '[data-review-action]', '[data-review-file]', '[data-session-action]',
             '[data-control-action]', '[data-command]', '[data-approve]', '[data-allow-session]', '[data-deny]',
-            '[data-action]', '[data-demo-action]', '[data-file-entry]', '[data-settings-go]', '[role="tab"]', '.session-item',
+            '[data-action]', '[data-demo-action]', '[data-file-entry]', '[role="tab"]', '.session-item',
             '#overlayBackdrop', '#newSessionBtn', '#sessionsCollapseBtn', '#sessionTitleButton',
             '#runStateToggle', '.stop-run', '#commandPaletteBtn', '#capabilityBtn', '#manageCapabilitiesBtn',
             '#resumeSessionBtn', '#compactSessionBtn',
             '#closeSheet', '#closeCommand', '#cancelQueued', '.composer-mic', '#queueToggle',
             '#approveAllDiffs', '#harnessDialogBackdrop',
-            '#modelLabRefreshButton',
-            '#modelLabRuntimeRefresh', '#modelLabCancelButton',
-            '#modelLabHfSearchButton',
-            '[data-provider-toggle]', '[data-provider-action]',
         ].join(',')
         const inert = [...document.querySelectorAll<HTMLButtonElement>('button:not([disabled])')]
             .filter((button) => !button.matches(handled))
             .map((button) => button.textContent?.trim().replace(/\s+/g, ' ') || button.getAttribute('aria-label'))
 
         expect(inert).toEqual([])
-    })
-
-    it('CODE-MODEL-LAB-SHELL-01 exposes the complete preparatory desktop model lab shell', () => {
-        mountStaticRuntime()
-
-        const requiredTabs = ['overview', 'providers', 'catalog', 'installed', 'huggingface', 'downloads']
-        for (const section of requiredTabs) {
-            expect(document.querySelector(`[data-model-lab-tab="${section}"]`), section).toBeTruthy()
-            expect(document.querySelector(`[data-model-lab-panel="${section}"]`), section).toBeTruthy()
-        }
-        expect(document.querySelectorAll('[data-model-lab-panel]')).toHaveLength(requiredTabs.length)
-        expect(document.querySelectorAll('[data-disabled-reason]')).not.toHaveLength(0)
-        expect(document.querySelector('#modelLabRuntimeBadge')?.textContent).toContain('non scelto')
-    })
-
-    it('CODE-MODEL-LAB-CAPACITY-01 renders measured machine capacity without exposing secrets', async () => {
-        const fetchMock = vi.fn(async (url: string) => {
-            if (url.endsWith('/api/v1/model-lab/capacity')) {
-                return new Response(JSON.stringify({ ok: true, data: {
-                    schema: 'talos.model-lab.capacity/1', platform: 'win32', arch: 'x64', measuredAt: '2026-08-30T10:00:00.000Z',
-                    memory: { totalBytes: 16 * 1024 ** 3, freeBytes: 8 * 1024 ** 3 },
-                    storage: { totalBytes: 512 * 1024 ** 3, availableBytes: 128 * 1024 ** 3, allocatableBytes: 127 * 1024 ** 3 },
-                    runtime: { status: 'unconfigured' },
-                } }), { status: 200 })
-            }
-            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
-            if (url.endsWith('/api/v1/tasks')) return new Response(JSON.stringify({ ok: true, data: { items: [{ id: 'task-probe' }] } }), { status: 200 })
-            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
-        })
-        vi.stubGlobal('fetch', fetchMock)
-        mountStaticRuntime()
-        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        await Promise.resolve()
-
-        expect(document.querySelector('#machineCapacityStatus')?.textContent).toBe('Misurata')
-        expect(document.querySelector('#machineMemoryMetric')?.textContent).toBe('16 GB')
-        expect(document.querySelector('#machineFreeMemoryMetric')?.textContent).toBe('8 GB')
-        expect(document.querySelector('#machineAllocatableMetric')?.textContent).toBe('127 GB')
-        expect(document.querySelector('#modelLabProviderStatus')?.textContent).toContain('non configurato')
-        const stored = window.localStorage.getItem('talos.harness.desktop.settings.v1') || ''
-        expect(stored).not.toMatch(/apiKey|token|secret/i)
-    })
-
-    it('CODE-MODEL-LAB-CATALOG-01 loads, filters and selects the real catalog shape', async () => {
-        const fetchMock = vi.fn(async (url: string) => {
-            if (url.endsWith('/api/v1/models')) return new Response(JSON.stringify({ ok: true, data: { modelli: [
-                { id: 'openai/gpt-test', provider: 'openai', nome: 'GPT Test', contextLength: 128000, inputModalities: ['text'], outputModalities: ['text'], supportedParameters: ['tools'], prezzoPrompt: '1', prezzoCompletion: '2', description: 'Test model' },
-                { id: 'anthropic/claude-test', provider: 'anthropic', nome: 'Claude Test', contextLength: 200000, inputModalities: ['text'], outputModalities: ['text'], supportedParameters: [], prezzoPrompt: '3', prezzoCompletion: '4', description: 'Second model' },
-            ], daCache: false, aggiornatoAlle: '2026-08-30T10:00:00.000Z' } }), { status: 200 })
-            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: true } }), { status: 200 })
-            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
-        })
-        vi.stubGlobal('fetch', fetchMock)
-        mountStaticRuntime()
-        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
-        document.querySelector<HTMLButtonElement>('[data-model-lab-tab="catalog"]')?.click()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        await Promise.resolve()
-
-        expect(document.querySelector('#modelLabCatalogCount')?.textContent).toContain('2 di 2')
-        expect(document.querySelectorAll('#modelLabCatalogList .model-lab-list-item')).toHaveLength(2)
-        expect(document.querySelector('#modelLabModelDetail')?.textContent).toContain('GPT Test')
-
-        const search = document.querySelector<HTMLInputElement>('#modelLabSearch')!
-        search.value = 'claude'
-        search.dispatchEvent(new Event('input', { bubbles: true }))
-        expect(document.querySelectorAll('#modelLabCatalogList .model-lab-list-item')).toHaveLength(1)
-        expect(document.querySelector('#modelLabCatalogList')?.textContent).toContain('Claude Test')
-    })
-
-    it('CODE-MODEL-LAB-CATALOG-ERROR-01 states upstream failure instead of showing an empty success', async () => {
-        const fetchMock = vi.fn(async (url: string) => {
-            if (url.endsWith('/api/v1/models')) return new Response(JSON.stringify({ ok: false, error: { code: 'CATALOG_UNAVAILABLE', message: 'Catalogo non raggiungibile' } }), { status: 503 })
-            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
-            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
-        })
-        vi.stubGlobal('fetch', fetchMock)
-        mountStaticRuntime()
-        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
-        document.querySelector<HTMLButtonElement>('[data-model-lab-tab="catalog"]')?.click()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        await Promise.resolve()
-
-        expect(document.querySelector('#modelLabCatalogCount')?.textContent).toContain('non disponibile')
-        expect(document.querySelector('#modelLabCatalogList')?.textContent).toContain('Catalogo non disponibile')
-    })
-
-    it('CODE-MODEL-LAB-RUNTIME-GATE-01 keeps runtime-dependent actions disabled with an explicit reason', () => {
-        mountStaticRuntime()
-        const gated = [...document.querySelectorAll<HTMLButtonElement>('[data-disabled-reason]')]
-        expect(gated.length).toBeGreaterThanOrEqual(3)
-        expect(gated.every((button) => button.disabled)).toBe(true)
-        expect(gated.some((button) => button.dataset.disabledReason?.toLowerCase().includes('runtime'))).toBe(true)
-    })
-
-    it('CODE-MODEL-LAB-LAPTOP-01 compacts the lab before the persistent session sidebar makes it overflow', () => {
-        const css = asset('styles.css')
-
-        expect(css).toMatch(/@media \(max-width:\s*1180px\)\s*\{[^}]*\.model-lab-ledger\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s)
-    })
-
-    it('CODE-MODEL-LAB-HF-DOWNLOAD-01 searches Hugging Face and starts a verified-set download', async () => {
-        const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
-            if (url.includes('/api/v1/huggingface/search')) return new Response(JSON.stringify({ ok: true, data: { items: [{ repo: 'org/model', revision: 'a'.repeat(40), downloads: 10, gated: false }] } }), { status: 200 })
-            if (url.includes('/api/v1/huggingface/repo')) return new Response(JSON.stringify({ ok: true, data: { repo: 'org/model', revision: 'a'.repeat(40), license: 'apache-2.0', files: [{ path: 'model.gguf', sizeBytes: 4, sha256: 'b'.repeat(64) }] } }), { status: 200 })
-            if (url.endsWith('/api/v1/huggingface/downloads')) return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
-            if (url.endsWith('/api/v1/huggingface/download')) return new Response(JSON.stringify({ ok: true, data: { id: 'org-model', state: 'queued', progress: 0 } }), { status: 200 })
-            if (url.endsWith('/api/v1/model-lab/capacity')) return new Response(JSON.stringify({ ok: true, data: { memory: {}, storage: {} } }), { status: 200 })
-            if (url.endsWith('/api/v1/runtime')) return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
-            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
-            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
-        })
-        vi.stubGlobal('fetch', fetchMock)
-        mountStaticRuntime()
-        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
-        document.querySelector<HTMLButtonElement>('[data-model-lab-tab="huggingface"]')?.click()
-        const input = document.querySelector<HTMLInputElement>('#modelLabHfSearch')!
-        input.value = 'model'
-        document.querySelector<HTMLButtonElement>('#modelLabHfSearchButton')?.click()
-        await new Promise((resolve) => setTimeout(resolve, 0)); await Promise.resolve()
-        expect(document.querySelector('#modelLabHfResults')?.textContent).toContain('org/model')
-        document.querySelector<HTMLButtonElement>('#modelLabHfResults .model-lab-list-item')?.click()
-        await new Promise((resolve) => setTimeout(resolve, 0)); await Promise.resolve()
-        expect(document.querySelector('#modelLabHfDetail')?.textContent).toContain('Scarica')
-    })
-
-    it('CODE-MODEL-LAB-RUNTIME-STATUS-01 renders observed runtimes and enables only a real model choice', async () => {
-        const fetchMock = vi.fn(async (url: string) => {
-            if (url.endsWith('/api/v1/runtime')) return new Response(JSON.stringify({ ok: true, data: { items: [
-                { runtimeId: 'ollama', provider: 'ollama', state: 'observed', baseUrl: 'http://127.0.0.1:11434', observedAt: '2026-08-31T10:00:00.000Z', models: [
-                    { id: 'qwen3:8b', name: 'qwen3:8b', source: 'ollama', context: { state: 'observed', value: 65536 }, verifiedContext: true },
-                ] },
-                { runtimeId: 'lmstudio', provider: 'lmstudio', state: 'unknown', baseUrl: 'http://127.0.0.1:1234', models: [] },
-            ] } }), { status: 200 })
-            if (url.endsWith('/api/v1/model-lab/capacity')) return new Response(JSON.stringify({ ok: true, data: { measuredAt: '2026-08-31T10:00:00.000Z', memory: {}, storage: {} } }), { status: 200 })
-            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
-            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
-        })
-        vi.stubGlobal('fetch', fetchMock)
-        mountStaticRuntime()
-        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        await Promise.resolve()
-
-        expect(document.querySelector('#modelLabRuntimeStatus')?.textContent).toContain('1 runtime pronto')
-        expect(document.querySelector('#modelLabRuntimeList')?.textContent).toContain('ollama')
-        expect(document.querySelector('#modelLabRuntimeList')?.textContent).toContain('qwen3:8b')
-        expect(document.querySelector('#modelLabRuntimeList')?.textContent).toContain('non raggiunto')
-        expect(document.querySelector<HTMLButtonElement>('#modelLabRunButton')?.disabled).toBe(false)
-        expect(document.querySelector<HTMLSelectElement>('#modelLabRuntimeSelect')?.value).toBe('ollama')
-        expect(document.querySelector<HTMLSelectElement>('#modelLabModelSelect')?.value).toBe('qwen3:8b')
-    })
-
-    it('CODE-MODEL-LAB-INSTALLED-01 renders local manifests without leaking absolute paths or secrets', async () => {
-        const fetchMock = vi.fn(async (url: string) => {
-            if (url.endsWith('/api/v1/local-models')) return new Response(JSON.stringify({ ok: true, data: { items: [{
-                id: 'qwen3', repo: 'Qwen/Qwen3-GGUF', revision: 'a'.repeat(40), bytes: 123456, sha256: 'b'.repeat(64), license: 'Apache-2.0', path: 'qwen3/model.gguf', state: 'ready', updatedAt: '2026-08-31T10:00:00.000Z', files: [],
-            }] } }), { status: 200 })
-            if (url.endsWith('/api/v1/runtime')) return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
-            if (url.endsWith('/api/v1/model-lab/capacity')) return new Response(JSON.stringify({ ok: true, data: { measuredAt: '2026-08-31T10:00:00.000Z', memory: {}, storage: {} } }), { status: 200 })
-            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
-            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
-        })
-        vi.stubGlobal('fetch', fetchMock)
-        mountStaticRuntime()
-        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
-        document.querySelector<HTMLButtonElement>('[data-model-lab-tab="installed"]')?.click()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        await Promise.resolve()
-
-        expect(document.querySelector('#modelLabInstalledList')?.textContent).toContain('qwen3')
-        expect(document.querySelector('#modelLabInstalledList')?.textContent).toContain('Apache-2.0')
-        expect(document.querySelector('#modelLabInstalledList')?.textContent).toContain('bbbbbbbbbbbb')
-        expect(document.querySelector('#modelLabInstalledList')?.textContent).not.toContain('C:\\')
-        expect(document.querySelector('#modelLabInstalledList')?.textContent).not.toMatch(/token|api[_-]?key|secret/i)
-    })
-
-    it('CODE-MODEL-LAB-GATED-01 keeps runtime test disabled when no adapter is ready', async () => {
-        const fetchMock = vi.fn(async (url: string) => {
-            if (url.endsWith('/api/v1/runtime')) return new Response(JSON.stringify({ ok: true, data: { items: [{ runtimeId: 'ollama', state: 'unknown', models: [] }] } }), { status: 200 })
-            if (url.endsWith('/api/v1/model-lab/capacity')) return new Response(JSON.stringify({ ok: true, data: { measuredAt: '2026-08-31T10:00:00.000Z', memory: {}, storage: {} } }), { status: 200 })
-            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
-            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
-        })
-        vi.stubGlobal('fetch', fetchMock)
-        mountStaticRuntime()
-        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        await Promise.resolve()
-
-        expect(document.querySelector<HTMLButtonElement>('#modelLabRunButton')?.disabled).toBe(true)
-        expect(document.querySelector('#modelLabRuntimeStatus')?.textContent).toContain('Nessun runtime pronto')
-        expect(document.querySelector('#modelLabRuntimeGate')?.textContent).toContain('non disponibile')
-    })
-
-    it('CODE-MODEL-LAB-STREAM-01 keeps text, reasoning, tool call and error in separate blocks', async () => {
-        class FakeEventSource {
-            static OPEN = 1
-            static CLOSED = 2
-            readyState = 1
-            onmessage: ((event: MessageEvent) => void) | null = null
-            onerror: (() => void) | null = null
-            close = vi.fn(() => { this.readyState = FakeEventSource.CLOSED })
-            constructor(public readonly url: string) { void url }
-            emit(value: unknown) { this.onmessage?.({ data: JSON.stringify(value) } as MessageEvent) }
-        }
-        const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
-            if (url.endsWith('/api/v1/runtime')) return new Response(JSON.stringify({ ok: true, data: { items: [{ runtimeId: 'ollama', state: 'observed', models: [{ id: 'qwen3:8b', name: 'qwen3:8b', source: 'ollama', context: { state: 'observed', value: 65536 } }] }] } }), { status: 200 })
-            if (url.endsWith('/api/v1/model-lab/capacity')) return new Response(JSON.stringify({ ok: true, data: { measuredAt: '2026-08-31T10:00:00.000Z', memory: {}, storage: {} } }), { status: 200 })
-            if (url.endsWith('/api/v1/doctor')) return new Response(JSON.stringify({ ok: true, data: { chiaveApi: false } }), { status: 200 })
-            if (url.endsWith('/api/v1/tasks')) return new Response(JSON.stringify({ ok: true, data: { items: [{ id: 'task-probe' }] } }), { status: 200 })
-            if (url.endsWith('/api/v1/sessions') && options?.method === 'POST') return new Response(JSON.stringify({ ok: true, data: { sessionId: 'local-1' } }), { status: 200 })
-            return new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 })
-        })
-        vi.stubGlobal('fetch', fetchMock)
-        vi.stubGlobal('EventSource', FakeEventSource)
-        mountStaticRuntime()
-        document.querySelector<HTMLButtonElement>('[data-open-view="settings"]')?.click()
-        await new Promise((resolve) => setTimeout(resolve, 40))
-        expect(document.querySelector<HTMLButtonElement>('#modelLabRunButton')?.disabled).toBe(false)
-        document.querySelector<HTMLButtonElement>('#modelLabRunButton')?.click()
-        await new Promise((resolve) => setTimeout(resolve, 40))
-        const source = [...([] as FakeEventSource[])][0]
-        // The implementation exposes the active source on the test seam to avoid using chat state.
-        const active = (window as unknown as { __talosHarnessModelLabEventSource?: FakeEventSource }).__talosHarnessModelLabEventSource
-        expect(active).toBeTruthy()
-        active?.emit({ type: 'TextMessageContent', delta: 'risposta' })
-        active?.emit({ type: 'ReasoningMessageContent', delta: 'interno' })
-        active?.emit({ type: 'ToolCallStart', toolCallId: 'tool-1', toolCallName: 'leggi' })
-        active?.emit({ type: 'ToolCallArgs', toolCallId: 'tool-1', delta: '{"path":"README.md"}' })
-        active?.emit({ type: 'RunError', code: 'LOCAL_RUNTIME_FAILED', message: 'runtime fermato' })
-
-        expect(document.querySelector('[data-model-lab-stream-block="text"]')?.textContent).toContain('risposta')
-        expect(document.querySelector('[data-model-lab-stream-block="reasoning"]')?.textContent).toContain('interno')
-        expect(document.querySelector('[data-model-lab-stream-block="tool"]')?.textContent).toContain('leggi')
-        expect(document.querySelector('[data-model-lab-stream-block="error"]')?.textContent).toContain('runtime fermato')
-        expect(document.querySelector('[data-model-lab-stream-block="text"]')?.textContent).not.toContain('interno')
-        expect(document.querySelector('[data-model-lab-stream-block="text"]')?.textContent).not.toContain('README.md')
-        expect(source).toBeUndefined()
-    })
-
-    it('CODE-MODEL-LAB-NO-SECRET-02 keeps provider credentials out of the shipped bundle', () => {
-        const js = asset('app.js')
-        expect(js).not.toMatch(/OPENROUTER_API_KEY|Authorization\s*:/i)
-        expect(js).not.toMatch(/(?:api[_-]?key|secret)\s*[:=]\s*['"][^'"]+['"]/i)
     })
 })

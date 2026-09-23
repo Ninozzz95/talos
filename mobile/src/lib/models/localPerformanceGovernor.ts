@@ -12,6 +12,41 @@ import type { TalosPerformanceSignals } from '@/services/localEngine'
  * o una richiesta reale sarebbe esattamente il tipo di numero scritto a
  * mano che questo progetto evita — resta un gap dichiarato, non un
  * default silenzioso.
+ *
+ * ## ⛔⛔ 2026-09-10 — È ARRIVATO UN DATO, E DICE DI NON FARLO
+ *
+ * La domanda posta a questo file era: «il banco sul Pad dà a `burst` la sua
+ * soglia d'ingresso?». La risposta misurata è **no, e per un motivo peggiore
+ * di "non c'è ancora abbastanza"**: quel banco ha trovato che i segnali che
+ * questo modulo legge sono CIECHI proprio al fenomeno che una soglia
+ * d'ingresso dovrebbe evitare.
+ *
+ * `.claude/TACCUINO-VELOCITA-LOCALE-2026-09-10.md`, 36 celle di
+ * `llama-bench` su OnePlus Pad 3, con campionamento delle frequenze DURANTE
+ * il calcolo:
+ *
+ * ```text
+ *   dumpsys thermalservice  ->  Thermal Status: 0   in 35 celle su 36
+ *   cpu6-7 (prime, max 4.320 MHz):  2.438 -> 1.958 -> 1.017 MHz, in CALO
+ * ```
+ *
+ * ⇒ I core prime hanno perso il **58% della frequenza** mentre il framework
+ * dichiarava `0`, cioè «nessun throttling». Il calo si vede nei numeri di
+ * throughput (447 → 421 → 404 → 391 tok/s di cella in cella) e non lo si
+ * sarebbe mai visto guardando questi segnali.
+ *
+ * ⇒ Una soglia d'ingresso a `burst` costruita su `thermalStatus === 'none'`
+ * e headroom alto sarebbe scattata **durante quella corsa**, cioè nel momento
+ * esattamente sbagliato: avrebbe chiesto di più a un chip che stava già
+ * togliendo. Questo dato non riempie il buco — lo **allarga**, e dice che
+ * riempirlo richiede un segnale che qui non c'è (la frequenza vera, letta da
+ * `scaling_cur_freq`, oppure il throughput osservato che cala a parità di
+ * lavoro).
+ *
+ * ⛔ Perciò `burst` resta irraggiungibile di proposito, e adesso c'è una
+ * misura che lo tiene tale invece di un'assenza di richieste. Chi in futuro
+ * volesse renderlo raggiungibile deve prima aggiungere il segnale che manca,
+ * non abbassare quelli che ci sono.
  */
 export type TalosPerformanceGovernorState = 'burst' | 'balanced' | 'constrained'
 

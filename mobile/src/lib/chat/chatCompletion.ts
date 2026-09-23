@@ -149,6 +149,7 @@ export function buildChatCompletion(
                     // usa lo streaming — cioè per quasi tutti.
                     providerBlocks: streamed.providerBlocks,
                     usage: streamed.usage ?? null,
+                    callId: streamed.callId ?? null,
                 }
             } catch (error) {
                 // A reader implementation may wrap cancellation in a generic
@@ -209,6 +210,7 @@ export function buildChatCompletion(
              */
             providerBlocks: result.providerBlocks,
             usage: result.usage ?? null,
+            callId: result.callId ?? null,
         }
     }
 }

@@ -108,7 +108,17 @@ internal class TalosVoiceProductionCoordinator(
         request: TalosVoiceProductionRequest,
         pocketFailure: Throwable,
     ): TalosVoiceEngineRoute {
-        require(request.mossCompatible) { "Pocket failed and no compatible MOSS fallback is available" }
+        // 12/09/2026: l'errore vero di Pocket NON si butta via. Sul Pad la lettura
+        // in chat con la voce personale moriva con questa sola frase — la causa
+        // (che sta in `pocketFailure`) non arrivava ne' al diario ne' al logcat.
+        // Niente android.util.Log qui: la classe gira anche nei test JVM senza
+        // Android. La causa viaggia nel messaggio e come `cause`.
+        if (!request.mossCompatible) {
+            throw IllegalStateException(
+                "Pocket failed (${describeCauseChain(pocketFailure)}) and no compatible MOSS fallback is available",
+                pocketFailure,
+            )
+        }
         val moss = request.profile.backendPayloads.filterIsInstance<TalosMossPromptPayload>().singleOrNull()
             ?: error("Pocket failed and the profile has no MOSS fallback payload")
         val failureType = pocketFailure.javaClass.simpleName.takeIf { it.isNotBlank() } ?: "Throwable"
@@ -119,6 +129,12 @@ internal class TalosVoiceProductionCoordinator(
             fallbackReason = "pocketRuntimeFailure:$failureType",
         )
     }
+
+    /** La catena intera delle cause, perche' il runtime Pocket avvolge l'errore vero («frame pipeline failed» -> causa). */
+    private fun describeCauseChain(error: Throwable): String =
+        generateSequence(error) { it.cause?.takeIf { cause -> cause !== it } }
+            .take(6)
+            .joinToString(" <- ") { "${it.javaClass.simpleName}: ${it.message ?: "no message"}" }
 
     private fun resolveFallback(
         route: TalosVoiceEngineRoute,

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { RotateCcw, SlidersHorizontal } from '@lucide/vue'
-import { TabsContent } from 'reka-ui'
+import { Check, RotateCcw, SlidersHorizontal } from '@lucide/vue'
+import { RadioGroupItem, RadioGroupRoot, TabsContent } from 'reka-ui'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
@@ -20,6 +20,8 @@ import {
     TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS,
 } from '@/lib/talosChatLayout'
 import {
+    TALOS_MOTION_FPS_CAPS,
+    TALOS_MOTION_DPR_CAPS,
     TALOS_INTERFACE_EASINGS,
     TALOS_INTERFACE_PROFILES,
     TALOS_MOTION_QUALITY_LEVELS,
@@ -30,13 +32,6 @@ import {
 import type { TalosFontScale } from '@/lib/talosFontScale'
 import { TALOS_FONT_SCALE_OPTIONS } from '@/lib/talosFontScaleOptions'
 import { useSettingsStore, type TalosMotionPreferencePatch } from '@/stores/settings'
-import {
-    TALOS_COMPOSER_PLUS_SURFACES,
-    TALOS_COMPOSER_SHAPES,
-    talosComposerHasPlus,
-    talosComposerPlusExists,
-    talosComposerShapeExists,
-} from '@/lib/composerStyle'
 import { useThemeStore } from '@/stores/theme'
 import { talosRememberView, talosRememberedView } from '@/lib/navigation/rememberedView'
 
@@ -47,6 +42,7 @@ const { t } = useTalosI18n()
 const themeItems = computed(() => TALOS_THEME_PRESETS.map((preset) => ({
     value: preset.id,
     label: t(`appearance.themeLabels.${preset.id}`),
+    preview: preset.preview,
 })))
 /**
  * Owner 2026-08-23: "posso mettere lo sfondo di terminal anche su calma" — the
@@ -73,6 +69,19 @@ const qualityItems = computed(() => TALOS_MOTION_QUALITY_LEVELS.map((quality) =>
     value: quality,
     label: t(`appearance.qualityLevels.${quality}`),
 })))
+const fpsItems = computed(() => TALOS_MOTION_FPS_CAPS.map((value) => ({
+    value: String(value), label: t('appearance.framesPerSecond', { count: value }),
+})))
+const dprItems = computed(() => TALOS_MOTION_DPR_CAPS.map((value) => ({
+    value: String(value), label: t(`appearance.resolutionLevels.${String(value).replace('.', '_')}`),
+})))
+function setPerformanceLimit(key: 'fps_cap' | 'dpr_cap', value: string): void {
+    const limit = Number(value)
+    const allowed: readonly number[] = key === 'fps_cap' ? TALOS_MOTION_FPS_CAPS : TALOS_MOTION_DPR_CAPS
+    if (!allowed.includes(limit)) return
+    void settings.setMotionPreferences({ [key]: limit } as TalosMotionPreferencePatch)
+}
+
 const interfaceProfileItems = computed(() => TALOS_INTERFACE_PROFILES.map((profile) => ({
     value: profile,
     label: t(`appearance.interfaceProfiles.${profile}`),
@@ -98,42 +107,13 @@ const windowPresentationItems = computed(() => TALOS_MOBILE_WINDOW_PRESENTATION_
     label: t(`appearance.windowModes.${option.value}`),
 })))
 
-const composerShapeItems = computed(() => TALOS_COMPOSER_SHAPES.map((shape) => ({
-    value: shape,
-    label: t(`appearance.composerShapes.${shape}`),
-})))
-const composerPlusItems = computed(() => TALOS_COMPOSER_PLUS_SURFACES.map((surface) => ({
-    value: surface,
-    label: t(`appearance.composerPlusSurfaces.${surface}`),
-})))
-
-/**
- * The classic bar has no "+" at all — attach, context and Browse are already on
- * it — so the surface setting has nothing to decide there. Offered but inert,
- * with the reason written beside it, rather than a live-looking control that
- * does nothing.
- */
-const composerPlusApplies = computed(() => talosComposerHasPlus(settings.state.shell.composer_shape))
-
-/**
- * Narrowed by the module's own guards rather than cast. A select can only emit
- * what it was given, right up until someone edits the item list and not this.
- */
-function setComposerShape(value: string): void {
-    if (!talosComposerShapeExists(value)) return
-    void settings.setShell({ composer_shape: value })
-}
-
-function setComposerPlus(value: string): void {
-    if (!talosComposerPlusExists(value)) return
-    void settings.setShell({ composer_plus: value })
-}
 
 const activePreset = computed(() => TALOS_THEME_PRESETS.find((preset) => preset.id === theme.state.theme) ?? TALOS_THEME_PRESETS[0])
 const activePresetLabel = computed(() => t(`appearance.themeLabels.${activePreset.value.id}`))
 const activePresetDescription = computed(() => t(`appearance.themeDescriptions.${activePreset.value.id}`))
 
-function changeTheme(value: string): void {
+function changeTheme(value: unknown): void {
+    if (typeof value !== 'string' || !TALOS_THEME_PRESETS.some((preset) => preset.id === value)) return
     void theme.setTheme(value as TalosThemeId)
 }
 
@@ -264,16 +244,31 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
                  disclosure — the same `<details>` the Model Lab already uses for
                  its manual models, so this is not a sixth way of hiding things. -->
             <div class="grid gap-4 sm:grid-cols-2">
-                <label class="block">
+                <div class="theme-picker sm:col-span-2">
                     <span :class="selectLabelClass">{{ t('appearance.themePreset') }}</span>
-                    <TalosThemedSelect
-                        class="mt-2"
+                    <RadioGroupRoot
+                        data-testid="talos-theme-grid"
+                        class="theme-grid mt-2"
                         :model-value="theme.state.theme"
-                        :items="themeItems"
                         :aria-label="t('appearance.themePreset')"
                         @update:model-value="changeTheme"
-                    />
-                </label>
+                    >
+                        <RadioGroupItem
+                            v-for="preset in themeItems"
+                            :key="preset.value"
+                            :value="preset.value"
+                            :data-theme-choice="preset.value"
+                            class="theme-choice talos-pressable"
+                        >
+                            <span class="swatches" aria-hidden="true">
+                                <i :style="{ background: preset.preview.background }" />
+                                <i :style="{ background: preset.preview.accent }" />
+                            </span>
+                            <span>{{ preset.label }}</span>
+                            <Check v-if="theme.state.theme === preset.value" class="ml-auto size-4 shrink-0" aria-hidden="true" />
+                        </RadioGroupItem>
+                    </RadioGroupRoot>
+                </div>
                 <label class="block">
                     <span :class="selectLabelClass">{{ t('appearance.colorMode') }}</span>
                     <TalosThemedSelect
@@ -324,43 +319,10 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
                         @update:model-value="setChatLayout('bubble_scale', $event)"
                     />
                 </label>
-                <!-- One choice where there were three switches. They influenced
-                     one another and could be set to combinations that meant
-                     nothing — with the drawer off and the dropdown off, the "+"
-                     announced itself as expanded and opened nothing at all. -->
-                <label class="block">
-                    <span :class="selectLabelClass">{{ t('appearance.composerShape') }}</span>
-                    <TalosThemedSelect
-                        class="mt-2"
-                        data-testid="talos-composer-shape-select"
-                        :model-value="settings.state.shell.composer_shape"
-                        :items="composerShapeItems"
-                        :aria-label="t('appearance.composerShape')"
-                        @update:model-value="setComposerShape"
-                    />
-                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">
-                        {{ t(`appearance.composerShapes.${settings.state.shell.composer_shape}Body`) }}
-                    </span>
-                </label>
-                <!-- A second question, not a corner of the first: where the "+"
-                     opens is where attach, Library and Browse live. -->
-                <label class="block">
-                    <span :class="selectLabelClass">{{ t('appearance.composerPlus') }}</span>
-                    <TalosThemedSelect
-                        class="mt-2"
-                        data-testid="talos-composer-plus-select"
-                        :model-value="settings.state.shell.composer_plus"
-                        :items="composerPlusItems"
-                        :disabled="!composerPlusApplies"
-                        :aria-label="t('appearance.composerPlus')"
-                        @update:model-value="setComposerPlus"
-                    />
-                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">
-                        {{ composerPlusApplies
-                            ? t(`appearance.composerPlusSurfaces.${settings.state.shell.composer_plus}Body`)
-                            : t('appearance.composerPlusInline') }}
-                    </span>
-                </label>
+                <!-- «Forma della barra» e «Il + apre» sono usciti il 12/09: il compositore Calm
+                     mostra sempre la stessa forma e lo stesso «+» (ChatScreen), e un controllo
+                     che non decide niente e' un controllo finto (regola di casa). Le chiavi
+                     composer_shape/composer_plus restano leggibili per compatibilita'. -->
                 <div class="border-t border-[var(--talos-border)] pt-3 text-xs leading-5 text-[var(--talos-muted)] sm:col-span-2">
                     <div class="flex items-center gap-2">
                         <span class="h-4 w-4 rounded-sm border border-[var(--talos-border)]" :style="{ background: activePreset.preview.background }" />
@@ -450,6 +412,18 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
                 </label>
             </div>
 
+            <div data-testid="talos-motion-performance" class="grid gap-4 sm:grid-cols-2">
+                <label class="block">
+                    <span :class="selectLabelClass">{{ t('appearance.frameLimit') }}</span>
+                    <TalosThemedSelect data-testid="talos-motion-fps-limit" class="mt-2" :model-value="String(settings.state.motion_v6.fps_cap)" :items="fpsItems" :aria-label="t('appearance.frameLimit')" @update:model-value="setPerformanceLimit('fps_cap', $event)" />
+                </label>
+                <label class="block">
+                    <span :class="selectLabelClass">{{ t('appearance.resolutionLimit') }}</span>
+                    <TalosThemedSelect data-testid="talos-motion-dpr-limit" class="mt-2" :model-value="String(settings.state.motion_v6.dpr_cap)" :items="dprItems" :aria-label="t('appearance.resolutionLimit')" @update:model-value="setPerformanceLimit('dpr_cap', $event)" />
+                </label>
+                <p class="text-xs leading-5 text-[var(--talos-muted)] sm:col-span-2">{{ t('appearance.performanceLimitsBody') }}</p>
+            </div>
+
             <div :class="switchRowClass">
                 <span><span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.backgroundMotion') }}</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">{{ t('appearance.backgroundMotionBody') }}</span></span>
                 <TalosThemedSwitch class="mt-1" :aria-label="t('appearance.backgroundMotion')" :model-value="settings.state.motion_v6.background_enabled && settings.state.motion_v6.mode !== 'off'" @update:model-value="setMotionBoolean('background_enabled', $event)" @click.stop />
@@ -492,3 +466,17 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
         </TabsContent>
     </TalosThemedTabs>
 </template>
+
+<style scoped>
+.theme-picker { container-type: inline-size; }
+.theme-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--talos-space-inline); }
+.theme-choice { display: flex; align-items: center; gap: var(--talos-space-inline); min-height: 2.75rem; min-width: 0; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); padding: var(--talos-space-inline); font-size: var(--text-xs); text-align: left; }
+.theme-choice > span:not(.swatches) { min-width: 0; overflow-wrap: anywhere; }
+.theme-choice[aria-checked="true"] { background: var(--talos-active); border-color: var(--talos-accent-border); }
+.theme-choice:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+.swatches { display: flex; gap: 3px; flex-shrink: 0; }
+.swatches i { width: 12px; height: 22px; border-radius: 2px; }
+@container (max-width: 19rem) { .theme-grid { grid-template-columns: minmax(0, 1fr); } }
+@container (min-width: 31rem) { .theme-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (min-width: 42rem) { .theme-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+</style>

@@ -32,6 +32,45 @@ describe('personalVoiceRouter', () => {
             .toEqual({ engine: 'system', profileId: null, fellBack: true, fallbackReason: 'noProfileSelected' })
     })
 
+    /**
+     * ⛔⛔⛔ Owner 11/09, QUARTA segnalazione di «codifico la voce e non si
+     * sente nulla / in chat la riproduzione fallisce». `ready` risponde a
+     * «esiste ALMENO un profilo compatibile», e con due profili la
+     * preferenza poteva puntare a quello NON compatibile: il router diceva
+     * `'personal'`, il nativo TROVAVA il file (quindi `speak()` risolveva
+     * `accepted: true`, bruciando il ripiego pulito) e falliva dopo, a
+     * sintesi iniziata. `'profileIncompatible'` era dichiarato nel tipo dal
+     * primo giorno e non lo produceva NESSUNA riga.
+     */
+    it('PVOICE-ROUTER-06 il profilo SCELTO non compatibile ripiega sul sistema, anche se un ALTRO profilo lo e', () => {
+        const altroProfiloPronto: TalosPersonalVoiceStatus = {
+            supported: true, installed: true, ready: true, active: false,
+            compatibleProfileIds: ['ffffffff-1111-4222-8333-444444444444'],
+        }
+        expect(resolveTalosVoiceRoute('personal', PROFILE_ID, altroProfiloPronto))
+            .toEqual({ engine: 'system', profileId: null, fellBack: true, fallbackReason: 'profileIncompatible' })
+    })
+
+    /**
+     * ⛔ La prova AL VERSO CONTRARIO, quella che deve continuare a fallire
+     * se qualcuno «rinforza» il controllo di sopra: un profilo scelto che
+     * E' nell'elenco dei compatibili non deve ripiegare, e un elenco
+     * ASSENTE significa «non lo so» (chiamante che non elenca, ponte che
+     * non ha risposto) — mai «nessuno». Trattarlo come vuoto spegnerebbe
+     * la voce personale a tutti.
+     */
+    it('PVOICE-ROUTER-07 il profilo scelto compatibile resta personale, e un elenco ASSENTE non spegne niente', () => {
+        const sceltoPronto: TalosPersonalVoiceStatus = {
+            supported: true, installed: true, ready: true, active: false,
+            compatibleProfileIds: [PROFILE_ID, 'ffffffff-1111-4222-8333-444444444444'],
+        }
+        expect(resolveTalosVoiceRoute('personal', PROFILE_ID, sceltoPronto))
+            .toEqual({ engine: 'personal', profileId: PROFILE_ID, fellBack: false })
+        // `READY_STATUS` non porta `compatibleProfileIds`: nessun ripiego.
+        expect(resolveTalosVoiceRoute('personal', PROFILE_ID, READY_STATUS))
+            .toEqual({ engine: 'personal', profileId: PROFILE_ID, fellBack: false })
+    })
+
     it('PVOICE-ROUTER-04 a fallback never rewrites the user\'s stored choice - the same preference resolves personal again once ready', () => {
         // The router is pure: it has no settings-store handle to write
         // through in the first place. The real proof that matters is

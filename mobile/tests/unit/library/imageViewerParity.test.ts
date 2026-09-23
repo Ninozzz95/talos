@@ -85,15 +85,57 @@ describe('one image viewer, mounted everywhere', () => {
  * e ancora su due colonne.»
  */
 describe('the Library grid uses the width it is given', () => {
-    it('widens past two columns on a tablet', () => {
-        const source = read('src/screens/ContextScreen.vue')
-        const grids = source.match(/class="grid grid-cols-2[^"]*"/g) ?? []
+    /**
+     * ⛔ Questo test guardava la STRINGA `grid-cols-2 md:grid-cols-4`, cioè un
+     * numero di colonne scritto a mano a due soglie decise a tavolino. U-20 lo
+     * sostituisce con `auto-fill` + `minmax`, e il test va con lui — non perché
+     * il codice sia cambiato, ma perché la domanda dell'owner non era «quante
+     * colonne hai scritto»: era **«perché sul tablet ce ne sono ancora due»**.
+     *
+     * Quello che si misura ora è la CONSEGUENZA, con i numeri in chiaro:
+     * - `auto-fill` vuol dire che il conto lo fa il browser sulla larghezza
+     *   VERA del riquadro, non su una soglia — quindi vale anche dentro un
+     *   pannello stretto, dove una media query è cieca;
+     * - il massimo della traccia deve stare sotto **un terzo** della soglia
+     *   tablet (768 px), perché è quello che GARANTISCE almeno tre colonne lì.
+     *   Con 13rem = 208 px: 3 × 208 = 624 ≤ 768. Alzarlo a 17rem (272 px) fa
+     *   816 > 768, e questo test diventa rosso.
+     *
+     * Fonti lette il 12/09/2026:
+     * https://css-tricks.com/auto-sizing-columns-css-grid-auto-fill-vs-auto-fit/
+     * https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/grid-template-columns
+     */
+    const SOGLIA_TABLET_PX = 768
+    const REM_PX = 16
 
-        expect(grids.length).toBeGreaterThan(0)
-        for (const grid of grids) {
-            // `md:` is 768px — the same threshold the app already treats as a
-            // tablet — so the grid widens exactly when the app says tablet.
-            expect(grid).toContain('md:grid-cols-4')
-        }
+    it('lets the measured width decide the columns, not a breakpoint', () => {
+        const source = read('src/screens/ContextScreen.vue')
+        const tracce = source.match(/repeat\(auto-fill,minmax\([^)]*clamp\(([\d.]+)rem,(\d+)%,([\d.]+)rem\)[^"]*\)/g) ?? []
+        expect(tracce.length).toBeGreaterThan(0)
+
+        // ⛔ E nessuna griglia della Libreria deve essere rimasta indietro con
+        // un numero di colonne scritto a mano.
+        expect(source).not.toMatch(/class="[^"]*grid-cols-2/)
+
+        const clamp = source.match(/clamp\(([\d.]+)rem,(\d+)%,([\d.]+)rem\)/)
+        expect(clamp).not.toBeNull()
+        const minimo = Number.parseFloat(clamp![1]!) * REM_PX
+        const massimo = Number.parseFloat(clamp![3]!) * REM_PX
+
+        // Sul tablet entrano almeno TRE colonne: è la domanda dell'owner.
+        expect(massimo * 3).toBeLessThanOrEqual(SOGLIA_TABLET_PX)
+        // ⛔ Il verso contrario: su un telefono da 360 px una scheda non deve
+        // diventare una scheggia illeggibile — due colonne, non quattro.
+        expect(minimo * 3).toBeGreaterThan(360)
+    })
+
+    /**
+     * ⛔ `min(100%, …)` non è cosmesi: senza, su un riquadro più stretto del
+     * minimo la traccia sfonda il contenitore e la PAGINA SCORRE IN
+     * ORIZZONTALE. È la raccomandazione esplicita della documentazione.
+     */
+    it('never overflows a container narrower than one card', () => {
+        const source = read('src/screens/ContextScreen.vue')
+        expect(source).toContain('minmax(min(100%,clamp(')
     })
 })

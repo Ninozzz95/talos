@@ -747,3 +747,61 @@ describe('⛔⭐ l\'id del profilo modello, che ha rotto i tool su tutto OpenRou
         expect(gate.recoveries()).toEqual([])
     })
 })
+
+describe('6.4 — registraDecisioneReale, il contatore di frizione opzionale', () => {
+    function coordinatorCon(registraDecisioneReale?: (
+        tool: string,
+        decisione: 'allow_once' | 'allow_turn' | 'always_allow' | 'deny',
+        quando: string,
+    ) => Promise<void>) {
+        return createTalosToolAuthorizationCoordinator({
+            repository,
+            now: () => '2026-07-29T12:01:00.000Z',
+            authorizations: () => grants,
+            async grant(tool, actions) {
+                grants = applyTalosToolAuthorizationGrant(grants, tool, actions, grants.revision, '2026-07-29T12:01:00.000Z')
+            },
+            async onReady() {},
+            ...(registraDecisioneReale ? { registraDecisioneReale } : {}),
+        })
+    }
+
+    it('⭐⭐⭐ PARITÀ — senza registraDecisioneReale, decide() si comporta esattamente come prima', async () => {
+        const gate = coordinatorCon()
+        await gate.suspend(await makeCheckpoint())
+        const risultato = await gate.decide('request-1', 'allow_once')
+        expect(risultato).toBe(true)
+        expect(gate.pending()).toEqual([])
+    })
+
+    it('⭐⭐⭐ una decisione vera chiama registraDecisioneReale con tool/decisione/quando giusti', async () => {
+        const spia = vi.fn(async () => {})
+        const gate = coordinatorCon(spia)
+        await gate.suspend(await makeCheckpoint())
+        await gate.decide('request-1', 'allow_once')
+
+        expect(spia).toHaveBeenCalledTimes(1)
+        expect(spia).toHaveBeenCalledWith('document_create', 'allow_once', '2026-07-29T12:01:00.000Z')
+    })
+
+    it('⛔⛔ AL CONTRARIO — se registraDecisioneReale RIFIUTA, decide() riesce comunque: un contatore rotto non deve mai rompere una decisione vera', async () => {
+        const cheRompeSempre = vi.fn(async () => { throw new Error('preferences non disponibile') })
+        const gate = coordinatorCon(cheRompeSempre)
+        await gate.suspend(await makeCheckpoint())
+
+        const risultato = await gate.decide('request-1', 'allow_once')
+
+        expect(risultato).toBe(true)
+        expect(gate.pending()).toEqual([])
+        expect(cheRompeSempre).toHaveBeenCalledTimes(1)
+    })
+
+    it('un "no" arriva al contatore come "deny", non come un\'omissione', async () => {
+        const spia = vi.fn(async () => {})
+        const gate = coordinatorCon(spia)
+        await gate.suspend(await makeCheckpoint())
+        await gate.decide('request-1', 'deny')
+
+        expect(spia).toHaveBeenCalledWith('document_create', 'deny', '2026-07-29T12:01:00.000Z')
+    })
+})

@@ -8,17 +8,25 @@ import {
     risolviSerialeAttivo,
 } from './avvia-harness-reverse.mjs'
 
-const UN_DISPOSITIVO = 'List of devices attached\nf4kecafe\tdevice product:OPD2415 model:OPD2415 device:OP6190L1\n'
+/*
+ * ⛔ I seriali qui sotto sono INVENTATI, e devono restarlo: questi test
+ * misurano la FORMA di quello che `adb devices -l` stampa — una riga per
+ * trasporto, il doppione TLS, la lista vuota — non quale tablet sia
+ * collegato. Un seriale vero e' il numero di un oggetto di una persona e
+ * non ha ragione di stare in un repository pubblico.
+ */
+
+const UN_DISPOSITIVO = 'List of devices attached\n1a2b3c4d\tdevice product:OPD2415 model:OPD2415 device:OP6190L1\n'
 const DUE_DISPOSITIVI = 'List of devices attached\n'
-    + 'f4kecafe\tdevice product:OPD2415 model:OPD2415 device:OP6190L1\n'
-    + 'adb-f4kecafe-f4k3tst._adb-tls-connect._tcp\tdevice product:OPD2415 model:OPD2415 device:OP6190L1\n'
+    + '1a2b3c4d\tdevice product:OPD2415 model:OPD2415 device:OP6190L1\n'
+    + 'adb-1a2b3c4d-f4k3tst._adb-tls-connect._tcp\tdevice product:OPD2415 model:OPD2415 device:OP6190L1\n'
 const ZERO_DISPOSITIVI = 'List of devices attached\n'
 const DISPOSITIVO_NON_PRONTO = 'List of devices attached\nXYZ123\tunauthorized\n'
 
 describe('analizzaElencoDispositivi', () => {
     it('legge seriale e stato, scartando la riga di intestazione', () => {
         assert.deepEqual(analizzaElencoDispositivi(UN_DISPOSITIVO), [
-            { seriale: 'f4kecafe', stato: 'device' },
+            { seriale: '1a2b3c4d', stato: 'device' },
         ]);
     })
 
@@ -28,8 +36,8 @@ describe('analizzaElencoDispositivi', () => {
 
     it('più righe, stati diversi', () => {
         assert.deepEqual(analizzaElencoDispositivi(DUE_DISPOSITIVI), [
-            { seriale: 'f4kecafe', stato: 'device' },
-            { seriale: 'adb-f4kecafe-f4k3tst._adb-tls-connect._tcp', stato: 'device' },
+            { seriale: '1a2b3c4d', stato: 'device' },
+            { seriale: 'adb-1a2b3c4d-f4k3tst._adb-tls-connect._tcp', stato: 'device' },
         ]);
         assert.deepEqual(analizzaElencoDispositivi(DISPOSITIVO_NON_PRONTO), [
             { seriale: 'XYZ123', stato: 'unauthorized' },
@@ -45,7 +53,7 @@ describe('risolviSerialeAttivo', () => {
 
     it('un solo dispositivo pronto → il suo seriale', () => {
         const eseguiAdb = () => UN_DISPOSITIVO;
-        assert.equal(risolviSerialeAttivo(eseguiAdb, 'adb', null), 'f4kecafe');
+        assert.equal(risolviSerialeAttivo(eseguiAdb, 'adb', null), '1a2b3c4d');
     })
 
     it('zero dispositivi pronti → errore onesto, mai un seriale inventato', () => {
@@ -62,8 +70,8 @@ describe('risolviSerialeAttivo', () => {
         const eseguiAdb = () => DUE_DISPOSITIVI;
         assert.throws(
             () => risolviSerialeAttivo(eseguiAdb, 'adb', null),
-            (errore) => errore.message.includes('f4kecafe')
-                && errore.message.includes('adb-f4kecafe-f4k3tst._adb-tls-connect._tcp')
+            (errore) => errore.message.includes('1a2b3c4d')
+                && errore.message.includes('adb-1a2b3c4d-f4k3tst._adb-tls-connect._tcp')
                 && errore.message.includes('--serial'),
         );
     })
@@ -107,7 +115,7 @@ describe('principale', () => {
         };
         principale(eseguiAdb, []);
         assert.deepEqual(chiamate[0], ['devices', '-l']);
-        assert.deepEqual(chiamate[1], ['-s', 'f4kecafe', 'reverse', 'tcp:4174', 'tcp:4174']);
+        assert.deepEqual(chiamate[1], ['-s', '1a2b3c4d', 'reverse', 'tcp:4174', 'tcp:4174']);
     })
 
     it('con --serial esplicito: non chiama mai "adb devices"', () => {

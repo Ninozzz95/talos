@@ -1,0 +1,35 @@
+/*
+ * v0.1.37 HOTFIX — native Android fling wins over scroll-linked station chrome.
+ *
+ * The v0.1.34 collapsing station header bound opacity/transform/visibility to a
+ * CSS scroll timeline discovered at runtime. On Android WebView the released
+ * finger can then lose the native inertial tail: the list follows the drag,
+ * stalls, and appears to catch/snap afterwards.
+ *
+ * v0.1.37 deliberately disables ONLY that scroll-linked presentation. The
+ * underlying overflow containers, touch-action, overscroll policy, long-press
+ * gestures, sidebar gestures and chat live-edge policy stay untouched. The
+ * large in-page title remains visible and the compact overlay bar stays hidden.
+ *
+ * Keep this file small and removable. A future collapsing-header implementation
+ * must first pass the real-device fling gate in scripts/verify-scroll-fling-device.mjs.
+ */
+.talos-mobile-tool-sheet-surface {
+    timeline-scope: none !important;
+}
+
+.talos-mobile-tool-sheet-surface [data-talos-sheet-scroller] {
+    scroll-timeline: none !important;
+}
+
+.talos-sheet-bar,
+.talos-sheet-bar .talos-title,
+.talos-sheet-body [data-talos-sheet-title] {
+    animation: none !important;
+    animation-timeline: none !important;
+}
+
+.talos-sheet-bar {
+    opacity: 0 !important;
+    visibility: hidden !important;
+}

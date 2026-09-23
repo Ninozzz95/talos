@@ -85,6 +85,7 @@ export const TALOS_IT_MESSAGES = {
         modelLab: 'Laboratorio modelli',
         harness: 'Codice',
         toolForge: 'Tool Forge',
+        devices: 'Dispositivi',
     },
     language: {
         title: 'Lingua',
@@ -217,6 +218,16 @@ export const TALOS_IT_MESSAGES = {
         workspaceSetup: 'Configurazione spazio di lavoro',
     },
     appearance: {
+        frameLimit: "Fluidità massima dello sfondo",
+        framesPerSecond: "{count} immagini al secondo",
+        resolutionLimit: "Definizione massima dello sfondo",
+        resolutionLevels: {
+            "1": "Standard",
+            "2": "Massima",
+            "1_25": "Più definita",
+            "1_5": "Alta"
+        },
+        performanceLimitsBody: "Questi limiti si applicano agli sfondi animati più elaborati. La qualità scelta e il risparmio energetico possono ridurli.",
         sectionsLabel: 'Sezioni aspetto',
         design: 'Design',
         motion: 'Movimento',
@@ -226,7 +237,7 @@ export const TALOS_IT_MESSAGES = {
         themeColorMode: 'Modalità colore del tema',
         sceneOverride: 'Sfondo scena',
         sceneOverrideAria: 'Sfondo scena, indipendente dal tema',
-        sceneOverrideBody: 'Mostra lo sfondo animato di un altro tema senza cambiare i colori: usa comunque la palette del tema attivo.',
+        sceneOverrideBody: "Mostra lo sfondo animato di un altro tema mantenendo i colori del tema attivo.",
         sceneOverrideFollowTheme: 'Segue il tema',
         chatMessageStyle: 'Stile messaggi chat',
         immersiveHeader: 'Intestazione immersiva',
@@ -240,7 +251,7 @@ export const TALOS_IT_MESSAGES = {
             menu: 'Menu ancorato',
             menuBody: 'Un menu attaccato al pulsante, senza coprire la conversazione.',
         },
-        composerShape: 'Forma del compositore',
+        composerShape: "Forma della barra di scrittura",
         composerShapes: {
             classic: 'Classico',
             classicBody: 'Tutti i controlli in una riga sotto il campo: niente nascosto.',
@@ -257,17 +268,17 @@ export const TALOS_IT_MESSAGES = {
         chatMessageSize: 'Dimensione messaggi chat',
         mobileToolWindows: 'Finestre strumenti su mobile',
         mobileToolWindowsAria: 'Presentazione finestre strumenti su mobile',
-        motionEngine: 'Motore movimento tema V6',
-        motionEngineBody: 'Questi valori alimentano il renderer mobile attivo e la policy di movimento dell’interfaccia.',
+        motionEngine: "Movimento dello sfondo e dell’interfaccia",
+        motionEngineBody: "Regola lo sfondo animato e i movimenti di pannelli, menu e controlli.",
         resetMotion: 'Ripristina movimento predefinito',
-        rendererMode: 'Modalità renderer',
-        rendererModeAria: 'Modalità renderer del movimento',
+        rendererMode: "Animazione dello sfondo",
+        rendererModeAria: "Animazione dello sfondo",
         quality: 'Qualità',
         qualityAria: 'Qualità del movimento',
         backgroundMotion: 'Movimento sfondo',
-        backgroundMotionBody: 'Renderizza la scena del tema attivo.',
+        backgroundMotionBody: "Anima lo sfondo del tema scelto.",
         interfaceMotion: 'Movimento interfaccia',
-        interfaceMotionBody: 'Anima pannelli, navigazione, compositore e feedback.',
+        interfaceMotionBody: "Anima pannelli, navigazione, barra di scrittura e segnali di risposta.",
         backgroundSpeed: 'Velocità sfondo',
         backgroundIntensity: 'Intensità sfondo',
         glowIntensity: 'Intensità bagliore',
@@ -275,11 +286,11 @@ export const TALOS_IT_MESSAGES = {
         sceneDepth: 'Profondità scena',
         trailPersistence: 'Persistenza scie',
         sceneContrast: 'Contrasto scena',
-        parallax: 'Parallasse',
+        parallax: "Movimento con la posizione",
         interfaceProfile: 'Profilo interfaccia',
         interfaceProfileAria: 'Profilo movimento interfaccia',
-        interfaceEasing: 'Easing interfaccia',
-        interfaceEasingAria: 'Easing movimento interfaccia',
+        interfaceEasing: "Andamento del movimento",
+        interfaceEasingAria: "Andamento del movimento dell’interfaccia",
         interfaceDuration: 'Durata interfaccia',
         interfaceIntensity: 'Intensità interfaccia',
         interfaceStagger: 'Ritardo progressivo interfaccia',
@@ -373,18 +384,18 @@ export const TALOS_IT_MESSAGES = {
         },
         themeDescriptions: {
             forge: 'Superficie di controllo industriale per esecuzione, tracce e recupero.',
-            paper: 'Modalità chiara per rapporti, audit trail e letture lunghe.',
-            terminal: 'Modalità incentrata sulla shell, con caratteri monospazio e scanline discrete.',
-            aurora: 'Workspace esplorativo per ricerca, sintesi e diramazioni creative.',
-            glacier: 'Tema enterprise luminoso e freddo, con contrasto netto e revisione ariosa.',
+            paper: "Fondo chiaro per rapporti e letture lunghe.",
+            terminal: "Fondo scuro, caratteri a larghezza fissa e sottili righe luminose.",
+            aurora: "Uno spazio per ricerca, sintesi e lavoro creativo.",
+            glacier: "Colori chiari e freddi, contrasto netto e spazio per leggere.",
             ember: 'Modalità di risposta agli incidenti per errori, rischi e avvisi ad alta priorità.',
-            atlas: 'Cockpit da sala riunioni, con colori misurati e densità tranquilla.',
+            atlas: "Colori misurati e spaziatura tranquilla per il lavoro quotidiano.",
             noir: 'Superficie ad alto contrasto per revisioni operative dense.',
-            signal: 'Tema da centro di comando per triage rapido, stato live e azioni.',
+            signal: "Un tema per controllare rapidamente gli aggiornamenti e scegliere le azioni.",
             violet: 'Laboratorio di ricerca approfondita, con focus morbido e tono sperimentale.',
             claudius: 'Superficie calda, incentrata sui documenti e ispirata ai flussi di revisione di Claude.',
-            basicus: 'Base in stile Material per moduli enterprise familiari e controlli prevedibili.',
-            telemetry: 'Pannello strumenti V7: cornice mono, righe ciano e letture tabellari.',
+            basicus: "Moduli familiari e controlli semplici da riconoscere.",
+            telemetry: "Caratteri a larghezza fissa, righe azzurre e dati allineati.",
             calm: 'Superfici grigie discrete, gerarchia tipografica e oro usato come firma misurata.',
         },
     },
@@ -531,6 +542,23 @@ export const TALOS_IT_MESSAGES = {
         loud4: 'Guarda che meraviglia, vieni a vedere!',
     },
     privacyPermissions: {
+        askFirst: 'Chiedi prima',
+        contentTitle: "Contenuti e modelli",
+        contentSaveFailed: "Non è stato possibile salvare la scelta. La preferenza precedente resta attiva.",
+        content: {
+            "library_access": {
+                "label": "Accesso alla Libreria",
+                "body": "Decide se TALOS può cercare e leggere i file della Libreria. Il contesto aggiunto automaticamente si regola nelle Preferenze AI."
+            },
+            "memory_write_access": {
+                "label": "Scrittura della memoria",
+                "body": "Decide se TALOS può salvare ricordi da usare nelle conversazioni future."
+            },
+            "image_attachment_consent": {
+                "label": "Invio degli allegati immagine",
+                "body": "Decide se le immagini allegate possono essere inviate al servizio che risponde."
+            }
+        },
         intro: 'TALOS chiede un’autorizzazione soltanto quando una funzione ne ha bisogno, nel momento in cui la usi. Android ha sempre l’ultima parola: puoi modificarle nelle impostazioni di sistema.',
         grantedAtInstall: 'Concessa all’installazione',
         /*
@@ -618,7 +646,7 @@ export const TALOS_IT_MESSAGES = {
             },
             network: {
                 title: 'Accesso alla rete',
-                purpose: 'Raggiunge il provider AI che hai configurato. Nulla viene inviato altrove e niente lascia il dispositivo finché non invii un messaggio.',
+                purpose: 'Raggiunge il servizio di intelligenza artificiale che hai configurato. Nulla viene inviato altrove e niente lascia il dispositivo finché non invii un messaggio.',
             },
             accessibility: {
                 title: 'Lettura dello schermo',
@@ -642,26 +670,27 @@ export const TALOS_IT_MESSAGES = {
             },
         },
         localEngineProbe: {
-            title: 'Verifica GPU sul telefono',
-            purpose: 'Una breve generazione vera, su CPU e su GPU, per scoprire se questo telefono va più veloce sulla GPU coi modelli locali. Costa batteria e un po\' di calore, gira una volta sola e ricorda la risposta, e non parte mai da sola.',
+            backendLabels: {"cpu":"il processore principale","opencl":"il processore grafico","vulkan":"il processore grafico nella modalità alternativa","hexagon":"l’acceleratore dedicato","unknown":"l’opzione disponibile"},
+            title: 'Quale motore è più veloce qui',
+            purpose: "Una breve prova con i modelli presenti sul telefono per scoprire quale opzione risponde più in fretta. Consuma batteria e produce un po’ di calore. Ricorda il risultato e parte solo quando lo chiedi.",
             states: {
                 unset: 'Non ancora chiesto',
                 granted: 'Consentito',
                 declined: 'Disattivato',
             },
             declinedNote: 'Puoi comunque farlo girare da qui quando vuoi.',
-            runNow: 'Fallo girare ora',
+            runNow: "Verifica il motore locale",
             running: 'In corso…',
             noModel: 'Scarica prima un modello locale — non c\'è ancora niente da verificare.',
-            resultRan: 'Fatto. Questo telefono risponde ai modelli locali più veloce sulla {backend}.',
+            resultRan: 'Fatto. Su questo telefono i modelli locali vanno più veloci con {backend}.',
             resultInconclusive: 'Quella corsa non è stata abbastanza stabile per fidarsene — puoi riprovare.',
             resultNotRun: {
                 hot: 'Saltato — il telefono è troppo caldo adesso. Riprova quando si è raffreddato.',
                 alreadyProven: 'Niente da verificare — già misurato su questo telefono.',
             },
             modal: {
-                title: 'Verificare la GPU di questo telefono?',
-                body: 'TALOS può far girare una breve generazione vera su CPU e su GPU per vedere se questo telefono risponde più veloce ai modelli locali sulla GPU. Costa batteria e un po\' di calore, e succede una volta sola — la risposta resta. Da qui in poi non parte mai più da sola.',
+                title: 'Provare i motori di questo telefono?',
+                body: 'TALOS può far girare una breve generazione vera con le diverse opzioni di calcolo di questo telefono per vedere con quale i modelli locali rispondono più in fretta. Costa batteria e un po\' di calore, e succede una volta sola — la risposta resta. Da qui in poi non parte mai più da sola.',
                 yes: 'Sì, verifica ora',
                 no: 'Non ora',
                 dontAskAgain: 'Non chiedermelo più',
@@ -701,6 +730,57 @@ export const TALOS_IT_MESSAGES = {
         temporaryChatNotice: 'Non salvata su questo telefono.',
         temporaryWelcome: 'Questa non la vede nessuno',
         temporaryWelcomeSub: 'Non scritta, non ricordata, sparisce quando esci.',
+        homeTitle: 'Cosa facciamo oggi?',
+        homeSubtitle: 'Un’idea, una domanda, un lavoro da portare avanti.',
+        promptChipsLabel: 'Idee per cominciare',
+        promptSlides: 'Crea una presentazione',
+        promptSlidesText: 'Crea una presentazione su ',
+        promptAnalyze: 'Analizza un file',
+        promptAnalyzeText: 'Analizza questo file e dimmi cosa contiene.',
+        promptResearch: 'Fai una ricerca',
+        promptMore: 'Altro',
+        resumeTitle: 'Riprendi da qui',
+        resumeConversation: 'Conversazione',
+        allChats: 'Tutte le chat',
+        // Foglio «+» sul mockup «Cosa vuoi fare?» (12/09)
+        /** Il nome sopra ogni risposta (mockup: «Talos», non «TALOS»). */
+        assistantName: 'Talos',
+        drawerTitle: 'Cosa vuoi fare?',
+        drawerSearch: 'Cerca azioni…',
+        drawerCategories: 'Categorie',
+        drawerNoResults: 'Nessuna azione con questo nome.',
+        drawerAttach: 'Allega',
+        drawerAttachHint: 'File, immagini, libreria',
+        drawerCreate: 'Crea',
+        drawerCreateHint: 'Documenti e contenuti',
+        drawerTools: 'Strumenti',
+        drawerToolsHint: 'Note, memoria, telefono',
+        drawerAgent: 'Agente',
+        drawerAgentHint: 'Piani, ricerche, strumenti',
+        drawerAttachFileHint: 'Dal tuo dispositivo',
+        drawerPickImage: 'Scegli un’immagine',
+        drawerPickImageHint: 'Aggiungi un’immagine al messaggio',
+        drawerTakePhotoHint: 'Con la fotocamera, adesso',
+        drawerFromLibrary: 'Dalla Libreria',
+        drawerFromLibraryHint: 'Scegli i materiali già salvati',
+        drawerEnhanceHint: 'Riscrive il messaggio prima di inviarlo',
+        drawerPresetHint: 'Precompila il messaggio',
+        drawerAnalyzeHint: 'Precompila e apre l’allegato',
+        drawerPresetSlides: 'Crea presentazione',
+        promptDocument: 'Crea documento',
+        promptDocumentText: 'Scrivi un documento su ',
+        drawerNoteHint: 'Un appunto da conservare',
+        drawerMemoryHint: 'Le informazioni utili nel tempo',
+        drawerPhoneControl: 'Controllo del telefono',
+        drawerPhoneControlHint: 'Stato degli accessi e dei consensi',
+        drawerToolForgeHint: 'Strumenti dichiarativi',
+        drawerModelLabHint: 'Provider, catalogo, modelli locali',
+        drawerAgentTools: 'Strumenti del modello',
+        drawerPlanTask: 'Pianifica un’attività',
+        drawerPlanTaskHint: 'Istruzioni, ricorrenza e conferma',
+        drawerResearchHint: 'Piano, fonti e verifica',
+        drawerCode: 'Lavora con Codice',
+        drawerCodeHint: 'Chat, file, modifiche e terminale',
         makePermanent: 'Modalità normale',
         temporaryChatProviderNotice: 'Il tuo fornitore la riceve comunque e la conserva secondo le sue regole.',
         chatOptions: 'Opzioni chat',
@@ -792,14 +872,30 @@ export const TALOS_IT_MESSAGES = {
         contextUnavailable: 'La selezione del contesto non è disponibile finché il bridge Contesto locale non viene configurato.',
         noModelSelected: 'Nessun modello selezionato',
         selectCallableModel: 'Seleziona un modello utilizzabile prima di migliorare il prompt.',
-        writePromptFirst: 'Scrivi prima un prompt: Migliora prompt riscrive la bozza.',
+        writePromptFirst: 'Scrivi prima un messaggio: poi lo riscrive per te.',
         processing: 'Elaborazione',
+        /**
+         * ⛔ «Sto aprendo il modello», non «caricamento»: la persona ha appena
+         * scritto un messaggio e vuole sapere perche' non risponde. E la
+         * percentuale c'e' perche' l'attesa vera, misurata sul Pad, e' di
+         * cinquanta secondi — senza un numero, un'app lenta e un'app bloccata
+         * si vedono uguali.
+         */
+        localLoadingModel: 'Sto aprendo il modello sul telefono… {percent}%',
+        localLoadingModelStarting: 'Sto aprendo il modello sul telefono…',
+        localLoadingCancel: 'Annulla',
+        localLoadingCancelling: 'Sto fermando…',
         removeFailedFiles: 'Rimuovi i file che non è stato possibile aggiungere prima dell’invio',
         improvingPrompt: 'Miglioramento prompt',
         stopResponse: 'Interrompi risposta',
         discardDictation: 'Annulla la dettatura',
         stopDictation: 'Interrompi dettatura',
         dictate: 'Detta',
+        reasonQuick: 'Ragiona',
+        agentQuick: 'Agente',
+        agentToolsOn: 'Gli strumenti del modello sono accesi per questa chat.',
+        agentToolsOff: 'Gli strumenti del modello sono spenti. Puoi continuare ad allegare file e usare la ricerca.',
+        dictationUnavailable: 'La dettatura non è disponibile qui.',
         dictateAppend: 'Detta altro, aggiungendolo al testo',
         startingDictation: 'Avvio dettatura…',
         dictationErrors: {
@@ -816,7 +912,7 @@ export const TALOS_IT_MESSAGES = {
         pickPhotos: 'Foto',
         browseOn: 'Navigazione attiva',
         browseWeb: 'Naviga sul web',
-        improvePrompt: 'Migliora prompt',
+        improvePrompt: 'Migliora il messaggio',
         chooseModel: 'Scegli modello',
         chooseModelProfile: 'Scegli profilo modello',
         chooseReasoningEffort: 'Scegli livello di ragionamento',
@@ -830,6 +926,10 @@ export const TALOS_IT_MESSAGES = {
         reasoningEffortLevels: 'Livelli di ragionamento',
         noReasoningSetting: 'Questo modello funziona senza un’impostazione di ragionamento.',
         modelAndReasoning: 'Modello e ragionamento',
+        executorModel: 'Modello esecutore',
+        executorModelHint: 'Usa questo modello più economico per i giri di routine; il primo giro e ogni ritentativo dopo un fallimento restano sul modello sopra.',
+        executorModelAutomatic: 'Automatico — usa sempre il modello sopra',
+        executorModelListLabel: 'Modelli esecutore',
         enhancerSetupTitle: 'Prima di riscrivere',
         enhancerDepthLabel: 'Quanto riscrivo',
         enhancerDepth: { concise: 'Conciso', balanced: 'Equilibrato', extended: 'Esteso' },
@@ -881,6 +981,9 @@ export const TALOS_IT_MESSAGES = {
         effortXhigh: 'Molto alto',
         effortMax: 'Massimo',
         compatibilitySupported: 'supportato',
+        // La seconda riga di un modello LOCALE nel selettore: prima era il percorso del file (foto B1c, 12/09/2026).
+        localModelLine: 'Sul dispositivo',
+        statusUntested: 'mai provato',
         compatibilityUnsupported: 'non supportato',
         statusEnabled: 'attivo',
         statusDisabled: 'disattivato',
@@ -985,8 +1088,83 @@ export const TALOS_IT_MESSAGES = {
         you: 'Tu',
         moreMessageActions: 'Altre azioni sul messaggio',
         reusePrompt: 'Riutilizza prompt',
+        runDetails: 'Dettagli esecuzione',
+        deleteTurn: 'Elimina',
+        turnDeleted: 'Domanda e risposta eliminate',
+        turnDeleteFailed: 'Eliminazione non riuscita: il messaggio è tornato al suo posto.',
+        shareMessageTitle: 'Condividi la risposta',
+        shareCopied: 'Condivisione non disponibile: testo copiato negli appunti.',
+        runDetailsUsage: 'Token e costo',
+        runDetailsTimings: 'Tempi',
+        runDetailsTools: 'Attrezzi usati',
+        runDetailsNotRecorded: 'Non registrato per questo messaggio.',
+        runDetailsNoTools: 'Nessun attrezzo registrato per questa risposta.',
+        runDetailsToolsUnavailable: 'Non è stato possibile leggere gli attrezzi di questa risposta.',
+        draftMarker: 'Bozza',
+        runTokensInput: 'Token in entrata',
+        runTokensOutput: 'Token in uscita',
+        runTokensCached: 'di cui {count} dalla cache',
+        runTokensReasoning: 'di cui {count} di ragionamento',
+        runNotReported: 'non comunicato',
+        runCost: 'Costo',
+        runCostFree: 'Gratis, sul telefono',
+        runCostEstimate: 'Stima: {amount} (listino OpenRouter del {date})',
+        runCostUnknown: 'Non comunicato dal fornitore',
+        runTimingFirst: 'Primo pezzo di risposta dopo',
+        runTimingTotal: 'Durata totale',
+        runTimingRounds: 'Passaggi del modello',
+        runSeconds: '{value} s',
+        runDetailsLoading: 'Lettura dei dettagli…',
+        toolStatusSucceeded: 'ok',
+        toolStatusFailed: 'errore',
+        toolStatusPending: 'in corso',
+        toolStatusCancelled: 'senza esito',
+        toolStatusRecovery: 'da riprendere',
         reasoningLive: 'Ragionamento…',
         reasoningWithTime: 'Ragionamento · {time}',
+        localSpeedLabel: 'Velocità di questa risposta su questo telefono',
+        localSpeedFirstToken: '{value} alla prima parola',
+        localSpeedEngineFirstToken: '{value} al primo token del motore',
+        localSpeedTokensPerSecond: '{value} token al secondo',
+        localSpeedMsPerToken: '{value} ms per token',
+        localSpeedMilliseconds: '{value} ms',
+        localSpeedSeconds: '{value} s',
+        localSpeedPromptDetail: 'Richiesta: {tokens} token letti in {time}',
+        // Solo con «Mostra dettagli tecnici» acceso. ⛔ Mai i nomi interni:
+        // niente `partialTrimRefused`, niente `seq_rm`, niente «KV».
+        localSpeedPromptReuse: '{reused} token della richiesta su {total} riusati',
+        localSpeedCacheReset: 'memoria azzerata dal motore',
+        /*
+         * ⭐⭐⭐ PERCHÉ l'inizio della richiesta era pronto — o perché no.
+         *
+         * `localSpeedPromptReuse` dice QUANTO è stato riusato; queste dicono
+         * PERCHÉ. Misurato sul Pad il 2026-09-10: LFM2.5-2.6B-Q4_0 «0 token
+         * della richiesta su 2847 riusati» e nessun modo di sapere che la causa
+         * era un file mai scritto.
+         *
+         * ⛔ «inizio della richiesta» e non «prefisso», «cache», «KV» o
+         * «congelato»: è la parte che non cambia mai fra un messaggio e
+         * l'altro — le istruzioni e gli strumenti — e chi legge non ha scritto
+         * il motore. Registro allineato alle due righe qui sopra.
+         *
+         * ⛔ Nessuna di queste chiede di FARE qualcosa, ed è voluto: non c'è
+         * niente che la persona possa fare, e una guida inventata sarebbe
+         * peggio del silenzio (NN/g, «Error-Message Guidelines», letto il
+         * 2026-09-10: si suggerisce una soluzione quando esiste; i dettagli
+         * tecnici stanno dietro un interruttore di diagnosi, dove questa riga
+         * già vive).
+         */
+        localSpeedOpeningReused: 'istruzioni già in memoria: non le ha rilette',
+        localSpeedOpeningNotReused: 'istruzioni in memoria, ma il modello le ha rilette lo stesso',
+        localSpeedOpeningPreparing: 'sto mettendo da parte le istruzioni: dal prossimo messaggio parte prima',
+        localSpeedOpeningEngineRefused: 'non sono riuscito a mettere da parte le istruzioni la volta scorsa: il modello non ha voluto, riprovo',
+        localSpeedOpeningSaveFailed: 'non sono riuscito a mettere da parte le istruzioni la volta scorsa: il salvataggio si è interrotto, riprovo',
+        localSpeedOpeningUnknownShape: 'non posso mettere da parte le istruzioni: questo modello non dice com’è fatto',
+        localSpeedOpeningTooShort: 'non serve mettere da parte le istruzioni: sono così poche che rileggerle costa meno',
+        localSpeedOpeningNoSpace: 'non posso mettere da parte le istruzioni: manca spazio sul telefono',
+        localSpeedOpeningTooLarge: 'non posso mettere da parte le istruzioni: occuperebbero troppo spazio',
+        localSpeedOpeningUnavailable: 'non posso mettere da parte le istruzioni: non riesco a capire dove finiscono',
+        localSpeedOpeningCheckFailed: 'non so dire se le istruzioni siano state messe da parte: il controllo non è riuscito',
         receivingResponse: 'Ricezione risposta',
         nextAction: 'Azione successiva',
         validationFault: 'Errore di validazione',
@@ -1073,6 +1251,26 @@ export const TALOS_IT_MESSAGES = {
         updateProviderCredential: 'Aggiorna la credenziale del provider nelle Impostazioni, poi riprova.',
         checkProviderHealth: 'Controlla lo stato del provider e riprova a inviare il messaggio.',
         checkModelConnection: 'Controlla il modello selezionato e la connessione, poi riprova.',
+        // ⛔ §40: «controlla la connessione» detto a proposito di un modello che
+        // gira sul telefono e non usa la rete. Il rimedio giusto è un altro.
+        checkLocalModel: 'Questo modello gira sul telefono e non usa la rete. Prova con un altro modello locale, oppure chiudi le altre app e riprova.',
+        // Le frasi che sostituiscono un codice interno finito nello slot del
+        // messaggio. Dicono che cosa è successo; il codice resta in piccolo.
+        faultNoChatTemplate: 'Questo modello non porta con sé le istruzioni su come parlargli, quindi TALOS non sa in che forma fargli la domanda.',
+        faultNoChatTemplateNext: 'Scegli un altro modello locale dal selettore: le varianti pronte alla conversazione hanno di solito «instruct» o «it» nel nome.',
+        faultProviderRefused: 'Il servizio del modello ha rifiutato la richiesta senza spiegare perché.',
+        faultProviderKeyMissing: 'Per questo modello manca la chiave del provider.',
+        faultProviderCatalogMissing: 'Il catalogo dei modelli di questo provider non è ancora stato caricato.',
+        faultModelMismatch: 'Il modello scelto non appartiene al provider selezionato.',
+        faultModelMissing: 'Non c’è nessun modello scelto per questa conversazione.',
+        faultPickModelAgain: 'Scegli di nuovo un modello dal selettore del compositore, poi riprova.',
+        faultImageUnsupported: 'Questo modello non legge le immagini.',
+        faultGenericValidator: 'TALOS ha fermato questo invio: qualcosa nella richiesta non era in ordine.',
+        faultGenericPolicy: 'TALOS si è fermato prima di procedere: mancava un permesso necessario.',
+        faultGenericProvider: 'Il servizio del modello non ha completato la risposta.',
+        faultGenericNetwork: 'TALOS non è riuscito a raggiungere il servizio del modello.',
+        faultGenericWorker: 'Una parte del lavoro in secondo piano si è fermata prima di finire.',
+        faultGenericSystem: 'TALOS non è riuscito a completare questa risposta.',
         resendAfterAuthorizationLapsed: 'Il permesso dato agli strumenti valeva per l’invio precedente. Rimanda il messaggio: te lo richiederà una volta sola.',
         storageHiccup: 'C’è stato un intoppo salvando questa risposta sul dispositivo.',
         storageHiccupNext: 'Quello che TALOS ha fatto è al suo posto — controlla la Libreria. Se il messaggio è incompleto, rimandalo.',
@@ -1121,6 +1319,14 @@ export const TALOS_IT_MESSAGES = {
         resendMessageMissing: 'TALOS non ha trovato il messaggio da inviare di nuovo.',
         retryResponseMissing: 'TALOS non ha trovato la risposta da rigenerare.',
         retryPromptMissing: 'TALOS non ha trovato il prompt che ha prodotto questa risposta.',
+        // Fase 4 — messaggi Calm
+        editMessageConfirm: "Il testo di questo messaggio riaprirà la bozza. Il messaggio e tutti i turni successivi saranno rimossi; quelli precedenti resteranno. Poi potrai reinviare.",
+        editMessageDraft: "Il testo riapre la bozza per essere modificato e reinviato.",
+        editMessageFailed: "Non è stato possibile modificare il messaggio. Controlla la conversazione e riprova.",
+        editMessageUnavailable: "Attendi la fine della risposta e delle richieste di autorizzazione prima di modificare il messaggio.",
+        messageInterrupted: "Interrotta. Il testo è conservato.",
+        openAttachmentPreview: "Apri anteprima",
+        attachmentPreviewUnavailable: "Anteprima non disponibile. Il file resta nella Libreria.",
     },
     messageMarkdown: {
         completedTask: 'Attività completata',
@@ -1138,18 +1344,60 @@ export const TALOS_IT_MESSAGES = {
     // sempre dietro lo stesso cancello debug-only del vecchio link in
     // Impostazioni — vedi services/harnessUi.ts.
     harness: {
-        demoNotice: 'Sessioni demo, non collegate a un backend reale — la struttura di navigazione è vera, i dati no.',
         groups: {
             today: 'Oggi',
             yesterday: 'Ieri',
             week: 'Ultimi 7 giorni',
+            // Visto sul Pad (12/09/2026): senza questa chiave la lista mostrava
+            // «HARNESS.GROUPS.LAST30» — il nome della chiave, non la parola.
+            last30: 'Ultimi 30 giorni',
         },
+        newSession: 'Nuova',
+        newSessionAria: 'Nuova sessione Codice',
+        emptyBody: 'Nessuna sessione ancora. Tocca "Nuova", oppure scrivi qui sotto per cominciare.',
+        draftHint: 'Scrivi il primo messaggio per avviare la sessione.',
         openingMockup: 'Apertura di Codice…',
         unavailable: 'Codice non è disponibile in questa build.',
         loadFailed: 'Codice non si è aperto. Riprova.',
+        bridgeNotConnected: 'Codice non è riuscito ad avviare il suo terminale su questo telefono. Chiudi e riapri TALOS: di solito risolve.',
+        /*
+         * ⭐ 12/9, owner: «avvisa nel toast nella sezione Codice se il ponte adb
+         * non è attivo, con passaggi chiari e concisi per come attivarlo».
+         *
+         * ⛔ Niente «adb», niente «ponte», niente «plugin» — la stessa regola che
+         * `bridgeNotConnected` qui sopra si è già data il 3/9. La parola che
+         * questa app usa per questa cosa è «collegato», ed è quella della
+         * schermata dove si rimedia: `ponte.readyTitle` dice «TALOS è collegato
+         * al tuo telefono».
+         *
+         * I due passi sono quelli veri, non inventati: «Debug wireless» nelle
+         * opzioni sviluppatore è letterale in `ponte.pairBody`, e il ritorno in
+         * Controllo del telefono è dove vivono sia il riaggancio automatico
+         * (`ponte.reconnectBody`) sia l'accoppiamento a sei cifre
+         * (`ponte.pairBody`). Verificato anche fuori: la voce di sistema si
+         * chiama «Pair device with pairing code» sotto Wireless debugging
+         * (developer.android.com/studio/run/device, letto il 12/09/2026).
+         */
+        bridgeOffline: 'TALOS non è collegato a questo telefono: in Codice il terminale e i comandi della sessione non partono. Accendi «Debug wireless» nelle opzioni sviluppatore, poi ricollega da Impostazioni → Controllo del telefono.',
+        bridgeOfflineAction: 'Impostazioni',
+        /** ⛔ Senza binari non c'è nessun passo da dare: si dice com'è e basta. */
+        bridgeMissing: 'Questa copia di TALOS non porta con sé il collegamento al telefono: in Codice il terminale non può partire.',
         unknownTitle: 'Sessione non trovata',
-        unknownSession: 'Questa sessione demo non esiste. Torna a Codice e scegline una dalla lista.',
+        unknownSession: 'Questa sessione non esiste più. Torna a Codice e scegline una dalla lista.',
         unknownBack: 'Torna a Codice',
+        actionsFor: 'Azioni per {title}',
+        renameTitle: 'Rinomina sessione',
+        renameDescription: 'Scegli un nuovo nome per questa sessione Codice.',
+        sessionName: 'Nome della sessione',
+        renameFailed: "Non sono riuscito a rinominare la sessione: {detail}",
+        deleteTitle: 'Elimina sessione',
+        deleteDescription: '"{title}" verrà eliminata dal telefono. Non si può annullare.',
+        deleteFailed: "Non sono riuscito a eliminare la sessione: {detail}",
+        statusRunning: 'In corso',
+        statusRunningAria: 'Sessione ancora in corso',
+        statusInterrupted: 'Interrotta',
+        statusWaitingApproval: 'In attesa di approvazione',
+        statusError: 'Conclusa con errore',
     },
     privilege: {
         keepAlive: 'Mantieni acceso',
@@ -1787,6 +2035,19 @@ export const TALOS_IT_MESSAGES = {
         categoryProductivity: 'produttività',
     },
     models: {
+        /** Vedi il cappello in `en.ts`: le stesse frasi, senza un nome tecnico. */
+        localWarm: {
+            loading: 'Sto caricando {model}… la prima volta ci vuole un po’.',
+            ready: '{model} è pronto.',
+            readySlow: '{model} è pronto — ci ha messo {seconds} secondi a caricarsi.',
+            skipped: {
+                'too-warm': 'Per ora non carico {model}: il telefono è troppo caldo. Si caricherà quando invii il primo messaggio.',
+                'low-memory': 'Per ora non carico {model}: su questo telefono resta poca memoria libera. Si caricherà quando invii il primo messaggio.',
+                'unknown-heat': 'Per ora non carico {model}: questo telefono non dice quanto scotta, quindi TALOS non lo carica in anticipo. Si caricherà quando invii il primo messaggio.',
+                'unknown-memory': 'Per ora non carico {model}: questo telefono non dice quanta memoria è libera, quindi TALOS non lo carica in anticipo. Si caricherà quando invii il primo messaggio.',
+            },
+            failed: 'Non sono riuscito a caricare {model} in anticipo. Si caricherà quando invii il primo messaggio.',
+        },
         // La capienza: owner 2026-08-04, «come etichetta che vedo sempre».
         // Non un filtro che nasconde — nascondere toglie anche il motivo
         // per liberare memoria.
@@ -1821,17 +2082,18 @@ export const TALOS_IT_MESSAGES = {
         defaultChatModel: 'Modello chat predefinito',
         selectDiscovered: 'Seleziona un modello rilevato',
         configureToBegin: 'Configura un provider o aggiungi un modello manuale per iniziare.',
-        labSections: 'Sezioni Model Lab',
-        labTitle: 'Model Lab',
+        labSections: 'Sezioni di Modelli',
+        labTitle: 'Modelli',
         labDescription: 'Configura gli accessi, scegli un modello e verifica cosa può eseguire questo dispositivo.',
-        labDestinations: 'Destinazioni Model Lab',
+        labDestinations: 'Destinazioni di Modelli',
         providerAccessTitle: 'Provider e accessi',
         providerAccessDescription: 'Chiavi, endpoint locali e stato dei provider.',
+        providerAccessStatusOne: '1 accesso salvato',
         providerAccessStatus: '{configured} accessi salvati',
         huggingFaceAccessTitle: 'Accesso Hugging Face',
         huggingFaceAccessDescription: 'Token manuale per limiti personali e repository gated già autorizzati.',
-        huggingFaceAccessSaved: 'salvato',
-        huggingFaceAccessMissing: 'non configurato',
+        huggingFaceAccessSaved: 'Salvato',
+        huggingFaceAccessMissing: 'Non configurato',
         huggingFaceAccessSecurity: 'Il valore resta nella cassaforte sicura del dispositivo; TALOS mostra soltanto se esiste.',
         huggingFaceAccessInput: 'Token Hugging Face',
         huggingFaceAccessPlaceholder: 'hf_…',
@@ -1845,6 +2107,7 @@ export const TALOS_IT_MESSAGES = {
         catalogStatus: '{count} modelli rilevati',
         localTitle: 'Modelli locali',
         localDescription: 'Modelli GGUF installati o disponibili da Hugging Face.',
+        localStatusOne: '1 file locale',
         localStatus: '{count} file locali',
         openDestination: 'Apri {destination}',
         deviceCapacityTitle: 'Questo dispositivo',
@@ -1963,6 +2226,12 @@ export const TALOS_IT_MESSAGES = {
         localModelsUnreadable: 'TALOS non riesce a leggere la cartella dei modelli locali, quindi non può sapere se ce ne sono. Scaricarne un altro non serve.',
         localModelOpenPath: 'Il file del modello locale non è più disponibile. Torna a Modelli locali e scaricalo di nuovo.',
         localModelOpenLoad: 'Questo file non può essere aperto come modello GGUF compatibile. Eliminalo e scarica una variante supportata.',
+        /**
+         * ⛔ Nessuna parola da errore qui — «non riuscito», «impossibile»,
+         * «riprova»: l'hai fermato tu, ed e' successo esattamente quello che
+         * hai chiesto. L'unica cosa utile da aggiungere e' come ripartire.
+         */
+        localModelOpenCancelled: 'Ho fermato l’apertura del modello. Invia di nuovo il messaggio quando vuoi riprovare.',
         localModelOpenContext: 'Il modello non entra nella memoria disponibile neppure con il contesto ridotto. Chiudi le altre app oppure scegli un modello più piccolo.',
         localModelOpenSampler: 'Il motore locale non può preparare questo modello. Scegli un’altra variante compatibile.',
         localModelOpenUnknown: 'TALOS non è riuscito ad aprire il modello locale. Riavvia l’app oppure scegli un altro modello.',
@@ -1989,6 +2258,19 @@ export const TALOS_IT_MESSAGES = {
         privilegedBridge: 'Il ponte per agire sul telefono non è più attivo: succede a ogni riavvio. Aprilo da Impostazioni → Controllo del telefono.',
     },
     library: {
+        /* U-20 — la testata della pagina, dal mockup «Talos Calm Finale». */
+        subtitle: 'Documenti, immagini e pagine salvate.',
+        viewLabel: 'Vista della Libreria',
+        sortLabel: 'Ordina',
+        /* ⛔ Due assenze diverse, due frasi diverse: solo la seconda si annulla. */
+        emptyTitle: 'Qui non c’è ancora niente',
+        emptyBody: 'Ciò che carichi o salvi da una chat resta qui, pronto da riusare in qualsiasi conversazione.',
+        noMatchesTitle: 'Nessun risultato',
+        clearFilters: 'Mostra tutto',
+        /* Un posto che si riempirà, non un glifo che verrà sostituito. */
+        thumbnailLoading: 'Anteprima in preparazione',
+        openSavedCopyOf: 'Apri la copia salvata di {title}',
+        openHostInBrowser: 'Apri {host} nel browser',
         pdfNonSiApre: 'Non sono riuscito ad aprire questo PDF.',
         pdfPrecedente: 'Pagina precedente',
         pdfSuccessiva: 'Pagina successiva',
@@ -2040,7 +2322,14 @@ export const TALOS_IT_MESSAGES = {
         sourceCountOne: '1 fonte',
         sourceCountMany: '{count} fonti',
         options: 'Opzioni Libreria',
-        uploadFiles: 'Carica file',
+        tabAll: 'Tutto',
+        excludedFromContextShort: 'Escluso dal contesto',
+        linkActionsFor: 'Azioni per {title}',
+        openInBrowser: 'Apri nel browser',
+        docReadingMode: 'Come mostrare il file',
+        docFormatted: 'Formattato',
+        docText: 'Testo',
+        addFile: 'Aggiungi file',
         selectFiles: 'Seleziona file',
         newFolder: 'Nuova cartella',
         grid: 'Griglia',
@@ -2048,13 +2337,23 @@ export const TALOS_IT_MESSAGES = {
         groupByChat: 'Raggruppa per chat',
         sortRecent: 'Più recenti',
         sortOldest: 'Meno recenti',
-        sortName: 'Nome chat (A–Z)',
+        sortName: 'Nome (A–Z)',
         cancelSelection: 'Annulla selezione',
+        selectedOne: '1 selezionato',
         selected: '{count} selezionati',
         deleteSelectedFiles: 'Elimina file selezionati',
         searchLibrary: 'Cerca nella Libreria',
         retryLibrary: 'Riprova Libreria',
         loadingLibrary: 'Caricamento Libreria',
+        /*
+         * ⛔ RITIRATA con U-20: l'intro lunga non sta più nella pagina (owner
+         * 12/09/2026). Diceva in tre righe come funziona la Libreria, ogni
+         * volta, a chi la Libreria l'aveva già aperta. Al suo posto ci sono
+         * `emptyTitle` e `emptyBody`, che sono uno stato vuoto e non una
+         * spiegazione. La riga resta qui senza chiamanti perché una stringa
+         * tolta è una traduzione persa: se l'owner la rivuole in Doctor o
+         * nelle impostazioni, è già scritta in tutte e due le lingue.
+         */
         emptyLong: 'Non ci sono ancora file. Tutto ciò che carichi o salvi da una chat resta qui, pronto per essere riutilizzato in qualsiasi conversazione.',
         noMatchQuery: 'Nessun file corrisponde a “{query}”.',
         noLinks: 'Non ci sono ancora link. I risultati trovati da TALOS e le pagine lette vengono salvati qui, con indirizzi che puoi riaprire.',
@@ -2169,37 +2468,94 @@ export const TALOS_IT_MESSAGES = {
         itemMissing: 'Questa memoria non c’è più.',
         searchPlaceholder: 'Cerca fra le memorie',
         title: 'Memoria',
+        // Sezione 4 del refactor «Talos Calm» (owner 12/09/2026): la pagina si
+        // presenta come nel mockup — un titolo, una riga che dice cosa ci si
+        // mette, e il pulsante che comincia.
+        subtitle: 'Le cose che scegli di portare nelle prossime conversazioni.',
+        // ⛔ U-12: la frase intera non è più un cartello sopra l'elenco. Resta
+        // come descrizione estesa della riga «Provenienza» nella pagina aperta.
+        // La disciplina lato prompt (`trust_level: 'untrusted'`) non cambia.
         explanation: 'Le memorie sono salvate su questo dispositivo e inserite sempre come contesto dichiarato non attendibile: non possono mai sovrascrivere regole di sistema o sicurezza.',
         newMemory: 'Nuova memoria',
         memoryTitle: 'Titolo memoria',
-        titlePlaceholder: 'Titolo',
         memoryContent: 'Contenuto memoria',
         content: 'Che cosa deve ricordare TALOS?',
+        fieldTitle: 'Titolo',
+        fieldContent: 'Contenuto',
         kind: 'Tipo di memoria',
-        scope: 'Ambito memoria',
         global: 'Globale',
         project: 'Progetto',
         thisChat: 'Questa chat',
         preference: 'Preferenza',
-        projectFact: 'Dato del progetto',
+        // «Fatto di progetto», come il mockup e come l'owner l'ha elencato il
+        // 12/09/2026 — prima era «Dato del progetto», che è la stessa cosa
+        // detta in un italiano più da banca dati.
+        projectFact: 'Fatto di progetto',
         procedure: 'Procedura',
         policyNote: 'Nota di policy',
+        // Una riga che il modello ha proposto e che nessuno ha approvato non ha
+        // un tipo: ha una domanda aperta.
+        kindReview: 'Da rivedere',
+        kindMissing: 'Questa memoria è stata proposta dal modello e non ha ancora un tipo: scegline uno prima di salvarla.',
         save: 'Salva memoria',
-        saved: 'Memoria salvata come contesto non attendibile.',
-        deleted: 'Memoria eliminata.',
-        empty: 'Nessuna memoria: salva ciò che TALOS deve ricordare tra le chat.',
+        empty: 'Le cose importanti, quando le scegli.',
+        emptyBody: 'Aggiungi una preferenza, un riferimento o una procedura.',
+        noMatches: 'Nessun risultato, per ora.',
+        noMatchesBody: 'Prova un’altra parola, oppure togli il filtro.',
+        clearFilters: 'Azzera i filtri',
+        count: '{count} memoria | {count} memorie',
+        viewLabel: 'Come si vedono le memorie',
+        viewList: 'Lista',
+        viewGrid: 'Schede',
+        filterLabel: 'Filtra le memorie',
+        filterAll: 'Tutte',
+        // U-18: l'unica voce della striscia che guarda lo STATO invece del tipo
+        // — le righe proposte dal modello e mai approvate.
+        filterReview: 'Da rivedere',
+        sortLabel: 'Ordina le memorie',
+        options: 'Opzioni Memoria',
+        sortRecent: 'Più recenti',
+        sortTitle: 'Titolo',
+        sortKind: 'Tipo',
         deleteTitle: 'Eliminare la memoria?',
         deleteDescription: 'Rimuove definitivamente “{title}” da questo dispositivo.',
-        projectId: 'ID progetto',
         projectScoped: 'Progetto · {id}',
         chatScope: 'Chat',
-        used: 'Usata {time}',
-        disableNamed: 'Disattiva memoria {title}',
-        enableNamed: 'Attiva memoria {title}',
+        open: 'Apri la memoria',
+        edit: 'Modifica',
+        editTitle: 'Modifica memoria',
+        actionsFor: 'Azioni per {title}',
+        // ⛔ Le due voci del menu dicono cosa SUCCEDE, non in che stato si è —
+        // il contrario dell'etichetta dell'interruttore, che non cambia mai.
+        activate: 'Attiva',
+        pause: 'Metti in pausa',
+        exportText: 'Esporta testo',
+        exportCopied: 'Memoria copiata negli appunti',
+        exportFailed: 'Non è stato possibile esportare la memoria.',
         deleteNamed: 'Elimina memoria {title}',
-        statusActive: 'attiva',
-        statusDisabled: 'disattivata',
-        displayNameTitle: 'Nome visualizzato',
+        // I tre stati del badge. Sono tre e non due: «in pausa» è una decisione
+        // dell'utente, «da rivedere» è una riga che nessuno ha ancora guardato.
+        stateActive: 'Attiva',
+        statePaused: 'In pausa',
+        stateReview: 'Da rivedere',
+        scopeLabel: 'Ambito',
+        stateLabel: 'Stato',
+        originLabel: 'Provenienza',
+        originUser: 'Contenuto fornito dall’utente',
+        originExternal: 'Contenuto raccolto da fuori',
+        // ⛔ L'etichetta dell'interruttore NON cambia con lo stato (WAI-ARIA
+        // APG, «Switch Pattern»): lo stato lo porta `aria-checked`. A cambiare
+        // è solo la frase esplicativa qui sotto, che descrive e non nomina.
+        toggleTitle: 'Attiva nelle prossime conversazioni',
+        toggleNamed: 'Attiva «{title}» nelle prossime conversazioni',
+        toggleOn: 'TALOS la rilegge in ogni nuova conversazione.',
+        toggleOff: 'TALOS non la rilegge finché non la riattivi.',
+        toggleReview: 'Proposta dal modello: attivandola, la approvi.',
+        hintPreference: 'Come preferisci lavorare',
+        hintProjectFact: 'Un riferimento da ricordare',
+        hintProcedure: 'Un modo di procedere',
+        hintPolicyNote: 'Un criterio da tenere presente',
+        hintReview: 'Proposta dal modello, in attesa di un sì',
     },
     localModels: {
             tabsLabel: 'Modelli: dove guardare',
@@ -2268,6 +2624,12 @@ export const TALOS_IT_MESSAGES = {
         copyPath: 'Copia il percorso',
         pathCopied: 'Percorso copiato.',
         pathCopyRefused: 'Gli appunti non hanno accettato il percorso. Riprova, o leggilo dalla cartella dei modelli.',
+        /** Vedi il cappello in `en.ts`. */
+        warmBadge: {
+            opening: 'Sto caricando…',
+            ready: 'Pronto',
+            notLoaded: 'Non ancora caricato',
+        },
         installedTitle: 'Su questo dispositivo',
         installedCount: '{count} modello | {count} modelli',
         installedSearch: 'Cerca fra i modelli scaricati',
@@ -2473,6 +2835,26 @@ export const TALOS_IT_MESSAGES = {
         reasonNotAModel: 'Non è un modello: è un file di servizio che serve a quantizzarne uno. Non si può eseguire.',
         reasonNoDevice: 'Questo telefono non è ancora stato misurato.',
         recheck: 'Ricontrolla',
+        backendChoiceTitle: 'Dove gira il modello',
+        backendChoiceBody: 'Scegli tu su quale parte del telefono lavora un modello locale. In automatico TALOS prende la più veloce fra quelle che ha misurato qui.',
+        backendUnavailable: 'qui non c’è',
+        /**
+         * ⛔ Diverso da `backendUnavailable`, e la differenza porta a due
+         * azioni opposte: li' non c'e' niente da fare, qui basta scaricare lo
+         * stesso modello in Q4_0. Misurato l'11/09: lo stesso Qwen3-4B legge a
+         * 1.126 t/s sull'NPU in Q4_0 e a 55,7 in Q4_K_M.
+         */
+        backendWrongFormat: 'non per questo formato',
+        backendInUse: 'adesso gira su {backend}',
+        backendInUseOn: 'adesso gira su {backend} · {device}',
+        backendSaveFailed: 'La scelta non è stata salvata: riprova.',
+        backendNeedsReload: 'La scelta vale dalla prossima volta che il modello si apre.',
+        backendName: {
+            auto: 'Automatico',
+            cpu: 'CPU',
+            gpu: 'GPU',
+            hexagon: 'Hexagon',
+        },
         engineReady: 'Motore locale a bordo · backend: {backends}',
         engineMissing: 'Motore locale non incluso in questa build: i modelli si possono scaricare ma non eseguire.',
         ramFree: 'memoria libera',
@@ -2497,18 +2879,64 @@ export const TALOS_IT_MESSAGES = {
         task: 'Attività',
     },
     notes: {
-        noMatches: 'Nessuna nota corrisponde a questa ricerca.',
+        // Sezione 2 del refactor «Talos Calm» (owner 11/09/2026): la pagina si
+        // presenta come nel mockup — un titolo, una riga che dice cosa ci si
+        // mette, e il pulsante che comincia.
+        subtitle: 'Le idee, prima che diventino un piano.',
+        noMatches: 'Nessun risultato, per ora.',
+        noMatchesBody: 'Prova un’altra parola, oppure togli il filtro.',
+        clearFilters: 'Azzera i filtri',
         viewLabel: 'Come si vedono le note',
+        viewList: 'Lista',
+        viewGrid: 'Schede',
+        deleteTitle: 'Eliminare questa nota?',
+        deleteDescription: '«{title}» sparisce da questo dispositivo, e non si può recuperare.',
         // La nota puo' essere stata cancellata altrove, o l'indirizzo copiato a mano.
         itemMissing: 'Questa nota non c’è più.',
         searchPlaceholder: 'Cerca fra le note',
+        // ⛔ U-12: la frase intera non è più un cartello sull'elenco. Resta
+        // come descrizione estesa del piede della scheda, dove la riga corta
+        // («Contenuto fornito dall’utente») dice la stessa cosa in tre parole.
+        // La disciplina lato prompt (`trust_level: 'untrusted'`) non cambia.
         intro: 'Le note sono salvate su questo dispositivo e trattate come contesto dichiarato non attendibile: non possono mai impartire istruzioni.',
         title: 'Titolo nota',
         content: 'Contenuto nota',
+        fieldTitle: 'Titolo',
+        fieldContent: 'Contenuto',
         add: 'Nuova nota',
-        empty: 'Non ci sono ancora note: crea la prima qui sopra.',
-        untrusted: 'non attendibile',
+        save: 'Salva nota',
+        edit: 'Modifica',
+        editTitle: 'Modifica nota',
+        empty: 'Un posto per la prossima idea.',
+        emptyBody: 'Una frase, una lista, un pensiero da riprendere.',
         deleteNamed: 'Elimina nota {title}',
+        actionsFor: 'Azioni per {title}',
+        open: 'Apri l’appunto',
+        count: '{count} appunto | {count} appunti',
+        filterLabel: 'Filtra le note',
+        filterAll: 'Tutte',
+        filterPinned: 'In evidenza',
+        filterChecklist: 'Checklist',
+        sortLabel: 'Ordina le note',
+        options: 'Opzioni Note',
+        sortRecent: 'Più recenti',
+        sortTitle: 'Titolo',
+        kindNote: 'Appunto',
+        kindThought: 'Pensiero',
+        kindChecklist: 'Checklist',
+        kicker: 'Appunto personale',
+        checkProgress: '{done}/{total} punti',
+        checkMore: 'Altri {count} punti',
+        checkSaveFailed: 'La spunta non è stata salvata. Riprova.',
+        checkState: '{done} di {total} punti spuntati',
+        pinOn: 'Metti in evidenza',
+        pinOff: 'Togli dall’evidenza',
+        pinNamed: 'In evidenza: {title}',
+        userProvided: 'Contenuto fornito dall’utente',
+        modifiedOn: 'Modificata il {date}',
+        exportText: 'Esporta testo',
+        exportCopied: 'Nota copiata negli appunti',
+        exportFailed: 'Non è stato possibile esportare la nota.',
     },
     toolPermissions: {
         allAtOnce: 'Decidi tutto in un colpo',
@@ -2573,33 +3001,98 @@ export const TALOS_IT_MESSAGES = {
         },
     },
     tasks: {
+        // Sezione 3 del refactor «Talos Calm» (owner 12/09/2026): la pagina si
+        // presenta come nel mockup — un titolo, una riga che dice a cosa serve,
+        // e il pulsante che comincia.
+        subtitle: 'Un passo alla volta. Con un prossimo gesto chiaro.',
         itemMissing: 'Questa attività non c’è più.',
         searchPlaceholder: 'Cerca fra le attività',
         intro: 'Attività collegate alle esecuzioni e salvate sul dispositivo: funzionano completamente offline.',
         title: 'Titolo attività',
         description: 'Descrizione attività',
         descriptionOptional: 'Descrizione attività (facoltativa)',
+        descriptionPlaceholder: 'Cosa vuoi portare a termine. Scrivi «- [ ] passo» per farne un punto da spuntare.',
+        fieldTitle: 'Titolo',
+        fieldDescription: 'Descrizione',
+        noDescription: 'Nessuna descrizione.',
         runIdOptional: 'ID esecuzione facoltativo',
         runIdLabel: 'run_id',
         selectedOne: '1 attività selezionata',
         selected: '{count} attività selezionate',
         cancelSelection: 'Annulla la selezione',
+        count: '{count} attività | {count} attività',
+        // I cinque gruppi sono una PARTIZIONE: i numeri accanto fanno il
+        // totale. «In pausa» non è un gruppo — un'attività in pausa resta
+        // pianificata, ed è lì che una persona la cerca.
+        filterLabel: 'Filtra le attività',
         filterAll: 'Tutte',
+        filterTodo: 'Da fare',
+        filterDoing: 'In corso',
+        filterScheduled: 'Pianificate',
+        filterDone: 'Completate',
+        clearFilters: 'Azzera i filtri',
         emptyFiltered: 'Nessuna attività di questo tipo, ma le altre ci sono.',
-        viewGrid: 'Passa alla griglia',
-        viewList: 'Passa alla lista',
+        noMatches: 'Nessun risultato, per ora.',
+        noMatchesBody: 'Prova un’altra parola, oppure togli il filtro.',
+        viewLabel: 'Come si vedono le attività',
+        viewGrid: 'Schede',
+        viewList: 'Lista',
+        sortLabel: 'Ordina le attività',
+        options: 'Opzioni Attività',
+        sortPriority: 'Priorità',
+        sortRecent: 'Più recenti',
+        sortTitle: 'Titolo',
         markDone: 'Segna come fatta',
+        markDoing: 'Segnala in corso',
         reopen: 'Riportala da fare',
+        completeNamed: 'Completa: {title}',
         actionsNamed: 'Azioni per {title}',
         deleteSelected: 'Elimina le selezionate',
         deleteSelectedDescriptionOne: 'Questa attività verrà eliminata dal dispositivo. Non si può annullare.',
         deleteSelectedDescriptionMany: '{count} attività verranno eliminate dal dispositivo. Non si può annullare.',
+        deleteTitle: 'Eliminare questa attività?',
+        deleteDescription: '«{title}» sparisce da questo dispositivo, e non si può recuperare.',
         runIdPlaceholder: 'run_id (facoltativo)',
         add: 'Nuova attività',
-        empty: 'Non ci sono ancora attività: aggiungi la prima qui sopra.',
+        edit: 'Modifica',
+        editTitle: 'Modifica attività',
+        save: 'Salva attività',
+        empty: 'Spazio al prossimo passo.',
+        emptyBody: 'Dai un nome a ciò che vuoi portare a termine.',
         noRun: 'nessuno',
         cycleNamed: 'Cambia stato di {title}',
         deleteNamed: 'Elimina attività {title}',
+        // I punti spuntabili scritti nella descrizione. Qui si spuntano
+        // davvero: nelle note sono un segno, in un'attività sono un'azione.
+        checkState: '{done} di {total} punti spuntati',
+        // U-17 — fermare la ricorrenza senza cancellarla.
+        pause: 'Metti in pausa',
+        resume: 'Riprendi',
+        // La riga che dice quando riparte, sulla scheda e nel dettaglio.
+        scheduleNone: 'Senza pianificazione',
+        scheduleEvery: 'Ogni {minutes} minuti',
+        scheduleDaily: 'Ogni giorno',
+        scheduleWeekly: 'Ogni settimana',
+        // Le proprietà, nella pagina dell'attività.
+        propertyStatus: 'Stato',
+        propertyPriority: 'Priorità',
+        propertyRecurrence: 'Ricorrenza',
+        recurrenceRuns: 'TALOS la esegue da solo all’ora scelta.',
+        recurrenceSetWithEdit: 'Puoi impostarla con Modifica.',
+        instructionLabel: 'Istruzione',
+        instructionNone: 'Nessuna istruzione',
+        notifyOnlyIfChanged: 'Ti avvisa solo se il risultato cambia.',
+        notifyAlways: 'Ti avvisa a ogni esecuzione.',
+        pausedFoot: 'In pausa: non partirà finché non la riprendi.',
+        scheduledFoot: 'Si ripete da sola, anche ad app chiusa.',
+        localFoot: 'Salvata su questo dispositivo.',
+        exportText: 'Esporta testo',
+        exportCopied: 'Attività copiata negli appunti',
+        exportFailed: 'Non è stato possibile esportare l’attività.',
+        priorityHigh: 'Priorità alta',
+        priorityLow: 'Bassa',
+        priorityNormal: 'Normale',
+        priorityHighShort: 'Alta',
         schedule: {
             section: 'Pianificazione',
             enable: 'Falla ripetere da sola',
@@ -2633,6 +3126,20 @@ export const TALOS_IT_MESSAGES = {
             todo: 'da fare',
             doing: 'in corso',
             done: 'completata',
+        },
+        /*
+         * La pastiglia che si legge addosso all'attività: cinque parole, non
+         * tre. `status` qui sopra sono i tre valori del modello e restano
+         * minuscoli perché finiscono dentro una frase; questi sono etichette
+         * che stanno da sole, e includono i due stati che `status` non ha —
+         * «pianificata» (ha una ricorrenza) e «in pausa» (ce l'ha, ferma).
+         */
+        state: {
+            todo: 'Da fare',
+            doing: 'In corso',
+            scheduled: 'Pianificata',
+            paused: 'In pausa',
+            done: 'Completata',
         },
     },
     chats: {
@@ -2669,6 +3176,7 @@ export const TALOS_IT_MESSAGES = {
         startFailed: 'Non è stato possibile avviare la chat: {detail}',
         renameFailed: 'Non è stato possibile rinominare la chat: {detail}',
         deleteFailed: 'Non è stato possibile eliminare la chat: {detail}',
+        archivedToast: 'Chat archiviata',
         archiveFailed: 'Non è stato possibile archiviare la chat: {detail}',
         unarchiveFailed: 'Non è stato possibile ripristinare la chat: {detail}',
         filesRemoveFailedOne: 'Non è stato possibile rimuovere 1 file dalla Libreria.',
@@ -2702,11 +3210,28 @@ export const TALOS_IT_MESSAGES = {
         system: 'Sistema',
         systemDescription: 'Diagnostica, policy, audit e preparazione del backup.',
     },
+    globalSearch: {
+        placeholder: 'Chat, file, note, attività e impostazioni',
+        conversation: 'Conversazione',
+        settingDescription: 'Impostazioni · {description}',
+        results: 'Risultati della ricerca',
+        resultCount: '{count} risultati',
+        searching: 'Ricerca in corso…',
+        empty: 'Nessun risultato',
+        emptyHint: 'Prova una parola della chat o il nome di un’impostazione.',
+        loadFailed: 'Non è stato possibile cercare in tutti i contenuti. Chiudi e riapri la ricerca per riprovare.',
+        messagesFailed: 'Non è stato possibile cercare nei messaggi. Cambia la ricerca per riprovare.',
+        openFailed: 'Non è stato possibile aprire questo risultato. Riprova.',
+    },
     settingsCenter: {
+        allSettings: "Tutte le impostazioni",
+        phoneDescription: "Collegamento al telefono, assistente e scorciatoie",
+        openTasks: "Le attività pianificate esistono già",
+        openDoctor: "Apri Doctor",
         categories: 'Categorie impostazioni',
         talosCategories: 'Categorie impostazioni TALOS',
-        localIdentity: 'Identità del workspace locale',
-        notInstalled: 'Non installato in questa build',
+        localIdentity: "Identità locale e sicurezza",
+        notInstalled: "Non disponibile in questa versione",
         protectedPreferences: 'Preferenze protette',
         detailLabel: 'Impostazioni {tab}',
         availabilityLabel: 'Disponibilità: {tab}',
@@ -2717,33 +3242,43 @@ export const TALOS_IT_MESSAGES = {
             connections: 'Connessioni',
             interface: 'Interfaccia',
             privacy: 'Privacy',
-            unavailable: 'Non in questa build',
+            unavailable: "Non disponibili",
         },
         tabs: {
-            models: { label: 'Modelli', description: 'Chiavi provider, catalogo, e i modelli su questo dispositivo.' },
-            ai_defaults: { label: 'Predefiniti AI', description: 'Preferenze di instradamento per utilità, ricerca e visione.' },
-            search: { label: 'Motore di ricerca', description: 'Quale servizio risponde a una ricerca web, e la sua chiave.' },
-            browser: { label: 'Browser', description: 'Navigazione manuale, policy di interazione e controlli delle prove del nodo attendibile.' },
-            integrations: { label: 'Integrazioni', description: 'Connettori esterni e integrazioni provider.', gate: 'I servizi connettore mobile non sono ancora installati.' },
-            email: { label: 'Email', description: 'Triage email, bozze e invio controllato da policy.', gate: 'Non è configurato alcun connettore email mobile autorizzato.' },
-            reminders: { label: 'Promemoria', description: 'Promemoria locali e canali di consegna.', gate: 'Il worker mobile per i promemoria non è ancora installato.' },
-            appearance: { label: 'Aspetto', description: 'Preferenze per tema, tipografia e movimento.' },
-            voice: { label: 'Voce', description: 'Quale voce legge ad alta voce, a che velocità, e la lingua della dettatura.' },
-            language: { label: 'Lingua', description: 'La lingua usata da menu, impostazioni e controlli di TALOS.' },
-            privacy: { label: 'Privacy e autorizzazioni', description: 'Cosa TALOS può chiedere al dispositivo e cosa può lasciarlo.' },
-            backup: { label: 'Backup e ripristino', description: 'Porta via tutto e rimettilo dove vuoi. Il file lo salvi tu, e resta anche se disinstalli.' },
-            account: { label: 'Account', description: 'Identità workspace locale, blocco app e ripetizione dell’introduzione.' },
-            agent_tools: { label: 'Strumenti agente', description: 'Scegli quali capacità può usare l’agente della chat.' },
-            system: { label: 'Sistema', description: 'Policy, audit e preparazione del backup. I controlli del dispositivo stanno in Diagnostica.', gate: 'I servizi mobile di policy, audit e backup non sono ancora installati. I controlli del dispositivo sono in Diagnostica.' },
+            models: {"label":"Modelli","description":"Servizi, catalogo e modelli sul dispositivo"},
+            ai_defaults: {"label":"Preferenze AI","description":"Tono, visione e contesto della Libreria"},
+            search: {"label":"Motore di ricerca","description":"Sorgente della ricerca e accesso"},
+            browser: {"label":"Browser","description":"Apertura dei link e interazioni"},
+            integrations: {"label":"Integrazioni","description":"Collegamenti a servizi esterni non installati","gate":"I collegamenti ai servizi esterni non sono ancora disponibili su mobile."},
+            email: {"label":"Email","description":"Nessun collegamento email autorizzato","gate":"Non è configurato alcun collegamento email autorizzato."},
+            reminders: {"label":"Promemoria","description":"Canale promemoria separato non installato","gate":"Il servizio dedicato alla consegna dei promemoria non è ancora disponibile. Puoi già gestire le attività pianificate."},
+            appearance: {"label":"Aspetto","description":"Tema, caratteri, barra di scrittura e movimento"},
+            voice: {"label":"Voce","description":"Dettatura, lettura e voci personali"},
+            language: {"label":"Lingua","description":"La lingua dei menu e dei controlli"},
+            privacy: {"label":"Privacy e permessi","description":"Accessi al dispositivo e stato dei consensi"},
+            backup: {"label":"Backup e ripristino","description":"Esporta e ripristina i dati con un file cifrato"},
+            account: {"label":"Account","description":"Spazio personale e blocco app"},
+            agent_tools: {"label":"Strumenti agente","description":"Autonomia, capacità e autorizzazioni"},
+            system: {"label":"Sistema","description":"Regole e registro delle operazioni non disponibili qui","gate":"La gestione delle regole e il registro delle operazioni non sono ancora disponibili qui. I controlli del dispositivo sono in Doctor."},
         },
     },
     agentTools: {
+        approvalDuration: "Durata dell’approvazione",
+        scopeTurn: "Questo messaggio",
+        scopeConversation: "La conversazione, finché attendibile",
+        scopeBody: "L’approvazione per la conversazione scade quando entrano pagine o documenti esterni non attendibili.",
+        scopeSaveFailed: "Non è stato possibile salvare la durata. La scelta precedente resta attiva.",
+        revokeAll: "Revoca autorizzazioni salvate",
+        revokeAllBody: "Vuoi revocare tutte le {count} autorizzazioni salvate? Gli strumenti restano accesi e seguono le regole di autorizzazione che hai scelto.",
+        revokeAllConfirm: "Revoca tutte",
+        noSavedAuthorizations: "Nessuna autorizzazione salvata da revocare.",
+        revokeAllFailed: "Alcune autorizzazioni non sono state revocate. Puoi riprovare per quelle rimaste.",
         autonomousTitle: 'Cosa può fare TALOS in autonomia',
         autonomousBody: 'Il modello può usare strumenti mentre risponde: cercare nella Libreria, leggere un documento o controllare le note. Queste scelte stabiliscono cosa può fare senza fermarsi a chiedere.',
         readThings: 'Leggere i tuoi contenuti',
         writeThings: 'Creare o modificare contenuti',
         outboundThings: 'Inviare dati fuori dal dispositivo',
-        outboundBody: 'La ricerca web e la lettura di pagine inviano fuori dal dispositivo una query o un URL. I record delle fonti vengono anche salvati nella Libreria cifrata, quindi richiedono pure l’autorizzazione “Creare o modificare contenuti”.',
+        outboundBody: "La ricerca web e la lettura di pagine inviano fuori dal dispositivo le parole cercate o l’indirizzo di una pagina. Le fonti vengono anche salvate nella Libreria cifrata, quindi richiedono pure l’autorizzazione “Creare o modificare contenuti”.",
         readPermission: 'Autorizzazione alla lettura',
         writePermission: 'Autorizzazione alla scrittura',
         outboundPermission: 'Autorizzazione a inviare dati fuori dal dispositivo',
@@ -2751,7 +3286,7 @@ export const TALOS_IT_MESSAGES = {
         askEveryTime: 'Chiedi ogni volta',
         neverAllow: 'Non consentire mai',
         intro: 'Uno strumento disattivato non viene inviato al modello e non può essere eseguito.',
-        policyNote: 'Gli strumenti attivi richiedono comunque un modello compatibile, un provider disponibile e le tue regole di lettura, scrittura o uscita dal dispositivo.',
+        policyNote: "Gli strumenti attivi richiedono comunque un modello compatibile, un servizio disponibile e le tue regole di lettura, scrittura o invio fuori dal dispositivo.",
         enabledCount: '{enabled} di {total} attivi',
         enableAria: 'Attiva {tool}',
         saveFailed: 'Non è stato possibile salvare {tool}. L’impostazione precedente è ancora attiva.',
@@ -2806,14 +3341,14 @@ export const TALOS_IT_MESSAGES = {
             tasks_list: { title: 'Elenca attività', description: 'Legge le attività con stato e priorità.' },
             memory_search: { title: 'Cerca nella memoria', description: 'Cerca ciò che hai chiesto esplicitamente a TALOS di ricordare.' },
             time_now: { title: 'Data e ora correnti', description: 'Legge data e ora locali dal dispositivo senza indovinarle.' },
-            web_search: { title: 'Cerca sul web', description: 'Invia una query alla fonte configurata e archivia le prove.' },
+            web_search: {"title":"Cerca sul web","description":"Invia le parole cercate al servizio scelto e salva le fonti."},
             web_read: { title: 'Leggi una pagina web', description: 'Scarica una pagina e archivia una copia del testo leggibile.' },
             document_create: { title: 'Crea un documento', description: 'Crea e verifica un documento per questa conversazione.' },
-            generate_image: { title: 'Genera un’immagine', description: 'Chiede al provider configurato di creare e salvare un’immagine.' },
+            generate_image: {"title":"Genera un’immagine","description":"Chiede al servizio configurato di creare e salvare un’immagine."},
             artifact_create: { title: 'Crea un elemento visivo interattivo', description: 'Scrive un elemento HTML autosufficiente e lo mostra isolato nella chat — un diagramma, un grafico, un piccolo disegno interattivo.' },
             tool_create: { title: 'Crea uno strumento personalizzato', description: 'Aggiunge un nuovo strumento che TALOS può usare da ora in poi, descritto in parole semplici invece che in JSON scritto a mano. Resta spento finché non lo accendi tu.' },
             library_export: { title: 'Salva un file della Libreria', description: 'Salva nella memoria del dispositivo un file scelto dalla Libreria.' },
-            library_context_policy_update: { title: 'Gestisci la policy Libreria', description: 'Consente all’agente di proporre modifiche confermate alla policy Libreria globale, della chat o della singola risposta.' },
+            library_context_policy_update: {"title":"Gestisci il contesto della Libreria","description":"Propone modifiche confermate all’uso della Libreria per tutte le conversazioni, per una chat o per una singola risposta."},
             local_models_search: { title: 'Trova modelli per questo telefono', description: 'Manda le tue parole a huggingface.co ed elenca i modelli che potrebbero girare qui.' },
             local_model_inspect: { title: 'Controlla un modello su questo telefono', description: 'Legge dalla rete l’intestazione di un modello e capisce se gira qui, e quanto veloce.' },
             local_model_download: { title: 'Scarica un modello', description: 'Scarica un modello su questo dispositivo. Chiede sempre, qualunque sia la taglia.' },
@@ -2907,6 +3442,7 @@ export const TALOS_IT_MESSAGES = {
         braveNote: 'Un indice indipendente. È richiesta una carta di credito e Brave offre limiti di spesa. Brave non consente a TALOS di salvare i risultati senza un accordo separato, quindi TALOS apre le fonti usate con web_read prima di salvarle.',
         searxngNote: 'La tua istanza SearXNG: nessuna terza parte vede la query. Basta un container Docker. L’output JSON è disattivato inizialmente; attivalo nelle impostazioni dell’istanza oppure TALOS riceverà una pagina HTML.',
         customNote: 'Qualsiasi altra API di ricerca che restituisca un array “results” al primo livello.',
+        duckduckgoNote: 'Nessuna chiave e nessun account: TALOS legge la pagina dei risultati pubblica di DuckDuckGo. Non è un’API ufficiale: sotto uso intenso può rispondere con un blocco, e allora l’esito lo dice chiaramente, invece di sembrare «nessun risultato». Solo la query lascia questo dispositivo.',
         tavilyKeyLink: 'Registrati o ottieni una chiave API Tavily',
         tavilyOpenFailed: 'Non è stato possibile aprire Tavily. Controlla il browser e riprova.',
         apiKey: 'Chiave API',
@@ -2979,6 +3515,12 @@ export const TALOS_IT_MESSAGES = {
         showTechnicalDetailAria: 'Mostra dettagli tecnici negli errori',
         technicalDetailBody: 'Aggiunge il codice interno accanto al messaggio quando qualcosa fallisce e registra la durata di ogni invio. Utile per segnalare un problema, altrimenti è solo rumore. Ciò che TALOS comunica non cambia.',
         recentIssues: 'Problemi recenti',
+        backendLoadTitle: 'Quali motori entrano davvero',
+        backendLoadBody: 'Prova a caricare una per una le librerie dei motori spedite con l’app e dice quali entrano su questo telefono. Non misura la velocità e non consuma batteria: chiede solo «entra o no».',
+        backendLoadRun: 'Chiedi',
+        backendLoadRunning: 'Sto chiedendo…',
+        backendLoadResult: '{entrati} motori su {provati} entrano su questo telefono',
+        backendLoadNone: 'Nessuna risposta: la sonda non ha potuto rispondere',
         localParityTitle: 'Parità del modello locale',
         localParityBody: 'Esegue prove reali ma senza effetti: testo, falsi richiami, chiamata e risposta di un tool diagnostico, protocollo nascosto e Stop. Non legge memoria, file, rete o dispositivo.',
         localParityRun: 'Verifica',
@@ -2988,6 +3530,22 @@ export const TALOS_IT_MESSAGES = {
         localParityIncomplete: 'Verifica incompleta: {passed} controlli su {total}',
         localParityError: 'La verifica non è terminata ({code}).',
         localParityTransportLabel: 'Trasporto tool',
+        /**
+         * ⛔ Si dice cosa CAMBIA per chi legge, non come funziona dentro.
+         * «Grammatica» e «constrained decoding» non vogliono dire niente a chi
+         * guarda questa schermata: quello che vuole sapere e' se il modello
+         * puo' mettersi a fare cose che non gli ha chiesto.
+         */
+        localParityGrammarHeld: 'Le richieste di questo modello agli strumenti si possono tenere a freno.',
+        /**
+         * ⛔ Rossa, e dice l'esempio vero: l'11/09 alla domanda «come ti
+         * chiami» questo modello ha scaricato sei documenti della Libreria e
+         * ha chiesto di aprire una pagina web. Un avviso senza il caso concreto
+         * si legge come un dettaglio tecnico e si salta.
+         */
+        localParityGrammarLoose: 'Le richieste di questo modello agli strumenti NON si possono tenere a freno: può chiedere di aprire file o pagine che non gli hai chiesto. Ogni azione passa comunque dal tuo permesso.',
+        localParityThinkingOptional: 'Il ragionamento di questo modello si puo\' spegnere: quando e\' spento risponde subito, senza pensare ad alta voce prima.',
+        localParityThinkingAlways: 'Questo modello ragiona SEMPRE prima di rispondere, e non si puo\' spegnere: parte del tempo che aspetti se ne va li\'.',
         localParityTransport: {
             'native-template': 'template GGUF nativo',
             'prompt-json-v1': 'prompt JSON v1',
@@ -3034,6 +3592,11 @@ export const TALOS_IT_MESSAGES = {
         engineTools: 'Strumenti dell’assistente con questo modello',
         recommendedProfile: 'Backend consigliato per questo modello',
         performanceHeadroom: 'Margine CPU/GPU/termico (Android 16)',
+        kernelWorkspaceFiles: 'I file dello spazio di lavoro si vedono',
+        kernelFileSize: 'I file dichiarano la dimensione',
+        kernelWorkspaceRead: 'Lo spazio di lavoro si legge per intero',
+        kernelCatalogue: 'Il catalogo distingue presente da assente',
+        kernelProbe: 'La sonda del kernel del codice',
         nativePlatform: 'nativa ({platform})',
         webPreview: 'anteprima web',
         storageNative: 'SQLCipher nativo',
@@ -3161,6 +3724,15 @@ export const TALOS_IT_MESSAGES = {
             failed: 'Non è riuscita',
             interrupted: 'Interrotta a metà',
         },
+        /**
+         * Il passo è finito e non ha lasciato niente.
+         *
+         * «Fonti raccolte» si scrive solo se le fonti sono sul disco: un passo
+         * concluso senza il suo `resultRef` ha girato, non ha prodotto. Dirlo
+         * uguale agli altri sarebbe la stessa bugia al contrario di quella che
+         * la scheda diceva prima (NN/g, «Designing Empty States», 12/09/2026).
+         */
+        sectionNothingSaved: 'Nessuna fonte salvata',
         stepState: {
             pending: 'in attesa',
             running: 'in corso',
@@ -3171,7 +3743,10 @@ export const TALOS_IT_MESSAGES = {
         openChat: 'Parlane in una chat',
         openingChat: 'Sto aprendo la chat…',
         stepSaved: 'salvato',
-        howItWasBuilt: 'Come è stato costruito',
+        // ⛔ Qui stava `howItWasBuilt`, con lo STESSO testo di `registroTitolo`.
+        // Erano due sezioni della stessa pagina col titolo identico (Pad,
+        // 12/09/2026, foto RC13). Tolta la chiave insieme alla sezione: finché
+        // resta, la seconda intestazione può tornare senza che si veda.
         runningSince: 'In corso da {elapsed}',
         endedAfter: 'Conclusa in {elapsed}',
         sectionsDone: '{done} di {total} sezioni',
@@ -3186,7 +3761,106 @@ export const TALOS_IT_MESSAGES = {
             unfinished: 'Interrotte',
             done: 'Concluse',
             failed: 'Fallite',
+            // ⛔ MB-1 — i tre esiti che dicono «conclusa, ma non regge». Nomi
+            // propri e non sfumature di «fallita»: una ricerca fallita non ha
+            // prodotto niente, queste hanno prodotto e quello che hanno
+            // prodotto non tiene. Sono due situazioni, e due mosse diverse.
+            'senza-rapporto': 'Senza rapporto',
+            'bloccata-dal-permesso': 'Bloccate da un permesso',
+            'giri-esauriti': 'Senza conclusione',
+            // Fase 6 (owner 14/09/2026): in pausa, interrotte, bloccate e senza conclusione in una scheda sola.
+            riprendere: 'Da riprendere',
         },
+        /**
+         * Lo stesso stato, ma di UNA ricerca sola.
+         *
+         * ⛔ Misurato sul Pad il 12/09/2026 (foto RC11): la pastiglia della scheda
+         * leggeva «Interrotte» sopra un dossier solo. Le due cose si chiamano
+         * uguale e non sono la stessa: il filtro conta un insieme — «Interrotte»
+         * sono tutte quelle interrotte — la pastiglia descrive l'oggetto che ha
+         * sotto, e di oggetti ce n'è uno.
+         *
+         * Il plurale è il ripiego di quando il numero NON si sa (Emplifi Soul
+         * Design System, «Singular versus plural», letto 12/09/2026). Qui si sa:
+         * è uno. Quindi qui si declina, e i filtri restano al plurale.
+         *
+         * ⛔ Nessun `all`: «Tutte» è una voce del filtro, e una ricerca sola non
+         * è mai in quello stato. Una chiave in più sarebbe un invito a usarla.
+         */
+        bucketOne: {
+            cancelled: 'Annullata',
+            paused: 'In pausa',
+            running: 'In corso',
+            unfinished: 'Interrotta',
+            done: 'Conclusa',
+            failed: 'Fallita',
+            'senza-rapporto': 'Senza rapporto',
+            'bloccata-dal-permesso': 'Bloccata da un permesso',
+            'giri-esauriti': 'Senza conclusione',
+        },
+        /**
+         * Che cosa è successo, e che cosa si può fare.
+         *
+         * Due frasi separate perché sono due fatti: la diagnosi vale sempre, la
+         * mossa solo quando la ricerca si può davvero riprendere. Unirle
+         * produrrebbe un invito a premere un pulsante che in metà dei casi non
+         * c'è.
+         */
+        completion: {
+            'senza-rapporto': {
+                what: 'Il rapporto è stato scritto, ma non si rilegge.',
+                do: 'Riprendi: il rapporto va riscritto.',
+            },
+            'bloccata-dal-permesso': {
+                what: 'Si è fermata su un permesso negato, senza scrivere il rapporto.',
+                do: 'Riprendi con i permessi giusti.',
+            },
+            'giri-esauriti': {
+                what: 'Si è fermata prima di arrivare a scrivere il rapporto.',
+                do: 'Riprendi: i giri sono finiti.',
+            },
+        },
+        subtitle: 'Una domanda. Un dossier da approfondire.',
+        dossierType: 'Dossier',
+        countLabel: '{count} dossier',
+        // Erano «5p» e «10 / 3m» (foto RE3, 12/09/2026): abbreviazioni da decifrare.
+        planPages: '{count} pagine',
+        depthChip: '{sources} pagine · {minutes} min',
+        countFiltered: '{count} dossier corrispondenti',
+        fromReport: 'Dal rapporto',
+        fromPlan: 'Dal piano',
+        planPending: 'Le linee di ricerca non sono ancora state preparate.',
+        sourcesPending: 'Fonti ancora da raccogliere',
+        /**
+         * Raccolte, ma non c'è un rapporto che le elenchi.
+         *
+         * ⛔ Misurato sul Pad il 12/09/2026 (foto RC12): una corsa con tutte le
+         * linee `b*:search` concluse e la sintesi caduta mostrava sulla scheda
+         * «Fonti ancora da raccogliere», mentre la pagina del rapporto diceva
+         * «Fonti raccolte» sulle stesse linee. La scheda guardava l'elenco del
+         * rapporto — che non c'è — e ne deduceva che la raccolta non fosse mai
+         * avvenuta: è lo stato vuoto che dichiara «niente» mentre il dato esiste
+         * (NN/g, «Designing Empty States in Complex Applications», letto
+         * 12/09/2026). Ora le due frasi escono dalla stessa funzione.
+         */
+        sourcesGathered: 'Fonti raccolte, non ancora nel rapporto',
+        sourcesOne: '1 fonte',
+        sourcesMany: '{count} fonti',
+        claimsOne: '1 riscontro',
+        claimsMany: '{count} riscontri',
+        branchesOne: '1 linea di ricerca',
+        branchesMany: '{count} linee di ricerca',
+        openSource: 'Apri la fonte {title}',
+        viewLabel: 'Come mostrare le ricerche',
+        viewList: 'Elenco',
+        viewGrid: 'Schede',
+        sortLabel: 'Ordina le ricerche',
+        options: 'Opzioni Ricerca',
+        showLabel: 'Mostra',
+        sortRecent: 'Più recenti',
+        sortTitle: 'Per titolo',
+        clearFilters: 'Togli i filtri',
+        noMatchesBody: 'Cambia le parole cercate, oppure torna a guardarle tutte.',
         showAsGrid: 'Mostra a griglia',
         showAsList: 'Mostra in elenco',
         emptyTitle: 'Nessuna ricerca, per ora.',
@@ -3376,7 +4050,7 @@ export const TALOS_IT_MESSAGES = {
         //   persona abbia visto, quindi il numero non distingue nulla — è solo
         //   una parola in più nel titolo della stazione.
         deepResearchTitle: 'Ricerca approfondita',
-        settingsCenterTitle: 'Centro impostazioni',
+        settingsCenterTitle: 'Impostazioni',
         tasksEmpty: 'Nessuna attività.',
         newTask: 'Nuova attività',
         notesEmpty: 'Nessuna nota.',
@@ -3473,6 +4147,8 @@ export const TALOS_IT_MESSAGES = {
         expandHarnessSessions: 'Espandi sessioni Codice',
     },
     shell: {
+        searchTalos: 'Cerca in Talos',
+        newChatOrSession: 'Nuova chat o sessione',
         sidebarDescription: 'Chat, strumenti e impostazioni',
         allChats: 'Tutte le chat',
         recentChats: 'Chat recenti',
