@@ -53,6 +53,8 @@ export function planTranscriptVirtualWindow<T>(input:{
   offset:number;
   rowBudget:number;
   heightOf:(item:T,index:number)=>number;
+  revealIndex?:number;
+  legacyPageSize?:number;
 }):TranscriptVirtualWindow<T>{
   const {items,heightOf}=input;
   const offset=Number.isFinite(input.offset)?Math.max(0,Math.floor(input.offset)):0;
@@ -69,6 +71,20 @@ export function planTranscriptVirtualWindow<T>(input:{
     start=index;
     used+=height;
     if(used>=budget)break;
+  }
+
+  const revealIndex=Number.isFinite(input.revealIndex)?Math.floor(input.revealIndex!):-1;
+  const legacyPageSize=Number.isFinite(input.legacyPageSize)?Math.max(1,Math.floor(input.legacyPageSize!)):0;
+  if(revealIndex>=0&&revealIndex<start&&revealIndex<end&&legacyPageSize>0){
+    const legacyStart=Math.max(0,end-legacyPageSize);
+    if(revealIndex>=legacyStart){
+      let legacyRows=0;
+      for(let index=legacyStart;index<end;index++){
+        const raw=Number(heightOf(items[index]!,index));
+        legacyRows+=Number.isFinite(raw)&&raw>0?Math.max(1,Math.ceil(raw)):1;
+      }
+      return{start:legacyStart,end,rows:items.slice(legacyStart,end),estimatedRows:legacyRows};
+    }
   }
   return{start,end,rows:items.slice(start,end),estimatedRows:used};
 }
