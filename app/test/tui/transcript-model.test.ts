@@ -58,19 +58,19 @@ test('M4-A RED — adapter retains stream starts roles run ids and persisted eve
   const adapter=createTuiEventAdapter([]);
   adapter.bindSession('s1');
   assert.deepEqual(adapter.translate({type:'TextMessageStart',messageId:'m1',role:'assistant',_sequenza:11}),{
-    type:'message.started',messageId:'m1',role:'assistant',eventId:'seq:11',
+    type:'message.started',messageId:'m1',role:'assistant',eventId:'talos:s1:native:11',
   });
   assert.deepEqual(adapter.translate({type:'ReasoningMessageStart',messageId:'q1',_sequenza:12}),{
-    type:'reasoning.started',messageId:'q1',eventId:'seq:12',
+    type:'reasoning.started',messageId:'q1',eventId:'talos:s1:native:12',
   });
   assert.deepEqual(adapter.translate({type:'RunStarted',sessionId:'s1',threadId:'thread',runId:'r1',_sequenza:10}),{
-    type:'run.started',sessionId:'s1',runId:'r1',eventId:'seq:10',
+    type:'run.started',sessionId:'s1',runId:'r1',eventId:'talos:s1:native:10',
   });
   assert.deepEqual(adapter.translate({type:'RuntimeFallback',reason:'provider down',_sequenza:13}),{
-    type:'warning',message:'provider down',eventId:'seq:13',
+    type:'warning',message:'provider down',eventId:'talos:s1:native:13',
   });
   assert.deepEqual(adapter.translate({type:'RunFinished',runId:'r1',_sequenza:14}),{
-    type:'run.completed',runId:'r1',eventId:'seq:14',
+    type:'run.completed',runId:'r1',eventId:'talos:s1:native:14',
   });
 });
 
