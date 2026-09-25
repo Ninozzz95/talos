@@ -6,11 +6,15 @@
  * Archive/Unarchive, Delete. Manual drag-reorder is deferred to an explicit
  * mode (the sort_index model stays).
  */
-import { computed, nextTick, ref } from 'vue'
+import TalosThemedCheckbox from '@/components/talos/ui/TalosThemedCheckbox.vue'
+import { computed, nextTick, onMounted, ref, unref } from 'vue'
 import { useRouter } from 'vue-router'
 import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import { useTalosI18n } from '@/i18n'
-import { Check, ChevronDown, LoaderCircle, MessageSquarePlus, Search, Trash2, X } from '@lucide/vue'
+import { Check, ChevronDown, FileText, LoaderCircle, MessageSquarePlus, Paperclip, Plus, Search, SlidersHorizontal, Trash2, X } from '@lucide/vue'
+import TalosMobileNovitaChat from '@/components/chat/TalosMobileNovitaChat.vue'
+import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
+import { talosCaricaNovita, talosChatNuova } from '@/stores/chatNovita'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileDeleteChatDialog from '@/components/shell/TalosMobileDeleteChatDialog.vue'
@@ -20,7 +24,34 @@ import {
     talosCleanupCount,
     type TalosSessionCleanupPlan,
 } from '@/lib/chat/sessionCleanup'
-import TalosMobileNewChatFab from '@/components/shell/TalosMobileNewChatFab.vue'
+import TalosMobileStationOptionsSheet from '@/components/talos/ui/TalosMobileStationOptionsSheet.vue'
+import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
+import { useTalosSlidingIndicator } from '@/composables/useTalosSlidingIndicator'
+import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
+import { talosShortModelLabel } from '@/lib/models/modelLabel'
+import {
+    TALOS_FACETTE_CHAT_NESSUNA,
+    TALOS_FILTRI_STATO_CHAT,
+    talosFacetteAttive,
+    talosModelloDellaChat,
+    talosNomeCortoModello,
+    talosOrdinaChat,
+    talosPassaFacette,
+    talosSessioniConDocumentiGenerati,
+    talosStatoNelFiltro,
+    type TalosContenutoChat,
+    type TalosFacetteChat,
+    type TalosFiltroStatoChat,
+    type TalosOrdineChat,
+    type TalosPeriodoChat,
+} from '@/lib/chat/filtriElencoChat'
+import TalosMobileStatoChat, {
+    TALOS_STATO_CHAT_CHIAVE,
+    talosStatoChatParla,
+    talosStatoDellaChat,
+} from '@/components/chat/TalosMobileStatoChat.vue'
+import type { TalosStatoChat } from '@/lib/chat/statoChat'
+import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import { useChatController } from '@/stores/chatController'
 import { talosDaIntitolare } from '@/stores/chat'
 import { archivedChatSessions, orderChatSessions } from '@/lib/chatListGestures'
@@ -66,17 +97,180 @@ function notCodice<T extends { metadata?: Record<string, unknown> }>(sessions: r
     return sessions.filter((session) => session.metadata?.codice !== true)
 }
 const ordered = computed(() => orderChatSessions(notCodice(controller.chat.history)))
-const filtered = computed(() => {
-    const needle = normalizeTalosLibrarySearchText(query.value)
-    if (!needle) return ordered.value
-    return ordered.value.filter(matchesSession)
+
+/*
+ * ⭐ A3-84 (owner 24/09 sera; decisioni 25/09, `.claude/ricerche/2026-09-25-elenco-chat-grammatica-stazioni-10x4.md`)
+ * — la grammatica delle stazioni: schede di STATO in alto, e nel foglio Opzioni periodo, contenuto, modello e ordine.
+ * La logica è pura in `lib/chat/filtriElencoChat.ts`; qui restano le fonti e la resa.
+ *   - i numeri delle schede contano il foglio ma non la ricerca (owner: «contano il foglio»; la ricerca non li
+ *     cambia, come nelle altre stazioni);
+ *   - ricerca, filtri e ordine valgono anche per le archiviate (owner: «restano in fondo»).
+ */
+const { isTablet } = useTalosTabletLayout()
+const filtroStato = ref<TalosFiltroStatoChat>('tutte')
+const facette = ref<TalosFacetteChat>({ ...TALOS_FACETTE_CHAT_NESSUNA })
+const ordine = ref<TalosOrdineChat>('attivita')
+const optionsOpen = ref(false)
+
+/*
+ * «Con allegati»: UNA lettura al repository (le chat con almeno un allegato), all'apertura e ogni volta che si sceglie
+ * il filtro — un allegato mandato un minuto fa deve già contare. Se la lettura fallisce il filtro lo DICE: una lista
+ * vuota muta si leggerebbe come «nessuna chat ha allegati», che è un'altra cosa.
+ */
+const conAllegati = ref<ReadonlySet<string>>(new Set())
+const allegatiNonLetti = ref(false)
+async function leggiAllegati(): Promise<void> {
+    try {
+        conAllegati.value = new Set(await controller.listSessionIdsWithAttachments())
+        allegatiNonLetti.value = false
+    } catch {
+        allegatiNonLetti.value = true
+    }
+}
+/*
+ * All'apertura si leggono le fonti di ciò che la riga dice (A3-84, seconda parte): le chat con allegati, la Libreria
+ * per i documenti generati, e il registro di «nuova risposta».
+ */
+onMounted(() => { void leggiAllegati(); void leggiGenerati(); void talosCaricaNovita() })
+/*
+ * «Con documenti generati»: dal vault del controller, con la regola della pulizia alla cancellazione.
+ * ⛔ ELENCO-REG-01 (Pad, 25/09/2026 10:08): quel vault si legge solo quando serve (galleria, Contesto, caricamenti) e
+ * appena aperta l'app è VUOTO — il filtro diceva «0 chat» mentre la chat su Genova aveva salvato un documento.
+ * Sceglierlo rilegge la Libreria; se la lettura fallisce, il filtro lo dice.
+ */
+const generatiNonLetti = ref(false)
+async function leggiGenerati(): Promise<void> {
+    await controller.attachments?.refreshVault?.().catch(() => {})
+    generatiNonLetti.value = Boolean(unref(controller.attachments?.vaultError))
+}
+const contenutoNonLetto = computed(() => (facette.value.contenuto === 'allegati' && allegatiNonLetti.value)
+    || (facette.value.contenuto === 'generati' && generatiNonLetti.value))
+const conGenerati = computed(() => talosSessioniConDocumentiGenerati(controller.attachments?.vaultFiles ?? []))
+const fonti = computed(() => ({ conAllegati: conAllegati.value, conGenerati: conGenerati.value, adesso: new Date() }))
+
+function cercata(session: TalosLocalChatSession): boolean {
+    return !normalizeTalosLibrarySearchText(query.value) || matchesSession(session)
+}
+function nelFoglio(session: TalosLocalChatSession): boolean {
+    return talosPassaFacette(session, facette.value, fonti.value)
+}
+function nellaScheda(session: TalosLocalChatSession): boolean {
+    return talosStatoNelFiltro(statoDi(session), filtroStato.value)
+}
+function ordina(sessioni: readonly TalosLocalChatSession[]): TalosLocalChatSession[] {
+    return talosOrdinaChat(sessioni, ordine.value, sessionTitle)
+}
+const filtered = computed(() => ordina(ordered.value.filter((session) => nelFoglio(session) && nellaScheda(session) && cercata(session))))
+const archived = computed(() => ordina(archivedChatSessions(notCodice(controller.chat.history))
+    .filter((session) => nelFoglio(session) && nellaScheda(session) && cercata(session))))
+
+const CHIAVE_SCHEDA: Readonly<Record<TalosFiltroStatoChat, string>> = {
+    tutte: 'chats.filter.all',
+    'in-corso': 'chats.filter.running',
+    'in-coda': 'chats.filter.queued',
+    'in-pausa': 'chats.filter.paused',
+    concluse: 'chats.filter.finished',
+}
+const schede = computed(() => {
+    const nelFoglioAttive = ordered.value.filter(nelFoglio)
+    return TALOS_FILTRI_STATO_CHAT.map((id) => ({
+        id,
+        label: t(CHIAVE_SCHEDA[id]),
+        count: id === 'tutte' ? nelFoglioAttive.length : nelFoglioAttive.filter((session) => talosStatoNelFiltro(statoDi(session), id)).length,
+    }))
 })
-const archived = computed(() => {
-    const needle = normalizeTalosLibrarySearchText(query.value)
-    const entries = archivedChatSessions(notCodice(controller.chat.history))
-    if (!needle) return entries
-    return entries.filter(matchesSession)
+const gruppoSchede = ref<HTMLElement | null>(null)
+useTalosSlidingIndicator(gruppoSchede, filtroStato)
+const onda = useTalosTouchWave()
+/** Le frecce spostano la scheda scelta, come un radiogroup vero (WAI-ARIA APG, «Radio Group»). */
+function frecciaSchede(event: KeyboardEvent): void {
+    const passo = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0
+    if (passo === 0) return
+    event.preventDefault()
+    const indice = TALOS_FILTRI_STATO_CHAT.indexOf(filtroStato.value)
+    const prossimo = TALOS_FILTRI_STATO_CHAT[(indice + passo + TALOS_FILTRI_STATO_CHAT.length) % TALOS_FILTRI_STATO_CHAT.length]!
+    filtroStato.value = prossimo
+    void nextTick(() => gruppoSchede.value?.querySelector<HTMLElement>(`[data-testid="talos-chats-filter-${prossimo}"]`)?.focus())
+}
+
+const facetteAccese = computed(() => talosFacetteAttive(facette.value))
+/** Un filtro qualsiasi (scheda o foglio) nasconde qualcosa: è l'assenza che si può annullare. */
+const filtrando = computed(() => filtroStato.value !== 'tutte' || facetteAccese.value > 0)
+const countLabel = computed(() => t('chats.count', { count: filtered.value.length }))
+
+const sortOptions = computed(() => [
+    { value: 'attivita', label: t('chats.sort.activity') },
+    { value: 'creazione', label: t('chats.sort.created') },
+    { value: 'titolo', label: t('chats.sort.title') },
+])
+/** I modelli delle ULTIME RISPOSTE (owner, 25/09), col nome del profilo e, se il profilo non c'è più, l'id accorciato. */
+const modelliPresenti = computed(() => {
+    const ids = new Set<string>()
+    for (const session of notCodice(controller.chat.history)) {
+        const id = talosModelloDellaChat(session)
+        if (id) ids.add(id)
+    }
+    return [...ids]
+        .map((id) => ({ value: id, label: nomeDelModello(id) }))
+        .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
 })
+const TUTTI_I_MODELLI = 'tutti'
+/*
+ * A3-84 seconda parte — il modello dell'ultima risposta nella riga: il logo del fornitore e il nome corto (owner,
+ * 25/09). Lo stesso nome nel foglio, così lo stesso modello non ha due nomi. Senza profilo (modello tolto dopo aver
+ * risposto) resta l'id accorciato e niente logo.
+ */
+const profiliPerId = computed(() => new Map((controller.profiles?.value ?? []).map((profilo) => [profilo.id, profilo])))
+function nomeDelModello(id: string): string {
+    const profilo = profiliPerId.value.get(id)
+    return profilo ? talosNomeCortoModello(profilo.display_name) : talosShortModelLabel(id)
+}
+function modelloDellaRiga(session: TalosLocalChatSession): { nome: string, fornitore: string | null } | null {
+    const id = talosModelloDellaChat(session)
+    if (!id) return null
+    return { nome: nomeDelModello(id), fornitore: profiliPerId.value.get(id)?.provider ?? null }
+}
+const gruppiFoglio = computed(() => [
+    {
+        id: 'periodo', label: t('chats.periodLabel'), value: facette.value.periodo,
+        options: [
+            { value: 'sempre', label: t('chats.period.always') },
+            { value: 'oggi', label: t('chats.period.today') },
+            { value: '7g', label: t('chats.period.last7') },
+            { value: '30g', label: t('chats.period.last30') },
+            { value: 'oltre-30g', label: t('chats.period.older') },
+        ],
+    },
+    {
+        id: 'contenuto', label: t('chats.contentLabel'), value: facette.value.contenuto,
+        options: [
+            { value: 'tutte', label: t('chats.content.all') },
+            { value: 'allegati', label: t('chats.content.attachments') },
+            { value: 'generati', label: t('chats.content.generated') },
+        ],
+    },
+    {
+        id: 'modello', label: t('chats.modelLabel'), value: facette.value.modello ?? TUTTI_I_MODELLI,
+        options: [{ value: TUTTI_I_MODELLI, label: t('chats.allModels') }, ...modelliPresenti.value],
+    },
+])
+function impostaGruppo(id: string, value: string): void {
+    if (id === 'periodo') facette.value = { ...facette.value, periodo: value as TalosPeriodoChat }
+    else if (id === 'contenuto') {
+        facette.value = { ...facette.value, contenuto: value as TalosContenutoChat }
+        if (value === 'allegati') void leggiAllegati()
+        else if (value === 'generati') void leggiGenerati()
+    } else if (id === 'modello') facette.value = { ...facette.value, modello: value === TUTTI_I_MODELLI ? null : value }
+}
+function azzeraFoglio(): void {
+    facette.value = { ...TALOS_FACETTE_CHAT_NESSUNA }
+}
+/** La via d'uscita dello stato vuoto «i filtri le nascondono»: scheda, foglio e ricerca tornano a «tutte». */
+function azzeraFiltri(): void {
+    filtroStato.value = 'tutte'
+    azzeraFoglio()
+    query.value = ''
+}
 const showArchived = ref(false)
 const relativeTimeLabels = computed(() => ({
     justNow: t('chat.justNow'),
@@ -100,6 +294,32 @@ function updatedAt(value: string): string {
 }
 
 /**
+ * ⭐ B3 / F4-B (parità desktop A1-01) — lo stato della riga, dalle fonti del controller
+ * (`talosStatoDellaChat`, la stessa funzione per ogni elenco). Si calcola nel template
+ * a ogni resa: legge stato reattivo (invio, code, permessi), quindi la riga cambia da
+ * sola quando un giro parte o finisce.
+ */
+function statoDi(session: TalosLocalChatSession): TalosStatoChat {
+    return talosStatoDellaChat(controller, session)
+}
+/**
+ * Il nome della riga quando lo stato parla: «titolo, stato» — il titolo PRIMA, perché
+ * il nome accessibile deve cominciare con ciò che si vede (WCAG 2.5.3 «Label in Name»).
+ * Quando tace (`conclusa`/`vuota`) nessun `aria-label`: il nome resta quello di sempre,
+ * preso dal contenuto del pulsante.
+ */
+function nomeDellaRiga(session: TalosLocalChatSession): string | undefined {
+    const stato = statoDi(session)
+    // A3-84 seconda parte: anche «nuova risposta» sta nel nome, dopo lo stato — si sente quello che si vede.
+    const parti = [
+        ...(talosStatoChatParla(stato) ? [t(TALOS_STATO_CHAT_CHIAVE[stato] ?? '')] : []),
+        ...(talosChatNuova(session) ? [t('chats.newReply')] : []),
+    ]
+    if (parti.length === 0) return undefined
+    return t('chats.status.rowLabel', { title: sessionTitle(session), status: parti.join(', ') })
+}
+
+/**
  * ⛔⛔ SIDEBAR-PIATTA-01 — venti righe uguali, tutte «1 h fa».
  *
  * MISURATO il 2026-08-20, provando i modelli locali: venti chat di prova, e
@@ -111,11 +331,15 @@ function updatedAt(value: string): string {
  * mezzanotte — l'unico punto in cui questo codice può sbagliare, e quello
  * che si nota solo di notte.
  */
-const fasce = computed(() => talosChatDateBuckets(
-    filtered.value,
-    (session) => session.updated_at,
-    new Date(),
-))
+const fasce = computed(() => {
+    // A3-84: con l'ordine per titolo le fasce del giorno non dicono più niente — una lista sola, senza insegne.
+    if (ordine.value === 'titolo') return [{ bucket: 'nessuna' as const, monthKey: null, items: filtered.value }]
+    return talosChatDateBuckets(filtered.value, dataDellOrdine, new Date())
+})
+/** La data che ordina, raggruppa e si legge sulla riga: la creazione se si ordina per creazione, se no l'attività. */
+function dataDellOrdine(session: TalosLocalChatSession): string | null | undefined {
+    return ordine.value === 'creazione' ? session.created_at : session.updated_at
+}
 
 /**
  * Il titolo di una fascia.
@@ -139,6 +363,12 @@ const fasce = computed(() => talosChatDateBuckets(
  */
 function quandoInFascia(bucket: string, iso: string | null | undefined): string {
     return chatRowWhenInBucket(bucket, iso, locale.value, updatedAt)
+}
+/** L'ora della riga: nella fascia l'ora o la data; senza fasce (per titolo) il tempo relativo, come le archiviate. */
+function quandoDellaRiga(bucket: string, session: TalosLocalChatSession): string {
+    const iso = dataDellOrdine(session)
+    if (!iso) return ''
+    return bucket === 'nessuna' ? updatedAt(iso) : quandoInFascia(bucket, iso)
 }
 
 function titoloFascia(gruppo: { bucket: string, monthKey: string | null }): string {
@@ -496,7 +726,36 @@ function act(
          header height (single-class specificity tie — stylesheet order wins),
          clipping the last chat row behind the shell's overflow-hidden. -->
     <div class="relative flex flex-col" :class="props.embedded ? 'min-h-0' : 'min-h-full'" data-testid="talos-chats-screen">
-        <div class="flex items-center gap-2 px-4 pt-3">
+        <!-- ⭐ A3-84 — che posto è questo, come nelle stazioni (Memoria, Note): il titolo e una riga sola che dice cosa
+             c'è e come si agisce. Nel pannello del tablet no: il pannello ha già la sua intestazione (owner, 25/09). -->
+        <header v-if="!props.embedded" class="px-[var(--talos-space-page)] pt-[var(--talos-space-section)]">
+            <div class="flex items-center justify-between gap-[var(--talos-space-section)]">
+                <h1 :class="['font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]', isTablet ? 'text-3xl' : 'text-2xl']">
+                    {{ t('navigation.chats') }}
+                </h1>
+                <!-- Sul telefono l'azione principale sta accanto al titolo (owner 14/09 per le stazioni; 25/09 per le
+                     chat, dove prende il posto del pulsante flottante). -->
+                <Button
+                    v-if="!isTablet"
+                    type="button"
+                    data-testid="talos-chats-new"
+                    :aria-label="t('chat.newChat')"
+                    class="talos-pressable talos-wave-host size-12 shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] p-0 text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)]"
+                    @click="newChat"
+                    @pointerdown="onda.onPointerDown"
+                >
+                    <Plus class="size-5" aria-hidden="true" />
+                </Button>
+            </div>
+            <p data-testid="talos-chats-subtitle" class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
+                {{ t('chats.subtitle') }}
+            </p>
+        </header>
+
+        <div
+            class="flex items-stretch gap-[var(--talos-space-inline)]"
+            :class="props.embedded ? 'px-4 pt-3' : 'mt-[var(--talos-space-section)] px-[var(--talos-space-page)]'"
+        >
             <div class="relative min-w-0 flex-1">
                 <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
                 <input
@@ -505,9 +764,44 @@ function act(
                     type="search"
                     :aria-label="t('chats.search')"
                     :placeholder="t('chats.search')"
-                    class="min-h-touch w-full rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                    class="min-h-touch w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 >
             </div>
+            <!-- Il foglio Opzioni delle stazioni. Il numero dice quanti filtri del foglio sono accesi: una lista più
+                 corta del solito deve dire da sé perché (LibreChat PR #16246, 23/09/2026). -->
+            <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                data-testid="talos-chats-options"
+                :aria-label="facetteAccese > 0 ? t('chats.optionsActive', { count: facetteAccese }) : t('chats.options')"
+                aria-haspopup="dialog"
+                :aria-expanded="optionsOpen"
+                class="relative min-h-touch min-w-touch shrink-0 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)]"
+                @click="optionsOpen = true"
+            >
+                <SlidersHorizontal class="size-5" aria-hidden="true" />
+                <span
+                    v-if="facetteAccese > 0"
+                    data-testid="talos-chats-options-active"
+                    aria-hidden="true"
+                    class="absolute -right-1.5 -top-1.5 grid min-h-[var(--talos-space-section)] min-w-[var(--talos-space-section)] place-items-center rounded-full bg-[var(--talos-accent)] px-[calc(var(--talos-space-inline)/2)] text-3xs font-semibold tabular-nums text-[var(--talos-accent-contrast)]"
+                >{{ facetteAccese }}</span>
+            </Button>
+            <!-- Sul tablet a tutta pagina «Nuova chat» con l'etichetta, nella riga degli strumenti (owner 13/09 per le
+                 stazioni). -->
+            <Button
+                v-if="!props.embedded && isTablet"
+                type="button"
+                data-testid="talos-chats-new"
+                :aria-label="t('chat.newChat')"
+                class="talos-pressable talos-wave-host min-h-touch shrink-0 gap-2 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-5 text-sm font-medium text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)]"
+                @click="newChat"
+                @pointerdown="onda.onPointerDown"
+            >
+                <Plus class="size-5" aria-hidden="true" />
+                <span>{{ t('chat.newChat') }}</span>
+            </Button>
             <!-- Owner 2026-07-27 added a header button here because holding a
                  row to select went unnoticed. Owner 2026-08-22, reversing that:
                  the icon costs too much header space and hold-to-select (the
@@ -529,6 +823,68 @@ function act(
                 {{ t('chats.newShort') }}
             </Button>
         </div>
+
+        <!-- ⭐ A3-84 — le schede di stato, con quante chat ha ciascuna (i numeri contano il foglio, non la ricerca).
+             Un radiogroup come nelle stazioni: sono alternative, e l'indicatore SCIVOLA da dov'era. -->
+        <div
+            ref="gruppoSchede"
+            role="radiogroup"
+            :aria-label="t('chats.filterLabel')"
+            data-testid="talos-chats-filters"
+            class="mt-[var(--talos-space-card)] flex min-h-touch items-center gap-[var(--talos-space-inline)] overflow-x-auto border-b border-[var(--talos-border)] [scrollbar-width:none]"
+            :class="props.embedded ? 'mx-4' : 'mx-[var(--talos-space-page)]'"
+            @keydown="frecciaSchede"
+        >
+            <button
+                v-for="scheda in schede"
+                :key="scheda.id"
+                type="button"
+                role="radio"
+                :aria-checked="filtroStato === scheda.id"
+                :tabindex="filtroStato === scheda.id ? 0 : -1"
+                :data-testid="`talos-chats-filter-${scheda.id}`"
+                :class="[
+                    'talos-pressable talos-wave-host relative inline-flex min-h-touch shrink-0 items-center gap-[var(--talos-space-inline)] whitespace-nowrap rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-xs',
+                    filtroStato === scheda.id ? 'text-[var(--talos-text)]' : 'text-[var(--talos-muted)]',
+                ]"
+                @click="filtroStato = scheda.id"
+                @pointerdown="onda.onPointerDown"
+            >
+                <span>{{ scheda.label }}</span>
+                <small class="text-2xs tabular-nums">{{ scheda.count }}</small>
+                <span
+                    v-if="filtroStato === scheda.id"
+                    data-talos-indicator
+                    aria-hidden="true"
+                    class="talos-calm-indicator absolute bottom-0 left-[var(--talos-space-control)] right-[var(--talos-space-control)] h-[2px] rounded-full bg-[var(--talos-accent)]"
+                />
+            </button>
+        </div>
+        <div
+            class="flex min-h-touch items-center text-xs text-[var(--talos-muted)]"
+            :class="props.embedded ? 'px-5' : 'px-[var(--talos-space-page)]'"
+        >
+            <span role="status" aria-live="polite" data-testid="talos-chats-count">{{ countLabel }}</span>
+        </div>
+        <p v-if="contenutoNonLetto" role="alert" data-testid="talos-chats-content-failed" class="px-5 pb-2 text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">
+            {{ t('chats.contentReadFailed') }}
+        </p>
+
+        <TalosMobileStationOptionsSheet
+            v-if="optionsOpen"
+            :title="t('chats.options')"
+            test-id-prefix="talos-chats"
+            :sort-label="t('chats.sortLabel')"
+            :sort-options="sortOptions"
+            :sort="ordine"
+            :groups="gruppiFoglio"
+            :reset-label="t('chats.reset')"
+            :resettable="facetteAccese > 0"
+            @update:sort="(value: string) => ordine = value as TalosOrdineChat"
+            @update:group="impostaGruppo"
+            @reset="azzeraFoglio"
+            @close="optionsOpen = false"
+        />
 
         <!-- Selection bar: replaces the hint while the mode is on, so the screen
              has ONE meaning at a time. -->
@@ -553,7 +909,7 @@ function act(
                 @click="bulkDeleteOpen = true"
             ><Trash2 class="size-4" aria-hidden="true" /></Button>
         </div>
-        <p v-else class="px-5 pt-2 text-2xs text-[var(--talos-muted)]">{{ t('chats.holdForActions') }}</p>
+        <p v-else-if="props.embedded" class="px-5 pt-2 text-2xs text-[var(--talos-muted)]">{{ t('chats.holdForActions') }}</p>
 
         <p
             v-if="actionError && renameTarget === null && deleteTarget === null"
@@ -563,7 +919,26 @@ function act(
 
         <p v-if="messageSearch.failed.value" role="alert" class="px-5 py-2 text-sm text-[var(--talos-muted)]">{{ t('globalSearch.messagesFailed') }}</p>
         <p v-if="messageSearch.pending.value" role="status" class="px-5 py-2 text-sm text-[var(--talos-muted)]">{{ t('globalSearch.searching') }}</p>
-        <p v-if="!filtered.length && !archived.length && !messageSearch.pending.value && !messageSearch.failed.value" class="px-5 py-6 text-sm text-[var(--talos-muted)]">
+        <!-- A3-84 — due assenze diverse, due frasi diverse (come le stazioni): «non ce ne sono» e «i filtri le
+             nascondono». Solo la seconda si può annullare, e il pulsante è quello che la ripara. -->
+        <div
+            v-if="filtrando && !filtered.length && !archived.length && !messageSearch.pending.value && !messageSearch.failed.value"
+            data-testid="talos-chats-no-matches"
+            role="status"
+            class="flex flex-col items-center gap-[var(--talos-space-inline)] px-5 py-[calc(var(--talos-space-page)*2)] text-center"
+        >
+            <h2 class="max-w-[27ch] text-base font-medium leading-[1.5] text-[var(--talos-text)]">{{ t('chats.noFilterMatches') }}</h2>
+            <p class="max-w-[38ch] text-sm leading-[1.7] text-[var(--talos-muted)]">{{ t('chats.noFilterMatchesBody') }}</p>
+            <Button
+                type="button"
+                data-testid="talos-chats-clear-filters"
+                class="talos-pressable mt-[var(--talos-space-section)] min-h-touch rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-5 text-xs text-[var(--talos-accent-text)]"
+                @click="azzeraFiltri"
+            >
+                {{ t('chats.clearFilters') }}
+            </Button>
+        </div>
+        <p v-else-if="!filtered.length && !archived.length && !messageSearch.pending.value && !messageSearch.failed.value" class="px-5 py-6 text-sm text-[var(--talos-muted)]">
             {{ query ? t('chats.noMatches') : t('chats.noChats') }}
         </p>
 
@@ -584,6 +959,7 @@ function act(
                         senza, si torna al muro — ma respira di meno.
                     -->
                 <li
+                    v-if="gruppo.bucket !== 'nessuna'"
                     role="presentation"
                     data-testid="talos-chats-fascia"
                     class="px-2 pb-1 pt-3 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)] landscape:pb-0.5 landscape:pt-1.5"
@@ -639,6 +1015,7 @@ function act(
                         data-testid="talos-chats-open"
                         class="talos-pressable flex min-h-13 w-full min-w-0 items-center gap-2 rounded-lg px-2 pr-13 text-left"
                         :aria-pressed="bulk.active.value ? bulk.isSelected(session.id) : undefined"
+                        :aria-label="nomeDellaRiga(session)"
                         @click="tapSession(session.id)"
                     >
                         <span v-if="bulk.active.value" class="flex size-5 shrink-0 items-center justify-center rounded-full border-2" :class="bulk.isSelected(session.id) ? 'border-[var(--talos-accent)] bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,#000)]' : 'border-[var(--talos-border)]'" aria-hidden="true">
@@ -653,9 +1030,36 @@ function act(
                             ⛔ L'ORA, non «8 h fa»: la fascia dice già il giorno, e
                             due righe «8 h fa» in due fasce diverse si leggono
                             uguali. Vedi la nota accanto a `quandoInFascia`.
+
+                            ⭐ B3 / F4-B — quando la chat ha qualcosa da dire (aspetta te, in
+                            corso, in coda, fallita, interrotta) l'ETICHETTA prende il posto
+                            dell'ora, come `HarnessScreen.vue:315-346`. Sulla seconda riga,
+                            non accanto al titolo: su 360 px il titolo tiene tutta la sua
+                            larghezza. In ricerca l'etichetta sta DAVANTI all'estratto e non
+                            si restringe: «aspetta te» non deve sparire perché stai cercando.
                         -->
-                        <span v-if="sessionExcerpt(session.id)" class="w-full truncate text-2xs text-[var(--talos-muted)]" data-testid="talos-chat-search-excerpt">{{ sessionExcerpt(session.id) }}</span>
-                        <span v-else-if="session.updated_at" class="text-2xs tabular-nums text-[var(--talos-muted)]">{{ quandoInFascia(gruppo.bucket, session.updated_at) }}</span>
+                        <!--
+                            ⭐ A3-84 seconda parte (owner 25/09 10:20): stato E ora insieme — lo stato non nasconde più
+                            l'ora —, «nuova risposta», il modello dell'ultima risposta (logo + nome corto) e le icone di
+                            allegati e documenti. Spazi, non puntini: ogni pezzo ha già la sua forma. In ricerca
+                            l'estratto prende il posto di ora, modello e icone, come prima.
+                        -->
+                        <span class="flex w-full min-w-0 items-center gap-2 text-2xs text-[var(--talos-muted)]" data-testid="talos-chats-row-meta">
+                            <TalosMobileStatoChat :stato="statoDi(session)" />
+                            <TalosMobileNovitaChat v-if="talosChatNuova(session)" />
+                            <span v-if="sessionExcerpt(session.id)" class="min-w-0 flex-1 truncate" data-testid="talos-chat-search-excerpt">{{ sessionExcerpt(session.id) }}</span>
+                            <template v-else>
+                                <span v-if="quandoDellaRiga(gruppo.bucket, session)" class="shrink-0 tabular-nums" data-testid="talos-chats-row-time">{{ quandoDellaRiga(gruppo.bucket, session) }}</span>
+                                <span v-if="modelloDellaRiga(session)" class="inline-flex min-w-0 items-center gap-1" data-testid="talos-chats-row-model">
+                                    <span v-if="modelloDellaRiga(session)!.fornitore" aria-hidden="true" class="inline-flex shrink-0">
+                                        <TalosMobileProviderIcon :provider="modelloDellaRiga(session)!.fornitore!" compatto />
+                                    </span>
+                                    <span class="min-w-0 truncate">{{ modelloDellaRiga(session)!.nome }}</span>
+                                </span>
+                                <Paperclip v-if="conAllegati.has(session.id)" role="img" data-testid="talos-chats-row-attachments" :aria-label="t('chats.hasAttachments')" class="size-3.5 shrink-0" />
+                                <FileText v-if="conGenerati.has(session.id)" role="img" data-testid="talos-chats-row-generated" :aria-label="t('chats.hasGenerated')" class="size-3.5 shrink-0" />
+                            </template>
+                        </span>
                         </span>
                     </button>
                 </li>
@@ -719,27 +1123,9 @@ function act(
             </section>
         </div>
 
-        <!-- Owner 2026-07-24 (Claude-style): floating New chat FAB, bottom-right
-             thumb zone, on the full page only (the tablet panel keeps its
-             inline New button). -->
-            <!--
-                ⛔ In ORIZZONTALE questa barra costa il 16% dello schermo.
-
-                MISURATO sul Pad il 2026-08-20 a risoluzione telefono, girato:
-                sfumatura 24 px + pulsante 48 px + padding basso fanno ~170 px su
-                1080, e la riga che ci finisce sotto diventa illeggibile proprio
-                dove di righe ne stanno due e mezzo.
-
-                Il pulsante resta — è il comando principale di questa schermata —
-                ma la sfumatura e i margini si stringono dove lo spazio verticale
-                è quello che manca.
-            -->
-        <div
-            v-if="!props.embedded"
-            class="sticky bottom-0 z-20 mt-auto flex justify-end bg-gradient-to-t from-[var(--talos-background)] via-[var(--talos-background)]/85 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-6 landscape:pb-2 landscape:pt-3"
-        >
-            <TalosMobileNewChatFab @click="newChat" />
-        </div>
+        <!-- ⛔ Owner 2026-07-24 aveva messo qui «Nuova chat» flottante (stile Claude). Owner 2026-09-25 (A3-84,
+             «come le stazioni»): «Nuova» sta accanto al titolo sul telefono e nella riga degli strumenti sul tablet.
+             TOLTO, non nascosto: due «Nuova» nella stessa schermata sarebbero un doppione. -->
 
         <!-- F5.1 — hold dropdown: one menu for the held row -->
         
@@ -789,7 +1175,7 @@ function act(
                 :class="actionBusy ? 'pointer-events-none opacity-60' : ''"
                 data-testid="talos-chats-bulk-media"
             >
-                <input v-model="bulkDeleteMedia" type="checkbox" class="mt-0.5 size-4 shrink-0 accent-[var(--talos-danger,#dc5b5b)]" :disabled="actionBusy">
+                <TalosThemedCheckbox v-model="bulkDeleteMedia" tone="danger" class="mt-0.5" :disabled="actionBusy" />
                 <span class="text-sm leading-5">
                     {{ t('chats.bulkDeleteFiles') }}
                     <span class="block text-xs text-[var(--talos-muted)]">{{ cleanupDescription(bulkPlan) }} {{ t('chats.inLibrary') }}</span>

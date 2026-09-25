@@ -541,3 +541,14 @@ export const TALOS_METADATA_SCHERMO = 'screen_context'
  * un avviso su ogni risposta insegnerebbe a dubitare anche di quelle intere.
  */
 export const TALOS_METADATA_TRONCATA = 'stopped_at_limit'
+
+/**
+ * CONT (25/09/2026): lo stesso fatto ha tre nomi — `length` (OpenAI, OpenRouter, Ollama), `max_tokens` (Anthropic),
+ * `MAX_TOKENS` (Gemini). Il controller guardava solo il primo: una risposta di Claude o Gemini tagliata non lo diceva.
+ * Fonti: OpenRouter API overview (finish_reason normalizzato), Anthropic «Handling stop reasons», lette il 25/09/2026.
+ */
+const MOTIVI_DI_LUNGHEZZA = new Set(['length', 'max_tokens', 'MAX_TOKENS'])
+
+export function talosFermataDallaLunghezza(motivo: unknown): boolean {
+    return typeof motivo === 'string' && MOTIVI_DI_LUNGHEZZA.has(motivo)
+}

@@ -60,12 +60,52 @@ function percorsoDi(cartellaStore, sessionId) {
  * bug di Hermes #8029). `record` è già serializzabile (un evento AG-UI,
  * o l'intestazione, o il record `messaggiFinali`) — questo modulo non
  * sa cosa contiene, solo che va in coda.
+ *
+ * ⛔⛔⛔ 24/09/2026 (difetto 5 del ledger B3, trovato sul Pad) — le righe di
+ * UN file si scrivono IN FILA. `broadcast()` chiama questa funzione per
+ * ogni pezzo di risposta senza aspettarla, e ogni `appendFile` asincrono
+ * gira sul threadpool di libuv: Node dice che con i metodi a callback o a
+ * promise «there is no guaranteed ordering» e che più scritture sullo
+ * stesso file senza aspettarle «is unsafe» (https://nodejs.org/api/fs.html,
+ * letto il 24/09/2026). Misurato: 300 righe lanciate insieme uscivano come
+ * 1, 2, 4, 5, 3, 7, 6… (`codiceOrdineEventi.test.ts`, ORDINE-03), e una
+ * risposta riletta dopo un riavvio usciva rimescolata. Ogni scrittura ora
+ * aspetta la precedente DELLO STESSO FILE (file diversi restano paralleli);
+ * una scrittura fallita rifiuta solo la propria promessa e la fila va
+ * avanti. La riga si serializza alla chiamata, cioè com'era l'evento
+ * quando è nato.
  */
+const filaPerFile = new Map();
+
 export async function registraRiga({ cartellaStore, sessionId, record }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const appendFileFn = deps.appendFileFn ?? fsp.appendFile;
-  await mkdirFn(cartellaStore, { recursive: true });
-  await appendFileFn(percorsoDi(cartellaStore, sessionId), `${JSON.stringify(record)}\n`, 'utf8');
+  const percorso = percorsoDi(cartellaStore, sessionId);
+  const riga = `${JSON.stringify(record)}\n`;
+  const precedente = filaPerFile.get(percorso) ?? Promise.resolve();
+  const questa = precedente.catch(() => undefined).then(async () => {
+    await mkdirFn(cartellaStore, { recursive: true });
+    await appendFileFn(percorso, riga, 'utf8');
+  });
+  filaPerFile.set(percorso, questa);
+  // Una fila finita non resta in memoria: si toglie se nessuno si è accodato nel frattempo.
+  const pulisci = () => { if (filaPerFile.get(percorso) === questa) filaPerFile.delete(percorso); };
+  questa.then(pulisci, pulisci);
+  return questa;
+}
+
+/**
+ * ⛔ 24/09/2026 (difetto 5) — gli eventi di una trascrizione nell'ordine in
+ * cui sono NATI, non in quello in cui sono atterrati sul disco. `_sequenza`
+ * è monotono e unico per sessione (`broadcast()` in session-registry.mjs):
+ * riordinare per quello ripara anche i file scritti fuori ordine prima
+ * della fila qui sopra, che sui telefoni esistono già. Un file con eventi
+ * senza `_sequenza` (mai visto: la persistenza è nata dopo) resta com'è,
+ * invece di inventare un ordine. `sort` è stabile (ES2019).
+ */
+export function inOrdineDiSequenza(eventi) {
+  if (!eventi.every((evento) => typeof evento._sequenza === 'number')) return eventi;
+  return [...eventi].sort((a, b) => a._sequenza - b._sequenza);
 }
 
 /**

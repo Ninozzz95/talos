@@ -206,6 +206,12 @@ export interface TalosAgentLoopDeps {
      * provider request. If persistence fails, provider egress must not occur.
      */
     onBeforeModelCheckpoint?(checkpoint: TalosAgentLoopCheckpointV1): void | Promise<void>
+    /**
+     * ⭐ B3 «Indirizza» (24/09/2026) — letta al PUNTO SICURO: risultati degli attrezzi già nei turni, nessuna chiamata
+     * al modello ancora partita. Vera ⇒ il ciclo si chiude pulito lì (niente rieseguito, niente perso) e la persona
+     * riparte col suo messaggio come turno nuovo. Codex `turn/steer`, Hermes PR #12116, LibreChat PR #14220.
+     */
+    chiudiAlPuntoSicuro?(): boolean
     maxRounds?: number
     maxCalls?: number
     /** How many of one round's calls may run at once. */
@@ -220,6 +226,8 @@ export interface TalosAgentLoopOutcome extends TalosAgentCompletion {
     stoppedByLimit: boolean
     /** Durable visual/file results produced by successful tools. */
     messageAttachments: AppendChatAttachmentInput[]
+    /** ⭐ B3 — il ciclo si è chiuso al punto sicuro perché la persona ha indirizzato il giro. */
+    chiusoPerIndirizzo?: boolean
     /** Present when the loop yielded instead of parking a Promise in memory. */
     suspension?: {
         checkpoint: TalosAgentLoopCheckpointV1
@@ -905,6 +913,10 @@ async function continueTalosAgentLoop(
                 : []),
         ]
         state.completion = null
+        if (deps.chiudiAlPuntoSicuro?.()) {
+            // Il lavoro di questo giro è dentro `executed` e `spoken`: si chiude come una risposta finita.
+            return { ...outcomeOf(state, { text: '' }), chiusoPerIndirizzo: true }
+        }
         await persistBeforeModel(state, deps)
         /*
          * ⭐⭐ IL GIRO A VUOTO: se non è arrivata NESSUNA chiamata nuova, il

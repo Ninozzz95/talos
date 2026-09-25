@@ -197,6 +197,16 @@ export interface TalosMobileShellPreferences {
      * `null` = nessuna scelta ancora fatta, e allora vale la scelta automatica.
      */
     composer_model: string | null
+    /**
+     * ⭐ Owner 2026-09-23 («sì»): l'ultimo modello scelto nel CODICE, da cui
+     * partono le sessioni NUOVE. Una sessione già aperta tiene il suo
+     * (`active_model_profile_id` della riga): stessa divisione di Hermes Agent
+     * (la scelta vale per le sessioni nuove) e di LibreChat (la chat nuova parte
+     * dal modello della precedente), letti il 23/09/2026. Separato da
+     * `composer_model` perché i cataloghi di chat e Codice sono diversi.
+     * `null` = nessuna scelta ancora, vale il predefinito del Codice.
+     */
+    codice_model: string | null
     /** Owner 2026-07-25: remembered Library view (grid gallery / list). */
     /**
      * Quanto accesso ha il MODELLO alla Libreria — owner 2026-08-03.
@@ -375,6 +385,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     library_autosave_generated: true,
     // Nessuna scelta ancora fatta: decide `ensureSelection`. Vedi `composer_model`.
     composer_model: null,
+    codice_model: null,
     library_access: 'ask',
     memory_write_access: 'ask',
     plan_scope: 'turn',
@@ -434,6 +445,9 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         composer_model: typeof record.composer_model === 'string' && record.composer_model.trim() !== ''
             ? record.composer_model
             : DEFAULT_SHELL_PREFERENCES.composer_model,
+        codice_model: typeof record.codice_model === 'string' && record.codice_model.trim() !== ''
+            ? record.codice_model
+            : DEFAULT_SHELL_PREFERENCES.codice_model,
         // Re-review 2026-07-25: this hardcoded 'grid' as the fallback, so the
         // documented 'list' default never shipped.
         // Chi aveva il booleano ACCESO diventa `allow`; chi lo aveva spento

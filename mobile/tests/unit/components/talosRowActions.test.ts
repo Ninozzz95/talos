@@ -306,3 +306,65 @@ describe('tiene il pannello dentro lo schermo', () => {
         expect(parseFloat((menu() as HTMLElement).style.right)).toBe(20)
     })
 })
+
+/**
+ * ⛔ Pad, 24/09/2026 (prova B3 della coda, tocco vero): aperto il ⋯ con la tastiera su, il fuoco entra nel menu
+ * (APG), la tastiera si chiude, la finestra si allunga e il ⋯ scende di ~660 px — ma il pannello restava dov'era il
+ * pulsante PRIMA, a metà conversazione. Come `autoUpdate` di Floating UI (https://floating-ui.com/docs/autoUpdate,
+ * letto il 24/09/2026): mentre è aperto si riposiziona quando la finestra cambia, e gli ascoltatori si tolgono alla
+ * chiusura («only while the floating element is open»).
+ */
+describe('segue il suo pulsante quando la finestra cambia', () => {
+    const altezzaOriginale = window.innerHeight
+    afterEach(() => {
+        Object.defineProperty(window, 'innerHeight', { configurable: true, value: altezzaOriginale })
+        vi.restoreAllMocks()
+    })
+
+    function pulsanteA(posizione: { top: number }) {
+        vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+            const rett = (left: number, width: number, top: number, height: number) => ({ left, width, top, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect
+            if (this.tagName === 'BUTTON' && this.getAttribute('aria-haspopup') === 'menu') return rett(300, 44, posizione.top, 48)
+            return rett(0, 0, 0, 0)
+        })
+        vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+            return this.getAttribute('data-testid') === 'talos-row-actions-menu' ? 176 : 0
+        })
+    }
+
+    it('MENU-BOUNDS-07 la tastiera si chiude col menu aperto: il pannello resta attaccato al suo ⋯', async () => {
+        Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 })
+        const posizione = { top: 400 }
+        pulsanteA(posizione)
+        const wrapper = open()
+        await wrapper.get('button').trigger('click')
+        await wrapper.vm.$nextTick()
+        expect(parseFloat((menu() as HTMLElement).style.top)).toBe(400 + 48 + 6)
+        // La tastiera si chiude: la finestra si allunga e il ⋯ scende.
+        Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1400 })
+        posizione.top = 1060
+        window.dispatchEvent(new Event('resize'))
+        await wrapper.vm.$nextTick()
+        expect(parseFloat((menu() as HTMLElement).style.top)).toBe(1060 + 48 + 6)
+        wrapper.unmount()
+    })
+
+    it('MENU-BOUNDS-08 al contrario: a menu chiuso nessun ascoltatore resta attaccato alla finestra', async () => {
+        const aggiunti: string[] = []
+        const tolti: string[] = []
+        const add = window.addEventListener.bind(window)
+        const remove = window.removeEventListener.bind(window)
+        vi.spyOn(window, 'addEventListener').mockImplementation((tipo: string, ...resto: unknown[]) => { aggiunti.push(tipo); return (add as (...a: unknown[]) => void)(tipo, ...resto) })
+        vi.spyOn(window, 'removeEventListener').mockImplementation((tipo: string, ...resto: unknown[]) => { tolti.push(tipo); return (remove as (...a: unknown[]) => void)(tipo, ...resto) })
+        const wrapper = open()
+        await wrapper.get('button').trigger('click')
+        await wrapper.vm.$nextTick()
+        expect(aggiunti).toContain('resize')
+        await wrapper.get('button').trigger('click')
+        await wrapper.vm.$nextTick()
+        for (const tipo of ['resize', 'scroll']) {
+            expect(tolti.filter((t) => t === tipo).length, tipo).toBe(aggiunti.filter((t) => t === tipo).length)
+        }
+        wrapper.unmount()
+    })
+})

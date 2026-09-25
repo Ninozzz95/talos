@@ -13,6 +13,13 @@ export interface TalosMarkdownRenderOptions {
     origin?: string
     allowExternalImages?: boolean
     labels?: Partial<TalosMarkdownLabels>
+    /**
+     * ACAPO (25/09/2026, owner «sistemali»): un a capo singolo diventa un a capo (`<br>`) invece di uno spazio. Solo per
+     * il testo scritto dal modello — i modelli scrivono elenchi, indirizzi e versi una riga alla volta («Roma\nMilano»
+     * arrivava «Roma Milano»). File e Libreria restano CommonMark. Come Zed (PR #57376, solo `MarkdownFont::Agent`,
+     * «README rendering […] untouched») e claudecodeui #1397; markdown-it `breaks` (letto il 25/09/2026).
+     */
+    lineBreaks?: boolean
 }
 
 export interface TalosMarkdownLabels {
@@ -104,15 +111,44 @@ function languageClass(info: string): string {
     return /^[a-z0-9_+-]{1,32}$/u.test(language) ? language : ''
 }
 
-function createMarkdownRenderer(): MarkdownIt {
+/*
+ * ⭐ LINK-FILE-01 (owner 25/09/2026, «saltare le estensioni di file»): «Peloro.md» diventava un collegamento a
+ * http://Peloro.md — `.md` è il dominio della Moldova, `.sh` di Sant'Elena, `.py` del Paraguay. Stesso difetto in Claude
+ * Code (#56097, #53602); cura come dray PR #292: un dominio scritto SENZA `http(s)://` e senza `www.` non diventa
+ * collegamento se finisce con un'estensione di file comune. Gli indirizzi scritti per intero e le email restano.
+ * (`fuzzyLink: false`, l'altra cura documentata, avrebbe spento anche «example.com»: scartata dall'owner.)
+ */
+const ESTENSIONI_DI_FILE = new Set([
+    'md', 'markdown', 'txt', 'sh', 'bash', 'zsh', 'ps1', 'py', 'rs', 'go', 'rb', 'pl', 'php', 'js', 'mjs', 'cjs', 'ts',
+    'tsx', 'jsx', 'vue', 'kt', 'java', 'cs', 'cc', 'cpp', 'mk', 'ml', 'so', 'json', 'yml', 'yaml', 'toml', 'ini', 'cfg',
+    'log', 'csv', 'tsv', 'sql', 'xml', 'html', 'css', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'rtf',
+    'zip', 'gz', 'tar', 'rar', '7z', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'mp3', 'mp4', 'mov', 'wav', 'apk',
+])
+
+function eUnNomeDiFile(collegamento: { schema: string, url: string, text: string }): boolean {
+    if (collegamento.schema !== '' || /^www\./i.test(collegamento.text)) return false
+    try {
+        const estensione = new URL(collegamento.url).hostname.split('.').pop()?.toLowerCase() ?? ''
+        return ESTENSIONI_DI_FILE.has(estensione)
+    } catch {
+        return false
+    }
+}
+
+function createMarkdownRenderer(breaks: boolean): MarkdownIt {
     const md = new MarkdownIt({
-        breaks: false,
+        breaks,
         html: false,
         linkify: true,
         typographer: false,
     })
 
     md.validateLink = isAllowedLink
+    const trovaCollegamenti = md.linkify.match.bind(md.linkify)
+    md.linkify.match = (testo: string) => {
+        const trovati = trovaCollegamenti(testo)
+        return trovati ? trovati.filter((collegamento) => !eUnNomeDiFile(collegamento)) : trovati
+    }
 
     /*
      * ⛔⛔ `<br>` DENTRO UNA CELLA — l'unico tag che si riconosce, e il perché.
@@ -210,7 +246,9 @@ function createMarkdownRenderer(): MarkdownIt {
     return md
 }
 
-const markdown = createMarkdownRenderer()
+const markdown = createMarkdownRenderer(false)
+// ACAPO: la stessa pipeline, con gli a capo singoli del modello tenuti (`lineBreaks`).
+const markdownConAcapo = createMarkdownRenderer(true)
 
 export function renderTalosMarkdown(
     source: string,
@@ -223,7 +261,7 @@ export function renderTalosMarkdown(
     const normalized = normalizeSource(truncated
         ? `${boundedSource}\n\n> ${labels.truncatedMessage}`
         : boundedSource)
-    const html = markdown.render(normalized, {
+    const html = (options.lineBreaks ? markdownConAcapo : markdown).render(normalized, {
         origin: resolvedOrigin(options),
         allowExternalImages: options.allowExternalImages === true,
         labels,
@@ -306,6 +344,8 @@ export function renderTalosMarkdownBlock(
         source,
         resolvedOrigin(options),
         resolvedLabels(options.labels),
+        // ACAPO: lo stesso blocco ha due forme; senza questa voce la cache restituirebbe quella sbagliata.
+        options.lineBreaks === true,
     ])
     const hit = blockCache.get(cacheKey)
     if (hit !== undefined) {

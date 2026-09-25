@@ -26,6 +26,7 @@ import { createOpenAiToolCallAccumulator, parseOpenAiToolCalls } from '@/lib/too
 import { talosCreateThinkSplitter, talosSplitFinalThink } from '@/lib/chat/thinkStream'
 import { talosParseInlineToolCall } from '@/lib/chat/inlineToolCall'
 import type { TalosToolCall } from '@/stores/chat'
+import { clampMobileEffort } from '@/lib/mobileEffort'
 
 /**
  * D-F1-2 (12/09/2026): i blocchi `<tool_call>` che il modello scrive nel TESTO
@@ -64,7 +65,25 @@ const modelSchema = z.object({
         output_modalities: z.array(z.string()).optional(),
     }).optional(),
     supported_parameters: z.array(z.string()).optional(),
+    // RAG-OBB: letto a parte (`reasoningPolicy`): una forma inattesa non deve far cadere l'intero catalogo.
+    reasoning: z.unknown().optional(),
 }).passthrough()
+
+/**
+ * RAG-OBB (24/09/2026): l'oggetto `reasoning` di OpenRouter, misurato il 24/09 su `GET /api/v1/models`:
+ * `{"mandatory":true,"default_enabled":true,"supported_efforts":["max","high","low"],"default_effort":"max"}` per
+ * `z-ai/glm-5.3-flash` (111 modelli su 458 obbligatori). Qualunque altra forma = il fornitore tace (null).
+ */
+const reasoningPolicySchema = z.object({
+    mandatory: z.boolean(),
+    supported_efforts: z.array(z.string()).optional(),
+})
+
+function reasoningPolicy(value: unknown): TalosMobileProviderModel['reasoning'] {
+    const parsed = reasoningPolicySchema.safeParse(value)
+    if (!parsed.success) return null
+    return { mandatory: parsed.data.mandatory, supportedEfforts: [...(parsed.data.supported_efforts ?? [])] }
+}
 
 const listSchema = z.object({ data: z.array(modelSchema) }).passthrough()
 const completionSchema = z.object({
@@ -215,6 +234,7 @@ function normalizeModel(config: OpenAiCompatibleConfig, model: z.infer<typeof mo
         createdAt: model.created ?? null,
         expiresAt: model.expiration_date ?? null,
         ownedBy: model.owned_by ?? null,
+        reasoning: config.metadata === 'openrouter' ? reasoningPolicy(model.reasoning) : null,
     }
 }
 
@@ -380,8 +400,18 @@ export function compatibleCompletionData(
         data.tools = talosToolsForOpenAi(compatibleTools)
         data.tool_choice = 'auto'
     }
-    if (config.provider === 'openrouter' && input.effort !== 'off' && input.model.supportedParameters.includes('reasoning')) {
-        data.reasoning = { effort: input.effort }
+    /*
+     * RAG-OBB (24/09/2026, owner «cura 1»): un modello che ragiona per forza riceve SEMPRE `reasoning`, al livello
+     * supportato più vicino verso il basso («off» → il minimo). Senza, un fornitore di GLM 5.3 ha scritto il
+     * ragionamento nella risposta (vLLM #54744, pi #8706, Hermes #96373). `provider.require_parameters` resta
+     * spento (owner): la cura è mandare il parametro, non restringere i fornitori.
+     */
+    const politica = config.provider === 'openrouter' ? input.model.reasoning ?? null : null
+    const effort = politica && politica.supportedEfforts.length > 0
+        ? clampMobileEffort(politica.supportedEfforts, input.effort, { mandatory: politica.mandatory })
+        : input.effort
+    if (config.provider === 'openrouter' && effort !== 'off' && input.model.supportedParameters.includes('reasoning')) {
+        data.reasoning = { effort }
     }
     if (config.provider === 'openai' && input.effort !== 'off' && input.model.supportedParameters.includes('reasoning_effort')) {
         /**
@@ -677,6 +707,8 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
              */
             let usage: Record<string, number> | null = null
             let callId: string | null = null
+            // CONT (25/09/2026): il motivo di fine viaggiava solo nel percorso senza streaming; la chat usa lo streaming, e l'avviso «Si è fermata qui» non poteva scattare.
+            let motivoDiFine: string | null = null
             const stream = await conRipiegoSulCredito(async (tetto) => await talosStreamText({
                 url: `${baseUrl}/chat/completions`,
                 headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
@@ -686,10 +718,12 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 extract: (payload) => {
                     const event = JSON.parse(payload) as {
                         id?: unknown
-                        choices?: Array<{ delta?: { content?: string | null } }>
+                        choices?: Array<{ delta?: { content?: string | null }; finish_reason?: string | null }>
                         usage?: Record<string, unknown> | null
                     }
                     toolCalls.push(event)
+                    const fine = event.choices?.[0]?.finish_reason
+                    if (typeof fine === 'string' && fine) motivoDiFine = fine
                     if (callId === null && typeof event.id === 'string' && event.id) callId = event.id
                     if (event.usage) usage = talosFlatUsage(event.usage) ?? usage
                     return event.choices?.[0]?.delta?.content ?? ''
@@ -720,7 +754,7 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 usage,
                 callId,
                 reasoning: stream.reasoning || undefined,
-                ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : {}),
+                ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : { finishReason: motivoDiFine }),
             }
         },
     }

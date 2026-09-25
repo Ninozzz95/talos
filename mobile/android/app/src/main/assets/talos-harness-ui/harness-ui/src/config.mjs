@@ -55,6 +55,26 @@ export function permessiRichiestaValido(raw) {
   return raw === undefined || raw === null || (typeof raw === 'string' && PERMESSI_AMMESSI.has(raw));
 }
 
+/*
+ * ⭐ REG-RAG-COD-13 (24/09/2026) — porta canonico del desktop (`AVM-harness-desktop/harness-ui/src/config.mjs:245-257`,
+ * letto in sola lettura). Solo la FORMA di `reasoning` all'avvio di una sessione: `{effort?, summary?}` coi valori di
+ * OpenRouter (https://openrouter.ai/docs/use-cases/reasoning-tokens). Quale livello un modello accetti davvero lo decide
+ * il kernel col catalogo (`regolaReasoningPerModello`).
+ */
+const EFFORT_AMMESSI = new Set(['max', 'xhigh', 'high', 'medium', 'low', 'minimal', 'none']);
+const SUMMARY_AMMESSI = new Set(['auto', 'concise', 'detailed']);
+
+/** Stesso principio di permessiRichiestaValido: pura, nessun throw. */
+export function reasoningRichiestaValido(raw) {
+  if (raw === null || raw === undefined) return true; // assente è sempre valido: nessun reasoning richiesto
+  if (typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const chiavi = Object.keys(raw);
+  if (chiavi.length === 0 || !chiavi.every((k) => k === 'effort' || k === 'summary')) return false;
+  if ('effort' in raw && !EFFORT_AMMESSI.has(raw.effort)) return false;
+  if ('summary' in raw && !SUMMARY_AMMESSI.has(raw.summary)) return false;
+  return true;
+}
+
 export class ConfigurationError extends Error {
   constructor(message) {
     super(message);

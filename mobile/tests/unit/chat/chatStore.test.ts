@@ -854,3 +854,40 @@ describe('the model still sees the whole conversation (defect #4 follow-up)', ()
         expect(turns.at(-1)?.content).toBe('e adesso?')
     })
 })
+
+/*
+ * GESTITA-01 (owner 25/09/2026, «riga compatta»): la risposta sospesa su un permesso porta l'esito letto dall'attività
+ * `tool.authorization` — alla riapertura della chat, e subito dopo una decisione (`refreshAuthorizationOutcomes`).
+ */
+describe('GESTITA-01 · esito del permesso nella vista del messaggio', () => {
+    it('GESTITA-STORE-01 assente finché si aspetta, presente dopo la decisione e alla riapertura', async () => {
+        const now = makeClock()
+        const makeId = makeIds()
+        const repository = createMemoryChatRepository({ now })
+        const sessionId = 'sessione-permesso'
+        await repository.createSession({ id: sessionId, title: 'Permesso', active_model_profile_id: null, created_at: now() })
+        const checkpoint = (decision: string) => ({ contract: 'x', checkpoint: { id: 'cp-1', requests: [{ id: 'r1', tool: 'document_create', decision }] } })
+        await repository.appendToolActivity({
+            id: 'cp-1', session_id: sessionId, message_id: null, operation: 'tool.authorization', status: 'pending',
+            payload: checkpoint('pending'), evidence: {}, created_at: now(),
+        })
+        await repository.appendMessage({
+            id: 'sospesa', session_id: sessionId, role: 'assistant', content: '', state: 'persisted', created_at: now(),
+            metadata: { tool_authorization_pending_checkpoint_id: 'cp-1', tool_authorization_pending_count: 1 },
+        })
+        const riaperta = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), { repository, makeId, now })
+        await riaperta.initialize()
+        await riaperta.selectSession(sessionId)
+        const sospesa = () => riaperta.messages.find((messaggio) => messaggio.id === 'sospesa')
+        expect(sospesa()?.authorizationOutcome).toBeUndefined()
+
+        await repository.updateToolActivity('cp-1', { status: 'succeeded', payload: checkpoint('allow_once') } as never)
+        await riaperta.refreshAuthorizationOutcomes()
+        expect(sospesa()?.authorizationOutcome).toEqual([{ tool: 'document_create', concesso: true }])
+
+        const ancora = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), { repository, makeId, now })
+        await ancora.initialize()
+        await ancora.selectSession(sessionId)
+        expect(ancora.messages.find((messaggio) => messaggio.id === 'sospesa')?.authorizationOutcome).toEqual([{ tool: 'document_create', concesso: true }])
+    })
+})

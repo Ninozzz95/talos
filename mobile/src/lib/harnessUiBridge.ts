@@ -32,6 +32,39 @@ export interface TalosHarnessUiRuntime {
      */
     submitPrompt?(text: string, modello?: string, modelloEsecutore?: string): boolean
     announceComposerAction?(action: string): boolean
+    /**
+     * ⭐ 24/09/2026 (AUT-2) — il modello scelto nel composer del Codice, anche prima di un invio: il Codice incorporato lo
+     * conosceva solo a `submitPrompt`, e una Automazione creata prima di scrivere sarebbe partita col modello
+     * predefinito del server invece di quello scelto qui.
+     */
+    impostaModello?(modello: string, nome?: string): boolean
+    /**
+     * ⭐ RAG-COD (24/09/2026): il livello di ragionamento del composer del Codice, nel vocabolario di OpenRouter
+     * (`none`…`max`); `null` = nessun `reasoning`. Con `sincronizzaSessione` lo prende anche la sessione aperta.
+     */
+    impostaEffort?(effort: string | null, sincronizzaSessione?: boolean): boolean
+}
+
+/**
+ * ⭐ RAG-COD (24/09/2026, owner «collegarla»): la barra dell'impegno del composer del Codice arrivava solo al
+ * miglioramento del prompt. `effort` è il livello già regolato sul modello (`clampMobileEffortFor`); «off» diventa
+ * `none`, il nome dell'API; `null` (modello senza livelli) lascia il predefinito del server.
+ */
+export function setTalosHarnessUiEffort(effort: string | null, sincronizzaSessione: boolean): boolean {
+    const runtime = currentTalosHarnessUiRuntime()
+    if (!runtime?.impostaEffort) return false
+    return runtime.impostaEffort(effort === 'off' ? 'none' : effort, sincronizzaSessione)
+}
+
+/**
+ * ⭐ AUT-2: porta nel Codice incorporato il modello scelto nel composer. `false` se il runtime non c'è ancora.
+ * NOME-MODELLO-01 (25/09/2026): col nome del profilo, che il server del Codice sul telefono non saprebbe dire.
+ */
+export function setTalosHarnessUiModel(modello: string | null, nome?: string | null): boolean {
+    if (!modello) return false
+    const runtime = currentTalosHarnessUiRuntime()
+    if (!runtime?.impostaModello) return false
+    return runtime.impostaModello(modello, nome ?? undefined)
 }
 
 export function currentTalosHarnessUiRuntime(): TalosHarnessUiRuntime | null {

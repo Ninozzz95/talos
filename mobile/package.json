@@ -41,6 +41,7 @@
     "verify:parity": "npm run test:scripts && node scripts/verify-parity-ledger.mjs docs/feature-parity.json",
     "typecheck": "vue-tsc -b --force",
     "harness:kernel": "vite build --config scripts/harness-talos/vite.banco.config.mjs",
+    "prepara:prove": "node scripts/prepara-prove.mjs",
     "build:probe": "vite build --config vite.probe.config.ts && node -e \"require('node:fs').readdirSync('dist/probe/assets').filter(f=>f.endsWith('.wasm')).forEach(f=>require('node:fs').rmSync(`dist/probe/assets/${f}`))\""
   },
   "dependencies": {

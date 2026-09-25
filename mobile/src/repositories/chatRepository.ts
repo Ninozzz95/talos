@@ -39,6 +39,28 @@ export interface TalosLocalChatSession {
      * `has_messages`: riportato da `listSessions`, undefined = non chiesto.
      */
     has_draft?: boolean
+    /**
+     * ⭐ B3 / F4-B — il riassunto dell'ULTIMO messaggio della chat (per posizione), perché
+     * l'elenco possa dire «fallita» o «interrotta» senza aprire la chat (`lib/chat/statoChat.ts`).
+     * Stessa regola dei due campi sopra: riportato da `listSessions`, `undefined` = non chiesto,
+     * `null` = la chat non ha messaggi. Mai il testo: all'elenco basta il fatto.
+     */
+    last_message?: TalosLocalListedLastMessage | null
+}
+
+/** Ciò che l'elenco sa dell'ultimo messaggio di una chat (B3 / F4-B). */
+export interface TalosLocalListedLastMessage {
+    role: TalosLocalMessageRole
+    state: TalosLocalMessageState
+    /** `metadata.interrupted === true` (risposta fermata a metà); solo il vero booleano conta. */
+    interrupted: boolean
+    /** Il profilo del modello che ha scritto il messaggio, se registrato. */
+    model_profile_id: string | null
+    /**
+     * A3-84 (25/09/2026, «nuova risposta finché non la apri»): l'ora scritta sul messaggio. `updated_at` della sessione
+     * non basta — cambia anche con una rinomina, e una rinomina non è una risposta.
+     */
+    created_at: string | null
 }
 
 /**
@@ -531,6 +553,19 @@ export interface TalosChatRepository {
     updateSessionMetadata(sessionId: string, metadata: Record<string, unknown>): Promise<TalosLocalChatSession>
     deleteSession(sessionId: string): Promise<string | null>
     /**
+     * ⭐ B3-REC (owner 24/09/2026) — tutto ciò che la chat ha scritto dentro `sourceSessionId` (messaggi, allegati,
+     * attività degli attrezzi, ricerche, memorie di sessione, bozza, allegati in bozza, coda del compositore) passa in
+     * una sessione NUOVA creata da `input`, in UNA transazione; la sessione di partenza resta, senza messaggi. Il
+     * puntatore della chat attiva segue solo se era sulla sessione di partenza.
+     *
+     * Serve a riportare nella Chat le conversazioni finite per sbaglio dentro una sessione del Codice
+     * (`stores/recuperoChatDalCodice.ts`). `null` = niente da spostare, nessuna sessione creata: rieseguirlo è innocuo.
+     */
+    moveMessagesToNewSession(
+        sourceSessionId: string,
+        input: CreateChatSessionInput & { updated_at: string },
+    ): Promise<TalosLocalChatSession | null>
+    /**
      * Owner 2026-07-25 (defect #4): opening a chat used to load EVERY message,
      * so the conversations you use most became the slowest to open. `before` is
      * a KEYSET cursor (ordinal, id) rather than an offset — offsets make the
@@ -609,10 +644,37 @@ export interface TalosChatRepository {
      * gallery unions the two.
      */
     listSessionAttachmentFileIds(sessionId: string): Promise<string[]>
+    /**
+     * ⭐ A3-84 (25/09/2026) — le chat che hanno almeno un allegato, in UNA lettura: il filtro «Con allegati»
+     * dell'elenco (una domanda per chat sarebbero cento letture per cento chat).
+     */
+    listSessionIdsWithAttachments(): Promise<string[]>
     loadComposerDraft(scopeId: string): Promise<string>
     saveComposerDraft(scopeId: string, draft: string): Promise<void>
     loadComposerAttachments(scopeId: string): Promise<TalosComposerAttachmentDraft[]>
     saveComposerAttachments(scopeId: string, attachments: readonly TalosComposerAttachmentDraft[]): Promise<void>
+    /**
+     * B3 / F2 — la coda dei messaggi di una chat, accanto alla bozza e con lo
+     * stesso ambito (`normalizeComposerDraftScope`: id di sessione o `'new'`).
+     *
+     * Il valore è JSON OPACO: la forma la valida `normalizzaStatoCoda` in
+     * `src/lib/chat/codaDelGiro.ts`, il repository non la interpreta. Rilegge
+     * `null` se non c'è nulla o se il JSON salvato è illeggibile — mai
+     * un'eccezione per dati corrotti: la coda riparte vuota.
+     */
+    loadComposerQueue(scopeId: string): Promise<unknown>
+    /**
+     * Salva `JSON.stringify(value)`. Un valore senza voci (`null`, `undefined`
+     * o `{ voci: [] }`) CANCELLA la riga invece di salvarla vuota, come la bozza
+     * vuota. La riga sparisce anche con la sessione (`deleteSession`).
+     */
+    saveComposerQueue(scopeId: string, value: unknown): Promise<void>
+    /**
+     * Tutte le code salvate in una lettura sola (per lo stato «in coda»
+     * nell'elenco delle chat). Le righe illeggibili, o che rileggono `null`,
+     * sono scartate in silenzio. Ordine per `scopeId`.
+     */
+    listComposerQueues(): Promise<Array<{ scopeId: string; value: unknown }>>
     createTask(input: CreateTaskInput): Promise<TalosLocalTask>
     listTasks(): Promise<TalosLocalTask[]>
     setTaskStatus(taskId: string, status: TalosTaskStatus): Promise<TalosLocalTask>

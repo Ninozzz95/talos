@@ -31,6 +31,7 @@ defineProps<{
     thinking: boolean
     supportsThinking: boolean
     effortLevels: string[]
+    reasoningMandatory?: boolean
     loadingModels?: boolean
     loadingRoutes?: boolean
     refreshingModels?: boolean
@@ -73,6 +74,7 @@ const emit = defineEmits<{
         <div v-if="effortLevels.length || supportsThinking" class="border-t border-[var(--talos-border)] pt-3">
             <TalosMobileEffortPicker
                 :effort-levels="effortLevels"
+                :reasoning-mandatory="reasoningMandatory === true"
                 :selected-effort="selectedEffort"
                 :supports-thinking="supportsThinking"
                 :thinking="thinking"

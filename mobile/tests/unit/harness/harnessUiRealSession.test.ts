@@ -341,29 +341,27 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(meta?.textContent).toContain('Real task · storia-0b81c88') // ⭐ 3/9 — vedi nota sopra, stessa etichetta tradotta
     })
 
-    it('REAL-SESSION-AUTOMATION-01 "Esegui ora" su una riga con data-task-id avvia per davvero quel task (standalone)', async () => {
+    // ⭐ 24/09/2026 (AUT-2): la riga fissa «Sconto a scaglioni · Esegui ora» è stata tolta (falsa sul telefono: il banco
+    // di prova lì è vuoto) e un'automazione è ora una richiesta scritta. Le tre garanzie restano, sul pulsante rimasto.
+    it('REAL-SESSION-AUTOMATION-01 "Nuova automazione" (standalone) apre il modulo vero: legge le cartelle di progetto dal server', async () => {
         const fetchMock = mockFetch([
-            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-automazione' } },
-            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'workspace', nome: 'workspace' }] } },
         ])
-        const bottone = document.querySelector('[data-automation-action="run"][data-task-id]') as HTMLButtonElement
+        const bottone = document.querySelector('[data-automation-action="new"]') as HTMLButtonElement
         expect(bottone).not.toBeNull()
 
         bottone.click()
-        await new Promise((r) => setTimeout(r, 0)) // il click non è awaitable dall'esterno: si aspetta che startRealSession finisca da sé
+        await new Promise((r) => setTimeout(r, 0))
+        await new Promise((r) => setTimeout(r, 0))
 
-        // Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3: 'client'
-        // riusa lo stesso segnale di window.__talosHarnessApiBase (Fase 1) —
-        // assente qui, quindi 'desktop', il valore di sempre.
-        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions',
-            expect.objectContaining({ method: 'POST', body: JSON.stringify({ taskId: bottone.dataset.taskId, client: 'desktop' }) }))
-        expect(runtime().realSessionState.id).toBe('sess-automazione')
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/projects', expect.anything())
+        expect(document.querySelector('#sheetBody textarea[name="consegna"]')).not.toBeNull()
     })
 
     it('⛔ REAL-SESSION-AUTOMATION-02 AL CONTRARIO: sullo stesso bottone, embedded SENZA tunnel non chiama MAI il backend', async () => {
         document.documentElement.classList.add('talos-embedded')
         const fetchMock = mockFetch([])
-        const bottone = document.querySelector('[data-automation-action="run"][data-task-id]') as HTMLButtonElement
+        const bottone = document.querySelector('[data-automation-action="new"]') as HTMLButtonElement
 
         bottone.click()
         await new Promise((r) => setTimeout(r, 0))
@@ -385,19 +383,16 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         document.documentElement.classList.add('talos-embedded')
         ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = 'http://localhost:4174'
         const fetchMock = mockFetch([
-            { metodo: 'POST', percorso: 'http://localhost:4174/api/v1/sessions', corpo: { sessionId: 'sess-mobile-tunnel' } },
-            { metodo: 'GET', percorso: 'http://localhost:4174/api/v1/sessions', corpo: { items: [] } },
+            { metodo: 'GET', percorso: 'http://localhost:4174/api/v1/projects', corpo: { items: [{ id: 'workspace', nome: 'workspace' }] } },
         ])
-        const bottone = document.querySelector('[data-automation-action="run"][data-task-id]') as HTMLButtonElement
+        const bottone = document.querySelector('[data-automation-action="new"]') as HTMLButtonElement
 
         bottone.click()
         await new Promise((r) => setTimeout(r, 0))
+        await new Promise((r) => setTimeout(r, 0))
 
-        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/sessions', expect.objectContaining({
-            method: 'POST',
-            body: JSON.stringify({ taskId: bottone.dataset.taskId, client: 'mobile' }),
-        }))
-        expect(runtime().realSessionState.id).toBe('sess-mobile-tunnel')
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/projects', expect.anything())
+        expect(document.querySelector('#sheetBody textarea[name="consegna"]')).not.toBeNull()
     })
 
     it('REAL-SESSION-START-01b il badge "Demo UI" della chat sparisce con una sessione vera, e MAI quello di una superficie diversa', async () => {
@@ -1205,6 +1200,52 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(kpi('errors')).toBe('0')
     })
 
+    /*
+     * ⛔ KPI-PLURALE-01 (Pad, 25/09/2026): la striscia diceva «1 passi» — l'etichetta dopo il numero era fissa. Ora segue
+     * il numero con le regole del plurale della lingua (`Intl.PluralRules`, CLDR: «one» per 1 in inglese e in italiano).
+     */
+    it('KPI-PLURALE-01 «1 step» e «2 steps»; in italiano «1 passo» e «2 passi»', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-plurale' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: 'sess-plurale', taskId: 'storia-x', conclusa: false, avviataAlle: '2026-08-26T10:00:00.000Z' }] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-x' })
+        const generation = runtime().realSessionState.generation
+        const striscia = () => document.querySelector('[data-run-kpi="step"]')?.textContent?.replace(/\s+/g, ' ').trim()
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'x' } }, generation)
+        runtime().handleRealEvent({ type: 'StateDelta', delta: [{ path: '/usage', value: { prompt_tokens: 1, completion_tokens: 1, giri: 1 } }] }, generation)
+        expect(striscia()).toBe('1 step')
+        runtime().handleRealEvent({ type: 'StateDelta', delta: [{ path: '/usage', value: { prompt_tokens: 1, completion_tokens: 1, giri: 2 } }] }, generation)
+        expect(striscia()).toBe('2 steps')
+        ;(window as unknown as { __talosHarnessLocale?: string }).__talosHarnessLocale = 'it'
+        try {
+            runtime().handleRealEvent({ type: 'StateDelta', delta: [{ path: '/usage', value: { prompt_tokens: 1, completion_tokens: 1, giri: 1 } }] }, generation)
+            expect(striscia()).toBe('1 passo')
+            runtime().handleRealEvent({ type: 'StateDelta', delta: [{ path: '/usage', value: { prompt_tokens: 1, completion_tokens: 1, giri: 3 } }] }, generation)
+            expect(striscia()).toBe('3 passi')
+        } finally {
+            delete (window as unknown as { __talosHarnessLocale?: string }).__talosHarnessLocale
+        }
+    })
+
+    // TOPO-03 (25/09/2026, parità desktop `legacy/app.js`): accanto a «sessione corrente» lo stato, e il nome intero nel
+    // suggerimento del titolo (che sta su una riga sola).
+    it('TOPO-03 la struttura della sessione dice lo stato e tiene il nome intero nel suggerimento', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-topo' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [{ sessionId: 'sess-topo', taskId: 'storia-x', conclusa: false, avviataAlle: '2026-08-26T10:00:00.000Z' }] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-x' })
+        const generation = runtime().realSessionState.generation
+        const riga = () => document.querySelector('.topology-row.root') as HTMLElement
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'x' } }, generation)
+        expect(riga().querySelector('small')?.textContent).toBe('current session · in progress')
+        const titolo = riga().querySelector('strong') as HTMLElement
+        expect(titolo.title).toBe(titolo.textContent)
+        runtime().handleRealEvent({ type: 'RunError', code: 'INTERNAL_ERROR', message: 'boom' }, generation)
+        expect(riga().querySelector('small')?.textContent).toBe('current session · stopped')
+    })
+
     it('REAL-SESSION-FINISH-01 RunFinished NON chiude subito lo stream — solo quando la connessione cade DAVVERO, e senza avviso', async () => {
         // ⛔ 27/8: chiudere subito su un RunFinished era il difetto — una
         // cronologia con PIÙ giri (resume, comando diretto) troncava il
@@ -1520,8 +1561,9 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         const terminale = document.querySelector('[data-view="terminal"] .terminal-window code')
         expect(terminale?.textContent).toContain('echo prova')
         expect(terminale?.textContent).toContain('exit 0 [sandbox: wsl2]')
+        // ⭐ B1-06 (23/09): il Terminale non è più una superficie demo — nessun badge da nascondere.
         const badge = document.querySelector('[data-view="terminal"] .demo-surface-badge') as HTMLElement | null
-        expect(badge?.hidden).toBe(true)
+        expect(badge === null || badge.hidden).toBe(true)
     })
 
     it('⛔ REAL-SESSION-SHELL-04 AL CONTRARIO: il risultato di un tool-call DIVERSO da "shell" (es. "leggi") NON tocca la vista Terminale', () => {
@@ -1562,7 +1604,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         // badge resta nascosto perché non è un dato finto da segnalare.
         expect(terminaleDopo?.textContent).toContain('No command run in this session.') // ⭐ 3/9 — testo tradotto in inglese
         const badge = document.querySelector('[data-view="terminal"] .demo-surface-badge') as HTMLElement | null
-        expect(badge?.hidden).toBe(true)
+        expect(badge === null || badge.hidden).toBe(true) // ⭐ B1-06 (23/09): nessun badge demo sul Terminale
     })
 
     // ⛔⛔⛔ 27/8, trovato nell'ispezione visiva finale (owner: "IMPORTANTISSIMA"):
@@ -1862,7 +1904,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             expect(sheetDialog.querySelector('.demo-surface-badge')?.hasAttribute('hidden')).toBe(true) // foglio interamente onesto — badge condiviso, va cercato DENTRO sheetDialog (14 superfici lo condividono nel resto della pagina)
         })
 
-        it('⛔ EXPORT-SHEET-02 AL CONTRARIO: SENZA sessione reale, executeCommand(\'export\') NON apre il foglio — resta il download demo diretto', () => {
+        it('⛔ EXPORT-SHEET-02 AL CONTRARIO: SENZA sessione reale, executeCommand(\'export\') NON apre il foglio e non scarica niente di inventato', () => {
             const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
             sheetDialog.showModal = vi.fn()
             // jsdom non garantisce URL.createObjectURL: stessa cura di
@@ -1876,7 +1918,9 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
                 runtime().executeCommand('export')
 
                 expect(sheetDialog.hasAttribute('open')).toBe(false)
-                expect(clickSpy).toHaveBeenCalled() // il vecchio percorso demo, invariato
+                // ⛔ B1 (23/09): prima scaricava un JSON con branch e worktree inventati — ora niente download, e si dice il perché.
+                expect(clickSpy).not.toHaveBeenCalled()
+                expect(document.querySelector('.toast strong')?.textContent).toBe('Nothing to export yet')
             } finally {
                 URL.createObjectURL = origCreate
             }
@@ -1959,6 +2003,42 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             expect(runtime().titoloDalPrimoMessaggio('riga uno\nriga due\tcon tab')).toBe('riga uno riga due con tab')
             const lungo = 'x'.repeat(200)
             expect(runtime().titoloDalPrimoMessaggio(lungo).length).toBe(80)
+        })
+
+        // ⛔ NUOVA-SESSIONE-IT-01 (Pad, 25/09/2026): il titoletto del foglio diceva «NEW SESSION» nell'app italiana.
+        // ⛔ BANCO-VUOTO-01 (Pad, 25/09/2026): senza attività del banco di prova il foglio annunciava «(0, checkout ed
+        // esecuzione veri)» e sotto non c'era niente da scegliere. Una sezione vuota non si mostra.
+        it('BANCO-VUOTO-01 senza attività del banco di prova la sezione non compare; con attività sì', async () => {
+            const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+            sheetDialog.showModal = vi.fn()
+            mockFetch([
+                { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+                { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+            ])
+            await runtime().openRealTaskSheet()
+            expect(document.querySelector('#sheetBody')?.textContent).not.toContain('benchmark task')
+            mockFetch([
+                { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [{ id: 'storia-x', consegnaCorta: 'Racconta', difficolta: 1 }] } },
+                { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+            ])
+            await runtime().openRealTaskSheet()
+            expect(document.querySelector('#sheetBody')?.textContent).toContain('Or try a benchmark task (1, real checkout and run)')
+        })
+
+        it("NUOVA-SESSIONE-IT-01 il titoletto del foglio «Nuova sessione» è nella lingua dell'app", async () => {
+            mockFetch([
+                { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+                { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+            ])
+            const sheetDialog = document.querySelector<HTMLDialogElement>('#sheetDialog')!
+            sheetDialog.showModal = vi.fn()
+            ;(window as unknown as { __talosHarnessLocale?: string }).__talosHarnessLocale = 'it'
+            try {
+                await runtime().openRealTaskSheet()
+                expect(document.querySelector('#sheetEyebrow, [data-sheet-eyebrow], .sheet-eyebrow')?.textContent).toBe('Nuova sessione')
+            } finally {
+                delete (window as unknown as { __talosHarnessLocale?: string }).__talosHarnessLocale
+            }
         })
 
         it('⭐⭐⭐ TITOLO-02: avviare un compito libero rinomina DAVVERO la sessione col primo messaggio — POST .../rename con la consegna pulita', async () => {
@@ -2251,7 +2331,9 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         const form = document.querySelector<HTMLFormElement>('#customTaskForm')
         expect(form).not.toBeNull()
-        expect(document.querySelector<HTMLSelectElement>('#customTaskCartella')?.options.length).toBe(1)
+        // SCELTA-CARTELLA (25/09/2026): il menu a elenco del Codice al posto del `<select>` nativo.
+        expect(document.querySelectorAll('#customTaskCartella-lista [role="option"]').length).toBe(1)
+        expect(document.querySelector('#customTaskCartella')?.getAttribute('role')).toBe('combobox')
         expect(document.querySelector('.model-picker')).not.toBeNull()
 
         form!.requestSubmit()
@@ -3019,7 +3101,8 @@ describe('Harness UI — Doctor, Hooks, deleghe sub-agenti (porting FASE A/C dal
         runtime().openSheet('sessionTree')
         await new Promise((r) => setTimeout(r, 0))
 
-        expect(document.querySelector('#subagentTreeMount')?.textContent).toContain('No delegation yet') // ⭐ 3/9 — testo tradotto in inglese
+        // ⭐ B1-10 (23/09): il kernel del Codice non offre delega_sottotask — il testo lo dice, invece di promettere una delega.
+        expect(document.querySelector('#subagentTreeMount')?.textContent).toContain('Code does not delegate')
         expect(document.querySelectorAll('#subagentTreeMount button').length).toBe(0)
     })
 })
@@ -3086,7 +3169,7 @@ describe('Harness UI — Automazioni (porting dal bundle desktop)', () => {
         expect(document.querySelector('.attention-card')?.hasAttribute('hidden')).toBe(true)
     })
 
-    it('AUTOMATIONS-04 setView("automations") carica l\'elenco vero nel mount point, in aggiunta alla riga reale già esistente', async () => {
+    it('AUTOMATIONS-04 setView("automations") carica l\'elenco vero nel mount point, e nessuna attività del banco scritta a mano', async () => {
         mockFetch([{
             metodo: 'GET', percorso: '/api/v1/automations',
             corpo: { items: [{ id: 'a1', nome: 'Weekly audit', attiva: false, intervalloMinuti: 60, limiteAlGiorno: 3 }] },
@@ -3097,16 +3180,18 @@ describe('Harness UI — Automazioni (porting dal bundle desktop)', () => {
 
         const mount = document.querySelector('#automationListReal')!
         expect(mount.textContent).toContain('Weekly audit')
-        expect(mount.querySelector('.status-chip')?.textContent).toBe('Pausa')
-        // la riga statica reale (Sconto a scaglioni, avvio manuale) resta intatta accanto al mount point
-        expect(document.querySelector('[data-task-id="sconto-a-scaglioni"]')).not.toBeNull()
+        // ⭐ 24/09 (AUT-3): la riga è quella del desktop — lo stato è un badge e un interruttore (APG Switch).
+        expect(mount.querySelectorAll('.talos-automation__head:first-child .talos-badge')[1]?.textContent).toBe('Paused')
+        expect(mount.querySelector('[data-auto-toggle]')?.getAttribute('aria-checked')).toBe('false')
+        // ⭐ 24/09 (AUT-2): la riga fissa «Sconto a scaglioni» non c'è più — sul telefono quell'attività non esiste.
+        expect(document.querySelector('[data-task-id]')).toBeNull()
     })
 
-    it('AUTOMATIONS-05 "Pausa"/"Attiva" chiama POST .../toggle e ricarica l\'elenco', async () => {
+    it('AUTOMATIONS-05 l\'interruttore chiama POST .../toggle e ricarica l\'elenco', async () => {
         mockFetch([{ metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [{ id: 'a1', nome: 'Weekly audit', attiva: true, intervalloMinuti: 60, limiteAlGiorno: 3 }] } }])
         await runtime().renderAutomationsReali()
 
-        const toggleBtn = Array.from(document.querySelectorAll('#automationListReal button')).find((b) => b.textContent === 'Pausa') as HTMLButtonElement
+        const toggleBtn = document.querySelector('#automationListReal [data-auto-toggle]') as HTMLButtonElement
         const postMock = mockFetch([
             { metodo: 'POST', percorso: '/api/v1/automations/a1/toggle', corpo: {} },
             { metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [{ id: 'a1', nome: 'Weekly audit', attiva: false, intervalloMinuti: 60, limiteAlGiorno: 3 }] } },
@@ -3116,10 +3201,10 @@ describe('Harness UI — Automazioni (porting dal bundle desktop)', () => {
         await new Promise((r) => setTimeout(r, 0))
 
         expect(postMock).toHaveBeenCalledWith('/api/v1/automations/a1/toggle', expect.objectContaining({ method: 'POST', body: JSON.stringify({ attiva: false }) }))
-        expect(document.querySelector('#automationListReal .status-chip')?.textContent).toBe('Pausa')
+        expect(document.querySelector('#automationListReal [data-auto-toggle]')?.getAttribute('aria-checked')).toBe('false')
     })
 
-    it('AUTOMATIONS-06 "Elimina" chiama POST .../elimina e la riga sparisce dopo il ricarico', async () => {
+    it('AUTOMATIONS-06 "Elimina", confermato, chiama POST .../elimina e la riga sparisce dopo il ricarico', async () => {
         mockFetch([{ metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [{ id: 'a1', nome: 'Weekly audit', attiva: false, intervalloMinuti: 60, limiteAlGiorno: 3 }] } }])
         await runtime().renderAutomationsReali()
 
@@ -3129,10 +3214,16 @@ describe('Harness UI — Automazioni (porting dal bundle desktop)', () => {
             { metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [] } },
         ])
         eliminaBtn.click()
+        // ⭐ 24/09/2026 (AUT-2): eliminare chiede conferma nominando l'automazione — solo la conferma elimina.
+        const conferma = Array.from(document.querySelectorAll('#sheetBody button')).find((b) => b.textContent === 'Delete automation') as HTMLButtonElement
+        conferma.click()
         await new Promise((r) => setTimeout(r, 0))
         await new Promise((r) => setTimeout(r, 0))
 
-        expect(document.querySelector('#automationListReal')?.children.length).toBe(0)
+        // ⭐ 24/09/2026: la riga sparisce e al suo posto c'è lo stato vuoto (AUT-3: il testo del desktop) — si contano le
+        // RIGHE, non i figli.
+        expect(document.querySelectorAll('#automationListReal .talos-automation').length).toBe(0)
+        expect(document.querySelector('#automationListReal')?.textContent).toBe('No automations created.')
     })
 
     /*
@@ -3154,7 +3245,7 @@ describe('Harness UI — Automazioni (porting dal bundle desktop)', () => {
         await new Promise((r) => setTimeout(r, 0)) // smaltisce il refresh al boot, se non era già passato
         fetchMock.mockClear()
 
-        const toggleBtn = document.querySelector('#automationListReal button') as HTMLButtonElement
+        const toggleBtn = document.querySelector('#automationListReal [data-auto-toggle]') as HTMLButtonElement
         mockFetch([{ metodo: 'POST', percorso: '/api/v1/automations/a1/toggle', corpo: { message: 'negato' }, ok: false, status: 403 }])
         toggleBtn.click()
         await new Promise((r) => setTimeout(r, 0))
@@ -3162,20 +3253,21 @@ describe('Harness UI — Automazioni (porting dal bundle desktop)', () => {
         // 1 = solo il POST fallito — NESSUN GET di ricarico dopo l'errore, quello è il punto della prova (la cronologia è stata azzerata sopra, il rumore del boot non conta più).
         expect(fetchMock).toHaveBeenCalledTimes(1)
         expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/automations/a1/toggle', expect.objectContaining({ method: 'POST' }))
-        expect(document.querySelector('#automationListReal .status-chip')?.textContent).toBe('Attiva')
+        expect(document.querySelector('#automationListReal [data-auto-toggle]')?.getAttribute('aria-checked')).toBe('true')
     })
 
-    it('AUTOMATIONS-08 "Nuova automazione" (non embedded) apre il vero form coi task del corpus', async () => {
-        mockFetch([{ metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [{ id: 'storia-t1', difficolta: 2 }] } }])
+    it('AUTOMATIONS-08 "Nuova automazione" (non embedded) apre il vero form: una richiesta scritta nella cartella di progetto', async () => {
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'workspace', nome: 'workspace' }] } }])
 
         ;(document.querySelector('[data-automation-action="new"]') as HTMLButtonElement).click()
         await new Promise((r) => setTimeout(r, 0))
         await new Promise((r) => setTimeout(r, 0))
 
         expect(document.querySelector('#sheetDialog')?.hasAttribute('open')).toBe(true)
-        expect(document.querySelector('#sheetTitle')?.textContent).toBe('Nuova automazione')
-        // scoped a #sheetBody: la pagina ha già un altro <select> (#campaignSelect, Board) con un <option> statico "Caricamento…" più in alto nel DOM.
-        expect(document.querySelector('#sheetBody select option')?.textContent).toContain('storia-t1')
+        expect(document.querySelector('#sheetTitle')?.textContent).toBe('New automation')
+        expect(document.querySelector('#sheetBody textarea[name="consegna"]')).not.toBeNull()
+        // ⭐ 24/09 (AUT-2e, modulo identico al desktop): una cartella sola non si mostra — la garanzia è nel corpo della
+        // POST (AUTOMATIONS-10: cartellaId 'workspace').
     })
 
     it('⛔ AUTOMATIONS-09 AL CONTRARIO: stesso bottone, embedded SENZA tunnel, resta il toast finto — zero fetch, foglio non aperto', async () => {
@@ -3190,20 +3282,21 @@ describe('Harness UI — Automazioni (porting dal bundle desktop)', () => {
     })
 
     it('AUTOMATIONS-10 inviare il form crea l\'automazione, chiude il foglio e ricarica l\'elenco', async () => {
-        mockFetch([{ metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [{ id: 'storia-t1', difficolta: 2 }] } }])
+        mockFetch([{ metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'workspace', nome: 'workspace' }] } }])
         await runtime().openNewAutomationSheet()
 
         const postMock = mockFetch([
             { metodo: 'POST', percorso: '/api/v1/automations', corpo: {} },
             { metodo: 'GET', percorso: '/api/v1/automations', corpo: { items: [] } },
         ])
+        ;(document.querySelector('#sheetBody textarea[name="consegna"]') as HTMLTextAreaElement).value = 'Controlla la cartella'
         document.querySelector('#sheetBody form')!.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))
         await new Promise((r) => setTimeout(r, 0))
         await new Promise((r) => setTimeout(r, 0))
 
         expect(postMock).toHaveBeenCalledWith('/api/v1/automations', expect.objectContaining({
             method: 'POST',
-            body: JSON.stringify({ taskId: 'storia-t1', intervalloMinuti: 30, limiteAlGiorno: 3 }),
+            body: JSON.stringify({ consegna: 'Controlla la cartella', cartellaId: 'workspace', nome: 'Controlla la cartella', intervalloMinuti: 60, limiteAlGiorno: 3 }),
         }))
         expect(document.querySelector('#sheetDialog')?.hasAttribute('open')).toBe(false)
     })
@@ -3725,6 +3818,36 @@ describe('Harness UI — selectSession con un id reale, senza una riga statica c
         expect(corpoInviato.reasoning).toEqual({ effort: 'minimal' })
     })
 
+    /*
+     * EFFORT-MAX (25/09/2026, owner «procedi in ordine», punto 2): la barra interna del Codice chiamava «Massimo» il
+     * livello `xhigh` e non aveva `max` («non esiste su OpenRouter» — falso oggi: GLM 5.3 accetta max/high/low,
+     * catalogo `GET /api/v1/models` del 24/09/2026). Ora i sette livelli di OpenRouter con le parole della chat.
+     */
+    it('EFFORT-MAX-01 la barra interna ha il vero «Massimo» (max) e le parole della chat', async () => {
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+        ])
+        await runtime().openRealTaskSheet()
+        const tacche = [...document.querySelectorAll('.effort-picker-tick')].map((el) => el.textContent)
+        expect(tacche).toEqual(['Disattivato', 'Minimo', 'Basso', 'Medio', 'Alto', 'Molto alto', 'Massimo'])
+        const range = document.querySelector<HTMLInputElement>('.effort-picker-range')!
+        range.value = String(tacche.length - 1)
+        range.dispatchEvent(new Event('input', { bubbles: true }))
+        expect(document.querySelector('.effort-picker-selected')?.textContent).toBe('Massimo')
+        document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-max' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        const postSpy = vi.spyOn(window, 'fetch')
+        document.querySelector<HTMLTextAreaElement>('#composerInput')!.value = 'al massimo'
+        document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+        await new Promise((r) => setTimeout(r, 0))
+        const chiamataPost = postSpy.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
+        expect(JSON.parse(String((chiamataPost?.[1] as RequestInit).body)).reasoning).toEqual({ effort: 'max' })
+    })
+
     it('⛔ AL CONTRARIO: EFFORT-PICKER-02 senza mai toccare lo slider, la POST non porta MAI il campo reasoning — comportamento di sempre', async () => {
         mockFetch([
             { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
@@ -3745,6 +3868,34 @@ describe('Harness UI — selectSession con un id reale, senza una riga statica c
         const chiamataPost = postSpy.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
         const corpoInviato = JSON.parse(String((chiamataPost?.[1] as RequestInit).body))
         expect('reasoning' in corpoInviato).toBe(false)
+    })
+
+    /*
+     * RAG-COD (24/09/2026, owner «collegarla»): il livello del composer dell'app arriva al Codice incorporato
+     * (`impostaEffort`, gemello di `impostaModello`) e parte nella POST come `reasoning.effort`; `null` = nessun
+     * `reasoning` (il predefinito del server); un valore fuori vocabolario si rifiuta.
+     */
+    it('RAG-COD-12 impostaEffort porta il livello del composer nella POST della sessione nuova', async () => {
+        const rt = runtime() as unknown as { impostaEffort(e: string | null, s?: boolean): boolean }
+        expect(rt.impostaEffort('turbo', false)).toBe(false)
+        expect(rt.impostaEffort('low', false)).toBe(true)
+        mockFetch([
+            { metodo: 'GET', percorso: '/api/v1/tasks', corpo: { items: [] } },
+            { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'proj-1', nome: 'Progetto di prova' }] } },
+        ])
+        await runtime().openRealTaskSheet()
+        document.querySelector<HTMLFormElement>('#customTaskForm')!.requestSubmit()
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-rag-cod' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        const postSpy = vi.spyOn(window, 'fetch')
+        document.querySelector<HTMLTextAreaElement>('#composerInput')!.value = 'livello dal composer'
+        document.querySelector<HTMLFormElement>('#composerForm')!.requestSubmit()
+        await new Promise((r) => setTimeout(r, 0))
+        const chiamataPost = postSpy.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
+        expect(JSON.parse(String((chiamataPost?.[1] as RequestInit).body)).reasoning).toEqual({ effort: 'low' })
+        expect(rt.impostaEffort(null, false)).toBe(true)
     })
 
     it('⭐ EFFORT-PICKER-03 lo stesso slider è ANCHE nella pill del modello (foglio aperto dal composer), non solo nella modale "Nuova sessione"', async () => {

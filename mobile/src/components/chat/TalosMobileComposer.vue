@@ -4,6 +4,7 @@ import { useTalosI18n } from '@/i18n'
 import { createTalosSendGate } from '@/lib/chat/sendGate'
 import { ArrowUp,
     Database,
+    ListPlus,
     Maximize2,
     Mic,
     Plus,
@@ -95,6 +96,16 @@ const props = withDefaults(defineProps<{
     canSend: boolean
     sending: boolean
     sendDisabledReason?: string
+    /**
+     * ⭐ B3 (24/09, D-B3-01 e D-B3-04) — si può ACCODARE adesso: l'app sta rispondendo, qui o in un'altra chat
+     * (`controller.canQueue`). Falso a riposo.
+     */
+    canQueue?: boolean
+    /**
+     * ⭐ B3 — perché non si può accodare mentre l'app risponde (oggi: c'è un allegato). Stringa vuota quando si può, o
+     * quando non c'è niente da accodare (`controller.queueDisabledReason`).
+     */
+    queueDisabledReason?: string
     loadingModels?: boolean
     loadingRoutes?: boolean
     refreshingModels?: boolean
@@ -142,6 +153,8 @@ const props = withDefaults(defineProps<{
 }>(), {
     agentToolsEnabled: true,
     docked: false,
+    canQueue: false,
+    queueDisabledReason: '',
     routingProfiles: () => [],
     selectedModelProfileId: null,
     selectedRoutingProfileId: null,
@@ -186,6 +199,8 @@ const TalosMobileDictationBar = defineAsyncComponent(
 const emit = defineEmits<{
     'update:prompt': [prompt: string]
     send: []
+    /** ⭐ B3 — il testo del campo va IN CODA (mai un reindirizzo: quello nasce solo da un gesto sulla voce in coda). */
+    queue: [text: string]
     stop: []
     toggleDictation: []
     discardDictation: []
@@ -359,6 +374,29 @@ const rightAction = computed<'stop' | 'dictating' | 'mic' | 'send'>(() => {
     if (dictating.value) return 'dictating'
     return composerHasContent.value ? 'send' : 'mic'
 })
+/**
+ * ⭐⭐ B3 (24/09) — IL COMPOSITORE A GIRO VIVO. Decisioni owner D-B3-01 e D-B3-04.
+ *
+ * Prima un messaggio scritto mentre TALOS rispondeva non andava da nessuna parte: l'Invio era ignorato qui sotto
+ * (`requestSend`) e lo store lo scartava in silenzio. Ora:
+ *   - campo vuoto ⇒ solo Stop, come prima;
+ *   - con testo ⇒ Stop RESTA il comando `talos-composer-action` e accanto compare Accoda, azione principale;
+ *   - l'Invio da tastiera ACCODA. ⛔ Mai un reindirizzo dall'Invio (desktop `legacy/invio-durante-il-giro.js`): il
+ *     reindirizzo nasce solo da un gesto sulla singola voce in coda (`TalosMobileCodaDelGiro.vue`).
+ * Nella chat B mentre risponde la chat A Stop non c'è (fermerebbe la risposta di un'altra chat): con testo Accoda prende
+ * il posto dell'invio spento.
+ *
+ * «Si sta rispondendo da qualche parte» si legge da `canQueue` O dal motivo per cui non si può: il controller dà un
+ * motivo SOLO mentre l'app risponde (`queueDisabledReason`), quindi a riposo sono entrambi spenti e il compositore resta
+ * quello di sempre.
+ */
+const queueMode = computed(() => props.canQueue || props.queueDisabledReason !== '')
+const queueOffered = computed(() => queueMode.value && !dictating.value && composerHasContent.value)
+/** Accoda spento resta VISIBILE col motivo: W3C APG, «Focusability of disabled controls» (letto il 24/09/2026). */
+const queueBlocked = computed(() => !props.canQueue)
+const queueTitle = computed(() => (queueBlocked.value && props.queueDisabledReason) || t('chat.queue'))
+/** L'invio spento non si mostra accanto ad Accoda: nella chat B il comando di destra È Accoda. */
+const showRightAction = computed(() => !(queueOffered.value && rightAction.value === 'send'))
 const microphoneReason = computed(() => !props.dictationSupported ? t('chat.dictationUnavailable') : '')
 function onMicrophone(): void {
     if (!props.dictationSupported || dictating.value) return
@@ -566,7 +604,26 @@ function updatePrompt(event: Event): void {
 const sendGate = createTalosSendGate()
 watch(() => props.sending, (sending) => sendGate.observeSending(sending))
 
+/**
+ * ⭐ B3 — un tocco, una voce in coda. Lo stesso cancello dell'invio, ma a giro vivo `sending` non cambia mai e non lo
+ * può riaprire: lo riapre un testo NUOVO nel campo (il genitore lo svuota dopo un Accoda riuscito), oppure il periodo
+ * di grazia se il genitore ha rifiutato e il testo è rimasto.
+ */
+const queueGate = createTalosSendGate()
+watch(() => props.prompt, () => queueGate.observeSending(false))
+
+function requestQueue(value = promptField.value?.value ?? props.prompt): void {
+    if (!props.canQueue || !value.trim()) return
+    if (!queueGate.claim(performance.now())) return
+    emit('queue', value)
+}
+
 function requestSend(value = promptField.value?.value ?? props.prompt): void {
+    // ⭐ B3 (D-B3-01): mentre l'app risponde l'Invio ACCODA — e se non si può, non fa niente (il motivo è a schermo).
+    if (queueMode.value && !dictating.value) {
+        requestQueue(value)
+        return
+    }
     if (!props.canSend || props.sending || attachmentBlocked.value
         || (!value.trim() && !hasAuthorizedAttachment.value)) return
     if (!sendGate.claim(performance.now())) return
@@ -820,17 +877,33 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
                  ⇒ E l'attributo era comunque MORTO: lo stato 'dictating' in
                  questa riga non si disegna piu' (la riga sparisce mentre si
                  detta), quindi non c'era piu' niente da «premere». -->
+            <!-- ⭐ B3: accanto ad Accoda lo Stop diventa SECONDARIO (fondo neutro): l'azione principale della riga, e il
+                 colore accento, passano ad Accoda. Resta lo stesso comando, con lo stesso nome. -->
             <Button
+                v-if="showRightAction"
                 data-testid="talos-composer-action" type="button" size="icon" variant="ghost" data-mobile-icon-only="true"
                 :aria-label="rightActionLabel" :title="rightActionTitle"
                 :data-talos-action="rightAction"
                 :disabled="rightActionDisabled" class="talos-pressable talos-send-btn min-h-touch min-w-touch"
+                :class="{ 'is-secondary': queueOffered && rightAction === 'stop' }"
                 @pointerdown.prevent @click="onRightAction"
             >
                 <Square v-if="rightAction === 'stop' || rightAction === 'dictating'" class="size-4" fill="currentColor" aria-hidden="true" />
                 <Mic v-else-if="rightAction === 'mic'" class="size-5" aria-hidden="true" />
                 <ArrowUp v-else class="size-5" aria-hidden="true" />
             </Button>
+            <!-- ⭐ B3 (D-B3-01): Accoda, all'estremo destro dove sta l'invio — il posto del pollice. Spento resta
+                 visibile: `aria-disabled` lo tiene raggiungibile e il motivo è scritto sotto, non solo nel title. -->
+            <Button
+                v-if="queueOffered"
+                data-testid="talos-composer-queue" type="button" size="icon" variant="ghost" data-mobile-icon-only="true"
+                :aria-label="$t('chat.queue')" :title="queueTitle"
+                :aria-disabled="queueBlocked ? 'true' : undefined"
+                :aria-describedby="queueBlocked && queueDisabledReason ? 'talos-composer-queue-reason' : undefined"
+                class="talos-pressable talos-send-btn min-h-touch min-w-touch"
+                :class="{ 'is-blocked': queueBlocked }"
+                @pointerdown.prevent @click="requestQueue()"
+            ><ListPlus class="size-5" aria-hidden="true" /></Button>
         </div>
 
         <div v-if="!composerCompact" class="talos-composer-tools" data-testid="talos-composer-tools">
@@ -902,6 +975,13 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
             data-testid="talos-composer-blocked-reason"
             class="px-1 pt-1 text-2xs leading-5 text-[var(--talos-muted)]"
         >{{ sendDisabledReason }}</p>
+        <!-- ⭐ B3: perché Accoda è spento, dove l'occhio lo trova (un title al telefono non lo legge nessuno). -->
+        <p
+            v-if="queueOffered && queueBlocked && queueDisabledReason"
+            id="talos-composer-queue-reason"
+            data-testid="talos-composer-queue-reason"
+            class="px-1 pt-1 text-2xs leading-5 text-[var(--talos-muted)]"
+        >{{ queueDisabledReason }}</p>
 
         <span class="sr-only" role="status" aria-live="polite">{{ statusText }}</span>
 
@@ -911,7 +991,7 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
             :can-enhance="canRequestEnhancement"
             :enhance-reason="enhanceUnavailableReason"
             :thinking="thinking"
-            :supports-thinking="selectedProfile?.supports_thinking ?? false"
+            :supports-thinking="selectedProfile?.thinking_toggle ?? selectedProfile?.supports_thinking ?? false"
             :effort-levels="selectedProfile?.effort_levels ?? []"
             :selected-effort="selectedEffort"
             :attachment-disabled-reason="attachmentReason"
@@ -943,8 +1023,9 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
             :selected-routing-profile-id="selectedRoutingProfileId"
             :selected-effort="selectedEffort"
             :thinking="thinking"
-            :supports-thinking="selectedProfile?.supports_thinking ?? false"
+            :supports-thinking="selectedProfile?.thinking_toggle ?? selectedProfile?.supports_thinking ?? false"
             :effort-levels="selectedProfile?.effort_levels ?? []"
+            :reasoning-mandatory="selectedProfile?.reasoning_mandatory"
             :loading-models="loadingModels"
             :loading-routes="loadingRoutes"
             :refreshing-models="refreshingModels"
@@ -1006,6 +1087,22 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
 </template>
 
 <style>
+/*
+ * ⭐ B3 (24/09) — Stop e Accoda nella stessa riga. Una sola azione principale per riga: Accoda tiene il contenitore
+ * accento del comando di destra (style.css, `.talos-calm-composer .talos-send-btn`), lo Stop accanto passa al fondo
+ * neutro dei controlli di servizio. Accoda spento ha l'aspetto dell'invio spento (`:disabled` in style.css): con
+ * `aria-disabled` il selettore `:disabled` non scatta, quindi lo si ripete qui.
+ */
+.talos-calm-composer .talos-send-btn.is-secondary {
+    background: var(--talos-secondary, var(--talos-panel));
+    color: var(--talos-text);
+}
+.talos-calm-composer .talos-send-btn.is-blocked { background: transparent; color: var(--talos-muted); opacity: .5; }
+@media (hover: hover) and (pointer: fine) {
+    .talos-calm-composer .talos-send-btn.is-secondary:hover:not(:disabled) { background: var(--talos-active); color: var(--talos-text); }
+    .talos-calm-composer .talos-send-btn.is-blocked:hover:not(:disabled) { background: transparent; color: var(--talos-muted); }
+}
+
 /* Il compositore resta scorrevole anche quando la tastiera lascia solo 180 px. */
 @media (orientation: landscape) and (max-height: 180px) {
     [data-testid="talos-mobile-composer"] {

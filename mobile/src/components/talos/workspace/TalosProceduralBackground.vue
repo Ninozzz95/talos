@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch, type PropType } from 'vue'
 import TalosMotionStage from '../motion/TalosMotionStage.vue'
+// AVVIO (25/09/2026): le scene di sfondo dei temi arrivano con lo sfondo (pezzo a richiesta), non col pezzo d'avvio.
+import '@/css/talos-motion-v6-simple.css'
 import { createTalosBrowserProductSceneRegistry } from '../../../motion-v6/productRegistry'
 import type { ComplexRendererFrameMetric } from '../../../motion-v6/renderers/complexRenderer'
 import type {

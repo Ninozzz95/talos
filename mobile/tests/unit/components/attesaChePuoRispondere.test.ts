@@ -239,3 +239,71 @@ describe('⭐⭐⭐ l attesa non mangia la risposta', () => {
         expect(chip.text()).not.toContain(':0')
     })
 })
+
+/*
+ * ⭐ GESTITA-01 (owner 25/09/2026, «riga compatta»): dopo «Consenti» la risposta sospesa restava una bolla a sé con la
+ * sola scheda «gestita». Ora, se la bolla è vuota, sparisce e la risposta che segue porta in cima una riga
+ * «Permesso concesso/negato: <strumento>»; se il modello aveva scritto qualcosa, la riga sta al posto di «gestita».
+ */
+describe('GESTITA-01 la riga compatta al posto della bolla «gestita»', () => {
+    const ESITO = [{ tool: 'document_create', concesso: true }, { tool: 'web_fetch', concesso: false }]
+    function monta(messaggi: unknown[]) {
+        return mount(TalosMobileMessageList, {
+            props: { messages: messaggi as never, sending: false, pendingAuthorizationIds: [] },
+            global: { stubs: { teleport: true }, mocks: { $t: (chiave: string) => chiave } },
+        })
+    }
+
+    it('bolla vuota risolta: sparisce, e la risposta dopo dice com’è andata per ogni strumento', () => {
+        const wrapper = monta([
+            messaggio({ id: 'sospesa', content: '', authorizationOutcome: ESITO }),
+            messaggio({ id: 'risposta', content: 'Fatto.', metadata: {} }),
+        ])
+        const sospesa = wrapper.get('[data-message-id="sospesa"]')
+        expect(sospesa.classes()).toContain('hidden')
+        const righe = wrapper.get('[data-message-id="risposta"]').findAll('[data-testid="talos-authorization-outcome"]')
+        expect(righe.map((riga) => riga.attributes('data-esito'))).toEqual(['concesso', 'negato'])
+        expect(righe[0]!.text()).toContain('chat.permissionGranted')
+        expect(righe[1]!.text()).toContain('chat.permissionDenied')
+        expect(wrapper.find('[data-testid="talos-authorization-pending-done"]').exists()).toBe(false)
+    })
+
+    it('se il modello aveva scritto qualcosa la bolla resta, con la riga al posto di «gestita»', () => {
+        const wrapper = monta([messaggio({ id: 'sospesa', authorizationOutcome: ESITO })])
+        const sospesa = wrapper.get('[data-message-id="sospesa"]')
+        expect(sospesa.classes()).not.toContain('hidden')
+        expect(sospesa.findAll('[data-testid="talos-authorization-outcome"]')).toHaveLength(2)
+        expect(wrapper.find('[data-testid="talos-authorization-pending-done"]').exists()).toBe(false)
+    })
+
+    /*
+     * GESTITA-RAG-01 (owner 25/09/2026, «spostarlo nella risposta»): la bolla nascosta portava via il «Ragionamento»
+     * scritto PRIMA della richiesta. Ora la risposta che segue ha un solo blocco coi due passi, nell'ordine.
+     */
+    it('GESTITA-RAG-01: il ragionamento del passo sospeso passa nella risposta, prima del suo', () => {
+        const wrapper = monta([
+            messaggio({ id: 'sospesa', content: '', reasoning: 'Serve lo strumento per creare il documento.', authorizationOutcome: ESITO }),
+            messaggio({ id: 'risposta', content: 'Fatto.', reasoning: 'Il documento è pronto.', metadata: {} }),
+        ])
+        const blocchi = wrapper.get('[data-message-id="risposta"]').findAll('[data-testid="talos-reasoning-text"]')
+        expect(blocchi).toHaveLength(1)
+        const testo = blocchi[0]!.text()
+        expect(testo).toContain('Serve lo strumento per creare il documento.')
+        expect(testo.indexOf('Serve lo strumento')).toBeLessThan(testo.indexOf('Il documento è pronto.'))
+    })
+
+    it('GESTITA-RAG-02: anche se la risposta non ha un suo ragionamento, quello del passo sospeso si vede', () => {
+        const wrapper = monta([
+            messaggio({ id: 'sospesa', content: '', reasoning: 'Serve lo strumento.', authorizationOutcome: ESITO }),
+            messaggio({ id: 'risposta', content: 'Fatto.', metadata: {} }),
+        ])
+        expect(wrapper.get('[data-message-id="risposta"]').get('[data-testid="talos-reasoning-text"]').text()).toBe('Serve lo strumento.')
+    })
+
+    it('senza esito leggibile resta la frase di sempre: niente esiti inventati', () => {
+        const wrapper = monta([messaggio({ id: 'sospesa', content: '' }), messaggio({ id: 'risposta', content: 'Fatto.', metadata: {} })])
+        expect(wrapper.get('[data-message-id="sospesa"]').classes()).not.toContain('hidden')
+        expect(wrapper.find('[data-testid="talos-authorization-pending-done"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-authorization-outcome"]').exists()).toBe(false)
+    })
+})

@@ -26,6 +26,16 @@ export interface TalosMobileProviderModel {
     expiresAt?: string | null
     ownedBy?: string | null
     capabilityProvenance?: 'observed' | 'declared'
+    /**
+     * RAG-OBB (24/09/2026): l'oggetto `reasoning` del catalogo OpenRouter (`GET /api/v1/models`), solo le due voci che
+     * governano il comando: se il ragionamento non si può spegnere e quali livelli accetta. Assente = il fornitore tace.
+     */
+    reasoning?: TalosMobileReasoningPolicy | null
+}
+
+export interface TalosMobileReasoningPolicy {
+    mandatory: boolean
+    supportedEfforts: string[]
 }
 
 export interface TalosMobileProviderCatalog {

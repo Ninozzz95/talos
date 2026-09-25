@@ -42,6 +42,7 @@ import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReal
 import { permessiRichiestaValido } from './config.mjs';
 import {
   elencaSessioniPersistite as elencaSessioniPersistiteReale,
+  inOrdineDiSequenza,
   leggiRegistro as leggiRegistroReale,
   registraRiga as registraRigaReale,
   registraRigaSync as registraRigaSyncReale,
@@ -173,11 +174,11 @@ export function createSessionRegistry({
   fidaHookFn = fidaHookReale,
   cartellaTrustHook = fileURLToPath(new URL('../.hooks-trust/', import.meta.url)),
   /**
-   * ⭐ 29/8 — porta canonico (ledger §17, FASE G.2/G.3). `document_create`/
-   * `delega_sottotask` restano nell'elenco (come il canonico): il
-   * kernel li offre al modello ma degrada onestamente ("not configured
-   * on this harness") se chiamati, invece di crasharsi — verificato
-   * leggendo il kernel PRIMA di scrivere questa riga, non assunto.
+   * ⭐ 29/8 — porta canonico (ledger §17, FASE G.2/G.3).
+   * ⛔ B1-11 (23/09): `web_search` e `document_create` NON si offrono più al
+   * modello se non configurati (`attrezziOfferti` nel kernel); il messaggio
+   * «not configured» del dispatch resta solo come difesa per un nome mai
+   * offerto. `delega_sottotask` non esiste nel kernel del Codice.
    * `ricercaWeb`/`firma`: di configurazione server (config.mjs),
    * iniettati da server.mjs, `undefined` di default = comportamento
    * invariato per chi non li configura.
@@ -738,7 +739,10 @@ export function createSessionRegistry({
         const intestazione = record.find((r) => r.tipo === 'intestazione');
         if (!intestazione) continue; // senza intestazione non c'è abbastanza per una voce onesta
         // ⛔ `type` (AG-UI, PascalCase) contro `tipo` (i record di questo file, italiano): due nomi di campo DIVERSI apposta, mai un'ambiguità nel distinguerli nello stesso file.
-        const eventi = record.filter((r) => typeof r.type === 'string');
+        // ⛔ 24/09/2026 (difetto 5): nell'ordine in cui gli eventi sono NATI (`_sequenza`), non in quello delle righe —
+        // un file scritto fuori ordine rimescolava la risposta al replay. Serve anche a `prossimaSequenza` qui sotto: con
+        // l'ultima riga non più alta, i nuovi eventi riusavano numeri già visti e il frontend li scartava come doppioni.
+        const eventi = inOrdineDiSequenza(record.filter((r) => typeof r.type === 'string'));
         const messaggiFinaliRecord = record.find((r) => r.tipo === 'messaggi-finali');
         const ultimoEvento = eventi.at(-1);
         const conclusa = Boolean(messaggiFinaliRecord) || ultimoEvento?.type === 'RunFinished' || ultimoEvento?.type === 'RunError';
@@ -876,6 +880,8 @@ export function createSessionRegistry({
       sessionId: sessionIdRichiesto = null,
       // ⭐⭐⭐ 2/9 — picker Planner: opzionale, mai richiesto per avviare una sessione.
       modelloEsecutore: modelloEsecutoreScelto = null,
+      // REG-RAG-COD-13 (24/09/2026): il livello di ragionamento scelto nel composer, validato in http-app.mjs.
+      reasoning: reasoningScelto = null,
     }) {
       if (cartellaLibera && permessiScelto !== 'Full access') {
         return { erroreAvvio: 'cartellaLibera richiede il permesso "Full access" per questa sessione', code: 'QUERY_INVALID' };
@@ -903,6 +909,7 @@ export function createSessionRegistry({
         taskId: cartellaLibera ? 'libero:full-access' : `libero:${cartellaId}`, cartella: preparato.cartella, task: preparato.task,
         comandoProva: preparato.comandoProva, modelloOverride: modelloScelto, mobile,
         permessiRichiesti: permessiScelto, modelloEsecutoreOverride: modelloEsecutoreScelto,
+        reasoningRichiesto: reasoningScelto,
       });
     },
 

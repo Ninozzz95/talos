@@ -96,9 +96,18 @@ function makeController(messages: FakeMessage[] = []) {
         activeSession: ref<{ id: string; title: string; metadata?: Record<string, unknown> } | null>(null),
         state: reactive({
             sending: false,
+            sendingSessionId: null as string | null,
             persistenceStatus: 'ready',
             persistenceError: null as string | null,
+            // ⭐ B3: la coda per chat, come nello store vero (`state.queues`, letta con `queueOf`).
+            queues: {} as Record<string, { voci: Array<{ id: string; testo: string; creataAlle: string }>; inPausa: boolean }>,
         }),
+        queueOf: vi.fn((sessionId: string) => chat.state.queues[sessionId] ?? { voci: [], inPausa: false }),
+        removeQueued: vi.fn().mockResolvedValue(undefined),
+        editQueued: vi.fn().mockResolvedValue({ ok: true }),
+        resumeQueue: vi.fn().mockResolvedValue(undefined),
+        sendQueuedNow: vi.fn().mockResolvedValue(true),
+        steerQueued: vi.fn().mockResolvedValue(true),
         retryPersistence: vi.fn().mockResolvedValue(undefined),
         recordBrowserActivity: vi.fn().mockResolvedValue(undefined),
         loadComposerDraft: vi.fn(async (scope?: string | null) => drafts.get(scope ?? 'new') ?? ''),
@@ -173,6 +182,17 @@ function makeController(messages: FakeMessage[] = []) {
         effort: ref('high'),
         thinking: ref(false),
         canSend: ref(false),
+        /*
+         * ⭐ B3 — il contratto del controller per la coda e per «Riprendi» (`chatController.ts:861-878`). Una finzione
+         * senza queste voci farebbe morire la schermata come quella senza le attese di autorizzazione, qui sopra.
+         */
+        composerBusy: ref<'idle' | 'this-chat' | 'other-chat'>('idle'),
+        canQueue: ref(false),
+        queueDisabledReason: ref(''),
+        queueMessage: vi.fn().mockResolvedValue({ ok: true, voce: { id: 'q-1', testo: 'x', creataAlle: '2026-09-24T10:00:00Z' } }),
+        turnUsesTools: ref(false),
+        canResume: ref(false),
+        resumeSession: vi.fn().mockResolvedValue(true),
         browseMode,
         sendDisabledReason: ref(''),
         enhancingPrompt: ref(false),
@@ -622,6 +642,19 @@ describe('ChatScreen (functional, local-first)', () => {
         await wrapper.vm.$nextTick()
         expect(controller.resendMessage).toHaveBeenCalledWith('user-1')
         expect(controller.retryAssistantMessage).toHaveBeenCalledWith('assistant-1')
+    })
+
+    // CONT-08 (25/09/2026): «Continua» sotto una risposta fermata dal limite manda un messaggio nuovo, come il composer.
+    it('CONT-08 «Continua» sends a new “Continue” message through the controller', async () => {
+        const controller = makeController([
+            { id: 'user-1', role: 'user', content: 'Prompt', created_at: '', state: 'persisted' },
+            { id: 'assistant-1', role: 'assistant', content: 'Answer that stops', created_at: '', state: 'persisted' },
+        ])
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen)
+        wrapper.getComponent(TalosMobileMessageList).vm.$emit('continueAfterLimit', 'assistant-1')
+        await flushPromises()
+        expect(controller.send).toHaveBeenCalledWith('Continue', null, false)
     })
 
     it('exposes the orchestrated session actions to the app shell (F1-T3 header/sidebar)', async () => {
@@ -1190,5 +1223,152 @@ describe('Bozza per chat — l’ambito è la chat, anche senza messaggi', () =>
         await vi.waitFor(() => expect(piena.__drafts.get('s-piena')).toBe('seguito'), { timeout: 4000 })
         expect(piena.__drafts.has('new')).toBe(false)
         w2.unmount()
+    })
+})
+
+/**
+ * ⭐ B3 F4-A — la schermata collega Accoda, la striscia della coda e «Riprendi» al controller (decisioni owner 24/09,
+ * D-B3-01…04). Controller e store qui sono finti: le loro regole hanno le loro prove (codaNelloStore,
+ * codaNelController, riprendi); qui si prova il FILO.
+ */
+describe('B3 — Accoda, coda del giro e Riprendi nella schermata', () => {
+    function giroVivoQui(controller: ReturnType<typeof makeController>, sessionId = 's-1'): void {
+        controller.chat.activeSession.value = { id: sessionId, title: 'Chat', surface: 'chat', has_messages: true } as never
+        controller.chat.state.sending = true
+        controller.chat.state.sendingSessionId = sessionId
+        controller.composerBusy.value = 'this-chat'
+        controller.canQueue.value = true
+    }
+
+    async function montaConLaStriscia() {
+        const wrapper = mount(ChatScreen, { global: { stubs: { teleport: true } } })
+        await flushPromises()
+        await vi.dynamicImportSettled()
+        await flushPromises()
+        return wrapper
+    }
+
+    it('CS-CODA-01 Accoda: il testo va in coda nella chat aperta e il campo si svuota, come dopo un invio', async () => {
+        const controller = makeController()
+        giroVivoQui(controller)
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { global: { stubs: { teleport: true } } })
+        await flushPromises()
+        const composer = wrapper.getComponent(TalosMobileComposer)
+        expect(composer.props('canQueue')).toBe(true)
+        expect(composer.props('queueDisabledReason')).toBe('')
+        await wrapper.get('textarea').setValue('la prossima')
+        composer.vm.$emit('queue', 'la prossima')
+        await vi.waitFor(() => expect(controller.queueMessage).toHaveBeenCalledWith('la prossima'))
+        await vi.waitFor(() => expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe(''))
+        await vi.waitFor(() => expect(controller.__drafts.has('s-1')).toBe(false), { timeout: 4000 })
+        expect(controller.send).not.toHaveBeenCalled()
+        wrapper.unmount()
+    })
+
+    it('CS-CODA-02 un rifiuto (coda piena) si dice con un avviso e il testo RESTA nel campo', async () => {
+        const { useTalosMobileToasts } = await import('@/stores/toasts')
+        const toasts = useTalosMobileToasts()
+        for (const toast of toasts.items.value) toasts.dismiss(toast.id)
+        const controller = makeController()
+        giroVivoQui(controller)
+        controller.queueMessage.mockResolvedValueOnce({ ok: false, rifiuto: 'coda-piena' })
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { global: { stubs: { teleport: true } } })
+        await flushPromises()
+        await wrapper.get('textarea').setValue('non ci sta')
+        wrapper.getComponent(TalosMobileComposer).vm.$emit('queue', 'non ci sta')
+        await vi.waitFor(() => expect(toasts.items.value.map((toast) => toast.message).join(' ')).toContain('10'))
+        expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('non ci sta')
+        wrapper.unmount()
+    })
+
+    it('CS-CODA-03 Accoda arrivato quando il giro è già finito: parte come un invio normale, non si perde', async () => {
+        const controller = makeController()
+        controller.chat.activeSession.value = { id: 's-1', title: 'Chat', surface: 'chat', has_messages: true } as never
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { global: { stubs: { teleport: true } } })
+        await flushPromises()
+        await wrapper.get('textarea').setValue('arrivato tardi')
+        wrapper.getComponent(TalosMobileComposer).vm.$emit('queue', 'arrivato tardi')
+        await vi.waitFor(() => expect(controller.send).toHaveBeenCalledWith('arrivato tardi', null, false))
+        expect(controller.queueMessage).not.toHaveBeenCalled()
+        wrapper.unmount()
+    })
+
+    it('CS-CODA-04 la striscia compare sopra il compositore SOLO con voci nella coda della chat aperta', async () => {
+        const controller = makeController()
+        giroVivoQui(controller)
+        controller.chat.state.queues = { altra: { voci: [{ id: 'x', testo: 'di un’altra chat', creataAlle: 'a' }], inPausa: false } }
+        mockState.controller = controller
+        const wrapper = await montaConLaStriscia()
+        expect(wrapper.find('[data-testid="talos-queue-strip"]').exists()).toBe(false)
+        controller.chat.state.queues = {
+            ...controller.chat.state.queues,
+            's-1': { voci: [{ id: 'v1', testo: 'in coda qui', creataAlle: 'b' }], inPausa: false },
+        }
+        await flushPromises()
+        await vi.dynamicImportSettled()
+        await flushPromises()
+        const strip = wrapper.get('[data-testid="talos-queue-strip"]')
+        expect(strip.text()).toContain('in coda qui')
+        // Sopra il compositore, nello stesso contenitore agganciato (la sua altezza entra nel margine della lista).
+        expect(wrapper.get('[data-testid="talos-composer-position"]').element.contains(strip.element)).toBe(true)
+        const composer = wrapper.get('[data-testid="talos-mobile-composer"]').element
+        expect(strip.element.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        wrapper.unmount()
+    })
+
+    it.each([
+        [true, 'punto-sicuro'],
+        [false, 'ferma-e-riparti'],
+    ] as const)('CS-CODA-05 azione principale a giro vivo (attrezzi=%s) ⇒ steerQueued «%s»', async (attrezzi, modo) => {
+        const controller = makeController()
+        giroVivoQui(controller)
+        controller.turnUsesTools.value = attrezzi
+        controller.chat.state.queues = { 's-1': { voci: [{ id: 'v1', testo: 'correggi', creataAlle: 'b' }], inPausa: false } }
+        mockState.controller = controller
+        const wrapper = await montaConLaStriscia()
+        await wrapper.get('[data-testid="talos-queue-primary-v1"]').trigger('click')
+        await vi.waitFor(() => expect(controller.chat.steerQueued).toHaveBeenCalledWith('s-1', 'v1', modo))
+        expect(controller.chat.sendQueuedNow).not.toHaveBeenCalled()
+        wrapper.unmount()
+    })
+
+    it('CS-CODA-06 giro fermo e coda in pausa: Invia ora, Riprendi la coda e Togli arrivano allo store', async () => {
+        const controller = makeController()
+        controller.chat.activeSession.value = { id: 's-1', title: 'Chat', surface: 'chat', has_messages: true } as never
+        controller.chat.state.queues = { 's-1': { voci: [{ id: 'v1', testo: 'dopo lo stop', creataAlle: 'b' }], inPausa: true } }
+        mockState.controller = controller
+        const wrapper = await montaConLaStriscia()
+        await wrapper.get('[data-testid="talos-queue-primary-v1"]').trigger('click')
+        await vi.waitFor(() => expect(controller.chat.sendQueuedNow).toHaveBeenCalledWith('s-1', 'v1'))
+        expect(controller.chat.steerQueued).not.toHaveBeenCalled()
+        await wrapper.get('[data-testid="talos-queue-resume"]').trigger('click')
+        await vi.waitFor(() => expect(controller.chat.resumeQueue).toHaveBeenCalledWith('s-1'))
+        wrapper.getComponent({ name: 'TalosMobileCodaDelGiro' }).vm.$emit('togli', 'v1')
+        await vi.waitFor(() => expect(controller.chat.removeQueued).toHaveBeenCalledWith('s-1', 'v1'))
+        wrapper.unmount()
+    })
+
+    it('CS-RESUME-01 «Riprendi» compare SOLO quando la chat si può riprendere, e dice cosa fa', async () => {
+        const controller = makeController([
+            { id: 'u1', role: 'user', content: 'Domanda', created_at: '2026-09-24', state: 'complete' },
+            { id: 'a1', role: 'assistant', content: 'Risposta a metà', created_at: '2026-09-24', state: 'complete', metadata: { interrupted: true } },
+        ])
+        controller.chat.activeSession.value = { id: 's-1', title: 'Chat', surface: 'chat', has_messages: true } as never
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { global: { stubs: { teleport: true } } })
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-resume-turn"]').exists()).toBe(false)
+        controller.canResume.value = true
+        // «Riprendi» è caricato a richiesta (tetto del pacchetto d'avvio): arriva dopo l'import, non al primo tick.
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-resume-turn"]').exists()).toBe(true))
+        const riprendi = wrapper.get('[data-testid="talos-resume-turn"]')
+        expect(riprendi.text()).toContain('Resume')
+        expect(wrapper.get('[data-testid="talos-resume-turn-hint"]').text()).toContain('your last message')
+        await riprendi.trigger('click')
+        await vi.waitFor(() => expect(controller.resumeSession).toHaveBeenCalledTimes(1))
+        wrapper.unmount()
     })
 })

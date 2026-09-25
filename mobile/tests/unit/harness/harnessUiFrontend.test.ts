@@ -229,7 +229,8 @@ describe('Harness UI embedded host and keyboard runtime', () => {
 
         const toastTitle = document.querySelector('.toast strong')?.textContent
         expect(toastTitle).not.toBe('Export demo') // il vecchio mockup fisso
-        expect(toastTitle).toBe('Session exported') // ⭐ 3/9 — tradotto; il toast VERO di exportSession(), ramo bozza
+        // ⛔ B1 (23/09): senza sessione reale non si scarica più un JSON con branch e worktree inventati — si dice il perché.
+        expect(toastTitle).toBe('Nothing to export yet')
     })
 
     it('CODE-MODE-STATE-TRUTH-01 never leaves Chat selected while another surface is visible', () => {
@@ -564,18 +565,19 @@ describe('Harness UI embedded host and keyboard runtime', () => {
         expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/v1/sessions/sess-fake-for-test/queue'), expect.objectContaining({ method: 'POST' }))
     })
 
-    it('HARNESS-BOARD-MOBILE-HONESTY-01 never calls a local backend from the embedded mobile demo', async () => {
+    // ⛔ B1-08 (23/09): la Bacheca delle campagne è stata tolta dal Codice (decisione owner). Le due prove
+    // restano, rovesciate: nessuna scheda, nessuna vista e nessuna richiesta alle campagne, con o senza tunnel.
+    it('HARNESS-BOARD-MOBILE-HONESTY-01 la Bacheca non esiste più e senza tunnel non parte nessuna richiesta', async () => {
         document.documentElement.classList.add('talos-embedded')
         const fetchMock = vi.fn()
         vi.stubGlobal('fetch', fetchMock)
         mountStaticRuntime()
-
-        document.querySelector<HTMLElement>('[data-mode="dashboard"]')?.click()
         await Promise.resolve()
 
+        expect(document.querySelector('[data-mode="dashboard"]')).toBeNull()
+        expect(document.querySelector('[data-view="dashboard"]')).toBeNull()
+        expect(document.querySelector('[data-connection-state]')).toBeNull()
         expect(fetchMock).not.toHaveBeenCalled()
-        expect(document.querySelector('[data-connection-state]')?.textContent).toBe('Demo UI · not connected') // ⭐ 3/9 — testo tradotto in inglese
-        expect(document.querySelector('#campaignReadMeta')?.textContent).toContain('mobile backend') // ⭐ 3/9 — testo tradotto in inglese, e "Codice"→"Code" per coerenza col resto del brand
     })
 
     /**
@@ -585,18 +587,17 @@ describe('Harness UI embedded host and keyboard runtime', () => {
      * questo cancello, trovato solo verificando dal vivo. Col tunnel
      * attivo la Board fa la stessa richiesta reale del desktop.
      */
-    it('HARNESS-BOARD-MOBILE-HONESTY-02 col tunnel attivo (window.__talosHarnessApiBase) la Board chiama il backend vero', async () => {
+    it('HARNESS-BOARD-MOBILE-HONESTY-02 col tunnel attivo nessuna richiesta alle campagne', async () => {
         document.documentElement.classList.add('talos-embedded')
         ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = 'http://localhost:4174'
         const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, data: { items: [] } }), { status: 200 }))
         vi.stubGlobal('fetch', fetchMock)
         mountStaticRuntime()
 
-        document.querySelector<HTMLElement>('[data-mode="dashboard"]')?.click()
         await Promise.resolve()
         await Promise.resolve()
 
-        expect(fetchMock).toHaveBeenCalledWith('http://localhost:4174/api/v1/campaigns', expect.anything())
+        expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/v1/campaigns'))).toBe(false)
     })
 
     it('HARNESS-ALL-CONTROLS-01 leaves no decorative or inert element exposed as an enabled button', () => {

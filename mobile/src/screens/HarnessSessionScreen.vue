@@ -85,6 +85,8 @@ import {
     dismissTalosHarnessUiTransientLayers,
     selectTalosHarnessUiSession,
     setTalosHarnessUiKeyboardOpen,
+    setTalosHarnessUiEffort,
+    setTalosHarnessUiModel,
     submitTalosHarnessUiPrompt,
     talosHarnessUiTransientLayersActive,
 } from '@/lib/harnessUiBridge'
@@ -94,7 +96,7 @@ import { avviaServerHarnessConChiaveProvider, talosTerminaleDisponibile } from '
 import { caricaProfiliModelloCodice } from '@/lib/harness/codiceModelProfiles'
 import { TALOS_DEFAULT_MODEL_LAB_PREFERENCES } from '@/lib/modelLabContracts'
 import { useSettingsStore } from '@/stores/settings'
-import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
+import { clampMobileEffortFor, type TalosMobileEffortLevel } from '@/lib/mobileEffort'
 import type { TalosMobileCommandId } from '@/lib/mobileCommandRegistry'
 /**
  * ⭐⭐⭐ 2/9 — "Migliora prompt" (piano §14.3/§15.6, R5): stessi pezzi
@@ -118,6 +120,24 @@ import { TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH } from '@/lib/chat/promptEnhancerDe
 import { talosHarnessUiApiBase } from '@/lib/harness/harnessUiApiBase'
 import { avvisaSePonteStaccato, leggiStatoPonteCodice } from '@/lib/harness/avvisoPonteCodice'
 import { useTalosMobileToasts } from '@/stores/toasts'
+/**
+ * ⭐ B1-14 — owner 23/09: «attiva la dettatura anche in codice». Gli STESSI
+ * pezzi che usa `ChatScreen.vue` (composable, politica della lingua, stop
+ * della voce): due microfoni con regole diverse a seconda di dove li premi
+ * sono il difetto che la barra e la chat hanno già avuto una volta (11/08).
+ * Solo la dettatura: la risposta a voce (`useTalosRispostaAVoce`) resta
+ * della chat.
+ */
+import { useTalosMobileDictation } from '@/composables/useTalosMobileDictation'
+import { useTalosSpeech } from '@/composables/useTalosSpeech'
+import { resolveTalosDictationLanguageTag, talosRilevamentoAcceso } from '@/lib/dictationPolicy'
+/**
+ * ⭐ B1-12 — il modello scelto si scrive sulla riga della sessione, nella
+ * STESSA colonna (`active_model_profile_id`) con cui la chat ricorda il
+ * modello di ogni conversazione (`stores/chat.ts`, `setActiveModelProfile`).
+ * Stesso singleton di `codiceSessions.ts`: nessuna seconda connessione.
+ */
+import { productionChatRepository } from '@/repositories/productionChatRepositorySingleton'
 
 const TALOS_HARNESS_UI_BASE = '/harness-ui'
 const TALOS_HARNESS_UI_BUILD_QUERY = `?build=${encodeURIComponent(TALOS_APP_BUILD)}`
@@ -183,6 +203,9 @@ async function resolveSession(): Promise<void> {
     }
     loadedSession.value = await findCodiceSession(sessionId.value)
     sessionResolving.value = false
+    // Il catalogo può essere arrivato PRIMA della sessione (vanno in parallelo
+    // al montaggio): la scelta ricordata si applica a chi arriva per secondo.
+    applicaModelloRicordato()
 }
 
 const hostEl = ref<HTMLDivElement | null>(null)
@@ -199,6 +222,51 @@ let pendingFirstPromptModello: string | null = null
 /** ⭐⭐⭐ 2/9 — gemello di `pendingFirstPromptModello` per il picker Planner: l'esecutore scelto AL MOMENTO dell'invio, stesso motivo. */
 let pendingFirstPromptModelloEsecutore: string | null = null
 const codeModelProfileId = ref('')
+
+/*
+ * ⭐ B1-14 — la dettatura del Codice, filo per filo come `ChatScreen.vue`:
+ * il dettato si compone sulla bozza catturata all'avvio (`base`), le parziali
+ * passano dalla stessa strada della tastiera (`updateCodePrompt`), la lingua
+ * viene dalle impostazioni della voce, e chi parla tace prima di ascoltare.
+ * ⛔ `allowedLanguages` resta il predefinito del composable (nessuna): in
+ * chat lo fornisce `useTalosRispostaAVoce`, che qui non si porta.
+ */
+const codeDictationDraftBefore = ref('')
+const parlaSubito = () => useTalosSpeech()
+const codeDictation = useTalosMobileDictation({
+    base: () => codePrompt.value,
+    onTranscript: (text) => { updateCodePrompt(text) },
+    language: () => resolveTalosDictationLanguageTag(settings.state.voice.dictation_language),
+    // ⛔ Il rilevamento si accende solo in automatico, come in chat.
+    autoLanguage: () => talosRilevamentoAcceso(settings.state.voice.dictation_language),
+    zittisci: () => parlaSubito().stop('il Codice apre il microfono'),
+    errorMessage: (code) => t(`chat.dictationErrors.${code}`),
+})
+
+/** Solo il pezzo NUOVO, come in chat: la bozza è nascosta dalla barra mentre si parla. */
+const codeTrascrizioneViva = computed(() => {
+    const ora = codePrompt.value
+    const prima = codeDictationDraftBefore.value
+    return ora.startsWith(prima) ? ora.slice(prima.length).trim() : ora.trim()
+})
+
+async function toggleCodeDictation(): Promise<void> {
+    if (codeDictation.status.value === 'idle') codeDictationDraftBefore.value = codePrompt.value
+    await codeDictation.toggle()
+}
+
+/** Butta via quello che si è detto e rimette il campo com'era. */
+function discardCodeDictation(): void {
+    codeDictation.cancel()
+    codePrompt.value = codeDictationDraftBefore.value
+}
+
+/** ⭐ Chiude la dettatura e manda, in un gesto solo. */
+async function onSendCodeDictation(): Promise<void> {
+    codeDictation.cancel()
+    await nextTick()
+    await submitCodePrompt()
+}
 /**
  * ⭐⭐⭐ 2/9 — picker Planner (piano §15.6, K): id del profilo esecutore
  * scelto, o `null` per "Automatico" (il kernel usa sempre `codeModelProfileId`
@@ -396,6 +464,13 @@ async function caricaModelliCodice(): Promise<boolean> {
         codeModelProfiles.value = []
         riuscito = false
     }
+    applicaModelloRicordato()
+    if (!codeModelProfiles.value.some((profilo) => profilo.id === codeModelProfileId.value)) {
+        // ⭐ Owner 23/09: prima del predefinito, l'ultimo modello scelto nel Codice —
+        // solo se è ancora nel catalogo, mai un id che il server rifiuterebbe.
+        const ultimo = settings.state.shell.codice_model
+        if (ultimo && codeModelProfiles.value.some((profilo) => profilo.id === ultimo)) codeModelProfileId.value = ultimo
+    }
     if (!codeModelProfiles.value.some((profilo) => profilo.id === codeModelProfileId.value)) {
         const preferito = codeModelProfiles.value.find((profilo) => profilo.model === MODELLO_PREFERITO_DEFAULT && profilo.status !== 'disabled')
             ?? codeModelProfiles.value.find((profilo) => profilo.show_in_composer)
@@ -406,6 +481,55 @@ async function caricaModelliCodice(): Promise<boolean> {
 }
 
 /**
+ * ⭐ B1-12 — MISURATO sul Pad il 23/09: scelto GLM 5.3 Flash, riaprendo la
+ * sessione il Codice tornava a Gemini 3.7 Flash. La scelta viveva solo in
+ * `codeModelProfileId`, che nasce vuoto a ogni montaggio.
+ *
+ * ⇒ Il modello ricordato dalla sessione vince, ma SOLO se è ancora nel
+ * catalogo: un id sparito lascia decidere `caricaModelliCodice()` (il
+ * predefinito Gemini, poi il primo), mai una stringa che il server
+ * rifiuterebbe. Open WebUI chiede la stessa cosa per le sue chat (issue
+ * #27672, «remember per-chat model», letto il 23/09/2026).
+ */
+function applicaModelloRicordato(): void {
+    const ricordato = loadedSession.value?.active_model_profile_id ?? null
+    if (!ricordato) return
+    if (!codeModelProfiles.value.some((profilo) => profilo.id === ricordato)) return
+    codeModelProfileId.value = ricordato
+}
+
+/**
+ * ⛔ Si scrive solo ciò che la persona SCEGLIE (o con cui manda il primo
+ * messaggio): l'autoselezione di un ripiego non si consacra a preferenza —
+ * la lezione di `chatController.ts` del 13/08 (ByteDance nel compositore).
+ * Un salvataggio fallito non toglie la scelta fatta: lo si dice e basta.
+ */
+async function ricordaModelloSessione(idSessione: string, idModello: string): Promise<void> {
+    try {
+        const aggiornata = await productionChatRepository.updateSession(idSessione, { active_model_profile_id: idModello })
+        if (loadedSession.value?.id === idSessione) loadedSession.value = aggiornata
+    } catch (error) {
+        console.warn('[codice] salvataggio del modello della sessione fallito:', error)
+        toasts.push({
+            message: t('chat.composerPreferencesSaveFailed', { detail: error instanceof Error ? error.message : String(error) }),
+            durationMs: 5000,
+        })
+    }
+}
+
+function selectCodeModel(idModello: string): void {
+    codeModelProfileId.value = idModello
+    // ⭐ Owner 23/09: la scelta della persona diventa il punto di partenza delle sessioni nuove.
+    void settings.setShell({ codice_model: idModello }).catch((error: unknown) => {
+        console.warn('[codice] salvataggio dell’ultimo modello fallito:', error)
+    })
+    const sessione = loadedSession.value
+    // Nella BOZZA non c'è ancora una riga: il modello si scrive quando nasce.
+    if (isDraft.value || !sessione) return
+    void ricordaModelloSessione(sessione.id, idModello)
+}
+
+/**
  * Il profilo VERO dietro `codeModelProfileId` — `undefined` quando
  * ancora nessun catalogo è stato caricato, o il provider scelto non ha
  * (più) un profilo OpenRouter valido: `startRealSessionFromMessage`
@@ -413,6 +537,22 @@ async function caricaModelliCodice(): Promise<boolean> {
  * il default del server (mai una stringa a caso).
  */
 const codeModeloSelezionato = computed(() => codeModelProfiles.value.find((profilo) => profilo.id === codeModelProfileId.value)?.model ?? null)
+/** NOME-MODELLO-01 (25/09/2026): il nome del profilo scelto, che la pagina del Codice mostra al posto della sigla. */
+const codeNomeModello = computed(() => codeModelProfiles.value.find((profilo) => profilo.id === codeModelProfileId.value)?.display_name ?? null)
+// ⭐ AUT-2 (24/09): a ogni cambio di modello, anche il Codice incorporato lo sa (le Automazioni partono con questo).
+watch(codeModeloSelezionato, (modello) => { setTalosHarnessUiModel(modello, codeNomeModello.value) })
+/*
+ * ⭐ RAG-COD (24/09/2026, owner «collegarla»): il livello che il giro del Codice usa davvero — quello del composer,
+ * regolato sui livelli veri del modello scelto (GLM 5.3: niente «off», un livello non supportato scende). `null` per un
+ * modello senza livelli: nessun `reasoning`, il predefinito del server, come prima.
+ */
+const codeEffortDelGiro = computed<TalosMobileEffortLevel | null>(() => {
+    const profilo = codeModelProfiles.value.find((entry) => entry.id === codeModelProfileId.value) ?? null
+    if (!profilo?.effort_levels?.length) return null
+    return clampMobileEffortFor(profilo, codeEffort.value)
+})
+// A ogni cambio (livello o modello) anche la sessione aperta lo prende; all'aggancio no (sotto): la sessione tiene il suo.
+watch(codeEffortDelGiro, (livello) => { setTalosHarnessUiEffort(livello, true) })
 
 /**
  * ⭐⭐⭐ 2/9 — gemello di `codeModeloSelezionato` per il picker Planner:
@@ -533,10 +673,16 @@ function updateCodePrompt(value: string): void {
 async function submitCodePrompt(): Promise<void> {
     const text = codePrompt.value.trim()
     if (!text || creatingSession.value) return
+    // SF5-3, come in chat: un microfono vivo non sopravvive all'invio — una
+    // parziale tardiva riporterebbe nel campo il testo appena mandato.
+    codeDictation.cancel()
     if (isDraft.value) {
         creatingSession.value = true
         try {
             const created = await createCodiceSession(text)
+            // ⭐ B1-12: la sessione nasce col modello con cui è partita, prima
+            // di atterrarci — così la rilettura della rotta nuova lo ritrova.
+            if (codeModelProfileId.value) await ricordaModelloSessione(created.id, codeModelProfileId.value)
             codePrompt.value = ''
             pendingFirstPrompt = text
             pendingFirstPromptModello = codeModeloSelezionato.value
@@ -875,6 +1021,10 @@ async function mountMockup(): Promise<void> {
         if (!selection || !selectTalosHarnessUiSession({ id: selection.id, title: selection.title })) {
             throw new Error('harness-ui session selection unavailable')
         }
+        // ⭐ AUT-2 (24/09): il Codice incorporato conosce da subito il modello scelto qui, non solo al primo invio.
+        setTalosHarnessUiModel(codeModeloSelezionato.value, codeNomeModello.value)
+        // ⭐ RAG-COD: e il livello di ragionamento, per le sessioni nuove; quella aperta tiene il suo finché non lo cambi.
+        setTalosHarnessUiEffort(codeEffortDelGiro.value, false)
         // Draft→real transition: the message that CREATED this session was
         // typed before the mockup existed to receive it — forward it now,
         // the one time the mockup is freshly mounted for this session.
@@ -947,6 +1097,8 @@ watch(codeView, () => { void nextTick(syncComposerLayout) })
 
 onBeforeUnmount(() => {
     mounted = false
+    // Chi esce dal Codice col microfono aperto lo restituisce.
+    codeDictation.cancel()
     void detachKeyboardBridge()
     composerLayoutObserver?.disconnect()
     composerLayoutObserver = null
@@ -1028,6 +1180,21 @@ onBeforeUnmount(() => {
                 data-testid="talos-code-composer-dock"
                 class="talos-code-composer-dock"
             >
+                <!-- ⭐ B1-14: gli esiti della dettatura parlano sopra il pollice,
+                     con le stesse regole della chat — il silenzio (`noSpeech`) è
+                     un avviso, non un guasto, e non interrompe chi legge. -->
+                <div
+                    v-if="codeDictation.error.value"
+                    :role="codeDictation.errorCode.value === 'noSpeech' ? 'status' : 'alert'"
+                    data-testid="talos-dictation-error"
+                    :data-esito="codeDictation.errorCode.value ?? ''"
+                    class="talos-code-dictation-error mb-2 rounded-md border p-3 text-sm"
+                    :class="codeDictation.errorCode.value === 'noSpeech'
+                        ? 'border-[var(--talos-border)] bg-[var(--talos-surface-2)] text-[var(--talos-muted)]'
+                        : 'border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]'"
+                >
+                    {{ codeDictation.error.value }}
+                </div>
                 <TalosMobileComposer
                     :prompt="codePrompt"
                     :model-profiles="codeModelProfiles"
@@ -1052,9 +1219,17 @@ onBeforeUnmount(() => {
                     :enhancer-model="codeEnhancer.model"
                     :enhancer-effort="codeEnhancer.effort"
                     :enhancer-models="codeEnhancerModels"
+                    :dictation-supported="codeDictation.visible.value"
+                    :dictation-listening="codeDictation.status.value === 'listening'"
+                    :dictation-starting="codeDictation.status.value === 'starting'"
+                    :dictation-level="codeDictation.level.value"
+                    :dictation-transcript="codeTrascrizioneViva"
                     @update:prompt="updateCodePrompt"
                     @send="submitCodePrompt"
-                    @select-model-profile="codeModelProfileId = $event"
+                    @toggle-dictation="void toggleCodeDictation()"
+                    @discard-dictation="discardCodeDictation()"
+                    @send-dictation="void onSendCodeDictation()"
+                    @select-model-profile="selectCodeModel"
                     @select-executor-model-profile="codeModelloEsecutoreId = $event"
                     @select-effort="codeEffort = $event"
                     @select-thinking="codeThinking = $event"
@@ -1110,6 +1285,14 @@ onBeforeUnmount(() => {
 
 .talos-code-composer-dock :deep([data-testid="talos-mobile-composer"]) {
     pointer-events: auto;
+    box-sizing: border-box;
+    width: calc(100% - 1.5rem);
+    max-width: 920px;
+    margin-inline: auto;
+}
+
+/* Stessa colonna del compositore qui sopra: l'avviso non sborda oltre i 920px. */
+.talos-code-dictation-error {
     box-sizing: border-box;
     width: calc(100% - 1.5rem);
     max-width: 920px;

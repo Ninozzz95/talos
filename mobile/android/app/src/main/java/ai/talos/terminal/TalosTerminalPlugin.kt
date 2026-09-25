@@ -787,20 +787,47 @@ class TalosTerminalPlugin : Plugin() {
         val pidSalvato = TalosPonteAdb.esegui(context, listOf("shell", "cat", PID_FILE_REMOTO))
             .uscita.trim()
         val pidValido = pidSalvato.isNotEmpty() && pidSalvato.all { it.isDigit() }
-        if (apkCambiatoDallUltimoAvvio && pidValido) {
-            TalosPonteAdb.esegui(context, listOf("shell", "kill", pidSalvato))
-            Log.i(TAG, "APK aggiornato dall'ultimo avvio del server: fermato il processo scaduto (pid $pidSalvato)")
-        } else if (pidValido) {
-            val vivo = TalosPonteAdb.esegui(context, listOf("shell", "kill", "-0", pidSalvato))
-            if (vivo.ok) {
-                val res = JSObject()
-                res.put("ok", true)
-                res.put("giaAttivo", true)
-                res.put("stdout", pidSalvato)
-                res.put("motivo", JSObject.NULL)
-                call.resolve(res)
-                return
+        // Si tiene il server in corso solo se l'APK è lo stesso e risponde ancora: esattamente la regola di prima.
+        val daTenere = pidSalvato.takeIf {
+            !apkCambiatoDallUltimoAvvio && pidValido
+                && TalosPonteAdb.esegui(context, listOf("shell", "kill", "-0", pidSalvato)).ok
+        }
+        /*
+         * ⛔⛔⛔ 24/09/2026 (difetto 6 del ledger B3, trovato sul Pad) — qui c'era UN `kill` al solo pid del file, e
+         * il rilancio subito dopo. Il vecchio non usciva (un flusso di eventi aperto lo teneva vivo) e restava per
+         * sempre, PPID 1, con l'app attaccata al codice vecchio; e un server rimasto da un giro prima non era nemmeno
+         * più nel file. Ora si fermano TUTTI i server del Codice in corso tranne quello che si tiene, con SIGTERM,
+         * grazia e SIGKILL, e solo dopo aver verificato che quel pid sia davvero il nostro server — vedi
+         * `TalosArrestoServer`. `ps -A -o PID,ARGS` si filtra QUI, non con `pgrep -f` (che trova se stesso, 28/8).
+         */
+        val inCorso = TalosArrestoServer.serverInCorso(
+            TalosPonteAdb.esegui(context, listOf("shell", "ps", "-A", "-o", "PID,ARGS")).uscita,
+            SERVER_JS_REMOTO,
+        )
+        val daFermare = (inCorso + listOfNotNull(pidSalvato.takeIf { pidValido })).distinct().filter { it != daTenere }
+        for (pid in daFermare) {
+            val esito = TalosArrestoServer.ferma(
+                pid = pid,
+                percorsoServer = SERVER_JS_REMOTO,
+                rigaDiComando = { p -> TalosPonteAdb.esegui(context, listOf("shell", "cat", "/proc/$p/cmdline")).uscita },
+                vivo = { p -> TalosPonteAdb.esegui(context, listOf("shell", "kill", "-0", p)).ok },
+                segnala = { p, segnale -> TalosPonteAdb.esegui(context, listOf("shell", "kill") + listOfNotNull(segnale) + p) },
+                dormi = { ms -> Thread.sleep(ms) },
+            )
+            if (esito == TalosArrestoServer.Esito.ANCORA_VIVO) {
+                Log.e(TAG, "server del Codice $pid ancora vivo anche dopo SIGKILL")
+            } else if (esito != TalosArrestoServer.Esito.NON_NOSTRO) {
+                Log.i(TAG, "server del Codice $pid fermato: $esito")
             }
+        }
+        if (daTenere != null) {
+            val res = JSObject()
+            res.put("ok", true)
+            res.put("giaAttivo", true)
+            res.put("stdout", daTenere)
+            res.put("motivo", JSObject.NULL)
+            call.resolve(res)
+            return
         }
         try {
             svuotaStagingSeApkAggiornato(staging)

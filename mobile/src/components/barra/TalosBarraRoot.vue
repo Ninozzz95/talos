@@ -1852,7 +1852,7 @@ onMounted(async () => {
                     <span /><span /><span />
                 </div>
                 <div v-else class="testo" data-testid="talos-barra-risposta">
-                    <TalosMobileMessageContent :content="risposta" />
+                    <TalosMobileMessageContent :content="risposta" line-breaks />
                 </div>
                 <!-- ⭐⭐⭐ LA SCHEDA, che qui NON C'ERA.
 

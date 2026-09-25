@@ -122,9 +122,73 @@ vi.mock('@/lib/chat/promptEnhancement', async (importOriginal) => ({
 const providerRegistryMock = vi.hoisted(() => ({
     providerAdapterFor: vi.fn(() => ({ listModels: vi.fn(async () => ({ provider: 'openrouter', models: [] })) })),
 }))
-vi.mock('@/lib/chat/providerRegistry', () => providerRegistryMock)
-vi.mock('@/services/providerEndpointStore', () => ({ getProviderEndpoint: vi.fn(async () => null) }))
-vi.mock('@/services/secureKeyStore', () => ({ getProviderKey: vi.fn(async () => 'chiave-prova') }))
+vi.mock('@/lib/chat/providerRegistry', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/lib/chat/providerRegistry')>()),
+    ...providerRegistryMock,
+}))
+vi.mock('@/services/providerEndpointStore', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/services/providerEndpointStore')>()),
+    getProviderEndpoint: vi.fn(async () => null),
+}))
+// ⭐ Il resto del modulo resta vero: la bozza carica in differita
+// `TalosWelcomeTitle`, che passa da `chatController` e legge `hasProviderKey`
+// — con un doppio parziale l'import fallisce DOPO la fine della prova.
+vi.mock('@/services/secureKeyStore', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/services/secureKeyStore')>()),
+    getProviderKey: vi.fn(async () => 'chiave-prova'),
+}))
+
+/**
+ * ⭐ B1-14 (owner 23/09: «attiva la dettatura anche in codice») — il MOTORE
+ * di dettatura finto, non il composable: `useTalosMobileDictation` resta
+ * quello vero, così la prova copre le stesse regole della chat (bozza di
+ * partenza, annulla, invio che chiude, errori). Si pilota a mano: `eventi`
+ * sono i callback che il composable consegna a `start()`.
+ */
+const dettaturaMock = vi.hoisted(() => {
+    const stato = {
+        eventi: null as null | {
+            onStart?: () => void
+            onPartial: (text: string) => void
+            onEnd: () => void
+            onError: (code: string) => void
+        },
+        opzioni: null as null | Record<string, unknown>,
+    }
+    const motore = {
+        // Spento per difetto (web senza Web Speech): le prove che vogliono il
+        // microfono lo accendono dichiarando la piattaforma nativa.
+        supported: vi.fn(async () => false),
+        requestPermission: vi.fn(async () => true),
+        start: vi.fn(async (eventi: NonNullable<typeof stato.eventi>, opzioni?: Record<string, unknown>) => {
+            stato.eventi = eventi
+            stato.opzioni = opzioni ?? null
+        }),
+        stop: vi.fn(async () => undefined),
+    }
+    return { stato, motore }
+})
+vi.mock('@/services/dictation', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/services/dictation')>()),
+    talosDictationEngine: () => dettaturaMock.motore,
+    talosDettaturaAnnota: vi.fn(),
+}))
+const vocePrestoMock = vi.hoisted(() => ({ stop: vi.fn(async () => undefined) }))
+vi.mock('@/composables/useTalosSpeech', () => ({ useTalosSpeech: () => vocePrestoMock }))
+
+/**
+ * ⭐ B1-12 — la STESSA colonna che la chat usa per ricordare il modello di
+ * una conversazione (`active_model_profile_id`, `stores/chat.ts`
+ * `setActiveModelProfile`). Il doppio conserva ciò che si scrive, così
+ * uscire e rientrare (smonta → rimonta) rilegge davvero la scelta.
+ */
+const repositoryMock = vi.hoisted(() => ({
+    modelliSalvati: new Map<string, string | null>(),
+    updateSession: vi.fn(),
+}))
+vi.mock('@/repositories/productionChatRepositorySingleton', () => ({
+    productionChatRepository: { updateSession: repositoryMock.updateSession },
+}))
 
 import HarnessSessionScreen from '@/screens/HarnessSessionScreen.vue'
 import {
@@ -175,7 +239,21 @@ describe('HarnessSessionScreen (28/8) — real sessions + a DRAFT state, shadow 
         mockState.routerPush.mockReset()
         mockState.routerReplace.mockClear()
         codiceMock.findCodiceSession.mockReset()
-        codiceMock.findCodiceSession.mockImplementation(async (id: string) => FIXTURES[id] ?? null)
+        codiceMock.findCodiceSession.mockImplementation(async (id: string) => (FIXTURES[id]
+            ? { ...FIXTURES[id], active_model_profile_id: repositoryMock.modelliSalvati.get(id) ?? null }
+            : null))
+        repositoryMock.modelliSalvati.clear()
+        repositoryMock.updateSession.mockReset().mockImplementation(async (id: string, input: { active_model_profile_id?: string | null }) => {
+            if (input.active_model_profile_id !== undefined) repositoryMock.modelliSalvati.set(id, input.active_model_profile_id)
+            return { ...(FIXTURES[id] ?? { id, title: id }), active_model_profile_id: repositoryMock.modelliSalvati.get(id) ?? null }
+        })
+        dettaturaMock.stato.eventi = null
+        dettaturaMock.stato.opzioni = null
+        dettaturaMock.motore.supported.mockClear()
+        dettaturaMock.motore.requestPermission.mockReset().mockResolvedValue(true)
+        dettaturaMock.motore.start.mockClear()
+        dettaturaMock.motore.stop.mockClear()
+        vocePrestoMock.stop.mockClear()
         codiceMock.createCodiceSession.mockReset()
         codiceMock.createCodiceSession.mockImplementation(async (title: string) => ({ id: 'created-session-id', title }))
         terminalePonteMock.talosTerminaleDisponibile.mockReset().mockReturnValue(false)
@@ -1022,6 +1100,332 @@ describe('HarnessSessionScreen (28/8) — real sessions + a DRAFT state, shadow 
 
             expect(w.get('[data-testid="talos-composer-action"]').attributes('disabled')).toBeDefined()
             expect(codiceMock.createCodiceSession).not.toHaveBeenCalled()
+        })
+    })
+
+    /**
+     * ⭐ B1-14 — owner 23/09: «attiva la dettatura anche in codice». Il
+     * compositore del Codice È quello della chat, ma senza i fili della
+     * dettatura il microfono diceva «La dettatura non è disponibile qui».
+     * Qui si prova che il filo è lo STESSO della chat (ChatScreen.vue):
+     * stessa lingua, stessa bozza di partenza, annulla che la rimette,
+     * invio che chiude l'ascolto, stessi errori sopra il compositore.
+     */
+    describe('B1-14 dettatura nel Codice — gli stessi fili della chat', () => {
+        async function montaSessioneConMicrofono() {
+            vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+            vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
+            const w = mount(HarnessSessionScreen)
+            const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+            await resolveScriptLoad(host)
+            await flushPromises()
+            return w
+        }
+
+        it('CODE-DICTATION-01 il microfono del Codice è acceso, mai più «La dettatura non è disponibile qui»', async () => {
+            const w = await montaSessioneConMicrofono()
+            const composer = w.getComponent({ name: 'TalosMobileComposer' })
+            expect(composer.props('dictationSupported')).toBe(true)
+            await composer.get('textarea').trigger('focus')
+            expect(composer.text()).not.toContain('La dettatura non è disponibile qui')
+        })
+
+        it('CODE-DICTATION-02 anche nella BOZZA (sessione nuova) il microfono è acceso', async () => {
+            mockState.params = { id: 'new' }
+            vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+            vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true)
+            const w = mount(HarnessSessionScreen)
+            await flushPromises()
+            expect(w.getComponent({ name: 'TalosMobileComposer' }).props('dictationSupported')).toBe(true)
+            // Col campo vuoto il tasto a destra è il microfono: ascolta, e non
+            // crea MAI una sessione (CODE-DRAFT-03 resta vero anche qui).
+            await w.get('[data-testid="talos-composer-action"]').trigger('click')
+            await flushPromises()
+            expect(dettaturaMock.motore.start).toHaveBeenCalledTimes(1)
+            expect(codiceMock.createCodiceSession).not.toHaveBeenCalled()
+        })
+
+        it('CODE-DICTATION-03 il dettato si compone sul testo già scritto, con la lingua delle impostazioni, e la voce tace prima', async () => {
+            const { useSettingsStore } = await import('@/stores/settings')
+            const { resolveTalosDictationLanguageTag, talosRilevamentoAcceso } = await import('@/lib/dictationPolicy')
+            const w = await montaSessioneConMicrofono()
+            const composer = w.getComponent({ name: 'TalosMobileComposer' })
+            await composer.get('textarea').setValue('Rifattorizza')
+            composer.vm.$emit('toggleDictation')
+            await flushPromises()
+
+            expect(vocePrestoMock.stop).toHaveBeenCalled()
+            expect(dettaturaMock.motore.start).toHaveBeenCalledTimes(1)
+            const lingua = useSettingsStore().state.voice.dictation_language
+            expect(dettaturaMock.stato.opzioni).toMatchObject({
+                language: resolveTalosDictationLanguageTag(lingua),
+                autoLanguage: talosRilevamentoAcceso(lingua),
+            })
+            expect(composer.props('dictationStarting')).toBe(true)
+
+            dettaturaMock.stato.eventi!.onPartial('il modulo auth')
+            await flushPromises()
+            expect(composer.props('dictationListening')).toBe(true)
+            expect(composer.props('prompt')).toBe('Rifattorizza il modulo auth')
+            // Solo il pezzo NUOVO nella barra, come in chat.
+            expect(composer.props('dictationTranscript')).toBe('il modulo auth')
+        })
+
+        it('CODE-DICTATION-04 annulla butta il dettato e rimette la bozza com\'era', async () => {
+            const w = await montaSessioneConMicrofono()
+            const composer = w.getComponent({ name: 'TalosMobileComposer' })
+            await composer.get('textarea').setValue('Rifattorizza')
+            composer.vm.$emit('toggleDictation')
+            await flushPromises()
+            dettaturaMock.stato.eventi!.onPartial('parole sbagliate')
+            await flushPromises()
+
+            composer.vm.$emit('discardDictation')
+            await flushPromises()
+            expect(composer.props('prompt')).toBe('Rifattorizza')
+            expect(composer.props('dictationListening')).toBe(false)
+            expect(dettaturaMock.motore.stop).toHaveBeenCalled()
+        })
+
+        it('CODE-DICTATION-05 «invia» dalla barra chiude l\'ascolto e manda il dettato; una parziale tardiva non lo resuscita', async () => {
+            const submitPrompt = vi.fn(() => true)
+            ;(window as unknown as {
+                __talosHarnessUiRuntime?: { selectSession(): void, submitPrompt(text: string): boolean }
+            }).__talosHarnessUiRuntime = { selectSession: vi.fn(() => true), submitPrompt }
+            const w = await montaSessioneConMicrofono()
+            const composer = w.getComponent({ name: 'TalosMobileComposer' })
+            composer.vm.$emit('toggleDictation')
+            await flushPromises()
+            const eventi = dettaturaMock.stato.eventi!
+            eventi.onPartial('sistema il test instabile')
+            await flushPromises()
+
+            composer.vm.$emit('sendDictation')
+            await flushPromises()
+            expect(submitPrompt).toHaveBeenCalledTimes(1)
+            expect((submitPrompt.mock.calls[0] as unknown[])[0]).toBe('sistema il test instabile')
+            expect(composer.props('dictationListening')).toBe(false)
+            expect(composer.props('prompt')).toBe('')
+
+            eventi.onPartial('sistema il test instabile adesso')
+            await flushPromises()
+            expect(composer.props('prompt')).toBe('')
+        })
+
+        it('CODE-DICTATION-06 un errore vero parla sopra il compositore in rosso; il silenzio no', async () => {
+            const w = await montaSessioneConMicrofono()
+            const composer = w.getComponent({ name: 'TalosMobileComposer' })
+            composer.vm.$emit('toggleDictation')
+            await flushPromises()
+            dettaturaMock.stato.eventi!.onError('recognitionFailed')
+            await flushPromises()
+            const errore = w.get('[data-testid="talos-dictation-error"]')
+            expect(errore.attributes('role')).toBe('alert')
+            expect(errore.attributes('data-esito')).toBe('recognitionFailed')
+            expect(errore.text().length).toBeGreaterThan(0)
+
+            composer.vm.$emit('toggleDictation')
+            await flushPromises()
+            dettaturaMock.stato.eventi!.onEnd()
+            await flushPromises()
+            const silenzio = w.get('[data-testid="talos-dictation-error"]')
+            expect(silenzio.attributes('role')).toBe('status')
+            expect(silenzio.attributes('data-esito')).toBe('noSpeech')
+        })
+
+        it('CODE-DICTATION-07 uscire dal Codice col microfono aperto lo restituisce', async () => {
+            const w = await montaSessioneConMicrofono()
+            const composer = w.getComponent({ name: 'TalosMobileComposer' })
+            composer.vm.$emit('toggleDictation')
+            await flushPromises()
+            dettaturaMock.stato.eventi!.onPartial('ciao')
+            await flushPromises()
+            dettaturaMock.motore.stop.mockClear()
+            w.unmount()
+            expect(dettaturaMock.motore.stop).toHaveBeenCalled()
+        })
+    })
+
+    /**
+     * ⭐ B1-12 — MISURATO sul Pad il 23/09: scelto GLM 5.3 Flash, riaprendo
+     * la sessione il Codice tornava a Gemini 3.7 Flash. La cura usa la
+     * colonna che la chat usa già per ricordare il modello di OGNI
+     * conversazione (`active_model_profile_id` della riga di sessione, la
+     * stessa tabella — Open WebUI chiede la stessa cosa, issue #27672).
+     */
+    describe('B1-12 il modello del Codice si ricorda per sessione', () => {
+        // L'ultimo modello del Codice vive nelle impostazioni (un singleton): ogni prova parte senza.
+        beforeEach(async () => {
+            const { useSettingsStore } = await import('@/stores/settings')
+            await useSettingsStore().setShell({ codice_model: null })
+        })
+        const profilo = (id: string, model: string, display_name: string): TalosMobileModelProfileView => ({
+            id, provider: 'openrouter', model, display_name, status: 'untested', has_secret: true, effort_levels: [],
+            supports_thinking: false, show_in_composer: true, capabilities: null, probe_ok: null,
+        } as unknown as TalosMobileModelProfileView)
+        const GEMINI = profilo('openrouter:google/gemini-3.7-flash', 'google/gemini-3.7-flash', 'Gemini 3.7 Flash')
+        const GLM = profilo('openrouter:z-ai/glm-5.3-flash', 'z-ai/glm-5.3-flash', 'GLM 5.3 Flash')
+
+        async function montaSessione() {
+            vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+            codiceModelProfilesMock.caricaProfiliModelloCodice.mockResolvedValue([GEMINI, GLM])
+            const w = mount(HarnessSessionScreen)
+            const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+            await resolveScriptLoad(host)
+            await flushPromises()
+            return w
+        }
+
+        // ⭐ 24/09/2026 (AUT-2): il Codice incorporato conosceva il modello solo a un invio; le Automazioni, aperte prima di
+        // scrivere, sarebbero partite col modello predefinito del server invece di quello scelto qui.
+        it('CODE-MODEL-BRIDGE-01 il Codice incorporato riceve il modello scelto: all’aggancio e a ogni cambio', async () => {
+            const impostaModello = vi.fn(() => true)
+            // L'ordine vero: i profili modello arrivano PRIMA che il Codice incorporato esista (il suo script si carica
+            // dopo) — il modello va consegnato anche all'aggancio, non solo ai cambi.
+            vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+            codiceModelProfilesMock.caricaProfiliModelloCodice.mockResolvedValue([GEMINI, GLM])
+            const w = mount(HarnessSessionScreen)
+            await flushPromises()
+            expect(impostaModello).not.toHaveBeenCalled()
+            ;(window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime = { selectSession: vi.fn(() => true), impostaModello }
+            const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+            host.shadowRoot?.querySelector('script')?.dispatchEvent(new Event('load'))
+            await flushPromises()
+            // NOME-MODELLO-01 (25/09/2026): col modello viaggia il suo nome — il server del Codice sul telefono non ha il
+            // catalogo (`/api/v1/models` → 404), e senza nome la pagina mostrava la sigla.
+            expect(impostaModello).toHaveBeenLastCalledWith(GEMINI.model, 'Gemini 3.7 Flash')
+            w.getComponent({ name: 'TalosMobileComposer' }).vm.$emit('selectModelProfile', GLM.id)
+            await flushPromises()
+            expect(impostaModello).toHaveBeenLastCalledWith(GLM.model, 'GLM 5.3 Flash')
+        })
+
+        /*
+         * RAG-COD (24/09/2026, owner «collegarla»): la barra dell'impegno del composer del Codice cambiava solo il
+         * miglioramento del prompt; il giro del Codice partiva senza `reasoning`. Ora il livello (coi livelli veri del
+         * modello: GLM 5.3 niente «off») arriva al Codice incorporato; un modello senza livelli non manda niente.
+         */
+        it('RAG-COD-11 il Codice incorporato riceve il livello di ragionamento del composer, già regolato sul modello', async () => {
+            const impostaEffort = vi.fn(() => true)
+            const GLM_OBBLIGATORIO = { ...GLM, effort_levels: ['max', 'high', 'low'], supports_thinking: true, reasoning_mandatory: true }
+            vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+            codiceModelProfilesMock.caricaProfiliModelloCodice.mockResolvedValue([GEMINI, GLM_OBBLIGATORIO])
+            const w = mount(HarnessSessionScreen)
+            await flushPromises()
+            ;(window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime = {
+                selectSession: vi.fn(() => true), impostaModello: vi.fn(() => true), impostaEffort,
+            }
+            const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+            host.shadowRoot?.querySelector('script')?.dispatchEvent(new Event('load'))
+            await flushPromises()
+            // Gemini qui non ha livelli: nessun `reasoning` (il predefinito del server), e la sessione salvata non si tocca.
+            expect(impostaEffort).toHaveBeenLastCalledWith(null, false)
+            const composer = w.getComponent({ name: 'TalosMobileComposer' })
+            composer.vm.$emit('selectModelProfile', GLM_OBBLIGATORIO.id)
+            await flushPromises()
+            expect(impostaEffort).toHaveBeenLastCalledWith('high', true)
+            composer.vm.$emit('selectEffort', 'off')
+            await flushPromises()
+            expect(impostaEffort).toHaveBeenLastCalledWith('low', true)
+        })
+
+        it('CODE-MODEL-MEMORY-01 scelto GLM, si esce e si rientra: resta GLM, non torna Gemini', async () => {
+            const primo = await montaSessione()
+            expect(primo.getComponent({ name: 'TalosMobileComposer' }).props('selectedModelProfileId')).toBe(GEMINI.id)
+            primo.getComponent({ name: 'TalosMobileComposer' }).vm.$emit('selectModelProfile', GLM.id)
+            await flushPromises()
+            expect(repositoryMock.updateSession).toHaveBeenCalledWith('refactor-auth-flow', { active_model_profile_id: GLM.id })
+            primo.unmount()
+
+            const secondo = await montaSessione()
+            expect(secondo.getComponent({ name: 'TalosMobileComposer' }).props('selectedModelProfileId')).toBe(GLM.id)
+        })
+
+        it('CODE-MODEL-MEMORY-02 il modello scelto nella BOZZA nasce già scritto sulla sessione creata', async () => {
+            mockState.params = { id: 'new' }
+            vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+            codiceModelProfilesMock.caricaProfiliModelloCodice.mockResolvedValue([GEMINI, GLM])
+            codiceMock.createCodiceSession.mockResolvedValue({ id: 'brand-new-id', title: 'Fix' })
+            const w = mount(HarnessSessionScreen)
+            await flushPromises()
+            const composer = w.getComponent({ name: 'TalosMobileComposer' })
+            composer.vm.$emit('selectModelProfile', GLM.id)
+            await flushPromises()
+            // Nella bozza non c'è ancora una riga: niente da scrivere.
+            expect(repositoryMock.updateSession).not.toHaveBeenCalled()
+
+            await composer.get('textarea').setValue('Fix')
+            await composer.get('[data-testid="talos-composer-action"]').trigger('click')
+            await flushPromises()
+            expect(repositoryMock.updateSession).toHaveBeenCalledWith('brand-new-id', { active_model_profile_id: GLM.id })
+        })
+
+        it('CODE-MODEL-MEMORY-03 al contrario: un modello salvato che non c\'è più nel catalogo lascia il predefinito, e l\'autoselezione non si scrive', async () => {
+            repositoryMock.modelliSalvati.set('refactor-auth-flow', 'openrouter:modello/sparito')
+            const w = await montaSessione()
+            expect(w.getComponent({ name: 'TalosMobileComposer' }).props('selectedModelProfileId')).toBe(GEMINI.id)
+            // ⛔ Un ripiego non è una scelta: non si consacra a preferenza.
+            expect(repositoryMock.updateSession).not.toHaveBeenCalled()
+        })
+
+        it('CODE-MODEL-MEMORY-04 il modello salvato vince anche se il catalogo arriva PRIMA della sessione', async () => {
+            repositoryMock.modelliSalvati.set('refactor-auth-flow', GLM.id)
+            let rilascia: (() => void) | null = null
+            codiceMock.findCodiceSession.mockImplementation(async (id: string) => {
+                await new Promise<void>((resolve) => { rilascia = resolve })
+                return { ...FIXTURES[id], active_model_profile_id: repositoryMock.modelliSalvati.get(id) ?? null }
+            })
+            vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+            codiceModelProfilesMock.caricaProfiliModelloCodice.mockResolvedValue([GEMINI, GLM])
+            const w = mount(HarnessSessionScreen)
+            await flushPromises()
+            expect(w.getComponent({ name: 'TalosMobileComposer' }).props('selectedModelProfileId')).toBe(GEMINI.id)
+            ;(rilascia as (() => void) | null)?.()
+            const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+            await resolveScriptLoad(host)
+            await flushPromises()
+            expect(w.getComponent({ name: 'TalosMobileComposer' }).props('selectedModelProfileId')).toBe(GLM.id)
+            expect(repositoryMock.updateSession).not.toHaveBeenCalled()
+        })
+
+        /*
+         * ⭐ Owner 23/09, «sì»: anche le sessioni NUOVE partono dall'ultimo modello
+         * scelto nel Codice, non da Gemini. Stesso comportamento di LibreChat (le
+         * chat nuove partono dal modello della conversazione precedente) e di
+         * Hermes Agent (la scelta vale per le sessioni nuove, quelle aperte tengono
+         * il loro modello) — letti il 23/09/2026.
+         */
+        describe('le sessioni nuove partono dall’ultimo modello scelto nel Codice', () => {
+            it('CODE-MODEL-LAST-01 scelto GLM in una sessione, la bozza nuova parte da GLM', async () => {
+                const primo = await montaSessione()
+                primo.getComponent({ name: 'TalosMobileComposer' }).vm.$emit('selectModelProfile', GLM.id)
+                await flushPromises()
+                primo.unmount()
+
+                mockState.params = { id: 'new' }
+                const bozza = mount(HarnessSessionScreen)
+                await flushPromises()
+                expect(bozza.getComponent({ name: 'TalosMobileComposer' }).props('selectedModelProfileId')).toBe(GLM.id)
+            })
+
+            it('CODE-MODEL-LAST-02 il modello salvato nella sessione vince sull’ultimo scelto altrove', async () => {
+                const { useSettingsStore } = await import('@/stores/settings')
+                await useSettingsStore().setShell({ codice_model: GLM.id })
+                repositoryMock.modelliSalvati.set('refactor-auth-flow', GEMINI.id)
+                const w = await montaSessione()
+                expect(w.getComponent({ name: 'TalosMobileComposer' }).props('selectedModelProfileId')).toBe(GEMINI.id)
+            })
+
+            it('CODE-MODEL-LAST-03 al contrario: un ultimo modello sparito dal catalogo lascia Gemini e non si riscrive', async () => {
+                const { useSettingsStore } = await import('@/stores/settings')
+                await useSettingsStore().setShell({ codice_model: 'openrouter:modello/sparito' })
+                mockState.params = { id: 'new' }
+                vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+                codiceModelProfilesMock.caricaProfiliModelloCodice.mockResolvedValue([GEMINI, GLM])
+                const w = mount(HarnessSessionScreen)
+                await flushPromises()
+                expect(w.getComponent({ name: 'TalosMobileComposer' }).props('selectedModelProfileId')).toBe(GEMINI.id)
+                expect(useSettingsStore().state.shell.codice_model).toBe('openrouter:modello/sparito')
+            })
         })
     })
 })

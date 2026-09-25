@@ -21,7 +21,16 @@ import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
  * col gesto Indietro o toccando fuori.
  */
 interface TalosStationOption { readonly value: string; readonly label: string; readonly count?: number }
-
+/**
+ * ⭐ A3-84 (25/09/2026) — altri gruppi a scelta singola dopo «Ordina»: l'elenco delle chat ne porta tre (Periodo,
+ * Contenuto, Modello; owner: «tutti i filtri del caso» nel foglio). Stessa voce a riquadro, un radiogroup per gruppo.
+ */
+export interface TalosStationOptionGroup {
+    readonly id: string
+    readonly label: string
+    readonly value: string
+    readonly options: readonly TalosStationOption[]
+}
 const props = withDefaults(defineProps<{
     title: string
     testIdPrefix: string
@@ -31,11 +40,16 @@ const props = withDefaults(defineProps<{
     showLabel?: string
     showOptions?: readonly TalosStationOption[]
     show?: string | null
-}>(), { showLabel: '', showOptions: () => [], show: null })
-
+    groups?: readonly TalosStationOptionGroup[]
+    /** A3-84: «Azzera» nell'intestazione (LibreChat PR #16246, 23/09/2026), solo se `resettable`. */
+    resetLabel?: string
+    resettable?: boolean
+}>(), { showLabel: '', showOptions: () => [], show: null, groups: () => [], resetLabel: '', resettable: false })
 const emit = defineEmits<{
     'update:sort': [value: string]
     'update:show': [value: string]
+    'update:group': [id: string, value: string]
+    reset: []
     close: []
 }>()
 
@@ -47,7 +61,7 @@ function optionClass(selected: boolean): string {
         : `${base} border-[var(--talos-border)] text-[var(--talos-muted)]`
 }
 
-function withTestIds(options: readonly TalosStationOption[], kind: 'sort' | 'show') {
+function withTestIds(options: readonly TalosStationOption[], kind: string) {
     return options.map((option) => ({ ...option, testId: `${props.testIdPrefix}-${kind}-${option.value}` }))
 }
 </script>
@@ -58,6 +72,16 @@ function withTestIds(options: readonly TalosStationOption[], kind: 'sort' | 'sho
         :testid="`${testIdPrefix}-options-sheet`"
         @close="emit('close')"
     >
+        <template v-if="resetLabel && resettable" #header-end>
+            <button
+                type="button"
+                :data-testid="`${testIdPrefix}-options-reset`"
+                class="talos-pressable flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--talos-radius-control)] px-2 text-sm font-medium text-[var(--talos-accent)]"
+                @click="emit('reset')"
+            >
+                {{ resetLabel }}
+            </button>
+        </template>
         <section>
             <h3 class="text-sm font-medium text-[var(--talos-text)]">{{ sortLabel }}</h3>
             <TalosThemedFilter
@@ -88,6 +112,29 @@ function withTestIds(options: readonly TalosStationOption[], kind: 'sort' | 'sho
                 <template #option="{ option, selected }">
                     <span class="min-w-0 flex-1">{{ option.label }}</span>
                     <small class="text-2xs tabular-nums text-[var(--talos-muted)]">{{ (option as TalosStationOption).count }}</small>
+                    <Check v-if="selected" class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                </template>
+            </TalosThemedFilter>
+        </section>
+
+        <section
+            v-for="group in groups"
+            :key="group.id"
+            :data-testid="`${testIdPrefix}-group-${group.id}`"
+            class="border-t border-[var(--talos-border)] pb-2 pt-3"
+        >
+            <h3 class="text-sm font-medium text-[var(--talos-text)]">{{ group.label }}</h3>
+            <TalosThemedFilter
+                group-class="mt-2 grid gap-2"
+                :model-value="group.value"
+                :options="withTestIds(group.options, group.id)"
+                :group-label="group.label"
+                :option-class="optionClass"
+                @update:model-value="(value: string) => emit('update:group', group.id, value)"
+            >
+                <template #option="{ option, selected }">
+                    <span class="min-w-0 flex-1">{{ option.label }}</span>
+                    <small v-if="(option as TalosStationOption).count !== undefined" class="text-2xs tabular-nums text-[var(--talos-muted)]">{{ (option as TalosStationOption).count }}</small>
                     <Check v-if="selected" class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                 </template>
             </TalosThemedFilter>

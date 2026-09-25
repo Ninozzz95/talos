@@ -286,7 +286,7 @@ describe('il modulo che CORREGGE — lo stesso che crea', () => {
             .toBe('Rivedere la presentazione')
         expect((wrapper.get('[data-testid="talos-task-description"]').element as HTMLTextAreaElement).value)
             .toContain('- [x] struttura')
-        expect((wrapper.get('[data-testid="talos-task-schedule-enable"]').element as HTMLInputElement).checked).toBe(true)
+        expect(wrapper.get('[data-testid="talos-task-schedule-enable"]').attributes('aria-checked')).toBe('true')
     })
 
     it('salva con `update`, e torna all\'ATTIVITÀ — non all\'elenco', async () => {

@@ -30,6 +30,7 @@ import { generaImmagineOpenRouter as generaImmagineOpenRouterReale } from './ima
 import { creaFileWorkspace as creaFileWorkspaceReale, WorkspaceFileError } from './workspace-files.mjs';
 // ⭐⭐⭐ 03/9 — collega i provider di rete già configurati (owner: "colleghiamo i 5, poi pensiamo ai locali"), vedi model-destination.mjs per il perché sta qui e non nel kernel.
 import { creaFetchMultiProvider } from './model-destination.mjs';
+import { politicaRagionamentoReale } from './reasoning-policy.mjs';
 import {
   compactionEnd,
   compactionStart,
@@ -70,7 +71,13 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
        * visibile a chi guarda una sessione HTTP. `null` quando nessun
        * giro l'ha mai riportato, inoltrato com'è, mai inventato.
        */
-      result: { detto: esito.detto, compattazioni: esito.compattazioni, premesseNegate: esito.premesseNegate, usage: esito.usage ?? null },
+      /*
+       * ⭐ B1-11 (23/09): `attrezziOfferti` — i nomi che il modello ha DAVVERO
+       * visto (kernel, `esito.attrezziOfferti`), per il Capability hub.
+       * Inoltrato com'è; `null` se un kernel più vecchio non lo riporta, mai
+       * ricostruito qui.
+       */
+      result: { detto: esito.detto, compattazioni: esito.compattazioni, premesseNegate: esito.premesseNegate, usage: esito.usage ?? null, attrezziOfferti: esito.attrezziOfferti ?? null },
     });
   }
   return runError({ message: esito.detto, code: esito.comeFinita });
@@ -95,7 +102,10 @@ const ESTENSIONE_PER_MEDIA_TYPE = Object.freeze({ 'image/png': 'png', 'image/jpe
  * `strumentiEstesi`/`ricercaWeb`/`onArtefatto` (attrezzi opzionali —
  * `document_create`/`onDocumento` deliberatamente ESCLUSO, richiede
  * document-generator.mjs e dipendenze npm non ancora verificate su
- * questo runtime, vedi il ledger), `livelloAccesso`/`chiediApprovazioneFn`/
+ * questo runtime, vedi il ledger; ⛔ B1-11, 23/09: senza `onDocumento` il
+ * kernel non lo OFFRE più al modello, e lo stesso vale per `web_search`
+ * quando `ricercaWeb` non è configurato — l'elenco vero torna in
+ * `esito.attrezziOfferti` e nel `result` di RunFinished), `livelloAccesso`/`chiediApprovazioneFn`/
  * `permessiPerAttrezzo` (permessi — inoltrati SENZA logica propria, la
  * decisione vive nel kernel), `hookFn` (gate pre/post tool-call),
  * `onDelega` (sub-agenti), `codaMessaggiFn` (coda follow-up), `firma`
@@ -167,6 +177,12 @@ export async function avviaSessione({
    */
   dipendenzeMultiProvider = null,
   creaFetchMultiProviderFn = creaFetchMultiProvider,
+  /**
+   * ⭐ RAG-COD (24/09/2026, owner «nel server del Codice») — il lettore del catalogo OpenRouter (`reasoning-policy.mjs`),
+   * uno per processo: il kernel lo interroga a ogni chiamata col modello di quel giro e applica
+   * `regolaReasoningPerModello`. Sessioni e automazioni passano tutte da qui.
+   */
+  politicaRagionamentoFn = politicaRagionamentoReale,
 }) {
   const threadId = randomUUID();
   const runId = randomUUID();
@@ -356,7 +372,7 @@ export async function avviaSessione({
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       modelloEsecutore, fetchDiRete: fetchInstradata,
-      onGiro, onScrittura, onDelta, reasoning,
+      onGiro, onScrittura, onDelta, reasoning, politicaRagionamento: politicaRagionamentoFn,
       strumentiEstesi, ricercaWeb, onArtefatto, onImmagine,
       livelloAccesso, chiediApprovazioneFn, hookFn, permessiPerAttrezzo, onDelega, codaMessaggiFn,
       elencaNoteFn, creaNotaFn, aggiornaNotaFn, eliminaNotaFn,
@@ -413,9 +429,12 @@ export async function avviaSessione({
 export async function compattaSessione({
   messaggiFinali, modello, chiave, fetchDiRete = fetch,
   compattaConversazioneFn = compattaConversazioneReale,
+  // RAG-COD (24/09/2026): anche il riassunto chiesto a mano passa dalla regola del catalogo.
+  politicaRagionamentoFn = politicaRagionamentoReale,
 }) {
   const chiamaModello = (richiesta) => chiamaConRitenta({
     modello, chiave, messaggi: richiesta, attrezzi: [], fetchDiRete,
+    politicaRagionamento: politicaRagionamentoFn,
   });
   return compattaConversazioneFn(messaggiFinali, chiamaModello);
 }

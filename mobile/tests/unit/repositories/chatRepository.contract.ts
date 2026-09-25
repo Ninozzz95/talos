@@ -121,6 +121,9 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
     })
     expect(await repository.listSessionAttachmentFileIds(alpha.id)).toEqual([vaultFile.id])
     expect(await repository.listSessionAttachmentFileIds('session-that-does-not-exist')).toEqual([])
+    // ELENCO-REPO-01 (A3-84, 25/09/2026): il filtro «Con allegati» dell'elenco chiede in UNA lettura quali chat ne
+    // hanno — una volta sola anche con due messaggi che portano lo stesso file, e solo quelle.
+    expect(await repository.listSessionIdsWithAttachments()).toEqual([alpha.id])
 
     expect((await repository.listMessageAttachments(messageWithFile.id))).toEqual([
         expect.objectContaining({

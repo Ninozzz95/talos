@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TalosThemedCheckbox from '@/components/talos/ui/TalosThemedCheckbox.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTalosI18n, useTalosLocalization } from '@/i18n'
 import { ArrowLeft, Check, Mic, Pause, Play, RefreshCw, Volume1, Volume2, VolumeX } from '@lucide/vue'
@@ -418,15 +419,15 @@ const tierLabel = computed(() => {
                 <p class="mt-3 text-md leading-7 text-[var(--talos-muted)]">{{ t('personalVoice.consentBody') }}</p>
                 <div class="mt-6 flex flex-col gap-4 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4">
                     <label class="flex items-start gap-3 text-sm leading-6">
-                        <input v-model="consentIdentity" type="checkbox" class="mt-0.5 size-5 accent-[var(--talos-accent)]" data-testid="talos-personal-voice-consent-identity">
+                        <TalosThemedCheckbox v-model="consentIdentity" class="mt-0.5" data-testid="talos-personal-voice-consent-identity" />
                         <span>{{ t('personalVoice.consentIdentity') }}</span>
                     </label>
                     <label class="flex items-start gap-3 text-sm leading-6">
-                        <input v-model="consentStorage" type="checkbox" class="mt-0.5 size-5 accent-[var(--talos-accent)]" data-testid="talos-personal-voice-consent-storage">
+                        <TalosThemedCheckbox v-model="consentStorage" class="mt-0.5" data-testid="talos-personal-voice-consent-storage" />
                         <span>{{ t('personalVoice.consentStorage') }}</span>
                     </label>
                     <label class="flex items-start gap-3 text-sm leading-6">
-                        <input v-model="consentMic" type="checkbox" class="mt-0.5 size-5 accent-[var(--talos-accent)]" data-testid="talos-personal-voice-consent-mic">
+                        <TalosThemedCheckbox v-model="consentMic" class="mt-0.5" data-testid="talos-personal-voice-consent-mic" />
                         <span>{{ t('personalVoice.consentMic') }}</span>
                     </label>
                 </div>

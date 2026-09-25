@@ -8,6 +8,21 @@ export default defineConfig({
         alias: [
             { find: /^zod$/, replacement: path.resolve(__dirname, './src/lib/zodCsp.ts') },
             { find: '@', replacement: path.resolve(__dirname, './src') },
+            /*
+             * Il server del Codice imbarcato nell'APK (`android/.../talos-harness-ui/harness-ui/src/*.mjs`) importa il
+             * kernel col percorso della disposizione SUL TELEFONO. Solo questo specificatore esatto: serve ai test che
+             * eseguono quel server (`codiceOrdineEventi.test.ts`, `codiceRagionamentoServer.test.ts`).
+             *
+             * ⭐ KERNEL-SPEDITO (owner 25/09/2026, «prove sul kernel spedito»): punta alla copia DENTRO l'APK
+             * (`talos-harness-ui/kernel/`), tracciata col suo `dist/kernelPerIlBanco.js`. Prima puntava al sorgente
+             * `scripts/harness-talos/talosHarness.mjs`, il cui `dist/` è ignorato da git: su un clone pulito (la CI e il
+             * job di release, che provano prima della build) i due test cadevano con «Cannot find module». Che sorgente e
+             * copia spedita coincidano lo dice `tests/unit/build/kernelSpedito.test.ts`.
+             */
+            {
+                find: /^\.\.\/\.\.\/\.\.\/AVM-harness\/mobile\/scripts\/harness-talos\/talosHarness\.mjs$/,
+                replacement: path.resolve(__dirname, './android/app/src/main/assets/talos-harness-ui/kernel/talosHarness.mjs'),
+            },
         ],
     },
     test: {

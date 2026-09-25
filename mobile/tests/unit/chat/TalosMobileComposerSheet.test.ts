@@ -96,3 +96,26 @@ describe('TalosMobileComposerSheet modality (SF-7)', () => {
         wrapper.unmount()
     })
 })
+
+/*
+ * ⛔ SHEET-CENTRO-01 (Pad, 25/09/2026): nel foglio Opzioni delle chat, con «Azzera» a destra (più largo della ✕), il
+ * titolo si spostava di ~10 px dal centro — il titolo prendeva lo spazio avanzato fra due lati diversi. Ora i due lati
+ * sono GEMELLI (stessa flessione), e il titolo sta al centro qualunque cosa ci sia a destra.
+ */
+describe('SHEET-CENTRO-01 il titolo resta al centro', () => {
+    it('la ✕ e ciò che sta a destra stanno in due lati gemelli, il titolo fra loro', () => {
+        const wrapper = mount(TalosMobileComposerSheet, {
+            attachTo: document.body,
+            props: { title: 'Opzioni', testid: 'test-sheet' },
+            slots: { 'header-end': '<button type="button" data-azzera>Azzera</button>' },
+        })
+        const intestazione = document.querySelector('[data-testid="talos-sheet-grab"]') as HTMLElement
+        const lati = [...intestazione.querySelectorAll(':scope > [data-lato-intestazione]')] as HTMLElement[]
+        expect(lati.map((lato) => lato.dataset.latoIntestazione)).toEqual(['inizio', 'fine'])
+        expect(lati[0]!.className).toBe(lati[1]!.className.replace('justify-end', 'justify-start'))
+        expect(lati[0]!.querySelector('button')?.getAttribute('aria-label')).toBeTruthy()
+        expect(lati[1]!.querySelector('[data-azzera]')).not.toBeNull()
+        expect(intestazione.querySelector(':scope > h2')?.textContent).toBe('Opzioni')
+        wrapper.unmount()
+    })
+})

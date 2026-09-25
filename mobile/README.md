@@ -573,11 +573,17 @@ git submodule update --init --depth 1
 ## Web / unit build
 
 ```bash
+cd mobile
 npm ci
 npm run typecheck
+npm run prepara:prove
 npm run test:unit
 npm run build
 ```
+
+`npm run prepara:prove` creates what a fresh clone does not carry and some tests need: the compiled kernel for the
+harness bench, the dependencies of the two isolated tools under `tools/`, and the Capacitor `config.xml` (it runs a
+build first if `dist/` is missing). It only runs the steps that are missing, so it is instant on a prepared checkout.
 
 ## Android
 
@@ -589,14 +595,10 @@ cd android
 
 `-PtalosSideBySide` installs the development package beside an existing release instead of replacing its local data.
 
-### Optional Git Bash launcher tests
+### Git Bash launcher tests
 
-```bash
-cd tools/git-bash-launcher
-npm ci
-```
-
-The launcher's `node-pty` dependency is intentionally isolated and should not be added to the main application dependency graph.
+`npm run prepara:prove` installs `tools/git-bash-launcher` in its own folder. The launcher's `node-pty` dependency is
+intentionally isolated and should not be added to the main application dependency graph.
 
 ---
 
