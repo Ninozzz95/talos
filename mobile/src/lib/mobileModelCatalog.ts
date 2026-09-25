@@ -11,6 +11,12 @@ import {
 
 const REASONING_PARAMETERS = new Set(['reasoning', 'reasoning_effort', 'thinking', 'think'])
 const EFFORT_LEVELS = Object.freeze(['low', 'medium', 'high'])
+/**
+ * RAG-EST (24/09/2026, owner «nasconderlo dove non conta»): i fornitori il cui adattatore legge `input.thinking`
+ * (`anthropicAdapter`, `geminiAdapter`, `ollamaAdapter`, `localAdapter`). Per gli altri (OpenRouter, OpenAI, DeepSeek,
+ * compatibili) «Ragionamento esteso» non cambierebbe la richiesta: lì governa solo la barra dell'impegno.
+ */
+const THINKING_TOGGLE_PROVIDERS = new Set(['anthropic', 'gemini', 'ollama', 'local'])
 
 /**
  * Le famiglie che il ragionamento ce l'hanno, quando il catalogo tace.
@@ -63,6 +69,18 @@ export function manualModelToProviderModel(model: TalosMobileManualModel): Talos
     }
 }
 
+/**
+ * RAG-OBB (24/09/2026, owner «solo livelli veri»): quando il fornitore dichiara i livelli (OpenRouter
+ * `reasoning.supported_efforts`), il menu mostra quelli e basta; «none» non è un livello ma il permesso di spegnere,
+ * e quello lo dice `reasoning_mandatory`. Come Zed (PR #61308) e nodal-agents (#417: «a wrong menu is worse»).
+ */
+function effortLevelsFor(model: TalosMobileProviderModel, reasoning: boolean): string[] {
+    // I nomi fuori vocabolario li scarta già la scala (`mobileEffortLadderFromLevels`); qui si toglie solo «none».
+    const declared = (model.reasoning?.supportedEfforts ?? []).filter((level) => level !== 'none')
+    if (declared.length > 0) return declared
+    return reasoning ? [...EFFORT_LEVELS] : []
+}
+
 export function talosMobileModelProfiles(
     models: readonly TalosMobileProviderModel[],
     hasSecret: (provider: TalosMobileProviderId) => boolean,
@@ -98,8 +116,10 @@ export function talosMobileModelProfiles(
                     ? (matchingProbe.ok ? 'healthy' : 'failed')
                     : 'untested',
             has_secret: hasSecret(model.provider),
-            effort_levels: reasoning ? [...EFFORT_LEVELS] : [],
+            effort_levels: effortLevelsFor(model, reasoning),
             supports_thinking: reasoning,
+            thinking_toggle: reasoning && THINKING_TOGGLE_PROVIDERS.has(model.provider),
+            reasoning_mandatory: model.reasoning?.mandatory === true,
             show_in_composer: override?.show_in_composer ?? !unsupported,
             capabilities: {
                 provenance: model.capabilityProvenance ?? 'observed',

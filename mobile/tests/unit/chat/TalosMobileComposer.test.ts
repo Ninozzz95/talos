@@ -98,6 +98,17 @@ describe('TalosMobileComposer', () => {
         expect(view.emitted('send')).toBeUndefined()
     })
 
+    it('RAG-EST-02 un profilo il cui fornitore ignora «Ragionamento esteso» non mostra l’interruttore', async () => {
+        const view = mountComposer({
+            thinking: false,
+            modelProfiles: [{ ...modelProfiles[0], thinking_toggle: false }],
+        })
+        await view.get('[data-testid="talos-composer-model-chip"]').trigger('click')
+        await vi.dynamicImportSettled()
+        expect(view.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
+        expect(view.find('[data-testid="talos-mobile-thinking-toggle"]').exists()).toBe(false)
+    })
+
     it('Calm: Agente spento lascia ricerca, file, foto e fotocamera utilizzabili', async () => {
         const view = mountComposer({ agentToolsEnabled: false })
         for (const [id, event] of [['attach', 'attach'], ['take-photo', 'takePhoto'], ['pick-photos', 'pickPhotos']]) {

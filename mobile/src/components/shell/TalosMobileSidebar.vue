@@ -18,6 +18,11 @@ import { useTalosAccountStore } from '@/stores/account'
 import { useSettingsStore } from '@/stores/settings'
 import { TALOS_MOTION_V6_DEFAULTS } from '@/motion-v6/defaults'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
+import type { TalosStatoChat } from '@/lib/chat/statoChat'
+import TalosMobileStatoChat, { talosStatoChatParla } from '@/components/chat/TalosMobileStatoChat.vue'
+import TalosMobileNovitaChat from '@/components/chat/TalosMobileNovitaChat.vue'
+import { talosCaricaNovita, talosChatNuova } from '@/stores/chatNovita'
+import { talosStatoDellaChat, type TalosFontiStatoChat } from '@/lib/chat/statoDellaChat'
 import { talosDaIntitolare } from '@/stores/chat'
 import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
@@ -92,7 +97,43 @@ const props = defineProps<{
      * mockup.
      */
     fixed?: boolean
+    /**
+     * ⭐ B3 / F4-B — lo stato di ogni recente («aspetta te», «in corso», …). La barra non
+     * conosce il controller: chi la monta passa `(s) => talosStatoDellaChat(controller, s)`
+     * (`components/chat/TalosMobileStatoChat.vue`). Assente ⇒ nessuna etichetta, righe come prima.
+     */
+    statoDi?: (session: TalosLocalChatSession) => TalosStatoChat
+    /**
+     * ⭐ B3 — le fonti dello stato (il controller): la barra calcola da sé con `talosStatoDellaChat`. Così `App.vue`
+     * non tira quella logica nel pacchetto d'avvio (tetto `verify-initial-chunk.mjs`): la barra è già caricata a richiesta.
+     */
+    fontiStato?: TalosFontiStatoChat
 }>()
+
+/** Lo stato che la riga deve DIRE, o `null` quando tace (conclusa, vuota, nessuna fonte). */
+function statoCheParla(session: TalosLocalChatSession): TalosStatoChat | null {
+    const stato = props.statoDi?.(session) ?? (props.fontiStato ? talosStatoDellaChat(props.fontiStato, session) : undefined)
+    return stato && talosStatoChatParla(stato) ? stato : null
+}
+/** Un id per `aria-describedby`: il nome del pulsante resta «Apri …», lo stato lo descrive. */
+function idDelloStato(sessionId: string): string {
+    return `talos-sidebar-chat-status-${sessionId}`
+}
+/*
+ * ⭐ A3-84 seconda parte (owner 25/09/2026: nella barra laterale «solo stato e novità») — la pastiglia «nuova
+ * risposta» accanto a quella dello stato, e la descrizione del pulsante le cita tutte e due.
+ */
+function idDellaNovita(sessionId: string): string {
+    return `talos-sidebar-chat-new-${sessionId}`
+}
+function descrizioneDellaRiga(session: TalosLocalChatSession): string | undefined {
+    const ids = [
+        ...(statoCheParla(session) ? [idDelloStato(session.id)] : []),
+        ...(talosChatNuova(session) ? [idDellaNovita(session.id)] : []),
+    ]
+    return ids.length > 0 ? ids.join(' ') : undefined
+}
+onMounted(() => { void talosCaricaNovita() })
 
 const emit = defineEmits<{
     'update:open': [open: boolean]
@@ -674,6 +715,7 @@ const onda = useTalosTouchWave()
                                     class="recent-row talos-pressable talos-pressable-row talos-wave-host"
                                     :aria-label="$t('chat.openNamed', { title: sessionTitle(session) })"
                                     :aria-current="session.id === props.activeSessionId ? 'page' : undefined"
+                                    :aria-describedby="descrizioneDellaRiga(session)"
                                     @pointerdown="onPressioneInizio(session.id, $event)"
                                     @pointermove="onPressioneMossa"
                                     @pointerup="annullaPressione"
@@ -684,6 +726,20 @@ const onda = useTalosTouchWave()
                                     <MessageSquareText class="icon" aria-hidden="true" />
                                     <span class="recent-title">{{ sessionTitle(session) }}</span>
                                     <span v-if="session.has_draft && session.has_messages === false" class="recent-draft" data-testid="talos-chat-draft-marker">{{ $t('chat.draftMarker') }}</span>
+                                    <!-- B3 / F4-B: la pastiglia dello stato, gemella del segno «bozza» (non si
+                                         sovrappongono: una bozza senza messaggi è «vuota», che tace). Il
+                                         titolo è quello che si restringe: `.recent-title` ha flex 1 e min-width 0. -->
+                                    <TalosMobileStatoChat
+                                        v-if="statoCheParla(session)"
+                                        :id="idDelloStato(session.id)"
+                                        :stato="statoCheParla(session)!"
+                                        forma="pastiglia"
+                                    />
+                                    <TalosMobileNovitaChat
+                                        v-if="talosChatNuova(session)"
+                                        :id="idDellaNovita(session.id)"
+                                        forma="pastiglia"
+                                    />
                                 </button>
                                 <div class="recent-menu">
                                     <TalosRowActions

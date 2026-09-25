@@ -261,3 +261,58 @@ describe('⛔ la scheda dice PERCHÉ, e non parla in JSON', () => {
         expect(wrapper.find('[data-testid="talos-tool-consent-input"]').exists()).toBe(false)
     })
 })
+
+/*
+ * ⛔ CONSENSO-TASTIERA-01 (Pad, 25/09/2026): il foglio del permesso compariva con la tastiera ancora aperta sotto —
+ * il campo della chat teneva il fuoco — e copriva metà della scheda. Quando la scheda compare il campo lascia il fuoco:
+ * su Android la tastiera si chiude (Capacitor Keyboard, `keyboardDidHide`, capacitorjs.com/docs/apis/keyboard).
+ */
+describe('CONSENSO-TASTIERA-01 la scheda chiude la tastiera', () => {
+    it('il campo di testo che aveva il fuoco lo lascia quando la scheda compare', () => {
+        const campo = document.createElement('textarea')
+        document.body.appendChild(campo)
+        campo.focus()
+        expect(document.activeElement).toBe(campo)
+        const scheda = mountCard()
+        expect(document.activeElement).not.toBe(campo)
+        scheda.unmount()
+        campo.remove()
+    })
+})
+
+/*
+ * ⛔ CONSENSO-ARG-01 (Pad, 25/09/2026; owner «parole per le chiavi comuni»): le righe degli argomenti mostravano le chiavi
+ * tecniche in maiuscolo (FORMAT, TITLE, BODY). Le chiavi più frequenti hanno una parola; le altre restano la chiave
+ * ripulita, con l'iniziale maiuscola e basta — mai un identificativo di traduzione a schermo.
+ */
+describe('CONSENSO-ARG-01 le righe degli argomenti parlano', () => {
+    it('le chiavi comuni hanno la loro parola, le altre la chiave ripulita; niente maiuscolo tutto', () => {
+        const wrapper = mount(TalosMobileToolConsentSheet, {
+            props: {
+                title: 'Create a document', description: 'x', actions: ['write'] as const, sessionTitle: 'Chat',
+                pendingCount: 1, allowPersistent: true,
+                input: { format: 'txt', title: 'La Lanterna', body: 'Tre righe', file_id: 'f-1' },
+            },
+            global: { stubs: { Teleport: true } },
+        })
+        const etichette = wrapper.findAll('[data-testid="talos-tool-consent-arguments"] dt')
+        expect(etichette.map((dt) => dt.text())).toEqual(['Format', 'Title', 'Text', 'File id'])
+        expect(etichette.every((dt) => !dt.classes().includes('uppercase'))).toBe(true)
+        wrapper.unmount()
+    })
+})
+
+/*
+ * ⛔ CONSENSO-DA-01 (owner «frase breve normale»): in cima c'era «RICHIESTO DA» e l'intera domanda della chat, in
+ * maiuscolo. Ora «From chat “…”» su una riga coi puntini; il titolo resta testo semplice (niente `t()`: gli apostrofi).
+ */
+describe('CONSENSO-DA-01 da quale chat, in breve', () => {
+    it('una riga sola, senza maiuscolo, col titolo fra virgolette', () => {
+        const wrapper = mountCard()
+        const riga = wrapper.get('[data-testid="talos-tool-consent-from"]')
+        expect(riga.text()).toBe('From chat “Quarterly planning”')
+        expect(riga.classes()).not.toContain('uppercase')
+        expect(riga.classes()).toContain('truncate')
+        wrapper.unmount()
+    })
+})

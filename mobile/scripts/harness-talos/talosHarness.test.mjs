@@ -25,6 +25,9 @@ import {
     richiestaRicerca, analizzaRisultatiRicerca, formattaRisultatiRicerca, eseguiRicercaWeb,
     formattaOraCorrente,
 } from './talosHarness.mjs'
+// ⭐ B1-11 (23/09): import a namespace, non nominato — un export ancora assente
+// (fase RED) fa fallire solo i test TOOLS-OFFER, non l'intero file.
+import * as kernelIntero from './talosHarness.mjs'
 
 /** Uno sportello finto: torna in fila gli stati che gli si danno. */
 function reteChe(...stati) {
@@ -1522,10 +1525,11 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         assert.ok(!nomiOfferti.includes('time_now'))
     })
 
+    // ⛔ B1-11 (23/09): `ricercaWeb` ora serve anche qui — senza, `web_search` non si offre più (vedi TOOLS-OFFER-01).
     it('⭐ strumentiEstesi aggiunge SOLO i nomi richiesti, non tutto ATTREZZI_ESTESI', async () => {
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(CONCLUSO_SUBITO)
-        await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['web_search'] })
+        await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['web_search'], ricercaWeb: { provider: 'tavily', apiKey: 'k' } })
         const nomiOfferti = rete.chiamate[0].corpo.tools.map((t) => t.function.name)
         assert.equal(nomiOfferti.length, 8)
         assert.ok(nomiOfferti.includes('web_search'))
@@ -1737,6 +1741,68 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.equal(messaggioTool.content, 'The document was not created: TALOS_DOCUMENT_EMPTY')
+    })
+
+    /*
+     * ⛔⛔⛔ B1-11 (23/09/2026) — decisione owner dopo il dossier
+     * `.claude/ricerche/2026-09-23-B1-funzioni-non-disponibili.md`: un
+     * attrezzo non configurato NON si offre al modello (Hermes, Codex,
+     * OpenCode, Zed, Gemini CLI, OpenAI Agents SDK; arXiv 2609.14758: con
+     * fallimenti silenziosi l'agente inventa la risposta). Prima di oggi
+     * `web_search`/`document_create` venivano offerti lo stesso e poi
+     * rispondevano sempre «not configured» — misurato nel Codice sul
+     * telefono, che non passa mai né `ricercaWeb` né `onDocumento`.
+     */
+    const TUTTI_GLI_ESTESI_DEL_TELEFONO = ['web_search', 'artifact_create', 'document_create', 'time_now', 'notes_list', 'generate_image']
+
+    it('TOOLS-OFFER-01 ⛔⛔⛔ senza ricercaWeb né onDocumento, web_search e document_create NON sono nell elenco offerto; gli altri estesi restano', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(CONCLUSO_SUBITO)
+        await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: TUTTI_GLI_ESTESI_DEL_TELEFONO })
+        const nomiOfferti = rete.chiamate[0].corpo.tools.map((t) => t.function.name)
+        assert.ok(!nomiOfferti.includes('web_search'), 'web_search senza configurazione non si offre')
+        assert.ok(!nomiOfferti.includes('document_create'), 'document_create senza callback non si offre')
+        for (const nome of ['artifact_create', 'time_now', 'notes_list', 'generate_image']) {
+            assert.ok(nomiOfferti.includes(nome), `${nome} resta offerto come prima`)
+        }
+    })
+
+    it('TOOLS-OFFER-02 ⭐⭐⭐ con ricercaWeb e onDocumento presenti, i due nomi ci sono (comportamento identico a prima)', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(CONCLUSO_SUBITO)
+        await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: TUTTI_GLI_ESTESI_DEL_TELEFONO,
+            ricercaWeb: { provider: 'tavily', apiKey: 'k' }, onDocumento: async () => ({ ok: true, esito: 'created' }),
+        })
+        const nomiOfferti = rete.chiamate[0].corpo.tools.map((t) => t.function.name)
+        assert.ok(nomiOfferti.includes('web_search'))
+        assert.ok(nomiOfferti.includes('document_create'))
+        assert.equal(nomiOfferti.length, 7 + TUTTI_GLI_ESTESI_DEL_TELEFONO.length)
+    })
+
+    it('TOOLS-OFFER-03 ⛔ ricercaWeb vuoto ({}) conta come assente: STESSO criterio del dispatch, mai offerto per poi dire «not configured»', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(CONCLUSO_SUBITO)
+        await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['web_search'], ricercaWeb: {} })
+        const nomiOfferti = rete.chiamate[0].corpo.tools.map((t) => t.function.name)
+        assert.ok(!nomiOfferti.includes('web_search'))
+        assert.equal(nomiOfferti.length, 7, 'i sette di sempre: nessun esteso rimasto')
+    })
+
+    it('TOOLS-OFFER-04 ⭐⭐ attrezziOfferti (export) e esito.attrezziOfferti dicono ESATTAMENTE i nomi mandati al modello, nello stesso ordine', async () => {
+        assert.equal(typeof kernelIntero.attrezziOfferti, 'function', 'il kernel esporta attrezziOfferti')
+        for (const config of [
+            { strumentiEstesi: TUTTI_GLI_ESTESI_DEL_TELEFONO },
+            { strumentiEstesi: TUTTI_GLI_ESTESI_DEL_TELEFONO, ricercaWeb: { endpoint: 'https://s.esempio.it' }, onDocumento: async () => ({ ok: true }) },
+            {},
+        ]) {
+            const cartella = cartellaVuota(it)
+            const rete = reteDiRisposte(CONCLUSO_SUBITO)
+            const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, ...config })
+            const nomiOfferti = rete.chiamate[0].corpo.tools.map((t) => t.function.name)
+            assert.deepEqual(kernelIntero.attrezziOfferti(config), nomiOfferti)
+            assert.deepEqual(esito.attrezziOfferti, nomiOfferti)
+        }
     })
 
     /*
@@ -2340,5 +2406,98 @@ describe('talosLavora — Note/Attività/Memoria/Libreria/Ricerca collegate al k
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /there is no readable report for that research/)
+    })
+})
+
+/*
+ * RAG-COD (24/09/2026, owner «1 sì» e «nel server del Codice»): GLM 5.3 ragiona per forza. Senza `reasoning` un
+ * fornitore OpenRouter ha scritto il ragionamento nella risposta (chat mobile, 45.580 caratteri). Il catalogo lo dice
+ * (`reasoning.mandatory`, `supported_efforts`, `default_effort`). Regole dell'owner: assente → `default_effort`;
+ * `none` → il livello più basso; non supportato → il più vicino più debole (Hermes `clamp_effort`, PR #90350).
+ */
+describe('RAG-COD — il ragionamento dei modelli obbligatori, scelto dal catalogo', () => {
+    const GLM = { mandatory: true, supportedEfforts: ['max', 'high', 'low'], defaultEffort: 'max' }
+    const FACOLTATIVO = { mandatory: false, supportedEfforts: ['xhigh', 'high', 'medium', 'low', 'none'], defaultEffort: 'medium' }
+
+    it('RAG-COD-01 la regola pura: assente, none, non supportato, supportato', () => {
+        const regola = kernelIntero.regolaReasoningPerModello
+        assert.equal(typeof regola, 'function')
+        assert.deepEqual(regola(undefined, GLM), { effort: 'max' })
+        assert.deepEqual(regola(null, GLM), { effort: 'max' })
+        assert.deepEqual(regola({ effort: 'none' }, GLM), { effort: 'low' })
+        assert.deepEqual(regola({ effort: 'medium' }, GLM), { effort: 'low' })
+        assert.deepEqual(regola({ effort: 'xhigh', summary: 'auto' }, GLM), { effort: 'high', summary: 'auto' })
+        assert.deepEqual(regola({ effort: 'minimal' }, GLM), { effort: 'low' })
+        assert.deepEqual(regola({ effort: 'high' }, GLM), { effort: 'high' })
+        // Facoltativo: assente resta assente, `none` resta «spento», un livello ignoto scende.
+        assert.equal(regola(undefined, FACOLTATIVO), undefined)
+        assert.deepEqual(regola({ effort: 'none' }, FACOLTATIVO), { effort: 'none' })
+        assert.deepEqual(regola({ effort: 'max' }, FACOLTATIVO), { effort: 'xhigh' })
+        // Il catalogo tace: niente cambia.
+        assert.equal(regola(undefined, null), undefined)
+        assert.deepEqual(regola({ effort: 'none' }, null), { effort: 'none' })
+        // Obbligatorio senza livelli dichiarati: acceso, senza inventare un livello.
+        assert.deepEqual(regola(undefined, { mandatory: true, supportedEfforts: [], defaultEffort: null }), { enabled: true })
+        assert.deepEqual(regola({ effort: 'none' }, { mandatory: true, supportedEfforts: [], defaultEffort: null }), { enabled: true })
+    })
+
+    function sportello() {
+        const corpi = []
+        return {
+            corpi,
+            fetch: async (url, opzioni) => {
+                corpi.push(JSON.parse(opzioni.body))
+                return {
+                    ok: true, status: 200,
+                    json: async () => ({ choices: [{ message: { role: 'assistant', content: 'fatto', tool_calls: [] } }] }),
+                    text: async () => '',
+                }
+            },
+        }
+    }
+
+    it('RAG-COD-02 chiamaConRitenta applica la politica del modello chiamato', async () => {
+        const rete = sportello()
+        const chiesti = []
+        await chiamaConRitenta({
+            modello: 'z-ai/glm-5.3-flash', chiave: 'y', messaggi: [], attrezzi: [], fetchDiRete: rete.fetch,
+            politicaRagionamento: async (modello) => { chiesti.push(modello); return GLM },
+        })
+        assert.deepEqual(chiesti, ['z-ai/glm-5.3-flash'])
+        assert.deepEqual(rete.corpi[0].reasoning, { effort: 'max' })
+
+        await chiamaConRitenta({
+            modello: 'z-ai/glm-5.3-flash', chiave: 'y', messaggi: [], attrezzi: [], fetchDiRete: rete.fetch,
+            reasoning: { effort: 'none' }, politicaRagionamento: async () => GLM,
+        })
+        assert.deepEqual(rete.corpi[1].reasoning, { effort: 'low' })
+    })
+
+    it('RAG-COD-03 una politica che fallisce non ferma la chiamata e non cambia il corpo', async () => {
+        const rete = sportello()
+        const r = await chiamaConRitenta({
+            modello: 'x', chiave: 'y', messaggi: [], attrezzi: [], fetchDiRete: rete.fetch,
+            politicaRagionamento: async () => { throw new Error('catalogo irraggiungibile') },
+        })
+        assert.equal(r.scelta.content, 'fatto')
+        assert.equal('reasoning' in rete.corpi[0], false)
+    })
+
+    it('RAG-COD-04 talosLavora passa la politica a ogni giro, col modello di quel giro', async () => {
+        const radice = mkdtempSync(join(tmpdir(), 'talos-rag-cod-'))
+        try {
+            const rete = sportello()
+            const chiesti = []
+            const esito = await talosLavora({
+                cartella: radice, task: { consegna: 'prova' }, modello: 'z-ai/glm-5.3-flash', chiave: 'y',
+                fetchDiRete: rete.fetch, reasoning: { effort: 'none' },
+                politicaRagionamento: async (modello) => { chiesti.push(modello); return GLM },
+            })
+            assert.equal(esito.comeFinita, 'concluso')
+            assert.deepEqual(chiesti, ['z-ai/glm-5.3-flash'])
+            assert.deepEqual(rete.corpi[0].reasoning, { effort: 'low' })
+        } finally {
+            rmSync(radice, { recursive: true, force: true })
+        }
     })
 })

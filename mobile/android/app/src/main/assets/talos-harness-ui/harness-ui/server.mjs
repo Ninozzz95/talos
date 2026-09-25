@@ -11,9 +11,11 @@ import { elencaCartelleProgetto } from './src/custom-task.mjs';
 import { diagnosi } from './src/doctor.mjs';
 import { cartelleFrequenti } from './src/frequent-dirs.mjs';
 import { createHttpApp } from './src/http-app.mjs';
+import { createModelCatalog } from './src/model-catalog.mjs';
 import { createPathPolicy } from './src/path-policy.mjs';
 import { createReportSource } from './src/report-source.mjs';
 import { createSessionRegistry } from './src/session-registry.mjs';
+import { creaSpegnimento } from './src/spegnimento.mjs';
 import { createStaticHandler } from './src/static-files.mjs';
 import { listaTaskDisponibili } from './src/task-catalog.mjs';
 
@@ -108,6 +110,8 @@ async function startServer() {
     store: automationStore,
     sessionRegistry,
   });
+  // ⭐ CATALOGO-MODELLI (owner 25/09/2026, «Portare la rotta dal desktop»): il catalogo vero per il selettore del modello del Codice.
+  const catalogoModelli = createModelCatalog();
   const app = createHttpApp({
     campaignService,
     staticHandler: createStaticHandler(config.publicDir),
@@ -117,6 +121,7 @@ async function startServer() {
     elencaCartelleProgetto: () => elencaCartelleProgetto(config.cartelleProgetto),
     automationStore,
     cartelleFrequentiFn: cartelleFrequenti,
+    catalogoModelliFn: (opzioni) => catalogoModelli.ottieni(opzioni),
   });
   const server = createServer(app);
 
@@ -126,9 +131,11 @@ async function startServer() {
   });
   automationScheduler.avvia();
 
-  const shutdown = () => { automationScheduler.ferma(); server.close(() => process.exit(0)); };
-  process.once('SIGINT', shutdown);
-  process.once('SIGTERM', shutdown);
+  // ⛔ 24/09/2026 (difetto 6): `server.close()` da solo aspettava per sempre un flusso di eventi aperto — vedi
+  // src/spegnimento.mjs.
+  const spegni = creaSpegnimento({ server, fermaAltro: () => automationScheduler.ferma() });
+  process.once('SIGINT', spegni);
+  process.once('SIGTERM', spegni);
   console.log(`Harness UI disponibile su http://${config.host}:${config.port}`);
 }
 

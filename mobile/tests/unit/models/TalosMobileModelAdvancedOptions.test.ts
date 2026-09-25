@@ -42,7 +42,7 @@ describe('TalosMobileModelAdvancedOptions', () => {
         provider.vm.$emit('update:modelValue', 'openai')
         await wrapper.get('[aria-label="Manual model ID"]').setValue('custom-chat')
         await wrapper.get('[aria-label="Manual model display name"]').setValue('Custom Chat')
-        await wrapper.get('[aria-label="Declare reasoning support"]').setValue(true)
+        await wrapper.get('[aria-label="Declare reasoning support"]').trigger('click')
         await wrapper.get('form').trigger('submit')
 
         expect(target.saveManualModel).toHaveBeenCalledWith(expect.objectContaining({

@@ -1,3 +1,5 @@
+import { reasoningRichiestaValido } from './config.mjs';
+
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
 /** ⭐ 30/8, porta canonico (432eec09) — vedi la doc sopra `res.on('close', ...)` nella rotta /events: abbastanza frequente da tenere il canale vivo, abbastanza raro da non essere rumore nei log/nel traffico. */
@@ -37,6 +39,9 @@ const API_ERROR_CODES = new Set([
   'FILE_TOO_LARGE',
   'FILE_EXISTS',
   'PLATFORM_UNSUPPORTED',
+  /* ⭐ CATALOGO-MODELLI (owner 25/09/2026, «Portare la rotta dal desktop»): gli errori di model-catalog.mjs, come nel desktop. */
+  'CATALOG_UNREACHABLE',
+  'CATALOG_UPSTREAM_ERROR',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
@@ -62,6 +67,8 @@ const STATUS_BY_CODE = Object.freeze({
   /** ⭐ 29/8 — stesso status di SESSION_NOT_READY: la richiesta è legittima ma lo stato attuale (un file già lì) la blocca. */
   FILE_EXISTS: 409,
   PLATFORM_UNSUPPORTED: 501,
+  CATALOG_UNREACHABLE: 503,
+  CATALOG_UPSTREAM_ERROR: 503,
 });
 
 const MESSAGE_BY_CODE = Object.freeze({
@@ -84,6 +91,8 @@ const MESSAGE_BY_CODE = Object.freeze({
   FILE_TOO_LARGE: 'File troppo grande per l\'anteprima',
   FILE_EXISTS: 'Esiste già un file con questo nome',
   PLATFORM_UNSUPPORTED: 'Non disponibile su questa piattaforma',
+  CATALOG_UNREACHABLE: 'Catalogo modelli non raggiungibile',
+  CATALOG_UPSTREAM_ERROR: 'Catalogo modelli: risposta non valida da OpenRouter',
 });
 
 const SECURITY_HEADERS = Object.freeze({
@@ -135,6 +144,20 @@ function requireNoQuery(url) {
     error.code = 'QUERY_INVALID';
     throw error;
   }
+}
+
+/** ⭐ CATALOGO-MODELLI (owner 25/09/2026, «Portare la rotta dal desktop»): una sola chiave, «forza=1» rilegge OpenRouter (il pulsante Aggiorna del selettore). Dal desktop, `parseModelsQuery`. */
+function parseModelsQuery(url) {
+  const query = {};
+  for (const [key, value] of url.searchParams) {
+    if (key !== 'forza' || Object.hasOwn(query, key) || value.length > 1024) {
+      const error = new Error('Query non valida');
+      error.code = value.length > 1024 ? 'PAYLOAD_LIMIT' : 'QUERY_INVALID';
+      throw error;
+    }
+    query[key] = value;
+  }
+  return query.forza === '1';
 }
 
 function requireValidStaticQuery(url) {
@@ -304,8 +327,14 @@ function requireTaskIdBody(body) {
  * la collisione con una sessione esistente si controlla in
  * avviaLibero (dove vive la Map vera).
  */
-function requireCustomTaskBody(body) {
-  const AMMESSE = ['cartellaId', 'cartellaLibera', 'consegna', 'comandoProva', 'modello', 'modelloEsecutore', 'client', 'permessi', 'sessionId'];
+/*
+ * ⛔ REG-RAG-COD-13 (24/09/2026, trovato sul Pad): `reasoning` mancava dall'elenco — la barra del composer del Codice
+ * (e già la barra interna, EFFORT-PICKER-01) mandava `{effort}` e l'avvio falliva con «Query non valida». Ora ammesso,
+ * validato col canonico del desktop (`reasoningRichiestaValido`, config.mjs) e passato ad `avviaLibero`. Esportata per le
+ * prove (`codiceRagionamentoServer.test.ts`), come `requireAutomationCreateBody`.
+ */
+export function requireCustomTaskBody(body) {
+  const AMMESSE = ['cartellaId', 'cartellaLibera', 'consegna', 'comandoProva', 'modello', 'modelloEsecutore', 'reasoning', 'client', 'permessi', 'sessionId'];
   const chiavi = Object.keys(body ?? {});
   const haCartellaId = Object.hasOwn(body ?? {}, 'cartellaId') && body.cartellaId !== undefined;
   const haCartellaLibera = Object.hasOwn(body ?? {}, 'cartellaLibera') && body.cartellaLibera !== undefined;
@@ -321,8 +350,9 @@ function requireCustomTaskBody(body) {
     || (Object.hasOwn(body, 'client') && body.client !== 'desktop' && body.client !== 'mobile')
     || (Object.hasOwn(body, 'permessi') && body.permessi !== undefined && typeof body.permessi !== 'string')
     || (Object.hasOwn(body, 'sessionId') && body.sessionId !== undefined && (typeof body.sessionId !== 'string' || body.sessionId.length === 0 || body.sessionId.length > 128))
+    || (Object.hasOwn(body, 'reasoning') && !reasoningRichiestaValido(body.reasoning))
   ) {
-    const errore = new Error('Corpo non valido: atteso {cartellaId XOR cartellaLibera, consegna, comandoProva?, modello?, modelloEsecutore?, client?, permessi?, sessionId?}');
+    const errore = new Error('Corpo non valido: atteso {cartellaId XOR cartellaLibera, consegna, comandoProva?, modello?, modelloEsecutore?, reasoning?, client?, permessi?, sessionId?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -334,6 +364,8 @@ function requireCustomTaskBody(body) {
     sessionId: body.sessionId ?? null,
     // ⭐⭐⭐ 2/9 — picker Planner (FASE K): stessa forma di modello sopra, opzionale.
     modelloEsecutore: body.modelloEsecutore ?? null,
+    // REG-RAG-COD-13: il livello scelto, fino al giro (il kernel lo regola sul catalogo del modello).
+    reasoning: body.reasoning ?? null,
   };
 }
 
@@ -343,22 +375,39 @@ function requireCustomTaskBody(body) {
  * restano validati in automation-store.crea(), l'unico posto che li
  * dichiara.
  */
-function requireAutomationCreateBody(body) {
-  const AMMESSE = ['taskId', 'nome', 'intervalloMinuti', 'limiteAlGiorno'];
+// ⭐ 24/09/2026 (AUT-2): esportata per le prove (`codiceAutomazioniServer.test.ts`); due forme, mai insieme — un'attività
+// del banco `{taskId}` (invariata) o una richiesta scritta `{consegna, cartellaId, modello?}`. Solo la FORMA qui; il
+// modello si valida alla partenza (`avviaLibero`), e un modello non valido mette l'automazione in pausa col motivo.
+export function requireAutomationCreateBody(body) {
   const chiavi = Object.keys(body ?? {});
-  const soloAmmesse = chiavi.length > 0 && chiavi.every((k) => AMMESSE.includes(k))
-    && chiavi.includes('taskId') && chiavi.includes('intervalloMinuti');
-  if (!soloAmmesse || typeof body.taskId !== 'string' || typeof body.intervalloMinuti !== 'number') {
-    const errore = new Error('Corpo non valido: atteso {taskId, intervalloMinuti, nome?, limiteAlGiorno?}');
+  const perConsegna = chiavi.includes('consegna');
+  const AMMESSE = perConsegna
+    ? ['consegna', 'cartellaId', 'modello', 'reasoning', 'nome', 'intervalloMinuti', 'limiteAlGiorno']
+    : ['taskId', 'nome', 'intervalloMinuti', 'limiteAlGiorno'];
+  const OBBLIGATORIE = perConsegna ? ['consegna', 'cartellaId', 'intervalloMinuti'] : ['taskId', 'intervalloMinuti'];
+  const formaGiusta = chiavi.length > 0
+    && chiavi.every((k) => AMMESSE.includes(k))
+    && OBBLIGATORIE.every((k) => chiavi.includes(k))
+    && typeof body.intervalloMinuti === 'number'
+    && (perConsegna
+      ? typeof body.consegna === 'string' && typeof body.cartellaId === 'string'
+        && (body.modello === undefined || typeof body.modello === 'string')
+        // AUTO-LIVELLO (25/09/2026, owner «Salvato alla creazione»): il livello del composer, stessa forma dell'avvio di una sessione.
+        && (body.reasoning === undefined || reasoningRichiestaValido(body.reasoning))
+      : typeof body.taskId === 'string');
+  if (!formaGiusta) {
+    const errore = new Error('Corpo non valido: atteso {taskId, intervalloMinuti, nome?, limiteAlGiorno?} oppure {consegna, cartellaId, intervalloMinuti, modello?, nome?, limiteAlGiorno?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
-  return {
-    taskId: body.taskId,
+  const comuni = {
     nome: typeof body.nome === 'string' ? body.nome : undefined,
     intervalloMinuti: body.intervalloMinuti,
     limiteAlGiorno: typeof body.limiteAlGiorno === 'number' ? body.limiteAlGiorno : undefined,
   };
+  return perConsegna
+    ? { consegna: body.consegna, cartellaId: body.cartellaId, modello: body.modello, reasoning: body.reasoning, ...comuni }
+    : { taskId: body.taskId, ...comuni };
 }
 
 /** ⭐ 29/8 — porta canonico verbatim. Un'allowlist di UNA chiave sola: {attiva}, un booleano — niente altro. */
@@ -574,6 +623,7 @@ function scriviEventoSse(res, evento) {
 export function createHttpApp({
   campaignService, staticHandler, sessionRegistry = null, listaTaskDisponibili = async () => [], clock = () => new Date(),
   diagnosiFn = null, elencaCartelleProgetto = () => [], automationStore = null, cartelleFrequentiFn = () => [],
+  catalogoModelliFn = null,
   // ⛔⛔⛔ 30/8, porta canonico (432eec09) — iniettabili SOLO per il test del battito SSE sotto: mai un setInterval reale nei test unitari, stesso principio di ogni altra dipendenza di questo file.
   impostaIntervalloFn = setInterval, cancellaIntervalloFn = clearInterval,
 }) {
@@ -1372,6 +1422,13 @@ export function createHttpApp({
           const errore = new Error('Doctor non configurato'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
         }
         data = await diagnosiFn();
+      } else if (url.pathname === '/api/v1/models') {
+        // ⭐ CATALOGO-MODELLI (owner 25/09/2026, «Portare la rotta dal desktop»): vedi model-catalog.mjs.
+        const forzaAggiornamento = parseModelsQuery(url);
+        if (!catalogoModelliFn) {
+          const errore = new Error('Catalogo modelli non configurato'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
+        }
+        data = await catalogoModelliFn({ forzaAggiornamento });
       } else if (url.pathname === '/api/v1/projects') {
         // ⭐ 29/8 — portata dal canonico, LEDGER-MOBILE-PAREGGIO-DESKTOP-CODICE.md §11.5. Mai il percorso assoluto verso il browser: solo id/nome, vedi custom-task.mjs.
         requireNoQuery(url);

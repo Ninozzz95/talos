@@ -17,6 +17,7 @@
  *    viaggia in chiaro apposta: chiedere la password e poi rispondere «guarda,
  *    è di un'altra versione» è un giro sprecato.
  */
+import TalosThemedCheckbox from '@/components/talos/ui/TalosThemedCheckbox.vue'
 import { computed, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
@@ -211,7 +212,7 @@ async function confermaRipristino(): Promise<void> {
             <!-- ⛔ Le chiavi sono FUORI per difetto: un backup senza chiavi si
                  appoggia ovunque, uno con le chiavi È una chiave. -->
             <label class="talos-pressable flex min-h-touch items-start gap-3 rounded-xl px-1 py-2 text-left">
-                <input v-model="includeKeys" type="checkbox" data-testid="talos-backup-include-keys" class="mt-1 size-4 shrink-0 accent-[var(--talos-accent)]">
+                <TalosThemedCheckbox v-model="includeKeys" data-testid="talos-backup-include-keys" class="mt-0.5" />
                 <span class="flex min-w-0 flex-col">
                     <span class="text-sm text-[var(--talos-text)]">{{ t('backup.includeKeys') }}</span>
                     <span class="text-2xs leading-4 text-[var(--talos-muted)]">{{ t('backup.includeKeysHint') }}</span>

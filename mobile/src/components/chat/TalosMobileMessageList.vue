@@ -4,7 +4,7 @@ import { useTalosI18n } from '@/i18n'
 import { useTalosMessageEntrance } from '@/composables/useTalosMessageEntrance'
 import './talosCalmMessages.css'
 import TalosMobileAssistantHeader from './TalosMobileAssistantHeader.vue'
-import { BookMarked, CheckCheck, ChevronRight, CircleAlert, FileText, Mic, ShieldQuestion } from '@lucide/vue'
+import { BookMarked, CheckCheck, ChevronRight, FileText, Mic, ShieldCheck, ShieldQuestion, ShieldX } from '@lucide/vue'
 import { talosShortModelLabel } from '@/lib/models/modelLabel'
 import {
     TALOS_METADATA_AZIONI,
@@ -12,10 +12,12 @@ import {
     talosHaAzioniDaMostrare,
 } from '@/lib/tools/tracciaAzione'
 
-import { TALOS_TOOL_LABEL_KEYS, talosDynamicToolFallbackLabel } from '@/lib/tools/toolLabels'
+import { TALOS_TOOL_LABEL_KEYS, talosDynamicToolFallbackLabel, talosToolConsentCopy } from '@/lib/tools/toolLabels'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 // La chat vuota non ha azioni per messaggio: arrivano con il primo messaggio.
 const TalosMobileMessageActions = defineAsyncComponent(() => import('./TalosMobileMessageActions.vue'))
+// CONT (25/09/2026): la riga «Si è fermata qui» e «Continua», a richiesta — una risposta tagliata è rara.
+const TalosMobileFermataAlLimite = defineAsyncComponent(() => import('./TalosMobileFermataAlLimite.vue'))
 import {
     talosAggiornaMisureDeiMessaggi,
     talosMisureDelMessaggio,
@@ -121,6 +123,8 @@ const emit = defineEmits<{
     delete: [messageId: string]
     /** La riga dell'attesa e' essa stessa il modo di rispondere. */
     reviewAuthorization: []
+    /** CONT (25/09/2026): «Continua» sotto la risposta fermata dal limite; l'id è quello della risposta. */
+    continueAfterLimit: [messageId: string]
 }>()
 
 /**
@@ -158,6 +162,40 @@ function quanteInAttesa(message: TalosMobileMessageView): number {
 }
 
 const { t } = useTalosI18n()
+
+/*
+ * ⭐ GESTITA-01 (owner 25/09/2026, «riga compatta»): una risposta sospesa su un permesso, VUOTA e già decisa, non è più
+ * una bolla a sé con «La richiesta di autorizzazione è stata gestita.»: sparisce, e la risposta che la segue porta in cima
+ * «Permesso concesso/negato: <strumento>», una riga per strumento (l'esito viene da `authorizationOutcome`, letto
+ * dall'attività `tool.authorization`). Se il modello aveva scritto qualcosa la bolla resta e la riga prende il posto di
+ * «gestita». Senza esito leggibile resta tutto com'era: nessun esito inventato.
+ */
+function sospesaVuotaRisolta(message: TalosMobileMessageView | undefined): boolean {
+    return Boolean(message && message.role === 'assistant' && !message.content.trim() && checkpointDi(message)
+        && !attesaViva(message) && message.authorizationOutcome?.length)
+}
+function assorbitaDallaSeguente(index: number): boolean {
+    return sospesaVuotaRisolta(props.messages[index]) && props.messages[index + 1]?.role === 'assistant'
+}
+function esitiDaMostrare(message: TalosMobileMessageView, index: number): readonly { tool: string, concesso: boolean }[] {
+    const precedente = props.messages[index - 1]
+    const ereditati = precedente && assorbitaDallaSeguente(index - 1) ? precedente.authorizationOutcome ?? [] : []
+    const propri = checkpointDi(message) && !attesaViva(message) && !assorbitaDallaSeguente(index) ? message.authorizationOutcome ?? [] : []
+    return [...ereditati, ...propri]
+}
+/*
+ * GESTITA-RAG-01 (owner 25/09/2026, «spostarlo nella risposta»): la bolla sospesa nascosta non porta via il suo
+ * «Ragionamento»: la risposta che la assorbe mostra un solo blocco, prima il passo sospeso e poi il proprio.
+ */
+function ragionamentoDaMostrare(message: TalosMobileMessageView, index: number): string {
+    const precedente = props.messages[index - 1]
+    const ereditato = precedente && assorbitaDallaSeguente(index - 1) ? precedente.reasoning?.trim() ?? '' : ''
+    const proprio = message.reasoning?.trim() ?? ''
+    return [ereditato, proprio].filter(Boolean).join('\n\n')
+}
+function titoloStrumento(tool: string): string {
+    return talosToolConsentCopy({ name: tool, title: tool, description: '' }, t).title
+}
 
 /**
  * ⭐⭐⭐ FASE 2 — quando compare una risposta, si ritirano le misure del
@@ -311,6 +349,8 @@ onBeforeUnmount(() => {
 function isGrouped(index: number): boolean {
     const current = props.messages[index]
     const previous = props.messages[index - 1]
+    // GESTITA-01: la bolla sospesa assorbita da questa risposta è nascosta: la risposta ha la sua intestazione.
+    if (previous && assorbitaDallaSeguente(index - 1)) return false
     return Boolean(previous && current.role !== 'system' && previous.role === current.role)
 }
 
@@ -438,13 +478,13 @@ function messageStateLabel(state: string): string {
             v-for="(message, index) in messages"
             :key="message.id"
             v-message-entrance="message.state"
-            v-memo="[message, messages[index - 1]?.role, messages[index + 1]?.role, sending, modelLabels, messageStyle, textScale, hasOlderMessages, pendingAuthorizationIds, diagnostica, firstMemoryDisclosureMessageId, now]"
+            v-memo="[message, messages[index - 1]?.role, messages[index - 1]?.authorizationOutcome, messages[index - 1]?.reasoning, messages[index + 1]?.role, sending, modelLabels, messageStyle, textScale, hasOlderMessages, pendingAuthorizationIds, diagnostica, firstMemoryDisclosureMessageId, now]"
             :data-message-id="message.id"
             :data-message-kind="message.role"
             :data-state="message.state"
             :data-grouped="isGrouped(index) ? 'true' : undefined"
             class="chat-message talos-chat-message flex min-w-0 max-w-full flex-col"
-            :class="message.role === 'user' ? 'user-message items-end' : 'assistant-message items-start'"
+            :class="[message.role === 'user' ? 'user-message items-end' : 'assistant-message items-start', assorbitaDallaSeguente(index) ? 'hidden' : '']"
             @pointerdown="message.role !== 'system' && onMessagePointerDown($event)"
             @pointermove="onMessagePointerMove($event)"
             @pointerup="clearMessageHold()"
@@ -459,8 +499,8 @@ function messageStateLabel(state: string): string {
                     <span v-if="message.state !== 'persisted'"> · {{ messageStateLabel(message.state) }}</span>
                 </TalosMobileAssistantHeader>
                 <TalosMobileReasoningBlock
-                    v-if="message.role === 'assistant' && message.reasoning"
-                    :reasoning="message.reasoning"
+                    v-if="message.role === 'assistant' && ragionamentoDaMostrare(message, index)"
+                    :reasoning="ragionamentoDaMostrare(message, index)"
                 />
                 <div
                     class="talos-message-bubble min-w-0 overflow-hidden"
@@ -593,7 +633,18 @@ function messageStateLabel(state: string): string {
                             «pending» a «risolto» senza toccare il messaggio.
                         -->
                         <div class="min-w-0 flex-1">
-                            <TalosMobileMessageContent :content="message.content" />
+                            <p
+                                v-for="(esito, posizione) in esitiDaMostrare(message, index)"
+                                :key="`${esito.tool}-${posizione}`"
+                                data-testid="talos-authorization-outcome"
+                                :data-esito="esito.concesso ? 'concesso' : 'negato'"
+                                class="mb-1.5 flex min-w-0 items-center gap-1.5 text-xs leading-5 text-[var(--talos-muted)]"
+                            >
+                                <ShieldCheck v-if="esito.concesso" class="size-3.5 shrink-0" aria-hidden="true" />
+                                <ShieldX v-else class="size-3.5 shrink-0" aria-hidden="true" />
+                                <span class="min-w-0 truncate">{{ esito.concesso ? $t('chat.permissionGranted') : $t('chat.permissionDenied') }} {{ titoloStrumento(esito.tool) }}</span>
+                            </p>
+                            <TalosMobileMessageContent :content="message.content" line-breaks />
                             <button
                                 v-if="attesaViva(message)"
                                 type="button"
@@ -630,7 +681,7 @@ function messageStateLabel(state: string): string {
                                 <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                             </button>
                             <p
-                                v-else-if="checkpointDi(message)"
+                                v-else-if="checkpointDi(message) && !message.authorizationOutcome?.length"
                                 data-testid="talos-authorization-pending-done"
                                 class="mt-2 text-xs leading-5 text-[var(--talos-muted)]"
                             >{{ $t('chat.toolAuthorizationSettled') }}</p>
@@ -657,31 +708,12 @@ function messageStateLabel(state: string): string {
                         <span>{{ $t('chat.actionsDone') }}</span>
                         <span class="opacity-80">{{ azioniFatte(message.metadata).join(' · ') }}</span>
                     </div>
-                    <!--
-                        ⛔⛔ SI È FERMATA A METÀ, e va detto — rilievo #16b.
-
-                        Owner, dagli screenshot del 12 agosto: la risposta
-                        appariva troncata a metà frase «senza che si capisca se
-                        sia finita, interrotta o tagliata dal rendering».
-
-                        Tre cause con lo stesso aspetto; questa è quella che non
-                        aveva voce. Il fatto lo sa solo il provider
-                        (`finishReason: 'length'`), viaggia coi metadati come le
-                        azioni, e finisce qui — sotto la risposta, dove la
-                        persona sta già guardando la frase che si interrompe.
-
-                        ⛔ Non riscrive la frase del modello: aggiunge il pezzo
-                        che il modello non poteva sapere.
-                    -->
-                    <div
+                    <!-- ⛔⛔ SI È FERMATA A METÀ (rilievo #16b) e «Continua» (CONT, 25/09): vedi TalosMobileFermataAlLimite.vue. -->
+                    <TalosMobileFermataAlLimite
                         v-if="siEFermataAlLimite(message.metadata)"
-                        data-testid="talos-risposta-troncata"
-                        role="status"
-                        class="mt-1.5 inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-2xs leading-4"
-                    >
-                        <CircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
-                        <span>{{ $t('chat.stoppedAtLimit') }}</span>
-                    </div>
+                        :mostra-continua="index === messages.length - 1 && !sending"
+                        @continua="emit('continueAfterLimit', message.id)"
+                    />
                     <!-- ⭐⭐⭐ LE SCHEDE: lo stato con cui si può ancora
                          parlare, non l'esito. Owner 2026-08-13, dopo il testa a
                          testa con Gemini: loro dopo «accendi la torcia»

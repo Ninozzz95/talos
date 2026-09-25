@@ -84,6 +84,9 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         async deleteSession(sessionId: string) {
             return (await ready()).deleteSession(sessionId)
         },
+        async moveMessagesToNewSession(sourceSessionId, input) {
+            return (await ready()).moveMessagesToNewSession(sourceSessionId, input)
+        },
         async listMessages(sessionId: string, options?: Parameters<TalosChatRepository['listMessages']>[1]) {
             // SF-CRITICAL: this wrapper is what production actually uses, and it
             // dropped the paging options on the floor — TypeScript cannot catch
@@ -146,6 +149,9 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         },
         async listSessionAttachmentMessageIds(sessionId: string) {
             return (await ready()).listSessionAttachmentMessageIds(sessionId)
+        },
+        async listSessionIdsWithAttachments() {
+            return (await ready()).listSessionIdsWithAttachments()
         },
         async listSessionAttachmentFileIds(sessionId: string) {
             return (await ready()).listSessionAttachmentFileIds(sessionId)
@@ -230,6 +236,15 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         },
         async saveComposerAttachments(scopeId: string, attachments: readonly TalosComposerAttachmentDraft[]) {
             return (await ready()).saveComposerAttachments(scopeId, attachments)
+        },
+        async loadComposerQueue(scopeId: string) {
+            return (await ready()).loadComposerQueue(scopeId)
+        },
+        async saveComposerQueue(scopeId: string, value: unknown) {
+            return (await ready()).saveComposerQueue(scopeId, value)
+        },
+        async listComposerQueues() {
+            return (await ready()).listComposerQueues()
         },
         async close() {
             if (initialization) {

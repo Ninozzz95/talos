@@ -181,9 +181,9 @@ describe('TalosMobilePersonalVoiceEnrollment', () => {
         await flushPromises()
         expect(bridge.startPeek).not.toHaveBeenCalled()
 
-        await wrapper.get('[data-testid="talos-personal-voice-consent-identity"]').setValue(true)
-        await wrapper.get('[data-testid="talos-personal-voice-consent-storage"]').setValue(true)
-        await wrapper.get('[data-testid="talos-personal-voice-consent-mic"]').setValue(true)
+        await wrapper.get('[data-testid="talos-personal-voice-consent-identity"]').trigger('click')
+        await wrapper.get('[data-testid="talos-personal-voice-consent-storage"]').trigger('click')
+        await wrapper.get('[data-testid="talos-personal-voice-consent-mic"]').trigger('click')
         await wrapper.get('[data-testid="talos-personal-voice-consent-continue"]').trigger('click')
         expect(bridge.startPeek).toHaveBeenCalledTimes(1)
         expect(bridge.stopPeek).not.toHaveBeenCalled()
@@ -237,17 +237,17 @@ describe('TalosMobilePersonalVoiceEnrollment', () => {
         )
         expect(readDisabled()).toBe(true)
 
-        await wrapper.get('[data-testid="talos-personal-voice-consent-identity"]').setValue(true)
-        await wrapper.get('[data-testid="talos-personal-voice-consent-storage"]').setValue(true)
+        await wrapper.get('[data-testid="talos-personal-voice-consent-identity"]').trigger('click')
+        await wrapper.get('[data-testid="talos-personal-voice-consent-storage"]').trigger('click')
         expect(readDisabled()).toBe(true)
-        await wrapper.get('[data-testid="talos-personal-voice-consent-mic"]').setValue(true)
+        await wrapper.get('[data-testid="talos-personal-voice-consent-mic"]').trigger('click')
         expect(readDisabled()).toBe(false)
     })
 
     async function advanceToWizard(wrapper: ReturnType<typeof mount>) {
-        await wrapper.get('[data-testid="talos-personal-voice-consent-identity"]').setValue(true)
-        await wrapper.get('[data-testid="talos-personal-voice-consent-storage"]').setValue(true)
-        await wrapper.get('[data-testid="talos-personal-voice-consent-mic"]').setValue(true)
+        await wrapper.get('[data-testid="talos-personal-voice-consent-identity"]').trigger('click')
+        await wrapper.get('[data-testid="talos-personal-voice-consent-storage"]').trigger('click')
+        await wrapper.get('[data-testid="talos-personal-voice-consent-mic"]').trigger('click')
         await wrapper.get('[data-testid="talos-personal-voice-consent-continue"]').trigger('click')
         await wrapper.get('[data-testid="talos-personal-voice-check-continue"]').trigger('click')
     }

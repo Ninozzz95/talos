@@ -38,6 +38,7 @@ import {
     type TalosChatRepository,
     type TalosLocalChatMessage,
     type TalosLocalChatSession,
+    type TalosLocalListedLastMessage,
     type TalosLocalToolActivity,
     type TalosLocalFileAuthorityGrant,
     type TalosLocalMemory,
@@ -59,6 +60,9 @@ import {
 const ACTIVE_SESSION_KEY = 'active_session_id'
 const COMPOSER_DRAFT_KEY_PREFIX = 'composer_draft:'
 const COMPOSER_ATTACHMENTS_KEY_PREFIX = 'composer_attachments:'
+// B3 / F2: la coda dei messaggi, stessa tabella e stesso ambito della bozza.
+// Chiave additiva: un'app vecchia non la legge e non ne soffre.
+const COMPOSER_QUEUE_KEY_PREFIX = 'composer_queue:'
 
 function invalidRow(): never {
     throw new Error('TALOS_CHAT_ROW_INVALID')
@@ -110,6 +114,43 @@ function oneOf<T extends string>(value: string, values: readonly T[]): T {
  */
 function reportedTrue(value: unknown): boolean {
     return value !== null && value !== undefined && value !== false && String(value) !== '0'
+}
+
+/**
+ * ⭐ B3 / F4-B — il riassunto dell'ultimo messaggio, dalle colonne `last_*` di `listSessions`.
+ *
+ * ⛔ Qui NON si usa `invalidRow()`: una riga di messaggio storta non deve far sparire
+ * l'intero elenco delle chat per colpa di un'etichetta di stato. Un riassunto illeggibile
+ * vale «non so» (`null`), e la riga resta com'era prima di F4-B.
+ *
+ * `last_interrupted_metadata` arriva SOLO quando il testo dei metadati contiene la chiave
+ * (filtro in SQL, vedi `listSessions`): qui si conferma col vero parse che sia la chiave di
+ * primo livello e il vero booleano — un «interrupted» annidato o scritto come stringa non conta.
+ */
+function parseListedLastMessage(row: TalosSqlRow): TalosLocalListedLastMessage | null {
+    const role = row.last_role
+    const state = row.last_state
+    if (role === null || role === undefined) return null
+    if (typeof role !== 'string' || !(['user', 'assistant', 'system', 'tool'] as const).includes(role as never)) return null
+    if (typeof state !== 'string' || !(['persisted', 'pending', 'failed'] as const).includes(state as never)) return null
+    const model = row.last_model_profile_id
+    let interrupted = false
+    if (typeof row.last_interrupted_metadata === 'string') {
+        try {
+            const metadata: unknown = JSON.parse(row.last_interrupted_metadata)
+            interrupted = !!metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+                && (metadata as Record<string, unknown>).interrupted === true
+        } catch {
+            interrupted = false
+        }
+    }
+    return {
+        role: role as TalosLocalListedLastMessage['role'],
+        state: state as TalosLocalListedLastMessage['state'],
+        interrupted,
+        model_profile_id: typeof model === 'string' ? model : null,
+        created_at: typeof row.last_created_at === 'string' ? row.last_created_at : null,
+    }
 }
 
 function parseSession(row: TalosSqlRow): TalosLocalChatSession {
@@ -288,6 +329,34 @@ function composerDraftKey(scopeId: string): string {
     return `${COMPOSER_DRAFT_KEY_PREFIX}${normalizeComposerDraftScope(scopeId)}`
 }
 
+function composerQueueKey(scopeId: string): string {
+    return `${COMPOSER_QUEUE_KEY_PREFIX}${normalizeComposerDraftScope(scopeId)}`
+}
+
+/**
+ * «Nessuna voce» per la coda: `null`/`undefined` o un oggetto con `voci: []`.
+ * È l'unica cosa che il repository guarda del valore, perché serve a decidere
+ * se cancellare la riga (come la bozza vuota); il resto è opaco.
+ * ⚠ Gemella di quella in `memoryChatRepository.ts`: i test QUEUE-REPO girano
+ * sulle due implementazioni, quindi una divergenza diventa rossa.
+ */
+function composerQueueIsEmpty(value: unknown): boolean {
+    if (value === null || value === undefined) return true
+    if (typeof value !== 'object' || Array.isArray(value)) return false
+    const voci = (value as { voci?: unknown }).voci
+    return Array.isArray(voci) && voci.length === 0
+}
+
+/** Rilettura difensiva: JSON illeggibile ⇒ `null`, mai un'eccezione. */
+function parseComposerQueue(raw: unknown): unknown {
+    if (typeof raw !== 'string') return null
+    try {
+        return JSON.parse(raw) as unknown
+    } catch {
+        return null
+    }
+}
+
 export function createSqliteChatRepository(
     runtime: TalosSqliteRuntime,
     options: ChatRepositoryOptions = {},
@@ -402,6 +471,18 @@ export function createSqliteChatRepository(
          * EXISTS rather than a join or a count: SQLite stops at the first row it
          * finds, so this costs one index seek per session and never materialises
          * a message.
+         *
+         * ⭐ B3 / F4-B — e dice anche com'è finito l'ULTIMO messaggio (`last_message`),
+         * nella STESSA query: niente N+1, che sul telefono sarebbero cento viaggi sul ponte
+         * nativo per cento chat. L'ultimo è quello con l'`ordinal` più alto: `MAX(ordinal)`
+         * con `session_id` fissato si risolve con un solo salto nell'indice
+         * `UNIQUE(session_id, ordinal)` (SQLite, «The SQLite Query Optimizer Overview»,
+         * sezione MIN/MAX, https://www.sqlite.org/optoverview.html, letto il 24/09/2026).
+         *
+         * ⛔ Niente `json_extract`: la JSON1 del SQLCipher sul dispositivo non è verificata
+         * qui, e se mancasse cadrebbe l'intero elenco. `instr` è del nucleo di SQLite. I
+         * metadati si trasferiscono SOLO quando contengono la chiave (di solito mai: possono
+         * portare il ragionamento intero); il vero controllo lo fa `parseListedLastMessage`.
          */
         async listSessions() {
             const rows = await (await db()).query(
@@ -411,14 +492,25 @@ export function createSqliteChatRepository(
                             AS has_messages,
                         EXISTS (SELECT 1 FROM talos_chat_state d
                                 WHERE d.key IN ('composer_draft:' || s.id, 'composer_attachments:' || s.id))
-                            AS has_draft
+                            AS has_draft,
+                        lm.role AS last_role,
+                        lm.state AS last_state,
+                        lm.model_profile_id AS last_model_profile_id,
+                        lm.created_at AS last_created_at,
+                        CASE WHEN instr(lm.metadata_json, '"interrupted":true') > 0
+                                  OR instr(lm.metadata_json, '"interrupted": true') > 0
+                             THEN lm.metadata_json END AS last_interrupted_metadata
                  FROM talos_chat_sessions s
+                 LEFT JOIN talos_chat_messages lm
+                        ON lm.session_id = s.id
+                       AND lm.ordinal = (SELECT MAX(u.ordinal) FROM talos_chat_messages u WHERE u.session_id = s.id)
                  ORDER BY s.updated_at DESC, s.created_at DESC, s.id DESC`,
             )
             return rows.map((row) => ({
                 ...parseSession(row),
                 has_messages: reportedTrue(row.has_messages),
                 has_draft: reportedTrue(row.has_draft),
+                last_message: parseListedLastMessage(row),
             }))
         },
         getActiveSessionId: () => activeSessionId(),
@@ -531,6 +623,7 @@ export function createSqliteChatRepository(
                 if (remaining.length !== 0) throw new Error('TALOS_CHAT_DELETE_UNVERIFIED')
                 await database.run('DELETE FROM talos_chat_state WHERE key = ?', [composerDraftKey(sessionId)])
                 await database.run('DELETE FROM talos_chat_state WHERE key = ?', [composerAttachmentsKey(sessionId)])
+                await database.run('DELETE FROM talos_chat_state WHERE key = ?', [composerQueueKey(sessionId)])
                 // SF-10: session-scoped memories die with their session.
                 await database.run(
                     "DELETE FROM talos_memories WHERE scope_type = 'session' AND scope_id = ?",
@@ -544,6 +637,66 @@ export function createSqliteChatRepository(
                 const next = rows.length === 0 ? null : requiredString(rows[0] as TalosSqlRow, 'id')
                 await writeActiveSession(database, next)
                 return next
+            })
+        },
+        /**
+         * ⭐ B3-REC — una transazione sola: o si sposta tutto o niente. La sessione nuova si inserisce PRIMA dei figli
+         * perché le chiavi esterne qui sono immediate, controllate a fine istruzione (SQLite, «Foreign Key Support»,
+         * https://sqlite.org/foreignkeys.html, letto il 24/09/2026). Come `deleteSession`, il risultato si verifica
+         * rileggendo, mai dal contatore `changes` del driver (F4-#22).
+         */
+        async moveMessagesToNewSession(sourceSessionId, input) {
+            const title = normalizeChatTitle(input.title)
+            const metadata = encodeObject(input.metadata)
+            const session: TalosLocalChatSession = {
+                id: input.id,
+                title,
+                surface: normalizeChatSurface(input.surface ?? 'chat'),
+                mode: input.mode ?? 'verified_execution',
+                persistence_mode: input.persistence_mode ?? 'persistent',
+                active_model_profile_id: input.active_model_profile_id,
+                metadata: JSON.parse(metadata) as Record<string, unknown>,
+                created_at: input.created_at,
+                updated_at: input.updated_at,
+            }
+            const ancoraMessaggi = async (database: TalosSqlConnection) => (await database.query(
+                'SELECT id FROM talos_chat_messages WHERE session_id = ? LIMIT 1',
+                [sourceSessionId],
+            )).length > 0
+            return transaction(async (database) => {
+                await findSession(sourceSessionId, database)
+                if (!await ancoraMessaggi(database)) return null
+                await database.run(
+                    `INSERT INTO talos_chat_sessions
+                        (id, title, surface, mode, persistence_mode, active_model_profile_id, metadata_json, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        session.id,
+                        session.title,
+                        session.surface,
+                        session.mode,
+                        session.persistence_mode,
+                        session.active_model_profile_id,
+                        metadata,
+                        session.created_at,
+                        session.updated_at,
+                    ],
+                )
+                for (const tabella of ['talos_chat_messages', 'talos_chat_attachments', 'talos_chat_tool_activities',
+                    'talos_research_runs'] as const) {
+                    await database.run(`UPDATE ${tabella} SET session_id = ? WHERE session_id = ?`, [session.id, sourceSessionId])
+                }
+                await database.run(
+                    "UPDATE talos_memories SET scope_id = ? WHERE scope_type = 'session' AND scope_id = ?",
+                    [session.id, sourceSessionId],
+                )
+                for (const chiave of [composerDraftKey, composerAttachmentsKey, composerQueueKey]) {
+                    await database.run('UPDATE talos_chat_state SET key = ? WHERE key = ?',
+                        [chiave(session.id), chiave(sourceSessionId)])
+                }
+                if (await activeSessionId(database) === sourceSessionId) await writeActiveSession(database, session.id)
+                if (await ancoraMessaggi(database)) throw new Error('TALOS_CHAT_MOVE_UNVERIFIED')
+                return session
             })
         },
         async searchMessages(term, options) {
@@ -1125,6 +1278,13 @@ export function createSqliteChatRepository(
                 .map((row) => (typeof row.message_id === 'string' ? row.message_id : null))
                 .filter((id): id is string => id !== null)
         },
+        async listSessionIdsWithAttachments() {
+            // A3-84: servita dall'indice talos_chat_attachments_session_idx (session_id, ...).
+            const rows = await (await db()).query('SELECT DISTINCT session_id FROM talos_chat_attachments', [])
+            return rows
+                .map((row) => (typeof row.session_id === 'string' ? row.session_id : null))
+                .filter((id): id is string => id !== null)
+        },
         async listSessionAttachmentFileIds(sessionId: string) {
             // Served by talos_chat_attachments_session_idx (session_id, ...).
             const rows = await (await db()).query(
@@ -1702,6 +1862,52 @@ export function createSqliteChatRepository(
                     [key, JSON.stringify(value), now()],
                 )
             })
+        },
+        // B3 / F2 — gemelli di loadComposerDraft/saveComposerDraft, con una
+        // differenza voluta: un JSON corrotto qui torna `null` (la coda riparte
+        // vuota) invece di `invalidRow()`, perché una coda persa non deve
+        // impedire di aprire la chat.
+        async loadComposerQueue(scopeId: string) {
+            const rows = await (await db()).query(
+                'SELECT value_json FROM talos_chat_state WHERE key = ? LIMIT 1',
+                [composerQueueKey(scopeId)],
+            )
+            if (rows.length === 0) return null
+            return parseComposerQueue((rows[0] as TalosSqlRow).value_json)
+        },
+        async saveComposerQueue(scopeId: string, value: unknown) {
+            const key = composerQueueKey(scopeId)
+            const encoded = composerQueueIsEmpty(value) ? undefined : JSON.stringify(value)
+            await transaction(async (database) => {
+                // `JSON.stringify` può dare `undefined` (una funzione, un simbolo):
+                // non c'è niente da salvare, quindi come il vuoto.
+                if (encoded === undefined) {
+                    await database.run('DELETE FROM talos_chat_state WHERE key = ?', [key])
+                    return
+                }
+                await database.run(
+                    `INSERT INTO talos_chat_state (key, value_json, updated_at)
+                     VALUES (?, ?, ?)
+                     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`,
+                    [key, encoded, now()],
+                )
+            })
+        },
+        async listComposerQueues() {
+            // `substr` e non `LIKE`: nel prefisso c'è `_`, che per LIKE è un jolly.
+            const rows = await (await db()).query(
+                `SELECT key, value_json FROM talos_chat_state
+                 WHERE substr(key, 1, ?) = ?
+                 ORDER BY key`,
+                [COMPOSER_QUEUE_KEY_PREFIX.length, COMPOSER_QUEUE_KEY_PREFIX],
+            )
+            const queues: Array<{ scopeId: string; value: unknown }> = []
+            for (const row of rows) {
+                const value = parseComposerQueue(row.value_json)
+                if (value === null) continue
+                queues.push({ scopeId: String(row.key).slice(COMPOSER_QUEUE_KEY_PREFIX.length), value })
+            }
+            return queues
         },
         close: () => runtime.close(),
     }

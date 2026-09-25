@@ -25,7 +25,7 @@
  * one offers Pause — and a menu of disabled entries makes the reader work out
  * why. Structure encoding truth, not decoration.
  */
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
 import { Check, MoreVertical } from '@lucide/vue'
@@ -125,9 +125,37 @@ function place(): void {
     }
 }
 
+/*
+ * ⛔ Pad, 24/09/2026: aperto il ⋯ con la tastiera su, il fuoco entra nel menu (APG), la tastiera si chiude, la finestra
+ * si allunga e il ⋯ scende — il pannello restava dov'era il pulsante PRIMA. Come `autoUpdate` di Floating UI
+ * (https://floating-ui.com/docs/autoUpdate, letto il 24/09/2026): finché è aperto si riposiziona quando la finestra
+ * (o lo schermo visibile) cambia o qualcosa scorre; gli ascoltatori esistono SOLO a menu aperto.
+ */
+let staccaAscoltatori: (() => void) | null = null
+function riposiziona(): void {
+    if (!open.value) return
+    place()
+    void nextTick(tieniDentroLoSchermo)
+}
+function attaccaAscoltatori(): void {
+    staccaAscoltatori?.()
+    const schermo = window.visualViewport
+    window.addEventListener('resize', riposiziona)
+    window.addEventListener('scroll', riposiziona, true)
+    schermo?.addEventListener('resize', riposiziona)
+    staccaAscoltatori = () => {
+        window.removeEventListener('resize', riposiziona)
+        window.removeEventListener('scroll', riposiziona, true)
+        schermo?.removeEventListener('resize', riposiziona)
+        staccaAscoltatori = null
+    }
+}
+onBeforeUnmount(() => staccaAscoltatori?.())
+
 async function show(index = 0): Promise<void> {
     place()
     open.value = true
+    attaccaAscoltatori()
     active.value = index
     // APG: opening moves the focus INTO the menu. Leaving it on the trigger
     // behind an open panel is how a screen reader user ends up driving a menu
@@ -171,6 +199,7 @@ function focusActive(): void {
 function close(restoreFocus = true): void {
     if (!open.value) return
     open.value = false
+    staccaAscoltatori?.()
     // Back to where it was opened from — unless the caller is about to remove
     // the row, in which case there is nothing to return to.
     if (restoreFocus) trigger.value?.focus()

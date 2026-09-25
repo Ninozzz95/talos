@@ -13,6 +13,7 @@ import type {
 import { parseTalosMobileBrowserEvidenceEnvelope } from '@/lib/browser/browserContracts'
 import { stripLibrarySaveMarkers } from '@/lib/chat/librarySave'
 import { talosMessageReasoning } from '@/lib/chat/messageReasoning'
+import { talosEsitoAutorizzazione } from '@/lib/chat/esitoAutorizzazione'
 import { TALOS_METADATA_SCHERMO } from '@/lib/tools/tracciaAzione'
 import { talosCreateReasoningGate } from '@/lib/chat/reasoningGate'
 import type { TalosMobileInputPart } from '@/lib/chat/attachmentContracts'
@@ -31,6 +32,11 @@ import {
 } from '@/lib/chat/libraryPolicy'
 import type { TalosToolDefinition } from '@/lib/tools/registry'
 import { newTalosMobileId } from '@/lib/mobileIds'
+import type { TalosCodaRifiuto, TalosCodaStato, TalosCodaVoce } from '@/lib/chat/codaDelGiro'
+import type { TalosCodaDelloStore } from './chatQueue'
+
+/** La coda vuota condivisa dello store (la stessa forma di `CODA_VUOTA`, senza tirare il modulo nell'avvio). */
+const CODA_VUOTA_DELLO_STORE: TalosCodaStato = Object.freeze({ voci: Object.freeze([]) as readonly TalosCodaVoce[], inPausa: false })
 import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
 import type {
     TalosChatRepository,
@@ -299,7 +305,23 @@ export interface ChatState {
     lastError: string | null
     persistenceStatus: ChatPersistenceStatus
     persistenceError: string | null
+    /**
+     * ⭐ B3 (24/09/2026) — la coda dei messaggi di OGNI chat, per id di sessione.
+     *
+     * Decisioni owner 24/09: mentre l'app è occupata si ACCODA (mai un reindirizzo dall'Invio); la coda di un'altra
+     * chat parte appena l'app è libera; lo Stop la mette in pausa. Su disco con `saveComposerQueue` (morte del
+     * processo); ritrovata all'avvio è sempre in pausa — nessun giro vivo da aspettare. Vedi
+     * `.claude/b3/LEDGER-B3-2026-09-24.md`.
+     */
+    queues: Record<string, TalosCodaStato>
+    /** Come è finito l'ultimo giro di ogni chat in questa esecuzione: serve alla pausa e allo stato nell'elenco. */
+    turnOutcomes: Record<string, TalosTurnOutcome>
 }
+
+export type TalosTurnOutcome = 'concluso' | 'errore' | 'fermato'
+export type TalosEnqueueResult =
+    | { ok: true; voce: TalosCodaVoce }
+    | { ok: false; rifiuto: TalosCodaRifiuto | 'nessuna-chat' }
 
 export interface ChatStoreOptions<Runtime = undefined> {
     repository: TalosChatRepository
@@ -318,6 +340,14 @@ export interface ChatStoreOptions<Runtime = undefined> {
     prepareSend?: (
         context: TalosChatSendPreparationContext<Runtime>,
     ) => Promise<TalosChatSendPreparation<Runtime>>
+    /**
+     * ⭐ B3 — consegna una voce della coda passando dalla STESSA strada di un invio normale (modello, attrezzi,
+     * permessi li decide il controller, non lo store). `false` = non consegnata: la voce torna in testa e la coda
+     * va in pausa, mai persa (Hermes #64578: code degradate in silenzio).
+     */
+    deliverQueued?: (sessionId: string, voce: TalosCodaVoce) => Promise<boolean>
+    /** ⭐ B3 — una chat con un permesso d'attrezzo in attesa non riceve la coda: la domanda aperta viene prima. */
+    permissionPendingFor?: (sessionId: string) => boolean
 }
 
 declare const TALOS_CHAT_STORE_RUNTIME: unique symbol
@@ -350,6 +380,8 @@ export interface ChatStore<Runtime = undefined> {
     selectSession(sessionId: string): Promise<void>
     /** Defect #4: prepend the page above the oldest message; returns how many. */
     loadOlderMessages(): Promise<number>
+    /** GESTITA-01: rilegge l'esito delle richieste di permesso delle risposte sospese della chat aperta. */
+    refreshAuthorizationOutcomes(): Promise<void>
     renameSession(sessionId: string, title: string): Promise<TalosLocalChatSession>
     deleteSession(sessionId: string): Promise<void>
     editUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string): Promise<void>
@@ -393,12 +425,25 @@ export interface ChatStore<Runtime = undefined> {
         // immediately instead of lingering for the whole generation.
         onPersisted?: () => void,
         turnPolicy?: TalosLibraryTurnOverride | null,
+        targetSessionId?: string | null,
     ): Promise<boolean>
     /**
      * Resume durable assistant work on its captured owner. The continuation is
      * queued behind an active send and never invents another user message.
      */
     continueFromCheckpoint(input: TalosChatContinuationInput<Runtime>): Promise<boolean>
+    /** ⭐ B3 — accoda nella chat indicata (predefinita: quella aperta). */
+    enqueue(testo: string, sessionId?: string): Promise<TalosEnqueueResult>
+    queueOf(sessionId: string): TalosCodaStato
+    removeQueued(sessionId: string, id: string): Promise<void>
+    editQueued(sessionId: string, id: string, testo: string): Promise<{ ok: true } | { ok: false; rifiuto: TalosCodaRifiuto }>
+    resumeQueue(sessionId: string): Promise<void>
+    sendQueuedNow(sessionId: string, id: string): Promise<boolean>
+    /** ⭐ B3 — «Indirizza» su una voce, solo nella chat che sta rispondendo. */
+    steerQueued(sessionId: string, id: string, modo: 'punto-sicuro' | 'ferma-e-riparti'): Promise<boolean>
+    consumeSafePointRequest(sessionId: string): boolean
+    /** ⭐ B3 — «Riprendi»: rifà la risposta all'ultimo messaggio della persona su una chat interrotta. */
+    resumeTurn(modelProfileId?: string | null, turnPolicy?: TalosLibraryTurnOverride | null): Promise<boolean>
 }
 
 function toBrowserActivityView(activity: TalosLocalToolActivity): TalosMobileBrowserActivityView | null {
@@ -626,6 +671,8 @@ export function createChatStore<Runtime = undefined>(
         lastError: null,
         persistenceStatus: 'idle',
         persistenceError: null,
+        queues: {},
+        turnOutcomes: {},
     })
     let initialization: Promise<void> | null = null
     let navigationRevision = 0
@@ -645,17 +692,40 @@ export function createChatStore<Runtime = undefined>(
             const attachments = batch.attachmentMessageIds.includes(message.id)
                 ? await repository.listMessageAttachments(message.id)
                 : []
-            return toMessageView(
+            return conEsitoAutorizzazione(toMessageView(
                 message,
                 attachments,
                 batch.sessionActivities.filter((activity) => activity.message_id === message.id),
-            )
+            ), batch.sessionActivities)
         }
         const [attachments, toolActivities] = await Promise.all([
             repository.listMessageAttachments(message.id),
             repository.listMessageToolActivities(message.id),
         ])
         return toMessageView(message, attachments, toolActivities)
+    }
+
+    /*
+     * ⭐ GESTITA-01 (owner 25/09/2026, «riga compatta»): una risposta sospesa su una richiesta di permesso porta l'esito
+     * di ogni strumento, letto dall'attività `tool.authorization` della chat (lo stesso id del checkpoint). Si legge
+     * all'apertura della pagina e di nuovo dopo ogni decisione (`refreshAuthorizationOutcomes`).
+     */
+    function conEsitoAutorizzazione(view: TalosMobileMessageView, attivita: readonly TalosLocalToolActivity[]): TalosMobileMessageView {
+        const checkpoint = view.metadata?.tool_authorization_pending_checkpoint_id
+        if (typeof checkpoint !== 'string' || !checkpoint) return view
+        const esito = talosEsitoAutorizzazione(attivita, checkpoint)
+        return esito ? { ...view, authorizationOutcome: esito } : view
+    }
+
+    async function refreshAuthorizationOutcomes(): Promise<void> {
+        const sessionId = activeSession.value?.id
+        if (!sessionId || !messages.some((message) => typeof message.metadata?.tool_authorization_pending_checkpoint_id === 'string')) return
+        const attivita = await repository.listSessionToolActivities(sessionId)
+        if (activeSession.value?.id !== sessionId) return
+        for (let indice = 0; indice < messages.length; indice += 1) {
+            const aggiornato = conEsitoAutorizzazione(messages[indice]!, attivita)
+            if (aggiornato !== messages[indice]) messages.splice(indice, 1, aggiornato)
+        }
     }
 
     /**
@@ -708,13 +778,30 @@ export function createChatStore<Runtime = undefined>(
         messages: TalosMobileMessageView[]
         sessionBrowserActivities: TalosMobileBrowserActivityView[]
     }> {
-        const available = await repository.listSessions()
+        let available = await repository.listSessions()
+        /*
+         * ⛔ 24/09/2026, trovato sul Pad: le sessioni del Codice stanno nello STESSO archivio (`metadata.codice`) e
+         * `createSession` scrive sempre la sessione attiva. Creata una sessione del Codice, al riavvio la chat nativa si
+         * apriva su QUELLA, ci scriveva dentro, e l'elenco — che le nasconde — diceva «Non ci sono ancora chat».
+         * La chat nativa sceglie la sua chat attiva solo fra le PROPRIE sessioni (`codiceNonRubaLaChat.test.ts`).
+         *
+         * ⭐ B3-REC (owner 24/09, «sì»): ciò che ci aveva già scritto torna nella Chat, in una chat nuova. Il Codice non
+         * scrive mai messaggi (`recuperoChatDalCodice.ts`), quindi una sessione del Codice CON messaggi è una chat finita
+         * lì. Il modulo si carica solo in quel caso (tetto del pacchetto d'avvio) e ridà l'elenco aggiornato.
+         */
+        if (available.some((session) => session.metadata?.codice === true && session.has_messages === true)) {
+            available = await import('./recuperoChatDalCodice')
+                .then((modulo) => modulo.recuperaChatFiniteNelCodice(repository, available,
+                    { titolo: titleFromPrompt, nuovoId: makeId }))
+                .catch((error: unknown) => (console.warn('[chat]', error), available))
+        }
+        const dellaChat = available.filter((session) => session.metadata?.codice !== true)
         let activeId = await repository.getActiveSessionId()
-        if (!available.some((session) => session.id === activeId)) {
-            activeId = available[0]?.id ?? null
+        if (!dellaChat.some((session) => session.id === activeId)) {
+            activeId = dellaChat[0]?.id ?? null
             if (activeId) await repository.selectSession(activeId)
         }
-        const active = available.find((session) => session.id === activeId) ?? null
+        const active = dellaChat.find((session) => session.id === activeId) ?? null
         const restoredRows = active
             ? await repository.listMessages(active.id, { limit: TALOS_MESSAGE_PAGE_SIZE })
             : []
@@ -750,6 +837,7 @@ export function createChatStore<Runtime = undefined>(
             state.persistenceStatus = 'ready'
             state.persistenceError = null
             state.lastError = null
+            await caricaCodeDalDisco()
         } catch (error) {
             markPersistenceFailure(error)
         }
@@ -857,11 +945,22 @@ export function createChatStore<Runtime = undefined>(
     // R2-9: appendMessage bumps ONLY the session's updated_at in the DB —
     // mirror that locally instead of a full-table round-trip on EVERY user
     // and assistant append (it was two listSessions per exchange).
-    function bumpSessionRecency(sessionId: string, updatedAt: string): void {
+    function bumpSessionRecency(
+        sessionId: string,
+        updatedAt: string,
+        lastMessage?: TalosLocalChatSession['last_message'],
+    ): void {
         const index = sessions.findIndex((session) => session.id === sessionId)
         if (index < 0) return
         // The first message is also the moment this chat ENTERS the history.
-        const updated = { ...sessions[index], updated_at: updatedAt, has_messages: true }
+        // ⭐ B3 — e l'ultimo messaggio segue in memoria: lo stato nell'elenco (in coda consegnata a una chat NON aperta,
+        // poi fallita) non resta quello letto dal disco all'ultima rilettura.
+        const updated = {
+            ...sessions[index],
+            updated_at: updatedAt,
+            has_messages: true,
+            ...(lastMessage !== undefined ? { last_message: lastMessage } : {}),
+        }
         sessions.splice(index, 1)
         // listSessions orders by updated_at DESC — the freshest bump leads.
         sessions.unshift(updated)
@@ -1466,7 +1565,13 @@ export function createChatStore<Runtime = undefined>(
         })
         const view = await loadMessageView(persisted)
         if (activeSession.value?.id === sessionId) messages.push(view)
-        bumpSessionRecency(sessionId, persisted.created_at)
+        bumpSessionRecency(sessionId, persisted.created_at, {
+            role: persisted.role,
+            state: persisted.state,
+            interrupted: persisted.metadata?.interrupted === true,
+            model_profile_id: persisted.model_profile_id,
+            created_at: persisted.created_at,
+        })
     }
 
     async function runContinuation(
@@ -1630,6 +1735,72 @@ export function createChatStore<Runtime = undefined>(
         }
     }
 
+    /*
+     * ⭐ B3 — la coda vive in `stores/chatQueue.ts`, caricata a richiesta (tetto del pacchetto d'avvio). Qui restano
+     * solo ciò che deve rispondere SUBITO: `queueOf` (lo legge il template) e `consumeSafePointRequest` (lo chiede il
+     * ciclo degli attrezzi a metà giro; se la coda non è mai stata caricata nessuno ha chiesto un indirizzo).
+     */
+    let codaDelloStore: TalosCodaDelloStore | null = null
+    let codaInCaricamento: Promise<TalosCodaDelloStore> | null = null
+    function caricaCoda(): Promise<TalosCodaDelloStore> {
+        codaInCaricamento ??= import('./chatQueue').then(({ creaCodaDelloStore }) => {
+            codaDelloStore = creaCodaDelloStore({
+                state,
+                repository,
+                options,
+                activeSession,
+                makeId,
+                now,
+                stopStreaming,
+                messaggioDiErrore: (error) => errorMessage(error, translate),
+                continuazioniInCorso: () => continuationQueue.length > 0 || drainingContinuations,
+                send,
+            })
+            return codaDelloStore
+        })
+        return codaInCaricamento
+    }
+    const codaInUso = (): boolean => codaDelloStore !== null || Object.keys(state.queues).length > 0
+
+    function queueOf(sessionId: string): TalosCodaStato {
+        return state.queues[sessionId] ?? CODA_VUOTA_DELLO_STORE
+    }
+    async function caricaCodeDalDisco(): Promise<void> {
+        await (await caricaCoda()).caricaCodeDalDisco()
+    }
+    async function enqueue(testo: string, sessionId?: string): Promise<TalosEnqueueResult> {
+        return (await caricaCoda()).enqueue(testo, sessionId)
+    }
+    async function removeQueued(sessionId: string, id: string): Promise<void> {
+        await (await caricaCoda()).removeQueued(sessionId, id)
+    }
+    async function editQueued(sessionId: string, id: string, testo: string): Promise<{ ok: true } | { ok: false; rifiuto: TalosCodaRifiuto }> {
+        return (await caricaCoda()).editQueued(sessionId, id, testo)
+    }
+    async function resumeQueue(sessionId: string): Promise<void> {
+        await (await caricaCoda()).resumeQueue(sessionId)
+    }
+    async function sendQueuedNow(sessionId: string, id: string): Promise<boolean> {
+        return (await caricaCoda()).sendQueuedNow(sessionId, id)
+    }
+    async function steerQueued(sessionId: string, id: string, modo: 'punto-sicuro' | 'ferma-e-riparti'): Promise<boolean> {
+        return (await caricaCoda()).steerQueued(sessionId, id, modo)
+    }
+    function consumeSafePointRequest(sessionId: string): boolean {
+        return codaDelloStore?.consumeSafePointRequest(sessionId) ?? false
+    }
+    /** Senza nessuna coda l'esito si segna e basta: il modulo non si carica per niente. */
+    async function registraEsito(sessionId: string, esito: TalosTurnOutcome): Promise<void> {
+        if (!codaInUso()) {
+            state.turnOutcomes = { ...state.turnOutcomes, [sessionId]: esito }
+            return
+        }
+        await (await caricaCoda()).registraEsito(sessionId, esito)
+    }
+    function consegnaCode(): void {
+        if (codaInUso()) void caricaCoda().then((coda) => coda.consegnaCode())
+    }
+
     async function drainContinuationQueue(): Promise<void> {
         if (drainingContinuations || state.sending || state.editingMessage) return
         drainingContinuations = true
@@ -1642,6 +1813,9 @@ export function createChatStore<Runtime = undefined>(
             drainingContinuations = false
             if (continuationQueue.length > 0 && !state.sending) {
                 void drainContinuationQueue()
+            } else {
+                // ⭐ B3: nessuna continuazione di permesso in attesa ⇒ è il turno della coda.
+                void consegnaCode()
             }
         }
     }
@@ -1672,6 +1846,18 @@ export function createChatStore<Runtime = undefined>(
         attachments: readonly AppendChatAttachmentInput[] = [],
         onPersisted?: () => void,
         turnPolicy: TalosLibraryTurnOverride | null = null,
+        /**
+         * ⭐ B3 — la chat a cui va QUESTO turno, quando non è quella aperta: la coda della chat B parte appena l'app è
+         * libera anche se stai guardando la A (decisione owner 24/09). Assente = la chat aperta, come sempre.
+         * ⛔ Una destinazione che non esiste non diventa «la chat aperta» per ripiego: si rifiuta, e la voce torna in
+         * coda (`deliverQueued` → false).
+         */
+        targetSessionId: string | null = null,
+        /**
+         * ⭐ B3 «Riprendi» (D-B3-03) — interno, lo passa solo `resumeTurn`: il messaggio della persona è GIÀ sul disco
+         * (non si riscrive) e ciò che lo segue — il parziale interrotto — non va al modello.
+         */
+        ripresa = false,
     ): Promise<boolean> {
         await flushMessageTurnDeletions()
         const trimmed = text.trim()
@@ -1681,8 +1867,12 @@ export function createChatStore<Runtime = undefined>(
             return false
         }
 
+        const altraChat = targetSessionId !== null && targetSessionId !== activeSession.value?.id
+        const destinazione = altraChat ? sessions.find((candidata) => candidata.id === targetSessionId) ?? null : null
+        if (altraChat && !destinazione) return false
+
         state.sending = true
-        state.sendingSessionId = activeSession.value?.id ?? null
+        state.sendingSessionId = altraChat ? targetSessionId : activeSession.value?.id ?? null
         state.lastError = null
         const acceptedAt = new Date().toISOString()
         const abort = new AbortController()
@@ -1699,7 +1889,7 @@ export function createChatStore<Runtime = undefined>(
         let session: TalosLocalChatSession
         let invocation: ChatCompletionInvocation<Runtime>
         try {
-            session = await ensureActiveSession(trimmed || 'Shared files', modelProfileId)
+            session = destinazione ?? await ensureActiveSession(trimmed || 'Shared files', modelProfileId)
         } catch (error) {
             markPersistenceFailure(error)
             finishSend()
@@ -1762,7 +1952,7 @@ export function createChatStore<Runtime = undefined>(
         }
 
         try {
-            await appendDurable(
+            if (!ripresa) await appendDurable(
                 session.id,
                 'user',
                 trimmed,
@@ -1793,7 +1983,9 @@ export function createChatStore<Runtime = undefined>(
             // have silently truncated the model's memory to the last page on
             // any long conversation — the answer would get worse the longer you
             // had talked. The model's history is read in full, from the store.
-            const history = await repository.listMessages(session.id)
+            const storiaIntera = await repository.listMessages(session.id)
+            const ultimoDellaPersona = storiaIntera.map((m) => m.role).lastIndexOf('user')
+            const history = ripresa && ultimoDellaPersona >= 0 ? storiaIntera.slice(0, ultimoDellaPersona + 1) : storiaIntera
             const withAttachments = new Set(await repository.listSessionAttachmentMessageIds(session.id))
             /*
              * ⛔ PIGRO, e non per eleganza: MISURATO in tre forme. Statico
@@ -1836,11 +2028,13 @@ export function createChatStore<Runtime = undefined>(
             } catch (persistenceError) {
                 markPersistenceFailure(persistenceError)
             }
+            await registraEsito(session.id, 'errore')
             finishSend()
             return true
         }
 
         let streamed = ''
+        let esitoGiro: TalosTurnOutcome = 'concluso'
         let reasoned = ''
         const ritmoRagionamento = talosCreateReasoningGate()
         try {
@@ -1906,6 +2100,7 @@ export function createChatStore<Runtime = undefined>(
             )
         } catch (error) {
             const aborted = error instanceof Error && error.name === 'AbortError'
+            esitoGiro = aborted ? 'fermato' : 'errore'
             // A streamed partial is preserved honestly, never re-fetched or dropped.
             if (streamed || reasoned) {
                 try {
@@ -1935,9 +2130,18 @@ export function createChatStore<Runtime = undefined>(
                 }
             }
         } finally {
+            await registraEsito(session.id, esitoGiro)
             finishSend()
         }
         return true
+    }
+
+    /** ⭐ B3 «Riprendi» (D-B3-03): vive nel modulo della coda (`chatQueue.ts`), caricato a richiesta. */
+    async function resumeTurn(
+        modelProfileId: string | null = null,
+        turnPolicy: TalosLibraryTurnOverride | null = null,
+    ): Promise<boolean> {
+        return (await caricaCoda()).resumeTurn(modelProfileId, turnPolicy)
     }
 
     function stopStreaming(): void {
@@ -1959,6 +2163,7 @@ export function createChatStore<Runtime = undefined>(
         createSession,
         selectSession,
         loadOlderMessages,
+        refreshAuthorizationOutcomes,
         renameSession,
         deleteSession,
         editUserMessage,
@@ -1979,5 +2184,14 @@ export function createChatStore<Runtime = undefined>(
         recordBrowserActivity,
         send,
         continueFromCheckpoint,
+        enqueue,
+        queueOf,
+        removeQueued,
+        editQueued,
+        resumeQueue,
+        sendQueuedNow,
+        steerQueued,
+        consumeSafePointRequest,
+        resumeTurn,
     }
 }

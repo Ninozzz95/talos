@@ -67,6 +67,14 @@ describe('TalosMobileEffortPicker segmented slider', () => {
         expect(wrapper.get('[role="slider"]').attributes('aria-valuetext')).toBe('Extra high')
     })
 
+    it('RAG-OBB-07 offers only the declared levels, without off, for a mandatory-reasoning model', () => {
+        const wrapper = mountPicker({ effortLevels: ['max', 'high', 'low'], selectedEffort: 'off', reasoningMandatory: true })
+        expect(wrapper.findAll('[data-testid="talos-mobile-effort-level"]').map((item) => (
+            item.attributes('data-talos-filter-option')
+        ))).toEqual(['low', 'high', 'max'])
+        expect(wrapper.get('[data-testid="talos-mobile-effort-selected"]').text()).toBe('Low')
+    })
+
     it('does not expose extended thinking for unsupported profiles', () => {
         const wrapper = mountPicker({ supportsThinking: false, thinking: true })
         expect(wrapper.find('[data-testid="talos-mobile-thinking-toggle"]').exists()).toBe(false)

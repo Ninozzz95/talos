@@ -21,6 +21,8 @@ const props = defineProps<{
     selectedEffort: string
     supportsThinking: boolean
     thinking: boolean
+    // RAG-OBB (24/09/2026): il catalogo dice che il ragionamento non si spegne ⇒ niente «off» sulla barra.
+    reasoningMandatory?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -30,7 +32,10 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useTalosI18n()
-const effortLadder = computed(() => mobileEffortLadderFromLevels(props.effortLevels))
+const effortLadder = computed(() => mobileEffortLadderFromLevels(
+    props.effortLevels,
+    { mandatory: props.reasoningMandatory === true },
+))
 
 function effortLabel(level: string): string {
     const key = `chat.effort${level.charAt(0).toUpperCase()}${level.slice(1)}`

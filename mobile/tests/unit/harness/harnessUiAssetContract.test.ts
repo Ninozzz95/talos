@@ -55,8 +55,10 @@ describe('Harness UI static asset contract', () => {
     it('CODE-TERMINAL-DEMO-TRUTH-01 never claims that a real PTY is active', () => {
         const html = harnessAsset('index.html')
 
-        expect(html).toContain('pty demo')
+        // ⭐ B1-06 (23/09): il chip «pty demo» è sparito con tutto l'output inventato — il Terminale parte vuoto e onesto.
+        expect(html).not.toContain('pty demo')
         expect(html).not.toContain('pty attiva')
+        expect(html).toContain('No command run in this session.')
     })
 
     it('CODE-TOAST-NO-CONTROL-OVERLAP-01 keeps wide-short feedback above the fixed composer', () => {
@@ -166,8 +168,10 @@ describe('Harness UI static asset contract', () => {
             '.harness-dialog-backdrop.motion-enter',
             '.message.motion-enter', '.tool-inline-detail', '.queued-message',
             '.approval-card.motion-exit', '.composer', '.mobile-nav',
-            '.campaign-run-detail', '.inspector-section.motion-enter',
+            '.inspector-section.motion-enter',
         ]) expect(css).toContain(selector)
+        // ⛔ B1-08 (23/09): la Bacheca è stata tolta dal Codice, e con lei le sue righe di campagna.
+        expect(css).not.toMatch(/campaign|board-heading|dashboard-shell/)
     })
 
     it('CODE-MOTION-EXIT-01 keeps disappearing nodes alive through a cancellable exit animation', () => {

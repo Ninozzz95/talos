@@ -46,7 +46,7 @@ describe('deleting a chat, and what it takes with it', () => {
         mountDialog(FULL)
         const row = document.querySelector(CHECKBOX)
         expect(row?.textContent).toContain('2 documents and 1 saved page')
-        expect(row?.querySelector<HTMLInputElement>('input')?.checked).toBe(false)
+        expect(row?.querySelector('[role="checkbox"]')?.getAttribute('aria-checked')).toBe('false')
     })
 
     it('deletes only the chat unless the box is ticked', async () => {
@@ -58,9 +58,7 @@ describe('deleting a chat, and what it takes with it', () => {
 
     it('takes the files when it is ticked', async () => {
         const wrapper = mountDialog(FULL)
-        const box = document.querySelector(CHECKBOX)!.querySelector('input')!
-        box.checked = true
-        box.dispatchEvent(new Event('change'))
+        ;(document.querySelector(CHECKBOX)!.querySelector('[role="checkbox"]') as HTMLElement).click()
         await wrapper.vm.$nextTick()
         ;(document.querySelector(CONFIRM) as HTMLElement).click()
         await wrapper.vm.$nextTick()
@@ -124,9 +122,7 @@ describe('deleting a chat, and what it takes with it', () => {
         // contents. Resetting on identity silently unticked the box the user
         // had ticked, and only the chat went.
         const wrapper = mountDialog(FULL)
-        const box = document.querySelector(CHECKBOX)!.querySelector('input')!
-        box.checked = true
-        box.dispatchEvent(new Event('change'))
+        ;(document.querySelector(CHECKBOX)!.querySelector('[role="checkbox"]') as HTMLElement).click()
         await wrapper.vm.$nextTick()
 
         await wrapper.setProps({ plan: { documents: [file('a'), file('b')], sources: [file('c')] } })

@@ -72,12 +72,16 @@ const ROUTES: Readonly<Record<keyof TalosChatRepository, Rule>> = {
     updateSession: 'session-arg',
     updateSessionMetadata: 'session-arg',
     deleteSession: 'session-arg',
+    // B3-REC: si sposta DENTRO il lato della sessione di partenza (le sessioni del Codice sono sempre sul disco).
+    moveMessagesToNewSession: 'session-arg',
     listMessages: 'session-arg',
     rewindUserMessage: 'session-arg',
     deleteMessageTurn: 'session-arg',
     listSessionToolActivities: 'session-arg',
     listSessionAttachmentMessageIds: 'session-arg',
     listSessionAttachmentFileIds: 'session-arg',
+    // A3-84: l'elenco delle chat è quello durevole (come `listSessions`).
+    listSessionIdsWithAttachments: 'durable',
 
     appendMessage: 'session-in-input',
     appendToolActivity: 'session-in-input',
@@ -103,6 +107,14 @@ const ROUTES: Readonly<Record<keyof TalosChatRepository, Rule>> = {
     saveComposerDraft: 'session-arg',
     loadComposerAttachments: 'session-arg',
     saveComposerAttachments: 'session-arg',
+    // B3 / F2: la coda segue la bozza. `'session-arg'` come `loadComposerDraft`:
+    // la coda di una chat temporanea (`tmp-…`) vive nel lato in memoria e non
+    // tocca mai il disco (QUEUE-REPO-06). L'elenco è `'durable'` come
+    // `listSessions`: una chat temporanea non compare nella cronologia, quindi
+    // nemmeno la sua coda nell'elenco delle code (QUEUE-REPO-14).
+    loadComposerQueue: 'session-arg',
+    saveComposerQueue: 'session-arg',
+    listComposerQueues: 'durable',
     createTask: 'durable',
     listTasks: 'durable',
     setTaskStatus: 'durable',

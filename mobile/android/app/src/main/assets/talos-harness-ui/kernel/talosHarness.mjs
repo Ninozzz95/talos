@@ -361,6 +361,48 @@ export async function consumaFlussoSSE(response, onDelta) {
 }
 
 /**
+ * ⭐ RAG-COD (24/09/2026, owner: «nel server del Codice», «come la chat mobile», «il predefinito del catalogo»).
+ *
+ * GLM 5.3 ragiona per forza: con la richiesta senza `reasoning` un fornitore OpenRouter ha scritto il ragionamento
+ * nella risposta (vLLM #54744, pi #8706, Hermes #96373). Il catalogo OpenRouter lo dichiara (`reasoning.mandatory`,
+ * `supported_efforts`, `default_effort`; https://openrouter.ai/docs/use-cases/reasoning-tokens, letta il 24/09/2026:
+ * «hide disable controls and do not send effort: "none"»). La regola:
+ * - politica assente (il catalogo tace, o un fornitore non OpenRouter): il `reasoning` del chiamante, intatto;
+ * - ragionamento assente: su un obbligatorio il `default_effort` del catalogo (è ciò che OpenRouter userebbe comunque:
+ *   «Predefinito del server» resta vero); su un facoltativo resta assente;
+ * - `none` su un obbligatorio: il livello supportato più basso;
+ * - un livello non supportato: il più vicino più debole, altrimenti il minimo — mai `none` (Hermes Agent `clamp_effort`,
+ *   PR #90350, merged 20/08/2026: «never escalate cost»);
+ * - obbligatorio senza livelli dichiarati: `{ enabled: true }`, senza inventarne uno.
+ * È la stessa regola della chat mobile (`mobile/src/lib/mobileEffort.ts`, `clampMobileEffort`).
+ */
+const SCALA_RAGIONAMENTO = Object.freeze(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+
+export function regolaReasoningPerModello(reasoning, politica) {
+    if (!politica || typeof politica !== 'object') return reasoning
+    const obbligatorio = politica.mandatory === true
+    const livelli = (Array.isArray(politica.supportedEfforts) ? politica.supportedEfforts : [])
+        .filter((livello) => livello !== 'none' && SCALA_RAGIONAMENTO.includes(livello))
+        .sort((a, b) => SCALA_RAGIONAMENTO.indexOf(a) - SCALA_RAGIONAMENTO.indexOf(b))
+    if (reasoning == null) {
+        if (!obbligatorio) return reasoning
+        const predefinito = livelli.includes(politica.defaultEffort) ? politica.defaultEffort : null
+        if (predefinito) return { effort: predefinito }
+        return livelli.length > 0 ? { effort: livelli[0] } : { enabled: true }
+    }
+    if (typeof reasoning !== 'object' || Array.isArray(reasoning) || typeof reasoning.effort !== 'string') return reasoning
+    const { effort, ...resto } = reasoning
+    if (effort === 'none') {
+        if (!obbligatorio) return reasoning
+        return livelli.length > 0 ? { ...resto, effort: livelli[0] } : { ...resto, enabled: true }
+    }
+    if (livelli.length === 0 || livelli.includes(effort) || !SCALA_RAGIONAMENTO.includes(effort)) return reasoning
+    const rango = SCALA_RAGIONAMENTO.indexOf(effort)
+    const piuDeboli = livelli.filter((livello) => SCALA_RAGIONAMENTO.indexOf(livello) < rango)
+    return { ...resto, effort: piuDeboli.at(-1) ?? livelli[0] }
+}
+
+/**
  * La chiamata al modello, che ritenta.
  *
  * ⛔ `fetch` e `dormi` sono argomenti perche' il test possa guardarla senza
@@ -375,6 +417,10 @@ export async function consumaFlussoSSE(response, onDelta) {
  * corpo della richiesta, `r.json()` come sempre — bit-per-bit lo stesso
  * comportamento di oggi per TALOS-BANCO, che non li passa. Presenti:
  * `stream:true` verso OpenRouter, consumato da `consumaFlussoSSE` sopra.
+ *
+ * ⭐ `politicaRagionamento` (RAG-COD, 24/09/2026) — opzionale: `(modello) => politica|null`, dal catalogo OpenRouter.
+ * Assente (TALOS-BANCO): corpo bit-per-bit come prima. Presente: `regolaReasoningPerModello` sotto; se la lettura
+ * fallisce si tiene il `reasoning` del chiamante, la chiamata non si ferma per il catalogo.
  */
 export async function chiamaConRitenta({
     modello, chiave, messaggi, attrezzi,
@@ -383,8 +429,13 @@ export async function chiamaConRitenta({
     dormi = (ms) => new Promise((ok) => setTimeout(ok, ms)),
     caso = Math.random,
     onDelta,
-    reasoning,
+    reasoning: reasoningRichiesto,
+    politicaRagionamento,
 }) {
+    const politica = politicaRagionamento
+        ? await Promise.resolve().then(() => politicaRagionamento(modello)).catch(() => null)
+        : null
+    const reasoning = regolaReasoningPerModello(reasoningRichiesto, politica)
     const inStreaming = Boolean(onDelta)
     let ultimoStato = null
     let ultimoTesto = ''
@@ -783,6 +834,9 @@ const ATTREZZI_ESTESI = [
      * `elencaNoteFn` assente degrada onestamente A TEMPO DI CHIAMATA
      * ("not configured on this harness"), mai un tentativo silenzioso
      * — vedi il dispatch più sotto.
+     * ⛔ B1-11 (23/09): per `document_create` (e `web_search`) questo
+     * principio NON vale più — senza configurazione non si offrono, vedi
+     * `attrezziOpenAIOfferti`. Per le Note e le altre sotto resta com'è.
      */
     {
         name: 'notes_list',
@@ -1069,6 +1123,66 @@ const ATTREZZI_ESTESI_OPENAI = ATTREZZI_ESTESI.map((a) => ({
     type: 'function',
     function: { name: a.name, description: a.description, parameters: a.input_schema },
 }))
+
+/**
+ * ⭐ B1-11 — il criterio UNICO per «la ricerca web è configurata»: lo usa
+ * l'offerta (sotto) e lo usa il dispatch di `web_search` in `talosLavora`.
+ * Due copie del criterio divergerebbero in silenzio, e un attrezzo tornerebbe
+ * offerto per poi dire «not configured».
+ */
+export function ricercaWebConfigurata(ricercaWeb) {
+    return Boolean(ricercaWeb?.provider || ricercaWeb?.apiKey || ricercaWeb?.endpoint)
+}
+
+/**
+ * ⛔⛔⛔ B1-11 (23/09/2026) — decisione owner dopo il dossier
+ * `.claude/ricerche/2026-09-23-B1-funzioni-non-disponibili.md` («Sintesi per
+ * caso», ultima riga): **un attrezzo non configurato NON si offre al
+ * modello.** Scelta unanime del campo (Hermes, Codex, OpenCode, Zed, Gemini
+ * CLI, OpenAI Agents SDK); arXiv 2609.14758: con fallimenti silenziosi gli
+ * agenti inventano la risposta. Prima di oggi `web_search` e `document_create`
+ * dipendevano SOLO da `strumentiEstesi` (il principio «l'offerta la decide chi
+ * imbarca il kernel, l'assenza della callback degrada a tempo di chiamata»,
+ * vedi sopra `ATTREZZI_ESTESI`) — e il Codice sul telefono, che non passa mai
+ * né `ricercaWeb` né `onDocumento`, li offriva per poi rispondere SEMPRE «not
+ * configured». Misurato, non ipotizzato.
+ *
+ * ⇒ Ora l'offerta di quei DUE dipende anche dalla loro configurazione. Gli
+ * altri estesi restano come sono (il loro principio non cambia oggi: la
+ * decisione owner riguarda questi due, B1-11 del ledger). Il messaggio
+ * onesto del dispatch resta, ma solo come difesa per un modello che chiama
+ * un nome mai offerto: il guasto momentaneo di un attrezzo VERO resta un
+ * errore esplicito («search failed: …», «document creation failed: …»).
+ *
+ * Con le configurazioni presenti l'elenco è identico a prima, byte per byte.
+ */
+const CONFIGURAZIONE_RICHIESTA = Object.freeze({
+    web_search: ({ ricercaWeb }) => ricercaWebConfigurata(ricercaWeb),
+    document_create: ({ onDocumento }) => typeof onDocumento === 'function',
+})
+
+function attrezziOpenAIOfferti({ strumentiEstesi, ricercaWeb, onDocumento } = {}) {
+    if (!strumentiEstesi?.length) return ATTREZZI_OPENAI
+    const configurazione = { ricercaWeb, onDocumento }
+    return [
+        ...ATTREZZI_OPENAI,
+        ...ATTREZZI_ESTESI_OPENAI.filter((a) => strumentiEstesi.includes(a.function.name)
+            && (CONFIGURAZIONE_RICHIESTA[a.function.name]?.(configurazione) ?? true)),
+    ]
+}
+
+/**
+ * ⭐ B1-11 — QUALI attrezzi il modello vede davvero in una sessione, nello
+ * stesso ordine della richiesta: la UI (Capability hub) mostra questo elenco,
+ * non quello dichiarato. Stessi parametri di `talosLavora` (gli altri sono
+ * ignorati), stessa funzione che costruisce l'offerta: mai due verità.
+ *
+ * @param {{strumentiEstesi?: string[], ricercaWeb?: object, onDocumento?: Function}} [parametri]
+ * @returns {string[]}
+ */
+export function attrezziOfferti(parametri = {}) {
+    return attrezziOpenAIOfferti(parametri).map((a) => a.function.name)
+}
 
 /**
  * ⭐ Stesso identico formato di `mobile/src/lib/tools/readTools.ts`
@@ -2143,12 +2257,13 @@ export async function eseguiChiamateRispettandoContratto(chiamate, esegui, elabo
     }
 }
 
-async function chiamaIlModelloConRitenta(modello, chiave, messaggi, fetchDiRete, onDelta, reasoning, attrezziOpenAI = ATTREZZI_OPENAI) {
+async function chiamaIlModelloConRitenta(modello, chiave, messaggi, fetchDiRete, onDelta, reasoning, attrezziOpenAI = ATTREZZI_OPENAI, politicaRagionamento) {
     return chiamaConRitenta({
         modello, chiave, messaggi, attrezzi: attrezziOpenAI,
         ...(fetchDiRete ? { fetchDiRete } : {}),
         ...(onDelta ? { onDelta } : {}),
         ...(reasoning ? { reasoning } : {}),
+        ...(politicaRagionamento ? { politicaRagionamento } : {}),
     })
 }
 
@@ -2258,6 +2373,9 @@ export async function talosLavora({
     cartella, task, modello, chiave, comandoProva = 'npm test',
     messaggiIniziali, onGiro, onScrittura, segnaleStop, fetchDiRete, mobile = false,
     onDelta, reasoning,
+    // ⭐ RAG-COD (24/09/2026): `(modello) => politica|null` dal catalogo OpenRouter, vedi `regolaReasoningPerModello`.
+    // Assente (TALOS-BANCO): comportamento invariato.
+    politicaRagionamento,
     // ⭐⭐⭐ 6.1 — vedi la doc sopra la firma. Assente: comportamento invariato.
     modelloEsecutore,
     /*
@@ -2266,7 +2384,7 @@ export async function talosLavora({
      * (`TALOS-BANCO/harness.mjs` verificato alla fonte, come già fatto
      * per `onScrittura`): comportamento bit-per-bit identico a oggi.
      */
-    strumentiEstesi, // array di nomi da ATTREZZI_ESTESI da offrire, es. ['web_search','artifact_create']
+    strumentiEstesi, // array di nomi da ATTREZZI_ESTESI da offrire, es. ['web_search','artifact_create'] — ⛔ B1-11: 'web_search' senza `ricercaWeb` configurato e 'document_create' senza `onDocumento` NON si offrono (vedi `attrezziOpenAIOfferti`)
     ricercaWeb, // {provider, apiKey?, endpoint?} — usato solo se 'web_search' è in strumentiEstesi
     onArtefatto, // (titolo, html) => {id} | Promise<{id}> — usato solo se 'artifact_create' è in strumentiEstesi
     // (spec) => {ok, esito} — usato solo se 'document_create' è in strumentiEstesi. `spec` è {format,title,body?,rows?,slides?,report?} così come li ha mandati il modello, invariati. `ok:false` porta `esito` come messaggio onesto (mai un successo inventato); `ok:true` porta `esito` come RIGA da mostrare al modello (chi implementa decide cosa dire — dimensione, verifica, dove è finito).
@@ -2326,9 +2444,8 @@ export async function talosLavora({
      */
     livelloAccesso, chiediApprovazioneFn,
 }) {
-    const attrezziOpenAI = strumentiEstesi?.length
-        ? [...ATTREZZI_OPENAI, ...ATTREZZI_ESTESI_OPENAI.filter((a) => strumentiEstesi.includes(a.function.name))]
-        : ATTREZZI_OPENAI
+    // ⛔ B1-11: web_search/document_create solo se configurati — vedi `attrezziOpenAIOfferti`.
+    const attrezziOpenAI = attrezziOpenAIOfferti({ strumentiEstesi, ricercaWeb, onDocumento })
     const disco = discoNode({ radice: cartella })
     let messaggi = Array.isArray(messaggiIniziali) && messaggiIniziali.length > 0
         ? [...messaggiIniziali]
@@ -2439,6 +2556,9 @@ export async function talosLavora({
                 (richiesta) => chiamaConRitenta({
                     modello, chiave, messaggi: richiesta, attrezzi: attrezziOpenAI,
                     ...(fetchDiRete ? { fetchDiRete } : {}),
+                    // RAG-COD: anche il riassunto passa dalla regola — un ragionamento trapelato lì finirebbe nella
+                    // memoria della conversazione.
+                    ...(politicaRagionamento ? { politicaRagionamento } : {}),
                 }),
             )
             onGiro?.({ giro, tipo: 'compattazione-fine', compattato: esito.compattato })
@@ -2481,7 +2601,7 @@ export async function talosLavora({
         const { scelta: risposta, usage } = await chiamaIlModelloConRitenta(
             modelloDelGiro, chiave, messaggi, fetchDiRete,
             onDelta ? (e) => onDelta({ giro, ...e }) : undefined,
-            reasoning, attrezziOpenAI,
+            reasoning, attrezziOpenAI, politicaRagionamento,
         )
         if (usage) {
             conto.prompt_tokens += Number(usage.prompt_tokens ?? 0) || 0
@@ -2616,7 +2736,8 @@ export async function talosLavora({
                 }
                 else if (nome === 'web_search') {
                     // ⛔ Onesto come `shell`/`enforcement:'none'`: mai un fallimento silenzioso, mai un tentativo senza chiave.
-                    if (!ricercaWeb?.provider && !ricercaWeb?.apiKey && !ricercaWeb?.endpoint) {
+                    // ⛔ B1-11: non offerto senza configurazione; questo ramo resta per un modello che chiama un nome mai offerto.
+                    if (!ricercaWebConfigurata(ricercaWeb)) {
                         esito = 'web search not configured on this harness: no provider/credential was set.'
                     }
                     else {
@@ -3247,6 +3368,9 @@ export async function talosLavora({
         /* ⭐ Stadio A: quante volte la conversazione e' stata compattata — 0 su
          * un task breve e' l'esito atteso, non un guasto. */
         compattazioni,
+        /* ⭐ B1-11: i nomi degli attrezzi DAVVERO offerti al modello, nell'ordine
+         * della richiesta — stessa fonte di `attrezziOfferti()` esportata sopra. */
+        attrezziOfferti: attrezziOpenAI.map((a) => a.function.name),
         /*
          * ⭐⭐⭐ Piano `elegant-spinning-dongarra.md`, §1.4 (Harness UI, 24/8) —
          * la conversazione INTERA, non solo l'ultimo testo. Prima d'oggi

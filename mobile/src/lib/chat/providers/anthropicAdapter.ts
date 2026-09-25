@@ -531,6 +531,8 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
          * harvested from the events already being parsed here.
          */
         const usage: Record<string, number> = {}
+        // CONT (25/09/2026): il motivo di fine viaggiava solo nel percorso senza streaming; la chat usa lo streaming, e l'avviso «Si è fermata qui» non poteva scattare.
+        let motivoDiFine: string | null = null
         const harvest = (event: { type?: string; message?: { usage?: unknown }; usage?: unknown }): void => {
             const reported = event.type === 'message_start' ? event.message?.usage : event.usage
             if (!reported || typeof reported !== 'object') return
@@ -547,12 +549,13 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             extract: (payload) => {
                 const event = JSON.parse(payload) as {
                     type?: string
-                    delta?: { type?: string; text?: string }
+                    delta?: { type?: string; text?: string; stop_reason?: string | null }
                     message?: { usage?: unknown }
                     usage?: unknown
                 }
                 toolCalls.push(event)
                 harvest(event)
+                if (event.type === 'message_delta' && typeof event.delta?.stop_reason === 'string') motivoDiFine = event.delta.stop_reason
                 return event.type === 'content_block_delta' && event.delta?.type === 'text_delta'
                     ? event.delta.text ?? ''
                     : ''
@@ -568,7 +571,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             onChunk: handlers.onChunk,
             onReasoning: handlers.onReasoning,
         })
-            return { stream, toolCalls, usage }
+            return { stream, toolCalls, usage, motivoDiFine }
         }
 
         let result
@@ -585,7 +588,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             learnTalosThinkingMode(input.model.id, other)
             result = await attempt(other)
         }
-        const { stream, toolCalls, usage: streamedUsage } = result
+        const { stream, toolCalls, usage: streamedUsage, motivoDiFine } = result
         const calls = toolCalls.calls()
         /*
          * ⛔⛔⛔ DOPO UN RISULTATO DI TOOL, IL SILENZIO È LEGITTIMO — e trattarlo
@@ -623,7 +626,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             // What the cache actually did this round, from the wire.
             usage: Object.keys(streamedUsage).length > 0 ? streamedUsage : null,
             reasoning: stream.reasoning || undefined,
-            ...(calls.length ? { toolCalls: calls, finishReason: 'tool_use' } : {}),
+            ...(calls.length ? { toolCalls: calls, finishReason: 'tool_use' } : { finishReason: motivoDiFine }),
         }
     },
 }

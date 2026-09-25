@@ -510,7 +510,7 @@ onBeforeUnmount(() => {
              was already on screen. Fading while it arrives is the effect; fading
              again once it has arrived is the bug. -->
         <div class="talos-streaming-body assistant-text">
-            <TalosMobileMessageContent :content="parsedMarkdown" />
+            <TalosMobileMessageContent :content="parsedMarkdown" line-breaks />
         </div>
         <span class="sr-only" role="status" aria-live="polite">{{ $t('chat.receivingResponse') }}</span>
     </article>

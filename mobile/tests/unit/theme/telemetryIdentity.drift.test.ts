@@ -1,52 +1,67 @@
 import { describe, expect, it } from 'vitest'
-import { existsSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { createHash } from 'node:crypto'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { parseTalosMobileDesignTokens } from '@talos-mobile/design-tokens'
 import bundled from '@/theme/telemetry.identity.json'
 
 /**
- * ⛔⛔ QUESTO CONTROLLO GUARDA FUORI DALLA CARTELLA, e va saputo.
+ * ⭐ TEMA-HASH (owner 25/09/2026, «hash nel manifesto»; dossier `.claude/ricerche/2026-09-25-release-mobile-v0138-10x4.md`,
+ * domanda 5).
  *
- * Confronta il tema impacchettato qui con quello ESPORTATO DAL DESKTOP, che
- * vive in `control-plane/` — cioè in un progetto vicino, non in questo. È il
- * suo senso: la deriva fra le due superfici si vede solo mettendole accanto.
+ * Prima questo test importava il tema dal desktop (`control-plane/resources/js/motion-v6/themeIdentity.ts`, fuori da
+ * `mobile/`) e, dove il desktop mancava, saltava per intero — anche il controllo sul contratto mobile, che il desktop non
+ * lo usa. Il pacchetto mobile si rilascia da solo e non legge file delle altre lane (regola dell'owner del 25/09).
  *
- * ## Perché adesso può saltare
- *
- * MISURATO il 2026-08-15, provando la cartella pubblicabile da zero: TALOS si
- * pubblica da solo, senza `control-plane`. Lì questo file non esiste, e il test
- * falliva con «Cannot find module» — cioè chi clona la repo pubblica trovava
- * 40 test rossi al primo `npx vitest run`.
- *
- * ⇒ Un confronto fra DUE cose non è «fallito» quando una delle due non c'è: non
- * è eseguibile. Sono due esiti diversi, e confonderli fa sembrare rotto un
- * progetto sano — la prima cosa che vede chi arriva.
- *
- * ⛔ E il salto è CONDIZIONATO al file, non a una variabile d'ambiente: dove il
- * desktop c'è il controllo gira sempre, e nessuno può zittirlo per comodità.
+ * Ora la copia porta il suo hash in `upstream/desktop-theme-identity-manifest.json`, come i file portati dal desktop
+ * (R3-13): cambiarla per sbaglio fa rosso; cambiarla apposta vuol dire riconciliarla col desktop e aggiornare il
+ * manifesto. Il contratto mobile si controlla sempre.
  */
-const DESKTOP = resolve(__dirname, '../../../../control-plane/resources/js/motion-v6/themeIdentity.ts')
-const conDesktop = existsSync(DESKTOP)
 
-describe.skipIf(!conDesktop)('telemetry identity drift', () => {
-    it('bundled identity equals the exported desktop telemetry identity', async () => {
-        /*
-         * ⛔ Import DINAMICO: uno statico in cima al file viene risolto anche
-         * quando il `describe` è saltato — il modulo si carica prima che vitest
-         * decida di non eseguire niente, e l'errore arriva lo stesso.
-         */
-        const { TALOS_THEME_IDENTITIES_V6, exportTalosThemeIdentity } =
-            await import('../../../../control-plane/resources/js/motion-v6/themeIdentity')
-        const desktop = TALOS_THEME_IDENTITIES_V6.find((identity: { id: string }) => identity.id === 'telemetry')
-        expect(desktop, 'desktop telemetry identity present').toBeTruthy()
-        const exported = exportTalosThemeIdentity(desktop!)
-        expect(bundled).toEqual(exported)
+const MOBILE = resolve(__dirname, '..', '..', '..')
+
+describe('TEMA-HASH: il tema «telemetry» del mobile', () => {
+    it('TEMA-01: la copia coincide con quella riconciliata col desktop (hash nel manifesto)', () => {
+        const manifesto = JSON.parse(readFileSync(join(MOBILE, 'upstream', 'desktop-theme-identity-manifest.json'), 'utf8'))
+        expect(Object.keys(manifesto).sort()).toEqual(['desktop_reconciled_revision', 'desktop_source', 'mobile_path', 'reconciliation', 'schema_version', 'sha256'])
+        expect(manifesto.schema_version).toBe(1)
+        expect(manifesto.mobile_path).toBe('mobile/src/theme/telemetry.identity.json')
+        const hash = createHash('sha256').update(readFileSync(join(MOBILE, 'src', 'theme', 'telemetry.identity.json'))).digest('hex')
+        expect(hash, 'tema cambiato: riconcilialo col desktop e aggiorna il manifesto').toBe(manifesto.sha256)
     })
 
-    it('bundled identity is canonical for the mobile contract', () => {
+    it('TEMA-02: rispetta il contratto mobile, sempre (anche senza il desktop accanto)', () => {
         const parsed = parseTalosMobileDesignTokens(bundled)
         expect(parsed.id).toBe('telemetry')
         expect(parsed.assets.poster.path).toBe('/talos/backgrounds/telemetry-poster.webp')
         expect(parsed.schema_version).toBe(1)
+    })
+})
+
+/*
+ * ⭐ LANE-01 (owner 25/09/2026, «il pacchetto funziona da solo, non chiama file delle altre lane»): nessun sorgente,
+ * script o test del mobile nomina in una stringa un percorso delle altre lane. I commenti che le citano restano: qui si
+ * guardano solo le stringhe tra apici, cioè ciò che il codice può importare, leggere o eseguire.
+ */
+describe('LANE-01: il mobile non legge file delle altre lane', () => {
+    it('LANE-01: nessuna stringa in src/, scripts/, tests/ punta a control-plane, harness-ui, context-engine o alla CLI', () => {
+        const ALTRE_LANE = /['"](?:\.\.\/)*(?:control-plane|harness-ui\/src|context-engine|kadmos|AVM-harness-desktop)\//
+        const trovati: string[] = []
+        const visita = (cartella: string) => {
+            for (const voce of readdirSync(cartella)) {
+                if (voce === 'node_modules' || voce === 'dist') continue
+                const percorso = join(cartella, voce)
+                if (statSync(percorso).isDirectory()) visita(percorso)
+                else if (/\.(ts|mts|mjs|cjs|js|vue)$/.test(voce)) {
+                    readFileSync(percorso, 'utf8').split('\n').forEach((riga, indice) => {
+                        const testo = riga.trim()
+                        if (testo.startsWith('//') || testo.startsWith('*') || testo.startsWith('/*')) return
+                        if (ALTRE_LANE.test(riga)) trovati.push(`${percorso.slice(MOBILE.length + 1)}:${indice + 1}`)
+                    })
+                }
+            }
+        }
+        for (const radice of ['src', 'scripts', 'tests']) visita(join(MOBILE, radice))
+        expect(trovati).toEqual([])
     })
 })

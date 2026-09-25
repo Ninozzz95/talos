@@ -31,6 +31,7 @@ import {
     type TalosChatRepository,
     type TalosLocalChatMessage,
     type TalosLocalChatSession,
+    type TalosLocalListedLastMessage,
     type TalosLocalToolActivity,
     type TalosLocalFileAuthorityGrant,
     type TalosLocalMemory,
@@ -88,11 +89,52 @@ function byMostRecentVaultFile(left: TalosLocalVaultFile, right: TalosLocalVault
         || right.id.localeCompare(left.id)
 }
 
+/**
+ * B3 / F2 — «nessuna voce» per la coda: `null`/`undefined` o `{ voci: [] }`.
+ * ⚠ Gemella di quella in `sqliteChatRepository.ts`: i test QUEUE-REPO girano
+ * sulle due implementazioni, quindi una divergenza diventa rossa.
+ */
+function composerQueueIsEmpty(value: unknown): boolean {
+    if (value === null || value === undefined) return true
+    if (typeof value !== 'object' || Array.isArray(value)) return false
+    const voci = (value as { voci?: unknown }).voci
+    return Array.isArray(voci) && voci.length === 0
+}
+
+/**
+ * ⭐ B3 / F4-B — il riassunto dell'ultimo messaggio per l'elenco, come lo dà il disco:
+ * l'`ordinal` più alto, e `interrupted` solo per il vero booleano di primo livello.
+ */
+function lastMessageOf(rows: readonly TalosLocalChatMessage[] | undefined): TalosLocalListedLastMessage | null {
+    if (!rows || rows.length === 0) return null
+    const last = rows.reduce((best, row) => (row.ordinal > best.ordinal ? row : best))
+    return {
+        role: last.role,
+        state: last.state,
+        interrupted: last.metadata.interrupted === true,
+        model_profile_id: last.model_profile_id,
+        created_at: last.created_at,
+    }
+}
+
+/** Rilettura difensiva, come sul disco: JSON illeggibile ⇒ `null`. */
+function parseComposerQueue(raw: string | undefined): unknown {
+    if (raw === undefined) return null
+    try {
+        return JSON.parse(raw) as unknown
+    } catch {
+        return null
+    }
+}
+
 export function createMemoryChatRepository(options: ChatRepositoryOptions = {}): TalosChatRepository {
     const sessions = new Map<string, TalosLocalChatSession>()
     const messages = new Map<string, TalosLocalChatMessage[]>()
     const composerDrafts = new Map<string, string>()
     const composerAttachments = new Map<string, TalosComposerAttachmentDraft[]>()
+    // La coda si tiene come TESTO JSON, come nella tabella: ogni lettura è una
+    // copia nuova e il comportamento resta quello del disco (QUEUE-REPO-07).
+    const composerQueues = new Map<string, string>()
     const vaultFiles = new Map<string, TalosLocalVaultFile>()
     const grants = new Map<string, TalosLocalFileAuthorityGrant>()
     const attachmentBindings = new Map<string, TalosChatAttachmentBinding[]>()
@@ -150,6 +192,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 ...copySession(session),
                 has_messages: (messages.get(session.id) ?? []).length > 0,
                 has_draft: composerDrafts.has(session.id) || composerAttachments.has(session.id),
+                last_message: lastMessageOf(messages.get(session.id)),
             }))
         },
         async getActiveSessionId() {
@@ -209,10 +252,55 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             }
             composerDrafts.delete(sessionId)
             composerAttachments.delete(sessionId)
+            composerQueues.delete(sessionId)
             if (activeSessionId === sessionId) {
                 activeSessionId = [...sessions.values()].sort(byMostRecent)[0]?.id ?? null
             }
             return activeSessionId
+        },
+        // ⭐ B3-REC — stesso contratto della tabella (`sqliteChatRepository.ts`): tutto o niente, controlli prima di
+        // toccare qualunque cosa.
+        async moveMessagesToNewSession(sourceSessionId, input) {
+            requireSession(sourceSessionId)
+            const spostati = messages.get(sourceSessionId) ?? []
+            if (spostati.length === 0) return null
+            if (sessions.has(input.id)) throw new Error('TALOS_CHAT_SESSION_EXISTS')
+            const session: TalosLocalChatSession = {
+                id: input.id,
+                title: normalizeChatTitle(input.title),
+                surface: normalizeChatSurface(input.surface ?? 'chat'),
+                mode: input.mode ?? 'verified_execution',
+                persistence_mode: input.persistence_mode ?? 'persistent',
+                active_model_profile_id: input.active_model_profile_id,
+                metadata: cloneJsonObject(input.metadata),
+                created_at: input.created_at,
+                updated_at: input.updated_at,
+            }
+            sessions.set(session.id, session)
+            messages.set(session.id, spostati.map((message) => ({ ...message, session_id: session.id })))
+            messages.set(sourceSessionId, [])
+            for (const message of spostati) {
+                const bindings = attachmentBindings.get(message.id)
+                if (bindings) attachmentBindings.set(message.id, bindings.map((b) => ({ ...b, session_id: session.id })))
+            }
+            for (const [id, activity] of toolActivities) {
+                if (activity.session_id === sourceSessionId) toolActivities.set(id, { ...activity, session_id: session.id })
+            }
+            for (const [id, run] of researchRuns) {
+                if (run.session_id === sourceSessionId) researchRuns.set(id, { ...run, session_id: session.id })
+            }
+            for (const [id, memory] of memories) {
+                if (memory.scope_type === 'session' && memory.scope_id === sourceSessionId) {
+                    memories.set(id, { ...memory, scope_id: session.id })
+                }
+            }
+            for (const perChat of [composerDrafts, composerAttachments, composerQueues] as Array<Map<string, unknown>>) {
+                if (!perChat.has(sourceSessionId)) continue
+                perChat.set(session.id, perChat.get(sourceSessionId))
+                perChat.delete(sourceSessionId)
+            }
+            if (activeSessionId === sourceSessionId) activeSessionId = session.id
+            return copySession(session)
         },
         async searchMessages(term, options) {
             const needle = normalizeTalosLibrarySearchText(term)
@@ -465,6 +553,13 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             grant.updated_at = now()
             grant.revoked_at = grant.updated_at
         },
+        async listSessionIdsWithAttachments(): Promise<string[]> {
+            const ids = new Set<string>()
+            for (const bindings of attachmentBindings.values()) {
+                for (const binding of bindings) ids.add(binding.session_id)
+            }
+            return [...ids]
+        },
         async listSessionAttachmentFileIds(sessionId: string): Promise<string[]> {
             const ids = new Set<string>()
             for (const bindings of attachmentBindings.values()) {
@@ -508,6 +603,23 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             const value = normalizeComposerAttachments(attachments)
             if (value.length === 0) composerAttachments.delete(scope)
             else composerAttachments.set(scope, value)
+        },
+        async loadComposerQueue(scopeId: string) {
+            return parseComposerQueue(composerQueues.get(normalizeComposerDraftScope(scopeId)))
+        },
+        async saveComposerQueue(scopeId: string, value: unknown) {
+            const scope = normalizeComposerDraftScope(scopeId)
+            const encoded = composerQueueIsEmpty(value) ? undefined : JSON.stringify(value)
+            if (encoded === undefined) composerQueues.delete(scope)
+            else composerQueues.set(scope, encoded)
+        },
+        async listComposerQueues() {
+            const queues: Array<{ scopeId: string; value: unknown }> = []
+            for (const scopeId of [...composerQueues.keys()].sort()) {
+                const value = parseComposerQueue(composerQueues.get(scopeId))
+                if (value !== null) queues.push({ scopeId, value })
+            }
+            return queues
         },
         async updateSessionMetadata(sessionId: string, metadata: Record<string, unknown>) {
             const session = sessions.get(sessionId)

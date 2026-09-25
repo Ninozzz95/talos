@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TalosThemedCheckbox from '@/components/talos/ui/TalosThemedCheckbox.vue'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { Check, Pencil, Play, Trash2, User, Volume2 } from '@lucide/vue'
@@ -553,11 +554,7 @@ function onEnrollmentCommitted(): void {
                 data-testid="talos-voice-all-languages"
                 class="mt-2 flex min-h-touch items-center gap-2 text-xs text-[var(--talos-muted)]"
             >
-                <input
-                    v-model="tutteLeLingue"
-                    type="checkbox"
-                    class="size-4 accent-[var(--talos-accent)]"
-                >
+                <TalosThemedCheckbox v-model="tutteLeLingue" />
                 <span>{{ t('voice.allLanguages') }}</span>
             </label>
 

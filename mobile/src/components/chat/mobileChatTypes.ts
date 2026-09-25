@@ -33,6 +33,10 @@ export interface TalosMobileModelProfileView {
     has_secret: boolean
     effort_levels: string[]
     supports_thinking: boolean
+    /** RAG-OBB (24/09/2026): il catalogo dice che il ragionamento non si spegne ⇒ niente «off» nel menu. */
+    reasoning_mandatory?: boolean
+    /** RAG-EST (24/09/2026): «Ragionamento esteso» governa qualcosa solo se il fornitore lo legge. */
+    thinking_toggle?: boolean
     show_in_composer: boolean
     capabilities: Record<string, unknown> | null
     probe_ok: boolean | null
@@ -71,6 +75,11 @@ export interface TalosMobileMessageView {
     reasoning?: string | null
     attachments?: readonly TalosMobileMessageAttachmentView[]
     browserActivities?: readonly TalosMobileBrowserActivityView[]
+    /**
+     * GESTITA-01 (25/09/2026): per una risposta sospesa su una richiesta di permesso, l'esito di ogni strumento, letto
+     * dall'attività `tool.authorization` (`lib/chat/esitoAutorizzazione.ts`). Assente finché la richiesta aspetta.
+     */
+    authorizationOutcome?: readonly { readonly tool: string, readonly concesso: boolean }[]
 }
 
 export interface TalosMobileBrowserActivityView {

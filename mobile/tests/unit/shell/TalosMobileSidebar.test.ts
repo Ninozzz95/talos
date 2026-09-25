@@ -541,3 +541,73 @@ describe('TalosMobileSidebar — chat con bozza in cronologia', () => {
         wrapper.unmount()
     })
 })
+
+/**
+ * ⭐ B3 / F4-B — lo stato delle chat anche nelle «Recenti».
+ *
+ * La barra laterale NON conosce il controller (il suo contratto sono le props):
+ * lo stato arriva da chi la monta, con `statoDi`. Senza, le righe restano come
+ * prima — nessuna etichetta inventata.
+ */
+describe('TalosMobileSidebar — lo stato di ogni chat (B3 / F4-B)', () => {
+    const i18n = config.global.plugins[0] as unknown as {
+        global: { locale: { value: string }, mergeLocaleMessage(locale: string, messages: object): void }
+    }
+    afterEach(() => { i18n.global.locale.value = 'en' })
+
+    function inItaliano() {
+        i18n.global.mergeLocaleMessage('it', { chats: { status: {
+            waiting: 'aspetta te', running: 'in corso', queued: 'in coda', failed: 'fallita', interrupted: 'interrotta',
+        } } })
+        i18n.global.locale.value = 'it'
+    }
+
+    it('SIDEBAR-STATO-01 la pastiglia dello stato sta in fondo alla riga e il pulsante la cita come descrizione', async () => {
+        inItaliano()
+        const stati: Record<string, string> = { 'chat-2': 'aspetta-te', 'chat-1': 'conclusa' }
+        const wrapper = mountSidebar({ statoDi: (sessione: TalosLocalChatSession) => stati[sessione.id] })
+        await flushPromises()
+        const riga = (id: string) => document.body.querySelector<HTMLElement>('[data-chat-id="' + id + '"]')!
+        const etichetta = riga('chat-2').querySelector<HTMLElement>('[data-testid="talos-chat-status"]')!
+        expect(etichetta.textContent?.trim()).toBe('aspetta te')
+        expect(etichetta.dataset.tone).toBe('attenzione')
+        // Il nome del pulsante resta «Apri …»; lo stato è la sua DESCRIZIONE.
+        const pulsante = riga('chat-2').querySelector<HTMLButtonElement>('.recent-row')!
+        expect(pulsante.getAttribute('aria-describedby')).toBe(etichetta.id)
+        expect(etichetta.id).not.toBe('')
+        // Il titolo resta il primo figlio che si restringe: l'etichetta non lo spinge via.
+        expect(pulsante.querySelector('.recent-title')?.textContent).toBe('Release review')
+        // «conclusa» tace.
+        expect(riga('chat-1').querySelector('[data-testid="talos-chat-status"]')).toBeNull()
+        expect(riga('chat-1').querySelector('.recent-row')!.hasAttribute('aria-describedby')).toBe(false)
+        wrapper.unmount()
+    })
+
+    // A3-84 seconda parte (owner 25/09 10:20): nella barra laterale «solo stato e novità».
+    it('SIDEBAR-NOVITA-01 una risposta arrivata dopo l\'ultima apertura porta la pastiglia «new reply», citata nella descrizione', async () => {
+        const { __talosNovitaPerLeProve, talosCaricaNovita } = await import('@/stores/chatNovita')
+        __talosNovitaPerLeProve({ leggi: async () => JSON.stringify({ base: '2026-07-01T00:00:00.000Z', viste: {} }), scrivi: async () => undefined })
+        await talosCaricaNovita()
+        const conRisposta = sessions.map((sessione) => ({
+            ...sessione,
+            last_message: { role: 'assistant' as const, state: 'persisted' as const, interrupted: false, model_profile_id: null, created_at: sessione.updated_at },
+        }))
+        const wrapper = mountSidebar({ sessions: conRisposta, activeSessionId: 'chat-2' })
+        await flushPromises()
+        const riga = (id: string) => document.body.querySelector<HTMLElement>('[data-chat-id="' + id + '"]')!
+        const novita = riga('chat-1').querySelector<HTMLElement>('[data-testid="talos-chat-new"]')!
+        expect(novita.textContent?.trim()).toBe('new reply')
+        expect(riga('chat-1').querySelector('.recent-row')!.getAttribute('aria-describedby')).toBe(novita.id)
+        // La chat attiva non è «guardata» finché la schermata della chat non lo dice: anche lei è nuova.
+        expect(riga('chat-2').querySelector('[data-testid="talos-chat-new"]')).not.toBeNull()
+        wrapper.unmount()
+        __talosNovitaPerLeProve(null)
+    })
+
+    it('SIDEBAR-STATO-02 senza statoDi nessuna etichetta: le righe restano quelle di prima', async () => {
+        const wrapper = mountSidebar()
+        await flushPromises()
+        expect(document.body.querySelector('[data-testid="talos-sidebar-recents"] [data-testid="talos-chat-status"]')).toBeNull()
+        wrapper.unmount()
+    })
+})

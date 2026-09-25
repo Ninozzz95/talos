@@ -1,4 +1,4 @@
-import { computed, reactive, readonly, ref, type ComputedRef, type Ref } from 'vue'
+import { computed, reactive, readonly, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { talosBytesToBase64 } from '@/lib/bytesToBase64'
 import { talosDettaturaAnnota } from '@/services/dictation'
 import { talosLocalEngineLazy } from '@/services/localEngineLazy'
@@ -21,6 +21,7 @@ import {
     TALOS_METADATA_SCHEDE,
     TALOS_METADATA_TRONCATA,
     talosAzioniEseguite,
+    talosFermataDallaLunghezza,
     talosChiamateDelTurno,
 } from '@/lib/tools/tracciaAzione'
 import { talosTracciaFuori } from '@/lib/device/traccia'
@@ -70,7 +71,7 @@ import {
     type TalosMobileModelLabPreferences,
     type TalosMobileModelProbeRecord,
 } from '@/lib/modelLabContracts'
-import { clampMobileEffort, mobileEffortLadderFromLevels, type TalosMobileEffortLevel } from '@/lib/mobileEffort'
+import { clampMobileEffortFor, mobileEffortLadderFor, type TalosMobileEffortLevel } from '@/lib/mobileEffort'
 import { talosMobileModelProfileIsCallable, TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
 import { cloneJsonObject, type TalosChatRepository } from '@/repositories/chatRepository'
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
@@ -857,6 +858,16 @@ export interface ChatController {
      */
     listChatMediaFileIds(sessionId: string): Promise<string[]>
     readonly canSend: ComputedRef<boolean>
+    /** ⭐ B3 — si può accodare adesso (l'app sta rispondendo, niente allegati nel compositore). */
+    readonly canQueue: ComputedRef<boolean>
+    /** ⭐ B3 — perché non si può accodare, detto; stringa vuota quando si può o quando non c'è niente da accodare. */
+    readonly queueDisabledReason: ComputedRef<string>
+    queueMessage(text: string): Promise<import('@/stores/chat').TalosEnqueueResult>
+    /** ⭐ B3 — il giro in corso usa gli attrezzi: «Indirizza ora» aspetta il punto sicuro invece di fermare. */
+    readonly turnUsesTools: ComputedRef<boolean>
+    /** ⭐ B3 — la chat aperta si può riprendere (ultimo tuo messaggio senza risposta completa). */
+    readonly canResume: ComputedRef<boolean>
+    resumeSession(): Promise<boolean>
     /**
      * Whether the generation the app is busy with belongs to THIS chat. A
      * composer that reads the bare `sending` flag offers Stop for somebody
@@ -945,6 +956,8 @@ export interface ChatController {
     /** R2-7 — single orchestration point for session actions (see impl). */
     sessionLifecycle: TalosSessionLifecycle
     searchMessages: TalosChatRepository['searchMessages']
+    /** A3-84 (25/09/2026): le chat con almeno un allegato, per il filtro «Con allegati» dell'elenco. */
+    listSessionIdsWithAttachments: TalosChatRepository['listSessionIdsWithAttachments']
     listSearchFiles: TalosChatRepository['listVaultFileSummaries']
     tasks: {
         list(): Promise<import('@/repositories/chatRepository').TalosLocalTask[]>
@@ -1382,6 +1395,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         }
         const decided = await authorizationCoordinator.decide(requestId, decision)
         syncToolAuthorizations()
+        // GESTITA-01 (25/09/2026): la risposta sospesa dice subito com'è andata («Permesso concesso: …»), senza riaprire la chat.
+        void chat.refreshAuthorizationOutcomes?.().catch(() => undefined)
         // Il prossimo in coda torna visibile da se': `sync` non riaccende la
         // tendina, la riaccende chi sa che c'e' ancora qualcosa da chiedere.
         showToolAuthorization()
@@ -1608,7 +1623,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             (model) => model.provider === profile.provider && model.id === profile.model,
         ) ?? null
     })
-    const effortLadder = computed(() => mobileEffortLadderFromLevels(selectedProfile.value?.effort_levels))
+    // RAG-OBB (24/09/2026): i modelli che ragionano per forza non hanno «off» (catalogo OpenRouter).
+    const effortLadder = computed(() => mobileEffortLadderFor(selectedProfile.value))
 
     /**
      * Which model made a file, resolved from the profile that was answering.
@@ -4265,6 +4281,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     : result
             }
             const agentDeps: TalosAgentLoopDeps = {
+                // ⭐ B3 «Indirizza»: al punto sicuro il ciclo chiede se QUESTA chat ha una correzione in attesa.
+                chiudiAlPuntoSicuro: () => chat.consumeSafePointRequest(sendIdentity.sessionId),
                 complete: async (turns, opzioni) => {
                     /*
                      * ⛔ Il giro senza strumenti: si passa un elenco VUOTO, non
@@ -4823,6 +4841,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         name: call.name,
                         detail: talosToolActivityDetail(call.name, call.arguments),
                     }))
+                    // ⭐ B3 — da qui gli attrezzi sono IN USO: esiste un passo fra attrezzi dove un indirizzo può entrare.
+                    giroConAttrezzi.value = sendIdentity.sessionId
                 },
                 ...(authorizationCheckpoint
                     ? {
@@ -5220,7 +5240,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                  * «forse è incompleta» su ogni risposta insegnerebbe a dubitare
                  * anche di quelle intere — che è il danno opposto e più grande.
                  */
-                ...(completion.finishReason === 'length'
+                ...(talosFermataDallaLunghezza(completion.finishReason)
                     ? { [TALOS_METADATA_TRONCATA]: true }
                     : {}),
             }
@@ -5380,6 +5400,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         resolveMessageParts: vaultService.resolveMessageParts,
         captureSendRuntime: captureControllerSendRuntime,
         prepareSend: prepareControllerSend,
+        // ⭐ B3 — la coda consegna dalla stessa strada di un invio; mai con un permesso d'attrezzo ancora aperto.
+        deliverQueued: (sessionId, voce) => inviaVoceDellaCoda(sessionId, voce),
+        permissionPendingFor: (sessionId) => pendingToolAuthorizations.value.some((p) => p.session_id === sessionId),
     })
     const browseMode = computed(() => chat.activeSession.value?.surface === 'browse')
     // Solo memoria del controller, distinta dalle preferenze globali dei singoli strumenti.
@@ -5417,6 +5440,43 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
      * app; nothing asked WHICH conversation it belonged to, though the store
      * knew.
      */
+    /**
+     * ⭐ B3 — la chat il cui giro ha GIÀ chiamato almeno un attrezzo: lì «Indirizza ora» aspetta il prossimo punto
+     * sicuro fra attrezzi; altrove è «Ferma e riparti con questo» (D-B3-02, «con attrezzi IN USO»). ⛔ Non basta che gli
+     * attrezzi siano offerti: misurato sul Pad il 24/09, un saggio senza chiamate offriva «Indirizza ora», che avrebbe
+     * aspettato un passo mai arrivato — cioè fatto la stessa cosa di Accoda. Si azzera quando l'app smette di rispondere.
+     */
+    const giroConAttrezzi = ref<string | null>(null)
+    watch(() => chat.state.sending, (inCorso) => { if (!inCorso) giroConAttrezzi.value = null })
+    const turnUsesTools = computed(() =>
+        chat.state.sending && giroConAttrezzi.value !== null && giroConAttrezzi.value === chat.state.sendingSessionId)
+    /**
+     * ⭐ B3 «Riprendi» (D-B3-03) — la chat aperta ha un tuo ultimo messaggio senza una risposta completa dopo (solo un
+     * parziale interrotto, un errore, o niente perché l'app si è chiusa). Si offre solo lì, mai sempre acceso.
+     */
+    const canResume = computed(() => {
+        if (chat.state.sending || chat.state.editingMessage || !chat.activeSession.value) return false
+        const lista = chat.messages
+        let indice = lista.length - 1
+        while (indice >= 0 && lista[indice].role !== 'user') indice -= 1
+        if (indice < 0) return false
+        return !lista.slice(indice + 1).some((m) => m.role === 'assistant' && !m.metadata?.interrupted)
+    })
+    /**
+     * ⭐ B3 (24/09) — si può ACCODARE quando l'app sta rispondendo, qui o in un'altra chat (decisioni owner D-B3-01 e
+     * D-B3-04). ⛔ Solo testo: con un allegato si aspetta (la coda porta solo testo in questa versione, dichiarato).
+     */
+    const canQueue = computed(() =>
+        chat.state.persistenceStatus === 'ready'
+        && chat.state.persistenceError === null
+        && chat.state.sending
+        && !chat.state.editingMessage
+        && attachments.bindings.value.length === 0,
+    )
+    const queueDisabledReason = computed(() => {
+        void localization.state.locale
+        return chat.state.sending && attachments.bindings.value.length > 0 ? talosT('chat.queueTextOnly') : ''
+    })
     const composerBusy = computed(() => chat.state.editingMessage ? 'this-chat' : talosComposerBusy(
         chat.state.sending,
         chat.state.sendingSessionId,
@@ -5492,7 +5552,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         if (scelta && deps.settings.state.shell?.composer_model !== profile.id) {
             void deps.settings.setShell?.({ composer_model: profile.id })
         }
-        effort.value = clampMobileEffort(profile.effort_levels, effort.value)
+        effort.value = clampMobileEffortFor(profile, effort.value)
         if (!profile.supports_thinking) thinking.value = false
         return true
     }
@@ -5538,7 +5598,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // modello mai scelto nel compositore.
         talosTracciaFuori(`modello: ripiego=${next?.id ?? '∅'} prima=${selectedModelId.value ?? '∅'} pref=${deps.settings.state.shell?.composer_model ?? '∅'} attesa=${modelloInAttesa ?? '∅'}`)
         selectedModelId.value = next?.id ?? null
-        effort.value = clampMobileEffort(next?.effort_levels, effort.value)
+        effort.value = clampMobileEffortFor(next, effort.value)
         if (!next?.supports_thinking) thinking.value = false
         return 'ripiego'
     }
@@ -5724,7 +5784,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 + ` ripiego=${selectedModelId.value ?? 'nessuno'}`,
             )
         }
-        effort.value = clampMobileEffort(selectedProfile.value?.effort_levels, effort.value)
+        effort.value = clampMobileEffortFor(selectedProfile.value, effort.value)
         if (!selectedProfile.value?.supports_thinking) thinking.value = false
         initialized = true
     }
@@ -5952,7 +6012,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     }
 
     async function selectEffort(level: TalosMobileEffortLevel): Promise<void> {
-        effort.value = clampMobileEffort(selectedProfile.value?.effort_levels, level)
+        effort.value = clampMobileEffortFor(selectedProfile.value, level)
         await persistComposerDefaults()
     }
 
@@ -7255,6 +7315,34 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         return true
     }
 
+    /** ⭐ B3 — «Riprendi»: rifà la risposta al tuo ultimo messaggio, col modello scelto adesso nel compositore. */
+    async function resumeSession(): Promise<boolean> {
+        if (!canResume.value) return false
+        return chat.resumeTurn(selectedModelId.value)
+    }
+
+    /** ⭐ B3 — accoda nella chat aperta il testo del compositore, mentre l'app sta rispondendo. */
+    async function queueMessage(text: string): Promise<import('@/stores/chat').TalosEnqueueResult> {
+        if (!canQueue.value) return { ok: false, rifiuto: 'nessuna-chat' }
+        return chat.enqueue(text)
+    }
+
+    /**
+     * ⭐ B3 — consegna una voce della coda come un invio normale, ma SENZA gli allegati del compositore (quelli
+     * appartengono alla bozza di adesso, non al messaggio accodato prima) e nella chat della voce, anche se non è
+     * quella aperta. Il modello è quello della chat della voce; se non ne ha uno, quello scelto ora.
+     */
+    async function inviaVoceDellaCoda(
+        sessionId: string,
+        voce: import('@/lib/chat/codaDelGiro').TalosCodaVoce,
+    ): Promise<boolean> {
+        const sessione = chat.activeSession.value?.id === sessionId
+            ? chat.activeSession.value
+            : chat.sessions.find((candidata) => candidata.id === sessionId) ?? null
+        const modello = sessione?.active_model_profile_id ?? selectedModelId.value
+        return chat.send(voce.testo, modello, {}, [], undefined, null, sessionId)
+    }
+
     async function send(
         text: string,
         turnPolicy: TalosLibraryTurnOverride | null = null,
@@ -7469,6 +7557,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     return {
         sessionLifecycle,
         searchMessages: (term: string, options?: { limit?: number }) => deps.chatRepository.searchMessages(term, options),
+        listSessionIdsWithAttachments: () => deps.chatRepository.listSessionIdsWithAttachments(),
         listSearchFiles: () => deps.chatRepository.listVaultFileSummaries(),
         catalogs: readonly(catalogs) as Readonly<Record<TalosMobileProviderId, ProviderCatalogState>>,
         endpoints: readonly(endpoints) as Readonly<Record<TalosMobileProviderId, string | null>>,
@@ -7512,6 +7601,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         listChatMediaFileIds: (sessionId: string) =>
             deps.chatRepository.listSessionAttachmentFileIds(sessionId),
         canSend,
+        canQueue,
+        queueDisabledReason,
+        queueMessage,
+        turnUsesTools,
+        canResume,
+        resumeSession,
         composerBusy,
         browseMode,
         agentToolsEnabled,

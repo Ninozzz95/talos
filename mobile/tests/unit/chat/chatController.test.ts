@@ -2895,6 +2895,21 @@ describe('chatController', () => {
         expect(controller.chat.messages.at(-1)).toMatchObject({ role: 'assistant', content: 'pong' })
     })
 
+    // CONT-06 (25/09/2026): Anthropic dice `max_tokens`, non `length`; l'avviso «Si è fermata qui» non scattava.
+    it('CONT-06 a reply stopped by max_tokens is marked as stopped at the limit', async () => {
+        const { deps, store, request } = makeDeps()
+        const originale = request.getMockImplementation()!
+        request.mockImplementation(async (call: { url: string }) => call.url.includes('anthropic.com/v1/messages')
+            ? { status: 200, data: { model: 'claude-live', content: [{ type: 'text', text: 'Un racconto che' }], stop_reason: 'max_tokens' } }
+            : originale(call as never))
+        store.set('anthropic', 'sk-ant')
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.send('Scrivi un racconto')
+        expect(controller.chat.messages.at(-1)).toMatchObject({ role: 'assistant', content: 'Un racconto che' })
+        expect(controller.chat.messages.at(-1)?.metadata).toMatchObject({ stopped_at_limit: true })
+    })
+
     it('P1-CTX-ISO-03 R8-A-SEND-01 rejects a second send while the first Library preflight is pending', async () => {
         const { deps, store, settings, request, chatRepository } = makeDeps()
         store.set('anthropic', 'sk-ant')

@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "mobile_path": "mobile/src/theme/telemetry.identity.json",
+  "sha256": "12a2da8249c4114b8574b54d1b3720a386166d3637a88dd0f099cf7766987e13",
+  "desktop_source": "control-plane/resources/js/motion-v6/themeIdentity.ts — exportTalosThemeIdentity(TALOS_THEME_IDENTITIES_V6 'telemetry')",
+  "desktop_reconciled_revision": "b9cc853fb",
+  "reconciliation": "2026-09-25: TEMA-HASH (owner: «hash nel manifesto»). The mobile copy equalled the desktop export, measured by the former drift test (2 passed with control-plane beside it, desktop file last changed at b9cc853fb on 2026-07-12). The mobile package no longer reads control-plane/: an accidental edit of the copy turns telemetryIdentity.drift.test.ts red; an intentional one means re-exporting from the desktop source above and updating this hash."
+}

@@ -189,16 +189,23 @@ onBeforeUnmount(() => { molla?.cancel(); molla = null })
                     class="absolute left-1/2 top-1.5 h-1 w-10 -translate-x-1/2 rounded-full bg-[var(--talos-border-strong)]"
                     aria-hidden="true"
                 />
-                <button
-                    type="button"
-                    :aria-label="$t('common.close')"
-                    class="talos-pressable flex min-h-touch min-w-touch items-center justify-center rounded-full text-[var(--talos-muted)]"
-                    @click="requestClose"
-                >
-                    <X class="size-5" aria-hidden="true" />
-                </button>
-                <h2 class="flex-1 text-center text-base font-semibold">{{ title }}</h2>
-                <span class="min-w-touch" aria-hidden="true" />
+                <!-- ⛔ SHEET-CENTRO-01 (25/09/2026): due lati GEMELLI (stessa flessione) ai fianchi del titolo, così il
+                     titolo resta al centro anche quando a destra c'è qualcosa più largo della ✕ (l'«Azzera» dei filtri). -->
+                <div data-lato-intestazione="inizio" class="flex min-w-touch flex-1 basis-0 items-center justify-start">
+                    <button
+                        type="button"
+                        :aria-label="$t('common.close')"
+                        class="talos-pressable flex min-h-touch min-w-touch items-center justify-center rounded-full text-[var(--talos-muted)]"
+                        @click="requestClose"
+                    >
+                        <X class="size-5" aria-hidden="true" />
+                    </button>
+                </div>
+                <h2 class="min-w-0 shrink truncate text-center text-base font-semibold">{{ title }}</h2>
+                <!-- A3-84 (25/09/2026): chi vuole un'azione accanto al titolo (l'«Azzera» dei filtri) la mette qui. -->
+                <div data-lato-intestazione="fine" class="flex min-w-touch flex-1 basis-0 items-center justify-end">
+                    <slot name="header-end" />
+                </div>
             </header>
 
             <!-- ⛔ `pb-3`: il mockup «Talos Calm Finale» dà il respiro DENTRO la parte che scorre

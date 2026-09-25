@@ -1,18 +1,20 @@
 import { Capacitor } from '@capacitor/core'
 
 /**
- * Se il mockup Harness UI (Codex, 24/8) e' raggiungibile su QUESTO build.
+ * Se la stazione Codice (Harness UI) è raggiungibile su QUESTO build.
  *
- * ⛔ Non e' `import.meta.env.DEV`: quello riflette come Vite ha compilato il
+ * ⛔ Non è `import.meta.env.DEV`: quello riflette come Vite ha compilato il
  * bundle JS (dev server o `vite build`), non se Gradle ha assemblato un APK
- * `debug` o `release` — un `npm run build` di produzione, sincronizzato in
- * ENTRAMBE le varianti Android, avrebbe `DEV === false` anche dentro un
- * `assembleDebug` locale. Il segnale vero e' la presenza del plugin nativo
- * `TalosHarnessUiPlugin`, che vive SOLO nel source set Android `debug`
- * (stesso meccanismo della bolla, vedi MainActivity.registerPlugin): in un
- * APK di release la classe non compila affatto, quindi
- * `isPluginAvailable` torna `false` per costruzione, non per un controllo
- * che si potrebbe scavalcare passando un flag.
+ * `debug` o `release`. Il segnale vero è la presenza del plugin nativo
+ * `TalosHarnessUiPlugin`.
+ *
+ * ⛔ Dal 3/9 (commit 7ffee9e9f, owner: «CODICE DEVE ESSERE PRESENTE NELLA APP
+ * DI PRODUZIONE») il plugin vive nel source set `main`, quindi in OGNI
+ * variante, release compresa: MainActivity lo registra per stringa e
+ * proguard-rules.pro lo tiene. Qui `isPluginAvailable` torna `false` solo in
+ * un install parziale o in un artefatto rotto, mai per scelta della variante.
+ * Dal 24/8 al 3/9 il plugin stava nel source set `debug`: chi legge vecchi
+ * documenti che dicono «Codice solo nei debug» legge quel periodo.
  */
 export function talosHarnessUiAvailable(): boolean {
     return Capacitor.isPluginAvailable('TalosHarnessUi')

@@ -39,6 +39,8 @@ import {
 import { createSessionActionRunner } from '@/lib/sessionActionRunner'
 import { createTalosChatLiveEdge } from '@/composables/useTalosChatLiveEdge'
 import { useChatController } from '@/stores/chatController'
+import { useTalosGuardaChat } from '@/composables/useTalosGuardaChat'
+import { TALOS_MOBILE_ROUTES } from '@/lib/mobileRoutes'
 import { useSettingsStore } from '@/stores/settings'
 import { talosComposerFlags } from '@/lib/composerStyle'
 import { useTalosMobileToasts } from '@/stores/toasts'
@@ -56,6 +58,18 @@ import { isTalosLibraryFileShared, parseVaultOrigin } from '@/lib/vaultLibrary'
 const TalosMobileBrowserActivity = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileBrowserActivity.vue'),
 )
+/*
+ * ⭐ B3 — la striscia della coda esiste solo quando qualcuno ha accodato durante un giro: chi apre l'app e scrive non la
+ * vede mai, quindi si carica a richiesta come i cassetti del compositore (tetto del grafo d'avvio,
+ * `scripts/verify-initial-chunk.mjs`).
+ */
+const TalosMobileCodaDellaChat = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileCodaDellaChat.vue'),
+)
+/** ⭐ B3 «Riprendi»: compare solo su una chat interrotta, quindi si carica a richiesta anche lui. */
+const TalosMobileRiprendiGiro = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileRiprendiGiro.vue'),
+)
 
 // Chat is the base surface: a scrollable thread (brand hero when empty) over a
 // bottom-docked composer. Local-first — the composer talks to the provider directly
@@ -68,6 +82,16 @@ const emit = defineEmits<{ export: [] }>()
 const router = useRouter()
 const { t, locale } = useTalosI18n()
 const controller = useChatController()
+// A3-84 seconda parte (owner 25/09/2026): questa schermata dice quale chat stai guardando — «nuova risposta» vale
+// solo per ciò che arriva mentre sei altrove (`composables/useTalosGuardaChat.ts`).
+// ⛔ GUARDA-REG-01: questa schermata resta montata sotto le altre pagine; la chat si «guarda» solo quando è la pagina
+// aperta — la stessa regola di `activeRoute` in `App.vue` (un nome che non è una pagina conosciuta è la chat).
+// Dal router che la schermata usa già; senza una rotta nota (prove, avvio) la chat è la pagina.
+const chatVisibile = computed(() => {
+    const nome = router.currentRoute?.value?.name
+    return !TALOS_MOBILE_ROUTES.some((voce) => voce.name === nome && voce.name !== 'chat')
+})
+useTalosGuardaChat(controller, chatVisibile)
 
 /**
  * ⛔ Le attese ANCORA aperte, per identificativo del punto di ripresa.
@@ -247,6 +271,11 @@ const trascrizioneViva = computed(() => {
 async function onSendDictation(): Promise<void> {
     dictation.cancel()
     await nextTick()
+    // ⭐ B3: mentre TALOS risponde, «invia» dalla barra di dettatura fa quello che fa l'Invio: accoda.
+    if (controller.canQueue.value) {
+        await onQueue(prompt.value)
+        return
+    }
     await onSend()
 }
 
@@ -863,6 +892,58 @@ async function onSend(): Promise<void> {
     await entraNellAmbito()
 }
 
+/*
+ * ⭐⭐ B3 F4-A (24/09) — ACCODA, LA CODA DEL GIRO, RIPRENDI. Decisioni owner D-B3-01…04 (`.claude/b3/LEDGER-B3-…`).
+ *
+ * La schermata collega soltanto: le regole stanno nello store (`enqueue`, `steerQueued`, `sendQueuedNow`…), nel
+ * controller (`canQueue`, `queueMessage`, `turnUsesTools`, `canResume`, `resumeSession`) e in `lib/chat/codaDelGiro.ts`.
+ * La striscia e «Riprendi» stanno in `TalosMobileCodaDellaChat.vue` e `TalosMobileRiprendiGiro.vue`, caricati a richiesta
+ * (tetto del pacchetto d'avvio, `scripts/verify-initial-chunk.mjs`).
+ */
+const sessioneAperta = computed(() => chat.activeSession.value?.id ?? null)
+const codaAperta = computed(() => (sessioneAperta.value ? chat.queueOf(sessioneAperta.value) : null))
+/** I tetti si leggono solo quando c'è un rifiuto da dire: il modulo della coda non entra nel pacchetto d'avvio. */
+async function rifiutoDellaCoda(rifiuto: string): Promise<string> {
+    const { CODA_TETTO_CARATTERI, CODA_TETTO_VOCI } = await import('@/lib/chat/codaDelGiro')
+    const numero = new Intl.NumberFormat(locale.value)
+    if (rifiuto === 'coda-piena') return t('chat.queueRefusedFull', { max: numero.format(CODA_TETTO_VOCI) })
+    if (rifiuto === 'troppo-lungo') return t('chat.queueRefusedTooLong', { max: numero.format(CODA_TETTO_CARATTERI) })
+    if (rifiuto === 'vuoto') return t('chat.queueRefusedEmpty')
+    return t('chat.queueRefusedUnavailable')
+}
+
+/**
+ * Accoda il testo del compositore. Stessa strada dell'invio per la bozza: il campo si svuota SUBITO e la bozza salvata
+ * con lui; un rifiuto (coda piena, troppo lungo) rimette il testo com'era e lo dice con l'avviso della schermata.
+ *
+ * ⛔ Se nel frattempo il giro è FINITO (il tocco arriva un attimo dopo), non c'è più niente dietro cui mettersi in fila:
+ *   parte come un invio normale — quello che la coda avrebbe fatto un istante dopo. Mai perso in silenzio (Hermes
+ *   issue #64578: /queue inviati a giro appena concluso venivano persi).
+ */
+async function onQueue(text: string): Promise<void> {
+    if (!text.trim()) return
+    if (!controller.canQueue.value) {
+        if (composerBusy.value === 'idle') await onSend()
+        return
+    }
+    void talosLightImpact()
+    dictation.cancel()
+    draft.updatePrompt('')
+    await draft.flush()
+    let esito: Awaited<ReturnType<typeof controller.queueMessage>>
+    try {
+        esito = await controller.queueMessage(text)
+    } catch {
+        esito = { ok: false, rifiuto: 'nessuna-chat' }
+    }
+    if (esito.ok) return
+    draft.updatePrompt(text)
+    await draft.flush()
+    toasts.push({ message: await rifiutoDellaCoda(esito.rifiuto), durationMs: 6000 })
+    await nextTick()
+    composer.value?.focusPrompt(true)
+}
+
 // Exposed to the app shell: the header/sidebar (F1-T3) drive these orchestrated
 // actions so attachment revocation + draft scoping stay in one place.
 defineExpose({ newSession, selectSession, renameSession, deleteSession, sessionActionBusy })
@@ -965,6 +1046,16 @@ async function runMessageAction(action: () => Promise<void>): Promise<void> {
                 ? error.message
                 : t('chat.messageActionFailed'))
     }
+}
+
+/**
+ * CONT (25/09/2026, owner «Nuovo messaggio «Continua»»): manda «Continua» come messaggio nuovo, per la stessa strada del
+ * composer; vale per ogni fornitore (il prefill nella stessa bolla non lo accettano tutti). Solo al tocco: nessuna
+ * continuazione automatica («Solo col pulsante»). La bozza nel composer non si tocca.
+ */
+async function continuaDopoIlLimite(): Promise<void> {
+    rejoinLiveEdge()
+    await controller.send(t('chat.continueAfterLimit'), null, false)
 }
 
 function reuseMessage(messageId: string): void {
@@ -1477,6 +1568,13 @@ onBeforeUnmount(() => {
                         >
                             {{ dictation.error.value }}
                         </div>
+                        <!-- ⭐ B3 F4-A: la coda della chat aperta, sopra il compositore e dentro il suo contenitore
+                             agganciato — la sua altezza entra in `--talos-composer-height`, quindi la conversazione
+                             non ci finisce sotto. -->
+                        <TalosMobileCodaDellaChat
+                            v-if="codaAperta && codaAperta.voci.length > 0"
+                            @rejoin="rejoinLiveEdge"
+                        />
                         <TalosMobileComposer
                             ref="composer"
                             :prompt="prompt"
@@ -1491,6 +1589,8 @@ onBeforeUnmount(() => {
                             :refreshing-models="refreshingModels"
                             :discovery-problems="discoveryProblems"
                             :send-disabled-reason="motivoInvioSpento"
+                            :can-queue="controller.canQueue.value"
+                            :queue-disabled-reason="controller.queueDisabledReason.value"
                             :enhancing-prompt="enhancingPrompt"
                             :enhancer-depth="enhancer.depth"
                             :enhancer-model="enhancer.model"
@@ -1516,6 +1616,7 @@ onBeforeUnmount(() => {
                             :library-files="libraryTurnFiles"
                             @update:prompt="draft.updatePrompt($event)"
                             @send="onSend"
+                            @queue="(text) => void onQueue(text)"
                             @stop="chat.stopStreaming()"
                             :dictation-transcript="trascrizioneViva"
                             @toggle-dictation="void toggleDictation()"
@@ -1652,7 +1753,14 @@ onBeforeUnmount(() => {
                     @details="showRunDetails"
                     @delete="deleteMessageTurn"
                     @review-authorization="controller.showToolAuthorization()"
+                    @continue-after-limit="continuaDopoIlLimite"
                 />
+                <!--
+                    ⭐ B3 «Riprendi» (D-B3-03): in fondo alla conversazione, SOLO quando l'ultimo tuo messaggio non ha una
+                    risposta completa (interrotta, fallita, o l'app si è chiusa a metà). Non un pulsante sempre acceso:
+                    compare dove serve e dice cosa fa, perché «riprendi» da solo non dice se rifà, continua o riscrive.
+                -->
+                <TalosMobileRiprendiGiro v-if="controller.canResume.value" @rejoin="rejoinLiveEdge" />
                 <TalosMobileRunDetailsSheet
                     v-if="runDetails"
                     :activities="runDetails.activities"

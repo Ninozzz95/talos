@@ -209,6 +209,8 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
         const toolCalls = createGeminiToolCallAccumulator()
         let usage: Record<string, number> | null = null
         let callId: string | null = null
+        // CONT (25/09/2026): il motivo di fine viaggiava solo nel percorso senza streaming; la chat usa lo streaming, e l'avviso «Si è fermata qui» non poteva scattare.
+        let motivoDiFine: string | null = null
         const stream = await talosStreamText({
             url: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model.id)}:streamGenerateContent?alt=sse`,
             headers: { 'x-goog-api-key': apiKey, 'content-type': 'application/json' },
@@ -217,11 +219,13 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
             accumulator: createTalosSseAccumulator(),
             extract: (payload) => {
                 const event = JSON.parse(payload) as {
-                    candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>
+                    candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> }; finishReason?: string }>
                     usageMetadata?: Record<string, unknown>
                     responseId?: unknown
                 }
                 toolCalls.push(event)
+                const fine = event.candidates?.[0]?.finishReason
+                if (typeof fine === 'string' && fine) motivoDiFine = fine
                 // I conteggi sono cumulativi: vale l'ULTIMO (ai.google.dev/gemini-api/docs/generate-content/tokens, 2026-09-13).
                 if (event.usageMetadata) usage = talosFlatUsage(event.usageMetadata) ?? usage
                 if (callId === null && typeof event.responseId === 'string' && event.responseId) callId = event.responseId
@@ -247,7 +251,7 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
             usage,
             callId,
             reasoning: stream.reasoning || undefined,
-            ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : {}),
+            ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : { finishReason: motivoDiFine }),
         }
     },
 }

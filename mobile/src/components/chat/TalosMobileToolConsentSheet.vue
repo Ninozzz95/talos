@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { ShieldAlert, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
+import { useTalosI18n } from '@/i18n'
 import type { TalosToolAction } from '@/lib/tools/permissionTypes'
 
 const MAX_RENDERED_ARGUMENTS = 4_096
@@ -142,6 +143,33 @@ function testoDiRiga(valore: unknown): string {
     }
 }
 
+/*
+ * ⭐ CONSENSO-ARG-01 (owner 25/09/2026, «parole per le chiavi comuni»): le chiavi più frequenti degli strumenti hanno una
+ * parola; le altre restano la chiave ripulita con l'iniziale maiuscola. ⛔ Il dizionario è CHIUSO e ogni voce ha la sua
+ * stringa: una chiave che non c'è non passa mai da `t()` — non si stampa mai un identificativo di traduzione (il difetto
+ * che questa scheda ha già pagato, vedi sotto).
+ */
+const { t } = useTalosI18n()
+const PAROLE_DEGLI_ARGOMENTI: Readonly<Record<string, string>> = {
+    title: 'chat.toolArg.title',
+    body: 'chat.toolArg.text',
+    text: 'chat.toolArg.text',
+    content: 'chat.toolArg.content',
+    format: 'chat.toolArg.format',
+    path: 'chat.toolArg.path',
+    url: 'chat.toolArg.url',
+    query: 'chat.toolArg.query',
+    name: 'chat.toolArg.name',
+    description: 'chat.toolArg.description',
+    filename: 'chat.toolArg.filename',
+}
+function etichettaArgomento(voce: string): string {
+    const chiave = PAROLE_DEGLI_ARGOMENTI[voce.toLowerCase()]
+    if (chiave) return t(chiave)
+    const pulita = voce.replace(/[_-]+/g, ' ').trim()
+    return pulita.charAt(0).toLocaleUpperCase() + pulita.slice(1)
+}
+
 const righeArgomenti = computed<TalosRigaArgomento[] | null>(() => {
     const dato = props.input
     if (dato === null || typeof dato !== 'object' || Array.isArray(dato)) return null
@@ -170,10 +198,21 @@ const righeArgomenti = computed<TalosRigaArgomento[] | null>(() => {
             // nome. Tradurre queste voci vorrebbe una stringa per ogni argomento
             // di ogni tool, e una mancante stamperebbe una chiave i18n al posto
             // suo — il difetto che questa scheda ha già pagato una volta.
-            voce: voce.replace(/[_-]+/g, ' '),
+            voce: etichettaArgomento(voce),
             valore: tagliato,
         }
     })
+})
+
+/*
+ * ⛔ CONSENSO-TASTIERA-01 (Pad, 25/09/2026): la scheda compariva con la tastiera ancora aperta sotto (il campo della
+ * chat teneva il fuoco) e ne copriva metà. Quando la scheda compare, il campo di testo lascia il fuoco: su Android la
+ * tastiera si chiude, e l'ascoltatore `keyboardDidHide` di `services/nativeFraming.ts` fa il resto (Capacitor
+ * Keyboard, capacitorjs.com/docs/apis/keyboard, letto il 25/09/2026).
+ */
+onMounted(() => {
+    const attivo = document.activeElement
+    if (attivo instanceof HTMLTextAreaElement || attivo instanceof HTMLInputElement) attivo.blur()
 })
 </script>
 
@@ -210,9 +249,9 @@ const righeArgomenti = computed<TalosRigaArgomento[] | null>(() => {
                     aria-hidden="true"
                 />
                 <div class="min-w-0 flex-1">
-                    <p class="text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">
-                        {{ $t('chat.authorizationFromChat') }} {{ sessionTitle }}
-                    </p>
+                    <!-- ⭐ CONSENSO-DA-01 (owner 25/09/2026, «frase breve normale»): era «RICHIESTO DA» + l'intera domanda
+                         in maiuscolo. Una riga coi puntini; il titolo resta testo semplice, fuori da `t()` (apostrofi). -->
+                    <p data-testid="talos-tool-consent-from" class="truncate text-2xs text-[var(--talos-muted)]" :title="sessionTitle">{{ $t('chat.authorizationFromChatShort') }} “{{ sessionTitle }}”</p>
                     <h2
                         id="talos-tool-authorization-title"
                         class="mt-0.5 text-md font-semibold text-[var(--talos-text)]"
@@ -263,7 +302,7 @@ const righeArgomenti = computed<TalosRigaArgomento[] | null>(() => {
                 class="mt-3 max-h-40 overflow-auto rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-2"
             >
                 <div v-for="riga in righeArgomenti" :key="riga.voce" class="flex flex-col gap-0.5 py-1">
-                    <dt class="text-3xs uppercase tracking-wide text-[var(--talos-muted)]">{{ riga.voce }}</dt>
+                    <dt class="text-2xs text-[var(--talos-muted)]">{{ riga.voce }}</dt>
                     <dd class="break-words text-xs leading-5 text-[var(--talos-text)]">{{ riga.valore }}</dd>
                 </div>
             </dl>

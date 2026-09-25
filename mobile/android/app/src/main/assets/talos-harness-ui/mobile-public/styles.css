@@ -339,7 +339,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .sidebar-footer strong { font-size: 13px; }
 .sidebar-footer small { font-size: 10px; color: var(--muted); margin-top: 3px; }
 
-.topbar { padding: 0 12px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; background: var(--bg-glass); backdrop-filter: blur(20px); will-change: backdrop-filter; z-index: 20; }
+.topbar { padding: 0 12px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; background: var(--bg-glass); backdrop-filter: blur(20px); will-change: backdrop-filter; z-index: 20; container: topbar / inline-size; }
 .topbar-left, .topbar-right, .topbar-center { display: flex; align-items: center; min-width: 0; }
 .topbar-right { justify-content: flex-end; gap: 4px; }
 .topbar-center { background: var(--surface-highlight-subtle); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
@@ -366,6 +366,14 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .context-chip { min-height: 36px; max-width: 230px; min-width: 0; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 10px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; cursor: pointer; font-size: 11px; }
 .context-chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .context-chip svg { width: 16px; height: 16px; }
+/*
+ * ⭐ 24/09/2026 — misurato sul Pad: l'etichetta dell'ambiente mostrava «w.» per «workspace», 43 px su 95. La regola
+ * sotto i 1280 px (più giù) la nasconde guardando lo SCHERMO; il Pad è 1292 px, ma con i due pannelli aperti la barra
+ * è larga 632 px. Qui si guarda lo spazio VERO della barra (CSS Containment 3, container query): a destra servono
+ * ~95 px per l'etichetta + cinque pulsanti da 32 px, ~275 px, cioè una barra da ~711 px con le colonne uguali. Sotto,
+ * l'etichetta non entra e si nasconde come già sui telefoni; la cartella resta nel pannello Contesto (Ambiente).
+ */
+@container topbar (max-width: 720px) { .environment-chip { display: none; } }
 .mobile-only { display: none; }
 .embedded-session-back-icon { display: none; }
 
@@ -402,7 +410,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .hero-welcome-title { margin: 16px 0 0; font-size: 17px; font-weight: 600; line-height: 1.35; color: var(--text); }
 .hero-subtitle { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 
-.mission-card, .activity-bundle, .approval-card, .widget, .settings-card, .automation-row, .inspector-card { border: 1px solid var(--line); background: linear-gradient(180deg, var(--surface-highlight-subtle), var(--surface-highlight-faint)); border-radius: var(--radius-card); }
+.mission-card, .activity-bundle, .approval-card, .widget, .settings-card, .inspector-card { border: 1px solid var(--line); background: linear-gradient(180deg, var(--surface-highlight-subtle), var(--surface-highlight-faint)); border-radius: var(--radius-card); }
 .mission-card { padding: 16px; margin-bottom: 24px; }
 .mission-head { display: flex; align-items: flex-start; gap: 12px; }
 .mission-head > div { flex: 1; min-width: 0; }
@@ -724,9 +732,12 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .agent-card small { color: var(--muted); font-size: 9px; margin-top: 4px; }
 .agent-card svg { width: 16px; height: 16px; color: var(--success); }
 
-.review-shell, .terminal-shell, .browser-shell, .dashboard-shell, .generic-shell { width: min(1040px, calc(100% - 40px)); margin: 0 auto; padding: 24px 0 80px; }
+.review-shell, .terminal-shell, .browser-shell, .generic-shell { width: min(1040px, calc(100% - 40px)); margin: 0 auto; padding: 24px 0 80px; }
 .view-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 18px; }
 .view-heading p { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
+/* ⭐ 24/09/2026 (AUT-2b): il pulsante della testata non si restringe — a fianco di un testo lungo andava a capo dentro
+   un pulsante alto 36px («Nuova automazione» sul Pad). */
+.view-heading > .primary-btn, .view-heading > .secondary-btn { flex: none; white-space: nowrap; }
 .review-summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 14px; }
 .review-summary > div { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 12px; }
 .review-summary span, .review-summary small { display: block; }
@@ -828,32 +839,8 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .context-ring:after { content:""; width: 72px; height: 72px; border-radius: 50%; background: var(--surface); position: absolute; }
 .context-ring span { z-index: 1; font-weight: 650; }
 
-/* Read-only campaign Board. All values stay on the existing Calm theme tokens. */
-.board-heading-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
-.board-heading-actions svg { width: 14px; height: 14px; }
-.campaign-controls { display: grid; grid-template-columns: repeat(3,minmax(120px,1fr)) minmax(220px,1.4fr); gap: 8px; margin-bottom: 10px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
-.campaign-controls label { min-width: 0; display: grid; gap: 5px; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
-.campaign-controls select { width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); color: var(--text-2); padding: 0 30px 0 10px; outline: 0; font: 10px var(--font-mono); }
-.campaign-controls select:focus { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus-soft); }
-.campaign-connection { min-width: 0; display: grid; grid-template-columns: 10px minmax(0,1fr); align-content: center; gap: 3px 7px; padding: 0 8px; }
-.campaign-connection .connection-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted-2); }
-.campaign-connection strong { color: var(--text-2); font-size: 11px; }
-.campaign-connection small { grid-column: 2; min-width: 0; color: var(--muted); font: 8px/1.4 var(--font-mono); overflow-wrap: anywhere; }
-.campaign-connection:has([data-connection-state="ready"]) .connection-dot { background: var(--success); box-shadow: 0 0 0 4px var(--success-soft); }
-.campaign-connection:has([data-connection-state="loading"]) .connection-dot { background: var(--accent-2); animation: pulse var(--motion-activity) var(--motion-ease) infinite; }
-.campaign-connection:has([data-connection-state="error"]) .connection-dot { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
 
-.campaign-summary { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 8px; margin-bottom: 10px; }
-.campaign-summary article { min-width: 0; min-height: 92px; display: flex; flex-direction: column; justify-content: center; padding: 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-.campaign-summary span, .campaign-summary small { color: var(--muted); font-size: 9px; }
-.campaign-summary strong { margin: 7px 0 4px; color: var(--text); font: 650 18px/1 var(--font-ui); overflow-wrap: anywhere; }
 
-.campaign-data-grid { display: grid; grid-template-columns: minmax(0,1.55fr) minmax(260px,.85fr); gap: 10px; align-items: start; }
-.campaign-runs, .campaign-report, .legacy-dashboard-widgets { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); padding: 12px; }
-.campaign-section-head { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-.campaign-section-head h3 { margin: 3px 0 0; font-size: 13px; }
-.campaign-section-head > span { color: var(--muted); font: 9px var(--font-mono); text-align: right; }
-.campaign-run-list { display: grid; gap: 6px; }
 .board-empty { margin: 0; padding: 28px 12px; border: 1px dashed var(--line); border-radius: 9px; color: var(--muted); text-align: center; font-size: 10px; }
 
 /*
@@ -879,32 +866,88 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .hero-wordmark { margin-top: 10px; font-family: var(--font-ui); font-weight: 700; font-size: 22px; letter-spacing: 0.04em; line-height: 1; color: var(--text); }
 .hero-welcome-title { margin: 16px 0 0; font-size: 17px; font-weight: 600; line-height: 1.35; color: var(--text); }
 .hero-subtitle { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
-.campaign-run { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); overflow: hidden; }
-.campaign-run-toggle { width: 100%; min-height: 60px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 7px 12px; align-items: center; border: 0; background: transparent; color: var(--text-2); padding: 9px 10px; text-align: left; cursor: pointer; }
-.campaign-run-toggle:hover { background: var(--surface-highlight-subtle); }
-.campaign-run-toggle > span { min-width: 0; }
-.campaign-run-toggle strong, .campaign-run-toggle small { display: block; }
-.campaign-run-toggle strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-.campaign-run-toggle small { margin-top: 4px; color: var(--muted); font: 8px var(--font-mono); }
-.campaign-run-outcome { justify-self: end; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.campaign-run-detail { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; padding: 10px; border-top: 1px solid var(--line); }
-.campaign-run-detail[hidden] { display: none; }
-.campaign-run-detail dl { display: contents; }
-.campaign-run-detail dl > div { min-width: 0; padding: 8px; border-radius: 8px; background: var(--surface-highlight-subtle); }
-.campaign-run-detail dt { color: var(--muted); font-size: 8px; }
-.campaign-run-detail dd { margin: 4px 0 0; color: var(--text-2); font: 9px/1.4 var(--font-mono); overflow-wrap: anywhere; }
-.run-evidence { grid-column: 1 / -1; min-width: 0; margin: 2px 0 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-deep); color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; font: 10px/1.55 var(--font-mono); }
-.campaign-runs > [data-action="load-more-runs"] { margin-top: 8px; }
-.campaign-report pre { max-height: 520px; min-height: 224px; margin: 0; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg-deep); color: var(--text-2); white-space: pre-wrap; overflow: auto; overflow-wrap: anywhere; font: 9px/1.6 var(--font-mono); }
-.legacy-dashboard-widgets { margin-top: 10px; padding-top: 16px; }
-.legacy-dashboard-widgets > .demo-surface-badge { margin: 0 0 12px; }
 
-.automation-list { display: grid; gap: 9px; }
-.automation-row { min-height: 72px; display: grid; grid-template-columns: 42px minmax(0,1fr) auto auto; gap: 10px; align-items: center; padding: 11px; }
-.automation-icon { width: 42px; height: 42px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-2); display: grid; place-items: center; }
-.automation-icon svg { width: 17px; height: 17px; }
-.automation-row strong, .automation-row small { display: block; }
-.automation-row strong { font-size: 12px; }.automation-row small { color: var(--muted); font-size: 9px; margin-top: 4px; }
+/*
+ * ⭐⭐ 24/09/2026 (AUT-3, owner «B, sì»): la vista Automazioni del desktop (componenti talos-*, misurati in sola lettura
+ * sul 4174: `misure-vista-{scuro,chiaro}.json` nel ledger). I token del Codice hanno gli stessi valori del desktop scuro;
+ * i derivati del desktop (--talos-border-subtle, --talos-accent-border, --talos-accent-text, il grigio dell'interruttore
+ * spento) sono color-mix sugli stessi token. Semplificazioni mobili: la cornice resta `.generic-shell` (larghezza e spazio
+ * per la barra in basso), i valori lunghi delle righe chiave-valore vanno a capo, sotto i 560px la ricerca è larga quanto
+ * lo schermo.
+ */
+.talos-page { color: var(--text); font-size: 14px; line-height: 1.5; }
+.talos-page__head { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 18px; margin-bottom: 18px; }
+.talos-page__testo { flex: 1 1 320px; min-width: 0; }
+.talos-page__head > .talos-button { flex: none; }
+.talos-eyebrow { color: var(--muted); font-size: 11px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; }
+.talos-page__head h2 { margin: 4px 0 0; font-size: 22px; font-weight: 600; line-height: 1.5; letter-spacing: -.01em; }
+.talos-page__head p { margin: 6px 0 0; max-width: 70ch; color: var(--muted); }
+.talos-grow { flex: 1 1 auto; min-width: 0; }
+.talos-muted { color: var(--muted); }
+
+.talos-button { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 0 16px; border: 2px solid transparent; border-radius: 9px; background: transparent; color: var(--text); font-family: inherit; font-size: 14px; font-weight: 600; line-height: 1.25; white-space: nowrap; cursor: pointer; }
+.talos-button--md { min-height: 40px; padding: 0 16px; font-size: 14px; }
+.talos-button svg { width: 16px; height: 16px; }
+.talos-button:disabled, .talos-button[aria-disabled="true"] { color: var(--muted); cursor: not-allowed; opacity: .58; }
+.talos-button--primary { background: var(--accent); color: var(--on-accent); box-shadow: inset 0 1px var(--surface-highlight-strong); }
+.talos-button--primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--accent-2); }
+.talos-button--secondary { border-color: var(--line); background: var(--surface-3); }
+.talos-button--ghost { color: var(--text-2); }
+.talos-button--secondary:hover:not(:disabled):not([aria-disabled="true"]), .talos-button--ghost:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--line-strong); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.talos-button--ghost[aria-expanded="true"] { border-color: color-mix(in srgb, var(--muted) 75%, var(--bg)); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.talos-button--sm { min-height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; }
+/* La coppia di pericolo dell'app (mobile/src/lib/dangerAction.ts, talosContrast.ts): `--danger` è leggibile SOLO sopra
+   `--danger-soft`; da solo su un fondo neutro è #fee2e2, quasi bianco (visto sul Pad, 24/09 sera). */
+.talos-button--danger { color: var(--danger); background: var(--danger-soft); border-color: var(--talos-danger-border, color-mix(in srgb, var(--danger) 45%, transparent)); }
+/* ⭐ 24/09/2026 sera (AUT-3c): la conferma distruttiva con la grammatica di `confermaModale` del desktop
+   (td-prose: 14px, riga 1.85; td-subtle: grigio, piccolo). I pulsanti a destra, come i fogli del Codice. */
+.talos-conferma__domanda { margin: 0; color: var(--text-2); font-size: 14px; line-height: 1.85; overflow-wrap: anywhere; }
+.talos-conferma__conseguenza { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.talos-conferma__piede { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding-top: 18px; }
+
+.talos-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.talos-field { position: relative; width: 280px; }
+.talos-field__icon { position: absolute; top: 50%; left: 12px; width: 16px; height: 16px; color: var(--muted); transform: translateY(-50%); pointer-events: none; }
+.talos-field__input { width: 100%; height: 40px; padding: 0 12px 0 34px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-3); color: var(--text); font-family: inherit; font-size: 14px; outline: 0; }
+.talos-field--sm .talos-field__input { height: 36px; font-size: 13.5px; }
+.talos-field__input::placeholder { color: var(--muted); }
+/* Come il desktop: solo l'anello (senza bordo né alone, che con la regola globale facevano un contorno doppio). */
+.talos-field__input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.talos-tabs { display: inline-flex; min-width: 0; }
+.talos-tabs--pills .talos-tabs__list { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+.talos-tabs--pills .talos-tabs__tab { min-height: 30px; display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-3); color: var(--text-2); font-family: inherit; font-size: 12.5px; font-weight: 500; line-height: 1.25; cursor: pointer; }
+.talos-tabs__tab:hover { color: var(--text); }
+.talos-tabs--pills .talos-tabs__tab[aria-selected="true"] { border-color: color-mix(in srgb, var(--accent) 34%, transparent); background: var(--accent-soft); color: color-mix(in srgb, var(--accent) 60%, var(--text)); }
+
+.talos-card { border: 1px solid var(--line); border-radius: 12px; }
+.talos-automation { margin-bottom: 10px; overflow: hidden; }
+.talos-automation__head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 14px; }
+.talos-automation__name { font-size: 13.5px; font-weight: 600; line-height: 1.5; }
+/* Il nome che apre l'ultima esecuzione (solo mobile, AUT-2): stesso testo, colore d'accento perché si tocca. */
+button.talos-automation__name { padding: 0; border: 0; background: none; color: var(--accent-2); font-family: inherit; text-align: left; cursor: pointer; }
+.talos-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: color-mix(in srgb, var(--muted) 75%, var(--bg)); }
+.talos-dot--success { background: var(--success); }
+.talos-badge { min-height: 26px; display: inline-flex; align-items: center; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--surface-3) 92%, var(--text)); color: var(--text-2); font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap; }
+.talos-badge--sm { min-height: 22px; padding: 0 8px; font-size: 11px; }
+.talos-badge--success { border-color: color-mix(in srgb, var(--success) 25%, transparent); background: var(--success-soft); color: var(--success); }
+.talos-switch { width: 70px; height: 40px; flex: none; display: inline-flex; align-items: center; padding: 4px; border: 2px solid color-mix(in srgb, var(--muted) 75%, var(--bg)); border-radius: 999px; background: var(--surface-3); cursor: pointer; }
+.talos-switch__thumb { width: 28px; height: 28px; border-radius: 999px; background: var(--muted); transition: transform var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease); }
+.talos-switch[aria-checked="true"] { border-color: color-mix(in srgb, var(--accent) 34%, transparent); background: var(--accent-soft); }
+.talos-switch[aria-checked="true"] .talos-switch__thumb { background: var(--accent); transform: translateX(30px); }
+.talos-automation__runs { padding: 2px 14px 10px; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.talos-kv { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.talos-kv:first-of-type { border-top: 0; }
+.talos-kv__k { flex: none; color: var(--muted); font-size: 12.5px; }
+.talos-kv__v { min-width: 0; font-family: var(--font-mono); font-size: 12px; font-weight: 500; text-align: right; overflow-wrap: anywhere; }
+.talos-list-row { min-height: 44px; display: flex; align-items: center; gap: 12px; margin: 0; padding: 8px 14px; }
+.talos-scope-note { margin-top: 4px; }
+.talos-button:focus-visible, .talos-tabs__tab:focus-visible, .talos-switch:focus-visible, button.talos-automation__name:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .talos-switch__thumb { transition: none; }
+}
+@media (max-width: 560px) {
+  .talos-toolbar .talos-field { width: 100%; }
+}
 .settings-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
 .settings-card { padding: 14px; min-height: 190px; }
 .settings-card h3 { margin: 0 0 14px; font-size: 13px; }
@@ -952,6 +995,9 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .sheet-body { max-height: min(880px, calc(100dvh - 96px)); overflow: auto; padding: 12px; }
 .sheet-section { margin-bottom: 16px; }
 .sheet-label { display: block; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .12em; margin: 0 0 7px 3px; }
+/* ⭐ 24/09/2026 (AUT-2e): la nota dei fogli, copiata dal desktop (dialog.sheet-dialog .sheet-hint, lì col
+   --talos-ui-font-scale che nel mobile non c'è) — il modulo «Nuova automazione» la usava senza che esistesse. */
+.sheet-hint { display: block; margin: 8px 3px 0; color: var(--muted); font-size: 11px; }
 .sheet-option { width: 100%; min-height: 54px; display: grid; grid-template-columns: 38px minmax(0,1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text-2); padding: 7px 10px; margin-bottom: 6px; text-align: left; cursor: pointer; }
 .sheet-option:hover, .sheet-option.active { border-color: var(--accent-strong); background: var(--accent-soft); }
 .sheet-option .sheet-icon { width: 36px; height: 36px; border-radius: 9px; background: var(--surface-3); display: grid; place-items: center; color: var(--accent-2); }
@@ -1049,7 +1095,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .mobile-nav button { min-width: 0; border: 0; background: transparent; color: var(--muted); border-radius: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: pointer; font-size: 9px; }
   .mobile-nav button.active { color: var(--accent-2); background: var(--accent-soft); }
   .mobile-nav svg { width: 18px; height: 18px; }
-  .review-shell, .terminal-shell, .browser-shell, .dashboard-shell, .generic-shell { width: calc(100% - 20px); padding: 14px 0 calc(var(--mobile-nav-h) + 24px); }
+  .review-shell, .terminal-shell, .browser-shell, .generic-shell { width: calc(100% - 20px); padding: 14px 0 calc(var(--mobile-nav-h) + 24px); }
   .view-heading { align-items: center; margin-bottom: 12px; }
   .view-heading h2 { font-size: 16px; }
   .view-heading p { display: none; }
@@ -1067,8 +1113,6 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
   .phone-frame { max-height: calc(100dvh - 165px - var(--mobile-nav-h)); }
   .widget-grid { grid-template-columns: 1fr; }
   .widget.wide { grid-column: auto; }
-  .automation-row { grid-template-columns: 42px minmax(0,1fr) auto; }
-  .automation-row .secondary-btn { grid-column: 2 / -1; width: 100%; }
   .settings-grid { grid-template-columns: 1fr; }
   .command-dialog { margin-top: 7vh; }
   .sheet-dialog { width: 100vw; max-width: none; margin: auto 0 0; border-radius: 18px 18px 0 0; border-bottom: 0; padding-bottom: max(0px, env(safe-area-inset-bottom)); }
@@ -1134,6 +1178,8 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .topology-row { position: relative; min-height: 46px; display: grid; grid-template-columns: 18px minmax(0,1fr); gap: 8px; align-items: center; color: var(--text-2); }
 .topology-row::before { content: ""; position: absolute; left: 8px; top: -14px; bottom: 22px; width: 1px; background: var(--line-strong); }
 .topology-row.root::before { top: 50%; }
+/* TOPO-02 (25/09/2026): il titolo su una riga coi puntini, come il desktop che lo accorcia; il nome intero nel title. */
+.topology-row strong { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topology-row.child { padding-left: 14px; }
 .topology-row.child::before { left: 22px; }
 .topology-row.child::after { content: ""; position: absolute; left: 22px; top: 22px; width: 14px; height: 1px; background: var(--line-strong); }
@@ -1141,8 +1187,13 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 .topology-row strong, .topology-row small { display: block; }
 .topology-row strong { font-size: 11px; }
 .topology-row small { margin-top: 3px; color: var(--muted); font-size: 9px; }
-.topology-actions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; margin-top: 7px; }
-.topology-actions .secondary-btn { padding: 0 6px; min-width: 0; }
+/*
+ * ⭐ 24/09/2026 — misurato sul Pad: la griglia a tre colonne era per tre pulsanti, due dei quali finti e tolti (B1);
+ * l'unico rimasto riceveva un terzo della riga (93 px) e, alto 36 px fissi, andava a capo sbordando dal bordo. Una fila
+ * che va a capo: ogni pulsante largo quanto il suo testo, su una riga sola.
+ */
+.topology-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.topology-actions .secondary-btn { padding: 0 12px; min-width: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .control-plane-card { grid-column: span 3; }
 .control-plane-card > p { margin: 0 0 12px; }
 .control-grid { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 6px; }
@@ -1161,7 +1212,7 @@ dd { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overfl
 }
 @media (max-width: 360px) {
   .control-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .topology-actions { grid-template-columns: 1fr; }
+  .topology-actions .secondary-btn { flex: 1 1 100%; }
 }
 
 /*
@@ -1295,7 +1346,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .run-strip.is-stopped .status-pulse { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
 .run-strip.is-stopped .run-progress span { background: var(--muted-2); }
 
-.mission-card, .activity-bundle, .approval-card, .widget, .settings-card, .automation-row, .inspector-card,
+.mission-card, .activity-bundle, .approval-card, .widget, .settings-card, .inspector-card,
 .composer, .sheet-option, .file-review, .diff-panel { transition: border-color var(--motion-control) var(--motion-ease), background-color var(--motion-theme) var(--motion-ease), box-shadow var(--motion-control) var(--motion-ease); }
 .mission-card:hover, .activity-bundle:hover { border-color: var(--surface-highlight-strong); }
 
@@ -1345,12 +1396,10 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .harness-dialog-backdrop.motion-enter { animation: code-backdrop-enter var(--motion-popover) var(--motion-ease) both; }
 .tool-inline-detail.motion-enter,
 .queued-message.motion-enter,
-.campaign-run-detail.motion-enter,
 .inspector-section.motion-enter { animation: code-surface-enter var(--motion-disclosure) var(--motion-ease) both; }
 .approval-card.motion-exit,
 .toast.motion-exit,
-.tool-inline-detail.motion-exit,
-.campaign-run-detail.motion-exit { pointer-events: none; }
+.tool-inline-detail.motion-exit { pointer-events: none; }
 .composer { transition-duration: var(--motion-composer-expand); }
 .run-progress span { transition: width var(--motion-activity) linear, background-color var(--motion-control) var(--motion-ease); }
 .status-pulse, .tool-state { transition: color var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease), box-shadow var(--motion-success) var(--motion-ease); }
@@ -1474,7 +1523,9 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .model-picker-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; text-align: left; }
 /* ⭐ 27/8 — stessa cautela imparata stasera su .model-picker-panel: ogni display esplicito vuole il suo [hidden], scritto SUBITO e non aspettando di trovarlo rotto. */
 .model-picker-trigger[hidden] { display: none; }
-.model-picker-trigger-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--font-mono); }
+/* NOME-MODELLO-01 (25/09/2026): il pulsante dice il NOME del modello, non più la sigla — carattere del testo, non a
+   spaziatura fissa (la sigla resta, in mono, nella riga di ogni voce del catalogo). */
+.model-picker-trigger-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; }
 .model-picker-chevron svg { width: 14px; height: 14px; color: var(--muted); flex: 0 0 auto; }
 .model-picker-trigger[aria-expanded="true"] .model-picker-chevron svg { transform: rotate(180deg); }
 .model-picker-panel { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-elevated); box-shadow: var(--shadow); }
@@ -1494,6 +1545,10 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .model-picker-group-chevron svg { width: 12px; height: 12px; transition: transform var(--motion-control) var(--motion-ease); }
 .model-picker-group-header[aria-expanded="true"] .model-picker-group-chevron svg { transform: rotate(180deg); }
 .model-picker-option { margin-bottom: 4px; grid-template-columns: 30px minmax(0,1fr) auto; min-height: 46px; }
+/* SCELTA-CARTELLA (25/09/2026): il menu a scelta singola — niente icona in testa, il nome nel carattere del testo,
+   la voce evidenziata da tastiera (APG: il fuoco resta sul pulsante) con lo stesso anello del fuoco. */
+.scelta-singola-voce { grid-template-columns: minmax(0,1fr) auto; min-height: 44px; cursor: pointer; }
+.scelta-singola-voce.is-evidenziata { outline: 2px solid var(--accent); outline-offset: -2px; }
 .model-picker-option .sheet-icon { width: 28px; height: 28px; }
 .model-picker-option .sheet-icon svg { width: 13px; height: 13px; }
 .model-picker-option strong { font-size: 11px; }
@@ -1535,38 +1590,9 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   .mobile-nav button, .mobile-nav button span { font-size: 10px; }
 }
 
-@media (max-width: 1040px) {
-  .campaign-controls { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .campaign-summary { grid-template-columns: repeat(3,minmax(0,1fr)); }
-}
 
-@media (max-width: 780px) {
-  .board-heading { align-items: flex-start; }
-  .board-heading-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
-  .board-heading-actions .primary-btn, .board-heading-actions .secondary-btn { min-height: 44px; width: 100%; }
-  .campaign-controls { grid-template-columns: 1fr 1fr; }
-  .campaign-connection { grid-column: 1 / -1; min-height: 52px; padding: 4px 8px; }
-  .campaign-controls select { min-height: 44px; font-size: 12px; }
-  .campaign-data-grid { grid-template-columns: 1fr; }
-  .campaign-report pre { min-height: 180px; max-height: 360px; }
-}
 
-@media (max-width: 430px) {
-  .campaign-controls { grid-template-columns: 1fr; }
-  .campaign-connection { grid-column: auto; }
-  .campaign-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .campaign-summary article { min-height: 84px; }
-  .campaign-run-toggle { min-height: 66px; }
-  .campaign-run-outcome { max-width: 112px; }
-  .campaign-run-detail { grid-template-columns: 1fr 1fr; }
-}
 
-@media (max-width: 360px) {
-  .board-heading-actions { grid-template-columns: 1fr; }
-  .campaign-summary { grid-template-columns: 1fr 1fr; gap: 6px; }
-  .campaign-runs, .campaign-report, .legacy-dashboard-widgets { padding: 9px; }
-  .campaign-run-detail { grid-template-columns: 1fr; }
-}
 
 /*
  * Owner 24/8, dopo aver VISTO il mockup incorporato in TALOS mobile: due
@@ -1838,3 +1864,11 @@ button:disabled { cursor: not-allowed; opacity: .48; }
      l'inspector qui è già un cassetto fuori schermo per conto suo. */
   :host(.talos-embedded) .app-shell { grid-template-columns: minmax(0,1fr); }
 }
+
+/*
+ * ⭐ B1 (23/09), foto del Pad: «Approve all», «Comment», «Open file», «Annotate» e «Inspect»
+ * avevano aria-disabled e il motivo, ma a schermo restavano pieni e dorati come se funzionassero.
+ * W3C APG: un controllo spento resta focalizzabile (per leggere il motivo) ma deve apparire spento.
+ */
+button[aria-disabled="true"],
+button[aria-disabled="true"]:hover { opacity: .45; cursor: not-allowed; box-shadow: none; }

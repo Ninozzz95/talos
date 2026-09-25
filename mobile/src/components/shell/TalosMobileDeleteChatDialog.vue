@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TalosThemedCheckbox from '@/components/talos/ui/TalosThemedCheckbox.vue'
 import { computed, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { Loader2, Trash2, X } from '@lucide/vue'
@@ -130,12 +131,7 @@ function close(): void {
             :class="running ? 'pointer-events-none opacity-60' : ''"
             data-testid="talos-delete-chat-media"
         >
-            <input
-                v-model="deleteMedia"
-                type="checkbox"
-                class="mt-0.5 size-4 shrink-0 accent-[var(--talos-danger,#dc5b5b)]"
-                :disabled="running"
-            >
+            <TalosThemedCheckbox v-model="deleteMedia" tone="danger" class="mt-0.5" :disabled="running" />
             <span class="text-sm leading-5">
                 {{ $t('chat.deleteGeneratedFiles') }}
                 <span class="block text-xs text-[var(--talos-muted)]">{{ $t('chat.cleanupLibrarySuffix', { items: description }) }}</span>

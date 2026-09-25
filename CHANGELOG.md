@@ -6,6 +6,62 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.38
+
+The chat list works like the other stations, replies keep their reasoning and their line breaks, and
+the Codice's automations run real requests on the phone's own day.
+
+### Chats
+
+- The chat list follows Notes, Memory and Tasks: search, Options and New chat on one row; tabs for
+  All, In progress, Queued, Paused and Finished, with counts; filters for model, period and content
+  (attachments, generated documents); sorting by activity, creation or title. Archived chats stay at
+  the bottom. The floating New chat button is gone, so there is only one.
+- Each row shows the status and the time together, the model of the last reply as its provider's
+  logo and a short name, icons for attachments and generated documents, and "new reply" until you
+  open the chat. The sidebar shows the status and new replies too.
+- A chat whose queue is paused says "Paused" in the list and the sidebar, as it already did inside
+  the chat. The turn queue fits one row on tablets and two rows on phones, with the app's buttons.
+- Replies keep the model's single line breaks: lists, addresses and verse no longer run together.
+- A reply that stops at the length limit says so and offers Continue, with OpenRouter, OpenAI,
+  DeepSeek, Anthropic, Gemini and Ollama.
+- Models that always reason (111 of 458 on OpenRouter, counted on 24 September, GLM 5.3 Flash among
+  them) always get a reasoning request, so their reasoning no longer spills into the reply.
+- File names such as Peloro.md or setup.sh in a reply are no longer links to websites (.md is
+  Moldova's domain). Web addresses, bare domains and emails still are.
+
+### Permissions
+
+- The permission sheet names the common fields in words (Title, Text, Format, Path, Address…), says
+  which chat is asking in one short line, and closes the keyboard when it appears.
+- After you decide, the reply opens with "Permission granted: <tool>" or "Permission denied: <tool>"
+  on one line, instead of a separate "handled" bubble. The reasoning the model wrote before asking
+  moves into that reply.
+
+### Codice
+
+- Automations run a written request as a real Codice session, with the folder, model and reasoning
+  level you chose. Each one remembers its last session and pauses itself, with the reason, when a
+  start fails. The daily limit resets at midnight on the phone, not at 00:00 UTC.
+- The model picker lists the whole OpenRouter catalog, grouped by provider and searchable (460 models
+  on 25 September). On touch screens it no longer opens the keyboard by itself.
+- The reasoning bar has seven levels, up to Maximum, and models that require reasoning get their
+  required level on every call, automations and compaction included.
+- The Codice is in Italian throughout when the app is: side panel, command palette, sheets, session
+  tree, about fifty notices and twenty accessibility labels. Demo data is no longer shown as real.
+- Updating the app no longer leaves the previous Codice server running in the background.
+
+### Everywhere
+
+- Android's own checkboxes are replaced by the app's, in its palette, in seven screens: chat
+  deletion, backup, voice, personal voice, task schedules and model options.
+
+## v0.1.37
+
+- Scrolling on station pages keeps Android's native momentum again: the collapsing header added in
+  v0.1.34 no longer takes over flings. Published for device testing of the scrolling regression
+  reported on v0.1.36.
+
 ## v0.1.36
 
 - The Library loads more files as you scroll, with search and filters covering the whole collection.

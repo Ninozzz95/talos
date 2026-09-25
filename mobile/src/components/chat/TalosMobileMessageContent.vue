@@ -13,6 +13,8 @@ import { writeTalosClipboardText } from '@/services/clipboard'
 const props = defineProps<{
     content: string
     allowExternalImages?: boolean
+    /** ACAPO (25/09/2026): testo scritto dal modello — un a capo singolo resta un a capo. */
+    lineBreaks?: boolean
 }>()
 
 const { t } = useTalosI18n()
@@ -53,6 +55,7 @@ const blocks = computed(() => splitTalosMarkdownBlocks(props.content))
  */
 const renderedBlocks = computed(() => blocks.value.map(source => renderTalosMarkdownBlock(source, {
     labels: markdownLabels.value,
+    lineBreaks: props.lineBreaks === true,
     allowExternalImages: props.allowExternalImages === true,
 })))
 

@@ -40,12 +40,20 @@
   const DIZIONARIO_IT = {
     Chat: 'Chat',
     Terminal: 'Terminale',
-    Board: 'Bacheca',
     Review: 'Revisione',
     Browser: 'Browser',
     More: 'Altro',
     Running: 'In corso',
     Stopped: 'Fermato',
+    'Open or start a real session first.': 'Prima apri o avvia una sessione reale.',
+    'Not available in Code yet.': 'Non ancora disponibile nel Codice.',
+    'Nothing to export yet': 'Ancora niente da esportare',
+    'The Code preview is not interactive: it shows the page TALOS read.': 'L\'anteprima del Codice non è interattiva: mostra la pagina che TALOS ha letto.',
+    'Code does not delegate: every step runs in this single session.': 'Il Codice non delega: ogni passo gira in questa sola sessione.',
+    'Open a session to see its files.': 'Apri una sessione per vederne i file.',
+    'No page read in this session.': 'Nessuna pagina letta in questa sessione.',
+    'Known after the first reply in this session.': 'Si conoscono dopo la prima risposta di questa sessione.',
+    'Type the path after the @.': 'Scrivi il percorso dopo la @.',
     'Type a command…': 'Scrivi un comando…',
     'No command run in this session.': 'Nessun comando eseguito in questa sessione.',
     'The session is still running: a direct command waits for it to finish.':
@@ -55,12 +63,333 @@
     // Visti sul Pad in inglese dentro l'app italiana (12/09/2026).
     'No history found for this session right now. Write below to continue: if the server was restarted, your message opens a new session from here.':
       'Nessuno storico per questa sessione al momento. Scrivi qui sotto per continuare: se il server è stato riavviato, il tuo messaggio apre una nuova sessione da qui.',
-    step: 'passi',
+    // ITA-STATO-01 (Pad, 25/09/2026, scansione del DOM vivo): le note di stato rimaste in inglese. Le parole sono quelle
+    // dell'app (`it.ts`: «Tieni premuta una chat per le azioni.», «Nuova», «giro in corso»).
+    'Press and hold a chat for actions.': 'Tieni premuta una chat per le azioni.',
+    'No sessions yet — press “New” to start.': 'Ancora nessuna sessione: premi «Nuova» per cominciare.',
+    'Follow-up queued': 'Seguito in coda',
+    'after the current run': 'dopo il giro in corso',
+    'press “New” to start': 'premi «Nuova» per cominciare',
+    // TOPO-03 (25/09/2026): lo stato accanto a «sessione corrente», come il desktop.
+    'in progress': 'in corso',
+    stopped: 'ferma',
+    // KPI-PLURALE-01 (25/09/2026): singolare e plurale, scelti col numero (`aggiornaRunKpis`).
+    step: 'passo',
+    steps: 'passi',
     ctx: 'contesto',
     errors: 'errori',
+    /*
+     * ⭐ 24/09/2026 — misurato sul Pad dal DOM vivo, 12 superfici (ledger `.claude/codice-italiano/`): il resto del
+     * Codice era ancora in inglese, comprese le etichette di accessibilità (WCAG 2.2, 3.1.2: un nome accessibile è una
+     * stringa «piatta» e si pronuncia con le regole della pagina). Parole allineate all'app nativa (`it.ts`: strumenti,
+     * Diagnostica, capacità, diramazione) e a Microsoft Learn in italiano per git (ramo, albero di lavoro). Restano
+     * inglesi i nomi propri e i termini tecnici entrati nell'uso: MCP, Browser, hook, token, skill, plugin, gateway.
+     */
+    // Pannello laterale
+    'Context rail': 'Pannello di contesto',
+    Session: 'Sessione',
+    Context: 'Contesto',
+    Files: 'File',
+    Agents: 'Agenti',
+    Environment: 'Ambiente',
+    Workspace: 'Cartella di lavoro',
+    Branch: 'Ramo',
+    Worktree: 'Albero di lavoro',
+    Root: 'Percorso',
+    Capability: 'Capacità',
+    Tools: 'Strumenti',
+    'Web search': 'Ricerca web',
+    'Manage capabilities': 'Gestisci le capacità',
+    Memory: 'Memoria',
+    'Not implemented yet — this agent has no project memory system today.': 'Non ancora disponibile: il Codice oggi non ha una memoria di progetto.',
+    'Session topology': 'Struttura della sessione',
+    'current session': 'sessione corrente',
+    'Fork this session': 'Crea una diramazione',
+    'Demo UI · not connected': 'Anteprima · non collegata',
+    // Etichette di accessibilità della barra e del pannello
+    'Open session details and tree': 'Apri i dettagli e l’albero della sessione',
+    'Doctor and project hooks': 'Diagnostica e hook del progetto',
+    'Resume this session': 'Riprendi questa sessione',
+    'Compact the context': 'Compatta il contesto',
+    Commands: 'Comandi',
+    'Show or hide the inspector': 'Mostra o nascondi il pannello laterale',
+    'Run state': 'Stato dell’esecuzione',
+    'Turn the follow-up queue on or off': 'Attiva o disattiva la coda dei messaggi',
+    'Run progress': 'Avanzamento dell’esecuzione',
+    'Run stopped': 'Esecuzione fermata',
+    'Stop run': 'Ferma l’esecuzione',
+    Inspector: 'Pannello laterale',
+    'Resize the inspector': 'Ridimensiona il pannello laterale',
+    'Session inspector': 'Pannello della sessione',
+    'Close the Code window': 'Chiudi la finestra del Codice',
+    'Close panel': 'Chiudi il pannello',
+    // File
+    new: 'nuovo',
+    changed: 'modificato',
+    Changed: 'Modificato',
+    'Filter files by name': 'Filtra i file per nome',
+    'Filter loaded files…': 'Filtra i file caricati…',
+    'Workspace files': 'File della cartella di lavoro',
+    // Terminale
+    'Built-in terminal': 'Terminale integrato',
+    // Palette dei comandi
+    'TALOS commands': 'Comandi di TALOS',
+    'New session': 'Nuova sessione',
+    'Open review': 'Apri la revisione',
+    'Open terminal': 'Apri il terminale',
+    'Open browser': 'Apri il browser',
+    'Resume session': 'Riprendi la sessione',
+    'Fork session': 'Crea una diramazione',
+    'Compact context': 'Compatta il contesto',
+    Permissions: 'Permessi',
+    'Session tree and side threads': 'Albero della sessione e diramazioni',
+    'Skills, MCP, plugins and gateways': 'Skill, MCP, plugin e gateway',
+    'Agents, hooks and doctor': 'Agenti, hook e diagnostica',
+    'Rename session': 'Rinomina la sessione',
+    'Export session': 'Esporta la sessione',
+    'Share snapshot': 'Condividi un’istantanea',
+    'Search a command or action': 'Cerca un comando o un’azione',
+    'Search a command or action...': 'Cerca un comando o un’azione…',
+    'Close commands': 'Chiudi i comandi',
+    // Pannelli (occhiello, titolo, righe)
+    Runtime: 'Motore',
+    Model: 'Modello',
+    'Safety lens': 'Sicurezza',
+    'Run permissions': 'Permessi dell’esecuzione',
+    'Read only': 'Sola lettura',
+    'Reads the project and runs non-mutating commands.': 'Legge il progetto ed esegue solo comandi che non modificano niente.',
+    'Workspace write': 'Scrittura nella cartella di lavoro',
+    'On request': 'Su richiesta',
+    'Full access': 'Accesso completo',
+    'Environment proof': 'Ambiente',
+    'Workspace e worktree': 'Cartella e albero di lavoro',
+    'Capability hub': 'Capacità',
+    Skills: 'Skill',
+    'Plugin market': 'Negozio dei plugin',
+    Toolsets: 'Gruppi di strumenti',
+    'Computer use': 'Uso del computer',
+    Images: 'Immagini',
+    Voice: 'Voce',
+    'Gateways · Telegram, Discord, Slack, WhatsApp': 'Gateway · Telegram, Discord, Slack, WhatsApp',
+    Profiles: 'Profili',
+    'Control plane': 'Pannello di controllo',
+    'Agents, hook e diagnostica': 'Agenti, hook e diagnostica',
+    'Agent runtime': 'Motore dell’agente',
+    Doctor: 'Diagnostica',
+    Open: 'Apri',
+    Hooks: 'Hook',
+    'Sub-agents, delegation, isolation and limits': 'Sotto-agenti, delega, isolamento e limiti',
+    'Approval policy per-tool': 'Approvazione per singolo strumento',
+    'No per-tool permission grammar today — the semantic gate on writes is always on, and not optional':
+      'Oggi non ci sono permessi per singolo strumento: il controllo sulle scritture è sempre attivo e non si spegne.',
+    'Conversation graph': 'Grafo della conversazione',
+    'Session tree': 'Albero della sessione',
+    'Context reference': 'Riferimento al contesto',
+    'Workspace tree': 'Albero dei file',
+    'Delete file': 'Elimina il file',
+    'Folder name': 'Nome della cartella',
+    lines: 'righe',
+    // Conversazione
+    'TALOS · real session': 'TALOS · sessione reale',
+    'Free task': 'Attività libera',
+    Main: 'Principale',
+    live: 'dal vivo',
+    Modified: 'Modificato',
+    Read: 'Letto',
+    Ran: 'Eseguito',
+    'Working…': 'Al lavoro…',
+    'see details': 'vedi i dettagli',
+    // Messaggi a comparsa
+    'Attached to chat': 'Allegato alla chat',
+    'Automation created': 'Automazione creata',
+    'Automation deleted': 'Automazione eliminata',
+    'Cancel failed': 'Annullamento non riuscito',
+    'Command not run': 'Comando non eseguito',
+    'Command sent': 'Comando inviato',
+    'Compaction failed': 'Compattazione non riuscita',
+    Copied: 'Copiato',
+    'Copy failed': 'Copia non riuscita',
+    'Copy not available': 'Copia non disponibile',
+    'Select the content manually.': 'Seleziona il contenuto a mano.',
+    'Create failed': 'Creazione non riuscita',
+    'Delete failed': 'Eliminazione non riuscita',
+    'Demo voice not connected': 'Voce dimostrativa non collegata',
+    'The microphone does not record or send audio on this surface.': 'Qui il microfono non registra e non invia audio.',
+    'Doctor not available': 'Diagnostica non disponibile',
+    'Empty command': 'Comando vuoto',
+    'Export failed': 'Esportazione non riuscita',
+    Failed: 'Non riuscito',
+    'File deleted': 'File eliminato',
+    'Follow-up cancelled': 'Messaggio in coda annullato',
+    'Fork created': 'Diramazione creata',
+    'A new branch of the conversation from this point.': 'Un nuovo ramo della conversazione da questo punto.',
+    'Fork failed': 'Diramazione non riuscita',
+    'Item selected': 'Elemento selezionato',
+    'Message not queued': 'Messaggio non accodato',
+    'Move failed': 'Spostamento non riuscito',
+    Moved: 'Spostato',
+    'The session is created on the first message.': 'La sessione nasce al primo messaggio.',
+    'No active session': 'Nessuna sessione attiva',
+    'A follow-up only queues during a running session — open "New" first.': 'Un messaggio si accoda solo mentre una sessione è in corso: apri prima «Nuova».',
+    'No real session running': 'Nessuna sessione reale in corso',
+    'Start a task from the corpus before using a direct command.': 'Avvia un’attività prima di usare un comando diretto.',
+    'No real session to resume': 'Nessuna sessione reale da riprendere',
+    'No session started': 'Nessuna sessione avviata',
+    'The server does not have a single project folder.': 'Il server non ha un’unica cartella di progetto.',
+    'Policy updated': 'Regola aggiornata',
+    'Preference not saved': 'Preferenza non salvata',
+    'Rename failed': 'Rinomina non riuscita',
+    'Reply failed': 'Risposta non riuscita',
+    'Session exported': 'Sessione esportata',
+    'Session renamed': 'Sessione rinominata',
+    'Session resumed': 'Sessione ripresa',
+    'Sharing not available': 'Condivisione non disponibile',
+    'Shown in Files': 'Mostrato in File',
+    'Start failed': 'Avvio non riuscito',
+    'Stop failed': 'Arresto non riuscito',
+    'Stop requested': 'Arresto richiesto',
+    'The session stops at the next turn.': 'La sessione si ferma al prossimo turno.',
+    'That did not work': 'Non ha funzionato',
+    'That follow-up is already queued': 'Quel messaggio è già in coda',
+    'Just write in the composer: a message sent during a running turn queues itself — this switch is not needed.':
+      'Scrivi e basta: un messaggio inviato mentre un turno è in corso si accoda da solo, questo interruttore non serve.',
+    'Unknown root': 'Percorso sconosciuto',
+    'This session has not declared its path yet — try again once the first turn starts.':
+      'Questa sessione non ha ancora dichiarato il suo percorso: riprova quando parte il primo turno.',
+    // Caricamenti, stati vuoti e pannelli secondari (scansione di app.js, 24/09)
+    'Back to Code sessions': 'Torna alle sessioni del Codice',
+    'Fetching the history…': 'Carico lo storico…',
+    'No active session — open or start a task to see the project hooks.': 'Nessuna sessione attiva: apri o avvia un’attività per vedere gli hook del progetto.',
+    'Loading hooks…': 'Carico gli hook…',
+    'Hooks not available': 'Hook non disponibili',
+    'No hooks declared in this project (.harness-ui-hooks.json).': 'Nessun hook dichiarato in questo progetto (.harness-ui-hooks.json).',
+    'Search a model or provider…': 'Cerca un modello o un provider…',
+    'Loading the catalogue from OpenRouter…': 'Carico il catalogo da OpenRouter…',
+    'Catalogue not available': 'Catalogo non disponibile',
+    'Not available': 'Non disponibile',
+    'No active session.': 'Nessuna sessione attiva.',
+    'Loading delegations…': 'Carico le deleghe…',
+    'Delegations not available': 'Deleghe non disponibili',
+    Delete: 'Elimina',
+    'List not available': 'Elenco non disponibile',
+    'Corpus task': 'Attività dal banco di prova',
+    difficulty: 'difficoltà',
+    'Follow-up': 'Continuazione',
+    'TALOS is working on the answer…': 'TALOS sta preparando la risposta…',
+    'Summarising the conversation so far…': 'Riassumo la conversazione fin qui…',
+    'Not readable.': 'Non leggibile.',
+    'Not readable': 'Non leggibile',
+    'Tree not available.': 'Albero dei file non disponibile.',
+    'No loaded file matches — open more folders to include them.': 'Nessun file caricato corrisponde: apri altre cartelle per includerle.',
+    'Folder — TALOS writes THERE directly, no copies': 'Cartella: TALOS scrive direttamente lì, senza copie',
+    'No project folder is configured on the server. Set TALOS_HARNESS_UI_PROJECT_DIRS to the allowed absolute paths and restart the server to use a free task.':
+      'Sul server non è configurata nessuna cartella di progetto. Imposta TALOS_HARNESS_UI_PROJECT_DIRS con i percorsi assoluti permessi e riavvia il server per usare un’attività libera.',
+    'Continue in the chat': 'Continua nella chat',
+    // Viste Revisione, Browser, Impostazioni, Automazioni (secondo giro sul Pad, 24/09)
+    line: 'riga',
+    'Review center': 'Revisione',
+    'A gate before you finish: diff, tests and risk.': 'Un controllo prima di chiudere: differenze, test e rischio.',
+    'Approve all': 'Approva tutto',
+    risk: 'rischio',
+    Comment: 'Commenta',
+    'Open file': 'Apri il file',
+    Annotate: 'Annota',
+    Inspect: 'Ispeziona',
+    Back: 'Indietro',
+    Forward: 'Avanti',
+    Reload: 'Ricarica',
+    'Code settings': 'Impostazioni del Codice',
+    'The surface follows the active TALOS theme tokens.': 'Il Codice segue il tema attivo di TALOS.',
+    Appearance: 'Aspetto',
+    Preset: 'Stile',
+    'Colour, type, radius and density tokens, inherited': 'Colori, caratteri, arrotondamenti e densità, presi dall’app',
+    Interaction: 'Interazione',
+    'Reduce motion': 'Riduci le animazioni',
+    'Diffs expanded by default and compact tool activity: not implemented yet.':
+      'Differenze aperte in partenza e attività degli strumenti compatta: non ancora disponibili.',
+    Agentic: 'Agente',
+    'Everything the CLI does, without forcing you into a terminal.': 'Tutto ciò che fa la riga di comando, senza obbligarti a un terminale.',
+    Plugins: 'Plugin',
+    Automations: 'Automazioni',
+    'Scheduled runs': 'Esecuzioni pianificate',
+    'Isolated tasks, each with its own state, history and model.': 'Attività isolate, ognuna con il suo stato, la sua cronologia e il suo modello.',
+    'New automation': 'Nuova automazione',
+    // ⭐ 24/09/2026 (AUT-3): la vista Automazioni del desktop, con le sue parole.
+    'Scheduled tasks': 'Attività programmate',
+    'They repeat a written request while the Code server is on: it starts when you open the Code and stops if you restart the phone. New automations start paused: you choose when to turn them on.':
+      'Ripetono una richiesta scritta quando il server del Codice è acceso: si accende quando apri il Codice e si spegne se riavvii il telefono. Le nuove automazioni nascono in pausa: scegli tu quando attivarle.',
+    'Search automations…': 'Cerca le automazioni…',
+    'Search by name or request': 'Cerca per nome o richiesta',
+    'Automation status': 'Stato delle automazioni',
+    'Filtered automations': 'Automazioni filtrate',
+    All: 'Tutte',
+    Active: 'Attive',
+    Enabled: 'Attiva',
+    Paused: 'In pausa',
+    Refresh: 'Aggiorna',
+    // ITA-PICKER-01 (25/09/2026): il piede del selettore del modello.
+    model: 'modello',
+    models: 'modelli',
+    cached: 'da cache',
+    Details: 'Dettagli',
+    Created: 'Creata',
+    Request: 'Richiesta',
+    'Next start': 'Prossimo avvio',
+    // GIORNO-LOCALE-01 (owner 25/09/2026, «giorno locale»).
+    'Starts today / limit': 'Avvii oggi / limite',
+    'Daily limit reached': 'Limite giornaliero raggiunto',
+    'State to check': 'Stato da verificare',
+    'Last recorded start': 'Ultimo avvio registrato',
+    'No start recorded': 'Nessun avvio registrato',
+    'Date not recorded': 'Data non registrata',
+    'Interval not recorded': 'Intervallo non registrato',
+    'Count not available': 'Conteggio non disponibile',
+    'Request not recorded': 'Richiesta non registrata',
+    'Automation without a name': 'Automazione senza nome',
+    'Server default model': 'Modello predefinito del server',
+    Reasoning: 'Ragionamento',
+    'Server default level': 'Livello predefinito del server',
+    'Paused because': 'Motivo della pausa',
+    'No automations created.': 'Nessuna automazione creata.',
+    'No automation matches the filters.': 'Nessuna automazione corrisponde ai filtri.',
+    'The daily count resets at midnight on this phone. A recorded start does not say whether the task succeeded: tap the name to open the last run.':
+      'Il conteggio giornaliero si azzera a mezzanotte del telefono. Un avvio registrato non dice se l’attività è riuscita: tocca il nome per aprire l’ultima esecuzione.',
+    'Tiered discount': 'Sconto a scaglioni',
+    'Real task': 'Attività reale',
+    'Run now': 'Avvia ora',
+    'Next run': 'Prossima esecuzione',
+    'None active': 'Nessuna attiva',
+    'No automations yet. Create one with “New automation”.': 'Nessuna automazione. Creane una con «Nuova automazione».',
+    'Automations need the Code server.': 'Le automazioni hanno bisogno del server del Codice.',
+    'Every how many minutes': 'Ogni quanti minuti',
+    'Maximum runs per day': 'Esecuzioni massime al giorno',
+    // Avvisi con il titolo scelto al momento (ITA-08 vede solo i letterali)
+    'Context compacted': 'Contesto compattato',
+    'The next resume or fork restarts from the summary.': 'La prossima ripresa o diramazione riparte dal riassunto.',
+    'Steering queue attiva': 'Coda dei messaggi attiva',
+    'Steering queue disattivata': 'Coda dei messaggi disattivata',
+    'Resume non riuscito': 'Ripresa non riuscita',
+    // Automazioni come richiesta scritta (AUT-2, 24/09)
+    'Loading…': 'Carico…',
+    'No project folder is configured on the server: an automation needs one to work in.':
+      'Sul server non è configurata nessuna cartella di progetto: un’automazione ne ha bisogno per lavorare.',
+    'What it should do': 'Cosa deve fare',
+    'For example: check the folder and tell me what changed since last time.': 'Per esempio: controlla la cartella e dimmi cosa è cambiato dall’ultima volta.',
+    Folder: 'Cartella',
+    'Delete automation': 'Elimina automazione',
+    'Delete the automation': 'Eliminare l’automazione',
+    'It stops running and leaves the list.': 'Smette di partire e sparisce dall’elenco.',
+    'This cannot be undone.': 'Non si annulla.',
+    Keep: 'Tieni',
+    'Open the last run': 'Apri l’ultima esecuzione',
+    'Requests that start on their own, at intervals': 'Richieste che partono da sole, a intervalli',
+    'They only run while the Code server is on: it starts when you open the Code and stops if you restart the phone. New automations start paused.':
+      'Partono solo mentre il server del Codice è acceso: si accende quando apri il Codice e si spegne se riavvii il telefono. Nascono in pausa.',
   };
+  /** In italiano la voce del dizionario, altrimenti il testo com'è. `hasOwn`: «toString» o «constructor» non sono voci. */
   function t(testoInglese) {
-    return (window.__talosHarnessLocale === 'it' && DIZIONARIO_IT[testoInglese]) || testoInglese;
+    if (window.__talosHarnessLocale !== 'it' || typeof testoInglese !== 'string') return testoInglese;
+    return Object.hasOwn(DIZIONARIO_IT, testoInglese) ? DIZIONARIO_IT[testoInglese] : testoInglese;
   }
   /** Applicata una sola volta al boot: le etichette statiche dei due tab bar (desktop e mobile) e il placeholder del composer del Terminale. */
   function applicaLocalizzazioneStatica() {
@@ -75,6 +404,42 @@
     $$('[data-run-kpi]').forEach((kpi) => { const ultimo = kpi.lastChild; if (ultimo && ultimo.nodeType === 3) ultimo.textContent = ' ' + t(ultimo.textContent.trim()); });
     const invioTerminale = $('.terminal-composer-send');
     if (invioTerminale) invioTerminale.setAttribute('aria-label', t(invioTerminale.getAttribute('aria-label')));
+    // ⭐ B1 (23/09): i motivi dei controlli spenti e gli stati vuoti onesti, nella lingua dell'app.
+    $$('#approveAllDiffs, [data-review-action], [data-browser-action]').forEach((el) => { if (el.title) el.title = t(el.title); });
+    const titoloDiff = $('[data-view="diff"] .view-heading h2');
+    if (titoloDiff) titoloDiff.textContent = titoloReview(0);
+    $$('.session-topology .muted-copy, #inspector-files .file-tree .board-empty, [data-view="browser"] .device-preview .board-empty, [data-view="terminal"] .terminal-window code')
+      .forEach((el) => { el.textContent = t(el.textContent); });
+    traduciAlbero(ROOT());
+  }
+
+  /*
+   * ⭐ 24/09/2026 — un pezzo di pagina nella lingua dell'app: ogni testo, `aria-label`, `title` e `placeholder` che
+   * coincide ESATTAMENTE con una voce del dizionario. Chiamata all'avvio (tutta la pagina statica) e dopo `openSheet`
+   * (il corpo del pannello appena disegnato), così le voci nuove non vanno cercate selettore per selettore.
+   * ⛔ Mai dentro ciò che non è interfaccia: il testo del modello (`.assistant-copy`), i messaggi, il codice, il
+   * terminale, e ogni dato dell'utente marcato `data-no-i18n` (un file o una sessione possono chiamarsi «Doctor»).
+   */
+  const NON_SI_TRADUCE = '.assistant-copy, .message-bubble, pre, code, .terminal-window, [data-no-i18n]';
+  const ATTRIBUTI_TRADOTTI = ['aria-label', 'title', 'placeholder'];
+  function traduciAlbero(radice) {
+    if (window.__talosHarnessLocale !== 'it' || !radice) return;
+    const scorri = document.createTreeWalker(radice, NodeFilter.SHOW_TEXT);
+    const daTradurre = [];
+    for (let nodo = scorri.nextNode(); nodo; nodo = scorri.nextNode()) {
+      const nucleo = nodo.nodeValue.trim();
+      if (!nucleo || !Object.hasOwn(DIZIONARIO_IT, nucleo) || nodo.parentElement?.closest(NON_SI_TRADUCE)) continue;
+      daTradurre.push([nodo, nucleo]);
+    }
+    for (const [nodo, nucleo] of daTradurre) nodo.nodeValue = nodo.nodeValue.replace(nucleo, DIZIONARIO_IT[nucleo]);
+    const elementi = radice.querySelectorAll ? [...radice.querySelectorAll('[aria-label], [title], [placeholder]')] : [];
+    for (const el of elementi) {
+      if (el.closest(NON_SI_TRADUCE)) continue;
+      for (const nome of ATTRIBUTI_TRADOTTI) {
+        const valore = el.getAttribute(nome);
+        if (valore && Object.hasOwn(DIZIONARIO_IT, valore.trim())) el.setAttribute(nome, DIZIONARIO_IT[valore.trim()]);
+      }
+    }
   }
   /*
    * Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3 (`adb reverse`).
@@ -123,9 +488,9 @@
     model: null,
     // ⭐ 28/8 — stesso principio di `model`: null = nessuna scelta esplicita, "reasoning" resta assente dal corpo della richiesta (comportamento di sempre). Un valore fra quelli di LIVELLI_RAGIONAMENTO appena l'owner tocca lo slider dell'effort picker.
     effort: null,
-    environment: 'wt/auth-61c · feat/mobile-code',
-    session: 'Refactor auth flow',
-    running: true,
+    environment: '—',
+    session: 'No session',
+    running: false,
     /** ⭐ 27/8 — {percorso, nome} del file bersaglio quando si apre il foglio Open/Rinomina/Elimina dall'albero, null altrimenti. I fogli sono statici (sheetTemplates), questo li parametrizza. */
     alberoFileTarget: null,
     /*
@@ -141,25 +506,6 @@
      * collegamento non documentato da nessun commit.
      */
     pendingCustomSession: null,
-    board: {
-      initialized: false,
-      bootstrapPromise: null,
-      campaign: null,
-      campaigns: [],
-      runs: [],
-      nextCursor: null,
-      totalMatched: 0,
-      generation: 0,
-    },
-    /*
-     * ⭐⭐⭐ 26/8 — riconciliazione desktop→mobile, DEC-053 (owner, 24/8:
-     * "harness deve essere fatto sia per mobile che desktop... quando
-     * riprenderemo il desktop lo legheremo al desktop"). Stessa forma di
-     * `state.realSession` già viva su `lane/harness-ui` (AVM-harness-ui,
-     * pipeline AG-UI reale): qui arriva SOLO la parte di consumo eventi
-     * (vedi handleRealEvent più sotto), non ancora agganciata a nessun
-     * pulsante — vedi la nota davanti a startRealSession per il perché.
-     */
     realSession: {
       id: null,
       taskId: null,
@@ -309,7 +655,7 @@
    */
   function mostraTitoloSessione(nome) {
     sessionTitle.textContent = nome;
-    if (sessionSubtitle) sessionSubtitle.textContent = nome && nome !== 'No sessions' ? '' : 'press “New” to start';
+    if (sessionSubtitle) sessionSubtitle.textContent = nome && nome !== 'No sessions' ? '' : t('press “New” to start');
   }
   /*
    * ⛔ Due funzioni, non una. Il primo tentativo ne aveva UNA che aggiornava
@@ -322,7 +668,8 @@
    */
   function mostraTitoloOvunque(nome) {
     mostraTitoloSessione(nome);
-    $$('[data-current-session-title]').forEach((label) => { label.textContent = nome; });
+    // TOPO-03: il nome intero anche nel suggerimento (il titolo sta su una riga coi puntini).
+    $$('[data-current-session-title]').forEach((label) => { label.textContent = nome; label.title = nome; });
   }
   const toastRegion = $('#toastRegion');
   const runStrip = $('.run-strip');
@@ -332,20 +679,6 @@
   const commandEmpty = $('#commandEmpty');
   const diffPath = $('#diffPath');
   const diffCode = $('#diffCode');
-  const campaignSelect = $('#campaignSelect');
-  const harnessFilter = $('#harnessFilter');
-  const outcomeFilter = $('#outcomeFilter');
-  const connectionState = $('[data-connection-state]');
-  const campaignReadMeta = $('#campaignReadMeta');
-  const campaignRunList = $('#campaignRunList');
-  const campaignRunCount = $('#campaignRunCount');
-  const campaignReportText = $('#campaignReportText');
-  const campaignReportState = $('#campaignReportState');
-  const loadMoreRunsButton = $('[data-action="load-more-runs"]');
-  const refreshCampaignButton = $('[data-action="refresh-campaign"]');
-  const boardEyebrow = $('#boardEyebrow');
-  const boardTitle = $('#boardTitle');
-  const boardDescription = $('#boardDescription');
   const composerMic = $('.composer-mic');
   const embeddedSessionBack = $('[data-open-panel="sessions"]');
   const topbar = $('.topbar');
@@ -353,7 +686,7 @@
   const embeddedHeaderScrollPositions = new WeakMap();
 
   if (HOST().classList.contains('talos-embedded')) {
-    embeddedSessionBack?.setAttribute('aria-label', 'Back to Code sessions');
+    embeddedSessionBack?.setAttribute('aria-label', t('Back to Code sessions'));
   }
 
   const motionAnimations = new Set();
@@ -452,8 +785,9 @@
       if (surface.querySelector('.demo-surface-badge')) return;
       const badge = document.createElement('span');
       badge.className = 'demo-surface-badge';
-      badge.textContent = 'Demo UI · not connected';
-      badge.setAttribute('aria-label', `Demo UI non collegata: ${surface.dataset.demoSurface || 'superficie'}`);
+      badge.textContent = t('Demo UI · not connected');
+      // ⭐ 24/09: l'etichetta dice ciò che si vede; l'id interno della superficie («inspector-agents») non è per chi ascolta.
+      badge.setAttribute('aria-label', t('Demo UI · not connected'));
       if (surface.classList.contains('chat-view')) surface.querySelector('.conversation')?.prepend(badge);
       else if (surface.classList.contains('sessions-panel')) surface.querySelector('.brand-row')?.after(badge);
       else surface.prepend(badge);
@@ -466,7 +800,6 @@
     document.documentElement.dataset.qaState = requested;
     document.documentElement.dataset.qaViewport = QA_VIEWPORTS[requested];
     if (requested === 'capabilities') window.setTimeout(() => openSheet('capabilities'), 0);
-    else setView('dashboard', { mode: 'dashboard' });
   }
 
   function syncNavigationState() {
@@ -529,7 +862,6 @@
     const previous = views.find((pane) => pane.classList.contains('active'));
     state.view = view;
     if (options.mode) state.mode = options.mode;
-    else if (view === 'dashboard') state.mode = 'dashboard';
     else if (view === 'chat') state.mode = 'chat';
     else if (view === 'terminal') { state.mode = 'terminal'; aggiornaComposerTerminale(); } // ⭐ 27/8 — il tab "Terminale" (ex "Split", che non affiancava niente) evidenzia se stesso anche quando ci si arriva da altrove (⌘T, `!comando`) · ⭐ 4/9 — LEDGER §76.2: aggiorna anche l'hint del comando diretto ogni volta che si entra qui
     else state.mode = null;
@@ -547,9 +879,9 @@
     target.scrollTop = 0;
     resetEmbeddedTopbarScroll(view === 'chat' ? chatConversation : target);
     window.__talosHarnessHostViewChange?.(view);
-    if (view === 'dashboard') ensureCampaignBoard();
     // ⭐ porting dal bundle desktop — stessa guardia del resto del file (HARNESS-BOARD-MOBILE-HONESTY-01): zero fetch fantasma se non c'è un backend da raggiungere.
     if (view === 'automations' && !embeddedDemoOnly()) renderAutomationsReali();
+    seguiAutomazioni(view === 'automations' && !embeddedDemoOnly()); // ⭐ AUT-2c: rilettura solo a vista aperta
   }
 
   function syncInspectorToggle() {
@@ -657,6 +989,10 @@
   }
 
   function toast(title, message = '') {
+    // ⭐ 24/09: ogni avviso con una voce nel dizionario esce nella lingua dell'app; un testo dinamico (un errore del
+    // server, un nome) non ha voce e resta com'è.
+    title = t(title);
+    message = t(message);
     if (toastRegion.children.length >= 3) {
       const oldest = toastRegion.firstElementChild;
       animateExit(oldest, {}, () => oldest?.remove());
@@ -761,7 +1097,7 @@
       nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '4');
       svg.append(nodo);
     }
-    hero.append(svg, textElement('p', 'hero-subtitle', 'Fetching the history…'));
+    hero.append(svg, textElement('p', 'hero-subtitle', t('Fetching the history…')));
     return hero;
   }
 
@@ -1026,35 +1362,6 @@
     streamingRenderPending.clear();
   }
 
-  function setConnectionState(value, label, detail) {
-    connectionState.dataset.connectionState = value;
-    connectionState.textContent = label;
-    if (detail !== undefined) campaignReadMeta.textContent = detail;
-  }
-
-  function boardErrorMessage(error) {
-    if (error?.code && typeof error.message === 'string' && error.message) return error.message;
-    return 'The local server is not responding. Open Codice on the PC and try again.';
-  }
-
-  function formatCost(value, estimated = false) {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
-    const amount = value.toFixed(9).replace(/\.?0+$/, '');
-    return `${estimated ? '~' : ''}$${amount}`;
-  }
-
-  /**
-   * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 — il
-   * contatore costo/token per una sessione VIVA (oggi esiste solo per le
-   * righe storiche della Board campagne). Solo token, MAI un costo in
-   * dollari: calcolarlo richiederebbe sapere con certezza quale modello
-   * ha girato QUESTO giro (il server può ricadere sul suo default senza
-   * dirlo al client) — mostrare un numero solo perché "probabilmente"
-   * giusto sarebbe un bluff, lo stesso principio che vieta un
-   * `enforcement` finto altrove in questo progetto. Token contati sono
-   * sempre veri, indipendentemente dal prezzo.
-   */
-  /** ⭐ 3/9 — sollevato da dentro formattaUsageBreve: lo riusa anche aggiornaRunKpis() per il kpi "ctx" del run-strip, invece di duplicare la stessa formula in due posti. */
   function formattaKilo(n) {
     return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
   }
@@ -1066,7 +1373,7 @@
     const cache = Number(usage.prompt_tokens_details?.cached_tokens ?? 0) || 0;
     const totale = prompt + completion;
     const cacheParte = cache > 0 ? ` · cache ${formattaKilo(cache)}` : '';
-    return `${formattaKilo(totale)} token · ${usage.giri} gir${usage.giri === 1 ? 'o' : 'i'}${cacheParte} · live`;
+    return `${formattaKilo(totale)} token · ${usage.giri} gir${usage.giri === 1 ? 'o' : 'i'}${cacheParte} · ${t('live')}`;
   }
 
   /**
@@ -1088,6 +1395,17 @@
     const ctxEl = $('[data-run-kpi="ctx"] b');
     const errorsEl = $('[data-run-kpi="errors"] b');
     if (stepEl) stepEl.textContent = usage && typeof usage.giri === 'number' ? String(usage.giri) : '—';
+    /*
+     * ⛔ KPI-PLURALE-01 (Pad, 25/09/2026): la striscia diceva «1 passi», l'etichetta dopo il numero era fissa. Ora segue
+     * il numero con le regole del plurale della lingua (`Intl.PluralRules`, MDN; CLDR: «one» per 1). Senza numero resta
+     * il plurale («— passi»).
+     */
+    const etichettaPassi = stepEl?.parentElement?.lastChild;
+    if (etichettaPassi && etichettaPassi.nodeType === 3) {
+      const lingua = window.__talosHarnessLocale === 'it' ? 'it' : 'en';
+      const uno = usage && typeof usage.giri === 'number' && new Intl.PluralRules(lingua).select(usage.giri) === 'one';
+      etichettaPassi.textContent = ' ' + t(uno ? 'step' : 'steps');
+    }
     if (ctxEl) {
       const totale = usage ? (Number(usage.prompt_tokens ?? 0) || 0) + (Number(usage.completion_tokens ?? 0) || 0) : 0;
       ctxEl.textContent = usage ? formattaKilo(totale) : '—';
@@ -1115,150 +1433,11 @@
   /** Ripatcha la riga "Main" del foglio Session tree SE è già aperto — non riapre né forza un redraw di tutto il foglio, stesso principio di aggiornaPillolaModello(). */
   function aggiornaContatoreUsage() {
     const nodo = $('[data-usage-summary]');
-    if (nodo) nodo.textContent = `Main · ${formattaUsageBreve(state.realSession.usage)}`;
+    if (nodo) nodo.textContent = `${t('Main')} · ${formattaUsageBreve(state.realSession.usage)}`;
     aggiornaRunKpis(); // ⭐ 3/9 — stessa fonte (state.realSession.usage), stesso momento di aggiornamento: mai due punti che potrebbero disallinearsi
   }
 
-  function formatPassRate(value) {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
-    return `${(value * 100).toFixed(1).replace(/\.0$/, '')}%`;
-  }
-
-  function replaceSelectOptions(select, values, allLabel, selectedValue = '') {
-    select.replaceChildren();
-    if (allLabel !== null) {
-      const all = document.createElement('option');
-      all.value = '';
-      all.textContent = allLabel;
-      select.appendChild(all);
-    }
-    for (const value of values) {
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = value;
-      select.appendChild(option);
-    }
-    select.value = values.includes(selectedValue) ? selectedValue : '';
-  }
-
-  function renderCampaignOptions(campaigns) {
-    campaignSelect.replaceChildren();
-    for (const campaign of campaigns) {
-      const option = document.createElement('option');
-      option.value = campaign.name;
-      option.textContent = campaign.available ? campaign.name : `${campaign.name} · non disponibile`;
-      option.disabled = !campaign.available;
-      campaignSelect.appendChild(option);
-    }
-    campaignSelect.disabled = campaigns.every((campaign) => !campaign.available);
-    if (state.board.campaign) campaignSelect.value = state.board.campaign;
-  }
-
-  function renderCampaignFilters(summary) {
-    const harnesses = (summary?.harnesses || []).map((entry) => entry.harness);
-    const outcomes = Object.keys(summary?.outcomeCounts || {});
-    replaceSelectOptions(harnessFilter, harnesses, 'Tutti', harnessFilter.value);
-    replaceSelectOptions(outcomeFilter, outcomes, 'Tutti', outcomeFilter.value);
-  }
-
-  function renderCampaignSummary(summary) {
-    $('#summaryTotal').textContent = summary ? String(summary.totalRows) : '—';
-    $('#summaryMeasured').textContent = summary ? String(summary.measuredRows) : '—';
-    $('#summaryPassRate').textContent = summary ? formatPassRate(summary.passRate) : '—';
-    $('#summaryCost').textContent = summary
-      ? formatCost(summary.canonicalCostUsd, summary.costEstimated)
-      : '—';
-    $('#summaryDiagnostics').textContent = summary ? String(summary.diagnosticCount) : '—';
-    $('#summaryCostSource').textContent = !summary || summary.canonicalCostUsd === null
-      ? 'non disponibile'
-      : (summary.costEstimated ? '~ somma righe' : 'file corsa');
-    renderCampaignFilters(summary);
-  }
-
-  function appendRunDetail(detail, label, value) {
-    const item = document.createElement('div');
-    const term = textElement('dt', '', label);
-    const description = textElement('dd', '', value);
-    item.append(term, description);
-    detail.appendChild(item);
-  }
-
-  let runDetailSequence = 0;
-  function createCampaignRun(row) {
-    const article = document.createElement('article');
-    article.className = 'campaign-run';
-    const toggle = document.createElement('button');
-    toggle.className = 'campaign-run-toggle';
-    toggle.type = 'button';
-    toggle.setAttribute('aria-expanded', 'false');
-
-    const identity = document.createElement('span');
-    identity.append(
-      textElement('strong', '', `${row.harness} · ${row.id}`),
-      textElement('small', '', `${row.source.file}:${row.source.line} · ${row.modello || 'modello non dichiarato'}`),
-    );
-    const outcome = textElement('span', 'status-chip campaign-run-outcome', row.esito);
-    toggle.append(identity, outcome);
-
-    const detail = document.createElement('div');
-    detail.className = 'campaign-run-detail';
-    detail.hidden = true;
-    detail.id = `campaign-run-detail-${runDetailSequence += 1}`;
-    toggle.setAttribute('aria-controls', detail.id);
-    const facts = document.createElement('dl');
-    appendRunDetail(facts, 'Difficoltà', row.difficolta);
-    appendRunDetail(facts, 'Durata', typeof row.ms === 'number' ? `${row.ms} ms` : '—');
-    appendRunDetail(facts, 'Costo riga', formatCost(row.costoUsd));
-    appendRunDetail(facts, 'Corpus', row.corpus);
-    appendRunDetail(facts, 'Quando', row.quando);
-    appendRunDetail(facts, 'Cambiamenti', row.cambiamenti?.quanti ?? '—');
-    detail.appendChild(facts);
-
-    toggle.addEventListener('click', () => {
-      const opening = detail.hidden;
-      toggle.setAttribute('aria-expanded', String(opening));
-      if (!opening) {
-        animateExit(detail, { durationToken: '--talos-motion-duration-disclosure' }, () => { detail.hidden = true; });
-        return;
-      }
-      detail.hidden = false;
-      markMotionEnter(detail);
-      if (!detail.querySelector('.run-evidence')) {
-        const evidence = textElement(
-          row.detto === null || row.detto === undefined ? 'p' : 'pre',
-          'run-evidence',
-          row.detto === null || row.detto === undefined ? 'Evidenza svuotata dalla memoria della pagina.' : row.detto,
-        );
-        detail.appendChild(evidence);
-      }
-    });
-
-    article.append(toggle, detail);
-    return article;
-  }
-
-  function renderCampaignRuns(items, { append = false } = {}) {
-    if (!append) campaignRunList.replaceChildren();
-    for (const row of items) campaignRunList.appendChild(createCampaignRun(row));
-    if (!append && items.length === 0) {
-      campaignRunList.appendChild(textElement('p', 'board-empty', 'No row matches the selected filters.'));
-    }
-    campaignRunCount.textContent = `${state.board.runs.length} di ${state.board.totalMatched} righe`;
-    loadMoreRunsButton.hidden = !state.board.nextCursor;
-  }
-
-  function renderCampaignReport(report, errorCode = null) {
-    campaignReportState.classList.toggle('success', Boolean(report));
-    if (report) {
-      campaignReportState.textContent = 'Disponibile';
-      campaignReportText.textContent = report.text;
-      return;
-    }
-    campaignReportState.textContent = errorCode === 'REPORT_UNAVAILABLE' ? 'Non prodotto' : 'Not available';
-    campaignReportText.textContent = errorCode === 'REPORT_UNAVAILABLE'
-      ? 'Report not produced yet'
-      : 'Rapporto non disponibile';
-  }
+  // ⛔ B1-08 (23/09): la Bacheca delle campagne è stata tolta dal Codice (decisione owner, `.claude/b1/LEDGER-B1-2026-09-23.md`).
 
   /*
    * ⭐⭐⭐ 2/9 — owner: "non si accettano compromessi... un utente reale
@@ -1369,15 +1548,15 @@
     const mount = $('#hooksListMount', sheetBody);
     if (!mount) return; // il foglio "control" non è (più) quello aperto
     if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'No active session — open or start a task to see the project hooks.'));
+      mount.replaceChildren(textElement('p', 'board-empty', t('No active session — open or start a task to see the project hooks.')));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Loading hooks…'));
+    mount.replaceChildren(textElement('p', 'board-empty', t('Loading hooks…')));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/hooks`);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Hooks not available: ${error.message}`));
+      mount.replaceChildren(textElement('p', 'board-empty', `${t('Hooks not available')}: ${error.message}`));
       return;
     }
     if (mount !== $('#hooksListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
@@ -1386,7 +1565,7 @@
       return;
     }
     if (!dati.hooks || dati.hooks.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'No hooks declared in this project (.harness-ui-hooks.json).'));
+      mount.replaceChildren(textElement('p', 'board-empty', t('No hooks declared in this project (.harness-ui-hooks.json).')));
       return;
     }
     mount.replaceChildren(...dati.hooks.map((hook) => rigaHook(hook)));
@@ -1433,6 +1612,123 @@
   }
 
   /**
+   * ⭐ SCELTA-CARTELLA (25/09/2026) — un menu a scelta singola al posto del `<select>` nativo (regola dell'owner del
+   * 13/09: niente controlli nativi, che Android disegna fuori dalla palette). Modello W3C APG «Select-Only Combobox»
+   * (w3.org/WAI/ARIA/apg/patterns/combobox/examples/combobox-select-only/, aggiornato il 12/08/2025, letto il
+   * 25/09/2026): il fuoco RESTA sul pulsante (`role="combobox"`), la voce evidenziata la dice `aria-activedescendant`;
+   * chiuso — frecce, Invio, Spazio, Home, Fine aprono; aperto — frecce/Home/Fine muovono, Invio/Spazio scelgono e
+   * chiudono, Esc chiude senza scegliere. L'aspetto è quello del selettore del modello (`.model-picker`).
+   * @returns {{elemento: HTMLElement, getValore: () => string}}
+   */
+  function creaSceltaSingola({ id, opzioni, valoreIniziale = '', etichetta = '' }) {
+    const wrap = document.createElement('div');
+    wrap.className = 'model-picker scelta-singola';
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.id = id;
+    trigger.className = 'sheet-input model-picker-trigger';
+    trigger.setAttribute('role', 'combobox');
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-controls', `${id}-lista`);
+    if (etichetta) trigger.setAttribute('aria-label', etichetta);
+    const triggerLabel = document.createElement('span');
+    triggerLabel.className = 'model-picker-trigger-label scelta-singola-label';
+    const chevron = document.createElement('span');
+    chevron.className = 'model-picker-chevron';
+    chevron.innerHTML = icon('i-chevron');
+    trigger.append(triggerLabel, chevron);
+    const lista = document.createElement('div');
+    lista.id = `${id}-lista`;
+    lista.className = 'model-picker-panel scelta-singola-lista';
+    lista.hidden = true;
+    lista.setAttribute('role', 'listbox');
+    if (etichetta) lista.setAttribute('aria-label', etichetta);
+    wrap.append(trigger, lista);
+
+    let valore = opzioni.some((o) => o.valore === valoreIniziale) ? valoreIniziale : (opzioni[0]?.valore ?? '');
+    let evidenziata = 0;
+    let aperto = false;
+    const idDi = (indice) => `${id}-voce-${indice}`;
+
+    function disegna() {
+      triggerLabel.textContent = opzioni.find((o) => o.valore === valore)?.etichetta ?? valore;
+      lista.replaceChildren(...opzioni.map((opzione, indice) => {
+        const voce = document.createElement('div');
+        voce.id = idDi(indice);
+        voce.className = 'sheet-option model-picker-option scelta-singola-voce';
+        voce.setAttribute('role', 'option');
+        voce.setAttribute('aria-selected', String(opzione.valore === valore));
+        if (opzione.valore === valore) voce.classList.add('active');
+        if (aperto && indice === evidenziata) voce.classList.add('is-evidenziata');
+        voce.append(textElement('strong', '', opzione.etichetta));
+        if (opzione.valore === valore) {
+          const spunta = document.createElement('span');
+          spunta.innerHTML = icon('i-check');
+          voce.append(spunta);
+        }
+        // Il mouse non ruba il fuoco al pulsante: `mousedown` evitato, la scelta al `click`.
+        voce.addEventListener('mousedown', (evento) => evento.preventDefault());
+        voce.addEventListener('click', () => { scegli(indice); });
+        return voce;
+      }));
+      if (aperto) trigger.setAttribute('aria-activedescendant', idDi(evidenziata));
+      else trigger.removeAttribute('aria-activedescendant');
+    }
+    function apri() {
+      aperto = true;
+      evidenziata = Math.max(0, opzioni.findIndex((o) => o.valore === valore));
+      lista.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+      disegna();
+    }
+    function chiudi() {
+      aperto = false;
+      lista.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+      disegna();
+    }
+    function scegli(indice) {
+      valore = opzioni[indice]?.valore ?? valore;
+      chiudi();
+      trigger.focus();
+    }
+    function muovi(indice) {
+      evidenziata = Math.min(opzioni.length - 1, Math.max(0, indice));
+      disegna();
+      document.getElementById(idDi(evidenziata))?.scrollIntoView?.({ block: 'nearest' });
+    }
+    trigger.addEventListener('click', () => { if (aperto) chiudi(); else apri(); });
+    trigger.addEventListener('keydown', (evento) => {
+      const chiave = evento.key;
+      if (!aperto) {
+        if (['ArrowDown', 'ArrowUp', 'Enter', ' ', 'Home', 'End'].includes(chiave)) {
+          evento.preventDefault();
+          apri();
+          if (chiave === 'Home') muovi(0);
+          if (chiave === 'End') muovi(opzioni.length - 1);
+        }
+        return;
+      }
+      if (chiave === 'ArrowDown') { evento.preventDefault(); muovi(evidenziata + 1); }
+      else if (chiave === 'ArrowUp') { evento.preventDefault(); muovi(evidenziata - 1); }
+      else if (chiave === 'Home') { evento.preventDefault(); muovi(0); }
+      else if (chiave === 'End') { evento.preventDefault(); muovi(opzioni.length - 1); }
+      else if (chiave === 'Enter' || chiave === ' ') { evento.preventDefault(); scegli(evidenziata); }
+      else if (chiave === 'Escape') { evento.preventDefault(); chiudi(); }
+      else if (chiave === 'Tab') { scegli(evidenziata); }
+    });
+    // Fuori dal menu si chiude, come il selettore del modello (registrazione rimandata di un giro: vedi quella nota).
+    function fuori(evento) {
+      if (!wrap.isConnected) { document.removeEventListener('click', fuori); return; }
+      if (aperto && !evento.composedPath().includes(wrap)) chiudi();
+    }
+    window.setTimeout(() => document.addEventListener('click', fuori), 0);
+    disegna();
+    return { elemento: wrap, getValore: () => valore };
+  }
+
+  /**
    * ⭐⭐⭐ 27/8 — owner: "un picker per il modello, dropdown stilizzato
    * (l'abbiamo già fatto nel mobile)". Stesso pattern di
    * TalosMobileComposerModelPicker.vue (AVM/mobile/src/components/chat/),
@@ -1472,7 +1768,7 @@
     const searchInput = document.createElement('input');
     searchInput.type = 'search';
     searchInput.className = 'sheet-input';
-    searchInput.placeholder = 'Search a model or provider…';
+    searchInput.placeholder = t('Search a model or provider…');
     searchLabel.append(searchIconSpan, searchInput);
 
     const listEl = document.createElement('div');
@@ -1485,7 +1781,8 @@
     refreshBtn.className = 'text-btn';
     const refreshIconSpan = document.createElement('span');
     refreshIconSpan.innerHTML = icon('i-history');
-    refreshBtn.append(refreshIconSpan, document.createTextNode('Refresh'));
+    // ITA-PICKER-01 (Pad, 25/09/2026): creato dopo l'avvio, passa da `t()` — `traduciAlbero` non lo vede più.
+    refreshBtn.append(refreshIconSpan, document.createTextNode(t('Refresh')));
     const metaSpan = document.createElement('span');
     metaSpan.className = 'model-picker-meta';
     footer.append(refreshBtn, metaSpan);
@@ -1500,7 +1797,8 @@
     const gruppiAperti = new Set();
 
     function aggiornaTriggerLabel() {
-      triggerLabel.textContent = valoreScelto || 'Predefinito del server';
+      // NOME-MODELLO-01: il nome, non la sigla (la sigla resta nella riga della voce, sotto il nome).
+      triggerLabel.textContent = valoreScelto ? nomeModello(valoreScelto) : 'Predefinito del server';
     }
 
     function filtraModelli(query) {
@@ -1522,7 +1820,7 @@
     function renderLista() {
       const query = searchInput.value;
       if (!modelliCache) {
-        listEl.replaceChildren(textElement('p', 'board-empty', 'Loading the catalogue from OpenRouter…'));
+        listEl.replaceChildren(textElement('p', 'board-empty', t('Loading the catalogue from OpenRouter…')));
         return;
       }
       const filtrati = filtraModelli(query);
@@ -1594,15 +1892,19 @@
     }
 
     async function carica({ forza = false } = {}) {
-      listEl.replaceChildren(textElement('p', 'board-empty', 'Loading the catalogue from OpenRouter…'));
+      listEl.replaceChildren(textElement('p', 'board-empty', t('Loading the catalogue from OpenRouter…')));
       try {
         const dati = await apiGet(`/api/v1/models${forza ? '?forza=1' : ''}`);
         modelliCache = dati.modelli;
+        ricordaNomiModelli(dati.modelli);
+        aggiornaTriggerLabel();
         caricato = true;
-        metaSpan.textContent = `${dati.modelli.length} modelli${dati.daCache ? ' · da cache' : ''}`;
+        // ITA-PICKER-01: il conteggio dal dizionario (era scritto in italiano qui, e restava italiano anche in inglese).
+        const quanti = dati.modelli.length;
+        metaSpan.textContent = `${quanti} ${t(new Intl.PluralRules('en').select(quanti) === 'one' ? 'model' : 'models')}${dati.daCache ? ` · ${t('cached')}` : ''}`;
         renderLista();
       } catch (error) {
-        listEl.replaceChildren(textElement('p', 'board-empty', `Catalogue not available: ${error.message}`));
+        listEl.replaceChildren(textElement('p', 'board-empty', `${t('Catalogue not available')}: ${error.message}`));
         metaSpan.textContent = '';
       }
     }
@@ -1612,7 +1914,9 @@
       panel.hidden = false;
       trigger.setAttribute('aria-expanded', 'true');
       if (!caricato) carica();
-      window.setTimeout(() => searchInput.focus(), 0);
+      // PICKER-TASTIERA-01 (owner 25/09/2026, «come il selettore dell'app»): su uno schermo a tocco la ricerca non prende
+      // il fuoco, altrimenti la tastiera copre metà del foglio; sale solo toccando «Cerca». Con mouse e tastiera, come prima.
+      if (!window.matchMedia?.('(pointer: coarse)').matches) window.setTimeout(() => searchInput.focus(), 0);
     }
     function chiudi() {
       aperto = false;
@@ -1689,13 +1993,20 @@
    * un nome diverso. I livelli alti (high/xhigh) SONO il "ragionamento
    * esteso" richiesto.
    */
+  /*
+   * ⭐ EFFORT-MAX (25/09/2026, owner «procedi in ordine»): la nota qui sopra («niente 'max' (non esiste su OpenRouter)»)
+   * è superata — OpenRouter oggi ha `max` (GLM 5.3: max/high/low, catalogo `GET /api/v1/models` del 24/09/2026) e
+   * «Massimo» stava su `xhigh`. Sette livelli, con le parole della chat (`chat.effort*` in it.ts). Quale livello un
+   * modello accetti davvero lo decide il server del Codice (`regolaReasoningPerModello`, RAG-COD).
+   */
   const LIVELLI_RAGIONAMENTO = [
-    { valore: 'none', etichetta: 'Off' },
+    { valore: 'none', etichetta: 'Disattivato' },
     { valore: 'minimal', etichetta: 'Minimo' },
     { valore: 'low', etichetta: 'Basso' },
     { valore: 'medium', etichetta: 'Medio' },
     { valore: 'high', etichetta: 'Alto' },
-    { valore: 'xhigh', etichetta: 'Massimo' },
+    { valore: 'xhigh', etichetta: 'Molto alto' },
+    { valore: 'max', etichetta: 'Massimo' },
   ];
 
   function creaEffortPicker({ valoreIniziale = null, alCambiato } = {}) {
@@ -1749,161 +2060,6 @@
     return { elemento: wrap, getValore: () => (toccato ? LIVELLI_RAGIONAMENTO[indice].valore : null) };
   }
 
-  function runsPath(cursor = null) {
-    const params = new URLSearchParams({ limit: '40' });
-    if (harnessFilter.value) params.set('harness', harnessFilter.value);
-    if (outcomeFilter.value) params.set('esito', outcomeFilter.value);
-    if (cursor) params.set('cursor', cursor);
-    return `/api/v1/campaigns/${encodeURIComponent(state.board.campaign)}/runs?${params}`;
-  }
-
-  async function loadCampaignRuns({ append = false, generation = state.board.generation } = {}) {
-    const page = await apiGet(runsPath(append ? state.board.nextCursor : null));
-    if (generation !== state.board.generation) return;
-    state.board.runs = append ? state.board.runs.concat(page.items) : page.items;
-    state.board.nextCursor = page.nextCursor;
-    state.board.totalMatched = page.totalMatched;
-    renderCampaignRuns(page.items, { append });
-  }
-
-  async function loadCampaignReport(generation) {
-    try {
-      const report = await apiGet(`/api/v1/campaigns/${encodeURIComponent(state.board.campaign)}/report`);
-      if (generation === state.board.generation) renderCampaignReport(report);
-    } catch (error) {
-      if (generation !== state.board.generation) return;
-      if (error.code === 'REPORT_UNAVAILABLE') {
-        renderCampaignReport(null, error.code);
-        return;
-      }
-      throw error;
-    }
-  }
-
-  async function refreshCampaign() {
-    if (!state.board.campaign) return;
-    const generation = state.board.generation += 1;
-    refreshCampaignButton.disabled = true;
-    setConnectionState('loading', 'Reading', 'Rileggo i file locali autorizzati.');
-    campaignReportState.textContent = 'Reading…';
-    try {
-      const snapshot = await apiGet(`/api/v1/campaigns/${encodeURIComponent(state.board.campaign)}/snapshot`);
-      if (generation !== state.board.generation) return;
-      renderCampaignSummary(snapshot.summary);
-      campaignReadMeta.textContent = `Read ${snapshot.readAt} · SHA-256 ${snapshot.sourceHash}`;
-      await Promise.all([
-        loadCampaignRuns({ append: false, generation }),
-        loadCampaignReport(generation),
-      ]);
-      if (generation !== state.board.generation) return;
-      setConnectionState('ready', 'Real data · read-only');
-      // ⭐ 26/8, riconciliazione desktop→mobile — trovato con una prova vera
-      // (browser reale contro il server vero, non ipotizzato): il badge
-      // "Demo UI" della Board restava visibile anche a dati reali caricati,
-      // difetto preesistente MAI notato perché su mobile embedded questo
-      // ramo non veniva mai raggiunto. Stesso principio già applicato ad
-      // aggiornaAlberoReale/aggiornaPannelloAmbiente: dati reali arrivati,
-      // l'etichetta demo deve sparire.
-      const demoBadgeBoard = $('.demo-surface-badge', $('[data-view="dashboard"]'));
-      if (demoBadgeBoard) demoBadgeBoard.hidden = true;
-    } catch (error) {
-      if (generation !== state.board.generation) return;
-      state.board.runs = [];
-      state.board.nextCursor = null;
-      state.board.totalMatched = 0;
-      renderCampaignSummary(null);
-      renderCampaignRuns([]);
-      renderCampaignReport(null, error.code);
-      setConnectionState('error', 'Collegamento non disponibile', boardErrorMessage(error));
-    } finally {
-      if (generation === state.board.generation) refreshCampaignButton.disabled = false;
-    }
-  }
-
-  async function loadCampaigns() {
-    setConnectionState('loading', 'Connessione locale', 'Leggo la allowlist dal server Codice.');
-    const campaigns = await apiGet('/api/v1/campaigns');
-    state.board.campaigns = campaigns;
-    const available = campaigns.filter((campaign) => campaign.available);
-    if (available.length === 0) throw new Error('No authorised campaign available');
-    if (!available.some((campaign) => campaign.name === state.board.campaign)) {
-      state.board.campaign = available[0].name;
-    }
-    renderCampaignOptions(campaigns);
-    campaignSelect.value = state.board.campaign;
-    state.board.initialized = true;
-    await refreshCampaign();
-  }
-
-  function renderEmbeddedBoardDemo(announce = false) {
-    state.board.initialized = true;
-    state.board.campaign = null;
-    state.board.campaigns = [];
-    state.board.runs = [];
-    state.board.nextCursor = null;
-    state.board.totalMatched = 0;
-    boardEyebrow.textContent = 'Board Codice · Demo UI';
-    boardTitle.textContent = 'Run preview';
-    boardDescription.textContent = 'This mobile surface has no backend: no benchmark data is read or simulated.';
-    campaignSelect.replaceChildren(new Option('Demo non collegata', ''));
-    campaignSelect.disabled = true;
-    harnessFilter.replaceChildren(new Option('Tutti', ''));
-    harnessFilter.disabled = true;
-    outcomeFilter.replaceChildren(new Option('Tutti', ''));
-    outcomeFilter.disabled = true;
-    renderCampaignSummary(null);
-    renderCampaignRuns([]);
-    renderCampaignReport(null, 'REPORT_UNAVAILABLE');
-    $('.board-empty', campaignRunList).textContent = 'No mobile data connected.';
-    campaignReportState.textContent = 'Demo';
-    campaignReportText.textContent = 'No mobile report connected';
-    setConnectionState('demo', 'Demo UI · not connected', 'No mobile backend is configured for Code.'); // ⭐ 3/9 — "Codice" → "Code": combacia col resto del brand inglese (title, en.ts), non un'eccezione isolata
-    if (announce) toast('Demo board not connected', 'No network request was made.');
-  }
-
-  function ensureCampaignBoard() {
-    if (embeddedDemoOnly()) {
-      renderEmbeddedBoardDemo();
-      return Promise.resolve();
-    }
-    if (state.board.initialized || state.board.bootstrapPromise) return state.board.bootstrapPromise;
-    state.board.bootstrapPromise = loadCampaigns()
-      .catch((error) => {
-        state.board.initialized = false;
-        setConnectionState('error', 'Server locale non disponibile', boardErrorMessage(error));
-        renderCampaignSummary(null);
-        renderCampaignRuns([]);
-        renderCampaignReport(null, error.code);
-      })
-      .finally(() => { state.board.bootstrapPromise = null; });
-    return state.board.bootstrapPromise;
-  }
-
-  async function reloadRunsFromFilters() {
-    if (!state.board.initialized) return;
-    const generation = state.board.generation;
-    loadMoreRunsButton.disabled = true;
-    try {
-      await loadCampaignRuns({ append: false, generation });
-      setConnectionState('ready', 'Real data · read-only');
-    } catch (error) {
-      setConnectionState('error', 'Filtro non disponibile', boardErrorMessage(error));
-    } finally {
-      loadMoreRunsButton.disabled = false;
-    }
-  }
-
-  function clearCampaignEvidence() {
-    if (embeddedDemoOnly()) {
-      toast('No evidence attached', 'La Board mobile è una Demo UI senza backend.');
-      return;
-    }
-    for (const row of state.board.runs) row.detto = null;
-    $$('.run-evidence', campaignRunList).forEach((element) => element.remove());
-    $$('.campaign-run-detail', campaignRunList).forEach((detail) => { detail.hidden = true; });
-    $$('.campaign-run-toggle', campaignRunList).forEach((button) => button.setAttribute('aria-expanded', 'false'));
-    toast('Evidenze svuotate', 'I testi detto sono stati rimossi solo dalla memoria e dal DOM della pagina.');
-  }
   // REAL_DATA_RENDER_END
 
   async function copyText(text, success = 'Copiato negli appunti') {
@@ -1973,7 +2129,7 @@
     try {
       badgeEl.textContent = riassuntoDoctor(await apiGet('/api/v1/doctor')).badge;
     } catch {
-      badgeEl.textContent = 'Not available';
+      badgeEl.textContent = t('Not available');
     }
   }
 
@@ -1986,7 +2142,7 @@
       return;
     }
     const { badge, dettaglio } = riassuntoDoctor(risultato);
-    toast(`Doctor: ${badge}`, dettaglio);
+    toast(`${t('Doctor')}: ${badge}`, dettaglio);
     const badgeEl = $('[data-doctor-status]', sheetBody);
     if (badgeEl) badgeEl.textContent = badge;
   }
@@ -2003,20 +2159,20 @@
     const mount = $('#subagentTreeMount', sheetBody);
     if (!mount) return; // il foglio "sessionTree" non è (più) quello aperto
     if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'No active session.'));
+      mount.replaceChildren(textElement('p', 'board-empty', t('No active session.')));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Loading delegations…'));
+    mount.replaceChildren(textElement('p', 'board-empty', t('Loading delegations…')));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/children`);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Delegations not available: ${error.message}`));
+      mount.replaceChildren(textElement('p', 'board-empty', `${t('Delegations not available')}: ${error.message}`));
       return;
     }
     if (mount !== $('#subagentTreeMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
     if (!dati.figli || dati.figli.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'No delegation yet — TALOS starts one itself, with the delega_sottotask tool, when a sub-task is genuinely separable.'));
+      mount.replaceChildren(textElement('p', 'board-empty', t('Code does not delegate: every step runs in this single session.')));
       return;
     }
     mount.replaceChildren(...dati.figli.map((figlio) => rigaFiglio(figlio)));
@@ -2069,8 +2225,245 @@
     const sottotitolo = $('span', card);
     if (titolo) titolo.textContent = `${elenco.length} automazion${elenco.length === 1 ? 'e' : 'i'}`;
     if (sottotitolo) {
-      const prossime = elenco.filter((a) => a.attiva && a.prossimaEsecuzione).map((a) => a.prossimaEsecuzione).sort();
-      sottotitolo.textContent = prossime.length > 0 ? `Next run ${formattaOraSessione(prossime[0])}` : 'None active';
+      const prossime = elenco.map(prossimaEsecuzioneVera).filter(Boolean).sort(); // ⭐ AUT-2c: l'orario vero, anche al limite
+      sottotitolo.textContent = prossime.length > 0 ? `${t('Next run')} ${formattaOraSessione(prossime[0])}` : t('None active');
+    }
+  }
+
+  /*
+   * ⭐ 24/09/2026 (AUT-2c, trovato sul Pad alla prima esecuzione vera): la vista aperta non si rileggeva — dopo il giro
+   * del pianificatore diceva ancora «prossima 16:28» e il nome non apriva l'esecuzione. Schema TanStack Query
+   * «Polling» (letto 24/09/2026): rilettura a intervalli solo con la pagina visibile. Il passo è quello del
+   * pianificatore (30 s); acceso solo mentre la vista Automazioni è aperta, spento lasciandola e dal distruttore.
+   * La firma evita di ricostruire righe identiche: il fuoco di tastiera resta dov'è.
+   */
+  const PASSO_AUTOMAZIONI_MS = 30_000;
+  let automazioniTimerId = null;
+  let firmaAutomazioni = null;
+  function seguiAutomazioni(accesa) {
+    if (automazioniTimerId !== null) { window.clearInterval(automazioniTimerId); automazioniTimerId = null; }
+    if (!accesa) return;
+    automazioniTimerId = window.setInterval(() => {
+      if (runtimeDistrutto || document.visibilityState === 'hidden') return;
+      renderAutomationsReali();
+    }, PASSO_AUTOMAZIONI_MS);
+  }
+  function rileggiAutomazioniAlRitorno() {
+    if (automazioniTimerId !== null && document.visibilityState !== 'hidden') renderAutomationsReali();
+  }
+  document.addEventListener('visibilitychange', rileggiAutomazioniAlRitorno);
+
+  /*
+   * ⭐ GIORNO-LOCALE-01 (owner 25/09/2026, «giorno locale»): il giorno è quello del telefono, lo stesso del server del
+   * Codice (`automation-store.mjs`, `giornoLocale`/`mezzanotteDopo`) — prima era il giorno UTC, che in Italia d'estate
+   * cambia alle 02:00.
+   */
+  function giornoLocale(data) {
+    return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
+  }
+  /** ⭐ AUT-2c: attiva, e il contatore di oggi (il giorno del telefono, quello di `unTick`) ha raggiunto il limite. */
+  function automazioneAlLimite(automazione) {
+    return Boolean(automazione.attiva && automazione.prossimaEsecuzione
+      && automazione.giornoContatore === giornoLocale(new Date())
+      && automazione.eseguiteOggi >= automazione.limiteAlGiorno);
+  }
+  /**
+   * ⭐ AUT-2c: l'orario in cui il pianificatore la farà partire davvero. Al limite: il più tardi fra l'orario salvato e il
+   * cambio di giorno (la mezzanotte del telefono) — vale anche per un orario scritto da un server di prima della cura, che annunciava «fra un
+   * intervallo». La riga e la scheda della barra laterale leggono questa, mai `prossimaEsecuzione` grezza.
+   */
+  function prossimaEsecuzioneVera(automazione) {
+    if (!automazione.attiva || !automazione.prossimaEsecuzione) return null;
+    if (!automazioneAlLimite(automazione)) return automazione.prossimaEsecuzione;
+    const adesso = new Date();
+    const cambioDiGiorno = new Date(adesso.getFullYear(), adesso.getMonth(), adesso.getDate() + 1);
+    return new Date(Math.max(Date.parse(automazione.prossimaEsecuzione), cambioDiGiorno.getTime())).toISOString();
+  }
+
+  /*
+   * ⭐⭐ 24/09/2026 (AUT-3, owner «B, sì»): la vista Automazioni è quella del desktop — `harness-ui/frontend/src/components/
+   * automazioni.js` (AutomationRow, filtri, riepilogo; nel desktop dal 05/09, d5dfbb76f) e `index.template.html:1252-1262`,
+   * misurati in sola lettura sul 4174. Differenze mobili: il nome apre l'ultima esecuzione (AUT-2), i dettagli dicono la
+   * richiesta e il modello (decisione owner A), una pausa dopo un errore dice il motivo. Interruttore e schede: W3C APG
+   * «Switch» e «Tabs» (letti 24/09/2026) — role=switch con etichetta fissa; tablist con frecce, Home e Fine.
+   */
+  const paginaAutomazioni = { elenco: null, query: '', stato: 'tutte', aperte: new Set(), focus: null };
+  const automazioniInItaliano = () => window.__talosHarnessLocale === 'it';
+  const interoNonNegativo = (n) => Number.isInteger(n) && n >= 0;
+  function dataCompletaAutomazione(valore) {
+    const data = typeof valore === 'string' ? new Date(valore) : null;
+    return data && Number.isFinite(data.getTime())
+      ? data.toLocaleString(automazioniInItaliano() ? 'it-IT' : 'en-GB')
+      : t('Date not recorded');
+  }
+  /** Porto di `testiAutomazione` del desktop: programma e avvii registrati, mai esiti o costi dedotti. */
+  function testiAutomazione(automazione, adesso = new Date()) {
+    const italiano = automazioniInItaliano();
+    const oggi = giornoLocale(new Date(adesso));
+    const limite = interoNonNegativo(automazione.limiteAlGiorno) && automazione.limiteAlGiorno > 0 ? automazione.limiteAlGiorno : null;
+    const conteggio = automazione.giornoContatore !== oggi ? 0 : interoNonNegativo(automazione.eseguiteOggi) ? automazione.eseguiteOggi : null;
+    const raggiunto = limite !== null && conteggio !== null && conteggio >= limite;
+    return {
+      nome: typeof automazione.nome === 'string' && automazione.nome.trim() ? automazione.nome : t('Automation without a name'),
+      intervallo: interoNonNegativo(automazione.intervalloMinuti) && automazione.intervalloMinuti > 0
+        ? `${italiano ? 'Ogni' : 'Every'} ${automazione.intervalloMinuti} min`
+        : t('Interval not recorded'),
+      conteggio: conteggio === null || limite === null ? t('Count not available') : `${conteggio} ${italiano ? 'di' : 'of'} ${limite}`,
+      ultima: automazione.ultimaEsecuzione == null ? t('No start recorded') : dataCompletaAutomazione(automazione.ultimaEsecuzione),
+      prossima: automazione.attiva === false ? t('Paused')
+        : automazione.attiva !== true ? t('State to check')
+          : raggiunto ? t('Daily limit reached') : dataCompletaAutomazione(automazione.prossimaEsecuzione),
+      creata: dataCompletaAutomazione(automazione.creataAlle),
+      richiesta: typeof automazione.consegna === 'string' && automazione.consegna.trim() ? automazione.consegna
+        : typeof automazione.taskId === 'string' ? automazione.taskId : t('Request not recorded'),
+      modello: typeof automazione.modello === 'string' && automazione.modello ? automazione.modello : null,
+      livello: LIVELLI_RAGIONAMENTO.find((l) => l.valore === automazione.reasoning?.effort)?.etichetta ?? null,
+    };
+  }
+  /** Porto di `filtraAutomazioni`: stato (tutte/attive/pausa) e ricerca su nome e richiesta. */
+  function filtraAutomazioni(elenco, { query = '', stato = 'tutte' } = {}) {
+    const cercato = String(query).trim().toLocaleLowerCase('it');
+    return elenco.filter((automazione) => (stato === 'tutte' || (stato === 'attive' ? automazione.attiva === true : automazione.attiva === false))
+      && (!cercato || [automazione.nome, automazione.consegna, automazione.taskId].filter(Boolean).join(' ').toLocaleLowerCase('it').includes(cercato)));
+  }
+  function riepilogoAutomazioni(elenco) {
+    const attive = elenco.filter((automazione) => automazione.attiva === true).length;
+    return automazioniInItaliano()
+      ? `${elenco.length} automazion${elenco.length === 1 ? 'e' : 'i'} · ${attive} ${attive === 1 ? 'attiva' : 'attive'}`
+      : `${elenco.length} automation${elenco.length === 1 ? '' : 's'} · ${attive} active`;
+  }
+  function rigaChiaveValore(chiave, valore, { datoUtente = false } = {}) {
+    const riga = document.createElement('div');
+    riga.className = 'talos-kv';
+    const v = textElement('span', 'talos-kv__v', valore);
+    if (datoUtente) v.setAttribute('data-no-i18n', '');
+    riga.append(textElement('span', 'talos-kv__k', chiave), v);
+    return riga;
+  }
+  async function cambiaStatoAutomazione(automazione) {
+    paginaAutomazioni.focus = { id: automazione.id, azione: 'toggle' };
+    try {
+      await apiPost(`/api/v1/automations/${encodeURIComponent(automazione.id)}/toggle`, { attiva: !automazione.attiva });
+      toast(automazione.attiva ? 'Automazione in pausa' : 'Automazione attivata', automazione.nome);
+      renderAutomationsReali();
+    } catch (error) {
+      paginaAutomazioni.focus = null;
+      toast('That did not work', error.message);
+    }
+  }
+  /** Porto di `creaAutomationRow` del desktop. */
+  function creaRigaAutomazione(automazione, { aperta = false } = {}) {
+    const italiano = automazioniInItaliano();
+    const testi = testiAutomazione(automazione);
+    const riga = document.createElement('article');
+    riga.className = 'talos-card talos-automation';
+    riga.setAttribute('role', 'listitem');
+    riga.dataset.automazioneId = automazione.id;
+
+    const testa = document.createElement('div');
+    testa.className = 'talos-automation__head';
+    const punto = document.createElement('span');
+    punto.className = `talos-dot${automazione.attiva === true ? ' talos-dot--success' : ''}`;
+    // Il nome apre l'ultima esecuzione (AUT-2): una sessione del pianificatore non ha una riga nell'elenco del Codice.
+    let nome;
+    if (automazione.ultimaSessioneId) {
+      nome = textElement('button', 'talos-automation__name talos-grow', testi.nome);
+      nome.type = 'button';
+      nome.setAttribute('data-apri-esecuzione', automazione.ultimaSessioneId);
+      nome.setAttribute('title', t('Open the last run'));
+      nome.addEventListener('click', () => {
+        passaASessione(automazione.ultimaSessioneId, automazione.ultimaSessioneId, automazione.nome);
+        setView('chat');
+      });
+    } else {
+      nome = textElement('span', 'talos-automation__name talos-grow', testi.nome);
+    }
+    nome.setAttribute('data-no-i18n', '');
+    const statoAttiva = automazione.attiva === true;
+    const interruttore = document.createElement('button');
+    interruttore.type = 'button';
+    interruttore.className = 'talos-switch';
+    interruttore.setAttribute('role', 'switch');
+    interruttore.setAttribute('aria-checked', String(statoAttiva));
+    interruttore.setAttribute('aria-label', `${italiano ? 'Automazione' : 'Automation'} ${testi.nome}`);
+    interruttore.setAttribute('data-auto-toggle', '');
+    interruttore.appendChild(textElement('span', 'talos-switch__thumb', ''));
+    interruttore.addEventListener('click', () => cambiaStatoAutomazione(automazione));
+    testa.append(
+      punto, nome,
+      textElement('span', 'talos-badge talos-badge--sm', testi.intervallo),
+      textElement('span', `talos-badge${statoAttiva ? ' talos-badge--success' : ''} talos-badge--sm`, statoAttiva ? t('Enabled') : t('Paused')),
+      interruttore,
+    );
+
+    const avvii = document.createElement('div');
+    avvii.className = 'talos-automation__runs';
+    avvii.append(rigaChiaveValore(t('Next start'), testi.prossima), rigaChiaveValore(t('Starts today / limit'), testi.conteggio));
+    if (automazione.attiva === false && automazione.ultimoErrore) {
+      avvii.append(rigaChiaveValore(t('Paused because'), automazione.ultimoErrore, { datoUtente: true }));
+    }
+
+    const piede = document.createElement('div');
+    piede.className = 'talos-automation__head';
+    const dettagli = textElement('button', 'talos-button talos-button--ghost talos-button--sm', t('Details'));
+    dettagli.type = 'button';
+    dettagli.setAttribute('data-auto-details', '');
+    dettagli.setAttribute('aria-expanded', String(aperta));
+    const elimina = textElement('button', 'talos-button talos-button--ghost talos-button--sm', t('Delete'));
+    elimina.type = 'button';
+    elimina.setAttribute('data-auto-elimina', '');
+    elimina.setAttribute('aria-label', `${italiano ? 'Elimina' : 'Delete'} ${testi.nome}`);
+    elimina.addEventListener('click', () => confermaEliminaAutomazione(automazione));
+    piede.append(dettagli, textElement('span', 'talos-grow', ''), elimina);
+
+    const pannello = document.createElement('div');
+    pannello.className = 'talos-automation__runs';
+    pannello.setAttribute('data-auto-dettaglio', '');
+    pannello.hidden = !aperta;
+    pannello.append(
+      rigaChiaveValore(t('Last recorded start'), testi.ultima),
+      rigaChiaveValore(t('Created'), testi.creata),
+      rigaChiaveValore(t('Request'), testi.richiesta, { datoUtente: true }),
+      rigaChiaveValore(t('Model'), testi.modello ?? t('Server default model'), { datoUtente: Boolean(testi.modello) }),
+      rigaChiaveValore(t('Reasoning'), testi.livello ?? t('Server default level')),
+    );
+    dettagli.addEventListener('click', () => {
+      pannello.hidden = !pannello.hidden;
+      dettagli.setAttribute('aria-expanded', String(!pannello.hidden));
+      if (pannello.hidden) paginaAutomazioni.aperte.delete(automazione.id);
+      else paginaAutomazioni.aperte.add(automazione.id);
+    });
+    riga.append(testa, avvii, piede, pannello);
+    return riga;
+  }
+  /** Porto di `render` del desktop: esito, schede, elenco filtrato; il fuoco torna al controllo toccato. */
+  function disegnaPaginaAutomazioni() {
+    const vista = $('[data-view="automations"]');
+    const contenitore = $('#automationListReal');
+    if (!vista || !contenitore) return;
+    const elenco = paginaAutomazioni.elenco ?? [];
+    const visibili = filtraAutomazioni(elenco, paginaAutomazioni);
+    const esito = $('[data-auto-esito]', vista);
+    if (esito) {
+      esito.textContent = visibili.length === elenco.length
+        ? riepilogoAutomazioni(elenco)
+        : (automazioniInItaliano() ? `${visibili.length} di ${elenco.length} automazioni` : `${visibili.length} of ${elenco.length} automations`);
+    }
+    for (const scheda of $$('[data-auto-stato]', vista)) {
+      const scelta = scheda.dataset.autoStato === paginaAutomazioni.stato;
+      scheda.setAttribute('aria-selected', String(scelta));
+      scheda.tabIndex = scelta ? 0 : -1;
+    }
+    contenitore.setAttribute('role', visibili.length ? 'list' : 'group');
+    contenitore.replaceChildren(...visibili.map((automazione) => creaRigaAutomazione(automazione, { aperta: paginaAutomazioni.aperte.has(automazione.id) })));
+    if (!visibili.length) {
+      contenitore.append(textElement('p', 'talos-list-row talos-muted', elenco.length ? t('No automation matches the filters.') : t('No automations created.')));
+    }
+    if (paginaAutomazioni.focus) {
+      const { id, azione } = paginaAutomazioni.focus;
+      const riga = [...contenitore.querySelectorAll('[data-automazione-id]')].find((r) => r.dataset.automazioneId === id);
+      riga?.querySelector(`[data-auto-${azione}]`)?.focus({ preventScroll: true });
+      paginaAutomazioni.focus = null;
     }
   }
 
@@ -2084,109 +2477,127 @@
       return; // ⛔ un refresh fallito non è un'azione richiesta, non merita un toast
     }
     aggiornaWidgetAutomazioni(elenco);
-    if (elenco.length > 0) {
-      const demoBadge = $('.demo-surface-badge', $('[data-view="automations"]'));
-      if (demoBadge) demoBadge.hidden = true;
+    // ⭐ 24/09: il server ha risposto, quindi la vista È collegata — anche con zero automazioni (prima il badge
+    // «non collegata» restava finché l'elenco era vuoto, e diceva il falso).
+    const demoBadge = $('.demo-surface-badge', $('[data-view="automations"]'));
+    if (demoBadge) demoBadge.hidden = true;
+    const firma = JSON.stringify([window.__talosHarnessLocale, giornoLocale(new Date()), elenco]);
+    if (firma === firmaAutomazioni && contenitore.childElementCount > 0) return;
+    firmaAutomazioni = firma;
+    paginaAutomazioni.elenco = elenco;
+    for (const id of paginaAutomazioni.aperte) {
+      if (!elenco.some((automazione) => automazione.id === id)) paginaAutomazioni.aperte.delete(id);
     }
-    const pezzi = elenco.map((automazione) => {
-      const article = document.createElement('article');
-      article.className = 'automation-row';
-      const iconWrap = document.createElement('div');
-      iconWrap.className = 'automation-icon';
-      iconWrap.innerHTML = icon(automazione.attiva ? 'i-clock' : 'i-history');
-      const testo = document.createElement('div');
-      const stato = automazione.attiva
-        ? `on · every ${automazione.intervalloMinuti} min · max ${automazione.limiteAlGiorno}/day · next ${formattaOraSessione(automazione.prossimaEsecuzione)}`
-        : `in pausa · ogni ${automazione.intervalloMinuti} min · max ${automazione.limiteAlGiorno}/giorno`;
-      testo.append(textElement('strong', '', automazione.nome), textElement('small', '', stato));
-      const chip = document.createElement('span');
-      chip.className = `status-chip${automazione.attiva ? ' success' : ''}`;
-      chip.textContent = automazione.attiva ? 'Attiva' : 'Pausa';
-      const toggleBtn = document.createElement('button');
-      toggleBtn.className = 'secondary-btn compact';
-      toggleBtn.textContent = automazione.attiva ? 'Pausa' : 'Attiva';
-      toggleBtn.addEventListener('click', async () => {
-        try {
-          await apiPost(`/api/v1/automations/${encodeURIComponent(automazione.id)}/toggle`, { attiva: !automazione.attiva });
-          toast(automazione.attiva ? 'Automazione in pausa' : 'Automazione attivata', automazione.nome);
-          renderAutomationsReali();
-        } catch (error) {
-          toast('That did not work', error.message);
-        }
-      });
-      const eliminaBtn = document.createElement('button');
-      eliminaBtn.className = 'secondary-btn compact';
-      eliminaBtn.textContent = 'Delete';
-      eliminaBtn.addEventListener('click', async () => {
-        try {
-          await apiPost(`/api/v1/automations/${encodeURIComponent(automazione.id)}/elimina`, {});
-          toast('Automation deleted', automazione.nome);
-          renderAutomationsReali();
-        } catch (error) {
-          toast('That did not work', error.message);
-        }
-      });
-      article.append(iconWrap, testo, chip, toggleBtn, eliminaBtn);
-      return article;
-    });
-    contenitore.replaceChildren(...pezzi);
+    disegnaPaginaAutomazioni();
   }
 
-  /** Il foglio "Nuova automazione": task dal corpus + intervallo + limite giornaliero, gli stessi tetti duri validati anche lato server. */
+  /**
+   * ⭐⭐⭐ 24/09/2026 (AUT-2, owner «Richiesta scritta») — il foglio «Nuova automazione» chiedeva un'attività del banco di
+   * prova, e sul telefono il banco è vuoto: non si creava niente. Ora un'automazione è una RICHIESTA SCRITTA, come in
+   * tutti i concorrenti misurati (dossier `.claude/ricerche/2026-09-24-automazioni-codice-10x4.md`): cosa deve fare, la
+   * cartella di progetto (la stessa delle sessioni vere del Codice), il modello del Codice, ogni quanti minuti e quante
+   * volte al massimo al giorno — gli stessi tetti duri che il server rivalida. Nasce in pausa.
+   */
   async function openNewAutomationSheet() {
-    sheetEyebrow.textContent = 'Automazioni';
-    sheetTitle.textContent = 'Nuova automazione';
-    sheetBody.replaceChildren(textElement('p', 'board-empty', 'Carico l’elenco dal server…'));
+    sheetEyebrow.textContent = t('Automations');
+    sheetTitle.textContent = t('New automation');
+    sheetBody.replaceChildren(textElement('p', 'board-empty', t('Loading…')));
+    // ⛔ ANTEPRIMA-01 (25/09/2026): il modulo è collegato al server davvero (POST /api/v1/automations): l'etichetta
+    // «Anteprima · non collegata» del foglio condiviso qui direbbe il falso, come non la dice «Nuova sessione».
+    const demoBadge = $('.demo-surface-badge', sheetDialog);
+    if (demoBadge) demoBadge.hidden = true;
     showEmbeddedDialog(sheetDialog);
 
-    let tasks;
+    let progetti;
     try {
-      tasks = (await apiGet('/api/v1/tasks')).items;
+      progetti = (await apiGet('/api/v1/projects')).items || [];
     } catch (error) {
-      sheetBody.replaceChildren(textElement('p', 'board-empty', `List not available: ${error.message}`));
+      sheetBody.replaceChildren(textElement('p', 'board-empty', `${t('List not available')}: ${error.message}`));
+      return;
+    }
+    if (progetti.length === 0) {
+      sheetBody.replaceChildren(textElement('p', 'board-empty', t('No project folder is configured on the server: an automation needs one to work in.')));
       return;
     }
 
+    // ⭐ 24/09/2026 (AUT-2e, owner: «deve essere identico a quello del desktop… in versione mobile semplificata»). Stessa
+    // sequenza del modulo desktop (AVM-integrazione-r4 harness-ui/frontend/src/legacy/app.js:20554-20586, misurato in sola
+    // lettura sul 4174): UN form.sheet-section, etichetta + campo, nota .sheet-hint, «Crea automazione» primary-btn compact.
+    // Cambia solo il primo campo: la richiesta scritta (decisione owner) al posto del task del corpus. Una cartella sola
+    // resta implicita; con più cartelle si sceglie come sul desktop si sceglie il task. Il modello è quello del composer.
     const form = document.createElement('form');
     form.className = 'sheet-section';
-    form.appendChild(textElement('span', 'sheet-label', 'Corpus task'));
-    const selectTask = document.createElement('select');
-    selectTask.className = 'sheet-input';
-    for (const task of tasks) {
-      const opzione = document.createElement('option');
-      opzione.value = task.id;
-      opzione.textContent = `${task.id} · difficulty ${task.difficolta}`;
-      selectTask.appendChild(opzione);
+    form.appendChild(textElement('span', 'sheet-label', t('What it should do')));
+    const richiesta = document.createElement('textarea');
+    richiesta.className = 'sheet-input';
+    richiesta.name = 'consegna';
+    richiesta.required = true;
+    richiesta.maxLength = 4000;
+    richiesta.rows = 4;
+    richiesta.placeholder = t('For example: check the folder and tell me what changed since last time.');
+    form.appendChild(richiesta);
+
+    let leggiCartella = () => progetti[0].id;
+    if (progetti.length > 1) {
+      form.appendChild(textElement('span', 'sheet-label', t('Folder')));
+      // SCELTA-CARTELLA (25/09/2026): il menu a elenco del Codice, non il `<select>` nativo.
+      const sceltaCartella = creaSceltaSingola({
+        id: 'automazioneCartella',
+        etichetta: t('Folder'),
+        opzioni: progetti.map((progetto) => ({ valore: progetto.id, etichetta: progetto.nome || progetto.id })),
+      });
+      form.appendChild(sceltaCartella.elemento);
+      leggiCartella = () => sceltaCartella.getValore();
     }
-    form.appendChild(selectTask);
-    form.appendChild(textElement('span', 'sheet-label', 'Every how many minutes'));
+    const modello = state.model || null;
+    // AUTO-LIVELLO (25/09/2026, owner «Salvato alla creazione»): il livello del composer si salva con l'automazione, come il modello.
+    const livello = state.effort || null;
+    const etichettaLivello = LIVELLI_RAGIONAMENTO.find((l) => l.valore === livello)?.etichetta ?? null;
+
+    form.appendChild(textElement('span', 'sheet-label', 'Ogni quanti minuti'));
     const inputIntervallo = document.createElement('input');
     inputIntervallo.className = 'sheet-input';
+    inputIntervallo.name = 'intervalloMinuti';
     inputIntervallo.type = 'number';
     inputIntervallo.min = '5';
-    inputIntervallo.value = '30';
+    inputIntervallo.value = '60';
     form.appendChild(inputIntervallo);
-    form.appendChild(textElement('span', 'sheet-label', 'Maximum runs per day'));
+    form.appendChild(textElement('span', 'sheet-label', 'Massimo esecuzioni al giorno'));
     const inputLimite = document.createElement('input');
     inputLimite.className = 'sheet-input';
+    inputLimite.name = 'limiteAlGiorno';
     inputLimite.type = 'number';
     inputLimite.min = '1';
     inputLimite.max = '10';
     inputLimite.value = '3';
     form.appendChild(inputLimite);
-    form.appendChild(textElement('small', 'sheet-hint', 'Nasce sempre in pausa: la attivi tu dall\'elenco quando vuoi che parta da sola.'));
+    // ⭐ 24/09/2026 (AUT-3, decisione owner A): la nota dice con quale modello girerà — l'automazione lo fissa alla
+    // creazione e non lo cambia se poi cambia quello del Codice (dossier `2026-09-24-modello-nelle-automazioni-10x4.md`).
+    // NOME-MODELLO-01: il nome del modello, non la sigla.
+    const nomeScelto = modello ? nomeModello(modello) : null;
+    const scelta = nomeScelto && etichettaLivello ? `Userà ${nomeScelto} con ragionamento ${etichettaLivello}, scelti nel Codice.`
+      : nomeScelto ? `Userà ${nomeScelto}, il modello scelto nel Codice.`
+        : etichettaLivello ? `Userà il modello predefinito del server con ragionamento ${etichettaLivello}.`
+          : 'Userà il modello predefinito del server.';
+    form.appendChild(textElement('small', 'sheet-hint', `${scelta} Nasce sempre in pausa: la attivi tu dall'elenco quando vuoi che parta da sola.`));
     const submit = document.createElement('button');
     submit.type = 'submit';
-    submit.className = 'primary-btn compact full';
+    submit.className = 'primary-btn compact';
     submit.textContent = 'Crea automazione';
     form.appendChild(submit);
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      const consegna = richiesta.value.trim();
+      if (!consegna) return;
       try {
         await apiPost('/api/v1/automations', {
-          taskId: selectTask.value,
+          consegna,
+          cartellaId: leggiCartella(),
+          nome: consegna.split('\n')[0].trim().slice(0, 60),
           intervalloMinuti: Number(inputIntervallo.value),
           limiteAlGiorno: Number(inputLimite.value),
+          ...(modello ? { modello } : {}),
+          ...(livello ? { reasoning: { effort: livello } } : {}),
         });
         closeEmbeddedDialog(sheetDialog);
         toast('Automation created', 'In pausa — attivala dall\'elenco quando vuoi.');
@@ -2196,6 +2607,49 @@
       }
     });
     sheetBody.replaceChildren(form);
+  }
+
+  /**
+   * ⭐ 24/09/2026 (AUT-2) — eliminare un'automazione non si annulla: si conferma, nominandola, con pulsanti che dicono
+   * l'azione (NN/g, «Confirmation dialogs»; stessa disciplina del foglio «Elimina il file»). Prima partiva al primo tocco.
+   */
+  function confermaEliminaAutomazione(automazione) {
+    // ⭐ 24/09/2026 sera (AUT-3c, owner «Conferma ridisegnata»): la domanda era in 10px dentro un riquadro tratteggiato.
+    // Ora la grammatica di `confermaModale` del desktop (components/modale-td.js:163): la domanda in prosa, la
+    // conseguenza in grigio, «Tieni» e l'azione distruttiva come pulsanti secondari; il fuoco parte dalla via d'uscita
+    // (W3C APG «Alert Dialog»: un Invio di troppo non elimina niente).
+    sheetEyebrow.textContent = t('Automations');
+    sheetTitle.textContent = t('Delete automation');
+    const sezione = document.createElement('div');
+    sezione.className = 'sheet-section';
+    const domanda = document.createElement('p');
+    domanda.className = 'talos-conferma__domanda';
+    const nome = textElement('strong', '', automazione.nome);
+    nome.setAttribute('data-no-i18n', '');
+    domanda.append(t('Delete the automation'), ' «', nome, '»? ', t('It stops running and leaves the list.'));
+    const conseguenza = textElement('p', 'talos-conferma__conseguenza', t('This cannot be undone.'));
+    const azioni = document.createElement('div');
+    azioni.className = 'talos-conferma__piede';
+    const tieni = textElement('button', 'talos-button talos-button--secondary talos-button--sm', t('Keep'));
+    tieni.type = 'button';
+    tieni.addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
+    const conferma = textElement('button', 'talos-button talos-button--secondary talos-button--danger talos-button--sm', t('Delete automation'));
+    conferma.type = 'button';
+    conferma.addEventListener('click', async () => {
+      try {
+        await apiPost(`/api/v1/automations/${encodeURIComponent(automazione.id)}/elimina`, {});
+        closeEmbeddedDialog(sheetDialog);
+        toast('Automation deleted', automazione.nome);
+        renderAutomationsReali();
+      } catch (error) {
+        toast('That did not work', error.message);
+      }
+    });
+    azioni.append(tieni, conferma);
+    sezione.append(domanda, conseguenza, azioni);
+    sheetBody.replaceChildren(sezione);
+    showEmbeddedDialog(sheetDialog);
+    tieni.focus();
   }
 
   /**
@@ -2213,9 +2667,10 @@
   function openSheet(type) {
     const content = sheetTemplates[type];
     if (!content) return;
-    sheetEyebrow.textContent = content.eyebrow;
-    sheetTitle.textContent = content.title;
+    sheetEyebrow.textContent = t(content.eyebrow);
+    sheetTitle.textContent = t(content.title);
     sheetBody.innerHTML = content.html();
+    traduciAlbero(sheetBody); // ⭐ 24/09: le righe del pannello nella lingua dell'app (i dati dell'utente sono data-no-i18n)
     showEmbeddedDialog(sheetDialog);
     wireSheetActions();
     // ⭐ porting dal bundle desktop: i due mount point sotto si riempiono con una fetch reale, mai al momento del template() (che non è async).
@@ -2351,27 +2806,10 @@
       html: () => `
         <div class="sheet-section">
           <span class="sheet-label">Ambiente attivo</span>
-          <button class="sheet-option active" data-environment-choice="active">
-            <span class="sheet-icon">${icon('i-branch')}</span><span><strong>wt/auth-61c · feat/mobile-code</strong><small>~/dev/talos/.worktrees/auth-61c</small></span><span>Attivo</span>
-          </button>
-          <button class="sheet-option" data-environment-choice="local">
-            <span class="sheet-icon">${icon('i-git')}</span><span><strong>Local · main</strong><small>~/dev/talos</small></span><span>pulito</span>
-          </button>
-          <button class="sheet-option" data-environment-choice="docker">
-            <span class="sheet-icon">${icon('i-terminal')}</span><span><strong>Docker sandbox</strong><small>talos-dev:latest · isolated</small></span><span>pronto</span>
-          </button>
-          <button class="sheet-option" data-environment-choice="ssh">
-            <span class="sheet-icon">${icon('i-link')}</span><span><strong>SSH remote</strong><small>devbox · /workspace/talos</small></span><span>offline</span>
-          </button>
-          <button class="sheet-option" data-environment-choice="cloud">
-            <span class="sheet-icon">${icon('i-web')}</span><span><strong>Cloud sandbox</strong><small>ephemeral · hibernate when idle</small></span><span>+</span>
-          </button>
-        </div>
-        <div class="sheet-section">
-          <span class="sheet-label">Regole</span>
-          <div class="sheet-toggle-row"><span>Mostra branch sempre</span><input type="checkbox" checked></div>
-          <div class="sheet-toggle-row"><span>Crea worktree per task</span><input type="checkbox" checked></div>
-          <div class="sheet-toggle-row"><span>Setup non bloccante</span><input type="checkbox" checked></div>
+          <!-- ⭐ B1 (23/09): i valori veri del pannello Contesto (aggiornaPannelloAmbiente), non cinque ambienti inventati. -->
+          <div class="sheet-option" role="group">
+            <span class="sheet-icon">${icon('i-branch')}</span><span><strong data-no-i18n>${testoSicuro($('#envWorkspace')?.textContent || '—')}</strong><small data-no-i18n>${testoSicuro($('#envRoot')?.textContent || '—')}</small></span>
+          </div>
         </div>`,
     },
     capabilities: {
@@ -2395,19 +2833,14 @@
        */
       html: () => `
         <div class="sheet-section">
-          <span class="sheet-label">Attrezzi dell'harness · sempre attivi, nessun permesso per-tool ancora</span>
-          ${[
-            ['elenca', 'Elenca i file del workspace, con le dimensioni', 'i-list'],
-            ['cerca', 'Trova file ovunque nel workspace, per testo o nome', 'i-search'],
-            ['leggi', 'Legge un file del workspace', 'i-eye'],
-            ['scrivi', 'Scrive un file, sostituendolo per intero — passa dal cancello semantico', 'i-code'],
-            ['prova', 'Esegue la suite di test del progetto: è il giudice', 'i-check'],
-            ['shell', 'Shell command in the project folder — WSL2 if present, otherwise declared', 'i-terminal'],
-            ['naviga', 'Legge una pagina web pubblica — DNS pinnato, solo http/https', 'i-web'],
-          ].map(([name, desc, ico]) => `
+          <span class="sheet-label">Attrezzi offerti al modello in questa sessione</span>
+          <!-- ⭐ B1-11 (23/09): i nomi che il kernel ha DAVVERO offerto (RunFinished → result.attrezziOfferti), mai un elenco scritto a mano. -->
+          ${attrezziOffertiCorrenti()
+            ? attrezziOffertiCorrenti().map((name) => `
             <div class="sheet-option" role="group">
-              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${desc}</small></span><span><input aria-label="${name}, sempre attivo" type="checkbox" checked disabled></span>
-            </div>`).join('')}
+              <span class="sheet-icon">${icon('i-code')}</span><span><strong data-no-i18n>${testoSicuro(name)}</strong></span>
+            </div>`).join('')
+            : `<p class="muted-copy">${t('Known after the first reply in this session.')}</p>`}
         </div>
         <div class="sheet-section">
           <span class="sheet-label">Non ancora implementato</span>
@@ -2419,13 +2852,13 @@
             ['Profiles', 'i-robot'],
           ].map(([name, ico]) => `
             <div class="sheet-option" role="group">
-              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>Non ancora implementato</small></span><span><input aria-label="${name}, non implementato" type="checkbox" disabled></span>
+              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>Non ancora implementato</small></span><span><input aria-label="${t(name)}, non implementato" type="checkbox" disabled></span>
             </div>`).join('')}
         </div>
         <div class="sheet-section">
           <span class="sheet-label">Input rapido</span>
-          <button class="sheet-option" data-capability-action="file"><span class="sheet-icon">${icon('i-files')}</span><span><strong>Allega file</strong><small>Seleziona dal workspace o dispositivo</small></span><span>+</span></button>
-          <button class="sheet-option" data-capability-action="image"><span class="sheet-icon">${icon('i-image')}</span><span><strong>Screenshot / immagine</strong><small>Contesto visivo per il task</small></span><span>+</span></button>
+          <button class="sheet-option" data-capability-action="file" aria-disabled="true" title="${t('Not available in Code yet.')}"><span class="sheet-icon">${icon('i-files')}</span><span><strong>Allega file</strong><small>Seleziona dalla cartella di lavoro o dal dispositivo</small></span><span>+</span></button>
+          <button class="sheet-option" data-capability-action="image" aria-disabled="true" title="${t('Not available in Code yet.')}"><span class="sheet-icon">${icon('i-image')}</span><span><strong>Screenshot / immagine</strong><small>Contesto visivo per il task</small></span><span>+</span></button>
         </div>`,
     },
     control: {
@@ -2450,6 +2883,7 @@
           <span class="sheet-label">Agent runtime</span>
           <button class="sheet-option" data-control-action="doctor"><span class="sheet-icon">${icon('i-check')}</span><span><strong>Doctor</strong><small>Runtime, provider, shell, git e browser</small></span><span data-doctor-status>Verifica…</span></button>
           <button class="sheet-option" data-control-action="settings"><span class="sheet-icon">${icon('i-settings')}</span><span><strong>Impostazioni Codice</strong><small>Aspetto, interazione e preferenze</small></span><span>Open</span></button>
+          <button class="sheet-option" data-control-action="automations"><span class="sheet-icon">${icon('i-clock')}</span><span><strong>Automations</strong><small>Requests that start on their own, at intervals</small></span><span>Open</span></button>
         </div>
         <div class="sheet-section">
           <span class="sheet-label">Hooks</span>
@@ -2462,7 +2896,7 @@
             ['Approval policy per-tool', 'No per-tool permission grammar today — the semantic gate on writes is always on, and not optional', 'i-shield'],
           ].map(([name, desc, ico]) => `
             <div class="sheet-option" role="group">
-              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${desc}</small></span><span><input aria-label="${name}, non implementato" type="checkbox" disabled></span>
+              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${desc}</small></span><span><input aria-label="${t(name)}, non implementato" type="checkbox" disabled></span>
             </div>`).join('')}
         </div>`,
     },
@@ -2492,7 +2926,7 @@
             commit precedente). formattaUsageBreve() ora esiste (portata
             da un commit successivo, verificato prima di usarla).
           -->
-          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong data-current-session-title>${state.session.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong><small data-usage-summary>Main · ${formattaUsageBreve(state.realSession.usage)}</small></span><span>●</span></button>
+          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong data-current-session-title data-no-i18n>${state.session.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong><small data-usage-summary>${t('Main')} · ${formattaUsageBreve(state.realSession.usage)}</small></span><span>●</span></button>
         </div>
         <div class="sheet-section">
           <!--
@@ -2525,7 +2959,8 @@
       html: () => `
         <div class="sheet-section">
           <span class="sheet-label">Suggerimenti workspace</span>
-          ${['src/components/chat/TalosComposer.vue','src/style.css','src/lib/talosThemes.ts','tests/unit/chat/composer.spec.ts','AGENTS.md'].map((file) => `<button class="sheet-option reference-option" data-reference-file="${file}"><span class="sheet-icon">${icon('i-files')}</span><span><strong>${file}</strong><small>Aggiungi al contesto del messaggio</small></span><span>@</span></button>`).join('')}
+          <!-- ⛔ B1 (23/09): i cinque percorsi scritti a mano non esistevano nel workspace. Si scrive il percorso dopo la @. -->
+          <p class="muted-copy">${t('Type the path after the @.')}</p>
         </div>`,
     },
     /*
@@ -2558,7 +2993,7 @@
       title: 'Delete file',
       html: () => `
         <div class="sheet-section">
-          <p class="board-empty">Eliminare <strong>${(state.alberoFileTarget?.nome ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong>? L'azione scrive DAVVERO sul disco e non si annulla da qui.</p>
+          <p class="board-empty">Eliminare <strong data-no-i18n>${(state.alberoFileTarget?.nome ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong>? L'azione scrive DAVVERO sul disco e non si annulla da qui.</p>
           <div class="sheet-actions">
             <button type="button" class="secondary-btn" data-delete-file-cancel>Annulla</button>
             <button type="button" class="primary-btn danger" id="deleteFileConfirm">Elimina</button>
@@ -2577,7 +3012,7 @@
       title: 'Nuovo', // ⛔ sovrascritto dinamicamente in avviaCreaVoce() col titolo vero — sheetTemplates.title è una stringa ovunque altrove, stesso pattern di fileViewer sopra
       html: () => `
         <form class="sheet-section rename-form" id="createFileForm">
-          <label class="sheet-label" for="createFileInput">${state.alberoFileTarget?.tipo === 'cartella' ? 'Folder name' : 'Nome del file'}</label>
+          <label class="sheet-label" for="createFileInput">${state.alberoFileTarget?.tipo === 'cartella' ? t('Folder name') : 'Nome del file'}</label>
           <input class="sheet-input" id="createFileInput" value="" maxlength="255" autocomplete="off" spellcheck="false">
           <div class="sheet-actions">
             <button type="button" class="secondary-btn" data-create-file-cancel>Annulla</button>
@@ -2617,9 +3052,32 @@
    * pillola del composer che apre il foglio Modello — selettore stabile
    * (`data-open-sheet="model"`), non un confronto sul testo attuale.
    */
+  /*
+   * ⛔ NOME-MODELLO-01 (Pad, 25/09/2026): il modello si leggeva come sigla («z-ai/glm-5.3-flash») nella pillola, nel
+   * selettore e nella nota delle automazioni. I nomi vengono dal catalogo che il Codice scarica già (`/api/v1/models`,
+   * in cache sul server), letto UNA volta; senza catalogo resta la sigla — mai un vuoto.
+   */
+  const nomiModelli = new Map();
+  let letturaNomiModelli = null;
+  function ricordaNomiModelli(modelli) {
+    for (const modello of Array.isArray(modelli) ? modelli : []) {
+      if (modello && typeof modello.id === 'string' && typeof modello.nome === 'string' && modello.nome) nomiModelli.set(modello.id, modello.nome);
+    }
+  }
+  function caricaNomiModelli() {
+    letturaNomiModelli ??= apiGet('/api/v1/models')
+      .then((dati) => { ricordaNomiModelli(dati?.modelli); aggiornaPillolaModello(); })
+      .catch(() => { letturaNomiModelli = null; });
+    return letturaNomiModelli;
+  }
+  function nomeModello(id) {
+    return nomiModelli.get(id) ?? id;
+  }
+
   function aggiornaPillolaModello() {
     const span = $('[data-open-sheet="model"] span');
-    if (span) span.textContent = state.model || 'Predefinito del server';
+    if (span) span.textContent = state.model ? nomeModello(state.model) : 'Predefinito del server';
+    if (state.model && !nomiModelli.has(state.model)) void caricaNomiModelli();
   }
 
   /*
@@ -2680,16 +3138,8 @@
     });
     $$('[data-capability-action]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
-        toast(button.dataset.capabilityAction === 'file' ? 'File picker simulato' : 'Cattura visiva pronta', 'Il mockup rappresenta il flusso senza backend.');
-        closeEmbeddedDialog(sheetDialog);
-      });
-    });
-    $$('[data-environment-choice]', sheetBody).forEach((button) => {
-      button.addEventListener('click', () => {
-        state.environment = button.querySelector('strong')?.textContent || 'Runtime updated';
-        const chip = $('.environment-chip span');
-        if (chip) chip.textContent = state.environment;
-        toast('Environment selected', state.environment);
+        // ⛔ B1 (23/09): nessun backend per allegati e immagini nel Codice — spento con il motivo, nessun successo finto.
+        if (button.getAttribute('aria-disabled') === 'true') return;
         closeEmbeddedDialog(sheetDialog);
       });
     });
@@ -2697,6 +3147,7 @@
       button.addEventListener('click', () => {
         const action = button.dataset.controlAction;
         if (action === 'settings') { closeEmbeddedDialog(sheetDialog); setView('settings'); }
+        if (action === 'automations') { closeEmbeddedDialog(sheetDialog); setView('automations'); } // ⭐ AUT-2: l'entrata alle Automazioni
         // ⭐ porting dal bundle desktop: 'agents'/'hooks' come toast finto sono spariti — Hooks è ora #hooksListMount (rigaHook porta i suoi listener), "Agents" resta onestamente "Non ancora implementato" nel template.
         else if (action === 'doctor') eseguiDoctor();
       });
@@ -2881,6 +3332,18 @@
     const timer = runStateToggle?.querySelector('span:last-child');
     if (label) label.textContent = state.running ? t('Running') : t('Stopped');
     /*
+     * ⛔ TOPO-03 (voce «titolo della struttura della sessione», 25/09/2026): come il desktop (`legacy/app.js`, riga di
+     * «sessione corrente · in corso/conclusa»), accanto a «sessione corrente» lo stato; il titolo sta su una riga coi
+     * puntini (CSS) e il nome intero resta nel suggerimento.
+     */
+    const rigaTopologia = $('.topology-row.root');
+    if (rigaTopologia && state.realSession.id) {
+      const sotto = $('small', rigaTopologia);
+      if (sotto) sotto.textContent = `${t('current session')} · ${state.running ? t('in progress') : t('stopped')}`;
+      const titolo = $('strong', rigaTopologia);
+      if (titolo) titolo.title = titolo.textContent;
+    }
+    /*
      * ⭐⭐⭐ 3/9 — era `timer.textContent = state.running ? '01:42' : '—'`:
      * una STRINGA LETTERALE, mai un tempo vero (trovato leggendo il
      * codice — non un'ipotesi). Il case RunStarted azzera
@@ -2902,8 +3365,9 @@
     const stopButton = $('.stop-run');
     if (stopButton) {
       stopButton.disabled = !state.running;
-      stopButton.setAttribute('aria-label', state.running ? 'Stop run' : 'Run stopped');
+      stopButton.setAttribute('aria-label', t(state.running ? 'Stop run' : 'Run stopped'));
     }
+    aggiornaComposerTerminale(); // ⭐ B1-13 (23/09): l'avviso del Terminale segue la stessa striscia, mai «in corso» accanto a «Fermato»
   }
 
   let nativeKeyboardOpen = null;
@@ -2931,81 +3395,17 @@
     applyKeyboardOpen(nativeKeyboardOpen ?? viewportKeyboardOpen);
   }
 
-  const toolDetails = {
-    read: ['File read', 'TalosComposer.vue · 214 lines · no conflict found.'],
-    search: ['Search done', 'Found breakpoints 360/430/780, safe-area and 11 interactive targets to refine.'],
-    edit: ['Patch applicata', '+28 −19 · layout composer convertito a container-aware responsive surface.'],
-    bash: ['Test completati', '6/6 tests passed in 8.4s · touch targets, safe-area and command palette verified.'],
-    browser: ['Browser check live', '390×844 · viewport dinamico, composer, drawer e bottom navigation sotto osservazione.'],
-  };
-
   function toggleToolDetail(button) {
-    const key = button.dataset.toolDetail;
     const existing = button.nextElementSibling?.classList.contains('tool-inline-detail') ? button.nextElementSibling : null;
-    $$('.tool-row[aria-expanded="true"]').forEach((row) => {
-      if (row !== button) row.setAttribute('aria-expanded', 'false');
-    });
-    $$('.tool-inline-detail').forEach((detail) => {
-      if (detail !== existing) animateExit(detail, { durationToken: '--talos-motion-duration-disclosure' }, () => detail.remove());
-    });
-    if (existing) {
-      button.setAttribute('aria-expanded', 'false');
-      animateExit(existing, { durationToken: '--talos-motion-duration-disclosure' }, () => existing.remove());
-      return;
-    }
-    const [title, detail] = toolDetails[key] || ['Dettaglio tool', 'No further detail available.'];
-    const row = document.createElement('div');
-    row.className = 'tool-inline-detail';
-    row.innerHTML = `<strong>${title}</strong><span>${detail}</span>`;
-    button.insertAdjacentElement('afterend', row);
-    markMotionEnter(row);
-    button.setAttribute('aria-expanded', 'true');
+    if (existing) existing.remove();
   }
-
-  const reviewFiles = {
-    composer: {
-      path: 'src/components/chat/TalosComposer.vue',
-      code: [
-        ['ctx', '@@ composer layout @@'],
-        ['del', '- .composer { grid-template-columns: 48px 1fr auto auto; }'],
-        ['add', '+ .composer { container-type: inline-size; }'],
-        ['add', '+ .composer-toolbar { grid-template-columns: 48px minmax(0, 1fr) 48px; }'],
-        ['add', '+ @container (max-width: 560px) {'],
-        ['add', '+   .secondary-context { display: none; }'],
-        ['add', '+ }'],
-        ['ctx', ' '],
-        ['ctx', '@@ safe area @@'],
-        ['add', '+ padding-bottom: max(12px, env(safe-area-inset-bottom));'],
-      ],
-    },
-    layout: {
-      path: 'src/styles/chat-layout.css',
-      code: [
-        ['ctx', '@@ mobile interaction density @@'],
-        ['del', '- .message-actions button { width: 34px; height: 32px; }'],
-        ['add', '+ .message-actions button { width: 44px; height: 44px; }'],
-        ['add', '+ .view-pane { overscroll-behavior: contain; }'],
-        ['add', '+ .mobile-nav { padding-bottom: env(safe-area-inset-bottom); }'],
-      ],
-    },
-    tests: {
-      path: 'tests/unit/chat/composer.spec.ts',
-      code: [
-        ['ctx', '@@ responsive guardrails @@'],
-        ['add', '+ expect(target.height).toBeGreaterThanOrEqual(44)'],
-        ['add', '+ expect(document.documentElement.scrollWidth).toBe(innerWidth)'],
-        ['add', '+ expect(dialog.getAttribute("aria-labelledby")).toBeTruthy()'],
-        ['add', '+ expect(queueButton.getAttribute("aria-pressed")).toBe("true")'],
-      ],
-    },
-  };
 
   function renderReviewFile(key) {
     // ⭐ 26/8, riconciliazione desktop→mobile — le voci reali vivono in
     // state.realSession.reviewFiles (una per percorso scritto), non nel
     // fisso `reviewFiles` demo: chiave "real:<percorso>" le distingue,
     // stesso schema già in produzione su lane/harness-ui.
-    const file = key.startsWith('real:') ? state.realSession.reviewFiles.get(key.slice(5)) : reviewFiles[key];
+    const file = key.startsWith('real:') ? state.realSession.reviewFiles.get(key.slice(5)) : null;
     if (!file || !diffPath || !diffCode) return;
     diffPath.textContent = file.path;
     diffCode.replaceChildren(...file.code.map(([kind, text]) => {
@@ -3133,7 +3533,7 @@
     span.textContent = task.id
       ? `Real task · ${task.id}`
       : (task.consegna || task.consegnaCorta)
-        ? `Free task${task.progetto ? ` · ${task.progetto}` : ''}`
+        ? `${t('Free task')}${task.progetto ? ` · ${task.progetto}` : ''}`
         : 'Direct command';
     meta.appendChild(span);
     article.append(bubble, meta);
@@ -3159,7 +3559,7 @@
     bubble.textContent = text;
     const meta = document.createElement('div');
     meta.className = 'message-meta';
-    meta.appendChild(textElement('span', '', 'Follow-up'));
+    meta.appendChild(textElement('span', '', t('Follow-up')));
     article.append(bubble, meta);
     conversation.appendChild(article);
     markMotionEnter(article);
@@ -3239,7 +3639,7 @@
       nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '4');
       svg.append(nodo);
     }
-    article.append(svg, textElement('span', 'sr-only', 'TALOS is working on the answer…'));
+    article.append(svg, textElement('span', 'sr-only', t('TALOS is working on the answer…')));
     conversation.appendChild(article);
     state.realSession.attesaBubble = article;
     markMotionEnter(article);
@@ -3269,7 +3669,7 @@
     article.className = 'message assistant-message compact-message real-compaction-note';
     article.setAttribute('role', 'status');
     article.setAttribute('aria-live', 'polite');
-    article.textContent = 'Summarising the conversation so far…';
+    article.textContent = t('Summarising the conversation so far…');
     conversation.appendChild(article);
     state.realSession.compattazioneBubble = article;
     markMotionEnter(article);
@@ -3293,7 +3693,7 @@
     const glyph = document.createElement('span');
     glyph.className = 'talos-glyph';
     glyph.appendChild(textElement('span', 'brand-glyph-mark', ''));
-    meta.append(glyph, document.createTextNode('TALOS · real session'));
+    meta.append(glyph, document.createTextNode(t('TALOS · real session')));
     const copy = document.createElement('div');
     copy.className = 'assistant-copy';
     article.append(meta, copy);
@@ -3489,17 +3889,28 @@
       if (!conteggi.has(item.categoria)) { conteggi.set(item.categoria, 0); ordine.push(item.categoria); }
       conteggi.set(item.categoria, conteggi.get(item.categoria) + 1);
     }
+    const unicoNuovo = () => gruppo.items.find((i) => i.categoria === 'modificato')?.nuovo;
     const VERBI = {
       modificato: (n) => {
         if (n !== 1) return `modified ${n} files`;
-        const unico = gruppo.items.find((i) => i.categoria === 'modificato');
-        return unico?.nuovo ? 'created a file' : 'modified a file';
+        return unicoNuovo() ? 'created a file' : 'modified a file';
       },
       eseguito: (n) => (n === 1 ? 'ran a command' : `ran ${n} commands`),
       letto: (n) => (n === 1 ? 'read a file' : `read ${n} files`),
     };
-    const testo = ordine.map((cat) => VERBI[cat](conteggi.get(cat))).join(', ');
-    const base = testo ? testo.charAt(0).toUpperCase() + testo.slice(1) : 'Working…';
+    // ⭐ 24/09: il numero cambia la frase (singolare/plurale), quindi non basta il dizionario — come `titoloReview`.
+    const VERBI_IT = {
+      modificato: (n) => {
+        if (n !== 1) return `modificati ${n} file`;
+        return unicoNuovo() ? 'creato un file' : 'modificato un file';
+      },
+      eseguito: (n) => (n === 1 ? 'eseguito un comando' : `eseguiti ${n} comandi`),
+      letto: (n) => (n === 1 ? 'letto un file' : `letti ${n} file`),
+    };
+    const italiano = window.__talosHarnessLocale === 'it';
+    const verbi = italiano ? VERBI_IT : VERBI;
+    const testo = ordine.map((cat) => verbi[cat](conteggi.get(cat))).join(', ');
+    const base = testo ? testo.charAt(0).toUpperCase() + testo.slice(1) : t('Working…');
     /*
      * ⭐⭐⭐ 3/9 — avm-03, dal vivo: «Un ⚠️ giallo accompagna "Read 9
      * files, ran a command" senza dire cosa è andato storto». L'icona da
@@ -3514,10 +3925,16 @@
     const problemi = gruppo.items.filter((item) => item.problema);
     if (problemi.length > 0) {
       const ultimo = problemi[problemi.length - 1];
-      const motivo = ultimo.motivoFallimento || 'see details';
-      gruppo.summaryText.textContent = problemi.length === 1
-        ? `${base} — failed: ${motivo}`
-        : `${base} — ${problemi.length} failed, last: ${motivo}`;
+      const motivo = ultimo.motivoFallimento || t('see details');
+      if (italiano) {
+        gruppo.summaryText.textContent = problemi.length === 1
+          ? `${base} — non riuscito: ${motivo}`
+          : `${base} — ${problemi.length} non riusciti, l’ultimo: ${motivo}`;
+      } else {
+        gruppo.summaryText.textContent = problemi.length === 1
+          ? `${base} — failed: ${motivo}`
+          : `${base} — ${problemi.length} failed, last: ${motivo}`;
+      }
     } else {
       gruppo.summaryText.textContent = base;
     }
@@ -3550,7 +3967,7 @@
       riga.className = 'tool-group-sheet-row';
       riga.setAttribute('aria-expanded', 'false');
       riga.append(nuovaIconaSvg(ICONA_PER_CATEGORIA[item.categoria]));
-      riga.append(textElement('strong', '', ETICHETTA_CATEGORIA[item.categoria]));
+      riga.append(textElement('strong', '', t(ETICHETTA_CATEGORIA[item.categoria])));
       riga.append(textElement('span', 'tool-group-sheet-target', item.bersaglio || ''));
       if (item.diffDisponibile && (item.diffAggiunte > 0 || item.diffRimozioni > 0)) {
         const diff = document.createElement('span');
@@ -3854,7 +4271,7 @@
       const barraUrl = $('[data-view="browser"] .browser-url');
       if (barraUrl) barraUrl.replaceChildren(document.createTextNode('—'));
       const anteprima = $('[data-view="browser"] .device-preview');
-      if (anteprima) anteprima.replaceChildren(textElement('p', 'board-empty', 'No page read in this session.'));
+      if (anteprima) anteprima.replaceChildren(textElement('p', 'board-empty', t('No page read in this session.')));
       const demoBadge = $('.demo-surface-badge', $('[data-view="browser"]'));
       if (demoBadge) demoBadge.hidden = true;
     }
@@ -4257,6 +4674,12 @@
    * finora in questa sessione, sostituendo le voci demo la prima volta che
    * esiste almeno una scrittura vera.
    */
+  /** ⭐ B1 (23/09), misurato sul Pad: «1 file changed» in inglese dentro l'app italiana. Il numero cambia, quindi non basta il dizionario. */
+  function titoloReview(numero) {
+    if (window.__talosHarnessLocale === 'it') return `${numero} file ${numero === 1 ? 'modificato' : 'modificati'}`;
+    return `${numero} file${numero === 1 ? '' : 's'} changed`;
+  }
+
   function renderRealReviewList() {
     const contenitore = $('[data-view="diff"] .file-review-list');
     if (!contenitore) return;
@@ -4275,7 +4698,7 @@
       uso.setAttribute('href', '#i-diff'); // ⛔ mai innerHTML: costruito nodo per nodo
       icona.append(uso);
       etichetta.append(icona, textElement('strong', '', file.path.split('/').pop()));
-      button.append(etichetta, textElement('span', 'diff-stats', `${file.nuovo ? 'new' : 'changed'} · ${file.code.length} lines`));
+      button.append(etichetta, textElement('span', 'diff-stats', `${t(file.nuovo ? 'new' : 'changed')} · ${file.code.length} ${t(file.code.length === 1 ? 'line' : 'lines')}`));
       button.addEventListener('click', () => {
         $$('.file-review', contenitore).forEach((f) => { f.classList.remove('active'); f.setAttribute('aria-pressed', 'false'); });
         button.classList.add('active');
@@ -4285,7 +4708,7 @@
       return button;
     }));
     const titolo = $('[data-view="diff"] .view-heading h2');
-    if (titolo) titolo.textContent = `${voci.length} file${voci.length === 1 ? '' : 's'} changed`;
+    if (titolo) titolo.textContent = titoloReview(voci.length);
     if (voci.length > 0) renderRischioReview(voci);
   }
 
@@ -4413,7 +4836,7 @@
     try {
       voci = await caricaLivelloAlbero(percorsoCompleto);
     } catch {
-      childUl.replaceChildren(textElement('li', 'ft-loading', 'Not readable.'));
+      childUl.replaceChildren(textElement('li', 'ft-loading', t('Not readable.')));
       return;
     }
     childUl.replaceChildren();
@@ -4461,7 +4884,7 @@
     if (stato) {
       const dot = document.createElement('span');
       dot.className = `ft-status-dot ft-${stato}`;
-      dot.title = stato === 'new' ? 'Nuovo' : 'Changed';
+      dot.title = stato === 'new' ? 'Nuovo' : t('Changed');
       row.appendChild(dot);
     }
 
@@ -4694,7 +5117,7 @@
       mount.replaceChildren(pre);
     } catch (error) {
       if (!mount.isConnected) return;
-      mount.replaceChildren(textElement('p', 'board-empty', `Not readable: ${error.message}`));
+      mount.replaceChildren(textElement('p', 'board-empty', `${t('Not readable')}: ${error.message}`));
     }
   }
 
@@ -4820,7 +5243,7 @@
     const ul = document.createElement('ul');
     ul.className = 'ft-tree';
     ul.setAttribute('role', 'tree');
-    ul.setAttribute('aria-label', 'Workspace files');
+    ul.setAttribute('aria-label', t('Workspace files'));
     ul.addEventListener('keydown', (e) => {
       const righe = righeVisibiliAlbero(ul);
       const i = righe.indexOf(document.activeElement);
@@ -4849,7 +5272,7 @@
     try {
       voci = await caricaLivelloAlbero('');
     } catch {
-      ul.appendChild(textElement('li', 'ft-loading', 'Tree not available.'));
+      ul.appendChild(textElement('li', 'ft-loading', t('Tree not available.')));
       return;
     }
     for (const voce of voci) {
@@ -4873,7 +5296,7 @@
       if (stato) {
         if (!dot) { dot = document.createElement('span'); row.appendChild(dot); }
         dot.className = `ft-status-dot ft-${stato}`;
-        dot.title = stato === 'new' ? 'Nuovo' : 'Changed';
+        dot.title = stato === 'new' ? 'Nuovo' : t('Changed');
       } else if (dot) {
         dot.remove();
       }
@@ -4937,9 +5360,11 @@
     hint.replaceChildren();
     if (trovati > 0) {
       hint.appendChild(textElement('b', '', String(trovati)));
-      hint.appendChild(document.createTextNode(` result${trovati === 1 ? '' : 's'} in the files already loaded`));
+      hint.appendChild(document.createTextNode(window.__talosHarnessLocale === 'it'
+        ? ` ${trovati === 1 ? 'risultato' : 'risultati'} nei file già caricati`
+        : ` result${trovati === 1 ? '' : 's'} in the files already loaded`));
     } else {
-      hint.textContent = 'No loaded file matches — open more folders to include them.';
+      hint.textContent = t('No loaded file matches — open more folders to include them.');
     }
   }
 
@@ -4954,6 +5379,11 @@
     const worktree = $('#envWorktree');
     const root = $('#envRoot');
     if (workspace) workspace.textContent = contesto.progetto || '—';
+    // ⭐ B1-07 (23/09), misurato sul Pad: il chip della testata restava «—» in una sessione vera. Mostra lo stesso workspace.
+    const chip = $('.environment-chip span');
+    if (chip) chip.textContent = contesto.progetto || '—';
+    // Foto del Pad 24/09: la colonna destra della testata è stretta e il chip si tronca. Il nome intero resta nel title.
+    chip?.closest('.environment-chip')?.setAttribute('title', contesto.progetto || '');
     if (branch) branch.textContent = contesto.branch || '—';
     if (worktree) worktree.textContent = '—'; // mai un repository git nel corpus di oggi, vedi doc in workspace-context.mjs
     if (root) root.textContent = contesto.cartella;
@@ -5319,6 +5749,11 @@
       }
       case 'RunFinished': {
         setRunState(false); // ⭐ 29/8 — ledger §10, stesso motivo di RunStarted sopra
+        // ⭐ B1-11 (23/09): gli attrezzi che il kernel ha DAVVERO offerto al modello, per il Capability hub.
+        if (Array.isArray(evento.result?.attrezziOfferti)) {
+          state.realSession.attrezziOfferti = { sessionId: state.realSession.id, nomi: evento.result.attrezziOfferti.map(String) };
+        }
+        aggiornaSchedaCapability();
         /*
          * ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col
          * modello" — la causa PRINCIPALE della "risposta duplicata" non era
@@ -5486,6 +5921,7 @@
    */
   function collegaEventiSessione(sessionId, generation) {
     state.realSession.id = sessionId;
+    aggiornaControlliSessione();
     state.realSession.eventoTerminaleVisto = false;
     const demoBadgeChat = $$('.demo-surface-badge', $('.chat-view'))
       .find((badge) => badge.closest('[data-demo-surface]')?.dataset.demoSurface === 'chat');
@@ -5580,6 +6016,7 @@
       resettaSuperficiRealiDedicate();
     }
     state.realSession.id = null;
+    aggiornaControlliSessione();
     return (state.realSession.generation += 1);
   }
 
@@ -5655,11 +6092,56 @@
    * ⭐ Fork reale quando c'è una sessione reale CONCLUSA attiva. Il server
    * rifiuta con SESSION_NOT_READY (409) su una sessione ancora in corso.
    */
+  /**
+   * ⭐ B1 (23/09/2026) — Compatta e Fork esistono davvero solo su una sessione
+   * reale. Senza, restano al loro posto ma SPENTI con il motivo (W3C APG:
+   * `aria-disabled` lascia il controllo raggiungibile e spiegabile; dossier
+   * `.claude/ricerche/2026-09-23-B1-funzioni-non-disponibili.md`). Si chiama
+   * a ogni cambio di `state.realSession.id` e al boot.
+   */
+  /** Testo qualunque reso sicuro dentro un template HTML (stessa sostituzione già usata dai fogli). */
+  function testoSicuro(testo) {
+    return String(testo).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  }
+
+  /** ⭐ B1-11 (23/09): i nomi offerti nell'ultimo giro concluso di QUESTA sessione, null se non se ne conosce ancora nessuno. */
+  function attrezziOffertiCorrenti() {
+    const ultimi = state.realSession.attrezziOfferti;
+    return ultimi && ultimi.sessionId === state.realSession.id && ultimi.nomi.length > 0 ? ultimi.nomi : null;
+  }
+
+  /**
+   * ⭐ B1 (23/09), foto del Pad: la scheda Capability diceva «Tools 7» e «Browser Scoped», scritti a mano.
+   * Ora conta gli attrezzi davvero offerti nell'ultimo giro; senza un giro concluso resta «—».
+   */
+  function aggiornaSchedaCapability() {
+    const nomi = attrezziOffertiCorrenti();
+    const imposta = (chiave, testo) => { const el = $(`[data-capability-count="${chiave}"]`); if (el) el.textContent = testo; };
+    imposta('tools', nomi ? String(nomi.length) : '—');
+    imposta('web_search', nomi?.includes('web_search') ? 'web_search' : '—');
+    imposta('naviga', nomi?.includes('naviga') ? 'naviga' : '—');
+  }
+
+  function aggiornaControlliSessione() {
+    aggiornaSchedaCapability();
+    const reale = Boolean(state.realSession.id);
+    const motivo = t('Open or start a real session first.');
+    [$('#compactSessionBtn'), ...$$('[data-action="fork-session"]')].forEach((bottone) => {
+      if (!bottone) return;
+      if (reale) {
+        bottone.removeAttribute('aria-disabled');
+        bottone.removeAttribute('title');
+      } else {
+        bottone.setAttribute('aria-disabled', 'true');
+        bottone.setAttribute('title', motivo);
+      }
+    });
+  }
+
   async function forkSession() {
-    if (!state.realSession.id) {
-      toast('Fork created', 'A new branch of the conversation from this point.');
-      return;
-    }
+    // ⛔ B1 (23/09): senza sessione reale non si crea niente — prima un
+    // «Fork created» annunciava un ramo mai nato.
+    if (!state.realSession.id) return;
     const idOrigine = state.realSession.id;
     const taskIdOrigine = state.realSession.taskId;
     try {
@@ -5739,10 +6221,11 @@
    * resume/fork erediterebbe — la conversazione già mostrata non cambia.
    */
   async function compactSession() {
-    if (!state.realSession.id) {
-      toast('Context compacted', '18.7k -> 9.3k token equivalenti.');
-      return;
-    }
+    // ⛔ B1 (23/09): senza una sessione reale non c'è niente da compattare —
+    // qui prima c'era un toast con «18.7k -> 9.3k» scritto a mano. Il
+    // pulsante è spento col motivo (aggiornaControlliSessione), e il clic
+    // su un controllo aria-disabled non fa nulla.
+    if (!state.realSession.id) return;
     try {
       const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/compact`, {});
       toast(
@@ -5880,6 +6363,7 @@
     setView('chat');
     closePanels();
     state.realSession.id = sessionId;
+    aggiornaControlliSessione();
     for (const evento of eventi) handleRealEvent(evento, generation);
     // ⭐ 2/9 — NIENTE aggiornaElencoSessioniReali() qui (a differenza di passaASessione): è un'altra fetch di rete, e questo percorso esiste apposta per essere a ZERO fetch — l'elenco è già quello giusto, era già stato popolato la prima volta che questa sessione è stata caricata.
     return true;
@@ -6040,7 +6524,7 @@
       const etichetta = sessione.nome || sessione.taskId; // ⭐ un nome scelto dall'owner vince sempre sul taskId
       main.append(
         textElement('strong', '', sessione.forkDa ? `${etichetta} · fork` : etichetta),
-        textElement('small', '', sessione.conclusa ? 'concluso' : 'in corso · live'),
+        textElement('small', '', sessione.conclusa ? 'concluso' : `in corso · ${t('live')}`),
       );
       const meta = document.createElement('span');
       meta.className = 'session-meta';
@@ -6081,7 +6565,8 @@
    * strumento reale, ma secondario, sotto il compito libero, mai il default.
    */
   async function openRealTaskSheet() {
-    sheetEyebrow.textContent = 'New session';
+    // NUOVA-SESSIONE-IT-01 (25/09/2026): nella lingua dell'app — diceva «NEW SESSION» in italiano.
+    sheetEyebrow.textContent = t('New session');
     sheetTitle.textContent = 'Cosa deve fare TALOS?';
     sheetBody.replaceChildren(textElement('p', 'board-empty', 'Carico l’elenco dal server…'));
     const demoBadge = $('.demo-surface-badge', sheetDialog);
@@ -6115,7 +6600,7 @@
           apiGet('/api/v1/projects').then((r) => r.items).catch(() => []), // ⛔ un elenco vuoto/non raggiungibile non deve bloccare i task del corpus
         ]);
       } catch (error) {
-        sheetBody.replaceChildren(textElement('p', 'board-empty', `List not available: ${error.message}`));
+        sheetBody.replaceChildren(textElement('p', 'board-empty', `${t('List not available')}: ${error.message}`));
         return;
       }
     } else {
@@ -6133,7 +6618,7 @@
           apiGet('/api/v1/frequent-dirs').then((r) => r.items).catch(() => []), // best effort, vedi sopra
         ]);
       } catch (error) {
-        sheetBody.replaceChildren(textElement('p', 'board-empty', `List not available: ${error.message}`));
+        sheetBody.replaceChildren(textElement('p', 'board-empty', `${t('List not available')}: ${error.message}`));
         return;
       }
     }
@@ -6182,34 +6667,31 @@
         customSection.appendChild(scorciatoie);
       }
     } else {
-      customSection.appendChild(textElement('span', 'sheet-label', 'Folder — TALOS writes THERE directly, no copies'));
+      customSection.appendChild(textElement('span', 'sheet-label', t('Folder — TALOS writes THERE directly, no copies')));
       if (progetti.length === 0) {
-        customSection.appendChild(textElement('p', 'board-empty', 'No project folder is configured on the server. Set TALOS_HARNESS_UI_PROJECT_DIRS to the allowed absolute paths and restart the server to use a free task.'));
+        customSection.appendChild(textElement('p', 'board-empty', t('No project folder is configured on the server. Set TALOS_HARNESS_UI_PROJECT_DIRS to the allowed absolute paths and restart the server to use a free task.')));
       } else {
-        selectCartella = document.createElement('select');
-        selectCartella.className = 'sheet-input';
-        selectCartella.id = 'customTaskCartella';
-        for (const progetto of progetti) {
-          const opzione = document.createElement('option');
-          opzione.value = progetto.id;
-          opzione.textContent = progetto.nome;
-          selectCartella.appendChild(opzione);
-        }
+        // SCELTA-CARTELLA (25/09/2026): il menu a elenco del Codice, non il `<select>` nativo.
+        selectCartella = creaSceltaSingola({
+          id: 'customTaskCartella',
+          etichetta: t('Folder'),
+          opzioni: progetti.map((progetto) => ({ valore: progetto.id, etichetta: progetto.nome || progetto.id })),
+        });
       }
     }
     if (selectCartella || inputCartellaLibera) {
       const modelPicker = creaModelPicker({ valoreIniziale: state.model || '' });
       const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
       customSection.append(
-        ...(selectCartella ? [selectCartella] : []),
-        textElement('span', 'sheet-label', 'Model'),
+        ...(selectCartella ? [selectCartella.elemento] : []),
+        textElement('span', 'sheet-label', t('Model')),
         modelPicker.elemento,
         effortPicker.elemento,
       );
       const submit = document.createElement('button');
       submit.type = 'submit';
       submit.className = 'primary-btn compact full';
-      submit.textContent = 'Continue in the chat';
+      submit.textContent = t('Continue in the chat');
       customSection.appendChild(submit);
       customSection.addEventListener('submit', (event) => {
         event.preventDefault();
@@ -6222,7 +6704,7 @@
           avviaSessionePendente({ cartellaLibera: percorso, nomeCartella: percorso, modello, effort, permessi: state.permissions });
           return;
         }
-        const cartellaId = selectCartella.value;
+        const cartellaId = selectCartella.getValore();
         const nomeCartella = progetti.find((p) => p.id === cartellaId)?.nome ?? cartellaId;
         closeEmbeddedDialog(sheetDialog);
         avviaSessionePendente({ cartellaId, nomeCartella, modello, effort, permessi: state.permissions });
@@ -6233,7 +6715,7 @@
     // --- SECONDARIA: i task del corpus del banco interno, per confrontare l'harness a parità di compito. ---
     const section = document.createElement('div');
     section.className = 'sheet-section';
-    section.appendChild(textElement('span', 'sheet-label', `Or try a benchmark task (${tasks.length}, real checkout and run)`));
+    section.appendChild(textElement('span', 'sheet-label', (window.__talosHarnessLocale === 'it' ? `Oppure scegli un’attività dal banco di prova (${tasks.length}, checkout ed esecuzione veri)` : `Or try a benchmark task (${tasks.length}, real checkout and run)`)));
     for (const task of tasks) {
       const button = document.createElement('button');
       button.className = 'sheet-option';
@@ -6243,11 +6725,12 @@
       iconWrap.innerHTML = icon('i-play');
       const textWrap = document.createElement('span');
       textWrap.append(textElement('strong', '', task.id), textElement('small', '', task.consegnaCorta));
-      button.append(iconWrap, textWrap, textElement('span', '', `difficulty ${task.difficolta}`));
+      button.append(iconWrap, textWrap, textElement('span', '', `${t('difficulty')} ${task.difficolta}`));
       button.addEventListener('click', () => { closeEmbeddedDialog(sheetDialog); startRealSession(task); });
       section.appendChild(button);
     }
-    corpoFoglio.push(section);
+    // ⛔ BANCO-VUOTO-01 (25/09/2026): senza attività la sezione annunciava «(0, …)» sopra il niente: non si mostra.
+    if (tasks.length > 0) corpoFoglio.push(section);
 
     sheetBody.replaceChildren(...corpoFoglio);
     /*
@@ -6316,7 +6799,7 @@
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
     state.realSession.taskId = taskSintetico.id;
-    state.session = `Free task · ${nomeCartella}`;
+    state.session = `${t('Free task')} · ${nomeCartella}`;
     mostraTitoloOvunque(state.session);
     setView('chat');
     closePanels();
@@ -6600,7 +7083,7 @@
       openRealTaskSheet();
       return;
     }
-    state.session = 'New session';
+    state.session = t('New session');
     mostraTitoloSessione(state.session);
     $$('.session-item').forEach((item) => item.classList.remove('active'));
     setView('chat');
@@ -6731,23 +7214,13 @@
    * userebbe l'export di un mockup per una diagnosi vera.
    */
   async function exportSession() {
+    // ⛔ B1 (23/09): senza sessione reale non c'è niente da esportare — prima scaricava un JSON con branch e worktree inventati.
     if (state.realSession.id) { openSheet('export'); return; }
-    const payload = {
-      schema: 'talos_mock_session_v1',
-      exported_at: new Date().toISOString(),
-      session: state.session,
-      model: state.model,
-      permissions: state.permissions,
-      branch: 'feat/mobile-code',
-      worktree: 'wt/auth-61c',
-      note: 'Interactive TALOS frontend mockup export',
-    };
-    scaricaTesto(JSON.stringify(payload, null, 2), 'talos-session-export.json', 'application/json');
-    toast('Session exported', 'JSON pronto.');
+    toast(t('Nothing to export yet'), t('Open or start a real session first.'));
   }
 
   async function shareSession() {
-    const text = `TALOS · ${state.session} · feat/mobile-code`;
+    const text = `TALOS · ${state.session}`;
     try {
       if (navigator.share) await navigator.share({ title: state.session, text });
       else if (navigator.clipboard) { await navigator.clipboard.writeText(text); toast('Snapshot copiato', 'Pronto da condividere.'); }
@@ -6802,8 +7275,8 @@
       case 'review': setView('diff'); break;
       case 'terminal': setView('terminal'); break;
       case 'browser': setView('browser'); break;
+      case 'automations': setView('automations'); break; // ⭐ AUT-2
       case 'permissions': openSheet('permissions'); break;
-      case 'dashboard': setView('dashboard'); break;
       /*
        * ⛔⛔⛔ 27/8 (33d4bbbe) — 'fork' mostrava sempre lo stesso toast finto
        * ("Fork created"), ANCHE con una sessione reale in corso, invece di
@@ -6857,16 +7330,11 @@
         if (window.innerWidth <= 1040) closePanels();
       } else if (button.dataset.mode === 'terminal') {
         setView('terminal');
-      } else {
-        setView('dashboard', { mode: 'dashboard' });
       }
     });
   });
 
   $$('[data-open-sheet]').forEach((button) => button.addEventListener('click', () => openSheet(button.dataset.openSheet)));
-  $$('[data-session-action]').forEach((button) => button.addEventListener('click', () => {
-    toast(button.dataset.sessionAction === 'fork' ? 'Fork created' : 'Side thread created', 'Isolated context, link kept in the session graph.');
-  }));
   /* ⭐ 27/8 — card "Session topology": il pulsante Fork chiama la VERA forkSession() (già reale per il blocco 1), non un toast finto — stesso attrezzo, un secondo punto d'accesso onesto. */
   $$('[data-action="fork-session"]').forEach((button) => button.addEventListener('click', () => forkSession()));
   $$('[data-control-action]').forEach((button) => button.addEventListener('click', () => {
@@ -6941,29 +7409,9 @@
     const message = actionButton.closest('.assistant-message');
     const action = actionButton.dataset.messageAction;
     if (action === 'copy') copyText($('.assistant-copy', message)?.textContent || '', 'Answer copied');
-    if (action === 'retry') toast('Regeneration started', 'The session context and permissions are unchanged.');
-    if (action === 'like' || action === 'dislike') {
-      const group = $$('.message-actions [data-message-action="like"], .message-actions [data-message-action="dislike"]', message);
-      const wasPressed = actionButton.getAttribute('aria-pressed') === 'true';
-      group.forEach((button) => button.setAttribute('aria-pressed', 'false'));
-      actionButton.setAttribute('aria-pressed', String(!wasPressed));
-      toast(!wasPressed ? 'Feedback registrato' : 'Feedback rimosso');
-    }
   });
 
-  $$('[data-browser-action]').forEach((button) => button.addEventListener('click', () => {
-    const labels = { back: 'Back', forward: 'Forward', reload: 'Preview reloaded', annotate: 'Modalità annotazione', inspect: 'Inspector browser' };
-    toast(labels[button.dataset.browserAction] || 'Browser', 'Azione simulata nel mockup locale.');
-  }));
-
-  const demoActionCopy = {
-    notifications: ['Notifiche demo', 'La superficie non è collegata a notifiche reali.'],
-    widget: ['Widget demo', 'Adding will work once this Board has a backend.'],
-    delegate: ['Delega demo', 'No sub-agent was started from this interface.'],
-  };
-  $$('[data-demo-action]').forEach((button) => button.addEventListener('click', () => {
-    toast(...(demoActionCopy[button.dataset.demoAction] || ['Demo UI · not connected', 'No real action was taken.']));
-  }));
+  // ⛔ B1 (23/09): Browser, notifiche, widget e deleghe annunciavano azioni simulate. I controlli del Browser restano spenti con il motivo (index.html).
 
   $$('[data-file-entry]').forEach((button) => button.addEventListener('click', () => {
     $$('[data-file-entry]').forEach((entry) => entry.classList.toggle('active', entry === button));
@@ -6995,9 +7443,44 @@
       openNewAutomationSheet();
       return;
     }
-    const labels = { new: ['Nuova automazione', 'Il mockup rappresenta il flusso senza backend.'], run: ['Run started', 'Il mockup rappresenta il flusso senza backend.'], edit: ['Automazione aperta', 'Il mockup rappresenta il flusso senza backend.'] };
-    toast(...(labels[action] || ['Automazione', 'Il mockup rappresenta il flusso senza backend.']));
+    // ⭐ 24/09/2026 (AUT-3): «Aggiorna» della vista del desktop rilegge l'elenco.
+    if (action === 'refresh' && !embeddedDemoOnly()) {
+      renderAutomationsReali();
+      return;
+    }
+    // ⛔ 24/09/2026: qui c'erano avvisi finti («Run started» senza nessun avvio, «Il mockup rappresenta il flusso senza
+    // backend») e un'azione «edit» senza pulsante. Senza server i pulsanti sono spenti col motivo (sotto, schema B1:
+    // W3C APG, aria-disabled lascia il controllo raggiungibile e spiegabile) e il tocco non fa niente.
   }));
+  if (embeddedDemoOnly()) {
+    $$('[data-automation-action]').forEach((bottone) => {
+      bottone.setAttribute('aria-disabled', 'true');
+      bottone.setAttribute('title', t('Automations need the Code server.'));
+    });
+  }
+  // ⭐ 24/09/2026 (AUT-3): ricerca e schede filtrano l'elenco già letto (niente rilettura).
+  $('[data-auto-query]')?.addEventListener('input', (evento) => {
+    paginaAutomazioni.query = evento.target.value;
+    disegnaPaginaAutomazioni();
+  });
+  const schedeAutomazioni = $$('[data-auto-stato]');
+  for (const scheda of schedeAutomazioni) {
+    scheda.addEventListener('click', () => {
+      paginaAutomazioni.stato = scheda.dataset.autoStato;
+      disegnaPaginaAutomazioni();
+    });
+    scheda.addEventListener('keydown', (evento) => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(evento.key)) return;
+      evento.preventDefault();
+      const indice = schedeAutomazioni.indexOf(scheda);
+      const nuova = evento.key === 'Home' ? schedeAutomazioni[0]
+        : evento.key === 'End' ? schedeAutomazioni.at(-1)
+          : schedeAutomazioni[(indice + (evento.key === 'ArrowRight' ? 1 : -1) + schedeAutomazioni.length) % schedeAutomazioni.length];
+      nuova.click();
+      nuova.focus();
+    });
+  }
+
 
   $('.stop-run')?.addEventListener('click', () => {
     if (!state.running) return;
@@ -7146,7 +7629,10 @@
     // server (SESSION_NOT_READY) — questo è solo l'avviso onesto
     // PRIMA del tentativo, mai un secondo giudice che può sbagliare
     // rispetto al server.
-    hint.hidden = state.realSession.eventoTerminaleVisto !== false;
+    // ⛔ B1-13 (23/09), misurato sul Pad: l'avviso «ancora in corso» restava
+    // accanto a «Fermato» nella testata. Ora si mostra solo se ENTRAMBI dicono
+    // che un giro gira: la striscia (state.running) e lo stream.
+    hint.hidden = !(state.running && state.realSession.eventoTerminaleVisto === false);
     hint.textContent = t('The session is still running: a direct command waits for it to finish.');
   }
   const terminalComposer = $('[data-terminal-composer]');
@@ -7190,19 +7676,7 @@
     }
   });
 
-  $$('[data-approve], [data-allow-session], [data-deny]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const card = button.closest('.approval-card');
-      animateExit(card, {}, () => card?.remove());
-      if (button.hasAttribute('data-deny')) toast('Permission denied', 'Il browser locale non verrà aperto.');
-      else toast(button.hasAttribute('data-allow-session') ? 'Per-session permission' : 'Permesso concesso', 'Browser locale autorizzato.');
-    });
-  });
-
-  $('#approveAllDiffs').addEventListener('click', () => {
-    toast('Review approvata', '3 file pronti per il gate finale.');
-    $$('.file-review').forEach((file) => { file.classList.remove('active'); file.setAttribute('aria-pressed', 'false'); });
-  });
+  // ⛔ B1 (23/09): «Approve all», «Comment» e «Open» annunciavano un'approvazione e un commento mai avvenuti — spenti con il motivo (index.html), nessun gestore.
 
   $$('.file-review').forEach((button) => {
     button.addEventListener('click', () => {
@@ -7215,47 +7689,10 @@
     });
   });
 
-  $$('[data-review-action]').forEach((button) => button.addEventListener('click', () => {
-    toast(button.dataset.reviewAction === 'comment' ? 'Commento inline pronto' : 'File aperto nel workspace', diffPath?.textContent || 'Review');
-  }));
-
   $('#reducedMotionToggle').addEventListener('change', (event) => {
     document.body.classList.toggle('reduce-motion', event.target.checked);
     toast('Movimento', event.target.checked ? 'Ridotto' : 'Standard');
   });
-
-  campaignSelect?.addEventListener('change', () => {
-    state.board.campaign = campaignSelect.value;
-    harnessFilter.value = '';
-    outcomeFilter.value = '';
-    refreshCampaign();
-  });
-  harnessFilter?.addEventListener('change', reloadRunsFromFilters);
-  outcomeFilter?.addEventListener('change', reloadRunsFromFilters);
-  refreshCampaignButton?.addEventListener('click', () => {
-    if (embeddedDemoOnly()) renderEmbeddedBoardDemo(true);
-    else if (state.board.initialized) refreshCampaign();
-    else ensureCampaignBoard();
-  });
-  loadMoreRunsButton?.addEventListener('click', async () => {
-    const dashboard = $('[data-view="dashboard"]');
-    const scrollTop = dashboard.scrollTop;
-    const firstNewIndex = state.board.runs.length;
-    loadMoreRunsButton.disabled = true;
-    try {
-      await loadCampaignRuns({ append: true });
-      dashboard.scrollTop = scrollTop;
-    } catch (error) {
-      setConnectionState('error', 'Paginazione non disponibile', boardErrorMessage(error));
-    } finally {
-      loadMoreRunsButton.disabled = false;
-      const focusTarget = loadMoreRunsButton.hidden
-        ? campaignRunList.querySelectorAll('.campaign-run-toggle')[firstNewIndex]
-        : loadMoreRunsButton;
-      focusTarget?.focus({ preventScroll: true });
-    }
-  });
-  $('[data-action="clear-evidence"]')?.addEventListener('click', clearCampaignEvidence);
 
   ROOT().addEventListener('keydown', (event) => {
     const mod = event.metaKey || event.ctrlKey;
@@ -7369,6 +7806,30 @@
     caricaPannelloHooks,
     caricaAlberoSessione,
     openSheet,
+    // ⭐ 24/09 — esposta per provare che NON tocca il testo del modello e i dati dell'utente (codiceItaliano.test.ts).
+    traduciAlbero,
+    traduci: t,
+    // ⭐ AUT-2 (24/09): il modello scelto nel composer dell'app, anche prima di un invio (harnessUiBridge.setTalosHarnessUiModel).
+    // NOME-MODELLO-01 (25/09/2026): col modello l'app passa il suo nome. Il server del telefono ora ha il catalogo
+    // (CATALOGO-MODELLI, `model-catalog.mjs`), ma il nome dell'app arriva subito e vale anche senza rete.
+    impostaModello(modello, nome) {
+      if (typeof modello !== 'string' || modello.trim().length === 0) return false;
+      if (typeof nome === 'string' && nome.trim()) nomiModelli.set(modello, nome.trim());
+      state.model = modello;
+      aggiornaPillolaModello();
+      return true;
+    },
+    // ⭐ RAG-COD (24/09/2026, owner «collegarla»): il livello di ragionamento del composer dell'app, nel vocabolario di
+    // OpenRouter (`none`…`max`); `null` = nessun `reasoning` (il predefinito del server). Entra in `state.effort`, che
+    // `startCustomSession` manda come `reasoning.effort`; con `sincronizzaSessione` anche la sessione aperta lo prende
+    // (la stessa via dello slider interno). Il server applica poi la regola del catalogo (`regolaReasoningPerModello`).
+    impostaEffort(effort, sincronizzaSessione = false) {
+      if (effort !== null && !['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) return false;
+      if (state.effort === effort) return true;
+      state.effort = effort;
+      if (sincronizzaSessione) sincronizzaImpostazioniSessione({ reasoning: effort ? { effort } : null });
+      return true;
+    },
     renderAutomationsReali,
     openNewAutomationSheet,
     setView,
@@ -7378,6 +7839,8 @@
     // ⛔ 15/09/2026 — spegne anche le catene di caricaCronologiaSessione sospese sul backoff (1s/2s/3s):
     // al prossimo risveglio vedono il flag e escono SENZA rilanciare apiGet (vedi la dichiarazione del flag).
     runtimeDistrutto = true;
+    seguiAutomazioni(false); // ⭐ AUT-2c: nessuna rilettura delle Automazioni dopo lo smontaggio
+    document.removeEventListener('visibilitychange', rileggiAutomazioniAlRitorno);
     cancelMotionAnimations();
     setEmbeddedTopbarHidden(false);
     embeddedHeaderScrollers.forEach((scroller) => {
@@ -7497,6 +7960,7 @@
 
   ensureDemoLabels();
   applicaLocalizzazioneStatica();
+  aggiornaControlliSessione();
   /*
    * ⛔⛔⛔ 27/8 (3626c9bd), owner: "il caricamento della pagina non deve
    * azzerare le sessioni in corso... se aggiorno adesso le sessioni passate
@@ -7544,9 +8008,8 @@
   setupPanelResize();
   syncHostLayout();
   setQueueMode(false);
-  setRunState(true);
+  setRunState(false); // ⛔ B1-13 (23/09): era setRunState(true) — la striscia diceva «Running» col cronometro acceso senza nessun giro partito
   setInspectorTab($('.inspector-tabs button.active'));
-  renderReviewFile('composer');
   autoGrowTextarea();
   ripristinaBozzaComposer(); // ⭐ 3/9 — un app.js appena montato (boot, o un ritorno da Model Lab) riprende quello che c'era scritto prima di partire
   syncVisualViewport();

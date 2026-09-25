@@ -185,6 +185,82 @@ describe('OpenAI-compatible mobile adapters', () => {
         expect(catalog.models[1]?.chatCompatibility).toBe('unsupported')
     })
 
+    it('RAG-OBB-04 reads the OpenRouter reasoning object from the catalog', async () => {
+        const { transport } = transportWith({
+            status: 200,
+            data: { data: [
+                {
+                    id: 'z-ai/glm-5.3-flash',
+                    name: 'Z.ai: GLM 5.3 Flash',
+                    architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+                    supported_parameters: ['include_reasoning', 'reasoning', 'reasoning_effort', 'tools'],
+                    reasoning: { mandatory: true, default_enabled: true, supported_efforts: ['max', 'high', 'low'], default_effort: 'max' },
+                },
+                {
+                    id: 'vendor/plain',
+                    architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+                    supported_parameters: [],
+                    reasoning: 'not an object',
+                },
+            ] },
+        })
+        const catalog = await openRouterAdapter.listModels({ apiKey: 'sentinel-secret' }, transport)
+        expect(catalog.models[0]?.reasoning).toEqual({ mandatory: true, supportedEfforts: ['max', 'high', 'low'] })
+        expect(catalog.models[1]?.reasoning ?? null).toBeNull()
+    })
+
+    it.each([
+        ['off', 'low'],
+        ['medium', 'low'],
+        ['max', 'max'],
+    ])('RAG-OBB-05 always asks a mandatory-reasoning model to reason (%s → %s)', async (scelto, inviato) => {
+        const { request, transport } = transportWith({
+            status: 200,
+            data: { model: 'z-ai/glm-5.3-flash', choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] },
+        })
+        await openRouterAdapter.complete({
+            model: {
+                id: 'z-ai/glm-5.3-flash',
+                provider: 'openrouter',
+                displayName: 'GLM 5.3 Flash',
+                chatCompatibility: 'supported',
+                inputModalities: ['text'],
+                outputModalities: ['text'],
+                supportedParameters: ['reasoning'],
+                reasoning: { mandatory: true, supportedEfforts: ['max', 'high', 'low'] },
+            },
+            turns: [{ role: 'user', content: 'ciao' }],
+            effort: scelto,
+            thinking: false,
+        }, { apiKey: 'sentinel-secret' }, transport)
+        expect(request.mock.calls[0][0].data.reasoning).toEqual({ effort: inviato })
+        // Owner 24/09: `provider.require_parameters` resta spento.
+        expect(request.mock.calls[0][0].data).not.toHaveProperty('provider')
+    })
+
+    it('RAG-OBB-06 still sends no reasoning when an optional-reasoning model is set to off', async () => {
+        const { request, transport } = transportWith({
+            status: 200,
+            data: { model: 'openai/gpt-5.5', choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] },
+        })
+        await openRouterAdapter.complete({
+            model: {
+                id: 'openai/gpt-5.5',
+                provider: 'openrouter',
+                displayName: 'GPT-5.5',
+                chatCompatibility: 'supported',
+                inputModalities: ['text'],
+                outputModalities: ['text'],
+                supportedParameters: ['reasoning'],
+                reasoning: { mandatory: false, supportedEfforts: ['xhigh', 'high', 'medium', 'low', 'none'] },
+            },
+            turns: [{ role: 'user', content: 'ciao' }],
+            effort: 'off',
+            thinking: false,
+        }, { apiKey: 'sentinel-secret' }, transport)
+        expect(request.mock.calls[0][0].data).not.toHaveProperty('reasoning')
+    })
+
     it('OPENROUTER-TOOLS-01 omits tool parameters when the selected model does not declare tools', async () => {
         const { request, transport } = transportWith({
             status: 200,

@@ -740,7 +740,43 @@ import { resolve } from 'node:path'
  * si alza con la misura; il debito strutturale (pezzi pigri per stazione)
  * resta quello scritto sopra.
  */
-const DEFAULT_MAXIMUM_BYTES = 644_000
+/*
+ * ⛔ JS 644.000 → 650.700, il 24/09/2026 (blocco B3 «Giro in corso» del mobile: coda dei messaggi, «Indirizza»,
+ * «Riprendi», stato di ogni chat; `.claude/b3/LEDGER-B3-2026-09-24.md`).
+ *
+ * Misurato PRIMA di B3 (stesso albero, file di B3 riportati a HEAD, build di confronto poi ripristinata): **643.316**
+ * — 684 byte di margine. B3 appena scritto: **656.741**, esito 1 letto dal codice di uscita.
+ *
+ * L'ordine della regola dell'owner (14/08), seguito e misurato passo per passo con le sourcemap, per file:
+ *   2. spostato nei pezzi a richiesta: la coda dello store (`stores/chatQueue.ts`, con «Riprendi»), la striscia e
+ *      «Riprendi» della schermata (`TalosMobileCodaDellaChat.vue`, `TalosMobileRiprendiGiro.vue`), i tetti della coda
+ *      letti solo al rifiuto, lo stato della barra laterale calcolato dentro la barra (già a richiesta) → **650.157**;
+ *   3. nessun contratto accorciato: nessun testo, nessuna guardia, nessuna prova toccata per far quadrare il numero.
+ * Quello che resta (+6.841 su HEAD) è ciò che la PRIMA schermata usa davvero: il compositore che mostra Accoda accanto
+ * a Stop (+1.155), `canQueue`/`canResume` e la consegna nel controller (+1.160), l'invio verso la chat giusta e i
+ * rimandi pigri dello store (+2.078), la schermata che collega il compositore (+1.448), l'instradamento dei tre metodi
+ * nuovi del repository (+298), l'icona di Accoda (+217) e i nomi dei nuovi pezzi a richiesta.
+ *
+ * ⇒ 650.700: 543 byte di margine sulla misura — «con 500 il tetto torna a fare il tetto» (sopra). Il debito
+ * strutturale resta quello già scritto: pezzi pigri per stazione.
+ */
+/*
+ * ⛔ JS 650.700 → 651.600, il 24/09/2026 notte (RAG-OBB, `.claude/ragionamento/LEDGER-RAG-OBB-2026-09-24.md`): i modelli
+ * che ragionano per forza (catalogo OpenRouter `reasoning.mandatory`, 111 su 458, GLM 5.3 compreso) non hanno più «off»
+ * nel menu e ricevono sempre `reasoning`; con «off» GLM 5.3 aveva scritto il ragionamento nella risposta.
+ *
+ * Misurato con le sourcemap (`peso.cjs`, build di confronto coi file della cura riportati a HEAD e poi ripristinati
+ * byte per byte): HEAD **650.520**, cura **651.037** (+517): `mobileEffort.ts` +344 (scala senza «off», degrado verso
+ * il basso di Hermes `clamp_effort`, le due funzioni per il profilo), `mobileModelCatalog.ts` +159 (livelli dichiarati,
+ * `reasoning_mandatory`), il compositore +79, il controller −74.
+ * L'ordine della regola del 14/08, seguito: 1. forme più snelle — il controller passa il profilo a una funzione sola
+ * invece di cinque oggetti `{ mandatory }` (−136), il filtro del catalogo lascia i nomi ignoti alla scala, il
+ * collegamento del compositore senza `=== true`; 2. l'adattatore, il selettore e il foglio del modello sono GIÀ pezzi a
+ * richiesta (zero byte qui); 3. nessun contratto accorciato; 4. il tetto.
+ *
+ * ⇒ 651.600 sulla misura del cancello (651.082): 518 byte di margine, come l'ultima volta.
+ */
+const DEFAULT_MAXIMUM_BYTES = 651_600
 /*
  * ⛔ CSS 220.000 → 222.000, il 2026-09-11, sezione 1 del refactor UI (U-1).
  *

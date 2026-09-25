@@ -1411,6 +1411,7 @@ onBeforeUnmount(async () => {
                 v-if="sidebarEverOpened"
                 v-model:open="sidebarOpen"
                 :sessions="recentChatSessions(chatController.chat.history)"
+                :fonti-stato="chatController"
                 :active-session-id="chatController.chat.activeSession.value?.id ?? null"
                 :busy="sessionBusy"
                 :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
@@ -1442,6 +1443,7 @@ onBeforeUnmount(async () => {
                         fixed
                         :open="true"
                         :sessions="recentChatSessions(chatController.chat.history)"
+                        :fonti-stato="chatController"
                         :active-session-id="chatController.chat.activeSession.value?.id ?? null"
                         :busy="sessionBusy"
                         :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"

@@ -129,4 +129,49 @@ describe('mobileModelCatalog', () => {
         expect(profiles.find((profile) => profile.id === 'anthropic:claude-live')?.capabilities)
             .toEqual(expect.objectContaining({ provenance: 'observed' }))
     })
+
+    it('RAG-OBB-03 takes effort levels and the mandate from the OpenRouter reasoning object', () => {
+        const profiles = talosMobileModelProfiles([
+            {
+                id: 'z-ai/glm-5.3-flash', provider: 'openrouter', displayName: 'GLM 5.3 Flash', chatCompatibility: 'supported',
+                inputModalities: ['text'], outputModalities: ['text'], supportedParameters: ['reasoning', 'tools'],
+                reasoning: { mandatory: true, supportedEfforts: ['max', 'high', 'low'] },
+            },
+            {
+                id: 'openai/gpt-5.5', provider: 'openrouter', displayName: 'GPT-5.5', chatCompatibility: 'supported',
+                inputModalities: ['text'], outputModalities: ['text'], supportedParameters: ['reasoning'],
+                reasoning: { mandatory: false, supportedEfforts: ['xhigh', 'high', 'medium', 'low', 'none'] },
+            },
+        ], () => true)
+        expect(profiles[0]).toMatchObject({ effort_levels: ['max', 'high', 'low'], reasoning_mandatory: true, supports_thinking: true })
+        expect(profiles[1]).toMatchObject({ effort_levels: ['xhigh', 'high', 'medium', 'low'], reasoning_mandatory: false })
+        expect(talosMobileModelProfiles(discovered, () => true)[1]).toMatchObject({
+            effort_levels: ['low', 'medium', 'high'], reasoning_mandatory: false,
+        })
+    })
+
+    /*
+     * RAG-EST (24/09/2026, owner «nasconderlo dove non conta»): «Ragionamento esteso» (`input.thinking`) lo leggono solo
+     * gli adattatori Anthropic, Gemini, Ollama e locale; OpenRouter, OpenAI, DeepSeek e i compatibili lo ignorano, e lì
+     * governa solo la barra dell'impegno. L'etichetta «Ragiona» del catalogo (`supports_thinking`) resta com'è.
+     */
+    it('RAG-EST-01 l’interruttore «Ragionamento esteso» solo dove il fornitore lo legge', () => {
+        const profili = talosMobileModelProfiles([
+            ...discovered,
+            {
+                id: 'deepseek-reasoner', provider: 'deepseek', displayName: 'DeepSeek Reasoner', chatCompatibility: 'supported',
+                inputModalities: ['text'], outputModalities: ['text'], supportedParameters: ['reasoning_effort'],
+            },
+            {
+                id: 'qwen3', provider: 'ollama', displayName: 'Qwen 3', chatCompatibility: 'supported',
+                inputModalities: ['text'], outputModalities: ['text'], supportedParameters: ['think'],
+            },
+        ], () => true)
+        const per = (id: string) => profili.find((profilo) => profilo.id === id)!
+        expect(per('anthropic:claude-live')).toMatchObject({ supports_thinking: true, thinking_toggle: true })
+        expect(per('ollama:qwen3')).toMatchObject({ supports_thinking: true, thinking_toggle: true })
+        expect(per('openrouter:vendor/reasoning')).toMatchObject({ supports_thinking: true, thinking_toggle: false })
+        expect(per('deepseek:deepseek-reasoner')).toMatchObject({ supports_thinking: true, thinking_toggle: false })
+        expect(per('openrouter:vendor/image')).toMatchObject({ thinking_toggle: false })
+    })
 })

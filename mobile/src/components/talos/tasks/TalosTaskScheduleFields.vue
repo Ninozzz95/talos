@@ -29,6 +29,7 @@
  * minuti non farebbe girare più spesso: farebbe MENTIRE l'interfaccia, perché
  * Android arrotonda in silenzio a quindici. Meglio dirlo dove si sceglie.
  */
+import TalosThemedCheckbox from '@/components/talos/ui/TalosThemedCheckbox.vue'
 import { computed } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
@@ -105,12 +106,7 @@ const quando = computed(() => {
                 <span class="text-sm text-[var(--talos-text)]">{{ t('tasks.schedule.enable') }}</span>
                 <span class="text-xs text-[var(--talos-muted)]">{{ t('tasks.schedule.hint') }}</span>
             </span>
-            <input
-                v-model="enabled"
-                type="checkbox"
-                data-testid="talos-task-schedule-enable"
-                class="size-5 shrink-0 accent-[var(--talos-accent)]"
-            >
+            <TalosThemedCheckbox v-model="enabled" data-testid="talos-task-schedule-enable" />
         </label>
 
         <template v-if="enabled">
@@ -199,13 +195,11 @@ const quando = computed(() => {
                     <span class="text-sm text-[var(--talos-text)]">{{ t('tasks.schedule.onlyIfChanged') }}</span>
                     <span class="text-xs text-[var(--talos-muted)]">{{ t('tasks.schedule.onlyIfChangedHint') }}</span>
                 </span>
-                <input
-                    :checked="schedule.onlyIfChanged === true"
-                    type="checkbox"
+                <TalosThemedCheckbox
+                    :model-value="schedule.onlyIfChanged === true"
                     data-testid="talos-task-schedule-only-if-changed"
-                    class="size-5 shrink-0 accent-[var(--talos-accent)]"
-                    @change="cambia('onlyIfChanged', ($event.target as HTMLInputElement).checked)"
-                >
+                    @update:model-value="cambia('onlyIfChanged', $event)"
+                />
             </label>
 
             <!--

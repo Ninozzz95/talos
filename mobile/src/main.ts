@@ -41,7 +41,7 @@ import '@fontsource/source-serif-4/latin-ext-500.css'
 import '@fontsource/source-serif-4/latin-600.css'
 import '@fontsource/source-serif-4/latin-ext-600.css'
 import '@fontsource/orbitron/600.css'
-import '@/css/talos-motion-v6-simple.css'
+// AVVIO (25/09/2026): `talos-motion-v6-simple.css` (le scene di sfondo) lo importa `TalosProceduralBackground.vue`, a richiesta.
 import '@/css/talos-motion-v6-complex.css'
 import '@/css/talos-interaction-motion-v6.css'
 import '@/css/talos-native-fling-hotfix.css'

@@ -79,7 +79,7 @@ describe('la pianificazione di un\'attività', () => {
     it('accesa, non si salva finché non dice cosa fare', async () => {
         const wrapper = await pagina()
         await wrapper.find('[data-testid="talos-task-title"]').setValue('Notizie del mattino')
-        await wrapper.find('[data-testid="talos-task-schedule-enable"]').setValue(true)
+        await wrapper.find('[data-testid="talos-task-schedule-enable"]').trigger('click')
         await flushPromises()
 
         expect(wrapper.find('[data-testid="talos-task-save"]').attributes('disabled')).toBeDefined()
@@ -93,11 +93,11 @@ describe('la pianificazione di un\'attività', () => {
         const wrapper = await pagina()
         await wrapper.find('[data-testid="talos-task-title"]').setValue('Notizie del mattino')
         await wrapper.find('[data-testid="talos-task-description"]').setValue('Per non aprire dieci siti.')
-        await wrapper.find('[data-testid="talos-task-schedule-enable"]').setValue(true)
+        await wrapper.find('[data-testid="talos-task-schedule-enable"]').trigger('click')
         await flushPromises()
         await wrapper.find('[data-testid="talos-task-instruction"]').setValue('Riassumi le notizie sull\'IA')
         await wrapper.find('[data-testid="talos-task-schedule-at"]').setValue('07:30')
-        await wrapper.find('[data-testid="talos-task-schedule-only-if-changed"]').setValue(true)
+        await wrapper.find('[data-testid="talos-task-schedule-only-if-changed"]').trigger('click')
         await flushPromises()
 
         await wrapper.find('form').trigger('submit')
@@ -120,7 +120,7 @@ describe('la pianificazione di un\'attività', () => {
      */
     it('dice quando partirà, e avvisa quando non partirebbe mai', async () => {
         const wrapper = await pagina()
-        await wrapper.find('[data-testid="talos-task-schedule-enable"]').setValue(true)
+        await wrapper.find('[data-testid="talos-task-schedule-enable"]').trigger('click')
         await flushPromises()
         expect(wrapper.find('[data-testid="talos-task-schedule-next"]').text().length).toBeGreaterThan(0)
 

@@ -31,6 +31,25 @@ describe('mobile effort presentation contract', () => {
         expect(clampMobileEffort([], 'high')).toBe('off')
     })
 
+    /**
+     * RAG-OBB (24/09/2026, owner «cura 1»): GLM 5.3 ragiona per forza. OpenRouter lo dichiara nel catalogo
+     * (`reasoning.mandatory`, «hide disable controls», https://openrouter.ai/docs/use-cases/reasoning-tokens):
+     * con «off» la richiesta partiva senza `reasoning` e un fornitore ha scritto il ragionamento nella risposta.
+     */
+    it('RAG-OBB-01 hides off when the model reasons by mandate', () => {
+        expect(mobileEffortLadderFromLevels(['max', 'high', 'low'], { mandatory: true })).toEqual(['low', 'high', 'max'])
+        expect(mobileEffortLadderFromLevels(['max', 'high', 'low'], { mandatory: false })).toEqual(['off', 'low', 'high', 'max'])
+    })
+
+    it('RAG-OBB-02 degrades an unsupported effort to the nearest weaker level, never to off (Hermes clamp_effort)', () => {
+        expect(clampMobileEffort(['max', 'high', 'low'], 'off', { mandatory: true })).toBe('low')
+        expect(clampMobileEffort(['max', 'high', 'low'], 'medium', { mandatory: true })).toBe('low')
+        expect(clampMobileEffort(['max', 'high', 'low'], 'xhigh', { mandatory: true })).toBe('high')
+        expect(clampMobileEffort(['max', 'high', 'low'], 'minimal', { mandatory: true })).toBe('low')
+        expect(clampMobileEffort(['low', 'medium', 'high'], 'minimal')).toBe('low')
+        expect(clampMobileEffort(['low', 'medium', 'high'], 'off')).toBe('off')
+    })
+
     it('formats canonical labels without inventing vocabulary', () => {
         expect(mobileEffortLabel('off')).toBe('Off')
         expect(mobileEffortLabel('xhigh')).toBe('Xhigh')

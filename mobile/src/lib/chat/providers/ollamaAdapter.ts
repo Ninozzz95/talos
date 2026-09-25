@@ -174,6 +174,8 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
         // there are no argument deltas to reassemble, so the buffered parser is
         // the right reader here too.
         const collected: ReturnType<typeof parseOllamaToolCalls> = []
+        // CONT (25/09/2026): il motivo di fine viaggiava solo nel percorso senza streaming; la chat usa lo streaming, e l'avviso «Si è fermata qui» non poteva scattare.
+        let motivoDiFine: string | null = null
         const stream = await talosStreamText({
             url: `${endpoint}/api/chat`,
             headers: { 'content-type': 'application/json' },
@@ -181,8 +183,9 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
             signal: handlers.signal,
             accumulator: createTalosLineAccumulator(),
             extract: (payload) => {
-                const event = JSON.parse(payload) as { message?: { content?: string } }
+                const event = JSON.parse(payload) as { message?: { content?: string }; done_reason?: string }
                 collected.push(...parseOllamaToolCalls(event.message))
+                if (typeof event.done_reason === 'string' && event.done_reason) motivoDiFine = event.done_reason
                 return event.message?.content ?? ''
             },
             // Defect #5: Ollama puts the model's thinking on `message.thinking`
@@ -202,7 +205,7 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
             text: stream.text,
             model: input.model.id,
             reasoning: stream.reasoning || undefined,
-            ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : {}),
+            ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : { finishReason: motivoDiFine }),
         }
     },
 }
