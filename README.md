@@ -11,6 +11,7 @@
 
 TALOS is a personal AI agent that reasons, remembers, researches and acts across your Android phone.
 TALOS Desktop is a local coding workspace for Windows, with a terminal, file review and persistent agent sessions.
+TALOS CLI brings the same coding agent to your terminal.
 
 [![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
 
@@ -35,14 +36,29 @@ Desktop release automation is prepared; consult the published assets and [deskto
 
 [Desktop installation, development and limitations →](harness-ui/desktop/README.md)
 
+## CLI (terminal)
+
+A coding agent in your terminal, on the same TALOS kernel as the desktop: per-tool permissions, file checkpoints you can undo, resumable sessions and a headless mode for scripts and CI, with the cloud or local model you choose.
+
+Install it from npm as **`talos-code`** with **Node.js 24**, then run `talos` in a project:
+
+```bash
+npm i -g talos-code
+talos
+```
+
+Tested on Windows 11 x64; macOS and Linux are not tested yet. `talos update` says when a newer version exists and prints the npm command.
+
+[CLI package, guide and known limits →](https://www.npmjs.com/package/talos-code)
+
 ## Local-first, no telemetry
 
-Neither product requires a TALOS account or sends TALOS telemetry. Local models run on your device. Choosing a cloud provider, searching the web or downloading a model uses the network for that action.
+No TALOS product requires a TALOS account or sends TALOS telemetry. Local models run on your device. Choosing a cloud provider, searching the web or downloading a model uses the network for that action. The CLI also reads the public model catalogue at models.dev for context windows and prices; `TALOS_MODELS_DEV=off` turns that off.
 
 The source tree keeps each product in its own place: [`mobile/`](mobile/README.md), [`harness-ui/`](harness-ui/README.md), and the shared desktop context component [`context-engine/`](context-engine/).
-Mobile release notes remain in [CHANGELOG.md](CHANGELOG.md); desktop notes are in [harness-ui/desktop/CHANGELOG.md](harness-ui/desktop/CHANGELOG.md).
+Mobile release notes remain in [CHANGELOG.md](CHANGELOG.md); desktop notes are in [harness-ui/desktop/CHANGELOG.md](harness-ui/desktop/CHANGELOG.md); CLI notes are on its [npm page](https://www.npmjs.com/package/talos-code).
 
-For mobile contributions and security details, see [its contribution guide](mobile/CONTRIBUTING.md) and [security policy](mobile/SECURITY.md). Report vulnerabilities in either product through this repository's private security reporting. The [Code of Conduct](CODE_OF_CONDUCT.md) applies to the whole project.
+For mobile contributions and security details, see [its contribution guide](mobile/CONTRIBUTING.md) and [security policy](mobile/SECURITY.md). Report vulnerabilities in any product through this repository's private security reporting. The [Code of Conduct](CODE_OF_CONDUCT.md) applies to the whole project.
 
 ## License
 
