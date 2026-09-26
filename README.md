@@ -9,6 +9,8 @@
 
 **Your AI. Your devices. Your models. Your rules.**
 
+**Website: [www.talos-code.com](https://www.talos-code.com/)**
+
 TALOS is a personal AI agent that reasons, remembers, researches and acts across your Android phone.
 TALOS Desktop is a local coding workspace for Windows, with a terminal, file review and persistent agent sessions.
 TALOS CLI brings the same coding agent to your terminal.
