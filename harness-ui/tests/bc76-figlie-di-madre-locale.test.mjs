@@ -49,6 +49,15 @@ import { leggiRicerca } from '../src/research-store.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const SEGRETO = 'SEGRETO-DELLA-MADRE';
+/**
+ * ⛔ 28/09/2026 — la richiesta della FIGLIA, non l'eco della madre. Il segreto sta in DUE posti: nel messaggio utente della
+ *   figlia (il suo compito) e nella chiamata `delega_sottotask` che la madre rimanda al motore al giro dopo. La delega non
+ *   aspetta la figlia, quindi quel secondo giro della madre può arrivare PRIMA che la figlia parli: misurato con una sonda,
+ *   due giri rossi su sei con le sole richieste della madre (`[system,user]`, `[system,user,assistant*,tool]`) e la figlia
+ *   «interrotto su richiesta: prima del giro 1» — fermata dalla prova stessa, perché `finoA` cercava il segreto OVUNQUE.
+ */
+const parlaLaFiglia = (richiesta) => (richiesta?.messages ?? [])
+  .some((m) => m?.role === 'user' && JSON.stringify(m.content ?? '').includes(SEGRETO));
 
 /* ---------------------------------------------------------------- la spia sulla rete */
 
@@ -213,7 +222,7 @@ test('⛔⛔⛔⛔ FIG-01 — la figlia DELEGATA da una madre locale resta sul m
     provider: 'local', runtimeId: 'llama.cpp', modelId: 'mio.gguf', /* F3-10: la delega è di Normale */
   });
   const figlia = await attendiFigliaEFermala(registro, sessionId, {
-    finoA: () => motore.richieste.some((r) => JSON.stringify(r?.messages ?? '').includes(SEGRETO)),
+    finoA: () => motore.richieste.some(parlaLaFiglia),
   });
   try { await attendiFine(registro, sessionId, 10_000); } catch { /* la madre puo restare appesa sull attrezzo della figlia fermata: non e cio che si misura qui */ }
 
@@ -225,8 +234,8 @@ test('⛔⛔⛔⛔ FIG-01 — la figlia DELEGATA da una madre locale resta sul m
      questa riga la prova resterebbe verde anche se la figlia non partisse affatto. */
   assert.ok(motore.richieste.length >= 3,
     `⛔ due giri della madre più almeno uno della figlia: richieste al motore locale = ${motore.richieste.length}`);
-  assert.ok(motore.richieste.some((r) => JSON.stringify(r?.messages ?? '').includes(SEGRETO)),
-    '⛔ il compito delegato deve arrivare al motore LOCALE');
+  assert.ok(motore.richieste.some(parlaLaFiglia),
+    '⛔ il compito delegato deve arrivare al motore LOCALE, come messaggio della FIGLIA (non basta l\'eco della madre)');
 });
 
 test('⛔⛔⛔⛔ FIG-02 — la RICERCA approfondita avviata da una madre locale resta sul motore locale', async (t) => {

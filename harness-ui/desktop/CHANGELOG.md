@@ -6,7 +6,11 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
-## desktop-v0.1.16 — 2026-09-28
+## desktop-v0.1.17 — 2026-09-28
+
+Same product as `desktop-v0.1.16`, which never published: its release job stopped at the install
+smoke, and a published tag is never rewritten, so this attempt gets a new number. The fixes for that
+stop are the first two under Fixed.
 
 The biggest release so far: the model can plan, ask and run workflows with you, the app reads your
 files and your git repository, and the window and the installer become TALOS's own.
@@ -76,6 +80,18 @@ files and your git repository, and the window and the installer become TALOS's o
 
 ### Fixed
 
+- The install smoke looks for the app where the new installer puts it. The assisted installer
+  installs to `Programs\TALOS`, named after the product; the one-click installer used the package
+  name, `Programs\talos-desktop` (electron-builder 26.16.1, `NsisTarget.js:179`). The installer
+  had worked, and the smoke looked in the old folder and reported "installed EXE missing". It now
+  also reads the folder the installer declares in the registry, and if the two differ it says
+  where the app went. An update from an earlier version keeps its folder, because the installer
+  reads the previous location first.
+- A test of delegation from a local model no longer races with itself. The parent does not wait
+  for its child, so the parent's next request — which repeats the delegated task inside its own
+  tool call — could reach the engine first. The test took that echo for the child and stopped the
+  child before it spoke, about one run in five. It now waits for the child's own request.
+
 - An answer cut off mid-stream continues instead of ending the turn; an empty answer
   is no longer mistaken for an interrupted one, and a failed turn keeps the work it did.
 - A reasoning level costlier than the one you chose is never sent.
@@ -97,15 +113,24 @@ files and your git repository, and the window and the installer become TALOS's o
 - The release gates, in the order the release workflow runs them, on this commit:
   - kernel: 615 passed, 1 skipped;
   - frontend unit: 1,698;
-  - desktop pure: 102;
+  - desktop pure: 103;
   - the real Electron shell: 3;
-  - the installer builds (156.6 MB).
-- Server: 4,641 of 4,653 passed, 10 skipped, and two known intermittent reds:
-  - the delegated-child test of a local parent;
-  - a crash inside libuv when a test server exits after a clean shutdown. It passed 8 of 8 runs on
-    its own, and the journal was already flushed when it happened.
+  - the installer builds.
+- Server: 4,633 of 4,653 passed, 17 skipped. The three reds are this machine, not the code:
+  - two cases of the secret-guard test got a system error from `wsl.exe` while WSL was not
+    answering;
+  - one test could not remove its own temporary folder (`EPERM`).
+  The same suite was green in the release job of `desktop-v0.1.16`.
+- A known intermittent: a test server can hit an internal libuv assertion while it exits, after a
+  clean shutdown (about one run in ten under full load, 8 of 8 on its own). The journal is already
+  flushed when it happens.
 - `kernel:controlla` still reports the declared divergence from the mobile kernel source (11,711
   lines against 6,260), as in `desktop-v0.1.15`.
+
+## desktop-v0.1.16 — 2026-09-28 (tag only, no release published)
+
+Its release job stopped at the install smoke, which looked for the app in the folder of the old
+one-click installer. Everything it would have shipped is in `desktop-v0.1.17`.
 
 ## desktop-v0.1.15 — 2026-09-20
 

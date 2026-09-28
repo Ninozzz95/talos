@@ -50,7 +50,12 @@ function Esegui-Installer([string]$File, [string]$Argomenti) {
 
 $Installer = (Resolve-Path -LiteralPath $Installer).Path
 $overrideDestinazione = -not [string]::IsNullOrEmpty($InstallDir)
-if (-not $overrideDestinazione) { $InstallDir = Join-Path $env:LOCALAPPDATA 'Programs/talos-desktop' }
+# 28/09/2026, release desktop-v0.1.16 ROSSA qui («EXE installato assente»): con l'installer ASSISTITO (F7-2, oneClick:false)
+# electron-builder 26.16.1 installa in `Programs\<productFilename>`, cioe' `Programs\TALOS`, non piu' nel nome del pacchetto:
+# `NsisTarget.js:179` passa `!oneClick || isPerMachine` a `getWindowsInstallationDirName` (`targetUtil.js:40-41`). Chi aggiorna
+# da una versione precedente resta nella sua cartella (`multiUser.nsh:24-28` legge prima `InstallLocation`); qui la macchina e'
+# vergine per il PREFLIGHT, quindi l'atteso e' quello nuovo — e dopo l'installazione lo si CONFRONTA col registro.
+if (-not $overrideDestinazione) { $InstallDir = Join-Path $env:LOCALAPPDATA 'Programs/TALOS' }
 if (-not [IO.Path]::IsPathFullyQualified($InstallDir) -or $InstallDir -match '["\r\n]') { throw 'InstallDir deve essere un percorso assoluto senza virgolette o righe nuove.' }
 $InstallDir = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
 $ReportPath = [IO.Path]::GetFullPath($ReportPath)
@@ -90,6 +95,15 @@ try {
     $argomenti = '/S' + $(if ($overrideDestinazione) { ' /D=' + $InstallDir } else { '' })
     Esegui-Installer $Installer $argomenti
     $misure.installazioneMs = $fase.ElapsedMilliseconds
+    # La cartella che l'installer DICHIARA (la voce di disinstallazione punta al suo disinstallatore): se non e' quella attesa,
+    # il rosso dice dove e' andata, invece di un «EXE assente» che manda a cercare nel posto sbagliato.
+    $voci = @(Registrazioni-Talos)
+    if ($voci.Count -ne 1) { throw "Voce di disinstallazione TALOS: attesa 1, trovate $($voci.Count)." }
+    $disinstallatoreDichiarato = ($voci[0].UninstallString -replace '^"([^"]+)".*$', '$1')
+    $misure.installazioneDichiarata = [IO.Path]::GetDirectoryName($disinstallatoreDichiarato)
+    if (-not [string]::Equals($misure.installazioneDichiarata.TrimEnd('\'), $InstallDir, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Cartella d'installazione diversa dall'attesa: il registro dice $($misure.installazioneDichiarata), lo smoke si aspetta $InstallDir."
+    }
     $exe = Join-Path $InstallDir 'TALOS.exe'
     if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'EXE installato assente nel percorso atteso; verificare InstallLocation NSIS.' }
     $helper = Join-Path $PSScriptRoot 'ci-smoke-installed.mjs'

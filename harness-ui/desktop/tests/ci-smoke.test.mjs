@@ -39,3 +39,15 @@ test('R04-PROCESSI-SENZA-WMI — trova un processo proprio senza privilegi CIM',
   const r = esegui(['-Command', programma]);
   assert.equal(r.status, 0, r.error?.message || r.stdout + r.stderr);
 });
+
+test('R04-CARTELLA — l\'installer assistito va in Programs\TALOS, e lo smoke lo confronta con ciò che dichiara il registro', () => {
+  /* 28/09/2026: la release desktop-v0.1.16 si è fermata qui con «EXE installato assente». Con `oneClick:false` electron-builder
+     26.16.1 installa in `Programs\<productFilename>` (`NsisTarget.js:179`, `targetUtil.js:40-41`), non più nel nome del pacchetto.
+     Lo smoke vero non gira su una macchina che ha già TALOS installato (PREFLIGHT): qui si fissa il contratto nel sorgente. */
+  const sorgente = readFileSync(script, 'utf8');
+  assert.match(sorgente, /if \(-not \$overrideDestinazione\) \{ \$InstallDir = Join-Path \$env:LOCALAPPDATA 'Programs\/TALOS' \}/u,
+    'la cartella attesa di un\'installazione nuova è Programs\TALOS');
+  assert.match(sorgente, /\$misure\.installazioneDichiarata = \[IO\.Path\]::GetDirectoryName\(\$disinstallatoreDichiarato\)/u,
+    'la cartella si legge dalla voce di disinstallazione');
+  assert.match(sorgente, /Cartella d'installazione diversa dall'attesa: il registro dice/u, 'e se non coincide il rosso dice dove è andata');
+});
