@@ -9,18 +9,32 @@
 
 **Your AI. Your devices. Your models. Your rules.**
 
-TALOS Mobile is a personal AI agent that reasons, remembers, researches and acts across your Android phone.
-TALOS Desktop is a local coding workspace for Windows, with a terminal, file review and persistent agent sessions.
+TALOS is an open-source AI agent ecosystem with three public surfaces:
+
+- **CLI** — a terminal-first coding agent with persistent conversations, tools, permissions and workspace checkpoints.
+- **Desktop** — a local coding workspace for Windows, with a terminal, file review and persistent agent sessions.
+- **Android** — a personal AI agent that reasons, remembers, researches and acts across your phone, including compatible GGUF models running on-device through llama.cpp.
+
+<p>
+  <a href="https://www.talos-code.com/"><strong>Website</strong></a>
+  ·
+  <a href="https://github.com/Ninozzz95/talos/releases"><strong>Releases</strong></a>
+</p>
 
 [![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
 
-## Mobile (Android)
+## CLI
 
-Use a compatible GGUF model on your device or connect the cloud model you choose with your own API key. Actions pass through explicit permissions; observable outcomes are checked before success is reported.
+Install the terminal agent from npm:
 
-Install the **signed APK** from [Releases](https://github.com/Ninozzz95/talos/releases), choosing a mobile tag **`v*`** such as `v0.1.30`. Check the release's SHA256 before installing. Keep the existing app installed to preserve its data when updating.
+```bash
+npm i -g talos-code
+talos
+```
 
-[Mobile guide, requirements and screenshots →](mobile/README.md)
+CLI releases use tags **`talos-cli-v*`** on the shared [Releases](https://github.com/Ninozzz95/talos/releases) page. Release notes document the supported platform, verification results and known limits for each version.
+
+The CLI is built for repository work from the terminal: persistent conversations, tool use, explicit permission changes and workspace checkpoints around mutations.
 
 ## Desktop (Windows)
 
@@ -35,14 +49,29 @@ Desktop release automation is prepared; consult the published assets and [deskto
 
 [Desktop installation, development and limitations →](harness-ui/desktop/README.md)
 
+## Android
+
+Use a compatible GGUF model on your device or connect the cloud model you choose with your own API key. Actions pass through explicit permissions; observable outcomes are checked before success is reported.
+
+Install the **signed APK** from [Releases](https://github.com/Ninozzz95/talos/releases), choosing a mobile tag **`v*`**. Check the release's SHA256 before installing. Keep the existing app installed to preserve its data when updating.
+
+[Android guide, requirements and screenshots →](mobile/README.md)
+
 ## Local-first, no telemetry
 
-Neither product requires a TALOS account or sends TALOS telemetry. Local models run on your device. Choosing a cloud provider, searching the web or downloading a model uses the network for that action.
+The documented Desktop and Android products do not require a TALOS account or send TALOS telemetry. Local models run on your device. Choosing a cloud provider, searching the web or downloading a model uses the network for that action.
 
-The source tree keeps each product in its own place: [`mobile/`](mobile/README.md), [`harness-ui/`](harness-ui/README.md), and the shared desktop context component [`context-engine/`](context-engine/).
-Mobile release notes remain in [CHANGELOG.md](CHANGELOG.md); desktop notes are in [harness-ui/desktop/CHANGELOG.md](harness-ui/desktop/CHANGELOG.md).
+Across the ecosystem, TALOS is designed around model choice rather than a single provider: use local models where supported, connect Ollama, or use a cloud provider when that is the better fit.
 
-For mobile contributions and security details, see [its contribution guide](mobile/CONTRIBUTING.md) and [security policy](mobile/SECURITY.md). Report vulnerabilities in either product through this repository's private security reporting. The [Code of Conduct](CODE_OF_CONDUCT.md) applies to the whole project.
+## Source and development
+
+The public repository contains the Android product under [`mobile/`](mobile/README.md), the Desktop harness under [`harness-ui/`](harness-ui/README.md), and the shared Desktop context component under [`context-engine/`](context-engine/).
+
+CLI distributions are published as **`talos-code`** on npm and tracked through **`talos-cli-v*`** release tags on this repository.
+
+Mobile release notes remain in [CHANGELOG.md](CHANGELOG.md); desktop notes are in [harness-ui/desktop/CHANGELOG.md](harness-ui/desktop/CHANGELOG.md). CLI release notes are published with the corresponding GitHub release.
+
+For mobile contributions and security details, see [its contribution guide](mobile/CONTRIBUTING.md) and [security policy](mobile/SECURITY.md). Report vulnerabilities through this repository's private security reporting. The [Code of Conduct](CODE_OF_CONDUCT.md) applies to the whole project.
 
 ## License
 
