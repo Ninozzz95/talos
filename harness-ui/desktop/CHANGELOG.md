@@ -6,11 +6,11 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
-## desktop-v0.1.17 — 2026-09-28
+## desktop-v0.1.18 — 2026-09-28
 
-Same product as `desktop-v0.1.16`, which never published: its release job stopped at the install
-smoke, and a published tag is never rewritten, so this attempt gets a new number. The fixes for that
-stop are the first two under Fixed.
+Same product as `desktop-v0.1.16` and `desktop-v0.1.17`, which never published: both release jobs
+stopped at the install smoke, and a published tag is never rewritten, so this attempt gets a new
+number. The fixes for those stops are the first four under Fixed.
 
 The biggest release so far: the model can plan, ask and run workflows with you, the app reads your
 files and your git repository, and the window and the installer become TALOS's own.
@@ -80,6 +80,15 @@ files and your git repository, and the window and the installer become TALOS's o
 
 ### Fixed
 
+- **The installed app's local server now starts.** Packaging dropped `src/scratch.mjs`: a rule meant
+  to keep scratch folders out of the package also matched that file's name, so the installed server
+  failed five times in a row with "module not found" and gave up. It was invisible to the tests,
+  which run the app from source; launching the packaged `TALOS.exe` before this release found it.
+  The rule now applies only to folders, and a new test requires every production source file to be
+  in the package.
+- The install smoke recognises the app's uninstall entry. The installer registers it as
+  "TALOS 0.1.18" (product name and version); the smoke looked for exactly "TALOS", found nothing,
+  and its registry checks had been passing without looking at anything.
 - The install smoke looks for the app where the new installer puts it. The assisted installer
   installs to `Programs\TALOS`, named after the product; the one-click installer used the package
   name, `Programs\talos-desktop` (electron-builder 26.16.1, `NsisTarget.js:179`). The installer
@@ -111,21 +120,29 @@ files and your git repository, and the window and the installer become TALOS's o
 ### Verification
 
 - The release gates, in the order the release workflow runs them, on this commit:
+  - server: 4,643 of 4,653, 10 skipped, no failures;
   - kernel: 615 passed, 1 skipped;
   - frontend unit: 1,698;
-  - desktop pure: 103;
+  - desktop pure: 105;
   - the real Electron shell: 3;
-  - the installer builds.
-- Server: 4,633 of 4,653 passed, 17 skipped. The three reds are this machine, not the code:
-  - two cases of the secret-guard test got a system error from `wsl.exe` while WSL was not
-    answering;
-  - one test could not remove its own temporary folder (`EPERM`).
-  The same suite was green in the release job of `desktop-v0.1.16`.
-- A known intermittent: a test server can hit an internal libuv assertion while it exits, after a
-  clean shutdown (about one run in ten under full load, 8 of 8 on its own). The journal is already
-  flushed when it happens.
+  - the installer builds (156.6 MB).
+- The packaged app, launched before tagging with the release smoke's own launcher and a separate
+  data folder:
+  - the page is ready in 1.6 s and health answers 200 with the cookie;
+  - it closes in 1.2 s;
+  - 648 MiB at rest.
+  This is the step that found the missing module.
+- The install and uninstall part of the smoke runs in the release job only. The machine that built
+  this release has an earlier TALOS installed, and the smoke refuses to touch it by design.
+- Known intermittent, not seen in this run: a test server can hit an internal libuv assertion while
+  it exits after a clean shutdown (about one run in ten under full load).
 - `kernel:controlla` still reports the declared divergence from the mobile kernel source (11,711
   lines against 6,260), as in `desktop-v0.1.15`.
+
+## desktop-v0.1.17 — 2026-09-28 (tag only, no release published)
+
+Its release job stopped at the install smoke: the smoke looked for the uninstall entry under the
+wrong name. Everything it would have shipped is in `desktop-v0.1.18`.
 
 ## desktop-v0.1.16 — 2026-09-28 (tag only, no release published)
 

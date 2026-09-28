@@ -31,11 +31,18 @@ function Processi-Installati([string]$Cartella) {
     }
 }
 
+# ⛔ 28/09/2026, release desktop-v0.1.17 ROSSA qui («Voce di disinstallazione TALOS: attesa 1, trovate 0»). electron-builder
+# scrive DisplayName = `${productName} ${version}` (NsisTarget.js:486, `uninstallDisplayName` di serie; installer.nsh:119 aggiunge
+# `$1`, vuoto per utente e per tutti): «TALOS 0.1.17», non «TALOS». Il filtro `-eq 'TALOS'`, qui dal 12/09 (`19f023c42`), non ha
+# MAI trovato una voce: il PREFLIGHT sul registro e «voce rimasta dopo la disinstallazione» passavano senza guardare niente.
+# Il predicato sta da solo perché la prova lo possa eseguire sui nomi veri (R04-VOCE-REGISTRO).
+function E-VoceTalos($Voce) {
+    $Voce.PSObject.Properties['DisplayName'] -and [string]$Voce.DisplayName -cmatch '^TALOS( \d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?)?$'
+}
+
 function Registrazioni-Talos {
     if (Test-Path -LiteralPath $registro) {
-        Get-ChildItem -LiteralPath $registro -ErrorAction Stop | Get-ItemProperty | Where-Object {
-            $_.PSObject.Properties['DisplayName'] -and $_.DisplayName -eq 'TALOS'
-        }
+        Get-ChildItem -LiteralPath $registro -ErrorAction Stop | Get-ItemProperty | Where-Object { E-VoceTalos $_ }
     }
 }
 

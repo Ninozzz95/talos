@@ -51,3 +51,15 @@ test('R04-CARTELLA — l\'installer assistito va in Programs\TALOS, e lo smoke l
     'la cartella si legge dalla voce di disinstallazione');
   assert.match(sorgente, /Cartella d'installazione diversa dall'attesa: il registro dice/u, 'e se non coincide il rosso dice dove è andata');
 });
+
+test('R04-VOCE-REGISTRO — la voce di disinstallazione si riconosce dal nome che electron-builder scrive davvero', { skip: !windows }, () => {
+  /* 28/09/2026: la release desktop-v0.1.17 si è fermata su «attesa 1, trovate 0». DisplayName è `${productName} ${version}`
+     (NsisTarget.js:486): il filtro `-eq 'TALOS'` del 12/09 non aveva mai trovato niente, e il PREFLIGHT e «voce rimasta»
+     passavano a vuoto. Misurato sulla macchina dell'owner: «TALOS 0.1.15», vecchio filtro 0, predicato nuovo sì.
+     Si carica il predicato VERO dal sorgente (come R04-PROCESSI-SENZA-WMI), non una sua copia. */
+  const casi = { 'TALOS 0.1.15': true, 'TALOS 0.1.17': true, TALOS: true, 'TALOS 1.2.3-beta.1': true, 'TALOS Mobile': false, 'Talos 0.1.15': false, 'TALOS 0.1': false, 'Altra app': false };
+  const programma = `$e = $null; $t = $null; $ast = [Management.Automation.Language.Parser]::ParseFile('${script.replaceAll("'", "''")}', [ref]$t, [ref]$e); $fn = $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'E-VoceTalos' }, $true); . ([scriptblock]::Create($fn.Extent.Text)); $esiti = @(foreach ($nome in @(${Object.keys(casi).map((n) => `'${n}'`).join(', ')})) { ,@($nome, [bool](E-VoceTalos ([pscustomobject]@{ DisplayName = $nome }))) }) + ,@('(senza nome)', [bool](E-VoceTalos ([pscustomobject]@{ Altro = 1 }))); ConvertTo-Json -Compress -InputObject $esiti`; // coppie, non una tabella: le chiavi di PowerShell non distinguono le maiuscole
+  const r = esegui(['-Command', programma]);
+  assert.equal(r.status, 0, r.error?.message || r.stdout + r.stderr);
+  assert.deepEqual(Object.fromEntries(JSON.parse(r.stdout.trim())), { ...casi, '(senza nome)': false });
+});

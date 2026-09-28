@@ -16,9 +16,17 @@ export const LLAMA = Object.freeze([
   { variante: 'vulkan', versione: 'b10517', nome: 'llama-b10517-bin-win-vulkan-x64.zip', sha256: 'afa3b2d38b2b461e45a3df7783009b22b2b7e4bb92b40bcb910d0c8924925c88' },
 ].map(a => Object.freeze({ ...a, url: `https://github.com/ggml-org/llama.cpp/releases/download/b10517/${a.nome}` })));
 
+/*
+ * ⛔ 28/09/2026 — le regole «cartella di lavoro» valgono per le CARTELLE del percorso, non per il nome del file. Prima valevano
+ *   per ogni parte, e `scratch.*` prendeva anche `src/scratch.mjs` (il modulo dei temporanei, nato il 24/09 con `8504bc013`):
+ *   restava fuori dal pacchetto e il server installato cadeva 5 volte di fila con ERR_MODULE_NOT_FOUND. Nessuna prova lo
+ *   vedeva, perché il guscio si prova dal sorgente; l'ha trovato lanciare `dist/win-unpacked/TALOS.exe` prima della release.
+ */
 export function fileProduzione(file) {
   const parti = file.replaceAll('\\', '/').split('/');
-  return !parti.some(p => p.startsWith('.') || /^(tests?|__tests__|fixtures|labs|frontend|node_modules|scratch.*)$/i.test(p))
+  const nome = parti.at(-1);
+  return !parti.slice(0, -1).some(p => p.startsWith('.') || /^(tests?|__tests__|fixtures|labs|frontend|node_modules|scratch.*)$/i.test(p))
+    && !nome.startsWith('.')
     && !/\.(test|spec)\.[^.]+$|\.(map|gguf|ggml|log)$/i.test(file);
 }
 
